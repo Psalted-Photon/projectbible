@@ -1,0 +1,21 @@
+node_modules/
+.DS_Store
+dist/
+.cache/
+.vscode/
+*.log
+
+# Data packs (do not commit large binaries)
+*.sqlite
+*.db
+*.mbtiles
+packs/
+
+# Electron
+apps/electron/out/
+apps/electron/release/
+
+# Vite/TS
+apps/pwa/.vite/
+apps/pwa/dev-dist/
+

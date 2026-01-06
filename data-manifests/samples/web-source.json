@@ -1,0 +1,14 @@
+{
+  "id": "web",
+  "title": "World English Bible (WEB)",
+  "sourceUrl": "https://worldenglish.bible/",
+  "license": {
+    "name": "Public Domain (see site for trademark notes)",
+    "url": "https://worldenglish.bible/",
+    "notes": "Verify specific download source and include required attribution/trademark guidance if applicable."
+  },
+  "attribution": {
+    "text": "World English Bible (WEB), public domain. Source: worldenglish.bible"
+  },
+  "retrievedAt": "2026-01-05T00:00:00Z"
+}

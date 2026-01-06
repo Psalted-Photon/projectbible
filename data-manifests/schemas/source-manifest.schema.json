@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/projectbible/source-manifest.schema.json",
+  "title": "ProjectBible Source Manifest",
+  "type": "object",
+  "required": ["id", "title", "sourceUrl", "license", "attribution", "retrievedAt"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "title": { "type": "string" },
+    "sourceUrl": { "type": "string", "format": "uri" },
+    "license": {
+      "type": "object",
+      "required": ["name", "url"],
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "notes": { "type": "string" }
+      }
+    },
+    "attribution": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" },
+        "additionalUrls": { "type": "array", "items": { "type": "string", "format": "uri" } }
+      }
+    },
+    "retrievedAt": { "type": "string", "format": "date-time" },
+    "hashes": {
+      "type": "object",
+      "properties": {
+        "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+      }
+    }
+  }
+}

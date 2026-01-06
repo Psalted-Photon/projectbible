@@ -1,0 +1,20 @@
+{
+  "name": "@projectbible/electron",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "dev": "echo \"TODO: electron dev\"",
+    "build": "echo \"TODO: electron build\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"(lint placeholder)\"",
+    "test": "echo \"(test placeholder)\""
+  },
+  "dependencies": {
+    "electron": "^33.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
