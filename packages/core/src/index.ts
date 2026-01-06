@@ -1,3 +1,5 @@
+export * from './interfaces.js';
+
 export function renderApp(root: HTMLElement): void {
   root.innerHTML = `
     <main style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; padding: 16px; max-width: 900px; margin: 0 auto;">

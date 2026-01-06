@@ -76,14 +76,14 @@ Sync plan (future)
 EXHAUSTIVE TODO LIST (living)
 
 EPIC E0 — Repo + DX (Developer Experience)
-- [ ] Add TypeScript config base (tsconfig.base.json)
+- [x] Add TypeScript config base (tsconfig.base.json)
 - [ ] Add ESLint config + prettier (optional)
 - [ ] Add GitHub Actions: typecheck + tests
-- [ ] Add Codespaces devcontainer configuration
+- [x] Add Codespaces devcontainer configuration
 
 EPIC E1 — Domain model + interfaces (core)
-- [ ] Define canonical IDs: Book/Chapter/Verse (BCV), translation IDs, pack IDs
-- [ ] Define interfaces:
+- [x] Define canonical IDs: Book/Chapter/Verse (BCV), translation IDs, pack IDs
+- [x] Define interfaces:
       - PackManager: list/install/remove packs; track versions
       - TextStore: getVerse/getChapter
       - SearchIndex: search(query)->results
@@ -93,7 +93,7 @@ EPIC E1 — Domain model + interfaces (core)
 - [ ] Define UI routing: /read/:translation/:book/:chapter, /search, /place/:id, /settings
 
 EPIC E2 — PWA shell (small packs first)
-- [ ] Vite app + PWA service worker basic offline shell
+- [x] Vite app + PWA service worker basic offline shell
 - [ ] IndexedDB storage adapter
 - [ ] Pack import (download .sqlite, verify checksum, store)
 - [ ] Basic “install profile” UI (mobile-min)
@@ -105,11 +105,11 @@ EPIC E3 — Electron shell (power pack)
 - [ ] Optional: open dev server in Electron during dev
 
 EPIC E4 — Pack builder tooling (packtools)
-- [ ] Pack manifest schema + validator
-- [ ] CLI: build packs from source inputs
+- [x] Pack manifest schema + validator
+- [x] CLI: build packs from source inputs
 - [ ] CLI: verify source downloads + hashes
-- [ ] Provenance log: record source URL, date, license, checksum
-- [ ] “Sample pack” for dev: tiny KJV/WEB subset (no copyrighted modern texts)
+- [x] Provenance log: record source URL, date, license, checksum
+- [x] "Sample pack" for dev: tiny KJV/WEB subset (no copyrighted modern texts)
 
 EPIC E5 — Reader MVP
 - [ ] Render chapter-view
