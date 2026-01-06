@@ -177,7 +177,19 @@ Getting started (Windows)
    - npm install
    - npm run dev:pwa
 
+Run PWA + Electron together (desktop)
+- npm run dev
+
+Codespaces
+- The repo includes `.devcontainer/devcontainer.json` so Codespaces can auto-install dependencies.
+- In Codespaces, prefer `npm run dev:pwa` + core work. Electron packaging is best locally.
+
 Next immediate milestones
 - M1: PWA runs with placeholder UI and offline shell.
 - M2: Electron runs and loads the same UI.
 - M3: Pack manifest schema + tiny sample pack + basic reader view.
+
+Next thing to do (recommended)
+- Build a tiny "sample pack" pipeline in `packages/packtools`: JSON -> SQLite with a handful of verses.
+  - Goal: unlock the real reader/search vertical slice without downloading any big datasets yet.
+  - Deliverables: a CLI command that compiles `data-manifests/samples/*.json` (or a new `packs/samples/*.json`) into a small `.sqlite` pack + a verifier that checks schema + checksums.

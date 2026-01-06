@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/main.ts",
   "scripts": {
-    "dev": "echo \"TODO: electron dev\"",
+    "dev": "npx electron ./src/main.ts",
     "build": "echo \"TODO: electron build\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "echo \"(lint placeholder)\"",

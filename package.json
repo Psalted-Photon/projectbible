@@ -7,8 +7,14 @@
     "apps/*",
     "packages/*"
   ],
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "wait-on": "^8.0.1"
+  },
   "scripts": {
     "dev:pwa": "npm -w apps/pwa run dev",
+    "dev:electron": "npm -w apps/electron run dev",
+    "dev": "concurrently -n PWA,ELECTRON -c green,cyan \"npm run dev:pwa\" \"wait-on http://127.0.0.1:5173; npm run dev:electron\"",
     "build:pwa": "npm -w apps/pwa run build",
     "lint": "npm -ws run lint",
     "typecheck": "npm -ws run typecheck",
