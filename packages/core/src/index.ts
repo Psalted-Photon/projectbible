@@ -1,5 +1,6 @@
 export * from './interfaces.js';
 export { Reader } from './reader.js';
+export * from './reading-plan.js';
 
 import { Reader, getReaderStyles } from './reader.js';
 
