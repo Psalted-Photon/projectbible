@@ -1,4 +1,4 @@
-import { IndexedDBTextStore, IndexedDBPackManager, importPackFromSQLite } from './adapters/index.js';
+import { IndexedDBTextStore, IndexedDBPackManager, IndexedDBSearchIndex, importPackFromSQLite } from './adapters/index.js';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing #app element');
@@ -6,6 +6,7 @@ if (!root) throw new Error('Missing #app element');
 // Create adapter instances
 const textStore = new IndexedDBTextStore();
 const packManager = new IndexedDBPackManager();
+const searchIndex = new IndexedDBSearchIndex();
 
 // Bible books list
 const BIBLE_BOOKS = [
@@ -36,6 +37,23 @@ root.innerHTML = `
       <h2>Installed Packs</h2>
       <button id="refreshPacks" style="padding: 8px 16px;">Refresh</button>
       <div id="packsList" style="margin-top: 15px;"></div>
+    </section>
+    
+    <section style="margin: 30px 0; padding: 20px; background: #e8f4f8; border-radius: 8px;">
+      <h2>🔍 Search Bible</h2>
+      <div style="margin: 10px 0;">
+        <input type="text" id="searchQuery" placeholder="Enter search terms..." 
+               style="padding: 8px; width: 60%; font-size: 16px;" />
+        <button id="searchBtn" style="padding: 8px 16px; margin-left: 10px; font-size: 16px;">Search</button>
+      </div>
+      <div style="margin-top: 10px;">
+        <label>
+          <input type="checkbox" id="searchAllTranslations" checked />
+          Search all translations
+        </label>
+      </div>
+      <div id="searchStatus" style="margin-top: 10px; color: #666;"></div>
+      <div id="searchResults" style="margin-top: 15px; max-height: 500px; overflow-y: auto;"></div>
     </section>
     
     <section style="margin: 30px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
@@ -230,7 +248,100 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
   }
 });
 
-// Load initial state
-refreshPacksList();
-refreshTranslationDropdown();
+// Search handler
+document.getElementById('searchBtn')?.addEventListener('click', performSearch);
+
+// Allow Enter key to trigger search
+document.getElementById('searchQuery')?.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    performSearch();
+  }
+});
+
+async function performSearch() {
+  const query = (document.getElementById('searchQuery') as HTMLInputElement).value;
+  const searchAll = (document.getElementById('searchAllTranslations') as HTMLInputElement).checked;
+  const statusDiv = document.getElementById('searchStatus')!;
+  const resultsDiv = document.getElementById('searchResults')!;
+  
+  if (!query.trim()) {
+    statusDiv.textContent = '❌ Please enter a search term';
+    statusDiv.style.color = 'red';
+    return;
+  }
+  
+  statusDiv.textContent = '🔍 Searching...';
+  statusDiv.style.color = '#666';
+  resultsDiv.innerHTML = '';
+  
+  try {
+    // Get translations to search
+    let translations: string[] | undefined;
+    if (!searchAll) {
+      const selectedTranslation = (document.getElementById('translation') as HTMLSelectElement).value;
+      if (selectedTranslation) {
+        translations = [selectedTranslation];
+      }
+    }
+    
+    const startTime = Date.now();
+    const results = await searchIndex.search(query, translations);
+    const elapsed = Date.now() - startTime;
+    
+    if (results.length === 0) {
+      statusDiv.textContent = `No results found for "${query}"`;
+      statusDiv.style.color = '#999';
+      return;
+    }
+    
+    statusDiv.textContent = `Found ${results.length} result${results.length === 1 ? '' : 's'} in ${elapsed}ms`;
+    statusDiv.style.color = 'green';
+    
+    // Group results by translation
+    const byTranslation = new Map<string, typeof results>();
+    results.forEach(r => {
+      if (!byTranslation.has(r.translation)) {
+        byTranslation.set(r.translation, []);
+      }
+      byTranslation.get(r.translation)!.push(r);
+    });
+    
+    // Render results
+    resultsDiv.innerHTML = Array.from(byTranslation.entries())
+      .map(([translation, verses]) => `
+        <div style="margin-bottom: 20px;">
+          <h3 style="color: #0066cc; margin-bottom: 10px;">${translation}</h3>
+          ${verses.map(v => `
+            <div style="padding: 10px; margin: 8px 0; background: white; border-radius: 4px; border-left: 3px solid #0066cc;">
+              <div style="font-weight: bold; color: #333; margin-bottom: 5px;">
+                ${v.book} ${v.chapter}:${v.verse}
+              </div>
+              <div style="color: #666; line-height: 1.6;">
+                ${highlightSearchTerms(v.snippet || v.text, query)}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
+    
+  } catch (error) {
+    statusDiv.textContent = `❌ Error: ${error instanceof Error ? error.message : 'Unknown'}`;
+    statusDiv.style.color = 'red';
+    console.error(error);
+  }
+}
+
+// Highlight search terms in text
+function highlightSearchTerms(text: string, query: string): string {
+  const terms = query.toLowerCase().trim().split(/\s+/);
+  let highlighted = text;
+  
+  terms.forEach(term => {
+    const regex = new RegExp(`(${term})`, 'gi');
+    highlighted = highlighted.replace(regex, '<mark style="background: #ffeb3b; padding: 2px;">$1</mark>');
+  });
+  
+  return highlighted;
+}
+
 

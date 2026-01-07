@@ -10,12 +10,15 @@ export type { DBPack, DBVerse, DBUserNote, DBUserHighlight, DBUserBookmark } fro
 
 export { IndexedDBTextStore } from './TextStore.js';
 export { IndexedDBPackManager } from './PackManager.js';
+export { IndexedDBSearchIndex } from './SearchIndex.js';
 export { importPackFromSQLite, exportPackToSQLite } from './pack-import.js';
 
 // Re-export platform interfaces from core
 export type { 
   TextStore, 
-  PackManager, 
+  PackManager,
+  SearchIndex,
+  SearchResult,
   PackInfo, 
   Verse, 
   BCV 
