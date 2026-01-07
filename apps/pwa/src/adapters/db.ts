@@ -11,7 +11,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface DBPack {
   id: string;
@@ -62,6 +62,20 @@ export interface DBUserBookmark {
   createdAt: number;
 }
 
+export interface DBCrossReference {
+  id: string;
+  fromBook: string;
+  fromChapter: number;
+  fromVerse: number;
+  toBook: string;
+  toChapter: number;
+  toVerseStart: number;
+  toVerseEnd?: number;
+  description?: string;
+  source: 'curated' | 'user' | 'ai';
+  votes: number;
+}
+
 /**
  * Open the IndexedDB database, creating it if needed
  */
@@ -106,6 +120,14 @@ export function openDB(): Promise<IDBDatabase> {
       // User bookmarks store
       if (!db.objectStoreNames.contains('user_bookmarks')) {
         db.createObjectStore('user_bookmarks', { keyPath: 'id' });
+      }
+      
+      // Cross-references store
+      if (!db.objectStoreNames.contains('cross_references')) {
+        const crossRefStore = db.createObjectStore('cross_references', { keyPath: 'id' });
+        crossRefStore.createIndex('from_verse', ['fromBook', 'fromChapter', 'fromVerse'], { unique: false });
+        crossRefStore.createIndex('to_verse', ['toBook', 'toChapter', 'toVerseStart'], { unique: false });
+        crossRefStore.createIndex('source', 'source', { unique: false });
       }
     };
   });
