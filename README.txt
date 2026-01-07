@@ -60,7 +60,15 @@ Data sources (target shortlist)
 - STEPBible Data (lexicons/tagging, CC BY 4.0)
 - OpenBible.info geo (places, CC BY 4.0)
 - Natural Earth (basemap layers, public domain)
-- Time-warp maps: start with modern basemap + place pins; ancient boundary polygons are scarce as truly open GIS, so create curated “snapshot overlays” with clear provenance.
+- Time-warp maps: start with modern basemap + place pins; ancient boundary polygons are scarce as truly open GIS, so create curated "snapshot overlays" with clear provenance.
+
+Typography & Fonts
+- WEB: Use "EB Garamond" (designed by Georg Mayr-Duffner and Octavio Pardo)
+  - Source: Google Fonts (Open Font License)
+- KJV: Use "Middle Ages" (designed by Måns Grebäck)
+  - Source: https://www.dafont.com/middle-ages.font (personal use license)
+- Note: Fonts should be embedded/bundled with app for offline use
+- Fallback: System serif for Hebrew/Greek that supports Unicode ranges
 
 Time‑warp maps (realistic plan)
 - MVP: present-day map + Bible places + “Open in Google Maps/Earth”.

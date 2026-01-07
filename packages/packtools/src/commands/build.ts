@@ -7,8 +7,12 @@ export async function buildPack(manifestPath: string, options: { output?: string
   console.log(`Building pack from: ${manifestPath}`);
   
   try {
+    // Use workspace root if provided, otherwise use current directory
+    const workspaceRoot = process.env.WORKSPACE_ROOT || process.cwd();
+    const resolvedManifestPath = resolve(workspaceRoot, manifestPath);
+    
     // Read the manifest
-    const manifestContent = readFileSync(manifestPath, 'utf-8');
+    const manifestContent = readFileSync(resolvedManifestPath, 'utf-8');
     const manifest = JSON.parse(manifestContent) as SourceManifest;
     
     console.log(`Pack ID: ${manifest.id}`);
@@ -16,7 +20,7 @@ export async function buildPack(manifestPath: string, options: { output?: string
     
     // Determine output path
     const outputPath = options.output || `${manifest.id}-${manifest.version}.sqlite`;
-    const resolvedOutput = resolve(outputPath);
+    const resolvedOutput = resolve(workspaceRoot, outputPath);
     
     console.log(`Output: ${resolvedOutput}`);
     

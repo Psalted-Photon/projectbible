@@ -94,7 +94,10 @@ export interface TextStore {
   getChapter(translation: string, book: string, chapter: number): Promise<Verse[]>;
   
   /** Get available translations */
-  getTranslations(): Promise<string[]>;
+  getTranslations(): Promise<Array<{id: string, name: string}>>;
+  
+  /** Get available books for a translation */
+  getBooks(translation: string): Promise<string[]>;
 }
 
 export interface SearchIndex {

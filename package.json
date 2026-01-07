@@ -1,6 +1,7 @@
 {
   "name": "projectbible",
   "private": true,
+  "type": "module",
   "version": "0.0.0",
   "packageManager": "npm@10.2.4",
   "workspaces": [
@@ -16,11 +17,16 @@
     "dev:electron": "npm -w apps/electron run dev",
     "dev": "concurrently -n PWA,ELECTRON -c green,cyan \"npm run dev:pwa\" \"wait-on http://127.0.0.1:5173; npm run dev:electron\"",
     "build:pwa": "npm -w apps/pwa run build",
-    "build:samples": "bash scripts/build-sample-packs.sh",
+    "build:samples": "powershell -ExecutionPolicy Bypass -File scripts/build-sample-packs.ps1",
+    "build:cross-refs": "node scripts/build-cross-references.mjs",
+    "test:packs": "node scripts/test-pack-read.mjs",
     "verify-pack": "node scripts/verify-pack.mjs",
     "lint": "npm -ws run lint",
     "typecheck": "npm -ws run typecheck",
     "test": "npm -ws run test",
-    "packtools": "npm -w packages/packtools run cli"
+    "packtools": "\"C:\\Program Files\\PowerShell\\7\\pwsh.exe\" -File scripts/packtools.ps1"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.3.3"
   }
 }

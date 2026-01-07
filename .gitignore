@@ -11,6 +11,9 @@ dist/
 *.mbtiles
 packs/
 
+# External data sources (downloaded/generated data)
+data-sources/
+
 # Electron
 apps/electron/out/
 apps/electron/release/
