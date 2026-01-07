@@ -11,7 +11,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 2;
+const DB_VERSION = 5;
 
 export interface DBPack {
   id: string;
@@ -76,6 +76,89 @@ export interface DBCrossReference {
   votes: number;
 }
 
+export interface DBStrongEntry {
+  id: string; // "G25" or "H1"
+  lemma: string;
+  transliteration?: string;
+  definition: string;
+  shortDefinition?: string;
+  partOfSpeech: string;
+  language: 'greek' | 'hebrew' | 'aramaic';
+  derivation?: string;
+  kjvUsage?: string;
+  occurrences?: number;
+}
+
+export interface DBPronunciation {
+  id: string; // Same as Strong's ID
+  ipa?: string;
+  phonetic?: string;
+  audioUrl?: string;
+  syllables?: string; // JSON string array
+  stress?: number;
+}
+
+export interface DBMorphology {
+  id?: number; // Auto-increment
+  book: string;
+  chapter: number;
+  verse: number;
+  wordPosition: number;
+  word: string;
+  lemma: string;
+  strongsId?: string;
+  parsing: string; // JSON string of MorphologyParsing
+  gloss?: string;
+  language: 'greek' | 'hebrew' | 'aramaic';
+}
+
+export interface DBWordOccurrence {
+  id?: number; // Auto-increment
+  strongsId: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  wordPosition: number;
+  word: string;
+  translation?: string; // Pack ID if available
+}
+
+export interface DBPlace {
+  id: string;
+  name: string;
+  altNames?: string; // JSON string array
+  latitude?: number;
+  longitude?: number;
+  verses?: string; // JSON string array of BCV objects
+}
+
+export interface DBReadingHistoryEntry {
+  id: string;
+  book: string;
+  chapter: number;
+  readAt: number; // timestamp
+  planId?: string;
+}
+
+export interface DBActiveReadingPlan {
+  id: string;
+  name: string;
+  config: string; // JSON string of ReadingPlanConfig
+  startedAt: number; // timestamp
+  completedAt?: number; // timestamp
+  currentDayNumber: number;
+}
+
+export interface DBReadingPlanDay {
+  id: string; // "planId-dayNumber"
+  planId: string;
+  dayNumber: number;
+  date: number; // timestamp
+  chapters: string; // JSON string array of {book, chapter}
+  completed: number; // 0 or 1 (boolean)
+  completedAt?: number; // timestamp
+}
+
 /**
  * Open the IndexedDB database, creating it if needed
  */
@@ -128,6 +211,60 @@ export function openDB(): Promise<IDBDatabase> {
         crossRefStore.createIndex('from_verse', ['fromBook', 'fromChapter', 'fromVerse'], { unique: false });
         crossRefStore.createIndex('to_verse', ['toBook', 'toChapter', 'toVerseStart'], { unique: false });
         crossRefStore.createIndex('source', 'source', { unique: false });
+      }
+      
+      // Strong's lexicon entries store
+      if (!db.objectStoreNames.contains('strongs_entries')) {
+        const strongsStore = db.createObjectStore('strongs_entries', { keyPath: 'id' });
+        strongsStore.createIndex('language', 'language', { unique: false });
+        strongsStore.createIndex('lemma', 'lemma', { unique: false });
+      }
+      
+      // Pronunciation data store
+      if (!db.objectStoreNames.contains('pronunciations')) {
+        db.createObjectStore('pronunciations', { keyPath: 'id' });
+      }
+      
+      // Morphology data store
+      if (!db.objectStoreNames.contains('morphology')) {
+        const morphStore = db.createObjectStore('morphology', { keyPath: 'id', autoIncrement: true });
+        morphStore.createIndex('book_chapter_verse_word', ['book', 'chapter', 'verse', 'wordPosition'], { unique: false });
+        morphStore.createIndex('strongsId', 'strongsId', { unique: false });
+      }
+      
+      // Word occurrences store
+      if (!db.objectStoreNames.contains('word_occurrences')) {
+        const occStore = db.createObjectStore('word_occurrences', { keyPath: 'id', autoIncrement: true });
+        occStore.createIndex('strongsId', 'strongsId', { unique: false });
+        occStore.createIndex('book_chapter_verse', ['book', 'chapter', 'verse'], { unique: false });
+      }
+      
+      // Places store
+      if (!db.objectStoreNames.contains('places')) {
+        const placeStore = db.createObjectStore('places', { keyPath: 'id' });
+        placeStore.createIndex('name', 'name', { unique: false });
+      }
+      
+      // Reading history store
+      if (!db.objectStoreNames.contains('reading_history')) {
+        const historyStore = db.createObjectStore('reading_history', { keyPath: 'id' });
+        historyStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
+        historyStore.createIndex('planId', 'planId', { unique: false });
+        historyStore.createIndex('readAt', 'readAt', { unique: false });
+      }
+      
+      // Active reading plans store
+      if (!db.objectStoreNames.contains('reading_plans')) {
+        const plansStore = db.createObjectStore('reading_plans', { keyPath: 'id' });
+        plansStore.createIndex('completedAt', 'completedAt', { unique: false });
+      }
+      
+      // Reading plan days store
+      if (!db.objectStoreNames.contains('reading_plan_days')) {
+        const daysStore = db.createObjectStore('reading_plan_days', { keyPath: 'id' });
+        daysStore.createIndex('planId', 'planId', { unique: false });
+        daysStore.createIndex('planId_dayNumber', ['planId', 'dayNumber'], { unique: true });
+        daysStore.createIndex('date', 'date', { unique: false });
       }
     };
   });
