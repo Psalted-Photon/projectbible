@@ -15,12 +15,14 @@ export interface Verse {
 export interface PackInfo {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'places' | 'map';
+  type: 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology';
   translationId?: string;
   translationName?: string;
   license: string;
   size?: number;
   installedAt?: Date;
+  description?: string;
+  attribution?: string;
 }
 
 export interface SearchResult {
@@ -85,13 +87,85 @@ export interface WordOccurrence {
   translation?: string; // How it's translated
 }
 
+// Geographic and map types
+export interface BoundingBox {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}
+
+export interface GeoPoint {
+  latitude: number;
+  longitude: number;
+}
+
+export interface MapTile {
+  zoom: number;
+  x: number;
+  y: number;
+  data: Blob | ArrayBuffer;
+}
+
+export interface HistoricalMapLayer {
+  id: string;
+  name: string; // "Roman Empire 30 AD"
+  displayName: string; // User-friendly name
+  period: 'patriarchs' | 'exodus' | 'judges' | 'united-kingdom' | 'divided-kingdom' | 'exile' | 'persian' | 'greek' | 'roman' | 'early-church';
+  yearRange: { start: number; end: number }; // { start: -30, end: 100 } (negative = BC)
+  type: 'political' | 'tribal' | 'empire' | 'journey' | 'battle' | 'region';
+  boundaries?: string; // GeoJSON polygon data
+  overlayUrl?: string; // Path to overlay image/tiles
+  opacity?: number; // Default opacity (0-1)
+  description?: string;
+  attribution?: string;
+}
+
+export interface PlaceHistoricalName {
+  name: string;
+  language: 'hebrew' | 'greek' | 'aramaic' | 'latin' | 'english';
+  period: string; // "OT", "NT", "Intertestamental", "Modern"
+  strongsId?: string; // Link to Strong's entry if applicable
+}
+
+export interface PlaceAppearance {
+  period: string;
+  description: string; // What it looked like in this era
+  population?: number;
+  significance?: string; // Religious, political, economic importance
+  imageUrl?: string; // Illustration or photo
+  reconstructionUrl?: string; // 3D model or artist's reconstruction
+}
+
 export interface PlaceInfo {
   id: string;
-  name: string;
-  altNames?: string[];
+  name: string; // Primary modern name
+  altNames?: string[]; // Other modern names
+  
+  // Location
   latitude?: number;
   longitude?: number;
-  verses?: BCV[];
+  modernCity?: string; // Modern equivalent city
+  modernCountry?: string; // Modern country
+  region?: string; // Biblical region (Judea, Galilee, etc.)
+  
+  // Historical context
+  historicalNames?: PlaceHistoricalName[]; // Names in different periods/languages
+  appearances?: PlaceAppearance[]; // How it looked in different eras
+  
+  // Biblical references
+  verses?: BCV[]; // All verses mentioning this place
+  firstMention?: BCV; // First biblical reference
+  significance?: string; // Why this place matters in biblical history
+  
+  // Related entities
+  events?: string[]; // Major biblical events at this location
+  people?: string[]; // Key biblical figures associated with this place
+  
+  // Additional data
+  type?: 'city' | 'region' | 'mountain' | 'river' | 'sea' | 'wilderness' | 'country';
+  elevation?: number; // Meters above sea level
+  description?: string;
 }
 
 export interface CrossReference {
@@ -195,8 +269,43 @@ export interface PlaceStore {
   /** Find places mentioned in a verse */
   getPlacesForVerse(reference: BCV): Promise<PlaceInfo[]>;
   
-  /** Search places by name */
+  /** Search places by name (modern or historical) */
   searchPlaces(query: string): Promise<PlaceInfo[]>;
+  
+  /** Get place by name (exact match, checks all historical names) */
+  getPlaceByName(name: string, period?: string): Promise<PlaceInfo | null>;
+  
+  /** Get all places within a bounding box (for map view) */
+  getPlacesInBounds(bounds: BoundingBox): Promise<PlaceInfo[]>;
+  
+  /** Get places by type (cities, mountains, rivers, etc.) */
+  getPlacesByType(type: PlaceInfo['type']): Promise<PlaceInfo[]>;
+  
+  /** Get place appearances for a specific time period */
+  getPlaceAppearance(placeId: string, period: string): Promise<PlaceAppearance | null>;
+}
+
+export interface MapStore {
+  /** Get base map tiles for offline viewing */
+  getBaseTiles(zoom: number, bounds: BoundingBox): Promise<MapTile[]>;
+  
+  /** Get a specific tile */
+  getTile(zoom: number, x: number, y: number): Promise<MapTile | null>;
+  
+  /** Get historical overlay for a time period */
+  getHistoricalLayer(layerId: string): Promise<HistoricalMapLayer | null>;
+  
+  /** Get all available time periods */
+  getTimePeriods(): Promise<HistoricalMapLayer[]>;
+  
+  /** Get layers for a specific period */
+  getLayersForPeriod(period: HistoricalMapLayer['period']): Promise<HistoricalMapLayer[]>;
+  
+  /** Get layers active during a specific year */
+  getLayersForYear(year: number): Promise<HistoricalMapLayer[]>;
+  
+  /** Check if map data is available offline */
+  hasOfflineData(): Promise<boolean>;
 }
 
 export interface CrossReferenceStore {
@@ -319,6 +428,7 @@ export interface PlatformContext {
   crossReferenceStore: CrossReferenceStore;
   lexiconStore: LexiconStore;
   placeStore: PlaceStore;
+  mapStore: MapStore;
   userDataStore: UserDataStore;
   readingHistoryStore: ReadingHistoryStore;
 }

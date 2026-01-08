@@ -4,5 +4,15 @@
 			"path": ".."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"terminal.integrated.defaultProfile.windows": "Command Prompt",
+		"terminal.integrated.profiles.windows": {
+			"Command Prompt": {
+				"path": "C:\\Windows\\System32\\cmd.exe",
+				"icon": "terminal-cmd"
+			}
+		},
+		"powershell.integratedConsole.enabled": false,
+		"powershell.enableStartup": false
+	}
 }

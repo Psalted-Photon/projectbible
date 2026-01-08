@@ -163,6 +163,37 @@ EPIC E13 — User data + (future) sync
 - [ ] Notes/highlights/bookmarks stored locally
 - [ ] Optional sync later (WebDAV/Dropbox/GitHub gist/custom server)
 
+EPIC E14 — Advanced text formatting & styling
+- [ ] Custom font selection (user-configurable per translation/type)
+  - KJV: Middle Ages/Gothic fonts
+  - WEB: EB Garamond or modern serif
+  - Greek/Hebrew: Specialized biblical fonts (SBL, Cardo)
+- [ ] Font size adjustment (global + per-translation)
+- [ ] Line spacing control (tight/normal/relaxed)
+- [ ] Verse display modes:
+  - New line per verse (current default)
+  - Continuous paragraph flow
+  - Poetry mode (indentation for Psalms, etc.)
+- [ ] Custom color highlights (not just yellow)
+  - Color picker for highlight backgrounds
+  - Multiple highlight colors per user preference
+  - Persist highlight color with verse reference
+- [ ] Custom underline colors
+  - Color picker for underlines
+  - Underline style variants (solid/dashed/dotted)
+  - Persist underline color + style with verse reference
+- [ ] Word-level text color customization
+  - Custom text colors per word
+  - Persist word color with book:chapter:verse:position
+- [ ] Style persistence across translations
+  - Notes, underlines, highlights keyed to canonical references (not translation-specific)
+  - Transfer annotations when switching translations
+  - Smart handling when verse numbering differs between versions
+- [ ] Theme support
+  - Light/dark/sepia modes
+  - Custom color schemes
+  - High contrast accessibility mode
+
 What to work on from a phone (Codespaces)
 - docs updates, TODO refinement
 - core algorithms (reading plan, query parsing)

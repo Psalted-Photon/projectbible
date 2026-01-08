@@ -5,13 +5,9 @@ dist/
 .vscode/
 *.log
 
-# Data packs (do not commit large binaries)
-*.sqlite
-*.db
-*.mbtiles
-packs/
-
-# External data sources (downloaded/generated data)
+# Data packs - allow committed packs for mobile deployment
+# (packs are small enough for GitHub, ~16MB each)
+# Ignore generated data sources, but allow final packs
 data-sources/
 
 # Electron

@@ -11,18 +11,19 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 5;
+const DB_VERSION = 6; // Updated for maps and enhanced places
 
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'places' | 'map';
+  type: 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology';
   translationId?: string;
   translationName?: string;
   license: string;
   attribution?: string;
   size: number;
   installedAt: number; // Unix timestamp
+  description?: string;
 }
 
 export interface DBVerse {
@@ -127,9 +128,67 @@ export interface DBPlace {
   id: string;
   name: string;
   altNames?: string; // JSON string array
+  
+  // Location
   latitude?: number;
   longitude?: number;
+  modernCity?: string;
+  modernCountry?: string;
+  region?: string; // Biblical region
+  
+  // Historical names (JSON string array of PlaceHistoricalName objects)
+  historicalNames?: string;
+  
+  // Appearances (JSON string array of PlaceAppearance objects)
+  appearances?: string;
+  
+  // Biblical references
   verses?: string; // JSON string array of BCV objects
+  firstMention?: string; // JSON string of BCV object
+  significance?: string;
+  
+  // Related entities
+  events?: string; // JSON string array
+  people?: string; // JSON string array
+  
+  // Additional data
+  type?: 'city' | 'region' | 'mountain' | 'river' | 'sea' | 'wilderness' | 'country';
+  elevation?: number;
+  description?: string;
+}
+
+export interface DBPlaceNameLink {
+  id?: number; // Auto-increment
+  word: string; // The word in the text (e.g., "Bethel", "Jerusalem")
+  normalizedWord: string; // Lowercase for searching
+  placeId: string; // Link to DBPlace
+  language: 'hebrew' | 'greek' | 'english';
+  strongsId?: string; // If the place name has a Strong's entry
+}
+
+export interface DBMapTile {
+  id: string; // "${zoom}-${x}-${y}"
+  zoom: number;
+  x: number;
+  y: number;
+  tileData: Blob; // PNG/WebP image data
+  packId: string; // Which map pack this belongs to
+}
+
+export interface DBHistoricalLayer {
+  id: string;
+  name: string;
+  displayName: string;
+  period: string; // 'patriarchs', 'exodus', 'judges', etc.
+  yearStart: number;
+  yearEnd: number;
+  type: string; // 'political', 'tribal', 'empire', 'journey', etc.
+  boundaries?: string; // GeoJSON string
+  overlayUrl?: string;
+  opacity?: number;
+  description?: string;
+  attribution?: string;
+  packId: string; // Which map pack this belongs to
 }
 
 export interface DBReadingHistoryEntry {
@@ -243,6 +302,34 @@ export function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('places')) {
         const placeStore = db.createObjectStore('places', { keyPath: 'id' });
         placeStore.createIndex('name', 'name', { unique: false });
+        placeStore.createIndex('type', 'type', { unique: false });
+        placeStore.createIndex('region', 'region', { unique: false });
+        placeStore.createIndex('modernCountry', 'modernCountry', { unique: false });
+      }
+      
+      // Place name links (for word -> place entity mapping)
+      if (!db.objectStoreNames.contains('place_name_links')) {
+        const linkStore = db.createObjectStore('place_name_links', { keyPath: 'id', autoIncrement: true });
+        linkStore.createIndex('normalizedWord', 'normalizedWord', { unique: false });
+        linkStore.createIndex('placeId', 'placeId', { unique: false });
+        linkStore.createIndex('strongsId', 'strongsId', { unique: false });
+      }
+      
+      // Map tiles store (for offline base maps)
+      if (!db.objectStoreNames.contains('map_tiles')) {
+        const tileStore = db.createObjectStore('map_tiles', { keyPath: 'id' });
+        tileStore.createIndex('zoom', 'zoom', { unique: false });
+        tileStore.createIndex('packId', 'packId', { unique: false });
+        tileStore.createIndex('zoom_x_y', ['zoom', 'x', 'y'], { unique: false });
+      }
+      
+      // Historical map layers store
+      if (!db.objectStoreNames.contains('historical_layers')) {
+        const layerStore = db.createObjectStore('historical_layers', { keyPath: 'id' });
+        layerStore.createIndex('period', 'period', { unique: false });
+        layerStore.createIndex('type', 'type', { unique: false });
+        layerStore.createIndex('packId', 'packId', { unique: false });
+        layerStore.createIndex('yearRange', ['yearStart', 'yearEnd'], { unique: false });
       }
       
       // Reading history store

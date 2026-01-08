@@ -16,17 +16,22 @@ npm run build:pwa
 ## Pack Building
 
 ```bash
-# Build a pack from manifest
-npm run packtools -- build <manifest.json> -o <output.sqlite>
+# Build all packs at once
+npm run build:all-packs
 
-# Example: Build KJV sample
-npm run packtools -- build data-manifests/samples/kjv-sample.json -o packs/kjv.sqlite
+# Build individual translation packs
+npm run build:greek     # Greek: LXX, Byzantine, TR, OpenGNT
+npm run build:hebrew    # Hebrew: WLC with morphology
+npm run build:web       # World English Bible
+npm run build:kjv       # King James Version
 
-# Example: Build WEB sample
-npm run packtools -- build data-manifests/samples/web-sample.json -o packs/web.sqlite
+# Build feature/data packs
+npm run build:places    # Biblical geography with place name linking
+npm run build:maps      # Historical map layers
+npm run build:cross-refs # Cross-references
 
-# Build both samples
-npm run build:samples
+# Build sample/dev packs
+npm run build:samples   # Small sample packs for testing
 ```
 
 ## Pack Validation
@@ -84,6 +89,17 @@ sqlite3 packs/kjv.sqlite "SELECT * FROM metadata;"
 
 ```bash
 ls -lh packs/
+```
+
+**Test place lookups:**
+
+```bash
+# Query places pack
+sqlite3 packs/places-biblical.sqlite "SELECT name, type, region FROM places;"
+sqlite3 packs/places-biblical.sqlite "SELECT * FROM place_name_links WHERE normalized_word='bethel';"
+
+# Query map pack
+sqlite3 packs/maps-biblical.sqlite "SELECT display_name, period, type FROM historical_layers;"
 ```
 
 ## Next Implementation Steps

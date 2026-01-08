@@ -145,6 +145,8 @@ function buildCrossReferencesDatabase() {
   
   // Insert metadata
   const insertMetadata = db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)');
+  insertMetadata.run('pack_id', 'cross-references');
+  insertMetadata.run('type', 'cross-references');
   insertMetadata.run('name', 'Bible Cross-References');
   insertMetadata.run('version', '1.0.0');
   insertMetadata.run('description', 'Curated cross-references between Bible verses');

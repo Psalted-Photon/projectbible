@@ -1,4 +1,5 @@
 import type { TextStore, Verse } from '@projectbible/core';
+import { BIBLE_BOOKS } from '@projectbible/core';
 import { readTransaction, type DBVerse } from './db.js';
 
 export class IndexedDBTextStore implements TextStore {
@@ -68,15 +69,12 @@ export class IndexedDBTextStore implements TextStore {
       return new Promise((resolve, reject) => {
         const transaction = db.transaction('packs', 'readonly');
         const store = transaction.objectStore('packs');
-        const index = store.index('type');
-        
-        const range = IDBKeyRange.only('text');
-        const request = index.getAll(range);
+        const request = store.getAll();
         
         request.onsuccess = () => {
           const packs = request.result;
           const translations = packs
-            .filter((p: any) => p.translationId)
+            .filter((p: any) => p.translationId && (p.type === 'text' || p.type === 'original-language'))
             .map((p: any) => ({
               id: p.translationId,
               name: p.translationName || p.translationId
@@ -113,7 +111,15 @@ export class IndexedDBTextStore implements TextStore {
             books.add(cursor.value.book);
             cursor.continue();
           } else {
-            resolve(Array.from(books).sort());
+            // Sort books by biblical order using BIBLE_BOOKS canonical order
+            const bookArray = Array.from(books);
+            const bookOrderMap = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
+            bookArray.sort((a, b) => {
+              const orderA = bookOrderMap.get(a) ?? 999;
+              const orderB = bookOrderMap.get(b) ?? 999;
+              return orderA - orderB;
+            });
+            resolve(bookArray);
           }
         };
         
