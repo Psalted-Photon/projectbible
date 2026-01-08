@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd apps/pwa && npm run build",
+  "buildCommand": "npm run build --workspace=@projectbible/core && cd apps/pwa && npm run build",
   "outputDirectory": "apps/pwa/dist",
   "installCommand": "npm install --workspaces=false && npm install --workspace=@projectbible/core && npm install --workspace=@projectbible/pwa",
   "framework": null,
