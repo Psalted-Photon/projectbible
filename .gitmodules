@@ -1,0 +1,9 @@
+[submodule "apps/trivcanon"]
+	path = apps/trivcanon
+	url = https://github.com/Psalted-Photon/TrivCanon.git
+[submodule "apps/lampstand"]
+	path = apps/lampstand
+	url = https://github.com/Psalted-Photon/LampStand.git
+[submodule "apps/guesstheflag"]
+	path = apps/guesstheflag
+	url = https://github.com/Psalted-Photon/guesstheflag.git
