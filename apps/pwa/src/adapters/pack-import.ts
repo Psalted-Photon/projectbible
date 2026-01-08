@@ -31,18 +31,27 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       metadata[key as string] = value as string;
     });
     
-    // Create pack info
+    console.log('Pack metadata:', metadata);
+    
+    // Create pack info (handle both camelCase and snake_case metadata keys)
     const packInfo: DBPack = {
-      id: metadata.pack_id,
-      version: metadata.version,
-      type: metadata.type as 'text' | 'lexicon' | 'places' | 'map',
-      translationId: metadata.translation_id,
-      translationName: metadata.translation_name,
+      id: metadata.pack_id || metadata.packId,
+      version: metadata.version || metadata.packVersion,
+      type: (metadata.type || metadata.packType) as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'original-language',
+      translationId: metadata.translation_id || metadata.translationId,
+      translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
       attribution: metadata.attribution,
       size: file.size,
-      installedAt: Date.now()
+      installedAt: Date.now(),
+      description: metadata.description
     };
+    
+    if (!packInfo.id) {
+      throw new Error('Pack metadata missing required "pack_id" or "packId" field');
+    }
+    
+    console.log('Parsed pack info:', packInfo);
     
     // Store pack metadata
     await writeTransaction('packs', (store) => store.put(packInfo));
@@ -187,6 +196,62 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         }
         
         console.log(`✅ Pack ${packInfo.id} imported successfully`);
+      }
+    } else if (packInfo.type === 'map') {
+      // Import map/places data
+      console.log('Importing map pack...');
+      
+      // Import historical layers (GeoJSON map data)
+      const layersRows = db.exec(`
+        SELECT id, name, display_name, period, year_start, year_end, type, 
+               boundaries, overlay_url, opacity, description
+        FROM historical_layers
+      `);
+      
+      if (layersRows.length && layersRows[0].values.length) {
+        // sql.js returns columns in the order specified in SELECT
+        const columns = layersRows[0].columns;
+        console.log('Historical layers columns:', columns);
+        
+        const layers = layersRows[0].values.map((row) => {
+          const obj: any = {};
+          columns.forEach((col, idx) => {
+            obj[col] = row[idx];
+          });
+          
+          // Map to IndexedDB schema
+          const layer = {
+            id: obj.id as string,
+            name: obj.name as string,
+            displayName: obj.display_name as string,
+            period: obj.period as string,
+            yearStart: obj.year_start as number,
+            yearEnd: obj.year_end as number,
+            type: obj.type as string,
+            boundaries: obj.boundaries ? JSON.parse(obj.boundaries as string) : undefined,
+            overlayUrl: obj.overlay_url as string | undefined,
+            opacity: obj.opacity as number,
+            description: obj.description as string | undefined,
+            packId: packInfo.id
+          };
+          
+          console.log('Layer:', layer.id, 'has id?', !!layer.id);
+          return layer;
+        });
+        
+        console.log(`Importing ${layers.length} historical layers...`);
+        
+        await batchWriteTransaction('historical_layers', (store) => {
+          layers.forEach(layer => {
+            if (!layer.id) {
+              console.error('Layer missing id:', layer);
+              throw new Error('Layer missing required id field');
+            }
+            store.put(layer);
+          });
+        });
+        
+        console.log(`✅ Map pack imported: ${layers.length} layers`);
       }
     }
     

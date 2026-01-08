@@ -115,6 +115,24 @@ root.innerHTML = `
       <div id="searchResults" style="margin-top: 15px; max-height: 500px; overflow-y: auto;"></div>
     </section>
     
+    <section style="margin: 30px 0; padding: 20px; background: #e8f8e8; border-radius: 8px;">
+      <h2>🗺️ Historical Maps</h2>
+      <div style="margin: 10px 0;">
+        <button id="loadMapsBtn" style="padding: 8px 16px;">Load Map Layers</button>
+      </div>
+      <div id="mapLayersList" style="margin-top: 15px;"></div>
+      <div id="mapViewer" style="margin-top: 20px; display: none; background: white; padding: 15px; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 id="mapViewerTitle" style="margin: 0;"></h3>
+          <button id="closeMapBtn" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">Close</button>
+        </div>
+        <div id="mapDetails" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px;"></div>
+        <div id="mapCanvas" style="width: 100%; height: 500px; border: 1px solid #ddd; background: #e9ecef; display: flex; align-items: center; justify-content: center; color: #666;">
+          GeoJSON map rendering (requires Leaflet or similar library)
+        </div>
+      </div>
+    </section>
+    
     <section style="margin: 30px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
       <h2>Read Verse</h2>
       <div style="margin: 10px 0;">
@@ -774,6 +792,118 @@ function highlightSearchTerms(text: string, query: string): string {
   
   return highlighted;
 }
+
+// Map layers handlers
+document.getElementById('loadMapsBtn')?.addEventListener('click', loadMapLayers);
+document.getElementById('closeMapBtn')?.addEventListener('click', () => {
+  document.getElementById('mapViewer')!.style.display = 'none';
+});
+
+async function loadMapLayers() {
+  const listDiv = document.getElementById('mapLayersList')!;
+  listDiv.innerHTML = '<div>Loading...</div>';
+  
+  try {
+    const db = await openDB();
+    const tx = db.transaction('historical_layers', 'readonly');
+    const store = tx.objectStore('historical_layers');
+    const layers = await new Promise<any[]>((resolve, reject) => {
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    
+    if (layers.length === 0) {
+      listDiv.innerHTML = '<div style="color: #999;">No map layers installed. Import maps.sqlite first.</div>';
+      return;
+    }
+    
+    listDiv.innerHTML = `
+      <div style="color: #666; margin-bottom: 10px;">✅ ${layers.length} historical layers loaded</div>
+      ${layers.map(layer => `
+        <div style="padding: 12px; margin: 8px 0; background: white; border-radius: 4px; border-left: 3px solid #28a745;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-weight: bold; color: #333;">${layer.displayName || layer.name}</div>
+              <div style="color: #666; font-size: 13px; margin-top: 4px;">
+                Period: ${layer.period} | ${layer.yearStart} to ${layer.yearEnd}
+              </div>
+              ${layer.description ? `<div style="color: #888; font-size: 12px; margin-top: 4px;">${layer.description}</div>` : ''}
+            </div>
+            <button onclick="viewMapLayer('${layer.id}')" 
+                    style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              View Map
+            </button>
+          </div>
+        </div>
+      `).join('')}
+    `;
+  } catch (error) {
+    listDiv.innerHTML = `<div style="color: red;">❌ Error loading map layers: ${error instanceof Error ? error.message : 'Unknown'}</div>`;
+    console.error(error);
+  }
+}
+
+// Make viewMapLayer available globally
+(window as any).viewMapLayer = async function(layerId: string) {
+  try {
+    const db = await openDB();
+    const tx = db.transaction('historical_layers', 'readonly');
+    const store = tx.objectStore('historical_layers');
+    const layer = await new Promise<any>((resolve, reject) => {
+      const request = store.get(layerId);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    
+    if (!layer) {
+      alert('Layer not found');
+      return;
+    }
+    
+    const viewerDiv = document.getElementById('mapViewer')!;
+    const titleDiv = document.getElementById('mapViewerTitle')!;
+    const detailsDiv = document.getElementById('mapDetails')!;
+    const canvasDiv = document.getElementById('mapCanvas')!;
+    
+    titleDiv.textContent = layer.displayName || layer.name;
+    detailsDiv.innerHTML = `
+      <div><strong>Period:</strong> ${layer.period}</div>
+      <div><strong>Time Range:</strong> ${layer.yearStart} to ${layer.yearEnd}</div>
+      <div><strong>Type:</strong> ${layer.type}</div>
+      ${layer.description ? `<div><strong>Description:</strong> ${layer.description}</div>` : ''}
+      ${layer.boundaries ? `<div style="margin-top: 8px;"><strong>Features:</strong> ${layer.boundaries.features?.length || 0} boundaries loaded</div>` : ''}
+    `;
+    
+    // Simple GeoJSON feature list
+    if (layer.boundaries && layer.boundaries.features) {
+      canvasDiv.innerHTML = `
+        <div style="width: 100%; text-align: left;">
+          <div style="font-weight: bold; margin-bottom: 10px;">Map Features (${layer.boundaries.features.length}):</div>
+          <div style="max-height: 400px; overflow-y: auto;">
+            ${layer.boundaries.features.map((feature: any, idx: number) => `
+              <div style="padding: 8px; margin: 4px 0; background: #f8f9fa; border-radius: 4px;">
+                <div style="font-weight: bold;">${feature.properties?.name || `Feature ${idx + 1}`}</div>
+                ${feature.properties?.description ? `<div style="font-size: 12px; color: #666;">${feature.properties.description}</div>` : ''}
+                <div style="font-size: 11px; color: #999; margin-top: 4px;">
+                  Type: ${feature.geometry?.type || 'Unknown'}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      canvasDiv.textContent = 'No boundary data available for this layer';
+    }
+    
+    viewerDiv.style.display = 'block';
+    viewerDiv.scrollIntoView({ behavior: 'smooth' });
+  } catch (error) {
+    alert(`Error loading map: ${error instanceof Error ? error.message : 'Unknown'}`);
+    console.error(error);
+  }
+};
 
 // Initialize UI
 refreshPacksList();

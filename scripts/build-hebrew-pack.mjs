@@ -47,9 +47,41 @@ function createSchema(db) {
       PRIMARY KEY (edition, book, chapter, verse)
     );
     
+    -- Morphology data (from OSHB)
+    CREATE TABLE IF NOT EXISTS morphology (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      book TEXT NOT NULL,
+      chapter INTEGER NOT NULL,
+      verse INTEGER NOT NULL,
+      wordPosition INTEGER NOT NULL,
+      word TEXT NOT NULL,
+      lemma TEXT NOT NULL,
+      strongsId TEXT,
+      parsing TEXT,
+      gloss TEXT,
+      language TEXT DEFAULT 'hebrew'
+    );
+    
+    -- Strong's lexicon entries for Hebrew
+    CREATE TABLE IF NOT EXISTS strongs_entries (
+      id TEXT PRIMARY KEY,
+      lemma TEXT NOT NULL,
+      transliteration TEXT,
+      definition TEXT NOT NULL,
+      shortDefinition TEXT,
+      partOfSpeech TEXT,
+      language TEXT DEFAULT 'hebrew',
+      derivation TEXT,
+      kjvUsage TEXT,
+      occurrences INTEGER
+    );
+    
     CREATE INDEX IF NOT EXISTS idx_verses_edition ON verses(edition);
     CREATE INDEX IF NOT EXISTS idx_verses_book ON verses(book);
     CREATE INDEX IF NOT EXISTS idx_verses_reference ON verses(edition, book, chapter);
+    CREATE INDEX IF NOT EXISTS idx_morphology_verse ON morphology(book, chapter, verse, wordPosition);
+    CREATE INDEX IF NOT EXISTS idx_morphology_strongs ON morphology(strongsId);
+    CREATE INDEX IF NOT EXISTS idx_strongs_lemma ON strongs_entries(lemma);
   `);
 }
 
@@ -94,6 +126,15 @@ function copyVerses(targetDb, sourcePack) {
   const sourceDb = new Database(sourcePack.file, { readonly: true });
   
   try {
+    // Check what tables exist
+    const tables = sourceDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+    const tableNames = tables.map(t => t.name);
+    
+    if (!tableNames.includes('verses')) {
+      console.warn(`    ⚠️  No verses table in ${sourcePack.file}`);
+      return 0;
+    }
+    
     // Check if source has verses
     const count = sourceDb.prepare('SELECT COUNT(*) as count FROM verses').get();
     if (count.count === 0) {
@@ -118,6 +159,98 @@ function copyVerses(targetDb, sourcePack) {
     insertMany(verses);
     
     console.log(`    ✅ Copied ${verses.length.toLocaleString()} verses`);
+    
+    // Copy morphology/words data if present
+    if (tableNames.includes('words')) {
+      try {
+        const morphCount = sourceDb.prepare(`SELECT COUNT(*) as count FROM words`).get();
+        if (morphCount.count > 0) {
+          // Check column structure
+          const sampleRow = sourceDb.prepare('SELECT * FROM words LIMIT 1').get();
+          const columns = Object.keys(sampleRow || {});
+          
+          const morphData = sourceDb.prepare(`SELECT * FROM words`).all();
+          
+          const insertMorph = targetDb.prepare(`
+            INSERT OR REPLACE INTO morphology (book, chapter, verse, wordPosition, word, lemma, strongsId, parsing, gloss, language)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'hebrew')
+          `);
+          
+          const insertMorphMany = targetDb.transaction((data) => {
+            for (const m of data) {
+              // Map column names (may vary between sources)
+              const book = m.book || m.bookName;
+              const chapter = m.chapter || m.chapterNum;
+              const verse = m.verse || m.verseNum;
+              const wordPosition = m.wordPosition || m.word_order || m.wordNum;
+              const word = m.word || m.text || m.hebrew;
+              const lemma = m.lemma || m.root;
+              const strongsId = m.strongsId || m.strongs;
+              const parsing = m.parsing || m.morph_code || m.morph || m.morphology;
+              const gloss = m.gloss || m.gloss_en || m.english;
+              
+              if (book && chapter && verse && wordPosition) {
+                insertMorph.run(book, chapter, verse, wordPosition, word, lemma, strongsId, parsing, gloss);
+              }
+            }
+          });
+          
+          insertMorphMany(morphData);
+          console.log(`    ✅ Copied ${morphData.length.toLocaleString()} morphology entries`);
+        }
+      } catch (err) {
+        console.warn(`    ⚠️  Error copying morphology:`, err.message);
+      }
+    } else if (tableNames.includes('morphology')) {
+      try {
+        const morphCount = sourceDb.prepare('SELECT COUNT(*) as count FROM morphology').get();
+        if (morphCount.count > 0) {
+          const morphData = sourceDb.prepare('SELECT book, chapter, verse, wordPosition, word, lemma, strongsId, parsing, gloss FROM morphology').all();
+          
+          const insertMorph = targetDb.prepare(`
+            INSERT OR REPLACE INTO morphology (book, chapter, verse, wordPosition, word, lemma, strongsId, parsing, gloss, language)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'hebrew')
+          `);
+          
+          const insertMorphMany = targetDb.transaction((data) => {
+            for (const m of data) {
+              insertMorph.run(m.book, m.chapter, m.verse, m.wordPosition, m.word, m.lemma, m.strongsId, m.parsing, m.gloss);
+            }
+          });
+          
+          insertMorphMany(morphData);
+          console.log(`    ✅ Copied ${morphData.length.toLocaleString()} morphology entries`);
+        }
+      } catch (err) {
+        console.warn(`    ⚠️  Error copying morphology:`, err.message);
+      }
+    }
+    
+    // Copy Strong's entries if present
+    if (tableNames.includes('strongs_entries')) {
+      try {
+        const strongsCount = sourceDb.prepare('SELECT COUNT(*) as count FROM strongs_entries').get();
+        if (strongsCount.count > 0) {
+          const strongsData = sourceDb.prepare('SELECT id, lemma, transliteration, definition, shortDefinition, partOfSpeech, derivation, kjvUsage, occurrences FROM strongs_entries').all();
+          
+          const insertStrongs = targetDb.prepare(`
+            INSERT OR REPLACE INTO strongs_entries (id, lemma, transliteration, definition, shortDefinition, partOfSpeech, language, derivation, kjvUsage, occurrences)
+            VALUES (?, ?, ?, ?, ?, ?, 'hebrew', ?, ?, ?)
+          `);
+          
+          const insertStrongsMany = targetDb.transaction((data) => {
+            for (const s of data) {
+              insertStrongs.run(s.id, s.lemma, s.transliteration, s.definition, s.shortDefinition, s.partOfSpeech, s.derivation, s.kjvUsage, s.occurrences);
+            }
+          });
+          
+          insertStrongsMany(strongsData);
+          console.log(`    ✅ Copied ${strongsData.length.toLocaleString()} Strong's entries`);
+        }
+      } catch (err) {
+        console.warn(`    ⚠️  Error copying Strong's data:`, err.message);
+      }
+    }
     
     return verses.length;
   } finally {
