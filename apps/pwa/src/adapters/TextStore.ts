@@ -67,23 +67,42 @@ export class IndexedDBTextStore implements TextStore {
       const db = await import('./db.js').then(m => m.openDB());
       
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction('packs', 'readonly');
-        const store = transaction.objectStore('packs');
-        const request = store.getAll();
+        const packsTx = db.transaction(['packs', 'verses'], 'readonly');
+        const packsStore = packsTx.objectStore('packs');
+        const versesStore = packsTx.objectStore('verses');
+        const versesIndex = versesStore.index('translationId');
         
-        request.onsuccess = () => {
-          const packs = request.result;
-          const translations = packs
-            .filter((p: any) => p.translationId && (p.type === 'text' || p.type === 'original-language'))
-            .map((p: any) => ({
-              id: p.translationId,
-              name: p.translationName || p.translationId
-            }));
+        const packsRequest = packsStore.getAll();
+        
+        packsRequest.onsuccess = async () => {
+          const packs = packsRequest.result;
+          const textPacks = packs.filter((p: any) => 
+            p.translationId && (p.type === 'text' || p.type === 'original-language')
+          );
           
-          resolve(translations);
+          // Filter out packs that have no verses (parent packs like "GREEK" or "HEBREW")
+          const translationsWithVerses: Array<{id: string, name: string}> = [];
+          
+          for (const pack of textPacks) {
+            // Check if this translation has any verses
+            const hasVerses = await new Promise<boolean>((res) => {
+              const countRequest = versesIndex.count(IDBKeyRange.only(pack.translationId));
+              countRequest.onsuccess = () => res(countRequest.result > 0);
+              countRequest.onerror = () => res(false);
+            });
+            
+            if (hasVerses) {
+              translationsWithVerses.push({
+                id: pack.translationId,
+                name: pack.translationName || pack.translationId
+              });
+            }
+          }
+          
+          resolve(translationsWithVerses);
         };
         
-        request.onerror = () => reject(request.error);
+        packsRequest.onerror = () => reject(packsRequest.error);
       });
     } catch (error) {
       console.error('Error getting translations:', error);
