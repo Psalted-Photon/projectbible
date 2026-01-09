@@ -1,5 +1,6 @@
 import { IndexedDBTextStore, IndexedDBPackManager, IndexedDBSearchIndex, IndexedDBCrossReferenceStore, importPackFromSQLite, getSettings, updateSettings, getDailyDriverFor, getPrimaryDailyDriver, type UserSettings, openDB } from './adapters/index.js';
 import { clearAllData, clearPacksOnly, getDatabaseStats } from './adapters/db-manager.js';
+import L from 'leaflet';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing #app element');
@@ -211,7 +212,7 @@ document.getElementById('downloadBtn')?.addEventListener('click', async () => {
     return;
   }
   
-  statusDiv.textContent = `⏳ Downloading from ${url}...`;
+  statusDiv.innerHTML = `⏳ Downloading from ${url}...<br><div id="downloadProgress" style="margin-top: 5px;"></div>`;
   statusDiv.style.color = '#666';
   
   try {
@@ -220,7 +221,43 @@ document.getElementById('downloadBtn')?.addEventListener('click', async () => {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
     
-    const blob = await response.blob();
+    const contentLength = response.headers.get('content-length');
+    const total = contentLength ? parseInt(contentLength, 10) : 0;
+    
+    // Download with progress tracking
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body');
+    }
+    
+    const chunks: Uint8Array[] = [];
+    let receivedLength = 0;
+    const progressDiv = document.getElementById('downloadProgress');
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      chunks.push(value);
+      receivedLength += value.length;
+      
+      // Update progress
+      if (progressDiv) {
+        const percent = total > 0 ? Math.round((receivedLength / total) * 100) : 0;
+        const mb = (receivedLength / 1024 / 1024).toFixed(2);
+        const totalMb = total > 0 ? (total / 1024 / 1024).toFixed(2) : '?';
+        
+        progressDiv.innerHTML = `
+          <div style="background: #e0e0e0; height: 20px; border-radius: 4px; overflow: hidden;">
+            <div style="background: #4caf50; height: 100%; width: ${percent}%; transition: width 0.3s;"></div>
+          </div>
+          <div style="margin-top: 5px; font-size: 12px;">${mb} MB / ${totalMb} MB (${percent}%)</div>
+        `;
+      }
+    }
+    
+    // Combine chunks into blob
+    const blob = new Blob(chunks);
     const file = new File([blob], url.split('/').pop() || 'pack.sqlite', { type: 'application/x-sqlite3' });
     
     statusDiv.textContent = `⏳ Importing ${file.name}...`;
@@ -932,6 +969,10 @@ function highlightSearchTerms(text: string, query: string): string {
 // Map layers handlers
 document.getElementById('loadMapsBtn')?.addEventListener('click', loadMapLayers);
 document.getElementById('closeMapBtn')?.addEventListener('click', () => {
+  if (currentMap) {
+    currentMap.remove();
+    currentMap = null;
+  }
   document.getElementById('mapViewer')!.style.display = 'none';
 });
 
@@ -981,6 +1022,8 @@ async function loadMapLayers() {
 }
 
 // Make viewMapLayer available globally
+let currentMap: L.Map | null = null;
+
 (window as any).viewMapLayer = async function(layerId: string) {
   try {
     const db = await openDB();
@@ -1011,30 +1054,79 @@ async function loadMapLayers() {
       ${layer.boundaries ? `<div style="margin-top: 8px;"><strong>Features:</strong> ${layer.boundaries.features?.length || 0} boundaries loaded</div>` : ''}
     `;
     
-    // Simple GeoJSON feature list
-    if (layer.boundaries && layer.boundaries.features) {
-      canvasDiv.innerHTML = `
-        <div style="width: 100%; text-align: left;">
-          <div style="font-weight: bold; margin-bottom: 10px;">Map Features (${layer.boundaries.features.length}):</div>
-          <div style="max-height: 400px; overflow-y: auto;">
-            ${layer.boundaries.features.map((feature: any, idx: number) => `
-              <div style="padding: 8px; margin: 4px 0; background: #f8f9fa; border-radius: 4px;">
-                <div style="font-weight: bold;">${feature.properties?.name || `Feature ${idx + 1}`}</div>
-                ${feature.properties?.description ? `<div style="font-size: 12px; color: #666;">${feature.properties.description}</div>` : ''}
-                <div style="font-size: 11px; color: #999; margin-top: 4px;">
-                  Type: ${feature.geometry?.type || 'Unknown'}
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      `;
+    // Clear previous map
+    if (currentMap) {
+      currentMap.remove();
+      currentMap = null;
+    }
+    
+    // Create map canvas
+    canvasDiv.innerHTML = '';
+    canvasDiv.style.display = 'block';
+    canvasDiv.style.alignItems = '';
+    canvasDiv.style.justifyContent = '';
+    
+    // Initialize Leaflet map with historical map center (Jerusalem area)
+    const map = L.map(canvasDiv).setView([31.7683, 35.2137], 8);
+    currentMap = map;
+    
+    // Add OpenStreetMap base layer (for reference)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    }).addTo(map);
+    
+    // Render GeoJSON features if available
+    if (layer.boundaries && layer.boundaries.features && layer.boundaries.features.length > 0) {
+      const geoJsonLayer = L.geoJSON(layer.boundaries, {
+        style: function (feature) {
+          return {
+            color: '#3388ff',
+            weight: 2,
+            opacity: 0.8,
+            fillOpacity: 0.2
+          };
+        },
+        onEachFeature: function (feature, layer) {
+          if (feature.properties) {
+            const props = feature.properties;
+            let popupContent = '';
+            
+            if (props.name) {
+              popupContent += `<strong>${props.name}</strong><br/>`;
+            }
+            if (props.description) {
+              popupContent += `${props.description}<br/>`;
+            }
+            if (props.type) {
+              popupContent += `<em>Type: ${props.type}</em>`;
+            }
+            
+            if (popupContent) {
+              layer.bindPopup(popupContent);
+            }
+          }
+        }
+      }).addTo(map);
+      
+      // Fit map to GeoJSON bounds
+      const bounds = geoJsonLayer.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
     } else {
-      canvasDiv.textContent = 'No boundary data available for this layer';
+      canvasDiv.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">No boundary data available for this layer</div>';
     }
     
     viewerDiv.style.display = 'block';
     viewerDiv.scrollIntoView({ behavior: 'smooth' });
+    
+    // Give map a moment to render then invalidate size
+    setTimeout(() => {
+      if (currentMap) {
+        currentMap.invalidateSize();
+      }
+    }, 100);
   } catch (error) {
     alert(`Error loading map: ${error instanceof Error ? error.message : 'Unknown'}`);
     console.error(error);
