@@ -200,9 +200,13 @@ console.log('✓ Schema created');
 console.log('\n📝 Inserting metadata...');
 const insertMeta = db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)');
 const metaTransaction = db.transaction(() => {
+  insertMeta.run('packId', 'maps-enhanced-v1');
+  insertMeta.run('type', 'map');
   insertMeta.run('version', '1.0');
   insertMeta.run('title', 'Enhanced Biblical Map Pack');
   insertMeta.run('description', 'Comprehensive geographic data for biblical study');
+  insertMeta.run('license', 'CC BY-SA 4.0');
+  insertMeta.run('attribution', 'Pleiades, AWMC Geodata');
   insertMeta.run('created', new Date().toISOString());
   insertMeta.run('total_places', biblicalPlaces.features.length);
   insertMeta.run('linked_verses', Object.keys(placeVerseLinks.verseToPlaces).length);

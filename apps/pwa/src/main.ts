@@ -1,5 +1,5 @@
 import { IndexedDBTextStore, IndexedDBPackManager, IndexedDBSearchIndex, IndexedDBCrossReferenceStore, importPackFromSQLite, getSettings, updateSettings, getDailyDriverFor, getPrimaryDailyDriver, type UserSettings, openDB } from './adapters/index.js';
-import { clearAllData, clearPacksOnly, getDatabaseStats } from './adapters/db-manager.js';
+import { clearAllData, clearPacksOnly, getDatabaseStats, removePack } from './adapters/db-manager.js';
 import L from 'leaflet';
 
 const root = document.getElementById('app');
@@ -387,15 +387,37 @@ async function refreshPacksList() {
     }
     
     packsDiv.innerHTML = packs.map(pack => `
-      <div style="padding: 10px; margin: 5px 0; background: white; border-radius: 4px;">
-        <strong>${pack.translationName || pack.id}</strong> (${pack.translationId || 'N/A'})<br/>
-        <small style="color: #666;">
-          Version: ${pack.version} | 
-          Type: ${pack.type} | 
-          Size: ${(pack.size! / 1024).toFixed(1)} KB
-        </small>
+      <div style="padding: 10px; margin: 5px 0; background: white; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <strong>${pack.translationName || pack.id}</strong> (${pack.translationId || 'N/A'})<br/>
+          <small style="color: #666;">
+            Version: ${pack.version} | 
+            Type: ${pack.type} | 
+            Size: ${(pack.size! / 1024).toFixed(1)} KB
+          </small>
+        </div>
+        <button class="delete-pack-btn" data-pack-id="${pack.id}" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Delete</button>
       </div>
     `).join('');
+    
+    // Add event listeners to delete buttons
+    const deleteButtons = packsDiv.querySelectorAll('.delete-pack-btn');
+    deleteButtons.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const packId = (e.target as HTMLElement).getAttribute('data-pack-id')!;
+        const packName = packs.find(p => p.id === packId)?.translationName || packId;
+        
+        if (confirm(`Are you sure you want to delete "${packName}"? This will remove all its data.`)) {
+          try {
+            await removePack(packId);
+            await refreshInstalledPacks();
+            await updateDatabaseStats();
+          } catch (error) {
+            alert(`Error deleting pack: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
+      });
+    });
     
     // Update translation dropdown
     await refreshTranslationDropdown();
