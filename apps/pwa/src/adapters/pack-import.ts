@@ -258,6 +258,38 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         }
       }
       
+      // Import map_layers if available (maps-enhanced schema)
+      if (tableNames.includes('map_layers')) {
+        console.log('Importing map layers from enhanced pack...');
+        const layersRows = db.exec(`
+          SELECT id, name, layer_type, geojson_data
+          FROM map_layers
+        `);
+        
+        if (layersRows.length && layersRows[0].values.length) {
+          const enhancedLayers = layersRows[0].values.map(([id, name, layerType, geojsonData]) => ({
+            id: id as string,
+            name: name as string,
+            displayName: name as string,
+            period: layerType as string,
+            yearStart: 0,
+            yearEnd: 0,
+            type: layerType as string,
+            boundaries: geojsonData ? JSON.parse(geojsonData as string) : undefined,
+            opacity: 0.6,
+            packId: packInfo.id
+          }));
+          
+          console.log(`Importing ${enhancedLayers.length} map layers...`);
+          
+          await batchWriteTransaction('historical_layers', (store) => {
+            enhancedLayers.forEach(layer => store.put(layer));
+          });
+          
+          console.log(`✅ Imported ${enhancedLayers.length} map layers from enhanced pack`);
+        }
+      }
+      
       // Import places if available (maps-enhanced schema)
       if (tableNames.includes('places')) {
         console.log('Importing places from enhanced map pack...');
