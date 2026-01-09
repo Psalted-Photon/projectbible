@@ -201,58 +201,79 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // Import map/places data
       console.log('Importing map pack...');
       
-      // Import historical layers (GeoJSON map data)
-      const layersRows = db.exec(`
-        SELECT id, name, display_name, period, year_start, year_end, type, 
-               boundaries, overlay_url, opacity, description
-        FROM historical_layers
-      `);
+      // Check which schema this pack uses
+      const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+      const tableNames = tables.length > 0 ? tables[0].values.map(row => row[0] as string) : [];
+      console.log('Pack tables:', tableNames);
       
-      if (layersRows.length && layersRows[0].values.length) {
-        // sql.js returns columns in the order specified in SELECT
-        const columns = layersRows[0].columns;
-        console.log('Historical layers columns:', columns);
+      // Try importing historical_layers (standard map pack)
+      if (tableNames.includes('historical_layers')) {
+        const layersRows = db.exec(`
+          SELECT id, name, display_name, period, year_start, year_end, type, 
+                 boundaries, overlay_url, opacity, description
+          FROM historical_layers
+        `);
         
-        const layers = layersRows[0].values.map((row) => {
-          const obj: any = {};
-          columns.forEach((col, idx) => {
-            obj[col] = row[idx];
+        if (layersRows.length && layersRows[0].values.length) {
+          const columns = layersRows[0].columns;
+          console.log('Historical layers columns:', columns);
+          
+          const layers = layersRows[0].values.map((row) => {
+            const obj: any = {};
+            columns.forEach((col, idx) => {
+              obj[col] = row[idx];
+            });
+            
+            const layer = {
+              id: obj.id as string,
+              name: obj.name as string,
+              displayName: obj.display_name as string,
+              period: obj.period as string,
+              yearStart: obj.year_start as number,
+              yearEnd: obj.year_end as number,
+              type: obj.type as string,
+              boundaries: obj.boundaries ? JSON.parse(obj.boundaries as string) : undefined,
+              overlayUrl: obj.overlay_url as string | undefined,
+              opacity: obj.opacity as number,
+              description: obj.description as string | undefined,
+              packId: packInfo.id
+            };
+            
+            return layer;
           });
           
-          // Map to IndexedDB schema
-          const layer = {
-            id: obj.id as string,
-            name: obj.name as string,
-            displayName: obj.display_name as string,
-            period: obj.period as string,
-            yearStart: obj.year_start as number,
-            yearEnd: obj.year_end as number,
-            type: obj.type as string,
-            boundaries: obj.boundaries ? JSON.parse(obj.boundaries as string) : undefined,
-            overlayUrl: obj.overlay_url as string | undefined,
-            opacity: obj.opacity as number,
-            description: obj.description as string | undefined,
-            packId: packInfo.id
-          };
+          console.log(`Importing ${layers.length} historical layers...`);
           
-          console.log('Layer:', layer.id, 'has id?', !!layer.id);
-          return layer;
-        });
-        
-        console.log(`Importing ${layers.length} historical layers...`);
-        
-        await batchWriteTransaction('historical_layers', (store) => {
-          layers.forEach(layer => {
-            if (!layer.id) {
-              console.error('Layer missing id:', layer);
-              throw new Error('Layer missing required id field');
-            }
-            store.put(layer);
+          await batchWriteTransaction('historical_layers', (store) => {
+            layers.forEach(layer => {
+              if (!layer.id) {
+                console.error('Layer missing id:', layer);
+                throw new Error('Layer missing required id field');
+              }
+              store.put(layer);
+            });
           });
-        });
-        
-        console.log(`✅ Map pack imported: ${layers.length} layers`);
+          
+          console.log(`✅ Map pack imported: ${layers.length} layers`);
+        }
       }
+      
+      // Import places if available (maps-enhanced schema)
+      if (tableNames.includes('places')) {
+        console.log('Importing places from enhanced map pack...');
+        const placesRows = db.exec(`
+          SELECT id, name, latitude, longitude, place_type, modern_name, 
+                 description, time_periods, ancient_names
+          FROM places
+        `);
+        
+        if (placesRows.length && placesRows[0].values.length) {
+          console.log(`Found ${placesRows[0].values.length} places, but places import not yet implemented`);
+          // TODO: Import places when places store is ready
+        }
+      }
+      
+      console.log(`✅ Map pack ${packInfo.id} imported`);
     }
     
   } finally {
