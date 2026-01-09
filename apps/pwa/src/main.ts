@@ -146,8 +146,16 @@ root.innerHTML = `
             <option value="">Select translation first</option>
           </select>
         </label>
-        <label style="margin-left: 10px;">Chapter: <input type="number" id="chapter" value="1" style="padding: 4px; width: 60px;" /></label>
-        <label style="margin-left: 10px;">Verse: <input type="number" id="verse" value="1" style="padding: 4px; width: 60px;" /></label>
+        <label style="margin-left: 10px;">Chapter:
+          <select id="chapter" style="padding: 4px; min-width: 80px;">
+            <option value="1">1</option>
+          </select>
+        </label>
+        <label style="margin-left: 10px;">Verse:
+          <select id="verse" style="padding: 4px; min-width: 80px;">
+            <option value="1">1</option>
+          </select>
+        </label>
       </div>
       <button id="readVerse" style="padding: 8px 16px; margin-top: 10px;">Read Verse</button>
       <button id="readChapter" style="padding: 8px 16px; margin-left: 10px;">Read Chapter</button>
@@ -387,6 +395,12 @@ async function refreshTranslationDropdown() {
     
     translationSelect.value = defaultTranslation;
     await refreshBookDropdown(defaultTranslation);
+    
+    // Initialize with Genesis 1:1
+    const bookSelect = document.getElementById('book') as HTMLSelectElement;
+    const firstBook = bookSelect.value || 'Genesis';
+    await refreshChapterDropdown(defaultTranslation, firstBook);
+    await refreshVerseDropdown(defaultTranslation, firstBook, 1);
   } catch (error) {
     translationSelect.innerHTML = '<option value="">Error loading translations</option>';
     console.error(error);
@@ -414,11 +428,133 @@ async function refreshBookDropdown(translation: string) {
   }
 }
 
-// Listen for translation changes to update book dropdown
+// Refresh chapter dropdown based on selected translation and book
+async function refreshChapterDropdown(translation: string, book: string) {
+  const chapterSelect = document.getElementById('chapter') as HTMLSelectElement;
+  
+  try {
+    const chapters = await textStore.getChapters(translation, book);
+    
+    if (chapters.length === 0) {
+      chapterSelect.innerHTML = '<option value="1">1</option>';
+      return;
+    }
+    
+    chapterSelect.innerHTML = chapters.map(ch => 
+      `<option value="${ch}">${ch}</option>`
+    ).join('');
+  } catch (error) {
+    chapterSelect.innerHTML = '<option value="1">1</option>';
+    console.error(error);
+  }
+}
+
+// Refresh verse dropdown based on selected translation, book, and chapter
+async function refreshVerseDropdown(translation: string, book: string, chapter: number) {
+  const verseSelect = document.getElementById('verse') as HTMLSelectElement;
+  
+  try {
+    const verses = await textStore.getVerses(translation, book, chapter);
+    
+    if (verses.length === 0) {
+      verseSelect.innerHTML = '<option value="1">1</option>';
+      return;
+    }
+    
+    verseSelect.innerHTML = verses.map(v => 
+      `<option value="${v}">${v}</option>`
+    ).join('');
+  } catch (error) {
+    verseSelect.innerHTML = '<option value="1">1</option>';
+    console.error(error);
+  }
+}
+
+// Listen for translation changes to keep current location
 document.getElementById('translation')?.addEventListener('change', async (e) => {
   const translation = (e.target as HTMLSelectElement).value;
   if (translation) {
+    const bookSelect = document.getElementById('book') as HTMLSelectElement;
+    const chapterSelect = document.getElementById('chapter') as HTMLSelectElement;
+    const verseSelect = document.getElementById('verse') as HTMLSelectElement;
+    
+    // Save current location
+    const currentBook = bookSelect.value;
+    const currentChapter = parseInt(chapterSelect.value);
+    const currentVerse = parseInt(verseSelect.value);
+    
+    // Refresh books for new translation
     await refreshBookDropdown(translation);
+    
+    // Try to restore previous location
+    const books = await textStore.getBooks(translation);
+    if (books.includes(currentBook)) {
+      bookSelect.value = currentBook;
+      await refreshChapterDropdown(translation, currentBook);
+      
+      // Try to restore chapter
+      const chapters = await textStore.getChapters(translation, currentBook);
+      if (chapters.includes(currentChapter)) {
+        chapterSelect.value = currentChapter.toString();
+        await refreshVerseDropdown(translation, currentBook, currentChapter);
+        
+        // Try to restore verse
+        const verses = await textStore.getVerses(translation, currentBook, currentChapter);
+        if (verses.includes(currentVerse)) {
+          verseSelect.value = currentVerse.toString();
+        } else {
+          verseSelect.value = '1'; // Default to verse 1 if not available
+        }
+      } else {
+        chapterSelect.value = '1'; // Default to chapter 1
+        verseSelect.value = '1';
+        await refreshVerseDropdown(translation, currentBook, 1);
+      }
+    } else {
+      // Book not available, default to first book, Genesis 1:1
+      if (books.length > 0) {
+        bookSelect.value = books[0];
+        await refreshChapterDropdown(translation, books[0]);
+        await refreshVerseDropdown(translation, books[0], 1);
+      }
+    }
+  }
+});
+
+// Listen for book changes to update chapter dropdown
+document.getElementById('book')?.addEventListener('change', async (e) => {
+  const bookSelect = e.target as HTMLSelectElement;
+  const translationSelect = document.getElementById('translation') as HTMLSelectElement;
+  const chapterSelect = document.getElementById('chapter') as HTMLSelectElement;
+  const verseSelect = document.getElementById('verse') as HTMLSelectElement;
+  
+  const translation = translationSelect.value;
+  const book = bookSelect.value;
+  
+  if (translation && book) {
+    // Reset to chapter 1, verse 1 when book changes
+    await refreshChapterDropdown(translation, book);
+    chapterSelect.value = '1';
+    await refreshVerseDropdown(translation, book, 1);
+    verseSelect.value = '1';
+  }
+});
+
+// Listen for chapter changes to update verse dropdown
+document.getElementById('chapter')?.addEventListener('change', async (e) => {
+  const chapterSelect = e.target as HTMLSelectElement;
+  const translationSelect = document.getElementById('translation') as HTMLSelectElement;
+  const bookSelect = document.getElementById('book') as HTMLSelectElement;
+  const verseSelect = document.getElementById('verse') as HTMLSelectElement;
+  
+  const translation = translationSelect.value;
+  const book = bookSelect.value;
+  const chapter = parseInt(chapterSelect.value);
+  
+  if (translation && book && chapter) {
+    // Reset to verse 1 when chapter changes
+    await refreshVerseDropdown(translation, book, chapter);
+    verseSelect.value = '1';
   }
 });
 
@@ -484,10 +620,10 @@ document.getElementById('saveSettings')?.addEventListener('click', () => {
 
 // Read verse handler
 document.getElementById('readVerse')?.addEventListener('click', async () => {
-  const translation = (document.getElementById('translation') as HTMLInputElement).value;
-  const book = (document.getElementById('book') as HTMLInputElement).value;
-  const chapter = parseInt((document.getElementById('chapter') as HTMLInputElement).value);
-  const verse = parseInt((document.getElementById('verse') as HTMLInputElement).value);
+  const translation = (document.getElementById('translation') as HTMLSelectElement).value;
+  const book = (document.getElementById('book') as HTMLSelectElement).value;
+  const chapter = parseInt((document.getElementById('chapter') as HTMLSelectElement).value);
+  const verse = parseInt((document.getElementById('verse') as HTMLSelectElement).value);
   const resultDiv = document.getElementById('verseText')!;
   
   resultDiv.textContent = '⏳ Loading...';
@@ -548,9 +684,9 @@ document.getElementById('readVerse')?.addEventListener('click', async () => {
 
 // Read chapter handler
 document.getElementById('readChapter')?.addEventListener('click', async () => {
-  const translation = (document.getElementById('translation') as HTMLInputElement).value;
-  const book = (document.getElementById('book') as HTMLInputElement).value;
-  const chapter = parseInt((document.getElementById('chapter') as HTMLInputElement).value);
+  const translation = (document.getElementById('translation') as HTMLSelectElement).value;
+  const book = (document.getElementById('book') as HTMLSelectElement).value;
+  const chapter = parseInt((document.getElementById('chapter') as HTMLSelectElement).value);
   const resultDiv = document.getElementById('verseText')!;
   
   resultDiv.textContent = '⏳ Loading...';

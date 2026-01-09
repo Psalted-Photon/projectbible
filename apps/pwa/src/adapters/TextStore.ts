@@ -149,4 +149,77 @@ export class IndexedDBTextStore implements TextStore {
       return [];
     }
   }
+
+  async getChapters(translation: string, book: string): Promise<number[]> {
+    try {
+      const db = await import('./db.js').then(m => m.openDB());
+      
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('verses', 'readonly');
+        const store = transaction.objectStore('verses');
+        const index = store.index('translation_book_chapter');
+        
+        // Use key range to filter by translation and book
+        const range = IDBKeyRange.bound(
+          [translation, book, 0],
+          [translation, book, Number.MAX_SAFE_INTEGER]
+        );
+        const request = index.openCursor(range);
+        
+        const chapters = new Set<number>();
+        
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (cursor) {
+            chapters.add(cursor.value.chapter);
+            cursor.continue();
+          } else {
+            // Return sorted chapter numbers
+            const chapterArray = Array.from(chapters).sort((a, b) => a - b);
+            resolve(chapterArray);
+          }
+        };
+        
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error('Error getting chapters:', error);
+      return [];
+    }
+  }
+
+  async getVerses(translation: string, book: string, chapter: number): Promise<number[]> {
+    try {
+      const db = await import('./db.js').then(m => m.openDB());
+      
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('verses', 'readonly');
+        const store = transaction.objectStore('verses');
+        const index = store.index('translation_book_chapter');
+        
+        // Use key range to filter by translation, book, and chapter
+        const range = IDBKeyRange.only([translation, book, chapter]);
+        const request = index.openCursor(range);
+        
+        const verses = new Set<number>();
+        
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (cursor) {
+            verses.add(cursor.value.verse);
+            cursor.continue();
+          } else {
+            // Return sorted verse numbers
+            const verseArray = Array.from(verses).sort((a, b) => a - b);
+            resolve(verseArray);
+          }
+        };
+        
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error('Error getting verses:', error);
+      return [];
+    }
+  }
 }
