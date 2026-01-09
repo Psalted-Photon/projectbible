@@ -24,8 +24,8 @@ const DATA_DIR = join(repoRoot, 'data-sources');
 const CACHE_FILE = join(DATA_DIR, 'NET.json');
 const OUTPUT_PATH = join(repoRoot, 'packs/net.sqlite');
 
-// getBible.net API endpoint for NET Bible (better structured data)
-const GETBIBLE_API = 'https://getbible.net/v2/net';
+// Bolls.life API endpoint for NET Bible (reliable JSON API)
+const BOLLS_API = 'https://bolls.life/get-chapter/NET';
 
 // All Bible books in canonical order
 const BIBLE_BOOKS = [
@@ -99,11 +99,17 @@ const BIBLE_BOOKS = [
   { name: 'Revelation', abbr: 'Rev', testament: 'NT' }
 ];
 
+// Chapter counts for each book
+const CHAPTER_COUNTS = [
+  50, 40, 27, 36, 34, 24, 21, 4, 31, 24, 22, 25, 29, 36, 10, 13, 10, 42, 150, 31, 12, 8, 66, 52, 5, 48, 12, 14, 3, 9, 1, 4, 7, 3, 3, 3, 2, 14, 4,
+  28, 16, 24, 21, 28, 16, 16, 13, 6, 6, 4, 4, 5, 3, 6, 4, 3, 1, 13, 5, 5, 3, 5, 1, 1, 1, 22
+];
+
 /**
- * Download NET Bible text from getBible.net API
+ * Download NET Bible text from bolls.life API
  */
 async function downloadNETBible() {
-  console.log('📥 Downloading NET Bible from getBible.net...\n');
+  console.log('📥 Downloading NET Bible from bolls.life...\n');
   
   const bibleData = {
     translation: 'NET',
@@ -115,25 +121,36 @@ async function downloadNETBible() {
   
   let totalVerses = 0;
   
-  for (const book of BIBLE_BOOKS) {
-    console.log(`Downloading ${book.name}...`);
+  for (let bookIndex = 0; bookIndex < BIBLE_BOOKS.length; bookIndex++) {
+    const book = BIBLE_BOOKS[bookIndex];
+    const bookNum = bookIndex + 1;
+    const chapterCount = CHAPTER_COUNTS[bookIndex];
+    
+    console.log(`Downloading ${book.name} (${chapterCount} chapters)...`);
+    
+    const verses = [];
     
     try {
-      // getBible.net uses book numbers (1-66)
-      const bookNum = BIBLE_BOOKS.indexOf(book) + 1;
-      const url = `${GETBIBLE_API}/${bookNum}.json`;
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        console.error(`  ❌ Failed to download ${book.name}: ${response.status}`);
-        continue;
+      for (let chapter = 1; chapter <= chapterCount; chapter++) {
+        // Bolls.life API: GET /get-chapter/{translation}/{book}/{chapter}/
+        const url = `${BOLLS_API}/${bookNum}/${chapter}/`;
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          console.error(`  ❌ Failed chapter ${chapter}: ${response.status}`);
+          continue;
+        }
+        
+        const data = await response.json();
+        
+        // Parse bolls.life format
+        const chapterVerses = parseBollsData(data, chapter);
+        verses.push(...chapterVerses);
+        
+        // Brief delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
-      
-      const data = await response.json();
-      
-      // Parse getBible format
-      const verses = parseGetBibleData(data, book.name);
       
       if (verses.length > 0) {
         bibleData.books.push({
@@ -146,9 +163,6 @@ async function downloadNETBible() {
         console.log(`  ✓ ${verses.length} verses`);
       }
       
-      // Rate limiting - be nice to the API
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
     } catch (error) {
       console.error(`  ❌ Error downloading ${book.name}:`, error.message);
     }
@@ -160,23 +174,21 @@ async function downloadNETBible() {
 }
 
 /**
- * Parse getBible.net JSON format
+ * Parse bolls.life JSON format
  */
-function parseGetBibleData(data, bookName) {
+function parseBollsData(data, chapterNum) {
   const verses = [];
   
-  // getBible format: { chapters: { "1": { verses: { "1": { text: "..." } } } } }
-  const chapters = data.chapters || {};
-  
-  for (const [chapterNum, chapterData] of Object.entries(chapters)) {
-    const verseData = chapterData.verses || {};
-    
-    for (const [verseNum, verse] of Object.entries(verseData)) {
-      verses.push({
-        chapter: parseInt(chapterNum),
-        verse: parseInt(verseNum),
-        text: verse.text || verse.verse || ''
-      });
+  // Bolls format is an array of verse objects
+  if (Array.isArray(data)) {
+    for (const verse of data) {
+      if (verse.verse && verse.text) {
+        verses.push({
+          chapter: chapterNum,
+          verse: parseInt(verse.verse),
+          text: verse.text.trim()
+        });
+      }
     }
   }
   
