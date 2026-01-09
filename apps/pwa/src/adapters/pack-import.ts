@@ -7,32 +7,32 @@ import { batchWriteTransaction, writeTransaction } from './db.js';
  */
 export async function importPackFromSQLite(file: File): Promise<void> {
   console.log(`Importing pack from ${file.name}...`);
-  
+
   // Dynamically import sql.js (will be added as dependency)
   const initSqlJs = await import('sql.js').then(m => m.default);
   const SQL = await initSqlJs({
     locateFile: (file: string) => `https://sql.js.org/dist/${file}`
   });
-  
+
   // Read the SQLite file
   const arrayBuffer = await file.arrayBuffer();
   const uint8Array = new Uint8Array(arrayBuffer);
   const db = new SQL.Database(uint8Array);
-  
+
   try {
     // Read metadata
     const metadataRows = db.exec('SELECT key, value FROM metadata');
     if (!metadataRows.length || !metadataRows[0].values.length) {
       throw new Error('Invalid pack: no metadata found');
     }
-    
+
     const metadata: Record<string, string> = {};
     metadataRows[0].values.forEach(([key, value]) => {
       metadata[key as string] = value as string;
     });
-    
+
     console.log('Pack metadata:', metadata);
-    
+
     // Create pack info (handle both camelCase and snake_case metadata keys)
     const packInfo: DBPack = {
       id: metadata.pack_id || metadata.packId,
@@ -46,18 +46,18 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       installedAt: Date.now(),
       description: metadata.description
     };
-    
+
     if (!packInfo.id) {
       throw new Error('Pack metadata missing required "pack_id" or "packId" field');
     }
-    
+
     console.log('Parsed pack info:', packInfo);
-    
+
     // Store pack metadata
     await writeTransaction('packs', (store) => store.put(packInfo));
-    
+
     console.log(`Pack metadata stored: ${packInfo.id}`);
-    
+
     // Import pack-specific data based on type
     if (packInfo.type === 'cross-references') {
       // Import cross-references
@@ -66,7 +66,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
                to_verse_start, to_verse_end, source, description
         FROM cross_references
       `);
-      
+
       if (xrefRows.length && xrefRows[0].values.length) {
         const crossRefs = xrefRows[0].values.map(([fromBook, fromChapter, fromVerse, toBook, toChapter, toVerseStart, toVerseEnd, source, description]) => ({
           id: `${fromBook}:${fromChapter}:${fromVerse}->${toBook}:${toChapter}:${toVerseStart}`,
@@ -81,9 +81,9 @@ export async function importPackFromSQLite(file: File): Promise<void> {
           source: (source as string || 'curated') as 'curated' | 'user' | 'ai',
           votes: 0
         }));
-        
+
         console.log(`Importing ${crossRefs.length} cross-references...`);
-        
+
         // Batch insert cross-references
         const CHUNK_SIZE = 500;
         for (let i = 0; i < crossRefs.length; i += CHUNK_SIZE) {
@@ -92,27 +92,27 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             chunk.forEach(xref => store.put(xref));
           });
         }
-        
+
         console.log(`✅ Cross-references pack imported: ${crossRefs.length} entries`);
       }
     } else if (packInfo.type === 'text' || packInfo.type === 'original-language') {
       // Check if this is a multi-edition pack
       const tableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='editions'");
       const hasEditions = tableCheck.length > 0 && tableCheck[0].values.length > 0;
-      
+
       if (hasEditions) {
         // Multi-edition pack (like greek.sqlite with LXX, Byzantine, TR, OpenGNT)
         console.log('Detected multi-edition pack, importing editions...');
-        
+
         const editionsRows = db.exec('SELECT id, name, testament, description FROM editions');
         if (!editionsRows.length || !editionsRows[0].values.length) {
           throw new Error('Multi-edition pack has no editions table data');
         }
-        
+
         // Import each edition as a separate virtual pack
         for (const [editionId, editionName, testament, description] of editionsRows[0].values) {
           const editionPackId = `${packInfo.id}-${editionId}`;
-          
+
           // Create a pack entry for this edition
           const editionPack: DBPack = {
             id: editionPackId,
@@ -126,18 +126,18 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             installedAt: packInfo.installedAt,
             description: description as string
           };
-          
+
           await writeTransaction('packs', (store) => store.put(editionPack));
           console.log(`  Edition pack created: ${editionId} (${editionName})`);
-          
+
           // Import verses for this edition
           const verseRows = db.exec(`SELECT book, chapter, verse, text FROM verses WHERE edition = ?`, [editionId]);
-          
+
           if (!verseRows.length || !verseRows[0].values.length) {
             console.warn(`  No verses found for edition ${editionId}`);
             continue;
           }
-          
+
           const verses: DBVerse[] = verseRows[0].values.map(([book, chapter, verse, text]) => ({
             id: `${editionId}:${book}:${chapter}:${verse}`,
             translationId: editionId as string,
@@ -146,9 +146,9 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             verse: verse as number,
             text: text as string
           }));
-          
+
           console.log(`  Importing ${verses.length} verses for ${editionId}...`);
-          
+
           // Batch insert verses
           const CHUNK_SIZE = 500;
           for (let i = 0; i < verses.length; i += CHUNK_SIZE) {
@@ -157,20 +157,20 @@ export async function importPackFromSQLite(file: File): Promise<void> {
               chunk.forEach(v => store.put(v));
             });
           }
-          
+
           console.log(`  ✅ Edition ${editionId}: ${verses.length} verses imported`);
         }
-        
+
         console.log(`✅ Multi-edition pack ${packInfo.id} imported successfully`);
       } else {
         // Single-edition pack (traditional format)
         const verseRows = db.exec('SELECT book, chapter, verse, text FROM verses');
-        
+
         if (!verseRows.length || !verseRows[0].values.length) {
           console.warn('No verses found in text pack');
           return;
         }
-        
+
         const verses: DBVerse[] = verseRows[0].values.map(([book, chapter, verse, text]) => {
           const translationId = packInfo.translationId!;
           return {
@@ -182,9 +182,9 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             text: text as string
           };
         });
-        
+
         console.log(`Importing ${verses.length} verses...`);
-        
+
         // Batch insert verses (chunk to avoid transaction timeout)
         const CHUNK_SIZE = 500;
         for (let i = 0; i < verses.length; i += CHUNK_SIZE) {
@@ -194,18 +194,18 @@ export async function importPackFromSQLite(file: File): Promise<void> {
           });
           console.log(`Imported ${Math.min(i + CHUNK_SIZE, verses.length)}/${verses.length} verses`);
         }
-        
+
         console.log(`✅ Pack ${packInfo.id} imported successfully`);
       }
     } else if (packInfo.type === 'map') {
       // Import map/places data
       console.log('Importing map pack...');
-      
+
       // Check which schema this pack uses
       const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
       const tableNames = tables.length > 0 ? tables[0].values.map(row => row[0] as string) : [];
       console.log('Pack tables:', tableNames);
-      
+
       // Try importing historical_layers (standard map pack)
       if (tableNames.includes('historical_layers')) {
         const layersRows = db.exec(`
@@ -213,17 +213,17 @@ export async function importPackFromSQLite(file: File): Promise<void> {
                  boundaries, overlay_url, opacity, description
           FROM historical_layers
         `);
-        
+
         if (layersRows.length && layersRows[0].values.length) {
           const columns = layersRows[0].columns;
           console.log('Historical layers columns:', columns);
-          
+
           const layers = layersRows[0].values.map((row) => {
             const obj: any = {};
             columns.forEach((col, idx) => {
               obj[col] = row[idx];
             });
-            
+
             const layer = {
               id: obj.id as string,
               name: obj.name as string,
@@ -238,12 +238,12 @@ export async function importPackFromSQLite(file: File): Promise<void> {
               description: obj.description as string | undefined,
               packId: packInfo.id
             };
-            
+
             return layer;
           });
-          
+
           console.log(`Importing ${layers.length} historical layers...`);
-          
+
           await batchWriteTransaction('historical_layers', (store) => {
             layers.forEach(layer => {
               if (!layer.id) {
@@ -253,11 +253,11 @@ export async function importPackFromSQLite(file: File): Promise<void> {
               store.put(layer);
             });
           });
-          
+
           console.log(`✅ Map pack imported: ${layers.length} layers`);
         }
       }
-      
+
       // Import map_layers if available (maps-enhanced schema)
       if (tableNames.includes('map_layers')) {
         console.log('Importing map layers from enhanced pack...');
@@ -265,7 +265,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
           SELECT id, name, layer_type, geojson_data
           FROM map_layers
         `);
-        
+
         if (layersRows.length && layersRows[0].values.length) {
           const enhancedLayers = layersRows[0].values.map(([id, name, layerType, geojsonData]) => ({
             id: id as string,
@@ -279,17 +279,17 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             opacity: 0.6,
             packId: packInfo.id
           }));
-          
+
           console.log(`Importing ${enhancedLayers.length} map layers...`);
-          
+
           await batchWriteTransaction('historical_layers', (store) => {
             enhancedLayers.forEach(layer => store.put(layer));
           });
-          
+
           console.log(`✅ Imported ${enhancedLayers.length} map layers from enhanced pack`);
         }
       }
-      
+
       // Import places if available (maps-enhanced schema)
       if (tableNames.includes('places')) {
         console.log('Importing places from enhanced map pack...');
@@ -298,16 +298,16 @@ export async function importPackFromSQLite(file: File): Promise<void> {
                  description, time_periods, ancient_names
           FROM places
         `);
-        
+
         if (placesRows.length && placesRows[0].values.length) {
           console.log(`Found ${placesRows[0].values.length} places, but places import not yet implemented`);
           // TODO: Import places when places store is ready
         }
       }
-      
+
       console.log(`✅ Map pack ${packInfo.id} imported`);
     }
-    
+
   } finally {
     db.close();
   }
