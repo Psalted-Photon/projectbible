@@ -24,8 +24,8 @@ const DATA_DIR = join(repoRoot, 'data-sources');
 const CACHE_FILE = join(DATA_DIR, 'NET.json');
 const OUTPUT_PATH = join(repoRoot, 'packs/net.sqlite');
 
-// Bible.org API endpoint for NET Bible
-const BIBLE_ORG_API = 'https://labs.bible.org/api/';
+// getBible.net API endpoint for NET Bible (better structured data)
+const GETBIBLE_API = 'https://getbible.net/v2/net';
 
 // All Bible books in canonical order
 const BIBLE_BOOKS = [
@@ -100,10 +100,10 @@ const BIBLE_BOOKS = [
 ];
 
 /**
- * Download NET Bible text from bible.org API
+ * Download NET Bible text from getBible.net API
  */
 async function downloadNETBible() {
-  console.log('📥 Downloading NET Bible from bible.org...\n');
+  console.log('📥 Downloading NET Bible from getBible.net...\n');
   
   const bibleData = {
     translation: 'NET',
@@ -119,9 +119,10 @@ async function downloadNETBible() {
     console.log(`Downloading ${book.name}...`);
     
     try {
-      // Download entire book using bible.org API
-      // Format: https://labs.bible.org/api/?passage=John&type=text&formatting=plain
-      const url = `${BIBLE_ORG_API}?passage=${encodeURIComponent(book.name)}&type=text&formatting=plain`;
+      // getBible.net uses book numbers (1-66)
+      const bookNum = BIBLE_BOOKS.indexOf(book) + 1;
+      const url = `${GETBIBLE_API}/${bookNum}.json`;
+      
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -129,11 +130,10 @@ async function downloadNETBible() {
         continue;
       }
       
-      const text = await response.text();
+      const data = await response.json();
       
-      // Parse the plain text response
-      // Format is typically: "Book Chapter:Verse verse text\n"
-      const verses = parseNETText(text, book.name);
+      // Parse getBible format
+      const verses = parseGetBibleData(data, book.name);
       
       if (verses.length > 0) {
         bibleData.books.push({
@@ -146,8 +146,8 @@ async function downloadNETBible() {
         console.log(`  ✓ ${verses.length} verses`);
       }
       
-      // Rate limiting - be nice to bible.org
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Rate limiting - be nice to the API
+      await new Promise(resolve => setTimeout(resolve, 300));
       
     } catch (error) {
       console.error(`  ❌ Error downloading ${book.name}:`, error.message);
@@ -160,26 +160,22 @@ async function downloadNETBible() {
 }
 
 /**
- * Parse plain text NET Bible format
+ * Parse getBible.net JSON format
  */
-function parseNETText(text, bookName) {
+function parseGetBibleData(data, bookName) {
   const verses = [];
-  const lines = text.trim().split('\n');
   
-  for (const line of lines) {
-    if (!line.trim()) continue;
+  // getBible format: { chapters: { "1": { verses: { "1": { text: "..." } } } } }
+  const chapters = data.chapters || {};
+  
+  for (const [chapterNum, chapterData] of Object.entries(chapters)) {
+    const verseData = chapterData.verses || {};
     
-    // Try to match verse pattern
-    // Could be: "Genesis 1:1 In the beginning..."
-    // Or just: "1 In the beginning..." (if book name is omitted)
-    const match = line.match(/^(?:.*?)?(\d+):(\d+)\s+(.+)$/);
-    
-    if (match) {
-      const [, chapter, verse, verseText] = match;
+    for (const [verseNum, verse] of Object.entries(verseData)) {
       verses.push({
-        chapter: parseInt(chapter),
-        verse: parseInt(verse),
-        text: verseText.trim()
+        chapter: parseInt(chapterNum),
+        verse: parseInt(verseNum),
+        text: verse.text || verse.verse || ''
       });
     }
   }
