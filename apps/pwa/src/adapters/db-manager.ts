@@ -80,7 +80,7 @@ export async function removePack(packId: string): Promise<void> {
   const db = await openDatabase();
   
   try {
-    const tx = db.transaction(['packs', 'verses', 'places', 'map_tiles', 'historical_layers'], 'readwrite');
+    const tx = db.transaction(['packs', 'verses', 'places', 'map_tiles', 'historical_layers', 'morphology'], 'readwrite');
     
     // Delete pack metadata
     await new Promise<void>((resolve, reject) => {
@@ -89,16 +89,19 @@ export async function removePack(packId: string): Promise<void> {
       request.onerror = () => reject(request.error);
     });
     
-    // Delete verses from this pack (if it's a text pack)
+    // Delete all verses from this pack (scan all verses since there's no translationId index)
     const versesStore = tx.objectStore('verses');
-    const versesIndex = versesStore.index('translationId');
-    const versesCursor = versesIndex.openCursor(IDBKeyRange.only(packId));
+    const versesCursor = versesStore.openCursor();
     
     await new Promise<void>((resolve, reject) => {
       versesCursor.onsuccess = (event) => {
         const cursor = (event.target as IDBRequest).result;
         if (cursor) {
-          cursor.delete();
+          const verse = cursor.value;
+          // Check if this verse belongs to the pack being deleted
+          if (verse.translationId === packId || verse.id?.startsWith(packId + ':')) {
+            cursor.delete();
+          }
           cursor.continue();
         } else {
           resolve();
@@ -107,22 +110,64 @@ export async function removePack(packId: string): Promise<void> {
       versesCursor.onerror = () => reject(versesCursor.error);
     });
     
-    // Delete places from this pack (if it's a places pack)
+    // Delete morphology data from this pack
+    const morphStore = tx.objectStore('morphology');
+    const morphCursor = morphStore.openCursor();
+    
+    await new Promise<void>((resolve, reject) => {
+      morphCursor.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result;
+        if (cursor) {
+          const morph = cursor.value;
+          if (morph.translationId === packId || morph.id?.startsWith(packId + ':')) {
+            cursor.delete();
+          }
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      morphCursor.onerror = () => reject(morphCursor.error);
+    });
+    
+    // Delete places from this pack (scan all since packId index might not exist)
     const placesStore = tx.objectStore('places');
-    const placesIndex = placesStore.index('packId');
-    const placesCursor = placesIndex.openCursor(IDBKeyRange.only(packId));
+    const placesCursor = placesStore.openCursor();
     
     await new Promise<void>((resolve, reject) => {
       placesCursor.onsuccess = (event) => {
         const cursor = (event.target as IDBRequest).result;
         if (cursor) {
-          cursor.delete();
+          const place = cursor.value;
+          if (place.packId === packId) {
+            cursor.delete();
+          }
           cursor.continue();
         } else {
           resolve();
         }
       };
       placesCursor.onerror = () => reject(placesCursor.error);
+    });
+    
+    // Delete map layers from this pack
+    const layersStore = tx.objectStore('historical_layers');
+    const layersCursor = layersStore.openCursor();
+    
+    await new Promise<void>((resolve, reject) => {
+      layersCursor.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result;
+        if (cursor) {
+          const layer = cursor.value;
+          if (layer.packId === packId) {
+            cursor.delete();
+          }
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      layersCursor.onerror = () => reject(layersCursor.error);
     });
     
     await waitForTransaction(tx);

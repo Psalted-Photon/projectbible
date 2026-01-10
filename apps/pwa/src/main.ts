@@ -15,7 +15,7 @@ const crossRefStore = new IndexedDBCrossReferenceStore();
 const selectedVerses = new Set<string>(); // Store as "book:chapter:verse"
 const selectedWords = new Set<string>(); // Store as "book:chapter:verse:position"
 let longPressTimer: number | null = null;
-const LONG_PRESS_DURATION = 800; // 0.8 seconds
+const LONG_PRESS_DURATION = 900; // 0.9 seconds
 
 // Bible books list
 const BIBLE_BOOKS = [
@@ -57,20 +57,38 @@ root.innerHTML = `
       <p style="margin: 5px 0; color: #666; font-size: 14px;">Set your preferred default translations</p>
       <div style="margin: 15px 0;">
         <label style="display: block; margin: 10px 0;">
-          English:
-          <select id="ddEnglish" style="margin-left: 10px; padding: 4px;">
+          English (OT):
+          <select id="ddEnglishOT" style="margin-left: 10px; padding: 4px;">
             <option value="">Not set</option>
           </select>
         </label>
         <label style="display: block; margin: 10px 0;">
-          Hebrew:
-          <select id="ddHebrew" style="margin-left: 10px; padding: 4px;">
+          English (NT):
+          <select id="ddEnglishNT" style="margin-left: 10px; padding: 4px;">
             <option value="">Not set</option>
           </select>
         </label>
         <label style="display: block; margin: 10px 0;">
-          Greek:
-          <select id="ddGreek" style="margin-left: 10px; padding: 4px;">
+          Hebrew (OT):
+          <select id="ddHebrewOT" style="margin-left: 10px; padding: 4px;">
+            <option value="">Not set</option>
+          </select>
+        </label>
+        <label style="display: block; margin: 10px 0;">
+          Hebrew (NT):
+          <select id="ddHebrewNT" style="margin-left: 10px; padding: 4px;">
+            <option value="">Not set</option>
+          </select>
+        </label>
+        <label style="display: block; margin: 10px 0;">
+          Greek (OT):
+          <select id="ddGreekOT" style="margin-left: 10px; padding: 4px;">
+            <option value="">Not set</option>
+          </select>
+        </label>
+        <label style="display: block; margin: 10px 0;">
+          Greek (NT):
+          <select id="ddGreekNT" style="margin-left: 10px; padding: 4px;">
             <option value="">Not set</option>
           </select>
         </label>
@@ -194,8 +212,8 @@ root.innerHTML = `
   </div>
   
   <!-- Word study popup -->
-  <div id="wordStudyModal" style="display: none; position: fixed; background: white; padding: 20px; border-radius: 8px; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.3); z-index: 1002; border: 1px solid #ddd;">
-    <button id="closeWordStudyModal" style="position: absolute; top: 8px; right: 8px; background: #f0f0f0; border: none; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 18px; line-height: 1;">&times;</button>
+  <div id="wordStudyModal" style="display: none; position: fixed; background: white; padding: 10px; border-radius: 8px; max-width: 360px; max-height: min(52vh, 420px); overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.3); z-index: 1002; border: 1px solid #ddd; font-size: 12.5px; line-height: 1.22;">
+    <button id="closeWordStudyModal" style="position: absolute; top: 6px; right: 6px; background: #f0f0f0; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
     <div id="wordStudyContent"></div>
   </div>
 `;
@@ -277,6 +295,11 @@ document.getElementById('downloadBtn')?.addEventListener('click', async () => {
     console.error(error);
   }
 });
+
+// Keep popups inside the viewport, regardless of where they are opened.
+installViewportClampedPopup('wordStudyModal', { preferBelow: 'auto' as any });
+installViewportClampedPopup('xrefModal', { preferBelow: 'auto' as any });
+installViewportClampedPopup('verseActionModal', { preferBelow: 'auto' as any });
 
 // Import pack handler
 document.getElementById('importBtn')?.addEventListener('click', async () => {
@@ -410,7 +433,7 @@ async function refreshPacksList() {
         if (confirm(`Are you sure you want to delete "${packName}"? This will remove all its data.`)) {
           try {
             await removePack(packId);
-            await refreshInstalledPacks();
+            await refreshPacksList();
             await updateDatabaseStats();
           } catch (error) {
             alert(`Error deleting pack: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -433,6 +456,9 @@ async function refreshTranslationDropdown() {
   
   try {
     const translations = await textStore.getTranslations();
+
+    translationNameById.clear();
+    for (const t of translations) translationNameById.set((t.id || '').toLowerCase(), t.name || '');
     
     if (translations.length === 0) {
       translationSelect.innerHTML = '<option value="">No packs installed</option>';
@@ -619,56 +645,110 @@ document.getElementById('chapter')?.addEventListener('change', async (e) => {
 
 document.getElementById('refreshPacks')?.addEventListener('click', refreshPacksList);
 
+const translationNameById = new Map<string, string>();
+
+function isGreekTranslationId(translationId: string): boolean {
+  const id = (translationId || '').toLowerCase();
+  const name = (translationNameById.get(id) || '').toLowerCase();
+
+  const looksEnglish = name.includes('english') || name.includes('brenton') || id.includes('english');
+
+  // Strong signals for Greek source texts
+  if (id === 'byz' || id === 'tr') return true;
+  if (id.includes('opengnt') || id.includes('gnt') || id.includes('sblgnt')) return true;
+  if (id.includes('greek')) return true;
+  if (name.includes('greek') || name.includes('gnt')) return true;
+
+  // LXX / Septuagint: Greek by default, but keep clearly-English versions in English.
+  const isLxxLike = id.includes('lxx') || name.includes('lxx') || name.includes('septuagint');
+  if (isLxxLike) return !looksEnglish;
+
+  return false;
+}
+
 // Daily driver settings handlers
 function populateDailyDriverDropdowns(translations: Array<{id: string, name: string}>) {
   const settings = getSettings();
   
-  const ddEnglish = document.getElementById('ddEnglish') as HTMLSelectElement;
-  const ddHebrew = document.getElementById('ddHebrew') as HTMLSelectElement;
-  const ddGreek = document.getElementById('ddGreek') as HTMLSelectElement;
+  const ddEnglishOT = document.getElementById('ddEnglishOT') as HTMLSelectElement;
+  const ddEnglishNT = document.getElementById('ddEnglishNT') as HTMLSelectElement;
+  const ddHebrewOT = document.getElementById('ddHebrewOT') as HTMLSelectElement;
+  const ddHebrewNT = document.getElementById('ddHebrewNT') as HTMLSelectElement;
+  const ddGreekOT = document.getElementById('ddGreekOT') as HTMLSelectElement;
+  const ddGreekNT = document.getElementById('ddGreekNT') as HTMLSelectElement;
   
   // Categorize translations
-  const greekIds = ['lxx', 'byz', 'tr', 'opengnt'];
-  const hebrewIds = ['wlc'];
-  
-  // English = not Hebrew or Greek
-  const englishTranslations = translations.filter(t => 
-    !greekIds.includes(t.id.toLowerCase()) && !hebrewIds.includes(t.id.toLowerCase())
-  );
-  
-  const hebrewTranslations = translations.filter(t => 
-    hebrewIds.includes(t.id.toLowerCase())
-  );
-  
-  const greekTranslations = translations.filter(t => 
-    greekIds.includes(t.id.toLowerCase())
-  );
-  
-  // Populate English (KJV, WEB, etc.)
-  ddEnglish.innerHTML = '<option value="">Not set</option>' + 
-    englishTranslations.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-  if (settings.dailyDriverEnglish) ddEnglish.value = settings.dailyDriverEnglish;
-  
-  // Populate Hebrew (WLC)
-  ddHebrew.innerHTML = '<option value="">Not set</option>' + 
-    hebrewTranslations.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-  if (settings.dailyDriverHebrew) ddHebrew.value = settings.dailyDriverHebrew;
-  
-  // Populate Greek (LXX, Byzantine, TR, OpenGNT)
-  ddGreek.innerHTML = '<option value="">Not set</option>' + 
-    greekTranslations.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-  if (settings.dailyDriverGreek) ddGreek.value = settings.dailyDriverGreek;
+  const isGreek = (t: { id: string; name: string }) => {
+    const id = (t.id || '').toLowerCase();
+    const name = (t.name || '').toLowerCase();
+
+    const looksEnglish = name.includes('english') || name.includes('brenton') || id.includes('english');
+
+    // Strong signals for Greek source texts
+    if (id === 'byz' || id === 'tr') return true;
+    if (id.includes('opengnt') || id.includes('gnt') || id.includes('sblgnt')) return true;
+    if (id.includes('greek')) return true;
+    if (name.includes('greek') || name.includes('gnt')) return true;
+
+    // LXX / Septuagint:
+    // - Treat as Greek by default (source text)
+    // - BUT if it's clearly an English translation (e.g., "LXX 2012 (Brenton English)"), keep it in English.
+    const isLxxLike = id.includes('lxx') || name.includes('lxx') || name.includes('septuagint');
+    if (isLxxLike) {
+      if (looksEnglish) return false;
+      return true;
+    }
+
+    return false;
+  };
+  const isHebrew = (t: { id: string; name: string }) => {
+    const id = (t.id || '').toLowerCase();
+    const name = (t.name || '').toLowerCase();
+    return id === 'wlc' || id.includes('hebrew') || name.includes('hebrew') || name.includes('wlc') || name.includes('leningrad');
+  };
+  const isEnglish = (t: { id: string; name: string }) => !isGreek(t) && !isHebrew(t);
+
+  const englishTranslations = translations.filter(isEnglish);
+  const hebrewTranslations = translations.filter(isHebrew);
+  const greekTranslations = translations.filter(isGreek);
+
+  const optionHtml = (items: Array<{id: string, name: string}>) =>
+    '<option value="">Not set</option>' + items.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+
+  // Populate English OT/NT
+  ddEnglishOT.innerHTML = optionHtml(englishTranslations);
+  ddEnglishNT.innerHTML = optionHtml(englishTranslations);
+  if (settings.dailyDriverEnglishOT) ddEnglishOT.value = settings.dailyDriverEnglishOT;
+  if (settings.dailyDriverEnglishNT) ddEnglishNT.value = settings.dailyDriverEnglishNT;
+
+  // Populate Hebrew OT/NT
+  ddHebrewOT.innerHTML = optionHtml(hebrewTranslations);
+  ddHebrewNT.innerHTML = optionHtml(hebrewTranslations);
+  if (settings.dailyDriverHebrewOT) ddHebrewOT.value = settings.dailyDriverHebrewOT;
+  if (settings.dailyDriverHebrewNT) ddHebrewNT.value = settings.dailyDriverHebrewNT;
+
+  // Populate Greek OT/NT
+  ddGreekOT.innerHTML = optionHtml(greekTranslations);
+  ddGreekNT.innerHTML = optionHtml(greekTranslations);
+  if (settings.dailyDriverGreekOT) ddGreekOT.value = settings.dailyDriverGreekOT;
+  if (settings.dailyDriverGreekNT) ddGreekNT.value = settings.dailyDriverGreekNT;
 }
 
 document.getElementById('saveSettings')?.addEventListener('click', () => {
-  const ddEnglish = (document.getElementById('ddEnglish') as HTMLSelectElement).value;
-  const ddHebrew = (document.getElementById('ddHebrew') as HTMLSelectElement).value;
-  const ddGreek = (document.getElementById('ddGreek') as HTMLSelectElement).value;
+  const ddEnglishOT = (document.getElementById('ddEnglishOT') as HTMLSelectElement).value;
+  const ddEnglishNT = (document.getElementById('ddEnglishNT') as HTMLSelectElement).value;
+  const ddHebrewOT = (document.getElementById('ddHebrewOT') as HTMLSelectElement).value;
+  const ddHebrewNT = (document.getElementById('ddHebrewNT') as HTMLSelectElement).value;
+  const ddGreekOT = (document.getElementById('ddGreekOT') as HTMLSelectElement).value;
+  const ddGreekNT = (document.getElementById('ddGreekNT') as HTMLSelectElement).value;
   
   updateSettings({
-    dailyDriverEnglish: ddEnglish || undefined,
-    dailyDriverHebrew: ddHebrew || undefined,
-    dailyDriverGreek: ddGreek || undefined
+    dailyDriverEnglishOT: ddEnglishOT || undefined,
+    dailyDriverEnglishNT: ddEnglishNT || undefined,
+    dailyDriverHebrewOT: ddHebrewOT || undefined,
+    dailyDriverHebrewNT: ddHebrewNT || undefined,
+    dailyDriverGreekOT: ddGreekOT || undefined,
+    dailyDriverGreekNT: ddGreekNT || undefined
   });
   
   // Show saved confirmation
@@ -694,7 +774,9 @@ document.getElementById('readVerse')?.addEventListener('click', async () => {
       // Get cross-references for this verse
       const crossRefs = await crossRefStore.getCrossReferences({ book, chapter, verse });
       
-      let html = `<strong>${book} ${chapter}:${verse}</strong><br/>${text}`;
+      const headingClass = getHeadingFontClass(translation);
+      const headingClasses = ['reader-title', headingClass].filter(Boolean).join(' ');
+      let html = `<strong class="${headingClasses}">${book} ${chapter}:${verse}</strong><br/>${renderVerseWordsHtml(text)}`;
       
       if (crossRefs.length > 0) {
         // Check which cross-references exist in current translation
@@ -731,7 +813,8 @@ document.getElementById('readVerse')?.addEventListener('click', async () => {
         `;
       }
       
-      resultDiv.innerHTML = html;
+      resultDiv.innerHTML = renderBackButtonHtml() + html;
+      setCurrentReadingLocation({ translation, book, chapter, verse, mode: 'verse' });
     } else {
       resultDiv.innerHTML = `<em style="color: #999;">Verse not found</em>`;
     }
@@ -740,6 +823,380 @@ document.getElementById('readVerse')?.addEventListener('click', async () => {
     console.error(error);
   }
 });
+
+type ReadingMode = 'verse' | 'chapter';
+type ReadingLocation = {
+  translation: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  mode: ReadingMode;
+};
+
+let currentReadingLocation: ReadingLocation | null = null;
+const readingBackStack: ReadingLocation[] = [];
+
+function setCurrentReadingLocation(loc: ReadingLocation) {
+  currentReadingLocation = loc;
+}
+
+function renderBackButtonHtml(): string {
+  if (readingBackStack.length === 0) return '';
+  return `
+    <div style="margin: 0 0 10px 0;">
+      <button onclick="goBackToPreviousReading(); return false;" style="padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; font-size: 13px;">← Back</button>
+    </div>
+  `;
+}
+
+async function navigateToLocation(loc: ReadingLocation) {
+  const translationSelect = document.getElementById('translation') as HTMLSelectElement;
+  const bookSelect = document.getElementById('book') as HTMLSelectElement;
+  const chapterSelect = document.getElementById('chapter') as HTMLSelectElement;
+  const verseSelect = document.getElementById('verse') as HTMLSelectElement;
+
+  translationSelect.value = loc.translation;
+  await refreshBookDropdown(loc.translation);
+  bookSelect.value = loc.book;
+  await refreshChapterDropdown(loc.translation, loc.book);
+  chapterSelect.value = String(loc.chapter);
+  await refreshVerseDropdown(loc.translation, loc.book, loc.chapter);
+  verseSelect.value = String(loc.verse);
+
+  if (loc.mode === 'chapter') {
+    (document.getElementById('readChapter') as HTMLButtonElement).click();
+  } else {
+    (document.getElementById('readVerse') as HTMLButtonElement).click();
+  }
+}
+
+function goBackToPreviousReading() {
+  const prev = readingBackStack.pop();
+  if (!prev) return;
+  void navigateToLocation(prev);
+}
+
+// Needed because renderBackButtonHtml uses inline onclick.
+(window as any).goBackToPreviousReading = goBackToPreviousReading;
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function cleanPopupText(raw: unknown): string {
+  if (raw === null || raw === undefined) return '';
+  let s = String(raw);
+  // Remove control chars / stray BOM / embedded NULs.
+  s = s.replace(/[\u0000\uFEFF]/g, '');
+  // Some glosses appear with leading tortoise-shell brackets like "〔Tamar".
+  s = s.replace(/^[\s\u3014\u3010\[\]]+/g, '');
+  return s.trim();
+}
+
+function stripHtmlTags(text: string): string {
+  // Some packs include inline markup like <b>...</b>. For popup verse previews,
+  // we prefer plain text.
+  return (text ?? '').replace(/<[^>]*>/g, '');
+}
+
+function positionFixedPopupWithinViewport(
+  modal: HTMLElement,
+  anchorRect: DOMRect,
+  opts?: { padding?: number; gap?: number; preferBelow?: boolean | 'auto' }
+) {
+  const padding = opts?.padding ?? 8;
+  const gap = opts?.gap ?? 6;
+  const preferBelow = opts?.preferBelow === 'auto'
+    ? (anchorRect.top < window.innerHeight / 2)
+    : (opts?.preferBelow ?? true);
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const modalRect = modal.getBoundingClientRect();
+
+  const spaceAbove = anchorRect.top - padding;
+  const spaceBelow = vh - anchorRect.bottom - padding;
+
+  // Decide vertical placement (below/above) and then clamp.
+  const belowTop = anchorRect.bottom + gap;
+  const aboveTop = anchorRect.top - modalRect.height - gap;
+
+  let idealTop: number;
+  if (preferBelow) {
+    if (spaceBelow >= modalRect.height + gap) idealTop = belowTop;
+    else if (spaceAbove >= modalRect.height + gap) idealTop = aboveTop;
+    else idealTop = spaceBelow >= spaceAbove ? belowTop : aboveTop;
+  } else {
+    if (spaceAbove >= modalRect.height + gap) idealTop = aboveTop;
+    else if (spaceBelow >= modalRect.height + gap) idealTop = belowTop;
+    else idealTop = spaceAbove >= spaceBelow ? aboveTop : belowTop;
+  }
+
+  // Horizontal placement: try align left edge to anchor, but keep inside viewport.
+  const idealLeft = anchorRect.left;
+
+  const maxLeft = Math.max(padding, vw - modalRect.width - padding);
+  const maxTop = Math.max(padding, vh - modalRect.height - padding);
+
+  const left = Math.min(Math.max(padding, idealLeft), maxLeft);
+  const top = Math.min(Math.max(padding, idealTop), maxTop);
+
+  modal.style.left = `${left}px`;
+  modal.style.top = `${top}px`;
+}
+
+let lastPopupAnchorRect: DOMRect = new DOMRect(Math.round(window.innerWidth / 2), Math.round(window.innerHeight / 2), 0, 0);
+
+// Long-press on touch/mouse often produces a synthetic click on release.
+// Suppress it to prevent immediately closing newly opened popups.
+let suppressNextGlobalClickUntil = 0;
+
+function recordLastPopupAnchorFromEvent(e: Event) {
+  const anyEvt = e as any;
+  const x = typeof anyEvt.clientX === 'number' ? anyEvt.clientX : (anyEvt.touches?.[0]?.clientX ?? lastPopupAnchorRect.left);
+  const y = typeof anyEvt.clientY === 'number' ? anyEvt.clientY : (anyEvt.touches?.[0]?.clientY ?? lastPopupAnchorRect.top);
+
+  // Prefer the actual interaction point (especially important for long-press on a whole verse line).
+  if (Number.isFinite(x) && Number.isFinite(y)) {
+    lastPopupAnchorRect = new DOMRect(x, y, 0, 0);
+    return;
+  }
+
+  // Fallback: element bounds.
+  const target = (e.target as HTMLElement | null);
+  if (target && typeof target.getBoundingClientRect === 'function') {
+    lastPopupAnchorRect = target.getBoundingClientRect();
+  }
+}
+
+// Track where the user last interacted so popups can self-correct even if
+// another code path positions them off-screen.
+document.addEventListener('pointerdown', recordLastPopupAnchorFromEvent, true);
+document.addEventListener('mousedown', recordLastPopupAnchorFromEvent, true);
+document.addEventListener('touchstart', recordLastPopupAnchorFromEvent, { capture: true, passive: true });
+
+// Capture-phase suppression so it runs before any click-to-close handlers.
+document.addEventListener('click', (e) => {
+  if (suppressNextGlobalClickUntil && Date.now() < suppressNextGlobalClickUntil) {
+    suppressNextGlobalClickUntil = 0;
+    e.preventDefault();
+    e.stopPropagation();
+    (e as any).stopImmediatePropagation?.();
+  }
+}, true);
+
+function installViewportClampedPopup(modalId: string, opts?: { preferBelow?: boolean }) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+
+  let scheduled = false;
+  let isRepositioning = false;
+
+  const schedule = () => {
+    if (scheduled || isRepositioning) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      if (isRepositioning) return;
+      const display = window.getComputedStyle(modal).display;
+      if (display === 'none') return;
+
+      isRepositioning = true;
+      const prevVis = (modal as HTMLElement).style.visibility;
+      (modal as HTMLElement).style.visibility = 'hidden';
+      positionFixedPopupWithinViewport(modal as HTMLElement, lastPopupAnchorRect, { preferBelow: (opts?.preferBelow ?? 'auto') as any });
+      (modal as HTMLElement).style.visibility = prevVis || 'visible';
+      queueMicrotask(() => {
+        isRepositioning = false;
+      });
+    });
+  };
+
+  // Re-clamp whenever someone shows/moves the popup.
+  const obs = new MutationObserver(schedule);
+  obs.observe(modal, { attributes: true, attributeFilter: ['style', 'class'] });
+
+  // Also clamp on viewport changes.
+  window.addEventListener('resize', schedule);
+  window.addEventListener('scroll', schedule, { passive: true });
+}
+
+function applyCinzelToItIsWrittenQuote(html: string, quoteClass: 'ot-quote' | 'ot-quote-greek' = 'ot-quote'): string {
+  // Lightweight heuristic: in NT text, OT quotations are often introduced with
+  // "as it is written" / "for it is written" / "it is written".
+  // We apply Cinzel only to the quoted portion (everything after the intro).
+  if (!html) return html;
+  if (html.includes('class="ot-quote"') || html.includes('class="ot-quote-greek"')) return html;
+
+  const lower = html.toLowerCase();
+  const patterns = ['as it is written', 'for it is written', 'it is written'];
+  let idx = -1;
+  let len = 0;
+  for (const p of patterns) {
+    const at = lower.indexOf(p);
+    if (at !== -1 && (idx === -1 || at < idx)) {
+      idx = at;
+      len = p.length;
+    }
+  }
+  if (idx === -1) return html;
+
+  let start = idx + len;
+  while (start < html.length && /[\s,;:\)\]\u2014\u2013-]/.test(html[start])) start++;
+  if (start >= html.length) return html;
+
+  return html.slice(0, start) + `<span class="${quoteClass}">` + html.slice(start) + `</span>`;
+}
+
+function renderVerseWordsHtml(text: string): string {
+  const cleaned = stripHtmlTags(text);
+  const { html: baseHtml } = renderTextWithInlineNotes(cleaned);
+  const translationSelect = document.getElementById('translation') as HTMLSelectElement | null;
+  const translation = (translationSelect?.value || '').toLowerCase();
+
+  const isGreek = isGreekTranslationId(translation);
+  const html = applyCinzelToItIsWrittenQuote(baseHtml, isGreek ? 'ot-quote-greek' : 'ot-quote');
+
+  let extraClass = '';
+  if (translation === 'web') extraClass = ' translation-font-web';
+  if (translation === 'kjv' || translation === 'kjvpce') extraClass = ' translation-font-kjv';
+  if (!extraClass && isGreek) extraClass = ' translation-font-greek';
+  return `<span class="verse-words${extraClass}" data-translation="${escapeHtml(translation)}">${html}</span>`;
+}
+
+function getHeadingFontClass(translationId: string): string {
+  const t = (translationId || '').toLowerCase();
+  if (t === 'kjv' || t === 'kjvpce') return 'heading-font-kjv';
+  if (t === 'web') return 'heading-font-web';
+  if (isGreekTranslationId(t)) return 'heading-font-greek';
+  return '';
+}
+
+function renderTextWithInlineNotes(text: string): { html: string; noteCount: number } {
+  // Converts inline notes like "+ 53:1 John 12:38; Rom 10:16" into clickable superscripts.
+  // Heuristics:
+  // - Notes that end with ". " followed by lowercase are treated as footnotes.
+  // - Notes that contain at least one ref token like "12:38" end before the next lowercase word.
+  const source = text ?? '';
+  let out = '';
+  let i = 0;
+  let noteIndex = 0;
+
+  const isPlusStart = (idx: number) => {
+    const ch = source[idx];
+    if (ch !== '+') return false;
+    const prev = idx > 0 ? source[idx - 1] : ' ';
+    return prev === ' ' || prev === '\n' || prev === '\t';
+  };
+
+  while (i < source.length) {
+    const plusPos = source.indexOf('+', i);
+    if (plusPos === -1) {
+      out += escapeHtml(source.slice(i));
+      break;
+    }
+
+    if (!isPlusStart(plusPos)) {
+      out += escapeHtml(source.slice(i, plusPos + 1));
+      i = plusPos + 1;
+      continue;
+    }
+
+    // Emit text before note
+    out += escapeHtml(source.slice(i, plusPos));
+
+    // Parse note
+    let j = plusPos + 1;
+    while (j < source.length && /\s/.test(source[j])) j++;
+
+    // Optional leading chapter:verse marker (e.g. 53:1)
+    const markerMatch = source.slice(j).match(/^(\d+):(\d+)\s*/);
+    if (markerMatch) {
+      j += markerMatch[0].length;
+    }
+
+    const noteStart = j;
+    let hasRefToken = false;
+    let noteEnd = source.length;
+
+    for (let k = j; k < source.length; k++) {
+      // Track if we see a likely bible ref token like 12:38
+      if (!hasRefToken && /\b\d+:\d+\b/.test(source.slice(j, k + 1))) {
+        hasRefToken = true;
+      }
+
+      // Footnote-like: end at period if next starts a lowercase continuation
+      if (source[k] === '.' && k + 2 < source.length && source[k + 1] === ' ' && /[a-z]/.test(source[k + 2])) {
+        // Avoid treating common abbreviations (e.g. "Gr.") as footnote terminators
+        const tokenStart = Math.max(
+          source.lastIndexOf(' ', k - 1) + 1,
+          source.lastIndexOf('\n', k - 1) + 1,
+          source.lastIndexOf('\t', k - 1) + 1
+        );
+        const token = source.slice(tokenStart, k).trim();
+        const abbrev = token.replace(/[^A-Za-z]/g, '');
+        const nonTerminalAbbrevs = new Set(['Gr', 'Gk', 'Heb', 'Aram', 'Lat', 'Syr', 'LXX', 'Vg']);
+        if (nonTerminalAbbrevs.has(abbrev)) {
+          continue;
+        }
+
+        noteEnd = k + 1; // include '.'
+        break;
+      }
+
+      // Cross-ref-like: end before next lowercase word if we've already seen ref tokens
+      if (hasRefToken && source[k] === ' ' && k + 1 < source.length && /[a-z]/.test(source[k + 1])) {
+        noteEnd = k;
+        break;
+      }
+
+      // Stop if another inline note begins
+      if (k > j && source[k] === '+' && (source[k - 1] === ' ' || source[k - 1] === '\n' || source[k - 1] === '\t')) {
+        noteEnd = k;
+        break;
+      }
+    }
+
+    const rawNote = source.slice(noteStart, noteEnd).trim();
+    if (rawNote.length > 0) {
+      noteIndex++;
+      const encoded = encodeURIComponent(rawNote);
+      const title = rawNote.length > 80 ? rawNote.slice(0, 77) + '…' : rawNote;
+      const encodedTitle = escapeHtml(title);
+      out += `<sup class="inline-note" data-note="${encoded}" data-note-index="${noteIndex}" ` +
+        `style="color:#0066cc; cursor:pointer; font-size:11px; margin:0 2px; user-select:none;" ` +
+        `title="Footnote ${noteIndex}: ${encodedTitle}">[${noteIndex}]</sup>`;
+    } else {
+      out += escapeHtml(source.slice(plusPos, noteEnd));
+    }
+
+    i = noteEnd;
+  }
+
+  return { html: out, noteCount: noteIndex };
+}
+
+// Handle inline footnote clicks (works across mouse/touch and avoids relying on inline onclick)
+document.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement | null;
+  if (!target) return;
+
+  const noteEl = target.closest('.inline-note') as HTMLElement | null;
+  if (!noteEl) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  (e as any).stopImmediatePropagation?.();
+
+  const encodedNote = noteEl.getAttribute('data-note') || '';
+  const noteIndex = noteEl.getAttribute('data-note-index') || '';
+  showInlineNote(encodedNote, noteIndex, e as MouseEvent, noteEl);
+}, true);
 
 // Read chapter handler
 document.getElementById('readChapter')?.addEventListener('click', async () => {
@@ -759,12 +1216,16 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
         verses.map(v => crossRefStore.getCrossReferences({ book, chapter, verse: v.verse }))
       );
       
+      const headingClass = getHeadingFontClass(translation);
+      const headingClasses = ['reader-title', headingClass].filter(Boolean).join(' ');
       resultDiv.innerHTML = `
-        <h3>${book} ${chapter}</h3>
+        ${renderBackButtonHtml()}
+        <h3 class="${headingClasses}">${book} ${chapter}</h3>
         ${verses.map((v, idx) => {
           const hasCrossRefs = verseCrossRefs[idx].length > 0;
           const verseKey = `${book}:${chapter}:${v.verse}`;
           const isSelected = selectedVerses.has(verseKey);
+          const wordsHtml = renderVerseWordsHtml(v.text);
           
           return `
             <p class="verse-text" 
@@ -776,7 +1237,7 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
                    ${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${book}', ${chapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>
                 ${v.verse}${hasCrossRefs ? ' 🔗' : ''}
               </sup> 
-              <span class="verse-words">${v.text}</span>
+              ${wordsHtml}
             </p>
           `;
         }).join('')}
@@ -784,6 +1245,7 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
       
       // Attach verse selection handlers
       attachVerseSelectionHandlers();
+      setCurrentReadingLocation({ translation, book, chapter, verse: 1, mode: 'chapter' });
     } else {
       resultDiv.innerHTML = `<em style="color: #999;">Chapter not found</em>`;
     }
@@ -798,10 +1260,6 @@ async function showCrossReferences(book: string, chapter: number, verse: number,
   const modal = document.getElementById('xrefModal')!;
   const content = document.getElementById('xrefModalContent')!;
   const translation = (document.getElementById('translation') as HTMLInputElement).value;
-  
-  // Store mouse position first
-  const mouseX = event.clientX;
-  const mouseY = event.clientY;
   
   modal.style.display = 'none'; // Hide completely while loading
   
@@ -853,18 +1311,13 @@ async function showCrossReferences(book: string, chapter: number, verse: number,
     modal.style.visibility = 'hidden';
     
     requestAnimationFrame(() => {
-      const modalRect = modal.getBoundingClientRect();
-      
-      console.log('FINAL modal height:', modalRect.height, 'mouseY:', mouseY);
-      
-      // Center horizontally, bottom edge 5px above cursor
-      const left = mouseX - (modalRect.width / 2);
-      const top = mouseY - modalRect.height - 5;
-      
-      console.log('FINAL position - left:', left, 'top:', top);
-      
-      modal.style.left = `${left}px`;
-      modal.style.top = `${top}px`;
+      const targetEl = (event.target as HTMLElement | null);
+      const anchorRect = targetEl?.getBoundingClientRect
+        ? targetEl.getBoundingClientRect()
+        : new DOMRect(event.clientX, event.clientY, 0, 0);
+
+      // Prefer showing above the clicked verse number, but always stay on-screen.
+      positionFixedPopupWithinViewport(modal, anchorRect, { preferBelow: false });
       modal.style.visibility = 'visible';
     });
   } catch (error) {
@@ -872,9 +1325,246 @@ async function showCrossReferences(book: string, chapter: number, verse: number,
   }
 }
 
+type FootnoteRefMatch = {
+  start: number;
+  end: number;
+  bookRaw: string;
+  chapter: number;
+  versesRaw: string;
+  display: string;
+};
+
+function parseFootnoteRefs(text: string): FootnoteRefMatch[] {
+  const matches: FootnoteRefMatch[] = [];
+  const s = text ?? '';
+  // Examples: "John 12:38", "Rom 10:16", "1 Pet. 2:22", "Acts 8:32,33"
+  const re = /\b((?:[1-3]\s*)?[A-Za-z][A-Za-z.]+(?:\s+[A-Za-z][A-Za-z.]*)*)\s+(\d+):(\d+(?:[\-\u2013]\d+)?(?:,\d+)*)\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    const bookRaw = m[1].trim();
+    const chapter = parseInt(m[2], 10);
+    const versesRaw = m[3].trim();
+    matches.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      bookRaw,
+      chapter,
+      versesRaw,
+      display: m[0]
+    });
+  }
+  return matches;
+}
+
+function normalizeBookKey(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .replace(/\./g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+const bookNameCache = new Map<string, Map<string, string>>();
+
+async function resolveBookNameFromAbbrev(raw: string, translation: string): Promise<string | null> {
+  const key = normalizeBookKey(raw);
+  if (!key) return null;
+
+  let map = bookNameCache.get(translation);
+  if (!map) {
+    const books = await textStore.getBooks(translation);
+    map = new Map<string, string>();
+    for (const b of books) {
+      map.set(normalizeBookKey(b), b);
+    }
+    bookNameCache.set(translation, map);
+  }
+
+  if (map.has(key)) return map.get(key)!;
+
+  let best: { book: string; score: number } | null = null;
+  for (const [norm, book] of map.entries()) {
+    if (norm.startsWith(key) || key.startsWith(norm)) {
+      const score = Math.abs(norm.length - key.length);
+      if (!best || score < best.score) best = { book, score };
+    }
+  }
+  return best?.book || null;
+}
+
+function parseVerseNumbers(versesRaw: string): number[] {
+  const cleaned = (versesRaw || '').replace(/[^0-9,\-\u2013]/g, '');
+  if (!cleaned) return [];
+  if (cleaned.includes('-') || cleaned.includes('\u2013')) {
+    const parts = cleaned.split(/[-\u2013]/).map(x => parseInt(x, 10)).filter(Boolean);
+    if (parts.length >= 2) {
+      const start = parts[0];
+      const end = parts[1];
+      const out: number[] = [];
+      for (let v = start; v <= end && out.length < 20; v++) out.push(v);
+      return out;
+    }
+  }
+  return cleaned.split(',').map(x => parseInt(x, 10)).filter(Boolean).slice(0, 20);
+}
+
+type FootnoteExpansion = {
+  key: string;
+  displayRef: string;
+  translation: string;
+  book: string;
+  chapter: number;
+  versesRaw: string;
+  verses: number[];
+  verseHtml: string;
+};
+
+let currentFootnoteState: { noteText: string; expansions: Map<string, FootnoteExpansion> } | null = null;
+let footnoteSessionId = 0;
+
+function renderFootnoteModalHtml(): string {
+  if (!currentFootnoteState) return '';
+  const { noteText, expansions } = currentFootnoteState;
+  const refs = parseFootnoteRefs(noteText);
+  const expandedKeys = new Set(expansions.keys());
+
+  let body = '';
+  let cursor = 0;
+  for (const r of refs) {
+    if (r.start < cursor) continue;
+    body += escapeHtml(noteText.slice(cursor, r.start));
+    const key = `${normalizeBookKey(r.bookRaw)}|${r.chapter}|${r.versesRaw}`;
+    const isExpanded = expandedKeys.has(key);
+    const style = isExpanded
+      ? 'color:#0066cc; font-weight:600; text-decoration: underline;'
+      : 'color:#0066cc; text-decoration: underline;';
+    body += `<a href="#" class="footnote-ref" data-book="${encodeURIComponent(r.bookRaw)}" data-chapter="${r.chapter}" data-verses="${encodeURIComponent(r.versesRaw)}" style="${style}">${escapeHtml(r.display)}</a>`;
+    cursor = r.end;
+  }
+  body += escapeHtml(noteText.slice(cursor));
+
+  let expansionsHtml = '';
+  for (const exp of expansions.values()) {
+    const previewFontClass = isGreekTranslationId(exp.translation) ? ' popup-verse-text-greek' : '';
+    expansionsHtml += `
+      <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee;">
+        <div style="font-weight: 650; font-size: 13px; color: #333; margin-bottom: 4px;">${escapeHtml(exp.displayRef)}</div>
+        <div class="popup-verse-text${previewFontClass}" style="color: #555; font-size: 13px; line-height: 1.35;">${exp.verseHtml}</div>
+      </div>
+    `;
+  }
+
+  return `<div style="margin: 0 22px 0 0; color: #555; font-size: 13px; line-height: 1.35;">${body}</div>${expansionsHtml}`;
+}
+
+function showInlineNote(encodedNote: string, noteIndex: string, event: MouseEvent, anchorEl?: HTMLElement) {
+  const modal = document.getElementById('xrefModal')!;
+  const content = document.getElementById('xrefModalContent')!;
+  const noteText = decodeURIComponent(encodedNote || '');
+
+  const target = (anchorEl || (event.target as HTMLElement)) as HTMLElement;
+
+  footnoteSessionId++;
+  currentFootnoteState = { noteText, expansions: new Map() };
+  content.innerHTML = renderFootnoteModalHtml();
+
+  // Position near the clicked marker (robust on touch where clientX/Y can be unreliable)
+  const rect = target.getBoundingClientRect();
+  modal.style.display = 'block';
+  modal.style.visibility = 'hidden';
+
+  requestAnimationFrame(() => {
+    positionFixedPopupWithinViewport(modal, rect, { preferBelow: true });
+    modal.style.visibility = 'visible';
+  });
+}
+
+// Handle verse-reference clicks inside footnotes:
+// 1st click expands popup with verse text
+// 2nd click navigates to that verse (with Back button)
+document.addEventListener('click', async (e) => {
+  const target = e.target as HTMLElement | null;
+  if (!target) return;
+  const link = target.closest('.footnote-ref') as HTMLElement | null;
+  if (!link) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  (e as any).stopImmediatePropagation?.();
+
+  if (!currentFootnoteState) return;
+  const session = footnoteSessionId;
+
+  const bookRaw = decodeURIComponent(link.getAttribute('data-book') || '');
+  const chapter = parseInt(link.getAttribute('data-chapter') || '0', 10);
+  const versesRaw = decodeURIComponent(link.getAttribute('data-verses') || '');
+  const verses = parseVerseNumbers(versesRaw);
+  if (!bookRaw || !chapter || verses.length === 0) return;
+
+  const key = `${normalizeBookKey(bookRaw)}|${chapter}|${versesRaw}`;
+
+  // If already expanded: navigate
+  if (currentFootnoteState.expansions.has(key)) {
+    const exp = currentFootnoteState.expansions.get(key)!;
+    const translationSel = document.getElementById('translation') as HTMLSelectElement;
+    const bookSel = document.getElementById('book') as HTMLSelectElement;
+    const chapterSel = document.getElementById('chapter') as HTMLSelectElement;
+    const verseSel = document.getElementById('verse') as HTMLSelectElement;
+    const fallbackLoc: ReadingLocation = {
+      translation: translationSel.value,
+      book: bookSel.value,
+      chapter: parseInt(chapterSel.value, 10),
+      verse: parseInt(verseSel.value, 10),
+      mode: 'verse'
+    };
+    readingBackStack.push(currentReadingLocation || fallbackLoc);
+
+    closeXrefModal();
+    await navigateToLocation({ translation: exp.translation, book: exp.book, chapter: exp.chapter, verse: exp.verses[0], mode: 'verse' });
+    return;
+  }
+
+  // Otherwise: expand
+  const translationSel = document.getElementById('translation') as HTMLSelectElement;
+  const currentTranslation = translationSel.value;
+  const primary = getPrimaryDailyDriver() || currentTranslation || 'kjv';
+  const resolvedBook = await resolveBookNameFromAbbrev(bookRaw, primary) || await resolveBookNameFromAbbrev(bookRaw, currentTranslation);
+  if (!resolvedBook) return;
+
+  const ddTranslation = getDailyDriverFor(resolvedBook) || currentTranslation || 'kjv';
+
+  const verseTexts: string[] = [];
+  for (const v of verses) {
+    const t = await textStore.getVerse(ddTranslation, resolvedBook, chapter, v);
+    if (t) verseTexts.push(t);
+  }
+
+  const verseHtml = verseTexts.length > 0
+    ? verseTexts.map(t => `<span>${escapeHtml(stripHtmlTags(t))}</span>`).join(' ')
+    : `<span style="color:#999;">Verse not found in ${escapeHtml(ddTranslation.toUpperCase())}</span>`;
+
+  if (session !== footnoteSessionId || !currentFootnoteState) return;
+
+  const displayRef = `${resolvedBook} ${chapter}:${versesRaw}`;
+  currentFootnoteState.expansions.set(key, {
+    key,
+    displayRef,
+    translation: ddTranslation,
+    book: resolvedBook,
+    chapter,
+    versesRaw,
+    verses,
+    verseHtml
+  });
+
+  const content = document.getElementById('xrefModalContent')!;
+  content.innerHTML = renderFootnoteModalHtml();
+}, true);
+
 function closeXrefModal() {
   const modal = document.getElementById('xrefModal')!;
   modal.style.display = 'none';
+  currentFootnoteState = null;
 }
 
 // Make functions globally available for onclick handlers
@@ -1236,7 +1926,7 @@ function attachVerseSelectionHandlers() {
         }
         longPressTimer = null;
       }, LONG_PRESS_DURATION);
-    });
+    }, { passive: true });
     
     element.addEventListener('touchend', () => {
       // Only clear timer if menu hasn't been shown yet
@@ -1244,7 +1934,7 @@ function attachVerseSelectionHandlers() {
         clearTimeout(longPressTimer);
         longPressTimer = null;
       }
-    });
+    }, { passive: true });
   });
   
   // Attach word click handlers
@@ -1258,26 +1948,45 @@ function attachWordClickHandlers() {
   const verseWordSpans = document.querySelectorAll('.verse-words');
   
   verseWordSpans.forEach(span => {
+    // Preserve any inline footnote markers (sup.inline-note) so they remain clickable.
+    const inlineNotes = Array.from(span.querySelectorAll('sup.inline-note')) as HTMLElement[];
+    if (inlineNotes.length > 0) {
+      inlineNotes.forEach((noteEl, noteIdx) => {
+        const placeholder = `__PB_NOTE_${noteIdx}__`;
+        // Ensure placeholders are surrounded by spaces so splitting works.
+        noteEl.replaceWith(document.createTextNode(` ${placeholder} `));
+      });
+    }
+
     const text = span.textContent || '';
     const words = text.split(/\s+/);
     
     const wordElements = words.map((word, idx) => {
-      if (!word.trim()) return '';
+      const trimmed = word.trim();
+      if (!trimmed) return '';
+
+      const noteMatch = trimmed.match(/^__PB_NOTE_(\d+)__$/);
+      if (noteMatch) {
+        const noteIdx = parseInt(noteMatch[1], 10);
+        const noteEl = inlineNotes[noteIdx];
+        return noteEl ? noteEl.outerHTML : '';
+      }
       
       const verseEl = span.closest('.verse-text') as HTMLElement;
       const book = verseEl?.dataset.book;
       const chapter = verseEl?.dataset.chapter;
       const verse = verseEl?.dataset.verse;
       
+      const safeWord = escapeHtml(trimmed);
       return `<span class="word-clickable" 
-                    data-word="${word}" 
+                    data-word="${safeWord}" 
                     data-word-position="${idx + 1}"
                     data-book="${book}"
                     data-chapter="${chapter}"
                     data-verse="${verse}"
                     style="cursor: pointer; padding: 2px; border-radius: 2px; transition: background 0.15s;"
                     onmouseenter="this.style.background='#f0f0f0'"
-                    onmouseleave="this.style.background='transparent'">${word}</span>`;
+                    onmouseleave="this.style.background='transparent'">${safeWord}</span>`;
     }).join(' ');
     
     span.innerHTML = wordElements;
@@ -1287,16 +1996,14 @@ function attachWordClickHandlers() {
   document.querySelectorAll('.word-clickable').forEach(wordEl => {
     const element = wordEl as HTMLElement;
     let pressStartTime = 0;
-    
-    // Click to highlight word
-    element.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleWordHighlight(element);
-    });
+    let didLongPress = false;
     
     element.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
       pressStartTime = Date.now();
       longPressTimer = window.setTimeout(() => {
+        didLongPress = true;
         showWordStudy(element, e);
       }, LONG_PRESS_DURATION);
     });
@@ -1319,21 +2026,33 @@ function attachWordClickHandlers() {
     element.addEventListener('touchstart', (e) => {
       pressStartTime = Date.now();
       longPressTimer = window.setTimeout(() => {
+        didLongPress = true;
         showWordStudy(element, e);
       }, LONG_PRESS_DURATION);
-    });
+    }, { passive: true });
     
     element.addEventListener('touchend', (e) => {
       if (longPressTimer) {
         clearTimeout(longPressTimer);
         longPressTimer = null;
       }
+
+      // If a long-press triggered the popup, prevent the synthetic click on release
+      // (which can immediately close the popup or toggle verse selection).
+      if (didLongPress) {
+        didLongPress = false;
+        suppressNextGlobalClickUntil = Date.now() + 800;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
       // If it was a quick tap, toggle highlight
       if (Date.now() - pressStartTime < LONG_PRESS_DURATION) {
         e.preventDefault();
         toggleWordHighlight(element);
       }
-    });
+    }, { passive: false });
   });
 }
 
@@ -1389,7 +2108,6 @@ function showVerseActionMenu(event: MouseEvent | TouchEvent) {
   
   // Prevent immediate close from click handler
   event.stopPropagation();
-  event.preventDefault();
 }
 
 /**
@@ -1405,13 +2123,27 @@ async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | Touch
   const verse = parseInt(wordElement.dataset.verse!);
   const wordPosition = parseInt(wordElement.dataset.wordPosition!);
   
-  const mouseX = 'clientX' in event ? event.clientX : event.touches[0].clientX;
-  const mouseY = 'clientY' in event ? event.clientY : event.touches[0].clientY;
+  // Avoid relying on delayed event objects; prefer the globally recorded anchor.
+  const mouseX = ('clientX' in event && typeof event.clientX === 'number')
+    ? event.clientX
+    : (event.touches?.[0]?.clientX ?? lastPopupAnchorRect.left);
+  const mouseY = ('clientY' in event && typeof event.clientY === 'number')
+    ? event.clientY
+    : (event.touches?.[0]?.clientY ?? lastPopupAnchorRect.top);
+
+  // Suppress the release-click that often follows long-press.
+  suppressNextGlobalClickUntil = Date.now() + 800;
   
   content.innerHTML = '⏳ Loading word study...';
   modal.style.display = 'block';
-  modal.style.left = `${mouseX - 100}px`;
-  modal.style.top = `${mouseY + 10}px`;
+  modal.style.visibility = 'hidden';
+
+  // Position immediately using the viewport clamping helper (don’t wait for observer).
+  requestAnimationFrame(() => {
+    const anchorRect = new DOMRect(mouseX, mouseY, 0, 0);
+    positionFixedPopupWithinViewport(modal, anchorRect, { preferBelow: 'auto' as any });
+    modal.style.visibility = 'visible';
+  });
   
   try {
     // Query morphology data from IndexedDB
@@ -1426,60 +2158,103 @@ async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | Touch
       request.onerror = () => resolve(null);
     });
     
+    const normalizeStrongsId = (raw: unknown): string | null => {
+      if (typeof raw !== 'string') return null;
+      const cleanId = raw.replace(/[^\w]/g, '');
+      const match = cleanId.match(/^([GH])(\d+)$/);
+      if (!match) return null;
+      return match[1] + match[2].padStart(4, '0');
+    };
+
+    const safeWord = escapeHtml(cleanPopupText(word));
+    const safeBook = escapeHtml(cleanPopupText(book));
+    const safeRef = `${safeBook} ${chapter}:${verse} &nbsp;&middot;&nbsp; #${wordPosition}`;
+
     let html = `
-      <h3 style="margin: 0 0 15px 0; color: #333;">Word Study: ${word}</h3>
-      <div style="margin-bottom: 15px; padding: 10px; background: #f5f5f5; border-radius: 4px;">
-        <strong>${book} ${chapter}:${verse}</strong>, word #${wordPosition}
+      <div style="margin: 0 22px 6px 0;">
+        <div style="font-weight: 650; font-size: 14px; line-height: 1.15; color: #333;">${safeWord}</div>
+        <div style="margin-top: 1px; color: #666; font-size: 11.5px;">${safeRef}</div>
       </div>
     `;
     
     if (morphData) {
-      // Parse morphology data
-      const parsing = typeof morphData.parsing === 'string' ? JSON.parse(morphData.parsing) : morphData.parsing;
+      // Parse morphology data - handle both JSON and plain string codes
+      let parsing: any;
+      if (typeof morphData.parsing === 'string') {
+        try {
+          parsing = JSON.parse(morphData.parsing);
+        } catch {
+          // Not JSON - it's a morph code like "N-NSM-P"
+          parsing = { code: morphData.parsing };
+        }
+      } else {
+        parsing = morphData.parsing;
+      }
+
+      const normalizedStrongsId = normalizeStrongsId(morphData.strongsId);
       
+      const safeMorphWord = escapeHtml(cleanPopupText(morphData.text || word));
+      const safeLemma = escapeHtml(cleanPopupText(morphData.lemma || 'N/A'));
+      const safeTranslit = morphData.transliteration ? escapeHtml(cleanPopupText(morphData.transliteration)) : '';
+      const safeGloss = morphData.gloss ? escapeHtml(cleanPopupText(morphData.gloss)) : '';
+      const safeMorphCode = parsing?.code ? escapeHtml(cleanPopupText(parsing.code)) : '';
+
       html += `
-        <div style="margin: 15px 0;">
-          <h4 style="margin: 10px 0 5px 0; color: #555;">Morphology</h4>
-          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-            <tr><td style="padding: 5px; font-weight: 500;">Lemma:</td><td style="padding: 5px;">${morphData.lemma || 'N/A'}</td></tr>
-            ${morphData.strongsId ? `<tr><td style="padding: 5px; font-weight: 500;">Strong's:</td><td style="padding: 5px;">${morphData.strongsId}</td></tr>` : ''}
-            <tr><td style="padding: 5px; font-weight: 500;">Language:</td><td style="padding: 5px;">${morphData.language}</td></tr>
-            ${morphData.gloss ? `<tr><td style="padding: 5px; font-weight: 500;">Gloss:</td><td style="padding: 5px;">${morphData.gloss}</td></tr>` : ''}
+        <div style="margin: 0 0 6px 0;">
+          <div style="margin: 0 0 3px 0; font-weight: 650; color: #555; font-size: 11.5px;">Morphology</div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">Word</td><td style="padding: 2px 4px;">${safeMorphWord}</td></tr>
+            <tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">Lemma</td><td style="padding: 2px 4px;">${safeLemma}</td></tr>
+            ${safeTranslit ? `<tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">Translit</td><td style="padding: 2px 4px;">${safeTranslit}</td></tr>` : ''}
+            ${safeGloss ? `<tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">Gloss</td><td style="padding: 2px 4px;">${safeGloss}</td></tr>` : ''}
+            ${safeMorphCode ? `<tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">Morph</td><td style="padding: 2px 4px;"><code style="background: #f0f0f0; padding: 1px 5px; border-radius: 3px;">${safeMorphCode}</code></td></tr>` : ''}
           </table>
         </div>
       `;
       
       // Show parsing details if available
-      if (parsing && Object.keys(parsing).length > 0) {
-        html += `
-          <div style="margin: 15px 0;">
-            <h4 style="margin: 10px 0 5px 0; color: #555;">Parsing</h4>
-            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-              ${Object.entries(parsing).map(([key, value]) => `
-                <span style="background: #e3f2fd; padding: 4px 8px; border-radius: 4px; font-size: 13px;">
-                  <strong>${key}:</strong> ${value}
-                </span>
-              `).join('')}
+      if (parsing && Object.keys(parsing).length > 1) {
+        const rows = Object.entries(parsing)
+          .filter(([key]) => key !== 'code')
+          .map(([key, value]) => {
+            const k = escapeHtml(cleanPopupText(key));
+            const v = escapeHtml(cleanPopupText(value));
+            return `<tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">${k}</td><td style="padding: 2px 4px;">${v}</td></tr>`;
+          })
+          .join('');
+
+        if (rows) {
+          html += `
+            <div style="margin: 0 0 6px 0;">
+              <div style="margin: 0 0 3px 0; font-weight: 650; color: #555; font-size: 11.5px;">Parsing</div>
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                ${rows}
+              </table>
             </div>
-          </div>
-        `;
+          `;
+        }
       }
       
       // Get Strong's definition if available
-      if (morphData.strongsId) {
+      if (normalizedStrongsId) {
         const strongsData = await new Promise<any>((resolve) => {
-          const request = tx.objectStore('strongs_entries').get(morphData.strongsId);
+          const request = tx.objectStore('strongs_entries').get(normalizedStrongsId);
           request.onsuccess = () => resolve(request.result);
           request.onerror = () => resolve(null);
         });
-        
+
         if (strongsData) {
+          const safeStrongLemma = escapeHtml(cleanPopupText(strongsData.lemma));
+          const safeStrongTranslit = strongsData.transliteration ? escapeHtml(cleanPopupText(strongsData.transliteration)) : '';
+          const safeStrongDef = escapeHtml(cleanPopupText(strongsData.shortDefinition || strongsData.definition));
+          const safeKjvUsage = strongsData.kjvUsage ? escapeHtml(cleanPopupText(strongsData.kjvUsage)) : '';
+
           html += `
-            <div style="margin: 15px 0; padding: 12px; background: #fff3e0; border-left: 3px solid #ff9800; border-radius: 4px;">
-              <h4 style="margin: 0 0 8px 0; color: #e65100;">Strong's Definition</h4>
-              <p style="margin: 5px 0;"><strong>${strongsData.lemma}</strong> ${strongsData.transliteration ? `(${strongsData.transliteration})` : ''}</p>
-              <p style="margin: 5px 0; color: #555;">${strongsData.shortDefinition || strongsData.definition}</p>
-              ${strongsData.kjvUsage ? `<p style="margin: 5px 0; font-size: 13px; color: #666;"><em>KJV: ${strongsData.kjvUsage}</em></p>` : ''}
+            <div id="strongs-def" style="margin: 0 0 6px 0; padding: 6px; background: #fff3e0; border-left: 3px solid #ff9800; border-radius: 4px; scroll-margin-top: 6px;">
+              <div style="margin: 0 0 3px 0; font-weight: 650; color: #e65100; font-size: 11.5px;">Strong's ${escapeHtml(normalizedStrongsId)}</div>
+              <div style="margin: 0 0 3px 0;"><strong>${safeStrongLemma}</strong>${safeStrongTranslit ? ` <span style=\"color:#666\">(${safeStrongTranslit})</span>` : ''}</div>
+              <div style="margin: 0; color: #555;">${safeStrongDef}</div>
+              ${safeKjvUsage ? `<div style="margin-top: 3px; font-size: 11.5px; color: #666;"><em>KJV: ${safeKjvUsage}</em></div>` : ''}
             </div>
           `;
         }
@@ -1502,15 +2277,27 @@ async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | Touch
         });
         
         if (placeData) {
+          const safePlaceName = escapeHtml(cleanPopupText(placeData.name));
+          const safeSignificance = placeData.significance ? escapeHtml(cleanPopupText(placeData.significance)) : '';
+          const altNames = placeData.altNames ? (() => {
+            try {
+              const parsed = JSON.parse(placeData.altNames);
+              if (!Array.isArray(parsed)) return '';
+              return parsed.map((x: any) => cleanPopupText(x)).filter(Boolean).join(', ');
+            } catch {
+              return '';
+            }
+          })() : '';
+
           html += `
-            <div style="margin: 15px 0; padding: 12px; background: #e8f5e9; border-left: 3px solid #4caf50; border-radius: 4px;">
-              <h4 style="margin: 0 0 8px 0; color: #2e7d32;">📍 Place: ${placeData.name}</h4>
-              ${placeData.altNames ? `<p style="margin: 5px 0; font-size: 13px; color: #666;">Also known as: ${JSON.parse(placeData.altNames).join(', ')}</p>` : ''}
-              ${placeData.latitude && placeData.longitude ? `<p style="margin: 5px 0; font-size: 13px;">📌 ${placeData.latitude.toFixed(4)}, ${placeData.longitude.toFixed(4)}</p>` : ''}
-              ${placeData.modernCity ? `<p style="margin: 5px 0; font-size: 13px;">Modern: ${placeData.modernCity}${placeData.modernCountry ? ', ' + placeData.modernCountry : ''}</p>` : ''}
-              ${placeData.significance ? `<p style="margin: 8px 0; color: #555;">${placeData.significance}</p>` : ''}
-              <button onclick="viewPlaceOnMap('${placeId}')" style="margin-top: 8px; padding: 6px 12px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                🗺️ View on Map
+            <div style="margin: 0 0 6px 0; padding: 6px; background: #e8f5e9; border-left: 3px solid #4caf50; border-radius: 4px;">
+              <div style="margin: 0 0 3px 0; font-weight: 650; color: #2e7d32; font-size: 11.5px;">Place: ${safePlaceName}</div>
+              ${altNames ? `<div style="margin: 0 0 3px 0; font-size: 11.5px; color: #666;">Also: ${escapeHtml(altNames)}</div>` : ''}
+              ${placeData.latitude && placeData.longitude ? `<div style="margin: 0 0 3px 0; font-size: 11.5px; color: #666;">${placeData.latitude.toFixed(4)}, ${placeData.longitude.toFixed(4)}</div>` : ''}
+              ${placeData.modernCity ? `<div style="margin: 0 0 3px 0; font-size: 11.5px; color: #666;">Modern: ${escapeHtml(cleanPopupText(placeData.modernCity))}${placeData.modernCountry ? ', ' + escapeHtml(cleanPopupText(placeData.modernCountry)) : ''}</div>` : ''}
+              ${safeSignificance ? `<div style="margin: 0; color: #555;">${safeSignificance}</div>` : ''}
+              <button onclick="viewPlaceOnMap('${escapeHtml(placeId)}')" style="margin-top: 5px; padding: 4px 8px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                View on Map
               </button>
             </div>
           `;
@@ -1528,6 +2315,18 @@ async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | Touch
     db.close();
     content.innerHTML = html;
     
+    // Auto-scroll to Strong's definition if it exists
+    if (normalizeStrongsId(morphData?.strongsId)) {
+      setTimeout(() => {
+        const strongsDef = document.getElementById('strongs-def');
+        if (strongsDef) {
+          strongsDef.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          strongsDef.style.setProperty('animation', 'highlight 1s ease');
+          setTimeout(() => strongsDef.style.removeProperty('animation'), 1000);
+        }
+      }, 100);
+    }
+    
   } catch (error) {
     content.innerHTML = `<p style="color: red;">Error loading word study: ${error instanceof Error ? error.message : 'Unknown'}</p>`;
     console.error(error);
@@ -1544,7 +2343,23 @@ function createNoteForSelected() {
 }
 
 function highlightSelected() {
-  alert(`Highlighting ${selectedVerses.size} verse(s) in yellow\n\n(Highlight persistence to be implemented)`);
+  selectedVerses.forEach(verseKey => {
+    const [book, chapter, verse] = verseKey.split(':');
+    const verseEl = document.querySelector(`[data-book="${book}"][data-chapter="${chapter}"][data-verse="${verse}"]`);
+    if (verseEl) {
+      const wordsSpan = verseEl.querySelector('.verse-words') as HTMLElement;
+      if (wordsSpan) {
+        const isHighlighted = wordsSpan.dataset.pbHighlight === '1';
+        if (isHighlighted) {
+          delete wordsSpan.dataset.pbHighlight;
+          wordsSpan.style.background = 'transparent';
+        } else {
+          wordsSpan.dataset.pbHighlight = '1';
+          wordsSpan.style.background = '#fff9c4';
+        }
+      }
+    }
+  });
   closeVerseActionModal();
 }
 
@@ -1555,7 +2370,14 @@ function underlineSelected() {
     if (verseEl) {
       const wordsSpan = verseEl.querySelector('.verse-words') as HTMLElement;
       if (wordsSpan) {
-        wordsSpan.style.textDecoration = 'underline';
+        const isUnderlined = wordsSpan.dataset.pbUnderline === '1';
+        if (isUnderlined) {
+          delete wordsSpan.dataset.pbUnderline;
+          wordsSpan.style.textDecoration = 'none';
+        } else {
+          wordsSpan.dataset.pbUnderline = '1';
+          wordsSpan.style.textDecoration = 'underline';
+        }
       }
     }
   });
@@ -1569,7 +2391,14 @@ function italicizeSelected() {
     if (verseEl) {
       const wordsSpan = verseEl.querySelector('.verse-words') as HTMLElement;
       if (wordsSpan) {
-        wordsSpan.style.fontStyle = 'italic';
+        const isItalic = wordsSpan.dataset.pbItalic === '1';
+        if (isItalic) {
+          delete wordsSpan.dataset.pbItalic;
+          wordsSpan.style.fontStyle = 'normal';
+        } else {
+          wordsSpan.dataset.pbItalic = '1';
+          wordsSpan.style.fontStyle = 'italic';
+        }
       }
     }
   });
@@ -1609,6 +2438,7 @@ function viewPlaceOnMap(placeId: string) {
 (window as any).italicizeSelected = italicizeSelected;
 (window as any).clearSelection = clearSelection;
 (window as any).viewPlaceOnMap = viewPlaceOnMap;
+(window as any).showInlineNote = showInlineNote;
 
 // Close modals on click
 document.getElementById('closeVerseActionModal')?.addEventListener('click', closeVerseActionModal);
@@ -1624,7 +2454,9 @@ document.addEventListener('click', (e) => {
   }
   
   const wordStudyModal = document.getElementById('wordStudyModal')!;
-  if (wordStudyModal.style.display === 'block' && !wordStudyModal.contains(target) && !target.classList.contains('word-clickable')) {
+  if (wordStudyModal.style.display === 'block' && !wordStudyModal.contains(target) && !target.closest('.word-clickable')) {
     closeWordStudyModal();
   }
 });
+
+// Removed scroll/wheel auto-close - user prefers manual close with X button

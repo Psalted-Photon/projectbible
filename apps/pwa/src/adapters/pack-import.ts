@@ -8,11 +8,15 @@ import { batchWriteTransaction, writeTransaction } from './db.js';
 export async function importPackFromSQLite(file: File): Promise<void> {
   console.log(`Importing pack from ${file.name}...`);
 
-  // Dynamically import sql.js (will be added as dependency)
-  const initSqlJs = await import('sql.js').then(m => m.default);
+  // Dynamically import sql.js
+  const sqlJsModule = await import('sql.js');
+  console.log('sql.js module:', sqlJsModule);
+  console.log('sql.js keys:', Object.keys(sqlJsModule));
+  const initSqlJs = sqlJsModule.default || sqlJsModule;
+  console.log('initSqlJs type:', typeof initSqlJs, initSqlJs);
   const SQL = await initSqlJs({
-    // Use relative path so Vite bundles the WASM file correctly
-    locateFile: (file: string) => new URL(`../../../node_modules/sql.js/dist/${file}`, import.meta.url).href
+    // Use public directory for WASM file (works in both dev and production)
+    locateFile: (file: string) => `/${file}`
   });
 
   // Read the SQLite file
@@ -100,6 +104,10 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // Check if this is a multi-edition pack
       const tableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='editions'");
       const hasEditions = tableCheck.length > 0 && tableCheck[0].values.length > 0;
+      
+      // Check if pack has morphology data (words table)
+      const wordsTableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='words'");
+      const hasWords = wordsTableCheck.length > 0 && wordsTableCheck[0].values.length > 0;
 
       if (hasEditions) {
         // Multi-edition pack (like greek.sqlite with LXX, Byzantine, TR, OpenGNT)
@@ -197,6 +205,89 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         }
 
         console.log(`✅ Pack ${packInfo.id} imported successfully`);
+      }
+      
+      // Import morphology data if available (words table)
+      if (hasWords) {
+        console.log('Importing morphology data from words table...');
+        const wordsRows = db.exec(`
+          SELECT book, chapter, verse, word_order, text, lemma, morph_code, 
+                 strongs, gloss_en, transliteration
+          FROM words
+        `);
+        
+        if (wordsRows.length && wordsRows[0].values.length) {
+          const morphologyData = wordsRows[0].values.map(([book, chapter, verse, wordOrder, text, lemma, morphCode, strongs, gloss, transliteration]) => ({
+            id: `${packInfo.translationId}:${book}:${chapter}:${verse}:${wordOrder}`,
+            translationId: packInfo.translationId!,
+            book: book as string,
+            chapter: chapter as number,
+            verse: verse as number,
+            wordPosition: wordOrder as number,
+            text: text as string,
+            lemma: lemma as string,
+            strongsId: strongs as string | undefined,
+            gloss: gloss as string | undefined,
+            transliteration: transliteration as string | undefined,
+            parsing: morphCode as string // Store raw morph code
+          }));
+          
+          console.log(`Importing ${morphologyData.length} morphology entries...`);
+          
+          // Batch insert morphology
+          const CHUNK_SIZE = 500;
+          for (let i = 0; i < morphologyData.length; i += CHUNK_SIZE) {
+            const chunk = morphologyData.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('morphology', (store) => {
+              chunk.forEach(m => store.put(m));
+            });
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, morphologyData.length)}/${morphologyData.length} morphology entries`);
+          }
+          
+          console.log(`✅ Morphology data imported: ${morphologyData.length} entries`);
+        }
+      }
+      
+      // Import Strong's dictionary if available (strongs_entries table)
+      const strongsTableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='strongs_entries'");
+      const hasStrongsEntries = strongsTableCheck.length > 0 && strongsTableCheck[0].values.length > 0;
+      
+      if (hasStrongsEntries) {
+        console.log('Importing Strong\'s dictionary entries...');
+        const strongsRows = db.exec(`
+          SELECT id, lemma, transliteration, definition, shortDefinition, 
+                 partOfSpeech, language, derivation, kjvUsage, occurrences
+          FROM strongs_entries
+        `);
+        
+        if (strongsRows.length && strongsRows[0].values.length) {
+          const strongsData = strongsRows[0].values.map(([id, lemma, transliteration, definition, shortDef, pos, language, derivation, kjvUsage, occurrences]) => ({
+            id: id as string,
+            lemma: lemma as string,
+            transliteration: transliteration as string | undefined,
+            definition: definition as string,
+            shortDefinition: shortDef as string | undefined,
+            partOfSpeech: pos as string,
+            language: (language as string || 'greek') as 'greek' | 'hebrew' | 'aramaic',
+            derivation: derivation as string | undefined,
+            kjvUsage: kjvUsage as string | undefined,
+            occurrences: occurrences as number | undefined
+          }));
+          
+          console.log(`Importing ${strongsData.length} Strong's entries...`);
+          
+          // Batch insert Strong's entries
+          const CHUNK_SIZE = 500;
+          for (let i = 0; i < strongsData.length; i += CHUNK_SIZE) {
+            const chunk = strongsData.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('strongs_entries', (store) => {
+              chunk.forEach(s => store.put(s));
+            });
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, strongsData.length)}/${strongsData.length} Strong's entries`);
+          }
+          
+          console.log(`✅ Strong's dictionary imported: ${strongsData.length} entries`);
+        }
       }
     } else if (packInfo.type === 'map') {
       // Import map/places data
@@ -307,6 +398,53 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       }
 
       console.log(`✅ Map pack ${packInfo.id} imported`);
+    } else if (packInfo.type === 'lexicon') {
+      // Import lexicon data (Strong's dictionaries, etc.)
+      console.log('Importing lexicon pack...');
+      
+      const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+      const tableNames = tables.length > 0 ? tables[0].values.map(row => row[0] as string) : [];
+      
+      // Import Strong's entries
+      if (tableNames.includes('strongs_entries')) {
+        console.log('Importing Strong\'s dictionary entries...');
+        const strongsRows = db.exec(`
+          SELECT id, lemma, transliteration, definition, shortDefinition, 
+                 partOfSpeech, language, derivation, kjvUsage, occurrences
+          FROM strongs_entries
+        `);
+        
+        if (strongsRows.length && strongsRows[0].values.length) {
+          const strongsData = strongsRows[0].values.map(([id, lemma, transliteration, definition, shortDef, pos, language, derivation, kjvUsage, occurrences]) => ({
+            id: id as string,
+            lemma: lemma as string,
+            transliteration: transliteration as string | undefined,
+            definition: definition as string,
+            shortDefinition: shortDef as string | undefined,
+            partOfSpeech: pos as string,
+            language: (language as string || 'greek') as 'greek' | 'hebrew' | 'aramaic',
+            derivation: derivation as string | undefined,
+            kjvUsage: kjvUsage as string | undefined,
+            occurrences: occurrences as number | undefined
+          }));
+          
+          console.log(`Importing ${strongsData.length} Strong's entries...`);
+          
+          // Batch insert Strong's entries
+          const CHUNK_SIZE = 500;
+          for (let i = 0; i < strongsData.length; i += CHUNK_SIZE) {
+            const chunk = strongsData.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('strongs_entries', (store) => {
+              chunk.forEach(s => store.put(s));
+            });
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, strongsData.length)}/${strongsData.length} Strong's entries`);
+          }
+          
+          console.log(`✅ Strong's dictionary imported: ${strongsData.length} entries`);
+        }
+      }
+      
+      console.log(`✅ Lexicon pack ${packInfo.id} imported`);
     }
 
   } finally {

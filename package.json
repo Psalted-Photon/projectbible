@@ -11,7 +11,8 @@
   "devDependencies": {
     "adm-zip": "^0.5.16",
     "concurrently": "^9.1.0",
-    "wait-on": "^8.0.1"
+    "wait-on": "^8.0.1",
+    "xml2js": "^0.6.2"
   },
   "scripts": {
     "dev:pwa": "npm -w apps/pwa run dev",

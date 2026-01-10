@@ -184,14 +184,26 @@ export class IndexedDBLexiconStore implements LexiconStore {
   }
 
   private dbToMorphology(db: DBMorphology): MorphologyInfo {
-    const parsing = typeof db.parsing === 'string' ? JSON.parse(db.parsing) : db.parsing;
+    // Handle parsing - can be a JSON string, plain morph code string, or object
+    let parsing: any;
+    if (typeof db.parsing === 'string') {
+      try {
+        parsing = JSON.parse(db.parsing);
+      } catch {
+        // Not JSON - it's a morph code string like "N-NSM-P"
+        parsing = { code: db.parsing };
+      }
+    } else {
+      parsing = db.parsing;
+    }
     
     return {
-      word: db.word,
+      word: db.text || db.word,
       lemma: db.lemma,
       strongsId: db.strongsId,
       parsing,
       gloss: db.gloss,
+      transliteration: db.transliteration,
       language: db.language
     };
   }

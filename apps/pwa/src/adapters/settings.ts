@@ -7,11 +7,34 @@
 const SETTINGS_KEY = 'projectbible_settings';
 
 export interface UserSettings {
-  dailyDriverEnglish?: string; // e.g., 'kjv' or 'web'
-  dailyDriverHebrew?: string;  // e.g., 'wlc'
-  dailyDriverGreek?: string;   // e.g., 'lxx' or 'byz'
+  // Daily Driver defaults by testament + language family
+  dailyDriverEnglishOT?: string; // e.g., 'kjv' or 'web'
+  dailyDriverEnglishNT?: string; // e.g., 'kjv' or 'web'
+  dailyDriverHebrewOT?: string;  // e.g., 'wlc'
+  dailyDriverHebrewNT?: string;  // (rare) Hebrew NT packs if installed
+  dailyDriverGreekOT?: string;   // e.g., 'lxx'
+  dailyDriverGreekNT?: string;   // e.g., 'opengnt' / 'byz' / 'tr'
+
+  // Back-compat (older settings)
+  dailyDriverEnglish?: string;
+  dailyDriverHebrew?: string;
+  dailyDriverGreek?: string;
   theme?: 'light' | 'dark';
   fontSize?: number;
+}
+
+function normalizeSettings(raw: UserSettings): UserSettings {
+  // Migrate older 3-field settings into the new OT/NT model.
+  const out: UserSettings = { ...raw };
+
+  if (!out.dailyDriverEnglishOT && out.dailyDriverEnglish) out.dailyDriverEnglishOT = out.dailyDriverEnglish;
+  if (!out.dailyDriverEnglishNT && out.dailyDriverEnglish) out.dailyDriverEnglishNT = out.dailyDriverEnglish;
+
+  if (!out.dailyDriverHebrewOT && out.dailyDriverHebrew) out.dailyDriverHebrewOT = out.dailyDriverHebrew;
+  if (!out.dailyDriverGreekNT && out.dailyDriverGreek) out.dailyDriverGreekNT = out.dailyDriverGreek;
+
+  // Reasonable defaults if nothing is set (kept minimal)
+  return out;
 }
 
 /**
@@ -21,7 +44,7 @@ export function getSettings(): UserSettings {
   const stored = localStorage.getItem(SETTINGS_KEY);
   if (stored) {
     try {
-      return JSON.parse(stored);
+      return normalizeSettings(JSON.parse(stored));
     } catch {
       return {};
     }
@@ -56,11 +79,11 @@ export function getDailyDriverFor(book: string): string | undefined {
   ];
   
   if (otBooks.includes(book)) {
-    // OT - prefer Hebrew daily driver, fall back to English
-    return settings.dailyDriverHebrew || settings.dailyDriverEnglish || 'kjv';
+    // OT - prefer Hebrew OT, then Greek OT (LXX), then English OT
+    return settings.dailyDriverHebrewOT || settings.dailyDriverGreekOT || settings.dailyDriverEnglishOT || settings.dailyDriverEnglish || 'kjv';
   } else {
-    // NT - prefer Greek daily driver, fall back to English
-    return settings.dailyDriverGreek || settings.dailyDriverEnglish || 'kjv';
+    // NT - prefer Greek NT, then Hebrew NT (if any), then English NT
+    return settings.dailyDriverGreekNT || settings.dailyDriverHebrewNT || settings.dailyDriverEnglishNT || settings.dailyDriverEnglish || 'kjv';
   }
 }
 
@@ -69,7 +92,18 @@ export function getDailyDriverFor(book: string): string | undefined {
  */
 export function getPrimaryDailyDriver(): string | undefined {
   const settings = getSettings();
-  return settings.dailyDriverEnglish || settings.dailyDriverGreek || settings.dailyDriverHebrew;
+  // Prefer an OT-capable English daily driver since the UI initializes at Genesis.
+  return (
+    settings.dailyDriverEnglishOT ||
+    settings.dailyDriverEnglishNT ||
+    settings.dailyDriverGreekOT ||
+    settings.dailyDriverGreekNT ||
+    settings.dailyDriverHebrewOT ||
+    settings.dailyDriverHebrewNT ||
+    settings.dailyDriverEnglish ||
+    settings.dailyDriverGreek ||
+    settings.dailyDriverHebrew
+  );
 }
 
 /**

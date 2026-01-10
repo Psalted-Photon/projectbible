@@ -7,10 +7,46 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=EB+Garamond:wght@400;600&family=Jura:wght@400;600&display=swap" rel="stylesheet">
     <style>
       body { margin: 0; padding: 0; background: #fff; color: #000; }
       #app { min-height: 100vh; }
       .leaflet-container { background: #aad3df; }
+      .popup-verse-text { font-family: 'Cinzel', serif; }
+      .popup-verse-text-greek { font-family: 'Jura', system-ui, sans-serif; }
+      .ot-quote { font-family: 'Cinzel', serif; }
+      .ot-quote-greek { font-family: 'Jura', system-ui, sans-serif; }
+      @font-face {
+        font-family: 'BerryRotunda';
+        src: url('/fonts/berry-rotunda.woff2') format('woff2');
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'Teutonic4';
+        src: url('/fonts/teutonic4.woff2') format('woff2');
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      .translation-font-web { font-family: 'EB Garamond', Georgia, serif; }
+      .translation-font-greek { font-family: 'EB Garamond', Georgia, serif; }
+      .translation-font-kjv { font-family: 'BerryRotunda', Georgia, serif; }
+      .heading-font-kjv { font-family: 'Teutonic4', 'BerryRotunda', Georgia, serif; }
+      .heading-font-web { font-family: 'Cinzel', Georgia, serif; }
+      .heading-font-greek { font-family: 'Jura', system-ui, sans-serif; }
+      .reader-title { font-size: 21px; line-height: 1.15; margin: 0 0 10px 0; }
+      .reader-title.heading-font-kjv { font-size: 28px; }
+      .verse-words { font-size: 15px; }
+      .verse-words.translation-font-greek { font-size: 17px; }
+      @keyframes highlight {
+        0% { background-color: #fff3e0; }
+        50% { background-color: #ffeb3b; }
+        100% { background-color: #fff3e0; }
+      }
     </style>
   </head>
   <body>

@@ -6,16 +6,16 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
-  optimizeDeps: {
-    exclude: ['sql.js']
-  },
+  assetsInclude: ['**/*.wasm'],
   build: {
     rollupOptions: {
       output: {
         // Ensure WASM files are properly chunked
         manualChunks: undefined
       }
-    }
+    },
+    // Copy WASM files to output
+    copyPublicDir: true
   },
   plugins: [
     VitePWA({
