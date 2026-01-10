@@ -6,6 +6,17 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
+  optimizeDeps: {
+    exclude: ['sql.js']
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        // Ensure WASM files are properly chunked
+        manualChunks: undefined
+      }
+    }
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

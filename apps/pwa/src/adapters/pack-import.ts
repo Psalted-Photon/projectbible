@@ -11,7 +11,8 @@ export async function importPackFromSQLite(file: File): Promise<void> {
   // Dynamically import sql.js (will be added as dependency)
   const initSqlJs = await import('sql.js').then(m => m.default);
   const SQL = await initSqlJs({
-    locateFile: (file: string) => `https://sql.js.org/dist/${file}`
+    // Use relative path so Vite bundles the WASM file correctly
+    locateFile: (file: string) => new URL(`../../../node_modules/sql.js/dist/${file}`, import.meta.url).href
   });
 
   // Read the SQLite file
