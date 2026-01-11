@@ -47,7 +47,8 @@ export class IndexedDBTextStore implements TextStore {
               book: v.book,
               chapter: v.chapter,
               verse: v.verse,
-              text: v.text
+              text: v.text,
+              heading: v.heading ?? null
             }))
             .sort((a, b) => a.verse - b.verse);
           

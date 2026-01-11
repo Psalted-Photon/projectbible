@@ -173,14 +173,22 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         console.log(`✅ Multi-edition pack ${packInfo.id} imported successfully`);
       } else {
         // Single-edition pack (traditional format)
-        const verseRows = db.exec('SELECT book, chapter, verse, text FROM verses');
+        // Check if heading column exists
+        const tableInfo = db.exec("PRAGMA table_info(verses)");
+        const hasHeading = tableInfo.length > 0 && tableInfo[0].values.some(row => row[1] === 'heading');
+        
+        const query = hasHeading 
+          ? 'SELECT book, chapter, verse, text, heading FROM verses'
+          : 'SELECT book, chapter, verse, text FROM verses';
+        const verseRows = db.exec(query);
 
         if (!verseRows.length || !verseRows[0].values.length) {
           console.warn('No verses found in text pack');
           return;
         }
 
-        const verses: DBVerse[] = verseRows[0].values.map(([book, chapter, verse, text]) => {
+        const verses: DBVerse[] = verseRows[0].values.map((row) => {
+          const [book, chapter, verse, text, heading] = row;
           const translationId = packInfo.translationId!;
           return {
             id: `${translationId}:${book}:${chapter}:${verse}`,
@@ -188,7 +196,8 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             book: book as string,
             chapter: chapter as number,
             verse: verse as number,
-            text: text as string
+            text: text as string,
+            heading: hasHeading ? (heading as string | null) : null
           };
         });
 

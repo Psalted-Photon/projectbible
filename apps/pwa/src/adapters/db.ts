@@ -33,6 +33,7 @@ export interface DBVerse {
   chapter: number;
   verse: number;
   text: string;
+  heading?: string | null; // Section heading that appears before this verse
 }
 
 export interface DBUserNote {

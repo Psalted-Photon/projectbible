@@ -1079,7 +1079,7 @@ function renderVerseWordsHtml(text: string): string {
   const html = applyCinzelToItIsWrittenQuote(baseHtml, isGreek ? 'ot-quote-greek' : 'ot-quote');
 
   let extraClass = '';
-  if (translation === 'web') extraClass = ' translation-font-web';
+  if (translation === 'web' || translation === 'bsb') extraClass = ' translation-font-web';
   if (translation === 'kjv' || translation === 'kjvpce') extraClass = ' translation-font-kjv';
   if (!extraClass && isGreek) extraClass = ' translation-font-greek';
   return `<span class="verse-words${extraClass}" data-translation="${escapeHtml(translation)}">${html}</span>`;
@@ -1088,16 +1088,74 @@ function renderVerseWordsHtml(text: string): string {
 function getHeadingFontClass(translationId: string): string {
   const t = (translationId || '').toLowerCase();
   if (t === 'kjv' || t === 'kjvpce') return 'heading-font-kjv';
-  if (t === 'web') return 'heading-font-web';
+  if (t === 'web' || t === 'bsb') return 'heading-font-web';
   if (isGreekTranslationId(t)) return 'heading-font-greek';
   return '';
 }
 
+/**
+ * Detect if a note string is a cross-reference (contains Bible book + chapter:verse)
+ * vs a footnote (explanatory text).
+ */
+function isCrossReference(noteText: string): boolean {
+  const trimmed = noteText.trim();
+  
+  // Footnote indicators - if it starts with these, it's explanatory text, not a cross-ref
+  // Even if it mentions a Bible verse later (like "cited in Acts 11:16")
+  const footnoteStarters = [
+    /^Or\b/i,           // Textual variant: "Or For John baptized..."
+    /^Lit\b/i,          // Literal translation: "Lit. seed"
+    /^I\.e\./i,         // Explanation: "I.e., ..."
+    /^That is/i,        // Explanation
+    /^Some manuscripts/i,
+    /^Other manuscripts/i,
+    /^DSS/i,            // Dead Sea Scrolls
+    /^LXX/i,            // Septuagint variant
+    /^Heb\b/i,          // Hebrew note
+    /^Gr\b/i,           // Greek note
+    /^Aram\b/i,         // Aramaic note
+    /^Cited/i,          // "Cited in..."
+    /^See /i,           // "See also..."
+    /^Compare/i,
+    /^Literally/i,
+  ];
+  
+  if (footnoteStarters.some(pattern => pattern.test(trimmed))) {
+    return false; // It's a footnote, not a cross-reference
+  }
+  
+  // Common Bible book names/abbreviations that indicate a cross-reference
+  const bookPatterns = [
+    /\b(Genesis|Gen|Exodus|Exod?|Leviticus|Lev|Numbers|Num|Deuteronomy|Deut?)\b/i,
+    /\b(Joshua|Josh?|Judges|Judg?|Ruth|1\s*Samuel|1\s*Sam|2\s*Samuel|2\s*Sam)\b/i,
+    /\b(1\s*Kings?|2\s*Kings?|1\s*Chronicles|1\s*Chron?|2\s*Chronicles|2\s*Chron?)\b/i,
+    /\b(Ezra|Nehemiah|Neh|Esther|Esth?|Job|Psalms?|Ps|Proverbs?|Prov?)\b/i,
+    /\b(Ecclesiastes|Eccl?|Song|Songs|Isaiah|Isa|Jeremiah|Jer|Lamentations|Lam)\b/i,
+    /\b(Ezekiel|Ezek?|Daniel|Dan|Hosea|Hos|Joel|Amos|Obadiah|Obad?|Jonah)\b/i,
+    /\b(Micah|Mic|Nahum|Nah|Habakkuk|Hab|Zephaniah|Zeph|Haggai|Hag|Zechariah|Zech|Malachi|Mal)\b/i,
+    /\b(Matthew|Matt?|Mark|Luke|John|Jn|Acts|Romans?|Rom|1\s*Corinthians|1\s*Cor)\b/i,
+    /\b(2\s*Corinthians|2\s*Cor|Galatians|Gal|Ephesians|Eph|Philippians|Phil)\b/i,
+    /\b(Colossians|Col|1\s*Thessalonians|1\s*Thess?|2\s*Thessalonians|2\s*Thess?)\b/i,
+    /\b(1\s*Timothy|1\s*Tim|2\s*Timothy|2\s*Tim|Titus|Tit|Philemon|Phlm?|Hebrews|Heb)\b/i,
+    /\b(James|Jas|1\s*Peter|1\s*Pet|2\s*Peter|2\s*Pet|1\s*John|1\s*Jn|2\s*John|2\s*Jn)\b/i,
+    /\b(3\s*John|3\s*Jn|Jude|Revelation|Rev)\b/i
+  ];
+  
+  // A pure cross-reference should START with a Bible book name or be a list of refs
+  // Not just contain one somewhere in explanatory text
+  const startsWithBook = bookPatterns.some(pattern => pattern.test(trimmed.slice(0, 30)));
+  const hasChapterVerse = /\d+:\d+/.test(noteText);
+  
+  // Also check for abbreviated refs like "cf. 12:38" or just verse refs with semicolons
+  const looksLikeRefList = /^\s*[\d:;\s,–-]+\s*$/.test(noteText) || /^cf\./i.test(trimmed);
+  
+  return hasChapterVerse && (startsWithBook || looksLikeRefList);
+}
+
 function renderTextWithInlineNotes(text: string): { html: string; noteCount: number } {
   // Converts inline notes like "+ 53:1 John 12:38; Rom 10:16" into clickable superscripts.
-  // Heuristics:
-  // - Notes that end with ". " followed by lowercase are treated as footnotes.
-  // - Notes that contain at least one ref token like "12:38" end before the next lowercase word.
+  // Cross-references (Bible refs): black [N]
+  // Footnotes (explanatory text): blue [N]
   const source = text ?? '';
   let out = '';
   let i = 0;
@@ -1184,9 +1242,16 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
       const encoded = encodeURIComponent(rawNote);
       const title = rawNote.length > 80 ? rawNote.slice(0, 77) + '…' : rawNote;
       const encodedTitle = escapeHtml(title);
-      out += `<sup class="inline-note" data-note="${encoded}" data-note-index="${noteIndex}" ` +
-        `style="color:#0066cc; cursor:pointer; font-size:11px; margin:0 2px; user-select:none;" ` +
-        `title="Footnote ${noteIndex}: ${encodedTitle}">[${noteIndex}]</sup>`;
+      
+      // Determine if cross-reference (black) or footnote (blue)
+      const isXref = isCrossReference(rawNote);
+      const noteColor = isXref ? '#333' : '#0066cc';
+      const noteType = isXref ? 'Cross-reference' : 'Footnote';
+      const noteClass = isXref ? 'inline-note inline-xref' : 'inline-note inline-footnote';
+      
+      out += `<sup class="${noteClass}" data-note="${encoded}" data-note-index="${noteIndex}" ` +
+        `style="color:${noteColor}; cursor:pointer; font-size:11px; margin:0 2px; user-select:none;" ` +
+        `title="${noteType} ${noteIndex}: ${encodedTitle}">[${noteIndex}]</sup>`;
     } else {
       out += escapeHtml(source.slice(plusPos, noteEnd));
     }
@@ -1243,7 +1308,13 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
           const isSelected = selectedVerses.has(verseKey);
           const wordsHtml = renderVerseWordsHtml(v.text);
           
+          // Render section heading if present - Cinzel font, bold
+          const headingHtml = v.heading 
+            ? `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.15em; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`
+            : '';
+          
           return `
+            ${headingHtml}
             <p class="verse-text" 
                data-book="${book}" 
                data-chapter="${chapter}" 
@@ -1350,13 +1421,18 @@ type FootnoteRefMatch = {
   display: string;
 };
 
+// Bible book names pattern - directly match known book names followed by chapter:verse
+const BIBLE_BOOK_NAMES_RE = /\b((?:[1-3]\s*)?(?:Genesis|Gen|Exodus|Exod?|Leviticus|Lev|Numbers|Num|Deuteronomy|Deut|Joshua|Josh|Judges|Judg|Ruth|Samuel|Sam|Kings|Ki|Chronicles|Chron|Ezra|Nehemiah|Neh|Esther|Esth|Job|Psalms?|Ps|Proverbs?|Prov|Ecclesiastes|Eccl|Song|Songs|Isaiah|Isa|Jeremiah|Jer|Lamentations|Lam|Ezekiel|Ezek|Daniel|Dan|Hosea|Hos|Joel|Amos|Obadiah|Obad|Jonah|Micah|Mic|Nahum|Nah|Habakkuk|Hab|Zephaniah|Zeph|Haggai|Hag|Zechariah|Zech|Malachi|Mal|Matthew|Matt|Mark|Luke|John|Jn|Acts|Romans|Rom|Corinthians|Cor|Galatians|Gal|Ephesians|Eph|Philippians|Phil|Colossians|Col|Thessalonians|Thess|Timothy|Tim|Titus|Tit|Philemon|Phlm|Hebrews|Heb|James|Jas|Peter|Pet|Jude|Revelation|Rev))\.?\s+(\d+):(\d+(?:[\-\u2013]\d+)?(?:,\s*\d+)*)\b/gi;
+
 function parseFootnoteRefs(text: string): FootnoteRefMatch[] {
   const matches: FootnoteRefMatch[] = [];
   const s = text ?? '';
-  // Examples: "John 12:38", "Rom 10:16", "1 Pet. 2:22", "Acts 8:32,33"
-  const re = /\b((?:[1-3]\s*)?[A-Za-z][A-Za-z.]+(?:\s+[A-Za-z][A-Za-z.]*)*)\s+(\d+):(\d+(?:[\-\u2013]\d+)?(?:,\d+)*)\b/g;
+  
+  // Reset regex lastIndex
+  BIBLE_BOOK_NAMES_RE.lastIndex = 0;
+  
   let m: RegExpExecArray | null;
-  while ((m = re.exec(s)) !== null) {
+  while ((m = BIBLE_BOOK_NAMES_RE.exec(s)) !== null) {
     const bookRaw = m[1].trim();
     const chapter = parseInt(m[2], 10);
     const versesRaw = m[3].trim();
@@ -1435,7 +1511,7 @@ type FootnoteExpansion = {
   verseHtml: string;
 };
 
-let currentFootnoteState: { noteText: string; expansions: Map<string, FootnoteExpansion> } | null = null;
+let currentFootnoteState: { noteText: string; expansions: Map<string, FootnoteExpansion>; lastClickedKey: string | null } | null = null;
 let footnoteSessionId = 0;
 
 function renderFootnoteModalHtml(): string {
@@ -1481,7 +1557,7 @@ function showInlineNote(encodedNote: string, noteIndex: string, event: MouseEven
   const target = (anchorEl || (event.target as HTMLElement)) as HTMLElement;
 
   footnoteSessionId++;
-  currentFootnoteState = { noteText, expansions: new Map() };
+  currentFootnoteState = { noteText, expansions: new Map(), lastClickedKey: null };
   content.innerHTML = renderFootnoteModalHtml();
 
   // Position near the clicked marker (robust on touch where clientX/Y can be unreliable)
@@ -1519,8 +1595,8 @@ document.addEventListener('click', async (e) => {
 
   const key = `${normalizeBookKey(bookRaw)}|${chapter}|${versesRaw}`;
 
-  // If already expanded: navigate
-  if (currentFootnoteState.expansions.has(key)) {
+  // Only navigate if: already expanded AND this is the SAME link clicked consecutively
+  if (currentFootnoteState.expansions.has(key) && currentFootnoteState.lastClickedKey === key) {
     const exp = currentFootnoteState.expansions.get(key)!;
     const translationSel = document.getElementById('translation') as HTMLSelectElement;
     const bookSel = document.getElementById('book') as HTMLSelectElement;
@@ -1540,7 +1616,14 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // Otherwise: expand
+  // Track this click
+  currentFootnoteState.lastClickedKey = key;
+
+  // If clicking a different link than what's expanded, clear previous and show new one
+  // Clear all existing expansions - we only show ONE expanded verse at a time
+  currentFootnoteState.expansions.clear();
+
+  // Expand this reference
   const translationSel = document.getElementById('translation') as HTMLSelectElement;
   const currentTranslation = translationSel.value;
   const primary = getPrimaryDailyDriver() || currentTranslation || 'kjv';
@@ -2417,9 +2500,10 @@ function zoomToPlace(place: any) {
     popupContent += `<p style="margin: 4px 0; font-size: 13px;"><strong>Type:</strong> ${escapeHtml(place.placeType || place.type)}</p>`;
   }
   
-  // Verse count for biblical places
+  // Verse count for biblical places - clickable to show verses
   if (place.verseCount > 0) {
-    popupContent += `<p style="margin: 4px 0; font-size: 13px; color: #3498db;"><strong>📖 Mentioned:</strong> ${place.verseCount} verse${place.verseCount === 1 ? '' : 's'}</p>`;
+    const placeName = place.friendlyId || place.title || place.name;
+    popupContent += `<p style="margin: 4px 0; font-size: 13px;"><strong>📖 Mentioned:</strong> <a href="#" onclick="event.preventDefault(); searchPlaceVerses('${escapeHtml(placeName)}'); return false;" style="color: #3498db; text-decoration: underline; cursor: pointer;">${place.verseCount} verse${place.verseCount === 1 ? '' : 's'}</a></p>`;
   }
   
   // Modern name if different
@@ -2790,31 +2874,34 @@ async function findPlaceByWord(word: string): Promise<any> {
     
     const tx = db.transaction(availableStores, 'readonly');
     
-    // 1. Search OpenBible places by friendlyId (EXACT case-insensitive match only)
+    // Create alternate spellings (e.g., judea -> judaea, cesar -> caesar) - used by multiple searches
+    const alternates = [normalizedWord];
+    if (normalizedWord.includes('e') && !normalizedWord.includes('ae')) alternates.push(normalizedWord.replace(/e/g, 'ae'));
+    if (normalizedWord.includes('ae')) alternates.push(normalizedWord.replace(/ae/g, 'e'));
+    if (normalizedWord.endsWith('a')) alternates.push(normalizedWord.slice(0, -1) + 'ah');
+    if (normalizedWord.endsWith('ah')) alternates.push(normalizedWord.slice(0, -2) + 'a');
+    
+    // 1. Search OpenBible places by friendlyId (word match, case-insensitive)
     if (availableStores.includes('openbible_places')) {
       const openBiblePlaces = await new Promise<any[]>((resolve) => {
         const store = tx.objectStore('openbible_places');
-        // Scan for exact case-insensitive match only
         const results: any[] = [];
-        let sampleFids: string[] = [];
         const request = store.openCursor();
         request.onsuccess = (e: any) => {
           const cursor = e.target.result;
           if (cursor) {
-            const fid = cursor.value.friendlyId?.toLowerCase();
-            // Collect first 10 friendlyIds for debug
-            if (sampleFids.length < 10) sampleFids.push(cursor.value.friendlyId || 'null');
-            // Also check if galilee appears anywhere
-            if (fid && fid.includes('galilee')) {
-              console.log('[findPlaceByWord] Found galilee-related:', cursor.value.friendlyId, cursor.value.id);
-            }
-            // EXACT match only - no partial matching
-            if (fid === normalizedWord) {
+            const fid = cursor.value.friendlyId?.toLowerCase() || '';
+            // Match if friendlyId starts with the word (e.g., "galilee" matches "Galilee 1", "Galilee 2")
+            // or if it's an exact match
+            // But NOT partial word matches (e.g., "men" should NOT match "Armenia")
+            const fidWords = fid.split(/\s+/);
+            const isMatch = fidWords.some(word => word === normalizedWord) || fid.startsWith(normalizedWord + ' ');
+            
+            if (isMatch) {
               results.push(cursor.value);
             }
             cursor.continue();
           } else {
-            console.log('[findPlaceByWord] Sample friendlyIds from DB:', sampleFids);
             resolve(results);
           }
         };
@@ -2831,16 +2918,25 @@ async function findPlaceByWord(word: string): Promise<any> {
         const identifications = await new Promise<any[]>((resolve) => {
           const idStore = tx.objectStore('openbible_identifications');
           const results: any[] = [];
+          let sampleIds: any[] = [];
           const request = idStore.openCursor();
           request.onsuccess = (e: any) => {
             const cursor = e.target.result;
             if (cursor) {
+              // Collect first 5 for debug
+              if (sampleIds.length < 5) {
+                sampleIds.push({ ancientPlaceId: cursor.value.ancientPlaceId, modernLocationId: cursor.value.modernLocationId });
+              }
               // Match ancientPlaceId exactly
               if (cursor.value.ancientPlaceId === place.id) {
                 results.push(cursor.value);
               }
               cursor.continue();
-            } else resolve(results);
+            } else {
+              console.log('[findPlaceByWord] Sample identifications:', sampleIds);
+              console.log('[findPlaceByWord] Looking for ancientPlaceId:', place.id, 'type:', typeof place.id);
+              resolve(results);
+            }
           };
           request.onerror = () => resolve([]);
         });
@@ -2868,10 +2964,57 @@ async function findPlaceByWord(word: string): Promise<any> {
             };
           }
         }
+        
+        // FALLBACK: If no identifications, search locations directly by matching friendlyId
+        console.log('[findPlaceByWord] Trying fallback: search locations directly');
+        console.log('[findPlaceByWord] Searching with alternates:', alternates);
+        
+        const directLocation = await new Promise<any>((resolve) => {
+          const locStore = tx.objectStore('openbible_locations');
+          const request = locStore.openCursor();
+          let sampleLocs: string[] = [];
+          let judaeaRelated: string[] = [];
+          request.onsuccess = (e: any) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              const locFid = cursor.value.friendlyId?.toLowerCase() || '';
+              // Collect samples
+              if (sampleLocs.length < 10) sampleLocs.push(cursor.value.friendlyId || 'null');
+              // Check for judea/judaea related
+              if (locFid.includes('jud')) judaeaRelated.push(cursor.value.friendlyId);
+              // Match if location friendlyId contains any alternate as a word
+              const isMatch = alternates.some(alt => 
+                locFid === alt || 
+                locFid.startsWith(alt + ' ') || 
+                locFid.includes(' ' + alt) ||
+                locFid.endsWith(' ' + alt)
+              );
+              if (isMatch) {
+                resolve(cursor.value);
+                return;
+              }
+              cursor.continue();
+            } else {
+              if (judaeaRelated.length > 0) console.log('[findPlaceByWord] Judea-related locations found:', judaeaRelated);
+              resolve(null);
+            }
+          };
+          request.onerror = () => resolve(null);
+        });
+        
+        if (directLocation && directLocation.latitude && directLocation.longitude) {
+          console.log('[findPlaceByWord] Found direct location match:', directLocation.friendlyId);
+          db.close();
+          return {
+            id: place.id, name: place.friendlyId,
+            friendlyId: place.friendlyId, latitude: directLocation.latitude, longitude: directLocation.longitude,
+            verseCount: place.verseCount, modernName: directLocation.friendlyId, source: 'openbible'
+          };
+        }
       }
     }
     
-    // 2. Search Pleiades places by title (EXACT match only)
+    // 2. Search Pleiades places by title (with alternates and word matching)
     if (availableStores.includes('pleiades_places')) {
       const pleiadesPlaces = await new Promise<any[]>((resolve) => {
         const store = tx.objectStore('pleiades_places');
@@ -2880,9 +3023,18 @@ async function findPlaceByWord(word: string): Promise<any> {
         request.onsuccess = (e: any) => {
           const cursor = e.target.result;
           if (cursor) {
-            const title = cursor.value.title?.toLowerCase();
-            // EXACT match only - "men" should NOT match "Armenia"
-            if (title === normalizedWord) {
+            const title = cursor.value.title?.toLowerCase() || '';
+            const titleWords = title.split(/[\s,\-()\/]+/);
+            
+            // Match if any alternate matches the title or is a word in the title
+            const isMatch = alternates.some(alt => 
+              title === alt ||
+              titleWords.includes(alt) ||
+              title.startsWith(alt + ' ') ||
+              title.endsWith(' ' + alt)
+            );
+            
+            if (isMatch && cursor.value.latitude && cursor.value.longitude) {
               results.push(cursor.value);
             }
             cursor.continue();
@@ -2892,6 +3044,9 @@ async function findPlaceByWord(word: string): Promise<any> {
       });
       
       console.log('[findPlaceByWord] Pleiades places found:', pleiadesPlaces.length);
+      if (pleiadesPlaces.length > 0) {
+        console.log('[findPlaceByWord] Pleiades matches:', pleiadesPlaces.map(p => p.title));
+      }
       
       if (pleiadesPlaces.length > 0) {
         const place = pleiadesPlaces[0];
@@ -3594,6 +3749,117 @@ async function viewPlaceOnMap(placeId: string) {
   viewerDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+/**
+ * Search for verses mentioning a place and display results
+ */
+async function searchPlaceVerses(placeName: string) {
+  // Close map popup and scroll to search results
+  const searchResults = document.getElementById('searchResults')!;
+  const searchStatus = document.getElementById('searchStatus')!;
+  const searchInput = document.getElementById('searchQuery') as HTMLInputElement;
+  
+  // Set the search input
+  searchInput.value = placeName;
+  
+  searchStatus.innerHTML = `<span style="color: #666;">🔍 Searching for verses mentioning "${escapeHtml(placeName)}"...</span>`;
+  searchResults.innerHTML = '';
+  
+  // Scroll to search section
+  searchResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  
+  try {
+    const db = await openDB();
+    const tx = db.transaction('verses', 'readonly');
+    const store = tx.objectStore('verses');
+    
+    const results: any[] = [];
+    const searchLower = placeName.toLowerCase();
+    
+    // Create regex for word boundary matching
+    const searchRegex = new RegExp(`\\b${placeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+    
+    await new Promise<void>((resolve) => {
+      const request = store.openCursor();
+      request.onsuccess = (e: any) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          const verse = cursor.value;
+          if (verse.text && searchRegex.test(verse.text)) {
+            results.push(verse);
+            searchRegex.lastIndex = 0; // Reset regex
+          }
+          if (results.length < 500) { // Limit results
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        } else {
+          resolve();
+        }
+      };
+      request.onerror = () => resolve();
+    });
+    
+    db.close();
+    
+    if (results.length === 0) {
+      searchStatus.innerHTML = `<span style="color: #888;">No verses found mentioning "${escapeHtml(placeName)}"</span>`;
+      return;
+    }
+    
+    searchStatus.innerHTML = `<span style="color: #27ae60;">📍 Found ${results.length} verse${results.length === 1 ? '' : 's'} mentioning "${escapeHtml(placeName)}"</span>`;
+    
+    // Group by book
+    const bookGroups: { [book: string]: any[] } = {};
+    results.forEach(verse => {
+      if (!bookGroups[verse.book]) bookGroups[verse.book] = [];
+      bookGroups[verse.book].push(verse);
+    });
+    
+    // Sort books by canonical order
+    const sortedBooks = Object.keys(bookGroups).sort((a, b) => {
+      const indexA = BIBLE_BOOKS.indexOf(a);
+      const indexB = BIBLE_BOOKS.indexOf(b);
+      return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+    });
+    
+    // Build results HTML with highlighted place name
+    let html = '';
+    for (const book of sortedBooks) {
+      const verses = bookGroups[book];
+      html += `<details open style="margin-bottom: 12px;">
+        <summary style="cursor: pointer; font-weight: 600; color: #333; padding: 8px; background: #f5f5f5; border-radius: 4px; margin-bottom: 4px;">
+          ${escapeHtml(book)} (${verses.length})
+        </summary>
+        <div style="padding-left: 8px;">`;
+      
+      verses.forEach(verse => {
+        // Highlight the place name in the text
+        const highlightedText = verse.text.replace(
+          searchRegex,
+          '<mark style="background: #fff3cd; padding: 1px 2px; border-radius: 2px; font-weight: 600;">$&</mark>'
+        );
+        searchRegex.lastIndex = 0; // Reset regex
+        
+        html += `<div style="padding: 8px; margin: 4px 0; background: #fafafa; border-radius: 4px; border-left: 3px solid #3498db;">
+          <div style="font-weight: 600; color: #2c3e50; margin-bottom: 4px;">
+            ${escapeHtml(verse.book)} ${verse.chapter}:${verse.verse}
+          </div>
+          <div style="color: #444; line-height: 1.5;">${highlightedText}</div>
+        </div>`;
+      });
+      
+      html += `</div></details>`;
+    }
+    
+    searchResults.innerHTML = html;
+    
+  } catch (error) {
+    console.error('Error searching place verses:', error);
+    searchStatus.innerHTML = `<span style="color: #e74c3c;">Error searching: ${error instanceof Error ? error.message : 'Unknown'}</span>`;
+  }
+}
+
 // Make functions globally available
 (window as any).createNoteForSelected = createNoteForSelected;
 (window as any).highlightSelected = highlightSelected;
@@ -3602,6 +3868,7 @@ async function viewPlaceOnMap(placeId: string) {
 (window as any).clearSelection = clearSelection;
 (window as any).viewPlaceOnMap = viewPlaceOnMap;
 (window as any).showInlineNote = showInlineNote;
+(window as any).searchPlaceVerses = searchPlaceVerses;
 
 // Close modals on click
 document.getElementById('closeVerseActionModal')?.addEventListener('click', closeVerseActionModal);

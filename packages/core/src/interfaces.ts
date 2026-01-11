@@ -10,6 +10,7 @@ export interface Verse {
   chapter: number;
   verse: number;
   text: string;
+  heading?: string | null; // Section heading that appears before this verse
 }
 
 export interface PackInfo {

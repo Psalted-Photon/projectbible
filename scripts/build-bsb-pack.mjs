@@ -190,7 +190,8 @@ function parseUSFM(content) {
           verses.push({
             chapter: currentChapter,
             verse: currentVerse,
-            text: verseText.trim()
+            text: verseText.trim(),
+            heading: null // Heading goes with the verse it precedes
           });
         }
         
@@ -206,10 +207,15 @@ function parseUSFM(content) {
         // Skip whitespace
         while (i < content.length && content[i] === ' ') i++;
         
-        // Add heading as inline note if present
-        if (pendingHeading) {
-          verseText += `+ ${pendingHeading}. `;
-          pendingHeading = '';
+        // Store heading separately (will be attached to this verse)
+        const headingForVerse = pendingHeading;
+        pendingHeading = '';
+        
+        // We'll attach the heading when saving the verse
+        // Mark this verse as having a heading
+        if (headingForVerse) {
+          // Store temporarily - we'll add it when verse completes
+          verseText = `__HEADING__${headingForVerse}__HEADING_END__`;
         }
         
         continue;
@@ -277,14 +283,47 @@ function parseUSFM(content) {
   
   // Save final verse
   if (currentVerse !== null && verseText.trim()) {
+    // Extract heading if present
+    let heading = null;
+    let finalText = verseText.trim();
+    const headingMatch = finalText.match(/^__HEADING__(.+?)__HEADING_END__/);
+    if (headingMatch) {
+      heading = headingMatch[1];
+      finalText = finalText.replace(/^__HEADING__.+?__HEADING_END__/, '').trim();
+    }
     verses.push({
       chapter: currentChapter,
       verse: currentVerse,
-      text: verseText.trim()
+      text: finalText,
+      heading: heading
     });
   }
   
   return verses;
+}
+
+/**
+ * Post-process verses to extract headings properly
+ */
+function processVerses(verses) {
+  return verses.map(v => {
+    let heading = v.heading;
+    let text = v.text;
+    
+    // Extract heading if embedded in text
+    const headingMatch = text.match(/^__HEADING__(.+?)__HEADING_END__/);
+    if (headingMatch) {
+      heading = headingMatch[1];
+      text = text.replace(/^__HEADING__.+?__HEADING_END__/, '').trim();
+    }
+    
+    return {
+      chapter: v.chapter,
+      verse: v.verse,
+      text: text,
+      heading: heading
+    };
+  });
 }
 
 /**
@@ -338,6 +377,7 @@ async function buildBSBPack() {
         chapter INTEGER NOT NULL,
         verse INTEGER NOT NULL,
         text TEXT NOT NULL,
+        heading TEXT,
         PRIMARY KEY (book, chapter, verse)
       );
       
@@ -359,7 +399,7 @@ async function buildBSBPack() {
     metaInsert.run('build_date', new Date().toISOString());
     
     // Insert verses from USFM files
-    const verseInsert = db.prepare('INSERT OR REPLACE INTO verses (book, chapter, verse, text) VALUES (?, ?, ?, ?)');
+    const verseInsert = db.prepare('INSERT OR REPLACE INTO verses (book, chapter, verse, text, heading) VALUES (?, ?, ?, ?, ?)');
     let totalVerses = 0;
     
     for (const book of BIBLE_BOOKS) {
@@ -373,11 +413,12 @@ async function buildBSBPack() {
       console.log(`Processing ${book.name}...`);
       
       const content = readFileSync(filePath, 'utf-8');
-      const verses = parseUSFM(content);
+      const rawVerses = parseUSFM(content);
+      const verses = processVerses(rawVerses);
       
       for (const verse of verses) {
         const cleanText = cleanUSFMMarkup(verse.text);
-        verseInsert.run(book.name, verse.chapter, verse.verse, cleanText);
+        verseInsert.run(book.name, verse.chapter, verse.verse, cleanText, verse.heading || null);
         totalVerses++;
       }
       
