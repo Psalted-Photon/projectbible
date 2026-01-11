@@ -11,7 +11,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 6; // Updated for maps and enhanced places
+const DB_VERSION = 8; // Updated for OpenBible biblical places integration
 
 export interface DBPack {
   id: string;
@@ -191,6 +191,46 @@ export interface DBHistoricalLayer {
   packId: string; // Which map pack this belongs to
 }
 
+export interface DBPleiadesPlace {
+  id: string; // Pleiades ID
+  title: string;
+  uri?: string;
+  placeType?: string; // "city", "region", "mountain", etc.
+  description?: string;
+  yearStart?: number;
+  yearEnd?: number;
+  created?: string;
+  modified?: string;
+  bbox?: string; // JSON bounding box
+  
+  // Primary coordinates (from first location)
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface DBPleiadesName {
+  id?: number; // Auto-increment
+  placeId: string;
+  name: string;
+  language?: string; // "grc" (Greek), "la" (Latin), "hbo" (Hebrew), etc.
+  romanized?: string;
+  nameType?: string;
+  timePeriod?: string;
+  certainty?: string;
+}
+
+export interface DBPleiadesLocation {
+  id?: number; // Auto-increment
+  placeId: string;
+  title?: string;
+  geometryType?: string; // "Point", "Polygon"
+  coordinates?: string; // JSON geometry coordinates
+  latitude?: number;
+  longitude?: number;
+  certainty?: string;
+  timePeriod?: string;
+}
+
 export interface DBReadingHistoryEntry {
   id: string;
   book: string;
@@ -352,6 +392,56 @@ export function openDB(): Promise<IDBDatabase> {
         daysStore.createIndex('planId', 'planId', { unique: false });
         daysStore.createIndex('planId_dayNumber', ['planId', 'dayNumber'], { unique: true });
         daysStore.createIndex('date', 'date', { unique: false });
+      }
+      
+      // Pleiades ancient places store (41,833 scholarly places)
+      if (!db.objectStoreNames.contains('pleiades_places')) {
+        const pleiadesStore = db.createObjectStore('pleiades_places', { keyPath: 'id' });
+        pleiadesStore.createIndex('title', 'title', { unique: false });
+        pleiadesStore.createIndex('placeType', 'placeType', { unique: false });
+        pleiadesStore.createIndex('yearRange', ['yearStart', 'yearEnd'], { unique: false });
+        pleiadesStore.createIndex('coordinates', ['latitude', 'longitude'], { unique: false });
+      }
+      
+      // Pleiades place names store (historical name variations)
+      if (!db.objectStoreNames.contains('pleiades_names')) {
+        const namesStore = db.createObjectStore('pleiades_names', { keyPath: 'id', autoIncrement: true });
+        namesStore.createIndex('placeId', 'placeId', { unique: false });
+        namesStore.createIndex('name', 'name', { unique: false });
+        namesStore.createIndex('language', 'language', { unique: false });
+      }
+      
+      // Pleiades place locations store (coordinates)
+      if (!db.objectStoreNames.contains('pleiades_locations')) {
+        const locationsStore = db.createObjectStore('pleiades_locations', { keyPath: 'id', autoIncrement: true });
+        locationsStore.createIndex('placeId', 'placeId', { unique: false });
+        locationsStore.createIndex('coordinates', ['latitude', 'longitude'], { unique: false });
+      }
+      
+      // OpenBible modern locations store (biblical geography with coordinates)
+      if (!db.objectStoreNames.contains('openbible_locations')) {
+        const openBibleLocStore = db.createObjectStore('openbible_locations', { keyPath: 'id' });
+        openBibleLocStore.createIndex('friendlyId', 'friendlyId', { unique: false });
+        openBibleLocStore.createIndex('type', 'type', { unique: false });
+        openBibleLocStore.createIndex('class', 'class', { unique: false });
+        openBibleLocStore.createIndex('coordinates', ['latitude', 'longitude'], { unique: false });
+      }
+      
+      // OpenBible ancient places store (biblical names as they appear in Scripture)
+      if (!db.objectStoreNames.contains('openbible_places')) {
+        const openBiblePlacesStore = db.createObjectStore('openbible_places', { keyPath: 'id' });
+        openBiblePlacesStore.createIndex('friendlyId', 'friendlyId', { unique: false });
+        openBiblePlacesStore.createIndex('type', 'type', { unique: false });
+        openBiblePlacesStore.createIndex('class', 'class', { unique: false });
+        openBiblePlacesStore.createIndex('verseCount', 'verseCount', { unique: false });
+      }
+      
+      // OpenBible place identifications store (links ancient -> modern with confidence)
+      if (!db.objectStoreNames.contains('openbible_identifications')) {
+        const openBibleIdentsStore = db.createObjectStore('openbible_identifications', { keyPath: 'id', autoIncrement: true });
+        openBibleIdentsStore.createIndex('ancientPlaceId', 'ancientPlaceId', { unique: false });
+        openBibleIdentsStore.createIndex('modernLocationId', 'modernLocationId', { unique: false });
+        openBibleIdentsStore.createIndex('confidence', 'confidence', { unique: false });
       }
     };
   });

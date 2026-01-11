@@ -32,10 +32,10 @@ const BIBLE_BOOKS = [
 
 // Simple test UI
 root.innerHTML = `
-  <div style="max-width: 800px; margin: 40px auto; padding: 20px; font-family: system-ui;">
-    <h1>ProjectBible PWA - Adapter Test</h1>
+  <div style="max-width: 800px; margin: 40px auto; padding: 20px; font-family: system-ui; background: #d5d5d5; color: #2a2a2a;">
+    <h1 style="color: #1e3a5f; border-bottom: 3px solid #2c5f8d; padding-bottom: 10px;">ProjectBible PWA - Adapter Test</h1>
     
-    <section style="margin: 30px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px; border: 1px solid #bbb;">
       <h2>Import Pack</h2>
       <div style="margin-bottom: 15px;">
         <h3 style="font-size: 14px; margin: 10px 0;">📱 Download from URL (mobile-friendly)</h3>
@@ -48,13 +48,13 @@ root.innerHTML = `
         <input type="file" id="packFile" accept=".sqlite" />
         <button id="importBtn" style="margin-left: 10px; padding: 8px 16px;">Import Pack</button>
       </div>
-      <div id="importStatus" style="margin-top: 10px; color: #666;"></div>
+      <div id="importStatus" style="margin-top: 10px; color: #555;"></div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #e8f5e8; border-radius: 8px;">
+    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
       <h2>⚙️ Settings</h2>
       <h3 style="font-size: 16px; margin: 15px 0 10px 0;">Daily Driver Translations</h3>
-      <p style="margin: 5px 0; color: #666; font-size: 14px;">Set your preferred default translations</p>
+      <p style="margin: 5px 0; color: #555; font-size: 14px;">Set your preferred default translations</p>
       <div style="margin: 15px 0;">
         <label style="display: block; margin: 10px 0;">
           English (OT):
@@ -92,32 +92,32 @@ root.innerHTML = `
             <option value="">Not set</option>
           </select>
         </label>
-        <button id="saveSettings" style="padding: 8px 16px; margin-top: 10px; background: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer;">
+        <button id="saveSettings" style="padding: 8px 16px; margin-top: 10px; background: #999; color: #1a1a1a; border: 1px solid #bbb; border-radius: 4px; cursor: pointer;">
           Save Settings
         </button>
-        <span id="settingsSaved" style="margin-left: 10px; color: #2e7d32; display: none;">✓ Saved</span>
+        <span id="settingsSaved" style="margin-left: 10px; color: #666; display: none;">✓ Saved</span>
       </div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #ffe8e8; border-radius: 8px;">
+    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
       <h2>⚠️ Database Management</h2>
-      <p style="margin: 10px 0; color: #666;">Clear old packs to free up space</p>
-      <button id="clearPacksBtn" style="padding: 8px 16px; background: #ff6b6b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+      <p style="margin: 10px 0; color: #555;">Clear old packs to free up space</p>
+      <button id="clearPacksBtn" style="padding: 8px 16px; background: #888; color: #1a1a1a; border: 1px solid #bbb; border-radius: 4px; cursor: pointer;">
         Clear All Packs (Keep User Data)
       </button>
-      <button id="clearAllBtn" style="padding: 8px 16px; margin-left: 10px; background: #c92a2a; color: white; border: none; border-radius: 4px; cursor: pointer;">
+      <button id="clearAllBtn" style="padding: 8px 16px; margin-left: 10px; background: #777; color: #1a1a1a; border: 1px solid #bbb; border-radius: 4px; cursor: pointer;">
         Clear Everything (Nuclear)
       </button>
-      <div id="dbStats" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
+      <div id="dbStats" style="margin-top: 10px; font-size: 14px; color: #555;"></div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
       <h2>Installed Packs</h2>
       <button id="refreshPacks" style="padding: 8px 16px;">Refresh</button>
-      <div id="packsList" style="margin-top: 15px;"></div>
+      <div id="packsList" style="margin-top: 15px; max-height: 200px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background: #f0f0f0;"></div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #e8f4f8; border-radius: 8px;">
+    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
       <h2>🔍 Search Bible</h2>
       <div style="margin: 10px 0;">
         <input type="text" id="searchQuery" placeholder="Enter search terms..." 
@@ -126,33 +126,49 @@ root.innerHTML = `
       </div>
       <div style="margin-top: 10px;">
         <label>
-          <input type="checkbox" id="searchAllTranslations" checked />
-          Search all translations
+          <input type="checkbox" id="canonicalOnly" />
+          Canonical Only?
         </label>
       </div>
-      <div id="searchStatus" style="margin-top: 10px; color: #666;"></div>
+      <div id="searchStatus" style="margin-top: 10px; color: #555;"></div>
       <div id="searchResults" style="margin-top: 15px; max-height: 500px; overflow-y: auto;"></div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #e8f8e8; border-radius: 8px;">
+    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
       <h2>🗺️ Historical Maps</h2>
       <div style="margin: 10px 0;">
         <button id="loadMapsBtn" style="padding: 8px 16px;">Load Map Layers</button>
       </div>
       <div id="mapLayersList" style="margin-top: 15px;"></div>
-      <div id="mapViewer" style="margin-top: 20px; display: none; background: white; padding: 15px; border-radius: 8px;">
+      <div id="mapViewer" style="margin-top: 20px; display: none; background: #e5e5e5; padding: 15px; border-radius: 8px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
           <h3 id="mapViewerTitle" style="margin: 0;"></h3>
-          <button id="closeMapBtn" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">Close</button>
+          <button id="closeMapBtn" style="padding: 6px 12px; background: #888; color: #1a1a1a; border: 1px solid #bbb; border-radius: 4px; cursor: pointer;">Close</button>
         </div>
-        <div id="mapDetails" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px;"></div>
-        <div id="mapCanvas" style="width: 100%; height: 500px; border: 1px solid #ddd; background: #e9ecef; display: flex; align-items: center; justify-content: center; color: #666;">
+        <div id="mapDetails" style="margin-bottom: 15px; padding: 10px; background: #f0f0f0; border-radius: 4px;"></div>
+        
+        <!-- Pleiades Place Search -->
+        <div style="margin-bottom: 15px; padding: 12px; background: #e8e8e8; border: 1px solid #ccc; border-radius: 4px;">
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input 
+              type="text" 
+              id="mapPlaceSearch" 
+              placeholder="Search 41,000+ ancient places (e.g., Jerusalem, Athens, Rome)..." 
+              style="flex: 1; padding: 8px; border: 1px solid #999; border-radius: 4px; font-size: 14px; background: #d5d5d5; color: #2a2a2a;"
+            />
+            <button id="mapSearchPlacesBtn" style="padding: 8px 16px; background: #2c5f8d; color: #f5f5f5; border: 1px solid #bbb; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.2s;" onmouseover="this.style.background='#3a7ab5'" onmouseout="this.style.background='#2c5f8d'">Search</button>
+          </div>
+          <div id="mapSearchResults" style="margin-top: 10px; max-height: 300px; overflow-y: auto; display: none; background: #d5d5d5; border: 1px solid #ccc; border-radius: 4px;"></div>
+          <div id="mapSearchStatus" style="margin-top: 8px; font-size: 12px; color: #555;"></div>
+        </div>
+        
+        <div id="mapCanvas" style="width: 100%; height: 500px; border: 1px solid #ccc; background: #e9ecef; display: flex; align-items: center; justify-content: center; color: #555;">
           GeoJSON map rendering (requires Leaflet or similar library)
         </div>
       </div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
       <h2>Read Verse</h2>
       <div style="margin: 10px 0;">
         <label>Translation: 
@@ -178,42 +194,42 @@ root.innerHTML = `
       </div>
       <button id="readVerse" style="padding: 8px 16px; margin-top: 10px;">Read Verse</button>
       <button id="readChapter" style="padding: 8px 16px; margin-left: 10px;">Read Chapter</button>
-      <div id="verseText" style="margin-top: 15px; padding: 15px; background: white; border-radius: 4px; min-height: 40px;"></div>
+      <div id="verseText" style="margin-top: 15px; padding: 15px; background: #e5e5e5; border-radius: 4px; min-height: 40px;"></div>
     </section>
   </div>
   
   <!-- Cross-reference popup -->
-  <div id="xrefModal" style="display: none; position: fixed; background: white; padding: 15px; border-radius: 8px; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000; border: 1px solid #ddd;">
-    <button id="closeXrefModal" style="position: absolute; top: 8px; right: 8px; background: #f0f0f0; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
+  <div id="xrefModal" style="display: none; position: fixed; background: #e5e5e5; padding: 15px; border-radius: 8px; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000; border: 1px solid #ccc;">
+    <button id="closeXrefModal" style="position: absolute; top: 8px; right: 8px; background: #bbb; border: 1px solid #bbb; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
     <div id="xrefModalContent"></div>
   </div>
   
   <!-- Verse action menu popup -->
-  <div id="verseActionModal" style="display: none; position: fixed; background: white; padding: 20px; border-radius: 8px; max-width: 350px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1001; border: 1px solid #ddd;">
-    <button id="closeVerseActionModal" style="position: absolute; top: 8px; right: 8px; background: #f0f0f0; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
+  <div id="verseActionModal" style="display: none; position: fixed; background: #e5e5e5; padding: 20px; border-radius: 8px; max-width: 350px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1001; border: 1px solid #ccc;">
+    <button id="closeVerseActionModal" style="position: absolute; top: 8px; right: 8px; background: #bbb; border: 1px solid #bbb; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
     <h3 style="margin: 0 0 15px 0; font-size: 16px;">Actions for Selected Verses</h3>
     <div id="verseActionContent" style="display: flex; flex-direction: column; gap: 10px;">
-      <button class="action-btn" onclick="createNoteForSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer; text-align: left;">
+      <button class="action-btn" onclick="createNoteForSelected()" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #e5e5e5; cursor: pointer; text-align: left;">
         📝 Create Note
       </button>
-      <button class="action-btn" onclick="highlightSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #fff9c4; cursor: pointer; text-align: left;">
+      <button class="action-btn" onclick="highlightSelected()" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #bbb; cursor: pointer; text-align: left;">
         🖍️ Highlight (Yellow)
       </button>
-      <button class="action-btn" onclick="underlineSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer; text-align: left;">
+      <button class="action-btn" onclick="underlineSelected()" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #e5e5e5; cursor: pointer; text-align: left;">
         <u>U</u> Underline
       </button>
-      <button class="action-btn" onclick="italicizeSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer; text-align: left;">
+      <button class="action-btn" onclick="italicizeSelected()" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #e5e5e5; cursor: pointer; text-align: left;">
         <i>I</i> Italicize
       </button>
-      <button class="action-btn" onclick="clearSelection()" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #ffebee; cursor: pointer; text-align: left;">
+      <button class="action-btn" onclick="clearSelection()" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #ddd; cursor: pointer; text-align: left;">
         ❌ Clear Selection
       </button>
     </div>
   </div>
   
   <!-- Word study popup -->
-  <div id="wordStudyModal" style="display: none; position: fixed; background: white; padding: 10px; border-radius: 8px; max-width: 360px; max-height: min(52vh, 420px); overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.3); z-index: 1002; border: 1px solid #ddd; font-size: 12.5px; line-height: 1.22;">
-    <button id="closeWordStudyModal" style="position: absolute; top: 6px; right: 6px; background: #f0f0f0; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
+  <div id="wordStudyModal" style="display: none; position: fixed; background: #e5e5e5; padding: 10px; border-radius: 8px; max-width: 360px; max-height: min(52vh, 420px); overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.3); z-index: 1002; border: 1px solid #ccc; font-size: 12.5px; line-height: 1.22;">
+    <button id="closeWordStudyModal" style="position: absolute; top: 6px; right: 6px; background: #bbb; border: 1px solid #bbb; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
     <div id="wordStudyContent"></div>
   </div>
 `;
@@ -267,7 +283,7 @@ document.getElementById('downloadBtn')?.addEventListener('click', async () => {
         
         progressDiv.innerHTML = `
           <div style="background: #e0e0e0; height: 20px; border-radius: 4px; overflow: hidden;">
-            <div style="background: #4caf50; height: 100%; width: ${percent}%; transition: width 0.3s;"></div>
+            <div style="background: #999; height: 100%; width: ${percent}%; transition: width 0.3s;"></div>
           </div>
           <div style="margin-top: 5px; font-size: 12px;">${mb} MB / ${totalMb} MB (${percent}%)</div>
         `;
@@ -405,21 +421,21 @@ async function refreshPacksList() {
     const packs = await packManager.listInstalled();
     
     if (packs.length === 0) {
-      packsDiv.innerHTML = '<p style="color: #999;">No packs installed</p>';
+      packsDiv.innerHTML = '<p style="color: #555;">No packs installed</p>';
       return;
     }
     
     packsDiv.innerHTML = packs.map(pack => `
-      <div style="padding: 10px; margin: 5px 0; background: white; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+      <div style="padding: 10px; margin: 5px 0; background: #e5e5e5; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
         <div>
           <strong>${pack.translationName || pack.id}</strong> (${pack.translationId || 'N/A'})<br/>
-          <small style="color: #666;">
+          <small style="color: #555;">
             Version: ${pack.version} | 
             Type: ${pack.type} | 
             Size: ${(pack.size! / 1024).toFixed(1)} KB
           </small>
         </div>
-        <button class="delete-pack-btn" data-pack-id="${pack.id}" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Delete</button>
+        <button class="delete-pack-btn" data-pack-id="${pack.id}" style="padding: 6px 12px; background: #8b0000; color: #f5f5f5; border: 1px solid #bbb; border-radius: 4px; cursor: pointer; font-size: 14px;">Delete</button>
       </div>
     `).join('');
     
@@ -801,11 +817,11 @@ document.getElementById('readVerse')?.addEventListener('click', async () => {
                 : `document.getElementById('translation').value='${dailyDriver}'; document.getElementById('book').value='${ref.to.book}'; document.getElementById('chapter').value=${ref.to.chapter}; document.getElementById('verse').value=${ref.to.verseStart}; document.getElementById('readVerse').click();`;
               
               return `
-                <div style="padding: 8px; margin: 5px 0; background: #f8f9fa; border-radius: 4px; font-size: 13px;">
+                <div style="padding: 8px; margin: 5px 0; background: #f0f0f0; border-radius: 4px; font-size: 13px;">
                   <a href="#" onclick="${viewAction} return false;" 
                      style="color: #0066cc; text-decoration: none; font-weight: 500;">${toRef}</a>
                   ${!exists ? `<span style="color: #ff6b6b; font-size: 11px; margin-left: 8px;">(view in ${dailyDriver.toUpperCase()})</span>` : ''}
-                  ${ref.description ? `<div style="color: #666; font-size: 12px; margin-top: 3px;">${ref.description}</div>` : ''}
+                  ${ref.description ? `<div style="color: #555; font-size: 12px; margin-top: 3px;">${ref.description}</div>` : ''}
                 </div>
               `;
             }).join('')}
@@ -816,7 +832,7 @@ document.getElementById('readVerse')?.addEventListener('click', async () => {
       resultDiv.innerHTML = renderBackButtonHtml() + html;
       setCurrentReadingLocation({ translation, book, chapter, verse, mode: 'verse' });
     } else {
-      resultDiv.innerHTML = `<em style="color: #999;">Verse not found</em>`;
+      resultDiv.innerHTML = `<em style="color: #555;">Verse not found</em>`;
     }
   } catch (error) {
     resultDiv.innerHTML = `<span style="color: red;">Error: ${error instanceof Error ? error.message : 'Unknown'}</span>`;
@@ -844,7 +860,7 @@ function renderBackButtonHtml(): string {
   if (readingBackStack.length === 0) return '';
   return `
     <div style="margin: 0 0 10px 0;">
-      <button onclick="goBackToPreviousReading(); return false;" style="padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; font-size: 13px;">← Back</button>
+      <button onclick="goBackToPreviousReading(); return false;" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #e5e5e5; cursor: pointer; font-size: 13px;">← Back</button>
     </div>
   `;
 }
@@ -1233,7 +1249,7 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
                data-chapter="${chapter}" 
                data-verse="${v.verse}"
                style="margin: 8px 0; padding: 8px; border-radius: 4px; cursor: pointer; background: ${isSelected ? '#ffffcc' : 'transparent'}; transition: background 0.2s;">
-              <sup style="color: #666; cursor: ${hasCrossRefs ? 'pointer' : 'default'};" 
+              <sup style="color: #555; cursor: ${hasCrossRefs ? 'pointer' : 'default'};" 
                    ${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${book}', ${chapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>
                 ${v.verse}${hasCrossRefs ? ' 🔗' : ''}
               </sup> 
@@ -1247,7 +1263,7 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
       attachVerseSelectionHandlers();
       setCurrentReadingLocation({ translation, book, chapter, verse: 1, mode: 'chapter' });
     } else {
-      resultDiv.innerHTML = `<em style="color: #999;">Chapter not found</em>`;
+      resultDiv.innerHTML = `<em style="color: #555;">Chapter not found</em>`;
     }
   } catch (error) {
     resultDiv.innerHTML = `<span style="color: red;">Error: ${error instanceof Error ? error.message : 'Unknown'}</span>`;
@@ -1269,7 +1285,7 @@ async function showCrossReferences(book: string, chapter: number, verse: number,
     if (crossRefs.length === 0) {
       content.innerHTML = `
         <h3>${book} ${chapter}:${verse}</h3>
-        <p style="color: #999;">No cross-references available for this verse.</p>
+        <p style="color: #555;">No cross-references available for this verse.</p>
       `;
     } else {
       // Check which cross-references exist in current translation
@@ -1294,11 +1310,11 @@ async function showCrossReferences(book: string, chapter: number, verse: number,
               : `closeXrefModal(); document.getElementById('translation').value='${dailyDriver}'; document.getElementById('book').value='${ref.to.book}'; document.getElementById('chapter').value=${ref.to.chapter}; document.getElementById('verse').value=${ref.to.verseStart}; document.getElementById('readVerse').click();`;
             
             return `
-              <div style="padding: 10px; margin: 8px 0; background: #f8f9fa; border-radius: 4px;">
+              <div style="padding: 10px; margin: 8px 0; background: #f0f0f0; border-radius: 4px;">
                 <a href="#" onclick="${viewAction} return false;" 
                    style="color: #0066cc; text-decoration: none; font-weight: 500; font-size: 14px;">${toRef}</a>
                 ${!exists ? `<span style="color: #ff6b6b; font-size: 11px; margin-left: 8px;">(view in ${dailyDriver.toUpperCase()})</span>` : ''}
-                ${ref.description ? `<div style="color: #666; font-size: 13px; margin-top: 5px;">${ref.description}</div>` : ''}
+                ${ref.description ? `<div style="color: #555; font-size: 13px; margin-top: 5px;">${ref.description}</div>` : ''}
               </div>
             `;
           }).join('')}
@@ -1592,9 +1608,22 @@ document.getElementById('searchQuery')?.addEventListener('keypress', (e) => {
   }
 });
 
+// 66 canonical books (Protestant Bible)
+const CANONICAL_BOOKS = new Set([
+  'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
+  '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles',
+  'Ezra', 'Nehemiah', 'Esther', 'Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon',
+  'Isaiah', 'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel',
+  'Hosea', 'Joel', 'Amos', 'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi',
+  'Matthew', 'Mark', 'Luke', 'John', 'Acts',
+  'Romans', '1 Corinthians', '2 Corinthians', 'Galatians', 'Ephesians', 'Philippians', 'Colossians',
+  '1 Thessalonians', '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus', 'Philemon',
+  'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude', 'Revelation'
+]);
+
 async function performSearch() {
   const query = (document.getElementById('searchQuery') as HTMLInputElement).value;
-  const searchAll = (document.getElementById('searchAllTranslations') as HTMLInputElement).checked;
+  const canonicalOnly = (document.getElementById('canonicalOnly') as HTMLInputElement).checked;
   const statusDiv = document.getElementById('searchStatus')!;
   const resultsDiv = document.getElementById('searchResults')!;
   
@@ -1609,17 +1638,15 @@ async function performSearch() {
   resultsDiv.innerHTML = '';
   
   try {
-    // Get translations to search
-    let translations: string[] | undefined;
-    if (!searchAll) {
-      const selectedTranslation = (document.getElementById('translation') as HTMLSelectElement).value;
-      if (selectedTranslation) {
-        translations = [selectedTranslation];
-      }
+    // Always search all translations
+    const startTime = Date.now();
+    let results = await searchIndex.search(query, undefined);
+    
+    // Filter by canonical books if requested
+    if (canonicalOnly) {
+      results = results.filter(r => CANONICAL_BOOKS.has(r.book));
     }
     
-    const startTime = Date.now();
-    const results = await searchIndex.search(query, translations);
     const elapsed = Date.now() - startTime;
     
     if (results.length === 0) {
@@ -1640,23 +1667,39 @@ async function performSearch() {
       byTranslation.get(r.translation)!.push(r);
     });
     
-    // Render results
+    // Render results with collapsible sections (like VS Code file explorer)
     resultsDiv.innerHTML = Array.from(byTranslation.entries())
-      .map(([translation, verses]) => `
-        <div style="margin-bottom: 20px;">
-          <h3 style="color: #0066cc; margin-bottom: 10px;">${translation}</h3>
-          ${verses.map(v => `
-            <div style="padding: 10px; margin: 8px 0; background: white; border-radius: 4px; border-left: 3px solid #0066cc;">
-              <div style="font-weight: bold; color: #333; margin-bottom: 5px;">
-                ${v.book} ${v.chapter}:${v.verse}
-              </div>
-              <div style="color: #666; line-height: 1.6;">
-                ${highlightSearchTerms(v.snippet || v.text, query)}
-              </div>
+      .map(([translation, verses]) => {
+        const translationId = translation.replace(/\s+/g, '-');
+        return `
+        <div style="margin-bottom: 8px; border: 1px solid #ccc; border-radius: 4px; background: #e8e8e8;">
+          <div 
+            onclick="toggleTranslation('${translationId}')" 
+            style="padding: 10px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #ddd; border-radius: 4px;"
+            onmouseover="this.style.background='#ccc'" 
+            onmouseout="this.style.background='#ddd'"
+          >
+            <div>
+              <span id="icon-${translationId}" style="font-family: monospace; margin-right: 8px;">▶</span>
+              <strong style="color: #1e3a5f;">${translation}</strong>
+              <span style="color: #666; margin-left: 8px; font-size: 0.9em;">(${verses.length} result${verses.length === 1 ? '' : 's'})</span>
             </div>
-          `).join('')}
+          </div>
+          <div id="content-${translationId}" style="display: none; padding: 5px 10px 10px 10px;">
+            ${verses.map(v => `
+              <div style="padding: 10px; margin: 8px 0; background: #f0f0f0; border-radius: 4px; border-left: 3px solid #2c5f8d;">
+                <div style="font-weight: bold; color: #1a1a1a; margin-bottom: 5px;">
+                  ${v.book} ${v.chapter}:${v.verse}
+                </div>
+                <div style="color: #555; line-height: 1.6;">
+                  ${highlightSearchTerms(v.snippet || v.text, query)}
+                </div>
+              </div>
+            `).join('')}
+          </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
     
   } catch (error) {
     statusDiv.textContent = `❌ Error: ${error instanceof Error ? error.message : 'Unknown'}`;
@@ -1665,18 +1708,57 @@ async function performSearch() {
   }
 }
 
+// Toggle translation section visibility
+function toggleTranslation(translationId: string) {
+  const content = document.getElementById(`content-${translationId}`);
+  const icon = document.getElementById(`icon-${translationId}`);
+  
+  if (content && icon) {
+    if (content.style.display === 'none') {
+      content.style.display = 'block';
+      icon.textContent = '▼';
+    } else {
+      content.style.display = 'none';
+      icon.textContent = '▶';
+    }
+  }
+}
+
+// Make toggleTranslation globally accessible for onclick handlers
+(window as any).toggleTranslation = toggleTranslation;
+
 // Highlight search terms in text
 function highlightSearchTerms(text: string, query: string): string {
   const terms = query.toLowerCase().trim().split(/\s+/);
   let highlighted = text;
   
+  // Convert ⌃ symbol (indicates plural "you") to clickable superscript
+  highlighted = highlighted.replace(/⌃/g, '<sup style="color: #2c5f8d; cursor: pointer; text-decoration: underline;" onclick="showFootnote(\'plural form\')"><strong>[pl]</strong></sup>');
+  
+  // First, convert footnote markers to clickable superscript references
+  // Pattern: + 12:29 Gr. gave. or similar footnote markers
+  let footnoteCounter = 0;
+  highlighted = highlighted.replace(/\+\s*\d+:\d+\s+([^.]+\.)/g, (match, note) => {
+    footnoteCounter++;
+    return `<sup style="color: #2c5f8d; cursor: pointer; text-decoration: underline;" onclick="showFootnote('${note.replace(/'/g, "\\'")}')"><strong>[${footnoteCounter}]</strong></sup>`;
+  });
+  
+  // Then apply search term highlighting
   terms.forEach(term => {
     const regex = new RegExp(`(${term})`, 'gi');
-    highlighted = highlighted.replace(regex, '<mark style="background: #ffeb3b; padding: 2px;">$1</mark>');
+    highlighted = highlighted.replace(regex, '<mark style="background: #d9ecff; color: #1a1a1a; padding: 2px; border-radius: 2px;">$1</mark>');
   });
   
   return highlighted;
 }
+
+// Show footnote in a tooltip/popup
+function showFootnote(note: string) {
+  alert(note);
+}
+
+// Make showFootnote globally accessible
+(window as any).showFootnote = showFootnote;
 
 // Map layers handlers
 document.getElementById('loadMapsBtn')?.addEventListener('click', loadMapLayers);
@@ -1703,24 +1785,24 @@ async function loadMapLayers() {
     });
     
     if (layers.length === 0) {
-      listDiv.innerHTML = '<div style="color: #999;">No map layers installed. Import maps.sqlite first.</div>';
+      listDiv.innerHTML = '<div style="color: #555;">No map layers installed. Import maps.sqlite first.</div>';
       return;
     }
     
     listDiv.innerHTML = `
-      <div style="color: #666; margin-bottom: 10px;">✅ ${layers.length} historical layers loaded</div>
+      <div style="color: #555; margin-bottom: 10px;">✅ ${layers.length} historical layers loaded</div>
       ${layers.map(layer => `
-        <div style="padding: 12px; margin: 8px 0; background: white; border-radius: 4px; border-left: 3px solid #28a745;">
+        <div style="padding: 12px; margin: 8px 0; background: #e5e5e5; border-radius: 4px; border-left: 3px solid #28a745;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
               <div style="font-weight: bold; color: #333;">${layer.displayName || layer.name}</div>
-              <div style="color: #666; font-size: 13px; margin-top: 4px;">
+              <div style="color: #555; font-size: 13px; margin-top: 4px;">
                 Period: ${layer.period} | ${layer.yearStart} to ${layer.yearEnd}
               </div>
               ${layer.description ? `<div style="color: #888; font-size: 12px; margin-top: 4px;">${layer.description}</div>` : ''}
             </div>
             <button onclick="viewMapLayer('${layer.id}')" 
-                    style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    style="padding: 8px 16px; background: #999; color: #1a1a1a; border: 1px solid #bbb; border-radius: 4px; cursor: pointer;">
               View Map
             </button>
           </div>
@@ -1779,24 +1861,79 @@ let currentMap: L.Map | null = null;
     canvasDiv.style.justifyContent = '';
     
     // Initialize Leaflet map with historical map center (Jerusalem area)
-    const map = L.map(canvasDiv).setView([31.7683, 35.2137], 8);
+    const map = L.map(canvasDiv).setView([31.7683, 35.2137], 5);
     currentMap = map;
     
-    // Add OpenStreetMap base layer (for reference)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19
-    }).addTo(map);
+    // Esri ArcGIS World Imagery (Satellite - High Resolution)
+    const esriSatellite = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: 'Tiles © Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        maxZoom: 19
+      }
+    );
     
-    // Render GeoJSON features if available
+    // Esri Labels Overlay (English place names)
+    const esriLabels = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: '',
+        maxZoom: 19
+      }
+    );
+    
+    // Esri World Topographic Map
+    const esriTopo = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: 'Tiles © Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community',
+        maxZoom: 19
+      }
+    );
+    
+    // Esri World Street Map
+    const esriStreets = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: 'Tiles © Esri',
+        maxZoom: 19
+      }
+    );
+    
+    // Esri National Geographic World Map (Beautiful historical aesthetic)
+    const esriNatGeo = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: 'Tiles © Esri &mdash; National Geographic, Esri, DeLorme, NAVTEQ, UNEP-WCMC, USGS, NASA, ESA, METI, NRCAN, GEBCO, NOAA, iPC',
+        maxZoom: 16
+      }
+    );
+    
+    // Create layer groups for base maps
+    const satelliteGroup = L.layerGroup([esriSatellite, esriLabels]);
+    
+    const baseMaps = {
+      "🛰️ Satellite": satelliteGroup,
+      "🗺️ Topographic": esriTopo,
+      "🏙️ Streets": esriStreets,
+      "🌍 National Geographic": esriNatGeo
+    };
+    
+    // Add default layer (satellite with labels)
+    satelliteGroup.addTo(map);
+    
+    // Render GeoJSON features as overlay layer (if available)
+    const overlays: { [key: string]: L.LayerGroup } = {};
+    
     if (layer.boundaries && layer.boundaries.features && layer.boundaries.features.length > 0) {
       const geoJsonLayer = L.geoJSON(layer.boundaries, {
         style: function (feature) {
           return {
-            color: '#3388ff',
+            color: '#ff7800',
             weight: 2,
-            opacity: 0.8,
-            fillOpacity: 0.2
+            opacity: 0.7,
+            fillOpacity: 0.15,
+            dashArray: '5, 5'
           };
         },
         onEachFeature: function (feature, layer) {
@@ -1821,17 +1958,33 @@ let currentMap: L.Map | null = null;
         }
       }).addTo(map);
       
+      overlays['📍 Ancient Boundaries'] = geoJsonLayer;
+      
       // Fit map to GeoJSON bounds
       const bounds = geoJsonLayer.getBounds();
       if (bounds.isValid()) {
         map.fitBounds(bounds, { padding: [50, 50] });
       }
+    }
+    
+    // Add layer control for base maps and overlays
+    if (Object.keys(overlays).length > 0) {
+      L.control.layers(baseMaps, overlays, {
+        position: 'topright',
+        collapsed: false
+      }).addTo(map);
     } else {
-      canvasDiv.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">No boundary data available for this layer</div>';
+      L.control.layers(baseMaps, {}, {
+        position: 'topright',
+        collapsed: false
+      }).addTo(map);
     }
     
     viewerDiv.style.display = 'block';
     viewerDiv.scrollIntoView({ behavior: 'smooth' });
+    
+    // Initialize Pleiades place search
+    setupPlaceSearch();
     
     // Give map a moment to render then invalidate size
     setTimeout(() => {
@@ -1844,6 +1997,473 @@ let currentMap: L.Map | null = null;
     console.error(error);
   }
 };
+
+// Marker layer for place search results
+let placeMarkers: L.LayerGroup | null = null;
+
+/**
+ * Setup Pleiades place search functionality
+ */
+function setupPlaceSearch() {
+  const searchInput = document.getElementById('mapPlaceSearch') as HTMLInputElement;
+  const searchResults = document.getElementById('mapSearchResults') as HTMLDivElement;
+  const searchStatus = document.getElementById('mapSearchStatus') as HTMLDivElement;
+  const searchBtn = document.getElementById('mapSearchPlacesBtn') as HTMLButtonElement;
+  
+  if (!searchInput || !searchResults || !searchStatus || !searchBtn) {
+    return;
+  }
+  
+  // Create marker layer group
+  if (!placeMarkers && currentMap) {
+    placeMarkers = L.layerGroup().addTo(currentMap);
+  }
+  
+  const performSearch = async () => {
+    const query = searchInput.value.trim();
+    
+    if (query.length < 2) {
+      searchResults.style.display = 'none';
+      searchStatus.textContent = 'Please enter at least 2 characters';
+      return;
+    }
+    
+    searchStatus.textContent = 'Searching biblical & ancient places...';
+    searchBtn.disabled = true;
+    
+    try {
+      const places = await searchAllPlaces(query);
+      displaySearchResults(places);
+      if (places.length === 0) {
+        searchStatus.textContent = 'No places found. Make sure you have imported place packs.';
+      } else {
+        const openBibleCount = places.filter(p => p.source === 'openbible').length;
+        const pleiadesCount = places.filter(p => p.source === 'pleiades').length;
+        searchStatus.textContent = `Found ${openBibleCount} biblical + ${pleiadesCount} ancient places`;
+      }
+    } catch (error) {
+      searchStatus.textContent = 'Search failed. Have you imported place packs?';
+      console.error('Place search error:', error);
+    } finally {
+      searchBtn.disabled = false;
+    }
+  };
+  
+  // Search on button click
+  searchBtn.addEventListener('click', performSearch);
+  
+  // Search on Enter key
+  searchInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      performSearch();
+    }
+  });
+}
+
+/**
+ * Search Pleiades places by name
+ */
+async function searchPleiadesPlaces(query: string): Promise<any[]> {
+  const db = await openDB();
+  
+  return new Promise((resolve, reject) => {
+    try {
+      // Check if store exists
+      if (!db.objectStoreNames.contains('pleiades_places')) {
+        console.warn('pleiades_places store not found');
+        resolve([]);
+        return;
+      }
+      
+      const transaction = db.transaction('pleiades_places', 'readonly');
+      const store = transaction.objectStore('pleiades_places');
+      const index = store.index('title');
+      
+      const results: any[] = [];
+      const queryLower = query.toLowerCase();
+      
+      // Use cursor to scan index
+      const request = index.openCursor();
+      
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result;
+        if (cursor && results.length < 50) {
+          const place = cursor.value;
+          if (place.title && place.title.toLowerCase().includes(queryLower)) {
+            results.push({ ...place, source: 'pleiades' });
+          }
+          cursor.continue();
+        } else {
+          console.log('Pleiades search results:', results.length);
+          resolve(results);
+        }
+      };
+      
+      request.onerror = () => {
+        console.error('Search request error:', request.error);
+        reject(request.error);
+      };
+      
+      transaction.onerror = () => {
+        console.error('Transaction error:', transaction.error);
+        reject(transaction.error);
+      };
+    } catch (error) {
+      console.error('Search error:', error);
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Search for biblical places in OpenBible database by name
+ */
+async function searchOpenBiblePlaces(query: string): Promise<any[]> {
+  const db = await openDB();
+  
+  return new Promise((resolve, reject) => {
+    try {
+      // Check if stores exist
+      if (!db.objectStoreNames.contains('openbible_places') || 
+          !db.objectStoreNames.contains('openbible_locations') ||
+          !db.objectStoreNames.contains('openbible_identifications')) {
+        console.warn('OpenBible stores not found');
+        resolve([]);
+        return;
+      }
+      
+      const transaction = db.transaction(['openbible_places', 'openbible_locations', 'openbible_identifications'], 'readonly');
+      const placesStore = transaction.objectStore('openbible_places');
+      const locationsStore = transaction.objectStore('openbible_locations');
+      const identsStore = transaction.objectStore('openbible_identifications');
+      
+      const results: any[] = [];
+      const queryLower = query.toLowerCase();
+      
+      // Search in ancient places by friendly_id
+      const placesIndex = placesStore.index('friendlyId');
+      const placesRequest = placesIndex.openCursor();
+      
+      placesRequest.onsuccess = async (event) => {
+        const cursor = (event.target as IDBRequest).result;
+        if (cursor && results.length < 25) {
+          const place = cursor.value;
+          if (place.friendlyId && place.friendlyId.toLowerCase().includes(queryLower)) {
+            results.push(place);
+          }
+          cursor.continue();
+        } else {
+          // Get coordinates for each result
+          const enrichedResults = [];
+          for (const place of results) {
+            try {
+              // Find identification
+              const identIndex = identsStore.index('ancientPlaceId');
+              const idents = await new Promise<any[]>((res) => {
+                const identReq = identIndex.getAll(place.id);
+                identReq.onsuccess = () => res(identReq.result || []);
+                identReq.onerror = () => res([]);
+              });
+              
+              // Get highest confidence identification
+              const bestIdent = idents.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0];
+              
+              if (bestIdent && bestIdent.modernLocationId) {
+                const location = await new Promise<any>((res) => {
+                  const locReq = locationsStore.get(bestIdent.modernLocationId);
+                  locReq.onsuccess = () => res(locReq.result);
+                  locReq.onerror = () => res(null);
+                });
+                
+                if (location && location.latitude && location.longitude) {
+                  enrichedResults.push({
+                    ...place,
+                    title: place.friendlyId, // For compatibility with displaySearchResults
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                    modernName: location.friendlyId,
+                    confidence: bestIdent.confidence,
+                    placeType: location.type,
+                    locationClass: location.class,
+                    source: 'openbible'
+                  });
+                }
+              }
+            } catch (err) {
+              console.error('Error enriching place:', err);
+            }
+          }
+          
+          console.log('OpenBible search results:', enrichedResults.length);
+          resolve(enrichedResults);
+        }
+      };
+      
+      placesRequest.onerror = () => {
+        console.error('Places search error:', placesRequest.error);
+        reject(placesRequest.error);
+      };
+      
+      transaction.onerror = () => {
+        console.error('Transaction error:', transaction.error);
+        reject(transaction.error);
+      };
+    } catch (error) {
+      console.error('OpenBible search error:', error);
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Search both Pleiades and OpenBible databases
+ */
+async function searchAllPlaces(query: string): Promise<any[]> {
+  const [openBibleResults, pleiadesResults] = await Promise.all([
+    searchOpenBiblePlaces(query),
+    searchPleiadesPlaces(query)
+  ]);
+  
+  // Combine with biblical (OpenBible) results first
+  return [...openBibleResults, ...pleiadesResults];
+}
+
+/**
+ * Display search results
+ */
+function displaySearchResults(places: any[]) {
+  const searchResults = document.getElementById('mapSearchResults') as HTMLDivElement;
+  
+  console.log('displaySearchResults called with', places.length, 'places');
+  console.log('searchResults element:', searchResults);
+  
+  if (!searchResults) {
+    console.error('searchResults element not found!');
+    return;
+  }
+  
+  if (places.length === 0) {
+    searchResults.style.display = 'none';
+    return;
+  }
+  
+  console.log('First place:', places[0]);
+  
+  const html = places.map(place => {
+    const sourceLabel = place.source === 'openbible' ? '📖 Biblical' : '🏛️ Ancient';
+    const confidenceLabel = place.confidence >= 500 ? '⭐ High confidence' : 
+                           place.confidence >= 300 ? '✓ Medium confidence' : 
+                           place.confidence > 0 ? '? Low confidence' : '';
+    
+    return `
+    <div 
+      class="search-result" 
+      data-place-id="${place.id}"
+      data-source="${place.source || 'pleiades'}"
+      style="padding: 10px; border-bottom: 1px solid #ccc; cursor: pointer; transition: background 0.2s; background: #f5f5f5;"
+      onmouseover="this.style.background='#e0e0e0'"
+      onmouseout="this.style.background='#f5f5f5'"
+    >
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-weight: bold; color: #2c3e50;">${escapeHtml(place.title)}</div>
+        <div style="font-size: 11px; color: #7f8c8d; font-weight: 500;">${sourceLabel}</div>
+      </div>
+      <div style="font-size: 12px; color: #7f8c8d; margin-top: 2px;">
+        ${place.placeType ? escapeHtml(place.placeType) : 'Place'} 
+        ${place.yearStart && place.yearEnd ? `(${place.yearStart} - ${place.yearEnd})` : ''}
+        ${confidenceLabel ? `<span style="margin-left: 8px; color: #27ae60;">${confidenceLabel}</span>` : ''}
+      </div>
+      ${place.modernName && place.modernName !== place.title ? `<div style="font-size: 11px; color: #95a5a6; margin-top: 2px;">Modern: ${escapeHtml(place.modernName)}</div>` : ''}
+      ${place.latitude && place.longitude ? `<div style="font-size: 11px; color: #95a5a6; margin-top: 2px;">${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}</div>` : ''}
+      ${place.verseCount > 0 ? `<div style="font-size: 11px; color: #3498db; margin-top: 2px;">📖 Mentioned in ${place.verseCount} verse${place.verseCount === 1 ? '' : 's'}</div>` : ''}
+    </div>
+  `;
+  }).join('');
+  
+  searchResults.innerHTML = html;
+  searchResults.style.display = 'block';
+  
+  console.log('Search results innerHTML length:', searchResults.innerHTML.length);
+  console.log('Search results display:', searchResults.style.display);
+  console.log('Search results computed style:', window.getComputedStyle(searchResults).display);
+  
+  // Attach click handlers
+  searchResults.querySelectorAll('.search-result').forEach(result => {
+    result.addEventListener('click', async (e) => {
+      const placeId = (e.currentTarget as HTMLElement).dataset.placeId;
+      if (placeId) {
+        const db = await openDB();
+        const transaction = db.transaction('pleiades_places', 'readonly');
+        const store = transaction.objectStore('pleiades_places');
+        const request = store.get(placeId);
+        
+        request.onsuccess = () => {
+          const place = request.result;
+          if (place && place.latitude && place.longitude) {
+            zoomToPlace(place);
+          }
+        };
+      }
+    });
+  });
+}
+
+/**
+ * Zoom map to a place and show marker with details
+ */
+function zoomToPlace(place: any) {
+  if (!currentMap || !place.latitude || !place.longitude) return;
+  
+  // Clear previous markers
+  if (placeMarkers) {
+    placeMarkers.clearLayers();
+  }
+  
+  // Fly to place with smooth animation
+  currentMap.flyTo([place.latitude, place.longitude], 12, {
+    duration: 1.5,
+    easeLinearity: 0.25
+  });
+  
+  // Determine marker color and icon based on source and confidence
+  let markerColor = '#3388ff'; // Default blue
+  let markerIcon = '📍';
+  
+  if (place.source === 'openbible') {
+    // Biblical places - blue with book icon
+    markerColor = '#2980b9';
+    markerIcon = '📖';
+    
+    // Adjust opacity based on confidence
+    if (place.confidence >= 500) {
+      markerColor = '#27ae60'; // High confidence - green
+      markerIcon = '⭐';
+    } else if (place.confidence >= 300) {
+      markerColor = '#2980b9'; // Medium - blue
+      markerIcon = '✓';
+    } else if (place.confidence > 0) {
+      markerColor = '#e67e22'; // Low - orange
+      markerIcon = '?';
+    }
+  } else {
+    // Ancient places (Pleiades) - orange/brown
+    markerColor = '#d35400';
+    markerIcon = '🏛️';
+  }
+  
+  // Create custom marker with DivIcon for colored markers
+  const marker = L.marker([place.latitude, place.longitude], {
+    icon: L.divIcon({
+      className: 'custom-place-marker',
+      html: `
+        <div style="
+          position: relative;
+          width: 32px;
+          height: 32px;
+        ">
+          <div style="
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 24px;
+            height: 24px;
+            background: ${markerColor};
+            border: 2px solid white;
+            border-radius: 50% 50% 50% 0;
+            transform: translateX(-50%) rotate(-45deg);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          "></div>
+          <div style="
+            position: absolute;
+            top: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            z-index: 1000;
+            text-shadow: 0 0 2px white;
+          ">${markerIcon}</div>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+      popupAnchor: [0, -32]
+    })
+  });
+  
+  // Create popup with place details
+  let popupContent = `<div style="min-width: 220px;">`;
+  
+  // Title with source badge
+  const sourceBadge = place.source === 'openbible' ? '📖 Biblical' : '🏛️ Ancient';
+  const placeTitle = place.title || place.friendlyId || place.name || 'Unknown Place';
+  popupContent += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">`;
+  popupContent += `<h4 style="margin: 0; color: #2c3e50; font-size: 16px;">${escapeHtml(placeTitle)}</h4>`;
+  popupContent += `<span style="font-size: 11px; color: #7f8c8d; font-weight: 600; white-space: nowrap; margin-left: 8px;">${sourceBadge}</span>`;
+  popupContent += `</div>`;
+  
+  // Confidence indicator for biblical places
+  if (place.source === 'openbible' && place.confidence > 0) {
+    const confidenceLabel = place.confidence >= 500 ? '⭐ High confidence' :
+                           place.confidence >= 300 ? '✓ Medium confidence' :
+                           '? Low confidence';
+    const confidenceColor = place.confidence >= 500 ? '#27ae60' :
+                            place.confidence >= 300 ? '#2980b9' : '#e67e22';
+    popupContent += `<p style="margin: 4px 0; font-size: 12px; color: ${confidenceColor}; font-weight: 600;">${confidenceLabel} (${place.confidence})</p>`;
+  }
+  
+  // Place type
+  if (place.placeType || place.type) {
+    popupContent += `<p style="margin: 4px 0; font-size: 13px;"><strong>Type:</strong> ${escapeHtml(place.placeType || place.type)}</p>`;
+  }
+  
+  // Verse count for biblical places
+  if (place.verseCount > 0) {
+    popupContent += `<p style="margin: 4px 0; font-size: 13px; color: #3498db;"><strong>📖 Mentioned:</strong> ${place.verseCount} verse${place.verseCount === 1 ? '' : 's'}</p>`;
+  }
+  
+  // Modern name if different
+  if (place.modernName && place.modernName !== place.title) {
+    popupContent += `<p style="margin: 4px 0; font-size: 13px;"><strong>Modern:</strong> ${escapeHtml(place.modernName)}</p>`;
+  }
+  
+  // Time period for ancient places
+  if (place.yearStart || place.yearEnd) {
+    popupContent += `<p style="margin: 4px 0; font-size: 13px;"><strong>Period:</strong> ${place.yearStart || '?'} - ${place.yearEnd || '?'}</p>`;
+  }
+  
+  // Description
+  if (place.description) {
+    const shortDesc = place.description.length > 200 
+      ? place.description.substring(0, 200) + '...' 
+      : place.description;
+    popupContent += `<p style="margin: 8px 0 4px 0; font-size: 12px; color: #555; line-height: 1.4;">${escapeHtml(shortDesc)}</p>`;
+  }
+  
+  // Coordinates
+  popupContent += `<p style="margin: 8px 0 0 0; font-size: 11px; color: #95a5a6;">${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}</p>`;
+  
+  // External link
+  if (place.uri) {
+    popupContent += `<p style="margin: 8px 0 0 0;"><a href="${place.uri}" target="_blank" style="font-size: 12px; color: #3498db; text-decoration: none;">View in Pleiades ↗</a></p>`;
+  }
+  
+  popupContent += `</div>`;
+  
+  marker.bindPopup(popupContent, {
+    maxWidth: 320,
+    className: 'place-popup'
+  });
+  
+  if (placeMarkers) {
+    placeMarkers.addLayer(marker);
+  }
+  
+  // Open popup after animation completes
+  setTimeout(() => {
+    marker.openPopup();
+  }, 1600);
+}
 
 // Initialize UI
 refreshPacksList();
@@ -1976,17 +2596,23 @@ function attachWordClickHandlers() {
       const book = verseEl?.dataset.book;
       const chapter = verseEl?.dataset.chapter;
       const verse = verseEl?.dataset.verse;
+      const htmlSpan = span as HTMLElement;
+      const translation = htmlSpan.dataset.translation || '';
       
-      const safeWord = escapeHtml(trimmed);
+      // Strip ALL punctuation from data attribute but keep original for display
+      const cleanWord = trimmed.replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '');
+      const safeWord = escapeHtml(cleanWord);
+      const displayWord = escapeHtml(trimmed);
       return `<span class="word-clickable" 
                     data-word="${safeWord}" 
                     data-word-position="${idx + 1}"
                     data-book="${book}"
                     data-chapter="${chapter}"
                     data-verse="${verse}"
+                    data-translation="${escapeHtml(translation)}"
                     style="cursor: pointer; padding: 2px; border-radius: 2px; transition: background 0.15s;"
                     onmouseenter="this.style.background='#f0f0f0'"
-                    onmouseleave="this.style.background='transparent'">${safeWord}</span>`;
+                    onmouseleave="this.style.background='transparent'">${displayWord}</span>`;
     }).join(' ');
     
     span.innerHTML = wordElements;
@@ -2004,7 +2630,7 @@ function attachWordClickHandlers() {
       pressStartTime = Date.now();
       longPressTimer = window.setTimeout(() => {
         didLongPress = true;
-        showWordStudy(element, e);
+        showWordActionMenu(element, e);
       }, LONG_PRESS_DURATION);
     });
     
@@ -2027,7 +2653,7 @@ function attachWordClickHandlers() {
       pressStartTime = Date.now();
       longPressTimer = window.setTimeout(() => {
         didLongPress = true;
-        showWordStudy(element, e);
+        showWordActionMenu(element, e);
       }, LONG_PRESS_DURATION);
     }, { passive: true });
     
@@ -2110,8 +2736,372 @@ function showVerseActionMenu(event: MouseEvent | TouchEvent) {
   event.stopPropagation();
 }
 
+// Store word context for action menu
+let currentWordContext: {
+  word: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  wordPosition: number;
+  translation: string;
+  hasMorphology: boolean;
+  placeData: any;
+} | null = null;
+
 /**
- * Show word study popup
+ * Check if translation has morphology data
+ */
+function translationHasMorphology(translation: string): boolean {
+  const t = translation.toLowerCase();
+  if (t.includes('byz') || t.includes('sblgnt') || t.includes('opengnt') || 
+      t === 'tr' || t.includes('gnt') || t.includes('greek')) return true;
+  if (t.includes('wlc') || t.includes('aleppo') || t.includes('morphhb') ||
+      t.includes('hebrew')) return true;
+  return false;
+}
+
+/**
+ * Search for place data by word
+ */
+async function findPlaceByWord(word: string): Promise<any> {
+  const db = await openDB();
+  const normalizedWord = word.toLowerCase().replace(/[\p{P}\p{S}]/gu, '');
+  
+  console.log('[findPlaceByWord] Searching for:', normalizedWord);
+  
+  try {
+    // Build list of available stores
+    const storeNames = Array.from(db.objectStoreNames);
+    const availableStores: string[] = [];
+    
+    if (storeNames.includes('openbible_places')) availableStores.push('openbible_places');
+    if (storeNames.includes('openbible_locations')) availableStores.push('openbible_locations');
+    if (storeNames.includes('openbible_identifications')) availableStores.push('openbible_identifications');
+    if (storeNames.includes('pleiades_places')) availableStores.push('pleiades_places');
+    if (storeNames.includes('places')) availableStores.push('places');
+    if (storeNames.includes('place_name_links')) availableStores.push('place_name_links');
+    
+    console.log('[findPlaceByWord] Available stores:', availableStores);
+    
+    if (availableStores.length === 0) {
+      db.close();
+      return null;
+    }
+    
+    const tx = db.transaction(availableStores, 'readonly');
+    
+    // 1. Search OpenBible places by friendlyId (EXACT case-insensitive match only)
+    if (availableStores.includes('openbible_places')) {
+      const openBiblePlaces = await new Promise<any[]>((resolve) => {
+        const store = tx.objectStore('openbible_places');
+        // Scan for exact case-insensitive match only
+        const results: any[] = [];
+        let sampleFids: string[] = [];
+        const request = store.openCursor();
+        request.onsuccess = (e: any) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            const fid = cursor.value.friendlyId?.toLowerCase();
+            // Collect first 10 friendlyIds for debug
+            if (sampleFids.length < 10) sampleFids.push(cursor.value.friendlyId || 'null');
+            // Also check if galilee appears anywhere
+            if (fid && fid.includes('galilee')) {
+              console.log('[findPlaceByWord] Found galilee-related:', cursor.value.friendlyId, cursor.value.id);
+            }
+            // EXACT match only - no partial matching
+            if (fid === normalizedWord) {
+              results.push(cursor.value);
+            }
+            cursor.continue();
+          } else {
+            console.log('[findPlaceByWord] Sample friendlyIds from DB:', sampleFids);
+            resolve(results);
+          }
+        };
+        request.onerror = () => resolve([]);
+      });
+      
+      console.log('[findPlaceByWord] OpenBible places found:', openBiblePlaces.length);
+      
+      if (openBiblePlaces.length > 0 && availableStores.includes('openbible_identifications') && availableStores.includes('openbible_locations')) {
+        const place = openBiblePlaces[0];
+        console.log('[findPlaceByWord] OpenBible place id:', place.id, 'friendlyId:', place.friendlyId);
+        
+        // Scan identifications for this ancientPlaceId (don't rely on index)
+        const identifications = await new Promise<any[]>((resolve) => {
+          const idStore = tx.objectStore('openbible_identifications');
+          const results: any[] = [];
+          const request = idStore.openCursor();
+          request.onsuccess = (e: any) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              // Match ancientPlaceId exactly
+              if (cursor.value.ancientPlaceId === place.id) {
+                results.push(cursor.value);
+              }
+              cursor.continue();
+            } else resolve(results);
+          };
+          request.onerror = () => resolve([]);
+        });
+        
+        console.log('[findPlaceByWord] Identifications found:', identifications.length);
+        
+        if (identifications.length > 0) {
+          identifications.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+          const bestIdent = identifications[0];
+          console.log('[findPlaceByWord] Best identification:', bestIdent.modernLocationId, 'confidence:', bestIdent.confidence);
+          
+          const modernLoc = await new Promise<any>((resolve) => {
+            const request = tx.objectStore('openbible_locations').get(bestIdent.modernLocationId);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => resolve(null);
+          });
+          
+          if (modernLoc) {
+            console.log('[findPlaceByWord] Found OpenBible place with location:', place.friendlyId, modernLoc.latitude, modernLoc.longitude);
+            db.close();
+            return {
+              id: place.id, name: place.friendlyId.charAt(0).toUpperCase() + place.friendlyId.slice(1),
+              friendlyId: place.friendlyId, latitude: modernLoc.latitude, longitude: modernLoc.longitude,
+              verseCount: place.verseCount, confidence: bestIdent.confidence, modernName: modernLoc.friendlyId, source: 'openbible'
+            };
+          }
+        }
+      }
+    }
+    
+    // 2. Search Pleiades places by title (EXACT match only)
+    if (availableStores.includes('pleiades_places')) {
+      const pleiadesPlaces = await new Promise<any[]>((resolve) => {
+        const store = tx.objectStore('pleiades_places');
+        const results: any[] = [];
+        const request = store.openCursor();
+        request.onsuccess = (e: any) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            const title = cursor.value.title?.toLowerCase();
+            // EXACT match only - "men" should NOT match "Armenia"
+            if (title === normalizedWord) {
+              results.push(cursor.value);
+            }
+            cursor.continue();
+          } else resolve(results);
+        };
+        request.onerror = () => resolve([]);
+      });
+      
+      console.log('[findPlaceByWord] Pleiades places found:', pleiadesPlaces.length);
+      
+      if (pleiadesPlaces.length > 0) {
+        const place = pleiadesPlaces[0];
+        db.close();
+        return { id: place.id, name: place.title, latitude: place.latitude, longitude: place.longitude, placeType: place.placeType, description: place.description, source: 'pleiades' };
+      }
+    }
+    
+    // 3. Check legacy place_name_links
+    if (availableStores.includes('place_name_links') && availableStores.includes('places')) {
+      const placeLinks = await new Promise<any[]>((resolve) => {
+        const store = tx.objectStore('place_name_links');
+        if (store.indexNames.contains('normalizedWord')) {
+          const request = store.index('normalizedWord').getAll(normalizedWord);
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => resolve([]);
+        } else {
+          resolve([]);
+        }
+      });
+      
+      if (placeLinks.length > 0) {
+        const placeData = await new Promise<any>((resolve) => {
+          const request = tx.objectStore('places').get(placeLinks[0].placeId);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => resolve(null);
+        });
+        if (placeData) { db.close(); return { ...placeData, source: 'legacy' }; }
+      }
+    }
+    
+    console.log('[findPlaceByWord] No place found for:', normalizedWord);
+    db.close();
+    return null;
+  } catch (error) {
+    console.error('[findPlaceByWord] Error:', error);
+    db.close();
+    return null;
+  }
+}
+
+/**
+ * Show word action menu (Morphology, Map, Note, Style)
+ */
+async function showWordActionMenu(wordElement: HTMLElement, event: MouseEvent | TouchEvent) {
+  const modal = document.getElementById('wordStudyModal')!;
+  const content = document.getElementById('wordStudyContent')!;
+  
+  const word = wordElement.dataset.word!;
+  const book = wordElement.dataset.book!;
+  const chapter = parseInt(wordElement.dataset.chapter!);
+  const verse = parseInt(wordElement.dataset.verse!);
+  const wordPosition = parseInt(wordElement.dataset.wordPosition!);
+  const translation = wordElement.dataset.translation || '';
+  
+  const mouseX = ('clientX' in event && typeof event.clientX === 'number') ? event.clientX : (event.touches?.[0]?.clientX ?? lastPopupAnchorRect.left);
+  const mouseY = ('clientY' in event && typeof event.clientY === 'number') ? event.clientY : (event.touches?.[0]?.clientY ?? lastPopupAnchorRect.top);
+
+  suppressNextGlobalClickUntil = Date.now() + 800;
+  content.innerHTML = '⏳ Loading...';
+  modal.style.display = 'block';
+  modal.style.visibility = 'hidden';
+
+  requestAnimationFrame(() => {
+    const anchorRect = new DOMRect(mouseX, mouseY, 0, 0);
+    positionFixedPopupWithinViewport(modal, anchorRect, { preferBelow: 'auto' as any });
+    modal.style.visibility = 'visible';
+  });
+  
+  const hasMorphology = translationHasMorphology(translation);
+  const placeData = await findPlaceByWord(word);
+  
+  currentWordContext = { word, book, chapter, verse, wordPosition, translation, hasMorphology, placeData };
+  
+  const safeWord = escapeHtml(cleanPopupText(word));
+  const safeBook = escapeHtml(cleanPopupText(book));
+  const morphDisabled = !hasMorphology;
+  const mapDisabled = !placeData;
+  
+  const btnStyle = (disabled: boolean) => disabled 
+    ? 'padding: 10px 16px; margin: 4px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: not-allowed; background: #e0e0e0; color: #999;'
+    : 'padding: 10px 16px; margin: 4px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; background: #2196f3; color: white;';
+  
+  content.innerHTML = `
+    <div style="margin: 0 0 12px 0; text-align: center;">
+      <div style="font-weight: 650; font-size: 16px; color: #333;">${safeWord}</div>
+      <div style="margin-top: 2px; color: #666; font-size: 12px;">${safeBook} ${chapter}:${verse}</div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 4px;">
+      <button onclick="showWordMorphology()" ${morphDisabled ? 'disabled' : ''} style="${btnStyle(morphDisabled)}" title="${morphDisabled ? 'Morphology not available for translations' : 'View morphology'}">📖 Morphology</button>
+      <button onclick="showWordOnMap()" ${mapDisabled ? 'disabled' : ''} style="${btnStyle(mapDisabled)}" title="${mapDisabled ? 'Not a recognized place' : 'View on map'}">🗺️ Map</button>
+      <button onclick="showWordNote()" style="${btnStyle(false)}">📝 Note</button>
+      <button onclick="showWordStyle()" disabled style="${btnStyle(true)}" title="Coming soon">🎨 Style</button>
+    </div>
+    ${placeData ? `<div style="margin-top: 12px; padding: 8px; background: #e3f2fd; border-radius: 6px; text-align: center; font-size: 12px; color: #1976d2;">📍 Place: <strong>${escapeHtml(placeData.name)}</strong></div>` : ''}
+    ${!hasMorphology ? `<div style="margin-top: 8px; padding: 6px; background: #fff3e0; border-radius: 6px; text-align: center; font-size: 11px; color: #e65100;">💡 Morphology available in Greek/Hebrew texts</div>` : ''}
+  `;
+}
+
+// Global action handlers
+(window as any).showWordMorphology = async function() {
+  if (!currentWordContext) return;
+  const { word, book, chapter, verse, wordPosition } = currentWordContext;
+  const content = document.getElementById('wordStudyContent')!;
+  content.innerHTML = '⏳ Loading morphology...';
+  
+  try {
+    const db = await openDB();
+    const tx = db.transaction(['morphology', 'strongs_entries'], 'readonly');
+    const morphData = await new Promise<any>((resolve) => {
+      const request = tx.objectStore('morphology').index('book_chapter_verse_word').get([book, chapter, verse, wordPosition]);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    });
+    
+    const normalizeStrongsId = (raw: unknown): string | null => {
+      if (typeof raw !== 'string') return null;
+      const match = raw.replace(/[^\w]/g, '').match(/^([GH])(\d+)$/);
+      return match ? match[1] + match[2].padStart(4, '0') : null;
+    };
+    
+    let html = `<button onclick="showWordActionMenuBack()" style="margin-bottom: 10px; padding: 4px 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-size: 12px;">← Back</button>
+      <div style="margin: 0 0 8px 0;"><div style="font-weight: 650; font-size: 14px; color: #333;">${escapeHtml(word)}</div><div style="color: #666; font-size: 12px;">${escapeHtml(book)} ${chapter}:${verse}</div></div>`;
+    
+    if (morphData) {
+      let parsing: any;
+      try { parsing = typeof morphData.parsing === 'string' ? JSON.parse(morphData.parsing) : morphData.parsing; } catch { parsing = { code: morphData.parsing }; }
+      const normalizedStrongsId = normalizeStrongsId(morphData.strongsId);
+      
+      html += `<div style="margin: 0 0 6px 0;"><div style="margin: 0 0 3px 0; font-weight: 650; color: #555; font-size: 11.5px;">Morphology</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          <tr><td style="padding: 2px 4px; font-weight: 600;">Word</td><td>${escapeHtml(morphData.text || word)}</td></tr>
+          <tr><td style="padding: 2px 4px; font-weight: 600;">Lemma</td><td>${escapeHtml(morphData.lemma || 'N/A')}</td></tr>
+          ${morphData.transliteration ? `<tr><td style="padding: 2px 4px; font-weight: 600;">Translit</td><td>${escapeHtml(morphData.transliteration)}</td></tr>` : ''}
+          ${morphData.gloss ? `<tr><td style="padding: 2px 4px; font-weight: 600;">Gloss</td><td>${escapeHtml(morphData.gloss)}</td></tr>` : ''}
+          ${parsing?.code ? `<tr><td style="padding: 2px 4px; font-weight: 600;">Morph</td><td><code style="background: #ddd; padding: 1px 5px; border-radius: 3px;">${escapeHtml(parsing.code)}</code></td></tr>` : ''}
+        </table></div>`;
+      
+      if (normalizedStrongsId) {
+        const strongsData = await new Promise<any>((resolve) => {
+          const request = tx.objectStore('strongs_entries').get(normalizedStrongsId);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => resolve(null);
+        });
+        if (strongsData) {
+          html += `<div style="margin: 6px 0; padding: 6px; background: #f5f5f5; border-left: 3px solid #e65100; border-radius: 4px;">
+            <div style="font-weight: 650; color: #e65100; font-size: 11.5px;">Strong's ${escapeHtml(normalizedStrongsId)}</div>
+            <div style="margin: 3px 0;"><strong>${escapeHtml(strongsData.lemma)}</strong>${strongsData.transliteration ? ` <span style="color:#666">(${escapeHtml(strongsData.transliteration)})</span>` : ''}</div>
+            <div style="color: #555;">${escapeHtml(strongsData.shortDefinition || strongsData.definition)}</div></div>`;
+        }
+      }
+    } else {
+      html += `<div style="padding: 15px; text-align: center; color: #666;">No morphology data found.</div>`;
+    }
+    db.close();
+    content.innerHTML = html;
+  } catch (error) {
+    content.innerHTML = `<p style="color: red;">Error: ${error instanceof Error ? error.message : 'Unknown'}</p>`;
+  }
+};
+
+(window as any).showWordActionMenuBack = function() {
+  if (!currentWordContext) return;
+  const wordEl = document.querySelector(`.word-clickable[data-word="${currentWordContext.word}"][data-book="${currentWordContext.book}"][data-chapter="${currentWordContext.chapter}"][data-verse="${currentWordContext.verse}"]`) as HTMLElement;
+  if (wordEl) showWordActionMenu(wordEl, new MouseEvent('click'));
+};
+
+(window as any).showWordOnMap = function() {
+  if (!currentWordContext?.placeData) return;
+  document.getElementById('wordStudyModal')!.style.display = 'none';
+  (window as any).viewPlaceOnMap(currentWordContext.placeData.id || currentWordContext.placeData.friendlyId);
+};
+
+(window as any).showWordNote = function() {
+  if (!currentWordContext) return;
+  const { word, book, chapter, verse } = currentWordContext;
+  const content = document.getElementById('wordStudyContent')!;
+  const noteKey = `note_${book}_${chapter}_${verse}_${word}`;
+  const existingNote = localStorage.getItem(noteKey) || '';
+  
+  content.innerHTML = `<button onclick="showWordActionMenuBack()" style="margin-bottom: 10px; padding: 4px 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-size: 12px;">← Back</button>
+    <div style="margin: 0 0 8px 0;"><div style="font-weight: 650; font-size: 14px; color: #333;">📝 Note: ${escapeHtml(word)}</div><div style="color: #666; font-size: 12px;">${escapeHtml(book)} ${chapter}:${verse}</div></div>
+    <textarea id="wordNoteInput" style="width: 100%; height: 100px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; resize: vertical;" placeholder="Add your note...">${escapeHtml(existingNote)}</textarea>
+    <div style="margin-top: 8px; display: flex; gap: 8px;">
+      <button onclick="saveWordNote('${noteKey}')" style="flex: 1; padding: 8px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Save</button>
+      <button onclick="deleteWordNote('${noteKey}')" style="padding: 8px 12px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
+    </div>`;
+};
+
+(window as any).saveWordNote = function(key: string) {
+  const textarea = document.getElementById('wordNoteInput') as HTMLTextAreaElement;
+  if (textarea.value.trim()) {
+    localStorage.setItem(key, textarea.value);
+    document.getElementById('wordStudyContent')!.innerHTML = `<div style="padding: 20px; text-align: center; color: #4caf50; font-weight: 600;">✓ Note saved!</div>`;
+    setTimeout(() => { document.getElementById('wordStudyModal')!.style.display = 'none'; }, 1000);
+  }
+};
+
+(window as any).deleteWordNote = function(key: string) {
+  localStorage.removeItem(key);
+  document.getElementById('wordStudyContent')!.innerHTML = `<div style="padding: 20px; text-align: center; color: #f44336;">Note deleted</div>`;
+  setTimeout(() => { document.getElementById('wordStudyModal')!.style.display = 'none'; }, 1000);
+};
+
+(window as any).showWordStyle = function() {
+  document.getElementById('wordStudyContent')!.innerHTML = `<div style="padding: 30px; text-align: center; color: #666;"><div style="font-size: 32px; margin-bottom: 10px;">🎨</div><div style="font-weight: 600;">Style Options</div><div style="margin-top: 8px; font-size: 13px;">Coming soon...</div></div>`;
+};
+
+/**
+ * Show word study popup (legacy - replaced by showWordActionMenu)
  */
 async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | TouchEvent) {
   const modal = document.getElementById('wordStudyModal')!;
@@ -2148,7 +3138,7 @@ async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | Touch
   try {
     // Query morphology data from IndexedDB
     const db = await openDB();
-    const tx = db.transaction(['morphology', 'strongs_entries', 'places', 'place_name_links'], 'readonly');
+    const tx = db.transaction(['morphology', 'strongs_entries', 'places', 'place_name_links', 'openbible_places', 'openbible_locations', 'openbible_identifications', 'pleiades_places'], 'readonly');
     
     // Get morphology for this specific word
     const morphIndex = tx.objectStore('morphology').index('book_chapter_verse_word');
@@ -2173,7 +3163,7 @@ async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | Touch
     let html = `
       <div style="margin: 0 22px 6px 0;">
         <div style="font-weight: 650; font-size: 14px; line-height: 1.15; color: #333;">${safeWord}</div>
-        <div style="margin-top: 1px; color: #666; font-size: 11.5px;">${safeRef}</div>
+        <div style="margin-top: 1px; color: #555; font-size: 11.5px;">${safeRef}</div>
       </div>
     `;
     
@@ -2207,7 +3197,7 @@ async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | Touch
             <tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">Lemma</td><td style="padding: 2px 4px;">${safeLemma}</td></tr>
             ${safeTranslit ? `<tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">Translit</td><td style="padding: 2px 4px;">${safeTranslit}</td></tr>` : ''}
             ${safeGloss ? `<tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">Gloss</td><td style="padding: 2px 4px;">${safeGloss}</td></tr>` : ''}
-            ${safeMorphCode ? `<tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">Morph</td><td style="padding: 2px 4px;"><code style="background: #f0f0f0; padding: 1px 5px; border-radius: 3px;">${safeMorphCode}</code></td></tr>` : ''}
+            ${safeMorphCode ? `<tr><td style="padding: 2px 4px; font-weight: 600; white-space: nowrap;">Morph</td><td style="padding: 2px 4px;"><code style="background: #bbb; padding: 1px 5px; border-radius: 3px;">${safeMorphCode}</code></td></tr>` : ''}
           </table>
         </div>
       `;
@@ -2250,11 +3240,11 @@ async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | Touch
           const safeKjvUsage = strongsData.kjvUsage ? escapeHtml(cleanPopupText(strongsData.kjvUsage)) : '';
 
           html += `
-            <div id="strongs-def" style="margin: 0 0 6px 0; padding: 6px; background: #fff3e0; border-left: 3px solid #ff9800; border-radius: 4px; scroll-margin-top: 6px;">
+            <div id="strongs-def" style="margin: 0 0 6px 0; padding: 6px; background: #f0f0f0; border-left: 3px solid #666; border-radius: 4px; scroll-margin-top: 6px;">
               <div style="margin: 0 0 3px 0; font-weight: 650; color: #e65100; font-size: 11.5px;">Strong's ${escapeHtml(normalizedStrongsId)}</div>
               <div style="margin: 0 0 3px 0;"><strong>${safeStrongLemma}</strong>${safeStrongTranslit ? ` <span style=\"color:#666\">(${safeStrongTranslit})</span>` : ''}</div>
               <div style="margin: 0; color: #555;">${safeStrongDef}</div>
-              ${safeKjvUsage ? `<div style="margin-top: 3px; font-size: 11.5px; color: #666;"><em>KJV: ${safeKjvUsage}</em></div>` : ''}
+              ${safeKjvUsage ? `<div style="margin-top: 3px; font-size: 11.5px; color: #555;"><em>KJV: ${safeKjvUsage}</em></div>` : ''}
             </div>
           `;
         }
@@ -2290,13 +3280,13 @@ async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | Touch
           })() : '';
 
           html += `
-            <div style="margin: 0 0 6px 0; padding: 6px; background: #e8f5e9; border-left: 3px solid #4caf50; border-radius: 4px;">
-              <div style="margin: 0 0 3px 0; font-weight: 650; color: #2e7d32; font-size: 11.5px;">Place: ${safePlaceName}</div>
-              ${altNames ? `<div style="margin: 0 0 3px 0; font-size: 11.5px; color: #666;">Also: ${escapeHtml(altNames)}</div>` : ''}
-              ${placeData.latitude && placeData.longitude ? `<div style="margin: 0 0 3px 0; font-size: 11.5px; color: #666;">${placeData.latitude.toFixed(4)}, ${placeData.longitude.toFixed(4)}</div>` : ''}
-              ${placeData.modernCity ? `<div style="margin: 0 0 3px 0; font-size: 11.5px; color: #666;">Modern: ${escapeHtml(cleanPopupText(placeData.modernCity))}${placeData.modernCountry ? ', ' + escapeHtml(cleanPopupText(placeData.modernCountry)) : ''}</div>` : ''}
+            <div style="margin: 0 0 6px 0; padding: 6px; background: #f0f0f0; border-left: 3px solid #666; border-radius: 4px;">
+              <div style="margin: 0 0 3px 0; font-weight: 650; color: #666; font-size: 11.5px;">Place: ${safePlaceName}</div>
+              ${altNames ? `<div style="margin: 0 0 3px 0; font-size: 11.5px; color: #555;">Also: ${escapeHtml(altNames)}</div>` : ''}
+              ${placeData.latitude && placeData.longitude ? `<div style="margin: 0 0 3px 0; font-size: 11.5px; color: #555;">${placeData.latitude.toFixed(4)}, ${placeData.longitude.toFixed(4)}</div>` : ''}
+              ${placeData.modernCity ? `<div style="margin: 0 0 3px 0; font-size: 11.5px; color: #555;">Modern: ${escapeHtml(cleanPopupText(placeData.modernCity))}${placeData.modernCountry ? ', ' + escapeHtml(cleanPopupText(placeData.modernCountry)) : ''}</div>` : ''}
               ${safeSignificance ? `<div style="margin: 0; color: #555;">${safeSignificance}</div>` : ''}
-              <button onclick="viewPlaceOnMap('${escapeHtml(placeId)}')" style="margin-top: 5px; padding: 4px 8px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              <button onclick="viewPlaceOnMap('${escapeHtml(placeId)}')" style="margin-top: 5px; padding: 4px 8px; background: #999; color: #1a1a1a; border: 1px solid #bbb; border-radius: 4px; cursor: pointer;">
                 View on Map
               </button>
             </div>
@@ -2305,7 +3295,7 @@ async function showWordStudy(wordElement: HTMLElement, event: MouseEvent | Touch
       }
     } else {
       html += `
-        <div style="padding: 20px; text-align: center; color: #999;">
+        <div style="padding: 20px; text-align: center; color: #555;">
           <p>No morphology data available for this word.</p>
           <p style="font-size: 13px; margin-top: 10px;">Morphology data may not be available for translations or specific texts.</p>
         </div>
@@ -2427,8 +3417,181 @@ function closeWordStudyModal() {
   modal.style.display = 'none';
 }
 
-function viewPlaceOnMap(placeId: string) {
-  alert(`Opening map view for place: ${placeId}\n\n(Map viewer to be implemented)`);
+/**
+ * Open the map viewer and show a place with marker
+ */
+async function viewPlaceOnMap(placeId: string) {
+  // Get place data from currentWordContext or look it up
+  let place = currentWordContext?.placeData;
+  
+  if (!place || (place.id !== placeId && place.friendlyId !== placeId)) {
+    // Look up place from database
+    const db = await openDB();
+    const tx = db.transaction(['openbible_places', 'openbible_locations', 'openbible_identifications', 'pleiades_places'], 'readonly');
+    
+    // Try OpenBible first
+    const openBiblePlace = await new Promise<any>((resolve) => {
+      const request = tx.objectStore('openbible_places').get(placeId);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    });
+    
+    if (openBiblePlace) {
+      // Get location data
+      const identifications = await new Promise<any[]>((resolve) => {
+        const request = tx.objectStore('openbible_identifications').index('ancientPlaceId').getAll(openBiblePlace.id);
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => resolve([]);
+      });
+      
+      if (identifications.length > 0) {
+        identifications.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+        const modernLoc = await new Promise<any>((resolve) => {
+          const request = tx.objectStore('openbible_locations').get(identifications[0].modernLocationId);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => resolve(null);
+        });
+        
+        if (modernLoc) {
+          place = {
+            id: openBiblePlace.id,
+            name: openBiblePlace.friendlyId.charAt(0).toUpperCase() + openBiblePlace.friendlyId.slice(1),
+            friendlyId: openBiblePlace.friendlyId,
+            latitude: modernLoc.latitude,
+            longitude: modernLoc.longitude,
+            verseCount: openBiblePlace.verseCount,
+            confidence: identifications[0].confidence,
+            source: 'openbible'
+          };
+        }
+      }
+    }
+    
+    // Try Pleiades if not found in OpenBible
+    if (!place) {
+      const pleiadesPlace = await new Promise<any>((resolve) => {
+        const request = tx.objectStore('pleiades_places').get(placeId);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => resolve(null);
+      });
+      
+      if (pleiadesPlace) {
+        place = {
+          id: pleiadesPlace.id,
+          name: pleiadesPlace.title,
+          latitude: pleiadesPlace.latitude,
+          longitude: pleiadesPlace.longitude,
+          placeType: pleiadesPlace.placeType,
+          description: pleiadesPlace.description,
+          source: 'pleiades'
+        };
+      }
+    }
+    
+    db.close();
+  }
+  
+  if (!place || !place.latitude || !place.longitude) {
+    alert(`Could not find location data for place: ${placeId}`);
+    return;
+  }
+  
+  // Show the map viewer
+  const viewerDiv = document.getElementById('mapViewer')!;
+  const titleDiv = document.getElementById('mapViewerTitle')!;
+  const detailsDiv = document.getElementById('mapDetails')!;
+  const canvasDiv = document.getElementById('mapCanvas')!;
+  
+  titleDiv.textContent = `📍 ${place.name || place.friendlyId || placeId}`;
+  
+  // Build details HTML
+  let detailsHtml = '<div style="display: flex; flex-wrap: wrap; gap: 12px;">';
+  if (place.source === 'openbible') {
+    detailsHtml += `<div><strong>Source:</strong> <span style="color: #2980b9;">📖 Biblical Places (OpenBible)</span></div>`;
+    if (place.verseCount) {
+      detailsHtml += `<div><strong>Verse References:</strong> ${place.verseCount}</div>`;
+    }
+    if (place.confidence) {
+      const confLevel = place.confidence >= 500 ? '⭐ High' : place.confidence >= 300 ? '✓ Medium' : '? Low';
+      const confColor = place.confidence >= 500 ? '#27ae60' : place.confidence >= 300 ? '#2980b9' : '#e67e22';
+      detailsHtml += `<div><strong>Location Confidence:</strong> <span style="color: ${confColor};">${confLevel} (${place.confidence})</span></div>`;
+    }
+    if (place.modernName) {
+      detailsHtml += `<div><strong>Modern Location:</strong> ${place.modernName}</div>`;
+    }
+  } else if (place.source === 'pleiades') {
+    detailsHtml += `<div><strong>Source:</strong> <span style="color: #d35400;">🏛️ Ancient Places (Pleiades)</span></div>`;
+    if (place.placeType) {
+      detailsHtml += `<div><strong>Type:</strong> ${place.placeType}</div>`;
+    }
+    if (place.description) {
+      detailsHtml += `<div style="width: 100%;"><strong>Description:</strong> ${place.description}</div>`;
+    }
+  }
+  detailsHtml += `<div><strong>Coordinates:</strong> ${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}</div>`;
+  detailsHtml += '</div>';
+  detailsDiv.innerHTML = detailsHtml;
+  
+  viewerDiv.style.display = 'block';
+  
+  // Clear previous map
+  if (currentMap) {
+    currentMap.remove();
+    currentMap = null;
+  }
+  
+  // Setup map canvas
+  canvasDiv.innerHTML = '';
+  canvasDiv.style.display = 'block';
+  canvasDiv.style.alignItems = '';
+  canvasDiv.style.justifyContent = '';
+  
+  // Initialize map centered on place
+  const map = L.map(canvasDiv).setView([place.latitude, place.longitude], 10);
+  currentMap = map;
+  
+  // Esri ArcGIS World Imagery (Satellite)
+  const esriSatellite = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Tiles © Esri', maxZoom: 19 }
+  );
+  
+  // Esri Labels Overlay
+  const esriLabels = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    { attribution: '', maxZoom: 19 }
+  );
+  
+  // Esri Topographic
+  const esriTopo = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Tiles © Esri', maxZoom: 19 }
+  );
+  
+  // Default to satellite with labels
+  esriSatellite.addTo(map);
+  esriLabels.addTo(map);
+  
+  // Add layer control
+  const baseMaps = {
+    'Satellite': esriSatellite,
+    'Topographic': esriTopo
+  };
+  L.control.layers(baseMaps, { 'Labels': esriLabels }).addTo(map);
+  
+  // Initialize place markers layer
+  if (!placeMarkers) {
+    placeMarkers = L.layerGroup().addTo(map);
+  } else {
+    placeMarkers.clearLayers();
+    placeMarkers.addTo(map);
+  }
+  
+  // Add marker using zoomToPlace function
+  zoomToPlace(place);
+  
+  // Scroll to map viewer
+  viewerDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // Make functions globally available

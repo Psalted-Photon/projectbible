@@ -80,7 +80,196 @@ Time‑warp maps (realistic plan)
 Sync plan (future)
 - Sync only user data at first: reading position, highlights, notes, bookmarks, reading plans.
 - Data packs stay local and are re-downloaded per device.
+=============================================================================
+FEATURE RESEARCH: Potential Integrations from Major Biblical Resources
+=============================================================================
 
+This section documents capabilities of leading biblical/geographic platforms that could inspire
+future ProjectBible features. User directive: "wow if my app could be a combo of that it would 
+be the best app ever. is this possible? please save what you learn in the readme for features"
+
+1. eBible.org — World Bible Translation Repository
+   Website: https://ebible.org
+   Developer Resources: https://ebible.org/Scriptures/
+   
+   What They Offer:
+   - 1000+ Bible translations across 600+ languages
+   - Multiple English translations (50+): ASV, BBE, BSB, Darby, ERV, Geneva 1599, KJV, 
+     LSV, NET, NASB, WEB, YLT, Brenton Septuagint, etc.
+   - International coverage: African languages (100+), Asian languages (300+), Pacific Islands,
+     Indigenous Americas, European minority languages
+   - Audio Bibles: MP3 and Ogg Vorbis formats for many translations
+   - Multiple formats: USFM, USFX, OSIS, plain text, SWORD modules
+   - Free download from /Scriptures/ directory
+   - Study web app: https://ebible.org/study/
+   
+   License Model:
+   - Public domain translations (KJV, WEB, ASV, BBE, etc.)
+   - Creative Commons licenses for modern translations
+   - Clear licensing metadata per translation
+   
+   Integration Possibilities:
+   - Bulk import tool to add 50+ English translations to ProjectBible
+   - Multi-language support: Add Spanish, French, Portuguese, Chinese, Arabic translations
+   - Audio Bible player: Sync text with MP3 audio for listening mode
+   - Translation comparison view: Show 3-5 translations side-by-side
+   - Download manager: Browse eBible.org catalog and install translations on demand
+   
+   Technical Approach:
+   - Parse USFM/USFX files from https://ebible.org/Scriptures/
+   - Convert to ProjectBible pack format (SQLite verses table)
+   - Store audio files alongside text packs for audio playback
+   - Create metadata catalog (translation name, language, license, year)
+   - Build UI for browsing/installing from 1000+ translation catalog
+
+2. Pleiades Gazetteer — Ancient Places Database
+   Website: https://pleiades.stoa.org
+   Downloads: https://pleiades.stoa.org/downloads
+   GitHub: https://github.com/isawnyu/pleiades.datasets
+   
+   What They Offer:
+   - Comprehensive ancient world gazetteer (40,000+ places)
+   - Scholarly place identification with precise coordinates
+   - Historical name variations across different periods
+   - Time periods: Archaic through Late Antique (3000 BC - 640 AD)
+   - Connections to modern places via GeoNames URIs
+   - Place types: settlements, regions, ethnic groups, waters, roads
+   - Attestations: Links to ancient sources mentioning places
+   
+   Data Formats Available:
+   - JSON (preferred): Complete dump with all attributes
+     - Daily exports at https://atlantides.org/downloads/pleiades/json/
+     - File: pleiades-places-latest.json.gz
+   - CSV for GIS: QGIS-ready, general use
+     - Download: https://atlantides.org/downloads/pleiades/gis/
+   - KML: For Google Earth
+   - RDF/Turtle: For linked data applications
+   - GeoJSON: Abridged dataset via https://github.com/ryanfb/pleiades-geojson
+   
+   Quarterly Releases:
+   - Numbered versions via GitHub: https://github.com/isawnyu/pleiades.datasets/releases
+   - Archived at Zenodo.org: https://doi.org/10.5281/zenodo.1193921
+   - Current release: 4.1 (May 28, 2025)
+   
+   License:
+   - Creative Commons Attribution 3.0 (CC-BY)
+   - Free for commercial and non-commercial use with attribution
+   
+   Integration Possibilities:
+   - Import 40,000+ ancient places into ProjectBible places database
+   - Add historical name variations (Greek, Latin, Hebrew, Aramaic forms)
+   - Time-period filtering: Show places that existed in specific biblical eras
+     - Patriarchal Period (2000-1500 BC)
+     - United/Divided Kingdom (1000-586 BC)
+     - Persian Period (539-330 BC)
+     - Hellenistic/Roman Period (330 BC - 640 AD)
+   - Scholarly coordinates: Replace approximate locations with precise Pleiades data
+   - Modern connections: Link ancient places to modern GeoNames for "then and now" view
+   - Source attestations: Show which ancient texts mention each place
+   - Place type icons: Different markers for cities, regions, rivers, mountains
+   
+   Technical Approach:
+   - Download daily JSON dump: pleiades-places-latest.json.gz
+   - Parse JSON and extract: id, title, names (with languages/periods), locations (coordinates),
+     place types, time periods (yearStart/yearEnd), connections, descriptions
+   - Create places_pleiades table in SQLite:
+     - id, title, primary_name, coordinates, place_type, year_start, year_end
+   - Create places_names table for name variations:
+     - place_id, name, language, romanized, time_period_id
+   - Link to existing Bible places via name matching + coordinate proximity
+   - UI: "View in Pleiades" button with scholarly details
+   - Time slider: Filter places by biblical period
+
+3. Ancient World Mapping Center (AWMC) — Interactive Historical Maps
+   Website: https://awmc.unc.edu
+   Platform: ArcGIS Experience (JavaScript-based)
+   Note: Full feature details require alternative research (page blocked by JavaScript requirements)
+   
+   What We Know:
+   - University of North Carolina academic project
+   - ArcGIS-powered interactive ancient world maps
+   - Historical layer overlays (kingdoms, empires, trade routes)
+   - Zoom/pan functionality for exploring ancient geography
+   - Time-period controls for showing different historical eras
+   
+   Observed Best Practices (from similar platforms):
+   - Layer switcher: Toggle between different map overlays
+   - Time slider: Animate historical changes over centuries
+   - Place search: Find cities/regions and zoom to location
+   - Information popups: Click place markers for details
+   - Legend panel: Explain map symbols and colors
+   - Export/share: Save map views or generate links
+   
+   Integration Possibilities:
+   - Interactive map viewer (Leaflet.js) with existing GeoJSON historical layers
+   - Time period selector: Switch between 11 biblical/historical eras
+     - Already implemented: 11 historical_layers in maps.sqlite
+     - Ancient Near East 2000 BC, Twelve Tribes 1000 BC, United Kingdom, etc.
+   - Layer controls: Toggle visibility of kingdoms, routes, regions
+   - Smooth zoom/pan navigation (already using Leaflet)
+   - Place markers with click popups (verse references, descriptions)
+   - Search box: Type place name and map zooms to location
+   - Legend: Explain boundary colors and map symbols
+   
+   Technical Approach (Using Existing Data):
+   - Already have: 11 historical_layers with GeoJSON boundaries in maps.sqlite
+   - Enhance map viewer UI:
+     - Add Leaflet layer controls for toggling layers on/off
+     - Add time period dropdown selector (replaces simple list)
+     - Add place search box (query places store, zoom to coordinates)
+     - Add legend panel showing current layer info
+     - Add zoom level controls and scale bar
+   - Create animated time slider:
+     - Smooth transitions between time periods
+     - Auto-play option to watch historical progression
+   - Add place tooltips: Hover over features to preview names
+   - Integration with Bible text: Click map place → show verses mentioning it
+
+=============================================================================
+INTEGRATION ROADMAP: Combining All Three Resources
+=============================================================================
+
+Priority 1 — eBible.org Translation Library:
+  - Download and parse 50+ English translations from https://ebible.org/Scriptures/
+  - Build translation import tool (USFM → SQLite pack converter)
+  - Add translation selector UI (dropdown with 50+ options)
+  - Translation comparison view (2-3 side-by-side)
+  - Estimated effort: 2-3 weeks
+  - Impact: Massive content expansion, user choice
+
+Priority 2 — Enhanced Map Viewer (AWMC-inspired):
+  - Upgrade existing map viewer with layer controls
+  - Add time period dropdown and smooth transitions
+  - Add place search with autocomplete
+  - Add legend panel for each historical layer
+  - Estimated effort: 1 week
+  - Impact: Professional map experience with existing data
+
+Priority 3 — Pleiades Ancient Places Integration:
+  - Download Pleiades JSON dump (40,000+ places)
+  - Parse and import into places_pleiades table
+  - Link to existing Bible places via name/coordinate matching
+  - Add "Scholarly Details" panel with Pleiades data
+  - Add time period filter (show only places from selected era)
+  - Estimated effort: 2 weeks
+  - Impact: Scholarly accuracy, historical name variations
+
+Priority 4 — Audio Bible Support:
+  - Download sample audio Bibles from eBible.org (MP3/Ogg)
+  - Build audio player UI with text sync
+  - Highlight current verse as audio plays
+  - Estimated effort: 1-2 weeks
+  - Impact: New study mode (reading + listening)
+
+The Vision:
+ProjectBible would combine:
+- eBible.org's comprehensive translation library (1000+ translations, 600+ languages)
+- AWMC's interactive mapping experience (zoom, pan, time slider, layers)
+- Pleiades' scholarly place database (40,000+ ancient places, historical names)
+- PLUS existing features: morphology, word study, cross-references, offline capability
+
+Result: "The best app ever" — comprehensive, scholarly, interactive, offline-capable
+        Bible study tool rivaling commercial products like Logos/Accordance but fully free.
 EXHAUSTIVE TODO LIST (living)
 
 EPIC E0 — Repo + DX (Developer Experience)

@@ -41,8 +41,8 @@ export async function importPackFromSQLite(file: File): Promise<void> {
     // Create pack info (handle both camelCase and snake_case metadata keys)
     const packInfo: DBPack = {
       id: metadata.pack_id || metadata.packId,
-      version: metadata.version || metadata.packVersion,
-      type: (metadata.type || metadata.packType) as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'original-language',
+      version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
+      type: (metadata.pack_type || metadata.type || metadata.packType) as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'original-language',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -289,6 +289,248 @@ export async function importPackFromSQLite(file: File): Promise<void> {
           console.log(`✅ Strong's dictionary imported: ${strongsData.length} entries`);
         }
       }
+    } else if (packInfo.type === 'places') {
+      // Import Pleiades places pack
+      console.log('Importing Pleiades places pack...');
+
+      // Check which schema this pack uses
+      const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+      const tableNames = tables.length > 0 ? tables[0].values.map(row => row[0] as string) : [];
+      console.log('Pack tables:', tableNames);
+
+      // Import Pleiades places if available (pleiades.sqlite format)
+      if (tableNames.includes('place_names') && tableNames.includes('place_locations')) {
+        // Import places table
+        const placesRows = db.exec(`
+          SELECT id, title, uri, place_type, description, year_start, year_end, 
+                 created, modified, bbox
+          FROM places
+        `);
+
+        if (placesRows.length && placesRows[0].values.length) {
+          console.log(`Importing ${placesRows[0].values.length} Pleiades places...`);
+
+          // Get first location for each place to extract primary coordinates
+          const locationRows = db.exec(`
+            SELECT place_id, latitude, longitude 
+            FROM place_locations 
+            WHERE latitude IS NOT NULL 
+            GROUP BY place_id
+          `);
+
+          const locationMap = new Map<string, { latitude: number; longitude: number }>();
+          if (locationRows.length && locationRows[0].values.length) {
+            locationRows[0].values.forEach(([placeId, lat, lon]) => {
+              locationMap.set(placeId as string, {
+                latitude: lat as number,
+                longitude: lon as number
+              });
+            });
+          }
+
+          const places = placesRows[0].values.map(([id, title, uri, placeType, description, yearStart, yearEnd, created, modified, bbox]) => {
+            const coords = locationMap.get(id as string);
+            return {
+              id: id as string,
+              title: title as string,
+              uri: uri as string | undefined,
+              placeType: placeType as string | undefined,
+              description: description as string | undefined,
+              yearStart: yearStart as number | undefined,
+              yearEnd: yearEnd as number | undefined,
+              created: created as string | undefined,
+              modified: modified as string | undefined,
+              bbox: bbox as string | undefined,
+              latitude: coords?.latitude,
+              longitude: coords?.longitude
+            };
+          });
+
+          // Batch insert places
+          const CHUNK_SIZE = 500;
+          for (let i = 0; i < places.length; i += CHUNK_SIZE) {
+            const chunk = places.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('pleiades_places', (store) => {
+              chunk.forEach(place => store.put(place));
+            });
+            console.log(`  Imported ${Math.min(i + CHUNK_SIZE, places.length)}/${places.length} places...`);
+          }
+
+          console.log(`✅ Imported ${places.length} Pleiades places`);
+        }
+
+        // Import place names
+        const namesRows = db.exec(`
+          SELECT place_id, name, language, romanized, name_type, time_period, certainty
+          FROM place_names
+        `);
+
+        if (namesRows.length && namesRows[0].values.length) {
+          console.log(`Importing ${namesRows[0].values.length} place names...`);
+
+          const names = namesRows[0].values.map(([placeId, name, language, romanized, nameType, timePeriod, certainty]) => ({
+            placeId: placeId as string,
+            name: name as string,
+            language: language as string | undefined,
+            romanized: romanized as string | undefined,
+            nameType: nameType as string | undefined,
+            timePeriod: timePeriod as string | undefined,
+            certainty: certainty as string | undefined
+          }));
+
+          // Batch insert names
+          const CHUNK_SIZE = 1000;
+          for (let i = 0; i < names.length; i += CHUNK_SIZE) {
+            const chunk = names.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('pleiades_names', (store) => {
+              chunk.forEach(name => store.put(name));
+            });
+          }
+
+          console.log(`✅ Imported ${names.length} place names`);
+        }
+
+        // Import place locations
+        const locationsRows = db.exec(`
+          SELECT place_id, title, geometry_type, coordinates, latitude, longitude, certainty, time_period
+          FROM place_locations
+        `);
+
+        if (locationsRows.length && locationsRows[0].values.length) {
+          console.log(`Importing ${locationsRows[0].values.length} place locations...`);
+
+          const locations = locationsRows[0].values.map(([placeId, title, geometryType, coordinates, latitude, longitude, certainty, timePeriod]) => ({
+            placeId: placeId as string,
+            title: title as string | undefined,
+            geometryType: geometryType as string | undefined,
+            coordinates: coordinates as string | undefined,
+            latitude: latitude as number | undefined,
+            longitude: longitude as number | undefined,
+            certainty: certainty as string | undefined,
+            timePeriod: timePeriod as string | undefined
+          }));
+
+          // Batch insert locations
+          const CHUNK_SIZE = 1000;
+          for (let i = 0; i < locations.length; i += CHUNK_SIZE) {
+            const chunk = locations.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('pleiades_locations', (store) => {
+              chunk.forEach(location => store.put(location));
+            });
+          }
+
+          console.log(`✅ Imported ${locations.length} place locations`);
+        }
+
+        console.log(`✅ Pleiades pack complete: ${placesRows[0].values.length} places with names and locations`);
+      }
+
+      // Import OpenBible places if available (openbible.sqlite format)
+      if (tableNames.includes('ancient_places') && tableNames.includes('modern_locations')) {
+        console.log('Importing OpenBible biblical places pack...');
+
+        // Import modern locations (these have the coordinates)
+        const modernRows = db.exec(`
+          SELECT id, friendly_id, longitude, latitude, geometry_type, class, type,
+                 precision_meters, thumbnail_file, thumbnail_credit, thumbnail_url
+          FROM modern_locations
+          WHERE latitude IS NOT NULL
+        `);
+
+        if (modernRows.length && modernRows[0].values.length) {
+          console.log(`Importing ${modernRows[0].values.length} modern locations...`);
+
+          const locations = modernRows[0].values.map(([id, friendlyId, lon, lat, geomType, cls, type, precisionM, thumbFile, thumbCredit, thumbUrl]) => ({
+            id: id as string,
+            friendlyId: friendlyId as string,
+            longitude: lon as number,
+            latitude: lat as number,
+            geometryType: geomType as string,
+            class: cls as string,
+            type: type as string,
+            precisionMeters: precisionM as number | undefined,
+            thumbnailFile: thumbFile as string | undefined,
+            thumbnailCredit: thumbCredit as string | undefined,
+            thumbnailUrl: thumbUrl as string | undefined
+          }));
+
+          // Batch insert modern locations
+          const CHUNK_SIZE = 500;
+          for (let i = 0; i < locations.length; i += CHUNK_SIZE) {
+            const chunk = locations.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('openbible_locations', (store) => {
+              chunk.forEach(location => store.put(location));
+            });
+            console.log(`  Imported ${Math.min(i + CHUNK_SIZE, locations.length)}/${locations.length} locations...`);
+          }
+
+          console.log(`✅ Imported ${locations.length} OpenBible modern locations`);
+        }
+
+        // Import ancient places (biblical names with verse references)
+        const ancientRows = db.exec(`
+          SELECT id, friendly_id, type, class, verse_count
+          FROM ancient_places
+        `);
+
+        if (ancientRows.length && ancientRows[0].values.length) {
+          console.log(`Importing ${ancientRows[0].values.length} ancient places...`);
+
+          const places = ancientRows[0].values.map(([id, friendlyId, type, cls, verseCount]) => ({
+            id: id as string,
+            friendlyId: friendlyId as string,
+            type: type as string | undefined,
+            class: cls as string | undefined,
+            verseCount: verseCount as number
+          }));
+
+          // Batch insert ancient places
+          const CHUNK_SIZE = 500;
+          for (let i = 0; i < places.length; i += CHUNK_SIZE) {
+            const chunk = places.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('openbible_places', (store) => {
+              chunk.forEach(place => store.put(place));
+            });
+          }
+
+          console.log(`✅ Imported ${places.length} OpenBible ancient places`);
+        }
+
+        // Import place identifications (linking ancient -> modern with confidence)
+        const identRows = db.exec(`
+          SELECT ancient_place_id, modern_location_id, time_total, vote_total, class, modifier
+          FROM place_identifications
+          WHERE modern_location_id IS NOT NULL AND time_total > 0
+        `);
+
+        if (identRows.length && identRows[0].values.length) {
+          console.log(`Importing ${identRows[0].values.length} place identifications...`);
+
+          const identifications = identRows[0].values.map(([ancientId, modernId, timeTotal, voteTotal, cls, modifier]) => ({
+            ancientPlaceId: ancientId as string,
+            modernLocationId: modernId as string,
+            confidence: timeTotal as number,
+            voteTotal: voteTotal as number,
+            class: cls as string | undefined,
+            modifier: modifier as string | undefined
+          }));
+
+          // Batch insert identifications
+          const CHUNK_SIZE = 500;
+          for (let i = 0; i < identifications.length; i += CHUNK_SIZE) {
+            const chunk = identifications.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('openbible_identifications', (store) => {
+              chunk.forEach(ident => store.put(ident));
+            });
+          }
+
+          console.log(`✅ Imported ${identifications.length} place identifications`);
+        }
+
+        console.log(`✅ OpenBible pack complete: ${ancientRows[0].values.length} biblical places`);
+      }
+
+      console.log(`✅ Places pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'map') {
       // Import map/places data
       console.log('Importing map pack...');
@@ -383,7 +625,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       }
 
       // Import places if available (maps-enhanced schema)
-      if (tableNames.includes('places')) {
+      if (tableNames.includes('places') && !tableNames.includes('place_names')) {
         console.log('Importing places from enhanced map pack...');
         const placesRows = db.exec(`
           SELECT id, name, latitude, longitude, place_type, modern_name, 
