@@ -25,7 +25,14 @@ Where development happens
 
 Repository structure (monorepo)
 - apps/pwa
-  - Installable web app (PWA). Uses IndexedDB/Cache API.
+  - Classic PWA version. Full-featured with pack management, search, maps.
+  - Uses IndexedDB/Cache API.
+  - Run: npm run dev:pwa (port 5173)
+- apps/pwa-polished
+  - Modern Svelte-based PWA. Streamlined 2-dropdown navigation.
+  - Gesture-based mobile-optimized interface.
+  - Run: npm run dev:polished (port 5174)
+  - Run both: npm run dev:all
 - apps/electron
   - Desktop shell (Electron). Uses filesystem + SQLite.
 - packages/core

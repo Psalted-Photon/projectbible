@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProjectBible - Choose Version</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    .header h1 {
+      font-size: 3rem;
+      color: #667eea;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .header p {
+      font-size: 1.1rem;
+      color: #aaa;
+    }
+
+    .versions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+
+    .version-card {
+      background: #2a2a2a;
+      border: 2px solid #3a3a3a;
+      border-radius: 12px;
+      padding: 30px;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+
+    .version-card:hover {
+      border-color: #667eea;
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+    }
+
+    .version-card h2 {
+      color: #667eea;
+      font-size: 1.8rem;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .version-card .badge {
+      font-size: 0.75rem;
+      background: #667eea;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    .version-card .badge.new {
+      background: #10b981;
+    }
+
+    .version-card p {
+      color: #ccc;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .version-card ul {
+      list-style: none;
+      margin-bottom: 20px;
+    }
+
+    .version-card li {
+      color: #aaa;
+      padding: 6px 0;
+      padding-left: 20px;
+      position: relative;
+      font-size: 0.95rem;
+    }
+
+    .version-card li:before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #667eea;
+      font-weight: bold;
+    }
+
+    .launch-btn {
+      display: inline-block;
+      background: #667eea;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-weight: 600;
+      text-align: center;
+      transition: background 0.2s;
+      margin-top: 10px;
+    }
+
+    .launch-btn:hover {
+      background: #5568d3;
+    }
+
+    .info {
+      background: rgba(102, 126, 234, 0.1);
+      border: 1px solid #667eea;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .info h3 {
+      color: #667eea;
+      margin-bottom: 10px;
+    }
+
+    .info p {
+      color: #ccc;
+      line-height: 1.6;
+    }
+
+    .info code {
+      background: #1a1a1a;
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: #10b981;
+      font-family: 'Courier New', monospace;
+    }
+
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 2rem;
+      }
+
+      .version-card {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📖 ProjectBible</h1>
+      <p>Choose your preferred version</p>
+    </div>
+
+    <div class="versions">
+      <!-- PWA Polished Version -->
+      <a href="/apps/pwa-polished/" class="version-card">
+        <h2>
+          Polished Version
+          <span class="badge new">NEW</span>
+        </h2>
+        <p>Modern Svelte-based interface with streamlined navigation</p>
+        <ul>
+          <li>2 dropdown navigation (Translation + Reference)</li>
+          <li>Tree-style book/chapter selector</li>
+          <li>Clean, minimal design</li>
+          <li>Mobile-optimized</li>
+          <li>Gesture-based navigation</li>
+        </ul>
+        <div class="launch-btn">Launch Polished →</div>
+      </a>
+
+      <!-- Original PWA Version -->
+      <a href="/apps/pwa/" class="version-card">
+        <h2>
+          Classic Version
+          <span class="badge">STABLE</span>
+        </h2>
+        <p>Feature-rich version with complete functionality</p>
+        <ul>
+          <li>Full pack management</li>
+          <li>Cross-references</li>
+          <li>Search functionality</li>
+          <li>Maps & places</li>
+          <li>Dark/light theme</li>
+        </ul>
+        <div class="launch-btn">Launch Classic →</div>
+      </a>
+    </div>
+
+    <div class="info">
+      <h3>🚀 Running Locally?</h3>
+      <p>
+        To run the Polished version: <code>npm run dev:polished</code><br>
+        To run the Classic version: <code>npm run dev:pwa</code><br>
+        To run both: <code>npm run dev:all</code>
+      </p>
+    </div>
+  </div>
+</body>
+</html>

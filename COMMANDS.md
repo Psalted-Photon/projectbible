@@ -2,15 +2,27 @@
 
 ## Development
 
+### Run Apps
+
 ```bash
-# Start PWA dev server (http://localhost:5173)
+# Classic PWA (full-featured) - http://localhost:5173
 npm run dev:pwa
+
+# Polished PWA (streamlined navigation) - http://localhost:5174
+npm run dev:polished
+
+# Run BOTH versions simultaneously
+npm run dev:all
+
+# Electron + PWA
+npm run dev
 
 # Type checking (all workspaces)
 npm run typecheck
 
-# Build PWA for production
-npm run build:pwa
+# Build for production
+npm run build:pwa        # Classic version
+npm run build:polished   # Polished version
 ```
 
 ## Pack Building
