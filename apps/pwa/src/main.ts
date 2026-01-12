@@ -32,10 +32,10 @@ const BIBLE_BOOKS = [
 
 // Simple test UI
 root.innerHTML = `
-  <div style="max-width: 800px; margin: 40px auto; padding: 20px; font-family: system-ui; background: #d5d5d5; color: #2a2a2a;">
-    <h1 style="color: #1e3a5f; border-bottom: 3px solid #2c5f8d; padding-bottom: 10px;">ProjectBible PWA - Adapter Test</h1>
+  <div class="main-container" style="max-width: 800px; margin: 40px auto; padding: 20px; font-family: system-ui;">
+    <h1 class="main-title" style="border-bottom: 3px solid #2c5f8d; padding-bottom: 10px;">ProjectBible PWA - Adapter Test</h1>
     
-    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px; border: 1px solid #bbb;">
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
       <h2>Import Pack</h2>
       <div style="margin-bottom: 15px;">
         <h3 style="font-size: 14px; margin: 10px 0;">📱 Download from URL (mobile-friendly)</h3>
@@ -51,10 +51,10 @@ root.innerHTML = `
       <div id="importStatus" style="margin-top: 10px; color: #555;"></div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
       <h2>⚙️ Settings</h2>
       <h3 style="font-size: 16px; margin: 15px 0 10px 0;">Daily Driver Translations</h3>
-      <p style="margin: 5px 0; color: #555; font-size: 14px;">Set your preferred default translations</p>
+      <p class="section-description" style="margin: 5px 0; font-size: 14px;">Set your preferred default translations</p>
       <div style="margin: 15px 0;">
         <label style="display: block; margin: 10px 0;">
           English (OT):
@@ -92,32 +92,71 @@ root.innerHTML = `
             <option value="">Not set</option>
           </select>
         </label>
-        <button id="saveSettings" style="padding: 8px 16px; margin-top: 10px; background: #999; color: #1a1a1a; border: 1px solid #bbb; border-radius: 4px; cursor: pointer;">
+      </div>
+      
+      <h3 style="font-size: 16px; margin: 25px 0 10px 0;">Display Settings</h3>
+      <div style="margin: 15px 0;">
+        <label style="display: block; margin: 10px 0;">
+          Theme:
+          <select id="themeSelect" style="margin-left: 10px; padding: 4px;">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <label style="display: block; margin: 10px 0;">
+          Font Size:
+          <input type="range" id="fontSizeSlider" min="12" max="24" step="1" value="15" style="margin-left: 10px; width: 150px;">
+          <span id="fontSizeValue" style="margin-left: 10px; font-weight: 600;">15px</span>
+        </label>
+        <label style="display: block; margin: 10px 0;">
+          Line Spacing:
+          <input type="range" id="lineSpacingSlider" min="1" max="2.5" step="0.1" value="1.5" style="margin-left: 10px; width: 150px;">
+          <span id="lineSpacingValue" style="margin-left: 10px; font-weight: 600;">1.5</span>
+        </label>
+        <label style="display: block; margin: 10px 0;">
+          Verse Layout:
+          <select id="verseLayoutSelect" style="margin-left: 10px; padding: 4px;">
+            <option value="one-per-line">Each verse on new line</option>
+            <option value="paragraph">Paragraph (flow like book)</option>
+          </select>
+        </label>
+      </div>
+      
+      <div style="margin: 15px 0;">
+        <button id="saveSettings" style="padding: 8px 16px; margin-top: 10px; border-radius: 4px; cursor: pointer;">
           Save Settings
         </button>
-        <span id="settingsSaved" style="margin-left: 10px; color: #666; display: none;">✓ Saved</span>
+        <span id="settingsSaved" class="success-text" style="margin-left: 10px; display: none;">✓ Saved</span>
+      </div>
+      
+      <h3 style="font-size: 16px; margin: 25px 0 10px 0;">🎨 Polished Version</h3>
+      <p class="section-description" style="margin: 10px 0;">Try the new immersive reading experience with slide-in panes</p>
+      <div style="margin: 15px 0;">
+        <button id="openPolishedBtn" style="padding: 12px 24px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; font-weight: 600; font-size: 14px; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(102, 126, 234, 0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+          Open Polished Version ✨
+        </button>
       </div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
       <h2>⚠️ Database Management</h2>
-      <p style="margin: 10px 0; color: #555;">Clear old packs to free up space</p>
-      <button id="clearPacksBtn" style="padding: 8px 16px; background: #888; color: #1a1a1a; border: 1px solid #bbb; border-radius: 4px; cursor: pointer;">
+      <p class="section-description" style="margin: 10px 0;">Clear old packs to free up space</p>
+      <button id="clearPacksBtn" style="padding: 8px 16px; border-radius: 4px; cursor: pointer;">
         Clear All Packs (Keep User Data)
       </button>
-      <button id="clearAllBtn" style="padding: 8px 16px; margin-left: 10px; background: #777; color: #1a1a1a; border: 1px solid #bbb; border-radius: 4px; cursor: pointer;">
+      <button id="clearAllBtn" style="padding: 8px 16px; margin-left: 10px; border-radius: 4px; cursor: pointer;">
         Clear Everything (Nuclear)
       </button>
-      <div id="dbStats" style="margin-top: 10px; font-size: 14px; color: #555;"></div>
+      <div id="dbStats" class="section-description" style="margin-top: 10px; font-size: 14px;"></div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
       <h2>Installed Packs</h2>
       <button id="refreshPacks" style="padding: 8px 16px;">Refresh</button>
-      <div id="packsList" style="margin-top: 15px; max-height: 200px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background: #f0f0f0;"></div>
+      <div id="packsList" class="list-container" style="margin-top: 15px; max-height: 200px; overflow-y: auto; border-radius: 4px; padding: 10px;"></div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
       <h2>🔍 Search Bible</h2>
       <div style="margin: 10px 0;">
         <input type="text" id="searchQuery" placeholder="Enter search terms..." 
@@ -130,36 +169,36 @@ root.innerHTML = `
           Canonical Only?
         </label>
       </div>
-      <div id="searchStatus" style="margin-top: 10px; color: #555;"></div>
+      <div id="searchStatus" class="section-description" style="margin-top: 10px;"></div>
       <div id="searchResults" style="margin-top: 15px; max-height: 500px; overflow-y: auto;"></div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
       <h2>🗺️ Historical Maps</h2>
       <div style="margin: 10px 0;">
         <button id="loadMapsBtn" style="padding: 8px 16px;">Load Map Layers</button>
       </div>
       <div id="mapLayersList" style="margin-top: 15px;"></div>
-      <div id="mapViewer" style="margin-top: 20px; display: none; background: #e5e5e5; padding: 15px; border-radius: 8px;">
+      <div id="mapViewer" class="map-viewer" style="margin-top: 20px; display: none; padding: 15px; border-radius: 8px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
           <h3 id="mapViewerTitle" style="margin: 0;"></h3>
-          <button id="closeMapBtn" style="padding: 6px 12px; background: #888; color: #1a1a1a; border: 1px solid #bbb; border-radius: 4px; cursor: pointer;">Close</button>
+          <button id="closeMapBtn" style="padding: 6px 12px; border-radius: 4px; cursor: pointer;">Close</button>
         </div>
-        <div id="mapDetails" style="margin-bottom: 15px; padding: 10px; background: #f0f0f0; border-radius: 4px;"></div>
+        <div id="mapDetails" class="map-details" style="margin-bottom: 15px; padding: 10px; border-radius: 4px;"></div>
         
         <!-- Pleiades Place Search -->
-        <div style="margin-bottom: 15px; padding: 12px; background: #e8e8e8; border: 1px solid #ccc; border-radius: 4px;">
+        <div class="map-search-panel" style="margin-bottom: 15px; padding: 12px; border-radius: 4px;">
           <div style="display: flex; gap: 10px; align-items: center;">
             <input 
               type="text" 
               id="mapPlaceSearch" 
               placeholder="Search 41,000+ ancient places (e.g., Jerusalem, Athens, Rome)..." 
-              style="flex: 1; padding: 8px; border: 1px solid #999; border-radius: 4px; font-size: 14px; background: #d5d5d5; color: #2a2a2a;"
+              style="flex: 1; padding: 8px; border-radius: 4px; font-size: 14px;"
             />
-            <button id="mapSearchPlacesBtn" style="padding: 8px 16px; background: #2c5f8d; color: #f5f5f5; border: 1px solid #bbb; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.2s;" onmouseover="this.style.background='#3a7ab5'" onmouseout="this.style.background='#2c5f8d'">Search</button>
+            <button id="mapSearchPlacesBtn" class="accent-button" style="padding: 8px 16px; background: #2c5f8d; color: #f5f5f5; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.2s;" onmouseover="this.style.background='#3a7ab5'" onmouseout="this.style.background='#2c5f8d'">Search</button>
           </div>
-          <div id="mapSearchResults" style="margin-top: 10px; max-height: 300px; overflow-y: auto; display: none; background: #d5d5d5; border: 1px solid #ccc; border-radius: 4px;"></div>
-          <div id="mapSearchStatus" style="margin-top: 8px; font-size: 12px; color: #555;"></div>
+          <div id="mapSearchResults" class="map-search-results" style="margin-top: 10px; max-height: 300px; overflow-y: auto; display: none; border-radius: 4px;"></div>
+          <div id="mapSearchStatus" class="section-description" style="margin-top: 8px; font-size: 12px;"></div>
         </div>
         
         <div id="mapCanvas" style="width: 100%; height: 500px; border: 1px solid #ccc; background: #e9ecef; display: flex; align-items: center; justify-content: center; color: #555;">
@@ -168,7 +207,7 @@ root.innerHTML = `
       </div>
     </section>
     
-    <section style="margin: 30px 0; padding: 20px; background: #e8e8e8; border-radius: 8px;">
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
       <h2>Read Verse</h2>
       <div style="margin: 10px 0;">
         <label>Translation: 
@@ -194,34 +233,34 @@ root.innerHTML = `
       </div>
       <button id="readVerse" style="padding: 8px 16px; margin-top: 10px;">Read Verse</button>
       <button id="readChapter" style="padding: 8px 16px; margin-left: 10px;">Read Chapter</button>
-      <div id="verseText" style="margin-top: 15px; padding: 15px; background: #e5e5e5; border-radius: 4px; min-height: 40px;"></div>
+      <div id="verseText" class="verse-display" style="margin-top: 15px; padding: 15px; border-radius: 4px; min-height: 40px;"></div>
     </section>
   </div>
   
   <!-- Cross-reference popup -->
-  <div id="xrefModal" style="display: none; position: fixed; background: #e5e5e5; padding: 15px; border-radius: 8px; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000; border: 1px solid #ccc;">
-    <button id="closeXrefModal" style="position: absolute; top: 8px; right: 8px; background: #bbb; border: 1px solid #bbb; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
+  <div id="xrefModal" class="modal" style="display: none; position: fixed; padding: 15px; border-radius: 8px; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000;">
+    <button id="closeXrefModal" class="modal-close" style="position: absolute; top: 8px; right: 8px; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
     <div id="xrefModalContent"></div>
   </div>
   
   <!-- Verse action menu popup -->
-  <div id="verseActionModal" style="display: none; position: fixed; background: #e5e5e5; padding: 20px; border-radius: 8px; max-width: 350px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1001; border: 1px solid #ccc;">
-    <button id="closeVerseActionModal" style="position: absolute; top: 8px; right: 8px; background: #bbb; border: 1px solid #bbb; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
+  <div id="verseActionModal" class="modal" style="display: none; position: fixed; padding: 20px; border-radius: 8px; max-width: 350px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1001;">
+    <button id="closeVerseActionModal" class="modal-close" style="position: absolute; top: 8px; right: 8px; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
     <h3 style="margin: 0 0 15px 0; font-size: 16px;">Actions for Selected Verses</h3>
     <div id="verseActionContent" style="display: flex; flex-direction: column; gap: 10px;">
-      <button class="action-btn" onclick="createNoteForSelected()" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #e5e5e5; cursor: pointer; text-align: left;">
+      <button class="action-btn" onclick="createNoteForSelected()" style="padding: 10px; border-radius: 4px; cursor: pointer; text-align: left;">
         📝 Create Note
       </button>
-      <button class="action-btn" onclick="highlightSelected()" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #bbb; cursor: pointer; text-align: left;">
+      <button class="action-btn" onclick="highlightSelected()" style="padding: 10px; border-radius: 4px; cursor: pointer; text-align: left;">
         🖍️ Highlight (Yellow)
       </button>
-      <button class="action-btn" onclick="underlineSelected()" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #e5e5e5; cursor: pointer; text-align: left;">
+      <button class="action-btn" onclick="underlineSelected()" style="padding: 10px; border-radius: 4px; cursor: pointer; text-align: left;">
         <u>U</u> Underline
       </button>
-      <button class="action-btn" onclick="italicizeSelected()" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #e5e5e5; cursor: pointer; text-align: left;">
+      <button class="action-btn" onclick="italicizeSelected()" style="padding: 10px; border-radius: 4px; cursor: pointer; text-align: left;">
         <i>I</i> Italicize
       </button>
-      <button class="action-btn" onclick="clearSelection()" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #ddd; cursor: pointer; text-align: left;">
+      <button class="action-btn" onclick="clearSelection()" style="padding: 10px; border-radius: 4px; cursor: pointer; text-align: left;">
         ❌ Clear Selection
       </button>
     </div>
@@ -748,6 +787,60 @@ function populateDailyDriverDropdowns(translations: Array<{id: string, name: str
   ddGreekNT.innerHTML = optionHtml(greekTranslations);
   if (settings.dailyDriverGreekOT) ddGreekOT.value = settings.dailyDriverGreekOT;
   if (settings.dailyDriverGreekNT) ddGreekNT.value = settings.dailyDriverGreekNT;
+
+  // Load display settings
+  const themeSelect = document.getElementById('themeSelect') as HTMLSelectElement;
+  const fontSizeSlider = document.getElementById('fontSizeSlider') as HTMLInputElement;
+  const fontSizeValue = document.getElementById('fontSizeValue') as HTMLSpanElement;
+  const lineSpacingSlider = document.getElementById('lineSpacingSlider') as HTMLInputElement;
+  const lineSpacingValue = document.getElementById('lineSpacingValue') as HTMLSpanElement;
+  const verseLayoutSelect = document.getElementById('verseLayoutSelect') as HTMLSelectElement;
+
+  if (settings.theme) themeSelect.value = settings.theme;
+  if (settings.fontSize) {
+    fontSizeSlider.value = settings.fontSize.toString();
+    fontSizeValue.textContent = `${settings.fontSize}px`;
+  }
+  if (settings.lineSpacing) {
+    lineSpacingSlider.value = settings.lineSpacing.toString();
+    lineSpacingValue.textContent = settings.lineSpacing.toFixed(1);
+  }
+  if (settings.verseLayout) verseLayoutSelect.value = settings.verseLayout;
+
+  // Update slider value displays
+  fontSizeSlider.addEventListener('input', () => {
+    fontSizeValue.textContent = `${fontSizeSlider.value}px`;
+  });
+  lineSpacingSlider.addEventListener('input', () => {
+    lineSpacingValue.textContent = parseFloat(lineSpacingSlider.value).toFixed(1);
+  });
+
+  // Apply current settings immediately
+  applyDisplaySettings();
+}
+
+function applyDisplaySettings() {
+  const settings = getSettings();
+  
+  // Apply theme
+  const theme = settings.theme || 'light';
+  if (theme === 'dark') {
+    document.body.classList.add('dark-theme');
+    document.body.classList.remove('light-theme');
+  } else {
+    document.body.classList.add('light-theme');
+    document.body.classList.remove('dark-theme');
+  }
+
+  // Apply font size (base verse font size)
+  const fontSize = settings.fontSize || 15;
+  document.documentElement.style.setProperty('--base-font-size', `${fontSize}px`);
+
+  // Apply line spacing
+  const lineSpacing = settings.lineSpacing || 1.5;
+  document.documentElement.style.setProperty('--line-spacing', lineSpacing.toString());
+
+  // Verse layout will be applied when rendering verses
 }
 
 document.getElementById('saveSettings')?.addEventListener('click', () => {
@@ -758,19 +851,36 @@ document.getElementById('saveSettings')?.addEventListener('click', () => {
   const ddGreekOT = (document.getElementById('ddGreekOT') as HTMLSelectElement).value;
   const ddGreekNT = (document.getElementById('ddGreekNT') as HTMLSelectElement).value;
   
+  const theme = (document.getElementById('themeSelect') as HTMLSelectElement).value as 'light' | 'dark';
+  const fontSize = parseInt((document.getElementById('fontSizeSlider') as HTMLInputElement).value);
+  const lineSpacing = parseFloat((document.getElementById('lineSpacingSlider') as HTMLInputElement).value);
+  const verseLayout = (document.getElementById('verseLayoutSelect') as HTMLSelectElement).value as 'one-per-line' | 'paragraph';
+  
   updateSettings({
     dailyDriverEnglishOT: ddEnglishOT || undefined,
     dailyDriverEnglishNT: ddEnglishNT || undefined,
     dailyDriverHebrewOT: ddHebrewOT || undefined,
     dailyDriverHebrewNT: ddHebrewNT || undefined,
     dailyDriverGreekOT: ddGreekOT || undefined,
-    dailyDriverGreekNT: ddGreekNT || undefined
+    dailyDriverGreekNT: ddGreekNT || undefined,
+    theme,
+    fontSize,
+    lineSpacing,
+    verseLayout
   });
+  
+  // Apply settings immediately
+  applyDisplaySettings();
   
   // Show saved confirmation
   const savedSpan = document.getElementById('settingsSaved')!;
   savedSpan.style.display = 'inline';
   setTimeout(() => { savedSpan.style.display = 'none'; }, 2000);
+});
+
+// Open Polished Version button
+document.getElementById('openPolishedBtn')?.addEventListener('click', () => {
+  window.open('http://localhost:5174', '_blank');
 });
 
 // Read verse handler
@@ -1297,38 +1407,87 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
         verses.map(v => crossRefStore.getCrossReferences({ book, chapter, verse: v.verse }))
       );
       
+      const settings = getSettings();
+      const verseLayout = settings.verseLayout || 'one-per-line';
+      const fontSize = settings.fontSize || 15;
+      const lineSpacing = settings.lineSpacing || 1.5;
+      
       const headingClass = getHeadingFontClass(translation);
       const headingClasses = ['reader-title', headingClass].filter(Boolean).join(' ');
-      resultDiv.innerHTML = `
-        ${renderBackButtonHtml()}
-        <h3 class="${headingClasses}">${book} ${chapter}</h3>
-        ${verses.map((v, idx) => {
+      
+      if (verseLayout === 'paragraph') {
+        // Paragraph layout: verses flow together, new lines only for headings
+        let paragraphHtml = '';
+        let currentParagraph: string[] = [];
+        
+        const flushParagraph = () => {
+          if (currentParagraph.length > 0) {
+            paragraphHtml += `<p class="verse-paragraph" style="margin: 8px 0; padding: 8px; line-height: ${lineSpacing}; font-size: ${fontSize}px;">${currentParagraph.join(' ')}</p>`;
+            currentParagraph = [];
+          }
+        };
+        
+        verses.forEach((v, idx) => {
           const hasCrossRefs = verseCrossRefs[idx].length > 0;
           const verseKey = `${book}:${chapter}:${v.verse}`;
           const isSelected = selectedVerses.has(verseKey);
           const wordsHtml = renderVerseWordsHtml(v.text);
           
-          // Render section heading if present - Cinzel font, bold
-          const headingHtml = v.heading 
-            ? `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.15em; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`
-            : '';
+          // If there's a heading, flush current paragraph and add heading
+          if (v.heading) {
+            flushParagraph();
+            paragraphHtml += `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.15em; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`;
+          }
           
-          return `
-            ${headingHtml}
-            <p class="verse-text" 
-               data-book="${book}" 
-               data-chapter="${chapter}" 
-               data-verse="${v.verse}"
-               style="margin: 8px 0; padding: 8px; border-radius: 4px; cursor: pointer; background: ${isSelected ? '#ffffcc' : 'transparent'}; transition: background 0.2s;">
-              <sup style="color: #555; cursor: ${hasCrossRefs ? 'pointer' : 'default'};" 
-                   ${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${book}', ${chapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>
-                ${v.verse}${hasCrossRefs ? ' 🔗' : ''}
-              </sup> 
-              ${wordsHtml}
-            </p>
-          `;
-        }).join('')}
-      `;
+          // Add verse to current paragraph
+          const verseSpan = `<span class="verse-span" data-book="${book}" data-chapter="${chapter}" data-verse="${v.verse}" style="cursor: pointer; background: ${isSelected ? '#ffffcc' : 'transparent'}; padding: 2px 4px; border-radius: 2px; transition: background 0.2s;">` +
+            `<sup style="color: #555; cursor: ${hasCrossRefs ? 'pointer' : 'default'}; font-size: 11px;" ` +
+            `${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${book}', ${chapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>` +
+            `${v.verse}${hasCrossRefs ? ' 🔗' : ''}</sup> ${wordsHtml}</span>`;
+          
+          currentParagraph.push(verseSpan);
+        });
+        
+        flushParagraph();
+        
+        resultDiv.innerHTML = `
+          ${renderBackButtonHtml()}
+          <h3 class="${headingClasses}">${book} ${chapter}</h3>
+          ${paragraphHtml}
+        `;
+      } else {
+        // One-per-line layout (original)
+        resultDiv.innerHTML = `
+          ${renderBackButtonHtml()}
+          <h3 class="${headingClasses}">${book} ${chapter}</h3>
+          ${verses.map((v, idx) => {
+            const hasCrossRefs = verseCrossRefs[idx].length > 0;
+            const verseKey = `${book}:${chapter}:${v.verse}`;
+            const isSelected = selectedVerses.has(verseKey);
+            const wordsHtml = renderVerseWordsHtml(v.text);
+            
+            // Render section heading if present - Cinzel font, bold
+            const headingHtml = v.heading 
+              ? `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.15em; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`
+              : '';
+            
+            return `
+              ${headingHtml}
+              <p class="verse-text" 
+                 data-book="${book}" 
+                 data-chapter="${chapter}" 
+                 data-verse="${v.verse}"
+                 style="margin: 8px 0; padding: 8px; border-radius: 4px; cursor: pointer; background: ${isSelected ? '#ffffcc' : 'transparent'}; transition: background 0.2s; line-height: ${lineSpacing}; font-size: ${fontSize}px;">
+                <sup style="color: #555; cursor: ${hasCrossRefs ? 'pointer' : 'default'};" 
+                     ${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${book}', ${chapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>
+                  ${v.verse}${hasCrossRefs ? ' 🔗' : ''}
+                </sup> 
+                ${wordsHtml}
+              </p>
+            `;
+          }).join('')}
+        `;
+      }
       
       // Attach verse selection handlers
       attachVerseSelectionHandlers();
@@ -2565,7 +2724,7 @@ document.getElementById('refreshPacks')?.addEventListener('click', () => {
  * Attach click and long-press handlers to verses
  */
 function attachVerseSelectionHandlers() {
-  const verseElements = document.querySelectorAll('.verse-text');
+  const verseElements = document.querySelectorAll('.verse-text, .verse-span');
   
   verseElements.forEach(verseEl => {
     const element = verseEl as HTMLElement;

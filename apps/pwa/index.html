@@ -11,8 +11,74 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=EB+Garamond:wght@400;600&family=Jura:wght@400;600&display=swap" rel="stylesheet">
     <style>
+      :root {
+        --base-font-size: 15px;
+        --line-spacing: 1.5;
+      }
       body { margin: 0; padding: 0; background: #fff; color: #000; }
+      body.dark-theme { background: #1a1a1a; color: #e0e0e0; }
       #app { min-height: 100vh; }
+      
+      /* Light theme component styling */
+      .main-container { background: #d5d5d5; color: #2a2a2a; }
+      .main-title { color: #1e3a5f; }
+      .content-section { background: #e8e8e8; border: 1px solid #bbb; }
+      .section-description { color: #555; }
+      .list-container { background: #f0f0f0; border: 1px solid #ccc; }
+      .verse-display { background: #e5e5e5; }
+      .map-viewer { background: #e5e5e5; }
+      .map-details { background: #f0f0f0; }
+      .map-search-panel { background: #e8e8e8; border: 1px solid #ccc; }
+      .map-search-results { background: #d5d5d5; border: 1px solid #ccc; }
+      .modal { background: #e5e5e5; border: 1px solid #ccc; }
+      .modal-close { background: #bbb; border: 1px solid #bbb; }
+      .action-btn { background: #e5e5e5; border: 1px solid #ccc; }
+      .success-text { color: #666; }
+      
+      /* Dark theme comprehensive styling - ALL layers */
+      .dark-theme * { border-color: #444; }
+      .dark-theme div,
+      .dark-theme section,
+      .dark-theme article,
+      .dark-theme main,
+      .dark-theme aside,
+      .dark-theme header,
+      .dark-theme footer,
+      .dark-theme nav { color: inherit; }
+      .dark-theme .main-container { background: #2a2a2a; color: #e0e0e0; }
+      .dark-theme .main-title { color: #6a9fd5; }
+      .dark-theme .content-section { background: #1e1e1e; border: 1px solid #444; }
+      .dark-theme .section-description { color: #aaa; }
+      .dark-theme .list-container { background: #252525; border: 1px solid #444; }
+      .dark-theme .verse-display { background: #1e1e1e; }
+      .dark-theme .map-viewer { background: #1e1e1e; }
+      .dark-theme .map-details { background: #252525; }
+      .dark-theme .map-search-panel { background: #1e1e1e; border: 1px solid #444; }
+      .dark-theme .map-search-results { background: #2a2a2a; border: 1px solid #444; }
+      .dark-theme .modal { background: #1e1e1e; border: 1px solid #444; }
+      .dark-theme .modal-close { background: #444; border: 1px solid #444; }
+      .dark-theme .action-btn { background: #1e1e1e; border: 1px solid #444; }
+      .dark-theme .success-text { color: #9a9a9a; }
+      .dark-theme input,
+      .dark-theme select,
+      .dark-theme button,
+      .dark-theme textarea { background: #2a2a2a; color: #e0e0e0; border-color: #444; }
+      .dark-theme button { background: #3a3a3a; }
+      .dark-theme button:hover { background: #4a4a4a; }
+      .dark-theme .verse-text,
+      .dark-theme .verse-span { background: transparent !important; }
+      .dark-theme .verse-text[style*="ffffcc"],
+      .dark-theme .verse-span[style*="ffffcc"] { background: #4a4a00 !important; }
+      .dark-theme .section-heading { color: #d0d0d0 !important; border-top-color: #444 !important; }
+      .dark-theme sup { color: #aaa !important; }
+      .dark-theme h1, .dark-theme h2, .dark-theme h3, .dark-theme h4, .dark-theme h5, .dark-theme h6 { color: #e0e0e0; }
+      .dark-theme p, .dark-theme span, .dark-theme label, .dark-theme a { color: inherit; }
+      .dark-theme em { color: #aaa; }
+      .dark-theme .inline-footnote { color: #6699ff !important; }
+      .dark-theme .inline-xref { color: #ccc !important; }
+      .dark-theme hr { border-color: #444; }
+      .dark-theme .verse-paragraph { background: transparent; }
+      
       .leaflet-container { background: #aad3df; }
       .popup-verse-text { font-family: 'Cinzel', serif; }
       .popup-verse-text-greek { font-family: 'Jura', system-ui, sans-serif; }
@@ -40,7 +106,10 @@
       .heading-font-greek { font-family: 'Jura', system-ui, sans-serif; }
       .reader-title { font-size: 21px; line-height: 1.15; margin: 0 0 10px 0; }
       .reader-title.heading-font-kjv { font-size: 28px; }
-      .verse-words { font-size: 15px; }
+      .verse-words { 
+        font-size: var(--base-font-size, 15px);
+        line-height: var(--line-spacing, 1.5);
+      }
       .verse-words.translation-font-greek { font-size: 17px; }
       @keyframes highlight {
         0% { background-color: #fff3e0; }

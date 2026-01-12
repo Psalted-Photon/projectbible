@@ -19,8 +19,12 @@ export interface UserSettings {
   dailyDriverEnglish?: string;
   dailyDriverHebrew?: string;
   dailyDriverGreek?: string;
+  
+  // Display settings
   theme?: 'light' | 'dark';
-  fontSize?: number;
+  fontSize?: number; // Base font size in pixels (default 15)
+  lineSpacing?: number; // Line height multiplier (default 1.5)
+  verseLayout?: 'one-per-line' | 'paragraph'; // Verse layout mode
 }
 
 function normalizeSettings(raw: UserSettings): UserSettings {

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ProjectBible - Polished</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a; color: #e0e0e0;
+    }
+    
+    /* Bible Reader */
+    .bible-reader {
+      width: 100%; height: 100%; overflow-y: auto;
+      position: relative; background: #1a1a1a;
+    }
+    
+    .text-container {
+      max-width: 700px; margin: 0 auto;
+      padding: 80px 20px 100px;
+    }
+    
+    .chapter-header { margin-bottom: 2rem; text-align: center; }
+    .chapter-header h1 { font-size: 1.5rem; color: #f0f0f0; }
+    
+    .verse { margin-bottom: 0.5rem; line-height: 1.8; }
+    .verse-number {
+      display: inline-block; min-width: 2rem;
+      font-size: 0.75rem; color: #888;
+      vertical-align: super; margin-right: 0.25rem;
+    }
+    .verse-text { font-size: 1.125rem; }
+    
+    /* Backdrop */
+    .backdrop {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      display: none; z-index: 99;
+    }
+    .backdrop.active { display: block; }
+    
+    /* Panes */
+    .pane {
+      position: fixed; background: #2a2a2a;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+      transition: transform 0.3s ease-out;
+      z-index: 100;
+    }
+    
+    .pane.left { left: 0; top: 0; bottom: 0; width: 40%; transform: translateX(-100%); }
+    .pane.right { right: 0; top: 0; bottom: 0; width: 40%; transform: translateX(100%); }
+    .pane.bottom { left: 0; right: 0; bottom: 0; height: 50%; transform: translateY(100%); }
+    
+    .pane.open { transform: translate(0, 0); }
+    
+    .pane-content {
+      height: 100%; overflow-y: auto;
+      padding: 60px 20px 20px;
+    }
+    
+    .close-btn {
+      position: absolute; top: 12px; right: 12px;
+      width: 32px; height: 32px;
+      border: none; background: rgba(255, 255, 255, 0.1);
+      color: #fff; font-size: 24px; border-radius: 50%;
+      cursor: pointer; z-index: 20;
+    }
+    .close-btn:hover { background: rgba(255, 255, 255, 0.2); }
+    
+    h2 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #f0f0f0; }
+    
+    .setting-group { margin-bottom: 2rem; }
+    .setting-group label {
+      display: block; margin-bottom: 0.5rem;
+      font-size: 0.9rem; color: #ccc;
+    }
+    
+    select, input[type="range"] {
+      width: 100%; padding: 0.5rem;
+      background: #1a1a1a; border: 1px solid #444;
+      border-radius: 4px; color: #e0e0e0;
+    }
+    
+    .edge-indicator {
+      position: fixed; background: rgba(255, 255, 255, 0.1);
+      pointer-events: none; z-index: 9999; display: none;
+    }
+    .edge-indicator.left { left: 0; top: 0; bottom: 0; width: 4px; }
+    .edge-indicator.right { right: 0; top: 0; bottom: 0; width: 4px; }
+    .edge-indicator.bottom { left: 0; right: 0; bottom: 0; height: 4px; }
+    .edge-indicator.active { display: block; }
+  </style>
+</head>
+<body>
+  <!-- Bible Reader -->
+  <div class="bible-reader" id="bibleReader">
+    <div class="text-container">
+      <div class="chapter-header">
+        <h1>John 1</h1>
+      </div>
+      <div class="verses" id="verses"></div>
+    </div>
+  </div>
+
+  <!-- Backdrop -->
+  <div class="backdrop" id="backdrop"></div>
+
+  <!-- Edge Indicators -->
+  <div class="edge-indicator left" id="edgeLeft"></div>
+  <div class="edge-indicator right" id="edgeRight"></div>
+  <div class="edge-indicator bottom" id="edgeBottom"></div>
+
+  <!-- Settings Pane -->
+  <div class="pane left" id="settingsPane">
+    <button class="close-btn" onclick="closePane('settingsPane')">&times;</button>
+    <div class="pane-content">
+      <h2>Settings</h2>
+      <div class="setting-group">
+        <label>Theme</label>
+        <select>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </div>
+      <div class="setting-group">
+        <label>Font Size: <span id="fontSizeValue">18px</span></label>
+        <input type="range" min="12" max="24" value="18" oninput="document.getElementById('fontSizeValue').textContent = this.value + 'px'" />
+      </div>
+      <div class="setting-group">
+        <label>Line Spacing: <span id="lineSpacingValue">1.8</span></label>
+        <input type="range" min="1" max="2.5" step="0.1" value="1.8" oninput="document.getElementById('lineSpacingValue').textContent = this.value" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Search Pane -->
+  <div class="pane right" id="searchPane">
+    <button class="close-btn" onclick="closePane('searchPane')">&times;</button>
+    <div class="pane-content">
+      <h2>Search</h2>
+      <p style="color: #888; font-style: italic;">Search functionality will be integrated here</p>
+    </div>
+  </div>
+
+  <!-- Map Pane -->
+  <div class="pane bottom" id="mapPane">
+    <button class="close-btn" onclick="closePane('mapPane')">&times;</button>
+    <div class="pane-content">
+      <h2>Map</h2>
+      <p style="color: #888; font-style: italic;">Interactive map will be integrated here</p>
+    </div>
+  </div>
+
+  <script>
+    // Generate sample verses
+    const versesContainer = document.getElementById('verses');
+    for (let i = 1; i <= 51; i++) {
+      const verse = document.createElement('div');
+      verse.className = 'verse';
+      verse.innerHTML = `
+        <span class="verse-number">${i}</span>
+        <span class="verse-text">In the beginning was the Word, and the Word was with God, and the Word was God. Sample verse ${i}.</span>
+      `;
+      versesContainer.appendChild(verse);
+    }
+
+    // Edge gesture detection
+    const EDGE_ZONE = 20;
+    const THRESHOLD = 0.3;
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let edgePosition = null;
+
+    function handleStart(e) {
+      const touch = e.touches ? e.touches[0] : e;
+      const x = touch.clientX;
+      const y = touch.clientY;
+
+      if (x < EDGE_ZONE) {
+        edgePosition = 'left';
+        startDrag(x, y);
+      } else if (x > window.innerWidth - EDGE_ZONE) {
+        edgePosition = 'right';
+        startDrag(x, y);
+      } else if (y > window.innerHeight - EDGE_ZONE) {
+        edgePosition = 'bottom';
+        startDrag(x, y);
+      }
+    }
+
+    function startDrag(x, y) {
+      isDragging = true;
+      startX = x;
+      startY = y;
+      document.getElementById('edge' + edgePosition.charAt(0).toUpperCase() + edgePosition.slice(1)).classList.add('active');
+    }
+
+    function handleMove(e) {
+      if (!isDragging) return;
+      e.preventDefault();
+    }
+
+    function handleEnd(e) {
+      if (!isDragging || !edgePosition) return;
+
+      const touch = e.changedTouches ? e.changedTouches[0] : e;
+      const currentX = touch.clientX;
+      const currentY = touch.clientY;
+
+      const dragDistance = edgePosition === 'bottom'
+        ? startY - currentY
+        : edgePosition === 'left'
+          ? currentX - startX
+          : startX - currentX;
+
+      const threshold = edgePosition === 'bottom'
+        ? window.innerHeight * THRESHOLD
+        : window.innerWidth * THRESHOLD;
+
+      if (dragDistance > threshold) {
+        openPane(edgePosition);
+      }
+
+      isDragging = false;
+      document.getElementById('edge' + edgePosition.charAt(0).toUpperCase() + edgePosition.slice(1)).classList.remove('active');
+      edgePosition = null;
+    }
+
+    function openPane(position) {
+      const paneMap = {
+        left: 'settingsPane',
+        right: 'searchPane',
+        bottom: 'mapPane'
+      };
+      const paneId = paneMap[position];
+      document.getElementById(paneId).classList.add('open');
+      document.getElementById('backdrop').classList.add('active');
+    }
+
+    function closePane(paneId) {
+      document.getElementById(paneId).classList.remove('open');
+      // Check if any panes are still open
+      const anyOpen = document.querySelectorAll('.pane.open').length > 0;
+      if (!anyOpen) {
+        document.getElementById('backdrop').classList.remove('active');
+      }
+    }
+
+    // Event listeners
+    document.addEventListener('touchstart', handleStart, { passive: true });
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd);
+    document.addEventListener('mousedown', handleStart);
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
+
+    document.getElementById('backdrop').addEventListener('click', () => {
+      document.querySelectorAll('.pane.open').forEach(pane => {
+        pane.classList.remove('open');
+      });
+      document.getElementById('backdrop').classList.remove('active');
+    });
+
+    console.log('🎨 Polished Bible Reader loaded!');
+    console.log('👆 Try swiping from the left, right, or bottom edges');
+  </script>
+</body>
+</html>
