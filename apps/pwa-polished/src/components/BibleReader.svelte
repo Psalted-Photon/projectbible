@@ -56,7 +56,7 @@
           heading: heading || v.heading,
         };
       });
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error loading chapter:", err);
       error = `Failed to load ${book} ${chapter}. Make sure you have packs installed.`;
       verses = [];
@@ -102,7 +102,7 @@
         // No translations found - try loading from public directory
         await autoLoadFromPublic(false);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error loading translations:", err);
     }
   }
@@ -114,7 +114,10 @@
         const tx = db.transaction(["packs", "verses"], "readwrite");
         await tx.objectStore("packs").clear();
         await tx.objectStore("verses").clear();
-        await tx.done;
+        await new Promise<void>((resolve, reject) => {
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
       }
       
       const { importPackFromUrl } = await import("../adapters/pack-import");
@@ -146,15 +149,17 @@
       }
     } catch (err) {
       console.error("Failed to auto-load packs:", err);
-      error = `Failed to load Bible data: ${err.message}`;
+      error = `Failed to load Bible data: ${err instanceof Error ? err.message : String(err)}`;
     }
   }
 
-  onMount(async () => {
+  onMount(() => {
     textStore = new IndexedDBTextStore();
 
-    await loadAvailableTranslations();
-    await loadChapter(currentTranslation, currentBook, currentChapter);
+    (async () => {
+      await loadAvailableTranslations();
+      await loadChapter(currentTranslation, currentBook, currentChapter);
+    })();
 
     // Handle footnote/cross-ref clicks
     const handleNoteClick = (e: MouseEvent) => {
