@@ -5,8 +5,11 @@
     navigationStore,
     availableTranslations,
   } from "../stores/navigationStore";
+  import { windowStore } from "../lib/stores/windowStore";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
+
+  export let windowId: string | undefined = undefined;
 
   let readerElement: HTMLDivElement;
   let textStore: IndexedDBTextStore;
@@ -15,9 +18,11 @@
   let loading = true;
   let error = "";
 
-  $: currentBook = $navigationStore.book;
-  $: currentChapter = $navigationStore.chapter;
-  $: currentTranslation = $navigationStore.translation;
+  // Use per-window state if windowId provided, otherwise use global state
+  $: windowState = windowId ? $windowStore.find(w => w.id === windowId) : null;
+  $: currentBook = windowState?.contentState?.book ?? $navigationStore.book;
+  $: currentChapter = windowState?.contentState?.chapter ?? $navigationStore.chapter;
+  $: currentTranslation = windowState?.contentState?.translation ?? $navigationStore.translation;
 
   // Load verses when navigation changes
   $: if (textStore && currentTranslation && currentBook && currentChapter) {
@@ -181,7 +186,7 @@
 </script>
 
 <div class="bible-reader" bind:this={readerElement}>
-  <NavigationBar />
+  <NavigationBar {windowId} />
 
   <div class="text-container">
     <div class="chapter-header">
@@ -228,10 +233,12 @@
   }
 
   .text-container {
-    max-width: 700px;
+    max-width: 100%;
+    width: 100%;
     margin: 0 auto;
     padding: 40px 20px 100px;
     flex: 1;
+    box-sizing: border-box;
   }
 
   .chapter-header {

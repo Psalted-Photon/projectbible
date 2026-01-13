@@ -1,11 +1,51 @@
 <script lang="ts">
   import BibleReader from "./components/BibleReader.svelte";
-  import PaneContainer from "./components/PaneContainer.svelte";
+  import WindowContainer from "./components/WindowContainer.svelte";
+  import { windowStore } from "./lib/stores/windowStore";
+
+  // Calculate main content area based on open panels
+  $: leftPanels = $windowStore.filter(w => w.edge === 'left');
+  $: rightPanels = $windowStore.filter(w => w.edge === 'right');
+  $: topPanels = $windowStore.filter(w => w.edge === 'top');
+  $: bottomPanels = $windowStore.filter(w => w.edge === 'bottom');
+
+  $: leftWidth = leftPanels.reduce((sum, p) => sum + p.size, 0);
+  $: rightWidth = rightPanels.reduce((sum, p) => sum + p.size, 0);
+  $: topHeight = topPanels.reduce((sum, p) => sum + p.size, 0);
+  $: bottomHeight = bottomPanels.reduce((sum, p) => sum + p.size, 0);
+
+  $: mainContentStyle = `
+    position: fixed;
+    left: ${leftWidth}%;
+    right: ${rightWidth}%;
+    top: ${topHeight}%;
+    bottom: ${bottomHeight}%;
+  `;
+
+  // Log main content area changes
+  $: {
+    console.log('📐 MAIN CONTENT AREA:', {
+      leftPanels: leftPanels.length,
+      rightPanels: rightPanels.length,
+      topPanels: topPanels.length,
+      bottomPanels: bottomPanels.length,
+      margins: {
+        left: `${leftWidth.toFixed(1)}%`,
+        right: `${rightWidth.toFixed(1)}%`,
+        top: `${topHeight.toFixed(1)}%`,
+        bottom: `${bottomHeight.toFixed(1)}%`,
+      },
+      availableWidth: `${(100 - leftWidth - rightWidth).toFixed(1)}%`,
+      availableHeight: `${(100 - topHeight - bottomHeight).toFixed(1)}%`
+    });
+  }
 </script>
 
 <div class="app-root">
-  <BibleReader />
-  <PaneContainer />
+  <div class="main-content" style={mainContentStyle}>
+    <BibleReader />
+  </div>
+  <WindowContainer />
 </div>
 
 <style>
@@ -15,13 +55,35 @@
     overflow: hidden;
   }
 
+  /* Hide scrollbars but keep scroll functionality */
+  :global(*) {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+  
+  :global(*::-webkit-scrollbar) {
+    display: none; /* Chrome, Safari, Opera */
+  }
+
   .app-root {
     width: 100%;
     height: 100vh;
     position: relative;
     overflow: hidden;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     background: #1a1a1a;
+  }
+
+  .main-content {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow: auto;
+    transition: margin 0.3s ease;
+    z-index: 1;
   }
 </style>

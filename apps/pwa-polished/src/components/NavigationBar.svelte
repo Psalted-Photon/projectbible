@@ -3,16 +3,21 @@
     navigationStore,
     availableTranslations,
   } from "../stores/navigationStore";
+  import { windowStore } from "../lib/stores/windowStore";
   import { BIBLE_BOOKS } from "../lib/bibleData";
   import { onMount, onDestroy } from "svelte";
+
+  export let windowId: string | undefined = undefined;
 
   let translationDropdownOpen = false;
   let referenceDropdownOpen = false;
   let expandedBooks = new Set<string>();
 
-  $: currentTranslation = $navigationStore.translation;
-  $: currentBook = $navigationStore.book;
-  $: currentChapter = $navigationStore.chapter;
+  // Use per-window state if windowId provided, otherwise use global state
+  $: windowState = windowId ? $windowStore.find(w => w.id === windowId) : null;
+  $: currentTranslation = windowState?.contentState?.translation ?? $navigationStore.translation;
+  $: currentBook = windowState?.contentState?.book ?? $navigationStore.book;
+  $: currentChapter = windowState?.contentState?.chapter ?? $navigationStore.chapter;
   $: currentReference = `${currentBook} ${currentChapter}`;
 
   function toggleTranslationDropdown(event: MouseEvent) {
@@ -32,7 +37,11 @@
   }
 
   function selectTranslation(translation: string) {
-    navigationStore.setTranslation(translation);
+    if (windowId) {
+      windowStore.updateContentState(windowId, { translation });
+    } else {
+      navigationStore.setTranslation(translation);
+    }
     translationDropdownOpen = false;
   }
 
@@ -47,7 +56,15 @@
   }
 
   function selectChapter(bookName: string, chapter: number) {
-    navigationStore.navigateTo(currentTranslation, bookName, chapter);
+    if (windowId) {
+      windowStore.updateContentState(windowId, { 
+        translation: currentTranslation,
+        book: bookName, 
+        chapter 
+      });
+    } else {
+      navigationStore.navigateTo(currentTranslation, bookName, chapter);
+    }
     referenceDropdownOpen = false;
     expandedBooks = new Set();
   }
