@@ -17,11 +17,24 @@ export default defineConfig({
     })
   ],
   server: {
-    port: 5173,
-    strictPort: false
+    port: 5174,
+    strictPort: false,
+    host: '0.0.0.0',
+    proxy: {
+      '/api/pwa': {
+        target: 'http://localhost:5173',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/pwa/, '')
+      }
+    },
+    fs: {
+      allow: ['..', '../..']
+    }
   },
+  assetsInclude: ['**/*.wasm', '**/*.sqlite'],
   build: {
     outDir: 'dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    copyPublicDir: true
   }
 });

@@ -14,7 +14,6 @@
     [];
   let loading = true;
   let error = "";
-  let debugInfo = "";
 
   $: currentBook = $navigationStore.book;
   $: currentChapter = $navigationStore.chapter;
@@ -52,17 +51,6 @@
           heading: heading || v.heading,
         };
       });
-
-      // Debug problematic verses
-      const v1 = verses.find((v) => v.verse === 1);
-      const v6 = verses.find((v) => v.verse === 6);
-      if (v1) debugInfo = `V1 heading: ${v1.heading || "none"}`;
-      if (v6) debugInfo += ` | V6 heading: ${v6.heading || "none"}`;
-
-      console.log(
-        "Sample verse with heading:",
-        verses.find((v) => v.heading)
-      );
     } catch (err) {
       console.error("Error loading chapter:", err);
       error = `Failed to load ${book} ${chapter}. Make sure you have packs installed.`;
@@ -74,10 +62,7 @@
 
   async function loadAvailableTranslations() {
     try {
-      debugInfo = "Loading translations...";
       const translations = await textStore.getTranslations();
-
-      debugInfo = `Found ${translations.length} translations: ${JSON.stringify(translations)}`;
 
       if (translations.length > 0) {
         const translationIds = translations.map((t) => t.id);
@@ -91,18 +76,72 @@
 
         if (!match) {
           navigationStore.setTranslation(translations[0].id);
-          debugInfo += ` | Switched to ${translations[0].id}`;
         } else if (match.id !== currentTranslation) {
           // Update to the exact case from database
           navigationStore.setTranslation(match.id);
-          debugInfo += ` | Updated case to ${match.id}`;
+        }
+        
+        // Verify the selected translation has verses
+        const testVerse = await textStore.getVerse(
+          translations[0].id,
+          "Genesis",
+          1,
+          1
+        );
+        
+        if (!testVerse) {
+          console.warn("Translation has no verses, reimporting...");
+          await autoLoadFromPublic(true);
         }
       } else {
-        debugInfo = "No translations found in database!";
+        // No translations found - try loading from public directory
+        await autoLoadFromPublic(false);
       }
     } catch (err) {
-      debugInfo = `Error: ${err.message}`;
       console.error("Error loading translations:", err);
+    }
+  }
+
+  async function autoLoadFromPublic(clearFirst: boolean) {
+    try {
+      if (clearFirst) {
+        const db = await import("../adapters/db").then((m) => m.openDB());
+        const tx = db.transaction(["packs", "verses"], "readwrite");
+        await tx.objectStore("packs").clear();
+        await tx.objectStore("verses").clear();
+        await tx.done;
+      }
+      
+      const { importPackFromUrl } = await import("../adapters/pack-import");
+      
+      // Load all available packs from public directory
+      const packsToLoad = [
+        "bsb.sqlite",
+        "kjv.sqlite", 
+        "web.sqlite",
+        "greek.sqlite",
+        "hebrew.sqlite"
+      ];
+      
+      for (const packFile of packsToLoad) {
+        try {
+          console.log(`Loading ${packFile}...`);
+          await importPackFromUrl(`/${packFile}`);
+        } catch (err) {
+          console.warn(`Failed to load ${packFile}:`, err);
+        }
+      }
+      
+      // Reload translations after import
+      const translations = await textStore.getTranslations();
+      if (translations.length > 0) {
+        availableTranslations.set(translations.map((t) => t.id));
+        navigationStore.setTranslation(translations[0].id);
+        await loadChapter(translations[0].id, currentBook, currentChapter);
+      }
+    } catch (err) {
+      console.error("Failed to auto-load packs:", err);
+      error = `Failed to load Bible data: ${err.message}`;
     }
   }
 
@@ -148,15 +187,6 @@
     <div class="chapter-header">
       <h1>{currentBook} {currentChapter}</h1>
     </div>
-
-    {#if debugInfo}
-      <div
-        class="debug-info"
-        style="background: #ffffcc; color: #000; padding: 10px; margin: 10px 0; border-radius: 4px; font-size: 12px; word-wrap: break-word;"
-      >
-        DEBUG: {debugInfo}
-      </div>
-    {/if}
 
     {#if loading}
       <div class="loading">Loading...</div>

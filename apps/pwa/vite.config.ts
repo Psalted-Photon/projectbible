@@ -4,7 +4,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   server: {
     port: 5173,
-    strictPort: true,
+    strictPort: false,
+    host: '0.0.0.0',
   },
   assetsInclude: ['**/*.wasm'],
   build: {

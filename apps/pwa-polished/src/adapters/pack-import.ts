@@ -704,6 +704,23 @@ export async function importPackFromSQLite(file: File): Promise<void> {
 }
 
 /**
+ * Import a pack from a URL
+ */
+export async function importPackFromUrl(url: string): Promise<void> {
+  console.log(`Fetching pack from ${url}...`);
+  
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch pack: ${response.statusText}`);
+  }
+  
+  const blob = await response.blob();
+  const file = new File([blob], url.split('/').pop() || 'pack.sqlite');
+  
+  await importPackFromSQLite(file);
+}
+
+/**
  * Export pack data from IndexedDB to SQLite file (future feature)
  */
 export async function exportPackToSQLite(packId: string): Promise<Blob> {
