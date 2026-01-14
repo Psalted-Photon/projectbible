@@ -140,6 +140,18 @@ function generateCanonicalVerseList() {
   return verses;
 }
 
+// Parse a reference like "Matthew 3:13-17" or "Luke 1:26-38"
+function parseReference(ref) {
+  const match = ref.trim().match(/^(.+?)\s+(\d+):(\d+)(?:-(\d+))?$/);
+  if (!match) return null;
+  return {
+    book: match[1],
+    chapter: parseInt(match[2]),
+    verseStart: parseInt(match[3]),
+    verseEnd: match[4] ? parseInt(match[4]) : parseInt(match[3])
+  };
+}
+
 // Apply chronological ordering based on ruleset
 function applyChronologicalOrdering(verses) {
   console.log(`\n📊 Applying FULL chronological ordering with ALL rules...`);
@@ -156,6 +168,52 @@ function applyChronologicalOrdering(verses) {
   
   // Track which books/chapters/verses have been added
   const addedVerses = new Set();
+  
+  // Track gospel pericopes to handle later
+  const gospelPericopes = new Map();
+  if (ruleset.gospel_harmony) {
+    ruleset.gospel_harmony.forEach(pericope => {
+      pericope.references.forEach(ref => {
+        const parsed = parseReference(ref);
+        if (parsed) {
+          const key = `${parsed.book}:${parsed.chapter}`;
+          if (!gospelPericopes.has(key)) {
+            gospelPericopes.set(key, []);
+          }
+          gospelPericopes.get(key).push({
+            pericope_id: pericope.pericope_id,
+            event_id: pericope.event_id,
+            timestamp_year: pericope.timestamp_year,
+            era: pericope.era,
+            references: pericope.references,
+            parsed
+          });
+        }
+      });
+    });
+  }
+  
+  // Track Acts/Epistles integration points
+  const actsEpistles = new Map();
+  if (ruleset.acts_epistles_timeline) {
+    ruleset.acts_epistles_timeline.forEach(timeline => {
+      timeline.acts_references.forEach(ref => {
+        const parsed = parseReference(ref);
+        if (parsed) {
+          const key = `Acts:${parsed.chapter}`;
+          if (!actsEpistles.has(key)) {
+            actsEpistles.set(key, []);
+          }
+          actsEpistles.get(key).push({
+            event_id: timeline.event_id,
+            year: timeline.year,
+            era: timeline.era,
+            epistles: timeline.epistles
+          });
+        }
+      });
+    });
+  }
   
   // Helper to parse anchor reference like "Genesis 12:1" or "Numbers 14:1-45"
   function parseAnchor(anchor) {
@@ -188,11 +246,41 @@ function applyChronologicalOrdering(verses) {
       verse,
       event_id: metadata.event_id || (event ? event.event_id : null),
       timestamp_year: metadata.timestamp_year || (event ? event.year_start : null),
-      era: metadata.era || (event ? event.era : null)
+      era: metadata.era || (event ? event.era : null),
+      pericope_id: metadata.pericope_id || null
     });
     
     addedVerses.add(key);
     return true;
+  }
+  
+  // Helper to interleave gospel pericope verses (parallel passages)
+  function addGospelPericope(pericope) {
+    const allRefs = pericope.references.map(parseReference).filter(r => r);
+    if (allRefs.length === 0) return 0;
+    
+    // Find the longest passage to determine max verses
+    const maxVerses = Math.max(...allRefs.map(r => r.verseEnd - r.verseStart + 1));
+    let addedCount = 0;
+    
+    // Interleave verses from all parallel passages
+    for (let offset = 0; offset < maxVerses; offset++) {
+      for (const ref of allRefs) {
+        const verse = ref.verseStart + offset;
+        if (verse <= ref.verseEnd) {
+          if (addVerse(ref.book, ref.chapter, verse, {
+            event_id: pericope.event_id,
+            timestamp_year: pericope.timestamp_year,
+            era: pericope.era,
+            pericope_id: pericope.pericope_id
+          })) {
+            addedCount++;
+          }
+        }
+      }
+    }
+    
+    return addedCount;
   }
   
   // Helper to add entire book
@@ -231,10 +319,82 @@ function applyChronologicalOrdering(verses) {
     if (!chapterCount) continue;
     
     const verseCounts = VERSE_COUNTS[bookName] || [];
+    const isGospel = ['Matthew', 'Mark', 'Luke', 'John'].includes(bookName);
+    const isActs = bookName === 'Acts';
     
     for (let chapter = 1; chapter <= chapterCount; chapter++) {
       const verseCount = verseCounts[chapter - 1] || 25;
       
+      // Handle Gospel harmony - check if this chapter has pericopes
+      if (isGospel) {
+        const chapterKey = `${bookName}:${chapter}`;
+        const pericopes = gospelPericopes.get(chapterKey);
+        
+        if (pericopes && pericopes.length > 0) {
+          // Find the first verse of the first pericope in this chapter
+          const firstPericope = pericopes[0];
+          const firstVerse = firstPericope.parsed.verseStart;
+          
+          // Add verses before the pericope
+          for (let verse = 1; verse < firstVerse; verse++) {
+            addVerse(bookName, chapter, verse);
+          }
+          
+          // Add all pericopes in this chapter (interleaved with parallels)
+          const processedPericopes = new Set();
+          for (const pericope of pericopes) {
+            if (!processedPericopes.has(pericope.pericope_id)) {
+              const count = addGospelPericope(pericope);
+              if (count > 0) {
+                console.log(`  🔗 Gospel harmony: ${pericope.pericope_id} (${count} verses interleaved)`);
+              }
+              processedPericopes.add(pericope.pericope_id);
+            }
+          }
+          
+          // Add any remaining verses after the pericopes
+          const lastPericope = pericopes[pericopes.length - 1];
+          const lastVerse = lastPericope.parsed.verseEnd;
+          for (let verse = lastVerse + 1; verse <= verseCount; verse++) {
+            addVerse(bookName, chapter, verse);
+          }
+          
+          continue; // Skip normal verse processing for this chapter
+        }
+      }
+      
+      // Handle Acts/Epistles integration
+      if (isActs) {
+        const chapterKey = `Acts:${chapter}`;
+        const timeline = actsEpistles.get(chapterKey);
+        
+        if (timeline && timeline.length > 0) {
+          // Add Acts verses for this chapter
+          for (let verse = 1; verse <= verseCount; verse++) {
+            addVerse(bookName, chapter, verse);
+          }
+          
+          // Insert epistles at the end of this Acts chapter
+          for (const entry of timeline) {
+            if (entry.epistles && entry.epistles.length > 0) {
+              for (const epistle of entry.epistles) {
+                const count = addBook(epistle, {
+                  event_id: entry.event_id,
+                  timestamp_year: entry.year,
+                  era: entry.era
+                });
+                if (count > 0) {
+                  console.log(`  📬 Inserted ${epistle} after Acts ${chapter} (${count} verses)`);
+                }
+              }
+            }
+          }
+          
+          continue; // Skip normal verse processing
+        }
+      }
+      
+      // Normal verse-by-verse processing (non-gospel, non-acts with epistles)
       for (let verse = 1; verse <= verseCount; verse++) {
         const currentRef = `${bookName} ${chapter}:${verse}`;
         
@@ -304,11 +464,14 @@ function applyChronologicalOrdering(verses) {
   }
   
   console.log(`  ✅ Applied ${ruleset.insertion_rules.length} insertion rules`);
+  if (ruleset.gospel_harmony) {
+    console.log(`  ✅ Integrated ${ruleset.gospel_harmony.length} gospel harmony pericopes`);
+  }
+  if (ruleset.acts_epistles_timeline) {
+    const epistleCount = ruleset.acts_epistles_timeline.reduce((sum, t) => sum + (t.epistles?.length || 0), 0);
+    console.log(`  ✅ Integrated ${epistleCount} epistles into Acts timeline`);
+  }
   console.log(`  ✅ Generated ${chronoVerses.length} chronological verse entries`);
-  
-  // Note: Gospel harmony and Acts/epistles timeline would require more complex interleaving
-  // For now, the books are in canonical order within their time periods
-  // Full implementation would interleave synoptic parallels and insert epistles during Acts
   
   return chronoVerses;
 }
@@ -380,7 +543,8 @@ function createSQLitePack(chronoVerses) {
         verse INTEGER NOT NULL,
         event_id TEXT,
         timestamp_year INTEGER,
-        era TEXT
+        era TEXT,
+        pericope_id TEXT
       );
       
       CREATE TABLE events (
@@ -417,8 +581,8 @@ function createSQLitePack(chronoVerses) {
     // Insert chronological verses
     const insertVerse = db.prepare(`
       INSERT INTO chronological_verses 
-      (chrono_index, book, book_id, chapter, verse, event_id, timestamp_year, era)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (chrono_index, book, book_id, chapter, verse, event_id, timestamp_year, era, pericope_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     db.transaction(() => {
@@ -431,7 +595,8 @@ function createSQLitePack(chronoVerses) {
           verse.verse,
           verse.event_id,
           verse.timestamp_year,
-          verse.era
+          verse.era,
+          verse.pericope_id
         );
       }
     })();
@@ -515,14 +680,15 @@ async function main() {
     console.log(`   📍 SQLite Pack: ${sqlitePackPath}`);
     console.log(`\n✅ Implemented Features:`);
     console.log(`   • Applied ${ruleset.insertion_rules.length} insertion rules for book placement`);
+    console.log(`   • Gospel harmony with ${ruleset.gospel_harmony?.length || 0} pericopes (synoptic parallels interleaved)`);
+    console.log(`   • Acts/Epistles timeline integration (epistles inserted during Acts narrative)`);
     console.log(`   • Integrated ${ruleset.events.length} historical events`);
     console.log(`   • Mapped ${ruleset.eras.length} biblical eras`);
     console.log(`   • Generated ${chronoVerses.length.toLocaleString()} verse entries`);
     console.log(`\n📝 Future Enhancements:`);
-    console.log(`   • Gospel harmony (interleave synoptic parallels verse-by-verse)`);
-    console.log(`   • Acts/Epistles timeline (insert epistles during Acts narrative)`);
-    console.log(`   • Detailed Psalms placement (context-based positioning)`);
+    console.log(`   • Detailed Psalms placement (expand beyond current ${ruleset.insertion_rules.filter(r => r.insert.includes('Psalm')).length} psalms)`);
     console.log(`   • Prophetic book verse-level chronology`);
+    console.log(`   • Minor prophets precise dating`);
     
   } catch (error) {
     console.error(`\n❌ Error building pack:`, error);

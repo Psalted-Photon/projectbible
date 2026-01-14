@@ -507,6 +507,168 @@
       "timestamp_year": -1435
     },
     {
+      "insert": "Psalm 7",
+      "position": "during",
+      "anchor": "1 Samuel 24:1-22",
+      "event_id": "UNITED_SAUL_01",
+      "era": "United Kingdom",
+      "timestamp_year": -1015,
+      "note": "Concerning Cush, a Benjamite - during Saul's pursuit"
+    },
+    {
+      "insert": "Psalm 11",
+      "position": "during",
+      "anchor": "1 Samuel 23:14-29",
+      "event_id": "UNITED_SAUL_01",
+      "era": "United Kingdom",
+      "timestamp_year": -1015,
+      "note": "When David fled to the wilderness"
+    },
+    {
+      "insert": "Psalm 34",
+      "position": "after",
+      "anchor": "1 Samuel 21:13-15",
+      "event_id": "UNITED_SAUL_01",
+      "era": "United Kingdom",
+      "timestamp_year": -1015,
+      "note": "When David feigned madness before Abimelech"
+    },
+    {
+      "insert": "Psalm 52",
+      "position": "after",
+      "anchor": "1 Samuel 22:9-19",
+      "event_id": "UNITED_SAUL_01",
+      "era": "United Kingdom",
+      "timestamp_year": -1015,
+      "note": "When Doeg the Edomite told Saul about David"
+    },
+    {
+      "insert": "Psalm 54",
+      "position": "after",
+      "anchor": "1 Samuel 23:19-29",
+      "event_id": "UNITED_SAUL_01",
+      "era": "United Kingdom",
+      "timestamp_year": -1015,
+      "note": "When the Ziphites betrayed David to Saul"
+    },
+    {
+      "insert": "Psalm 56",
+      "position": "after",
+      "anchor": "1 Samuel 21:10-15",
+      "event_id": "UNITED_SAUL_01",
+      "era": "United Kingdom",
+      "timestamp_year": -1015,
+      "note": "When the Philistines seized David in Gath"
+    },
+    {
+      "insert": "Psalm 57",
+      "position": "during",
+      "anchor": "1 Samuel 22:1-5",
+      "event_id": "UNITED_SAUL_01",
+      "era": "United Kingdom",
+      "timestamp_year": -1015,
+      "note": "When David fled from Saul into the cave"
+    },
+    {
+      "insert": "Psalm 59",
+      "position": "after",
+      "anchor": "1 Samuel 19:11-18",
+      "event_id": "UNITED_SAUL_01",
+      "era": "United Kingdom",
+      "timestamp_year": -1015,
+      "note": "When Saul sent men to watch David's house"
+    },
+    {
+      "insert": "Psalm 142",
+      "position": "during",
+      "anchor": "1 Samuel 22:1-5",
+      "event_id": "UNITED_SAUL_01",
+      "era": "United Kingdom",
+      "timestamp_year": -1015,
+      "note": "A prayer when David was in the cave"
+    },
+    {
+      "insert": "Psalm 60",
+      "position": "after",
+      "anchor": "2 Samuel 8:13-14",
+      "event_id": "UNITED_DAVID_01",
+      "era": "United Kingdom",
+      "timestamp_year": -995,
+      "note": "When David fought Aram-naharaim and Aram-zobah"
+    },
+    {
+      "insert": "Psalm 63",
+      "position": "during",
+      "anchor": "2 Samuel 15:23-37",
+      "event_id": "UNITED_DAVID_01",
+      "era": "United Kingdom",
+      "timestamp_year": -990,
+      "note": "When David was in the wilderness of Judah"
+    },
+    {
+      "insert": "Psalm 30",
+      "position": "after",
+      "anchor": "1 Kings 8:62-66",
+      "event_id": "UNITED_SOLOMON_01",
+      "era": "United Kingdom",
+      "timestamp_year": -960,
+      "note": "A song at the dedication of the temple"
+    },
+    {
+      "insert": "Psalm 127",
+      "position": "during",
+      "anchor": "1 Kings 6:1-38",
+      "event_id": "UNITED_SOLOMON_01",
+      "era": "United Kingdom",
+      "timestamp_year": -966,
+      "note": "A song of Solomon - Unless the LORD builds the house"
+    },
+    {
+      "insert": "Psalm 72",
+      "position": "after",
+      "anchor": "1 Kings 1:38-40",
+      "event_id": "UNITED_SOLOMON_01",
+      "era": "United Kingdom",
+      "timestamp_year": -970,
+      "note": "A Psalm for Solomon - prayer for the king"
+    },
+    {
+      "insert": "Psalm 137",
+      "position": "during",
+      "anchor": "2 Kings 25:8-21",
+      "event_id": "BABYLON_EXILE_01",
+      "era": "Exile",
+      "timestamp_year": -586,
+      "note": "By the rivers of Babylon we sat and wept"
+    },
+    {
+      "insert": "Psalm 74",
+      "position": "after",
+      "anchor": "2 Kings 25:8-10",
+      "event_id": "BABYLON_FALL_JERUSALEM_01",
+      "era": "Exile",
+      "timestamp_year": -586,
+      "note": "Why have you rejected us forever, O God?"
+    },
+    {
+      "insert": "Psalm 79",
+      "position": "after",
+      "anchor": "2 Kings 25:8-10",
+      "event_id": "BABYLON_FALL_JERUSALEM_01",
+      "era": "Exile",
+      "timestamp_year": -586,
+      "note": "O God, the nations have invaded your inheritance"
+    },
+    {
+      "insert": "Psalm 126",
+      "position": "after",
+      "anchor": "Ezra 1:1-4",
+      "event_id": "RETURN_DECREE_CYRUS_01",
+      "era": "Post-Exile",
+      "timestamp_year": -538,
+      "note": "When the LORD restored the fortunes of Zion"
+    },
+    {
       "insert": "Lamentations",
       "position": "after",
       "anchor": "2 Kings 25:21",
