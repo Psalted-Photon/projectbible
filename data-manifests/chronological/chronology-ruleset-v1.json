@@ -1,0 +1,752 @@
+{
+  "version": "1.0",
+  "source": "Moderate Chronology (synthesized from standard evangelical/scholarly timelines, harmonies, and historical anchors)",
+  "eras": [
+    {
+      "era": "Primeval",
+      "year_start": -4004,
+      "year_end": -2200,
+      "description": "Creation, Fall, Flood, Babel and the earliest human history."
+    },
+    {
+      "era": "Patriarchal",
+      "year_start": -2166,
+      "year_end": -1876,
+      "description": "Lives of Abraham, Isaac, Jacob, and Joseph."
+    },
+    {
+      "era": "Exodus",
+      "year_start": -1446,
+      "year_end": -1406,
+      "description": "Moses, the plagues, Exodus from Egypt, Sinai covenant, and wilderness wanderings."
+    },
+    {
+      "era": "Conquest",
+      "year_start": -1406,
+      "year_end": -1350,
+      "description": "Joshua leads Israel into Canaan and allocates the land."
+    },
+    {
+      "era": "Judges",
+      "year_start": -1350,
+      "year_end": -1050,
+      "description": "Cycles of sin, oppression, and deliverance under the judges."
+    },
+    {
+      "era": "United Kingdom",
+      "year_start": -1050,
+      "year_end": -930,
+      "description": "Reigns of Saul, David, and Solomon over a united Israel."
+    },
+    {
+      "era": "Divided Kingdom",
+      "year_start": -930,
+      "year_end": -722,
+      "description": "Northern kingdom of Israel and southern kingdom of Judah until Assyria conquers Israel."
+    },
+    {
+      "era": "Judah Alone",
+      "year_start": -722,
+      "year_end": -586,
+      "description": "Period after the fall of Israel when only Judah remains until Babylonian conquest."
+    },
+    {
+      "era": "Exile",
+      "year_start": -605,
+      "year_end": -538,
+      "description": "Babylonian captivity of Judah and life of exiles in Babylon."
+    },
+    {
+      "era": "Post-Exile",
+      "year_start": -538,
+      "year_end": -400,
+      "description": "Return from exile, rebuilding of temple and walls, and post-exilic reforms."
+    },
+    {
+      "era": "Gospel",
+      "year_start": 4,
+      "year_end": 33,
+      "description": "Birth, life, ministry, death, and resurrection of Jesus Christ."
+    },
+    {
+      "era": "Early Church",
+      "year_start": 33,
+      "year_end": 100,
+      "description": "Spread of the gospel, apostolic missions, and early church development."
+    }
+  ],
+  "events": [
+    {
+      "event_id": "CREATION_01",
+      "event_name": "Creation Week",
+      "era": "Primeval",
+      "year_start": -4004,
+      "year_end": -4004,
+      "description": "God creates the heavens, the earth, and all living things."
+    },
+    {
+      "event_id": "FALL_01",
+      "event_name": "The Fall of Humanity",
+      "era": "Primeval",
+      "year_start": -4004,
+      "year_end": -4004,
+      "description": "Adam and Eve disobey God and are expelled from Eden."
+    },
+    {
+      "event_id": "CAIN_ABEL_01",
+      "event_name": "Cain and Abel",
+      "era": "Primeval",
+      "year_start": -3900,
+      "year_end": -3900,
+      "description": "Cain murders his brother Abel and is judged by God."
+    },
+    {
+      "event_id": "FLOOD_01",
+      "event_name": "The Flood and Noah",
+      "era": "Primeval",
+      "year_start": -2500,
+      "year_end": -2500,
+      "description": "God judges the world with a flood; Noah and his family are preserved."
+    },
+    {
+      "event_id": "BABEL_01",
+      "event_name": "Tower of Babel",
+      "era": "Primeval",
+      "year_start": -2200,
+      "year_end": -2200,
+      "description": "Humanity unites in pride; God confuses their language and scatters them."
+    },
+    {
+      "event_id": "PATRIARCHS_ABRAHAM_CALL_01",
+      "event_name": "Call of Abram",
+      "era": "Patriarchal",
+      "year_start": -2166,
+      "year_end": -2166,
+      "description": "God calls Abram to leave his homeland and promises to bless all nations through him."
+    },
+    {
+      "event_id": "PATRIARCHS_ABRAHAM_COVENANT_01",
+      "event_name": "Covenant with Abraham",
+      "era": "Patriarchal",
+      "year_start": -2091,
+      "year_end": -2091,
+      "description": "God makes a covenant with Abraham, promising land, offspring, and blessing."
+    },
+    {
+      "event_id": "PATRIARCHS_JACOB_01",
+      "event_name": "Life of Jacob",
+      "era": "Patriarchal",
+      "year_start": -2006,
+      "year_end": -1859,
+      "description": "Birth, exile, marriages, and return of Jacob; God renames him Israel."
+    },
+    {
+      "event_id": "PATRIARCHS_JOSEPH_01",
+      "event_name": "Joseph in Egypt",
+      "era": "Patriarchal",
+      "year_start": -1915,
+      "year_end": -1805,
+      "description": "Joseph is sold into slavery, rises to power in Egypt, and preserves his family."
+    },
+    {
+      "event_id": "EXODUS_MOSES_BIRTH_01",
+      "event_name": "Birth of Moses",
+      "era": "Exodus",
+      "year_start": -1526,
+      "year_end": -1526,
+      "description": "Moses is born during Israel's oppression in Egypt."
+    },
+    {
+      "event_id": "EXODUS_MOSES_CALL_01",
+      "event_name": "Call of Moses",
+      "era": "Exodus",
+      "year_start": -1446,
+      "year_end": -1446,
+      "description": "God calls Moses from the burning bush to deliver Israel from Egypt."
+    },
+    {
+      "event_id": "EXODUS_PLAGUES_01",
+      "event_name": "Plagues on Egypt",
+      "era": "Exodus",
+      "year_start": -1446,
+      "year_end": -1446,
+      "description": "God sends ten plagues on Egypt to compel Pharaoh to release Israel."
+    },
+    {
+      "event_id": "EXODUS_RED_SEA_01",
+      "event_name": "Crossing the Red Sea",
+      "era": "Exodus",
+      "year_start": -1446,
+      "year_end": -1446,
+      "description": "God parts the Red Sea and delivers Israel from Pharaoh's army."
+    },
+    {
+      "event_id": "EXODUS_SINAI_01",
+      "event_name": "Covenant at Sinai",
+      "era": "Exodus",
+      "year_start": -1446,
+      "year_end": -1445,
+      "description": "God gives the Law to Israel at Mount Sinai."
+    },
+    {
+      "event_id": "WILDERNESS_WANDERING_01",
+      "event_name": "Wilderness Wanderings",
+      "era": "Exodus",
+      "year_start": -1445,
+      "year_end": -1406,
+      "description": "Israel wanders in the wilderness for forty years due to unbelief."
+    },
+    {
+      "event_id": "CONQUEST_JOSHUA_01",
+      "event_name": "Conquest under Joshua",
+      "era": "Conquest",
+      "year_start": -1406,
+      "year_end": -1380,
+      "description": "Joshua leads Israel into Canaan and conquers key cities."
+    },
+    {
+      "event_id": "JUDGES_CYCLE_01",
+      "event_name": "Cycles of the Judges",
+      "era": "Judges",
+      "year_start": -1350,
+      "year_end": -1050,
+      "description": "Israel repeatedly falls into sin, oppression, and deliverance under various judges."
+    },
+    {
+      "event_id": "UNITED_SAUL_01",
+      "event_name": "Reign of Saul",
+      "era": "United Kingdom",
+      "year_start": -1050,
+      "year_end": -1010,
+      "description": "Saul becomes the first king of Israel."
+    },
+    {
+      "event_id": "UNITED_DAVID_01",
+      "event_name": "Reign of David",
+      "era": "United Kingdom",
+      "year_start": -1010,
+      "year_end": -970,
+      "description": "David rules Israel and receives God's covenant promise."
+    },
+    {
+      "event_id": "UNITED_SOLOMON_01",
+      "event_name": "Reign of Solomon",
+      "era": "United Kingdom",
+      "year_start": -970,
+      "year_end": -930,
+      "description": "Solomon builds the temple and rules during a time of great prosperity."
+    },
+    {
+      "event_id": "DIVIDED_KINGDOM_01",
+      "event_name": "Division of the Kingdom",
+      "era": "Divided Kingdom",
+      "year_start": -930,
+      "year_end": -930,
+      "description": "The kingdom splits into northern Israel and southern Judah."
+    },
+    {
+      "event_id": "DIVIDED_ELIJAH_01",
+      "event_name": "Ministry of Elijah",
+      "era": "Divided Kingdom",
+      "year_start": -870,
+      "year_end": -850,
+      "description": "Elijah confronts idolatry in the northern kingdom."
+    },
+    {
+      "event_id": "DIVIDED_ELISHA_01",
+      "event_name": "Ministry of Elisha",
+      "era": "Divided Kingdom",
+      "year_start": -850,
+      "year_end": -800,
+      "description": "Elisha continues Elijah's prophetic ministry with many miracles."
+    },
+    {
+      "event_id": "ASSYRIA_FALL_ISRAEL_01",
+      "event_name": "Fall of Israel to Assyria",
+      "era": "Divided Kingdom",
+      "year_start": -722,
+      "year_end": -722,
+      "description": "The northern kingdom of Israel falls to Assyria."
+    },
+    {
+      "event_id": "JUDAH_REFORMS_HEZEKIAH_01",
+      "event_name": "Reforms of Hezekiah",
+      "era": "Judah Alone",
+      "year_start": -715,
+      "year_end": -686,
+      "description": "Hezekiah leads spiritual reforms in Judah."
+    },
+    {
+      "event_id": "JUDAH_REFORMS_JOSIAH_01",
+      "event_name": "Reforms of Josiah",
+      "era": "Judah Alone",
+      "year_start": -640,
+      "year_end": -609,
+      "description": "Josiah restores temple worship and renews the covenant."
+    },
+    {
+      "event_id": "BABYLON_EXILE_01",
+      "event_name": "Babylonian Exile Begins",
+      "era": "Exile",
+      "year_start": -605,
+      "year_end": -597,
+      "description": "First deportations of Judah to Babylon."
+    },
+    {
+      "event_id": "BABYLON_FALL_JERUSALEM_01",
+      "event_name": "Fall of Jerusalem",
+      "era": "Exile",
+      "year_start": -586,
+      "year_end": -586,
+      "description": "Babylon destroys Jerusalem and the temple."
+    },
+    {
+      "event_id": "RETURN_DECREE_CYRUS_01",
+      "event_name": "Decree of Cyrus",
+      "era": "Post-Exile",
+      "year_start": -538,
+      "year_end": -538,
+      "description": "Cyrus of Persia allows Jews to return and rebuild the temple."
+    },
+    {
+      "event_id": "POSTEXILE_TEMPLE_REBUILT_01",
+      "event_name": "Second Temple Completed",
+      "era": "Post-Exile",
+      "year_start": -516,
+      "year_end": -516,
+      "description": "The rebuilt temple in Jerusalem is completed."
+    },
+    {
+      "event_id": "POSTEXILE_NEHEMIAH_WALLS_01",
+      "event_name": "Walls of Jerusalem Rebuilt",
+      "era": "Post-Exile",
+      "year_start": -445,
+      "year_end": -445,
+      "description": "Nehemiah leads the rebuilding of Jerusalem's walls."
+    },
+    {
+      "event_id": "GOSPEL_BIRTH_JESUS_01",
+      "event_name": "Birth of Jesus",
+      "era": "Gospel",
+      "year_start": 4,
+      "year_end": 4,
+      "description": "Jesus is born in Bethlehem."
+    },
+    {
+      "event_id": "GOSPEL_MINISTRY_JESUS_01",
+      "event_name": "Public Ministry of Jesus",
+      "era": "Gospel",
+      "year_start": 27,
+      "year_end": 30,
+      "description": "Jesus teaches, heals, and proclaims the kingdom of God."
+    },
+    {
+      "event_id": "GOSPEL_CRUCIFIXION_01",
+      "event_name": "Crucifixion of Jesus",
+      "era": "Gospel",
+      "year_start": 30,
+      "year_end": 30,
+      "description": "Jesus is crucified in Jerusalem."
+    },
+    {
+      "event_id": "GOSPEL_RESURRECTION_01",
+      "event_name": "Resurrection of Jesus",
+      "era": "Gospel",
+      "year_start": 30,
+      "year_end": 30,
+      "description": "Jesus rises from the dead on the third day."
+    },
+    {
+      "event_id": "CHURCH_PENTECOST_01",
+      "event_name": "Pentecost and Birth of the Church",
+      "era": "Early Church",
+      "year_start": 30,
+      "year_end": 30,
+      "description": "Holy Spirit descends on the disciples; the church is born."
+    },
+    {
+      "event_id": "CHURCH_PAUL_CONVERSION_01",
+      "event_name": "Conversion of Saul/Paul",
+      "era": "Early Church",
+      "year_start": 33,
+      "year_end": 33,
+      "description": "Saul encounters the risen Christ and becomes Paul the apostle."
+    },
+    {
+      "event_id": "CHURCH_PAUL_JOURNEYS_01",
+      "event_name": "Paul's Missionary Journeys",
+      "era": "Early Church",
+      "year_start": 47,
+      "year_end": 57,
+      "description": "Paul travels throughout the Roman world planting churches."
+    },
+    {
+      "event_id": "CHURCH_PAUL_IMPRISONMENT_01",
+      "event_name": "Paul's Imprisonments",
+      "era": "Early Church",
+      "year_start": 60,
+      "year_end": 62,
+      "description": "Paul is imprisoned and writes several epistles."
+    },
+    {
+      "event_id": "APOCALYPSE_REVELATION_01",
+      "event_name": "Visions of Revelation",
+      "era": "Early Church",
+      "year_start": 95,
+      "year_end": 95,
+      "description": "John receives apocalyptic visions on the island of Patmos."
+    }
+  ],
+  "book_placements": [
+    { "book": "Genesis", "start_event": "CREATION_01", "end_event": "PATRIARCHS_JOSEPH_01" },
+    { "book": "Exodus", "start_event": "EXODUS_MOSES_BIRTH_01", "end_event": "WILDERNESS_WANDERING_01" },
+    { "book": "Leviticus", "start_event": "EXODUS_SINAI_01", "end_event": "EXODUS_SINAI_01" },
+    { "book": "Numbers", "start_event": "WILDERNESS_WANDERING_01", "end_event": "WILDERNESS_WANDERING_01" },
+    { "book": "Deuteronomy", "start_event": "WILDERNESS_WANDERING_01", "end_event": "WILDERNESS_WANDERING_01" },
+    { "book": "Joshua", "start_event": "CONQUEST_JOSHUA_01", "end_event": "CONQUEST_JOSHUA_01" },
+    { "book": "Judges", "start_event": "JUDGES_CYCLE_01", "end_event": "JUDGES_CYCLE_01" },
+    { "book": "Ruth", "start_event": "JUDGES_CYCLE_01", "end_event": "JUDGES_CYCLE_01" },
+    { "book": "1 Samuel", "start_event": "UNITED_SAUL_01", "end_event": "UNITED_DAVID_01" },
+    { "book": "2 Samuel", "start_event": "UNITED_DAVID_01", "end_event": "UNITED_DAVID_01" },
+    { "book": "1 Kings", "start_event": "UNITED_SOLOMON_01", "end_event": "DIVIDED_KINGDOM_01" },
+    { "book": "2 Kings", "start_event": "DIVIDED_KINGDOM_01", "end_event": "BABYLON_FALL_JERUSALEM_01" },
+    { "book": "1 Chronicles", "start_event": "UNITED_DAVID_01", "end_event": "UNITED_SOLOMON_01" },
+    { "book": "2 Chronicles", "start_event": "UNITED_SOLOMON_01", "end_event": "BABYLON_FALL_JERUSALEM_01" },
+    { "book": "Ezra", "start_event": "RETURN_DECREE_CYRUS_01", "end_event": "POSTEXILE_TEMPLE_REBUILT_01" },
+    { "book": "Nehemiah", "start_event": "POSTEXILE_NEHEMIAH_WALLS_01", "end_event": "POSTEXILE_NEHEMIAH_WALLS_01" },
+    { "book": "Esther", "start_event": "Post-Exile", "end_event": "Post-Exile" },
+    { "book": "Job", "start_event": "PATRIARCHAL_JOB", "end_event": "PATRIARCHAL_JOB" },
+    { "book": "Psalms", "start_event": "UNITED_DAVID_01", "end_event": "POST-EXILE" },
+    { "book": "Proverbs", "start_event": "UNITED_SOLOMON_01", "end_event": "UNITED_SOLOMON_01" },
+    { "book": "Ecclesiastes", "start_event": "UNITED_SOLOMON_01", "end_event": "UNITED_SOLOMON_01" },
+    { "book": "Song of Solomon", "start_event": "UNITED_SOLOMON_01", "end_event": "UNITED_SOLOMON_01" },
+    { "book": "Isaiah", "start_event": "JUDAH_REFORMS_HEZEKIAH_01", "end_event": "BABYLON_EXILE_01" },
+    { "book": "Jeremiah", "start_event": "JUDAH_REFORMS_JOSIAH_01", "end_event": "BABYLON_FALL_JERUSALEM_01" },
+    { "book": "Lamentations", "start_event": "BABYLON_FALL_JERUSALEM_01", "end_event": "BABYLON_FALL_JERUSALEM_01" },
+    { "book": "Ezekiel", "start_event": "BABYLON_EXILE_01", "end_event": "BABYLON_EXILE_01" },
+    { "book": "Daniel", "start_event": "BABYLON_EXILE_01", "end_event": "POST-EXILE" },
+    { "book": "Hosea", "start_event": "DIVIDED_KINGDOM_01", "end_event": "ASSYRIA_FALL_ISRAEL_01" },
+    { "book": "Joel", "start_event": "Judah Alone", "end_event": "Judah Alone" },
+    { "book": "Amos", "start_event": "DIVIDED_KINGDOM_01", "end_event": "ASSYRIA_FALL_ISRAEL_01" },
+    { "book": "Obadiah", "start_event": "BABYLON_FALL_JERUSALEM_01", "end_event": "BABYLON_FALL_JERUSALEM_01" },
+    { "book": "Jonah", "start_event": "DIVIDED_KINGDOM_01", "end_event": "DIVIDED_KINGDOM_01" },
+    { "book": "Micah", "start_event": "DIVIDED_KINGDOM_01", "end_event": "ASSYRIA_FALL_ISRAEL_01" },
+    { "book": "Nahum", "start_event": "Judah Alone", "end_event": "Judah Alone" },
+    { "book": "Habakkuk", "start_event": "Judah Alone", "end_event": "BABYLON_EXILE_01" },
+    { "book": "Zephaniah", "start_event": "Judah Alone", "end_event": "Judah Alone" },
+    { "book": "Haggai", "start_event": "RETURN_DECREE_CYRUS_01", "end_event": "POSTEXILE_TEMPLE_REBUILT_01" },
+    { "book": "Zechariah", "start_event": "RETURN_DECREE_CYRUS_01", "end_event": "POSTEXILE_TEMPLE_REBUILT_01" },
+    { "book": "Malachi", "start_event": "POST-EXILE", "end_event": "POST-EXILE" },
+    { "book": "Matthew", "start_event": "GOSPEL_BIRTH_JESUS_01", "end_event": "GOSPEL_RESURRECTION_01" },
+    { "book": "Mark", "start_event": "GOSPEL_MINISTRY_JESUS_01", "end_event": "GOSPEL_RESURRECTION_01" },
+    { "book": "Luke", "start_event": "GOSPEL_BIRTH_JESUS_01", "end_event": "GOSPEL_RESURRECTION_01" },
+    { "book": "John", "start_event": "GOSPEL_MINISTRY_JESUS_01", "end_event": "GOSPEL_RESURRECTION_01" },
+    { "book": "Acts", "start_event": "CHURCH_PENTECOST_01", "end_event": "CHURCH_PAUL_IMPRISONMENT_01" },
+    { "book": "Romans", "start_event": "CHURCH_PAUL_JOURNEYS_01", "end_event": "CHURCH_PAUL_JOURNEYS_01" },
+    { "book": "1 Corinthians", "start_event": "CHURCH_PAUL_JOURNEYS_01", "end_event": "CHURCH_PAUL_JOURNEYS_01" },
+    { "book": "2 Corinthians", "start_event": "CHURCH_PAUL_JOURNEYS_01", "end_event": "CHURCH_PAUL_JOURNEYS_01" },
+    { "book": "Galatians", "start_event": "CHURCH_PAUL_JOURNEYS_01", "end_event": "CHURCH_PAUL_JOURNEYS_01" },
+    { "book": "Ephesians", "start_event": "CHURCH_PAUL_IMPRISONMENT_01", "end_event": "CHURCH_PAUL_IMPRISONMENT_01" },
+    { "book": "Philippians", "start_event": "CHURCH_PAUL_IMPRISONMENT_01", "end_event": "CHURCH_PAUL_IMPRISONMENT_01" },
+    { "book": "Colossians", "start_event": "CHURCH_PAUL_IMPRISONMENT_01", "end_event": "CHURCH_PAUL_IMPRISONMENT_01" },
+    { "book": "1 Thessalonians", "start_event": "CHURCH_PAUL_JOURNEYS_01", "end_event": "CHURCH_PAUL_JOURNEYS_01" },
+    { "book": "2 Thessalonians", "start_event": "CHURCH_PAUL_JOURNEYS_01", "end_event": "CHURCH_PAUL_JOURNEYS_01" },
+    { "book": "1 Timothy", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "2 Timothy", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "Titus", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "Philemon", "start_event": "CHURCH_PAUL_IMPRISONMENT_01", "end_event": "CHURCH_PAUL_IMPRISONMENT_01" },
+    { "book": "Hebrews", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "James", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "1 Peter", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "2 Peter", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "1 John", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "2 John", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "3 John", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "Jude", "start_event": "Early Church", "end_event": "Early Church" },
+    { "book": "Revelation", "start_event": "APOCALYPSE_REVELATION_01", "end_event": "APOCALYPSE_REVELATION_01" }
+  ],
+  "insertion_rules": [
+    {
+      "insert": "Job",
+      "position": "before",
+      "anchor": "Genesis 12:1",
+      "event_id": "PATRIARCHAL_JOB",
+      "era": "Patriarchal",
+      "timestamp_year": -2100
+    },
+    {
+      "insert": "Psalm 3",
+      "position": "during",
+      "anchor": "2 Samuel 15:13-37",
+      "event_id": "UNITED_DAVID_01",
+      "era": "United Kingdom",
+      "timestamp_year": -990
+    },
+    {
+      "insert": "Psalm 18",
+      "position": "parallel",
+      "anchor": "2 Samuel 22:1-51",
+      "event_id": "UNITED_DAVID_01",
+      "era": "United Kingdom",
+      "timestamp_year": -990
+    },
+    {
+      "insert": "Psalm 51",
+      "position": "after",
+      "anchor": "2 Samuel 12:1-25",
+      "event_id": "UNITED_DAVID_01",
+      "era": "United Kingdom",
+      "timestamp_year": -990
+    },
+    {
+      "insert": "Psalm 90",
+      "position": "within",
+      "anchor": "Numbers 14:1-45",
+      "event_id": "WILDERNESS_WANDERING_01",
+      "era": "Exodus",
+      "timestamp_year": -1435
+    },
+    {
+      "insert": "Lamentations",
+      "position": "after",
+      "anchor": "2 Kings 25:21",
+      "event_id": "BABYLON_FALL_JERUSALEM_01",
+      "era": "Exile",
+      "timestamp_year": -586
+    },
+    {
+      "insert": "Daniel",
+      "position": "during",
+      "anchor": "2 Kings 24:10-17",
+      "event_id": "BABYLON_EXILE_01",
+      "era": "Exile",
+      "timestamp_year": -605
+    },
+    {
+      "insert": "Haggai",
+      "position": "during",
+      "anchor": "Ezra 5:1-2",
+      "event_id": "POSTEXILE_TEMPLE_REBUILT_01",
+      "era": "Post-Exile",
+      "timestamp_year": -520
+    },
+    {
+      "insert": "Zechariah",
+      "position": "during",
+      "anchor": "Ezra 5:1-2",
+      "event_id": "POSTEXILE_TEMPLE_REBUILT_01",
+      "era": "Post-Exile",
+      "timestamp_year": -520
+    }
+  ],
+  "gospel_harmony": [
+    {
+      "pericope_id": "GOSPEL_BIRTH_01",
+      "event_id": "GOSPEL_BIRTH_JESUS_01",
+      "era": "Gospel",
+      "timestamp_year": 4,
+      "references": [
+        "Matthew 1:18-25",
+        "Luke 1:26-38",
+        "Luke 2:1-20"
+      ]
+    },
+    {
+      "pericope_id": "GOSPEL_BAPTISM_01",
+      "event_id": "GOSPEL_MINISTRY_JESUS_01",
+      "era": "Gospel",
+      "timestamp_year": 27,
+      "references": [
+        "Matthew 3:13-17",
+        "Mark 1:9-11",
+        "Luke 3:21-22"
+      ]
+    },
+    {
+      "pericope_id": "GOSPEL_TEMPTATION_01",
+      "event_id": "GOSPEL_MINISTRY_JESUS_01",
+      "era": "Gospel",
+      "timestamp_year": 27,
+      "references": [
+        "Matthew 4:1-11",
+        "Mark 1:12-13",
+        "Luke 4:1-13"
+      ]
+    },
+    {
+      "pericope_id": "GOSPEL_SERMON_MOUNT_01",
+      "event_id": "GOSPEL_MINISTRY_JESUS_01",
+      "era": "Gospel",
+      "timestamp_year": 28,
+      "references": [
+        "Matthew 5:1-48",
+        "Matthew 6:1-34",
+        "Matthew 7:1-29"
+      ]
+    },
+    {
+      "pericope_id": "GOSPEL_FEEDING_5000_01",
+      "event_id": "GOSPEL_MINISTRY_JESUS_01",
+      "era": "Gospel",
+      "timestamp_year": 29,
+      "references": [
+        "Matthew 14:13-21",
+        "Mark 6:30-44",
+        "Luke 9:10-17",
+        "John 6:1-14"
+      ]
+    },
+    {
+      "pericope_id": "GOSPEL_TRANSFIGURATION_01",
+      "event_id": "GOSPEL_MINISTRY_JESUS_01",
+      "era": "Gospel",
+      "timestamp_year": 29,
+      "references": [
+        "Matthew 17:1-13",
+        "Mark 9:2-13",
+        "Luke 9:28-36"
+      ]
+    },
+    {
+      "pericope_id": "GOSPEL_TRIUMPHAL_ENTRY_01",
+      "event_id": "GOSPEL_CRUCIFIXION_01",
+      "era": "Gospel",
+      "timestamp_year": 30,
+      "references": [
+        "Matthew 21:1-11",
+        "Mark 11:1-11",
+        "Luke 19:28-44",
+        "John 12:12-19"
+      ]
+    },
+    {
+      "pericope_id": "GOSPEL_LAST_SUPPER_01",
+      "event_id": "GOSPEL_CRUCIFIXION_01",
+      "era": "Gospel",
+      "timestamp_year": 30,
+      "references": [
+        "Matthew 26:17-30",
+        "Mark 14:12-26",
+        "Luke 22:7-23",
+        "John 13:1-30"
+      ]
+    },
+    {
+      "pericope_id": "GOSPEL_CRUCIFIXION_01",
+      "event_id": "GOSPEL_CRUCIFIXION_01",
+      "era": "Gospel",
+      "timestamp_year": 30,
+      "references": [
+        "Matthew 27:27-56",
+        "Mark 15:16-41",
+        "Luke 23:26-49",
+        "John 19:16-37"
+      ]
+    },
+    {
+      "pericope_id": "GOSPEL_RESURRECTION_01",
+      "event_id": "GOSPEL_RESURRECTION_01",
+      "era": "Gospel",
+      "timestamp_year": 30,
+      "references": [
+        "Matthew 28:1-10",
+        "Mark 16:1-8",
+        "Luke 24:1-12",
+        "John 20:1-18"
+      ]
+    }
+  ],
+  "acts_epistles_timeline": [
+    {
+      "event_id": "CHURCH_PENTECOST_01",
+      "era": "Early Church",
+      "year": 30,
+      "acts_references": ["Acts 2:1-47"],
+      "epistles": []
+    },
+    {
+      "event_id": "CHURCH_PAUL_CONVERSION_01",
+      "era": "Early Church",
+      "year": 33,
+      "acts_references": ["Acts 9:1-31"],
+      "epistles": []
+    },
+    {
+      "event_id": "CHURCH_PAUL_FIRST_JOURNEY_01",
+      "era": "Early Church",
+      "year": 47,
+      "acts_references": ["Acts 13:1-52", "Acts 14:1-28"],
+      "epistles": ["Galatians"]
+    },
+    {
+      "event_id": "CHURCH_JERUSALEM_COUNCIL_01",
+      "era": "Early Church",
+      "year": 49,
+      "acts_references": ["Acts 15:1-35"],
+      "epistles": []
+    },
+    {
+      "event_id": "CHURCH_PAUL_SECOND_JOURNEY_01",
+      "era": "Early Church",
+      "year": 50,
+      "acts_references": ["Acts 15:36-41", "Acts 16:1-40", "Acts 17:1-34", "Acts 18:1-22"],
+      "epistles": ["1 Thessalonians", "2 Thessalonians"]
+    },
+    {
+      "event_id": "CHURCH_PAUL_THIRD_JOURNEY_01",
+      "era": "Early Church",
+      "year": 54,
+      "acts_references": ["Acts 18:23-28", "Acts 19:1-41", "Acts 20:1-38"],
+      "epistles": ["1 Corinthians", "2 Corinthians", "Romans"]
+    },
+    {
+      "event_id": "CHURCH_PAUL_JERUSALEM_ARREST_01",
+      "era": "Early Church",
+      "year": 57,
+      "acts_references": ["Acts 21:1-40", "Acts 22:1-30", "Acts 23:1-35"],
+      "epistles": []
+    },
+    {
+      "event_id": "CHURCH_PAUL_CAESAREA_01",
+      "era": "Early Church",
+      "year": 58,
+      "acts_references": ["Acts 24:1-27", "Acts 25:1-27", "Acts 26:1-32"],
+      "epistles": []
+    },
+    {
+      "event_id": "CHURCH_PAUL_ROMAN_IMPRISONMENT_01",
+      "era": "Early Church",
+      "year": 60,
+      "acts_references": ["Acts 27:1-44", "Acts 28:1-31"],
+      "epistles": ["Ephesians", "Philippians", "Colossians", "Philemon"]
+    },
+    {
+      "event_id": "CHURCH_PASTORAL_EPISTLES_01",
+      "era": "Early Church",
+      "year": 64,
+      "acts_references": [],
+      "epistles": ["1 Timothy", "Titus"]
+    },
+    {
+      "event_id": "CHURCH_FINAL_PAUL_01",
+      "era": "Early Church",
+      "year": 67,
+      "acts_references": [],
+      "epistles": ["2 Timothy"]
+    },
+    {
+      "event_id": "CHURCH_GENERAL_EPISTLES_01",
+      "era": "Early Church",
+      "year": 60,
+      "acts_references": [],
+      "epistles": ["Hebrews", "James", "1 Peter", "2 Peter", "1 John", "2 John", "3 John", "Jude"]
+    },
+    {
+      "event_id": "APOCALYPSE_REVELATION_01",
+      "era": "Early Church",
+      "year": 95,
+      "acts_references": [],
+      "epistles": ["Revelation"]
+    }
+  ]
+}

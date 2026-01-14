@@ -5,6 +5,7 @@ export interface NavigationState {
   translation: string;
   book: string;
   chapter: number;
+  isChronologicalMode?: boolean;
 }
 
 // Available translations (will be populated from packs later)
@@ -30,6 +31,9 @@ function createNavigationStore() {
     },
     setChapter: (chapter: number) => {
       update(state => ({ ...state, chapter }));
+    },
+    setChronologicalMode: (isChronologicalMode: boolean) => {
+      update(state => ({ ...state, isChronologicalMode }));
     },
     navigateTo: (translation: string, book: string, chapter: number) => {
       set({ translation, book, chapter });

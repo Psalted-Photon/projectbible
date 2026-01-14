@@ -77,13 +77,9 @@
 
   .main-content {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
     box-sizing: border-box;
     overflow: auto;
-    transition: margin 0.3s ease;
+    transition: left 0.3s ease, right 0.3s ease, top 0.3s ease, bottom 0.3s ease;
     z-index: 1;
   }
 </style>

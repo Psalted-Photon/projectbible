@@ -32,6 +32,30 @@ export interface ReadingPlanConfig {
   
   /** How to order the readings */
   ordering: 'canonical' | 'shuffled' | 'chronological';
+  
+  /** Add one Psalm per day */
+  dailyPsalm?: boolean;
+  
+  /** Randomize Psalm order (shuffled round-robin) */
+  randomizePsalms?: boolean;
+  
+  /** Add one Proverb per day */
+  dailyProverb?: boolean;
+  
+  /** Randomize Proverb order (shuffled round-robin) */
+  randomizeProverbs?: boolean;
+  
+  /** Reverse the final plan order */
+  reverseOrder?: boolean;
+  
+  /** Show overall statistics */
+  showOverallStats?: boolean;
+  
+  /** Show daily statistics */
+  showDailyStats?: boolean;
+  
+  /** Translation pack ID for word count calculations */
+  translationPackId?: string;
 }
 
 export interface BookSelection {
@@ -61,6 +85,18 @@ export interface ReadingPlan {
   
   /** Daily readings */
   days: DayReading[];
+  
+  /** Total verses in plan */
+  totalVerses?: number;
+  
+  /** Total words in plan (if translation specified) */
+  totalWords?: number;
+  
+  /** Shuffled Psalm chapter sequence (for randomized daily Psalms) */
+  psalmSequence?: number[];
+  
+  /** Shuffled Proverb chapter sequence (for randomized daily Proverbs) */
+  proverbSequence?: number[];
 }
 
 export interface DayReading {
@@ -72,6 +108,15 @@ export interface DayReading {
   
   /** Chapters to read on this day */
   chapters: ChapterRef[];
+  
+  /** Total verses in this day's reading */
+  verseCount?: number;
+  
+  /** Total words in this day's reading (if translation pack specified) */
+  wordCount?: number;
+  
+  /** Estimated reading time in minutes (based on 200 words/min) */
+  estimatedMinutes?: number;
 }
 
 export interface ChapterRef {
@@ -98,8 +143,8 @@ export const BIBLE_BOOKS: BookInfo[] = [
   { name: '2 Chronicles', testament: 'OT', chapters: 36, chronologicalOrder: 14 },
   { name: 'Ezra', testament: 'OT', chapters: 10, chronologicalOrder: 15 },
   { name: 'Nehemiah', testament: 'OT', chapters: 13, chronologicalOrder: 16 },
-  { name: 'Esther', testament: 'OT', chapters: 10, chronologicalOrder: 17 },
-  { name: 'Job', testament: 'OT', chapters: 42, chronologicalOrder: 18 },
+  { name: 'Esther', testament: 'OT', chapters: 10, chronologicalOrder: 35 },
+  { name: 'Job', testament: 'OT', chapters: 42, chronologicalOrder: 2 }, // Patriarchal era (post-Genesis 11)
   { name: 'Psalms', testament: 'OT', chapters: 150, chronologicalOrder: 19 },
   { name: 'Proverbs', testament: 'OT', chapters: 31, chronologicalOrder: 20 },
   { name: 'Ecclesiastes', testament: 'OT', chapters: 12, chronologicalOrder: 21 },
@@ -128,28 +173,28 @@ export const BIBLE_BOOKS: BookInfo[] = [
   { name: 'Luke', testament: 'NT', chapters: 24, chronologicalOrder: 42 },
   { name: 'John', testament: 'NT', chapters: 21, chronologicalOrder: 43 },
   { name: 'Acts', testament: 'NT', chapters: 28, chronologicalOrder: 44 },
-  { name: 'Romans', testament: 'NT', chapters: 16, chronologicalOrder: 45 },
-  { name: '1 Corinthians', testament: 'NT', chapters: 16, chronologicalOrder: 46 },
-  { name: '2 Corinthians', testament: 'NT', chapters: 13, chronologicalOrder: 47 },
-  { name: 'Galatians', testament: 'NT', chapters: 6, chronologicalOrder: 48 },
-  { name: 'Ephesians', testament: 'NT', chapters: 6, chronologicalOrder: 49 },
-  { name: 'Philippians', testament: 'NT', chapters: 4, chronologicalOrder: 50 },
-  { name: 'Colossians', testament: 'NT', chapters: 4, chronologicalOrder: 51 },
-  { name: '1 Thessalonians', testament: 'NT', chapters: 5, chronologicalOrder: 52 },
-  { name: '2 Thessalonians', testament: 'NT', chapters: 3, chronologicalOrder: 53 },
-  { name: '1 Timothy', testament: 'NT', chapters: 6, chronologicalOrder: 54 },
-  { name: '2 Timothy', testament: 'NT', chapters: 4, chronologicalOrder: 55 },
-  { name: 'Titus', testament: 'NT', chapters: 3, chronologicalOrder: 56 },
-  { name: 'Philemon', testament: 'NT', chapters: 1, chronologicalOrder: 57 },
-  { name: 'Hebrews', testament: 'NT', chapters: 13, chronologicalOrder: 58 },
-  { name: 'James', testament: 'NT', chapters: 5, chronologicalOrder: 59 },
-  { name: '1 Peter', testament: 'NT', chapters: 5, chronologicalOrder: 60 },
-  { name: '2 Peter', testament: 'NT', chapters: 3, chronologicalOrder: 61 },
-  { name: '1 John', testament: 'NT', chapters: 5, chronologicalOrder: 62 },
-  { name: '2 John', testament: 'NT', chapters: 1, chronologicalOrder: 63 },
-  { name: '3 John', testament: 'NT', chapters: 1, chronologicalOrder: 64 },
-  { name: 'Jude', testament: 'NT', chapters: 1, chronologicalOrder: 65 },
-  { name: 'Revelation', testament: 'NT', chapters: 22, chronologicalOrder: 66 }
+  { name: 'James', testament: 'NT', chapters: 5, chronologicalOrder: 45 }, // ~49 AD
+  { name: 'Galatians', testament: 'NT', chapters: 6, chronologicalOrder: 46 }, // ~48-49 AD
+  { name: '1 Thessalonians', testament: 'NT', chapters: 5, chronologicalOrder: 47 }, // ~50-51 AD
+  { name: '2 Thessalonians', testament: 'NT', chapters: 3, chronologicalOrder: 48 }, // ~51-52 AD
+  { name: '1 Corinthians', testament: 'NT', chapters: 16, chronologicalOrder: 49 }, // ~54-55 AD
+  { name: '2 Corinthians', testament: 'NT', chapters: 13, chronologicalOrder: 50 }, // ~55-56 AD
+  { name: 'Romans', testament: 'NT', chapters: 16, chronologicalOrder: 51 }, // ~57 AD
+  { name: 'Ephesians', testament: 'NT', chapters: 6, chronologicalOrder: 52 }, // ~60-62 AD (Prison)
+  { name: 'Philippians', testament: 'NT', chapters: 4, chronologicalOrder: 53 }, // ~60-62 AD (Prison)
+  { name: 'Colossians', testament: 'NT', chapters: 4, chronologicalOrder: 54 }, // ~60-62 AD (Prison)
+  { name: 'Philemon', testament: 'NT', chapters: 1, chronologicalOrder: 55 }, // ~60-62 AD (Prison)
+  { name: '1 Timothy', testament: 'NT', chapters: 6, chronologicalOrder: 56 }, // ~62-64 AD
+  { name: 'Titus', testament: 'NT', chapters: 3, chronologicalOrder: 57 }, // ~62-64 AD
+  { name: '2 Timothy', testament: 'NT', chapters: 4, chronologicalOrder: 58 }, // ~66-67 AD
+  { name: 'Hebrews', testament: 'NT', chapters: 13, chronologicalOrder: 59 }, // ~60s AD
+  { name: '1 Peter', testament: 'NT', chapters: 5, chronologicalOrder: 60 }, // ~62-64 AD
+  { name: '2 Peter', testament: 'NT', chapters: 3, chronologicalOrder: 61 }, // ~64-68 AD
+  { name: 'Jude', testament: 'NT', chapters: 1, chronologicalOrder: 62 }, // ~65-80 AD
+  { name: '1 John', testament: 'NT', chapters: 5, chronologicalOrder: 63 }, // ~85-95 AD
+  { name: '2 John', testament: 'NT', chapters: 1, chronologicalOrder: 64 }, // ~85-95 AD
+  { name: '3 John', testament: 'NT', chapters: 1, chronologicalOrder: 65 }, // ~85-95 AD
+  { name: 'Revelation', testament: 'NT', chapters: 22, chronologicalOrder: 66 } // ~95 AD
 ];
 
 /**
@@ -171,14 +216,31 @@ export function generateReadingPlan(config: ReadingPlanConfig): ReadingPlan {
   }
   
   // Step 3: Distribute chapters evenly across days
-  const days = distributeChapters(chapters, readingDays);
+  let days = distributeChapters(chapters, readingDays);
+  
+  // Step 4: Add daily Psalms/Proverbs if configured
+  const { days: updatedDays, psalmSeq, proverbSeq } = addDailyPsalmsProverbs(days, config);
+  days = updatedDays;
+  
+  // Step 5: Reverse order if configured
+  if (config.reverseOrder) {
+    days = days.reverse().map((day, index) => ({
+      ...day,
+      dayNumber: index + 1 // Renumber days after reversal
+    }));
+  }
+  
+  // Step 6: Calculate total chapters (including added Psalms/Proverbs)
+  const totalChapters = days.reduce((sum, day) => sum + day.chapters.length, 0);
   
   return {
     config,
     totalDays: days.length,
-    totalChapters: chapters.length,
-    avgChaptersPerDay: chapters.length / days.length,
-    days
+    totalChapters,
+    avgChaptersPerDay: totalChapters / days.length,
+    days,
+    psalmSequence: psalmSeq,
+    proverbSequence: proverbSeq
   };
 }
 
@@ -307,6 +369,71 @@ function distributeChapters(chapters: ChapterRef[], days: Date[]): DayReading[] 
   }
   
   return result;
+}
+
+/**
+ * Create a shuffled array for round-robin cycling
+ */
+function createShuffledSequence(count: number): number[] {
+  const sequence = Array.from({ length: count }, (_, i) => i + 1);
+  // Fisher-Yates shuffle
+  for (let i = sequence.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [sequence[i], sequence[j]] = [sequence[j], sequence[i]];
+  }
+  return sequence;
+}
+
+/**
+ * Add daily Psalm/Proverb chapters to the reading plan days
+ */
+function addDailyPsalmsProverbs(
+  days: DayReading[], 
+  config: ReadingPlanConfig
+): { days: DayReading[], psalmSeq?: number[], proverbSeq?: number[] } {
+  let psalmSequence: number[] | undefined;
+  let proverbSequence: number[] | undefined;
+  
+  // Generate sequences if needed
+  if (config.dailyPsalm) {
+    psalmSequence = config.randomizePsalms 
+      ? createShuffledSequence(150) 
+      : Array.from({ length: 150 }, (_, i) => i + 1);
+  }
+  
+  if (config.dailyProverb) {
+    proverbSequence = config.randomizeProverbs
+      ? createShuffledSequence(31)
+      : Array.from({ length: 31 }, (_, i) => i + 1);
+  }
+  
+  // Add Psalms/Proverbs to each day
+  const updatedDays = days.map((day, index) => {
+    const newChapters = [...day.chapters];
+    
+    if (config.dailyPsalm && psalmSequence) {
+      const psalmIndex = index % psalmSequence.length;
+      const psalmChapter = psalmSequence[psalmIndex];
+      newChapters.push({ book: 'Psalms', chapter: psalmChapter });
+    }
+    
+    if (config.dailyProverb && proverbSequence) {
+      const proverbIndex = index % proverbSequence.length;
+      const proverbChapter = proverbSequence[proverbIndex];
+      newChapters.push({ book: 'Proverbs', chapter: proverbChapter });
+    }
+    
+    return {
+      ...day,
+      chapters: newChapters
+    };
+  });
+  
+  return { 
+    days: updatedDays, 
+    psalmSeq: psalmSequence, 
+    proverbSeq: proverbSequence 
+  };
 }
 
 /**

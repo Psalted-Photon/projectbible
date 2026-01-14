@@ -8,10 +8,13 @@
   import { onMount, onDestroy } from "svelte";
 
   export let windowId: string | undefined = undefined;
+  export let visible: boolean = true;
 
   let translationDropdownOpen = false;
   let referenceDropdownOpen = false;
   let expandedBooks = new Set<string>();
+  let isChronologicalMode = false;
+  let pendingChronologicalMode = false;
 
   // Use per-window state if windowId provided, otherwise use global state
   $: windowState = windowId ? $windowStore.find(w => w.id === windowId) : null;
@@ -19,6 +22,17 @@
   $: currentBook = windowState?.contentState?.book ?? $navigationStore.book;
   $: currentChapter = windowState?.contentState?.chapter ?? $navigationStore.chapter;
   $: currentReference = `${currentBook} ${currentChapter}`;
+  
+  // Initialize from store but don't auto-sync
+  $: if ($navigationStore.isChronologicalMode !== undefined && isChronologicalMode === false && pendingChronologicalMode === false) {
+    isChronologicalMode = $navigationStore.isChronologicalMode;
+    pendingChronologicalMode = $navigationStore.isChronologicalMode;
+  }
+
+  function updateChronologicalMode() {
+    isChronologicalMode = pendingChronologicalMode;
+    navigationStore.setChronologicalMode(pendingChronologicalMode);
+  }
 
   function toggleTranslationDropdown(event: MouseEvent) {
     event.stopPropagation();
@@ -86,7 +100,7 @@
   });
 </script>
 
-<div class="navigation-bar">
+<div class="navigation-bar" class:visible>
   <!-- Translation Dropdown -->
   <div class="nav-dropdown">
     <button
@@ -112,6 +126,15 @@
         {/each}
       </div>
     {/if}
+  </div>
+
+  <!-- Chronological Mode Checkbox -->
+  <div class="nav-checkbox">
+    <label>
+      <input type="checkbox" bind:checked={pendingChronologicalMode} />
+      Chronological?
+    </label>
+    <button class="update-btn" on:click={updateChronologicalMode}>Update</button>
   </div>
 
   <!-- Reference Dropdown (Tree Structure) -->
@@ -170,14 +193,63 @@
     padding: 12px 20px;
     background: #2a2a2a;
     border-bottom: 1px solid #3a3a3a;
-    position: relative;
+    position: sticky;
+    top: 0;
     z-index: 50;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease-in-out;
+  }
+
+  .navigation-bar.visible {
+    transform: translateY(0);
   }
 
   .nav-dropdown {
     position: relative;
     flex: 1;
     max-width: 280px;
+  }
+
+  .nav-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .nav-checkbox label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    margin: 0;
+  }
+
+  .nav-checkbox input[type="checkbox"] {
+    cursor: pointer;
+  }
+
+  .update-btn {
+    padding: 4px 12px;
+    background: #667eea;
+    border: 1px solid #667eea;
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+
+  .update-btn:hover {
+    background: #5568d3;
+    border-color: #5568d3;
   }
 
   .nav-button {

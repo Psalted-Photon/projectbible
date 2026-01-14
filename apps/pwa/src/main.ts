@@ -1,5 +1,6 @@
 import { IndexedDBTextStore, IndexedDBPackManager, IndexedDBSearchIndex, IndexedDBCrossReferenceStore, importPackFromSQLite, getSettings, updateSettings, getDailyDriverFor, getPrimaryDailyDriver, type UserSettings, openDB } from './adapters/index.js';
 import { clearAllData, clearPacksOnly, getDatabaseStats, removePack } from './adapters/db-manager.js';
+import { generateReadingPlan, BIBLE_BOOKS as BIBLE_BOOKS_INFO, type ReadingPlanConfig, type ReadingPlan } from '@projectbible/core';
 import L from 'leaflet';
 
 const root = document.getElementById('app');
@@ -17,6 +18,169 @@ const selectedWords = new Set<string>(); // Store as "book:chapter:verse:positio
 let longPressTimer: number | null = null;
 const LONG_PRESS_DURATION = 900; // 0.9 seconds
 
+// State management for reading plans
+let currentReadingPlan: ReadingPlan | null = null;
+let currentPlanId: string | null = null;
+
+// Storage keys for reading plans
+const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan';
+const STORAGE_PLAN_HISTORY = 'projectbible_reading_plan_history';
+
+// Chronological ordering state
+let chronologicalData: any = null;
+let isChronologicalMode = false;
+let currentChronoIndex = 0;
+
+// Load chronological pack
+async function loadChronologicalPack() {
+  try {
+    const response = await fetch('/packs/chronological-v1.json');
+    if (response.ok) {
+      chronologicalData = await response.json();
+      console.log(`Loaded chronological pack: ${chronologicalData.verse_count} verses`);
+    }
+  } catch (e) {
+    console.warn('Chronological pack not available:', e);
+  }
+}
+
+// Load active plan from storage
+function loadActivePlan() {
+  try {
+    const stored = localStorage.getItem(STORAGE_ACTIVE_PLAN);
+    if (stored) {
+      const data = JSON.parse(stored);
+      currentReadingPlan = data.plan;
+      currentPlanId = data.id;
+      // Convert date strings back to Date objects
+      if (currentReadingPlan) {
+        currentReadingPlan.config.startDate = new Date(currentReadingPlan.config.startDate);
+        currentReadingPlan.config.endDate = new Date(currentReadingPlan.config.endDate);
+        currentReadingPlan.days.forEach(day => {
+          day.date = new Date(day.date);
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Error loading active plan:', e);
+  }
+}
+
+// Save active plan to storage
+function saveActivePlan() {
+  if (currentReadingPlan && currentPlanId) {
+    localStorage.setItem(STORAGE_ACTIVE_PLAN, JSON.stringify({
+      id: currentPlanId,
+      plan: currentReadingPlan
+    }));
+  }
+}
+
+// Save plan to history
+function savePlanToHistory(plan: ReadingPlan, planId: string) {
+  try {
+    const historyStr = localStorage.getItem(STORAGE_PLAN_HISTORY);
+    const history = historyStr ? JSON.parse(historyStr) : [];
+    history.unshift({
+      id: planId,
+      plan,
+      createdAt: new Date().toISOString(),
+      completedAt: null
+    });
+    // Keep only last 10 plans
+    if (history.length > 10) {
+      history.splice(10);
+    }
+    localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(history));
+  } catch (e) {
+    console.error('Error saving plan to history:', e);
+  }
+}
+
+// Get plan history
+function getPlanHistory() {
+  try {
+    const historyStr = localStorage.getItem(STORAGE_PLAN_HISTORY);
+    return historyStr ? JSON.parse(historyStr) : [];
+  } catch (e) {
+    console.error('Error loading plan history:', e);
+    return [];
+  }
+}
+
+// Delete current plan
+function deleteCurrentPlan() {
+  if (confirm('Are you sure you want to delete the current reading plan?')) {
+    localStorage.removeItem(STORAGE_ACTIVE_PLAN);
+    currentReadingPlan = null;
+    currentPlanId = null;
+    
+    // Update UI
+    const container = document.getElementById('activePlanContent')!;
+    container.innerHTML = '<p style="color: #666;">No active plan. Create one to get started!</p>';
+  }
+}
+
+// Delete plan from history
+function deletePlanFromHistory(planId: string) {
+  if (confirm('Are you sure you want to delete this plan from history?')) {
+    try {
+      const history = getPlanHistory();
+      const updated = history.filter((p: any) => p.id !== planId);
+      localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(updated));
+      renderPlanHistory();
+    } catch (e) {
+      console.error('Error deleting plan from history:', e);
+    }
+  }
+}
+
+// Render plan history
+function renderPlanHistory() {
+  const container = document.getElementById('planHistoryContent')!;
+  const history = getPlanHistory();
+  
+  if (history.length === 0) {
+    container.innerHTML = '<p style="opacity: 0.7;">No past plans yet.</p>';
+    return;
+  }
+  
+  let html = '<div style="max-height: 500px; overflow-y: auto;">';
+  
+  history.forEach((item: any) => {
+    const plan = item.plan as ReadingPlan;
+    const createdDate = new Date(item.createdAt).toLocaleDateString();
+    const startDate = new Date(plan.config.startDate).toLocaleDateString();
+    const endDate = new Date(plan.config.endDate).toLocaleDateString();
+    
+    html += `
+      <div class="content-section" style="padding: 15px; margin-bottom: 15px; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+          <div>
+            <div style="font-weight: 600; margin-bottom: 5px;">
+              ${plan.config.ordering.charAt(0).toUpperCase() + plan.config.ordering.slice(1)} Plan
+            </div>
+            <div style="font-size: 13px; opacity: 0.8;">Created ${createdDate}</div>
+          </div>
+          <button onclick="deletePlanFromHistory('${item.id}')" style="padding: 6px 12px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Delete</button>
+        </div>
+        <div style="font-size: 13px; opacity: 0.8; margin-bottom: 5px;">
+          <strong>${plan.totalDays}</strong> days • <strong>${plan.totalChapters}</strong> chapters
+        </div>
+        <div style="font-size: 13px; opacity: 0.8;">
+          ${startDate} → ${endDate}
+        </div>
+      </div>
+    `;
+  });
+  
+  html += '</div>';
+  container.innerHTML = html;
+  
+  // Make delete function available globally
+  (window as any).deletePlanFromHistory = deletePlanFromHistory;
+}
+
 // Bible books list
 const BIBLE_BOOKS = [
   'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
@@ -30,25 +194,207 @@ const BIBLE_BOOKS = [
   'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude', 'Revelation'
 ];
 
+// Derived book lists for UI helpers
+const OT_BOOKS = BIBLE_BOOKS_INFO.filter(b => b.testament === 'OT').map(b => b.name);
+const NT_BOOKS = BIBLE_BOOKS_INFO.filter(b => b.testament === 'NT').map(b => b.name);
+
 // Simple test UI
 root.innerHTML = `
   <div class="main-container" style="max-width: 800px; margin: 40px auto; padding: 20px; font-family: system-ui;">
     <h1 class="main-title" style="border-bottom: 3px solid #2c5f8d; padding-bottom: 10px;">ProjectBible PWA - Adapter Test</h1>
     
     <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
-      <h2>Import Pack</h2>
-      <div style="margin-bottom: 15px;">
-        <h3 style="font-size: 14px; margin: 10px 0;">📱 Download from URL (mobile-friendly)</h3>
-        <input type="text" id="packUrl" placeholder="https://example.com/greek.sqlite" 
-               style="width: 70%; padding: 8px; margin-right: 10px;" />
-        <button id="downloadBtn" style="padding: 8px 16px;">Download & Import</button>
+      <h2>Read Verse</h2>
+      <div style="margin: 10px 0;">
+        <label>Translation: 
+          <select id="translation" style="padding: 4px; min-width: 120px;">
+            <option value="">Loading...</option>
+          </select>
+        </label>
+        <label style="margin-left: 10px;">
+          <input type="checkbox" id="chronologicalMode" />
+          Chronological?
+        </label>
+        <label style="margin-left: 10px;">Book: 
+          <select id="book" style="padding: 4px; min-width: 150px;">
+            <option value="">Select translation first</option>
+          </select>
+        </label>
+        <label style="margin-left: 10px;">Chapter:
+          <select id="chapter" style="padding: 4px; min-width: 80px;">
+            <option value="1">1</option>
+          </select>
+        </label>
+        <label style="margin-left: 10px;">Verse:
+          <select id="verse" style="padding: 4px; min-width: 80px;">
+            <option value="1">1</option>
+          </select>
+        </label>
       </div>
-      <div style="margin-bottom: 15px;">
-        <h3 style="font-size: 14px; margin: 10px 0;">💾 Upload from device</h3>
-        <input type="file" id="packFile" accept=".sqlite" />
-        <button id="importBtn" style="margin-left: 10px; padding: 8px 16px;">Import Pack</button>
+      <button id="readVerse" style="padding: 8px 16px; margin-top: 10px;">Read Verse</button>
+      <button id="readChapter" style="padding: 8px 16px; margin-left: 10px;">Read Chapter</button>
+      <div id="verseText" class="verse-display" style="margin-top: 15px; padding: 15px; border-radius: 4px; min-height: 40px;"></div>
+    </section>
+    
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
+      <h2>📖 Reading Plan</h2>
+      <div id="readingPlanContainer">
+        <!-- Tab navigation -->
+        <div style="border-bottom: 2px solid #ccc; margin-bottom: 20px;">
+          <button id="tabCreatePlan" class="plan-tab active" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 3px solid #2c5f8d; font-weight: 600;">Create Plan</button>
+          <button id="tabActivePlan" class="plan-tab" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 3px solid transparent;">Active Plan</button>
+          <button id="tabPlanHistory" class="plan-tab" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 3px solid transparent;">History</button>
+        </div>
+        
+        <!-- Create Plan Tab -->
+        <div id="createPlanTab" class="plan-tab-content">
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 10px; font-weight: 600;">Preset Plan:</label>
+            <select id="planPreset" style="padding: 8px; width: 100%; max-width: 400px;">
+              <option value="">Custom...</option>
+              <option value="bible-1-year">Bible in 1 Year</option>
+              <option value="nt-90-days">New Testament in 90 Days</option>
+              <option value="gospels-30-days">Gospels in 30 Days</option>
+              <option value="chronological-1-year">Chronological Bible in 1 Year</option>
+              <option value="psalms-proverbs">Psalms & Proverbs</option>
+            </select>
+          </div>
+          
+          <div id="customPlanOptions" style="display: block;">
+            <h3 style="font-size: 16px; margin: 20px 0 10px 0;">Date Range</h3>
+            <div style="margin-bottom: 15px;">
+              <label style="display: block; margin-bottom: 10px;">
+                Start Date: <input type="date" id="planStartDate" style="padding: 6px; margin-left: 10px;" />
+              </label>
+              <label style="display: block; margin-bottom: 10px;">
+                End Date: <input type="date" id="planEndDate" style="padding: 6px; margin-left: 10px;" />
+              </label>
+            </div>
+            
+            <h3 style="font-size: 16px; margin: 20px 0 10px 0;">Reading Days</h3>
+            <div style="margin-bottom: 15px;">
+              <label style="margin-right: 15px;"><input type="checkbox" id="daySun" checked /> Sunday</label>
+              <label style="margin-right: 15px;"><input type="checkbox" id="dayMon" checked /> Monday</label>
+              <label style="margin-right: 15px;"><input type="checkbox" id="dayTue" checked /> Tuesday</label>
+              <label style="margin-right: 15px;"><input type="checkbox" id="dayWed" checked /> Wednesday</label>
+              <label style="margin-right: 15px;"><input type="checkbox" id="dayThu" checked /> Thursday</label>
+              <label style="margin-right: 15px;"><input type="checkbox" id="dayFri" checked /> Friday</label>
+              <label style="margin-right: 15px;"><input type="checkbox" id="daySat" checked /> Saturday</label>
+            </div>
+            
+            <h3 style="font-size: 16px; margin: 20px 0 10px 0;">Book Selection</h3>
+            <div style="margin-bottom: 15px;">
+              <button id="selectAllBooks" style="padding: 6px 12px; margin-right: 10px;">Select All</button>
+              <button id="selectNone" style="padding: 6px 12px; margin-right: 10px;">Select None</button>
+              <button id="selectOT" style="padding: 6px 12px; margin-right: 10px;">OT Only</button>
+              <button id="selectNT" style="padding: 6px 12px;">NT Only</button>
+            </div>
+            <div id="bookGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 300px; overflow-y: auto; padding: 10px; background: #f5f5f5; border-radius: 4px;"></div>
+            
+            <h3 style="font-size: 16px; margin: 20px 0 10px 0;">Reading Order</h3>
+            <div style="margin-bottom: 15px;">
+              <label><input type="radio" name="ordering" value="canonical" checked /> Canonical (Traditional)</label><br/>
+              <label><input type="radio" name="ordering" value="chronological" /> Chronological (Historical Order)</label><br/>
+              <label><input type="radio" name="ordering" value="shuffled" /> Shuffled (Random)</label>
+            </div>
+            
+            <h3 style="font-size: 16px; margin: 20px 0 10px 0;">Advanced Options</h3>
+            <div style="margin-bottom: 15px;">
+              <label style="display: block; margin-bottom: 10px;">
+                <input type="checkbox" id="optDailyPsalm" /> Add one Psalm per day
+                <div id="psalmsRandomOpt" style="margin-left: 25px; margin-top: 5px; display: none;">
+                  <label><input type="checkbox" id="optRandomizePsalms" /> Randomize Psalms?</label>
+                </div>
+              </label>
+              <label style="display: block; margin-bottom: 10px;">
+                <input type="checkbox" id="optDailyProverb" /> Add one Proverb per day
+                <div id="proverbsRandomOpt" style="margin-left: 25px; margin-top: 5px; display: none;">
+                  <label><input type="checkbox" id="optRandomizeProverbs" /> Randomize Proverbs?</label>
+                </div>
+              </label>
+              <label style="display: block; margin-bottom: 10px;">
+                <input type="checkbox" id="optReverseOrder" /> Reverse Order (read last day first)
+              </label>
+              <label style="display: block; margin-bottom: 10px;">
+                <input type="checkbox" id="optShowOverallStats" checked /> Show Overall Statistics
+              </label>
+              <label style="display: block; margin-bottom: 10px;">
+                <input type="checkbox" id="optShowDailyStats" checked /> Show Daily Statistics
+              </label>
+            </div>
+          </div>
+          
+          <div style="margin-top: 20px;">
+            <button id="generatePlanBtn" style="padding: 12px 24px; background: #2c5f8d; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Generate Plan</button>
+            <div id="planGenerationStatus" style="margin-top: 10px; color: #666;"></div>
+          </div>
+        </div>
+        
+        <!-- Active Plan Tab -->
+        <div id="activePlanTab" class="plan-tab-content" style="display: none;">
+          <div id="activePlanContent">
+            <p style="color: #666;">No active plan. Create one to get started!</p>
+          </div>
+        </div>
+        
+        <!-- Plan History Tab -->
+        <div id="planHistoryTab" class="plan-tab-content" style="display: none;">
+          <div id="planHistoryContent">
+            <p style="color: #666;">No past plans yet.</p>
+          </div>
+        </div>
       </div>
-      <div id="importStatus" style="margin-top: 10px; color: #555;"></div>
+    </section>
+    
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
+      <h2>🔍 Search Bible</h2>
+      <div style="margin: 10px 0;">
+        <input type="text" id="searchQuery" placeholder="Enter search terms..." 
+               style="padding: 8px; width: 60%; font-size: 16px;" />
+        <button id="searchBtn" style="padding: 8px 16px; margin-left: 10px; font-size: 16px;">Search</button>
+      </div>
+      <div style="margin-top: 10px;">
+        <label>
+          <input type="checkbox" id="canonicalOnly" />
+          Canonical Only?
+        </label>
+      </div>
+      <div id="searchStatus" class="section-description" style="margin-top: 10px;"></div>
+      <div id="searchResults" style="margin-top: 15px; max-height: 500px; overflow-y: auto;"></div>
+    </section>
+    
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
+      <h2>🗺️ Historical Maps</h2>
+      <div style="margin: 10px 0;">
+        <button id="loadMapsBtn" style="padding: 8px 16px;">Load Map Layers</button>
+      </div>
+      <div id="mapLayersList" style="margin-top: 15px;"></div>
+      <div id="mapViewer" class="map-viewer" style="margin-top: 20px; display: none; padding: 15px; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 id="mapViewerTitle" style="margin: 0;"></h3>
+          <button id="closeMapBtn" style="padding: 6px 12px; border-radius: 4px; cursor: pointer;">Close</button>
+        </div>
+        <div id="mapDetails" class="map-details" style="margin-bottom: 15px; padding: 10px; border-radius: 4px;"></div>
+        
+        <!-- Pleiades Place Search -->
+        <div class="map-search-panel" style="margin-bottom: 15px; padding: 12px; border-radius: 4px;">
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input 
+              type="text" 
+              id="mapPlaceSearch" 
+              placeholder="Search 41,000+ ancient places (e.g., Jerusalem, Athens, Rome)..." 
+              style="flex: 1; padding: 8px; border-radius: 4px; font-size: 14px;"
+            />
+            <button id="mapSearchPlacesBtn" class="accent-button" style="padding: 8px 16px; background: #2c5f8d; color: #f5f5f5; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.2s;" onmouseover="this.style.background='#3a7ab5'" onmouseout="this.style.background='#2c5f8d'">Search</button>
+          </div>
+          <div id="mapSearchResults" class="map-search-results" style="margin-top: 10px; max-height: 300px; overflow-y: auto; display: none; border-radius: 4px;"></div>
+          <div id="mapSearchStatus" class="section-description" style="margin-top: 8px; font-size: 12px;"></div>
+        </div>
+        
+        <div id="mapCanvas" style="width: 100%; height: 500px; border: 1px solid #ccc; background: #e9ecef; display: flex; align-items: center; justify-content: center; color: #555;">
+          GeoJSON map rendering (requires Leaflet or similar library)
+        </div>
+      </div>
     </section>
     
     <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
@@ -139,6 +485,28 @@ root.innerHTML = `
     </section>
     
     <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
+      <h2>Import Pack</h2>
+      <div style="margin-bottom: 15px;">
+        <h3 style="font-size: 14px; margin: 10px 0;">📱 Download from URL (mobile-friendly)</h3>
+        <input type="text" id="packUrl" placeholder="https://example.com/greek.sqlite" 
+               style="width: 70%; padding: 8px; margin-right: 10px;" />
+        <button id="downloadBtn" style="padding: 8px 16px;">Download & Import</button>
+      </div>
+      <div style="margin-bottom: 15px;">
+        <h3 style="font-size: 14px; margin: 10px 0;">💾 Upload from device</h3>
+        <input type="file" id="packFile" accept=".sqlite" />
+        <button id="importBtn" style="margin-left: 10px; padding: 8px 16px;">Import Pack</button>
+      </div>
+      <div id="importStatus" style="margin-top: 10px; color: #555;"></div>
+    </section>
+    
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
+      <h2>Installed Packs</h2>
+      <button id="refreshPacks" style="padding: 8px 16px;">Refresh</button>
+      <div id="packsList" class="list-container" style="margin-top: 15px; max-height: 200px; overflow-y: auto; border-radius: 4px; padding: 10px;"></div>
+    </section>
+    
+    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
       <h2>⚠️ Database Management</h2>
       <p class="section-description" style="margin: 10px 0;">Clear old packs to free up space</p>
       <button id="clearPacksBtn" style="padding: 8px 16px; border-radius: 4px; cursor: pointer;">
@@ -149,95 +517,9 @@ root.innerHTML = `
       </button>
       <div id="dbStats" class="section-description" style="margin-top: 10px; font-size: 14px;"></div>
     </section>
-    
-    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
-      <h2>Installed Packs</h2>
-      <button id="refreshPacks" style="padding: 8px 16px;">Refresh</button>
-      <div id="packsList" class="list-container" style="margin-top: 15px; max-height: 200px; overflow-y: auto; border-radius: 4px; padding: 10px;"></div>
-    </section>
-    
-    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
-      <h2>🔍 Search Bible</h2>
-      <div style="margin: 10px 0;">
-        <input type="text" id="searchQuery" placeholder="Enter search terms..." 
-               style="padding: 8px; width: 60%; font-size: 16px;" />
-        <button id="searchBtn" style="padding: 8px 16px; margin-left: 10px; font-size: 16px;">Search</button>
-      </div>
-      <div style="margin-top: 10px;">
-        <label>
-          <input type="checkbox" id="canonicalOnly" />
-          Canonical Only?
-        </label>
-      </div>
-      <div id="searchStatus" class="section-description" style="margin-top: 10px;"></div>
-      <div id="searchResults" style="margin-top: 15px; max-height: 500px; overflow-y: auto;"></div>
-    </section>
-    
-    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
-      <h2>🗺️ Historical Maps</h2>
-      <div style="margin: 10px 0;">
-        <button id="loadMapsBtn" style="padding: 8px 16px;">Load Map Layers</button>
-      </div>
-      <div id="mapLayersList" style="margin-top: 15px;"></div>
-      <div id="mapViewer" class="map-viewer" style="margin-top: 20px; display: none; padding: 15px; border-radius: 8px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <h3 id="mapViewerTitle" style="margin: 0;"></h3>
-          <button id="closeMapBtn" style="padding: 6px 12px; border-radius: 4px; cursor: pointer;">Close</button>
-        </div>
-        <div id="mapDetails" class="map-details" style="margin-bottom: 15px; padding: 10px; border-radius: 4px;"></div>
-        
-        <!-- Pleiades Place Search -->
-        <div class="map-search-panel" style="margin-bottom: 15px; padding: 12px; border-radius: 4px;">
-          <div style="display: flex; gap: 10px; align-items: center;">
-            <input 
-              type="text" 
-              id="mapPlaceSearch" 
-              placeholder="Search 41,000+ ancient places (e.g., Jerusalem, Athens, Rome)..." 
-              style="flex: 1; padding: 8px; border-radius: 4px; font-size: 14px;"
-            />
-            <button id="mapSearchPlacesBtn" class="accent-button" style="padding: 8px 16px; background: #2c5f8d; color: #f5f5f5; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.2s;" onmouseover="this.style.background='#3a7ab5'" onmouseout="this.style.background='#2c5f8d'">Search</button>
-          </div>
-          <div id="mapSearchResults" class="map-search-results" style="margin-top: 10px; max-height: 300px; overflow-y: auto; display: none; border-radius: 4px;"></div>
-          <div id="mapSearchStatus" class="section-description" style="margin-top: 8px; font-size: 12px;"></div>
-        </div>
-        
-        <div id="mapCanvas" style="width: 100%; height: 500px; border: 1px solid #ccc; background: #e9ecef; display: flex; align-items: center; justify-content: center; color: #555;">
-          GeoJSON map rendering (requires Leaflet or similar library)
-        </div>
-      </div>
-    </section>
-    
-    <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
-      <h2>Read Verse</h2>
-      <div style="margin: 10px 0;">
-        <label>Translation: 
-          <select id="translation" style="padding: 4px; min-width: 120px;">
-            <option value="">Loading...</option>
-          </select>
-        </label>
-        <label style="margin-left: 10px;">Book: 
-          <select id="book" style="padding: 4px; min-width: 150px;">
-            <option value="">Select translation first</option>
-          </select>
-        </label>
-        <label style="margin-left: 10px;">Chapter:
-          <select id="chapter" style="padding: 4px; min-width: 80px;">
-            <option value="1">1</option>
-          </select>
-        </label>
-        <label style="margin-left: 10px;">Verse:
-          <select id="verse" style="padding: 4px; min-width: 80px;">
-            <option value="1">1</option>
-          </select>
-        </label>
-      </div>
-      <button id="readVerse" style="padding: 8px 16px; margin-top: 10px;">Read Verse</button>
-      <button id="readChapter" style="padding: 8px 16px; margin-left: 10px;">Read Chapter</button>
-      <div id="verseText" class="verse-display" style="margin-top: 15px; padding: 15px; border-radius: 4px; min-height: 40px;"></div>
-    </section>
   </div>
   
-  <!-- Cross-reference popup -->
+  <!--Cross-reference popup -->
   <div id="xrefModal" class="modal" style="display: none; position: fixed; padding: 15px; border-radius: 8px; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000;">
     <button id="closeXrefModal" class="modal-close" style="position: absolute; top: 8px; right: 8px; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
     <div id="xrefModalContent"></div>
@@ -883,6 +1165,539 @@ document.getElementById('openPolishedBtn')?.addEventListener('click', () => {
   window.open('http://localhost:5174', '_blank');
 });
 
+// ===== Reading Plan Handlers =====
+
+// Tab switching
+document.getElementById('tabCreatePlan')?.addEventListener('click', () => {
+  document.querySelectorAll('.plan-tab').forEach(tab => {
+    tab.classList.remove('active');
+    (tab as HTMLElement).style.borderBottomColor = 'transparent';
+  });
+  document.querySelectorAll('.plan-tab-content').forEach(content => {
+    (content as HTMLElement).style.display = 'none';
+  });
+  
+  const tab = document.getElementById('tabCreatePlan')!;
+  tab.classList.add('active');
+  tab.style.borderBottomColor = '#2c5f8d';
+  document.getElementById('createPlanTab')!.style.display = 'block';
+});
+
+document.getElementById('tabActivePlan')?.addEventListener('click', () => {
+  document.querySelectorAll('.plan-tab').forEach(tab => {
+    tab.classList.remove('active');
+    (tab as HTMLElement).style.borderBottomColor = 'transparent';
+  });
+  document.querySelectorAll('.plan-tab-content').forEach(content => {
+    (content as HTMLElement).style.display = 'none';
+  });
+  
+  const tab = document.getElementById('tabActivePlan')!;
+  tab.classList.add('active');
+  tab.style.borderBottomColor = '#2c5f8d';
+  document.getElementById('activePlanTab')!.style.display = 'block';
+});
+
+document.getElementById('tabPlanHistory')?.addEventListener('click', () => {
+  document.querySelectorAll('.plan-tab').forEach(tab => {
+    tab.classList.remove('active');
+    (tab as HTMLElement).style.borderBottomColor = 'transparent';
+  });
+  document.querySelectorAll('.plan-tab-content').forEach(content => {
+    (content as HTMLElement).style.display = 'none';
+  });
+  
+  const tab = document.getElementById('tabPlanHistory')!;
+  tab.classList.add('active');
+  tab.style.borderBottomColor = '#2c5f8d';
+  document.getElementById('planHistoryTab')!.style.display = 'block';
+  
+  // Load plan history when tab is shown
+  renderPlanHistory();
+});
+
+// Show/hide custom options when preset changes
+document.getElementById('planPreset')?.addEventListener('change', (e) => {
+  const value = (e.target as HTMLSelectElement).value;
+  const customOptions = document.getElementById('customPlanOptions')!;
+  customOptions.style.display = value === '' ? 'block' : 'none';
+});
+
+// Show/hide randomize options for daily Psalm/Proverb
+document.getElementById('optDailyPsalm')?.addEventListener('change', (e) => {
+  const checked = (e.target as HTMLInputElement).checked;
+  const randomOpt = document.getElementById('psalmsRandomOpt')!;
+  randomOpt.style.display = checked ? 'block' : 'none';
+});
+
+document.getElementById('optDailyProverb')?.addEventListener('change', (e) => {
+  const checked = (e.target as HTMLInputElement).checked;
+  const randomOpt = document.getElementById('proverbsRandomOpt')!;
+  randomOpt.style.display = checked ? 'block' : 'none';
+});
+
+// Generate Plan button
+document.getElementById('generatePlanBtn')?.addEventListener('click', async () => {
+  const statusDiv = document.getElementById('planGenerationStatus')!;
+  statusDiv.textContent = 'Generating plan...';
+  statusDiv.style.color = '#666';
+  
+  try {
+    const preset = (document.getElementById('planPreset') as HTMLSelectElement).value;
+    
+    // Get configuration from form
+    const config: ReadingPlanConfig = preset === '' 
+      ? await buildCustomPlanConfig() 
+      : buildPresetPlanConfig(preset);
+    
+    // Generate the plan
+    statusDiv.textContent = 'Calculating reading schedule...';
+    currentReadingPlan = generateReadingPlan(config);
+    
+    // Generate a plan ID
+    currentPlanId = `plan_${Date.now()}`;
+    
+    // Save to storage and history
+    saveActivePlan();
+    savePlanToHistory(currentReadingPlan, currentPlanId);
+    
+    statusDiv.textContent = `✓ Plan created! ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
+    statusDiv.style.color = '#2c5f8d';
+    
+    // Switch to Active Plan tab to show the generated plan
+    setTimeout(() => {
+      document.getElementById('tabActivePlan')?.click();
+      renderActivePlan();
+    }, 1000);
+    
+  } catch (error) {
+    statusDiv.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+    statusDiv.style.color = '#d32f2f';
+  }
+});
+
+// Build custom plan configuration from form
+async function buildCustomPlanConfig(): Promise<ReadingPlanConfig> {
+  const startDate = new Date((document.getElementById('planStartDate') as HTMLInputElement).value);
+  const endDate = new Date((document.getElementById('planEndDate') as HTMLInputElement).value);
+  
+  // Get excluded weekdays
+  const excludedWeekdays: number[] = [];
+  if (!(document.getElementById('daySun') as HTMLInputElement).checked) excludedWeekdays.push(0);
+  if (!(document.getElementById('dayMon') as HTMLInputElement).checked) excludedWeekdays.push(1);
+  if (!(document.getElementById('dayTue') as HTMLInputElement).checked) excludedWeekdays.push(2);
+  if (!(document.getElementById('dayWed') as HTMLInputElement).checked) excludedWeekdays.push(3);
+  if (!(document.getElementById('dayThu') as HTMLInputElement).checked) excludedWeekdays.push(4);
+  if (!(document.getElementById('dayFri') as HTMLInputElement).checked) excludedWeekdays.push(5);
+  if (!(document.getElementById('daySat') as HTMLInputElement).checked) excludedWeekdays.push(6);
+  
+  // Get selected books
+  const bookCheckboxes = Array.from(document.querySelectorAll('#bookGrid input[type="checkbox"]:checked')) as HTMLInputElement[];
+  const selectedBooks = bookCheckboxes.map(cb => ({ book: cb.value }));
+  
+  if (selectedBooks.length === 0) {
+    throw new Error('Please select at least one book');
+  }
+  
+  // Get ordering
+  const orderingRadio = document.querySelector('input[name="ordering"]:checked') as HTMLInputElement;
+  const ordering = (orderingRadio?.value || 'canonical') as 'canonical' | 'chronological' | 'shuffled';
+  
+  return {
+    startDate,
+    endDate,
+    excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
+    books: selectedBooks,
+    ordering,
+    dailyPsalm: (document.getElementById('optDailyPsalm') as HTMLInputElement).checked,
+    randomizePsalms: (document.getElementById('optRandomizePsalms') as HTMLInputElement).checked,
+    dailyProverb: (document.getElementById('optDailyProverb') as HTMLInputElement).checked,
+    randomizeProverbs: (document.getElementById('optRandomizeProverbs') as HTMLInputElement).checked,
+    reverseOrder: (document.getElementById('optReverseOrder') as HTMLInputElement).checked,
+    showOverallStats: (document.getElementById('optShowOverallStats') as HTMLInputElement).checked,
+    showDailyStats: (document.getElementById('optShowDailyStats') as HTMLInputElement).checked
+  };
+}
+
+// Build preset plan configuration
+function buildPresetPlanConfig(preset: string): ReadingPlanConfig {
+  const today = new Date();
+  const oneYearLater = new Date(today);
+  oneYearLater.setFullYear(today.getFullYear() + 1);
+  
+  const ninetyDaysLater = new Date(today);
+  ninetyDaysLater.setDate(today.getDate() + 90);
+  
+  const thirtyDaysLater = new Date(today);
+  thirtyDaysLater.setDate(today.getDate() + 30);
+  
+  switch (preset) {
+    case 'bible-1-year':
+      return {
+        startDate: today,
+        endDate: oneYearLater,
+        books: BIBLE_BOOKS_INFO.map(b => ({ book: b.name })),
+        ordering: 'canonical',
+        showOverallStats: true,
+        showDailyStats: true
+      };
+      
+    case 'nt-90-days':
+      return {
+        startDate: today,
+        endDate: ninetyDaysLater,
+        books: BIBLE_BOOKS_INFO.filter(b => b.testament === 'NT').map(b => ({ book: b.name })),
+        ordering: 'canonical',
+        showOverallStats: true,
+        showDailyStats: true
+      };
+      
+    case 'gospels-30-days':
+      return {
+        startDate: today,
+        endDate: thirtyDaysLater,
+        books: ['Matthew', 'Mark', 'Luke', 'John'].map(book => ({ book })),
+        ordering: 'canonical',
+        showOverallStats: true,
+        showDailyStats: true
+      };
+      
+    case 'chronological-1-year':
+      return {
+        startDate: today,
+        endDate: oneYearLater,
+        books: BIBLE_BOOKS_INFO.map(b => ({ book: b.name })),
+        ordering: 'chronological',
+        showOverallStats: true,
+        showDailyStats: true
+      };
+      
+    case 'psalms-proverbs':
+      return {
+        startDate: today,
+        endDate: new Date(today.getTime() + 150 * 24 * 60 * 60 * 1000), // 150 days
+        books: [{ book: 'Psalms' }, { book: 'Proverbs' }],
+        ordering: 'canonical',
+        showOverallStats: true,
+        showDailyStats: true
+      };
+      
+    default:
+      throw new Error('Unknown preset: ' + preset);
+  }
+}
+
+// Render active plan (calendar and list views)
+function renderActivePlan() {
+  const container = document.getElementById('activePlanContent')!;
+  
+  if (!currentReadingPlan) {
+    container.innerHTML = '<p style="color: #666;">No active plan. Create one to get started!</p>';
+    return;
+  }
+  
+  const plan = currentReadingPlan;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Find today's day in the plan
+  const todayIndex = plan.days.findIndex(day => {
+    const dayDate = new Date(day.date);
+    dayDate.setHours(0, 0, 0, 0);
+    return dayDate.getTime() === today.getTime();
+  });
+  
+  const todayDay = todayIndex >= 0 ? plan.days[todayIndex] : null;
+  
+  // Overall stats with delete button
+  let statsHtml = '';
+  if (plan.config.showOverallStats) {
+    statsHtml = `
+      <div class="content-section" style="padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="margin: 0; font-size: 16px;">📊 Plan Overview</h3>
+          <button id="deletePlanBtn" style="padding: 6px 12px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Delete Plan</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+          <div><strong>Total Days:</strong> ${plan.totalDays}</div>
+          <div><strong>Total Chapters:</strong> ${plan.totalChapters}</div>
+          <div><strong>Avg/Day:</strong> ${plan.avgChaptersPerDay.toFixed(1)} chapters</div>
+          <div><strong>Start:</strong> ${new Date(plan.config.startDate).toLocaleDateString()}</div>
+          <div><strong>End:</strong> ${new Date(plan.config.endDate).toLocaleDateString()}</div>
+        </div>
+      </div>
+    `;
+  } else {
+    // If stats hidden, still show delete button
+    statsHtml = `
+      <div style="text-align: right; margin-bottom: 20px;">
+        <button id="deletePlanBtn" style="padding: 6px 12px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Delete Plan</button>
+      </div>
+    `;
+  }
+  
+  // Today's reading
+  let todayHtml = '';
+  if (todayDay) {
+    const chaptersLinks = todayDay.chapters.map(c => `<a href="#" onclick="navigateToChapter('${c.book}', ${c.chapter}); return false;" style="text-decoration: none; color: #4caf50; font-weight: 500; border-bottom: 1px dotted currentColor;">${c.book} ${c.chapter}</a>`).join(', ');
+    todayHtml = `
+      <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4caf50;">
+        <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #155724;">📖 Today's Reading (Day ${todayDay.dayNumber})</h3>
+        <p style="margin: 5px 0; font-size: 15px; color: #155724;">${chaptersLinks}</p>
+        <p style="margin: 5px 0; font-size: 13px; color: #155724; opacity: 0.8;">${todayDay.chapters.length} chapters</p>
+        <button onclick="navigateToChapter('${todayDay.chapters[0].book}', ${todayDay.chapters[0].chapter})" style="margin-top: 10px; padding: 8px 16px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Start Reading →
+        </button>
+      </div>
+    `;
+  } else {
+    todayHtml = `
+      <div class="content-section" style="padding: 15px; border-radius: 8px; margin-bottom: 20px; opacity: 0.7;">
+        <p style="margin: 0;">Today is not a reading day in this plan.</p>
+      </div>
+    `;
+  }
+  
+  // View toggle
+  const viewToggle = `
+    <div style="margin-bottom: 15px;">
+      <button id="viewCalendar" class="view-toggle active action-btn" style="padding: 8px 16px; margin-right: 10px; background: #2c5f8d; color: white; border-radius: 4px; cursor: pointer;">Calendar View</button>
+      <button id="viewList" class="view-toggle action-btn" style="padding: 8px 16px; border-radius: 4px; cursor: pointer;">List View</button>
+    </div>
+  `;
+  
+  // Calendar view (simple list for now, calendar grid can be added later)
+  const calendarView = renderCalendarView(plan);
+  const listView = renderListView(plan);
+  
+  container.innerHTML = statsHtml + todayHtml + viewToggle + 
+    `<div id="calendarViewContent">${calendarView}</div>` +
+    `<div id="listViewContent" style="display: none;">${listView}</div>`;
+  
+  // Add view toggle handlers
+  document.getElementById('viewCalendar')?.addEventListener('click', () => {
+    document.querySelectorAll('.view-toggle').forEach(btn => {
+      btn.classList.remove('active');
+      (btn as HTMLButtonElement).style.background = '';
+      (btn as HTMLButtonElement).style.color = '';
+    });
+    const btn = document.getElementById('viewCalendar') as HTMLButtonElement;
+    btn.classList.add('active');
+    btn.style.background = '#2c5f8d';
+    btn.style.color = 'white';
+    document.getElementById('calendarViewContent')!.style.display = 'block';
+    document.getElementById('listViewContent')!.style.display = 'none';
+  });
+  
+  document.getElementById('viewList')?.addEventListener('click', () => {
+    document.querySelectorAll('.view-toggle').forEach(btn => {
+      btn.classList.remove('active');
+      (btn as HTMLButtonElement).style.background = '';
+      (btn as HTMLButtonElement).style.color = '';
+    });
+    const btn = document.getElementById('viewList') as HTMLButtonElement;
+    btn.classList.add('active');
+    btn.style.background = '#2c5f8d';
+    btn.style.color = 'white';
+    document.getElementById('calendarViewContent')!.style.display = 'none';
+    document.getElementById('listViewContent')!.style.display = 'block';
+  });
+  
+  // Add delete button handler
+  document.getElementById('deletePlanBtn')?.addEventListener('click', () => {
+    deleteCurrentPlan();
+  });
+}
+
+// Render calendar view
+function renderCalendarView(plan: ReadingPlan): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  let html = '<div style="max-height: 500px; overflow-y: auto; padding: 10px;">';
+  
+  // Group by month
+  const daysByMonth = new Map<string, typeof plan.days>();
+  plan.days.forEach(day => {
+    const date = new Date(day.date);
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    if (!daysByMonth.has(monthKey)) {
+      daysByMonth.set(monthKey, []);
+    }
+    daysByMonth.get(monthKey)!.push(day);
+  });
+  
+  daysByMonth.forEach((days, monthKey) => {
+    const [year, month] = monthKey.split('-');
+    const monthName = new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    
+    html += `<h4 style="margin: 20px 0 10px 0; padding-bottom: 5px; border-bottom: 2px solid;">${monthName}</h4>`;
+    html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">';
+    
+    days.forEach(day => {
+      const dayDate = new Date(day.date);
+      dayDate.setHours(0, 0, 0, 0);
+      const isToday = dayDate.getTime() === today.getTime();
+      const isPast = dayDate < today;
+      
+      const cardClass = isToday ? 'plan-today' : (isPast ? 'plan-past' : 'plan-future');
+      const borderColor = isToday ? '#4caf50' : 'var(--border-color, #ddd)';
+      
+      const chaptersLinks = day.chapters.map(c => `<a href="#" onclick="navigateToChapter('${c.book}', ${c.chapter}); return false;" style="text-decoration: none; color: inherit; border-bottom: 1px dotted currentColor;">${c.book} ${c.chapter}</a>`).join(', ');
+      const dateStr = dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      
+      html += `
+        <div class="content-section ${cardClass}" style="padding: 10px; border: 1px solid ${borderColor}; border-radius: 4px; font-size: 13px;">
+          <div style="font-weight: 600; margin-bottom: 5px;">${dateStr} (Day ${day.dayNumber})</div>
+          <div style="font-size: 12px; opacity: 0.9;">${chaptersLinks}</div>
+        </div>
+      `;
+    });
+    
+    html += '</div>';
+  });
+  
+  html += '</div>';
+  return html;
+}
+
+// Render list view
+function renderListView(plan: ReadingPlan): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  let html = '<div style="max-height: 500px; overflow-y: auto;">';
+  html += '<table style="width: 100%; border-collapse: collapse;">';
+  html += '<thead><tr class="list-container" style="position: sticky; top: 0;"><th style="padding: 10px; text-align: left; border: 1px solid;">Day</th><th style="padding: 10px; text-align: left; border: 1px solid;">Date</th><th style="padding: 10px; text-align: left; border: 1px solid;">Reading</th></tr></thead>';
+  html += '<tbody>';
+  
+  plan.days.forEach(day => {
+    const dayDate = new Date(day.date);
+    dayDate.setHours(0, 0, 0, 0);
+    const isToday = dayDate.getTime() === today.getTime();
+    
+    const rowClass = isToday ? 'plan-today' : '';
+    const chaptersLinks = day.chapters.map(c => `<a href="#" onclick="navigateToChapter('${c.book}', ${c.chapter}); return false;" style="text-decoration: none; color: inherit; border-bottom: 1px dotted currentColor;">${c.book} ${c.chapter}</a>`).join(', ');
+    const dateStr = dayDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    
+    html += `
+      <tr class="${rowClass}">
+        <td style="padding: 10px; border: 1px solid; font-weight: ${isToday ? '600' : 'normal'};">${day.dayNumber}</td>
+        <td style="padding: 10px; border: 1px solid;">${dateStr}</td>
+        <td style="padding: 10px; border: 1px solid; font-size: 13px;">${chaptersLinks}</td>
+      </tr>
+    `;
+  });
+  
+  html += '</tbody></table></div>';
+  return html;
+}
+
+// Book selection helpers
+document.getElementById('selectAllBooks')?.addEventListener('click', () => {
+  document.querySelectorAll('#bookGrid input[type="checkbox"]').forEach(cb => {
+    (cb as HTMLInputElement).checked = true;
+  });
+});
+
+document.getElementById('selectNone')?.addEventListener('click', () => {
+  document.querySelectorAll('#bookGrid input[type="checkbox"]').forEach(cb => {
+    (cb as HTMLInputElement).checked = false;
+  });
+});
+
+document.getElementById('selectOT')?.addEventListener('click', () => {
+  document.querySelectorAll('#bookGrid input[type="checkbox"]').forEach(cb => {
+    const input = cb as HTMLInputElement;
+    const bookName = input.value;
+    const isOT = OT_BOOKS.includes(bookName);
+    input.checked = isOT;
+  });
+});
+
+document.getElementById('selectNT')?.addEventListener('click', () => {
+  document.querySelectorAll('#bookGrid input[type="checkbox"]').forEach(cb => {
+    const input = cb as HTMLInputElement;
+    const bookName = input.value;
+    const isNT = NT_BOOKS.includes(bookName);
+    input.checked = isNT;
+  });
+});
+
+// Initialize book grid
+function initializeBookGrid() {
+  const bookGrid = document.getElementById('bookGrid');
+  if (!bookGrid) return;
+  
+  const allBooks = [...OT_BOOKS, ...NT_BOOKS];
+  bookGrid.innerHTML = allBooks.map(book => `
+    <label class="content-section" style="display: flex; align-items: center; padding: 6px; border-radius: 4px; cursor: pointer;">
+      <input type="checkbox" value="${book}" checked style="margin-right: 6px;" />
+      <span style="font-size: 13px;">${book}</span>
+    </label>
+  `).join('');
+}
+
+// Initialize on page load
+setTimeout(() => {
+  initializeBookGrid();
+  
+  // Set default dates (today + 1 year)
+  const today = new Date();
+  const oneYearLater = new Date(today);
+  oneYearLater.setFullYear(today.getFullYear() + 1);
+  
+  const startInput = document.getElementById('planStartDate') as HTMLInputElement;
+  const endInput = document.getElementById('planEndDate') as HTMLInputElement;
+  
+  if (startInput) startInput.value = today.toISOString().split('T')[0];
+  if (endInput) endInput.value = oneYearLater.toISOString().split('T')[0];
+  
+  // Load active reading plan from storage
+  loadActivePlan();
+  
+  // Load chronological pack
+  loadChronologicalPack();
+}, 100);
+
+// Navigate to chapter from reading plan
+function navigateToChapter(book: string, chapter: number) {
+  // Switch to Read Verse tab
+  const tabs = document.querySelectorAll('.nav-tab');
+  const contents = document.querySelectorAll('.tab-content');
+  
+  tabs.forEach(tab => {
+    tab.classList.remove('active');
+    (tab as HTMLElement).style.borderBottomColor = 'transparent';
+  });
+  
+  contents.forEach(content => {
+    (content as HTMLElement).style.display = 'none';
+  });
+  
+  const readTab = document.querySelector('[onclick*="readVerseTab"]') as HTMLElement;
+  if (readTab) {
+    readTab.classList.add('active');
+    readTab.style.borderBottomColor = '#2c5f8d';
+  }
+  
+  document.getElementById('readVerseTab')!.style.display = 'block';
+  
+  // Set the book and chapter
+  (document.getElementById('book') as HTMLSelectElement).value = book;
+  (document.getElementById('chapter') as HTMLSelectElement).value = String(chapter);
+  (document.getElementById('verse') as HTMLSelectElement).value = '1';
+  
+  // Trigger read
+  document.getElementById('readVerse')?.click();
+  
+  // Scroll to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Make navigateToChapter globally available for onclick handlers
+(window as any).navigateToChapter = navigateToChapter;
+
 // Read verse handler
 document.getElementById('readVerse')?.addEventListener('click', async () => {
   const translation = (document.getElementById('translation') as HTMLSelectElement).value;
@@ -1500,6 +2315,220 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
     console.error(error);
   }
 });
+
+// Chronological mode checkbox handler
+document.getElementById('chronologicalMode')?.addEventListener('change', async (e) => {
+  const checkbox = e.target as HTMLInputElement;
+  isChronologicalMode = checkbox.checked;
+  
+  if (isChronologicalMode && !chronologicalData) {
+    await loadChronologicalPack();
+  }
+  
+  // Update UI - disable/enable book dropdown in chronological mode
+  const bookDropdown = document.getElementById('book') as HTMLSelectElement;
+  const chapterDropdown = document.getElementById('chapter') as HTMLSelectElement;
+  
+  if (isChronologicalMode) {
+    // In chronological mode, we start from the beginning
+    if (chronologicalData) {
+      const firstVerse = chronologicalData.verses[0];
+      currentChronoIndex = 0;
+      
+      bookDropdown.value = firstVerse.book;
+      chapterDropdown.value = String(firstVerse.chapter);
+      
+      // Auto-load first chapter in chronological order
+      document.getElementById('readChapter')?.click();
+    }
+  }
+});
+
+// Scroll detection for continuous reading
+let scrollCheckInterval: number | null = null;
+let isLoadingNextChapter = false;
+
+function startScrollDetection() {
+  if (scrollCheckInterval) return;
+  
+  scrollCheckInterval = window.setInterval(() => {
+    if (isLoadingNextChapter) return;
+    
+    const scrollPosition = window.scrollY + window.innerHeight;
+    const documentHeight = document.documentElement.scrollHeight;
+    
+    // If within 200px of bottom, load next chapter
+    if (scrollPosition >= documentHeight - 200) {
+      loadNextChapter();
+    }
+  }, 500);
+}
+
+function stopScrollDetection() {
+  if (scrollCheckInterval) {
+    clearInterval(scrollCheckInterval);
+    scrollCheckInterval = null;
+  }
+}
+
+async function loadNextChapter() {
+  if (isLoadingNextChapter) return;
+  isLoadingNextChapter = true;
+  
+  try {
+    const translation = (document.getElementById('translation') as HTMLSelectElement).value;
+    const currentBook = (document.getElementById('book') as HTMLSelectElement).value;
+    const currentChapter = parseInt((document.getElementById('chapter') as HTMLSelectElement).value);
+    
+    let nextBook = currentBook;
+    let nextChapter = currentChapter + 1;
+    
+    if (isChronologicalMode && chronologicalData) {
+      // Find current position in chronological order
+      const currentVerseData = chronologicalData.verses.find(
+        (v: any) => v.book === currentBook && v.chapter === currentChapter
+      );
+      
+      if (currentVerseData) {
+        // Find next chapter in chronological order
+        const nextChapterData = chronologicalData.verses.find(
+          (v: any) => v.chrono_index > currentVerseData.chrono_index && 
+                      (v.book !== currentBook || v.chapter !== currentChapter)
+        );
+        
+        if (nextChapterData) {
+          nextBook = nextChapterData.book;
+          nextChapter = nextChapterData.chapter;
+          currentChronoIndex = nextChapterData.chrono_index;
+        } else {
+          // Reached end of Bible
+          isLoadingNextChapter = false;
+          stopScrollDetection();
+          return;
+        }
+      }
+    } else {
+      // Canonical order - check if we need to move to next book
+      const bookInfo = BIBLE_BOOKS_INFO.find(b => b.name === currentBook);
+      if (bookInfo && nextChapter > bookInfo.chapters) {
+        // Move to next book
+        const currentBookIndex = BIBLE_BOOKS_INFO.findIndex(b => b.name === currentBook);
+        if (currentBookIndex < BIBLE_BOOKS_INFO.length - 1) {
+          nextBook = BIBLE_BOOKS_INFO[currentBookIndex + 1].name;
+          nextChapter = 1;
+        } else {
+          // Reached end of Bible
+          isLoadingNextChapter = false;
+          stopScrollDetection();
+          return;
+        }
+      }
+    }
+    
+    // Load and append next chapter
+    const verses = await textStore.getChapter(translation, nextBook, nextChapter);
+    
+    if (verses.length > 0) {
+      const resultDiv = document.getElementById('verseText')!;
+      const settings = getSettings();
+      const verseLayout = settings.verseLayout || 'one-per-line';
+      const fontSize = settings.fontSize || 15;
+      const lineSpacing = settings.lineSpacing || 1.5;
+      
+      const headingClass = getHeadingFontClass(translation);
+      const headingClasses = ['reader-title', headingClass].filter(Boolean).join(' ');
+      
+      // Get cross-references
+      const verseCrossRefs = await Promise.all(
+        verses.map(v => crossRefStore.getCrossReferences({ book: nextBook, chapter: nextChapter, verse: v.verse }))
+      );
+      
+      let nextChapterHtml = `<h3 class="${headingClasses}" style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #ccc;">${nextBook} ${nextChapter}</h3>`;
+      
+      if (verseLayout === 'paragraph') {
+        let paragraphHtml = '';
+        let currentParagraph: string[] = [];
+        
+        const flushParagraph = () => {
+          if (currentParagraph.length > 0) {
+            paragraphHtml += `<p class="verse-paragraph" style="margin: 8px 0; padding: 8px; line-height: ${lineSpacing}; font-size: ${fontSize}px;">${currentParagraph.join(' ')}</p>`;
+            currentParagraph = [];
+          }
+        };
+        
+        verses.forEach((v, idx) => {
+          const hasCrossRefs = verseCrossRefs[idx].length > 0;
+          const verseKey = `${nextBook}:${nextChapter}:${v.verse}`;
+          const wordsHtml = renderVerseWordsHtml(v.text);
+          
+          if (v.heading) {
+            flushParagraph();
+            paragraphHtml += `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.15em; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`;
+          }
+          
+          const verseSpan = `<span class="verse-span" data-book="${nextBook}" data-chapter="${nextChapter}" data-verse="${v.verse}" style="cursor: pointer; padding: 2px 4px; border-radius: 2px;">` +
+            `<sup style="color: #555; cursor: ${hasCrossRefs ? 'pointer' : 'default'}; font-size: 11px;" ` +
+            `${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${nextBook}', ${nextChapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>` +
+            `${v.verse}${hasCrossRefs ? ' 🔗' : ''}</sup> ${wordsHtml}</span>`;
+          
+          currentParagraph.push(verseSpan);
+        });
+        
+        flushParagraph();
+        nextChapterHtml += paragraphHtml;
+      } else {
+        nextChapterHtml += verses.map((v, idx) => {
+          const hasCrossRefs = verseCrossRefs[idx].length > 0;
+          const verseKey = `${nextBook}:${nextChapter}:${v.verse}`;
+          const wordsHtml = renderVerseWordsHtml(v.text);
+          
+          const headingHtml = v.heading 
+            ? `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.15em; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`
+            : '';
+          
+          return `
+            ${headingHtml}
+            <p class="verse-text" 
+               data-book="${nextBook}" 
+               data-chapter="${nextChapter}" 
+               data-verse="${v.verse}"
+               style="margin: 8px 0; padding: 8px; border-radius: 4px; cursor: pointer; transition: background 0.2s; line-height: ${lineSpacing}; font-size: ${fontSize}px;">
+              <sup style="color: #555; cursor: ${hasCrossRefs ? 'pointer' : 'default'};" 
+                   ${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${nextBook}', ${nextChapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>\n                ${v.verse}${hasCrossRefs ? ' 🔗' : ''}
+              </sup> 
+              ${wordsHtml}
+            </p>
+          `;
+        }).join('');
+      }
+      
+      // Append to existing content
+      resultDiv.innerHTML += nextChapterHtml;
+      
+      // Update dropdown values
+      (document.getElementById('book') as HTMLSelectElement).value = nextBook;
+      (document.getElementById('chapter') as HTMLSelectElement).value = String(nextChapter);
+      
+      // Reattach verse selection handlers for new content
+      attachVerseSelectionHandlers();
+    }
+  } catch (error) {
+    console.error('Error loading next chapter:', error);
+  } finally {
+    isLoadingNextChapter = false;
+  }
+}
+
+// Start scroll detection when reading a chapter
+const originalReadChapterHandler = document.getElementById('readChapter');
+if (originalReadChapterHandler) {
+  originalReadChapterHandler.addEventListener('click', () => {
+    // Delay to let content render first
+    setTimeout(() => {
+      startScrollDetection();
+    }, 500);
+  });
+}
 
 // Cross-reference popup functions
 async function showCrossReferences(book: string, chapter: number, verse: number, event: MouseEvent) {
