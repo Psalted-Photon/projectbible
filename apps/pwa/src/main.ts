@@ -16,7 +16,7 @@ const crossRefStore = new IndexedDBCrossReferenceStore();
 const selectedVerses = new Set<string>(); // Store as "book:chapter:verse"
 const selectedWords = new Set<string>(); // Store as "book:chapter:verse:position"
 let longPressTimer: number | null = null;
-const LONG_PRESS_DURATION = 900; // 0.9 seconds
+const LONG_PRESS_DURATION = 1000; // 1 second
 
 // State management for reading plans
 let currentReadingPlan: ReadingPlan | null = null;
@@ -3945,12 +3945,10 @@ function attachWordClickHandlers() {
         return;
       }
 
-      // If it was a quick tap, toggle highlight
-      if (Date.now() - pressStartTime < LONG_PRESS_DURATION) {
-        e.preventDefault();
-        toggleWordHighlight(element);
-      }
-    }, { passive: false });
+      // Prevent any default action on quick tap to avoid unwanted interactions
+      e.preventDefault();
+      e.stopPropagation();
+    });
   });
 }
 
@@ -4283,12 +4281,31 @@ async function showWordActionMenu(wordElement: HTMLElement, event: MouseEvent | 
   const modal = document.getElementById('wordStudyModal')!;
   const content = document.getElementById('wordStudyContent')!;
   
-  const word = wordElement.dataset.word!;
-  const book = wordElement.dataset.book!;
-  const chapter = parseInt(wordElement.dataset.chapter!);
-  const verse = parseInt(wordElement.dataset.verse!);
-  const wordPosition = parseInt(wordElement.dataset.wordPosition!);
+  const word = wordElement.dataset.word;
+  const book = wordElement.dataset.book;
+  const chapterStr = wordElement.dataset.chapter;
+  const verseStr = wordElement.dataset.verse;
+  const wordPositionStr = wordElement.dataset.wordPosition;
   const translation = wordElement.dataset.translation || '';
+  
+  // Validate required data attributes
+  if (!word || !book || !chapterStr || !verseStr || !wordPositionStr) {
+    console.error('Word element missing required data attributes:', {
+      word, book, chapter: chapterStr, verse: verseStr, wordPosition: wordPositionStr
+    });
+    return;
+  }
+  
+  const chapter = parseInt(chapterStr);
+  const verse = parseInt(verseStr);
+  const wordPosition = parseInt(wordPositionStr);
+  
+  if (isNaN(chapter) || isNaN(verse) || isNaN(wordPosition)) {
+    console.error('Invalid numeric data attributes:', {
+      chapter: chapterStr, verse: verseStr, wordPosition: wordPositionStr
+    });
+    return;
+  }
   
   const mouseX = ('clientX' in event && typeof event.clientX === 'number') ? event.clientX : (event.touches?.[0]?.clientX ?? lastPopupAnchorRect.left);
   const mouseY = ('clientY' in event && typeof event.clientY === 'number') ? event.clientY : (event.touches?.[0]?.clientY ?? lastPopupAnchorRect.top);
