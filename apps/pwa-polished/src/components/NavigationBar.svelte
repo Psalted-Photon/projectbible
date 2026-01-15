@@ -198,6 +198,7 @@
     z-index: 50;
     transform: translateY(-100%);
     transition: transform 0.3s ease-in-out;
+    touch-action: manipulation; /* Allow fast taps */
   }
 
   .navigation-bar.visible {
@@ -245,6 +246,8 @@
     font-size: 12px;
     font-weight: 500;
     transition: background 0.2s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.4);
   }
 
   .update-btn:hover {
@@ -265,6 +268,8 @@
     cursor: pointer;
     transition: all 0.2s;
     font-size: 14px;
+    touch-action: manipulation; /* Allow fast taps */
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
   }
 
   .nav-button:hover {
@@ -321,6 +326,8 @@
     cursor: pointer;
     transition: background 0.15s;
     font-size: 14px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
   }
 
   .dropdown-item:hover {
@@ -355,6 +362,8 @@
     cursor: pointer;
     transition: background 0.15s;
     font-size: 14px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
   }
 
   .book-button:hover {
@@ -395,6 +404,8 @@
     transition: all 0.15s;
     font-size: 13px;
     text-align: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
   }
 
   .chapter-button:hover {

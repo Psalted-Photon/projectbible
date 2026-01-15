@@ -29,8 +29,10 @@ Repository structure (monorepo)
   - Uses IndexedDB/Cache API.
   - Run: npm run dev:pwa (port 5173)
 - apps/pwa-polished
-  - Modern Svelte-based PWA. Streamlined 2-dropdown navigation.
-  - Gesture-based mobile-optimized interface.
+  - Modern Svelte-based PWA. Streamlined 2-dropdown navigation (Book → Chapter).
+  - Gesture-based mobile-optimized interface (swipe between chapters).
+  - Map viewer with 11 historical boundary layers (SQLite-backed GeoJSON).
+  - Advanced styling: custom highlights, underlines, word-level text colors.
   - Run: npm run dev:polished (port 5174)
   - Run both: npm run dev:all
 - apps/electron
@@ -297,8 +299,7 @@ EPIC E1 — Domain model + interfaces (core)
 - [ ] Define UI routing: /read/:translation/:book/:chapter, /search, /place/:id, /settings
 
 EPIC E2 — PWA shell (small packs first)
-- [x] Vite app + PWA service worker basic offline shell
-- [ ] IndexedDB storage adapter
+- [x] Vite app + PWA service worker basic offline shell- [x] Svelte-based pwa-polished variant with 2-dropdown navigation- [ ] IndexedDB storage adapter
 - [ ] Pack import (download .sqlite, verify checksum, store)
 - [ ] Basic “install profile” UI (mobile-min)
 
@@ -342,11 +343,14 @@ EPIC E10 — Places + maps
 - [ ] Place entity pages (name, alt names, coords)
 - [ ] Verse -> place links
 - [ ] Open in Google Maps/Earth
+- [x] Map viewer with Leaflet.js (implemented in pwa-polished)
 - [ ] Offline basemap viewer in Electron (MBTiles)
 
 EPIC E11 — Time slider overlays
-- [ ] Support “eras” as overlay layers with year range
-- [ ] Start with 3–5 layers where license/provenance is clean
+- [x] Support "eras" as overlay layers with year range (11 periods implemented)
+- [x] Historical boundary GeoJSON stored in SQLite
+- [x] Time period selector UI in map viewer
+- [ ] Expand to additional geographic regions beyond Middle East
 
 EPIC E12 — Reading plan generator
 - [ ] Selection UI (books/chapters, groups)
@@ -370,18 +374,18 @@ EPIC E14 — Advanced text formatting & styling
   - New line per verse (current default)
   - Continuous paragraph flow
   - Poetry mode (indentation for Psalms, etc.)
-- [ ] Custom color highlights (not just yellow)
+- [x] Custom color highlights (implemented in pwa-polished)
   - Color picker for highlight backgrounds
   - Multiple highlight colors per user preference
   - Persist highlight color with verse reference
-- [ ] Custom underline colors
+- [x] Custom underline colors (implemented in pwa-polished)
   - Color picker for underlines
   - Underline style variants (solid/dashed/dotted)
   - Persist underline color + style with verse reference
-- [ ] Word-level text color customization
+- [x] Word-level text color customization (implemented in pwa-polished)
   - Custom text colors per word
   - Persist word color with book:chapter:verse:position
-- [ ] Style persistence across translations
+- [x] Style persistence across translations (implemented in pwa-polished)
   - Notes, underlines, highlights keyed to canonical references (not translation-specific)
   - Transfer annotations when switching translations
   - Smart handling when verse numbering differs between versions
@@ -389,6 +393,44 @@ EPIC E14 — Advanced text formatting & styling
   - Light/dark/sepia modes
   - Custom color schemes
   - High contrast accessibility mode
+
+EPIC E15 — Cross-Reference Network Visualization
+- [ ] Visual graph showing connections between passages
+- [ ] Interactive node exploration (click verse → see all cross-refs)
+- [ ] Strength indicators (direct quote vs thematic vs allusion)
+- [ ] Filter by reference type (parallel, quotation, thematic)
+- [ ] Zoom/pan graph navigation
+- [ ] Export as GraphML for external analysis
+- [ ] Build from existing cross-reference data (TSK, OpenBible.info)
+
+EPIC E16 — Commentary Integration
+- [ ] Import public domain commentaries (Matthew Henry, John Gill, John Wesley, etc.)
+- [ ] Verse-linked commentary viewer
+- [ ] Commentary search across multiple authors
+- [ ] Commentary comparison (show 2-3 side-by-side)
+- [ ] Pack format for commentary data (SQLite)
+- [ ] Sources: StudyLight.org, CCEL (Christian Classics Ethereal Library)
+- [ ] Attribution/licensing tracking per commentary work
+
+EPIC E17 — Reading Statistics & Insights
+- [ ] Reading streak tracker (days in a row)
+- [ ] Books/chapters completed visualization
+- [ ] Average reading time per chapter
+- [ ] Heatmap: which books you've read most
+- [ ] Reading pace tracking (verses/day, chapters/week)
+- [ ] Export reading log (CSV/JSON)
+- [ ] Reading goals with progress indicators
+- [ ] Year-in-review summary
+
+EPIC E18 — Advanced Search (Power Users)
+- [ ] Regex search support (for power users)
+- [ ] Proximity search ("faith" within 5 words of "works")
+- [ ] Boolean operators (AND, OR, NOT)
+- [ ] Grammatical search (find all aorist verbs in John)
+- [ ] Lemma search (find all forms of Greek λόγος)
+- [ ] Saved search templates
+- [ ] Search history
+- [ ] Export search results (CSV/JSON)
 
 What to work on from a phone (Codespaces)
 - docs updates, TODO refinement

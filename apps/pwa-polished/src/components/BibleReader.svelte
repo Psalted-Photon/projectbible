@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import NavigationBar from "./NavigationBar.svelte";
+  import SelectionToast from "./SelectionToast.svelte";
   import {
     navigationStore,
     availableTranslations,
@@ -28,6 +29,20 @@
   let lastNavigationKey = '';
   let lastScrollTop = 0;
   let showNavBar = true;
+
+  // Text selection state
+  let showToast = false;
+  let toastX = 0;
+  let toastY = 0;
+  let selectedText = '';
+  let selectionMode: 'word' | 'verse' = 'word';
+  let selectionRange: Range | null = null;
+  let longPressTimer: number | null = null;
+  let highlightedElements: HTMLElement[] = [];
+  let isDragging = false;
+  let dragEdge: 'left' | 'right' | null = null;
+  let hoveredWordElement: HTMLElement | null = null;
+  let justOpenedToast = false;
 
   // Use per-window state if windowId provided, otherwise use global state
   $: windowState = windowId ? $windowStore.find(w => w.id === windowId) : null;
@@ -407,6 +422,495 @@
     }
   }
 
+  // Text selection handlers
+  function handleTextInteraction(e: MouseEvent | TouchEvent) {
+    const target = e.target as HTMLElement;
+    
+    // Ignore if clicking on note, navigation bar, or any button/dropdown
+    if (target.closest('.inline-note')) return;
+    if (target.closest('.navigation-bar')) return;
+    if (target.closest('button')) return;
+    if (target.closest('.nav-dropdown')) return;
+    if (target.closest('.toast')) return;
+    
+    // Start long press timer for touch
+    if (e.type === 'touchstart') {
+      e.preventDefault(); // Prevent default touch behavior
+      const touch = (e as TouchEvent).touches[0];
+      longPressTimer = window.setTimeout(() => {
+        handleTextSelection(touch.clientX, touch.clientY, target);
+      }, 900);
+    }
+  }
+
+  function handleTouchEnd(e: TouchEvent) {
+    // Cancel long press if finger lifted before 0.9s
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+
+  function handleMouseMove(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    
+    // Clear any previous hover
+    if (hoveredWordElement) {
+      hoveredWordElement.classList.remove('word-hover');
+      hoveredWordElement = null;
+    }
+    
+    // Don't hover when dragging or when toast is open
+    if (isDragging || showToast) return;
+    
+    // Ignore special elements
+    if (target.closest('.inline-note')) return;
+    if (target.closest('.toast')) return;
+    if (target.closest('.navigation-bar')) return;
+    if (target.closest('button')) return;
+    
+    // Only handle if hovering over verse text
+    const verseText = target.closest('.verse-text');
+    if (!verseText) return;
+    
+    // Get the word at cursor position
+    const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+    if (!range) return;
+    
+    let textNode = range.startContainer;
+    if (textNode.nodeType !== Node.TEXT_NODE) {
+      const walker = document.createTreeWalker(textNode, NodeFilter.SHOW_TEXT, null);
+      const firstText = walker.nextNode();
+      if (firstText) textNode = firstText;
+      else return;
+    }
+    
+    const text = textNode.textContent || '';
+    const offset = range.startOffset;
+    const wordBounds = getWordBounds(text, offset);
+    
+    if (wordBounds) {
+      const word = text.substring(wordBounds.start, wordBounds.end).trim();
+      if (word.length > 0) {
+        // Create temporary highlight for hover
+        try {
+          const hoverRange = document.createRange();
+          hoverRange.setStart(textNode, wordBounds.start);
+          hoverRange.setEnd(textNode, wordBounds.end);
+          
+          // Wrap the word temporarily
+          const span = document.createElement('span');
+          span.className = 'word-hover';
+          const contents = hoverRange.extractContents();
+          span.appendChild(contents);
+          hoverRange.insertNode(span);
+          hoveredWordElement = span;
+        } catch (err) {
+          // Silently fail if can't create hover
+        }
+      }
+    }
+  }
+
+  function handleTextClick(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    
+    // Ignore if clicking on note
+    if (target.closest('.inline-note')) return;
+    
+    // Ignore if clicking on toast or drag handles
+    if (target.closest('.toast') || target.closest('.drag-handle')) return;
+    
+    // Only handle if clicking inside verse text
+    if (!target.closest('.verse-text')) return;
+    
+    // Clear hover highlight before selecting (unwrap the span)
+    if (hoveredWordElement) {
+      const parent = hoveredWordElement.parentNode;
+      while (hoveredWordElement.firstChild) {
+        parent?.insertBefore(hoveredWordElement.firstChild, hoveredWordElement);
+      }
+      parent?.removeChild(hoveredWordElement);
+      hoveredWordElement = null;
+      
+      // Normalize the parent to merge adjacent text nodes
+      parent?.normalize();
+    }
+    
+    // After unwrapping, get the element at the click position
+    const elementAtPoint = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+    
+    // Handle click - mouse clicks work immediately
+    handleTextSelection(e.clientX, e.clientY, elementAtPoint || target);
+  }
+
+  function handleTextSelection(x: number, y: number, target: HTMLElement) {
+    // Find the verse text container
+    const verseText = target.closest('.verse-text');
+    if (!verseText) return;
+    
+    // Get selection from browser (works better with HTML content)
+    const selection = window.getSelection();
+    if (!selection) return;
+    
+    // Clear any existing selection
+    selection.removeAllRanges();
+    
+    // Use document.caretRangeFromPoint to get the exact position
+    const range = document.caretRangeFromPoint(x, y);
+    if (!range) return;
+    
+    // Get the text node at click position
+    let textNode = range.startContainer;
+    
+    // If we clicked on an element, try to get its text content
+    if (textNode.nodeType !== Node.TEXT_NODE) {
+      // Try to find a text node child
+      const walker = document.createTreeWalker(
+        textNode,
+        NodeFilter.SHOW_TEXT,
+        null
+      );
+      const firstText = walker.nextNode();
+      if (firstText) {
+        textNode = firstText;
+      } else {
+        return; // No text to select
+      }
+    }
+    
+    const text = textNode.textContent || '';
+    if (!text.trim()) return;
+    
+    const offset = range.startOffset;
+    const wordBounds = getWordBounds(text, offset);
+    
+    if (wordBounds) {
+      selectedText = text.substring(wordBounds.start, wordBounds.end).trim();
+      
+      if (!selectedText) return;
+      
+      // Create selection range
+      try {
+        const newRange = document.createRange();
+        newRange.setStart(textNode, wordBounds.start);
+        newRange.setEnd(textNode, wordBounds.end);
+        selectionRange = newRange;
+        
+        // Highlight the selection
+        highlightSelection(newRange, selectionMode);
+        
+        // Show toast
+        showToastAt(x, y);
+      } catch (err) {
+        console.error('Error creating selection range:', err);
+        // Silently fail - just don't show selection
+      }
+    }
+  }
+
+  function getClickOffset(element: HTMLElement, x: number): number {
+    const range = document.caretRangeFromPoint(x, 0);
+    if (range && range.startContainer === element.firstChild) {
+      return range.startOffset;
+    }
+    return 0;
+  }
+
+  function getWordBounds(text: string, offset: number): { start: number; end: number } | null {
+    // Find word boundaries
+    let start = offset;
+    let end = offset;
+    
+    // Expand left
+    while (start > 0 && /\w/.test(text[start - 1])) {
+      start--;
+    }
+    
+    // Expand right
+    while (end < text.length && /\w/.test(text[end])) {
+      end++;
+    }
+    
+    if (start < end) {
+      return { start, end };
+    }
+    
+    return null;
+  }
+
+  function highlightSelection(range: Range, mode: 'word' | 'verse') {
+    // Clear previous highlights
+    clearHighlights();
+    
+    if (mode === 'word') {
+      // Use browser's native selection for highlighting (non-invasive)
+      const selection = window.getSelection();
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range.cloneRange());
+      }
+      
+      // Create floating drag handles positioned absolutely
+      const rects = range.getClientRects();
+      if (rects.length > 0) {
+        const firstRect = rects[0];
+        const lastRect = rects[rects.length - 1];
+        
+        // Get the scrollable container offset
+        const readerRect = readerElement?.getBoundingClientRect();
+        const scrollTop = readerElement?.scrollTop || 0;
+        
+        // Left handle at start of selection
+        const leftHandle = document.createElement('div');
+        leftHandle.className = 'drag-handle-float left';
+        leftHandle.style.position = 'absolute';
+        leftHandle.style.left = `${firstRect.left - (readerRect?.left || 0)}px`;
+        leftHandle.style.top = `${firstRect.top - (readerRect?.top || 0) + scrollTop}px`;
+        leftHandle.style.height = `${firstRect.height}px`;
+        leftHandle.addEventListener('mousedown', (e) => startDrag(e, 'left'));
+        leftHandle.addEventListener('touchstart', (e) => startDragTouch(e, 'left'), { passive: false });
+        
+        // Right handle at end of selection
+        const rightHandle = document.createElement('div');
+        rightHandle.className = 'drag-handle-float right';
+        rightHandle.style.position = 'absolute';
+        rightHandle.style.left = `${lastRect.right - (readerRect?.left || 0)}px`;
+        rightHandle.style.top = `${lastRect.top - (readerRect?.top || 0) + scrollTop}px`;
+        rightHandle.style.height = `${lastRect.height}px`;
+        rightHandle.addEventListener('mousedown', (e) => startDrag(e, 'right'));
+        rightHandle.addEventListener('touchstart', (e) => startDragTouch(e, 'right'), { passive: false });
+        
+        // Append to text container
+        const textContainer = readerElement?.querySelector('.text-container');
+        if (textContainer) {
+          textContainer.appendChild(leftHandle);
+          textContainer.appendChild(rightHandle);
+          highlightedElements.push(leftHandle, rightHandle);
+        }
+      }
+    } else {
+      // Highlight the entire verse
+      const verseEl = range.startContainer.parentElement?.closest('.verse');
+      if (verseEl) {
+        verseEl.classList.add('verse-highlighted');
+        highlightedElements.push(verseEl as HTMLElement);
+      }
+    }
+  }
+
+  function clearHighlights() {
+    // Clear browser selection
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+    }
+    
+    // Remove any DOM elements we added
+    highlightedElements.forEach(el => {
+      if (el.classList.contains('verse-highlighted')) {
+        el.classList.remove('verse-highlighted');
+      } else {
+        // Remove floating handles or other elements
+        el.remove();
+      }
+    });
+    highlightedElements = [];
+  }
+
+  function startDrag(e: MouseEvent, edge: 'left' | 'right') {
+    e.preventDefault();
+    e.stopPropagation();
+    isDragging = true;
+    dragEdge = edge;
+    
+    // Prevent toast from closing during drag
+    document.addEventListener('mousemove', handleDrag, true);
+    document.addEventListener('mouseup', stopDrag, true);
+  }
+
+  function handleDrag(e: MouseEvent) {
+    if (!isDragging || !dragEdge || !selectionRange) return;
+    
+    // Get the position of the mouse
+    const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+    if (!range) return;
+    
+    try {
+      const newRange = selectionRange.cloneRange();
+      
+      if (dragEdge === 'left') {
+        // Expand/contract from the left
+        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+          newRange.setStart(range.startContainer, range.startOffset);
+        }
+      } else {
+        // Expand/contract from the right
+        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+          newRange.setEnd(range.startContainer, range.startOffset);
+        }
+      }
+      
+      // Update selected text
+      selectedText = newRange.toString().trim();
+      
+      if (selectedText) {
+        // Clear and re-highlight
+        selectionRange = newRange;
+        highlightSelection(newRange, selectionMode);
+      }
+    } catch (err) {
+      console.error('Error during drag:', err);
+    }
+  }
+
+  function stopDrag() {
+    isDragging = false;
+    dragEdge = null;
+    document.removeEventListener('mousemove', handleDrag, true);
+    document.removeEventListener('touchmove', handleDragTouch, true);
+    document.removeEventListener('mouseup', stopDrag, true);
+    document.removeEventListener('touchend', stopDrag, true);
+  }
+
+  function startDragTouch(e: TouchEvent, edge: 'left' | 'right') {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Cancel any long press
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    
+    isDragging = true;
+    dragEdge = edge;
+    
+    // Prevent toast from closing during drag
+    document.addEventListener('touchmove', handleDragTouch, { passive: false, capture: true });
+    document.addEventListener('touchend', stopDrag, { capture: true });
+  }
+
+  function handleDragTouch(e: TouchEvent) {
+    if (!isDragging || !dragEdge || !selectionRange) return;
+    e.preventDefault();
+    
+    const touch = e.touches[0];
+    if (!touch) return;
+    
+    // Get the position of the touch
+    const range = document.caretRangeFromPoint(touch.clientX, touch.clientY);
+    if (!range) return;
+    
+    try {
+      const newRange = selectionRange.cloneRange();
+      
+      if (dragEdge === 'left') {
+        // Expand/contract from the left
+        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+          newRange.setStart(range.startContainer, range.startOffset);
+        }
+      } else {
+        // Expand/contract from the right
+        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+          newRange.setEnd(range.startContainer, range.startOffset);
+        }
+      }
+      
+      // Update the selection text
+      selectedText = newRange.toString().trim();
+      
+      if (selectedText) {
+        selectionRange = newRange;
+        highlightSelection(newRange, selectionMode);
+      }
+    } catch (err) {
+      console.error('Error during touch drag:', err);
+    }
+  }
+
+  function showToastAt(x: number, y: number) {
+    // Clear any hover highlight
+    if (hoveredWordElement) {
+      hoveredWordElement.classList.remove('word-hover');
+      hoveredWordElement = null;
+    }
+    
+    // Position toast above the selection to avoid covering the word
+    const toastHeight = 90; // Smaller toast now
+    const toastWidth = 200;
+    
+    // Position above and centered on click
+    toastX = Math.min(Math.max(x - toastWidth / 2, 10), window.innerWidth - toastWidth - 10);
+    toastY = Math.max(y - toastHeight - 15, 10); // 15px above selection (5px higher)
+    
+    // If too close to top, position below instead
+    if (toastY < 70) {
+      toastY = y + 30;
+    }
+    
+    showToast = true;
+    justOpenedToast = true;
+    
+    // Allow clickOutside to work after a short delay
+    setTimeout(() => {
+      justOpenedToast = false;
+    }, 100);
+  }
+
+  function handleToastAction(event: CustomEvent) {
+    const { action, text } = event.detail;
+    console.log(`Action: ${action} on "${text}"`);
+    
+    // TODO: Wire up actual actions
+    switch (action) {
+      case 'dissect':
+        alert(`Dissect: ${text}\n\n(Word study coming soon)`);
+        break;
+      case 'search':
+        alert(`Search for: ${text}\n\n(Search coming soon)`);
+        break;
+      case 'map':
+        alert(`Show on map: ${text}\n\n(Map integration coming soon)`);
+        break;
+      case 'highlight':
+        alert(`Highlight: ${text}\n\n(Highlights coming soon)`);
+        break;
+      case 'save':
+        alert(`Save verse: ${text}\n\n(Saved verses coming soon)`);
+        break;
+      case 'repeats':
+        alert(`Show repeats of: ${text}\n\n(Repeats coming soon)`);
+        break;
+    }
+    
+    // Close toast after action
+    showToast = false;
+    clearHighlights();
+  }
+
+  function handleModeChange(event: CustomEvent) {
+    selectionMode = event.detail;
+    if (selectionRange) {
+      highlightSelection(selectionRange, selectionMode);
+    }
+  }
+
+  function handleClickOutside(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    
+    // Don't close if dragging
+    if (isDragging) return;
+    
+    // Don't close if toast was just opened
+    if (justOpenedToast) return;
+    
+    if (!target.closest('.selection-highlight') && !target.closest('.toast')) {
+      showToast = false;
+      clearHighlights();
+    }
+  }
+
   onMount(() => {
     textStore = new IndexedDBTextStore();
 
@@ -439,12 +943,49 @@
 
     readerElement?.addEventListener("click", handleNoteClick, true);
 
+    // Add text selection listeners
+    readerElement?.addEventListener("mousemove", handleMouseMove);
+    readerElement?.addEventListener("click", handleTextClick);
+    readerElement?.addEventListener("touchstart", handleTextInteraction);
+    readerElement?.addEventListener("touchend", handleTouchEnd);
+    readerElement?.addEventListener("touchcancel", handleTouchEnd);
+    document.addEventListener("click", handleClickOutside);
+
     return () => {
       readerElement?.removeEventListener("click", handleNoteClick, true);
+      readerElement?.removeEventListener("mousemove", handleMouseMove);
+      readerElement?.removeEventListener("click", handleTextClick);
+      readerElement?.removeEventListener("touchstart", handleTextInteraction);
+      readerElement?.removeEventListener("touchend", handleTouchEnd);
+      readerElement?.removeEventListener("touchcancel", handleTouchEnd);
+      document.removeEventListener("click", handleClickOutside);
       stopScrollDetection();
+      if (longPressTimer) clearTimeout(longPressTimer);
+      
+      // Cleanup hover element
+      if (hoveredWordElement) {
+        const parent = hoveredWordElement.parentNode;
+        while (hoveredWordElement.firstChild) {
+          parent?.insertBefore(hoveredWordElement.firstChild, hoveredWordElement);
+        }
+        parent?.removeChild(hoveredWordElement);
+        hoveredWordElement = null;
+      }
     };
   });
 </script>
+
+{#if showToast}
+  <SelectionToast 
+    x={toastX} 
+    y={toastY} 
+    {selectedText}
+    isPlace={false}
+    mode={selectionMode}
+    on:action={handleToastAction}
+    on:modeChange={handleModeChange}
+  />
+{/if}
 
 <div class="bible-reader" bind:this={readerElement}>
   <NavigationBar {windowId} visible={showNavBar} />
@@ -551,8 +1092,10 @@
   .verse-text {
     font-size: 1.125rem;
     line-height: 1.8;
+    cursor: text;
   }
 
+  /* Remove verse-level hover - we'll handle word-level in JS */
   .section-heading {
     font-weight: 600;
     font-size: 1.1rem;
@@ -611,5 +1154,69 @@
   .bible-reader {
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* Text selection highlights */
+  :global(.word-hover) {
+    background: rgba(102, 126, 234, 0.15);
+    border-radius: 2px;
+    padding: 0 2px;
+    margin: 0 -2px;
+    cursor: pointer;
+    transition: background 0.1s ease;
+  }
+
+  :global(.selection-highlight) {
+    background: rgba(102, 126, 234, 0.3);
+    border-radius: 2px;
+    position: relative;
+    padding: 0 2px;
+    margin: 0 -2px;
+  }
+
+  :global(.verse-highlighted) {
+    background: rgba(102, 126, 234, 0.15);
+    border-left: 3px solid #667eea;
+    padding-left: 8px;
+    margin-left: -8px;
+    border-radius: 2px;
+  }
+
+  /* Floating drag handles for text selection */
+  :global(.drag-handle-float) {
+    position: absolute;
+    width: 3px;
+    background: #667eea;
+    border-radius: 2px;
+    cursor: ew-resize;
+    z-index: 100;
+    opacity: 0.8;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    touch-action: none;
+    pointer-events: auto;
+  }
+
+  :global(.drag-handle-float.left) {
+    margin-left: -3px;
+  }
+
+  :global(.drag-handle-float.right) {
+    margin-left: 0px;
+  }
+
+  :global(.drag-handle-float:hover) {
+    background: #5568d3;
+    opacity: 1;
+    width: 4px;
+  }
+
+  :global(.drag-handle-float:active) {
+    background: #4456c0;
+    width: 4px;
+  }
+
+  /* Custom selection styling */
+  .text-container ::selection {
+    background: rgba(102, 126, 234, 0.3);
   }
 </style>

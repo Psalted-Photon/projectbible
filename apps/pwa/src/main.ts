@@ -1,10 +1,14 @@
 import { IndexedDBTextStore, IndexedDBPackManager, IndexedDBSearchIndex, IndexedDBCrossReferenceStore, importPackFromSQLite, getSettings, updateSettings, getDailyDriverFor, getPrimaryDailyDriver, type UserSettings, openDB } from './adapters/index.js';
 import { clearAllData, clearPacksOnly, getDatabaseStats, removePack } from './adapters/db-manager.js';
 import { generateReadingPlan, BIBLE_BOOKS as BIBLE_BOOKS_INFO, type ReadingPlanConfig, type ReadingPlan } from '@projectbible/core';
+import { DevTools } from './components/DevTools.js';
 import L from 'leaflet';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing #app element');
+
+// Initialize DevTools for workbench
+const devTools = new DevTools(root);
 
 // Create adapter instances
 const textStore = new IndexedDBTextStore();
