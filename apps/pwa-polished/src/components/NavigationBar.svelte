@@ -6,6 +6,10 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { BIBLE_BOOKS } from "../lib/bibleData";
   import { onMount, onDestroy } from "svelte";
+  import {
+    searchService,
+    type SearchCategory,
+  } from "../lib/services/searchService";
 
   export let windowId: string | undefined = undefined;
   export let visible: boolean = true;
@@ -15,16 +19,32 @@
   let expandedBooks = new Set<string>();
   let isChronologicalMode = false;
   let pendingChronologicalMode = false;
+  let searchQuery = "";
+  let searchFocused = false;
+  let blurTimeout: number | undefined;
+  let searchResults: SearchCategory[] = [];
+  let showResults = false;
+  let isSearching = false;
+  let searchTimeout: ReturnType<typeof setTimeout>;
+  let expandedTranslations = new Set<string>();
 
   // Use per-window state if windowId provided, otherwise use global state
-  $: windowState = windowId ? $windowStore.find(w => w.id === windowId) : null;
-  $: currentTranslation = windowState?.contentState?.translation ?? $navigationStore.translation;
+  $: windowState = windowId
+    ? $windowStore.find((w) => w.id === windowId)
+    : null;
+  $: currentTranslation =
+    windowState?.contentState?.translation ?? $navigationStore.translation;
   $: currentBook = windowState?.contentState?.book ?? $navigationStore.book;
-  $: currentChapter = windowState?.contentState?.chapter ?? $navigationStore.chapter;
+  $: currentChapter =
+    windowState?.contentState?.chapter ?? $navigationStore.chapter;
   $: currentReference = `${currentBook} ${currentChapter}`;
-  
+
   // Initialize from store but don't auto-sync
-  $: if ($navigationStore.isChronologicalMode !== undefined && isChronologicalMode === false && pendingChronologicalMode === false) {
+  $: if (
+    $navigationStore.isChronologicalMode !== undefined &&
+    isChronologicalMode === false &&
+    pendingChronologicalMode === false
+  ) {
     isChronologicalMode = $navigationStore.isChronologicalMode;
     pendingChronologicalMode = $navigationStore.isChronologicalMode;
   }
@@ -71,10 +91,10 @@
 
   function selectChapter(bookName: string, chapter: number) {
     if (windowId) {
-      windowStore.updateContentState(windowId, { 
+      windowStore.updateContentState(windowId, {
         translation: currentTranslation,
-        book: bookName, 
-        chapter 
+        book: bookName,
+        chapter,
       });
     } else {
       navigationStore.navigateTo(currentTranslation, bookName, chapter);
@@ -85,10 +105,140 @@
 
   function closeDropdowns(event: MouseEvent) {
     const target = event.target as HTMLElement;
-    if (!target.closest(".nav-dropdown")) {
+    if (
+      !target.closest(".nav-dropdown") &&
+      !target.closest(".search-container")
+    ) {
       translationDropdownOpen = false;
       referenceDropdownOpen = false;
+      showResults = false;
     }
+  }
+
+  function handleSearchInput(event: Event) {
+    const target = event.target as HTMLInputElement;
+    searchQuery = target.value;
+
+    // Debounce search
+    clearTimeout(searchTimeout);
+    if (searchQuery.trim()) {
+      searchTimeout = setTimeout(async () => {
+        await performSearch();
+      }, 300);
+    } else {
+      searchResults = [];
+      showResults = false;
+    }
+  }
+
+  function handleSearchKeydown(event: KeyboardEvent) {
+    if (event.key === "Enter" && searchQuery.trim()) {
+      performSearch();
+    } else if (event.key === "Escape") {
+      showResults = false;
+    }
+  }
+
+  async function performSearch() {
+    if (!searchQuery.trim()) {
+      searchResults = [];
+      showResults = false;
+      return;
+    }
+
+    isSearching = true;
+    try {
+      searchResults = await searchService.search(searchQuery);
+      showResults = true;
+    } catch (error) {
+      console.error("Search error:", error);
+      searchResults = [];
+    } finally {
+      isSearching = false;
+    }
+  }
+
+  function handleResultClick(result: any) {
+    // Navigate to the result
+    if (result.type === "verse" && result.data) {
+      const { book, chapter } = result.data;
+      if (windowId) {
+        windowStore.updateContentState(windowId, {
+          translation: currentTranslation,
+          book,
+          chapter,
+        });
+      } else {
+        navigationStore.navigateTo(currentTranslation, book, chapter);
+      }
+      // Close search results
+      showResults = false;
+      searchQuery = "";
+      searchResults = [];
+    }
+  }
+
+  function highlightText(text: string, query: string): string {
+    if (!query || !text) return text;
+
+    const terms = query.toLowerCase().trim().split(/\s+/);
+    let highlighted = text;
+
+    terms.forEach((term) => {
+      if (term.length < 2) return; // Skip very short terms
+
+      // Create a case-insensitive regex to find the term
+      const regex = new RegExp(`(${term})`, "gi");
+      highlighted = highlighted.replace(regex, "<mark>$1</mark>");
+    });
+
+    return highlighted;
+  }
+
+  function toggleTranslation(translationId: string) {
+    const newExpanded = new Set(expandedTranslations);
+    if (newExpanded.has(translationId)) {
+      newExpanded.delete(translationId);
+    } else {
+      newExpanded.add(translationId);
+    }
+    expandedTranslations = newExpanded;
+  }
+
+  // Group results by translation
+  $: resultsByTranslation = searchResults.reduce(
+    (acc, category) => {
+      if (category.name === "Verses") {
+        category.results.forEach((result) => {
+          const translationId = result.data.translation || "Unknown";
+          if (!acc[translationId]) {
+            acc[translationId] = [];
+          }
+          acc[translationId].push(result);
+        });
+      }
+      return acc;
+    },
+    {} as Record<string, any[]>
+  );
+
+  function clearSearch() {
+    searchQuery = "";
+    searchResults = [];
+    showResults = false;
+  }
+
+  function handleSearchFocus() {
+    if (blurTimeout) {
+      clearTimeout(blurTimeout);
+    }
+    searchFocused = true;
+  }
+
+  function handleSearchBlur() {
+    blurTimeout = window.setTimeout(() => {
+      searchFocused = false;
+    }, 100);
   }
 
   onMount(() => {
@@ -134,7 +284,8 @@
       <input type="checkbox" bind:checked={pendingChronologicalMode} />
       Chronological?
     </label>
-    <button class="update-btn" on:click={updateChronologicalMode}>Update</button>
+    <button class="update-btn" on:click={updateChronologicalMode}>Update</button
+    >
   </div>
 
   <!-- Reference Dropdown (Tree Structure) -->
@@ -181,6 +332,85 @@
             {/if}
           </div>
         {/each}
+      </div>
+    {/if}
+  </div>
+
+  <!-- Search Bar -->
+  <div class="search-container" on:click|stopPropagation>
+    <div class="search-input-wrapper" class:focused={searchFocused}>
+      <span class="search-icon">🔍</span>
+      <input
+        type="text"
+        class="search-input"
+        placeholder="Search verses, places, Strong's..."
+        bind:value={searchQuery}
+        on:input={handleSearchInput}
+        on:keydown={handleSearchKeydown}
+        on:focus={handleSearchFocus}
+        on:blur={handleSearchBlur}
+      />
+      {#if isSearching}
+        <span class="search-spinner">⏳</span>
+      {:else if searchQuery}
+        <button
+          class="clear-search"
+          on:mousedown|preventDefault={clearSearch}
+          title="Clear search"
+        >
+          ✕
+        </button>
+      {/if}
+    </div>
+    <button
+      class="search-button"
+      on:click={performSearch}
+      disabled={!searchQuery.trim()}
+    >
+      Search
+    </button>
+
+    {#if showResults}
+      <div class="search-results-dropdown">
+        {#if searchResults.length > 0 && Object.keys(resultsByTranslation).length > 0}
+          {#each Object.entries(resultsByTranslation) as [translationId, results]}
+            <div class="translation-group">
+              <button
+                class="translation-header"
+                class:expanded={expandedTranslations.has(translationId)}
+                on:click={() => toggleTranslation(translationId)}
+              >
+                <span class="expand-icon">
+                  {expandedTranslations.has(translationId) ? "▼" : "▶"}
+                </span>
+                <span class="translation-name">{translationId}</span>
+                <span class="result-count">({results.length})</span>
+              </button>
+
+              {#if expandedTranslations.has(translationId)}
+                <div class="translation-results">
+                  {#each results as result}
+                    <button
+                      class="search-result-item"
+                      on:click={() => handleResultClick(result)}
+                    >
+                      <div class="result-title">{result.title}</div>
+                      {#if result.subtitle}
+                        <div class="result-subtitle">
+                          {@html highlightText(result.subtitle, searchQuery)}
+                        </div>
+                      {/if}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        {:else}
+          <div class="no-search-results">
+            No results found for "{searchQuery}"
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -435,6 +665,258 @@
   }
 
   .dropdown-menu::-webkit-scrollbar-thumb:hover {
+    background: #5a5a5a;
+  }
+
+  /* Search Bar Styles */
+  .search-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    max-width: 400px;
+  }
+
+  .search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+
+  .search-input-wrapper.focused {
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+  }
+
+  .search-icon {
+    padding: 0 12px;
+    color: #888;
+    font-size: 14px;
+    pointer-events: none;
+  }
+
+  .search-input {
+    flex: 1;
+    padding: 10px 12px 10px 0;
+    background: transparent;
+    border: none;
+    color: #e0e0e0;
+    font-size: 14px;
+    outline: none;
+  }
+
+  .search-input::placeholder {
+    color: #666;
+  }
+
+  .clear-search {
+    padding: 0 12px;
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 16px;
+    transition: color 0.2s;
+    touch-action: manipulation;
+  }
+
+  .clear-search:hover {
+    color: #e0e0e0;
+  }
+
+  .search-button {
+    padding: 10px 20px;
+    background: #667eea;
+    border: 1px solid #667eea;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background 0.2s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.4);
+  }
+
+  .search-button:hover:not(:disabled) {
+    background: #5568d3;
+    border-color: #5568d3;
+  }
+
+  .search-button:disabled {
+    background: #3a3a3a;
+    border-color: #3a3a3a;
+    color: #666;
+    cursor: not-allowed;
+  }
+
+  .search-spinner {
+    padding: 0 12px;
+    color: #667eea;
+    font-size: 16px;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .search-results-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 250px;
+    overflow-y: auto;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    z-index: 100;
+  }
+
+  .search-category {
+    border-bottom: 1px solid #3a3a3a;
+  }
+
+  .search-category:last-child {
+    border-bottom: none;
+  }
+
+  .category-header {
+    padding: 12px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #667eea;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #1a1a1a;
+  }
+
+  .category-results {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .translation-group {
+    border-bottom: 1px solid #3a3a3a;
+  }
+
+  .translation-group:last-child {
+    border-bottom: none;
+  }
+
+  .translation-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    background: #1a1a1a;
+    border: none;
+    color: #e0e0e0;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 14px;
+    font-weight: 600;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+  }
+
+  .translation-header:hover {
+    background: #252525;
+  }
+
+  .translation-name {
+    flex: 1;
+    color: #667eea;
+  }
+
+  .result-count {
+    color: #888;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .translation-results {
+    background: #222;
+  }
+
+  .search-result-item {
+    width: 100%;
+    padding: 12px 14px;
+    background: transparent;
+    border: none;
+    color: #e0e0e0;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid #2a2a2a;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+  }
+
+  .search-result-item:last-child {
+    border-bottom: none;
+  }
+
+  .search-result-item:hover {
+    background: #3a3a3a;
+  }
+
+  .result-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 14px;
+  }
+
+  .result-subtitle {
+    font-size: 13px;
+    color: #aaa;
+    line-height: 1.4;
+  }
+
+  .result-subtitle :global(mark) {
+    background: #667eea;
+    color: #fff;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+
+  .no-search-results {
+    padding: 24px;
+    text-align: center;
+    color: #888;
+    font-size: 14px;
+  }
+
+  .search-results-dropdown::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .search-results-dropdown::-webkit-scrollbar-track {
+    background: #1a1a1a;
+  }
+
+  .search-results-dropdown::-webkit-scrollbar-thumb {
+    background: #4a4a4a;
+    border-radius: 4px;
+  }
+
+  .search-results-dropdown::-webkit-scrollbar-thumb:hover {
     background: #5a5a5a;
   }
 </style>

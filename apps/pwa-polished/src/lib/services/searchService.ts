@@ -1,3 +1,5 @@
+import { IndexedDBSearchIndex } from '../../adapters/SearchIndex';
+
 export interface SearchResult {
   type: 'verse' | 'place' | 'strongs' | 'morphology' | 'cross-reference';
   title: string;
@@ -15,8 +17,11 @@ export interface SearchCategory {
 
 export class UnifiedSearchService {
   private static instance: UnifiedSearchService;
+  private searchIndex: IndexedDBSearchIndex;
 
-  private constructor() {}
+  private constructor() {
+    this.searchIndex = new IndexedDBSearchIndex();
+  }
 
   static getInstance(): UnifiedSearchService {
     if (!UnifiedSearchService.instance) {
@@ -53,23 +58,28 @@ export class UnifiedSearchService {
   }
 
   private async searchVerses(query: string): Promise<SearchResult[]> {
-    // TODO: Implement verse search using IndexedDBTextStore
-    // For now, return placeholder
-    const results: SearchResult[] = [];
-
-    // Placeholder implementation
-    if (query.includes('love')) {
-      results.push({
-        type: 'verse',
-        title: 'John 3:16',
-        subtitle: 'For God so loved the world...',
-        reference: 'John 3:16',
-        data: { book: 'John', chapter: 3, verse: 16 },
-        score: 1.0,
-      });
+    try {
+      // Use the IndexedDBSearchIndex to search
+      const dbResults = await this.searchIndex.search(query);
+      
+      // Convert to our SearchResult format and limit to top 50 results
+      return dbResults.slice(0, 50).map((result, index) => ({
+        type: 'verse' as const,
+        title: `${result.book} ${result.chapter}:${result.verse}`,
+        subtitle: result.snippet || result.text,
+        reference: `${result.book} ${result.chapter}:${result.verse}`,
+        data: { 
+          book: result.book, 
+          chapter: result.chapter, 
+          verse: result.verse,
+          translation: result.translation
+        },
+        score: 1.0 - (index / 100), // Simple relevance scoring
+      }));
+    } catch (error) {
+      console.error('Error searching verses:', error);
+      return [];
     }
-
-    return results;
   }
 
   private async searchPlaces(_query: string): Promise<SearchResult[]> {
