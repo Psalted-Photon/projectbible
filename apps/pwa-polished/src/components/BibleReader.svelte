@@ -43,6 +43,8 @@
   let dragEdge: 'left' | 'right' | null = null;
   let hoveredWordElement: HTMLElement | null = null;
   let justOpenedToast = false;
+  let touchStartPos: { x: number; y: number } | null = null;
+  let hasMoved = false;
 
   // Use per-window state if windowId provided, otherwise use global state
   $: windowState = windowId ? $windowStore.find(w => w.id === windowId) : null;
@@ -435,20 +437,47 @@
     
     // Start long press timer for touch
     if (e.type === 'touchstart') {
-      e.preventDefault(); // Prevent default touch behavior
+      // DO NOT preventDefault here - allow native scrolling
       const touch = (e as TouchEvent).touches[0];
+      touchStartPos = { x: touch.clientX, y: touch.clientY };
+      hasMoved = false;
+      
       longPressTimer = window.setTimeout(() => {
-        handleTextSelection(touch.clientX, touch.clientY, target);
-      }, 900);
+        // Only trigger selection if user hasn't moved (scrolled)
+        if (!hasMoved && touchStartPos) {
+          handleTextSelection(touchStartPos.x, touchStartPos.y, target);
+        }
+      }, 500); // Reduced from 900ms to 500ms for better UX
+    }
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    // Track if user is scrolling
+    if (touchStartPos && !hasMoved) {
+      const touch = e.touches[0];
+      const deltaX = Math.abs(touch.clientX - touchStartPos.x);
+      const deltaY = Math.abs(touch.clientY - touchStartPos.y);
+      
+      // If moved more than 10px, consider it scrolling
+      if (deltaX > 10 || deltaY > 10) {
+        hasMoved = true;
+        // Cancel long press timer since user is scrolling
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      }
     }
   }
 
   function handleTouchEnd(e: TouchEvent) {
-    // Cancel long press if finger lifted before 0.9s
+    // Cancel long press if finger lifted before timer fires
     if (longPressTimer) {
       clearTimeout(longPressTimer);
       longPressTimer = null;
     }
+    touchStartPos = null;
+    hasMoved = false;
   }
 
   function handleMouseMove(e: MouseEvent) {
@@ -947,6 +976,7 @@
     readerElement?.addEventListener("mousemove", handleMouseMove);
     readerElement?.addEventListener("click", handleTextClick);
     readerElement?.addEventListener("touchstart", handleTextInteraction);
+    readerElement?.addEventListener("touchmove", handleTouchMove);
     readerElement?.addEventListener("touchend", handleTouchEnd);
     readerElement?.addEventListener("touchcancel", handleTouchEnd);
     document.addEventListener("click", handleClickOutside);
@@ -956,6 +986,7 @@
       readerElement?.removeEventListener("mousemove", handleMouseMove);
       readerElement?.removeEventListener("click", handleTextClick);
       readerElement?.removeEventListener("touchstart", handleTextInteraction);
+      readerElement?.removeEventListener("touchmove", handleTouchMove);
       readerElement?.removeEventListener("touchend", handleTouchEnd);
       readerElement?.removeEventListener("touchcancel", handleTouchEnd);
       document.removeEventListener("click", handleClickOutside);
