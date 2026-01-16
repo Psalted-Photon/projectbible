@@ -37,6 +37,11 @@
   let displayedResultCount = 0;
   let showingAll = false;
   let showPowerSearchModal = false;
+  
+  // Refs for positioning dropdowns on mobile
+  let translationButtonRef: HTMLElement;
+  let referenceButtonRef: HTMLElement;
+  let searchContainerRef: HTMLElement;
 
   // Listen for external search triggers
   $: if ($triggerSearch > 0) {
@@ -75,6 +80,18 @@
     translationDropdownOpen = !translationDropdownOpen;
     if (translationDropdownOpen) {
       referenceDropdownOpen = false;
+      // Position dropdown on mobile
+      if (window.innerWidth <= 768 && translationButtonRef) {
+        requestAnimationFrame(() => {
+          const rect = translationButtonRef.getBoundingClientRect();
+          const dropdown = translationButtonRef.nextElementSibling as HTMLElement;
+          if (dropdown) {
+            dropdown.style.left = `${rect.left}px`;
+            dropdown.style.top = `${rect.bottom + 4}px`;
+            dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+          }
+        });
+      }
     }
   }
 
@@ -83,6 +100,18 @@
     referenceDropdownOpen = !referenceDropdownOpen;
     if (referenceDropdownOpen) {
       translationDropdownOpen = false;
+      // Position dropdown on mobile
+      if (window.innerWidth <= 768 && referenceButtonRef) {
+        requestAnimationFrame(() => {
+          const rect = referenceButtonRef.getBoundingClientRect();
+          const dropdown = referenceButtonRef.nextElementSibling as HTMLElement;
+          if (dropdown) {
+            dropdown.style.left = `${rect.left}px`;
+            dropdown.style.top = `${rect.bottom + 4}px`;
+            dropdown.style.width = `${Math.max(rect.width, 250)}px`;
+          }
+        });
+      }
     }
   }
 
@@ -178,6 +207,19 @@
       showingAll = loadAll || displayedResultCount >= totalResultCount;
 
       showResults = true;
+      
+      // Position search results dropdown on mobile
+      if (window.innerWidth <= 768 && searchContainerRef) {
+        requestAnimationFrame(() => {
+          const rect = searchContainerRef.getBoundingClientRect();
+          const dropdown = searchContainerRef.querySelector('.search-results-dropdown') as HTMLElement;
+          if (dropdown) {
+            dropdown.style.left = `${rect.left}px`;
+            dropdown.style.top = `${rect.bottom + 4}px`;
+            dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
+          }
+        });
+      }
     } catch (error) {
       console.error("Search error:", error);
       searchResults = [];
@@ -299,6 +341,7 @@
   <!-- Translation Dropdown -->
   <div class="nav-dropdown">
     <button
+      bind:this={translationButtonRef}
       class="nav-button"
       on:click={toggleTranslationDropdown}
       class:active={translationDropdownOpen}
@@ -336,6 +379,7 @@
   <!-- Reference Dropdown (Tree Structure) -->
   <div class="nav-dropdown">
     <button
+      bind:this={referenceButtonRef}
       class="nav-button"
       on:click={toggleReferenceDropdown}
       class:active={referenceDropdownOpen}
@@ -382,7 +426,7 @@
   </div>
 
   <!-- Search Bar -->
-  <div class="search-container" on:click|stopPropagation role="search">
+  <div bind:this={searchContainerRef} class="search-container" on:click|stopPropagation role="search">
     <div class="search-input-wrapper" class:focused={searchFocused}>
       <span class="search-icon">🔍</span>
       <input
@@ -407,78 +451,80 @@
         </button>
       {/if}
     </div>
-    <button
-      class="search-button"
-      on:click={() => performSearch()}
-      disabled={!searchQuery.trim()}
-    >
-      Search
-    </button>
-    <button
-      class="power-search-button"
-      on:click={() => (showPowerSearchModal = true)}
-      title="Advanced search with regex, proximity, and biblical filters"
-    >
-      ⚡ Power Search
-    </button>
 
     {#if showResults}
       <div class="search-results-dropdown">
-          {#if displayedResultCount > 0}
-            <div class="search-stats">
-              Showing {displayedResultCount}
-              {#if !showingAll && totalResultCount > displayedResultCount}
-                of <button class="load-all-link" on:click={loadAllResults}
-                  >{totalResultCount} results</button
-                >
-              {:else}
-                {totalResultCount > 1 ? "results" : "result"}
+        {#if displayedResultCount > 0}
+          <div class="search-stats">
+            Showing {displayedResultCount}
+            {#if !showingAll && totalResultCount > displayedResultCount}
+              of <button class="load-all-link" on:click={loadAllResults}
+                >{totalResultCount} results</button
+              >
+            {:else}
+              {totalResultCount > 1 ? "results" : "result"}
+            {/if}
+          </div>
+        {/if}
+
+        {#if searchResults.length > 0 && Object.keys(resultsByTranslation).length > 0}
+          {#each Object.entries(resultsByTranslation) as [translationId, results]}
+            <div class="translation-group">
+              <button
+                class="translation-header"
+                class:expanded={expandedTranslations.has(translationId)}
+                on:click={() => toggleTranslation(translationId)}
+              >
+                <span class="expand-icon">
+                  {expandedTranslations.has(translationId) ? "▼" : "▶"}
+                </span>
+                <span class="translation-name">{translationId}</span>
+                <span class="result-count">({results.length})</span>
+              </button>
+
+              {#if expandedTranslations.has(translationId)}
+                <div class="translation-results">
+                  {#each results as result}
+                    <button
+                      class="search-result-item"
+                      on:click={() => handleResultClick(result)}
+                    >
+                      <div class="result-title">{result.title}</div>
+                      {#if result.subtitle}
+                        <div class="result-subtitle">
+                          {@html highlightText(result.subtitle, searchQuery)}
+                        </div>
+                      {/if}
+                    </button>
+                  {/each}
+                </div>
               {/if}
             </div>
-          {/if}
-
-          {#if searchResults.length > 0 && Object.keys(resultsByTranslation).length > 0}
-            {#each Object.entries(resultsByTranslation) as [translationId, results]}
-              <div class="translation-group">
-                <button
-                  class="translation-header"
-                  class:expanded={expandedTranslations.has(translationId)}
-                  on:click={() => toggleTranslation(translationId)}
-                >
-                  <span class="expand-icon">
-                    {expandedTranslations.has(translationId) ? "▼" : "▶"}
-                  </span>
-                  <span class="translation-name">{translationId}</span>
-                  <span class="result-count">({results.length})</span>
-                </button>
-
-                {#if expandedTranslations.has(translationId)}
-                  <div class="translation-results">
-                    {#each results as result}
-                      <button
-                        class="search-result-item"
-                        on:click={() => handleResultClick(result)}
-                      >
-                        <div class="result-title">{result.title}</div>
-                        {#if result.subtitle}
-                          <div class="result-subtitle">
-                            {@html highlightText(result.subtitle, searchQuery)}
-                          </div>
-                        {/if}
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-          {:else}
-            <div class="no-search-results">
-              No results found for "{searchQuery}"
-            </div>
-          {/if}
-        </div>
-      {/if}
+          {/each}
+        {:else}
+          <div class="no-search-results">
+            No results found for "{searchQuery}"
+          </div>
+        {/if}
+      </div>
+    {/if}
   </div>
+
+  <!-- Search Buttons -->
+  <button
+    class="search-button"
+    on:click={() => performSearch()}
+    disabled={!searchQuery.trim()}
+  >
+    Search
+  </button>
+  <button
+    class="power-search-button"
+    on:click={() => (showPowerSearchModal = true)}
+    title="Advanced search with regex, proximity, and biblical filters"
+  >
+    ⚡ Power
+  </button>
 
   <!-- Settings Button -->
   <button
@@ -528,6 +574,7 @@
     touch-action: manipulation; /* Allow fast taps */
     min-height: 68px;
     box-sizing: border-box;
+    flex-wrap: nowrap; /* Prevent wrapping on all screen sizes */
   }
 
   .navigation-bar:not(.visible) {
@@ -649,7 +696,7 @@
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    z-index: 1001;
+    z-index: 10001; /* Higher than nav bar */
   }
 
   .tree-menu {
@@ -780,8 +827,9 @@
 
   /* Search Bar Styles */
   .search-container {
-    flex: 1;
-    max-width: 600px;
+    flex-shrink: 0;
+    max-width: 400px;
+    min-width: 200px;
     position: relative;
     display: flex;
     align-items: center;
@@ -918,7 +966,7 @@
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-    z-index: 10000;
+    z-index: 10002; /* Higher than dropdowns */
   }
 
   .translation-group {
@@ -1089,13 +1137,16 @@
   /* Mobile responsive styles */
   @media (max-width: 768px) {
     .navigation-bar {
-      gap: 8px;
-      padding: 8px 12px;
+      gap: 10px; /* Increased from 6px */
+      padding: 10px 12px; /* Increased from 8px 10px */
       overflow-x: auto;
-      overflow-y: hidden;
+      overflow-y: visible; /* Changed from hidden to allow dropdowns */
       -webkit-overflow-scrolling: touch;
       scrollbar-width: none; /* Firefox */
       -ms-overflow-style: none; /* IE and Edge */
+      flex-wrap: nowrap; /* Prevent wrapping */
+      min-height: 60px; /* Increased from 56px */
+      align-items: center;
     }
 
     .navigation-bar::-webkit-scrollbar {
@@ -1104,75 +1155,164 @@
 
     .nav-dropdown {
       flex-shrink: 0;
-      min-width: 140px;
-      max-width: 160px;
+      min-width: 130px; /* Increased from 120px */
+      max-width: 150px; /* Increased from 140px */
+      position: static; /* Allow dropdowns to escape container */
+    }
+
+    .dropdown-menu {
+      position: fixed; /* Fixed positioning to escape scrolling container */
+      left: auto;
+      right: auto;
+      min-width: 200px;
+      max-width: 90vw;
+    }
+
+    .search-results-dropdown {
+      position: fixed; /* Fixed positioning to escape scrolling container */
+      left: auto;
+      right: auto;
+      min-width: 250px;
+      max-width: 90vw;
     }
 
     .nav-checkbox {
       flex-shrink: 0;
-      font-size: 13px;
-      padding: 8px 10px;
+      font-size: 13px; /* Increased from 12px */
+      padding: 8px 10px; /* Increased from 6px 8px */
       white-space: nowrap;
+      min-width: fit-content;
     }
 
     .nav-checkbox label {
-      font-size: 12px;
+      font-size: 12px; /* Increased from 11px */
+      white-space: nowrap;
     }
 
     .update-btn {
-      padding: 3px 8px;
-      font-size: 11px;
+      padding: 4px 10px; /* Increased from 3px 8px */
+      font-size: 11px; /* Increased from 10px */
+      white-space: nowrap;
     }
 
     .nav-button {
-      font-size: 13px;
-      padding: 8px 10px;
+      font-size: 13px; /* Increased from 12px */
+      padding: 8px 10px; /* Increased from 6px 8px */
     }
 
     .nav-label {
-      font-size: 11px;
+      font-size: 11px; /* Increased from 10px */
+    }
+
+    .nav-value {
+      font-size: 13px; /* Increased from 12px */
     }
 
     .search-container {
-      flex: 1;
-      min-width: 200px;
-      max-width: 100%;
+      flex-shrink: 0;
+      min-width: 200px; /* Increased from 180px */
+      max-width: 280px; /* Increased from 250px */
+    }
+
+    .search-input {
+      font-size: 13px; /* Increased from 12px */
+      padding: 8px 10px 8px 0;
+    }
+
+    .search-icon {
+      padding: 0 10px; /* Increased from 8px */
+      font-size: 13px; /* Increased from 12px */
+    }
+
+    .search-button {
+      padding: 8px 14px; /* Increased from 8px 12px */
+      font-size: 13px; /* Increased from 12px */
     }
 
     .power-search-button {
-      padding: 10px 12px;
-      font-size: 13px;
+      padding: 8px 12px; /* Increased from 8px 10px */
+      font-size: 13px; /* Increased from 12px */
+      white-space: nowrap;
     }
 
     .settings-button {
-      width: 40px;
-      height: 40px;
+      width: 44px; /* Increased from 40px - same as desktop */
+      height: 44px; /* Increased from 40px */
+      flex-shrink: 0;
+    }
+
+    .settings-button svg {
+      width: 22px; /* Make icon more visible */
+      height: 22px;
     }
   }
 
   @media (max-width: 480px) {
     .navigation-bar {
-      gap: 6px;
-      padding: 6px 8px;
+      gap: 8px; /* Increased from 4px */
+      padding: 8px 10px; /* Increased from 6px 8px */
+      min-height: 56px; /* Increased from 52px */
+      overflow-y: visible; /* Allow dropdowns */
     }
 
     .nav-dropdown {
-      min-width: 100px;
-      max-width: 120px;
-      font-size: 12px;
+      min-width: 110px; /* Increased from 100px */
+      max-width: 120px; /* Increased from 110px */
+      font-size: 12px; /* Increased from 11px */
+    }
+
+    .nav-button {
+      font-size: 12px; /* Increased from 11px */
+      padding: 7px 8px; /* Increased from 6px */
+    }
+
+    .nav-checkbox {
+      padding: 6px 8px; /* Increased from 5px 6px */
+      font-size: 12px; /* Increased from 11px */
+    }
+
+    .nav-checkbox label {
+      font-size: 11px; /* Increased from 10px */
+    }
+
+    .update-btn {
+      padding: 3px 8px; /* Increased from 2px 6px */
+      font-size: 11px; /* Increased from 10px */
     }
 
     .search-container {
-      min-width: 150px;
+      min-width: 160px; /* Increased from 140px */
+      max-width: 200px; /* Increased from 180px */
     }
 
     .search-input {
-      font-size: 13px;
+      font-size: 12px; /* Increased from 11px */
+      padding: 7px 8px 7px 0; /* Increased from 6px 8px 6px 0 */
+    }
+
+    .search-icon {
+      padding: 0 8px; /* Increased from 6px */
+      font-size: 12px; /* Increased from 11px */
     }
 
     .search-button {
-      padding: 8px 12px;
-      font-size: 13px;
+      padding: 7px 12px; /* Increased from 6px 10px */
+      font-size: 12px; /* Increased from 11px */
+    }
+
+    .power-search-button {
+      padding: 7px 10px; /* Increased from 6px 8px */
+      font-size: 12px; /* Increased from 11px */
+    }
+
+    .settings-button {
+      width: 44px; /* Increased from 36px - make it prominent! */
+      height: 44px; /* Increased from 36px */
+    }
+
+    .settings-button svg {
+      width: 20px; /* Increased from 16px */
+      height: 20px; /* Increased from 16px */
     }
   }
 </style>

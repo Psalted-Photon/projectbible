@@ -25,6 +25,7 @@ export interface UserSettings {
   fontSize?: number; // Base font size in pixels (default 15)
   lineSpacing?: number; // Line height multiplier (default 1.5)
   verseLayout?: 'one-per-line' | 'paragraph'; // Verse layout mode
+  wordWrap?: boolean; // Enable/disable word wrapping (default true)
 }
 
 function normalizeSettings(raw: UserSettings): UserSettings {

@@ -6,6 +6,7 @@
   let fontSize = 18;
   let lineSpacing = 1.8;
   let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
+  let wordWrap: boolean = true;
   let savedMessage = false;
 
   // Load settings on mount
@@ -15,6 +16,7 @@
     fontSize = settings.fontSize || 18;
     lineSpacing = settings.lineSpacing || 1.8;
     verseLayout = settings.verseLayout || "one-per-line";
+    wordWrap = settings.wordWrap !== undefined ? settings.wordWrap : true;
   });
 
   function applySettings() {
@@ -30,14 +32,21 @@
     // Apply font size via CSS variable
     document.documentElement.style.setProperty(
       "--base-font-size",
-      `${fontSize}px`
+      `${fontSize}px`,
     );
 
     // Apply line spacing via CSS variable
     document.documentElement.style.setProperty(
       "--line-spacing",
-      lineSpacing.toString()
+      lineSpacing.toString(),
     );
+
+    // Apply word wrap
+    if (wordWrap) {
+      document.documentElement.style.setProperty("--word-wrap", "normal");
+    } else {
+      document.documentElement.style.setProperty("--word-wrap", "nowrap");
+    }
   }
 
   function saveSettings() {
@@ -46,6 +55,7 @@
       fontSize,
       lineSpacing,
       verseLayout,
+      wordWrap,
     });
 
     // Apply settings immediately
@@ -66,6 +76,7 @@
     fontSize;
     lineSpacing;
     theme;
+    wordWrap;
     applySettings();
   }
 </script>
@@ -113,6 +124,13 @@
     </label>
   </div>
 
+  <div class="setting-group">
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={wordWrap} />
+      <span class="label-text">Word Wrap (wrap long lines)</span>
+    </label>
+  </div>
+
   <div class="button-group">
     <button class="save-button" on:click={saveSettings}> Save Settings </button>
     {#if savedMessage}
@@ -146,6 +164,20 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+  }
+
+  .checkbox-label {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 0.75rem !important;
+    cursor: pointer;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: #667eea;
   }
 
   .label-text {
