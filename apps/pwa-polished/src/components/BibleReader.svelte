@@ -11,6 +11,7 @@
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
   import { BIBLE_BOOKS } from "../lib/bibleData";
+  import { getSettings } from "../adapters/settings";
 
   export let windowId: string | undefined = undefined;
 
@@ -30,6 +31,7 @@
   let lastNavigationKey = "";
   let lastScrollTop = 0;
   let showNavBar = true;
+  let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
 
   // Text selection state
   let showToast = false;
@@ -48,6 +50,17 @@
   let hasMoved = false;
   let repeatsActive = false;
   let repeatsWord = "";
+
+  // Load user settings
+  function loadUserSettings() {
+    const settings = getSettings();
+    verseLayout = settings.verseLayout || "one-per-line";
+  }
+
+  // Listen for settings updates
+  function handleSettingsUpdate() {
+    loadUserSettings();
+  }
 
   // Use per-window state if windowId provided, otherwise use global state
   $: windowState = windowId
@@ -1133,6 +1146,12 @@
   onMount(() => {
     textStore = new IndexedDBTextStore();
 
+    // Load user settings
+    loadUserSettings();
+
+    // Listen for settings updates
+    window.addEventListener("settingsUpdated", handleSettingsUpdate);
+
     (async () => {
       await loadAvailableTranslations();
       await loadChapter(currentTranslation, currentBook, currentChapter);
@@ -1172,6 +1191,7 @@
     document.addEventListener("click", handleClickOutside);
 
     return () => {
+      window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
       readerElement?.removeEventListener("mousemove", handleMouseMove);
       readerElement?.removeEventListener("click", handleTextClick);
@@ -1231,7 +1251,10 @@
           <div class="chapter-header">
             <h1>{chapterData.book} {chapterData.chapter}</h1>
           </div>
-          <div class="verses">
+          <div
+            class="verses"
+            class:paragraph-layout={verseLayout === "paragraph"}
+          >
             {#each chapterData.verses as { verse, text, heading }}
               {#if heading}
                 <div class="section-heading">{heading}</div>
@@ -1314,16 +1337,28 @@
   }
 
   .verse-text {
-    font-size: 1.125rem;
-    line-height: 1.8;
+    font-size: var(--base-font-size, 1.125rem);
+    line-height: var(--line-spacing, 1.8);
     cursor: text;
+  }
+
+  /* Paragraph layout mode */
+  .verses.paragraph-layout .verse {
+    display: inline;
+    margin-bottom: 0;
+  }
+
+  .verses.paragraph-layout .verse-number {
+    vertical-align: baseline;
+    font-size: 0.7em;
+    color: #888;
   }
 
   /* Increase font size for mobile devices */
   @media (max-width: 768px) {
     .verse-text {
-      font-size: 1.4rem;
-      line-height: 2;
+      font-size: var(--base-font-size, 1.4rem);
+      line-height: var(--line-spacing, 2);
     }
 
     .chapter-header h1 {

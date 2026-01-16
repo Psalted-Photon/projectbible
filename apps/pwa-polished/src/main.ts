@@ -1,12 +1,39 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
 import { initializePolishedApp, isInitialized } from './lib/pack-init';
+import { getSettings } from './adapters/settings';
 
 const appElement = document.getElementById('app');
 
 if (!appElement) {
   throw new Error('No #app element found');
 }
+
+// Apply initial settings
+function applyInitialSettings() {
+  const settings = getSettings();
+  
+  // Apply theme
+  const theme = settings.theme || 'dark';
+  if (theme === 'dark') {
+    document.body.classList.add('dark-theme');
+    document.body.classList.remove('light-theme');
+  } else {
+    document.body.classList.add('light-theme');
+    document.body.classList.remove('dark-theme');
+  }
+  
+  // Apply font size
+  const fontSize = settings.fontSize || 18;
+  document.documentElement.style.setProperty('--base-font-size', `${fontSize}px`);
+  
+  // Apply line spacing
+  const lineSpacing = settings.lineSpacing || 1.8;
+  document.documentElement.style.setProperty('--line-spacing', lineSpacing.toString());
+}
+
+// Apply settings before app loads
+applyInitialSettings();
 
 // Initialize app with bundled packs on first run
 async function initApp() {
