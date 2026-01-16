@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IndexedDB Diagnostic</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 10px;
+      overflow-x: auto;
+    }
+    button {
+      margin: 5px;
+      padding: 10px 20px;
+    }
+    .error { color: red; }
+    .success { color: green; }
+  </style>
+</head>
+<body>
+  <h1>ProjectBible IndexedDB Diagnostic</h1>
+  
+  <div>
+    <button onclick="checkDatabase()">Check Database</button>
+    <button onclick="checkKJVVerses()">Check KJV Verses</button>
+    <button onclick="checkWEBVerses()">Check WEB Verses</button>
+    <button onclick="checkBSBVerses()">Check BSB Verses</button>
+    <button onclick="checkSamuelBooks()">Check Samuel/Kings/Chronicles</button>
+  </div>
+  
+  <div id="output"></div>
+  
+  <script>
+    const output = document.getElementById('output');
+    
+    function log(msg, className = '') {
+      const div = document.createElement('div');
+      div.className = className;
+      div.textContent = msg;
+      output.appendChild(div);
+    }
+    
+    function logPre(data) {
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(data, null, 2);
+      output.appendChild(pre);
+    }
+    
+    function clear() {
+      output.innerHTML = '';
+    }
+    
+    async function openDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('projectbible');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+    
+    async function checkDatabase() {
+      clear();
+      log('Checking IndexedDB database...');
+      
+      try {
+        const db = await openDB();
+        log(`✓ Database opened: ${db.name} v${db.version}`, 'success');
+        log(`Object stores: ${Array.from(db.objectStoreNames).join(', ')}`);
+        
+        // Check packs
+        const tx = db.transaction(['packs', 'verses'], 'readonly');
+        const packStore = tx.objectStore('packs');
+        const verseStore = tx.objectStore('verses');
+        
+        const packs = await new Promise((resolve) => {
+          const req = packStore.getAll();
+          req.onsuccess = () => resolve(req.result);
+        });
+        
+        log(`\nInstalled packs (${packs.length}):`);
+        packs.forEach(pack => {
+          log(`  - ${pack.id}: ${pack.translationName || pack.translationId || 'No name'} (${pack.type})`);
+        });
+        
+        // Count verses per translation
+        log('\nVerse counts:');
+        for (const pack of packs) {
+          if (pack.translationId) {
+            const count = await new Promise((resolve) => {
+              const idx = verseStore.index('translationId');
+              const req = idx.count(IDBKeyRange.only(pack.translationId));
+              req.onsuccess = () => resolve(req.result);
+            });
+            log(`  ${pack.translationId}: ${count.toLocaleString()} verses`);
+          }
+        }
+        
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+    
+    async function checkKJVVerses() {
+      clear();
+      log('Checking KJV verses...');
+      await checkTranslationVerses('KJV');
+    }
+    
+    async function checkWEBVerses() {
+      clear();
+      log('Checking WEB verses...');
+      await checkTranslationVerses('WEB');
+    }
+    
+    async function checkBSBVerses() {
+      clear();
+      log('Checking BSB verses...');
+      await checkTranslationVerses('BSB');
+    }
+    
+    async function checkTranslationVerses(translationId) {
+      try {
+        const db = await openDB();
+        const tx = db.transaction('verses', 'readonly');
+        const store = tx.objectStore('verses');
+        const index = store.index('translationId');
+        
+        const allVerses = await new Promise((resolve) => {
+          const req = index.getAll(IDBKeyRange.only(translationId));
+          req.onsuccess = () => resolve(req.result);
+        });
+        
+        log(`\nTotal verses: ${allVerses.length.toLocaleString()}`);
+        
+        // Group by book
+        const bookCounts = {};
+        allVerses.forEach(v => {
+          if (!bookCounts[v.book]) bookCounts[v.book] = 0;
+          bookCounts[v.book]++;
+        });
+        
+        log(`\nBooks found: ${Object.keys(bookCounts).length}`);
+        
+        // Check specifically for Samuel, Kings, Chronicles
+        const targetBooks = ['Ruth', 'I Samuel', 'II Samuel', 'I Kings', 'II Kings', 'I Chronicles', 'II Chronicles', 'Ezra'];
+        log('\nTarget books (Ruth to Ezra):');
+        targetBooks.forEach(book => {
+          const count = bookCounts[book] || 0;
+          const status = count > 0 ? '✓' : '✗';
+          log(`  ${status} ${book}: ${count} verses`, count > 0 ? 'success' : 'error');
+        });
+        
+        // Sample a verse from I Samuel 1
+        log('\nSample: I Samuel 1:1');
+        const sampleId = `${translationId}:I Samuel:1:1`;
+        const sample = await new Promise((resolve) => {
+          const req = store.get(sampleId);
+          req.onsuccess = () => resolve(req.result);
+        });
+        
+        if (sample) {
+          logPre(sample);
+        } else {
+          log('✗ Verse not found!', 'error');
+        }
+        
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+    
+    async function checkSamuelBooks() {
+      clear();
+      log('Checking Samuel/Kings/Chronicles for all translations...');
+      
+      try {
+        const db = await openDB();
+        const tx = db.transaction(['packs', 'verses'], 'readonly');
+        const packStore = tx.objectStore('packs');
+        const verseStore = tx.objectStore('verses');
+        
+        const packs = await new Promise((resolve) => {
+          const req = packStore.getAll();
+          req.onsuccess = () => resolve(req.result);
+        });
+        
+        const textPacks = packs.filter(p => p.translationId && (p.type === 'text' || p.type === 'original-language'));
+        
+        for (const pack of textPacks) {
+          log(`\n${pack.translationId}:`);
+          const targetBooks = ['I Samuel', 'II Samuel', 'I Kings', 'II Kings', 'I Chronicles', 'II Chronicles'];
+          
+          for (const book of targetBooks) {
+            const idx = verseStore.index('translation_book');
+            const count = await new Promise((resolve) => {
+              const req = idx.count(IDBKeyRange.only([pack.translationId, book]));
+              req.onsuccess = () => resolve(req.result);
+            });
+            const status = count > 0 ? '✓' : '✗';
+            log(`  ${status} ${book}: ${count} verses`, count > 0 ? 'success' : 'error');
+          }
+        }
+        
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+  </script>
+</body>
+</html>

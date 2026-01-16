@@ -2,6 +2,54 @@ import type { TextStore, Verse } from '@projectbible/core';
 import { BIBLE_BOOKS } from '@projectbible/core';
 import { readTransaction, type DBVerse } from './db.js';
 
+/**
+ * Normalize book names between different naming conventions
+ * Maps both directions: "1 Samuel" <-> "I Samuel", etc.
+ */
+function normalizeBookName(book: string): string[] {
+  const bookUpper = book.toUpperCase().trim();
+  
+  // Mapping of numeric to Roman numeral book names
+  const numericToRoman: Record<string, string> = {
+    '1 SAMUEL': 'I Samuel',
+    '2 SAMUEL': 'II Samuel',
+    '1 KINGS': 'I Kings',
+    '2 KINGS': 'II Kings',
+    '1 CHRONICLES': 'I Chronicles',
+    '2 CHRONICLES': 'II Chronicles',
+    '1 CORINTHIANS': 'I Corinthians',
+    '2 CORINTHIANS': 'II Corinthians',
+    '1 THESSALONIANS': 'I Thessalonians',
+    '2 THESSALONIANS': 'II Thessalonians',
+    '1 TIMOTHY': 'I Timothy',
+    '2 TIMOTHY': 'II Timothy',
+    '1 PETER': 'I Peter',
+    '2 PETER': 'II Peter',
+    '1 JOHN': 'I John',
+    '2 JOHN': 'II John',
+    '3 JOHN': 'III John'
+  };
+  
+  // Create reverse mapping
+  const romanToNumeric: Record<string, string> = {};
+  for (const [numeric, roman] of Object.entries(numericToRoman)) {
+    romanToNumeric[roman.toUpperCase()] = numeric.replace(/^\d+/, m => m).split(' ').map((w, i) => i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  }
+  
+  // Return all possible variants
+  const variants = [book]; // Always include original
+  
+  if (numericToRoman[bookUpper]) {
+    variants.push(numericToRoman[bookUpper]);
+  }
+  
+  if (romanToNumeric[bookUpper]) {
+    variants.push(romanToNumeric[bookUpper]);
+  }
+  
+  return variants;
+}
+
 export class IndexedDBTextStore implements TextStore {
   async getVerse(
     translation: string,
@@ -9,15 +57,23 @@ export class IndexedDBTextStore implements TextStore {
     chapter: number,
     verse: number
   ): Promise<string | null> {
-    const id = `${translation}:${book}:${chapter}:${verse}`;
+    const bookVariants = normalizeBookName(book);
     
     try {
-      const dbVerse = await readTransaction<DBVerse | undefined>(
-        'verses',
-        (store) => store.get(id)
-      );
+      // Try each book name variant
+      for (const bookVariant of bookVariants) {
+        const id = `${translation}:${bookVariant}:${chapter}:${verse}`;
+        const dbVerse = await readTransaction<DBVerse | undefined>(
+          'verses',
+          (store) => store.get(id)
+        );
+        
+        if (dbVerse) {
+          return dbVerse.text;
+        }
+      }
       
-      return dbVerse?.text ?? null;
+      return null;
     } catch (error) {
       console.error('Error getting verse:', error);
       return null;
@@ -31,31 +87,51 @@ export class IndexedDBTextStore implements TextStore {
   ): Promise<Verse[]> {
     try {
       const db = await import('./db.js').then(m => m.openDB());
+      const bookVariants = normalizeBookName(book);
       
       return new Promise((resolve, reject) => {
         const transaction = db.transaction('verses', 'readonly');
         const store = transaction.objectStore('verses');
         const index = store.index('translation_book_chapter');
         
-        const range = IDBKeyRange.only([translation, book, chapter]);
-        const request = index.getAll(range);
+        // Try each book name variant
+        let allVerses: DBVerse[] = [];
+        let processed = 0;
         
-        request.onsuccess = () => {
-          const dbVerses = request.result as DBVerse[];
-          const verses: Verse[] = dbVerses
-            .map(v => ({
-              book: v.book,
-              chapter: v.chapter,
-              verse: v.verse,
-              text: v.text,
-              heading: v.heading ?? null
-            }))
-            .sort((a, b) => a.verse - b.verse);
+        for (const bookVariant of bookVariants) {
+          const range = IDBKeyRange.only([translation, bookVariant, chapter]);
+          const request = index.getAll(range);
           
-          resolve(verses);
-        };
-        
-        request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const verses = request.result as DBVerse[];
+            if (verses.length > 0 && allVerses.length === 0) {
+              allVerses = verses;
+            }
+            
+            processed++;
+            if (processed === bookVariants.length) {
+              // All variants checked, return results
+              const sortedVerses: Verse[] = allVerses
+                .map(v => ({
+                  book: v.book,
+                  chapter: v.chapter,
+                  verse: v.verse,
+                  text: v.text,
+                  heading: v.heading ?? null
+                }))
+                .sort((a, b) => a.verse - b.verse);
+              
+              resolve(sortedVerses);
+            }
+          };
+          
+          request.onerror = () => {
+            processed++;
+            if (processed === bookVariants.length) {
+              reject(request.error);
+            }
+          };
+        }
       });
     } catch (error) {
       console.error('Error getting chapter:', error);
