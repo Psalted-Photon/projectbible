@@ -6,7 +6,6 @@
  */
 
 import initSqlJs from 'sql.js';
-import type { Database } from 'sql.js';
 import { englishLexicalService } from './englishLexicalService';
 import type { WordInfo, Synonym, VerbForm, NounPlural, POSTag } from './englishLexicalService';
 
