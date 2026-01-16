@@ -173,7 +173,7 @@
       // Calculate displayed count from all categories
       displayedResultCount = searchResults.reduce(
         (sum, category) => sum + category.count,
-        0
+        0,
       );
       showingAll = loadAll || displayedResultCount >= totalResultCount;
 
@@ -260,7 +260,7 @@
       }
       return acc;
     },
-    {} as Record<string, any[]>
+    {} as Record<string, any[]>,
   );
 
   function clearSearch() {
@@ -382,7 +382,7 @@
   </div>
 
   <!-- Search Bar -->
-  <div class="search-container" on:click|stopPropagation>
+  <div class="search-container" on:click|stopPropagation role="search">
     <div class="search-input-wrapper" class:focused={searchFocused}>
       <span class="search-icon">🔍</span>
       <input
@@ -424,60 +424,60 @@
 
     {#if showResults}
       <div class="search-results-dropdown">
-        {#if displayedResultCount > 0}
-          <div class="search-stats">
-            Showing {displayedResultCount}
-            {#if !showingAll && totalResultCount > displayedResultCount}
-              of <button class="load-all-link" on:click={loadAllResults}
-                >{totalResultCount} results</button
-              >
-            {:else}
-              {totalResultCount > 1 ? "results" : "result"}
-            {/if}
-          </div>
-        {/if}
-
-        {#if searchResults.length > 0 && Object.keys(resultsByTranslation).length > 0}
-          {#each Object.entries(resultsByTranslation) as [translationId, results]}
-            <div class="translation-group">
-              <button
-                class="translation-header"
-                class:expanded={expandedTranslations.has(translationId)}
-                on:click={() => toggleTranslation(translationId)}
-              >
-                <span class="expand-icon">
-                  {expandedTranslations.has(translationId) ? "▼" : "▶"}
-                </span>
-                <span class="translation-name">{translationId}</span>
-                <span class="result-count">({results.length})</span>
-              </button>
-
-              {#if expandedTranslations.has(translationId)}
-                <div class="translation-results">
-                  {#each results as result}
-                    <button
-                      class="search-result-item"
-                      on:click={() => handleResultClick(result)}
-                    >
-                      <div class="result-title">{result.title}</div>
-                      {#if result.subtitle}
-                        <div class="result-subtitle">
-                          {@html highlightText(result.subtitle, searchQuery)}
-                        </div>
-                      {/if}
-                    </button>
-                  {/each}
-                </div>
+          {#if displayedResultCount > 0}
+            <div class="search-stats">
+              Showing {displayedResultCount}
+              {#if !showingAll && totalResultCount > displayedResultCount}
+                of <button class="load-all-link" on:click={loadAllResults}
+                  >{totalResultCount} results</button
+                >
+              {:else}
+                {totalResultCount > 1 ? "results" : "result"}
               {/if}
             </div>
-          {/each}
-        {:else}
-          <div class="no-search-results">
-            No results found for "{searchQuery}"
-          </div>
-        {/if}
-      </div>
-    {/if}
+          {/if}
+
+          {#if searchResults.length > 0 && Object.keys(resultsByTranslation).length > 0}
+            {#each Object.entries(resultsByTranslation) as [translationId, results]}
+              <div class="translation-group">
+                <button
+                  class="translation-header"
+                  class:expanded={expandedTranslations.has(translationId)}
+                  on:click={() => toggleTranslation(translationId)}
+                >
+                  <span class="expand-icon">
+                    {expandedTranslations.has(translationId) ? "▼" : "▶"}
+                  </span>
+                  <span class="translation-name">{translationId}</span>
+                  <span class="result-count">({results.length})</span>
+                </button>
+
+                {#if expandedTranslations.has(translationId)}
+                  <div class="translation-results">
+                    {#each results as result}
+                      <button
+                        class="search-result-item"
+                        on:click={() => handleResultClick(result)}
+                      >
+                        <div class="result-title">{result.title}</div>
+                        {#if result.subtitle}
+                          <div class="result-subtitle">
+                            {@html highlightText(result.subtitle, searchQuery)}
+                          </div>
+                        {/if}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          {:else}
+            <div class="no-search-results">
+              No results found for "{searchQuery}"
+            </div>
+          {/if}
+        </div>
+      {/if}
   </div>
 
   <!-- Settings Button -->
@@ -524,14 +524,25 @@
     border-bottom: 1px solid #3a3a3a;
     position: sticky;
     top: 0;
-    z-index: 50;
-    transform: translateY(-100%);
-    transition: transform 0.3s ease-in-out;
+    z-index: 1000;
     touch-action: manipulation; /* Allow fast taps */
+    min-height: 68px;
+    box-sizing: border-box;
+  }
+
+  .navigation-bar:not(.visible) {
+    margin-top: -68px;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .navigation-bar.visible {
-    transform: translateY(0);
+    margin-top: 0;
+    opacity: 1;
+    pointer-events: auto;
+    transition:
+      margin-top 0.3s ease-in-out,
+      opacity 0.3s ease-in-out;
   }
 
   .nav-dropdown {
@@ -638,7 +649,7 @@
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    z-index: 100;
+    z-index: 1001;
   }
 
   .tree-menu {
@@ -769,18 +780,20 @@
 
   /* Search Bar Styles */
   .search-container {
+    flex: 1;
+    max-width: 600px;
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
-    flex: 1;
-    max-width: 400px;
   }
 
   .search-input-wrapper {
     position: relative;
     display: flex;
     align-items: center;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     background: #1a1a1a;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
@@ -801,6 +814,7 @@
 
   .search-input {
     flex: 1;
+    min-width: 0;
     padding: 10px 12px 10px 0;
     background: transparent;
     border: none;
@@ -829,6 +843,7 @@
   }
 
   .search-button {
+    flex-shrink: 0;
     padding: 10px 20px;
     background: #667eea;
     border: 1px solid #667eea;
@@ -855,6 +870,7 @@
   }
 
   .power-search-button {
+    flex-shrink: 0;
     padding: 10px 20px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border: 1px solid #667eea;
@@ -896,36 +912,13 @@
     top: calc(100% + 4px);
     left: 0;
     right: 0;
-    max-height: 250px;
+    max-height: 400px;
     overflow-y: auto;
     background: #2a2a2a;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    z-index: 100;
-  }
-
-  .search-category {
-    border-bottom: 1px solid #3a3a3a;
-  }
-
-  .search-category:last-child {
-    border-bottom: none;
-  }
-
-  .category-header {
-    padding: 12px 14px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #667eea;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    background: #1a1a1a;
-  }
-
-  .category-results {
-    display: flex;
-    flex-direction: column;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    z-index: 10000;
   }
 
   .translation-group {
@@ -1141,12 +1134,14 @@
     }
 
     .search-container {
-      flex-shrink: 0;
+      flex: 1;
       min-width: 200px;
+      max-width: 100%;
     }
 
     .power-search-button {
-      display: none; /* Hide on small mobile screens */
+      padding: 10px 12px;
+      font-size: 13px;
     }
 
     .settings-button {
@@ -1162,8 +1157,9 @@
     }
 
     .nav-dropdown {
-      min-width: 120px;
-      max-width: 140px;
+      min-width: 100px;
+      max-width: 120px;
+      font-size: 12px;
     }
 
     .search-container {

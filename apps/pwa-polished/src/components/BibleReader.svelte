@@ -254,10 +254,11 @@
         loadNextChapter();
       }
 
+      // Disabled: auto-loading previous chapters causes scroll issues
       // If within 200px of top, load previous chapter
-      if (scrollTop <= 200 && !isLoadingPrevChapter) {
-        loadPreviousChapter();
-      }
+      // if (scrollTop <= 200 && !isLoadingPrevChapter) {
+      //   loadPreviousChapter();
+      // }
     }, 300);
   }
 
@@ -1288,9 +1289,11 @@
     max-width: 100%;
     width: 100%;
     margin: 0 auto;
-    padding: 40px 20px 100px;
+    padding: 80px 20px 100px;
     flex: 1;
     box-sizing: border-box;
+    position: relative;
+    z-index: 1;
   }
 
   .chapter-section {
