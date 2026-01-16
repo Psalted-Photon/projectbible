@@ -21,7 +21,7 @@ const BUNDLED_PACKS: BundledPack[] = [
     id: 'kjv',
     name: 'King James Version',
     filename: 'kjv.sqlite',
-    url: '/assets/packs/kjv.sqlite',
+    url: '/kjv.sqlite',
     type: 'translation',
     required: true
   },
@@ -29,7 +29,7 @@ const BUNDLED_PACKS: BundledPack[] = [
     id: 'web',
     name: 'World English Bible',
     filename: 'web.sqlite',
-    url: '/assets/packs/web.sqlite',
+    url: '/web.sqlite',
     type: 'translation',
     required: true
   },
@@ -37,7 +37,7 @@ const BUNDLED_PACKS: BundledPack[] = [
     id: 'maps',
     name: 'Biblical Maps & Places',
     filename: 'maps.sqlite',
-    url: '/assets/packs/maps.sqlite',
+    url: '/maps.sqlite',
     type: 'maps',
     required: true
   },
@@ -45,7 +45,7 @@ const BUNDLED_PACKS: BundledPack[] = [
     id: 'english-wordlist',
     name: 'English Dictionary (440k words + IPA)',
     filename: 'english-wordlist-v1.sqlite',
-    url: '/assets/packs/english-wordlist-v1.sqlite',
+    url: '/english-wordlist-v1.sqlite',
     type: 'lexicon',
     required: false,
     isLexical: true
@@ -54,7 +54,7 @@ const BUNDLED_PACKS: BundledPack[] = [
     id: 'english-thesaurus',
     name: 'English Thesaurus (3.5M synonyms)',
     filename: 'english-thesaurus-v1.sqlite',
-    url: '/assets/packs/english-thesaurus-v1.sqlite',
+    url: '/english-thesaurus-v1.sqlite',
     type: 'lexicon',
     required: false,
     isLexical: true
@@ -63,7 +63,7 @@ const BUNDLED_PACKS: BundledPack[] = [
     id: 'english-grammar',
     name: 'English Grammar (POS tags, verb forms)',
     filename: 'english-grammar-v1.sqlite',
-    url: '/assets/packs/english-grammar-v1.sqlite',
+    url: '/english-grammar-v1.sqlite',
     type: 'lexicon',
     required: false,
     isLexical: true
