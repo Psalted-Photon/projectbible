@@ -1087,7 +1087,7 @@
       case "search":
         // Set search query and trigger search in NavigationBar
         searchQuery.set(text);
-        triggerSearch.update(n => n + 1);
+        triggerSearch.update((n) => n + 1);
         break;
       case "map":
         alert(`Show on map: ${text}\n\n(Map integration coming soon)`);
@@ -1319,6 +1319,22 @@
     cursor: text;
   }
 
+  /* Increase font size for mobile devices */
+  @media (max-width: 768px) {
+    .verse-text {
+      font-size: 1.4rem;
+      line-height: 2;
+    }
+
+    .chapter-header h1 {
+      font-size: 2rem;
+    }
+
+    .verse-number {
+      font-size: 0.9rem;
+    }
+  }
+
   /* Remove verse-level hover - we'll handle word-level in JS */
   .section-heading {
     font-weight: 600;
@@ -1327,6 +1343,12 @@
     margin: 24px 0 12px 0;
     padding-top: 12px;
     border-top: 1px solid #444;
+  }
+
+  @media (max-width: 768px) {
+    .section-heading {
+      font-size: 1.3rem;
+    }
   }
 
   .section-heading:first-child {
