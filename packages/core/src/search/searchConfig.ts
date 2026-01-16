@@ -138,7 +138,7 @@ function calculateComplexity(pattern: string): number {
  * Estimate potential result count based on pattern characteristics
  * Returns: 'safe' | 'moderate' | 'high' | 'extreme'
  */
-function estimateResultVolume(pattern: string, text: string): string {
+function estimateResultVolume(pattern: string, text: string): 'safe' | 'moderate' | 'high' | 'extreme' {
   // Empty pattern or very short text = likely too broad
   if (text.trim().length === 0) return 'extreme';
   if (text.trim().length === 1) return 'high';

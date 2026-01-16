@@ -5,7 +5,8 @@
  * Handles chunked loading to avoid blocking the main thread.
  */
 
-import initSqlJs, { Database } from 'sql.js';
+import initSqlJs from 'sql.js';
+import type { Database } from 'sql.js';
 import { englishLexicalService } from './englishLexicalService';
 import type { WordInfo, Synonym, VerbForm, NounPlural, POSTag } from './englishLexicalService';
 
@@ -27,7 +28,7 @@ export class EnglishLexicalPackLoader {
   private async initSQL(): Promise<void> {
     if (this.sql) return;
     this.sql = await initSqlJs({
-      locateFile: (file) => `https://sql.js.org/dist/${file}`
+      locateFile: (file: string) => `https://sql.js.org/dist/${file}`
     });
   }
 
