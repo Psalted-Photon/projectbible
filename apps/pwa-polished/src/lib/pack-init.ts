@@ -158,8 +158,12 @@ export async function initializePolishedApp(
       }
     }
     
+    console.log(`Completed ${completed} of ${total} packs`);
+    console.log(`Lexical packs to install: ${lexicalPacks.length}`);
+    
     // Install English lexical packs (these go into a separate IndexedDB)
     if (lexicalPacks.length > 0) {
+      console.log('Loading lexical pack loader...');
       try {
         const { englishLexicalPackLoader } = await Promise.race([
           import('../../../../packages/core/src/search/englishLexicalPackLoader'),
