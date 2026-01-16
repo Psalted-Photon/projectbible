@@ -19,4 +19,5 @@ declare module 'sql.js' {
   }
 
   export default function initSqlJs(options?: InitSqlJsOptions): Promise<SqlJsStatic>;
+  export type { Database };
 }
