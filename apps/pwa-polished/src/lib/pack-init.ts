@@ -41,33 +41,35 @@ const BUNDLED_PACKS: BundledPack[] = [
     type: 'maps',
     required: true
   },
-  {
-    id: 'english-wordlist',
-    name: 'English Dictionary (440k words + IPA)',
-    filename: 'english-wordlist-v1.sqlite',
-    url: '/english-wordlist-v1.sqlite',
-    type: 'lexicon',
-    required: false,
-    isLexical: true
-  },
-  {
-    id: 'english-thesaurus',
-    name: 'English Thesaurus (3.5M synonyms)',
-    filename: 'english-thesaurus-v1.sqlite',
-    url: '/english-thesaurus-v1.sqlite',
-    type: 'lexicon',
-    required: false,
-    isLexical: true
-  },
-  {
-    id: 'english-grammar',
-    name: 'English Grammar (POS tags, verb forms)',
-    filename: 'english-grammar-v1.sqlite',
-    url: '/english-grammar-v1.sqlite',
-    type: 'lexicon',
-    required: false,
-    isLexical: true
-  }
+  // English lexical packs disabled for faster initial load
+  // These can be manually installed later through the pack manager
+  // {
+  //   id: 'english-wordlist',
+  //   name: 'English Dictionary (440k words + IPA)',
+  //   filename: 'english-wordlist-v1.sqlite',
+  //   url: '/english-wordlist-v1.sqlite',
+  //   type: 'lexicon',
+  //   required: false,
+  //   isLexical: true
+  // },
+  // {
+  //   id: 'english-thesaurus',
+  //   name: 'English Thesaurus (3.5M synonyms)',
+  //   filename: 'english-thesaurus-v1.sqlite',
+  //   url: '/english-thesaurus-v1.sqlite',
+  //   type: 'lexicon',
+  //   required: false,
+  //   isLexical: true
+  // },
+  // {
+  //   id: 'english-grammar',
+  //   name: 'English Grammar (POS tags, verb forms)',
+  //   filename: 'english-grammar-v1.sqlite',
+  //   url: '/english-grammar-v1.sqlite',
+  //   type: 'lexicon',
+  //   required: false,
+  //   isLexical: true
+  // }
 ];
 
 const INIT_FLAG_KEY = 'projectbible_polished_initialized';
@@ -158,7 +160,11 @@ export async function initializePolishedApp(
     
     // Install English lexical packs (these go into a separate IndexedDB)
     if (lexicalPacks.length > 0) {
-      const { englishLexicalPackLoader } = await import('../../../../packages/core/src/search/englishLexicalPackLoader');
+      try {
+        const { englishLexicalPackLoader } = await Promise.race([
+          import('../../../../packages/core/src/search/englishLexicalPackLoader'),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Import timeout')), 5000))
+        ]) as any;
       
       for (const pack of lexicalPacks) {
         const progress = Math.round((completed / total) * 100);
@@ -196,6 +202,10 @@ export async function initializePolishedApp(
           // Lexical packs are optional, don't fail the whole initialization
           completed++;
         }
+      }
+      } catch (importError) {
+        console.warn('Failed to load English lexical pack loader, skipping lexical packs:', importError);
+        // Skip lexical packs but continue with initialization
       }
     }
     
