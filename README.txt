@@ -466,6 +466,84 @@ Next immediate milestones
 - M2: Electron runs and loads the same UI.
 - M3: Pack manifest schema + tiny sample pack + basic reader view.
 
+📚 Open‑Source & Public‑Domain English Dictionaries
+1. Open‑Source English Dictionary (MIT‑licensed)
+   - Based on the Online Plain Text English Dictionary (OPTED)
+   - Already available in SQLite format
+   - ~176k definitions
+   - https://github.com/mattcolman/dictionary
+
+2. Wiktionary Public‑Domain Source Imports
+   - Wiktionary includes large amounts of public‑domain dictionary content:
+     * Webster's 1913 (definitions, etymologies, synonyms, quotations)
+     * Century Dictionary (1911)
+     * 1811 Dictionary of the Vulgar Tongue
+   - https://en.wiktionary.org/wiki/Wiktionary:List_of_public_domain_lexicons
+
+3. Open Dictionary (JSON‑based, open‑source)
+   - Community‑driven
+   - Entries stored as JSON files
+   - Easy to convert into SQLite
+   - https://github.com/open-dict-data
+
+4. Large Lists of English Words (Open‑Source)
+   - Word lists (479k words)
+   - IPA pronunciation lists
+   - Wiktionary‑derived datasets
+   - https://github.com/dwyl/english-words
+
+🟦 Open‑Source & Public‑Domain Thesauri
+1. Moby Thesaurus (Public Domain)
+   - One of the largest English thesauri ever compiled
+   - Fully public domain
+   - https://github.com/words/moby
+
+2. WordNet‑based Thesauri (Open License)
+   - Artha (GPL‑licensed): Offline thesaurus based on WordNet
+   - https://github.com/digitalfortress-tech/artha
+   - GitHub Offline Thesaurus (JSONL): Extracted from WordNet, clean JSONL format
+   - https://github.com/zaibacu/thesaurus
+
+🟩 Open‑Source English Grammar Datasets
+1. English Grammar Instruction Dataset (HuggingFace)
+   - 71k rows
+   - Grammar questions, answers, explanations
+   - CC‑licensed
+   - https://huggingface.co/datasets/MuskumPillerum/General-Knowledge
+
+2. NLP Public‑Domain Corpora (Grammar‑rich)
+   - Project Gutenberg
+   - Public mailing lists
+   - Annotated corpora
+   - https://github.com/niderhoff/nlp-datasets
+
+3. English Writing Assessment Dataset (CC0)
+   - Contains grammar error counts, cohesion metrics, vocabulary richness
+   - Fully public domain (CC0)
+   - https://www.kaggle.com/datasets/shashankgupta2/english-writing-assessment
+
+📊 Comparison Table (Decision‑Ready)
+Resource                              License        Type       Best Use
+────────────────────────────────────────────────────────────────────────────────────
+Open‑Source English Dictionary        MIT            Dictionary Fast, modern, SQLite‑ready
+Webster 1913 (via Wiktionary)         Public Domain  Dictionary Etymology‑rich, classic definitions
+Open Dictionary JSON                  Open‑source    Dictionary Flexible JSON → SQLite ingestion
+Moby Thesaurus                        Public Domain  Thesaurus  Massive synonym graph
+WordNet‑based Thesauri                GPL / open     Thesaurus  Structured semantic relations
+Grammar instruction dataset           Open           Grammar    Q/A grammar engine
+Public‑domain NLP corpora             Mixed PD       Grammar    POS tagging, parsing, training
+Grammar‑annotated writing dataset     CC0            Grammar    Error detection, scoring
+
+🧠 How These Fit Your SQLite Pack Architecture
+Given your motif‑driven, multi‑pack ecosystem, these datasets map beautifully:
+- Dictionary pack → definitions, etymology, IPA, usage
+- Thesaurus pack → synonyms, antonyms, semantic clusters
+- Grammar pack → POS patterns, error types, example sentences
+- Word‑intelligence pack → combine lemma, morphology, Strong's, and English glosses
+- Trivia engine → grammar questions, synonym chains, archaic definitions, word origins
+
+Your existing OSHB + GNT + LXX morphology system will pair elegantly with English lexical data for cross‑lingual trivia and study modes.
+
 Next thing to do (recommended)
 - Build a tiny "sample pack" pipeline in `packages/packtools`: JSON -> SQLite with a handful of verses.
   - Goal: unlock the real reader/search vertical slice without downloading any big datasets yet.

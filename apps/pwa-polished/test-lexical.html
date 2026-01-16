@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test English Lexical Integration</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      background: #1a1a2e;
+      color: #fff;
+    }
+    h1 {
+      color: #667eea;
+    }
+    .section {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+    }
+    input, button, select {
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      margin: 0.25rem;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      cursor: pointer;
+      border: none;
+      font-weight: 600;
+    }
+    button:hover {
+      transform: translateY(-1px);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .output {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1rem;
+      border-radius: 4px;
+      margin-top: 1rem;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .status {
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      margin: 0.5rem 0;
+    }
+    .status.success {
+      background: rgba(76, 175, 80, 0.2);
+      color: #4caf50;
+    }
+    .status.error {
+      background: rgba(244, 67, 54, 0.2);
+      color: #f44336;
+    }
+    .status.info {
+      background: rgba(33, 150, 243, 0.2);
+      color: #2196f3;
+    }
+  </style>
+</head>
+<body>
+  <h1>📚 English Lexical Packs Test</h1>
+  
+  <div class="section">
+    <h2>1. Initialize Services</h2>
+    <button onclick="initializeServices()">Initialize IndexedDB</button>
+    <div id="init-status"></div>
+  </div>
+  
+  <div class="section">
+    <h2>2. Test Wordlist + Pronunciation</h2>
+    <input type="text" id="word-input" placeholder="Enter a word (e.g., love, faith, grace)" />
+    <button onclick="testWordlist()">Get Pronunciation</button>
+    <div id="word-output" class="output"></div>
+  </div>
+  
+  <div class="section">
+    <h2>3. Test Thesaurus</h2>
+    <input type="text" id="synonym-input" placeholder="Enter a word (e.g., holy, love, faith)" />
+    <button onclick="testSynonyms()">Get Synonyms</button>
+    <div id="synonym-output" class="output"></div>
+  </div>
+  
+  <div class="section">
+    <h2>4. Test Grammar</h2>
+    <input type="text" id="grammar-input" placeholder="Enter a word (e.g., be, go, love)" />
+    <button onclick="testGrammar()">Get POS Tags & Forms</button>
+    <div id="grammar-output" class="output"></div>
+  </div>
+  
+  <div class="section">
+    <h2>5. Test Synonym Expansion</h2>
+    <input type="text" id="expand-input" placeholder="Enter words (space-separated)" />
+    <input type="number" id="expand-limit" value="10" min="1" max="50" style="width: 80px;" />
+    <button onclick="testExpansion()">Expand with Synonyms</button>
+    <div id="expand-output" class="output"></div>
+  </div>
+  
+  <script type="module">
+    // Note: This requires a build step to work in browser
+    // For now, this is a reference implementation
+    
+    import { englishLexicalService } from '../../packages/core/src/search/englishLexicalService.js';
+    
+    window.englishLexicalService = englishLexicalService;
+    
+    window.initializeServices = async function() {
+      const statusDiv = document.getElementById('init-status');
+      try {
+        statusDiv.innerHTML = '<div class="status info">Initializing IndexedDB...</div>';
+        await englishLexicalService.initialize();
+        const isLoaded = await englishLexicalService.isDataLoaded();
+        
+        if (isLoaded) {
+          statusDiv.innerHTML = '<div class="status success">✅ IndexedDB initialized and data is loaded!</div>';
+        } else {
+          statusDiv.innerHTML = '<div class="status error">⚠️ IndexedDB initialized but no data found. Please load packs first.</div>';
+        }
+      } catch (error) {
+        statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+      }
+    };
+    
+    window.testWordlist = async function() {
+      const word = document.getElementById('word-input').value;
+      const output = document.getElementById('word-output');
+      
+      if (!word) {
+        output.textContent = 'Please enter a word';
+        return;
+      }
+      
+      try {
+        output.textContent = 'Searching...';
+        const result = await englishLexicalService.getPronunciation(word);
+        
+        if (result) {
+          output.textContent = `Word: ${result.word}\n` +
+            (result.ipa_us ? `US Pronunciation: /${result.ipa_us}/\n` : '') +
+            (result.ipa_uk ? `UK Pronunciation: /${result.ipa_uk}/\n` : '');
+        } else {
+          output.textContent = `No pronunciation found for "${word}"`;
+        }
+      } catch (error) {
+        output.textContent = `Error: ${error.message}`;
+      }
+    };
+    
+    window.testSynonyms = async function() {
+      const word = document.getElementById('synonym-input').value;
+      const output = document.getElementById('synonym-output');
+      
+      if (!word) {
+        output.textContent = 'Please enter a word';
+        return;
+      }
+      
+      try {
+        output.textContent = 'Searching...';
+        const synonyms = await englishLexicalService.getSynonyms(word, 50);
+        
+        if (synonyms.length > 0) {
+          output.textContent = `Synonyms for "${word}" (${synonyms.length} total):\n\n${synonyms.join(', ')}`;
+        } else {
+          output.textContent = `No synonyms found for "${word}"`;
+        }
+      } catch (error) {
+        output.textContent = `Error: ${error.message}`;
+      }
+    };
+    
+    window.testGrammar = async function() {
+      const word = document.getElementById('grammar-input').value;
+      const output = document.getElementById('grammar-output');
+      
+      if (!word) {
+        output.textContent = 'Please enter a word';
+        return;
+      }
+      
+      try {
+        output.textContent = 'Searching...';
+        
+        const posTags = await englishLexicalService.getPOSTags(word);
+        const verbForms = await englishLexicalService.getVerbForms(word);
+        const plural = await englishLexicalService.getNounPlural(word);
+        
+        let result = `Word: ${word}\n\n`;
+        
+        if (posTags.length > 0) {
+          result += `POS Tags: ${posTags.join(', ')}\n`;
+        }
+        
+        if (verbForms) {
+          result += `\nVerb Forms:\n`;
+          result += `  Base: ${verbForms.base_form}\n`;
+          result += `  Present: ${verbForms.present}\n`;
+          result += `  Past: ${verbForms.past}\n`;
+          result += `  Past Participle: ${verbForms.past_participle}\n`;
+          result += `  Present Participle: ${verbForms.present_participle}\n`;
+        }
+        
+        if (plural) {
+          result += `\nPlural: ${plural}\n`;
+        }
+        
+        if (!posTags.length && !verbForms && !plural) {
+          result += 'No grammar information found';
+        }
+        
+        output.textContent = result;
+      } catch (error) {
+        output.textContent = `Error: ${error.message}`;
+      }
+    };
+    
+    window.testExpansion = async function() {
+      const input = document.getElementById('expand-input').value;
+      const limit = parseInt(document.getElementById('expand-limit').value);
+      const output = document.getElementById('expand-output');
+      
+      if (!input) {
+        output.textContent = 'Please enter words';
+        return;
+      }
+      
+      try {
+        output.textContent = 'Expanding...';
+        const words = input.split(/\s+/);
+        const expanded = await englishLexicalService.expandWithSynonyms(words, limit);
+        
+        output.textContent = `Original words (${words.length}): ${words.join(', ')}\n\n` +
+          `Expanded with synonyms (${expanded.length} total):\n${expanded.join(', ')}`;
+      } catch (error) {
+        output.textContent = `Error: ${error.message}`;
+      }
+    };
+    
+    // Auto-initialize on load
+    window.addEventListener('load', () => {
+      initializeServices();
+    });
+  </script>
+</body>
+</html>

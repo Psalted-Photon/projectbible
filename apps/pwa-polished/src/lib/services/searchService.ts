@@ -30,7 +30,7 @@ export class UnifiedSearchService {
     return UnifiedSearchService.instance;
   }
 
-  async search(query: string): Promise<SearchCategory[]> {
+  async search(query: string, limit?: number): Promise<SearchCategory[]> {
     if (!query || query.trim().length === 0) {
       return [];
     }
@@ -39,7 +39,7 @@ export class UnifiedSearchService {
     const categories: SearchCategory[] = [];
 
     // Search verses
-    const verseResults = await this.searchVerses(normalizedQuery);
+    const verseResults = await this.searchVerses(normalizedQuery, limit);
     if (verseResults.length > 0) {
       categories.push({
         name: 'Verses',
@@ -57,13 +57,21 @@ export class UnifiedSearchService {
     return categories;
   }
 
-  private async searchVerses(query: string): Promise<SearchResult[]> {
+  private async searchVerses(query: string, limit: number = 250): Promise<SearchResult[]> {
     try {
+      console.time(`searchVerses: "${query}"`);
       // Use the IndexedDBSearchIndex to search
       const dbResults = await this.searchIndex.search(query);
+      console.timeEnd(`searchVerses: "${query}"`);
       
-      // Convert to our SearchResult format and limit to top 50 results
-      return dbResults.slice(0, 50).map((result, index) => ({
+      // Limit results (default 250, or all if limit is -1)
+      const resultLimit = limit === -1 ? dbResults.length : limit;
+      
+      console.log(`Formatting ${resultLimit.toLocaleString()} results...`);
+      console.time(`Formatting ${resultLimit} results`);
+      
+      // Convert to our SearchResult format
+      const results = dbResults.slice(0, resultLimit).map((result, index) => ({
         type: 'verse' as const,
         title: `${result.book} ${result.chapter}:${result.verse}`,
         subtitle: result.snippet || result.text,
@@ -76,9 +84,27 @@ export class UnifiedSearchService {
         },
         score: 1.0 - (index / 100), // Simple relevance scoring
       }));
+      
+      console.timeEnd(`Formatting ${resultLimit} results`);
+      console.log(`✓ Formatted ${results.length.toLocaleString()} results`);
+      
+      return results;
     } catch (error) {
       console.error('Error searching verses:', error);
       return [];
+    }
+  }
+  
+  async getTotalCount(query: string): Promise<number> {
+    try {
+      console.time(`getTotalCount: "${query}"`);
+      const dbResults = await this.searchIndex.search(query);
+      console.timeEnd(`getTotalCount: "${query}"`);
+      console.log(`Total results for "${query}":`, dbResults.length);
+      return dbResults.length;
+    } catch (error) {
+      console.error('Error getting total count:', error);
+      return 0;
     }
   }
 

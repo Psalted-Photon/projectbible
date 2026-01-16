@@ -4,7 +4,7 @@ import type { DBVerse } from './db.js';
 export class IndexedDBSearchIndex implements SearchIndex {
   /**
    * Search for verses containing the query string
-   * @param query Search term(s)
+   * @param query Search term(s) or regex pattern
    * @param translations Optional list of translation IDs to search within
    */
   async search(query: string, translations?: string[]): Promise<SearchResult[]> {
@@ -12,7 +12,23 @@ export class IndexedDBSearchIndex implements SearchIndex {
       return [];
     }
 
-    const searchTerms = query.toLowerCase().trim().split(/\s+/);
+    // Try to detect if this is a regex pattern (contains regex metacharacters)
+    const isRegex = /[\\()?.*+[\]{}|^$]/.test(query);
+    let regex: RegExp | null = null;
+    let searchTerms: string[] = [];
+    
+    if (isRegex) {
+      try {
+        // Treat as regex pattern
+        regex = new RegExp(query, 'gi');
+      } catch (error) {
+        console.error('Invalid regex pattern, falling back to simple search:', error);
+        searchTerms = query.toLowerCase().trim().split(/\s+/);
+      }
+    } else {
+      // Simple term search
+      searchTerms = query.toLowerCase().trim().split(/\s+/);
+    }
     
     try {
       const db = await import('./db.js').then(m => m.openDB());
@@ -36,13 +52,24 @@ export class IndexedDBSearchIndex implements SearchIndex {
               return;
             }
             
-            // Check if all search terms are in the verse text
-            const lowerText = verse.text.toLowerCase();
-            const matches = searchTerms.every(term => lowerText.includes(term));
+            let matches = false;
+            
+            if (regex) {
+              // Test regex against verse text
+              matches = regex.test(verse.text);
+              // Reset regex lastIndex for next test
+              regex.lastIndex = 0;
+            } else {
+              // Check if all search terms are in the verse text
+              const lowerText = verse.text.toLowerCase();
+              matches = searchTerms.every(term => lowerText.includes(term));
+            }
             
             if (matches) {
               // Create snippet with highlighted terms
-              const snippet = this.createSnippet(verse.text, searchTerms);
+              const snippet = regex 
+                ? this.createSnippet(verse.text, [])
+                : this.createSnippet(verse.text, searchTerms);
               
               results.push({
                 translation: verse.translationId,

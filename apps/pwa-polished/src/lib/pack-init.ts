@@ -12,6 +12,7 @@ export interface BundledPack {
   url: string;
   type: 'translation' | 'lexicon' | 'maps' | 'commentary';
   required: boolean;
+  isLexical?: boolean; // For English lexical packs (handled separately)
 }
 
 // List of packs bundled with the polished app
@@ -39,6 +40,33 @@ const BUNDLED_PACKS: BundledPack[] = [
     url: '/assets/packs/maps.sqlite',
     type: 'maps',
     required: true
+  },
+  {
+    id: 'english-wordlist',
+    name: 'English Dictionary (440k words + IPA)',
+    filename: 'english-wordlist-v1.sqlite',
+    url: '/assets/packs/english-wordlist-v1.sqlite',
+    type: 'lexicon',
+    required: false,
+    isLexical: true
+  },
+  {
+    id: 'english-thesaurus',
+    name: 'English Thesaurus (3.5M synonyms)',
+    filename: 'english-thesaurus-v1.sqlite',
+    url: '/assets/packs/english-thesaurus-v1.sqlite',
+    type: 'lexicon',
+    required: false,
+    isLexical: true
+  },
+  {
+    id: 'english-grammar',
+    name: 'English Grammar (POS tags, verb forms)',
+    filename: 'english-grammar-v1.sqlite',
+    url: '/assets/packs/english-grammar-v1.sqlite',
+    type: 'lexicon',
+    required: false,
+    isLexical: true
   }
 ];
 
@@ -75,10 +103,15 @@ export async function initializePolishedApp(
     // Open IndexedDB
     const db = await openPackDB();
     
+    // Separate regular packs from lexical packs
+    const regularPacks = BUNDLED_PACKS.filter(p => !p.isLexical);
+    const lexicalPacks = BUNDLED_PACKS.filter(p => p.isLexical);
+    
     let completed = 0;
     const total = BUNDLED_PACKS.length;
     
-    for (const pack of BUNDLED_PACKS) {
+    // Install regular packs first (Bible translations, maps, etc.)
+    for (const pack of regularPacks) {
       const progress = Math.round((completed / total) * 100);
       onProgress?.(`Installing ${pack.name}...`, progress);
       
@@ -120,6 +153,49 @@ export async function initializePolishedApp(
           throw error; // Fail if required pack can't be installed
         }
         completed++;
+      }
+    }
+    
+    // Install English lexical packs (these go into a separate IndexedDB)
+    if (lexicalPacks.length > 0) {
+      const { englishLexicalPackLoader } = await import('../../../../packages/core/src/search/englishLexicalPackLoader');
+      
+      for (const pack of lexicalPacks) {
+        const progress = Math.round((completed / total) * 100);
+        onProgress?.(`Installing ${pack.name}...`, progress);
+        
+        try {
+          // Load lexical pack using the specialized loader
+          console.log(`Loading lexical pack: ${pack.url}...`);
+          
+          if (pack.id === 'english-wordlist') {
+            await englishLexicalPackLoader.loadWordlistPack(pack.url, (loadProgress) => {
+              const currentProgress = Math.round((completed / total) * 100);
+              const packProgress = Math.round(loadProgress.progress * 0.01 * (1 / total) * 100);
+              onProgress?.(loadProgress.message, currentProgress + packProgress);
+            });
+          } else if (pack.id === 'english-thesaurus') {
+            await englishLexicalPackLoader.loadThesaurusPack(pack.url, (loadProgress) => {
+              const currentProgress = Math.round((completed / total) * 100);
+              const packProgress = Math.round(loadProgress.progress * 0.01 * (1 / total) * 100);
+              onProgress?.(loadProgress.message, currentProgress + packProgress);
+            });
+          } else if (pack.id === 'english-grammar') {
+            await englishLexicalPackLoader.loadGrammarPack(pack.url, (loadProgress) => {
+              const currentProgress = Math.round((completed / total) * 100);
+              const packProgress = Math.round(loadProgress.progress * 0.01 * (1 / total) * 100);
+              onProgress?.(loadProgress.message, currentProgress + packProgress);
+            });
+          }
+          
+          console.log(`✓ Installed ${pack.name}`);
+          completed++;
+          
+        } catch (error) {
+          console.error(`Error installing lexical pack ${pack.id}:`, error);
+          // Lexical packs are optional, don't fail the whole initialization
+          completed++;
+        }
       }
     }
     

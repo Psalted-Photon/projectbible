@@ -7,6 +7,7 @@
     availableTranslations,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
+  import { searchQuery, triggerSearch } from "../stores/searchStore";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
   import { BIBLE_BOOKS } from "../lib/bibleData";
@@ -1084,7 +1085,9 @@
         alert(`Dissect: ${text}\n\n(Word study coming soon)`);
         break;
       case "search":
-        alert(`Search for: ${text}\n\n(Search coming soon)`);
+        // Set search query and trigger search in NavigationBar
+        searchQuery.set(text);
+        triggerSearch.update(n => n + 1);
         break;
       case "map":
         alert(`Show on map: ${text}\n\n(Map integration coming soon)`);

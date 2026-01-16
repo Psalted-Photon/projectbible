@@ -1,10 +1,11 @@
 <script lang="ts">
-  let searchQuery = '';
+  import { searchQuery } from '../../stores/searchStore';
+  
   let searchResults: any[] = [];
   
   function handleSearch() {
     // TODO: Integrate with search adapter
-    console.log('Searching for:', searchQuery);
+    console.log('Searching for:', $searchQuery);
   }
 </script>
 
@@ -15,7 +16,7 @@
     <input 
       type="text" 
       placeholder="Search the Bible..." 
-      bind:value={searchQuery}
+      bind:value={$searchQuery}
       on:keydown={(e) => e.key === 'Enter' && handleSearch()}
     />
     <button on:click={handleSearch}>Search</button>

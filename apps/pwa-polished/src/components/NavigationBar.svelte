@@ -10,6 +10,8 @@
     searchService,
     type SearchCategory,
   } from "../lib/services/searchService";
+  import { searchQuery as searchQueryStore, triggerSearch } from "../stores/searchStore";
+  import PowerSearchModal from "./PowerSearchModal.svelte";
 
   export let windowId: string | undefined = undefined;
   export let visible: boolean = true;
@@ -27,6 +29,16 @@
   let isSearching = false;
   let searchTimeout: ReturnType<typeof setTimeout>;
   let expandedTranslations = new Set<string>();
+  let totalResultCount = 0;
+  let displayedResultCount = 0;
+  let showingAll = false;
+  let showPowerSearchModal = false;
+  
+  // Listen for external search triggers
+  $: if ($triggerSearch > 0) {
+    searchQuery = $searchQueryStore;
+    performSearch();
+  }
 
   // Use per-window state if windowId provided, otherwise use global state
   $: windowState = windowId
@@ -139,7 +151,7 @@
     }
   }
 
-  async function performSearch() {
+  async function performSearch(loadAll: boolean = false) {
     if (!searchQuery.trim()) {
       searchResults = [];
       showResults = false;
@@ -148,13 +160,34 @@
 
     isSearching = true;
     try {
-      searchResults = await searchService.search(searchQuery);
+      const limit = loadAll ? -1 : 250;
+      searchResults = await searchService.search(searchQuery, limit);
+      
+      // Get total count
+      totalResultCount = await searchService.getTotalCount(searchQuery);
+      
+      // Calculate displayed count from all categories
+      displayedResultCount = searchResults.reduce((sum, category) => sum + category.count, 0);
+      showingAll = loadAll || displayedResultCount >= totalResultCount;
+      
       showResults = true;
     } catch (error) {
       console.error("Search error:", error);
       searchResults = [];
+      totalResultCount = 0;
+      displayedResultCount = 0;
     } finally {
       isSearching = false;
+    }
+  }
+  
+  async function loadAllResults() {
+    const message = totalResultCount > 10000 
+      ? `Load all ${totalResultCount.toLocaleString()} results? This could take a while and create a very long list to scroll through.`
+      : `Load all ${totalResultCount.toLocaleString()} results?`;
+    
+    if (confirm(message)) {
+      await performSearch(true);
     }
   }
 
@@ -364,14 +397,32 @@
     </div>
     <button
       class="search-button"
-      on:click={performSearch}
+      on:click={() => performSearch()}
       disabled={!searchQuery.trim()}
     >
       Search
     </button>
+    <button
+      class="power-search-button"
+      on:click={() => showPowerSearchModal = true}
+      title="Advanced search with regex, proximity, and biblical filters"
+    >
+      ⚡ Power Search
+    </button>
 
     {#if showResults}
       <div class="search-results-dropdown">
+        {#if displayedResultCount > 0}
+          <div class="search-stats">
+            Showing {displayedResultCount} 
+            {#if !showingAll && totalResultCount > displayedResultCount}
+              of <button class="load-all-link" on:click={loadAllResults}>{totalResultCount} results</button>
+            {:else}
+              {totalResultCount > 1 ? 'results' : 'result'}
+            {/if}
+          </div>
+        {/if}
+        
         {#if searchResults.length > 0 && Object.keys(resultsByTranslation).length > 0}
           {#each Object.entries(resultsByTranslation) as [translationId, results]}
             <div class="translation-group">
@@ -415,6 +466,9 @@
     {/if}
   </div>
 </div>
+
+<!-- Power Search Modal -->
+<PowerSearchModal bind:show={showPowerSearchModal} />
 
 <style>
   .navigation-bar {
@@ -745,15 +799,35 @@
   }
 
   .search-button:hover:not(:disabled) {
-    background: #5568d3;
-    border-color: #5568d3;
+    background: #7e8ff0;
   }
 
   .search-button:disabled {
-    background: #3a3a3a;
-    border-color: #3a3a3a;
-    color: #666;
+    background: #4a4a4a;
+    border-color: #4a4a4a;
+    color: #888;
     cursor: not-allowed;
+  }
+
+  .power-search-button {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: 1px solid #667eea;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.2s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.4);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  }
+
+  .power-search-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
   }
 
   .search-spinner {
@@ -901,6 +975,31 @@
     text-align: center;
     color: #888;
     font-size: 14px;
+  }
+  
+  .search-stats {
+    padding: 10px 14px;
+    background: #1a1a1a;
+    border-bottom: 1px solid #3a3a3a;
+    color: #aaa;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  
+  .load-all-link {
+    background: none;
+    border: none;
+    color: #667eea;
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: inherit;
+    font-weight: inherit;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .load-all-link:hover {
+    color: #7e8ff0;
   }
 
   .search-results-dropdown::-webkit-scrollbar {
