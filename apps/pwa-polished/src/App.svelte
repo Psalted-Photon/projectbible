@@ -1,13 +1,14 @@
 <script lang="ts">
   import BibleReader from "./components/BibleReader.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
+  import PaneContainer from "./components/PaneContainer.svelte";
   import { windowStore } from "./lib/stores/windowStore";
 
   // Calculate main content area based on open panels
-  $: leftPanels = $windowStore.filter(w => w.edge === 'left');
-  $: rightPanels = $windowStore.filter(w => w.edge === 'right');
-  $: topPanels = $windowStore.filter(w => w.edge === 'top');
-  $: bottomPanels = $windowStore.filter(w => w.edge === 'bottom');
+  $: leftPanels = $windowStore.filter((w) => w.edge === "left");
+  $: rightPanels = $windowStore.filter((w) => w.edge === "right");
+  $: topPanels = $windowStore.filter((w) => w.edge === "top");
+  $: bottomPanels = $windowStore.filter((w) => w.edge === "bottom");
 
   $: leftWidth = leftPanels.reduce((sum, p) => sum + p.size, 0);
   $: rightWidth = rightPanels.reduce((sum, p) => sum + p.size, 0);
@@ -24,7 +25,7 @@
 
   // Log main content area changes
   $: {
-    console.log('📐 MAIN CONTENT AREA:', {
+    console.log("📐 MAIN CONTENT AREA:", {
       leftPanels: leftPanels.length,
       rightPanels: rightPanels.length,
       topPanels: topPanels.length,
@@ -36,7 +37,7 @@
         bottom: `${bottomHeight.toFixed(1)}%`,
       },
       availableWidth: `${(100 - leftWidth - rightWidth).toFixed(1)}%`,
-      availableHeight: `${(100 - topHeight - bottomHeight).toFixed(1)}%`
+      availableHeight: `${(100 - topHeight - bottomHeight).toFixed(1)}%`,
     });
   }
 </script>
@@ -46,6 +47,7 @@
     <BibleReader />
   </div>
   <WindowContainer />
+  <PaneContainer />
 </div>
 
 <style>
@@ -60,7 +62,7 @@
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE and Edge */
   }
-  
+
   :global(*::-webkit-scrollbar) {
     display: none; /* Chrome, Safari, Opera */
   }
@@ -79,7 +81,11 @@
     position: fixed;
     box-sizing: border-box;
     overflow: auto;
-    transition: left 0.3s ease, right 0.3s ease, top 0.3s ease, bottom 0.3s ease;
+    transition:
+      left 0.3s ease,
+      right 0.3s ease,
+      top 0.3s ease,
+      bottom 0.3s ease;
     z-index: 1;
   }
 </style>

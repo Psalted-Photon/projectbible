@@ -37,11 +37,49 @@
   let displayedResultCount = 0;
   let showingAll = false;
   let showPowerSearchModal = false;
-  
+
   // Refs for positioning dropdowns on mobile
   let translationButtonRef: HTMLElement;
   let referenceButtonRef: HTMLElement;
   let searchContainerRef: HTMLElement;
+  let navBarRef: HTMLElement;
+
+  // Update dropdown positions on scroll (mobile)
+  function updateDropdownPositions() {
+    if (window.innerWidth > 768) return; // Only on mobile
+
+    if (translationDropdownOpen && translationButtonRef) {
+      const rect = translationButtonRef.getBoundingClientRect();
+      const dropdown = translationButtonRef.nextElementSibling as HTMLElement;
+      if (dropdown) {
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+      }
+    }
+
+    if (referenceDropdownOpen && referenceButtonRef) {
+      const rect = referenceButtonRef.getBoundingClientRect();
+      const dropdown = referenceButtonRef.nextElementSibling as HTMLElement;
+      if (dropdown) {
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+      }
+    }
+
+    if (showResults && searchContainerRef) {
+      const rect = searchContainerRef.getBoundingClientRect();
+      const dropdown = searchContainerRef.querySelector(
+        ".search-results-dropdown",
+      ) as HTMLElement;
+      if (dropdown) {
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
+      }
+    }
+  }
 
   // Listen for external search triggers
   $: if ($triggerSearch > 0) {
@@ -83,13 +121,7 @@
       // Position dropdown on mobile
       if (window.innerWidth <= 768 && translationButtonRef) {
         requestAnimationFrame(() => {
-          const rect = translationButtonRef.getBoundingClientRect();
-          const dropdown = translationButtonRef.nextElementSibling as HTMLElement;
-          if (dropdown) {
-            dropdown.style.left = `${rect.left}px`;
-            dropdown.style.top = `${rect.bottom + 4}px`;
-            dropdown.style.width = `${Math.max(rect.width, 200)}px`;
-          }
+          updateDropdownPositions();
         });
       }
     }
@@ -103,13 +135,7 @@
       // Position dropdown on mobile
       if (window.innerWidth <= 768 && referenceButtonRef) {
         requestAnimationFrame(() => {
-          const rect = referenceButtonRef.getBoundingClientRect();
-          const dropdown = referenceButtonRef.nextElementSibling as HTMLElement;
-          if (dropdown) {
-            dropdown.style.left = `${rect.left}px`;
-            dropdown.style.top = `${rect.bottom + 4}px`;
-            dropdown.style.width = `${Math.max(rect.width, 250)}px`;
-          }
+          updateDropdownPositions();
         });
       }
     }
@@ -207,17 +233,11 @@
       showingAll = loadAll || displayedResultCount >= totalResultCount;
 
       showResults = true;
-      
+
       // Position search results dropdown on mobile
       if (window.innerWidth <= 768 && searchContainerRef) {
         requestAnimationFrame(() => {
-          const rect = searchContainerRef.getBoundingClientRect();
-          const dropdown = searchContainerRef.querySelector('.search-results-dropdown') as HTMLElement;
-          if (dropdown) {
-            dropdown.style.left = `${rect.left}px`;
-            dropdown.style.top = `${rect.bottom + 4}px`;
-            dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
-          }
+          updateDropdownPositions();
         });
       }
     } catch (error) {
@@ -330,14 +350,23 @@
 
   onMount(() => {
     document.addEventListener("click", closeDropdowns);
+
+    // Add scroll listener to nav bar for updating dropdown positions on mobile
+    if (navBarRef) {
+      navBarRef.addEventListener("scroll", updateDropdownPositions);
+    }
   });
 
   onDestroy(() => {
     document.removeEventListener("click", closeDropdowns);
+
+    if (navBarRef) {
+      navBarRef.removeEventListener("scroll", updateDropdownPositions);
+    }
   });
 </script>
 
-<div class="navigation-bar" class:visible>
+<div bind:this={navBarRef} class="navigation-bar" class:visible>
   <!-- Translation Dropdown -->
   <div class="nav-dropdown">
     <button
@@ -426,7 +455,12 @@
   </div>
 
   <!-- Search Bar -->
-  <div bind:this={searchContainerRef} class="search-container" on:click|stopPropagation role="search">
+  <div
+    bind:this={searchContainerRef}
+    class="search-container"
+    on:click|stopPropagation
+    role="search"
+  >
     <div class="search-input-wrapper" class:focused={searchFocused}>
       <span class="search-icon">🔍</span>
       <input
@@ -697,6 +731,7 @@
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     z-index: 10001; /* Higher than nav bar */
+    pointer-events: auto; /* Ensure clickable */
   }
 
   .tree-menu {
@@ -1137,43 +1172,45 @@
   /* Mobile responsive styles */
   @media (max-width: 768px) {
     .navigation-bar {
-      gap: 10px; /* Increased from 6px */
-      padding: 10px 12px; /* Increased from 8px 10px */
+      gap: 10px;
+      padding: 10px 12px;
       overflow-x: auto;
-      overflow-y: visible; /* Changed from hidden to allow dropdowns */
+      overflow-y: hidden; /* Hide overflow to prevent clipping issues */
       -webkit-overflow-scrolling: touch;
-      scrollbar-width: none; /* Firefox */
-      -ms-overflow-style: none; /* IE and Edge */
-      flex-wrap: nowrap; /* Prevent wrapping */
-      min-height: 60px; /* Increased from 56px */
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      flex-wrap: nowrap;
+      min-height: 60px;
       align-items: center;
     }
 
     .navigation-bar::-webkit-scrollbar {
-      display: none; /* Chrome, Safari, Opera */
+      display: none;
     }
 
     .nav-dropdown {
       flex-shrink: 0;
-      min-width: 130px; /* Increased from 120px */
-      max-width: 150px; /* Increased from 140px */
-      position: static; /* Allow dropdowns to escape container */
+      min-width: 130px;
+      max-width: 150px;
+      position: static; /* Let dropdown escape */
     }
 
     .dropdown-menu {
-      position: fixed; /* Fixed positioning to escape scrolling container */
+      position: fixed; /* Fixed positioning to escape nav bar clipping */
       left: auto;
       right: auto;
       min-width: 200px;
       max-width: 90vw;
+      z-index: 10001;
     }
 
     .search-results-dropdown {
-      position: fixed; /* Fixed positioning to escape scrolling container */
+      position: fixed; /* Fixed positioning to escape nav bar clipping */
       left: auto;
       right: auto;
       min-width: 250px;
       max-width: 90vw;
+      z-index: 10002;
     }
 
     .nav-checkbox {
@@ -1210,8 +1247,9 @@
 
     .search-container {
       flex-shrink: 0;
-      min-width: 200px; /* Increased from 180px */
-      max-width: 280px; /* Increased from 250px */
+      min-width: 200px;
+      max-width: 280px;
+      position: static; /* Let dropdown escape */
     }
 
     .search-input {
