@@ -696,6 +696,38 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       }
       
       console.log(`✅ Lexicon pack ${packInfo.id} imported`);
+    } else if (packInfo.type === 'audio') {
+      // Import audio pack metadata
+      console.log('Importing audio pack...');
+      
+      const audioRows = db.exec('SELECT book, chapter, file_path, format FROM audio_chapters');
+      
+      if (!audioRows.length || !audioRows[0].values.length) {
+        console.warn('No audio chapters found in audio pack');
+        return;
+      }
+      
+      const audioChapters = audioRows[0].values.map(([book, chapter, filePath, format]) => ({
+        id: `${packInfo.translationId}:${book}:${chapter}`,
+        translationId: packInfo.translationId!,
+        book: book as string,
+        chapter: chapter as number,
+        filePath: filePath as string,
+        format: format as string
+      }));
+      
+      console.log(`Importing ${audioChapters.length} audio chapters...`);
+      
+      // Batch insert audio metadata
+      const CHUNK_SIZE = 500;
+      for (let i = 0; i < audioChapters.length; i += CHUNK_SIZE) {
+        const chunk = audioChapters.slice(i, i + CHUNK_SIZE);
+        await batchWriteTransaction('audio_chapters', (store) => {
+          chunk.forEach(audio => store.put(audio));
+        });
+      }
+      
+      console.log(`✅ Audio pack ${packInfo.id} imported: ${audioChapters.length} chapters`);
     }
 
   } finally {

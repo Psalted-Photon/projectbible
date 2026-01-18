@@ -11,12 +11,12 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 8; // Updated for OpenBible biblical places integration
+const DB_VERSION = 9; // Updated for audio pack support
 
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology';
+  type: 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -24,6 +24,15 @@ export interface DBPack {
   size: number;
   installedAt: number; // Unix timestamp
   description?: string;
+}
+
+export interface DBPackAudioChapter {
+  id: string; // `${translationId}:${book}:${chapter}`
+  translationId: string;
+  book: string;
+  chapter: number;
+  filePath: string; // Relative path to audio file
+  format: string; // 'mp3', 'webm', 'ogg'
 }
 
 export interface DBVerse {
@@ -385,6 +394,14 @@ export function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('reading_plans')) {
         const plansStore = db.createObjectStore('reading_plans', { keyPath: 'id' });
         plansStore.createIndex('completedAt', 'completedAt', { unique: false });
+      }
+      
+      // Audio chapters store (for audio Bible packs)
+      if (!db.objectStoreNames.contains('audio_chapters')) {
+        const audioStore = db.createObjectStore('audio_chapters', { keyPath: 'id' });
+        audioStore.createIndex('translationId', 'translationId', { unique: false });
+        audioStore.createIndex('book', 'book', { unique: false });
+        audioStore.createIndex('translation_book_chapter', ['translationId', 'book', 'chapter'], { unique: false });
       }
       
       // Reading plan days store

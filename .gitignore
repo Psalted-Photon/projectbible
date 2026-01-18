@@ -10,6 +10,10 @@ dist/
 # Ignore generated data sources, but allow final packs
 data-sources/
 
+# BSB Audio pack - too large for GitHub (3.4GB MP3s)
+# Users can rebuild with: npm run build:bsb-audio
+packs/bsb-audio/audio/
+
 # Electron
 apps/electron/out/
 apps/electron/release/

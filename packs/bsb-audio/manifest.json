@@ -1,0 +1,13 @@
+{
+  "id": "bsb-audio",
+  "name": "Berean Standard Bible Audio",
+  "version": "1.0.0",
+  "license": "CC0 1.0",
+  "source_url": "https://audiobible.org/",
+  "type": "audio",
+  "format": "mp3",
+  "structure": "book/chapters",
+  "narrator": "Bob Souer, Barry Hays, Jordan Gilbert",
+  "description": "Complete Bible audio narration (chapter-level)",
+  "required": false
+}
