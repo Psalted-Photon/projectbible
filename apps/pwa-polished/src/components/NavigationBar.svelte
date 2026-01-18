@@ -4,7 +4,11 @@
     availableTranslations,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { BIBLE_BOOKS } from "../lib/bibleData";
+  import {
+    BIBLE_BOOKS,
+    getAvailableBooks,
+    getFirstAvailableBook,
+  } from "../lib/bibleData";
   import { onMount, onDestroy } from "svelte";
   import {
     searchService,
@@ -28,6 +32,9 @@
   let searchQuery = "";
   let searchFocused = false;
   let blurTimeout: number | undefined;
+
+  // Get available books for current translation
+  $: availableBooks = getAvailableBooks(currentTranslation);
   let searchResults: SearchCategory[] = [];
   let showResults = false;
   let isSearching = false;
@@ -142,10 +149,36 @@
   }
 
   function selectTranslation(translation: string) {
+    // Get available books for the new translation
+    const newAvailableBooks = getAvailableBooks(translation);
+
+    // Check if current book is available in new translation
+    const currentBookAvailable = newAvailableBooks.some(
+      (b) => b.name === currentBook,
+    );
+
     if (windowId) {
-      windowStore.updateContentState(windowId, { translation });
+      if (!currentBookAvailable) {
+        // Navigate to first available book
+        const firstBook = getFirstAvailableBook(translation);
+        windowStore.updateContentState(windowId, {
+          translation,
+          book: firstBook,
+          chapter: 1,
+        });
+      } else {
+        windowStore.updateContentState(windowId, { translation });
+      }
     } else {
-      navigationStore.setTranslation(translation);
+      if (!currentBookAvailable) {
+        // Navigate to first available book
+        const firstBook = getFirstAvailableBook(translation);
+        navigationStore.setTranslation(translation);
+        navigationStore.setBook(firstBook);
+        navigationStore.setChapter(1);
+      } else {
+        navigationStore.setTranslation(translation);
+      }
     }
     translationDropdownOpen = false;
   }
@@ -420,7 +453,7 @@
 
     {#if referenceDropdownOpen}
       <div class="dropdown-menu tree-menu">
-        {#each BIBLE_BOOKS as book}
+        {#each availableBooks as book}
           <div class="book-item">
             <button
               class="book-button"

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import NavigationBar from "./NavigationBar.svelte";
   import SelectionToast from "./SelectionToast.svelte";
+  import LexicalModal from "./LexicalModal.svelte";
   import {
     navigationStore,
     availableTranslations,
@@ -48,6 +49,12 @@
   let justOpenedToast = false;
   let touchStartPos: { x: number; y: number } | null = null;
   let hasMoved = false;
+
+  // Lexical modal state
+  let showLexicalModal = false;
+  let lexicalSelectedText = "";
+  let lexicalStrongsId: string | undefined = undefined;
+
   let repeatsActive = false;
   let repeatsWord = "";
 
@@ -91,7 +98,7 @@
     translation: string,
     book: string,
     chapter: number,
-    resetScroll = false
+    resetScroll = false,
   ) {
     loading = true;
     error = "";
@@ -100,7 +107,7 @@
       const chapterVerses = await textStore.getChapter(
         translation,
         book,
-        chapter
+        chapter,
       );
 
       const processedVerses = chapterVerses.map((v) => {
@@ -138,7 +145,7 @@
         // If current translation not available, switch to first one
         const currentTransUpper = currentTranslation.toUpperCase();
         const match = translations.find(
-          (t) => t.id.toUpperCase() === currentTransUpper
+          (t) => t.id.toUpperCase() === currentTransUpper,
         );
 
         if (!match) {
@@ -148,12 +155,22 @@
           navigationStore.setTranslation(match.id);
         }
 
+        // If we only have 2 translations, load the rest
+        if (translations.length < 9) {
+          console.log(
+            "Only found",
+            translations.length,
+            "translations, loading more...",
+          );
+          await autoLoadFromPublic(false);
+        }
+
         // Verify the selected translation has verses
         const testVerse = await textStore.getVerse(
           translations[0].id,
           "Genesis",
           1,
-          1
+          1,
         );
 
         if (!testVerse) {
@@ -170,48 +187,51 @@
   }
 
   async function autoLoadFromPublic(clearFirst: boolean) {
-    try {
-      if (clearFirst) {
-        const db = await import("../adapters/db").then((m) => m.openDB());
-        const tx = db.transaction(["packs", "verses"], "readwrite");
-        await tx.objectStore("packs").clear();
-        await tx.objectStore("verses").clear();
-        await new Promise<void>((resolve, reject) => {
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        });
-      }
+    showToast("Loading additional packs...", "info");
 
+    try {
       const { importPackFromUrl } = await import("../adapters/pack-import");
 
-      // Load all available packs from public directory
+      // Load all translation packs from public directory
       const packsToLoad = [
         "bsb.sqlite",
         "kjv.sqlite",
         "web.sqlite",
-        "greek.sqlite",
-        "hebrew.sqlite",
+        "net.sqlite",
+        "lxx2012-english.sqlite",
+        "byz-full.sqlite",
+        "tr-full.sqlite",
+        "lxx-greek.sqlite",
+        "hebrew-oshb.sqlite",
       ];
+
+      let loaded = 0;
+      let failed = 0;
 
       for (const packFile of packsToLoad) {
         try {
           console.log(`Loading ${packFile}...`);
+          showToast(`Loading ${packFile}...`, "info");
           await importPackFromUrl(`/${packFile}`);
+          loaded++;
         } catch (err) {
-          console.warn(`Failed to load ${packFile}:`, err);
+          failed++;
+          const errMsg = `Failed to load ${packFile}: ${err instanceof Error ? err.message : String(err)}`;
+          console.warn(errMsg);
         }
       }
 
-      // Reload translations after import
-      const translations = await textStore.getTranslations();
-      if (translations.length > 0) {
-        availableTranslations.set(translations.map((t) => t.id));
-        navigationStore.setTranslation(translations[0].id);
-        await loadChapter(translations[0].id, currentBook, currentChapter);
-      }
+      showToast(
+        `Loaded ${loaded} packs, ${failed} failed`,
+        failed > 0 ? "error" : "success",
+      );
+
+      // Reload translations and debug info
+      await loadAvailableTranslations();
     } catch (err) {
-      console.error("Failed to auto-load packs:", err);
-      error = `Failed to load Bible data: ${err instanceof Error ? err.message : String(err)}`;
+      const errMsg = `Failed to load translations: ${err instanceof Error ? err.message : String(err)}`;
+      console.error(errMsg);
+      showToast(errMsg, "error");
     }
   }
 
@@ -221,7 +241,7 @@
       if (response.ok) {
         chronologicalData = await response.json();
         console.log(
-          `Loaded chronological pack: ${chronologicalData.verse_count} verses`
+          `Loaded chronological pack: ${chronologicalData.verse_count} verses`,
         );
       }
     } catch (e) {
@@ -280,16 +300,16 @@
 
       console.log(
         "loadNextChapter - isChronologicalMode:",
-        isChronologicalMode
+        isChronologicalMode,
       );
       console.log(
         "loadNextChapter - chronologicalData loaded:",
-        !!chronologicalData
+        !!chronologicalData,
       );
       console.log(
         "loadNextChapter - current:",
         lastChapter.book,
-        lastChapter.chapter
+        lastChapter.chapter,
       );
 
       if (isChronologicalMode && chronologicalData) {
@@ -297,19 +317,19 @@
         // Find the LAST verse of the current chapter in chronological order
         const currentChapterVerses = chronologicalData.verses.filter(
           (v: any) =>
-            v.book === lastChapter.book && v.chapter === lastChapter.chapter
+            v.book === lastChapter.book && v.chapter === lastChapter.chapter,
         );
 
         console.log(
           "Found",
           currentChapterVerses.length,
-          "verses for current chapter"
+          "verses for current chapter",
         );
 
         if (currentChapterVerses.length > 0) {
           // Get the highest chrono_index for this chapter
           const lastVerseIndex = Math.max(
-            ...currentChapterVerses.map((v: any) => v.chrono_index)
+            ...currentChapterVerses.map((v: any) => v.chrono_index),
           );
 
           console.log("Last verse index of current chapter:", lastVerseIndex);
@@ -318,7 +338,8 @@
           const nextChapterData = chronologicalData.verses.find(
             (v: any) =>
               v.chrono_index > lastVerseIndex &&
-              (v.book !== lastChapter.book || v.chapter !== lastChapter.chapter)
+              (v.book !== lastChapter.book ||
+                v.chapter !== lastChapter.chapter),
           );
 
           if (nextChapterData) {
@@ -337,7 +358,7 @@
         const bookInfo = BIBLE_BOOKS.find((b) => b.name === lastChapter.book);
         if (bookInfo && nextChapter > bookInfo.chapters) {
           const currentBookIndex = BIBLE_BOOKS.findIndex(
-            (b) => b.name === lastChapter.book
+            (b) => b.name === lastChapter.book,
           );
           if (currentBookIndex < BIBLE_BOOKS.length - 1) {
             nextBook = BIBLE_BOOKS[currentBookIndex + 1].name;
@@ -361,7 +382,7 @@
       const nextVerses = await textStore.getChapter(
         currentTranslation,
         nextBook,
-        nextChapter
+        nextChapter,
       );
 
       if (nextVerses.length > 0) {
@@ -400,13 +421,13 @@
         // Find the FIRST verse of the current chapter in chronological order
         const currentChapterVerses = chronologicalData.verses.filter(
           (v: any) =>
-            v.book === firstChapter.book && v.chapter === firstChapter.chapter
+            v.book === firstChapter.book && v.chapter === firstChapter.chapter,
         );
 
         if (currentChapterVerses.length > 0) {
           // Get the lowest chrono_index for this chapter
           const firstVerseIndex = Math.min(
-            ...currentChapterVerses.map((v: any) => v.chrono_index)
+            ...currentChapterVerses.map((v: any) => v.chrono_index),
           );
 
           // Find previous chapter before this index
@@ -417,7 +438,7 @@
               (v: any) =>
                 v.chrono_index < firstVerseIndex &&
                 (v.book !== firstChapter.book ||
-                  v.chapter !== firstChapter.chapter)
+                  v.chapter !== firstChapter.chapter),
             );
 
           if (prevChapterData) {
@@ -434,7 +455,7 @@
       } else {
         if (prevChapter < 1) {
           const currentBookIndex = BIBLE_BOOKS.findIndex(
-            (b) => b.name === firstChapter.book
+            (b) => b.name === firstChapter.book,
           );
           if (currentBookIndex > 0) {
             const prevBookInfo = BIBLE_BOOKS[currentBookIndex - 1];
@@ -460,7 +481,7 @@
       const prevVerses = await textStore.getChapter(
         currentTranslation,
         prevBook,
-        prevChapter
+        prevChapter,
       );
 
       if (prevVerses.length > 0) {
@@ -585,7 +606,7 @@
       const walker = document.createTreeWalker(
         textNode,
         NodeFilter.SHOW_TEXT,
-        null
+        null,
       );
       const firstText = walker.nextNode();
       if (firstText) textNode = firstText;
@@ -647,7 +668,7 @@
     // After unwrapping, get the element at the click position
     const elementAtPoint = document.elementFromPoint(
       e.clientX,
-      e.clientY
+      e.clientY,
     ) as HTMLElement;
 
     // Handle click - mouse clicks work immediately
@@ -679,7 +700,7 @@
       const walker = document.createTreeWalker(
         textNode,
         NodeFilter.SHOW_TEXT,
-        null
+        null,
       );
       const firstText = walker.nextNode();
       if (firstText) {
@@ -729,7 +750,7 @@
 
   function getWordBounds(
     text: string,
-    offset: number
+    offset: number,
   ): { start: number; end: number } | null {
     // Find word boundaries
     let start = offset;
@@ -785,7 +806,7 @@
         leftHandle.addEventListener(
           "touchstart",
           (e) => startDragTouch(e, "left"),
-          { passive: false }
+          { passive: false },
         );
 
         // Right handle at end of selection
@@ -799,7 +820,7 @@
         rightHandle.addEventListener(
           "touchstart",
           (e) => startDragTouch(e, "right"),
-          { passive: false }
+          { passive: false },
         );
 
         // Append to text container
@@ -837,7 +858,7 @@
       }
     });
     highlightedElements = highlightedElements.filter((el) =>
-      el.classList.contains("repeat-highlight")
+      el.classList.contains("repeat-highlight"),
     );
   }
 
@@ -969,7 +990,7 @@
     // Position above and centered on click
     toastX = Math.min(
       Math.max(x - toastWidth / 2, 10),
-      window.innerWidth - toastWidth - 10
+      window.innerWidth - toastWidth - 10,
     );
     toastY = Math.max(y - toastHeight - 15, 10); // 15px above selection (5px higher)
 
@@ -1016,7 +1037,7 @@
       const walker = document.createTreeWalker(
         verseText,
         NodeFilter.SHOW_TEXT,
-        null
+        null,
       );
 
       const textNodes: Text[] = [];
@@ -1078,14 +1099,14 @@
       if (parent) {
         parent.replaceChild(
           document.createTextNode(highlight.textContent || ""),
-          highlight
+          highlight,
         );
         parent.normalize(); // Merge adjacent text nodes
       }
     });
 
     highlightedElements = highlightedElements.filter(
-      (el) => !el.classList.contains("repeat-highlight")
+      (el) => !el.classList.contains("repeat-highlight"),
     );
   }
 
@@ -1096,7 +1117,11 @@
     // TODO: Wire up actual actions
     switch (action) {
       case "dissect":
-        alert(`Dissect: ${text}\n\n(Word study coming soon)`);
+        // Open lexical modal
+        lexicalSelectedText = text;
+        lexicalStrongsId = undefined; // Could be extracted from context if available
+        showLexicalModal = true;
+        showToast = false; // Close the toast
         break;
       case "search":
         // Set search query and trigger search in NavigationBar
@@ -1118,7 +1143,9 @@
     }
 
     // Close toast after action
-    showToast = false;
+    if (action !== "dissect") {
+      showToast = false;
+    }
     clearHighlights();
   }
 
@@ -1176,7 +1203,7 @@
       const isXref = noteEl.classList.contains("inline-xref");
 
       alert(
-        `${isXref ? "Cross-reference" : "Footnote"} ${noteIndex}:\n\n${noteText}`
+        `${isXref ? "Cross-reference" : "Footnote"} ${noteIndex}:\n\n${noteText}`,
       );
     };
 
@@ -1210,7 +1237,7 @@
         while (hoveredWordElement.firstChild) {
           parent?.insertBefore(
             hoveredWordElement.firstChild,
-            hoveredWordElement
+            hoveredWordElement,
           );
         }
         parent?.removeChild(hoveredWordElement);
@@ -1271,6 +1298,13 @@
     {/if}
   </div>
 </div>
+
+<!-- Lexical Modal -->
+<LexicalModal
+  bind:isOpen={showLexicalModal}
+  selectedText={lexicalSelectedText}
+  strongsId={lexicalStrongsId}
+/>
 
 <style>
   .bible-reader {

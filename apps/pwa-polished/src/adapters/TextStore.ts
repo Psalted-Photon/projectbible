@@ -153,29 +153,49 @@ export class IndexedDBTextStore implements TextStore {
         
         packsRequest.onsuccess = async () => {
           const packs = packsRequest.result;
+          console.log('All packs in database:', packs.map((p: any) => ({ id: p.id, translationId: p.translationId, type: p.type })));
+          
+          // Include any pack that has a translationId (text translations, original language texts)
           const textPacks = packs.filter((p: any) => 
-            p.translationId && (p.type === 'text' || p.type === 'original-language')
+            p.translationId && p.translationId.trim().length > 0
           );
+          
+          console.log('Found text packs:', textPacks.map((p: any) => ({ id: p.translationId, name: p.translationName, type: p.type })));
           
           // Filter out packs that have no verses (parent packs like "GREEK" or "HEBREW")
           const translationsWithVerses: Array<{id: string, name: string}> = [];
+          const seenIds = new Set<string>(); // Track uppercase IDs to avoid duplicates
           
           for (const pack of textPacks) {
+            // Normalize translation ID to uppercase
+            const normalizedId = pack.translationId.toUpperCase();
+            
+            // Skip if we've already seen this ID (case-insensitive)
+            if (seenIds.has(normalizedId)) {
+              console.log(`Skipping duplicate translation: ${pack.translationId} (already have ${normalizedId})`);
+              continue;
+            }
+            
             // Check if this translation has any verses
             const hasVerses = await new Promise<boolean>((res) => {
               const countRequest = versesIndex.count(IDBKeyRange.only(pack.translationId));
-              countRequest.onsuccess = () => res(countRequest.result > 0);
+              countRequest.onsuccess = () => {
+                console.log(`Pack ${pack.translationId} has ${countRequest.result} verses`);
+                res(countRequest.result > 0);
+              };
               countRequest.onerror = () => res(false);
             });
             
             if (hasVerses) {
+              seenIds.add(normalizedId);
               translationsWithVerses.push({
-                id: pack.translationId,
-                name: pack.translationName || pack.translationId
+                id: normalizedId, // Use normalized uppercase ID
+                name: pack.translationName || normalizedId
               });
             }
           }
           
+          console.log('Final translations list:', translationsWithVerses);
           resolve(translationsWithVerses);
         };
         

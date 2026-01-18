@@ -3,6 +3,20 @@
   import WindowContainer from "./components/WindowContainer.svelte";
   import PaneContainer from "./components/PaneContainer.svelte";
   import { windowStore } from "./lib/stores/windowStore";
+  import { onMount } from "svelte";
+
+  // Initialize Eruda for mobile debugging
+  onMount(async () => {
+    if (typeof window !== "undefined") {
+      const eruda = await import("eruda");
+      eruda.default.init();
+      // Make the eruda button draggable
+      eruda.default.position({
+        x: window.innerWidth - 60,
+        y: window.innerHeight - 60,
+      });
+    }
+  });
 
   // Calculate main content area based on open panels
   $: leftPanels = $windowStore.filter((w) => w.edge === "left");
