@@ -39,10 +39,14 @@ export async function importPackFromSQLite(file: File): Promise<void> {
     console.log('Pack metadata:', metadata);
 
     // Create pack info (handle both camelCase and snake_case metadata keys)
+    let packType = (metadata.pack_type || metadata.type || metadata.packType) as string;
+    // Normalize 'original-language' to 'text' for storage
+    if (packType === 'original-language') packType = 'text';
+    
     const packInfo: DBPack = {
       id: metadata.pack_id || metadata.packId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: (metadata.pack_type || metadata.type || metadata.packType) as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'original-language',
+      type: packType as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -100,7 +104,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
 
         console.log(`✅ Cross-references pack imported: ${crossRefs.length} entries`);
       }
-    } else if (packInfo.type === 'text' || packInfo.type === 'original-language') {
+    } else if (packInfo.type === 'text') {
       // Check if this is a multi-edition pack
       const tableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='editions'");
       const hasEditions = tableCheck.length > 0 && tableCheck[0].values.length > 0;
@@ -219,27 +223,66 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // Import morphology data if available (words table)
       if (hasWords) {
         console.log('Importing morphology data from words table...');
-        const wordsRows = db.exec(`
-          SELECT book, chapter, verse, word_order, text, lemma, morph_code, 
-                 strongs, gloss_en, transliteration
-          FROM words
-        `);
+        
+        try {
+          // Check which columns are available in the words table
+          const wordsTableInfo = db.exec('PRAGMA table_info(words)');
+          const columns = wordsTableInfo.length > 0 && wordsTableInfo[0].values 
+            ? wordsTableInfo[0].values.map(row => row[1] as string) 
+            : [];
+          const hasGlossEn = columns.includes('gloss_en');
+          const hasTransliteration = columns.includes('transliteration');
+        
+        console.log(`  Words table columns: ${columns.join(', ')}`);
+        
+        // Build SELECT query based on available columns
+        let selectQuery = 'SELECT book, chapter, verse, word_order, text, lemma, morph_code, strongs';
+        if (hasGlossEn) selectQuery += ', gloss_en';
+        if (hasTransliteration) selectQuery += ', transliteration';
+        selectQuery += ' FROM words';
+        
+        const wordsRows = db.exec(selectQuery);
         
         if (wordsRows.length && wordsRows[0].values.length) {
-          const morphologyData = wordsRows[0].values.map(([book, chapter, verse, wordOrder, text, lemma, morphCode, strongs, gloss, transliteration]) => ({
-            id: `${packInfo.translationId}:${book}:${chapter}:${verse}:${wordOrder}`,
-            translationId: packInfo.translationId!,
-            book: book as string,
-            chapter: chapter as number,
-            verse: verse as number,
-            wordPosition: wordOrder as number,
-            text: text as string,
-            lemma: lemma as string,
-            strongsId: strongs as string | undefined,
-            gloss: gloss as string | undefined,
-            transliteration: transliteration as string | undefined,
-            parsing: morphCode as string // Store raw morph code
-          }));
+          const morphologyData = wordsRows[0].values.map((row) => {
+            const [book, chapter, verse, wordOrder, text, lemma, morphCode, strongs, ...optional] = row;
+            let gloss: string | undefined;
+            let transliteration: string | undefined;
+            
+            // Extract optional fields based on which columns exist
+            if (hasGlossEn && hasTransliteration) {
+              [gloss, transliteration] = optional as [string, string];
+            } else if (hasGlossEn) {
+              [gloss] = optional as [string];
+            } else if (hasTransliteration) {
+              [transliteration] = optional as [string];
+            }
+            
+            // Determine language from translation ID
+            const language = packInfo.translationId?.startsWith('LXX') || 
+                           packInfo.translationId === 'BYZ' || 
+                           packInfo.translationId === 'TR' 
+              ? 'greek' 
+              : packInfo.translationId === 'WLC' 
+              ? 'hebrew' 
+              : 'greek'; // default to greek for original language packs
+            
+            return {
+              id: `${packInfo.translationId}:${book}:${chapter}:${verse}:${wordOrder}`,
+              translationId: packInfo.translationId!,
+              book: book as string,
+              chapter: chapter as number,
+              verse: verse as number,
+              wordPosition: wordOrder as number,
+              text: text as string,
+              lemma: lemma as string,
+              strongsId: strongs as string | undefined,
+              gloss: gloss as string | undefined,
+              transliteration: transliteration as string | undefined,
+              parsing: morphCode as string,
+              language: language as 'greek' | 'hebrew' | 'aramaic'
+            };
+          });
           
           console.log(`Importing ${morphologyData.length} morphology entries...`);
           
@@ -254,6 +297,9 @@ export async function importPackFromSQLite(file: File): Promise<void> {
           }
           
           console.log(`✅ Morphology data imported: ${morphologyData.length} entries`);
+        }
+        } catch (morphError) {
+          console.error('Error importing morphology data:', morphError);
         }
       }
       

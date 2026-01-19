@@ -11,12 +11,12 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 9; // Updated for audio pack support
+const DB_VERSION = 10; // Updated for morphology translationId + verse_ref index
 
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio';
+  type: 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -110,16 +110,19 @@ export interface DBPronunciation {
 }
 
 export interface DBMorphology {
-  id?: number; // Auto-increment
+  id?: string | number; // Can be auto-increment or custom ID
+  translationId?: string; // Added for multi-translation support
   book: string;
   chapter: number;
   verse: number;
   wordPosition: number;
-  word: string;
+  word?: string; // Made optional since pack-import uses 'text'
+  text?: string; // Alternative to 'word'
   lemma: string;
   strongsId?: string;
   parsing: string; // JSON string of MorphologyParsing
   gloss?: string;
+  transliteration?: string;
   language: 'greek' | 'hebrew' | 'aramaic';
 }
 
@@ -336,8 +339,9 @@ export function openDB(): Promise<IDBDatabase> {
       
       // Morphology data store
       if (!db.objectStoreNames.contains('morphology')) {
-        const morphStore = db.createObjectStore('morphology', { keyPath: 'id', autoIncrement: true });
+        const morphStore = db.createObjectStore('morphology', { keyPath: 'id' });
         morphStore.createIndex('book_chapter_verse_word', ['book', 'chapter', 'verse', 'wordPosition'], { unique: false });
+        morphStore.createIndex('verse_ref', ['translationId', 'book', 'chapter', 'verse'], { unique: false });
         morphStore.createIndex('strongsId', 'strongsId', { unique: false });
       }
       
@@ -525,4 +529,75 @@ export async function batchWriteTransaction(
  */
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
+ * Clear only translation packs (text/audio), keeping lexical/morphology/maps intact
+ * Useful for debugging translation issues without re-importing large lexical datasets
+ */
+export async function clearTranslationPacks(): Promise<void> {
+  const db = await openDB();
+  
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Get all packs
+      const packsTransaction = db.transaction('packs', 'readonly');
+      const packsStore = packsTransaction.objectStore('packs');
+      const packsRequest = packsStore.getAll();
+      
+      packsRequest.onsuccess = async () => {
+        const allPacks = packsRequest.result as DBPack[];
+        const translationPacks = allPacks.filter(p => p.type === 'text' || p.type === 'audio');
+        const translationIds = new Set(translationPacks.map(p => p.translationId).filter(Boolean));
+        
+        console.log(`Clearing ${translationPacks.length} translation packs...`);
+        console.log('Translation IDs to remove:', Array.from(translationIds));
+        
+        // Delete translation packs metadata
+        const deletePacksTransaction = db.transaction('packs', 'readwrite');
+        const deletePacksStore = deletePacksTransaction.objectStore('packs');
+        for (const pack of translationPacks) {
+          deletePacksStore.delete(pack.id);
+        }
+        
+        await new Promise<void>((res, rej) => {
+          deletePacksTransaction.oncomplete = () => res();
+          deletePacksTransaction.onerror = () => rej(deletePacksTransaction.error);
+        });
+        
+        // Delete all verses from translation packs
+        const versesTransaction = db.transaction('verses', 'readwrite');
+        const versesStore = versesTransaction.objectStore('verses');
+        const versesIndex = versesStore.index('translationId');
+        
+        for (const translationId of translationIds) {
+          const versesRequest = versesIndex.openCursor(IDBKeyRange.only(translationId));
+          versesRequest.onsuccess = (e) => {
+            const cursor = (e.target as IDBRequest).result;
+            if (cursor) {
+              cursor.delete();
+              cursor.continue();
+            }
+          };
+        }
+        
+        await new Promise<void>((res, rej) => {
+          versesTransaction.oncomplete = () => res();
+          versesTransaction.onerror = () => rej(versesTransaction.error);
+        });
+        
+        console.log('✅ Translation packs cleared (lexical data preserved)');
+        resolve();
+      };
+      
+      packsRequest.onerror = () => reject(packsRequest.error);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+// Expose to window for console debugging
+if (typeof window !== 'undefined') {
+  (window as any).clearTranslationPacks = clearTranslationPacks;
 }

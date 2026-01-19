@@ -17,6 +17,7 @@ export interface BundledPack {
 
 // List of packs bundled with the polished app
 const BUNDLED_PACKS: BundledPack[] = [
+  // English Translations
   {
     id: 'kjv',
     name: 'King James Version',
@@ -34,6 +35,66 @@ const BUNDLED_PACKS: BundledPack[] = [
     required: true
   },
   {
+    id: 'bsb',
+    name: 'Berean Standard Bible',
+    filename: 'bsb.sqlite',
+    url: '/bsb.sqlite',
+    type: 'translation',
+    required: false
+  },
+  {
+    id: 'net',
+    name: 'NET Bible (with notes)',
+    filename: 'net.sqlite',
+    url: '/net.sqlite',
+    type: 'translation',
+    required: false
+  },
+  {
+    id: 'lxx2012-english',
+    name: 'LXX 2012 (English)',
+    filename: 'lxx2012-english.sqlite',
+    url: '/lxx2012-english.sqlite',
+    type: 'translation',
+    required: false
+  },
+  
+  // Original Language Texts
+  {
+    id: 'byz-full',
+    name: 'Byzantine Greek NT',
+    filename: 'byz-full.sqlite',
+    url: '/byz-full.sqlite',
+    type: 'translation',
+    required: false
+  },
+  {
+    id: 'tr-full',
+    name: 'Textus Receptus Greek NT',
+    filename: 'tr-full.sqlite',
+    url: '/tr-full.sqlite',
+    type: 'translation',
+    required: false
+  },
+  {
+    id: 'lxx-greek',
+    name: 'Septuagint (LXX) Greek',
+    filename: 'lxx-greek.sqlite',
+    url: '/lxx-greek.sqlite',
+    type: 'translation',
+    required: false
+  },
+  {
+    id: 'hebrew-oshb',
+    name: 'Open Scriptures Hebrew Bible',
+    filename: 'hebrew-oshb.sqlite',
+    url: '/hebrew-oshb.sqlite',
+    type: 'translation',
+    required: false
+  },
+  
+  // Maps & Places
+  {
     id: 'maps',
     name: 'Biblical Maps & Places',
     filename: 'maps.sqlite',
@@ -41,35 +102,34 @@ const BUNDLED_PACKS: BundledPack[] = [
     type: 'maps',
     required: true
   },
-  // English lexical packs disabled for faster initial load
-  // These can be manually installed later through the pack manager
-  // {
-  //   id: 'english-wordlist',
-  //   name: 'English Dictionary (440k words + IPA)',
-  //   filename: 'english-wordlist-v1.sqlite',
-  //   url: '/english-wordlist-v1.sqlite',
-  //   type: 'lexicon',
-  //   required: false,
-  //   isLexical: true
-  // },
-  // {
-  //   id: 'english-thesaurus',
-  //   name: 'English Thesaurus (3.5M synonyms)',
-  //   filename: 'english-thesaurus-v1.sqlite',
-  //   url: '/english-thesaurus-v1.sqlite',
-  //   type: 'lexicon',
-  //   required: false,
-  //   isLexical: true
-  // },
-  // {
-  //   id: 'english-grammar',
-  //   name: 'English Grammar (POS tags, verb forms)',
-  //   filename: 'english-grammar-v1.sqlite',
-  //   url: '/english-grammar-v1.sqlite',
-  //   type: 'lexicon',
-  //   required: false,
-  //   isLexical: true
-  // }
+  // English lexical packs for word study
+  {
+    id: 'english-wordlist',
+    name: 'English Dictionary (440k words + IPA)',
+    filename: 'english-wordlist-v1.sqlite',
+    url: '/english-wordlist-v1.sqlite',
+    type: 'lexicon',
+    required: false,
+    isLexical: true
+  },
+  {
+    id: 'english-thesaurus',
+    name: 'English Thesaurus (3.5M synonyms)',
+    filename: 'english-thesaurus-v1.sqlite',
+    url: '/english-thesaurus-v1.sqlite',
+    type: 'lexicon',
+    required: false,
+    isLexical: true
+  },
+  {
+    id: 'english-grammar',
+    name: 'English Grammar (POS tags, verb forms)',
+    filename: 'english-grammar-v1.sqlite',
+    url: '/english-grammar-v1.sqlite',
+    type: 'lexicon',
+    required: false,
+    isLexical: true
+  }
 ];
 
 const INIT_FLAG_KEY = 'projectbible_polished_initialized';
@@ -128,25 +188,10 @@ export async function initializePolishedApp(
         const progress = Math.round((completed / total) * 100);
         onProgress?.(`Installing ${pack.name}...`, progress);
         
-        // Fetch the bundled pack file
-        console.log(`Fetching ${pack.url}...`);
-        const response = await fetch(pack.url);
-        
-        if (!response.ok) {
-          console.warn(`Pack ${pack.filename} not found at ${pack.url}, skipping`);
-          completed++;
-          continue;
-        }
-        
-        const blob = await response.blob();
-        
-        // Store in IndexedDB
-        await storePackInDB(db, pack.id, blob, {
-          name: pack.name,
-          type: pack.type,
-          version: CURRENT_PACK_VERSION,
-          installedAt: new Date().toISOString()
-        });
+        // Import pack directly from URL - this will parse SQLite and import verses
+        console.log(`Importing ${pack.url}...`);
+        const { importPackFromUrl } = await import('../adapters/pack-import');
+        await importPackFromUrl(pack.url);
         
         console.log(`✓ Installed ${pack.name}`);
         completed++;
