@@ -2,6 +2,14 @@ import { mount } from 'svelte';
 import App from './App.svelte';
 import { initializePolishedApp, isInitialized } from './lib/pack-init';
 import { getSettings } from './adapters/settings';
+import { removePack } from './adapters/db-manager';
+import { importPackFromUrl } from './adapters/pack-import';
+
+// Expose utilities for console debugging
+if (import.meta.env.DEV) {
+  (window as any).removePack = removePack;
+  (window as any).importPackFromUrl = importPackFromUrl;
+}
 
 const appElement = document.getElementById('app');
 

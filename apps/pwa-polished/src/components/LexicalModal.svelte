@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { IndexedDBLexiconStore } from "../adapters/LexiconStore";
   import type { StrongEntry } from "@projectbible/core";
+  import type { DBMorphology } from "../adapters/db";
   import {
     englishLexicalService,
     type WordInfo,
@@ -10,6 +11,7 @@
   export let isOpen = false;
   export let selectedText = "";
   export let strongsId: string | undefined = undefined;
+  export let morphologyData: DBMorphology | null = null;
 
   let lexiconStore: IndexedDBLexiconStore;
   let strongEntry: StrongEntry | null = null;
@@ -47,6 +49,12 @@
     loadingDefinition = false;
 
     try {
+      // If we have morphology data, don't need to load anything - just display it
+      if (morphologyData) {
+        loading = false;
+        return;
+      }
+      
       if (strongsId) {
         // Direct Strong's lookup for biblical languages
         strongEntry = await lexiconStore.getStrong(strongsId);
@@ -163,6 +171,14 @@
     }
   }
 
+  async function loadStrongsEntry(strongsNum: string) {
+    // Clear morphology data and load the Strong's entry
+    morphologyData = null;
+    strongsId = strongsNum;
+    selectedText = "";
+    await loadLexicalData();
+  }
+
   function getLanguageColor(lang: string): string {
     switch (lang) {
       case "greek":
@@ -241,6 +257,79 @@
             </svg>
             <p>{error}</p>
             <p class="hint">Lexical packs may not be fully installed yet.</p>
+          </div>
+        {:else if morphologyData}
+          <!-- Original Language Morphology Display -->
+          <div class="morphology-view">
+            <div class="info-section">
+              <h3>Morphology</h3>
+              <dl>
+                <dt>Word:</dt>
+                <dd class="morph-text" dir={morphologyData.language === 'hebrew' ? 'rtl' : 'ltr'}>
+                  {morphologyData.text}
+                </dd>
+
+                {#if morphologyData.lemma}
+                  <dt>Lemma:</dt>
+                  <dd class="morph-lemma" dir={morphologyData.language === 'hebrew' ? 'rtl' : 'ltr'}>
+                    {#if morphologyData.lemma && !/^\d+$/.test(morphologyData.lemma)}
+                      {morphologyData.lemma}
+                    {:else}
+                      {morphologyData.text}
+                      <span class="hint-text">(lemma data unavailable)</span>
+                    {/if}
+                  </dd>
+                {/if}
+
+                {#if morphologyData.transliteration}
+                  <dt>Transliteration:</dt>
+                  <dd>{morphologyData.transliteration}</dd>
+                {:else}
+                  <dt>Transliteration:</dt>
+                  <dd class="missing-data">Not available in legacy pack</dd>
+                {/if}
+
+                {#if morphologyData.strongsId}
+                  <dt>Strong's:</dt>
+                  <dd>
+                    <button 
+                      class="strongs-link" 
+                      style="color: {getLanguageColor(morphologyData.language)}"
+                      on:click={() => loadStrongsEntry(morphologyData!.strongsId!)}
+                    >
+                      {morphologyData.strongsId}
+                    </button>
+                  </dd>
+                {/if}
+
+                <dt>English Gloss:</dt>
+                {#if morphologyData.gloss_en}
+                  <dd class="gloss">{morphologyData.gloss_en}</dd>
+                {:else}
+                  <dd class="missing-data">Not available in legacy pack</dd>
+                {/if}
+
+                {#if morphologyData.morph_code}
+                  <dt>Parsing:</dt>
+                  <dd class="parsing">{morphologyData.morph_code}</dd>
+                {/if}
+
+                <dt>Language:</dt>
+                <dd>
+                  <span style="color: {getLanguageColor(morphologyData.language)}">
+                    {morphologyData.language.charAt(0).toUpperCase() + morphologyData.language.slice(1)}
+                  </span>
+                </dd>
+              </dl>
+            </div>
+
+            {#if morphologyData.strongsId}
+              <div class="hint-section">
+                <p class="hint">
+                  💡 Click Strong's number above to view full lexicon entry
+                </p>
+              </div>
+            {/if}
           </div>
         {:else if searchResults.length > 0}
           <div class="search-results">
@@ -773,6 +862,76 @@
   .info-section dd {
     margin: 0;
     color: var(--text-color, #fff);
+  }
+
+  .morph-text {
+    font-size: 24px;
+    font-weight: 600;
+    font-family: "Times New Roman", serif;
+  }
+
+  .morph-lemma {
+    font-size: 20px;
+    font-weight: 500;
+    font-family: "Times New Roman", serif;
+    color: #4caf50;
+  }
+
+  .hint-text {
+    font-size: 12px;
+    color: #888;
+    font-style: italic;
+    margin-left: 8px;
+    font-family: system-ui, sans-serif;
+  }
+
+  .missing-data {
+    color: #888;
+    font-style: italic;
+  }
+
+  .gloss {
+    font-size: 16px;
+    color: #8bc34a;
+  }
+
+  .parsing {
+    font-family: monospace;
+    font-size: 14px;
+    color: #999;
+  }
+
+  .strongs-link {
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 16px;
+  }
+
+  .strongs-link:hover {
+    opacity: 0.8;
+  }
+
+  .morphology-view {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .hint-section {
+    padding: 12px 16px;
+    background: rgba(76, 175, 80, 0.1);
+    border-left: 3px solid #4caf50;
+    border-radius: 4px;
+  }
+
+  .hint-section .hint {
+    margin: 0;
+    font-size: 14px;
+    color: #8bc34a;
   }
 
   .lemma-text {

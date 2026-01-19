@@ -56,9 +56,17 @@
   let showLexicalModal = false;
   let lexicalSelectedText = "";
   let lexicalStrongsId: string | undefined = undefined;
+  let lexicalMorphologyData: DBMorphology | null = null;
+  let selectedMorphology: DBMorphology | null = null;
 
   let repeatsActive = false;
   let repeatsWord = "";
+
+  // Morphology cache state
+  let morphologyCache = new Map<number, DBMorphology[]>();
+  let isIndexedPack = false;
+  const DEBUG_MORPHOLOGY = true; // Set to false to disable debug features
+  let morphStats = { hits: 0, misses: 0, indexMatches: 0, textFallback: 0, totalLookups: 0 };
 
   // Load user settings
   function loadUserSettings() {
@@ -196,6 +204,139 @@
     return (value || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  // Strip Hebrew cantillation marks and vowel points for text comparison
+  function stripHebrewDiacritics(text: string): string {
+    // Remove Hebrew cantillation marks (U+0591 to U+05AF)
+    // Remove Hebrew vowel points (U+05B0 to U+05BD, U+05BF to U+05C2, U+05C4, U+05C5, U+05C7)
+    // Keep consonants and maqqef (־)
+    return text
+      .replace(/[\u0591-\u05AF]/g, '') // Cantillation marks
+      .replace(/[\u05B0-\u05BD\u05BF-\u05C2\u05C4\u05C5\u05C7]/g, '') // Vowel points
+      .normalize('NFC');
+  }
+
+  // Morphology helper: find morphology data for clicked word
+  function findMorphologyForClick(
+    verseMorphs: DBMorphology[] | undefined,
+    clickedIndex: number,
+    clickedText: string,
+    isIndexed: boolean
+  ): DBMorphology | null {
+    if (!verseMorphs || verseMorphs.length === 0) {
+      if (DEBUG_MORPHOLOGY) morphStats.misses++;
+      return null;
+    }
+    
+    morphStats.totalLookups++;
+    
+    // Primary: try word_index match (for v2+ packs)
+    if (isIndexed) {
+      const byIndex = verseMorphs.find(m => m.word_index === clickedIndex);
+      if (byIndex) {
+        morphStats.hits++;
+        morphStats.indexMatches++;
+        if (DEBUG_MORPHOLOGY) {
+          console.log(`✅ Morphology match by word_index: ${clickedIndex}`, byIndex);
+        }
+        return byIndex;
+      }
+    }
+    
+    // Fallback: try text match (exact)
+    let byText = verseMorphs.find(m => m.text === clickedText);
+    if (byText) {
+      morphStats.hits++;
+      morphStats.textFallback++;
+      if (DEBUG_MORPHOLOGY) {
+        console.log(`✅ Morphology match by text: "${clickedText}"`, byText);
+      }
+      return byText;
+    }
+    
+    // Second fallback: try text match without Hebrew diacritics
+    const strippedClickedText = stripHebrewDiacritics(clickedText);
+    byText = verseMorphs.find(m => stripHebrewDiacritics(m.text) === strippedClickedText);
+    if (byText) {
+      morphStats.hits++;
+      morphStats.textFallback++;
+      if (DEBUG_MORPHOLOGY) {
+        console.log(`✅ Morphology match by stripped text: "${clickedText}" → "${strippedClickedText}"`, byText);
+      }
+      return byText;
+    }
+    
+    morphStats.misses++;
+    if (DEBUG_MORPHOLOGY) {
+      console.log(`❌ No morphology match for index ${clickedIndex}, text "${clickedText}", stripped "${strippedClickedText}"`);
+      console.log('   Available texts in verse:', verseMorphs.map(m => m.text));
+    }
+    return null;
+  }
+
+  // Segmentation helper: get word at click position
+  function getClickWordInfo(
+    clickX: number,
+    clickY: number,
+    verseText: string
+  ): { index: number; text: string } | null {
+    // Get the character position from click coordinates
+    const range = document.caretRangeFromPoint(clickX, clickY);
+    if (!range) return null;
+    
+    const clickOffset = range.startOffset;
+    
+    // Segment verse text into words
+    const hasSegmenter = typeof Intl !== 'undefined' && 'Segmenter' in Intl;
+    
+    if (hasSegmenter) {
+      // Use Intl.Segmenter for robust Unicode word segmentation
+      const segmenter = new (Intl as any).Segmenter('en', { granularity: 'word' });
+      const segments = Array.from(segmenter.segment(verseText));
+      
+      let currentOffset = 0;
+      let wordIndex = 0;
+      
+      for (const segment of segments as any[]) {
+        const segmentStart = segment.index;
+        const segmentEnd = segment.index + segment.segment.length;
+        
+        // Check if click is within this segment
+        if (clickOffset >= segmentStart && clickOffset < segmentEnd) {
+          // Only count actual words (not whitespace/punctuation)
+          if (segment.isWordLike) {
+            return { index: wordIndex, text: segment.segment.normalize('NFC') };
+          } else {
+            return null;
+          }
+        }
+        
+        // Count word index for word-like segments
+        if (segment.isWordLike) {
+          wordIndex++;
+        }
+      }
+    } else {
+      // Fallback: Unicode-aware regex
+      if (DEBUG_MORPHOLOGY && import.meta.env.DEV) {
+        console.warn('⚠️ Intl.Segmenter not available, using regex fallback');
+      }
+      
+      const words = Array.from(verseText.matchAll(/[\p{L}\p{M}]+/gu));
+      
+      for (let i = 0; i < words.length; i++) {
+        const match = words[i];
+        const start = match.index!;
+        const end = start + match[0].length;
+        
+        if (clickOffset >= start && clickOffset < end) {
+          return { index: i, text: match[0].normalize('NFC') };
+        }
+      }
+    }
+    
+    return null;
+  }
+
   async function loadChapter(
     translation: string,
     book: string,
@@ -241,6 +382,15 @@
       
       console.log('   Chapters array AFTER assignment:', chapters.map(c => `${c.book} ${c.chapter} (${c.verses.length} verses)`));
 
+      // Load morphology cache if original language translation
+      if (isOriginalLanguage(translation)) {
+        await loadMorphologyCache(translation, book, chapter);
+      } else {
+        // Clear morphology cache for non-original-language translations
+        morphologyCache.clear();
+        isIndexedPack = false;
+      }
+
       if (resetScroll && readerElement) {
         readerElement.scrollTo({ top: 0, behavior: "auto" });
       }
@@ -250,6 +400,66 @@
       chapters = [];
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadMorphologyCache(translation: string, book: string, chapter: number) {
+    try {
+      morphologyCache.clear();
+      
+      console.log(`🔤 Loading morphology for ${translation} ${book} ${chapter}...`);
+      
+      // Query morphology store for entire chapter
+      const { openDB } = await import('../adapters/db');
+      const db = await openDB();
+      
+      const transaction = db.transaction('morphology', 'readonly');
+      const store = transaction.objectStore('morphology');
+      const index = store.index('verse_ref');
+      
+      // Query for all verses in this chapter (verse 1-999)
+      const range = IDBKeyRange.bound(
+        [translation, book, chapter, 1],
+        [translation, book, chapter, 999]
+      );
+      
+      const results: DBMorphology[] = await new Promise((resolve, reject) => {
+        const entries: DBMorphology[] = [];
+        const request = index.openCursor(range);
+        
+        request.onsuccess = (e) => {
+          const cursor = (e.target as IDBRequest).result;
+          if (cursor) {
+            entries.push(cursor.value);
+            cursor.continue();
+          } else {
+            resolve(entries);
+          }
+        };
+        request.onerror = () => reject(request.error);
+      });
+      
+      // Organize by verse number
+      results.forEach(morphEntry => {
+        const verseNum = morphEntry.verse;
+        if (!morphologyCache.has(verseNum)) {
+          morphologyCache.set(verseNum, []);
+        }
+        morphologyCache.get(verseNum)!.push(morphEntry);
+      });
+      
+      // Detect if pack is indexed (schema version 2+)
+      // Check if first entry has word_index field
+      const firstEntry = results[0];
+      isIndexedPack = firstEntry && typeof firstEntry.word_index === 'number';
+      
+      console.log(`   ✅ Loaded ${results.length} morphology entries, ${morphologyCache.size} verses cached`);
+      console.log(`   📊 Pack type: ${isIndexedPack ? 'Indexed (v2+)' : 'Legacy (v1)'}`);
+      
+    } catch (err) {
+      console.warn('Failed to load morphology cache:', err);
+      morphologyCache.clear();
+      isIndexedPack = false;
     }
   }
 
@@ -844,27 +1054,58 @@
     // Find the verse text container
     const verseText = target.closest(".verse-text");
     if (!verseText) return;
+    
+    // Get verse number from parent verse element
+    const verseElement = target.closest(".verse") as HTMLElement;
+    const verseNum = verseElement?.querySelector('.verse-number')?.textContent?.trim();
+    const verseNumInt = verseNum ? parseInt(verseNum) : null;
 
-    // Check if we clicked on a morphology-tagged word
-    const morphWord = target.closest(".morphology-word") as HTMLElement;
-    if (morphWord) {
-      // For morphology words, select the entire span
-      selectedText = morphWord.textContent?.trim() || '';
-      if (!selectedText) return;
-
-      const range = document.createRange();
-      range.selectNodeContents(morphWord);
-      selectionRange = range;
-
-      // Highlight the selection
-      highlightSelection(range, selectionMode);
-
-      // Show toast with morphology data
-      showToastAt(x, y);
+    // Check if this is an original language translation
+    if (isOriginalLanguage(currentTranslation)) {
+      // Greek/Hebrew word click detection
+      if (!verseNumInt) return;
+      
+      const fullVerseText = verseText.textContent || '';
+      const clickInfo = getClickWordInfo(x, y, fullVerseText);
+      
+      if (!clickInfo) {
+        if (DEBUG_MORPHOLOGY) {
+          console.log('❌ Could not determine clicked word');
+        }
+        return;
+      }
+      
+      // Look up morphology from cache
+      const morph = findMorphologyForClick(
+        morphologyCache.get(verseNumInt),
+        clickInfo.index,
+        clickInfo.text,
+        isIndexedPack
+      );
+      
+      if (morph) {
+        // Found morphology - set up for toast/modal
+        selectedText = clickInfo.text;
+        selectedMorphology = morph;
+        
+        // Create a pseudo-range for highlighting (approximate)
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+        }
+        
+        showToastAt(x, y);
+      } else {
+        // No morphology found
+        if (DEBUG_MORPHOLOGY) {
+          console.log('ℹ️ No morphology data available for this word');
+        }
+      }
+      
       return;
     }
 
-    // For non-morphology text (English), use word-boundary detection
+    // For English translations, use existing word-boundary detection
     const selection = window.getSelection();
     if (!selection) return;
 
@@ -1301,9 +1542,10 @@
     // TODO: Wire up actual actions
     switch (action) {
       case "dissect":
-        // Open lexical modal
+        // Open lexical modal with morphology data if available
         lexicalSelectedText = text;
-        lexicalStrongsId = undefined; // Could be extracted from context if available
+        lexicalStrongsId = selectedMorphology?.strongsId || undefined;
+        lexicalMorphologyData = selectedMorphology;
         showLexicalModal = true;
         showToast = false; // Close the toast
         break;
@@ -1438,6 +1680,7 @@
     {selectedText}
     isPlace={false}
     mode={selectionMode}
+    morphologyData={selectedMorphology}
     on:action={handleToastAction}
     on:modeChange={handleModeChange}
   />
@@ -1488,6 +1731,7 @@
   bind:isOpen={showLexicalModal}
   selectedText={lexicalSelectedText}
   strongsId={lexicalStrongsId}
+  morphologyData={lexicalMorphologyData}
 />
 
 <style>
@@ -1669,13 +1913,14 @@
   }
 
   /* Text selection highlights */
-  :global(.word-hover) {
-    background: rgba(102, 126, 234, 0.15);
-    border-radius: 2px;
-    padding: 0 2px;
-    margin: 0 -2px;
+  .verse-text :global(.word-hover) {
+    background: rgba(102, 126, 234, 0.3);
+    border-radius: 3px;
+    padding: 2px 4px;
+    margin: -2px -4px;
     cursor: pointer;
-    transition: background 0.1s ease;
+    transition: background 0.15s ease;
+    box-shadow: 0 0 0 1px rgba(102, 126, 234, 0.4);
   }
 
   :global(.selection-highlight) {

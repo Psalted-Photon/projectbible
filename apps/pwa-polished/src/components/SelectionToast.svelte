@@ -1,11 +1,13 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import type { DBMorphology } from '../adapters/db';
   
   export let x = 0;
   export let y = 0;
   export let selectedText = '';
   export let isPlace = false;
   export let mode: 'word' | 'verse' = 'word';
+  export let morphologyData: DBMorphology | null = null;
   
   const dispatch = createEventDispatcher();
   
@@ -33,9 +35,17 @@
   </div>
   
   <div class="actions">
-    <button class="action-btn" on:click={() => handleAction('dissect')}>
-      Dissect
-    </button>
+    {#if morphologyData}
+      <!-- Original language morphology -->
+      <button class="action-btn" on:click={() => handleAction('dissect')}>
+        Dissect
+      </button>
+    {:else}
+      <!-- English word definition -->
+      <button class="action-btn" on:click={() => handleAction('dissect')}>
+        Define
+      </button>
+    {/if}
     
     <button class="action-btn" on:click={() => handleAction('search')}>
       Search

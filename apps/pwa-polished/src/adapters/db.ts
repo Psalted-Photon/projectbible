@@ -110,20 +110,32 @@ export interface DBPronunciation {
 }
 
 export interface DBMorphology {
-  id?: string | number; // Can be auto-increment or custom ID
-  translationId?: string; // Added for multi-translation support
-  book: string;
-  chapter: number;
-  verse: number;
-  wordPosition: number;
-  word?: string; // Made optional since pack-import uses 'text'
-  text?: string; // Alternative to 'word'
-  lemma: string;
-  strongsId?: string;
-  parsing: string; // JSON string of MorphologyParsing
-  gloss?: string;
-  transliteration?: string;
-  language: 'greek' | 'hebrew' | 'aramaic';
+  // Positioning / alignment
+  word_index: number;          // 0-based index within verse (v2+ schema)
+  book: string;                // canonical book name, e.g. "Genesis", "Romans"
+  chapter: number;             // 1-based
+  verse: number;               // 1-based
+  
+  // Text + normalization
+  text: string;                // surface form as in the verse (NFC normalized)
+  lemma: string;               // lemma in original script
+  transliteration: string;     // e.g. "bereshit", "logos"
+  
+  // Lexical identifiers
+  strongsId?: string;          // e.g. "H7225", "G3056"
+  morph_code: string;          // raw morphology code, e.g. "V-PAI-3S"
+  language: 'hebrew' | 'greek' | 'aramaic';
+  translationId: string;       // "WLC", "LXX", "BYZ", "TR", etc.
+  
+  // Gloss / display
+  gloss_en?: string;           // short English gloss
+  
+  // Legacy fields (for backward compatibility)
+  id?: string | number;        // Can be auto-increment or custom ID
+  wordPosition?: number;       // Old field name (use word_index instead)
+  word?: string;               // Old field name (use text instead)
+  parsing?: string;            // Old field name (use morph_code instead)
+  gloss?: string;              // Old field name (use gloss_en instead)
 }
 
 export interface DBWordOccurrence {

@@ -74,15 +74,20 @@ async function buildLXXPack() {
         book TEXT NOT NULL,
         chapter INTEGER NOT NULL,
         verse INTEGER NOT NULL,
-        word_order INTEGER NOT NULL,
+        word_index INTEGER NOT NULL,
         text TEXT NOT NULL,
         lemma TEXT NOT NULL,
-        UNIQUE(book, chapter, verse, word_order)
+        morph_code TEXT,
+        strongs TEXT,
+        transliteration TEXT,
+        gloss_en TEXT,
+        UNIQUE(book, chapter, verse, word_index)
       );
       
       CREATE INDEX IF NOT EXISTS idx_verses_book ON verses(book);
       CREATE INDEX IF NOT EXISTS idx_verses_book_chapter ON verses(book, chapter);
       CREATE INDEX IF NOT EXISTS idx_words_verse ON words(book, chapter, verse);
+      CREATE INDEX IF NOT EXISTS idx_words_word_index ON words(book, chapter, verse, word_index);
       CREATE INDEX IF NOT EXISTS idx_words_lemma ON words(lemma);
     `);
     
@@ -97,7 +102,8 @@ async function buildLXXPack() {
       language_name: 'Ancient Greek (Koine)',
       license: 'CC BY-SA 4.0',
       attribution: 'Open Scriptures Hebrew Bible Project. Greek Septuagint with lemmas. https://github.com/openscriptures/GreekResources',
-      features: 'lemma,full-lxx-84-books'
+      features: 'lemma,full-lxx-84-books',
+      morphology_schema_version: '2'
     };
     
     const insertMeta = db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)');
@@ -111,8 +117,8 @@ async function buildLXXPack() {
     
     // Prepare statements
     const insertWord = db.prepare(`
-      INSERT OR REPLACE INTO words (book, chapter, verse, word_order, text, lemma)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO words (book, chapter, verse, word_index, text, lemma, morph_code, strongs, transliteration, gloss_en)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     const insertVerse = db.prepare('INSERT OR IGNORE INTO verses (book, chapter, verse, text) VALUES (?, ?, ?, ?)');
@@ -159,8 +165,8 @@ async function buildLXXPack() {
           continue;
         }
         
-        // Build verse text from lemmas
-        const verseText = verseWords.map(w => w.lemma || w.key).join(' ');
+        // Build verse text from lemmas (NFC normalized)
+        const verseText = verseWords.map(w => w.lemma || w.key).join(' ').normalize('NFC');
         
         verses.push({ bookName, chapter, verse, text: verseText });
         
@@ -170,9 +176,13 @@ async function buildLXXPack() {
             bookName,
             chapter,
             verse,
-            wordOrder: idx + 1,
-            text: word.key || word.lemma,
-            lemma: word.lemma
+            wordIndex: idx,  // 0-based index
+            text: (word.key || word.lemma).normalize('NFC'),
+            lemma: word.lemma,
+            morphCode: null,
+            strongs: null,
+            transliteration: null,
+            gloss_en: null
           });
         });
       }
@@ -183,7 +193,7 @@ async function buildLXXPack() {
       });
       
       const wordTransaction = db.transaction((ww) => {
-        ww.forEach(w => insertWord.run(w.bookName, w.chapter, w.verse, w.wordOrder, w.text, w.lemma));
+        ww.forEach(w => insertWord.run(w.bookName, w.chapter, w.verse, w.wordIndex, w.text, w.lemma, w.morphCode, w.strongs, w.transliteration, w.gloss_en));
       });
       
       verseTransaction(verses);

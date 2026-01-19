@@ -73,17 +73,20 @@ async function buildHebrewPack() {
         book TEXT NOT NULL,
         chapter INTEGER NOT NULL,
         verse INTEGER NOT NULL,
-        word_order INTEGER NOT NULL,
+        word_index INTEGER NOT NULL,
         text TEXT NOT NULL,
         lemma TEXT NOT NULL,
         morph_code TEXT NOT NULL,
         strongs TEXT,
-        UNIQUE(book, chapter, verse, word_order)
+        transliteration TEXT,
+        gloss_en TEXT,
+        UNIQUE(book, chapter, verse, word_index)
       );
       
       CREATE INDEX IF NOT EXISTS idx_verses_book ON verses(book);
       CREATE INDEX IF NOT EXISTS idx_verses_book_chapter ON verses(book, chapter);
       CREATE INDEX IF NOT EXISTS idx_words_verse ON words(book, chapter, verse);
+      CREATE INDEX IF NOT EXISTS idx_words_word_index ON words(book, chapter, verse, word_index);
       CREATE INDEX IF NOT EXISTS idx_words_lemma ON words(lemma);
       CREATE INDEX IF NOT EXISTS idx_words_strongs ON words(strongs);
       CREATE INDEX IF NOT EXISTS idx_words_morph ON words(morph_code);
@@ -100,7 +103,8 @@ async function buildHebrewPack() {
       language_name: 'Biblical Hebrew',
       license: 'CC BY 4.0',
       attribution: 'Open Scriptures Hebrew Bible. Westminster Leningrad Codex with complete morphology. https://github.com/openscriptures/morphhb',
-      features: 'morphology,lemma,strongs,full-parsing'
+      features: 'morphology,lemma,strongs,full-parsing',
+      morphology_schema_version: '2'
     };
     
     const insertMeta = db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)');
@@ -114,8 +118,8 @@ async function buildHebrewPack() {
     
     // Prepare statements
     const insertWord = db.prepare(`
-      INSERT OR REPLACE INTO words (book, chapter, verse, word_order, text, lemma, morph_code, strongs)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO words (book, chapter, verse, word_index, text, lemma, morph_code, strongs, transliteration, gloss_en)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     const insertVerse = db.prepare('INSERT OR IGNORE INTO verses (book, chapter, verse, text) VALUES (?, ?, ?, ?)');
@@ -185,16 +189,17 @@ async function buildHebrewPack() {
             return w['#text'] || '';
           }).join(' ').replace(/\s+/g, ' ').trim();
           
-          verses.push({ bookName, chapter: chNum, verse: vNum, text: verseText });
+          // Normalize text (NFC) for consistent matching
+          const normalizedText = verseText.normalize('NFC');
+          
+          verses.push({ bookName, chapter: chNum, verse: vNum, text: normalizedText });
           
           // Process words with morphology
-          let wordOrder = 0;
+          let wordIndex = 0;
           for (const word of verseWords) {
             if (typeof word === 'string' || !word['@_lemma']) continue;
             
-            wordOrder++;
-            
-            const text = word['#text'] || '';
+            const text = (word['#text'] || '').normalize('NFC');
             const lemma = word['@_lemma'] || '';
             const morphCode = word['@_morph'] || '';
             
@@ -202,16 +207,22 @@ async function buildHebrewPack() {
             const strongsMatch = lemma.match(/\d+/);
             const strongs = strongsMatch ? 'H' + strongsMatch[0].padStart(4, '0') : '';
             
+            // Note: transliteration and gloss_en will be added by separate script (add-strongs-glosses.mjs)
+            
             words.push({
               bookName,
               chapter: chNum,
               verse: vNum,
-              wordOrder,
+              wordIndex,  // 0-based index
               text,
               lemma,
               morphCode,
-              strongs
+              strongs,
+              transliteration: null,
+              gloss_en: null
             });
+            
+            wordIndex++;
           }
         }
       }
@@ -222,7 +233,7 @@ async function buildHebrewPack() {
       });
       
       const wordTransaction = db.transaction((ww) => {
-        ww.forEach(w => insertWord.run(w.bookName, w.chapter, w.verse, w.wordOrder, w.text, w.lemma, w.morphCode, w.strongs));
+        ww.forEach(w => insertWord.run(w.bookName, w.chapter, w.verse, w.wordIndex, w.text, w.lemma, w.morphCode, w.strongs, w.transliteration, w.gloss_en));
       });
       
       verseTransaction(verses);
