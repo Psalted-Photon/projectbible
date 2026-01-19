@@ -4,10 +4,7 @@
     availableTranslations,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import {
-    getAvailableBooks,
-    getFirstAvailableBook,
-  } from "../lib/bibleData";
+  import { BIBLE_BOOKS } from "../lib/bibleData";
   import { onMount, onDestroy } from "svelte";
   import {
     searchService,
@@ -32,9 +29,6 @@
   let searchQuery = "";
   let searchFocused = false;
   let blurTimeout: number | undefined;
-
-  // Get available books for current translation
-  $: availableBooks = getAvailableBooks(currentTranslation);
   let searchResults: SearchCategory[] = [];
   let showResults = false;
   let isSearching = false;
@@ -45,49 +39,11 @@
   let showingAll = false;
   let showPowerSearchModal = false;
   let showReadingPlanModal = false;
-
+  
   // Refs for positioning dropdowns on mobile
   let translationButtonRef: HTMLElement;
   let referenceButtonRef: HTMLElement;
   let searchContainerRef: HTMLElement;
-  let navBarRef: HTMLElement;
-
-  // Update dropdown positions on scroll (mobile)
-  function updateDropdownPositions() {
-    if (window.innerWidth > 768) return; // Only on mobile
-
-    if (translationDropdownOpen && translationButtonRef) {
-      const rect = translationButtonRef.getBoundingClientRect();
-      const dropdown = translationButtonRef.nextElementSibling as HTMLElement;
-      if (dropdown) {
-        dropdown.style.left = `${rect.left}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
-        dropdown.style.width = `${Math.max(rect.width, 200)}px`;
-      }
-    }
-
-    if (referenceDropdownOpen && referenceButtonRef) {
-      const rect = referenceButtonRef.getBoundingClientRect();
-      const dropdown = referenceButtonRef.nextElementSibling as HTMLElement;
-      if (dropdown) {
-        dropdown.style.left = `${rect.left}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
-        dropdown.style.width = `${Math.max(rect.width, 200)}px`;
-      }
-    }
-
-    if (showResults && searchContainerRef) {
-      const rect = searchContainerRef.getBoundingClientRect();
-      const dropdown = searchContainerRef.querySelector(
-        ".search-results-dropdown",
-      ) as HTMLElement;
-      if (dropdown) {
-        dropdown.style.left = `${rect.left}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
-        dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
-      }
-    }
-  }
 
   // Listen for external search triggers
   $: if ($triggerSearch > 0) {
@@ -129,7 +85,13 @@
       // Position dropdown on mobile
       if (window.innerWidth <= 768 && translationButtonRef) {
         requestAnimationFrame(() => {
-          updateDropdownPositions();
+          const rect = translationButtonRef.getBoundingClientRect();
+          const dropdown = translationButtonRef.nextElementSibling as HTMLElement;
+          if (dropdown) {
+            dropdown.style.left = `${rect.left}px`;
+            dropdown.style.top = `${rect.bottom + 4}px`;
+            dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+          }
         });
       }
     }
@@ -143,43 +105,23 @@
       // Position dropdown on mobile
       if (window.innerWidth <= 768 && referenceButtonRef) {
         requestAnimationFrame(() => {
-          updateDropdownPositions();
+          const rect = referenceButtonRef.getBoundingClientRect();
+          const dropdown = referenceButtonRef.nextElementSibling as HTMLElement;
+          if (dropdown) {
+            dropdown.style.left = `${rect.left}px`;
+            dropdown.style.top = `${rect.bottom + 4}px`;
+            dropdown.style.width = `${Math.max(rect.width, 250)}px`;
+          }
         });
       }
     }
   }
 
   function selectTranslation(translation: string) {
-    // Get available books for the new translation
-    const newAvailableBooks = getAvailableBooks(translation);
-
-    // Check if current book is available in new translation
-    const currentBookAvailable = newAvailableBooks.some(
-      (b) => b.name === currentBook,
-    );
-
     if (windowId) {
-      if (!currentBookAvailable) {
-        // Navigate to first available book
-        const firstBook = getFirstAvailableBook(translation);
-        windowStore.updateContentState(windowId, {
-          translation,
-          book: firstBook,
-          chapter: 1,
-        });
-      } else {
-        windowStore.updateContentState(windowId, { translation });
-      }
+      windowStore.updateContentState(windowId, { translation });
     } else {
-      if (!currentBookAvailable) {
-        // Navigate to first available book
-        const firstBook = getFirstAvailableBook(translation);
-        navigationStore.setTranslation(translation);
-        navigationStore.setBook(firstBook);
-        navigationStore.setChapter(1);
-      } else {
-        navigationStore.setTranslation(translation);
-      }
+      navigationStore.setTranslation(translation);
     }
     translationDropdownOpen = false;
   }
@@ -267,11 +209,17 @@
       showingAll = loadAll || displayedResultCount >= totalResultCount;
 
       showResults = true;
-
+      
       // Position search results dropdown on mobile
       if (window.innerWidth <= 768 && searchContainerRef) {
         requestAnimationFrame(() => {
-          updateDropdownPositions();
+          const rect = searchContainerRef.getBoundingClientRect();
+          const dropdown = searchContainerRef.querySelector('.search-results-dropdown') as HTMLElement;
+          if (dropdown) {
+            dropdown.style.left = `${rect.left}px`;
+            dropdown.style.top = `${rect.bottom + 4}px`;
+            dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
+          }
         });
       }
     } catch (error) {
@@ -384,23 +332,14 @@
 
   onMount(() => {
     document.addEventListener("click", closeDropdowns);
-
-    // Add scroll listener to nav bar for updating dropdown positions on mobile
-    if (navBarRef) {
-      navBarRef.addEventListener("scroll", updateDropdownPositions);
-    }
   });
 
   onDestroy(() => {
     document.removeEventListener("click", closeDropdowns);
-
-    if (navBarRef) {
-      navBarRef.removeEventListener("scroll", updateDropdownPositions);
-    }
   });
 </script>
 
-<div bind:this={navBarRef} class="navigation-bar" class:visible>
+<div class="navigation-bar" class:visible>
   <!-- Translation Dropdown -->
   <div class="nav-dropdown">
     <button
@@ -463,7 +402,7 @@
 
     {#if referenceDropdownOpen}
       <div class="dropdown-menu tree-menu">
-        {#each availableBooks as book}
+        {#each BIBLE_BOOKS as book}
           <div class="book-item">
             <button
               class="book-button"
@@ -498,12 +437,7 @@
   </div>
 
   <!-- Search Bar -->
-  <div
-    bind:this={searchContainerRef}
-    class="search-container"
-    on:click|stopPropagation
-    role="search"
-  >
+  <div bind:this={searchContainerRef} class="search-container" on:click|stopPropagation role="search">
     <div class="search-input-wrapper" class:focused={searchFocused}>
       <span class="search-icon">🔍</span>
       <input
@@ -777,7 +711,6 @@
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     z-index: 10001; /* Higher than nav bar */
-    pointer-events: auto; /* Ensure clickable */
   }
 
   .tree-menu {
@@ -1240,45 +1173,43 @@
   /* Mobile responsive styles */
   @media (max-width: 768px) {
     .navigation-bar {
-      gap: 10px;
-      padding: 10px 12px;
+      gap: 10px; /* Increased from 6px */
+      padding: 10px 12px; /* Increased from 8px 10px */
       overflow-x: auto;
-      overflow-y: hidden; /* Hide overflow to prevent clipping issues */
+      overflow-y: visible; /* Changed from hidden to allow dropdowns */
       -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-      flex-wrap: nowrap;
-      min-height: 60px;
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none; /* IE and Edge */
+      flex-wrap: nowrap; /* Prevent wrapping */
+      min-height: 60px; /* Increased from 56px */
       align-items: center;
     }
 
     .navigation-bar::-webkit-scrollbar {
-      display: none;
+      display: none; /* Chrome, Safari, Opera */
     }
 
     .nav-dropdown {
       flex-shrink: 0;
-      min-width: 130px;
-      max-width: 150px;
-      position: static; /* Let dropdown escape */
+      min-width: 130px; /* Increased from 120px */
+      max-width: 150px; /* Increased from 140px */
+      position: static; /* Allow dropdowns to escape container */
     }
 
     .dropdown-menu {
-      position: fixed; /* Fixed positioning to escape nav bar clipping */
+      position: fixed; /* Fixed positioning to escape scrolling container */
       left: auto;
       right: auto;
       min-width: 200px;
       max-width: 90vw;
-      z-index: 10001;
     }
 
     .search-results-dropdown {
-      position: fixed; /* Fixed positioning to escape nav bar clipping */
+      position: fixed; /* Fixed positioning to escape scrolling container */
       left: auto;
       right: auto;
       min-width: 250px;
       max-width: 90vw;
-      z-index: 10002;
     }
 
     .nav-checkbox {
@@ -1315,9 +1246,8 @@
 
     .search-container {
       flex-shrink: 0;
-      min-width: 200px;
-      max-width: 280px;
-      position: static; /* Let dropdown escape */
+      min-width: 200px; /* Increased from 180px */
+      max-width: 280px; /* Increased from 250px */
     }
 
     .search-input {

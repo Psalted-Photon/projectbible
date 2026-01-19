@@ -159,6 +159,22 @@ export async function initializePolishedApp(
     return;
   }
 
+  // Skip pack initialization on production (Vercel) - packs not included in deployment
+  const isProduction = window.location.hostname.includes('vercel.app') || 
+                       window.location.hostname === 'projectbible.vercel.com';
+  
+  if (isProduction) {
+    console.log('Production environment detected - skipping automatic pack initialization');
+    console.log('Packs should be loaded manually or from CDN');
+    
+    // Mark as initialized to prevent infinite loops
+    localStorage.setItem(INIT_FLAG_KEY, 'true');
+    localStorage.setItem(PACK_VERSION_KEY, CURRENT_PACK_VERSION);
+    
+    onProgress?.('Production mode - pack initialization skipped', 100);
+    return;
+  }
+
   console.log('First run detected - initializing bundled packs...');
   
   try {
