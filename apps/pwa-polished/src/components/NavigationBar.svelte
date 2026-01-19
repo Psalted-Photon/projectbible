@@ -5,7 +5,6 @@
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import {
-    BIBLE_BOOKS,
     getAvailableBooks,
     getFirstAvailableBook,
   } from "../lib/bibleData";
@@ -19,6 +18,7 @@
     triggerSearch,
   } from "../stores/searchStore";
   import PowerSearchModal from "./PowerSearchModal.svelte";
+  import ReadingPlanModal from "./ReadingPlanModal.svelte";
   import { paneStore } from "../stores/paneStore";
 
   export let windowId: string | undefined = undefined;
@@ -44,6 +44,7 @@
   let displayedResultCount = 0;
   let showingAll = false;
   let showPowerSearchModal = false;
+  let showReadingPlanModal = false;
 
   // Refs for positioning dropdowns on mobile
   let translationButtonRef: HTMLElement;
@@ -438,6 +439,15 @@
     >
   </div>
 
+  <!-- Reading Plan Button -->
+  <button
+    class="reading-plan-button"
+    on:click={() => showReadingPlanModal = true}
+    title="Open reading plan"
+  >
+    📖 Reading Plan
+  </button>
+
   <!-- Reference Dropdown (Tree Structure) -->
   <div class="nav-dropdown">
     <button
@@ -627,6 +637,9 @@
 
 <!-- Power Search Modal -->
 <PowerSearchModal bind:show={showPowerSearchModal} />
+
+<!-- Reading Plan Modal -->
+<ReadingPlanModal bind:isOpen={showReadingPlanModal} />
 
 <style>
   .navigation-bar {
@@ -1007,6 +1020,28 @@
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
   }
 
+  .reading-plan-button {
+    flex-shrink: 0;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+    border: 1px solid #4caf50;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.2s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(76, 175, 80, 0.4);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+  }
+
+  .reading-plan-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+  }
+
   .search-spinner {
     padding: 0 12px;
     color: #667eea;
@@ -1306,6 +1341,12 @@
       white-space: nowrap;
     }
 
+    .reading-plan-button {
+      padding: 8px 12px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
     .settings-button {
       width: 44px; /* Increased from 40px - same as desktop */
       height: 44px; /* Increased from 40px */
@@ -1374,6 +1415,11 @@
     .power-search-button {
       padding: 7px 10px; /* Increased from 6px 8px */
       font-size: 12px; /* Increased from 11px */
+    }
+
+    .reading-plan-button {
+      padding: 7px 10px;
+      font-size: 12px;
     }
 
     .settings-button {
