@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getSettings, updateSettings } from "../../adapters/settings";
+  import { paneStore } from "../../stores/paneStore";
 
   let theme: "light" | "dark" = "dark";
   let fontSize = 18;
@@ -71,6 +72,10 @@
     window.dispatchEvent(new CustomEvent("settingsUpdated"));
   }
 
+  function openPacksPane() {
+    paneStore.openPane("packs", "right");
+  }
+
   // Apply settings on value changes (live preview)
   $: {
     fontSize;
@@ -136,6 +141,19 @@
     {#if savedMessage}
       <span class="saved-indicator">✓ Saved</span>
     {/if}
+  </div>
+
+  <!-- Pack Management Section -->
+  <div class="pack-management-section">
+    <h3>📦 Pack Management</h3>
+    <p class="section-description">
+      Manage installed Bible translations, lexicons, maps, and other resources.
+    </p>
+    <button class="packs-button" on:click={openPacksPane}>
+      <span class="icon">📦</span>
+      <span class="text">Manage Packs</span>
+      <span class="arrow">→</span>
+    </button>
   </div>
 
   <p class="note">
@@ -283,6 +301,72 @@
     color: #4caf50;
     font-weight: 600;
     font-size: 0.95rem;
+  }
+
+  .pack-management-section {
+    margin-top: 2.5rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: linear-gradient(
+      135deg,
+      rgba(102, 126, 234, 0.05),
+      rgba(118, 75, 162, 0.05)
+    );
+    border: 1px solid rgba(102, 126, 234, 0.2);
+    border-radius: 8px;
+  }
+
+  .pack-management-section h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.1rem;
+    color: #f0f0f0;
+  }
+
+  .section-description {
+    margin: 0 0 1.5rem 0;
+    color: #aaa;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .packs-button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  }
+
+  .packs-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  }
+
+  .packs-button:active {
+    transform: translateY(0);
+  }
+
+  .packs-button .icon {
+    font-size: 1.5rem;
+  }
+
+  .packs-button .text {
+    flex: 1;
+    text-align: left;
+  }
+
+  .packs-button .arrow {
+    font-size: 1.2rem;
+    opacity: 0.7;
   }
 
   .note {
