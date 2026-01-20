@@ -1169,8 +1169,7 @@
     .navigation-bar {
       gap: 10px; /* Increased from 6px */
       padding: 10px 12px; /* Increased from 8px 10px */
-      overflow-x: auto;
-      overflow-y: visible; /* Changed from hidden to allow dropdowns */
+      overflow: visible; /* Allow dropdowns to extend beyond nav bar */
       -webkit-overflow-scrolling: touch;
       scrollbar-width: none; /* Firefox */
       -ms-overflow-style: none; /* IE and Edge */
@@ -1291,7 +1290,7 @@
       gap: 8px; /* Increased from 4px */
       padding: 8px 10px; /* Increased from 6px 8px */
       min-height: 56px; /* Increased from 52px */
-      overflow-y: visible; /* Allow dropdowns */
+      overflow: visible; /* Allow dropdowns to extend beyond nav bar */
     }
 
     .nav-dropdown {
