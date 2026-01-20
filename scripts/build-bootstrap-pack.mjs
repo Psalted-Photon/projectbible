@@ -21,7 +21,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -250,6 +250,12 @@ console.log('📦 Building Bootstrap Pack...\n');
 const outputDir = dirname(OUTPUT_PATH);
 if (!existsSync(outputDir)) {
   mkdirSync(outputDir, { recursive: true });
+}
+
+// Delete existing database to ensure fresh build
+if (existsSync(OUTPUT_PATH)) {
+  console.log('Removing existing bootstrap pack...\n');
+  unlinkSync(OUTPUT_PATH);
 }
 
 // Create database
