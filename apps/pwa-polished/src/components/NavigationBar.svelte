@@ -41,7 +41,9 @@
   let showPowerSearchModal = false;
   let showReadingPlanModal = false;
 
-  // Ref for search container click handling
+  // Refs for dropdown positioning
+  let translationButtonRef: HTMLElement;
+  let referenceButtonRef: HTMLElement;
   let searchContainerRef: HTMLElement;
 
   // Listen for external search triggers
@@ -81,6 +83,18 @@
     translationDropdownOpen = !translationDropdownOpen;
     if (translationDropdownOpen) {
       referenceDropdownOpen = false;
+      // Position dropdown
+      requestAnimationFrame(() => {
+        const dropdown = document.querySelector(
+          ".translation-dropdown",
+        ) as HTMLElement;
+        if (dropdown && translationButtonRef) {
+          const rect = translationButtonRef.getBoundingClientRect();
+          dropdown.style.left = `${rect.left}px`;
+          dropdown.style.top = `${rect.bottom + 4}px`;
+          dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+        }
+      });
     }
   }
 
@@ -89,6 +103,18 @@
     referenceDropdownOpen = !referenceDropdownOpen;
     if (referenceDropdownOpen) {
       translationDropdownOpen = false;
+      // Position dropdown
+      requestAnimationFrame(() => {
+        const dropdown = document.querySelector(
+          ".reference-dropdown",
+        ) as HTMLElement;
+        if (dropdown && referenceButtonRef) {
+          const rect = referenceButtonRef.getBoundingClientRect();
+          dropdown.style.left = `${rect.left}px`;
+          dropdown.style.top = `${rect.bottom + 4}px`;
+          dropdown.style.width = `${Math.max(rect.width, 250)}px`;
+        }
+      });
     }
   }
 
@@ -307,12 +333,48 @@
     paneStore.openPane("settings", "right");
   }
 
+  function updateDropdownPositions() {
+    if (translationDropdownOpen) {
+      const dropdown = document.querySelector(
+        ".translation-dropdown",
+      ) as HTMLElement;
+      if (dropdown && translationButtonRef) {
+        const rect = translationButtonRef.getBoundingClientRect();
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+      }
+    }
+    if (referenceDropdownOpen) {
+      const dropdown = document.querySelector(
+        ".reference-dropdown",
+      ) as HTMLElement;
+      if (dropdown && referenceButtonRef) {
+        const rect = referenceButtonRef.getBoundingClientRect();
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.width = `${Math.max(rect.width, 250)}px`;
+      }
+    }
+  }
+
   onMount(() => {
     document.addEventListener("click", closeDropdowns);
+
+    // Update dropdown positions on scroll
+    const navContent = document.querySelector(".nav-content");
+    if (navContent) {
+      navContent.addEventListener("scroll", updateDropdownPositions);
+    }
   });
 
   onDestroy(() => {
     document.removeEventListener("click", closeDropdowns);
+
+    const navContent = document.querySelector(".nav-content");
+    if (navContent) {
+      navContent.removeEventListener("scroll", updateDropdownPositions);
+    }
   });
 </script>
 
@@ -321,6 +383,7 @@
     <!-- Translation Dropdown -->
     <div class="nav-dropdown">
       <button
+        bind:this={translationButtonRef}
         class="nav-button"
         on:click={toggleTranslationDropdown}
         class:active={translationDropdownOpen}
@@ -329,20 +392,6 @@
         <span class="nav-value">{currentTranslation}</span>
         <span class="nav-arrow">{translationDropdownOpen ? "▲" : "▼"}</span>
       </button>
-
-      {#if translationDropdownOpen}
-        <div class="dropdown-menu">
-          {#each $availableTranslations as translation}
-            <button
-              class="dropdown-item"
-              class:selected={translation === currentTranslation}
-              on:click={() => selectTranslation(translation)}
-            >
-              {translation}
-            </button>
-          {/each}
-        </div>
-      {/if}
     </div>
 
     <!-- Chronological Mode Checkbox -->
@@ -368,6 +417,7 @@
     <!-- Reference Dropdown (Tree Structure) -->
     <div class="nav-dropdown">
       <button
+        bind:this={referenceButtonRef}
         class="nav-button"
         on:click={toggleReferenceDropdown}
         class:active={referenceDropdownOpen}
@@ -376,41 +426,6 @@
         <span class="nav-value">{currentReference}</span>
         <span class="nav-arrow">{referenceDropdownOpen ? "▲" : "▼"}</span>
       </button>
-
-      {#if referenceDropdownOpen}
-        <div class="dropdown-menu tree-menu">
-          {#each BIBLE_BOOKS as book}
-            <div class="book-item">
-              <button
-                class="book-button"
-                class:expanded={expandedBooks.has(book.name)}
-                class:current={book.name === currentBook}
-                on:click={() => toggleBook(book.name)}
-              >
-                <span class="expand-icon">
-                  {expandedBooks.has(book.name) ? "▼" : "▶"}
-                </span>
-                <span class="book-name">{book.name}</span>
-              </button>
-
-              {#if expandedBooks.has(book.name)}
-                <div class="chapters-container">
-                  {#each Array.from({ length: book.chapters }, (_, i) => i + 1) as chapter}
-                    <button
-                      class="chapter-button"
-                      class:selected={book.name === currentBook &&
-                        chapter === currentChapter}
-                      on:click={() => selectChapter(book.name, chapter)}
-                    >
-                      {chapter}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      {/if}
     </div>
 
     <!-- Search Bar -->
@@ -550,6 +565,56 @@
       </svg>
     </button>
   </div>
+
+  <!-- Dropdowns rendered outside nav-content to avoid overflow clipping -->
+  {#if translationDropdownOpen}
+    <div class="dropdown-menu translation-dropdown">
+      {#each $availableTranslations as translation}
+        <button
+          class="dropdown-item"
+          class:selected={translation === currentTranslation}
+          on:click={() => selectTranslation(translation)}
+        >
+          {translation}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  {#if referenceDropdownOpen}
+    <div class="dropdown-menu tree-menu reference-dropdown">
+      {#each BIBLE_BOOKS as book}
+        <div class="book-item">
+          <button
+            class="book-button"
+            class:expanded={expandedBooks.has(book.name)}
+            class:current={book.name === currentBook}
+            on:click={() => toggleBook(book.name)}
+          >
+            <span class="expand-icon">
+              {expandedBooks.has(book.name) ? "▼" : "▶"}
+            </span>
+            <span class="book-name">{book.name}</span>
+          </button>
+
+          {#if expandedBooks.has(book.name)}
+            <div class="chapters-container">
+              {#each Array.from({ length: book.chapters }, (_, i) => i + 1) as chapter}
+                <button
+                  class="chapter-button"
+                  class:selected={book.name === currentBook &&
+                    chapter === currentChapter}
+                  on:click={() => selectChapter(book.name, chapter)}
+                >
+                  {chapter}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <!-- Power Search Modal -->
@@ -691,6 +756,14 @@
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     z-index: 10001; /* Higher than nav bar */
+  }
+
+  /* Dropdowns outside nav-content use fixed positioning */
+  .translation-dropdown,
+  .reference-dropdown {
+    position: fixed;
+    left: 0;
+    top: 0;
   }
 
   .tree-menu {
