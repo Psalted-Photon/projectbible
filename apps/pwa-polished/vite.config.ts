@@ -4,43 +4,69 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 
-// Plugin to copy polished packs to build output
+// Plugin to copy bootstrap pack to build output
+// Bootstrap is a small (208KB) SQLite file with book metadata for instant startup
+function copyBootstrapPack() {
+  return {
+    name: 'copy-bootstrap-pack',
+    closeBundle() {
+      const bootstrapPath = resolve(__dirname, '../../packs/bootstrap.sqlite');
+      const targetDir = resolve(__dirname, 'dist');
+      
+      // Check if bootstrap exists
+      if (!existsSync(bootstrapPath)) {
+        console.warn('⚠️  Bootstrap pack not found at:', bootstrapPath);
+        console.warn('   Run: node scripts/build-bootstrap-pack.mjs');
+        return;
+      }
+      
+      // Copy bootstrap to dist root (accessible at /bootstrap.sqlite)
+      const dest = resolve(targetDir, 'bootstrap.sqlite');
+      copyFileSync(bootstrapPath, dest);
+      
+      console.log('\n📦 Bundled bootstrap pack (instant startup)\n');
+    }
+  };
+}
+
+// Plugin to copy polished packs (only in dev or when USE_BUNDLED_PACKS=true)
 function copyPolishedPacks() {
   return {
     name: 'copy-polished-packs',
     closeBundle() {
-      const polishedPacksDir = resolve(__dirname, '../../packs/polished');
-      const targetDir = resolve(__dirname, 'dist/assets/packs');
+      // Skip in production builds (use GitHub Releases CDN instead)
+      if (process.env.NODE_ENV === 'production' && !process.env.VITE_USE_BUNDLED_PACKS) {
+        console.log('\n📦 Skipping polished packs (will download from GitHub Releases)\n');
+        return;
+      }
       
-      // Create target directory if it doesn't exist
+      const polishedPacksDir = resolve(__dirname, '../../packs/polished');
+      const targetDir = resolve(__dirname, 'dist/packs');
+      
+      if (!existsSync(polishedPacksDir)) {
+        console.warn('⚠️  No polished packs directory found');
+        return;
+      }
+      
       if (!existsSync(targetDir)) {
         mkdirSync(targetDir, { recursive: true });
       }
       
-      // Check if polished packs directory exists
-      if (!existsSync(polishedPacksDir)) {
-        console.warn('⚠️  No polished packs directory found at:', polishedPacksDir);
-        console.warn('   Create packs/polished/ and add .sqlite files to bundle with the app');
-        return;
-      }
-      
-      // Copy all .sqlite files from polished to dist
       const files = readdirSync(polishedPacksDir).filter(f => f.endsWith('.sqlite'));
       
       if (files.length === 0) {
-        console.warn('⚠️  No .sqlite packs found in packs/polished/');
-        console.warn('   Add packs to bundle with the polished app');
+        console.warn('⚠️  No packs in polished directory');
         return;
       }
       
-      console.log('\n📦 Bundling polished packs:');
+      console.log('\n📦 Bundling polished packs (dev mode):');
       files.forEach(file => {
         const src = resolve(polishedPacksDir, file);
         const dest = resolve(targetDir, file);
         copyFileSync(src, dest);
         console.log(`   ✓ ${file}`);
       });
-      console.log(`\n✨ Bundled ${files.length} pack(s) into polished build\n`);
+      console.log(`\n✨ Bundled ${files.length} pack(s)\n`);
     }
   };
 }
@@ -58,7 +84,8 @@ export default defineConfig({
         icons: []
       }
     }),
-    copyPolishedPacks()
+    copyBootstrapPack(), // Always bundle bootstrap (208KB)
+    copyPolishedPacks()  // Only in dev or when VITE_USE_BUNDLED_PACKS=true
   ],
   server: {
     port: 5174,

@@ -1,14 +1,16 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
-import { initializePolishedApp, isInitialized } from './lib/pack-init';
+import { initializeApp, isBootstrapLoaded } from './lib/progressive-init';
 import { getSettings } from './adapters/settings';
-import { removePack } from './adapters/db-manager';
-import { importPackFromUrl } from './adapters/pack-import';
+import { removePack } from './lib/progressive-init';
+import { loadPackOnDemand, getInstalledPacks } from './lib/progressive-init';
+import { FEATURES } from './config';
 
 // Expose utilities for console debugging
 if (import.meta.env.DEV) {
   (window as any).removePack = removePack;
-  (window as any).importPackFromUrl = importPackFromUrl;
+  (window as any).loadPack = loadPackOnDemand;
+  (window as any).getInstalledPacks = getInstalledPacks;
 }
 
 const appElement = document.getElementById('app');
@@ -43,25 +45,29 @@ function applyInitialSettings() {
 // Apply settings before app loads
 applyInitialSettings();
 
-// Initialize app with bundled packs on first run
+// Initialize app with progressive loading
 async function initApp() {
-  if (!isInitialized()) {
-    // Show loading screen during first-run initialization
+  // Always initialize (progressive startup)
+  const needsInit = !isBootstrapLoaded();
+  
+  if (needsInit || FEATURES.progressiveStartup) {
+    // Show loading screen during initialization
     appElement.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; font-family: sans-serif;">
         <h1 style="margin-bottom: 20px;">ProjectBible</h1>
         <div style="width: 300px; background: #333; border-radius: 8px; padding: 20px;">
-          <div id="init-message" style="margin-bottom: 10px; text-align: center;">Initializing...</div>
+          <div id="init-message" style="margin-bottom: 10px; text-align: center;">Loading bootstrap...</div>
           <div style="width: 100%; height: 6px; background: #555; border-radius: 3px; overflow: hidden;">
             <div id="init-progress" style="width: 0%; height: 100%; background: linear-gradient(90deg, #4CAF50, #8BC34A); transition: width 0.3s;"></div>
           </div>
           <div id="init-percent" style="margin-top: 10px; text-align: center; font-size: 12px; color: #888;">0%</div>
         </div>
+        ${FEATURES.progressiveStartup ? '<p style="margin-top: 20px; font-size: 12px; color: #666;">Progressive startup enabled</p>' : ''}
       </div>
     `;
     
     try {
-      await initializePolishedApp((message, percent) => {
+      await initializeApp((message, percent) => {
         const messageEl = document.getElementById('init-message');
         const progressEl = document.getElementById('init-progress');
         const percentEl = document.getElementById('init-percent');
@@ -83,7 +89,7 @@ async function initApp() {
             Could not initialize the app. Please check your internet connection and refresh the page.
           </p>
           <p style="margin-top: 20px; font-size: 12px; color: #666;">
-            Error: ${error.message}
+            Error: ${(error as Error).message}
           </p>
           <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
             Retry

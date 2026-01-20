@@ -35,8 +35,9 @@ export class UnifiedSearchService {
       return [];
     }
 
-    const normalizedQuery = query.toLowerCase().trim();
-    const categories: SearchCategory[] = [];
+    // Don't lowercase regex patterns - they contain special characters like \W that would break
+    const normalizedQuery = query.trim();
+    const categories: SearchCategory[]= [];
 
     // Search verses
     const verseResults = await this.searchVerses(normalizedQuery, limit);

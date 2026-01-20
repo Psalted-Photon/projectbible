@@ -4,6 +4,7 @@ export * from './reading-plan.js';
 export * from './search/searchConfig.js';
 export * from './search/englishLexicalService.js';
 export * from './search/englishLexicalPackLoader.js';
+export * from './services/PackLoader.js';
 
 import { Reader, getReaderStyles } from './reader.js';
 
