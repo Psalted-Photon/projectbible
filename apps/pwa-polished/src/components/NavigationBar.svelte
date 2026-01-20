@@ -344,6 +344,7 @@
 </script>
 
 <div class="navigation-bar" {style}>
+  <div class="nav-content">
   <!-- Translation Dropdown -->
   <div class="nav-dropdown">
     <button
@@ -576,6 +577,7 @@
       />
     </svg>
   </button>
+  </div>
 </div>
 
 <!-- Power Search Modal -->
@@ -586,18 +588,30 @@
 
 <style>
   .navigation-bar {
-    display: flex;
-    gap: 12px;
-    padding: 12px 20px;
     background: #2a2a2a;
     border-bottom: 1px solid #3a3a3a;
     position: sticky;
     top: 0;
     z-index: 1000;
-    touch-action: manipulation; /* Allow fast taps */
     min-height: 68px;
     box-sizing: border-box;
+    overflow: visible; /* Allow dropdowns to escape */
+  }
+
+  .nav-content {
+    display: flex;
+    gap: 12px;
+    padding: 12px 20px;
+    touch-action: manipulation; /* Allow fast taps */
     flex-wrap: nowrap; /* Prevent wrapping on all screen sizes */
+    overflow-x: auto; /* Enable horizontal scrolling */
+    overflow-y: visible;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+
+  .nav-content::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
   }
 
   .nav-dropdown {
@@ -1167,20 +1181,14 @@
   /* Mobile responsive styles */
   @media (max-width: 768px) {
     .navigation-bar {
-      gap: 10px; /* Increased from 6px */
-      padding: 10px 12px; /* Increased from 8px 10px */
-      overflow: visible; /* Allow dropdowns to extend beyond nav bar */
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none; /* Firefox */
-      -ms-overflow-style: none; /* IE and Edge */
-      flex-wrap: nowrap; /* Prevent wrapping */
       min-height: 60px; /* Increased from 56px */
-      align-items: center;
-      z-index: 1000; /* Ensure nav bar stays on top */
     }
 
-    .navigation-bar::-webkit-scrollbar {
-      display: none; /* Chrome, Safari, Opera */
+    .nav-content {
+      gap: 10px; /* Increased from 6px */
+      padding: 10px 12px; /* Increased from 8px 10px */
+      -webkit-overflow-scrolling: touch;
+      align-items: center;
     }
 
     .nav-dropdown {
@@ -1287,10 +1295,12 @@
 
   @media (max-width: 480px) {
     .navigation-bar {
+      min-height: 56px; /* Increased from 52px */
+    }
+
+    .nav-content {
       gap: 8px; /* Increased from 4px */
       padding: 8px 10px; /* Increased from 6px 8px */
-      min-height: 56px; /* Increased from 52px */
-      overflow: visible; /* Allow dropdowns to extend beyond nav bar */
     }
 
     .nav-dropdown {
