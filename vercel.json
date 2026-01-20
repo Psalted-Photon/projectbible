@@ -1,11 +1,12 @@
 {
-  "buildCommand": "npm run build --workspace=@projectbible/core && cd apps/pwa-polished && npm run build",
+  "buildCommand": "NODE_ENV=production npm run build --workspace=@projectbible/core && cd apps/pwa-polished && NODE_ENV=production npm run build",
   "outputDirectory": "apps/pwa-polished/dist",
   "installCommand": "npm install --workspaces=false && npm install --workspace=@projectbible/core && npm install --workspace=@projectbible/pwa-polished",
   "framework": null,
   "devCommand": "cd apps/pwa-polished && npm run dev",
   "env": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "VITE_USE_BUNDLED_PACKS": "false"
   },
   "headers": [
     {

@@ -55,6 +55,17 @@ function copyPolishedPacks() {
   return {
     name: 'copy-polished-packs',
     buildStart() {
+      // Skip in production builds
+      const isProduction = process.env.NODE_ENV === 'production' || 
+                          process.env.VERCEL || 
+                          process.env.CI;
+      const useBundled = process.env.VITE_USE_BUNDLED_PACKS === 'true';
+      
+      if (isProduction && !useBundled) {
+        console.log('📦 Skipping polished packs in buildStart (production mode)');
+        return;
+      }
+      
       // Copy to public folder for dev server
       const polishedPacksDir = resolve(__dirname, '../../packs/polished');
       const publicPacksDir = resolve(__dirname, 'public/packs');
@@ -85,7 +96,12 @@ function copyPolishedPacks() {
     },
     closeBundle() {
       // Skip in production builds (use GitHub Releases CDN instead)
-      if (process.env.NODE_ENV === 'production' && !process.env.VITE_USE_BUNDLED_PACKS) {
+      const isProduction = process.env.NODE_ENV === 'production' || 
+                          process.env.VERCEL || 
+                          process.env.CI;
+      const useBundled = process.env.VITE_USE_BUNDLED_PACKS === 'true';
+      
+      if (isProduction && !useBundled) {
         console.log('\n📦 Skipping polished packs (will download from GitHub Releases)\n');
         return;
       }

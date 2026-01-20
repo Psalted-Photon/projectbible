@@ -37,11 +37,9 @@ export class SQLiteWorkerPool {
   async initialize(): Promise<void> {
     if (this.worker) return; // Already initialized
     
-    // Create worker
-    this.worker = new Worker(
-      new URL('./SQLiteWorker.ts', import.meta.url),
-      { type: 'module' }
-    );
+    // Create worker - use .js extension for bundled output
+    const workerUrl = new URL('./SQLiteWorker.js', import.meta.url);
+    this.worker = new Worker(workerUrl, { type: 'module' });
     
     // Set up message handler
     this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
