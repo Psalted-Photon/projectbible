@@ -1,5 +1,5 @@
 {
-  "buildCommand": "node scripts/build-bootstrap-pack.mjs && NODE_ENV=production npm run build --workspace=@projectbible/core && cd apps/pwa-polished && NODE_ENV=production npm run build",
+  "buildCommand": "NODE_ENV=production npm run build --workspace=@projectbible/core && cd apps/pwa-polished && NODE_ENV=production npm run build",
   "outputDirectory": "apps/pwa-polished/dist",
   "installCommand": "npm install --workspaces=false && npm install --workspace=@projectbible/core && npm install --workspace=@projectbible/pwa-polished",
   "framework": null,
@@ -10,25 +10,8 @@
   },
   "headers": [
     {
-      "source": "/(.*).sqlite",
+      "source": "/bootstrap.sqlite",
       "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/x-sqlite3"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    },
-    {
-      "source": "/(.*).wasm",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/wasm"
-        },
         {
           "key": "Cache-Control",
           "value": "public, max-age=31536000, immutable"
