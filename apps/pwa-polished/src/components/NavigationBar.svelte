@@ -20,6 +20,7 @@
 
   export let windowId: string | undefined = undefined;
   export let visible: boolean = true;
+  export let style: string = "";
 
   let translationDropdownOpen = false;
   let referenceDropdownOpen = false;
@@ -342,7 +343,7 @@
   });
 </script>
 
-<div class="navigation-bar" class:visible>
+<div class="navigation-bar" {style}>
   <!-- Translation Dropdown -->
   <div class="nav-dropdown">
     <button
@@ -597,21 +598,6 @@
     min-height: 68px;
     box-sizing: border-box;
     flex-wrap: nowrap; /* Prevent wrapping on all screen sizes */
-  }
-
-  .navigation-bar:not(.visible) {
-    margin-top: -68px;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .navigation-bar.visible {
-    margin-top: 0;
-    opacity: 1;
-    pointer-events: auto;
-    transition:
-      margin-top 0.3s ease-in-out,
-      opacity 0.3s ease-in-out;
   }
 
   .nav-dropdown {

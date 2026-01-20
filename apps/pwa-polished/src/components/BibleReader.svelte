@@ -23,7 +23,12 @@
   let chapters: Array<{
     book: string;
     chapter: number;
-    verses: Array<{ verse: number; text: string; html?: string; heading?: string | null }>;
+    verses: Array<{
+      verse: number;
+      text: string;
+      html?: string;
+      heading?: string | null;
+    }>;
   }> = [];
   let loading = true;
   let error = "";
@@ -33,8 +38,9 @@
   let scrollCheckInterval: number | null = null;
   let lastNavigationKey = "";
   let lastScrollTop = 0;
-  let showNavBar = true;
+  let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
   let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
+  let scrollHandler: ((e: Event) => void) | null = null;
 
   // Text selection state
   let showToast = false;
@@ -66,7 +72,13 @@
   let morphologyCache = new Map<number, DBMorphology[]>();
   let isIndexedPack = false;
   const DEBUG_MORPHOLOGY = true; // Set to false to disable debug features
-  let morphStats = { hits: 0, misses: 0, indexMatches: 0, textFallback: 0, totalLookups: 0 };
+  let morphStats = {
+    hits: 0,
+    misses: 0,
+    indexMatches: 0,
+    textFallback: 0,
+    totalLookups: 0,
+  };
 
   // Load user settings
   function loadUserSettings() {
@@ -91,24 +103,37 @@
   $: isChronologicalMode = $navigationStore.isChronologicalMode ?? false;
 
   // DEBUG: Log when reactive values change
-  $: console.log('📖 REACTIVE UPDATE:', { currentTranslation, currentBook, currentChapter, isChronologicalMode });
+  $: console.log("📖 REACTIVE UPDATE:", {
+    currentTranslation,
+    currentBook,
+    currentChapter,
+    isChronologicalMode,
+  });
 
   // Load verses when navigation changes externally (not from our scroll loading)
   $: {
     const navKey = `${currentTranslation}-${currentBook}-${currentChapter}-${isChronologicalMode}`;
-    console.log('🔑 Navigation key changed:', navKey, 'last:', lastNavigationKey);
+    console.log(
+      "🔑 Navigation key changed:",
+      navKey,
+      "last:",
+      lastNavigationKey,
+    );
     if (textStore && navKey !== lastNavigationKey) {
-      console.log('🚀 Triggering loadChapter from reactive block');
-      
+      console.log("🚀 Triggering loadChapter from reactive block");
+
       // Check if translation changed and book might not exist (BEFORE updating lastNavigationKey)
-      const prevTranslation = lastNavigationKey.split('-')[0];
-      const translationChanged = prevTranslation && prevTranslation !== currentTranslation;
-      
+      const prevTranslation = lastNavigationKey.split("-")[0];
+      const translationChanged =
+        prevTranslation && prevTranslation !== currentTranslation;
+
       // Update lastNavigationKey AFTER checking previous value
       lastNavigationKey = navKey;
-      
+
       if (translationChanged) {
-        console.log(`📚 Translation changed from ${prevTranslation} to ${currentTranslation}, verifying book exists...`);
+        console.log(
+          `📚 Translation changed from ${prevTranslation} to ${currentTranslation}, verifying book exists...`,
+        );
         // Verify the book exists in new translation, fallback if not
         verifyAndLoadChapter(currentTranslation, currentBook, currentChapter);
       } else {
@@ -117,14 +142,14 @@
     }
   }
 
-  // Start/stop scroll detection
-  $: if (currentBook) {
+  // Start/stop scroll detection when both book and element are ready
+  $: if (currentBook && readerElement) {
     startScrollDetection();
   }
 
   // Check if translation is original language (Greek/Hebrew)
   function isOriginalLanguage(translationId: string): boolean {
-    const originalLanguageIds = ['WLC', 'LXX', 'BYZ', 'TR', 'SBLGNT'];
+    const originalLanguageIds = ["WLC", "LXX", "BYZ", "TR", "SBLGNT"];
     return originalLanguageIds.includes(translationId);
   }
 
@@ -133,11 +158,11 @@
     translationId: string,
     book: string,
     chapter: number,
-    verse: number
+    verse: number,
   ): Promise<DBMorphology[]> {
     try {
-      return await readTransaction('morphology', (store) => {
-        const index = store.index('verse_ref');
+      return await readTransaction("morphology", (store) => {
+        const index = store.index("verse_ref");
         const range = IDBKeyRange.only([translationId, book, chapter, verse]);
         return new Promise<DBMorphology[]>((resolve, reject) => {
           const request = index.getAll(range);
@@ -146,7 +171,7 @@
         });
       });
     } catch (error) {
-      console.error('Error fetching morphology:', error);
+      console.error("Error fetching morphology:", error);
       return [];
     }
   }
@@ -157,13 +182,18 @@
     book: string,
     chapter: number,
     verse: number,
-    text: string
+    text: string,
   ): Promise<string> {
     if (!isOriginalLanguage(translationId)) {
       return renderVerseHtml(text);
     }
 
-    const morphData = await getMorphologyForVerse(translationId, book, chapter, verse);
+    const morphData = await getMorphologyForVerse(
+      translationId,
+      book,
+      chapter,
+      verse,
+    );
     if (morphData.length === 0) {
       // No morphology data, render normally
       return renderVerseHtml(text);
@@ -171,29 +201,30 @@
 
     // Sort by word position
     const sorted = morphData.sort((a, b) => a.wordPosition - b.wordPosition);
-    
+
     // Build HTML with word spans
-    let html = '';
+    let html = "";
     sorted.forEach((morph, idx) => {
-      const word = morph.word || morph.text || '';
-      const lemma = morph.lemma || '';
-      const strongsId = morph.strongsId || '';
-      const gloss = morph.gloss || '';
-      const parsing = morph.parsing || '';
-      const transliteration = morph.transliteration || '';
-      
-      html += `<span class="morphology-word" ` +
+      const word = morph.word || morph.text || "";
+      const lemma = morph.lemma || "";
+      const strongsId = morph.strongsId || "";
+      const gloss = morph.gloss || "";
+      const parsing = morph.parsing || "";
+      const transliteration = morph.transliteration || "";
+
+      html +=
+        `<span class="morphology-word" ` +
         `data-word="${escapeAttribute(word)}" ` +
         `data-lemma="${escapeAttribute(lemma)}" ` +
         `data-strongs="${escapeAttribute(strongsId)}" ` +
         `data-gloss="${escapeAttribute(gloss)}" ` +
         `data-transliteration="${escapeAttribute(transliteration)}" ` +
         `data-parsing="${escapeAttribute(parsing)}" ` +
-        `data-language="${morph.language || 'greek'}">${word}</span>`;
-      
+        `data-language="${morph.language || "greek"}">${word}</span>`;
+
       // Add space except after last word
       if (idx < sorted.length - 1) {
-        html += ' ';
+        html += " ";
       }
     });
 
@@ -201,7 +232,7 @@
   }
 
   function escapeAttribute(value: string): string {
-    return (value || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return (value || "").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
   // Strip Hebrew cantillation marks and vowel points for text comparison
@@ -210,9 +241,9 @@
     // Remove Hebrew vowel points (U+05B0 to U+05BD, U+05BF to U+05C2, U+05C4, U+05C5, U+05C7)
     // Keep consonants and maqqef (־)
     return text
-      .replace(/[\u0591-\u05AF]/g, '') // Cantillation marks
-      .replace(/[\u05B0-\u05BD\u05BF-\u05C2\u05C4\u05C5\u05C7]/g, '') // Vowel points
-      .normalize('NFC');
+      .replace(/[\u0591-\u05AF]/g, "") // Cantillation marks
+      .replace(/[\u05B0-\u05BD\u05BF-\u05C2\u05C4\u05C5\u05C7]/g, "") // Vowel points
+      .normalize("NFC");
   }
 
   // Morphology helper: find morphology data for clicked word
@@ -220,30 +251,33 @@
     verseMorphs: DBMorphology[] | undefined,
     clickedIndex: number,
     clickedText: string,
-    isIndexed: boolean
+    isIndexed: boolean,
   ): DBMorphology | null {
     if (!verseMorphs || verseMorphs.length === 0) {
       if (DEBUG_MORPHOLOGY) morphStats.misses++;
       return null;
     }
-    
+
     morphStats.totalLookups++;
-    
+
     // Primary: try word_index match (for v2+ packs)
     if (isIndexed) {
-      const byIndex = verseMorphs.find(m => m.word_index === clickedIndex);
+      const byIndex = verseMorphs.find((m) => m.word_index === clickedIndex);
       if (byIndex) {
         morphStats.hits++;
         morphStats.indexMatches++;
         if (DEBUG_MORPHOLOGY) {
-          console.log(`✅ Morphology match by word_index: ${clickedIndex}`, byIndex);
+          console.log(
+            `✅ Morphology match by word_index: ${clickedIndex}`,
+            byIndex,
+          );
         }
         return byIndex;
       }
     }
-    
+
     // Fallback: try text match (exact)
-    let byText = verseMorphs.find(m => m.text === clickedText);
+    let byText = verseMorphs.find((m) => m.text === clickedText);
     if (byText) {
       morphStats.hits++;
       morphStats.textFallback++;
@@ -252,23 +286,33 @@
       }
       return byText;
     }
-    
+
     // Second fallback: try text match without Hebrew diacritics
     const strippedClickedText = stripHebrewDiacritics(clickedText);
-    byText = verseMorphs.find(m => stripHebrewDiacritics(m.text) === strippedClickedText);
+    byText = verseMorphs.find(
+      (m) => stripHebrewDiacritics(m.text) === strippedClickedText,
+    );
     if (byText) {
       morphStats.hits++;
       morphStats.textFallback++;
       if (DEBUG_MORPHOLOGY) {
-        console.log(`✅ Morphology match by stripped text: "${clickedText}" → "${strippedClickedText}"`, byText);
+        console.log(
+          `✅ Morphology match by stripped text: "${clickedText}" → "${strippedClickedText}"`,
+          byText,
+        );
       }
       return byText;
     }
-    
+
     morphStats.misses++;
     if (DEBUG_MORPHOLOGY) {
-      console.log(`❌ No morphology match for index ${clickedIndex}, text "${clickedText}", stripped "${strippedClickedText}"`);
-      console.log('   Available texts in verse:', verseMorphs.map(m => m.text));
+      console.log(
+        `❌ No morphology match for index ${clickedIndex}, text "${clickedText}", stripped "${strippedClickedText}"`,
+      );
+      console.log(
+        "   Available texts in verse:",
+        verseMorphs.map((m) => m.text),
+      );
     }
     return null;
   }
@@ -277,39 +321,41 @@
   function getClickWordInfo(
     clickX: number,
     clickY: number,
-    verseText: string
+    verseText: string,
   ): { index: number; text: string } | null {
     // Get the character position from click coordinates
     const range = document.caretRangeFromPoint(clickX, clickY);
     if (!range) return null;
-    
+
     const clickOffset = range.startOffset;
-    
+
     // Segment verse text into words
-    const hasSegmenter = typeof Intl !== 'undefined' && 'Segmenter' in Intl;
-    
+    const hasSegmenter = typeof Intl !== "undefined" && "Segmenter" in Intl;
+
     if (hasSegmenter) {
       // Use Intl.Segmenter for robust Unicode word segmentation
-      const segmenter = new (Intl as any).Segmenter('en', { granularity: 'word' });
+      const segmenter = new (Intl as any).Segmenter("en", {
+        granularity: "word",
+      });
       const segments = Array.from(segmenter.segment(verseText));
-      
+
       let currentOffset = 0;
       let wordIndex = 0;
-      
+
       for (const segment of segments as any[]) {
         const segmentStart = segment.index;
         const segmentEnd = segment.index + segment.segment.length;
-        
+
         // Check if click is within this segment
         if (clickOffset >= segmentStart && clickOffset < segmentEnd) {
           // Only count actual words (not whitespace/punctuation)
           if (segment.isWordLike) {
-            return { index: wordIndex, text: segment.segment.normalize('NFC') };
+            return { index: wordIndex, text: segment.segment.normalize("NFC") };
           } else {
             return null;
           }
         }
-        
+
         // Count word index for word-like segments
         if (segment.isWordLike) {
           wordIndex++;
@@ -318,22 +364,22 @@
     } else {
       // Fallback: Unicode-aware regex
       if (DEBUG_MORPHOLOGY && import.meta.env.DEV) {
-        console.warn('⚠️ Intl.Segmenter not available, using regex fallback');
+        console.warn("⚠️ Intl.Segmenter not available, using regex fallback");
       }
-      
+
       const words = Array.from(verseText.matchAll(/[\p{L}\p{M}]+/gu));
-      
+
       for (let i = 0; i < words.length; i++) {
         const match = words[i];
         const start = match.index!;
         const end = start + match[0].length;
-        
+
         if (clickOffset >= start && clickOffset < end) {
-          return { index: i, text: match[0].normalize('NFC') };
+          return { index: i, text: match[0].normalize("NFC") };
         }
       }
     }
-    
+
     return null;
   }
 
@@ -343,9 +389,17 @@
     chapter: number,
     resetScroll = false,
   ) {
-    console.log('📄 loadChapter called:', { translation, book, chapter, resetScroll });
-    console.log('   Current chapters array before load:', chapters.map(c => `${c.book} ${c.chapter}`));
-    
+    console.log("📄 loadChapter called:", {
+      translation,
+      book,
+      chapter,
+      resetScroll,
+    });
+    console.log(
+      "   Current chapters array before load:",
+      chapters.map((c) => `${c.book} ${c.chapter}`),
+    );
+
     loading = true;
     error = "";
     clearRepeats(); // Clear repeats when loading a new chapter
@@ -355,9 +409,9 @@
         book,
         chapter,
       );
-      
+
       console.log(`   Fetched ${chapterVerses?.length || 0} verses from DB`);
-      
+
       if (!chapterVerses || chapterVerses.length === 0) {
         console.warn(`No verses found for ${translation} ${book} ${chapter}`);
         loading = false;
@@ -375,12 +429,19 @@
       });
 
       console.log(`   Processed ${processedVerses.length} verses`);
-      console.log(`   First verse text: "${processedVerses[0]?.text.substring(0, 50)}..."`);
+      console.log(
+        `   First verse text: "${processedVerses[0]?.text.substring(0, 50)}..."`,
+      );
 
       // Reset chapters array and scroll to top
       chapters = [{ book, chapter, verses: processedVerses }];
-      
-      console.log('   Chapters array AFTER assignment:', chapters.map(c => `${c.book} ${c.chapter} (${c.verses.length} verses)`));
+
+      console.log(
+        "   Chapters array AFTER assignment:",
+        chapters.map(
+          (c) => `${c.book} ${c.chapter} (${c.verses.length} verses)`,
+        ),
+      );
 
       // Load morphology cache if original language translation
       if (isOriginalLanguage(translation)) {
@@ -403,30 +464,36 @@
     }
   }
 
-  async function loadMorphologyCache(translation: string, book: string, chapter: number) {
+  async function loadMorphologyCache(
+    translation: string,
+    book: string,
+    chapter: number,
+  ) {
     try {
       morphologyCache.clear();
-      
-      console.log(`🔤 Loading morphology for ${translation} ${book} ${chapter}...`);
-      
+
+      console.log(
+        `🔤 Loading morphology for ${translation} ${book} ${chapter}...`,
+      );
+
       // Query morphology store for entire chapter
-      const { openDB } = await import('../adapters/db');
+      const { openDB } = await import("../adapters/db");
       const db = await openDB();
-      
-      const transaction = db.transaction('morphology', 'readonly');
-      const store = transaction.objectStore('morphology');
-      const index = store.index('verse_ref');
-      
+
+      const transaction = db.transaction("morphology", "readonly");
+      const store = transaction.objectStore("morphology");
+      const index = store.index("verse_ref");
+
       // Query for all verses in this chapter (verse 1-999)
       const range = IDBKeyRange.bound(
         [translation, book, chapter, 1],
-        [translation, book, chapter, 999]
+        [translation, book, chapter, 999],
       );
-      
+
       const results: DBMorphology[] = await new Promise((resolve, reject) => {
         const entries: DBMorphology[] = [];
         const request = index.openCursor(range);
-        
+
         request.onsuccess = (e) => {
           const cursor = (e.target as IDBRequest).result;
           if (cursor) {
@@ -438,26 +505,29 @@
         };
         request.onerror = () => reject(request.error);
       });
-      
+
       // Organize by verse number
-      results.forEach(morphEntry => {
+      results.forEach((morphEntry) => {
         const verseNum = morphEntry.verse;
         if (!morphologyCache.has(verseNum)) {
           morphologyCache.set(verseNum, []);
         }
         morphologyCache.get(verseNum)!.push(morphEntry);
       });
-      
+
       // Detect if pack is indexed (schema version 2+)
       // Check if first entry has word_index field
       const firstEntry = results[0];
-      isIndexedPack = firstEntry && typeof firstEntry.word_index === 'number';
-      
-      console.log(`   ✅ Loaded ${results.length} morphology entries, ${morphologyCache.size} verses cached`);
-      console.log(`   📊 Pack type: ${isIndexedPack ? 'Indexed (v2+)' : 'Legacy (v1)'}`);
-      
+      isIndexedPack = firstEntry && typeof firstEntry.word_index === "number";
+
+      console.log(
+        `   ✅ Loaded ${results.length} morphology entries, ${morphologyCache.size} verses cached`,
+      );
+      console.log(
+        `   📊 Pack type: ${isIndexedPack ? "Indexed (v2+)" : "Legacy (v1)"}`,
+      );
     } catch (err) {
-      console.warn('Failed to load morphology cache:', err);
+      console.warn("Failed to load morphology cache:", err);
       morphologyCache.clear();
       isIndexedPack = false;
     }
@@ -466,44 +536,49 @@
   async function verifyAndLoadChapter(
     translation: string,
     book: string,
-    chapter: number
+    chapter: number,
   ) {
     // Try to load the requested chapter
     const verses = await textStore.getChapter(translation, book, 1);
-    
+
     if (!verses || verses.length === 0) {
       console.warn(`⚠️ Book "${book}" not found in ${translation}`);
-      
+
       // Determine fallback book based on translation type
-      const bookInfo = BIBLE_BOOKS.find(b => b.name === book);
-      const isNTBook = bookInfo?.testament === 'NT';
-      
-      let fallbackBook = 'Genesis';
+      const bookInfo = BIBLE_BOOKS.find((b) => b.name === book);
+      const isNTBook = bookInfo?.testament === "NT";
+
+      let fallbackBook = "Genesis";
       let fallbackChapter = 1;
-      
+
       // WLC, LXX only have OT
-      if (translation === 'WLC' || translation === 'LXX') {
-        fallbackBook = 'Genesis';
+      if (translation === "WLC" || translation === "LXX") {
+        fallbackBook = "Genesis";
         fallbackChapter = 1;
       }
       // BYZ, TR only have NT
-      else if (translation === 'BYZ' || translation === 'TR') {
-        fallbackBook = 'Matthew';
+      else if (translation === "BYZ" || translation === "TR") {
+        fallbackBook = "Matthew";
         fallbackChapter = 1;
       }
       // Full Bible translations
       else {
         // If we were in NT and switching to OT-only, go to Genesis
         // If we were in OT and switching to NT-only, go to Matthew
-        fallbackBook = isNTBook ? 'Matthew' : 'Genesis';
+        fallbackBook = isNTBook ? "Matthew" : "Genesis";
         fallbackChapter = 1;
       }
-      
+
       console.log(`📍 Falling back to ${fallbackBook} ${fallbackChapter}`);
-      
+
       // Update navigation store to reflect the fallback
       if (windowId) {
-        windowStore.updateContent(windowId, fallbackBook, fallbackChapter, translation);
+        windowStore.updateContent(
+          windowId,
+          fallbackBook,
+          fallbackChapter,
+          translation,
+        );
       } else {
         navigationStore.navigateTo(translation, fallbackBook, fallbackChapter);
       }
@@ -625,43 +700,58 @@
   }
 
   function startScrollDetection() {
-    if (scrollCheckInterval) return;
+    // Clean up any existing listener first
+    if (scrollHandler && readerElement) {
+      readerElement.removeEventListener("scroll", scrollHandler);
+      scrollHandler = null;
+    }
 
-    scrollCheckInterval = window.setInterval(() => {
+    if (!readerElement) {
+      return;
+    }
+
+    // Create scroll handler with proper reference
+    scrollHandler = () => {
       if (!readerElement) return;
 
       const scrollTop = readerElement.scrollTop;
       const scrollPosition = scrollTop + readerElement.clientHeight;
       const scrollHeight = readerElement.scrollHeight;
+      const scrollDelta = scrollTop - lastScrollTop;
 
-      // Show/hide navbar based on scroll direction
-      if (scrollTop < lastScrollTop || scrollTop < 50) {
-        // Scrolling up or near top - show navbar
-        showNavBar = true;
-      } else if (scrollTop > lastScrollTop && scrollTop > 100) {
-        // Scrolling down and past threshold - hide navbar
-        showNavBar = false;
+      // Update navbar offset based on scroll - it moves with the content
+      if (scrollTop < 5) {
+        // Near top - always fully visible
+        navBarOffset = 0;
+      } else if (scrollDelta > 0) {
+        // Scrolling down - move navbar up (hide it)
+        navBarOffset = Math.max(-68, navBarOffset - scrollDelta);
+      } else if (scrollDelta < 0) {
+        // Scrolling up - move navbar down (show it)
+        navBarOffset = Math.min(0, navBarOffset - scrollDelta);
       }
+
       lastScrollTop = scrollTop;
 
-      // If within 200px of bottom, load next chapter
+      // Check for loading next chapter (non-debounced for responsiveness)
       if (scrollPosition >= scrollHeight - 200 && !isLoadingNextChapter) {
         loadNextChapter();
       }
+    };
 
-      // Disabled: auto-loading previous chapters causes scroll issues
-      // If within 200px of top, load previous chapter
-      // if (scrollTop <= 200 && !isLoadingPrevChapter) {
-      //   loadPreviousChapter();
-      // }
-    }, 300);
+    // Attach scroll event listener
+    readerElement.addEventListener("scroll", scrollHandler, { passive: true });
+    scrollCheckInterval = 1 as any; // Mark as active
   }
 
   function stopScrollDetection() {
-    if (scrollCheckInterval) {
-      clearInterval(scrollCheckInterval);
-      scrollCheckInterval = null;
+    // Remove event listener properly
+    if (scrollHandler && readerElement) {
+      readerElement.removeEventListener("scroll", scrollHandler);
+      scrollHandler = null;
     }
+
+    scrollCheckInterval = null;
   }
 
   async function loadNextChapter() {
@@ -1054,54 +1144,56 @@
     // Find the verse text container
     const verseText = target.closest(".verse-text");
     if (!verseText) return;
-    
+
     // Get verse number from parent verse element
     const verseElement = target.closest(".verse") as HTMLElement;
-    const verseNum = verseElement?.querySelector('.verse-number')?.textContent?.trim();
+    const verseNum = verseElement
+      ?.querySelector(".verse-number")
+      ?.textContent?.trim();
     const verseNumInt = verseNum ? parseInt(verseNum) : null;
 
     // Check if this is an original language translation
     if (isOriginalLanguage(currentTranslation)) {
       // Greek/Hebrew word click detection
       if (!verseNumInt) return;
-      
-      const fullVerseText = verseText.textContent || '';
+
+      const fullVerseText = verseText.textContent || "";
       const clickInfo = getClickWordInfo(x, y, fullVerseText);
-      
+
       if (!clickInfo) {
         if (DEBUG_MORPHOLOGY) {
-          console.log('❌ Could not determine clicked word');
+          console.log("❌ Could not determine clicked word");
         }
         return;
       }
-      
+
       // Look up morphology from cache
       const morph = findMorphologyForClick(
         morphologyCache.get(verseNumInt),
         clickInfo.index,
         clickInfo.text,
-        isIndexedPack
+        isIndexedPack,
       );
-      
+
       if (morph) {
         // Found morphology - set up for toast/modal
         selectedText = clickInfo.text;
         selectedMorphology = morph;
-        
+
         // Create a pseudo-range for highlighting (approximate)
         const selection = window.getSelection();
         if (selection) {
           selection.removeAllRanges();
         }
-        
+
         showToastAt(x, y);
       } else {
         // No morphology found
         if (DEBUG_MORPHOLOGY) {
-          console.log('ℹ️ No morphology data available for this word');
+          console.log("ℹ️ No morphology data available for this word");
         }
       }
-      
+
       return;
     }
 
@@ -1687,7 +1779,10 @@
 {/if}
 
 <div class="bible-reader" bind:this={readerElement}>
-  <NavigationBar {windowId} visible={showNavBar} />
+  <NavigationBar
+    {windowId}
+    style="transform: translateY({navBarOffset}px); transition: none;"
+  />
 
   <div class="text-container">
     {#if loading && chapters.length === 0}
@@ -1716,7 +1811,9 @@
               {/if}
               <div class="verse">
                 <span class="verse-number">{verse}</span>
-                <span class="verse-text">{@html html || renderVerseHtml(text)}</span>
+                <span class="verse-text"
+                  >{@html html || renderVerseHtml(text)}</span
+                >
               </div>
             {/each}
           </div>
