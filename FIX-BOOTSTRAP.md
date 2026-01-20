@@ -1,12 +1,15 @@
 # Bootstrap Database Fix - January 20, 2026
 
 ## Problem
+
 Getting error: "Bootstrap load failed: file is not a database"
 
 This means the bootstrap.sqlite file in the deployment is corrupted or invalid.
 
 ## Root Cause
+
 The bootstrap.sqlite file either:
+
 1. Wasn't properly generated before deployment
 2. Got corrupted during the build/copy process
 3. Has a content-type issue causing binary corruption
@@ -14,6 +17,7 @@ The bootstrap.sqlite file either:
 ## Solution Steps
 
 ### 1. Rebuild Bootstrap Pack
+
 ```bash
 # Generate a fresh bootstrap pack
 node scripts/build-bootstrap-pack.mjs
@@ -28,6 +32,7 @@ ls -lh packs/bootstrap.sqlite
 ```
 
 ### 2. Clean and Rebuild App
+
 ```bash
 # Clean previous builds
 rm -rf apps/pwa-polished/dist
@@ -38,6 +43,7 @@ npm run build --workspace=@projectbible/pwa-polished
 ```
 
 ### 3. Verify Local Build
+
 ```bash
 # Check dist has bootstrap
 ls -lh apps/pwa-polished/dist/bootstrap.sqlite
@@ -51,6 +57,7 @@ sqlite3 apps/pwa-polished/dist/bootstrap.sqlite "SELECT COUNT(*) FROM books;"
 ```
 
 ### 4. Add Vercel Headers for SQLite Files
+
 Add to `vercel.json` to ensure proper content-type:
 
 ```json
@@ -83,6 +90,7 @@ Add to `vercel.json` to ensure proper content-type:
 ```
 
 ### 5. Deploy
+
 ```bash
 git add .
 git commit -m "fix: Rebuild bootstrap pack and add proper headers"
@@ -92,11 +100,13 @@ git push origin main
 ## Prevention
 
 The bootstrap pack should be:
+
 1. Built as part of the CI/CD pipeline (not committed)
 2. Verified with integrity checks
 3. Served with proper headers
 
 Consider adding to package.json:
+
 ```json
 {
   "scripts": {
