@@ -1177,6 +1177,7 @@
       flex-wrap: nowrap; /* Prevent wrapping */
       min-height: 60px; /* Increased from 56px */
       align-items: center;
+      z-index: 1000; /* Ensure nav bar stays on top */
     }
 
     .navigation-bar::-webkit-scrollbar {
@@ -1196,6 +1197,7 @@
       right: auto;
       min-width: 200px;
       max-width: 90vw;
+      z-index: 10001; /* Ensure dropdowns appear above all content on mobile */
     }
 
     .search-results-dropdown {
@@ -1204,6 +1206,7 @@
       right: auto;
       min-width: 250px;
       max-width: 90vw;
+      z-index: 10002; /* Ensure search results appear above dropdowns on mobile */
     }
 
     .nav-checkbox {
