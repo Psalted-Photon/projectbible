@@ -39,7 +39,7 @@
   let showingAll = false;
   let showPowerSearchModal = false;
   let showReadingPlanModal = false;
-  
+
   // Refs for positioning dropdowns on mobile
   let translationButtonRef: HTMLElement;
   let referenceButtonRef: HTMLElement;
@@ -86,7 +86,8 @@
       if (window.innerWidth <= 768 && translationButtonRef) {
         requestAnimationFrame(() => {
           const rect = translationButtonRef.getBoundingClientRect();
-          const dropdown = translationButtonRef.nextElementSibling as HTMLElement;
+          const dropdown =
+            translationButtonRef.nextElementSibling as HTMLElement;
           if (dropdown) {
             dropdown.style.left = `${rect.left}px`;
             dropdown.style.top = `${rect.bottom + 4}px`;
@@ -209,12 +210,14 @@
       showingAll = loadAll || displayedResultCount >= totalResultCount;
 
       showResults = true;
-      
+
       // Position search results dropdown on mobile
       if (window.innerWidth <= 768 && searchContainerRef) {
         requestAnimationFrame(() => {
           const rect = searchContainerRef.getBoundingClientRect();
-          const dropdown = searchContainerRef.querySelector('.search-results-dropdown') as HTMLElement;
+          const dropdown = searchContainerRef.querySelector(
+            ".search-results-dropdown",
+          ) as HTMLElement;
           if (dropdown) {
             dropdown.style.left = `${rect.left}px`;
             dropdown.style.top = `${rect.bottom + 4}px`;
@@ -381,7 +384,7 @@
   <!-- Reading Plan Button -->
   <button
     class="reading-plan-button"
-    on:click={() => showReadingPlanModal = true}
+    on:click={() => (showReadingPlanModal = true)}
     title="Open reading plan"
   >
     📖 Reading Plan
@@ -437,7 +440,12 @@
   </div>
 
   <!-- Search Bar -->
-  <div bind:this={searchContainerRef} class="search-container" on:click|stopPropagation role="search">
+  <div
+    bind:this={searchContainerRef}
+    class="search-container"
+    on:click|stopPropagation
+    role="search"
+  >
     <div class="search-input-wrapper" class:focused={searchFocused}>
       <span class="search-icon">🔍</span>
       <input

@@ -102,39 +102,143 @@ const BUNDLED_PACKS: BundledPack[] = [
     type: 'maps',
     required: true
   },
-  // English lexical packs for word study
   {
-    id: 'english-wordlist',
-    name: 'English Dictionary (440k words + IPA)',
-    filename: 'english-wordlist-v1.sqlite',
-    url: '/english-wordlist-v1.sqlite',
-    type: 'lexicon',
-    required: false,
-    isLexical: true
+    id: 'places',
+    name: 'Biblical Places Database',
+    filename: 'places.sqlite',
+    url: '/places.sqlite',
+    type: 'maps',
+    required: false
+  },
+  // Large map packs - skip during initial load to avoid timeout
+  // These can be loaded later via pack manager
+  // {
+  //   id: 'maps-enhanced',
+  //   name: 'Enhanced Biblical Maps',
+  //   filename: 'maps-enhanced.sqlite',
+  //   url: '/maps-enhanced.sqlite',
+  //   type: 'maps',
+  //   required: false
+  // },
+  // {
+  //   id: 'maps-biblical',
+  //   name: 'Biblical Geography',
+  //   filename: 'maps-biblical.sqlite',
+  //   url: '/maps-biblical.sqlite',
+  //   type: 'maps',
+  //   required: false
+  // },
+  // {
+  //   id: 'places-biblical',
+  //   name: 'Biblical Places (Detailed)',
+  //   filename: 'places-biblical.sqlite',
+  //   url: '/places-biblical.sqlite',
+  //   type: 'maps',
+  //   required: false
+  // },
+  // {
+  //   id: 'pleiades',
+  //   name: 'Pleiades Ancient Places',
+  //   filename: 'pleiades.sqlite',
+  //   url: '/pleiades.sqlite',
+  //   type: 'maps',
+  //   required: false
+  // },
+  
+  // Reference Data
+  {
+    id: 'cross-references',
+    name: 'Cross References',
+    filename: 'cross-references.sqlite',
+    url: '/cross-references.sqlite',
+    type: 'commentary',
+    required: false
   },
   {
-    id: 'english-thesaurus',
-    name: 'English Thesaurus (3.5M synonyms)',
-    filename: 'english-thesaurus-v1.sqlite',
-    url: '/english-thesaurus-v1.sqlite',
-    type: 'lexicon',
-    required: false,
-    isLexical: true
+    id: 'openbible',
+    name: 'OpenBible Data',
+    filename: 'openbible.sqlite',
+    url: '/openbible.sqlite',
+    type: 'commentary',
+    required: false
   },
   {
-    id: 'english-grammar',
-    name: 'English Grammar (POS tags, verb forms)',
-    filename: 'english-grammar-v1.sqlite',
-    url: '/english-grammar-v1.sqlite',
+    id: 'opengnt-morphology',
+    name: 'OpenGNT Morphology',
+    filename: 'opengnt-morphology.sqlite',
+    url: '/opengnt-morphology.sqlite',
     type: 'lexicon',
-    required: false,
-    isLexical: true
+    required: false
+  },
+  
+  // English Lexical Packs - TEMPORARILY DISABLED
+  // {
+  //   id: 'english-wordlist',
+  //   name: 'English Dictionary (440k words + IPA)',
+  //   filename: 'english-wordlist-v1.sqlite',
+  //   url: '/english-wordlist-v1.sqlite',
+  //   type: 'lexicon',
+  //   required: false,
+  //   isLexical: true
+  // },
+  // {
+  //   id: 'english-thesaurus',
+  //   name: 'English Thesaurus (3.5M synonyms)',
+  //   filename: 'english-thesaurus-v1.sqlite',
+  //   url: '/english-thesaurus-v1.sqlite',
+  //   type: 'lexicon',
+  //   required: false,
+  //   isLexical: true
+  // },
+  // {
+  //   id: 'english-grammar',
+  //   name: 'English Grammar (POS tags, verb forms)',
+  //   filename: 'english-grammar-v1.sqlite',
+  //   url: '/english-grammar-v1.sqlite',
+  //   type: 'lexicon',
+  //   required: false,
+  //   isLexical: true
+  // },
+  
+  // Biblical Language Lexicons
+  {
+    id: 'strongs-greek',
+    name: "Strong's Greek Lexicon",
+    filename: 'strongs-greek.sqlite',
+    url: '/strongs-greek.sqlite',
+    type: 'lexicon',
+    required: false
+  },
+  {
+    id: 'strongs-hebrew',
+    name: "Strong's Hebrew/Aramaic Lexicon",
+    filename: 'strongs-hebrew.sqlite',
+    url: '/strongs-hebrew.sqlite',
+    type: 'lexicon',
+    required: false
+  },
+  {
+    id: 'greek',
+    name: 'Greek Morphology & Lexicon',
+    filename: 'greek.sqlite',
+    url: '/greek.sqlite',
+    type: 'lexicon',
+    required: false
+  },
+  {
+    id: 'hebrew',
+    name: 'Hebrew Morphology & Lexicon',
+    filename: 'hebrew.sqlite',
+    url: '/hebrew.sqlite',
+    type: 'lexicon',
+    required: false
   }
 ];
 
 const INIT_FLAG_KEY = 'projectbible_polished_initialized';
 const PACK_VERSION_KEY = 'projectbible_pack_version';
-const CURRENT_PACK_VERSION = '1.0.0';
+const LEXICAL_INIT_FLAG_KEY = 'projectbible_lexical_initialized';
+const CURRENT_PACK_VERSION = '1.2.0'; // Updated to load all translations and packs
 
 /**
  * Check if app has been initialized with bundled packs
@@ -159,22 +263,6 @@ export async function initializePolishedApp(
     return;
   }
 
-  // Skip pack initialization on production (Vercel) - packs not included in deployment
-  const isProduction = window.location.hostname.includes('vercel.app') || 
-                       window.location.hostname === 'projectbible.vercel.com';
-  
-  if (isProduction) {
-    console.log('Production environment detected - skipping automatic pack initialization');
-    console.log('Packs should be loaded manually or from CDN');
-    
-    // Mark as initialized to prevent infinite loops
-    localStorage.setItem(INIT_FLAG_KEY, 'true');
-    localStorage.setItem(PACK_VERSION_KEY, CURRENT_PACK_VERSION);
-    
-    onProgress?.('Production mode - pack initialization skipped', 100);
-    return;
-  }
-
   console.log('First run detected - initializing bundled packs...');
   
   try {
@@ -190,27 +278,45 @@ export async function initializePolishedApp(
     
     // Install regular packs first (Bible translations, maps, etc.)
     for (const pack of regularPacks) {
+      const progress = Math.round((completed / total) * 100);
+      onProgress?.(`Installing ${pack.name}...`, progress);
+      
       try {
-        // Check if pack already exists
-        const existing = await getPackFromDB(db, pack.id);
-        if (existing) {
-          console.log(`Pack ${pack.id} already exists, skipping`);
+        // Check if pack already exists - skip this check, always reimport
+        // const existing = await getPackFromDB(db, pack.id);
+        // if (existing) {
+        //   console.log(`Pack ${pack.id} already exists, skipping`);
+        //   completed++;
+        //   continue;
+        // }
+        
+        // Fetch and import the bundled pack file with timeout
+        console.log(`Fetching ${pack.url}...`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        try {
+          // Import pack directly from URL - this will parse SQLite and import verses
+          const { importPackFromUrl } = await import('../adapters/pack-import');
+          await importPackFromUrl(pack.url);
+          clearTimeout(timeoutId);
+          
+          console.log(`✓ Installed ${pack.name}`);
           completed++;
-          const progress = Math.round((completed / total) * 100);
-          onProgress?.(`Pack ${pack.name} already installed`, progress);
+          
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            console.warn(`Pack ${pack.id} fetch timed out, skipping`);
+          } else {
+            console.error(`Error fetching pack ${pack.id}:`, fetchError);
+          }
+          if (pack.required) {
+            throw fetchError;
+          }
+          completed++;
           continue;
         }
-        
-        const progress = Math.round((completed / total) * 100);
-        onProgress?.(`Installing ${pack.name}...`, progress);
-        
-        // Import pack directly from URL - this will parse SQLite and import verses
-        console.log(`Importing ${pack.url}...`);
-        const { importPackFromUrl } = await import('../adapters/pack-import');
-        await importPackFromUrl(pack.url);
-        
-        console.log(`✓ Installed ${pack.name}`);
-        completed++;
         
       } catch (error) {
         console.error(`Error installing pack ${pack.id}:`, error);
@@ -225,7 +331,10 @@ export async function initializePolishedApp(
     console.log(`Lexical packs to install: ${lexicalPacks.length}`);
     
     // Install English lexical packs (these go into a separate IndexedDB)
-    if (lexicalPacks.length > 0) {
+    // Check if lexical packs already initialized
+    const lexicalInitialized = localStorage.getItem(LEXICAL_INIT_FLAG_KEY) === 'true';
+    
+    if (lexicalPacks.length > 0 && !lexicalInitialized) {
       console.log('Loading lexical pack loader...');
       try {
         const { englishLexicalPackLoader } = await Promise.race([
@@ -270,10 +379,16 @@ export async function initializePolishedApp(
           completed++;
         }
       }
+      
+      // Mark lexical packs as initialized
+      localStorage.setItem(LEXICAL_INIT_FLAG_KEY, 'true');
+      
       } catch (importError) {
         console.warn('Failed to load English lexical pack loader, skipping lexical packs:', importError);
         // Skip lexical packs but continue with initialization
       }
+    } else if (lexicalInitialized) {
+      console.log('Lexical packs already initialized, skipping');
     }
     
     // Mark as initialized
