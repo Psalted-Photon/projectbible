@@ -5,8 +5,11 @@
   import { windowStore } from "./lib/stores/windowStore";
   import { onMount } from "svelte";
 
+  let appReady = false;
+
   // Initialize Eruda for mobile debugging
   onMount(async () => {
+    console.log("🚀 App mounted, initializing...");
     if (typeof window !== "undefined") {
       const eruda = await import("eruda");
       eruda.default.init();
@@ -15,7 +18,10 @@
         x: window.innerWidth - 60,
         y: window.innerHeight - 60,
       });
+      console.log("🐛 Eruda initialized");
     }
+    appReady = true;
+    console.log("✅ App ready");
   });
 
   // Calculate main content area based on open panels
@@ -57,11 +63,19 @@
 </script>
 
 <div class="app-root">
-  <div class="main-content" style={mainContentStyle}>
-    <BibleReader />
-  </div>
-  <WindowContainer />
-  <PaneContainer />
+  {#if !appReady}
+    <div
+      style="display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-size: 20px;"
+    >
+      Loading App...
+    </div>
+  {:else}
+    <div class="main-content" style={mainContentStyle}>
+      <BibleReader />
+    </div>
+    <WindowContainer />
+    <PaneContainer />
+  {/if}
 </div>
 
 <style>

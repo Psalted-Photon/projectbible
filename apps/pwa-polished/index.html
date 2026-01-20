@@ -40,10 +40,54 @@
       width: 100%;
       height: 100%;
     }
+    
+    #loading {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: white;
+      font-size: 20px;
+      z-index: 9999;
+    }
   </style>
 </head>
 <body>
+  <div id="loading">Loading ProjectBible...</div>
   <div id="app"></div>
+  <script>
+    // Global error handler
+    window.addEventListener('error', function(e) {
+      document.getElementById('loading').innerHTML = 
+        '<h2 style="color: #f44336;">ERROR</h2>' +
+        '<p style="margin-top: 20px; font-size: 16px;">' + e.message + '</p>' +
+        '<p style="margin-top: 10px; font-size: 14px; color: #888;">' + e.filename + ':' + e.lineno + '</p>';
+    });
+    
+    window.addEventListener('unhandledrejection', function(e) {
+      document.getElementById('loading').innerHTML = 
+        '<h2 style="color: #f44336;">PROMISE ERROR</h2>' +
+        '<p style="margin-top: 20px; font-size: 16px;">' + e.reason + '</p>';
+    });
+    
+    // Hide loading message - check repeatedly until app mounts
+    var checkInterval = setInterval(function() {
+      var app = document.getElementById('app');
+      var loading = document.getElementById('loading');
+      if (app && app.children.length > 0) {
+        if (loading) loading.style.display = 'none';
+        clearInterval(checkInterval);
+      }
+    }, 100);
+    
+    // Fallback: hide after 5 seconds regardless
+    setTimeout(function() {
+      clearInterval(checkInterval);
+      var loading = document.getElementById('loading');
+      if (loading) loading.style.display = 'none';
+    }, 5000);
+  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

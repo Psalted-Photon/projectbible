@@ -1,3 +1,5 @@
+console.log('🔥 MAIN.TS LOADING...');
+
 import { mount } from 'svelte';
 import App from './App.svelte';
 import { initializeApp, isBootstrapLoaded } from './lib/progressive-init';
@@ -6,6 +8,8 @@ import { removePack } from './lib/progressive-init';
 import { loadPackOnDemand, getInstalledPacks } from './lib/progressive-init';
 import { FEATURES } from './config';
 
+console.log('🔥 IMPORTS LOADED');
+
 // Expose utilities for console debugging
 if (import.meta.env.DEV) {
   (window as any).removePack = removePack;
@@ -13,11 +17,16 @@ if (import.meta.env.DEV) {
   (window as any).getInstalledPacks = getInstalledPacks;
 }
 
+console.log('🔥 GETTING APP ELEMENT');
+
 const appElement = document.getElementById('app');
 
 if (!appElement) {
+  console.error('❌ NO APP ELEMENT FOUND!');
   throw new Error('No #app element found');
 }
+
+console.log('🔥 APP ELEMENT FOUND:', appElement);
 
 // Apply initial settings
 function applyInitialSettings() {
@@ -47,7 +56,20 @@ applyInitialSettings();
 
 // Initialize app with progressive loading
 async function initApp() {
-  // Always initialize (progressive startup)
+  console.log('🚀 Starting app initialization...');
+  console.log('Environment:', import.meta.env.DEV ? 'DEV' : 'PROD');
+  console.log('Features:', FEATURES);
+  
+  // In dev mode, skip bootstrap loading and mount immediately
+  if (import.meta.env.DEV) {
+    console.log('✅ Dev mode - mounting app immediately');
+    const app = mount(App, {
+      target: appElement
+    });
+    return app;
+  }
+  
+  // Production mode - progressive startup
   const needsInit = !isBootstrapLoaded();
   
   if (needsInit || FEATURES.progressiveStartup) {

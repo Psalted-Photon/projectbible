@@ -4,11 +4,32 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 
-// Plugin to copy bootstrap pack to build output
+// Plugin to copy bootstrap pack to build output and public folder (for dev)
 // Bootstrap is a small (208KB) SQLite file with book metadata for instant startup
 function copyBootstrapPack() {
   return {
     name: 'copy-bootstrap-pack',
+    buildStart() {
+      // Copy to public folder for dev server
+      const bootstrapPath = resolve(__dirname, '../../packs/bootstrap.sqlite');
+      const publicDir = resolve(__dirname, 'public');
+      
+      // Check if bootstrap exists
+      if (!existsSync(bootstrapPath)) {
+        console.warn('⚠️  Bootstrap pack not found at:', bootstrapPath);
+        console.warn('   Run: node scripts/build-bootstrap-pack.mjs');
+        return;
+      }
+      
+      if (!existsSync(publicDir)) {
+        mkdirSync(publicDir, { recursive: true });
+      }
+      
+      // Copy bootstrap to public folder (for dev server)
+      const publicDest = resolve(publicDir, 'bootstrap.sqlite');
+      copyFileSync(bootstrapPath, publicDest);
+      console.log('📦 Copied bootstrap pack to public/ (dev mode)');
+    },
     closeBundle() {
       const bootstrapPath = resolve(__dirname, '../../packs/bootstrap.sqlite');
       const targetDir = resolve(__dirname, 'dist');
@@ -33,6 +54,35 @@ function copyBootstrapPack() {
 function copyPolishedPacks() {
   return {
     name: 'copy-polished-packs',
+    buildStart() {
+      // Copy to public folder for dev server
+      const polishedPacksDir = resolve(__dirname, '../../packs/polished');
+      const publicPacksDir = resolve(__dirname, 'public/packs');
+      
+      if (!existsSync(polishedPacksDir)) {
+        console.warn('⚠️  No polished packs directory found');
+        return;
+      }
+      
+      if (!existsSync(publicPacksDir)) {
+        mkdirSync(publicPacksDir, { recursive: true });
+      }
+      
+      const files = readdirSync(polishedPacksDir).filter(f => f.endsWith('.sqlite'));
+      
+      if (files.length === 0) {
+        console.warn('⚠️  No packs in polished directory');
+        return;
+      }
+      
+      console.log('📦 Copying polished packs to public/ (dev mode):');
+      files.forEach(file => {
+        const src = resolve(polishedPacksDir, file);
+        const dest = resolve(publicPacksDir, file);
+        copyFileSync(src, dest);
+        console.log(`   ✓ ${file}`);
+      });
+    },
     closeBundle() {
       // Skip in production builds (use GitHub Releases CDN instead)
       if (process.env.NODE_ENV === 'production' && !process.env.VITE_USE_BUNDLED_PACKS) {
@@ -89,7 +139,7 @@ export default defineConfig({
   ],
   server: {
     port: 5174,
-    strictPort: true,
+    strictPort: false,  // Allow fallback to other ports if 5174 is in use
     host: '0.0.0.0',
     proxy: {
       '/api/pwa': {
