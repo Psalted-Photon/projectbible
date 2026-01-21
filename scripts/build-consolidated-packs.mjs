@@ -20,7 +20,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, readdirSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -41,7 +41,7 @@ if (!existsSync(OUTPUT_DIR)) {
 /**
  * Merge multiple SQLite databases into one
  */
-function mergeDatabases(sourcePacks: string[], outputPath: string, packInfo: any): void {
+function mergeDatabases(sourcePacks, outputPath, packInfo) {
   console.log(`\n📦 Building ${packInfo.name}...`);
   console.log(`   Sources: ${sourcePacks.length} packs`);
   
@@ -227,7 +227,7 @@ function mergeDatabases(sourcePacks: string[], outputPath: string, packInfo: any
       
       // Copy verses if they exist
       try {
-        const verseCount = source.prepare('SELECT COUNT(*) as count FROM verses').get() as any;
+        const verseCount = source.prepare('SELECT COUNT(*) as count FROM verses').get();
         if (verseCount.count > 0) {
           output.exec(`INSERT OR IGNORE INTO verses SELECT * FROM source.verses`);
           totalRecords += verseCount.count;
@@ -238,7 +238,7 @@ function mergeDatabases(sourcePacks: string[], outputPath: string, packInfo: any
       
       // Copy morphology if it exists
       try {
-        const morphCount = source.prepare('SELECT COUNT(*) as count FROM morphology').get() as any;
+        const morphCount = source.prepare('SELECT COUNT(*) as count FROM morphology').get();
         if (morphCount.count > 0) {
           output.exec(`INSERT OR IGNORE INTO morphology SELECT * FROM source.morphology`);
         }
@@ -271,8 +271,7 @@ function mergeDatabases(sourcePacks: string[], outputPath: string, packInfo: any
   output.close();
   
   // Get file size
-  const fs = require('fs');
-  const stats = fs.statSync(outputPath);
+  const stats = statSync(outputPath);
   const sizeMB = (stats.size / (1024 * 1024)).toFixed(2);
   
   console.log(`   ✅ Complete: ${sizeMB} MB (${totalRecords.toLocaleString()} records)`);
