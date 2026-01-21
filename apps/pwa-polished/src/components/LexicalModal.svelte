@@ -12,6 +12,7 @@
   export let selectedText = "";
   export let strongsId: string | undefined = undefined;
   export let morphologyData: DBMorphology | null = null;
+  export let lexicalEntries: any = null; // English word data from lexicon-lookup.ts
 
   let lexiconStore: IndexedDBLexiconStore;
   let strongEntry: StrongEntry | null = null;
@@ -49,6 +50,46 @@
     loadingDefinition = false;
 
     try {
+      // Check if we already have lexical entries from the new lookup system
+      if (lexicalEntries) {
+        console.log('✅ Using lexical entries from lookup system:', lexicalEntries);
+        isEnglishWord = true;
+        
+        // Map lexicalEntries to the format this modal expects
+        englishWordInfo = {
+          word: lexicalEntries.word,
+          ipa_us: lexicalEntries.ipa_us,
+          ipa_uk: lexicalEntries.ipa_uk,
+          pos: lexicalEntries.pos,
+        };
+        
+        if (lexicalEntries.synonyms && lexicalEntries.synonyms.length > 0) {
+          englishSynonyms = lexicalEntries.synonyms;
+        }
+        
+        if (lexicalEntries.antonyms && lexicalEntries.antonyms.length > 0) {
+          // Store antonyms (TODO: display in UI)
+        }
+        
+        // Fetch definition from free dictionary API
+        loadingDefinition = true;
+        try {
+          const response = await fetch(
+            `https://api.dictionaryapi.dev/api/v2/entries/en/${lexicalEntries.word}`,
+          );
+          if (response.ok) {
+            englishDefinitions = await response.json();
+          }
+        } catch (err) {
+          console.log("Dictionary API failed:", err);
+        } finally {
+          loadingDefinition = false;
+        }
+        
+        loading = false;
+        return;
+      }
+      
       // If we have morphology data, don't need to load anything - just display it
       if (morphologyData) {
         loading = false;

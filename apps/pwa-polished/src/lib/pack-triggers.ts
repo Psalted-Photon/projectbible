@@ -64,18 +64,14 @@ async function loadPackIfNeeded(packId: string): Promise<void> {
     // Show progress modal
     showProgressModal.set(true);
     
-    // Load pack with progress tracking
-    await loadPackOnDemand(packId, (progress) => {
-      currentDownload.set(progress);
-      
-      // Auto-hide modal when complete
-      if (progress.stage === 'complete') {
-        setTimeout(() => {
-          showProgressModal.set(false);
-          currentDownload.set(null);
-        }, 1000);
-      }
-    });
+    // Load pack (note: progress tracking not yet implemented)
+    await loadPackOnDemand(packId);
+    
+    // Auto-hide modal when complete
+    setTimeout(() => {
+      showProgressModal.set(false);
+      currentDownload.set(null);
+    }, 500);
     
     loadedPacks.add(packId);
     console.log(`Pack ${packId} loaded successfully`);

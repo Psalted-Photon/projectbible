@@ -27,6 +27,104 @@
   let installProgress = "";
   let fileInputElement: HTMLInputElement;
 
+  // DEV MODE: Set to true to load packs from local /packs/consolidated folder
+  const DEV_MODE = import.meta.env.DEV;
+  const CDN_BASE = 'https://github.com/Psalted-Photon/projectbible/releases/download/v1.0.0';
+  const LOCAL_BASE = '/packs/consolidated';
+  const BASE_URL = DEV_MODE ? LOCAL_BASE : CDN_BASE;
+
+  // Consolidated pack definitions
+  const CONSOLIDATED_PACKS = [
+    {
+      id: 'translations',
+      name: 'English Translations',
+      description: 'KJV, WEB, BSB, NET, LXX2012',
+      size: '33.80 MB',
+      icon: '📖',
+      url: `${BASE_URL}/translations.sqlite`
+    },
+    {
+      id: 'ancient-languages',
+      name: 'Ancient Languages',
+      description: 'Hebrew, Greek with morphology',
+      size: '67.11 MB',
+      icon: '📜',
+      url: `${BASE_URL}/ancient-languages.sqlite`
+    },
+    {
+      id: 'lexical',
+      name: 'Lexical Resources',
+      description: 'Strong\'s + English dictionaries',
+      size: '365.45 MB',
+      icon: '📚',
+      url: `${BASE_URL}/lexical.sqlite`
+    },
+    {
+      id: 'study-tools',
+      name: 'Study Tools',
+      description: 'Maps, cross-refs, chronological',
+      size: '3.57 MB',
+      icon: '🗺️',
+      url: `${BASE_URL}/study-tools.sqlite`
+    },
+    {
+      id: 'bsb-audio-pt1',
+      name: 'BSB Audio Part 1',
+      description: 'Genesis - Psalms',
+      size: '1.76 GB',
+      icon: '🎵',
+      url: `${BASE_URL}/bsb-audio-pt1.sqlite`
+    },
+    {
+      id: 'bsb-audio-pt2',
+      name: 'BSB Audio Part 2',
+      description: 'Proverbs - Revelation',
+      size: '1.65 GB',
+      icon: '🎵',
+      url: `${BASE_URL}/bsb-audio-pt2.sqlite`
+    }
+  ];
+
+  async function installConsolidatedPack(pack: typeof CONSOLIDATED_PACKS[0]) {
+    if (installedPacks.some(p => p.id === pack.id)) {
+      if (!confirm(`Pack "${pack.name}" is already installed. Re-download it?`)) {
+        return;
+      }
+    }
+
+    isInstalling = true;
+    installProgress = `Downloading ${pack.name} (${pack.size})...`;
+
+    try {
+      const response = await fetch(pack.url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      const file = new File([blob], `${pack.id}.sqlite`, {
+        type: "application/x-sqlite3",
+      });
+
+      installProgress = `Installing ${pack.name}...`;
+      await importPackFromSQLite(file);
+
+      installProgress = "Complete!";
+      alert(`${pack.name} installed successfully!`);
+
+      await loadPacks();
+      await loadStats();
+
+      window.dispatchEvent(new CustomEvent("packsUpdated"));
+    } catch (error) {
+      console.error(`Error installing ${pack.name}:`, error);
+      alert(`Failed to install ${pack.name}: ${error}`);
+    } finally {
+      isInstalling = false;
+      installProgress = "";
+    }
+  }
+
   onMount(async () => {
     await loadPacks();
     await loadStats();
@@ -246,9 +344,40 @@
     {/if}
   </div>
 
+  <!-- Quick Install: Consolidated Packs -->
+  <div class="section">
+    <h3>📦 Quick Install</h3>
+    <p class="section-description">
+      Install official consolidated packs with one click. These packs are hosted on GitHub Releases and verified with SHA-256 hashes.
+    </p>
+
+    <div class="pack-grid">
+      {#each CONSOLIDATED_PACKS as pack}
+        {@const isInstalled = installedPacks.some(p => p.id === pack.id)}
+        <button
+          class="pack-card"
+          class:installed={isInstalled}
+          on:click={() => installConsolidatedPack(pack)}
+          disabled={isInstalling}
+          title={isInstalled ? `Already installed - click to re-download` : `Download ${pack.name}`}
+        >
+          <div class="pack-card-icon">{pack.icon}</div>
+          <div class="pack-card-content">
+            <div class="pack-card-name">
+              {pack.name}
+              {#if isInstalled}<span class="installed-badge">✓</span>{/if}
+            </div>
+            <div class="pack-card-description">{pack.description}</div>
+            <div class="pack-card-size">{pack.size}</div>
+          </div>
+        </button>
+      {/each}
+    </div>
+  </div>
+
   <!-- Install Actions -->
   <div class="section">
-    <h3>Install New Pack</h3>
+    <h3>Advanced Install</h3>
 
     <div class="actions">
       <button
@@ -490,6 +619,95 @@
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 0.75rem;
     margin-bottom: 1rem;
+  }
+
+  .pack-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .pack-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: linear-gradient(
+      135deg,
+      rgba(102, 126, 234, 0.08),
+      rgba(118, 75, 162, 0.08)
+    );
+    border: 1px solid rgba(102, 126, 234, 0.25);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+  }
+
+  .pack-card:hover:not(:disabled) {
+    background: linear-gradient(
+      135deg,
+      rgba(102, 126, 234, 0.15),
+      rgba(118, 75, 162, 0.15)
+    );
+    border-color: rgba(102, 126, 234, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+  }
+
+  .pack-card:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .pack-card.installed {
+    background: linear-gradient(
+      135deg,
+      rgba(76, 175, 80, 0.1),
+      rgba(56, 142, 60, 0.1)
+    );
+    border-color: rgba(76, 175, 80, 0.4);
+  }
+
+  .pack-card-icon {
+    font-size: 2rem;
+    line-height: 1;
+  }
+
+  .pack-card-content {
+    flex: 1;
+  }
+
+  .pack-card-name {
+    font-weight: 600;
+    color: #f0f0f0;
+    margin-bottom: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .installed-badge {
+    display: inline-block;
+    background: #4caf50;
+    color: white;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 700;
+  }
+
+  .pack-card-description {
+    font-size: 0.85rem;
+    color: #aaa;
+    margin-bottom: 0.5rem;
+  }
+
+  .pack-card-size {
+    font-size: 0.75rem;
+    color: #888;
+    font-weight: 500;
   }
 
   .primary-btn {

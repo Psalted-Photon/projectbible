@@ -58,11 +58,12 @@ export class IndexedDBTextStore implements TextStore {
     verse: number
   ): Promise<string | null> {
     const bookVariants = normalizeBookName(book);
+    const normalizedTranslation = translation.toLowerCase(); // Normalize to lowercase for consolidated packs
     
     try {
       // Try each book name variant
       for (const bookVariant of bookVariants) {
-        const id = `${translation}:${bookVariant}:${chapter}:${verse}`;
+        const id = `${normalizedTranslation}:${bookVariant}:${chapter}:${verse}`;
         const dbVerse = await readTransaction<DBVerse | undefined>(
           'verses',
           (store) => store.get(id)
@@ -88,6 +89,7 @@ export class IndexedDBTextStore implements TextStore {
     try {
       const db = await import('./db.js').then(m => m.openDB());
       const bookVariants = normalizeBookName(book);
+      const normalizedTranslation = translation.toLowerCase(); // Normalize to lowercase for consolidated packs
       
       return new Promise((resolve, reject) => {
         const transaction = db.transaction('verses', 'readonly');
@@ -99,7 +101,7 @@ export class IndexedDBTextStore implements TextStore {
         let processed = 0;
         
         for (const bookVariant of bookVariants) {
-          const range = IDBKeyRange.only([translation, bookVariant, chapter]);
+          const range = IDBKeyRange.only([normalizedTranslation, bookVariant, chapter]);
           const request = index.getAll(range);
           
           request.onsuccess = () => {
@@ -155,9 +157,10 @@ export class IndexedDBTextStore implements TextStore {
           const packs = packsRequest.result;
           console.log('All packs in database:', packs.map((p: any) => ({ id: p.id, translationId: p.translationId, type: p.type })));
           
-          // Include any pack that has a translationId (text translations, original language texts)
+          // CANONICAL: Detect text packs by type field (Pack Standard v1.0)
+          // Must also have translationId to filter out parent packs
           const textPacks = packs.filter((p: any) => 
-            p.translationId && p.translationId.trim().length > 0
+            p.type === 'text' && p.translationId
           );
           
           console.log('Found text packs:', textPacks.map((p: any) => ({ id: p.translationId, name: p.translationName, type: p.type })));
@@ -210,13 +213,14 @@ export class IndexedDBTextStore implements TextStore {
   async getBooks(translation: string): Promise<string[]> {
     try {
       const db = await import('./db.js').then(m => m.openDB());
+      const normalizedTranslation = translation.toLowerCase(); // Normalize to lowercase for consolidated packs
       
       return new Promise((resolve, reject) => {
         const transaction = db.transaction('verses', 'readonly');
         const store = transaction.objectStore('verses');
         const index = store.index('translationId');
         
-        const range = IDBKeyRange.only(translation);
+        const range = IDBKeyRange.only(normalizedTranslation);
         const request = index.openCursor(range);
         
         const books = new Set<string>();

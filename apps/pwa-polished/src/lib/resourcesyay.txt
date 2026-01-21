@@ -1,0 +1,156 @@
+🌍 Free Data Sources You Can Add to ProjectBible
+📖 Additional Bible Translations (Public Domain)
+These are fully free and safe to include:
+
+World English Bible (WEB) — already included, but you can add WEB British, WEB Catholic, WEB Messianic
+
+American Standard Version (ASV) — 1901, public domain
+
+Darby Translation — public domain
+
+Young’s Literal Translation (YLT) — public domain
+
+Geneva Bible (1599) — public domain
+
+Wycliffe (1382/1395) — public domain
+
+Douay-Rheims (1899) — public domain
+
+These are small (1–5MB each) and fit perfectly into your translations.sqlite pack.
+
+🏺 Ancient Texts & Manuscripts
+These are gold for your ancient-languages.sqlite pack:
+
+SBL Greek New Testament (SBLGNT) — permissive license
+
+MorphHB — Open Scriptures Hebrew morphology (you already have OSHB but can add richer tagging)
+
+Open Greek New Testament (OGNT) — CC BY-SA
+
+Vulgate (Latin) — public domain
+
+Peshitta (Syriac) — public domain editions exist
+
+Tischendorf 8th Edition — public domain
+
+Westcott & Hort — public domain
+
+These expand your ancient-language capabilities dramatically.
+
+📚 Lexical & Linguistic Data
+Perfect for lexical.sqlite:
+
+WordNet — Princeton’s semantic network (synonyms, hypernyms, definitions)
+
+CMU Pronouncing Dictionary — phonetic pronunciations for 134k English words
+
+MorphAdorner Lemma Lists — public domain lemma + POS data
+
+Etymology datasets — several public domain English etymology lists exist
+
+Greek & Hebrew frequency lists — public domain academic datasets
+
+These would make your lexicon pack insanely powerful.
+
+🗺️ Geography & Maps
+For study-tools.sqlite:
+
+OpenStreetMap extracts for ancient regions (public domain)
+
+Pleiades Gazetteer — CC BY, ancient world places
+
+OpenBible.info  locations — CC BY
+
+Digital Atlas of the Roman Empire — CC BY
+
+You can generate:
+
+coordinates
+
+bounding boxes
+
+region polygons
+
+elevation data
+
+travel routes
+
+All offline.
+
+🕰️ Chronology & Historical Data
+For chronology + events:
+
+Open Chronology of the Ancient Near East — public domain
+
+Kings/Chronicles harmonization datasets — PD academic sources
+
+Gospel harmonies — several PD harmonies exist
+
+Josephus public domain texts — can extract historical anchors
+
+This would let you build a timeline slider that feels like a premium Bible app.
+
+🎵 Audio & Media
+For audio packs:
+
+Public domain hymns (MIDI or MP3)
+
+Public domain dramatized readings (LibriVox)
+
+Gregorian chant recordings (PD archives)
+
+You can create optional “audio add‑ons” without licensing issues.
+
+🧠 Semantic & AI‑Friendly Datasets
+These are great for future features:
+
+Bible embeddings (public domain) — several open projects exist
+
+Cross‑reference graphs — TSK is PD, but you can generate your own graph edges
+
+Topic modeling datasets — PD LDA topic sets for the Bible
+
+Named entity recognition datasets — PD biblical NER corpora
+
+These unlock:
+
+semantic search
+
+“related verses”
+
+concept maps
+
+topic clustering
+
+All offline.
+
+🔥 High‑Impact Additions (My Top Picks)
+If you want the biggest bang for your time:
+
+WordNet → massive semantic power
+
+CMU Pronouncing Dictionary → instant IPA + audio synthesis
+
+Pleiades Gazetteer → real ancient geography
+
+OGNT + SBLGNT → richer Greek text options
+
+Vulgate + Peshitta → multilingual ancient corpus
+
+Public domain harmonies → timeline + parallel gospel view
+
+These would make ProjectBible feel like a scholarly tool and a modern study app.
+
+If you want, I can help you:
+build a harvest plan
+
+write scrapers
+
+design new pack schemas
+
+generate SQLite builders
+
+integrate new datasets into your existing packs
+
+Just tell me which category you want to explore first:
+translations, ancient languages, lexical, maps, chronology, or semantic datasets.

@@ -11,12 +11,12 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 10; // Updated for morphology translationId + verse_ref index
+const DB_VERSION = 13; // Updated for dictionary pack (english_definitions_modern, english_definitions_historic)
 
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -355,6 +355,87 @@ export function openDB(): Promise<IDBDatabase> {
         morphStore.createIndex('book_chapter_verse_word', ['book', 'chapter', 'verse', 'wordPosition'], { unique: false });
         morphStore.createIndex('verse_ref', ['translationId', 'book', 'chapter', 'verse'], { unique: false });
         morphStore.createIndex('strongsId', 'strongsId', { unique: false });
+        morphStore.createIndex('word', 'word', { unique: false }); // For lexicon lookup
+        morphStore.createIndex('by_word', 'word', { unique: false });
+        morphStore.createIndex('by_strongs', 'strongs_id', { unique: false });
+        morphStore.createIndex('by_lemma', 'lemma', { unique: false });
+        morphStore.createIndex('by_ref_word', ['translation_id', 'book', 'chapter', 'verse', 'word'], { unique: false });
+      }
+      
+      // Greek Strong's lexicon entries
+      if (!db.objectStoreNames.contains('greek_strongs_entries')) {
+        const greekStore = db.createObjectStore('greek_strongs_entries', { keyPath: 'id' });
+        greekStore.createIndex('lemma', 'lemma', { unique: false });
+        greekStore.createIndex('by_id', 'id', { unique: true });
+        greekStore.createIndex('by_lemma', 'lemma', { unique: false });
+      }
+      
+      // Hebrew Strong's lexicon entries
+      if (!db.objectStoreNames.contains('hebrew_strongs_entries')) {
+        const hebrewStore = db.createObjectStore('hebrew_strongs_entries', { keyPath: 'id' });
+        hebrewStore.createIndex('lemma', 'lemma', { unique: false });
+        hebrewStore.createIndex('by_id', 'id', { unique: true });
+        hebrewStore.createIndex('by_lemma', 'lemma', { unique: false });
+      }
+      
+      // General lexicon entries (for words without Strong's)
+      if (!db.objectStoreNames.contains('lexicon_entries')) {
+        const lexiconStore = db.createObjectStore('lexicon_entries', { keyPath: 'id' });
+        lexiconStore.createIndex('lemma', 'lemma', { unique: false });
+        lexiconStore.createIndex('by_lemma', 'lemma', { unique: false });
+        lexiconStore.createIndex('language', 'language', { unique: false });
+      }
+      
+      // English words (dictionary)
+      if (!db.objectStoreNames.contains('english_words')) {
+        const englishStore = db.createObjectStore('english_words', { keyPath: 'id' });
+        englishStore.createIndex('word', 'word', { unique: false });
+        englishStore.createIndex('by_word', 'word', { unique: false });
+        englishStore.createIndex('pos', 'pos', { unique: false });
+      }
+      
+      // English synonyms
+      if (!db.objectStoreNames.contains('english_synonyms')) {
+        const synStore = db.createObjectStore('english_synonyms', { keyPath: 'id', autoIncrement: true });
+        synStore.createIndex('word', 'word', { unique: false });
+      }
+      
+      // Thesaurus synonyms
+      if (!db.objectStoreNames.contains('thesaurus_synonyms')) {
+        const thesaurusStore = db.createObjectStore('thesaurus_synonyms', { keyPath: 'id', autoIncrement: true });
+        thesaurusStore.createIndex('word', 'word', { unique: false });
+      }
+      
+      // Thesaurus antonyms
+      if (!db.objectStoreNames.contains('thesaurus_antonyms')) {
+        const antonymsStore = db.createObjectStore('thesaurus_antonyms', { keyPath: 'id', autoIncrement: true });
+        antonymsStore.createIndex('word', 'word', { unique: false });
+      }
+      
+      // English grammar data
+      if (!db.objectStoreNames.contains('english_grammar')) {
+        const grammarStore = db.createObjectStore('english_grammar', { keyPath: 'id', autoIncrement: true });
+        grammarStore.createIndex('word', 'word', { unique: false });
+      }
+      
+      // English definitions (modern) - Wiktionary
+      if (!db.objectStoreNames.contains('english_definitions_modern')) {
+        const modernStore = db.createObjectStore('english_definitions_modern', { keyPath: 'id', autoIncrement: true });
+        modernStore.createIndex('word_id', 'word_id', { unique: false });
+        modernStore.createIndex('word_order', ['word_id', 'definition_order'], { unique: false });
+      }
+      
+      // English definitions (historic) - GCIDE/Webster 1913
+      if (!db.objectStoreNames.contains('english_definitions_historic')) {
+        const historicStore = db.createObjectStore('english_definitions_historic', { keyPath: 'id', autoIncrement: true });
+        historicStore.createIndex('word_id', 'word_id', { unique: false });
+        historicStore.createIndex('word_order', ['word_id', 'definition_order'], { unique: false });
+      }
+      
+      // Chronological order (moved from study pack to core schema)
+      if (!db.objectStoreNames.contains('chronological_order')) {
+        const chronoStore = db.createObjectStore('chronological_order', { keyPath: 'sequence' });
+        chronoStore.createIndex('book', 'book', { unique: false });
       }
       
       // Word occurrences store

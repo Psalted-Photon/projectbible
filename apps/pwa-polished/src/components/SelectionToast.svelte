@@ -43,7 +43,7 @@
     {:else}
       <!-- English word definition -->
       <button class="action-btn" on:click={() => handleAction('dissect')}>
-        Define
+        Dissect
       </button>
     {/if}
     

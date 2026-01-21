@@ -63,6 +63,7 @@
   let lexicalSelectedText = "";
   let lexicalStrongsId: string | undefined = undefined;
   let lexicalMorphologyData: DBMorphology | null = null;
+  let lexicalEntries: any = null; // Store lexicon lookup results
   let selectedMorphology: DBMorphology | null = null;
 
   let repeatsActive = false;
@@ -609,38 +610,33 @@
           navigationStore.setTranslation(match.id);
         }
 
-        // If we only have 2 translations, load the rest
-        if (translations.length < 9) {
-          console.log(
-            "Only found",
-            translations.length,
-            "translations, loading more...",
-          );
-          await autoLoadFromPublic(false);
-        }
-
-        // Verify the selected translation has verses
-        const testVerse = await textStore.getVerse(
-          translations[0].id,
-          "Genesis",
-          1,
-          1,
-        );
-
-        if (!testVerse) {
-          console.warn("Translation has no verses, reimporting...");
-          await autoLoadFromPublic(true);
+        // NOTE: Auto-loading from /public is disabled
+        // Users should install packs via the Packs pane (consolidated packs from GitHub Releases)
+        
+        if (translations.length === 0) {
+          console.log("💡 No translations installed. Please use the Packs pane to install the 'English Translations' pack.");
         }
       } else {
-        // No translations found - try loading from public directory
-        await autoLoadFromPublic(false);
+        // No translations found
+        console.log("💡 No translations installed. Please use the Packs pane to install packs.");
       }
     } catch (err: unknown) {
       console.error("Error loading translations:", err);
     }
   }
 
+  let autoLoadAttempts = 0;
+  const MAX_AUTO_LOAD_ATTEMPTS = 1;
+
   async function autoLoadFromPublic(clearFirst: boolean) {
+    // Prevent infinite retry loop
+    if (autoLoadAttempts >= MAX_AUTO_LOAD_ATTEMPTS) {
+      console.warn("⚠️ Auto-load already attempted, skipping to avoid infinite loop");
+      console.log("💡 Please use the Packs pane to install translations manually");
+      return;
+    }
+    
+    autoLoadAttempts++;
     console.log("Loading additional packs...");
 
     try {
@@ -676,7 +672,7 @@
 
       console.log(`Loaded ${loaded} packs, ${failed} failed`);
 
-      // Reload translations and debug info
+      // Reload translations and debug info (but won't trigger another autoLoad)
       await loadAvailableTranslations();
     } catch (err) {
       const errMsg = `Failed to load translations: ${err instanceof Error ? err.message : String(err)}`;
@@ -687,15 +683,39 @@
 
   async function loadChronologicalPack() {
     try {
-      const response = await fetch("/packs/chronological-v1.json");
-      if (response.ok) {
-        chronologicalData = await response.json();
-        console.log(
-          `Loaded chronological pack: ${chronologicalData.verse_count} verses`,
-        );
+      // Chronological data is now in the study-tools pack, not a JSON file
+      const { readTransaction, openDB } = await import('../adapters/db.js');
+      
+      // Check if study-tools pack is installed
+      const pack = await readTransaction('packs', (store) => 
+        store.get('study-tools') || store.get('consolidated-study-tools')
+      );
+      
+      if (!pack) {
+        console.log('Study tools pack not installed - chronological mode unavailable');
+        return;
+      }
+      
+      // Query chronological_order table from IndexedDB
+      const db = await openDB();
+      const chronoData = await new Promise<any[]>((resolve) => {
+        const tx = db.transaction('chronological_order', 'readonly');
+        const store = tx.objectStore('chronological_order');
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => resolve([]);
+      });
+      
+      if (chronoData.length > 0) {
+        // Transform to expected format
+        chronologicalData = {
+          verse_count: chronoData.length,
+          verses: chronoData
+        };
+        console.log(`Loaded chronological pack: ${chronologicalData.verse_count} entries`);
       }
     } catch (e) {
-      console.warn("Chronological pack not available:", e);
+      console.warn('Chronological pack not available:', e);
     }
   }
 
@@ -1638,7 +1658,85 @@
         lexicalSelectedText = text;
         lexicalStrongsId = selectedMorphology?.strongsId || undefined;
         lexicalMorphologyData = selectedMorphology;
-        showLexicalModal = true;
+        
+        console.log('🔍 Starting lexicon lookup for:', text);
+        console.log('   Current translation:', currentTranslation);
+        console.log('   Has morphology:', !!selectedMorphology);
+        console.log('   Strong\'s ID:', lexicalStrongsId);
+        
+        // Look up lexical data using new consolidated pack system
+        (async () => {
+          try {
+            console.log('🔄 Importing lexicon lookup module...');
+            const { lookupWord, lookupStrongs, lookupEnglishWord } = await import('../adapters/lexicon-lookup.js');
+            console.log('✅ Module imported successfully');
+            
+            // Check if this is an English translation
+            const englishTranslations = ['kjv', 'web', 'bsb', 'net', 'lxx2012'];
+            const isEnglish = englishTranslations.includes(currentTranslation.toLowerCase());
+            console.log('🌍 Is English translation:', isEnglish);
+            
+            if (isEnglish) {
+              console.log('📚 Calling lookupEnglishWord for:', text);
+              // Look up English word in lexical pack
+              const englishEntry = await lookupEnglishWord(text);
+              console.log('📚 lookupEnglishWord returned:', englishEntry);
+              
+              if (englishEntry) {
+                console.log('📖 English Word Entry:', englishEntry);
+                console.log(`   Word: ${englishEntry.word}`);
+                if (englishEntry.ipa_us) console.log(`   Pronunciation (US): /${englishEntry.ipa_us}/`);
+                if (englishEntry.pos) console.log(`   Part of Speech: ${englishEntry.pos}`);
+                if (englishEntry.synonyms && englishEntry.synonyms.length > 0) {
+                  console.log(`   Synonyms (${englishEntry.synonyms.length}): ${englishEntry.synonyms.slice(0, 10).join(', ')}${englishEntry.synonyms.length > 10 ? '...' : ''}`);
+                }
+                if (englishEntry.antonyms && englishEntry.antonyms.length > 0) {
+                  console.log(`   Antonyms (${englishEntry.antonyms.length}): ${englishEntry.antonyms.slice(0, 10).join(', ')}${englishEntry.antonyms.length > 10 ? '...' : ''}`);
+                }
+                if (englishEntry.grammar) {
+                  console.log('   Grammar:', englishEntry.grammar);
+                }
+                
+                // Store results for the modal
+                lexicalEntries = englishEntry;
+                console.log('✅ Stored lexical entries, opening modal');
+                showLexicalModal = true;
+              } else {
+                console.log(`ℹ️ No lexical data found for "${text}"`);
+                console.log('💡 Make sure you have installed the "Lexical Resources Pack" (365 MB) from the Packs menu.');
+                lexicalEntries = null;
+                showLexicalModal = true; // Still show modal with error
+              }
+            }
+            
+            // If we have a Strong's ID from morphology, look it up directly
+            if (lexicalStrongsId) {
+              const entry = await lookupStrongs(lexicalStrongsId);
+              if (entry) {
+                console.log('Found Strong\'s entry:', entry);
+                // Store and open modal (Strong's data is handled via lexicalStrongsId prop)
+                showLexicalModal = true;
+              }
+            } else {
+              // Otherwise look up the word
+              const entries = await lookupWord(text);
+              if (entries.length > 0) {
+                console.log(`Found ${entries.length} lexical entries:`, entries);
+                // Store and open modal (morphology data is handled via lexicalMorphologyData prop)
+                showLexicalModal = true;
+              } else {
+                console.log('No lexical entries found for:', text);
+                console.log('💡 Make sure you have installed the "Lexical Resources Pack" from the Packs menu.');
+                showLexicalModal = true; // Still show modal with error
+              }
+            }
+          } catch (error) {
+            console.error('Lexicon lookup error:', error);
+            showLexicalModal = true; // Show modal with error
+          }
+        })();
+        
+        // Modal will be opened by the async function above once data is ready
         showToast = false; // Close the toast
         break;
       case "search":
@@ -1829,6 +1927,7 @@
   selectedText={lexicalSelectedText}
   strongsId={lexicalStrongsId}
   morphologyData={lexicalMorphologyData}
+  lexicalEntries={lexicalEntries}
 />
 
 <style>

@@ -42,9 +42,11 @@ export async function importPackFromSQLite(file: File): Promise<void> {
     let packType = (metadata.pack_type || metadata.type || metadata.packType) as string;
     // Normalize 'original-language' to 'text' for storage
     if (packType === 'original-language') packType = 'text';
+    // Normalize 'translation' to 'text' for consolidated packs
+    if (packType === 'translation') packType = 'text';
     
     const packInfo: DBPack = {
-      id: metadata.pack_id || metadata.packId,
+      id: metadata.pack_id || metadata.packId || metadata.id,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
       type: packType as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio',
       translationId: metadata.translation_id || metadata.translationId,
@@ -109,11 +111,91 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       const tableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='editions'");
       const hasEditions = tableCheck.length > 0 && tableCheck[0].values.length > 0;
       
+      // Check if this is a multi-translation consolidated pack
+      const translationsTableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='translations'");
+      const hasTranslationsTable = translationsTableCheck.length > 0 && translationsTableCheck[0].values.length > 0;
+      
       // Check if pack has morphology data (words table)
       const wordsTableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='words'");
       const hasWords = wordsTableCheck.length > 0 && wordsTableCheck[0].values.length > 0;
 
-      if (hasEditions) {
+      if (hasTranslationsTable) {
+        // Multi-translation consolidated pack
+        console.log('Detected multi-translation consolidated pack, importing translations...');
+
+        const translationsRows = db.exec('SELECT id, name, language, description FROM translations');
+        if (!translationsRows.length || !translationsRows[0].values.length) {
+          throw new Error('Multi-translation pack has no translations table data');
+        }
+
+        // Import each translation as a separate virtual pack
+        for (const [translationId, translationName, language, description] of translationsRows[0].values) {
+          const translationPackId = `${packInfo.id}-${translationId}`;
+
+          // Create a pack entry for this translation WITH ALL REQUIRED FIELDS
+          const translationPack: DBPack = {
+            id: translationPackId,
+            version: packInfo.version,
+            type: 'text', // CRITICAL: canonical classification for TextStore filtering
+            translationId: translationId as string,
+            translationName: translationName as string,
+            language: language as string, // CRITICAL: required for language routing
+            license: packInfo.license,
+            attribution: packInfo.attribution,
+            size: 0, // Will be estimated
+            installedAt: packInfo.installedAt,
+            description: description as string
+          };
+
+          await writeTransaction('packs', (store) => store.put(translationPack));
+          console.log(`  Translation pack created: ${translationId} (${translationName})`);
+        }
+
+        // Import all verses (check column names - may be translation_id or translationId)
+        const versesTableInfo = db.exec('PRAGMA table_info(verses)');
+        const versesColumns = versesTableInfo.length > 0 && versesTableInfo[0].values
+          ? versesTableInfo[0].values.map(row => row[1] as string)
+          : [];
+        
+        console.log(`  Verses table columns: ${versesColumns.join(', ')}`);
+        
+        const hasHeading = versesColumns.includes('heading');
+        const translationIdCol = versesColumns.includes('translation_id') ? 'translation_id' : 'translationId';
+        
+        const versesQuery = hasHeading
+          ? `SELECT ${translationIdCol}, book, chapter, verse, text, heading FROM verses`
+          : `SELECT ${translationIdCol}, book, chapter, verse, text FROM verses`;
+        
+        const versesRows = db.exec(versesQuery);
+        if (versesRows.length && versesRows[0].values.length) {
+          const verses = versesRows[0].values.map((row) => {
+            const [translationId, book, chapter, verse, text, heading] = row;
+            return {
+              id: `${translationId}:${book}:${chapter}:${verse}`,
+              translationId: translationId as string,
+              book: book as string,
+              chapter: chapter as number,
+              verse: verse as number,
+              text: text as string,
+              heading: hasHeading ? (heading as string | null) : null
+            };
+          });
+
+          console.log(`Importing ${verses.length} verses from ${translationsRows[0].values.length} translations...`);
+
+          // Batch insert verses
+          const CHUNK_SIZE = 500;
+          for (let i = 0; i < verses.length; i += CHUNK_SIZE) {
+            const chunk = verses.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('verses', (store) => {
+              chunk.forEach(v => store.put(v));
+            });
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, verses.length)}/${verses.length} verses`);
+          }
+
+          console.log(`✅ Consolidated pack ${packInfo.id} imported: ${verses.length} verses`);
+        }
+      } else if (hasEditions) {
         // Multi-edition pack (like greek.sqlite with LXX, Byzantine, TR, OpenGNT)
         console.log('Detected multi-edition pack, importing editions...');
 
@@ -696,52 +778,364 @@ export async function importPackFromSQLite(file: File): Promise<void> {
 
       console.log(`✅ Map pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'lexicon') {
-      // Import lexicon data (Strong's dictionaries, etc.)
+      // Import lexicon data (Strong's dictionaries, lemmas, morphology, etc.)
       console.log('Importing lexicon pack...');
       
       const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
       const tableNames = tables.length > 0 ? tables[0].values.map(row => row[0] as string) : [];
+      console.log('Available tables:', tableNames);
       
-      // Import Strong's entries
-      if (tableNames.includes('strongs_entries')) {
-        console.log('Importing Strong\'s dictionary entries...');
-        const strongsRows = db.exec(`
+      const CHUNK_SIZE = 500;
+      
+      // Import Greek Strong's entries
+      if (tableNames.includes('greek_strongs_entries')) {
+        console.log('Importing Greek Strong\'s entries...');
+        const rows = db.exec(`
           SELECT id, lemma, transliteration, definition, shortDefinition, 
-                 partOfSpeech, language, derivation, kjvUsage, occurrences
-          FROM strongs_entries
+                 partOfSpeech, language, derivation, kjvUsage
+          FROM greek_strongs_entries
         `);
         
-        if (strongsRows.length && strongsRows[0].values.length) {
-          const strongsData = strongsRows[0].values.map(([id, lemma, transliteration, definition, shortDef, pos, language, derivation, kjvUsage, occurrences]) => ({
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([id, lemma, trans, def, shortDef, pos, lang, deriv, kjv]) => ({
             id: id as string,
             lemma: lemma as string,
-            transliteration: transliteration as string | undefined,
-            definition: definition as string,
-            shortDefinition: shortDef as string | undefined,
-            partOfSpeech: pos as string,
-            language: (language as string || 'greek') as 'greek' | 'hebrew' | 'aramaic',
-            derivation: derivation as string | undefined,
-            kjvUsage: kjvUsage as string | undefined,
-            occurrences: occurrences as number | undefined
+            transliteration: trans as string | null,
+            definition: def as string,
+            shortDefinition: shortDef as string | null,
+            partOfSpeech: pos as string | null,
+            language: lang as string | null,
+            derivation: deriv as string | null,
+            kjvUsage: kjv as string | null
           }));
           
-          console.log(`Importing ${strongsData.length} Strong's entries...`);
-          
-          // Batch insert Strong's entries
-          const CHUNK_SIZE = 500;
-          for (let i = 0; i < strongsData.length; i += CHUNK_SIZE) {
-            const chunk = strongsData.slice(i, i + CHUNK_SIZE);
-            await batchWriteTransaction('strongs_entries', (store) => {
-              chunk.forEach(s => store.put(s));
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('greek_strongs_entries', (store) => {
+              chunk.forEach(entry => store.put(entry));
             });
-            console.log(`Imported ${Math.min(i + CHUNK_SIZE, strongsData.length)}/${strongsData.length} Strong's entries`);
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, data.length)}/${data.length} Greek Strong's entries`);
           }
+          console.log(`✅ Greek Strong's imported: ${data.length} entries`);
+        }
+      }
+      
+      // Import Hebrew Strong's entries
+      if (tableNames.includes('hebrew_strongs_entries')) {
+        console.log('Importing Hebrew Strong\'s entries...');
+        const rows = db.exec(`
+          SELECT id, lemma, transliteration, definition, shortDefinition, 
+                 partOfSpeech, language, derivation, kjvUsage
+          FROM hebrew_strongs_entries
+        `);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([id, lemma, trans, def, shortDef, pos, lang, deriv, kjv]) => ({
+            id: id as string,
+            lemma: lemma as string,
+            transliteration: trans as string | null,
+            definition: def as string,
+            shortDefinition: shortDef as string | null,
+            partOfSpeech: pos as string | null,
+            language: lang as string | null,
+            derivation: deriv as string | null,
+            kjvUsage: kjv as string | null
+          }));
           
-          console.log(`✅ Strong's dictionary imported: ${strongsData.length} entries`);
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('hebrew_strongs_entries', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, data.length)}/${data.length} Hebrew Strong's entries`);
+          }
+          console.log(`✅ Hebrew Strong's imported: ${data.length} entries`);
+        }
+      }
+      
+      // Import lexicon entries (lemmas)
+      if (tableNames.includes('lexicon_entries')) {
+        console.log('Importing lexicon entries...');
+        const rows = db.exec(`
+          SELECT id, lemma, transliteration, pronunciation, definition, language
+          FROM lexicon_entries
+        `);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([id, lemma, trans, pron, def, lang]) => ({
+            id: id as string,
+            lemma: lemma as string,
+            transliteration: trans as string | null,
+            pronunciation: pron as string | null,
+            definition: def as string,
+            language: lang as string | null
+          }));
+          
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('lexicon_entries', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, data.length)}/${data.length} lexicon entries`);
+          }
+          console.log(`✅ Lexicon entries imported: ${data.length} entries`);
+        }
+      }
+      
+      // Import morphology data
+      if (tableNames.includes('morphology')) {
+        console.log('Importing morphology data...');
+        const rows = db.exec(`
+          SELECT translation_id, book, chapter, verse, word_order, word, lemma, strongs_id, morph_code
+          FROM morphology
+        `);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([trans, book, ch, v, order, word, lemma, strongs, morph]) => ({
+            id: `${trans}:${book}:${ch}:${v}:${order}`,
+            translation_id: trans as string,
+            book: book as string,
+            chapter: ch as number,
+            verse: v as number,
+            word_order: order as number,
+            word: word as string,
+            lemma: lemma as string | null,
+            strongs_id: strongs as string | null,
+            morph_code: morph as string | null
+          }));
+          
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('morphology', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, data.length)}/${data.length} morphology entries`);
+          }
+          console.log(`✅ Morphology data imported: ${data.length} entries`);
+        }
+      }
+      
+      // Import English words
+      if (tableNames.includes('english_words')) {
+        console.log('Importing English word data...');
+        const rows = db.exec(`
+          SELECT id, word, ipa_us, ipa_uk, pos
+          FROM english_words
+        `);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([id, word, ipaUs, ipaUk, pos]) => ({
+            id: id as string,
+            word: word as string,
+            ipa_us: ipaUs as string | null,
+            ipa_uk: ipaUk as string | null,
+            pos: pos as string | null
+          }));
+          
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('english_words', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, data.length)}/${data.length} English words`);
+          }
+          console.log(`✅ English words imported: ${data.length} entries`);
+        }
+      }
+      
+      // Import English synonyms
+      if (tableNames.includes('english_synonyms')) {
+        console.log('Importing English synonyms...');
+        const rows = db.exec(`SELECT word, synonym, relationship FROM english_synonyms`);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([word, syn, rel]) => ({
+            id: `${word}:${syn}`,
+            word: word as string,
+            synonym: syn as string,
+            relationship: rel as string | null
+          }));
+          
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('english_synonyms', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+          }
+          console.log(`✅ English synonyms imported: ${data.length} entries`);
+        }
+      }
+      
+      // Import thesaurus synonyms
+      if (tableNames.includes('thesaurus_synonyms')) {
+        console.log('Importing thesaurus synonyms...');
+        const rows = db.exec(`SELECT word, synonym FROM thesaurus_synonyms`);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([word, syn]) => ({
+            id: `${word}:${syn}`,
+            word: word as string,
+            synonym: syn as string
+          }));
+          
+          const LARGE_CHUNK = 2000; // Larger chunks for massive datasets
+          for (let i = 0; i < data.length; i += LARGE_CHUNK) {
+            const chunk = data.slice(i, i + LARGE_CHUNK);
+            await batchWriteTransaction('thesaurus_synonyms', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+            if (i % 100000 === 0) {
+              console.log(`Imported ${Math.min(i + LARGE_CHUNK, data.length)}/${data.length} thesaurus synonyms`);
+            }
+          }
+          console.log(`✅ Thesaurus synonyms imported: ${data.length} entries`);
+        }
+      }
+      
+      // Import thesaurus antonyms
+      if (tableNames.includes('thesaurus_antonyms')) {
+        console.log('Importing thesaurus antonyms...');
+        const rows = db.exec(`SELECT word, antonym FROM thesaurus_antonyms`);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([word, ant]) => ({
+            id: `${word}:${ant}`,
+            word: word as string,
+            antonym: ant as string
+          }));
+          
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('thesaurus_antonyms', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+          }
+          console.log(`✅ Thesaurus antonyms imported: ${data.length} entries`);
+        }
+      }
+      
+      // Import English grammar
+      if (tableNames.includes('english_grammar')) {
+        console.log('Importing English grammar data...');
+        const rows = db.exec(`SELECT word, base_form, inflection_type FROM english_grammar`);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([word, base, inflection]) => ({
+            id: `${word}:${inflection || 'base'}`,
+            word: word as string,
+            base_form: base as string | null,
+            inflection_type: inflection as string | null
+          }));
+          
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('english_grammar', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+          }
+          console.log(`✅ English grammar imported: ${data.length} entries`);
         }
       }
       
       console.log(`✅ Lexicon pack ${packInfo.id} imported`);
+    } else if (packInfo.type === 'study') {
+      // Import study tools data (cross-references, chronological ordering, etc.)
+      console.log('Importing study tools pack...');
+      
+      const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+      const tableNames = tables.length > 0 ? tables[0].values.map(row => row[0] as string) : [];
+      console.log('Available tables:', tableNames);
+      
+      const CHUNK_SIZE = 500;
+      
+      // Import chronological ordering
+      if (tableNames.includes('chronological_order')) {
+        console.log('Importing chronological ordering...');
+        const rows = db.exec(`
+          SELECT book, chapter, verse, order_index
+          FROM chronological_order
+        `);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([book, chapter, verse, order]) => ({
+            id: `${book}:${chapter}:${verse}`,
+            book: book as string,
+            chapter: chapter as number,
+            verse: verse as number,
+            order_index: order as number
+          }));
+          
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('chronological_order', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, data.length)}/${data.length} chronological entries`);
+          }
+          console.log(`✅ Chronological ordering imported: ${data.length} entries`);
+        }
+      }
+      
+      // Import cross-references
+      if (tableNames.includes('cross_references')) {
+        console.log('Importing cross-references...');
+        const rows = db.exec(`
+          SELECT from_book, from_chapter, from_verse, to_book, to_chapter, to_verse, weight
+          FROM cross_references
+        `);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([fromBook, fromCh, fromV, toBook, toCh, toV, weight]) => ({
+            id: `${fromBook}:${fromCh}:${fromV}-${toBook}:${toCh}:${toV}`,
+            from_book: fromBook as string,
+            from_chapter: fromCh as number,
+            from_verse: fromV as number,
+            to_book: toBook as string,
+            to_chapter: toCh as number,
+            to_verse: toV as number,
+            weight: weight as number
+          }));
+          
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('cross_references', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+            console.log(`Imported ${Math.min(i + CHUNK_SIZE, data.length)}/${data.length} cross-references`);
+          }
+          console.log(`✅ Cross-references imported: ${data.length} entries`);
+        }
+      }
+      
+      // Import places (if not already imported from map pack)
+      if (tableNames.includes('places')) {
+        console.log('Importing places data...');
+        const rows = db.exec(`
+          SELECT id, name, description, latitude, longitude, type
+          FROM places
+        `);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([id, name, desc, lat, lon, type]) => ({
+            id: id as string,
+            name: name as string,
+            description: desc as string | null,
+            latitude: lat as number,
+            longitude: lon as number,
+            type: type as string | null
+          }));
+          
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('places', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+          }
+          console.log(`✅ Places imported: ${data.length} entries`);
+        }
+      }
+      
+      console.log(`✅ Study tools pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'audio') {
       // Import audio pack metadata
       console.log('Importing audio pack...');
