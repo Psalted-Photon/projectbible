@@ -35,7 +35,6 @@
   let chronologicalData: any = null;
   let isLoadingNextChapter = false;
   let isLoadingPrevChapter = false;
-  let scrollCheckInterval: number | null = null;
   let lastNavigationKey = "";
   let lastScrollTop = 0;
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
@@ -162,15 +161,12 @@
     verse: number,
   ): Promise<DBMorphology[]> {
     try {
-      return await readTransaction("morphology", (store) => {
+      const result = await readTransaction("morphology", (store) => {
         const index = store.index("verse_ref");
         const range = IDBKeyRange.only([translationId, book, chapter, verse]);
-        return new Promise<DBMorphology[]>((resolve, reject) => {
-          const request = index.getAll(range);
-          request.onsuccess = () => resolve(request.result as DBMorphology[]);
-          request.onerror = () => reject(request.error);
-        });
+        return index.getAll(range);
       });
+      return result as DBMorphology[];
     } catch (error) {
       console.error("Error fetching morphology:", error);
       return [];
@@ -178,7 +174,8 @@
   }
 
   // Render verse with morphology tagging for original languages
-  async function renderVerseWithMorphology(
+  // @ts-expect-error - Unused function kept for future use
+  async function _renderVerseWithMorphology(
     translationId: string,
     book: string,
     chapter: number,
@@ -201,7 +198,7 @@
     }
 
     // Sort by word position
-    const sorted = morphData.sort((a, b) => a.wordPosition - b.wordPosition);
+    const sorted = morphData.sort((a, b) => (a.wordPosition || 0) - (b.wordPosition || 0));
 
     // Build HTML with word spans
     let html = "";
@@ -340,7 +337,6 @@
       });
       const segments = Array.from(segmenter.segment(verseText));
 
-      let currentOffset = 0;
       let wordIndex = 0;
 
       for (const segment of segments as any[]) {
@@ -573,16 +569,7 @@
       console.log(`📍 Falling back to ${fallbackBook} ${fallbackChapter}`);
 
       // Update navigation store to reflect the fallback
-      if (windowId) {
-        windowStore.updateContent(
-          windowId,
-          fallbackBook,
-          fallbackChapter,
-          translation,
-        );
-      } else {
-        navigationStore.navigateTo(translation, fallbackBook, fallbackChapter);
-      }
+      navigationStore.navigateTo(translation, fallbackBook, fallbackChapter);
     } else {
       // Book exists, load normally
       loadChapter(translation, book, chapter, true);
@@ -628,7 +615,8 @@
   let autoLoadAttempts = 0;
   const MAX_AUTO_LOAD_ATTEMPTS = 1;
 
-  async function autoLoadFromPublic(clearFirst: boolean) {
+  // @ts-expect-error - Unused function kept for backward compatibility
+  async function _autoLoadFromPublic(_clearFirst: boolean) {
     // Prevent infinite retry loop
     if (autoLoadAttempts >= MAX_AUTO_LOAD_ATTEMPTS) {
       console.warn("⚠️ Auto-load already attempted, skipping to avoid infinite loop");
@@ -677,7 +665,6 @@
     } catch (err) {
       const errMsg = `Failed to load translations: ${err instanceof Error ? err.message : String(err)}`;
       console.error(errMsg);
-      showToast(errMsg, "error");
     }
   }
 
@@ -761,7 +748,6 @@
 
     // Attach scroll event listener
     readerElement.addEventListener("scroll", scrollHandler, { passive: true });
-    scrollCheckInterval = 1 as any; // Mark as active
   }
 
   function stopScrollDetection() {
@@ -770,8 +756,6 @@
       readerElement.removeEventListener("scroll", scrollHandler);
       scrollHandler = null;
     }
-
-    scrollCheckInterval = null;
   }
 
   async function loadNextChapter() {
@@ -893,7 +877,8 @@
     }
   }
 
-  async function loadPreviousChapter() {
+  // @ts-expect-error - Unused function kept for future feature
+  async function _loadPreviousChapter() {
     if (isLoadingPrevChapter || chapters.length === 0) return;
     isLoadingPrevChapter = true;
 
@@ -1050,7 +1035,7 @@
     }
   }
 
-  function handleTouchEnd(e: TouchEvent) {
+  function handleTouchEnd(_e: TouchEvent) {
     // Cancel long press if finger lifted before timer fires
     if (longPressTimer) {
       clearTimeout(longPressTimer);
@@ -1277,7 +1262,8 @@
     }
   }
 
-  function getClickOffset(element: HTMLElement, x: number): number {
+  // @ts-expect-error - Unused function kept for potential future use
+  function _getClickOffset(element: HTMLElement, x: number): number {
     const range = document.caretRangeFromPoint(x, 0);
     if (range && range.startContainer === element.firstChild) {
       return range.startOffset;

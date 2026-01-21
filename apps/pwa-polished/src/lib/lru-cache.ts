@@ -10,7 +10,7 @@ export class LRUCache<K, V> {
   private maxSize: number;
 
   constructor(maxSize: number = 500) {
-    this.cache = new Map();
+    this.cache = new Map<K, V>();
     this.maxSize = maxSize;
   }
 
@@ -38,7 +38,9 @@ export class LRUCache<K, V> {
     // Evict oldest if over capacity
     if (this.cache.size > this.maxSize) {
       const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
     }
   }
 
