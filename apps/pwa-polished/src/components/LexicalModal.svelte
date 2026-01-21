@@ -71,19 +71,15 @@
           // Store antonyms (TODO: display in UI)
         }
         
-        // Fetch definition from free dictionary API
-        loadingDefinition = true;
-        try {
-          const response = await fetch(
-            `https://api.dictionaryapi.dev/api/v2/entries/en/${lexicalEntries.word}`,
-          );
-          if (response.ok) {
-            englishDefinitions = await response.json();
-          }
-        } catch (err) {
-          console.log("Dictionary API failed:", err);
-        } finally {
-          loadingDefinition = false;
+        // Use offline definitions from dictionary pack (NO API CALL)
+        if (lexicalEntries.modern && lexicalEntries.modern.length > 0) {
+          console.log('✅ Using offline modern definitions:', lexicalEntries.modern.length);
+          // Modern definitions will be displayed separately
+        }
+        
+        if (lexicalEntries.historic && lexicalEntries.historic.length > 0) {
+          console.log('✅ Using offline historic definitions:', lexicalEntries.historic.length);
+          // Historic definitions will be displayed separately
         }
         
         loading = false;
@@ -475,6 +471,105 @@
                     {/each}
                   {/each}
                 {:else}
+                  <!-- Offline Dictionary Definitions -->
+                  {#if lexicalEntries && (lexicalEntries.modern.length > 0 || lexicalEntries.historic.length > 0)}
+                    <!-- Modern Definitions (Wiktionary) -->
+                    {#if lexicalEntries.modern.length > 0}
+                      <div class="info-section dictionary-section">
+                        <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
+                          📖 Modern Definitions
+                          <span style="font-size: 12px; color: #666; font-weight: normal;">Wiktionary</span>
+                        </h3>
+                        {#each lexicalEntries.modern as def, idx}
+                          <div class="definition-entry modern-def" style="margin-bottom: 16px;">
+                            <div style="display: flex; gap: 8px; align-items: start; margin-bottom: 4px;">
+                              {#if def.sense_number}
+                                <span class="sense-badge">{def.sense_number}</span>
+                              {/if}
+                              {#if def.pos}
+                                <span class="pos-pill" style="background: #e3f2fd; color: #1976d2; padding: 2px 8px; border-radius: 12px; font-size: 11px; text-transform: capitalize;">
+                                  {def.pos}
+                                </span>
+                              {/if}
+                              {#if def.tags}
+                                {#each def.tags.split(',') as tag}
+                                  <span class="tag-chip" style="background: {tag.includes('archaic') ? '#d7ccc8' : tag.includes('slang') ? '#e1bee7' : tag.includes('formal') ? '#c5cae9' : '#e0e0e0'}; padding: 2px 6px; border-radius: 10px; font-size: 10px;">
+                                    {tag.trim()}
+                                  </span>
+                                {/each}
+                              {/if}
+                            </div>
+                            <p class="definition-text" style="margin: 4px 0 4px 24px;">{def.definition}</p>
+                            {#if def.example}
+                              <p class="example-text" style="margin: 4px 0 4px 24px; color: #666; font-style: italic; font-size: 14px;">
+                                "{def.example}"
+                              </p>
+                            {/if}
+                            {#if def.etymology && idx === 0}
+                              <details style="margin: 8px 0 0 24px; font-size: 13px; color: #555;">
+                                <summary style="cursor: pointer; user-select: none; font-weight: 500;">Etymology</summary>
+                                <p style="margin: 4px 0; padding-left: 12px;">{def.etymology}</p>
+                                {#if def.raw_etymology && def.raw_etymology !== def.etymology}
+                                  <details style="margin: 4px 0; padding-left: 12px;">
+                                    <summary style="cursor: pointer; font-size: 12px; color: #777;">Show full chain</summary>
+                                    <p style="margin: 4px 0; font-size: 12px; color: #666;">{def.raw_etymology}</p>
+                                  </details>
+                                {/if}
+                              </details>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                    
+                    <!-- Historic Definitions (GCIDE/Webster 1913) -->
+                    {#if lexicalEntries.historic.length > 0}
+                      <div class="info-section dictionary-section">
+                        <h3 style="color: #8d6e63; display: flex; align-items: center; gap: 8px;">
+                          📜 Historic Definitions
+                          <span style="font-size: 12px; color: #666; font-weight: normal;">Webster 1913</span>
+                        </h3>
+                        {#each lexicalEntries.historic as def}
+                          <div class="definition-entry historic-def" style="margin-bottom: 12px; border-left: 3px solid #d7ccc8; padding-left: 12px;">
+                            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                              {#if def.sense_number}
+                                <span class="sense-badge" style="background: #d7ccc8; color: #5d4037;">{def.sense_number}</span>
+                              {/if}
+                              {#if def.pos}
+                                <span class="pos-pill" style="background: #efebe9; color: #5d4037; padding: 2px 8px; border-radius: 12px; font-size: 11px; text-transform: capitalize;">
+                                  {def.pos}
+                                </span>
+                              {/if}
+                            </div>
+                            <p class="definition-text" style="margin: 4px 0;">{def.definition}</p>
+                            {#if def.example}
+                              <p class="example-text" style="margin: 4px 0; color: #666; font-style: italic; font-size: 14px;">
+                                "{def.example}"
+                              </p>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                  {:else}
+                    <!-- No offline definitions available -->
+                    <div class="info-section">
+                      <h3>About This Word</h3>
+                      <p class="full-def">
+                        This is an English word from the Bible translation.
+                        {#if englishSynonyms.length > 0}
+                          See the Synonyms tab for {englishSynonyms.length} related words.
+                        {:else}
+                          For deeper study, look up the original Greek or Hebrew word from an interlinear Bible.
+                        {/if}
+                      </p>
+                      <p style="margin-top: 12px; padding: 12px; background: #e3f2fd; border-radius: 8px; font-size: 13px;">
+                        💡 Install the <strong>English Dictionary Pack</strong> from the Packs menu to get 6M+ offline definitions from Wiktionary + Webster 1913!
+                      </p>
+                    </div>
+                  {/if}
+                {:else}
+                  <!-- Old fallback for API definitions (deprecated) -->
                   <div class="info-section">
                     <h3>About This Word</h3>
                     <p class="full-def">
@@ -1082,6 +1177,59 @@
   .definition-list li {
     margin-bottom: 16px;
     line-height: 1.6;
+  }
+  
+  /* Dictionary definition styles */
+  .dictionary-section {
+    margin-bottom: 24px;
+  }
+  
+  .sense-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+    background: #4a90e2;
+    color: white;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  
+  .pos-pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+  
+  .tag-chip {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+  }
+  
+  .definition-entry {
+    transition: background 0.2s;
+  }
+  
+  .definition-entry:hover {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+  }
+  
+  .modern-def {
+    border-left: 3px solid #4a90e2;
+    padding-left: 12px;
+  }
+  
+  .historic-def {
+    background: rgba(141, 110, 99, 0.03);
+    border-radius: 4px;
+    padding: 8px;
   }
 
   .definition-text {

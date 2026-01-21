@@ -4,6 +4,7 @@
  */
 
 import { openDB } from './db.js';
+import { dictionaryCache } from '../lib/lru-cache.js';
 
 export interface Definition {
   id: number;
@@ -246,11 +247,19 @@ export async function lookupLemma(lemma: string): Promise<LexiconEntry | null> {
 export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry | null> {
   console.log('🔍 lookupEnglishWord called with:', word);
   
+  const normalizedWord = word.toLowerCase();
+  
+  // Check cache first
+  const cached = dictionaryCache.get(normalizedWord);
+  if (cached) {
+    console.log('✅ Cache hit for:', normalizedWord);
+    return cached;
+  }
+  
   try {
     const db = await openDB();
     console.log('✅ DB opened successfully');
     
-    const normalizedWord = word.toLowerCase();
     console.log('📝 Normalized word:', normalizedWord);
     
     // Look up the word in english_words
@@ -447,6 +456,10 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
     entry.historic = historicDefs;
     
     console.log('✅ Returning complete entry with', entry.synonyms.length, 'synonyms,', entry.modern.length, 'modern defs,', entry.historic.length, 'historic defs');
+    
+    // Cache the result
+    dictionaryCache.set(normalizedWord, entry);
+    
     return entry;
   } catch (error) {
     console.error('Error looking up English word:', error);

@@ -1038,6 +1038,116 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       }
       
       console.log(`✅ Lexicon pack ${packInfo.id} imported`);
+    } else if (packInfo.type === 'dictionary') {
+      // Import dictionary data (modern Wiktionary + historic GCIDE definitions)
+      console.log('Importing dictionary pack...');
+      
+      const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+      const tableNames = tables.length > 0 ? tables[0].values.map(row => row[0] as string) : [];
+      console.log('Available tables:', tableNames);
+      
+      const CHUNK_SIZE = 2000; // Larger chunks for massive definition datasets
+      
+      // Import modern definitions (Wiktionary)
+      if (tableNames.includes('english_definitions_modern')) {
+        console.log('Importing modern definitions (Wiktionary)...');
+        const rows = db.exec(`
+          SELECT id, word_id, pos, sense_number, definition_order, definition, 
+                 example, etymology, raw_etymology, tags, search_tokens, source, source_url
+          FROM english_definitions_modern
+        `);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([id, wordId, pos, senseNum, defOrder, def, ex, etym, rawEtym, tags, tokens, src, url]) => ({
+            id: id as number,
+            word_id: wordId as number,
+            pos: pos as string | null,
+            sense_number: senseNum as string | null,
+            definition_order: defOrder as number,
+            definition: def as string,
+            example: ex as string | null,
+            etymology: etym as string | null,
+            raw_etymology: rawEtym as string | null,
+            tags: tags as string | null,
+            search_tokens: tokens as string | null,
+            source: (src as string) || 'wiktionary',
+            source_url: url as string | null
+          }));
+          
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('english_definitions_modern', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+            
+            // Progress logging every 500k entries
+            if (i % 500000 === 0 || i + CHUNK_SIZE >= data.length) {
+              const progress = Math.min(i + CHUNK_SIZE, data.length);
+              const percent = Math.round((progress / data.length) * 100);
+              console.log(`Imported ${progress.toLocaleString()}/${data.length.toLocaleString()} modern definitions (${percent}%)`);
+            }
+          }
+          console.log(`✅ Modern definitions imported: ${data.length.toLocaleString()} entries`);
+        }
+      }
+      
+      // Import historic definitions (GCIDE/Webster 1913)
+      if (tableNames.includes('english_definitions_historic')) {
+        console.log('Importing historic definitions (GCIDE/Webster 1913)...');
+        const rows = db.exec(`
+          SELECT id, word_id, pos, sense_number, definition_order, definition, 
+                 example, search_tokens, source, source_url
+          FROM english_definitions_historic
+        `);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([id, wordId, pos, senseNum, defOrder, def, ex, tokens, src, url]) => ({
+            id: id as number,
+            word_id: wordId as number,
+            pos: pos as string | null,
+            sense_number: senseNum as string | null,
+            definition_order: defOrder as number,
+            definition: def as string,
+            example: ex as string | null,
+            search_tokens: tokens as string | null,
+            source: (src as string) || 'gcide',
+            source_url: url as string | null
+          }));
+          
+          const HISTORIC_CHUNK = 1000; // Smaller chunks for historic definitions
+          for (let i = 0; i < data.length; i += HISTORIC_CHUNK) {
+            const chunk = data.slice(i, i + HISTORIC_CHUNK);
+            await batchWriteTransaction('english_definitions_historic', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+            console.log(`Imported ${Math.min(i + HISTORIC_CHUNK, data.length).toLocaleString()}/${data.length.toLocaleString()} historic definitions`);
+          }
+          console.log(`✅ Historic definitions imported: ${data.length.toLocaleString()} entries`);
+        }
+      }
+      
+      // Import word mapping (lemma → word_id)
+      if (tableNames.includes('word_mapping')) {
+        console.log('Importing word mapping...');
+        const rows = db.exec(`SELECT lemma, word_id FROM word_mapping`);
+        
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([lemma, wordId]) => ({
+            lemma: lemma as string,
+            word_id: wordId as number
+          }));
+          
+          // Word mapping can be large, use larger chunks
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            // Note: word_mapping store needs to be added to db.ts if used
+            // For now, skip if store doesn't exist
+            console.log(`Word mapping: ${data.length.toLocaleString()} entries (skipped - store not yet created)`);
+          }
+        }
+      }
+      
+      console.log(`✅ Dictionary pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'study') {
       // Import study tools data (cross-references, chronological ordering, etc.)
       console.log('Importing study tools pack...');
