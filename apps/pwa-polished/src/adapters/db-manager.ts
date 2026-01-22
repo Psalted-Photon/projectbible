@@ -7,6 +7,8 @@
  * - Export/import data
  */
 
+import { openDB } from './db';
+
 const DB_NAME = 'projectbible';
 
 export interface DBStats {
@@ -24,7 +26,7 @@ export interface DBStats {
  * Get statistics about current database
  */
 export async function getDatabaseStats(): Promise<DBStats> {
-  const db = await openDatabase();
+  const db = await openDB();
   
   try {
     const stats: DBStats = {
@@ -77,7 +79,7 @@ export async function clearAllData(): Promise<void> {
  * Remove a specific pack and all its data
  */
 export async function removePack(packId: string): Promise<void> {
-  const db = await openDatabase();
+  const db = await openDB();
   
   try {
     const tx = db.transaction(['packs', 'verses', 'places', 'map_tiles', 'historical_layers', 'morphology'], 'readwrite');
@@ -181,7 +183,7 @@ export async function removePack(packId: string): Promise<void> {
  * Keeps user notes, highlights, bookmarks
  */
 export async function clearPacksOnly(): Promise<void> {
-  const db = await openDatabase();
+  const db = await openDB();
   
   try {
     const tx = db.transaction(
@@ -209,7 +211,7 @@ export async function clearPacksOnly(): Promise<void> {
  * List all installed packs
  */
 export async function listInstalledPacks(): Promise<Array<{ id: string; type: string; version: string; size: number }>> {
-  const db = await openDatabase();
+  const db = await openDB();
   
   try {
     const tx = db.transaction('packs', 'readonly');
@@ -234,14 +236,6 @@ export async function listInstalledPacks(): Promise<Array<{ id: string; type: st
 }
 
 // ===== Helper functions =====
-
-function openDatabase(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
 
 function countRecords(db: IDBDatabase, storeName: string): Promise<number> {
   return new Promise((resolve, reject) => {

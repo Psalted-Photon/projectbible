@@ -9,7 +9,7 @@
 
 import { loadBootstrap } from './bootstrap-loader';
 import { APP_VERSION, PACK_MANIFEST_URL, USE_BUNDLED_PACKS, FEATURES } from '../config';
-import { importPackFromSQLite } from '../adapters/pack-import';
+import { importPackFromSQLite, importPackFromUrl } from '../adapters/pack-import';
 import { listInstalledPacks as listInstalledPacksFromDb, removePack as removePackFromDb } from '../adapters/db-manager';
 import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
@@ -105,29 +105,51 @@ export async function loadPackOnDemand(
     }
 
     const loader = getPackLoaderInstance();
-    const data = await loader.downloadPack(packId);
+    try {
+      const data = await loader.downloadPack(packId);
 
-    onProgress?.({
-      packId,
-      loaded: data.length,
-      total: data.length,
-      percentage: 100,
-      stage: 'extracting'
-    });
+      onProgress?.({
+        packId,
+        loaded: data.length,
+        total: data.length,
+        percentage: 100,
+        stage: 'extracting'
+      });
 
-    const file = new File([data], `${packId}.sqlite`, {
-      type: 'application/x-sqlite3'
-    });
+      const file = new File([data], `${packId}.sqlite`, {
+        type: 'application/x-sqlite3'
+      });
 
-    await importPackFromSQLite(file);
+      await importPackFromSQLite(file);
 
-    onProgress?.({
-      packId,
-      loaded: data.length,
-      total: data.length,
-      percentage: 100,
-      stage: 'complete'
-    });
+      onProgress?.({
+        packId,
+        loaded: data.length,
+        total: data.length,
+        percentage: 100,
+        stage: 'complete'
+      });
+    } catch (error) {
+      console.warn(`Pack download failed for ${packId}, trying bundled fallback`, error);
+
+      onProgress?.({
+        packId,
+        loaded: 0,
+        total: 1,
+        percentage: 0,
+        stage: 'downloading'
+      });
+
+      await importPackFromUrl(`/packs/consolidated/${packId}.sqlite`);
+
+      onProgress?.({
+        packId,
+        loaded: 1,
+        total: 1,
+        percentage: 100,
+        stage: 'complete'
+      });
+    }
   } finally {
     setProgressHandler();
   }
