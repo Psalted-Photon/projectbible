@@ -1136,14 +1136,21 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             lemma: lemma as string,
             word_id: wordId as number
           }));
-          
+
           // Word mapping can be large, use larger chunks
           for (let i = 0; i < data.length; i += CHUNK_SIZE) {
             const chunk = data.slice(i, i + CHUNK_SIZE);
-            // Note: word_mapping store needs to be added to db.ts if used
-            // For now, skip if store doesn't exist
-            console.log(`Word mapping: ${data.length.toLocaleString()} entries (skipped - store not yet created)`);
+            await batchWriteTransaction('word_mapping', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+
+            if (i % 500000 === 0 || i + CHUNK_SIZE >= data.length) {
+              const progress = Math.min(i + CHUNK_SIZE, data.length);
+              const percent = Math.round((progress / data.length) * 100);
+              console.log(`Imported ${progress.toLocaleString()}/${data.length.toLocaleString()} word mappings (${percent}%)`);
+            }
           }
+          console.log(`✅ Word mapping imported: ${data.length.toLocaleString()} entries`);
         }
       }
       

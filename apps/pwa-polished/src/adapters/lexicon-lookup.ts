@@ -311,19 +311,35 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
     
     console.log('📦 Word data retrieved:', wordData);
     
-    if (!wordData) {
-      console.log('❌ No word data found for:', normalizedWord);
+    let dictionaryWordId: number | null = null;
+    if (db.objectStoreNames.contains('word_mapping')) {
+      console.log('🔍 Looking up dictionary word mapping for:', normalizedWord);
+      dictionaryWordId = await new Promise<number | null>((resolve) => {
+        const tx = db.transaction('word_mapping', 'readonly');
+        const store = tx.objectStore('word_mapping');
+        const request = store.get(normalizedWord);
+        request.onsuccess = () => resolve(request.result?.word_id ?? null);
+        request.onerror = () => resolve(null);
+      });
+    } else {
+      console.log('⚠️ word_mapping store not found');
+    }
+
+    if (!wordData && !dictionaryWordId) {
+      console.log('❌ No word data or dictionary mapping found for:', normalizedWord);
       return null;
     }
     
-    console.log('✅ Found word data:', wordData);
+    if (wordData) {
+      console.log('✅ Found word data:', wordData);
+    }
     
     const entry: EnglishWordEntry = {
-      id: wordData.id,
-      word: wordData.word,
-      ipa_us: wordData.ipa_us,
-      ipa_uk: wordData.ipa_uk,
-      pos: wordData.pos,
+      id: wordData?.id ?? dictionaryWordId ?? normalizedWord,
+      word: wordData?.word ?? normalizedWord,
+      ipa_us: wordData?.ipa_us ?? null,
+      ipa_uk: wordData?.ipa_uk ?? null,
+      pos: wordData?.pos ?? null,
       synonyms: [],
       antonyms: [],
       modern: [],
@@ -396,7 +412,12 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
     entry.grammar = grammar;
     
     // Look up modern definitions (Wiktionary)
-    console.log('🔍 Looking up modern definitions for word_id:', wordData.id);
+    const definitionWordId = dictionaryWordId ?? wordData?.id ?? null;
+    if (!definitionWordId) {
+      console.log('⚠️ No word_id available for definitions');
+    }
+
+    console.log('🔍 Looking up modern definitions for word_id:', definitionWordId);
     const modernDefs = await new Promise<Definition[]>((resolve) => {
       // Check if dictionary pack is installed
       if (!db.objectStoreNames.contains('english_definitions_modern')) {
@@ -404,11 +425,16 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
         resolve([]);
         return;
       }
+
+      if (!definitionWordId) {
+        resolve([]);
+        return;
+      }
       
       const tx = db.transaction('english_definitions_modern', 'readonly');
       const store = tx.objectStore('english_definitions_modern');
       const index = store.index('word_id');
-      const request = index.getAll(wordData.id);
+      const request = index.getAll(definitionWordId);
       
       request.onsuccess = () => {
         const results = (request.result || []) as Definition[];
@@ -426,7 +452,7 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
     entry.modern = modernDefs;
     
     // Look up historic definitions (GCIDE/Webster 1913)
-    console.log('🔍 Looking up historic definitions for word_id:', wordData.id);
+    console.log('🔍 Looking up historic definitions for word_id:', definitionWordId);
     const historicDefs = await new Promise<Definition[]>((resolve) => {
       // Check if dictionary pack is installed
       if (!db.objectStoreNames.contains('english_definitions_historic')) {
@@ -434,11 +460,16 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
         resolve([]);
         return;
       }
+
+      if (!definitionWordId) {
+        resolve([]);
+        return;
+      }
       
       const tx = db.transaction('english_definitions_historic', 'readonly');
       const store = tx.objectStore('english_definitions_historic');
       const index = store.index('word_id');
-      const request = index.getAll(wordData.id);
+      const request = index.getAll(definitionWordId);
       
       request.onsuccess = () => {
         const results = (request.result || []) as Definition[];

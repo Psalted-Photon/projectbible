@@ -1,13 +1,33 @@
 // parse-wiktionary.mjs
-// Streaming Wiktionary XML → english_definitions_modern rows
-// This is scaffolding. Claude will fill in the TODO sections.
+// Streaming Wiktionary XML → english_definitions_modern rows with content safety filtering
 
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { createReadStream } from "fs";
 import sax from "sax";
 import { normalizeLemma, normalizePOS } from "./helpers/normalize.js";
 import { OutputWriter } from "./helpers/output.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load blocklist
+const blocklistFile = path.join(__dirname, 'blocked-tags.json');
+if (!fs.existsSync(blocklistFile)) {
+  console.error('❌ Error: blocked-tags.json not found');
+  console.error('   Run filter-questionable-tags.mjs first\n');
+  process.exit(1);
+}
+
+const blocklist = JSON.parse(fs.readFileSync(blocklistFile, 'utf8'));
+const blockedTags = new Set(blocklist.blocked.map(t => t.toLowerCase()));
+
+console.log(`🛡️  Loaded ${blockedTags.size} blocked tags for content filtering`);
+
+let definitionsBlocked = 0;
+let definitionsExtracted = 0;
+let pagesProcessed = 0;
 
 const inputFile = process.argv[2];
 if (!inputFile) {
@@ -55,6 +75,13 @@ parser.on("closetag", (name) => {
   }
   if (name === "page") {
     processPage(currentPage);
+    pagesProcessed++;
+    
+    // Log progress every 1000 pages
+    if (pagesProcessed % 1000 === 0) {
+      console.log(`Processed ${(pagesProcessed/1000).toFixed(0)}k pages, extracted ${definitionsExtracted.toLocaleString()} (blocked ${definitionsBlocked.toLocaleString()})...`);
+    }
+    
     currentPage = null;
   }
 });
@@ -65,7 +92,7 @@ function processPage(page) {
   const lemma = normalizeLemma(page.title);
   const lines = page.text.split("\n");
 
-  // Find English section
+  // Find English section (permissive)
   let inEnglish = false;
   let currentPOS = null;
   let currentEtymology = null;
@@ -74,33 +101,65 @@ function processPage(page) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
 
-    // Detect English section
-    if (line === "==English==") {
+    // Detect English section (allow whitespace)
+    if (line.match(/^==\s*English\s*==/i)) {
       inEnglish = true;
       continue;
     }
 
-    // Exit English section
-    if (inEnglish && line.startsWith("==") && line !== "==English==") {
-      inEnglish = false;
-      continue;
+    // Exit English section on next level-2 header
+    if (inEnglish && line.match(/^==\s*[^=]/)) {
+      if (!line.match(/^==\s*English\s*==/i)) {
+        inEnglish = false;
+        continue;
+      }
     }
 
     if (!inEnglish) continue;
 
-    // Extract POS sections
-    const posMatch = line.match(/^===\s*(Noun|Verb|Adjective|Adverb|Pronoun|Preposition|Conjunction|Interjection|Determiner|Article|Participle|Proper noun)\s*===/i);
+    // Extract POS sections (allow level-3 or level-4 headers)
+    const posMatch = line.match(/^====?=\s*([A-Za-z ][A-Za-z -]*?)\s*====?=/);
     if (posMatch) {
-      currentPOS = normalizePOS(posMatch[1]);
-      definitionOrder = 0;
+      const rawPOS = posMatch[1].trim();
+      const posLower = rawPOS.toLowerCase();
+      if (
+        posLower.includes("noun") ||
+        posLower.includes("verb") ||
+        posLower.includes("adjective") ||
+        posLower.includes("adverb") ||
+        posLower.includes("pronoun") ||
+        posLower.includes("preposition") ||
+        posLower.includes("conjunction") ||
+        posLower.includes("interjection") ||
+        posLower.includes("determiner") ||
+        posLower.includes("article") ||
+        posLower.includes("participle") ||
+        posLower.includes("proper noun") ||
+        posLower.includes("numeral") ||
+        posLower.includes("particle") ||
+        posLower.includes("prefix") ||
+        posLower.includes("suffix") ||
+        posLower.includes("letter") ||
+        posLower.includes("symbol") ||
+        posLower.includes("initialism") ||
+        posLower.includes("acronym") ||
+        posLower.includes("abbreviation") ||
+        posLower.includes("contraction") ||
+        posLower.includes("phrase") ||
+        posLower.includes("proverb") ||
+        posLower.includes("idiom")
+      ) {
+        currentPOS = normalizePOS(rawPOS);
+        definitionOrder = 0;
+      }
       continue;
     }
 
-    // Extract Etymology
-    if (line.match(/^===\s*Etymology/i)) {
+    // Extract Etymology (permissive)
+    if (line.match(/^==+\s*Etymology.*?==+/i)) {
       currentEtymology = "";
       let j = i + 1;
-      while (j < lines.length && !lines[j].trim().startsWith("===") && !lines[j].trim().startsWith("==")) {
+      while (j < lines.length && !lines[j].trim().match(/^===/) && !lines[j].trim().match(/^==/)) {
         const etymLine = lines[j].trim();
         if (etymLine && !etymLine.startsWith("#") && !etymLine.startsWith("*")) {
           currentEtymology += cleanWikiMarkup(etymLine) + " ";
@@ -112,19 +171,34 @@ function processPage(page) {
     }
 
     // Extract senses (definitions)
-    if (currentPOS && line.match(/^#+\s+/)) {
+    const defMatch = line.match(/^#+\s*(.*)$/);
+    if (currentPOS && defMatch) {
       // Skip examples and nested items
-      if (line.match(/^##[:#]/)) continue;
+      if (line.match(/^##[:#*]/)) continue;
 
-      const defText = line.replace(/^#+\s*/, "");
+      const defText = defMatch[1];
+      
+      // Extract tags BEFORE cleaning (templates contain tag info)
+      const tags = extractTags(defText);
+      
+      // Check for blocked tags - skip this definition if found
+      if (hasBlockedTag(tags)) {
+        definitionsBlocked++;
+        continue;
+      }
+      
       const cleaned = cleanWikiMarkup(defText);
 
       if (cleaned.length === 0) continue;
-
-      // Extract tags
-      const tags = extractTags(cleaned);
+      if (/^[\s:*]+$/.test(cleaned)) continue;
+      if (!/[A-Za-z]/.test(cleaned)) continue;
 
       definitionOrder++;
+      definitionsExtracted++;
+
+      const sourceUrl = page.title
+        ? `https://en.wiktionary.org/wiki/${encodeURIComponent(page.title)}`
+        : null;
 
       writer.write({
         word: lemma,
@@ -132,7 +206,9 @@ function processPage(page) {
         definition_order: definitionOrder,
         definition_text: cleaned,
         etymology: currentEtymology || "",
-        tags: tags
+        tags: tags.length > 0 ? tags : undefined,
+        source: "wiktionary",
+        source_url: sourceUrl
       });
     }
   }
@@ -161,29 +237,58 @@ function cleanWikiMarkup(text) {
 
 function extractTags(text) {
   const tags = [];
-  const tagPatterns = [
-    /\b(archaic|obsolete)\b/i,
-    /\b(slang|colloquial)\b/i,
-    /\b(dated|old-fashioned)\b/i,
-    /\b(formal|literary)\b/i,
-    /\b(informal|casual)\b/i,
-    /\b(vulgar|offensive)\b/i,
-    /\b(poetic|rare)\b/i
-  ];
-
-  for (const pattern of tagPatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      tags.push(match[1].toLowerCase());
+  
+  // {{label|en|tag1|tag2|...}} or {{lb|en|...}}
+  const labelPattern = /\{\{(?:label|lb|lbl)\|en\|([^}]+)\}\}/gi;
+  let match;
+  while ((match = labelPattern.exec(text)) !== null) {
+    const params = match[1].split('|').map(s => s.trim());
+    tags.push(...params.filter(p => p && !p.startsWith('_')));
+  }
+  
+  // {{q|tag}}, {{qualifier|tag}}, {{i|tag}}
+  const qualifierPattern = /\{\{(?:q|qualifier|i)\|([^}]+)\}\}/gi;
+  while ((match = qualifierPattern.exec(text)) !== null) {
+    tags.push(match[1].trim());
+  }
+  
+  // {{context|tag}} or {{cx|tag}}
+  const contextPattern = /\{\{(?:context|cx)\|([^}]+)\}\}/gi;
+  while ((match = contextPattern.exec(text)) !== null) {
+    const params = match[1].split('|').map(s => s.trim());
+    tags.push(...params.filter(p => p && !p.startsWith('_')));
+  }
+  
+  // Parenthetical tags (tag) - only short ones that look like usage labels
+  const parenPattern = /\(([^)]{1,40})\)/g;
+  while ((match = parenPattern.exec(text)) !== null) {
+    const tag = match[1].trim();
+    // Skip if it looks like an example or explanation
+    if (!tag.includes('see') && !tag.includes('example') && tag.split(' ').length <= 3) {
+      tags.push(tag);
     }
   }
+  
+  return tags.map(t => t.toLowerCase().trim());
+}
 
-  return tags;
+// Check if any tag is in the blocklist
+function hasBlockedTag(tags) {
+  return tags.some(tag => blockedTags.has(tag));
 }
 
 parser.on("end", () => {
   writer.close();
-  console.log("Wiktionary parsing complete.");
+  
+  const totalDefinitions = definitionsExtracted + definitionsBlocked;
+  const blockRate = totalDefinitions > 0 ? (definitionsBlocked / totalDefinitions * 100).toFixed(2) : 0;
+  
+  console.log(`\n✅ Wiktionary parsing complete!`);
+  console.log(`   Pages processed: ${pagesProcessed.toLocaleString()}`);
+  console.log(`   Definitions extracted: ${definitionsExtracted.toLocaleString()}`);
+  console.log(`   Definitions blocked: ${definitionsBlocked.toLocaleString()}`);
+  console.log(`   Block rate: ${blockRate}%`);
+  console.log(`   Output: wiktionary-modern.ndjson\n`);
 });
 
 createReadStream(inputFile).pipe(parser);

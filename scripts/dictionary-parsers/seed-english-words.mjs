@@ -19,14 +19,22 @@ import Database from 'better-sqlite3';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const WIKTIONARY_NDJSON = process.argv[2] || 'wiktionary-modern.ndjson';
+const defaultWiktionary = fs.existsSync('wiktionary-modern-clean.ndjson')
+  ? 'wiktionary-modern-clean.ndjson'
+  : 'wiktionary-modern.ndjson';
+
+const WIKTIONARY_NDJSON = process.argv[2] || defaultWiktionary;
 const GCIDE_NDJSON = process.argv[3] || 'gcide-historic.ndjson';
 const OUTPUT_DB = process.argv[4] || path.join(__dirname, '../../packs/consolidated/dictionary-en.sqlite');
+const MAPPING_OUT = process.argv[5] || path.join(__dirname, '../../data-manifests/word-mapping.ndjson');
+const MAPPING_REVERSE_OUT = process.argv[6] || path.join(__dirname, '../../data-manifests/word-mapping-reverse.ndjson');
 
 console.log('📚 Seeding English Words & Mapping\n');
 console.log(`   Wiktionary: ${WIKTIONARY_NDJSON}`);
 console.log(`   GCIDE: ${GCIDE_NDJSON}`);
 console.log(`   Output: ${OUTPUT_DB}\n`);
+console.log(`   Mapping: ${MAPPING_OUT}`);
+console.log(`   Reverse: ${MAPPING_REVERSE_OUT}\n`);
 
 if (!fs.existsSync(WIKTIONARY_NDJSON) || !fs.existsSync(GCIDE_NDJSON)) {
   console.error('❌ Input files not found. Run parsers first.');
@@ -131,6 +139,26 @@ async function seedWordMapping() {
   // Verify
   const count = db.prepare('SELECT COUNT(*) as count FROM word_mapping').get();
   console.log(`✅ Verification: ${count.count.toLocaleString()} rows in word_mapping`);
+
+  console.log('\n🧾 Writing mapping files...');
+  const mappingDir = path.dirname(MAPPING_OUT);
+  if (!fs.existsSync(mappingDir)) {
+    fs.mkdirSync(mappingDir, { recursive: true });
+  }
+
+  const mappingStream = fs.createWriteStream(MAPPING_OUT, { flags: 'w' });
+  const reverseStream = fs.createWriteStream(MAPPING_REVERSE_OUT, { flags: 'w' });
+
+  let wordId = 1;
+  for (const lemma of sortedLemmas) {
+    mappingStream.write(JSON.stringify({ lemma, word_id: wordId }) + '\n');
+    reverseStream.write(JSON.stringify({ word_id: wordId, lemma }) + '\n');
+    wordId++;
+  }
+
+  mappingStream.end();
+  reverseStream.end();
+  console.log('   ✅ Mapping files written');
 }
 
 // Run seeder

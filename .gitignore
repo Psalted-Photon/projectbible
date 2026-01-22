@@ -10,6 +10,17 @@ dist/
 # Ignore generated data sources, but allow final packs
 data-sources/
 
+# Large build artifacts (dictionary pipeline)
+data/raw/
+data/processed/
+scripts/dictionary-parsers/*.ndjson
+scripts/dictionary-parsers/*.ndjson*
+scripts/dictionary-parsers/gcide-historic.ndjson
+wiktionary-modern.ndjson
+wiktionary-modern-clean.ndjson
+packs/consolidated/*.sqlite-shm
+packs/consolidated/*.sqlite-wal
+
 # BSB Audio pack - too large for GitHub (3.4GB MP3s)
 # Users can rebuild with: npm run build:bsb-audio
 packs/bsb-audio/audio/

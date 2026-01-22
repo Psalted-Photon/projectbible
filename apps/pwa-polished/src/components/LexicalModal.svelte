@@ -446,7 +446,9 @@
                       <span>Loading definition...</span>
                     </div>
                   </div>
-                {:else if englishDefinitions.length > 0}
+                {/if}
+
+                {#if englishDefinitions.length > 0}
                   {#each englishDefinitions as entry}
                     {#each entry.meanings || [] as meaning}
                       <div class="info-section">
@@ -474,16 +476,18 @@
                       </div>
                     {/each}
                   {/each}
-                {:else if lexicalEntries && (lexicalEntries.modern?.length > 0 || lexicalEntries.historic?.length > 0)}
+                {/if}
+
+                {#if lexicalEntries && (lexicalEntries.modern?.length > 0 || lexicalEntries.historic?.length > 0)}
                   <!-- Offline Dictionary Definitions from Dictionary Pack -->
                   
                   <!-- Modern Definitions (Wiktionary) -->
-                  {#if lexicalEntries.modern && lexicalEntries.modern.length > 0}
-                    <div class="info-section">
-                      <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
-                        📖 Modern Definitions
-                        <span style="font-size: 12px; color: #666; font-weight: normal;">Wiktionary</span>
-                      </h3>
+                  <div class="info-section">
+                    <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
+                      📖 Modern Definitions
+                      <span style="font-size: 12px; color: #666; font-weight: normal;">Wiktionary</span>
+                    </h3>
+                    {#if lexicalEntries.modern && lexicalEntries.modern.length > 0}
                       {#each lexicalEntries.modern as def, idx}
                         <div class="modern-def" style="margin-bottom: 16px;">
                           <div style="display: flex; gap: 8px; align-items: start; margin-bottom: 4px;">
@@ -523,16 +527,20 @@
                           {/if}
                         </div>
                       {/each}
-                    </div>
-                  {/if}
+                    {:else}
+                      <p class="definition-text" style="margin: 6px 0 0; color: #777; font-size: 13px;">
+                        No modern definitions available for this word.
+                      </p>
+                    {/if}
+                  </div>
                   
                   <!-- Historic Definitions (GCIDE/Webster 1913) -->
-                  {#if lexicalEntries.historic && lexicalEntries.historic.length > 0}
-                    <div class="info-section">
-                      <h3 style="color: #8d6e63; display: flex; align-items: center; gap: 8px;">
-                        📜 Historic Definitions
-                        <span style="font-size: 12px; color: #666; font-weight: normal;">Webster 1913</span>
-                      </h3>
+                  <div class="info-section">
+                    <h3 style="color: #8d6e63; display: flex; align-items: center; gap: 8px;">
+                      📜 Historic Definitions
+                      <span style="font-size: 12px; color: #666; font-weight: normal;">Webster 1913</span>
+                    </h3>
+                    {#if lexicalEntries.historic && lexicalEntries.historic.length > 0}
                       {#each lexicalEntries.historic as def}
                         <div class="historic-def" style="margin-bottom: 12px; border-left: 3px solid #d7ccc8; padding-left: 12px;">
                           <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
@@ -553,9 +561,15 @@
                           {/if}
                         </div>
                       {/each}
-                    </div>
-                  {/if}
-                {:else}
+                    {:else}
+                      <p class="definition-text" style="margin: 6px 0 0; color: #777; font-size: 13px;">
+                        No historic definitions available for this word.
+                      </p>
+                    {/if}
+                  </div>
+                {/if}
+
+                {#if !loadingDefinition && englishDefinitions.length === 0 && (!lexicalEntries || (lexicalEntries.modern?.length === 0 && lexicalEntries.historic?.length === 0))}
                   <!-- No offline definitions available -->
                   <div class="info-section">
                     <h3>About This Word</h3>

@@ -16,7 +16,11 @@ import Database from 'better-sqlite3';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const WIKTIONARY_NDJSON = process.argv[2] || 'wiktionary-modern.ndjson';
+const defaultWiktionary = fs.existsSync('wiktionary-modern-clean.ndjson')
+  ? 'wiktionary-modern-clean.ndjson'
+  : 'wiktionary-modern.ndjson';
+
+const WIKTIONARY_NDJSON = process.argv[2] || defaultWiktionary;
 const GCIDE_NDJSON = process.argv[3] || 'gcide-historic.ndjson';
 const OUTPUT_DB = process.argv[4] || path.join(__dirname, '../../packs/consolidated/dictionary-en.sqlite');
 
@@ -49,6 +53,11 @@ console.log('🏗️  Ensuring schema exists...');
 // Create schema (idempotent)
 db.exec(`
   CREATE TABLE IF NOT EXISTS pack_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS metadata (
     key TEXT PRIMARY KEY,
     value TEXT
   );
@@ -136,8 +145,8 @@ async function importModern() {
   
   const insert = db.prepare(`
     INSERT INTO english_definitions_modern 
-    (word_id, pos, definition_order, definition, etymology, tags)
-    VALUES (?, ?, ?, ?, ?, ?)
+    (word_id, pos, sense_number, definition_order, definition, example, etymology, raw_etymology, tags, search_tokens, source, source_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
   const fileStream = fs.createReadStream(WIKTIONARY_NDJSON);
@@ -148,7 +157,20 @@ async function importModern() {
   
   const insertBatch = db.transaction((rows) => {
     for (const row of rows) {
-      insert.run(row.word_id, row.pos, row.definition_order, row.definition_text, row.etymology, JSON.stringify(row.tags));
+      insert.run(
+        row.word_id,
+        row.pos,
+        row.sense_number,
+        row.definition_order,
+        row.definition_text,
+        row.example,
+        row.etymology,
+        row.raw_etymology,
+        row.tags ? JSON.stringify(row.tags) : null,
+        row.search_tokens,
+        row.source,
+        row.source_url
+      );
     }
   });
   
@@ -170,11 +192,17 @@ async function importModern() {
       
       batch.push({
         word_id: wordId,
-        pos: row.pos,
+        pos: row.pos || null,
+        sense_number: row.sense_number || null,
         definition_order: row.definition_order,
         definition_text: row.definition_text,
+        example: row.example || null,
         etymology: row.etymology || null,
-        tags: row.tags || []
+        raw_etymology: row.raw_etymology || null,
+        tags: row.tags || null,
+        search_tokens: row.search_tokens || null,
+        source: row.source || 'wiktionary',
+        source_url: row.source_url || null
       });
       
       if (batch.length >= 5000) {
@@ -215,8 +243,8 @@ async function importHistoric() {
   
   const insert = db.prepare(`
     INSERT INTO english_definitions_historic 
-    (word_id, pos, definition_order, definition)
-    VALUES (?, ?, ?, ?)
+    (word_id, pos, sense_number, definition_order, definition, example, search_tokens, source, source_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
   const fileStream = fs.createReadStream(GCIDE_NDJSON);
@@ -227,7 +255,17 @@ async function importHistoric() {
   
   const insertBatch = db.transaction((rows) => {
     for (const row of rows) {
-      insert.run(row.word_id, row.pos, row.definition_order, row.definition_text);
+      insert.run(
+        row.word_id,
+        row.pos,
+        row.sense_number,
+        row.definition_order,
+        row.definition_text,
+        row.example,
+        row.search_tokens,
+        row.source,
+        row.source_url
+      );
     }
   });
   
@@ -249,9 +287,14 @@ async function importHistoric() {
       
       batch.push({
         word_id: wordId,
-        pos: row.pos,
+        pos: row.pos || null,
+        sense_number: row.sense_number || null,
         definition_order: row.definition_order,
-        definition_text: row.definition_text
+        definition_text: row.definition_text,
+        example: row.example || null,
+        search_tokens: row.search_tokens || null,
+        source: row.source || 'gcide',
+        source_url: row.source_url || null
       });
       
       if (batch.length >= 5000) {
@@ -294,7 +337,7 @@ function insertMetadata() {
     language: 'en',
     version: '1.0.0',
     schemaVersion: '13',
-    description: '6M+ definitions from Wiktionary + Webster 1913',
+    description: 'Modern Wiktionary + Webster 1913 definitions',
     build_date: new Date().toISOString(),
     sources: JSON.stringify([
       { name: 'Wiktionary', url: 'https://en.wiktionary.org/', license: 'CC BY-SA 3.0' },
@@ -302,9 +345,25 @@ function insertMetadata() {
     ])
   };
   
-  const insertMeta = db.prepare('INSERT OR REPLACE INTO pack_metadata (key, value) VALUES (?, ?)');
+  const insertPackMeta = db.prepare('INSERT OR REPLACE INTO pack_metadata (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(metadata)) {
-    insertMeta.run(key, value.toString());
+    insertPackMeta.run(key, value.toString());
+  }
+
+  const standardMeta = {
+    pack_id: metadata.id,
+    pack_type: metadata.type,
+    pack_version: metadata.version,
+    name: metadata.name,
+    language: metadata.language,
+    description: metadata.description,
+    build_date: metadata.build_date,
+    sources: metadata.sources
+  };
+
+  const insertStandardMeta = db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)');
+  for (const [key, value] of Object.entries(standardMeta)) {
+    insertStandardMeta.run(key, value.toString());
   }
   
   console.log('   ✅ Metadata inserted\n');
@@ -317,8 +376,8 @@ function runIntegrityChecks() {
   console.log('🔍 Running integrity checks...');
   
   // Check for null definitions
-  const nullModern = db.prepare('SELECT COUNT(*) as count FROM english_definitions_modern WHERE definition IS NULL OR definition = ""').get();
-  const nullHistoric = db.prepare('SELECT COUNT(*) as count FROM english_definitions_historic WHERE definition IS NULL OR definition = ""').get();
+  const nullModern = db.prepare("SELECT COUNT(*) as count FROM english_definitions_modern WHERE definition IS NULL OR definition = ''").get();
+  const nullHistoric = db.prepare("SELECT COUNT(*) as count FROM english_definitions_historic WHERE definition IS NULL OR definition = ''").get();
   
   if (nullModern.count > 0) {
     console.warn(`   ⚠️  Found ${nullModern.count} null modern definitions`);

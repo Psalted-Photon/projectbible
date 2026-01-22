@@ -20,7 +20,10 @@ let inDef = false;
 let currentPOS = null;
 let inPOS = false;
 
-const parser = sax.createStream(true, { trim: true });
+const parser = sax.createStream(false, { 
+  trim: true,
+  MAX_BUFFER_LENGTH: 100000 // Increase buffer for long entries
+}); // Use non-strict mode for GCIDE markup
 
 parser.on("opentag", (node) => {
   if (node.name === "entry") {
@@ -111,10 +114,12 @@ function processEntry(entry) {
     // Extract GCIDE numbering if present (e.g., "1a.", "2b.", etc.)
     const numberMatch = cleaned.match(/^(\d+[a-z]?)\.\s*/);
     let definitionOrder = i + 1;
+    let senseNumber = null;
     
     if (numberMatch) {
       // Remove the numbering from the definition text
       cleaned = cleaned.replace(/^\d+[a-z]?\.\s*/, "");
+      senseNumber = numberMatch[1];
       
       // Parse the numbering for better ordering
       const num = numberMatch[1];
@@ -134,8 +139,11 @@ function processEntry(entry) {
     writer.write({
       word: lemma,
       pos: pos,
+      sense_number: senseNumber,
       definition_order: Math.round(definitionOrder * 10) / 10, // Keep one decimal
-      definition_text: cleaned
+      definition_text: cleaned,
+      source: "gcide",
+      source_url: null
     });
   });
 }

@@ -11,7 +11,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 13; // Updated for dictionary pack (english_definitions_modern, english_definitions_historic)
+const DB_VERSION = 15; // Added word_mapping store for dictionary lookups
 
 export interface DBPack {
   id: string;
@@ -423,6 +423,12 @@ export function openDB(): Promise<IDBDatabase> {
         const modernStore = db.createObjectStore('english_definitions_modern', { keyPath: 'id', autoIncrement: true });
         modernStore.createIndex('word_id', 'word_id', { unique: false });
         modernStore.createIndex('word_order', ['word_id', 'definition_order'], { unique: false });
+      }
+
+      // Word mapping (lemma -> word_id) for dictionary packs
+      if (!db.objectStoreNames.contains('word_mapping')) {
+        const mappingStore = db.createObjectStore('word_mapping', { keyPath: 'lemma' });
+        mappingStore.createIndex('word_id', 'word_id', { unique: false });
       }
       
       // English definitions (historic) - GCIDE/Webster 1913

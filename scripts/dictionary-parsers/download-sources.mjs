@@ -40,7 +40,7 @@ const SOURCES = {
     output: 'enwiktionary.xml'
   },
   gcide: {
-    url: 'https://ftp.gnu.org/gnu/gcide/gcide-0.53.tar.xz',
+    url: 'https://mirrors.kernel.org/gnu/gcide/gcide-0.53.tar.xz',
     filename: 'gcide-0.53.tar.xz',
     output: 'gcide.xml'
   }

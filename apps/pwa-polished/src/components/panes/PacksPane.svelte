@@ -44,6 +44,14 @@
       url: `${BASE_URL}/translations.sqlite`
     },
     {
+      id: 'dictionary-en',
+      name: 'English Dictionary (Modern + Historic)',
+      description: 'Wiktionary + Webster 1913 offline definitions',
+      size: '38.36 MB',
+      icon: '📖',
+      url: `${BASE_URL}/dictionary-en.sqlite`
+    },
+    {
       id: 'ancient-languages',
       name: 'Ancient Languages',
       description: 'Hebrew, Greek with morphology',
