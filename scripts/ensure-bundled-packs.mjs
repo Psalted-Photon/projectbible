@@ -75,11 +75,16 @@ async function downloadFromLfs(oid, size, filename) {
 
   console.log(`⬇️  Downloading ${filename} from LFS (${oid})`);
 
+  const authHeader = process.env.GIT_LFS_TOKEN
+    ? { Authorization: `Bearer ${process.env.GIT_LFS_TOKEN}` }
+    : {};
+
   const batchResponse = await fetch(batchUrl, {
     method: 'POST',
     headers: {
       'Accept': 'application/vnd.git-lfs+json',
-      'Content-Type': 'application/vnd.git-lfs+json'
+      'Content-Type': 'application/vnd.git-lfs+json',
+      ...authHeader
     },
     body: JSON.stringify({
       operation: 'download',
