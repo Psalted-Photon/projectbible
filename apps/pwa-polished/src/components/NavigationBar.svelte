@@ -155,7 +155,8 @@
     const target = event.target as HTMLElement;
     if (
       !target.closest(".nav-dropdown") &&
-      !target.closest(".search-container")
+      !target.closest(".search-container") &&
+      !target.closest(".search-results-dropdown")
     ) {
       translationDropdownOpen = false;
       referenceDropdownOpen = false;
@@ -211,14 +212,14 @@
 
       showResults = true;
 
-      // Position search results dropdown on mobile
-      if (window.innerWidth <= 768 && searchContainerRef) {
+      // Position search results dropdown
+      if (searchContainerRef) {
         requestAnimationFrame(() => {
-          const rect = searchContainerRef.getBoundingClientRect();
-          const dropdown = searchContainerRef.querySelector(
+          const dropdown = document.querySelector(
             ".search-results-dropdown",
           ) as HTMLElement;
           if (dropdown) {
+            const rect = searchContainerRef.getBoundingClientRect();
             dropdown.style.left = `${rect.left}px`;
             dropdown.style.top = `${rect.bottom + 4}px`;
             dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
@@ -356,6 +357,17 @@
         dropdown.style.width = `${Math.max(rect.width, 250)}px`;
       }
     }
+    if (showResults) {
+      const dropdown = document.querySelector(
+        ".search-results-dropdown",
+      ) as HTMLElement;
+      if (dropdown && searchContainerRef) {
+        const rect = searchContainerRef.getBoundingClientRect();
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
+      }
+    }
   }
 
   onMount(() => {
@@ -459,63 +471,6 @@
           </button>
         {/if}
       </div>
-
-      {#if showResults}
-        <div class="search-results-dropdown">
-          {#if displayedResultCount > 0}
-            <div class="search-stats">
-              Showing {displayedResultCount}
-              {#if !showingAll && totalResultCount > displayedResultCount}
-                of <button class="load-all-link" on:click={loadAllResults}
-                  >{totalResultCount} results</button
-                >
-              {:else}
-                {totalResultCount > 1 ? "results" : "result"}
-              {/if}
-            </div>
-          {/if}
-
-          {#if searchResults.length > 0 && Object.keys(resultsByTranslation).length > 0}
-            {#each Object.entries(resultsByTranslation) as [translationId, results]}
-              <div class="translation-group">
-                <button
-                  class="translation-header"
-                  class:expanded={expandedTranslations.has(translationId)}
-                  on:click={() => toggleTranslation(translationId)}
-                >
-                  <span class="expand-icon">
-                    {expandedTranslations.has(translationId) ? "▼" : "▶"}
-                  </span>
-                  <span class="translation-name">{translationId}</span>
-                  <span class="result-count">({results.length})</span>
-                </button>
-
-                {#if expandedTranslations.has(translationId)}
-                  <div class="translation-results">
-                    {#each results as result}
-                      <button
-                        class="search-result-item"
-                        on:click={() => handleResultClick(result)}
-                      >
-                        <div class="result-title">{result.title}</div>
-                        {#if result.subtitle}
-                          <div class="result-subtitle">
-                            {@html highlightText(result.subtitle, searchQuery)}
-                          </div>
-                        {/if}
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-          {:else}
-            <div class="no-search-results">
-              No results found for "{searchQuery}"
-            </div>
-          {/if}
-        </div>
-      {/if}
     </div>
 
     <!-- Search Buttons -->
@@ -565,6 +520,63 @@
       </svg>
     </button>
   </div>
+
+  {#if showResults}
+    <div class="search-results-dropdown">
+      {#if displayedResultCount > 0}
+        <div class="search-stats">
+          Showing {displayedResultCount}
+          {#if !showingAll && totalResultCount > displayedResultCount}
+            of <button class="load-all-link" on:click={loadAllResults}
+              >{totalResultCount} results</button
+            >
+          {:else}
+            {totalResultCount > 1 ? "results" : "result"}
+          {/if}
+        </div>
+      {/if}
+
+      {#if searchResults.length > 0 && Object.keys(resultsByTranslation).length > 0}
+        {#each Object.entries(resultsByTranslation) as [translationId, results]}
+          <div class="translation-group">
+            <button
+              class="translation-header"
+              class:expanded={expandedTranslations.has(translationId)}
+              on:click={() => toggleTranslation(translationId)}
+            >
+              <span class="expand-icon">
+                {expandedTranslations.has(translationId) ? "▼" : "▶"}
+              </span>
+              <span class="translation-name">{translationId}</span>
+              <span class="result-count">({results.length})</span>
+            </button>
+
+            {#if expandedTranslations.has(translationId)}
+              <div class="translation-results">
+                {#each results as result}
+                  <button
+                    class="search-result-item"
+                    on:click={() => handleResultClick(result)}
+                  >
+                    <div class="result-title">{result.title}</div>
+                    {#if result.subtitle}
+                      <div class="result-subtitle">
+                        {@html highlightText(result.subtitle, searchQuery)}
+                      </div>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      {:else}
+        <div class="no-search-results">
+          No results found for "{searchQuery}"
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Dropdowns rendered outside nav-content to avoid overflow clipping -->
   {#if translationDropdownOpen}
@@ -1045,10 +1057,9 @@
   }
 
   .search-results-dropdown {
-    position: absolute;
+    position: fixed;
     top: calc(100% + 4px);
     left: 0;
-    right: 0;
     max-height: 400px;
     overflow-y: auto;
     background: #2a2a2a;
