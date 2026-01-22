@@ -6,6 +6,8 @@
     getDatabaseStats,
   } from "../../adapters/db-manager";
   import { importPackFromSQLite } from "../../adapters/pack-import";
+  import { loadPackOnDemand } from "../../lib/progressive-init";
+  import { USE_BUNDLED_PACKS } from "../../config";
 
   interface PackInfo {
     id: string;
@@ -27,95 +29,130 @@
   let installProgress = "";
   let fileInputElement: HTMLInputElement;
 
-  // DEV MODE: Set to true to load packs from local /packs/consolidated folder
-  const DEV_MODE = import.meta.env.DEV;
-  const CDN_BASE = 'https://github.com/Psalted-Photon/projectbible/releases/download/v1.0.0';
-  const LOCAL_BASE = '/packs/consolidated';
-  const BASE_URL = DEV_MODE ? LOCAL_BASE : CDN_BASE;
+  // Use bundled packs when running locally or when VITE_USE_BUNDLED_PACKS=true
+  const USE_BUNDLED = USE_BUNDLED_PACKS;
+  const CDN_BASE =
+    "https://github.com/Psalted-Photon/projectbible/releases/download/v1.0.0";
+  const LOCAL_BASE = "/packs/consolidated";
+  const BASE_URL = USE_BUNDLED ? LOCAL_BASE : CDN_BASE;
 
   // Consolidated pack definitions
   const CONSOLIDATED_PACKS = [
     {
-      id: 'translations',
-      name: 'English Translations',
-      description: 'KJV, WEB, BSB, NET, LXX2012',
-      size: '33.80 MB',
-      icon: '📖',
-      url: `${BASE_URL}/translations.sqlite`
+      id: "translations",
+      name: "English Translations",
+      description: "KJV, WEB, BSB, NET, LXX2012",
+      size: "33.80 MB",
+      icon: "📖",
+      url: `${BASE_URL}/translations.sqlite`,
     },
     {
-      id: 'dictionary-en',
-      name: 'English Dictionary (Modern + Historic)',
-      description: 'Wiktionary + Webster 1913 offline definitions',
-      size: '38.36 MB',
-      icon: '📖',
-      url: `${BASE_URL}/dictionary-en.sqlite`
+      id: "dictionary-en",
+      name: "English Dictionary (Modern + Historic)",
+      description: "Wiktionary + Webster 1913 offline definitions",
+      size: "38.36 MB",
+      icon: "📖",
+      url: `${BASE_URL}/dictionary-en.sqlite`,
     },
     {
-      id: 'ancient-languages',
-      name: 'Ancient Languages',
-      description: 'Hebrew, Greek with morphology',
-      size: '67.11 MB',
-      icon: '📜',
-      url: `${BASE_URL}/ancient-languages.sqlite`
+      id: "ancient-languages",
+      name: "Ancient Languages",
+      description: "Hebrew, Greek with morphology",
+      size: "67.11 MB",
+      icon: "📜",
+      url: `${BASE_URL}/ancient-languages.sqlite`,
     },
     {
-      id: 'lexical',
-      name: 'Lexical Resources',
-      description: 'Strong\'s + English dictionaries',
-      size: '365.45 MB',
-      icon: '📚',
-      url: `${BASE_URL}/lexical.sqlite`
+      id: "lexical",
+      name: "Lexical Resources",
+      description: "Strong's + English dictionaries",
+      size: "365.45 MB",
+      icon: "📚",
+      url: `${BASE_URL}/lexical.sqlite`,
     },
     {
-      id: 'study-tools',
-      name: 'Study Tools',
-      description: 'Maps, cross-refs, chronological',
-      size: '3.57 MB',
-      icon: '🗺️',
-      url: `${BASE_URL}/study-tools.sqlite`
+      id: "study-tools",
+      name: "Study Tools",
+      description: "Maps, cross-refs, chronological",
+      size: "3.57 MB",
+      icon: "🗺️",
+      url: `${BASE_URL}/study-tools.sqlite`,
     },
     {
-      id: 'bsb-audio-pt1',
-      name: 'BSB Audio Part 1',
-      description: 'Genesis - Psalms',
-      size: '1.76 GB',
-      icon: '🎵',
-      url: `${BASE_URL}/bsb-audio-pt1.sqlite`
+      id: "bsb-audio-pt1",
+      name: "BSB Audio Part 1",
+      description: "Genesis - Psalms",
+      size: "1.76 GB",
+      icon: "🎵",
+      url: `${BASE_URL}/bsb-audio-pt1.sqlite`,
     },
     {
-      id: 'bsb-audio-pt2',
-      name: 'BSB Audio Part 2',
-      description: 'Proverbs - Revelation',
-      size: '1.65 GB',
-      icon: '🎵',
-      url: `${BASE_URL}/bsb-audio-pt2.sqlite`
-    }
+      id: "bsb-audio-pt2",
+      name: "BSB Audio Part 2",
+      description: "Proverbs - Revelation",
+      size: "1.65 GB",
+      icon: "🎵",
+      url: `${BASE_URL}/bsb-audio-pt2.sqlite`,
+    },
   ];
 
-  async function installConsolidatedPack(pack: typeof CONSOLIDATED_PACKS[0]) {
-    if (installedPacks.some(p => p.id === pack.id)) {
-      if (!confirm(`Pack "${pack.name}" is already installed. Re-download it?`)) {
+  function getStageLabel(stage: string): string {
+    switch (stage) {
+      case "downloading":
+        return "Downloading";
+      case "validating":
+        return "Validating";
+      case "extracting":
+        return "Extracting";
+      case "caching":
+        return "Caching";
+      case "complete":
+        return "Complete";
+      default:
+        return "Working";
+    }
+  }
+
+  async function installConsolidatedPack(pack: (typeof CONSOLIDATED_PACKS)[0]) {
+    if (installedPacks.some((p) => p.id === pack.id)) {
+      if (
+        !confirm(`Pack "${pack.name}" is already installed. Re-download it?`)
+      ) {
         return;
       }
     }
 
     isInstalling = true;
-    installProgress = `Downloading ${pack.name} (${pack.size})...`;
+    installProgress = `Preparing ${pack.name}...`;
 
     try {
-      const response = await fetch(pack.url);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (USE_BUNDLED) {
+        installProgress = `Downloading ${pack.name} (${pack.size})...`;
+
+        const response = await fetch(pack.url);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const blob = await response.blob();
+        const file = new File([blob], `${pack.id}.sqlite`, {
+          type: "application/x-sqlite3",
+        });
+
+        installProgress = `Installing ${pack.name}...`;
+        await importPackFromSQLite(file);
+      } else {
+        await loadPackOnDemand(pack.id, (progress) => {
+          const stageLabel = getStageLabel(progress.stage);
+          if (progress.stage === "downloading") {
+            const loadedMB = (progress.loaded / (1024 * 1024)).toFixed(1);
+            const totalMB = (progress.total / (1024 * 1024)).toFixed(1);
+            installProgress = `${stageLabel} ${pack.name} (${loadedMB} MB / ${totalMB} MB)...`;
+          } else {
+            installProgress = `${stageLabel} ${pack.name}...`;
+          }
+        });
       }
-
-      const blob = await response.blob();
-      const file = new File([blob], `${pack.id}.sqlite`, {
-        type: "application/x-sqlite3",
-      });
-
-      installProgress = `Installing ${pack.name}...`;
-      await importPackFromSQLite(file);
 
       installProgress = "Complete!";
       alert(`${pack.name} installed successfully!`);
@@ -356,18 +393,21 @@
   <div class="section">
     <h3>📦 Quick Install</h3>
     <p class="section-description">
-      Install official consolidated packs with one click. These packs are hosted on GitHub Releases and verified with SHA-256 hashes.
+      Install official consolidated packs with one click. These packs are hosted
+      on GitHub Releases and verified with SHA-256 hashes.
     </p>
 
     <div class="pack-grid">
       {#each CONSOLIDATED_PACKS as pack}
-        {@const isInstalled = installedPacks.some(p => p.id === pack.id)}
+        {@const isInstalled = installedPacks.some((p) => p.id === pack.id)}
         <button
           class="pack-card"
           class:installed={isInstalled}
           on:click={() => installConsolidatedPack(pack)}
           disabled={isInstalling}
-          title={isInstalled ? `Already installed - click to re-download` : `Download ${pack.name}`}
+          title={isInstalled
+            ? `Already installed - click to re-download`
+            : `Download ${pack.name}`}
         >
           <div class="pack-card-icon">{pack.icon}</div>
           <div class="pack-card-content">

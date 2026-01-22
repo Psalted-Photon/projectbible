@@ -6,7 +6,7 @@
   "devCommand": "cd apps/pwa-polished && npm run dev",
   "env": {
     "NODE_ENV": "production",
-    "VITE_USE_BUNDLED_PACKS": "false"
+    "VITE_USE_BUNDLED_PACKS": "true"
   },
   "headers": [
     {

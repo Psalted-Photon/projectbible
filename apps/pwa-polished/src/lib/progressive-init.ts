@@ -9,8 +9,31 @@
 
 import { loadBootstrap } from './bootstrap-loader';
 import { APP_VERSION, PACK_MANIFEST_URL, USE_BUNDLED_PACKS, FEATURES } from '../config';
+import { importPackFromSQLite } from '../adapters/pack-import';
+import { listInstalledPacks as listInstalledPacksFromDb, removePack as removePackFromDb } from '../adapters/db-manager';
+import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
+import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
 
 let bootstrapLoaded = false;
+let packLoader: PackLoader | null = null;
+let progressHandler: ((progress: DownloadProgress) => void) | null = null;
+
+function getPackLoaderInstance(): PackLoader {
+  if (!packLoader) {
+    packLoader = new PackLoader({
+      manifestUrl: PACK_MANIFEST_URL,
+      appVersion: APP_VERSION,
+      onProgress: (progress) => {
+        progressHandler?.(progress);
+      }
+    });
+  }
+  return packLoader;
+}
+
+function setProgressHandler(handler?: (progress: DownloadProgress) => void): void {
+  progressHandler = handler ?? null;
+}
 
 /**
  * Initialize app with progressive loading
@@ -30,8 +53,13 @@ export async function initializeApp(
       onProgress?.('Using bundled packs...', 50);
       onProgress?.('Ready', 100);
     } else {
-      // Production mode with CDN loading would go here
-      // For now, just mark as ready
+      // Production mode: preload manifest (non-blocking)
+      onProgress?.('Checking pack manifest...', 50);
+      try {
+        await getPackLoaderInstance().fetchManifest();
+      } catch (error) {
+        console.warn('Manifest fetch failed:', error);
+      }
       onProgress?.('Ready', 100);
     }
     
@@ -44,8 +72,8 @@ export async function initializeApp(
 /**
  * Get the pack loader instance (not implemented yet)
  */
-export function getPackLoader(): null {
-  return null;
+export function getPackLoader(): PackLoader {
+  return getPackLoaderInstance();
 }
 
 /**
@@ -58,20 +86,64 @@ export function isBootstrapLoaded(): boolean {
 /**
  * Load a pack on-demand (not implemented yet)
  */
-export async function loadPackOnDemand(packId: string): Promise<void> {
-  console.warn('loadPackOnDemand not implemented yet - packs are bundled in dev mode');
+export async function loadPackOnDemand(
+  packId: string,
+  onProgress?: (progress: DownloadProgress) => void
+): Promise<void> {
+  if (USE_BUNDLED_PACKS) {
+    console.log('Using bundled packs - skipping on-demand download');
+    return;
+  }
+
+  setProgressHandler(onProgress);
+
+  try {
+    const installed = await listInstalledPacksFromDb();
+    if (installed.some((pack) => pack.id === packId)) {
+      console.log(`Pack ${packId} already installed`);
+      return;
+    }
+
+    const loader = getPackLoaderInstance();
+    const data = await loader.downloadPack(packId);
+
+    onProgress?.({
+      packId,
+      loaded: data.length,
+      total: data.length,
+      percentage: 100,
+      stage: 'extracting'
+    });
+
+    const file = new File([data], `${packId}.sqlite`, {
+      type: 'application/x-sqlite3'
+    });
+
+    await importPackFromSQLite(file);
+
+    onProgress?.({
+      packId,
+      loaded: data.length,
+      total: data.length,
+      percentage: 100,
+      stage: 'complete'
+    });
+  } finally {
+    setProgressHandler();
+  }
 }
 
 /**
  * Get list of installed packs (not implemented yet)
  */
 export async function getInstalledPacks(): Promise<string[]> {
-  return [];
+  const installed = await listInstalledPacksFromDb();
+  return installed.map((pack) => pack.id);
 }
 
 /**
  * Remove a cached pack (not implemented yet)
  */
 export async function removePack(packId: string): Promise<void> {
-  console.warn('removePack not implemented yet - packs are bundled in dev mode');
+  await removePackFromDb(packId);
 }

@@ -64,8 +64,10 @@ async function loadPackIfNeeded(packId: string): Promise<void> {
     // Show progress modal
     showProgressModal.set(true);
     
-    // Load pack (note: progress tracking not yet implemented)
-    await loadPackOnDemand(packId);
+    // Load pack with progress tracking
+    await loadPackOnDemand(packId, (progress) => {
+      currentDownload.set(progress);
+    });
     
     // Auto-hide modal when complete
     setTimeout(() => {
@@ -81,6 +83,7 @@ async function loadPackIfNeeded(packId: string): Promise<void> {
     
     // Show error in modal
     currentDownload.set(null);
+    showProgressModal.set(false);
     
     // Re-throw to let caller handle
     throw error;

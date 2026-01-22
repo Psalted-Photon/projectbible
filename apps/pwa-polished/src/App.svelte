@@ -2,7 +2,9 @@
   import BibleReader from "./components/BibleReader.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
   import PaneContainer from "./components/PaneContainer.svelte";
+  import ProgressModal from "./components/ProgressModal.svelte";
   import { windowStore } from "./lib/stores/windowStore";
+  import { currentDownload, showProgressModal } from "./lib/pack-triggers";
   import { onMount } from "svelte";
 
   let appReady = false;
@@ -75,6 +77,7 @@
     </div>
     <WindowContainer />
     <PaneContainer />
+    <ProgressModal progress={$currentDownload} visible={$showProgressModal} />
   {/if}
 </div>
 
