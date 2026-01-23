@@ -341,7 +341,7 @@ export class SyncOrchestrator {
     this.debounceTimer = globalThis.setTimeout(() => {
       this.debounceTimer = null;
       void this.processQueue();
-    }, CHAPTER_DEBOUNCE_MS);
+    }, CHAPTER_DEBOUNCE_MS) as unknown as number;
   }
 
   private async handleError(item: SyncQueueItem, error: unknown): Promise<boolean> {
@@ -379,7 +379,7 @@ export class SyncOrchestrator {
       this.retryTimer = globalThis.setTimeout(() => {
         this.retryTimer = null;
         void this.processQueue();
-      }, delay);
+      }, delay) as unknown as number;
     }
     return false;
   }
