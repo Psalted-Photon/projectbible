@@ -2,7 +2,22 @@ export * from './interfaces.js';
 export { Reader } from './reader.js';
 export * from './reading-plan.js';
 export * from './BibleMetadata.js';
-export * from './ReadingPlanEngine.js';
+export {
+  DayStatus,
+  ReadingPlanDay as EngineReadingPlanDay,
+  ReadingPlan as EngineReadingPlan,
+  ChapterAction,
+  ChapterProgress,
+  ReadingProgressEntry,
+  VerseCountResult,
+  CatchUpSuggestion,
+  computeDayStatus,
+  getDaysAheadBehind,
+  calculateStreak,
+  suggestCatchUp,
+  calculateVerseCounts,
+  mergeProgress,
+} from './ReadingPlanEngine.js';
 export * from './search/searchConfig.js';
 export * from './search/englishLexicalService.js';
 export * from './search/englishLexicalPackLoader.js';
