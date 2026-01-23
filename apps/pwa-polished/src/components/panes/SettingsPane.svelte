@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getSettings, updateSettings } from "../../adapters/settings";
+  import { applyTheme, getSettings, updateSettings } from "../../adapters/settings";
   import { paneStore } from "../../stores/paneStore";
 
-  let theme: "light" | "dark" = "dark";
+  let theme: "light" | "dark" | "auto" = "dark";
   let fontSize = 18;
   let lineSpacing = 1.8;
   let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
@@ -22,13 +22,7 @@
 
   function applySettings() {
     // Apply theme
-    if (theme === "dark") {
-      document.body.classList.add("dark-theme");
-      document.body.classList.remove("light-theme");
-    } else {
-      document.body.classList.add("light-theme");
-      document.body.classList.remove("dark-theme");
-    }
+    applyTheme(theme);
 
     // Apply font size via CSS variable
     document.documentElement.style.setProperty(
@@ -93,6 +87,7 @@
     <label>
       <span class="label-text">Theme</span>
       <select bind:value={theme}>
+        <option value="auto">Auto</option>
         <option value="light">Light</option>
         <option value="dark">Dark</option>
       </select>

@@ -11,7 +11,7 @@
   } from '../stores/ReadingProgressStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
   import { syncOrchestrator, type SyncQueueStats } from '../services/SyncOrchestrator';
-  import { supabaseAuthService } from '../services/SupabaseAuthService';
+  import { userProfileStore } from '../stores/userProfileStore';
   
   export let isOpen = false;
   
@@ -63,10 +63,7 @@
     lastError: null,
   };
   let syncError: string | null = null;
-  let authEmail = '';
-  let authPassword = '';
-  let authStatus = '';
-  let signedInEmail: string | null = null;
+  let userName: string | null = null;
   
   // Derived book lists
   const OT_BOOKS = BIBLE_BOOKS.filter(b => b.testament === 'OT').map(b => b.name);
@@ -75,26 +72,17 @@
   onMount(() => {
     loadActivePlan();
     loadPlanHistory();
-    supabaseAuthService.getSession().then((session) => {
-      signedInEmail = session?.user?.email ?? null;
-    });
     const unsubscribeSync = syncOrchestrator.subscribe((stats) => {
       syncStats = stats;
       syncError = stats.lastError;
       syncStatus = formatSyncStatus(stats);
     });
-    const subscription = supabaseAuthService.onAuthStateChange((event, session) => {
-      signedInEmail = session?.user?.email ?? null;
-      if (event === 'SIGNED_IN') {
-        void handleSignInSync();
-      }
-      if (event === 'SIGNED_OUT') {
-        authStatus = 'Signed out';
-      }
+    const unsubscribeProfile = userProfileStore.subscribe((profile) => {
+      userName = profile.name;
     });
     return () => {
       unsubscribeSync();
-      subscription?.data?.subscription?.unsubscribe();
+      unsubscribeProfile();
     };
   });
 
@@ -128,17 +116,6 @@
     return 'Not synced';
   }
 
-  async function handleSignInSync() {
-    if (!currentPlanId) return;
-    try {
-      syncStatus = 'Syncing...';
-      await syncOrchestrator.runImmediateSync(currentPlanId, 'sign-in');
-      syncStatus = 'Synced just now';
-    } catch (error) {
-      console.error('Sign-in sync failed:', error);
-      syncStatus = 'Sync failed';
-    }
-  }
   
   function loadActivePlan() {
     try {
@@ -539,41 +516,6 @@
     }
   }
 
-  async function signIn() {
-    authStatus = '';
-    try {
-      await supabaseAuthService.signIn(authEmail, authPassword);
-      authStatus = 'Signed in';
-      authPassword = '';
-    } catch (error) {
-      authStatus = 'Sign in failed';
-      console.error(error);
-    }
-  }
-
-  async function signUp() {
-    authStatus = '';
-    try {
-      await supabaseAuthService.signUp(authEmail, authPassword);
-      authStatus = 'Check your email to confirm';
-      authPassword = '';
-    } catch (error) {
-      authStatus = 'Sign up failed';
-      console.error(error);
-    }
-  }
-
-  async function signOut() {
-    authStatus = '';
-    try {
-      await supabaseAuthService.signOut();
-      signedInEmail = null;
-      authStatus = 'Signed out';
-    } catch (error) {
-      authStatus = 'Sign out failed';
-      console.error(error);
-    }
-  }
 
   function getCompletionTimeline() {
     if (!currentReadingPlan) return [];
@@ -849,7 +791,7 @@
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div class="modal-content" on:click|stopPropagation>
       <div class="modal-header">
-        <h2>📖 Reading Plan</h2>
+        <h2>📖 {userName ? `${userName}'s Reading Plan` : 'Reading Plan'}</h2>
         <button class="close-btn" on:click={close}>&times;</button>
       </div>
       
@@ -1038,6 +980,9 @@
                   <div><strong>Days ahead/behind:</strong> {currentReadingPlan ? getDaysAheadBehind(currentReadingPlan, getProgressEntries()) : 0}</div>
                   <div><strong>Streak:</strong> {calculateStreak(getProgressEntries())} days</div>
                 </div>
+                {#if userName}
+                  <div class="progress-message">Congrats {userName}, today you read {verseStats.todayRead} verses!</div>
+                {/if}
                 <div class="progress-actions">
                   <button class="export-btn" on:click={exportProgressJson}>Export JSON</button>
                   <button class="export-btn" on:click={exportProgressMarkdown}>Export Markdown</button>
@@ -1054,35 +999,6 @@
                 {#if syncError}
                   <div class="sync-error">{syncError}</div>
                 {/if}
-                <div class="auth-panel">
-                  {#if signedInEmail}
-                    <div class="auth-row">
-                      <span class="auth-label">Signed in as</span>
-                      <span class="auth-email">{signedInEmail}</span>
-                      <button class="export-btn" on:click={signOut}>Sign out</button>
-                    </div>
-                  {:else}
-                    <div class="auth-row">
-                      <input
-                        class="auth-input"
-                        type="email"
-                        placeholder="Email"
-                        bind:value={authEmail}
-                      />
-                      <input
-                        class="auth-input"
-                        type="password"
-                        placeholder="Password"
-                        bind:value={authPassword}
-                      />
-                      <button class="export-btn" on:click={signIn}>Sign in</button>
-                      <button class="export-btn" on:click={signUp}>Sign up</button>
-                    </div>
-                  {/if}
-                  {#if authStatus}
-                    <div class="auth-status">{authStatus}</div>
-                  {/if}
-                </div>
               </div>
               
               <div class="view-toggle">
@@ -1764,42 +1680,10 @@
     color: #e57373;
   }
 
-  .auth-panel {
-    margin-top: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .auth-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .auth-input {
-    padding: 6px 10px;
-    border-radius: 4px;
-    border: 1px solid #3a3a3a;
-    background: #121212;
-    color: #e0e0e0;
-    min-width: 180px;
-  }
-
-  .auth-label {
+  .progress-message {
+    margin-top: 8px;
     font-size: 12px;
-    color: #aaa;
-  }
-
-  .auth-email {
-    font-size: 12px;
-    color: #e0e0e0;
-  }
-
-  .auth-status {
-    font-size: 12px;
-    color: #9ccc65;
+    color: #c8e6c9;
   }
   
   .view-toggle {

@@ -3,7 +3,7 @@ console.log('🔥 MAIN.TS LOADING...');
 import { mount } from 'svelte';
 import App from './App.svelte';
 import { initializeApp, isBootstrapLoaded } from './lib/progressive-init';
-import { getSettings } from './adapters/settings';
+import { applyTheme, getSettings } from './adapters/settings';
 import { removePack } from './lib/progressive-init';
 import { loadPackOnDemand, getInstalledPacks } from './lib/progressive-init';
 import { FEATURES } from './config';
@@ -33,14 +33,7 @@ function applyInitialSettings() {
   const settings = getSettings();
   
   // Apply theme
-  const theme = settings.theme || 'dark';
-  if (theme === 'dark') {
-    document.body.classList.add('dark-theme');
-    document.body.classList.remove('light-theme');
-  } else {
-    document.body.classList.add('light-theme');
-    document.body.classList.remove('dark-theme');
-  }
+  applyTheme(settings.theme || 'dark');
   
   // Apply font size
   const fontSize = settings.fontSize || 18;

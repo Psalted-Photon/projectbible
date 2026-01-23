@@ -1,6 +1,8 @@
 <script lang="ts">
   import BibleReader from "./components/BibleReader.svelte";
   import LexicalModal from "./components/LexicalModal.svelte";
+  import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
+  import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
   import PaneContainer from "./components/PaneContainer.svelte";
   import ProgressModal from "./components/ProgressModal.svelte";
@@ -8,9 +10,11 @@
   import { currentDownload, showProgressModal } from "./lib/pack-triggers";
   import { onMount } from "svelte";
   import { syncOrchestrator } from "./services/SyncOrchestrator";
+  import { readingPlanModalStore } from "./stores/readingPlanModalStore";
 
   let appReady = false;
   let lastHiddenAt: number | null = null;
+  let showReadingPlanModal = false;
 
   // Initialize Eruda for mobile debugging
   onMount(() => {
@@ -45,10 +49,19 @@
     document.addEventListener("visibilitychange", handleVisibility);
     void init();
 
+    const unsubscribeReadingPlan = readingPlanModalStore.subscribe((value) => {
+      if (showReadingPlanModal !== value) {
+        showReadingPlanModal = value;
+      }
+    });
+
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
+      unsubscribeReadingPlan();
     };
   });
+
+  $: readingPlanModalStore.set(showReadingPlanModal);
 
   // Calculate main content area based on open panels
   $: leftPanels = $windowStore.filter((w) => w.edge === "left");
@@ -105,6 +118,12 @@
     
     <!-- Shared Lexical Modal (single instance for all Bible readers) -->
     <LexicalModal />
+
+    <!-- Shared Reading Plan Modal -->
+    <ReadingPlanModal bind:isOpen={showReadingPlanModal} />
+
+    <!-- Shared Profile Modal -->
+    <ProfileModal />
   {/if}
 </div>
 

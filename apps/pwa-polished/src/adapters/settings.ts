@@ -21,7 +21,7 @@ export interface UserSettings {
   dailyDriverGreek?: string;
   
   // Display settings
-  theme?: 'light' | 'dark';
+  theme?: 'light' | 'dark' | 'auto';
   fontSize?: number; // Base font size in pixels (default 15)
   lineSpacing?: number; // Line height multiplier (default 1.5)
   verseLayout?: 'one-per-line' | 'paragraph'; // Verse layout mode
@@ -64,6 +64,27 @@ export function updateSettings(updates: Partial<UserSettings>): void {
   const current = getSettings();
   const updated = { ...current, ...updates };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+}
+
+export function resolveTheme(theme: UserSettings['theme']): 'light' | 'dark' {
+  if (theme === 'auto') {
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'dark';
+  }
+  return theme || 'dark';
+}
+
+export function applyTheme(theme: UserSettings['theme']): void {
+  const resolved = resolveTheme(theme);
+  if (resolved === 'dark') {
+    document.body.classList.add('dark-theme');
+    document.body.classList.remove('light-theme');
+  } else {
+    document.body.classList.add('light-theme');
+    document.body.classList.remove('dark-theme');
+  }
 }
 
 /**
