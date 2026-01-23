@@ -3,7 +3,7 @@
   import { applyTheme, getSettings, updateSettings } from "../../adapters/settings";
   import { paneStore } from "../../stores/paneStore";
 
-  let theme: "light" | "dark" | "auto" = "dark";
+  let theme: "light" | "dark" | "auto" | "sepia" = "dark";
   let fontSize = 18;
   let lineSpacing = 1.8;
   let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
@@ -81,13 +81,14 @@
 </script>
 
 <div class="settings-pane">
-  <h2>⚙️ Display Settings</h2>
+  <h2><span class="emoji">⚙️</span> Display Settings</h2>
 
   <div class="setting-group">
     <label>
       <span class="label-text">Theme</span>
       <select bind:value={theme}>
         <option value="auto">Auto</option>
+        <option value="sepia">Sepia</option>
         <option value="light">Light</option>
         <option value="dark">Dark</option>
       </select>
@@ -140,12 +141,12 @@
 
   <!-- Pack Management Section -->
   <div class="pack-management-section">
-    <h3>📦 Pack Management</h3>
+    <h3><span class="emoji">📦</span> Pack Management</h3>
     <p class="section-description">
       Manage installed Bible translations, lexicons, maps, and other resources.
     </p>
     <button class="packs-button" on:click={openPacksPane}>
-      <span class="icon">📦</span>
+      <span class="icon emoji">📦</span>
       <span class="text">Manage Packs</span>
       <span class="arrow">→</span>
     </button>

@@ -45,7 +45,7 @@
       on:keydown={(e) => e.key === 'Enter' && handleSearch()}
     />
     {#if isSearching}
-      <span class="spinner">⏳</span>
+      <span class="spinner emoji">⏳</span>
     {/if}
   </div>
 

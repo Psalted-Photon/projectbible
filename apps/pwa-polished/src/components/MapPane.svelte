@@ -180,12 +180,12 @@
 <div class="map-pane">
   {#if loading}
     <div class="loading">
-      <h2>🗺️ Loading Map...</h2>
+      <h2><span class="emoji">🗺️</span> Loading Map...</h2>
       <p>Initializing Leaflet and loading biblical geography</p>
     </div>
   {:else if error}
     <div class="error">
-      <h2>⚠️ Map Error</h2>
+      <h2><span class="emoji">⚠️</span> Map Error</h2>
       <p>{error}</p>
       <p class="hint">Basic map functionality may still work</p>
     </div>

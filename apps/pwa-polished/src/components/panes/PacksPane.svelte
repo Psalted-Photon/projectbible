@@ -328,7 +328,7 @@
 </script>
 
 <div class="packs-pane">
-  <h2>📦 Pack Management</h2>
+  <h2><span class="emoji">📦</span> Pack Management</h2>
 
   <!-- Database Stats -->
   <div class="stats-card">
@@ -364,7 +364,7 @@
       <div class="pack-list">
         {#each installedPacks as pack (pack.id)}
           <div class="pack-item">
-            <div class="pack-icon">{getPackTypeIcon(pack.type)}</div>
+            <div class="pack-icon"><span class="emoji">{getPackTypeIcon(pack.type)}</span></div>
             <div class="pack-info">
               <div class="pack-name">{pack.id}</div>
               <div class="pack-meta">
@@ -380,7 +380,7 @@
               on:click={() => handleRemovePack(pack.id)}
               title="Remove this pack"
             >
-              🗑️
+              <span class="emoji">🗑️</span>
             </button>
           </div>
         {/each}
@@ -390,7 +390,7 @@
 
   <!-- Quick Install: Consolidated Packs -->
   <div class="section">
-    <h3>📦 Quick Install</h3>
+    <h3><span class="emoji">📦</span> Quick Install</h3>
     <p class="section-description">
       Install official consolidated packs with one click. These packs are hosted
       on GitHub Releases and verified with SHA-256 hashes.
@@ -408,7 +408,7 @@
             ? `Already installed - click to re-download`
             : `Download ${pack.name}`}
         >
-          <div class="pack-card-icon">{pack.icon}</div>
+          <div class="pack-card-icon"><span class="emoji">{pack.icon}</span></div>
           <div class="pack-card-content">
             <div class="pack-card-name">
               {pack.name}
@@ -432,7 +432,7 @@
         on:click={() => (showInstallUrl = !showInstallUrl)}
         disabled={isInstalling}
       >
-        🌐 Install from URL
+        <span class="emoji">🌐</span> Install from URL
       </button>
 
       <button
@@ -440,7 +440,7 @@
         on:click={handleInstallFromFileClick}
         disabled={isInstalling}
       >
-        📁 Install from File
+        <span class="emoji">📁</span> Install from File
       </button>
     </div>
 
@@ -478,7 +478,7 @@
 
   <!-- Help Text -->
   <div class="help-section">
-    <h3>ℹ️ About Packs</h3>
+    <h3><span class="emoji">ℹ️</span> About Packs</h3>
     <p>
       Packs are SQLite databases containing Bible texts, lexicons, maps, and
       other resources.
@@ -489,7 +489,7 @@
       <li>A local file on your device</li>
     </ul>
     <p class="warning">
-      ⚠️ Only install packs from trusted sources. Removing a pack will delete
+      <span class="emoji">⚠️</span> Only install packs from trusted sources. Removing a pack will delete
       all its data.
     </p>
   </div>

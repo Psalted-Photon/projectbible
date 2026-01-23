@@ -41,7 +41,7 @@
   let isSignedIn = false;
   let passwordsMatch = false;
 
-  let theme: 'light' | 'dark' | 'auto' = 'dark';
+  let theme: 'light' | 'dark' | 'auto' | 'sepia' = 'dark';
   let defaultOT = '';
   let defaultNT = '';
 
@@ -416,7 +416,7 @@
             {#if profileName}
               {profileName.slice(0, 1).toUpperCase()}
             {:else}
-              👤
+              <span class="emoji">👤</span>
             {/if}
           </div>
           <div class="profile-details">
@@ -522,6 +522,7 @@
                 <label>Theme</label>
                 <select bind:value={theme}>
                   <option value="auto">Auto</option>
+                  <option value="sepia">Sepia</option>
                   <option value="light">Light</option>
                   <option value="dark">Dark</option>
                 </select>
@@ -776,21 +777,21 @@
   }
 
   .secondary-btn.warning-btn {
-    background: #3a2f12;
-    border-color: #ffc107;
-    color: #ffd54f;
+    background: linear-gradient(135deg, #ffeb3b 0%, #f9a825 100%);
+    border-color: #ffeb3b;
+    color: #3b2f12;
   }
 
   .secondary-btn.warning-btn:hover {
-    background: #4a3a14;
-    border-color: #ffca28;
-    color: #ffecb3;
+    background: linear-gradient(135deg, #fff176 0%, #fbc02d 100%);
+    border-color: #fff176;
+    color: #3b2f12;
   }
 
   .danger-btn {
-    background: #3b1c1c;
-    border-color: #8a2b2b;
-    color: #ffbdbd;
+    background: linear-gradient(135deg, #ef5350 0%, #c62828 100%);
+    border-color: #ef5350;
+    color: #fff;
   }
 
   .link-btn {

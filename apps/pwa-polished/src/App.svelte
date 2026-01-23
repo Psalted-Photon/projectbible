@@ -134,6 +134,28 @@
     overflow: hidden;
   }
 
+  :global(body.light-theme) {
+    filter: invert(1) hue-rotate(180deg);
+    background: #f5f5f5;
+  }
+
+  :global(.emoji) {
+    display: inline-block;
+  }
+
+  :global(body.light-theme .emoji) {
+    filter: invert(1) hue-rotate(180deg);
+  }
+
+  :global(body.sepia-theme) {
+    filter: invert(1) hue-rotate(180deg) sepia(0.5) saturate(0.85);
+    background: #f6f0e3;
+  }
+
+  :global(body.sepia-theme .emoji) {
+    filter: invert(1) hue-rotate(180deg);
+  }
+
   /* Hide scrollbars but keep scroll functionality */
   :global(*) {
     scrollbar-width: none; /* Firefox */

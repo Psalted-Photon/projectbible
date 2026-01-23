@@ -368,7 +368,7 @@
             {#if morphologyData.strongsId}
               <div class="hint-section">
                 <p class="hint">
-                  💡 Click Strong's number above to view full lexicon entry
+                  <span class="emoji">💡</span> Click Strong's number above to view full lexicon entry
                 </p>
               </div>
             {/if}
@@ -485,7 +485,7 @@
                   <!-- Modern Definitions (Wiktionary) -->
                   <div class="info-section">
                     <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
-                      📖 Modern Definitions
+                      <span class="emoji">📖</span> Modern Definitions
                       <span style="font-size: 12px; color: #666; font-weight: normal;">Wiktionary</span>
                     </h3>
                     {#if lexicalEntries.modern && lexicalEntries.modern.length > 0}
@@ -538,7 +538,7 @@
                   <!-- Historic Definitions (GCIDE/Webster 1913) -->
                   <div class="info-section">
                     <h3 style="color: #8d6e63; display: flex; align-items: center; gap: 8px;">
-                      📜 Historic Definitions
+                      <span class="emoji">📜</span> Historic Definitions
                       <span style="font-size: 12px; color: #666; font-weight: normal;">Webster 1913</span>
                     </h3>
                     {#if lexicalEntries.historic && lexicalEntries.historic.length > 0}
@@ -583,7 +583,7 @@
                       {/if}
                     </p>
                     <p style="margin-top: 12px; padding: 12px; background: #e3f2fd; border-radius: 8px; font-size: 13px;">
-                      💡 Install the <strong>English Dictionary Pack</strong> from the Packs menu to get 6M+ offline definitions from Wiktionary + Webster 1913!
+                      <span class="emoji">💡</span> Install the <strong>English Dictionary Pack</strong> from the Packs menu to get 6M+ offline definitions from Wiktionary + Webster 1913!
                     </p>
                   </div>
                 {/if}

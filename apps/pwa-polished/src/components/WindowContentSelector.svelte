@@ -39,27 +39,27 @@
       bind:value={searchQuery}
       on:keydown={(e) => e.key === 'Enter' && handleSearch()}
     />
-    <button on:click={handleSearch}>🔍</button>
+    <button on:click={handleSearch}><span class="emoji">🔍</span></button>
   </div>
 
   <div class="button-grid">
     <button class="content-button bible" on:click={() => handleContentSelect('bible')}>
-      <span class="icon">📖</span>
+      <span class="icon emoji">📖</span>
       <span class="label">Bible</span>
     </button>
     
     <button class="content-button map" on:click={() => handleContentSelect('map')}>
-      <span class="icon">🗺️</span>
+      <span class="icon emoji">🗺️</span>
       <span class="label">Map</span>
     </button>
     
     <button class="content-button notes" on:click={() => handleContentSelect('notes')}>
-      <span class="icon">📝</span>
+      <span class="icon emoji">📝</span>
       <span class="label">Notes</span>
     </button>
     
     <button class="content-button wordstudy" on:click={() => handleContentSelect('wordstudy')}>
-      <span class="icon">📚</span>
+      <span class="icon emoji">📚</span>
       <span class="label">Word Study</span>
     </button>
   </div>

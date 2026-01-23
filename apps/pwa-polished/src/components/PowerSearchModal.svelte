@@ -242,7 +242,7 @@
     <div class="modal-container" on:click|stopPropagation>
       <!-- Header -->
       <div class="modal-header">
-        <h2>⚡ Power Search</h2>
+        <h2><span class="emoji">⚡</span> Power Search</h2>
         <button class="close-button" on:click={closeModal} title="Close">✕</button>
       </div>
 
@@ -252,7 +252,7 @@
         <div class="controls-panel">
           <!-- Word/Phrase Section -->
           <section class="control-section">
-            <h3>🔤 Word / Phrase</h3>
+            <h3><span class="emoji">🔤</span> Word / Phrase</h3>
             
             <div class="control-group">
               <label for="search-text">Search for:</label>
@@ -295,7 +295,7 @@
           <!-- Pattern Options Section -->
           <section class="control-section">
             <h3>
-              🎛️ Match Type
+              <span class="emoji">🎛️</span> Match Type
               <button class="help-btn" on:click={() => openHelp('matchType')} title="Learn about match types">?</button>
             </h3>
             
@@ -314,7 +314,7 @@
           <!-- Must Contain/Not Contain Section -->
           <section class="control-section">
             <h3>
-              🧩 Advanced Logic
+              <span class="emoji">🧩</span> Advanced Logic
               <button class="help-btn" on:click={() => openHelp('mustContain')} title="Learn about must contain">?</button>
             </h3>
             
@@ -372,7 +372,7 @@
           <!-- Proximity Search Section -->
           <section class="control-section">
             <h3>
-              📏 Proximity Search
+              <span class="emoji">📏</span> Proximity Search
               <button class="help-btn" on:click={() => openHelp('proximity')} title="Learn about proximity search">?</button>
             </h3>
             
@@ -436,7 +436,11 @@
           <!-- Action Buttons -->
           <div class="action-buttons">
             <button class="btn-primary" on:click={() => executeSearch(false)} disabled={isSearching}>
-              {isSearching ? 'Searching...' : '🔍 Search'}
+              {#if isSearching}
+                Searching...
+              {:else}
+                <span class="emoji">🔍</span> Search
+              {/if}
             </button>
             <button class="btn-secondary" on:click={resetConfig}>
               Reset
@@ -463,7 +467,7 @@
                     <span>Complexity: {generatedQuery.estimatedComplexity}/100</span>
                     <button class="help-btn-inline" on:click={() => openHelp('complexity')}>?</button>
                     {#if generatedQuery.estimatedComplexity > 60}
-                      <span class="warning">⚠️ Complex pattern - may be slow</span>
+                      <span class="warning"><span class="emoji">⚠️</span> Complex pattern - may be slow</span>
                     {/if}
                   </div>
                 </div>

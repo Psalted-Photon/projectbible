@@ -84,7 +84,7 @@
   <div class="help-backdrop" on:click={handleBackdropClick}>
     <div class="help-modal">
       <div class="help-header">
-        <h3>❓ {content.title}</h3>
+        <h3><span class="emoji">❓</span> {content.title}</h3>
         <button class="close-btn" on:click={closeModal}>✕</button>
       </div>
       

@@ -791,7 +791,7 @@
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div class="modal-content" on:click|stopPropagation>
       <div class="modal-header">
-        <h2>📖 {userName ? `${userName}'s Reading Plan` : 'Reading Plan'}</h2>
+        <h2><span class="emoji">📖</span> {userName ? `${userName}'s Reading Plan` : 'Reading Plan'}</h2>
         <button class="close-btn" on:click={close}>&times;</button>
       </div>
       
@@ -921,8 +921,8 @@
             {#if currentReadingPlan}
               <div class="plan-overview">
                 <div class="overview-header">
-                  <h3>📊 Plan Overview</h3>
-                  <button class="delete-btn" on:click={deleteCurrentPlan}>🗑️ Delete Plan</button>
+                  <h3><span class="emoji">📊</span> Plan Overview</h3>
+                  <button class="delete-btn" on:click={deleteCurrentPlan}><span class="emoji">🗑️</span> Delete Plan</button>
                 </div>
                 <div class="stats-grid">
                   <div><strong>Total Days:</strong> {currentReadingPlan.totalDays}</div>
@@ -935,7 +935,7 @@
               
               {#if todayReading}
                 <div class="today-reading">
-                  <h3>📖 Today's Reading (Day {todayReading.dayNumber})</h3>
+                  <h3><span class="emoji">📖</span> Today's Reading (Day {todayReading.dayNumber})</h3>
                   <p class="chapters-list">
                     {#each todayReading.chapters as chapter, i}
                       <button 
@@ -1507,16 +1507,17 @@
   
   .delete-btn {
     padding: 6px 12px;
-    background: #f44336;
-    color: white;
-    border: none;
+    background: linear-gradient(135deg, #ef5350 0%, #c62828 100%);
+    color: #fff;
+    border: 1px solid #ef5350;
     border-radius: 4px;
     cursor: pointer;
     font-size: 13px;
+    box-shadow: 0 2px 6px rgba(239, 83, 80, 0.3);
   }
   
   .delete-btn:hover {
-    background: #d32f2f;
+    background: linear-gradient(135deg, #ff6f60 0%, #d32f2f 100%);
   }
   
   .stats-grid {

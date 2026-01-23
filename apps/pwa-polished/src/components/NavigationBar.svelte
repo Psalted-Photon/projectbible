@@ -18,6 +18,7 @@
   import { profileModalStore } from "../stores/profileModalStore";
   import { readingPlanModalStore } from "../stores/readingPlanModalStore";
   import { paneStore } from "../stores/paneStore";
+  import { userProfileStore } from "../stores/userProfileStore";
 
   export let windowId: string | undefined = undefined;
   export let visible: boolean = true;
@@ -62,6 +63,7 @@
   $: currentChapter =
     windowState?.contentState?.chapter ?? $navigationStore.chapter;
   $: currentReference = `${currentBook} ${currentChapter}`;
+  $: isSignedIn = $userProfileStore.isSignedIn;
 
   // Initialize from store but don't auto-sync
   $: if (
@@ -393,7 +395,7 @@
 <div class="navigation-bar" {style}>
   <div class="nav-content">
     <!-- Translation Dropdown -->
-    <div class="nav-dropdown">
+    <div class="nav-dropdown translation-dropdown-trigger">
       <button
         bind:this={translationButtonRef}
         class="nav-button"
@@ -423,18 +425,17 @@
       on:click={() => readingPlanModalStore.open()}
       title="Open reading plan"
     >
-      📖 Reading Plan
+      <span class="emoji">📖</span> Reading Plan
     </button>
 
     <!-- Reference Dropdown (Tree Structure) -->
-    <div class="nav-dropdown">
+    <div class="nav-dropdown reference-dropdown-trigger">
       <button
         bind:this={referenceButtonRef}
         class="nav-button"
         on:click={toggleReferenceDropdown}
         class:active={referenceDropdownOpen}
       >
-        <span class="nav-label">Reference:</span>
         <span class="nav-value">{currentReference}</span>
         <span class="nav-arrow">{referenceDropdownOpen ? "▲" : "▼"}</span>
       </button>
@@ -448,7 +449,7 @@
       role="search"
     >
       <div class="search-input-wrapper" class:focused={searchFocused}>
-        <span class="search-icon">🔍</span>
+        <span class="search-icon emoji">🔍</span>
         <input
           type="text"
           class="search-input"
@@ -460,7 +461,7 @@
           on:blur={handleSearchBlur}
         />
         {#if isSearching}
-          <span class="search-spinner">⏳</span>
+          <span class="search-spinner emoji">⏳</span>
         {:else if searchQuery}
           <button
             class="clear-search"
@@ -470,23 +471,23 @@
             ✕
           </button>
         {/if}
+        <button
+          class="search-button inline-search"
+          on:click={() => performSearch()}
+          disabled={!searchQuery.trim()}
+        >
+          Search
+        </button>
       </div>
     </div>
 
     <!-- Search Buttons -->
     <button
-      class="search-button"
-      on:click={() => performSearch()}
-      disabled={!searchQuery.trim()}
-    >
-      Search
-    </button>
-    <button
       class="power-search-button"
       on:click={() => (showPowerSearchModal = true)}
       title="Advanced search with regex, proximity, and biblical filters"
     >
-      ⚡ Power
+      <span class="emoji">⚡</span> Power
     </button>
 
     <!-- Settings Button -->
@@ -523,6 +524,7 @@
     <!-- Profile Button -->
     <button
       class="profile-button"
+      class:signed-in={isSignedIn}
       on:click={() => profileModalStore.open()}
       title="Profile"
       aria-label="Open profile"
@@ -672,6 +674,8 @@
     top: 0;
     z-index: 1000;
     min-height: 68px;
+    --nav-item-height: 33px;
+    --nav-item-inline-pad: calc((var(--nav-item-height) - 14px) / 2);
     box-sizing: border-box;
     overflow: visible; /* Allow dropdowns to escape */
   }
@@ -684,6 +688,7 @@
     flex-wrap: nowrap; /* Prevent wrapping on all screen sizes */
     overflow-x: auto; /* Enable horizontal scrolling */
     overflow-y: visible;
+    align-items: flex-start;
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE and Edge */
   }
@@ -696,19 +701,34 @@
     position: relative;
     flex: 1;
     max-width: 280px;
+    align-self: flex-start;
+  }
+
+  .nav-dropdown.reference-dropdown-trigger {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: none;
+  }
+
+  .nav-dropdown.translation-dropdown-trigger {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: none;
   }
 
   .nav-checkbox {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 14px;
+    padding: 0 14px;
+    height: var(--nav-item-height);
     background: #1a1a1a;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     color: #e0e0e0;
     font-size: 14px;
     white-space: nowrap;
+    box-sizing: border-box;
   }
 
   .nav-checkbox label {
@@ -724,7 +744,8 @@
   }
 
   .update-btn {
-    padding: 4px 12px;
+    height: 20px;
+    padding: 0 10px;
     background: #667eea;
     border: 1px solid #667eea;
     border-radius: 4px;
@@ -747,7 +768,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 14px;
+    padding: 0 14px;
+    height: var(--nav-item-height);
     background: #1a1a1a;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
@@ -755,8 +777,30 @@
     cursor: pointer;
     transition: all 0.2s;
     font-size: 14px;
+    box-sizing: border-box;
     touch-action: manipulation; /* Allow fast taps */
     -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+  }
+
+  .nav-dropdown.reference-dropdown-trigger .nav-button {
+    width: auto;
+    padding: 0 var(--nav-item-inline-pad);
+    white-space: nowrap;
+  }
+
+  .nav-dropdown.reference-dropdown-trigger .nav-value {
+    white-space: nowrap;
+  }
+
+  .nav-dropdown.translation-dropdown-trigger .nav-button {
+    width: auto;
+    padding: 0 var(--nav-item-inline-pad);
+    white-space: nowrap;
+  }
+
+  .nav-dropdown.translation-dropdown-trigger .nav-label,
+  .nav-dropdown.translation-dropdown-trigger .nav-value {
+    white-space: nowrap;
   }
 
   .nav-button:hover {
@@ -942,6 +986,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    height: var(--nav-item-height);
   }
 
   .search-input-wrapper {
@@ -950,10 +995,12 @@
     align-items: center;
     flex: 1;
     min-width: 0;
+    height: 100%;
     background: #1a1a1a;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     transition: all 0.2s;
+    box-sizing: border-box;
   }
 
   .search-input-wrapper.focused {
@@ -971,7 +1018,8 @@
   .search-input {
     flex: 1;
     min-width: 0;
-    padding: 10px 12px 10px 0;
+    height: 100%;
+    padding: 0 12px 0 0;
     background: transparent;
     border: none;
     color: #e0e0e0;
@@ -1000,9 +1048,10 @@
 
   .search-button {
     flex-shrink: 0;
-    padding: 10px 20px;
-    background: #667eea;
-    border: 1px solid #667eea;
+    height: var(--nav-item-height);
+    padding: 0 20px;
+    background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+    border: 1px solid #4caf50;
     border-radius: 6px;
     color: white;
     cursor: pointer;
@@ -1011,11 +1060,11 @@
     white-space: nowrap;
     transition: background 0.2s;
     touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.4);
+    -webkit-tap-highlight-color: rgba(76, 175, 80, 0.4);
   }
 
   .search-button:hover:not(:disabled) {
-    background: #7e8ff0;
+    background: linear-gradient(135deg, #5bc75f 0%, #388e3c 100%);
   }
 
   .search-button:disabled {
@@ -1025,11 +1074,21 @@
     cursor: not-allowed;
   }
 
+  .inline-search {
+    height: 20px;
+    padding: 0 10px;
+    font-size: 14px;
+    font-weight: 500;
+    margin: 0 6px 0 4px;
+    box-shadow: none;
+  }
+
   .power-search-button {
     flex-shrink: 0;
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: 1px solid #667eea;
+    height: var(--nav-item-height);
+    padding: 0 20px;
+    background: linear-gradient(135deg, #7e57c2 0%, #512da8 100%);
+    border: 1px solid #7e57c2;
     border-radius: 6px;
     color: white;
     cursor: pointer;
@@ -1038,40 +1097,43 @@
     white-space: nowrap;
     transition: all 0.2s;
     touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.4);
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    -webkit-tap-highlight-color: rgba(126, 87, 194, 0.4);
+    box-shadow: 0 2px 8px rgba(126, 87, 194, 0.3);
   }
 
   .power-search-button:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 12px rgba(126, 87, 194, 0.4);
   }
 
   .reading-plan-button {
     flex-shrink: 0;
-    padding: 10px 16px;
-    background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
-    border: 1px solid #4caf50;
+    height: var(--nav-item-height);
+    padding: 0 16px;
+    background: linear-gradient(135deg, #42a5f5 0%, #1565c0 100%);
+    border: 1px solid #42a5f5;
     border-radius: 6px;
     color: white;
     cursor: pointer;
     font-size: 14px;
     font-weight: 600;
+    line-height: 1;
+    box-sizing: border-box;
     white-space: nowrap;
     transition: all 0.2s;
     touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(76, 175, 80, 0.4);
-    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+    -webkit-tap-highlight-color: rgba(66, 165, 245, 0.4);
+    box-shadow: 0 2px 8px rgba(66, 165, 245, 0.3);
   }
 
   .reading-plan-button:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+    box-shadow: 0 4px 12px rgba(66, 165, 245, 0.4);
   }
 
   .search-spinner {
     padding: 0 12px;
-    color: #667eea;
+    color: #4caf50;
     font-size: 16px;
     animation: spin 1s linear infinite;
   }
@@ -1239,23 +1301,23 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    padding: 10px;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
+    width: var(--nav-item-height);
+    height: var(--nav-item-height);
+    padding: 0;
+    background: linear-gradient(135deg, #ffb74d 0%, #f57c00 100%);
+    border: 1px solid #ffb74d;
     border-radius: 6px;
-    color: #e0e0e0;
+    color: #1a1a1a;
     cursor: pointer;
     transition: all 0.2s;
     touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+    -webkit-tap-highlight-color: rgba(255, 183, 77, 0.2);
   }
 
   .settings-button:hover {
-    background: #252525;
-    border-color: #667eea;
-    color: #667eea;
+    background: linear-gradient(135deg, #ffca66 0%, #fb8c00 100%);
+    border-color: #ffca66;
+    color: #1a1a1a;
   }
 
   .settings-button svg {
@@ -1268,10 +1330,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    padding: 10px;
-    background: #1a1a1a;
+    width: var(--nav-item-height);
+    height: var(--nav-item-height);
+    padding: 0;
+    background: #2a2a2a;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     color: #e0e0e0;
@@ -1282,9 +1344,21 @@
   }
 
   .profile-button:hover {
-    background: #252525;
-    border-color: #667eea;
-    color: #667eea;
+    background: #343434;
+    border-color: #5a5a5a;
+    color: #f0f0f0;
+  }
+
+  .profile-button.signed-in {
+    background: linear-gradient(135deg, #66bb6a 0%, #2e7d32 100%);
+    border-color: #66bb6a;
+    color: #0f1f0f;
+  }
+
+  .profile-button.signed-in:hover {
+    background: linear-gradient(135deg, #7ad07f 0%, #388e3c 100%);
+    border-color: #7ad07f;
+    color: #0f1f0f;
   }
 
   .profile-button svg {
@@ -1302,7 +1376,7 @@
       gap: 10px; /* Increased from 6px */
       padding: 10px 12px; /* Increased from 8px 10px */
       -webkit-overflow-scrolling: touch;
-      align-items: center;
+      align-items: flex-start;
     }
 
     .nav-dropdown {

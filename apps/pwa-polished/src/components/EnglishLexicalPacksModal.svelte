@@ -40,7 +40,7 @@
       });
       
       packsLoaded = true;
-      currentMessage = '✅ All English lexical packs loaded successfully!';
+      currentMessage = 'All English lexical packs loaded successfully!';
     } catch (err: any) {
       error = `Failed to load packs: ${err.message}`;
       console.error('Pack loading error:', err);
@@ -66,7 +66,7 @@
   <div class="modal-backdrop" on:click={handleBackdropClick}>
     <div class="modal-container" on:click|stopPropagation>
       <div class="modal-header">
-        <h2>📚 English Lexical Packs</h2>
+        <h2><span class="emoji">📚</span> English Lexical Packs</h2>
         <button class="close-button" on:click={close}>✕</button>
       </div>
       
@@ -94,7 +94,7 @@
         
         {#if packsLoaded && !isLoading}
           <div class="success-message">
-            ✅ English lexical packs are loaded and ready!
+            <span class="emoji">✅</span> English lexical packs are loaded and ready!
           </div>
           <button class="load-button" on:click={close}>
             Close
@@ -110,9 +110,15 @@
           <div class="progress-container">
             <div class="progress-header">
               <span class="pack-name">
-                {currentPack === 'wordlist' ? '📖 Wordlist' : 
-                 currentPack === 'thesaurus' ? '🔄 Thesaurus' : 
-                 currentPack === 'grammar' ? '📝 Grammar' : 'Loading...'}
+                {#if currentPack === 'wordlist'}
+                  <span class="emoji">📖</span> Wordlist
+                {:else if currentPack === 'thesaurus'}
+                  <span class="emoji">🔄</span> Thesaurus
+                {:else if currentPack === 'grammar'}
+                  <span class="emoji">📝</span> Grammar
+                {:else}
+                  Loading...
+                {/if}
               </span>
               <span class="progress-stage">
                 {currentStage === 'downloading' ? 'Downloading' :

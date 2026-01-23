@@ -21,7 +21,7 @@ export interface UserSettings {
   dailyDriverGreek?: string;
   
   // Display settings
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: 'light' | 'dark' | 'auto' | 'sepia';
   fontSize?: number; // Base font size in pixels (default 15)
   lineSpacing?: number; // Line height multiplier (default 1.5)
   verseLayout?: 'one-per-line' | 'paragraph'; // Verse layout mode
@@ -66,7 +66,7 @@ export function updateSettings(updates: Partial<UserSettings>): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
 }
 
-export function resolveTheme(theme: UserSettings['theme']): 'light' | 'dark' {
+export function resolveTheme(theme: UserSettings['theme']): 'light' | 'dark' | 'sepia' {
   if (theme === 'auto') {
     if (typeof window !== 'undefined' && window.matchMedia) {
       return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -78,12 +78,13 @@ export function resolveTheme(theme: UserSettings['theme']): 'light' | 'dark' {
 
 export function applyTheme(theme: UserSettings['theme']): void {
   const resolved = resolveTheme(theme);
+  document.body.classList.remove('dark-theme', 'light-theme', 'sepia-theme');
   if (resolved === 'dark') {
     document.body.classList.add('dark-theme');
-    document.body.classList.remove('light-theme');
+  } else if (resolved === 'sepia') {
+    document.body.classList.add('sepia-theme');
   } else {
     document.body.classList.add('light-theme');
-    document.body.classList.remove('dark-theme');
   }
 }
 
