@@ -14,6 +14,7 @@
   let hoveredEdge: WindowEdge | null = null;
   let mouseX = 0;
   let mouseY = 0;
+  let usingTouch = false; // Track if we're using touch to ignore mouse events
 
   $: atLimit = $windowStore.length >= 6;
   $: bumperClass = atLimit ? 'at-limit' : 'normal';
@@ -47,6 +48,8 @@
   function handleTouchStart(e: TouchEvent) {
     if (atLimit) return; // Don't allow new windows at limit
 
+    usingTouch = true; // Mark that we're using touch input
+    console.log('👆 TOUCH START - usingTouch set to TRUE');
     const touch = e.touches[0];
     const x = touch.clientX;
     const y = touch.clientY;
@@ -68,7 +71,12 @@
   }
 
   function handleMouseDown(e: MouseEvent) {
+    console.log('🖱️ MOUSE DOWN called - usingTouch:', usingTouch);
     if (atLimit) return; // Don't allow new windows at limit
+    if (usingTouch) {
+      console.log('⛔ MOUSE DOWN blocked - usingTouch is true');
+      return; // Ignore mouse events when touch is active
+    }
 
     const x = e.clientX;
     const y = e.clientY;
@@ -135,7 +143,15 @@
   }
 
   function handleTouchEnd() {
+    console.log('🟢 TOUCH END called:', { isDragging, edgePosition, usingTouch });
     if (!isDragging || !edgePosition) return;
+    
+    // Prevent duplicate execution from mouse events
+    if (!usingTouch) {
+      console.log('⛔ TOUCH END blocked - usingTouch is false');
+      return;
+    }
+    console.log('✅ TOUCH END processing...');
 
     let dragDistance = 0;
     let threshold = 0;
@@ -185,10 +201,71 @@
 
     isDragging = false;
     edgePosition = null;
+    
+    // Reset touch flag after a short delay to allow mouse events to be ignored
+    if (usingTouch) {
+      setTimeout(() => {
+        usingTouch = false;
+      }, 100);
+    }
   }
 
   function handleMouseUp() {
-    handleTouchEnd();
+    console.log('🔵 MOUSE UP called:', { isDragging, edgePosition, usingTouch });
+    if (!isDragging || !edgePosition) return;
+    if (usingTouch) {
+      console.log('⛔ MOUSE UP blocked - usingTouch is true');
+      return; // Ignore if touch is active
+    }
+    console.log('✅ MOUSE UP processing...');
+
+    let dragDistance = 0;
+    let threshold = 0;
+    let screenSize = 0;
+
+    switch (edgePosition) {
+      case "top":
+        dragDistance = currentY - startY;
+        screenSize = window.innerHeight;
+        threshold = screenSize * OPEN_THRESHOLD;
+        break;
+      case "bottom":
+        dragDistance = startY - currentY;
+        screenSize = window.innerHeight;
+        threshold = screenSize * OPEN_THRESHOLD;
+        break;
+      case "left":
+        dragDistance = currentX - startX;
+        screenSize = window.innerWidth;
+        threshold = screenSize * OPEN_THRESHOLD;
+        break;
+      case "right":
+        dragDistance = startX - currentX;
+        screenSize = window.innerWidth;
+        threshold = screenSize * OPEN_THRESHOLD;
+        break;
+    }
+
+    const dragPercent = Math.min(90, Math.max(10, (dragDistance / screenSize) * 100));
+
+    console.log('🪟 EDGE GESTURE:', {
+      edge: edgePosition,
+      dragDistance: `${dragDistance}px`,
+      screenSize: `${screenSize}px`,
+      dragPercent: `${dragPercent.toFixed(1)}%`,
+      threshold: `${threshold}px`,
+      willOpen: dragDistance > threshold
+    });
+
+    if (dragDistance > threshold) {
+      const windowId = windowStore.createWindow(edgePosition, dragPercent);
+      console.log(`✅ Window opened: ${windowId} at ${dragPercent.toFixed(1)}%`);
+    } else {
+      console.log('❌ Drag too short, window not opened');
+    }
+
+    isDragging = false;
+    edgePosition = null;
   }
 
   onMount(() => {

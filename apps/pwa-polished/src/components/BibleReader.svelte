@@ -2,13 +2,13 @@
   import { onMount } from "svelte";
   import NavigationBar from "./NavigationBar.svelte";
   import SelectionToast from "./SelectionToast.svelte";
-  import LexicalModal from "./LexicalModal.svelte";
   import {
     navigationStore,
     availableTranslations,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { searchQuery, triggerSearch } from "../stores/searchStore";
+  import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
   import { BIBLE_BOOKS } from "../lib/bibleData";
@@ -57,12 +57,7 @@
   let touchStartPos: { x: number; y: number } | null = null;
   let hasMoved = false;
 
-  // Lexical modal state
-  let showLexicalModal = false;
-  let lexicalSelectedText = "";
-  let lexicalStrongsId: string | undefined = undefined;
-  let lexicalMorphologyData: DBMorphology | null = null;
-  let lexicalEntries: any = null; // Store lexicon lookup results
+  // Morphology state
   let selectedMorphology: DBMorphology | null = null;
 
   let repeatsActive = false;
@@ -1641,14 +1636,10 @@
     switch (action) {
       case "dissect":
         // Open lexical modal with morphology data if available
-        lexicalSelectedText = text;
-        lexicalStrongsId = selectedMorphology?.strongsId || undefined;
-        lexicalMorphologyData = selectedMorphology;
-        
         console.log('🔍 Starting lexicon lookup for:', text);
         console.log('   Current translation:', currentTranslation);
         console.log('   Has morphology:', !!selectedMorphology);
-        console.log('   Strong\'s ID:', lexicalStrongsId);
+        console.log('   Strong\'s ID:', selectedMorphology?.strongsId);
         
         // Look up lexical data using new consolidated pack system
         (async () => {
@@ -1683,42 +1674,70 @@
                   console.log('   Grammar:', englishEntry.grammar);
                 }
                 
-                // Store results for the modal
-                lexicalEntries = englishEntry;
-                console.log('✅ Stored lexical entries, opening modal');
-                showLexicalModal = true;
+                // Open modal with results
+                console.log('✅ Opening modal with lexical entries');
+                lexicalModalStore.open({
+                  selectedText: text,
+                  strongsId: undefined,
+                  morphologyData: null,
+                  lexicalEntries: englishEntry,
+                });
               } else {
                 console.log(`ℹ️ No lexical data found for "${text}"`);
                 console.log('💡 Make sure you have installed the "Lexical Resources Pack" (365 MB) from the Packs menu.');
-                lexicalEntries = null;
-                showLexicalModal = true; // Still show modal with error
+                lexicalModalStore.open({
+                  selectedText: text,
+                  strongsId: undefined,
+                  morphologyData: null,
+                  lexicalEntries: null,
+                });
               }
             }
             
             // If we have a Strong's ID from morphology, look it up directly
-            if (lexicalStrongsId) {
-              const entry = await lookupStrongs(lexicalStrongsId);
+            if (selectedMorphology?.strongsId) {
+              const entry = await lookupStrongs(selectedMorphology.strongsId);
               if (entry) {
                 console.log('Found Strong\'s entry:', entry);
-                // Store and open modal (Strong's data is handled via lexicalStrongsId prop)
-                showLexicalModal = true;
               }
+              lexicalModalStore.open({
+                selectedText: text,
+                strongsId: selectedMorphology.strongsId,
+                morphologyData: selectedMorphology,
+                lexicalEntries: null,
+              });
+            } else if (selectedMorphology) {
+              // Have morphology but no Strong's ID
+              lexicalModalStore.open({
+                selectedText: text,
+                strongsId: undefined,
+                morphologyData: selectedMorphology,
+                lexicalEntries: null,
+              });
             } else {
               // Otherwise look up the word
               const entries = await lookupWord(text);
               if (entries.length > 0) {
                 console.log(`Found ${entries.length} lexical entries:`, entries);
-                // Store and open modal (morphology data is handled via lexicalMorphologyData prop)
-                showLexicalModal = true;
               } else {
                 console.log('No lexical entries found for:', text);
                 console.log('💡 Make sure you have installed the "Lexical Resources Pack" from the Packs menu.');
-                showLexicalModal = true; // Still show modal with error
               }
+              lexicalModalStore.open({
+                selectedText: text,
+                strongsId: undefined,
+                morphologyData: null,
+                lexicalEntries: null,
+              });
             }
           } catch (error) {
             console.error('Lexicon lookup error:', error);
-            showLexicalModal = true; // Show modal with error
+            lexicalModalStore.open({
+              selectedText: text,
+              strongsId: undefined,
+              morphologyData: selectedMorphology,
+              lexicalEntries: null,
+            });
           }
         })();
         
@@ -1907,14 +1926,7 @@
   </div>
 </div>
 
-<!-- Lexical Modal -->
-<LexicalModal
-  bind:isOpen={showLexicalModal}
-  selectedText={lexicalSelectedText}
-  strongsId={lexicalStrongsId}
-  morphologyData={lexicalMorphologyData}
-  lexicalEntries={lexicalEntries}
-/>
+
 
 <style>
   .bible-reader {

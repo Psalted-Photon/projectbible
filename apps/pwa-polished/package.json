@@ -17,6 +17,7 @@
     "vite-plugin-pwa": "^0.21.1"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.91.0",
     "eruda": "^3.4.3",
     "leaflet": "^1.9.4",
     "sql.js": "^1.12.0"

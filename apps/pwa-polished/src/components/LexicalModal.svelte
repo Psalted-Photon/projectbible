@@ -2,17 +2,18 @@
   import { onMount } from "svelte";
   import { IndexedDBLexiconStore } from "../adapters/LexiconStore";
   import type { StrongEntry } from "@projectbible/core";
-  import type { DBMorphology } from "../adapters/db";
   import {
     englishLexicalService,
     type WordInfo,
   } from "../../../../packages/core/src/search/englishLexicalService";
+  import { lexicalModalStore } from "../stores/lexicalModalStore";
 
-  export let isOpen = false;
-  export let selectedText = "";
-  export let strongsId: string | undefined = undefined;
-  export let morphologyData: DBMorphology | null = null;
-  export let lexicalEntries: any = null; // English word data from lexicon-lookup.ts
+  // Subscribe to store instead of using props
+  $: isOpen = $lexicalModalStore.isOpen;
+  $: selectedText = $lexicalModalStore.selectedText;
+  $: strongsId = $lexicalModalStore.strongsId;
+  $: morphologyData = $lexicalModalStore.morphologyData;
+  $: lexicalEntries = $lexicalModalStore.lexicalEntries;
 
   let lexiconStore: IndexedDBLexiconStore;
   let strongEntry: StrongEntry | null = null;
@@ -200,7 +201,7 @@
   }
 
   function close() {
-    isOpen = false;
+    lexicalModalStore.close();
     strongEntry = null;
     searchResults = [];
     error = "";

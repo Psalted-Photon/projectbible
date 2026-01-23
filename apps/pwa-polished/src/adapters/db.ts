@@ -11,7 +11,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 15; // Added word_mapping store for dictionary lookups
+const DB_VERSION = 17; // Added sync queue + idempotency stores
 
 export interface DBPack {
   id: string;
@@ -283,6 +283,51 @@ export interface DBReadingPlanDay {
   completedAt?: number; // timestamp
 }
 
+export interface DBReadingProgressEntry {
+  id: string; // "planId-dayNumber"
+  planId: string;
+  dayNumber: number;
+  completed: number; // 0 or 1
+  createdAt: number; // timestamp
+  completedAt?: number; // timestamp
+  startedReadingAt?: number; // timestamp
+  chaptersRead: string; // JSON string of chapters/actions
+  catchUpAdjustment?: string; // JSON string
+}
+
+export interface DBPlanMetadata {
+  planId: string;
+  status: 'active' | 'completed' | 'archived';
+  planDefinitionHash: string;
+  planVersion: number;
+  activatedAt: number; // timestamp
+  archivedAt?: number; // timestamp
+  lastSyncedAt?: number; // timestamp
+  syncConflicts?: string; // JSON string
+  catchUpAdjustment?: string; // JSON string
+}
+
+export type DBSyncQueueStatus = 'pending' | 'processing' | 'failed' | 'done';
+
+export interface DBSyncQueueItem {
+  id: string;
+  type: string;
+  payload: any;
+  operationId: string;
+  priority: number;
+  createdAt: number;
+  attempts: number;
+  lastAttemptAt?: number | null;
+  status: DBSyncQueueStatus;
+  lastError?: string;
+  planId?: string;
+}
+
+export interface DBSyncOperation {
+  operationId: string;
+  appliedAt: number;
+}
+
 /**
  * Open the IndexedDB database, creating it if needed
  */
@@ -513,6 +558,39 @@ export function openDB(): Promise<IDBDatabase> {
         daysStore.createIndex('planId', 'planId', { unique: false });
         daysStore.createIndex('planId_dayNumber', ['planId', 'dayNumber'], { unique: true });
         daysStore.createIndex('date', 'date', { unique: false });
+      }
+
+      // Reading progress store
+      if (!db.objectStoreNames.contains('reading_progress')) {
+        const progressStore = db.createObjectStore('reading_progress', { keyPath: 'id' });
+        progressStore.createIndex('planId', 'planId', { unique: false });
+        progressStore.createIndex('planId_dayNumber', ['planId', 'dayNumber'], { unique: true });
+        progressStore.createIndex('completed', 'completed', { unique: false });
+      }
+
+      // Plan metadata store
+      if (!db.objectStoreNames.contains('plan_metadata')) {
+        const metaStore = db.createObjectStore('plan_metadata', { keyPath: 'planId' });
+        metaStore.createIndex('status', 'status', { unique: false });
+        metaStore.createIndex('activatedAt', 'activatedAt', { unique: false });
+      }
+
+      // Sync queue store
+      if (!db.objectStoreNames.contains('sync_queue')) {
+        const queueStore = db.createObjectStore('sync_queue', { keyPath: 'id' });
+        queueStore.createIndex('status', 'status', { unique: false });
+        queueStore.createIndex('priority', 'priority', { unique: false });
+        queueStore.createIndex('status_priority', ['status', 'priority'], { unique: false });
+        queueStore.createIndex('createdAt', 'createdAt', { unique: false });
+        queueStore.createIndex('type', 'type', { unique: false });
+        queueStore.createIndex('planId', 'planId', { unique: false });
+        queueStore.createIndex('type_planId', ['type', 'planId'], { unique: false });
+      }
+
+      // Sync operations store (idempotency log)
+      if (!db.objectStoreNames.contains('sync_operations')) {
+        const opsStore = db.createObjectStore('sync_operations', { keyPath: 'operationId' });
+        opsStore.createIndex('appliedAt', 'appliedAt', { unique: false });
       }
       
       // Pleiades ancient places store (41,833 scholarly places)

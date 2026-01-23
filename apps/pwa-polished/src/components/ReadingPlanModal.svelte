@@ -1,7 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { generateReadingPlan, BIBLE_BOOKS, type ReadingPlanConfig, type ReadingPlan } from '@projectbible/core';
+  import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
+  import { suggestCatchUp, getDaysAheadBehind, calculateStreak } from '../../../../packages/core/src/ReadingPlanEngine';
   import { navigationStore } from '../stores/navigationStore';
+  import {
+    readingProgressStore,
+    getLatestChapterState,
+    type ReadingProgressEntry,
+  } from '../stores/ReadingProgressStore';
+  import { planMetadataStore } from '../stores/PlanMetadataStore';
+  import { syncOrchestrator, type SyncQueueStats } from '../services/SyncOrchestrator';
+  import { supabaseAuthService } from '../services/SupabaseAuthService';
   
   export let isOpen = false;
   
@@ -29,7 +39,34 @@
   let optShowDailyStats = true;
   let planGenerationStatus = '';
   let planHistory: any[] = [];
-  let viewMode: 'calendar' | 'list' = 'calendar';
+  let viewMode: 'calendar' | 'list' | 'catchup' = 'calendar';
+  let dayProgressMap = new Map<number, ReadingProgressEntry>();
+  let lastLoadedPlanId: string | null = null;
+  let catchUpMode: 'spread' | 'dedicated' = 'spread';
+  let maxCatchUpPerDay = 3;
+  let catchUpDays: Array<{ dayNumber: number; date: Date; chapters: Array<{ book: string; chapter: number }> }> = [];
+  const CATCHUP_STORAGE_PREFIX = 'projectbible_catchup_days_';
+  let showCatchUpDays = true;
+  let verseStats = {
+    total: 0,
+    read: 0,
+    remaining: 0,
+    todayRead: 0,
+  };
+  let syncStatus = 'Not synced';
+  let syncStats: SyncQueueStats = {
+    pending: 0,
+    processing: 0,
+    failed: 0,
+    done: 0,
+    lastSyncedAt: null,
+    lastError: null,
+  };
+  let syncError: string | null = null;
+  let authEmail = '';
+  let authPassword = '';
+  let authStatus = '';
+  let signedInEmail: string | null = null;
   
   // Derived book lists
   const OT_BOOKS = BIBLE_BOOKS.filter(b => b.testament === 'OT').map(b => b.name);
@@ -38,7 +75,70 @@
   onMount(() => {
     loadActivePlan();
     loadPlanHistory();
+    supabaseAuthService.getSession().then((session) => {
+      signedInEmail = session?.user?.email ?? null;
+    });
+    const unsubscribeSync = syncOrchestrator.subscribe((stats) => {
+      syncStats = stats;
+      syncError = stats.lastError;
+      syncStatus = formatSyncStatus(stats);
+    });
+    const subscription = supabaseAuthService.onAuthStateChange((event, session) => {
+      signedInEmail = session?.user?.email ?? null;
+      if (event === 'SIGNED_IN') {
+        void handleSignInSync();
+      }
+      if (event === 'SIGNED_OUT') {
+        authStatus = 'Signed out';
+      }
+    });
+    return () => {
+      unsubscribeSync();
+      subscription?.data?.subscription?.unsubscribe();
+    };
   });
+
+  $: if (currentReadingPlan) {
+    dayProgressMap;
+    verseStats = computeVerseStats();
+  }
+
+  $: if (currentReadingPlan && currentPlanId && currentPlanId !== lastLoadedPlanId) {
+    loadProgressForPlan();
+    loadCatchUpDays();
+  }
+
+  function formatSyncStatus(stats: SyncQueueStats): string {
+    if (stats.processing > 0) {
+      return stats.pending > 0
+        ? `Auto-syncing (${stats.pending} queued)`
+        : 'Auto-syncing...';
+    }
+    if (stats.failed > 0) {
+      return `Sync failed (${stats.failed})`;
+    }
+    if (stats.pending > 0) {
+      return `Queued (${stats.pending})`;
+    }
+    if (stats.lastSyncedAt) {
+      const ageMs = Date.now() - stats.lastSyncedAt;
+      if (ageMs < 30000) return 'Synced just now';
+      return `Synced ${new Date(stats.lastSyncedAt).toLocaleTimeString()}`;
+    }
+    return 'Not synced';
+  }
+
+  async function handleSignInSync() {
+    if (!currentPlanId) return;
+    try {
+      syncStatus = 'Syncing...';
+      await syncOrchestrator.runImmediateSync(currentPlanId, 'sign-in');
+      syncStatus = 'Synced just now';
+    } catch (error) {
+      console.error('Sign-in sync failed:', error);
+      syncStatus = 'Sync failed';
+    }
+  }
   
   function loadActivePlan() {
     try {
@@ -78,6 +178,464 @@
       planHistory = [];
     }
   }
+
+  function getVerseCountForChapter(bookName: string, chapter: number): number {
+    return VERSE_COUNTS[bookName]?.[chapter - 1] ?? 0;
+  }
+
+  function isSameDate(timestamp: number, reference: Date): boolean {
+    const date = new Date(timestamp);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime() === reference.getTime();
+  }
+
+  function computeVerseStats() {
+    if (!currentReadingPlan) {
+      return { total: 0, read: 0, remaining: 0, todayRead: 0 };
+    }
+
+    let total = 0;
+    let read = 0;
+    let todayRead = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    currentReadingPlan.days.forEach((day) => {
+      const progress = getDayProgress(day.dayNumber);
+
+      day.chapters.forEach((chapter: any) => {
+        const verseCount = getVerseCountForChapter(chapter.book, chapter.chapter);
+        total += verseCount;
+
+        if (!progress) return;
+        const chapterProgress = progress.chaptersRead.find(
+          (item) => item.book === chapter.book && item.chapter === chapter.chapter,
+        );
+        if (!chapterProgress || chapterProgress.actions.length === 0) return;
+        const latest = chapterProgress.actions[chapterProgress.actions.length - 1];
+        if (latest.type === 'checked') {
+          read += verseCount;
+          if (isSameDate(latest.timestamp, today)) {
+            todayRead += verseCount;
+          }
+        }
+      });
+    });
+
+    return {
+      total,
+      read,
+      remaining: Math.max(0, total - read),
+      todayRead,
+    };
+  }
+
+  function getOverdueDays() {
+    if (!currentReadingPlan) return [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return currentReadingPlan.days.filter((day) => {
+      const dayDate = new Date(day.date);
+      dayDate.setHours(0, 0, 0, 0);
+      const progress = getDayProgress(day.dayNumber);
+      return dayDate < today && !progress?.completed;
+    });
+  }
+
+  function getOverdueChapters() {
+    return getOverdueDays().flatMap((day) => day.chapters);
+  }
+
+  function getEvenSpreadSuggestions() {
+    if (!currentReadingPlan) return [];
+    return suggestCatchUp(currentReadingPlan, getProgressEntries(), maxCatchUpPerDay);
+  }
+
+  function getDedicatedCatchUpDays() {
+    const overdueChapters = getOverdueChapters();
+    if (overdueChapters.length === 0) return [];
+
+    const baseDayNumber = currentReadingPlan?.days?.[currentReadingPlan.days.length - 1]?.dayNumber ?? 0;
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+
+    const days: Array<{ dayNumber: number; date: Date; chapters: Array<{ book: string; chapter: number }> }> = [];
+    let index = 0;
+    let dayNumber = baseDayNumber + 1;
+
+    while (index < overdueChapters.length) {
+      const chunk = overdueChapters.slice(index, index + maxCatchUpPerDay);
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + (dayNumber - baseDayNumber));
+      days.push({
+        dayNumber,
+        date,
+        chapters: chunk,
+      });
+      index += maxCatchUpPerDay;
+      dayNumber += 1;
+    }
+
+    return days;
+  }
+
+  async function applyEvenSpread() {
+    if (!currentPlanId) return;
+    const suggestions = getEvenSpreadSuggestions();
+    for (const suggestion of suggestions) {
+      const existing = await readingProgressStore.getDayProgress(currentPlanId, suggestion.dayNumber);
+      const entry = existing
+        ? existing
+        : await readingProgressStore.ensureDayProgress(
+            currentPlanId,
+            suggestion.dayNumber,
+            currentReadingPlan?.days.find((day) => day.dayNumber === suggestion.dayNumber)?.chapters ?? [],
+          );
+      entry.catchUpAdjustment = {
+        originalDayNumber: -1,
+        addedChapters: suggestion.addedChapters,
+      };
+      await readingProgressStore.setCatchUpAdjustment(entry);
+      dayProgressMap = new Map(dayProgressMap);
+      dayProgressMap.set(entry.dayNumber, entry);
+    }
+    await persistCatchUpAdjustment('spread', suggestions);
+    await syncOrchestrator.enqueue(
+      'catch-up-apply',
+      { planId: currentPlanId, mode: 'spread', appliedAt: Date.now(), data: suggestions },
+      1,
+    );
+  }
+
+  function applyDedicatedCatchUp() {
+    const days = getDedicatedCatchUpDays();
+    saveCatchUpDays(days);
+    if (currentPlanId) {
+      void persistCatchUpAdjustment('dedicated', days);
+      void syncOrchestrator.enqueue(
+        'catch-up-apply',
+        { planId: currentPlanId, mode: 'dedicated', appliedAt: Date.now(), data: days },
+        1,
+      );
+    }
+  }
+
+  async function persistCatchUpAdjustment(mode: 'spread' | 'dedicated', data: any) {
+    if (!currentPlanId) return;
+    const existing = await planMetadataStore.getPlanMetadata(currentPlanId);
+    if (!existing) return;
+    await planMetadataStore.upsertPlanMetadata({
+      ...existing,
+      catchUpAdjustment: {
+        mode,
+        appliedAt: Date.now(),
+        data,
+      },
+    });
+  }
+
+  async function loadProgressForPlan() {
+    if (!currentPlanId) return;
+    try {
+      const entries = await readingProgressStore.getProgressForPlan(currentPlanId);
+      dayProgressMap = new Map(entries.map((entry) => [entry.dayNumber, entry]));
+      lastLoadedPlanId = currentPlanId;
+    } catch (error) {
+      console.error('Error loading reading progress:', error);
+    }
+  }
+
+  function loadCatchUpDays() {
+    if (!currentPlanId) return;
+    const stored = localStorage.getItem(`${CATCHUP_STORAGE_PREFIX}${currentPlanId}`);
+    if (!stored) {
+      catchUpDays = [];
+      return;
+    }
+    try {
+      const parsed = JSON.parse(stored) as Array<{ dayNumber: number; date: string; chapters: Array<{ book: string; chapter: number }> }>;
+      catchUpDays = parsed.map((day) => ({
+        ...day,
+        date: new Date(day.date),
+      }));
+    } catch (error) {
+      console.error('Error loading catch-up days:', error);
+      catchUpDays = [];
+    }
+  }
+
+  function saveCatchUpDays(days: Array<{ dayNumber: number; date: Date; chapters: Array<{ book: string; chapter: number }> }>) {
+    if (!currentPlanId) return;
+    const serialized = days.map((day) => ({
+      dayNumber: day.dayNumber,
+      date: day.date.toISOString(),
+      chapters: day.chapters,
+    }));
+    localStorage.setItem(`${CATCHUP_STORAGE_PREFIX}${currentPlanId}`, JSON.stringify(serialized));
+    catchUpDays = days;
+  }
+
+  function getDayProgress(dayNumber: number): ReadingProgressEntry | undefined {
+    return dayProgressMap.get(dayNumber);
+  }
+
+  function getEffectiveChapters(day: any): Array<{ book: string; chapter: number }> {
+    const baseChapters = day.chapters ?? [];
+    const progress = getDayProgress(day.dayNumber);
+    const adjustment = progress?.catchUpAdjustment?.addedChapters ?? [];
+    return [...baseChapters, ...adjustment];
+  }
+
+  function getDisplayedDays() {
+    if (!currentReadingPlan) return [];
+    const baseDays = currentReadingPlan.days.map((day) => ({
+      ...day,
+      date: new Date(day.date),
+      isCatchUp: false,
+    }));
+
+    const catchUpEntries = catchUpDays.map((day) => ({
+      dayNumber: day.dayNumber,
+      date: new Date(day.date),
+      chapters: day.chapters,
+      isCatchUp: true,
+    }));
+
+    const combined = [...baseDays, ...catchUpEntries].sort((a, b) => a.dayNumber - b.dayNumber);
+    return showCatchUpDays ? combined : combined.filter((day) => !day.isCatchUp);
+  }
+
+  function getProgressEntries(): ReadingProgressEntry[] {
+    return Array.from(dayProgressMap.values());
+  }
+
+  function isChapterChecked(progress: ReadingProgressEntry | undefined, book: string, chapter: number): boolean {
+    const state = getLatestChapterState(progress, book, chapter);
+    return state === 'checked';
+  }
+
+  function getDayProgressCounts(day: any) {
+    const progress = getDayProgress(day.dayNumber);
+    const effectiveChapters = getEffectiveChapters(day);
+    const total = effectiveChapters.length;
+    const checked = effectiveChapters.filter((chapter: any) =>
+      isChapterChecked(progress, chapter.book, chapter.chapter)
+    ).length;
+    return { checked, total };
+  }
+
+  function getDayStatus(day: any): 'unread' | 'current' | 'completed' | 'ahead' | 'overdue' {
+    const progress = getDayProgress(day.dayNumber);
+    const dayDate = new Date(day.date);
+    dayDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (progress?.completed) {
+      return dayDate.getTime() > today.getTime() ? 'ahead' : 'completed';
+    }
+    if (dayDate.getTime() < today.getTime()) return 'overdue';
+    if (dayDate.getTime() === today.getTime()) return 'current';
+    return 'unread';
+  }
+
+  async function ensureStartedReading(day: any) {
+    if (!currentPlanId) return;
+    const effectiveChapters = getEffectiveChapters(day);
+    const progress = await readingProgressStore.ensureDayProgress(
+      currentPlanId,
+      day.dayNumber,
+      effectiveChapters,
+    );
+    if (!progress.startedReadingAt) {
+      const startedAt = Date.now();
+      await readingProgressStore.setStartedReadingAt(currentPlanId, day.dayNumber, startedAt);
+      dayProgressMap = new Map(dayProgressMap);
+      dayProgressMap.set(day.dayNumber, { ...progress, startedReadingAt: startedAt });
+    }
+  }
+
+  async function handleChapterClick(day: any, chapter: any) {
+    await ensureStartedReading(day);
+    navigateToChapter(chapter.book, chapter.chapter);
+  }
+
+  async function toggleChapter(day: any, chapter: any) {
+    if (!currentPlanId) return;
+    const effectiveChapters = getEffectiveChapters(day);
+    const progress = getDayProgress(day.dayNumber);
+    const wasCompleted = progress?.completed ?? false;
+    const currentlyChecked = isChapterChecked(progress, chapter.book, chapter.chapter);
+    const updated = await readingProgressStore.setChapterAction(
+      currentPlanId,
+      day.dayNumber,
+      effectiveChapters,
+      { book: chapter.book, chapter: chapter.chapter },
+      currentlyChecked ? 'unchecked' : 'checked',
+    );
+    dayProgressMap = new Map(dayProgressMap);
+    dayProgressMap.set(day.dayNumber, updated);
+
+    if (updated.completed !== wasCompleted) {
+      await syncOrchestrator.enqueue(
+        updated.completed ? 'day-complete' : 'day-incomplete',
+        {
+          planId: currentPlanId,
+          dayNumber: day.dayNumber,
+          completed: updated.completed,
+          completedAt: updated.completedAt,
+          chaptersRead: updated.chaptersRead,
+        },
+        1,
+      );
+    } else {
+      await syncOrchestrator.enqueue(
+        'chapter-toggle',
+        {
+          planId: currentPlanId,
+          dayNumber: day.dayNumber,
+          chapter: { book: chapter.book, chapter: chapter.chapter },
+          action: currentlyChecked ? 'unchecked' : 'checked',
+          timestamp: Date.now(),
+        },
+        5,
+      );
+    }
+  }
+
+  async function markDayComplete(day: any) {
+    if (!currentPlanId) return;
+    const effectiveChapters = getEffectiveChapters(day);
+    const updated = await readingProgressStore.markDayComplete(
+      currentPlanId,
+      day.dayNumber,
+      effectiveChapters,
+    );
+    dayProgressMap = new Map(dayProgressMap);
+    dayProgressMap.set(day.dayNumber, updated);
+    await syncOrchestrator.enqueue(
+      'day-complete',
+      {
+        planId: currentPlanId,
+        dayNumber: day.dayNumber,
+        completed: true,
+        completedAt: updated.completedAt,
+        chaptersRead: updated.chaptersRead,
+      },
+      1,
+    );
+  }
+
+  async function syncNow() {
+    if (!currentPlanId) return;
+    try {
+      syncStatus = 'Syncing...';
+      await syncOrchestrator.runImmediateSync(currentPlanId, 'manual');
+      await syncOrchestrator.processQueue();
+      syncStatus = `Synced ${new Date().toLocaleTimeString()}`;
+    } catch (error) {
+      console.error('Sync failed:', error);
+      syncStatus = 'Sync failed';
+    }
+  }
+
+  async function signIn() {
+    authStatus = '';
+    try {
+      await supabaseAuthService.signIn(authEmail, authPassword);
+      authStatus = 'Signed in';
+      authPassword = '';
+    } catch (error) {
+      authStatus = 'Sign in failed';
+      console.error(error);
+    }
+  }
+
+  async function signUp() {
+    authStatus = '';
+    try {
+      await supabaseAuthService.signUp(authEmail, authPassword);
+      authStatus = 'Check your email to confirm';
+      authPassword = '';
+    } catch (error) {
+      authStatus = 'Sign up failed';
+      console.error(error);
+    }
+  }
+
+  async function signOut() {
+    authStatus = '';
+    try {
+      await supabaseAuthService.signOut();
+      signedInEmail = null;
+      authStatus = 'Signed out';
+    } catch (error) {
+      authStatus = 'Sign out failed';
+      console.error(error);
+    }
+  }
+
+  function getCompletionTimeline() {
+    if (!currentReadingPlan) return [];
+    return currentReadingPlan.days.map((day) => {
+      const progress = getDayProgress(day.dayNumber);
+      return {
+        dayNumber: day.dayNumber,
+        date: new Date(day.date).toISOString(),
+        completedAt: progress?.completedAt ? new Date(progress.completedAt).toISOString() : null,
+      };
+    });
+  }
+
+  function exportProgressJson() {
+    if (!currentReadingPlan || !currentPlanId) return;
+    const payload = {
+      planId: currentPlanId,
+      generatedAt: new Date().toISOString(),
+      totalDays: currentReadingPlan.totalDays,
+      totalChapters: currentReadingPlan.totalChapters,
+      verseStats,
+      timeline: getCompletionTimeline(),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reading-plan-${currentPlanId}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportProgressMarkdown() {
+    if (!currentReadingPlan || !currentPlanId) return;
+    const lines: string[] = [];
+    lines.push(`# Reading Plan Report`);
+    lines.push('');
+    lines.push(`Plan ID: ${currentPlanId}`);
+    lines.push(`Generated: ${new Date().toLocaleString()}`);
+    lines.push('');
+    lines.push(`- Total Days: ${currentReadingPlan.totalDays}`);
+    lines.push(`- Total Chapters: ${currentReadingPlan.totalChapters}`);
+    lines.push(`- Verses Read: ${verseStats.read}`);
+    lines.push(`- Verses Remaining: ${verseStats.remaining}`);
+    lines.push(`- Percent Complete: ${verseStats.total > 0 ? Math.round((verseStats.read / verseStats.total) * 100) : 0}%`);
+    lines.push('');
+    lines.push('## Completion Timeline');
+    lines.push('| Day | Scheduled Date | Completed At |');
+    lines.push('| --- | -------------- | ------------ |');
+    getCompletionTimeline().forEach((entry) => {
+      lines.push(`| ${entry.dayNumber} | ${new Date(entry.date).toLocaleDateString()} | ${entry.completedAt ? new Date(entry.completedAt).toLocaleDateString() : '—'} |`);
+    });
+    lines.push('');
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reading-plan-${currentPlanId}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
   
   function savePlanToHistory(plan: ReadingPlan, planId: string) {
     try {
@@ -101,6 +659,8 @@
       localStorage.removeItem(STORAGE_ACTIVE_PLAN);
       currentReadingPlan = null;
       currentPlanId = null;
+      dayProgressMap = new Map();
+      lastLoadedPlanId = null;
     }
   }
   
@@ -438,7 +998,7 @@
                     {#each todayReading.chapters as chapter, i}
                       <button 
                         class="chapter-link" 
-                        on:click={() => navigateToChapter(chapter.book, chapter.chapter)}
+                        on:click={() => handleChapterClick(todayReading, chapter)}
                       >
                         {chapter.book} {chapter.chapter}
                       </button>{#if i < todayReading.chapters.length - 1}, {/if}
@@ -447,7 +1007,7 @@
                   <p class="chapter-count">{todayReading.chapters.length} chapters</p>
                   <button 
                     class="start-reading-btn" 
-                    on:click={() => navigateToChapter(todayReading.chapters[0].book, todayReading.chapters[0].chapter)}
+                    on:click={() => handleChapterClick(todayReading, todayReading.chapters[0])}
                   >
                     Start Reading →
                   </button>
@@ -457,6 +1017,73 @@
                   <p>Today is not a reading day in this plan.</p>
                 </div>
               {/if}
+
+              <div class="plan-progress">
+                <div class="progress-header">
+                  <h3>Progress</h3>
+                  <span class="progress-percent">
+                    {verseStats.total > 0 ? Math.round((verseStats.read / verseStats.total) * 100) : 0}%
+                  </span>
+                </div>
+                <div class="progress-bar">
+                  <div
+                    class="progress-fill"
+                    style={`width: ${verseStats.total > 0 ? (verseStats.read / verseStats.total) * 100 : 0}%`}
+                  ></div>
+                </div>
+                <div class="progress-stats">
+                  <div><strong>Verses read today:</strong> {verseStats.todayRead}</div>
+                  <div><strong>Total verses read:</strong> {verseStats.read}</div>
+                  <div><strong>Verses remaining:</strong> {verseStats.remaining}</div>
+                  <div><strong>Days ahead/behind:</strong> {currentReadingPlan ? getDaysAheadBehind(currentReadingPlan, getProgressEntries()) : 0}</div>
+                  <div><strong>Streak:</strong> {calculateStreak(getProgressEntries())} days</div>
+                </div>
+                <div class="progress-actions">
+                  <button class="export-btn" on:click={exportProgressJson}>Export JSON</button>
+                  <button class="export-btn" on:click={exportProgressMarkdown}>Export Markdown</button>
+                  <button class="export-btn" on:click={syncNow}>Sync Now</button>
+                  <span class="sync-status">{syncStatus}</span>
+                </div>
+                {#if syncStats.failed > 0}
+                  <div class="sync-actions">
+                    <button class="export-btn" on:click={() => syncOrchestrator.retryFailed()}>
+                      Retry failed
+                    </button>
+                  </div>
+                {/if}
+                {#if syncError}
+                  <div class="sync-error">{syncError}</div>
+                {/if}
+                <div class="auth-panel">
+                  {#if signedInEmail}
+                    <div class="auth-row">
+                      <span class="auth-label">Signed in as</span>
+                      <span class="auth-email">{signedInEmail}</span>
+                      <button class="export-btn" on:click={signOut}>Sign out</button>
+                    </div>
+                  {:else}
+                    <div class="auth-row">
+                      <input
+                        class="auth-input"
+                        type="email"
+                        placeholder="Email"
+                        bind:value={authEmail}
+                      />
+                      <input
+                        class="auth-input"
+                        type="password"
+                        placeholder="Password"
+                        bind:value={authPassword}
+                      />
+                      <button class="export-btn" on:click={signIn}>Sign in</button>
+                      <button class="export-btn" on:click={signUp}>Sign up</button>
+                    </div>
+                  {/if}
+                  {#if authStatus}
+                    <div class="auth-status">{authStatus}</div>
+                  {/if}
+                </div>
+              </div>
               
               <div class="view-toggle">
                 <button 
@@ -471,38 +1098,189 @@
                 >
                   List View
                 </button>
+                <button
+                  class:active={viewMode === 'catchup'}
+                  on:click={() => viewMode = 'catchup'}
+                >
+                  Catch-up
+                </button>
+                <label class="catchup-toggle">
+                  <input type="checkbox" bind:checked={showCatchUpDays} />
+                  Show catch-up days
+                </label>
               </div>
               
               {#if viewMode === 'calendar'}
                 <div class="calendar-view">
-                  {#each currentReadingPlan.days.slice(0, 30) as day}
-                    <div class="day-card" class:today={todayReading && day.dayNumber === todayReading.dayNumber}>
+                  {#each getDisplayedDays().slice(0, 30) as day}
+                    <div
+                      class="day-card"
+                      class:today={todayReading && day.dayNumber === todayReading.dayNumber}
+                      class:status-unread={getDayStatus(day) === 'unread'}
+                      class:status-current={getDayStatus(day) === 'current'}
+                      class:status-completed={getDayStatus(day) === 'completed'}
+                      class:status-ahead={getDayStatus(day) === 'ahead'}
+                      class:status-overdue={getDayStatus(day) === 'overdue'}
+                      class:catchup-day={day.isCatchUp}
+                    >
                       <div class="day-header">
-                        <strong>Day {day.dayNumber}</strong>
+                        <strong>{day.isCatchUp ? 'Catch-up Day' : 'Day'} {day.dayNumber}</strong>
                         <span class="day-date">{new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        {#if day.isCatchUp}
+                          <span class="catchup-badge">Catch-up</span>
+                        {/if}
+                        <span class="day-progress">
+                          {getDayProgressCounts(day).checked}/{getDayProgressCounts(day).total}
+                        </span>
                       </div>
                       <div class="day-chapters">
                         {#each day.chapters as chapter}
-                          <div class="chapter-item">{chapter.book} {chapter.chapter}</div>
+                          <div class="chapter-row">
+                            <label class="chapter-checkbox">
+                              <input
+                                type="checkbox"
+                                checked={isChapterChecked(getDayProgress(day.dayNumber), chapter.book, chapter.chapter)}
+                                on:change={() => toggleChapter(day, chapter)}
+                              />
+                              <button
+                                class="chapter-link"
+                                on:click={() => handleChapterClick(day, chapter)}
+                              >
+                                {chapter.book} {chapter.chapter}
+                              </button>
+                            </label>
+                          </div>
                         {/each}
                       </div>
+                      <button class="mark-day-btn" on:click={() => markDayComplete(day)}>
+                        Mark Day Complete
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {:else if viewMode === 'list'}
+                <div class="list-view">
+                  {#each getDisplayedDays() as day}
+                    <div
+                      class="list-day"
+                      class:today={todayReading && day.dayNumber === todayReading.dayNumber}
+                      class:status-unread={getDayStatus(day) === 'unread'}
+                      class:status-current={getDayStatus(day) === 'current'}
+                      class:status-completed={getDayStatus(day) === 'completed'}
+                      class:status-ahead={getDayStatus(day) === 'ahead'}
+                      class:status-overdue={getDayStatus(day) === 'overdue'}
+                      class:catchup-day={day.isCatchUp}
+                    >
+                      <div class="list-day-header">
+                        <strong>{day.isCatchUp ? 'Catch-up Day' : 'Day'} {day.dayNumber}</strong> - {new Date(day.date).toLocaleDateString()}
+                        {#if day.isCatchUp}
+                          <span class="catchup-badge">Catch-up</span>
+                        {/if}
+                        <span class="day-progress">
+                          {getDayProgressCounts(day).checked}/{getDayProgressCounts(day).total}
+                        </span>
+                      </div>
+                      <div class="list-day-chapters">
+                        {#each day.chapters as chapter, i}
+                          <label class="chapter-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={isChapterChecked(getDayProgress(day.dayNumber), chapter.book, chapter.chapter)}
+                              on:change={() => toggleChapter(day, chapter)}
+                            />
+                            <button
+                              class="chapter-link"
+                              on:click={() => handleChapterClick(day, chapter)}
+                            >
+                              {chapter.book} {chapter.chapter}
+                            </button>
+                          </label>
+                          {#if i < day.chapters.length - 1}
+                            <span class="chapter-separator">,</span>
+                          {/if}
+                        {/each}
+                      </div>
+                      <button class="mark-day-btn" on:click={() => markDayComplete(day)}>
+                        Mark Day Complete
+                      </button>
                     </div>
                   {/each}
                 </div>
               {:else}
-                <div class="list-view">
-                  {#each currentReadingPlan.days as day}
-                    <div class="list-day" class:today={todayReading && day.dayNumber === todayReading.dayNumber}>
-                      <div class="list-day-header">
-                        <strong>Day {day.dayNumber}</strong> - {new Date(day.date).toLocaleDateString()}
-                      </div>
-                      <div class="list-day-chapters">
-                        {#each day.chapters as chapter, i}
-                          {chapter.book} {chapter.chapter}{#if i < day.chapters.length - 1}, {/if}
+                <div class="catchup-view">
+                  <div class="catchup-summary">
+                    <div><strong>Overdue days:</strong> {getOverdueDays().length}</div>
+                    <div><strong>Overdue chapters:</strong> {getOverdueChapters().length}</div>
+                    <div><strong>Max per day:</strong> {maxCatchUpPerDay}</div>
+                  </div>
+
+                  <div class="catchup-controls">
+                    <label>
+                      Catch-up Mode
+                      <select bind:value={catchUpMode}>
+                        <option value="spread">Even spread</option>
+                        <option value="dedicated">Dedicated catch-up days</option>
+                      </select>
+                    </label>
+                    <label>
+                      Max chapters per day
+                      <input type="number" min="1" max="10" bind:value={maxCatchUpPerDay} />
+                    </label>
+                  </div>
+
+                  {#if catchUpMode === 'spread'}
+                    <div class="catchup-preview">
+                      <h4>Even spread preview</h4>
+                      {#if getEvenSpreadSuggestions().length === 0}
+                        <p class="muted">No catch-up needed. You are on schedule.</p>
+                      {:else}
+                        {#each getEvenSpreadSuggestions() as suggestion}
+                          <div class="catchup-item">
+                            <strong>Day {suggestion.dayNumber}:</strong>
+                            {#each suggestion.addedChapters as chapter, i}
+                              <span>{chapter.book} {chapter.chapter}</span>{#if i < suggestion.addedChapters.length - 1}, {/if}
+                            {/each}
+                          </div>
+                        {/each}
+                        <button class="apply-catchup" on:click={applyEvenSpread}>
+                          Apply even spread
+                        </button>
+                      {/if}
+                    </div>
+                  {:else}
+                    <div class="catchup-preview">
+                      <h4>Dedicated catch-up days</h4>
+                      {#if getDedicatedCatchUpDays().length === 0}
+                        <p class="muted">No catch-up needed. You are on schedule.</p>
+                      {:else}
+                        {#each getDedicatedCatchUpDays() as day}
+                          <div class="catchup-item">
+                            <strong>Catch-up Day {day.dayNumber}:</strong>
+                            {#each day.chapters as chapter, i}
+                              <span>{chapter.book} {chapter.chapter}</span>{#if i < day.chapters.length - 1}, {/if}
+                            {/each}
+                          </div>
+                        {/each}
+                        <button class="apply-catchup" on:click={applyDedicatedCatchUp}>
+                          Save catch-up days
+                        </button>
+                      {/if}
+                    </div>
+
+                    {#if catchUpDays.length > 0}
+                      <div class="catchup-saved">
+                        <h4>Saved catch-up days</h4>
+                        {#each catchUpDays as day}
+                          <div class="catchup-item">
+                            <strong>Catch-up Day {day.dayNumber}:</strong>
+                            {#each day.chapters as chapter, i}
+                              <span>{chapter.book} {chapter.chapter}</span>{#if i < day.chapters.length - 1}, {/if}
+                            {/each}
+                          </div>
                         {/each}
                       </div>
-                    </div>
-                  {/each}
+                    {/if}
+                  {/if}
                 </div>
               {/if}
             {:else}
@@ -896,11 +1674,139 @@
     margin-bottom: 20px;
     color: #888;
   }
+
+  .plan-progress {
+    background: #1f1f1f;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 20px;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .progress-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: #e0e0e0;
+  }
+
+  .progress-percent {
+    font-size: 14px;
+    color: #8bc34a;
+    font-weight: 600;
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #2a2a2a;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4caf50, #8bc34a);
+    transition: width 0.3s ease;
+  }
+
+  .progress-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+    font-size: 13px;
+    color: #bbb;
+  }
+
+  .progress-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .export-btn {
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid #3a3a3a;
+    background: #1f1f1f;
+    color: #e0e0e0;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .export-btn:hover {
+    background: #2a2a2a;
+  }
+
+  .sync-status {
+    font-size: 12px;
+    color: #9ccc65;
+    align-self: center;
+  }
+
+  .sync-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+  }
+
+  .sync-error {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #e57373;
+  }
+
+  .auth-panel {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .auth-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .auth-input {
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid #3a3a3a;
+    background: #121212;
+    color: #e0e0e0;
+    min-width: 180px;
+  }
+
+  .auth-label {
+    font-size: 12px;
+    color: #aaa;
+  }
+
+  .auth-email {
+    font-size: 12px;
+    color: #e0e0e0;
+  }
+
+  .auth-status {
+    font-size: 12px;
+    color: #9ccc65;
+  }
   
   .view-toggle {
     display: flex;
     gap: 10px;
     margin-bottom: 15px;
+    flex-wrap: wrap;
   }
   
   .view-toggle button {
@@ -922,6 +1828,112 @@
     color: white;
     border-color: #4caf50;
   }
+
+  .catchup-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #bbb;
+    padding: 6px 10px;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    background: #1f1f1f;
+  }
+
+  .catchup-toggle input {
+    accent-color: #ffc107;
+  }
+
+  .catchup-badge {
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: #111;
+    background: #ffc107;
+  }
+
+  .catchup-view {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .catchup-summary {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    background: #1f1f1f;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 13px;
+    color: #ccc;
+  }
+
+  .catchup-controls {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .catchup-controls label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: #ccc;
+  }
+
+  .catchup-controls select,
+  .catchup-controls input {
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid #3a3a3a;
+    background: #1a1a1a;
+    color: #e0e0e0;
+  }
+
+  .catchup-preview,
+  .catchup-saved {
+    background: #1f1f1f;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .catchup-preview h4,
+  .catchup-saved h4 {
+    margin: 0 0 10px 0;
+    color: #e0e0e0;
+  }
+
+  .catchup-item {
+    font-size: 13px;
+    color: #ccc;
+    margin-bottom: 6px;
+  }
+
+  .apply-catchup {
+    margin-top: 10px;
+    padding: 8px 14px;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    color: #e0e0e0;
+    cursor: pointer;
+  }
+
+  .apply-catchup:hover {
+    background: #3a3a3a;
+  }
+
+  .muted {
+    color: #888;
+    margin: 0;
+  }
   
   .calendar-view {
     display: grid;
@@ -935,6 +1947,34 @@
     border-radius: 8px;
     padding: 12px;
     transition: all 0.2s;
+  }
+
+  .day-card.status-unread {
+    background: #2a2a2a;
+  }
+
+  .day-card.status-current {
+    background: #1a3d1a;
+    border-left: 4px solid #4caf50;
+  }
+
+  .day-card.status-completed {
+    background: #1a2a1a;
+    border-left: 4px solid #8bc34a;
+  }
+
+  .day-card.status-ahead {
+    background: #2a2010;
+    border-left: 4px solid #ffc107;
+  }
+
+  .day-card.status-overdue {
+    background: #2a1a1a;
+    border-left: 4px solid #d32f2f;
+  }
+
+  .day-card.catchup-day {
+    border-style: dashed;
   }
   
   .day-card:hover {
@@ -955,6 +1995,11 @@
     border-bottom: 1px solid #3a3a3a;
     color: #e0e0e0;
   }
+
+  .day-progress {
+    font-size: 12px;
+    color: #bbb;
+  }
   
   .day-date {
     font-size: 12px;
@@ -966,8 +2011,35 @@
     color: #ccc;
   }
   
-  .chapter-item {
-    margin: 3px 0;
+  .chapter-row {
+    margin: 4px 0;
+  }
+
+  .chapter-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chapter-checkbox input {
+    accent-color: #4caf50;
+    width: 14px;
+    height: 14px;
+  }
+
+  .mark-day-btn {
+    margin-top: 10px;
+    padding: 6px 10px;
+    border: 1px solid #3a3a3a;
+    background: #1f1f1f;
+    color: #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .mark-day-btn:hover {
+    background: #2a2a2a;
   }
   
   .list-view {
@@ -982,6 +2054,34 @@
     padding: 12px;
     border-radius: 8px;
     border-left: 3px solid transparent;
+  }
+
+  .list-day.status-unread {
+    background: #2a2a2a;
+  }
+
+  .list-day.status-current {
+    background: #1a3d1a;
+    border-left-color: #4caf50;
+  }
+
+  .list-day.status-completed {
+    background: #1a2a1a;
+    border-left-color: #8bc34a;
+  }
+
+  .list-day.status-ahead {
+    background: #2a2010;
+    border-left-color: #ffc107;
+  }
+
+  .list-day.status-overdue {
+    background: #2a1a1a;
+    border-left-color: #d32f2f;
+  }
+
+  .list-day.catchup-day {
+    border-style: dashed;
   }
   
   .list-day.today {
@@ -998,6 +2098,11 @@
   .list-day-chapters {
     font-size: 14px;
     color: #aaa;
+  }
+
+  .chapter-separator {
+    margin: 0 6px;
+    color: #555;
   }
   
   .history-item {

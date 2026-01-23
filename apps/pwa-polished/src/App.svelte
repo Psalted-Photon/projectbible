@@ -1,29 +1,53 @@
 <script lang="ts">
   import BibleReader from "./components/BibleReader.svelte";
+  import LexicalModal from "./components/LexicalModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
   import PaneContainer from "./components/PaneContainer.svelte";
   import ProgressModal from "./components/ProgressModal.svelte";
   import { windowStore } from "./lib/stores/windowStore";
   import { currentDownload, showProgressModal } from "./lib/pack-triggers";
   import { onMount } from "svelte";
+  import { syncOrchestrator } from "./services/SyncOrchestrator";
 
   let appReady = false;
+  let lastHiddenAt: number | null = null;
 
   // Initialize Eruda for mobile debugging
-  onMount(async () => {
+  onMount(() => {
     console.log("🚀 App mounted, initializing...");
-    if (typeof window !== "undefined") {
-      const eruda = await import("eruda");
-      eruda.default.init();
-      // Make the eruda button draggable
-      eruda.default.position({
-        x: window.innerWidth - 60,
-        y: window.innerHeight - 60,
-      });
-      console.log("🐛 Eruda initialized");
-    }
-    appReady = true;
-    console.log("✅ App ready");
+    const init = async () => {
+      if (typeof window !== "undefined") {
+        const eruda = await import("eruda");
+        eruda.default.init();
+        // Make the eruda button draggable
+        eruda.default.position({
+          x: window.innerWidth - 60,
+          y: window.innerHeight - 60,
+        });
+        console.log("🐛 Eruda initialized");
+      }
+      appReady = true;
+      console.log("✅ App ready");
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        lastHiddenAt = Date.now();
+        return;
+      }
+      if (!lastHiddenAt) return;
+      const elapsed = Date.now() - lastHiddenAt;
+      if (elapsed > 5 * 60 * 1000) {
+        void syncOrchestrator.processQueue();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    void init();
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   });
 
   // Calculate main content area based on open panels
@@ -78,6 +102,9 @@
     <WindowContainer />
     <PaneContainer />
     <ProgressModal progress={$currentDownload} visible={$showProgressModal} />
+    
+    <!-- Shared Lexical Modal (single instance for all Bible readers) -->
+    <LexicalModal />
   {/if}
 </div>
 
