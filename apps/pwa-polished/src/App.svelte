@@ -109,7 +109,7 @@
       Loading App...
     </div>
   {:else}
-    <div class="main-content" style={mainContentStyle}>
+    <div class="main-content themed" style={mainContentStyle}>
       <BibleReader />
     </div>
     <WindowContainer />
@@ -135,7 +135,6 @@
   }
 
   :global(body.light-theme) {
-    filter: invert(1) hue-rotate(180deg);
     background: #f5f5f5;
   }
 
@@ -143,16 +142,23 @@
     display: inline-block;
   }
 
-  :global(body.light-theme .emoji) {
-    filter: invert(1) hue-rotate(180deg);
-  }
-
   :global(body.sepia-theme) {
-    filter: invert(1) hue-rotate(180deg) sepia(0.5) saturate(0.85);
     background: #f6f0e3;
   }
 
-  :global(body.sepia-theme .emoji) {
+  :global(body.light-theme .themed) {
+    filter: invert(1) hue-rotate(180deg);
+  }
+
+  :global(body.light-theme .themed .emoji) {
+    filter: invert(1) hue-rotate(180deg);
+  }
+
+  :global(body.sepia-theme .themed) {
+    filter: invert(1) hue-rotate(180deg) sepia(0.5) saturate(0.85);
+  }
+
+  :global(body.sepia-theme .themed .emoji) {
     filter: invert(1) hue-rotate(180deg);
   }
 

@@ -27,30 +27,26 @@ export interface DBStats {
  */
 export async function getDatabaseStats(): Promise<DBStats> {
   const db = await openDB();
+
+  const stats: DBStats = {
+    packs: await countRecords(db, 'packs'),
+    verses: await countRecords(db, 'verses'),
+    notes: await countRecords(db, 'user_notes'),
+    highlights: await countRecords(db, 'user_highlights'),
+    bookmarks: await countRecords(db, 'user_bookmarks'),
+    places: await countRecords(db, 'places'),
+    mapTiles: await countRecords(db, 'map_tiles'),
+    totalSizeEstimate: 'calculating...'
+  };
   
-  try {
-    const stats: DBStats = {
-      packs: await countRecords(db, 'packs'),
-      verses: await countRecords(db, 'verses'),
-      notes: await countRecords(db, 'user_notes'),
-      highlights: await countRecords(db, 'user_highlights'),
-      bookmarks: await countRecords(db, 'user_bookmarks'),
-      places: await countRecords(db, 'places'),
-      mapTiles: await countRecords(db, 'map_tiles'),
-      totalSizeEstimate: 'calculating...'
-    };
-    
-    // Estimate storage usage
-    if ('storage' in navigator && 'estimate' in navigator.storage) {
-      const estimate = await navigator.storage.estimate();
-      const usedMB = (estimate.usage || 0) / (1024 * 1024);
-      stats.totalSizeEstimate = `${usedMB.toFixed(2)} MB`;
-    }
-    
-    return stats;
-  } finally {
-    db.close();
+  // Estimate storage usage
+  if ('storage' in navigator && 'estimate' in navigator.storage) {
+    const estimate = await navigator.storage.estimate();
+    const usedMB = (estimate.usage || 0) / (1024 * 1024);
+    stats.totalSizeEstimate = `${usedMB.toFixed(2)} MB`;
   }
+  
+  return stats;
 }
 
 /**
@@ -80,9 +76,8 @@ export async function clearAllData(): Promise<void> {
  */
 export async function removePack(packId: string): Promise<void> {
   const db = await openDB();
-  
-  try {
-    const tx = db.transaction(['packs', 'verses', 'places', 'map_tiles', 'historical_layers', 'morphology'], 'readwrite');
+
+  const tx = db.transaction(['packs', 'verses', 'places', 'map_tiles', 'historical_layers', 'morphology'], 'readwrite');
     
     // Delete pack metadata
     await new Promise<void>((resolve, reject) => {
@@ -172,10 +167,7 @@ export async function removePack(packId: string): Promise<void> {
       layersCursor.onerror = () => reject(layersCursor.error);
     });
     
-    await waitForTransaction(tx);
-  } finally {
-    db.close();
-  }
+  await waitForTransaction(tx);
 }
 
 /**
@@ -184,27 +176,23 @@ export async function removePack(packId: string): Promise<void> {
  */
 export async function clearPacksOnly(): Promise<void> {
   const db = await openDB();
+
+  const tx = db.transaction(
+    ['packs', 'verses', 'places', 'map_tiles', 'historical_layers', 'place_name_links'],
+    'readwrite'
+  );
   
-  try {
-    const tx = db.transaction(
-      ['packs', 'verses', 'places', 'map_tiles', 'historical_layers', 'place_name_links'],
-      'readwrite'
-    );
-    
-    await Promise.all([
-      clearStore(tx.objectStore('packs')),
-      clearStore(tx.objectStore('verses')),
-      clearStore(tx.objectStore('places')),
-      clearStore(tx.objectStore('map_tiles')),
-      clearStore(tx.objectStore('historical_layers')),
-      clearStore(tx.objectStore('place_name_links'))
-    ]);
-    
-    await waitForTransaction(tx);
-    console.log('Cleared all pack data while preserving user data');
-  } finally {
-    db.close();
-  }
+  await Promise.all([
+    clearStore(tx.objectStore('packs')),
+    clearStore(tx.objectStore('verses')),
+    clearStore(tx.objectStore('places')),
+    clearStore(tx.objectStore('map_tiles')),
+    clearStore(tx.objectStore('historical_layers')),
+    clearStore(tx.objectStore('place_name_links'))
+  ]);
+  
+  await waitForTransaction(tx);
+  console.log('Cleared all pack data while preserving user data');
 }
 
 /**
@@ -212,27 +200,23 @@ export async function clearPacksOnly(): Promise<void> {
  */
 export async function listInstalledPacks(): Promise<Array<{ id: string; type: string; version: string; size: number }>> {
   const db = await openDB();
+
+  const tx = db.transaction('packs', 'readonly');
+  const store = tx.objectStore('packs');
   
-  try {
-    const tx = db.transaction('packs', 'readonly');
-    const store = tx.objectStore('packs');
-    
-    return new Promise((resolve, reject) => {
-      const request = store.getAll();
-      request.onsuccess = () => {
-        const packs = request.result.map(pack => ({
-          id: pack.id,
-          type: pack.type,
-          version: pack.version,
-          size: pack.size
-        }));
-        resolve(packs);
-      };
-      request.onerror = () => reject(request.error);
-    });
-  } finally {
-    db.close();
-  }
+  return new Promise((resolve, reject) => {
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const packs = request.result.map(pack => ({
+        id: pack.id,
+        type: pack.type,
+        version: pack.version,
+        size: pack.size
+      }));
+      resolve(packs);
+    };
+    request.onerror = () => reject(request.error);
+  });
 }
 
 // ===== Helper functions =====

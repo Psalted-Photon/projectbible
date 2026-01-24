@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generatedAt": "2026-01-21T00:36:42.502Z",
+  "generatedAt": "2026-01-24T04:29:53.994Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -66,16 +66,16 @@
       "id": "study-tools",
       "type": "study",
       "name": "Study Tools Pack",
-      "description": "Maps, places, chronological ordering, cross-references",
+      "description": "Maps, places, OpenBible, Pleiades, chronological ordering, cross-references",
       "version": "1.0.0",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 3747840,
-      "sizeMB": 3.57,
-      "sha256": "fb04b22a82257ebc30ba3495537b9dda9a3d23942e3c0bc723de261d9df4f9bc",
+      "size": 460206080,
+      "sizeMB": 438.89,
+      "sha256": "c115945a7e43acd277d2fb12ec6b802eef3722ca57e8571ea7c155b7d24add72",
       "dependencies": [],
       "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/v1.0.0/study-tools.sqlite",
-      "createdAt": "2026-01-20T23:42:20.898Z"
+      "createdAt": "2026-01-24T04:29:53.994Z"
     },
     {
       "id": "translations",

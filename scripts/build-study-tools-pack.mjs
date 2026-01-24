@@ -6,7 +6,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, statSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -24,7 +24,17 @@ if (!existsSync(OUTPUT_DIR)) {
   mkdirSync(OUTPUT_DIR, { recursive: true });
 }
 
+// Rebuild cleanly if file already exists
+if (existsSync(OUTPUT_FILE)) {
+  try {
+    unlinkSync(OUTPUT_FILE);
+  } catch (err) {
+    console.warn('⚠️  Could not delete existing study-tools.sqlite, will try to overwrite:', err);
+  }
+}
+
 const output = new Database(OUTPUT_FILE);
+output.exec('PRAGMA foreign_keys = OFF;');
 
 // Create metadata table
 output.exec(`
@@ -42,7 +52,7 @@ insertMeta.run('type', 'study');
 insertMeta.run('schemaVersion', '1');
 insertMeta.run('minAppVersion', '1.0.0');
 insertMeta.run('name', 'Study Tools Pack');
-insertMeta.run('description', 'Maps, places, chronological ordering, cross-references');
+insertMeta.run('description', 'Maps, places, OpenBible, Pleiades, chronological ordering, cross-references');
 insertMeta.run('createdAt', new Date().toISOString());
 
 // Helper to copy all tables
@@ -70,10 +80,22 @@ function copyAllTables(sourcePath, packName) {
     
     try {
       output.exec(createStmt.sql);
-      output.exec(`INSERT INTO ${table.name} SELECT * FROM source.${table.name}`);
     } catch (e) {
       console.log(`         Already exists, appending data`);
-      output.exec(`INSERT OR IGNORE INTO ${table.name} SELECT * FROM source.${table.name}`);
+    }
+
+    // Insert only shared columns to avoid schema mismatches
+    const targetCols = output.prepare(`PRAGMA table_info(${table.name})`).all().map(c => c.name);
+    const sourceCols = output.prepare(`PRAGMA source.table_info(${table.name})`).all().map(c => c.name);
+    const sharedCols = targetCols.filter(c => sourceCols.includes(c));
+
+    if (sharedCols.length === 0) {
+      console.log(`         ⚠️  No shared columns, skipping ${table.name}`);
+    } else {
+      const columnList = sharedCols.map(c => `"${c}"`).join(', ');
+      output.exec(
+        `INSERT OR IGNORE INTO ${table.name} (${columnList}) SELECT ${columnList} FROM source.${table.name}`
+      );
     }
     
     // Copy indexes
@@ -94,17 +116,208 @@ function copyAllTables(sourcePath, packName) {
   output.exec('DETACH DATABASE source');
 }
 
+function mergeOpenBible(sourcePath) {
+  if (!existsSync(join(repoRoot, sourcePath))) {
+    console.log('      ⚠️  OpenBible not found, skipping');
+    return;
+  }
+
+  const absPath = join(repoRoot, sourcePath).replace(/\\/g, '/');
+  output.exec(`ATTACH DATABASE '${absPath}' AS source`);
+
+  output.exec(`
+    CREATE TABLE IF NOT EXISTS openbible_places (
+      id TEXT PRIMARY KEY,
+      friendly_id TEXT,
+      type TEXT,
+      class TEXT,
+      verse_count INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS openbible_locations (
+      id TEXT PRIMARY KEY,
+      friendly_id TEXT,
+      longitude REAL,
+      latitude REAL,
+      geometry_type TEXT,
+      class TEXT,
+      type TEXT,
+      precision_meters INTEGER,
+      thumbnail_file TEXT,
+      thumbnail_credit TEXT,
+      thumbnail_url TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS openbible_identifications (
+      ancient_place_id TEXT,
+      modern_location_id TEXT,
+      time_total INTEGER,
+      vote_total INTEGER,
+      class TEXT,
+      modifier TEXT
+    );
+  `);
+
+  try {
+    output.exec(`
+      INSERT OR IGNORE INTO openbible_places (id, friendly_id, type, class, verse_count)
+      SELECT id, friendly_id, type, class, verse_count FROM source.ancient_places
+    `);
+  } catch (e) {
+    console.log('      ⚠️  openbible_places import skipped');
+  }
+
+  try {
+    output.exec(`
+      INSERT OR IGNORE INTO openbible_locations (
+        id, friendly_id, longitude, latitude, geometry_type, class, type,
+        precision_meters, thumbnail_file, thumbnail_credit, thumbnail_url
+      )
+      SELECT id, friendly_id, longitude, latitude, geometry_type, class, type,
+             precision_meters, thumbnail_file, thumbnail_credit, thumbnail_url
+      FROM source.modern_locations
+    `);
+  } catch (e) {
+    console.log('      ⚠️  openbible_locations import skipped');
+  }
+
+  try {
+    output.exec(`
+      INSERT OR IGNORE INTO openbible_identifications (
+        ancient_place_id, modern_location_id, time_total, vote_total, class, modifier
+      )
+      SELECT ancient_place_id, modern_location_id, time_total, vote_total, class, modifier
+      FROM source.place_identifications
+    `);
+  } catch (e) {
+    console.log('      ⚠️  openbible_identifications import skipped');
+  }
+
+  output.exec('DETACH DATABASE source');
+}
+
+function mergePleiades(sourcePath) {
+  if (!existsSync(join(repoRoot, sourcePath))) {
+    console.log('      ⚠️  Pleiades not found, skipping');
+    return;
+  }
+
+  const absPath = join(repoRoot, sourcePath).replace(/\\/g, '/');
+  output.exec(`ATTACH DATABASE '${absPath}' AS source`);
+
+  output.exec(`
+    CREATE TABLE IF NOT EXISTS pleiades_places (
+      id TEXT PRIMARY KEY,
+      title TEXT,
+      uri TEXT,
+      place_type TEXT,
+      description TEXT,
+      year_start INTEGER,
+      year_end INTEGER,
+      created TEXT,
+      modified TEXT,
+      bbox TEXT,
+      latitude REAL,
+      longitude REAL
+    );
+
+    CREATE TABLE IF NOT EXISTS pleiades_names (
+      place_id TEXT,
+      name TEXT,
+      language TEXT,
+      romanized TEXT,
+      name_type TEXT,
+      time_period TEXT,
+      certainty TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS pleiades_locations (
+      place_id TEXT,
+      title TEXT,
+      geometry_type TEXT,
+      coordinates TEXT,
+      latitude REAL,
+      longitude REAL,
+      certainty TEXT,
+      time_period TEXT
+    );
+  `);
+
+  try {
+    output.exec(`
+      INSERT OR IGNORE INTO pleiades_places (
+        id, title, uri, place_type, description, year_start, year_end, created, modified, bbox, latitude, longitude
+      )
+      SELECT p.id, p.title, p.uri, p.place_type, p.description, p.year_start, p.year_end, p.created, p.modified, p.bbox,
+             l.latitude, l.longitude
+      FROM source.places p
+      LEFT JOIN (
+        SELECT place_id, latitude, longitude
+        FROM source.place_locations
+        WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+        GROUP BY place_id
+      ) l ON l.place_id = p.id
+    `);
+  } catch (e) {
+    console.log('      ⚠️  pleiades_places import skipped');
+  }
+
+  try {
+    output.exec(`
+      INSERT OR IGNORE INTO pleiades_names (
+        place_id, name, language, romanized, name_type, time_period, certainty
+      )
+      SELECT place_id, name, language, romanized, name_type, time_period, certainty
+      FROM source.place_names
+    `);
+  } catch (e) {
+    console.log('      ⚠️  pleiades_names import skipped');
+  }
+
+  try {
+    output.exec(`
+      INSERT OR IGNORE INTO pleiades_locations (
+        place_id, title, geometry_type, coordinates, latitude, longitude, certainty, time_period
+      )
+      SELECT place_id, title, geometry_type, coordinates, latitude, longitude, certainty, time_period
+      FROM source.place_locations
+    `);
+  } catch (e) {
+    console.log('      ⚠️  pleiades_locations import skipped');
+  }
+
+  output.exec('DETACH DATABASE source');
+}
+
 // 1. Maps
 console.log('\n   Merging maps...');
 copyAllTables('packs/maps.sqlite', 'Maps');
+copyAllTables('packs/maps-enhanced.sqlite', 'Enhanced Maps');
+copyAllTables('packs/maps-biblical.sqlite', 'Biblical Maps');
 console.log(`      ✅ Complete`);
 
-// 2. Cross-references
+// 2. Places
+console.log('\n   Merging places...');
+copyAllTables('packs/places.sqlite', 'Places');
+copyAllTables('packs/places-biblical.sqlite', 'Biblical Places');
+console.log(`      ✅ Complete`);
+
+// 3. OpenBible
+console.log('\n   Merging OpenBible...');
+mergeOpenBible('packs/openbible.sqlite');
+console.log(`      ✅ Complete`);
+
+// 4. Pleiades
+console.log('\n   Merging Pleiades...');
+mergePleiades('packs/pleiades.sqlite');
+console.log(`      ✅ Complete`);
+
+// 5. Cross-references
 console.log('\n   Merging cross-references...');
 copyAllTables('packs/cross-references.sqlite', 'Cross-references');
 console.log(`      ✅ Complete`);
 
-// 3. Chronological
+// 6. Chronological
 console.log('\n   Merging chronological data...');
 copyAllTables('packs/chronological.sqlite', 'Chronological');
 console.log(`      ✅ Complete`);

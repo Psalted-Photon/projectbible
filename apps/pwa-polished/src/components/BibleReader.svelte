@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import NavigationBar from "./NavigationBar.svelte";
   import SelectionToast from "./SelectionToast.svelte";
   import {
@@ -49,6 +49,7 @@
   let selectionMode: "word" | "verse" = "word";
   let selectionRange: Range | null = null;
   let longPressTimer: number | null = null;
+  let searchHighlightedElement: HTMLElement | null = null;
   let highlightedElements: HTMLElement[] = [];
   let isDragging = false;
   let dragEdge: "left" | "right" | null = null;
@@ -96,6 +97,10 @@
   $: currentTranslation =
     windowState?.contentState?.translation ?? $navigationStore.translation;
   $: isChronologicalMode = $navigationStore.isChronologicalMode ?? false;
+  $: highlightVerse =
+    windowState?.contentState?.highlightedVerse ??
+    $navigationStore.highlightedVerse ??
+    null;
 
   // DEBUG: Log when reactive values change
   $: console.log("📖 REACTIVE UPDATE:", {
@@ -135,6 +140,14 @@
         loadChapter(currentTranslation, currentBook, currentChapter, true);
       }
     }
+  }
+
+  $: if (chapters.length > 0 && highlightVerse) {
+    applySearchHighlight(highlightVerse);
+  }
+
+  $: if (!highlightVerse) {
+    clearSearchHighlight();
   }
 
   // Start/stop scroll detection when both book and element are ready
@@ -1359,6 +1372,28 @@
     }
   }
 
+  function clearSearchHighlight() {
+    if (searchHighlightedElement) {
+      searchHighlightedElement.classList.remove("search-verse-highlighted");
+      searchHighlightedElement = null;
+    }
+  }
+
+  async function applySearchHighlight(verseNumber: number) {
+    clearSearchHighlight();
+    await tick();
+
+    const verseEl = readerElement?.querySelector(
+      `.verse[data-verse="${verseNumber}"]`,
+    ) as HTMLElement | null;
+
+    if (!verseEl) return;
+
+    verseEl.classList.add("search-verse-highlighted");
+    searchHighlightedElement = verseEl;
+    verseEl.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   function clearHighlights() {
     // Clear browser selection
     const selection = window.getSelection();
@@ -1917,7 +1952,7 @@
               {#if heading}
                 <div class="section-heading">{heading}</div>
               {/if}
-              <div class="verse">
+              <div class="verse" data-verse={verse}>
                 <span class="verse-number">{verse}</span>
                 <span class="verse-text"
                   >{@html html || renderVerseHtml(text)}</span
@@ -2136,6 +2171,19 @@
     padding-left: 8px;
     margin-left: -8px;
     border-radius: 2px;
+  }
+
+  :global(.search-verse-highlighted) {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 183, 77, 0.35) 0%,
+      rgba(245, 124, 0, 0.25) 100%
+    );
+    border-left: 3px solid #f57c00;
+    padding-left: 8px;
+    margin-left: -8px;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(255, 183, 77, 0.25);
   }
 
   /* Floating drag handles for text selection */

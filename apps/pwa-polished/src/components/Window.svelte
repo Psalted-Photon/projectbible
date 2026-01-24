@@ -134,7 +134,8 @@
 />
 
 <div
-  class="panel panel-{window.edge}"
+  class="panel panel-{window.edge} panel-{window.contentType}"
+  class:themed={window.contentType !== 'map'}
   style="
     {window.edge === 'left' || window.edge === 'right' ? `width: ${window.size}%` : `height: ${window.size}%`};
   "

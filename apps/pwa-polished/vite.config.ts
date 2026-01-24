@@ -69,6 +69,8 @@ function copyPolishedPacks() {
       // Copy to public folder for dev server
       const polishedPacksDir = resolve(__dirname, '../../packs/polished');
       const publicPacksDir = resolve(__dirname, 'public/packs');
+      const consolidatedPacksDir = resolve(__dirname, '../../packs/consolidated');
+      const publicConsolidatedDir = resolve(__dirname, 'public/packs/consolidated');
       
       if (!existsSync(polishedPacksDir)) {
         console.warn('⚠️  No polished packs directory found');
@@ -77,6 +79,9 @@ function copyPolishedPacks() {
       
       if (!existsSync(publicPacksDir)) {
         mkdirSync(publicPacksDir, { recursive: true });
+      }
+      if (!existsSync(publicConsolidatedDir)) {
+        mkdirSync(publicConsolidatedDir, { recursive: true });
       }
       
       const files = readdirSync(polishedPacksDir).filter(f => f.endsWith('.sqlite'));
@@ -93,6 +98,20 @@ function copyPolishedPacks() {
         copyFileSync(src, dest);
         console.log(`   ✓ ${file}`);
       });
+
+      // Copy consolidated packs (for /packs/consolidated)
+      if (existsSync(consolidatedPacksDir)) {
+        const consolidatedFiles = readdirSync(consolidatedPacksDir).filter(f => f.endsWith('.sqlite'));
+        if (consolidatedFiles.length > 0) {
+          console.log('📦 Copying consolidated packs to public/ (dev mode):');
+          consolidatedFiles.forEach(file => {
+            const src = resolve(consolidatedPacksDir, file);
+            const dest = resolve(publicConsolidatedDir, file);
+            copyFileSync(src, dest);
+            console.log(`   ✓ consolidated/${file}`);
+          });
+        }
+      }
     },
     closeBundle() {
       // Skip in production builds (use GitHub Releases CDN instead)
@@ -108,6 +127,8 @@ function copyPolishedPacks() {
       
       const polishedPacksDir = resolve(__dirname, '../../packs/polished');
       const targetDir = resolve(__dirname, 'dist/packs');
+      const consolidatedPacksDir = resolve(__dirname, '../../packs/consolidated');
+      const targetConsolidatedDir = resolve(__dirname, 'dist/packs/consolidated');
       
       if (!existsSync(polishedPacksDir)) {
         console.warn('⚠️  No polished packs directory found');
@@ -116,6 +137,9 @@ function copyPolishedPacks() {
       
       if (!existsSync(targetDir)) {
         mkdirSync(targetDir, { recursive: true });
+      }
+      if (!existsSync(targetConsolidatedDir)) {
+        mkdirSync(targetConsolidatedDir, { recursive: true });
       }
       
       const files = readdirSync(polishedPacksDir).filter(f => f.endsWith('.sqlite'));
@@ -133,6 +157,20 @@ function copyPolishedPacks() {
         console.log(`   ✓ ${file}`);
       });
       console.log(`\n✨ Bundled ${files.length} pack(s)\n`);
+
+      // Bundle consolidated packs
+      if (existsSync(consolidatedPacksDir)) {
+        const consolidatedFiles = readdirSync(consolidatedPacksDir).filter(f => f.endsWith('.sqlite'));
+        if (consolidatedFiles.length > 0) {
+          console.log('\n📦 Bundling consolidated packs (dev mode):');
+          consolidatedFiles.forEach(file => {
+            const src = resolve(consolidatedPacksDir, file);
+            const dest = resolve(targetConsolidatedDir, file);
+            copyFileSync(src, dest);
+            console.log(`   ✓ consolidated/${file}`);
+          });
+        }
+      }
     }
   };
 }

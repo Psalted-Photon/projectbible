@@ -216,7 +216,12 @@
     const current = get(navigationStore);
     navigationStore.pushHistory(current);
     const targetTranslation = result.data.translation || current.translation;
-    navigationStore.navigateTo(targetTranslation, result.data.book, result.data.chapter);
+    navigationStore.navigateTo(
+      targetTranslation,
+      result.data.book,
+      result.data.chapter,
+      result.data.verse ?? null,
+    );
     closeModal();
   }
 

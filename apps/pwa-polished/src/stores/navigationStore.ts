@@ -6,6 +6,7 @@ export interface NavigationState {
   book: string;
   chapter: number;
   isChronologicalMode?: boolean;
+  highlightedVerse?: number | null;
 }
 
 // Available translations (will be populated from packs later)
@@ -15,7 +16,8 @@ export const availableTranslations = writable<string[]>(['WEB', 'KJV']);
 const initialState: NavigationState = {
   translation: 'WEB',
   book: 'John',
-  chapter: 1
+  chapter: 1,
+  highlightedVerse: null
 };
 
 const navigationHistory = writable<NavigationState[]>([]);
@@ -26,19 +28,30 @@ function createNavigationStore() {
   return {
     subscribe,
     setTranslation: (translation: string) => {
-      update(state => ({ ...state, translation }));
+      update(state => ({ ...state, translation, highlightedVerse: null }));
     },
     setBook: (book: string) => {
-      update(state => ({ ...state, book, chapter: 1 }));
+      update(state => ({ ...state, book, chapter: 1, highlightedVerse: null }));
     },
     setChapter: (chapter: number) => {
-      update(state => ({ ...state, chapter }));
+      update(state => ({ ...state, chapter, highlightedVerse: null }));
     },
     setChronologicalMode: (isChronologicalMode: boolean) => {
       update(state => ({ ...state, isChronologicalMode }));
     },
-    navigateTo: (translation: string, book: string, chapter: number) => {
-      set({ translation, book, chapter });
+    navigateTo: (
+      translation: string,
+      book: string,
+      chapter: number,
+      highlightedVerse: number | null = null,
+    ) => {
+      update(state => ({
+        ...state,
+        translation,
+        book,
+        chapter,
+        highlightedVerse,
+      }));
     },
     pushHistory: (state: NavigationState) => {
       navigationHistory.update((history) => [...history, state]);

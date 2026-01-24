@@ -72,8 +72,8 @@
     {
       id: "study-tools",
       name: "Study Tools",
-      description: "Maps, cross-refs, chronological",
-      size: "3.57 MB",
+      description: "Maps, OpenBible, Pleiades, cross-refs, chronological",
+      size: "438.89 MB",
       icon: "🗺️",
       url: `${BASE_URL}/study-tools.sqlite`,
     },
@@ -118,6 +118,12 @@
         !confirm(`Pack "${pack.name}" is already installed. Re-download it?`)
       ) {
         return;
+      }
+      if (pack.id === "study-tools") {
+        installProgress = `Removing old ${pack.name}...`;
+        await removePack(pack.id);
+        await loadPacks();
+        await loadStats();
       }
     }
 

@@ -1283,19 +1283,41 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // Import places (if not already imported from map pack)
       if (tableNames.includes('places')) {
         console.log('Importing places data...');
+        const placeColumnInfo = db.exec('PRAGMA table_info(places)');
+        const placeColumns = placeColumnInfo.length > 0
+          ? placeColumnInfo[0].values.map((row) => row[1] as string)
+          : [];
+        const hasDescription = placeColumns.includes('description');
+        const hasType = placeColumns.includes('type');
+
+        const selectedPlaceColumns = [
+          'id',
+          'name',
+          hasDescription ? 'description' : null,
+          'latitude',
+          'longitude',
+          hasType ? 'type' : null
+        ].filter(Boolean) as string[];
+
         const rows = db.exec(`
-          SELECT id, name, description, latitude, longitude, type
+          SELECT ${selectedPlaceColumns.join(', ')}
           FROM places
         `);
         
         if (rows.length && rows[0].values.length) {
-          const data = rows[0].values.map(([id, name, desc, lat, lon, type]) => ({
-            id: id as string,
-            name: name as string,
-            description: desc as string | null,
-            latitude: lat as number,
-            longitude: lon as number,
-            type: type as string | null
+          const columnIndex = (name: string) => selectedPlaceColumns.indexOf(name);
+          const getValue = (row: unknown[], name: string) => {
+            const idx = columnIndex(name);
+            return idx >= 0 ? row[idx] : undefined;
+          };
+
+          const data = rows[0].values.map((row) => ({
+            id: getValue(row, 'id') as string,
+            name: getValue(row, 'name') as string,
+            description: (hasDescription ? getValue(row, 'description') : null) as string | null,
+            latitude: getValue(row, 'latitude') as number,
+            longitude: getValue(row, 'longitude') as number,
+            type: (hasType ? getValue(row, 'type') : null) as string | null
           }));
           
           for (let i = 0; i < data.length; i += CHUNK_SIZE) {
@@ -1305,6 +1327,180 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             });
           }
           console.log(`✅ Places imported: ${data.length} entries`);
+        }
+      }
+
+      // Import OpenBible data (if present)
+      if (tableNames.includes('openbible_locations') && tableNames.includes('openbible_places')) {
+        console.log('Importing OpenBible data...');
+
+        const locationsRows = db.exec(`
+          SELECT id, friendly_id, longitude, latitude, geometry_type, class, type,
+                 precision_meters, thumbnail_file, thumbnail_credit, thumbnail_url
+          FROM openbible_locations
+        `);
+
+        if (locationsRows.length && locationsRows[0].values.length) {
+          const locations = locationsRows[0].values.map(([id, friendlyId, lon, lat, geomType, cls, type, precisionM, thumbFile, thumbCredit, thumbUrl]) => ({
+            id: id as string,
+            friendlyId: friendlyId as string,
+            longitude: lon as number,
+            latitude: lat as number,
+            geometryType: geomType as string,
+            class: cls as string,
+            type: type as string,
+            precisionMeters: precisionM as number | undefined,
+            thumbnailFile: thumbFile as string | undefined,
+            thumbnailCredit: thumbCredit as string | undefined,
+            thumbnailUrl: thumbUrl as string | undefined
+          }));
+
+          for (let i = 0; i < locations.length; i += CHUNK_SIZE) {
+            const chunk = locations.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('openbible_locations', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+          }
+          console.log(`✅ OpenBible locations imported: ${locations.length} entries`);
+        }
+
+        const placesRows = db.exec(`
+          SELECT id, friendly_id, type, class, verse_count
+          FROM openbible_places
+        `);
+
+        if (placesRows.length && placesRows[0].values.length) {
+          const places = placesRows[0].values.map(([id, friendlyId, type, cls, verseCount]) => ({
+            id: id as string,
+            friendlyId: friendlyId as string,
+            type: type as string | undefined,
+            class: cls as string | undefined,
+            verseCount: verseCount as number
+          }));
+
+          for (let i = 0; i < places.length; i += CHUNK_SIZE) {
+            const chunk = places.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('openbible_places', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+          }
+          console.log(`✅ OpenBible places imported: ${places.length} entries`);
+        }
+
+        if (tableNames.includes('openbible_identifications')) {
+          const identRows = db.exec(`
+            SELECT ancient_place_id, modern_location_id, time_total, vote_total, class, modifier
+            FROM openbible_identifications
+          `);
+
+          if (identRows.length && identRows[0].values.length) {
+            const idents = identRows[0].values.map(([ancientId, modernId, timeTotal, voteTotal, cls, modifier]) => ({
+              ancientPlaceId: ancientId as string,
+              modernLocationId: modernId as string,
+              confidence: timeTotal as number,
+              voteTotal: voteTotal as number,
+              class: cls as string | undefined,
+              modifier: modifier as string | undefined
+            }));
+
+            for (let i = 0; i < idents.length; i += CHUNK_SIZE) {
+              const chunk = idents.slice(i, i + CHUNK_SIZE);
+              await batchWriteTransaction('openbible_identifications', (store) => {
+                chunk.forEach(entry => store.put(entry));
+              });
+            }
+            console.log(`✅ OpenBible identifications imported: ${idents.length} entries`);
+          }
+        }
+      }
+
+      // Import Pleiades data (if present)
+      if (tableNames.includes('pleiades_places')) {
+        console.log('Importing Pleiades data...');
+
+        const placesRows = db.exec(`
+          SELECT id, title, uri, place_type, description, year_start, year_end, created, modified, bbox, latitude, longitude
+          FROM pleiades_places
+        `);
+
+        if (placesRows.length && placesRows[0].values.length) {
+          const places = placesRows[0].values.map(([id, title, uri, placeType, description, yearStart, yearEnd, created, modified, bbox, lat, lon]) => ({
+            id: id as string,
+            title: title as string,
+            uri: uri as string | undefined,
+            placeType: placeType as string | undefined,
+            description: description as string | undefined,
+            yearStart: yearStart as number | undefined,
+            yearEnd: yearEnd as number | undefined,
+            created: created as string | undefined,
+            modified: modified as string | undefined,
+            bbox: bbox as string | undefined,
+            latitude: lat as number | undefined,
+            longitude: lon as number | undefined
+          }));
+
+          for (let i = 0; i < places.length; i += CHUNK_SIZE) {
+            const chunk = places.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('pleiades_places', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+          }
+          console.log(`✅ Pleiades places imported: ${places.length} entries`);
+        }
+
+        if (tableNames.includes('pleiades_names')) {
+          const namesRows = db.exec(`
+            SELECT place_id, name, language, romanized, name_type, time_period, certainty
+            FROM pleiades_names
+          `);
+
+          if (namesRows.length && namesRows[0].values.length) {
+            const names = namesRows[0].values.map(([placeId, name, language, romanized, nameType, timePeriod, certainty]) => ({
+              placeId: placeId as string,
+              name: name as string,
+              language: language as string | undefined,
+              romanized: romanized as string | undefined,
+              nameType: nameType as string | undefined,
+              timePeriod: timePeriod as string | undefined,
+              certainty: certainty as string | undefined
+            }));
+
+            for (let i = 0; i < names.length; i += CHUNK_SIZE) {
+              const chunk = names.slice(i, i + CHUNK_SIZE);
+              await batchWriteTransaction('pleiades_names', (store) => {
+                chunk.forEach(entry => store.put(entry));
+              });
+            }
+            console.log(`✅ Pleiades names imported: ${names.length} entries`);
+          }
+        }
+
+        if (tableNames.includes('pleiades_locations')) {
+          const locationsRows = db.exec(`
+            SELECT place_id, title, geometry_type, coordinates, latitude, longitude, certainty, time_period
+            FROM pleiades_locations
+          `);
+
+          if (locationsRows.length && locationsRows[0].values.length) {
+            const locations = locationsRows[0].values.map(([placeId, title, geometryType, coordinates, lat, lon, certainty, timePeriod]) => ({
+              placeId: placeId as string,
+              title: title as string | undefined,
+              geometryType: geometryType as string | undefined,
+              coordinates: coordinates as string | undefined,
+              latitude: lat as number | undefined,
+              longitude: lon as number | undefined,
+              certainty: certainty as string | undefined,
+              timePeriod: timePeriod as string | undefined
+            }));
+
+            for (let i = 0; i < locations.length; i += CHUNK_SIZE) {
+              const chunk = locations.slice(i, i + CHUNK_SIZE);
+              await batchWriteTransaction('pleiades_locations', (store) => {
+                chunk.forEach(entry => store.put(entry));
+              });
+            }
+            console.log(`✅ Pleiades locations imported: ${locations.length} entries`);
+          }
         }
       }
       

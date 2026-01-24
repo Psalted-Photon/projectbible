@@ -123,7 +123,10 @@
 
   function selectTranslation(translation: string) {
     if (windowId) {
-      windowStore.updateContentState(windowId, { translation });
+      windowStore.updateContentState(windowId, {
+        translation,
+        highlightedVerse: null,
+      });
     } else {
       navigationStore.setTranslation(translation);
     }
@@ -146,6 +149,7 @@
         translation: currentTranslation,
         book: bookName,
         chapter,
+        highlightedVerse: null,
       });
     } else {
       navigationStore.navigateTo(currentTranslation, bookName, chapter);
@@ -254,14 +258,21 @@
     // Navigate to the result
     if (result.type === "verse" && result.data) {
       const { book, chapter } = result.data;
+      const highlightVerse = result.data.verse ?? null;
       if (windowId) {
         windowStore.updateContentState(windowId, {
           translation: currentTranslation,
           book,
           chapter,
+          highlightedVerse: highlightVerse,
         });
       } else {
-        navigationStore.navigateTo(currentTranslation, book, chapter);
+        navigationStore.navigateTo(
+          currentTranslation,
+          book,
+          chapter,
+          highlightVerse,
+        );
       }
       // Close search results
       showResults = false;
@@ -715,20 +726,21 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
+    background: linear-gradient(135deg, #ffb74d 0%, #f57c00 100%);
+    border: 1px solid #ffb74d;
     border-radius: 6px;
-    color: #e0e0e0;
+    color: #1a1a1a;
     cursor: pointer;
     font-size: 16px;
     transition: all 0.2s;
     touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+    -webkit-tap-highlight-color: rgba(255, 183, 77, 0.2);
   }
 
   .nav-back-button:hover {
-    background: #252525;
-    border-color: #4a4a4a;
+    background: linear-gradient(135deg, #ffca66 0%, #fb8c00 100%);
+    border-color: #ffca66;
+    color: #1a1a1a;
   }
 
   .nav-dropdown {

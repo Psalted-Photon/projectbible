@@ -85,7 +85,8 @@
 
 <!-- Pane -->
 <div
-  class="pane {pane.position}"
+  class="pane {pane.position} pane-{pane.type}"
+  class:themed={pane.type !== "map"}
   style={paneStyle}
   transition:fly={transitionConfig}
 >

@@ -148,6 +148,75 @@ function mergeDatabases(sourcePacks, outputPath, packInfo) {
       type TEXT,
       description TEXT
     );
+
+    -- OpenBible places (for study-tools pack)
+    CREATE TABLE IF NOT EXISTS openbible_places (
+      id TEXT PRIMARY KEY,
+      friendly_id TEXT,
+      type TEXT,
+      class TEXT,
+      verse_count INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS openbible_locations (
+      id TEXT PRIMARY KEY,
+      friendly_id TEXT,
+      longitude REAL,
+      latitude REAL,
+      geometry_type TEXT,
+      class TEXT,
+      type TEXT,
+      precision_meters INTEGER,
+      thumbnail_file TEXT,
+      thumbnail_credit TEXT,
+      thumbnail_url TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS openbible_identifications (
+      ancient_place_id TEXT,
+      modern_location_id TEXT,
+      time_total INTEGER,
+      vote_total INTEGER,
+      class TEXT,
+      modifier TEXT
+    );
+
+    -- Pleiades places (for study-tools pack)
+    CREATE TABLE IF NOT EXISTS pleiades_places (
+      id TEXT PRIMARY KEY,
+      title TEXT,
+      uri TEXT,
+      place_type TEXT,
+      description TEXT,
+      year_start INTEGER,
+      year_end INTEGER,
+      created TEXT,
+      modified TEXT,
+      bbox TEXT,
+      latitude REAL,
+      longitude REAL
+    );
+
+    CREATE TABLE IF NOT EXISTS pleiades_names (
+      place_id TEXT,
+      name TEXT,
+      language TEXT,
+      romanized TEXT,
+      name_type TEXT,
+      time_period TEXT,
+      certainty TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS pleiades_locations (
+      place_id TEXT,
+      title TEXT,
+      geometry_type TEXT,
+      coordinates TEXT,
+      latitude REAL,
+      longitude REAL,
+      certainty TEXT,
+      time_period TEXT
+    );
     
     -- Maps (for study-tools pack)
     CREATE TABLE IF NOT EXISTS historical_layers (
@@ -254,6 +323,27 @@ function mergeDatabases(sourcePacks, outputPath, packInfo) {
         // No entries table
       }
       
+      // Copy study-tools tables if they exist
+      const copyTable = (tableName) => {
+        try {
+          source.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get();
+          output.exec(`INSERT OR IGNORE INTO ${tableName} SELECT * FROM source.${tableName}`);
+        } catch (e) {
+          // Table does not exist in source
+        }
+      };
+
+      copyTable('historical_layers');
+      copyTable('places');
+      copyTable('cross_references');
+      copyTable('chronological_order');
+      copyTable('openbible_places');
+      copyTable('openbible_locations');
+      copyTable('openbible_identifications');
+      copyTable('pleiades_places');
+      copyTable('pleiades_names');
+      copyTable('pleiades_locations');
+
       // Detach source
       output.exec('DETACH DATABASE source');
       source.close();
@@ -318,14 +408,24 @@ mergeDatabases(
 
 // Build 4: Study Tools Pack
 mergeDatabases(
-  ['maps.sqlite'],
+  [
+    'maps.sqlite',
+    'maps-enhanced.sqlite',
+    'maps-biblical.sqlite',
+    'places.sqlite',
+    'places-biblical.sqlite',
+    'openbible.sqlite',
+    'pleiades.sqlite',
+    'cross-references.sqlite',
+    'chronological.sqlite'
+  ],
   join(OUTPUT_DIR, 'study-tools.sqlite'),
   {
     id: 'study-tools',
     version: '1.0.0',
     type: 'study',
     name: 'Study Tools Pack',
-    description: 'Maps, places, chronological ordering, cross-references'
+    description: 'Maps, places, OpenBible, Pleiades, chronological ordering, cross-references'
   }
 );
 
