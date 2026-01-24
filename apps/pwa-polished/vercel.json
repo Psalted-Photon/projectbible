@@ -1,7 +1,7 @@
 {
   "env": {
     "NODE_ENV": "production",
-    "VITE_USE_BUNDLED_PACKS": "false"
+    \"VITE_USE_BUNDLED_PACKS\": \"true\"
   },
   "rewrites": [
     {
