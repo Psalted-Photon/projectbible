@@ -1,6 +1,5 @@
 <script lang="ts">
   import { englishLexicalPackLoader, type LoadProgress } from "../../../../packages/core/src/search/englishLexicalPackLoader";
-  import { englishLexicalService } from "../../../../packages/core/src/search/englishLexicalService";
   
   export let show = false;
   

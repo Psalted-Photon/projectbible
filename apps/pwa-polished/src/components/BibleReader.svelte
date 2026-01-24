@@ -1682,6 +1682,7 @@
                   morphologyData: null,
                   lexicalEntries: englishEntry,
                 });
+                return;
               } else {
                 console.log(`ℹ️ No lexical data found for "${text}"`);
                 console.log('💡 Make sure you have installed the "Lexical Resources Pack" (365 MB) from the Packs menu.');
@@ -1691,6 +1692,7 @@
                   morphologyData: null,
                   lexicalEntries: null,
                 });
+                return;
               }
             }
             
@@ -1706,6 +1708,7 @@
                 morphologyData: selectedMorphology,
                 lexicalEntries: null,
               });
+              return;
             } else if (selectedMorphology) {
               // Have morphology but no Strong's ID
               lexicalModalStore.open({
@@ -1714,6 +1717,7 @@
                 morphologyData: selectedMorphology,
                 lexicalEntries: null,
               });
+              return;
             } else {
               // Otherwise look up the word
               const entries = await lookupWord(text);
@@ -1729,6 +1733,7 @@
                 morphologyData: null,
                 lexicalEntries: null,
               });
+              return;
             }
           } catch (error) {
             console.error('Lexicon lookup error:', error);

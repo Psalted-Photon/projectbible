@@ -8,8 +8,9 @@
     createDefaultConfig 
   } from "../../../../packages/core/src/search/searchConfig";
   import { searchService, type SearchCategory } from "../lib/services/searchService";
+  import { navigationStore } from "../stores/navigationStore";
+  import { get } from "svelte/store";
   import { englishLexicalService } from "../../../../packages/core/src/search/englishLexicalService";
-  import { englishLexicalPackLoader } from "../../../../packages/core/src/search/englishLexicalPackLoader";
   import HelpModal from "./HelpModal.svelte";
 
   export let show = false;
@@ -22,7 +23,6 @@
   let searchResults: SearchCategory[] = [];
   let totalResultCount = 0;
   let displayedResultCount = 0;
-  let showingAll = false;
   
   // Translation tree state
   interface TranslationGroup {
@@ -111,25 +111,6 @@
     config.proximityRules = config.proximityRules.filter((_, i) => i !== index);
   }
 
-  async function updatePreview() {
-    if (!config.text.trim() && config.proximityRules.length === 0) {
-      generatedQuery = null;
-      previewResults = [];
-      return;
-    }
-
-    try {
-      generatedQuery = generateSafeRegex(config);
-      
-      // Get preview results (first 10)
-      const results = await searchService.search(generatedQuery.regex.source, 10);
-      previewResults = results;
-    } catch (error) {
-      console.error("Preview error:", error);
-      generatedQuery = null;
-      previewResults = [];
-    }
-  }
 
   async function executeSearch() {
     if (!config.text.trim() && config.proximityRules.length === 0) {
@@ -230,8 +211,47 @@
     displayedResultCount = 0;
   }
 
-  // Don't auto-update preview to avoid losing input focus
-  let updateTimeout: ReturnType<typeof setTimeout>;
+  function handleResultClick(result: SearchResult) {
+    if (result.type !== "verse" || !result.data) return;
+    const current = get(navigationStore);
+    navigationStore.pushHistory(current);
+    const targetTranslation = result.data.translation || current.translation;
+    navigationStore.navigateTo(targetTranslation, result.data.book, result.data.chapter);
+    closeModal();
+  }
+
+  function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function getHighlightTerms(): string[] {
+    const terms = new Set<string>();
+    if (config.text.trim()) {
+      config.text
+        .split(/\s+/)
+        .map((term) => term.trim())
+        .filter(Boolean)
+        .forEach((term) => terms.add(term));
+    }
+    config.proximityRules.forEach((rule) => {
+      if (rule.word1?.trim()) terms.add(rule.word1.trim());
+      if (rule.word2?.trim()) terms.add(rule.word2.trim());
+    });
+    return Array.from(terms);
+  }
+
+  function highlightSnippet(text: string | undefined): string {
+    if (!text) return "";
+    const terms = getHighlightTerms();
+    if (terms.length === 0) return text;
+    let highlighted = text;
+    terms.forEach((term) => {
+      if (term.length < 2) return;
+      const regex = new RegExp(`(${escapeRegExp(term)})`, "gi");
+      highlighted = highlighted.replace(regex, '<mark class="highlight-term">$1</mark>');
+    });
+    return highlighted;
+  }
 
 </script>
 
@@ -435,7 +455,7 @@
 
           <!-- Action Buttons -->
           <div class="action-buttons">
-            <button class="btn-primary" on:click={() => executeSearch(false)} disabled={isSearching}>
+            <button class="btn-primary" on:click={executeSearch} disabled={isSearching}>
               {#if isSearching}
                 Searching...
               {:else}
@@ -499,12 +519,12 @@
                 {#if translationGroups.length === 1}
                   <!-- Single translation: show flat list -->
                   {#each translationGroups[0].results.slice(0, translationGroups[0].displayedCount) as result}
-                    <div class="result-item">
+                    <button class="result-item" on:click={() => handleResultClick(result)}>
                       <div class="result-title">{result.title}</div>
                       {#if result.subtitle}
-                        <div class="result-text">{result.subtitle}</div>
+                        <div class="result-text">{@html highlightSnippet(result.subtitle)}</div>
                       {/if}
-                    </div>
+                    </button>
                   {/each}
                   
                   {#if translationGroups[0].displayedCount < translationGroups[0].totalCount}
@@ -540,12 +560,12 @@
                       {#if group.expanded}
                         <div class="translation-results">
                           {#each group.results.slice(0, group.displayedCount) as result}
-                            <div class="result-item">
+                            <button class="result-item" on:click={() => handleResultClick(result)}>
                               <div class="result-title">{result.title}</div>
                               {#if result.subtitle}
-                                <div class="result-text">{result.subtitle}</div>
+                                <div class="result-text">{@html highlightSnippet(result.subtitle)}</div>
                               {/if}
-                            </div>
+                            </button>
                           {/each}
                           
                           {#if group.displayedCount < group.totalCount}
@@ -573,12 +593,12 @@
               <h3>Preview (first 10 matches)</h3>
               {#each previewResults as category}
                 {#each category.results as result}
-                  <div class="preview-item">
+                  <button class="preview-item" on:click={() => handleResultClick(result)}>
                     <div class="preview-title">{result.title}</div>
                     {#if result.subtitle}
-                      <div class="preview-text">{result.subtitle}</div>
+                      <div class="preview-text">{@html highlightSnippet(result.subtitle)}</div>
                     {/if}
-                  </div>
+                  </button>
                 {/each}
               {/each}
             </div>
@@ -1281,12 +1301,16 @@
   }
 
   .result-item {
+    width: 100%;
+    text-align: left;
     padding: 12px;
     background: #1a1a1a;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     margin-bottom: 8px;
     cursor: pointer;
+    display: block;
+    font: inherit;
     transition: all 0.2s;
   }
 
@@ -1327,11 +1351,17 @@
   }
 
   .preview-item {
+    width: 100%;
+    text-align: left;
     padding: 10px;
     background: #1a1a1a;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     margin-bottom: 8px;
+    cursor: pointer;
+    font: inherit;
+    display: block;
+    transition: all 0.2s;
   }
 
   .preview-title {
@@ -1345,6 +1375,15 @@
     color: #888;
     font-size: 12px;
     line-height: 1.3;
+  }
+
+  .highlight-term {
+    background: rgba(255, 193, 7, 0.35);
+    border-radius: 3px;
+    padding: 2px 4px;
+    margin: 0 1px;
+    box-shadow: 0 0 0 1px rgba(255, 193, 7, 0.2);
+    font-weight: 500;
   }
 
   .empty-state {

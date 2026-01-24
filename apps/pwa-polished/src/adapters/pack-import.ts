@@ -1196,31 +1196,87 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // Import cross-references
       if (tableNames.includes('cross_references')) {
         console.log('Importing cross-references...');
-        const rows = db.exec(`
-          SELECT from_book, from_chapter, from_verse, to_book, to_chapter, to_verse, weight
-          FROM cross_references
-        `);
-        
-        if (rows.length && rows[0].values.length) {
-          const data = rows[0].values.map(([fromBook, fromCh, fromV, toBook, toCh, toV, weight]) => ({
-            id: `${fromBook}:${fromCh}:${fromV}-${toBook}:${toCh}:${toV}`,
-            from_book: fromBook as string,
-            from_chapter: fromCh as number,
-            from_verse: fromV as number,
-            to_book: toBook as string,
-            to_chapter: toCh as number,
-            to_verse: toV as number,
-            weight: weight as number
-          }));
+        const columnInfo = db.exec('PRAGMA table_info(cross_references)');
+        const columnNames = columnInfo.length > 0
+          ? columnInfo[0].values.map((row) => row[1] as string)
+          : [];
+        const hasToVerseStart = columnNames.includes('to_verse_start');
+        const hasToVerseEnd = columnNames.includes('to_verse_end');
+        const hasToVerse = columnNames.includes('to_verse');
+        const hasWeight = columnNames.includes('weight');
+        const hasSource = columnNames.includes('source');
+        const hasDescription = columnNames.includes('description');
+
+        const selectedColumns = [
+          'from_book',
+          'from_chapter',
+          'from_verse',
+          'to_book',
+          'to_chapter',
+          hasToVerseStart ? 'to_verse_start' : (hasToVerse ? 'to_verse' : null),
+          hasToVerseEnd ? 'to_verse_end' : null,
+          hasWeight ? 'weight' : null,
+          hasSource ? 'source' : null,
+          hasDescription ? 'description' : null,
+        ].filter(Boolean) as string[];
+
+        if (selectedColumns.length === 0 || (!hasToVerseStart && !hasToVerse)) {
+          console.warn('Cross-references table missing verse columns, skipping import.');
+        } else {
+          const rows = db.exec(`
+            SELECT ${selectedColumns.join(', ')}
+            FROM cross_references
+          `);
           
-          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-            const chunk = data.slice(i, i + CHUNK_SIZE);
-            await batchWriteTransaction('cross_references', (store) => {
-              chunk.forEach(entry => store.put(entry));
+          if (rows.length && rows[0].values.length) {
+            const columnIndex = (name: string) => selectedColumns.indexOf(name);
+            const getValue = (row: unknown[], name: string) => {
+              const idx = columnIndex(name);
+              return idx >= 0 ? row[idx] : undefined;
+            };
+
+            const data = rows[0].values.map((row) => {
+              const fromBook = getValue(row, 'from_book') as string;
+              const fromChapter = getValue(row, 'from_chapter') as number;
+              const fromVerse = getValue(row, 'from_verse') as number;
+              const toBook = getValue(row, 'to_book') as string;
+              const toChapter = getValue(row, 'to_chapter') as number;
+              const toVerseStart = (hasToVerseStart
+                ? getValue(row, 'to_verse_start')
+                : getValue(row, 'to_verse')) as number;
+              const toVerseEnd = hasToVerseEnd
+                ? (getValue(row, 'to_verse_end') as number | undefined)
+                : undefined;
+              const weight = hasWeight ? (getValue(row, 'weight') as number) : 0;
+              const source = hasSource ? (getValue(row, 'source') as string) : 'curated';
+              const description = hasDescription
+                ? (getValue(row, 'description') as string | undefined)
+                : undefined;
+
+              return {
+                id: `${fromBook}:${fromChapter}:${fromVerse}-${toBook}:${toChapter}:${toVerseStart}`,
+                fromBook,
+                fromChapter,
+                fromVerse,
+                toBook,
+                toChapter,
+                toVerseStart,
+                toVerseEnd,
+                description,
+                source: (source || 'curated') as 'curated' | 'user' | 'ai',
+                votes: Number.isFinite(weight) ? weight : 0
+              };
             });
-            console.log(`Imported ${Math.min(i + CHUNK_SIZE, data.length)}/${data.length} cross-references`);
+          
+            for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+              const chunk = data.slice(i, i + CHUNK_SIZE);
+              await batchWriteTransaction('cross_references', (store) => {
+                chunk.forEach(entry => store.put(entry));
+              });
+              console.log(`Imported ${Math.min(i + CHUNK_SIZE, data.length)}/${data.length} cross-references`);
+            }
+            console.log(`✅ Cross-references imported: ${data.length} entries`);
           }
-          console.log(`✅ Cross-references imported: ${data.length} entries`);
         }
       }
       

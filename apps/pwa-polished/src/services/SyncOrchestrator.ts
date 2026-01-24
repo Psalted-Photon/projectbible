@@ -423,6 +423,9 @@ export class SyncOrchestrator {
 
   private async getItemsByStatus(status: SyncQueueStatus): Promise<SyncQueueItem[]> {
     const db = await openDB();
+    if (!db.objectStoreNames.contains("sync_queue")) {
+      return [];
+    }
     return new Promise((resolve, reject) => {
       const tx = db.transaction("sync_queue", "readonly");
       const store = tx.objectStore("sync_queue");
@@ -436,6 +439,9 @@ export class SyncOrchestrator {
 
   private async getAllItems(): Promise<SyncQueueItem[]> {
     const db = await openDB();
+    if (!db.objectStoreNames.contains("sync_queue")) {
+      return [];
+    }
     return new Promise((resolve, reject) => {
       const tx = db.transaction("sync_queue", "readonly");
       const store = tx.objectStore("sync_queue");
@@ -470,6 +476,9 @@ export class SyncOrchestrator {
 
   private async markPlanItemsDone(planId: string): Promise<void> {
     const db = await openDB();
+    if (!db.objectStoreNames.contains("sync_queue")) {
+      return;
+    }
     return new Promise((resolve, reject) => {
       const tx = db.transaction("sync_queue", "readwrite");
       const store = tx.objectStore("sync_queue");
@@ -492,11 +501,19 @@ export class SyncOrchestrator {
   }
 
   private async isOperationApplied(operationId: string): Promise<boolean> {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains("sync_operations")) {
+      return false;
+    }
     const record = await readTransaction("sync_operations", (store) => store.get(operationId));
     return Boolean(record);
   }
 
   private async recordOperation(operationId: string): Promise<void> {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains("sync_operations")) {
+      return;
+    }
     await writeTransaction("sync_operations", (store) =>
       store.put({
         operationId,

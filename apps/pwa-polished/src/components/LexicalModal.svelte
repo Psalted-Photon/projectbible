@@ -6,6 +6,7 @@
     englishLexicalService,
     type WordInfo,
   } from "../../../../packages/core/src/search/englishLexicalService";
+  import { lookupEnglishWord } from "../adapters/lexicon-lookup.js";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
 
   // Subscribe to store instead of using props
@@ -29,6 +30,8 @@
   let englishDefinitions: any[] = [];
   let isEnglishWord = false;
   let loadingDefinition = false;
+  let hasOfflineDefinitions = false;
+  let localLexicalEntries: any = null;
 
   onMount(() => {
     lexiconStore = new IndexedDBLexiconStore();
@@ -37,6 +40,11 @@
   $: if (isOpen && lexiconStore) {
     loadLexicalData();
   }
+
+  $: effectiveLexicalEntries = localLexicalEntries ?? lexicalEntries;
+  $: hasOfflineDefinitions = Boolean(
+    effectiveLexicalEntries?.modern?.length || effectiveLexicalEntries?.historic?.length,
+  );
 
   async function loadLexicalData() {
     loading = true;
@@ -49,6 +57,7 @@
     englishDefinitions = [];
     isEnglishWord = false;
     loadingDefinition = false;
+    localLexicalEntries = null;
 
     try {
       // Check if we already have lexical entries from the new lookup system
@@ -59,8 +68,7 @@
         // Map lexicalEntries to the format this modal expects
         englishWordInfo = {
           word: lexicalEntries.word,
-          ipa_us: lexicalEntries.ipa_us,
-          ipa_uk: lexicalEntries.ipa_uk,
+          ipa_us: lexicalEntries.ipa_us ?? undefined,
         };
         
         // Use POS from lexicalEntries if available
@@ -105,6 +113,30 @@
         }
       } else if (selectedText) {
         const searchText = selectedText.trim().toLowerCase();
+
+        try {
+          const offlineEntry = await lookupEnglishWord(searchText);
+          if (offlineEntry) {
+            localLexicalEntries = offlineEntry;
+            isEnglishWord = true;
+            englishWordInfo = {
+              word: offlineEntry.word,
+              ipa_us: offlineEntry.ipa_us ?? undefined,
+            };
+            if (offlineEntry.pos) {
+              englishPOS = Array.isArray(offlineEntry.pos)
+                ? offlineEntry.pos
+                : [offlineEntry.pos];
+            }
+            if (offlineEntry.synonyms && offlineEntry.synonyms.length > 0) {
+              englishSynonyms = offlineEntry.synonyms;
+            }
+            loading = false;
+            return;
+          }
+        } catch (err) {
+          console.log("Offline dictionary lookup failed:", err);
+        }
 
         // First try English lexical lookup
         try {
@@ -479,17 +511,17 @@
                   {/each}
                 {/if}
 
-                {#if lexicalEntries && (lexicalEntries.modern?.length > 0 || lexicalEntries.historic?.length > 0)}
+                {#if effectiveLexicalEntries && (effectiveLexicalEntries.modern?.length > 0 || effectiveLexicalEntries.historic?.length > 0)}
                   <!-- Offline Dictionary Definitions from Dictionary Pack -->
-                  
-                  <!-- Modern Definitions (Wiktionary) -->
-                  <div class="info-section">
+                  <div class="definitions-grid">
+                    <!-- Modern Definitions (Wiktionary) -->
+                    <div class="info-section">
                     <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
                       <span class="emoji">📖</span> Modern Definitions
                       <span style="font-size: 12px; color: #666; font-weight: normal;">Wiktionary</span>
                     </h3>
-                    {#if lexicalEntries.modern && lexicalEntries.modern.length > 0}
-                      {#each lexicalEntries.modern as def, idx}
+                    {#if effectiveLexicalEntries.modern && effectiveLexicalEntries.modern.length > 0}
+                      {#each effectiveLexicalEntries.modern as def, idx}
                         <div class="modern-def" style="margin-bottom: 16px;">
                           <div style="display: flex; gap: 8px; align-items: start; margin-bottom: 4px;">
                             {#if def.sense_number}
@@ -533,16 +565,16 @@
                         No modern definitions available for this word.
                       </p>
                     {/if}
-                  </div>
-                  
-                  <!-- Historic Definitions (GCIDE/Webster 1913) -->
-                  <div class="info-section">
+                    </div>
+                    
+                    <!-- Historic Definitions (GCIDE/Webster 1913) -->
+                    <div class="info-section">
                     <h3 style="color: #8d6e63; display: flex; align-items: center; gap: 8px;">
                       <span class="emoji">📜</span> Historic Definitions
                       <span style="font-size: 12px; color: #666; font-weight: normal;">Webster 1913</span>
                     </h3>
-                    {#if lexicalEntries.historic && lexicalEntries.historic.length > 0}
-                      {#each lexicalEntries.historic as def}
+                    {#if effectiveLexicalEntries.historic && effectiveLexicalEntries.historic.length > 0}
+                      {#each effectiveLexicalEntries.historic as def}
                         <div class="historic-def" style="margin-bottom: 12px; border-left: 3px solid #d7ccc8; padding-left: 12px;">
                           <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
                             {#if def.sense_number}
@@ -567,10 +599,11 @@
                         No historic definitions available for this word.
                       </p>
                     {/if}
+                    </div>
                   </div>
                 {/if}
 
-                {#if !loadingDefinition && englishDefinitions.length === 0 && (!lexicalEntries || (lexicalEntries.modern?.length === 0 && lexicalEntries.historic?.length === 0))}
+                {#if !loadingDefinition && englishDefinitions.length === 0 && !hasOfflineDefinitions}
                   <!-- No offline definitions available -->
                   <div class="info-section">
                     <h3>About This Word</h3>
@@ -1175,6 +1208,18 @@
     margin: 0;
     padding-left: 24px;
     color: var(--text-color, #fff);
+  }
+
+  .definitions-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  @media (max-width: 900px) {
+    .definitions-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   .definition-list li {

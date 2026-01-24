@@ -2,6 +2,7 @@
   import {
     navigationStore,
     availableTranslations,
+    canGoBack,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { BIBLE_BOOKS } from "../lib/bibleData";
@@ -394,6 +395,16 @@
 
 <div class="navigation-bar" {style}>
   <div class="nav-content">
+    {#if $canGoBack}
+      <button
+        class="nav-back-button"
+        on:click={() => navigationStore.goBack()}
+        title="Back"
+        aria-label="Back"
+      >
+        ←
+      </button>
+    {/if}
     <!-- Translation Dropdown -->
     <div class="nav-dropdown translation-dropdown-trigger">
       <button
@@ -695,6 +706,29 @@
 
   .nav-content::-webkit-scrollbar {
     display: none; /* Chrome, Safari, Opera */
+  }
+
+  .nav-back-button {
+    flex: 0 0 auto;
+    width: var(--nav-item-height);
+    height: var(--nav-item-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #e0e0e0;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+  }
+
+  .nav-back-button:hover {
+    background: #252525;
+    border-color: #4a4a4a;
   }
 
   .nav-dropdown {

@@ -1,4 +1,4 @@
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 import { getBookChapters } from '../lib/bibleData';
 
 export interface NavigationState {
@@ -17,6 +17,8 @@ const initialState: NavigationState = {
   book: 'John',
   chapter: 1
 };
+
+const navigationHistory = writable<NavigationState[]>([]);
 
 function createNavigationStore() {
   const { subscribe, set, update } = writable<NavigationState>(initialState);
@@ -38,11 +40,26 @@ function createNavigationStore() {
     navigateTo: (translation: string, book: string, chapter: number) => {
       set({ translation, book, chapter });
     },
+    pushHistory: (state: NavigationState) => {
+      navigationHistory.update((history) => [...history, state]);
+    },
+    goBack: () => {
+      let previous: NavigationState | undefined;
+      navigationHistory.update((history) => {
+        previous = history[history.length - 1];
+        return history.slice(0, -1);
+      });
+      if (previous) {
+        set(previous);
+      }
+    },
     reset: () => set(initialState)
   };
 }
 
 export const navigationStore = createNavigationStore();
+
+export const canGoBack = derived(navigationHistory, (history) => history.length > 0);
 
 // Derived store for getting current chapter count
 export const currentBookChapters = derived(

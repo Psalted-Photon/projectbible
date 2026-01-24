@@ -40,7 +40,7 @@
       loading = false;
     } catch (err) {
       console.error('Map initialization error:', err);
-      error = err.message || 'Failed to initialize map';
+      error = (err instanceof Error ? err.message : String(err)) || 'Failed to initialize map';
       loading = false;
     }
   });
@@ -196,7 +196,10 @@
   {#if historicalLayers.length > 0 && !loading}
     <div class="layer-selector">
       <h3>Time Period</h3>
-      <select bind:value={currentLayerId} on:change={(e) => showHistoricalLayer(Number(e.target.value))}>
+      <select
+        bind:value={currentLayerId}
+        on:change={(e) => showHistoricalLayer(Number((e.currentTarget as HTMLSelectElement).value))}
+      >
         {#each historicalLayers as layer}
           <option value={layer.id}>
             {layer.name} ({layer.yearStart} - {layer.yearEnd})

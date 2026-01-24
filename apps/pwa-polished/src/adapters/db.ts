@@ -11,7 +11,10 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 17; // Added sync queue + idempotency stores
+const DB_VERSION = 18; // Ensure sync queue + idempotency stores exist
+
+let dbPromise: Promise<IDBDatabase> | null = null;
+let dbInstance: IDBDatabase | null = null;
 
 export interface DBPack {
   id: string;
@@ -332,11 +335,34 @@ export interface DBSyncOperation {
  * Open the IndexedDB database, creating it if needed
  */
 export function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (dbInstance) {
+    return Promise.resolve(dbInstance);
+  }
+
+  if (dbPromise) {
+    return dbPromise;
+  }
+
+  dbPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => {
+      dbPromise = null;
+      reject(request.error);
+    };
+    request.onblocked = () => {
+      dbPromise = null;
+      reject(new Error('IndexedDB upgrade blocked by another open tab. Close other tabs and reload.'));
+    };
+    request.onsuccess = () => {
+      dbInstance = request.result;
+      dbInstance.onversionchange = () => {
+        dbInstance?.close();
+        dbInstance = null;
+        dbPromise = null;
+      };
+      resolve(dbInstance);
+    };
     
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
@@ -644,6 +670,8 @@ export function openDB(): Promise<IDBDatabase> {
       }
     };
   });
+
+  return dbPromise;
 }
 
 /**
