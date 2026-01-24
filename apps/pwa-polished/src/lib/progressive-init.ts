@@ -116,8 +116,7 @@ export async function loadPackOnDemand(
         stage: 'extracting'
       });
 
-      const blob = new Blob([data.buffer], { type: 'application/x-sqlite3' });
-      const file = new File([blob], `${packId}.sqlite`, {
+      const file = new File([data.slice()], `${packId}.sqlite`, {
         type: 'application/x-sqlite3'
       });
 
