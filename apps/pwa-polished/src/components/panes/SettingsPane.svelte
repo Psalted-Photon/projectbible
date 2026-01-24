@@ -21,6 +21,29 @@
     wordWrap = settings.wordWrap !== undefined ? settings.wordWrap : true;
   });
 
+  function deleteIndexedDbDatabase(name: string): Promise<void> {
+    return new Promise((resolve) => {
+      try {
+        const request = indexedDB.deleteDatabase(name);
+        request.onsuccess = () => {
+          console.log(`Deleted database: ${name}`);
+          resolve();
+        };
+        request.onerror = () => {
+          console.warn(`Failed to delete database: ${name}`, request.error);
+          resolve();
+        };
+        request.onblocked = () => {
+          console.warn(`Database deletion blocked: ${name}`);
+          resolve();
+        };
+      } catch (error) {
+        console.warn(`Error deleting database: ${name}`, error);
+        resolve();
+      }
+    });
+  }
+
   async function clearCacheAndReload() {
     const warningMessage =
       'This will delete ALL cached data on this device (downloaded packs, IndexedDB databases, service worker cache, and session storage). You will need to reinstall packs after this. Continue?';
@@ -36,13 +59,20 @@
     try {
       // 1. Clear all IndexedDB databases
       if ('indexedDB' in window) {
-        const dbs = await indexedDB.databases();
-        for (const db of dbs) {
-          if (db.name) {
-            indexedDB.deleteDatabase(db.name);
-            console.log(`Deleted database: ${db.name}`);
+        const namesToDelete = new Set<string>(["projectbible", "ProjectBible_Packs"]);
+        if ('databases' in indexedDB) {
+          try {
+            const dbs = await indexedDB.databases();
+            for (const db of dbs) {
+              if (db.name) {
+                namesToDelete.add(db.name);
+              }
+            }
+          } catch (error) {
+            console.warn('indexedDB.databases() not available:', error);
           }
         }
+        await Promise.all([...namesToDelete].map(deleteIndexedDbDatabase));
       }
 
       // 2. Clear all caches (Service Worker caches)
