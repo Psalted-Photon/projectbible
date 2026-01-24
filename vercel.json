@@ -1,4 +1,5 @@
 {
+  "rootDirectory": "apps/pwa-polished",
   "buildCommand": "node scripts/ensure-bundled-packs.mjs && node scripts/build-bootstrap-pack.mjs && NODE_ENV=production npm run build --workspace=@projectbible/core && cd apps/pwa-polished && NODE_ENV=production npm run build",
   "outputDirectory": "apps/pwa-polished/dist",
   "installCommand": "npm install --workspaces=false && npm install --workspace=@projectbible/core && npm install --workspace=@projectbible/pwa-polished",

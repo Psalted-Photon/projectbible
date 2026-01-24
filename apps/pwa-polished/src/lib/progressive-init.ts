@@ -20,6 +20,7 @@ let progressHandler: ((progress: DownloadProgress) => void) | null = null;
 
 function getPackLoaderInstance(): PackLoader {
   if (!packLoader) {
+    console.log("🔍 Manifest URL at runtime:", PACK_MANIFEST_URL);
     packLoader = new PackLoader({
       manifestUrl: PACK_MANIFEST_URL,
       appVersion: APP_VERSION,
