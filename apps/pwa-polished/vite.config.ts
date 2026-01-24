@@ -63,7 +63,6 @@ function copyPolishedPacks() {
       
       if (isProduction && !useBundled) {
         console.log('📦 Skipping polished packs in buildStart (production mode)');
-        return;
       }
       
       // Copy to public folder for dev server
@@ -74,7 +73,6 @@ function copyPolishedPacks() {
       
       if (!existsSync(polishedPacksDir)) {
         console.warn('⚠️  No polished packs directory found');
-        return;
       }
       
       if (!existsSync(publicPacksDir)) {
@@ -88,16 +86,17 @@ function copyPolishedPacks() {
       
       if (files.length === 0) {
         console.warn('⚠️  No packs in polished directory');
-        return;
       }
       
-      console.log('📦 Copying polished packs to public/ (dev mode):');
-      files.forEach(file => {
-        const src = resolve(polishedPacksDir, file);
-        const dest = resolve(publicPacksDir, file);
-        copyFileSync(src, dest);
-        console.log(`   ✓ ${file}`);
-      });
+      if (files.length > 0) {
+        console.log('📦 Copying polished packs to public/ (dev mode):');
+        files.forEach(file => {
+          const src = resolve(polishedPacksDir, file);
+          const dest = resolve(publicPacksDir, file);
+          copyFileSync(src, dest);
+          console.log(`   ✓ ${file}`);
+        });
+      }
 
       // Copy consolidated packs (for /packs/consolidated)
       if (existsSync(consolidatedPacksDir)) {
@@ -122,7 +121,6 @@ function copyPolishedPacks() {
       
       if (isProduction && !useBundled) {
         console.log('\n📦 Skipping polished packs (will download from GitHub Releases)\n');
-        return;
       }
       
       const polishedPacksDir = resolve(__dirname, '../../packs/polished');
@@ -132,7 +130,6 @@ function copyPolishedPacks() {
       
       if (!existsSync(polishedPacksDir)) {
         console.warn('⚠️  No polished packs directory found');
-        return;
       }
       
       if (!existsSync(targetDir)) {
@@ -146,17 +143,18 @@ function copyPolishedPacks() {
       
       if (files.length === 0) {
         console.warn('⚠️  No packs in polished directory');
-        return;
       }
       
-      console.log('\n📦 Bundling polished packs (dev mode):');
-      files.forEach(file => {
-        const src = resolve(polishedPacksDir, file);
-        const dest = resolve(targetDir, file);
-        copyFileSync(src, dest);
-        console.log(`   ✓ ${file}`);
-      });
-      console.log(`\n✨ Bundled ${files.length} pack(s)\n`);
+      if (files.length > 0) {
+        console.log('\n📦 Bundling polished packs (dev mode):');
+        files.forEach(file => {
+          const src = resolve(polishedPacksDir, file);
+          const dest = resolve(targetDir, file);
+          copyFileSync(src, dest);
+          console.log(`   ✓ ${file}`);
+        });
+        console.log(`\n✨ Bundled ${files.length} pack(s)\n`);
+      }
 
       // Bundle consolidated packs
       if (existsSync(consolidatedPacksDir)) {

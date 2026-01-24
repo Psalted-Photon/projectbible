@@ -134,7 +134,12 @@
       if (USE_BUNDLED) {
         installProgress = `Downloading ${pack.name} (${pack.size})...`;
 
-        const response = await fetch(pack.url);
+        let response = await fetch(pack.url);
+        if (!response.ok) {
+          console.warn(`CDN fetch failed for ${pack.id}. Trying local bundle...`);
+          const localUrl = `/packs/consolidated/${pack.id}.sqlite`;
+          response = await fetch(localUrl);
+        }
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
