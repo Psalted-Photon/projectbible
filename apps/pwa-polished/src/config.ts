@@ -14,7 +14,7 @@ export const PACK_MANIFEST_URL =
   import.meta.env.VITE_PACK_MANIFEST_URL || 
   (import.meta.env.DEV
     ? 'https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0/manifest.json'
-    : '/api/manifest');
+    : '/packs/manifest.json');
 
 // Whether to use bundled packs (local development) or download from CDN
 // Default: use bundled packs only in dev, or when explicitly enabled via env

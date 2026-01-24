@@ -1,0 +1,12 @@
+{
+  "env": {
+    "NODE_ENV": "production",
+    "VITE_USE_BUNDLED_PACKS": "false"
+  },
+  "rewrites": [
+    {
+      "source": "/packs/:file",
+      "destination": "https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0/:file"
+    }
+  ]
+}

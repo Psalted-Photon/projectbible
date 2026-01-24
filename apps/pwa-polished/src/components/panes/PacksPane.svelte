@@ -34,12 +34,12 @@
   const CDN_BASE =
     "https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0";
   const LOCAL_BASE = "/packs/consolidated";
-  const PACK_PROXY_BASE = "/api/pack";
+  const PACK_PROXY_BASE = "/packs";
   const BASE_URL = USE_BUNDLED ? LOCAL_BASE : CDN_BASE;
   const packUrl = (fileName: string) =>
     USE_BUNDLED
       ? `${LOCAL_BASE}/${fileName}`
-      : `${PACK_PROXY_BASE}?name=${encodeURIComponent(fileName)}`;
+      : `${PACK_PROXY_BASE}/${fileName}`;
   // Consolidated pack definitions
   const CONSOLIDATED_PACKS = [
     {

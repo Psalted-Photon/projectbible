@@ -17,9 +17,9 @@ import type { DownloadProgress } from '../../../../packages/core/src/services/Pa
 let bootstrapLoaded = false;
 let packLoader: PackLoader | null = null;
 let progressHandler: ((progress: DownloadProgress) => void) | null = null;
-const FALLBACK_PACK_BASE = '/api/pack';
+const FALLBACK_PACK_BASE = '/packs';
 const fallbackPackUrl = (packId: string) =>
-  `${FALLBACK_PACK_BASE}?name=${encodeURIComponent(`${packId}.sqlite`)}`;
+  `${FALLBACK_PACK_BASE}/${packId}.sqlite`;
 
 function getPackLoaderInstance(): PackLoader {
   if (!packLoader) {

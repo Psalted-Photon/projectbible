@@ -35,5 +35,11 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/packs/:file",
+      "destination": "https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0/:file"
+    }
   ]
 }
