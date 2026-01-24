@@ -34,7 +34,12 @@
   const CDN_BASE =
     "https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0";
   const LOCAL_BASE = "/packs/consolidated";
+  const PACK_PROXY_BASE = "/api/pack";
   const BASE_URL = USE_BUNDLED ? LOCAL_BASE : CDN_BASE;
+  const packUrl = (fileName: string) =>
+    USE_BUNDLED
+      ? `${LOCAL_BASE}/${fileName}`
+      : `${PACK_PROXY_BASE}?name=${encodeURIComponent(fileName)}`;
   // Consolidated pack definitions
   const CONSOLIDATED_PACKS = [
     {
@@ -43,7 +48,7 @@
       description: "KJV, WEB, BSB, NET, LXX2012",
       size: "33.80 MB",
       icon: "📖",
-      url: `${BASE_URL}/translations.sqlite`,
+      url: packUrl("translations.sqlite"),
     },
     {
       id: "dictionary-en",
@@ -51,7 +56,7 @@
       description: "Wiktionary + Webster 1913 offline definitions",
       size: "38.36 MB",
       icon: "📖",
-      url: `${BASE_URL}/dictionary-en.sqlite`,
+      url: packUrl("dictionary-en.sqlite"),
     },
     {
       id: "ancient-languages",
@@ -59,7 +64,7 @@
       description: "Hebrew, Greek with morphology",
       size: "67.11 MB",
       icon: "📜",
-      url: `${BASE_URL}/ancient-languages.sqlite`,
+      url: packUrl("ancient-languages.sqlite"),
     },
     {
       id: "lexical",
@@ -67,7 +72,7 @@
       description: "Strong's + English dictionaries",
       size: "365.45 MB",
       icon: "📚",
-      url: `${BASE_URL}/lexical.sqlite`,
+      url: packUrl("lexical.sqlite"),
     },
     {
       id: "study-tools",
@@ -75,7 +80,7 @@
       description: "Maps, OpenBible, Pleiades, cross-refs, chronological",
       size: "438.89 MB",
       icon: "🗺️",
-      url: `${BASE_URL}/study-tools.sqlite`,
+      url: packUrl("study-tools.sqlite"),
     },
     {
       id: "bsb-audio-pt1",
@@ -83,7 +88,7 @@
       description: "Genesis - Psalms",
       size: "1.76 GB",
       icon: "🎵",
-      url: `${BASE_URL}/bsb-audio-pt1.sqlite`,
+      url: packUrl("bsb-audio-pt1.sqlite"),
     },
     {
       id: "bsb-audio-pt2",
@@ -91,7 +96,7 @@
       description: "Proverbs - Revelation",
       size: "1.65 GB",
       icon: "🎵",
-      url: `${BASE_URL}/bsb-audio-pt2.sqlite`,
+      url: packUrl("bsb-audio-pt2.sqlite"),
     },
   ];
 

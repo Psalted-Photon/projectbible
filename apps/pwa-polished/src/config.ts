@@ -12,7 +12,9 @@ export const APP_VERSION = '1.0.0';
 // Update this URL when you publish a new pack release
 export const PACK_MANIFEST_URL = 
   import.meta.env.VITE_PACK_MANIFEST_URL || 
-  'https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0/manifest.json';
+  (import.meta.env.DEV
+    ? 'https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0/manifest.json'
+    : '/api/manifest');
 
 // Whether to use bundled packs (local development) or download from CDN
 // Default: use bundled packs only in dev, or when explicitly enabled via env
