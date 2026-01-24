@@ -401,6 +401,15 @@
     if (syncStats.lastSyncedAt) return `Synced ${new Date(syncStats.lastSyncedAt).toLocaleTimeString()}`;
     return 'Not synced';
   }
+
+  async function handleManualSync() {
+    if (!isSignedIn || !currentPlanId) return;
+    try {
+      await syncOrchestrator.runImmediateSync(currentPlanId, 'manual-sync');
+    } catch (error) {
+      console.error('Manual sync failed:', error);
+    }
+  }
 </script>
 
 {#if isOpen}
@@ -431,7 +440,20 @@
           </div>
         </div>
         <div class="profile-actions">
-          <span class="sync-indicator">{formatSyncStatus()}</span>
+          <div class="sync-status">
+            <span class="sync-indicator">{formatSyncStatus()}</span>
+            {#if isSignedIn && currentPlanId}
+              <button
+                class="sync-btn"
+                on:click={handleManualSync}
+                disabled={syncStats.processing > 0}
+                title="Sync now"
+                aria-label="Sync now"
+              >
+                🔄
+              </button>
+            {/if}
+          </div>
           {#if isSignedIn}
             <button class="secondary-btn" on:click={handleSignOut}>Sign Out</button>
           {/if}
@@ -699,9 +721,38 @@
     gap: 10px;
   }
 
+  .sync-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   .sync-indicator {
     font-size: 12px;
     color: #9ccc65;
+  }
+
+  .sync-btn {
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid #667eea;
+    color: #667eea;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    transition: all 0.2s;
+  }
+
+  .sync-btn:hover:not(:disabled) {
+    background: #667eea;
+    color: #fff;
+    transform: rotate(180deg);
+  }
+
+  .sync-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .tabs {
