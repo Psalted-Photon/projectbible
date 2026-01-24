@@ -5,8 +5,7 @@
   "framework": null,
   "devCommand": "cd apps/pwa-polished && npm run dev",
   "env": {
-    "NODE_ENV": "production",
-    \"VITE_USE_BUNDLED_PACKS\": \"true\"
+    "NODE_ENV": "production"
   },
   "headers": [
     {
@@ -34,12 +33,6 @@
           "value": "1; mode=block"
         }
       ]
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/packs/:file",
-      "destination": "https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0/:file"
     }
   ]
 }
