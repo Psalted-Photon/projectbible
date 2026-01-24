@@ -10,14 +10,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const githubUrl =
-      `https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0/${name}`;
+      `https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/${name}`;
+
+    const headers: Record<string, string> = {
+      "User-Agent": "ProjectBible-PackProxy",
+      "Accept": "application/octet-stream"
+    };
+
+    // Add GitHub token for private repository access
+    if (process.env.GITHUB_TOKEN) {
+      headers["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
+    }
 
     const gh = await fetch(githubUrl, {
       redirect: "follow",
-      headers: {
-        "User-Agent": "ProjectBible-PackProxy",
-        "Accept": "application/octet-stream"
-      }
+      headers
     });
 
     if (!gh.ok || !gh.body) {
