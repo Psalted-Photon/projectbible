@@ -15,7 +15,9 @@ export const PACK_MANIFEST_URL =
   'https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0/manifest.json';
 
 // Whether to use bundled packs (local development) or download from CDN
-export const USE_BUNDLED_PACKS = import.meta.env.DEV || import.meta.env.VITE_USE_BUNDLED_PACKS !== 'false';
+// Default: use bundled packs only in dev, or when explicitly enabled via env
+export const USE_BUNDLED_PACKS =
+  import.meta.env.DEV || import.meta.env.VITE_USE_BUNDLED_PACKS === 'true';
 
 // Bootstrap pack location (always bundled with app)
 export const BOOTSTRAP_PACK_URL = '/bootstrap.sqlite';
