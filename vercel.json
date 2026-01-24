@@ -4,11 +4,6 @@
   "installCommand": "npm install --workspaces=false && npm install --workspace=@projectbible/core && npm install --workspace=@projectbible/pwa-polished",
   "framework": null,
   "devCommand": "cd apps/pwa-polished && npm run dev",
-  "functions": {
-    "apps/pwa-polished/api/**/*.ts": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "env": {
     "NODE_ENV": "production"
   },
