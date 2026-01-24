@@ -11,8 +11,9 @@ export const APP_VERSION = '1.0.0';
 // Pack manifest URL (GitHub Releases)
 // Update this URL when you publish a new pack release
 export const PACK_MANIFEST_URL = 
-  import.meta.env.VITE_PACK_MANIFEST_URL || 
-  '/api/packs/manifest.json';
+  import.meta.env.PROD
+    ? "/api/packs/manifest.json"          // Production → Proxy → GitHub Releases
+    : "/packs/consolidated/manifest.json"; // Dev fallback → public/
 
 // Whether to use bundled packs (local development) or download from CDN
 export const USE_BUNDLED_PACKS = import.meta.env.DEV || import.meta.env.VITE_USE_BUNDLED_PACKS === 'true';

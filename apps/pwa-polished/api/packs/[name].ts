@@ -9,11 +9,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // IMPORTANT: direct GitHub Releases URL
     const githubUrl =
       `https://github.com/Psalted-Photon/ProjectBible/releases/download/packs-v1.0.0/${name}`;
 
-    // Fetch from GitHub server-side (bypasses CORS)
     const gh = await fetch(githubUrl, {
       redirect: "follow",
       headers: {
@@ -22,26 +20,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
 
-    if (!gh.ok) {
+    if (!gh.ok || !gh.body) {
       res.status(gh.status).send(`GitHub fetch failed: ${gh.statusText}`);
       return;
     }
 
-    // Set headers so browser accepts the file
+    // CORS + streaming headers
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Content-Type", "application/octet-stream");
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
 
-    // Stream the response directly to the client
-    const reader = gh.body!.getReader();
-    const encoder = new TextEncoder();
+    // Stream GitHub → Vercel → Browser
+    const reader = gh.body.getReader();
 
     res.status(200);
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      res.write(Buffer.from(value));
+      res.write(value);
     }
 
     res.end();

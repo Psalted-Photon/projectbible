@@ -32,8 +32,8 @@
   // Use bundled packs when running locally or when VITE_USE_BUNDLED_PACKS=true
   const USE_BUNDLED = USE_BUNDLED_PACKS;
   const CDN_BASE = "/api/packs";
-  const LOCAL_BASE = "/packs/consolidated";
-  const BASE_URL = USE_BUNDLED ? LOCAL_BASE : CDN_BASE;
+  const LOCAL_BASE = "/api/packs";
+  const BASE_URL = CDN_BASE;
   // Consolidated pack definitions
   const CONSOLIDATED_PACKS = [
     {

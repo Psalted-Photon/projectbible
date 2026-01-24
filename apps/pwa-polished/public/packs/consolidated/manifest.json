@@ -1,0 +1,45 @@
+{
+  "manifestVersion": 1,
+  "packs": [
+    {
+      "id": "translations",
+      "type": "sqlite",
+      "version": "1.0.0",
+      "url": "/api/packs/translations.sqlite",
+      "sha256": "fb397fd037f93a6ae912751798dc1b37d3829c539983dccdde522bfb5ea5e40e",
+      "size": 33800000
+    },
+    {
+      "id": "lexical",
+      "type": "sqlite",
+      "version": "1.0.0",
+      "url": "/api/packs/lexical.sqlite",
+      "sha256": "c29a238f55c9609e32a568b198994d799ebd3cc2ee831d5e676dc4b5d07b31d5",
+      "size": 365000000
+    },
+    {
+      "id": "ancient-languages",
+      "type": "sqlite",
+      "version": "1.0.0",
+      "url": "/api/packs/ancient-languages.sqlite",
+      "sha256": "5767f5aa12754262d14e89d586aeaa18baafbfda0d9d9c02d4acdec07bfec01a",
+      "size": 67100000
+    },
+    {
+      "id": "dictionary-en",
+      "type": "sqlite",
+      "version": "1.0.0",
+      "url": "/api/packs/dictionary-en.sqlite",
+      "sha256": "87a95b4ac5021b57e7ff9ce6af317154c02f89230fb121359aafeaaa2604d6d2",
+      "size": 38400000
+    },
+    {
+      "id": "study-tools",
+      "type": "sqlite",
+      "version": "1.0.0",
+      "url": "/api/packs/study-tools.sqlite",
+      "sha256": "c115945a7e43acd277d2fb12ec6b802eef3722ca57e8571ea7c155b7d24add72",
+      "size": 439000000
+    }
+  ]
+}
