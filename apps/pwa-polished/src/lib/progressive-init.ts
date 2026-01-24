@@ -9,7 +9,7 @@
 
 import { loadBootstrap } from './bootstrap-loader';
 import { APP_VERSION, PACK_MANIFEST_URL, USE_BUNDLED_PACKS, FEATURES } from '../config';
-import { importPackFromSQLite, importPackFromUrl } from '../adapters/pack-import';
+import { importPackFromSQLite } from '../adapters/pack-import';
 import { listInstalledPacks as listInstalledPacksFromDb, removePack as removePackFromDb } from '../adapters/db-manager';
 import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
@@ -116,7 +116,8 @@ export async function loadPackOnDemand(
         stage: 'extracting'
       });
 
-      const file = new File([data], `${packId}.sqlite`, {
+      const blob = new Blob([data.buffer], { type: 'application/x-sqlite3' });
+      const file = new File([blob], `${packId}.sqlite`, {
         type: 'application/x-sqlite3'
       });
 
@@ -140,7 +141,18 @@ export async function loadPackOnDemand(
         stage: 'downloading'
       });
 
-      await importPackFromUrl(`/packs/consolidated/${packId}.sqlite`);
+      // Fetch from local static hosting
+      const response = await fetch(`/packs/consolidated/${packId}.sqlite`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch bundled pack: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const file = new File([blob], `${packId}.sqlite`, {
+        type: 'application/x-sqlite3'
+      });
+      
+      await importPackFromSQLite(file);
 
       onProgress?.({
         packId,
