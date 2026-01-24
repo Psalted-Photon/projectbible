@@ -9,6 +9,7 @@
   let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
   let wordWrap: boolean = true;
   let savedMessage = false;
+  let clearing = false;
 
   // Load settings on mount
   onMount(() => {
@@ -19,6 +20,65 @@
     verseLayout = settings.verseLayout || "one-per-line";
     wordWrap = settings.wordWrap !== undefined ? settings.wordWrap : true;
   });
+
+  async function clearCacheAndReload() {
+    if (!confirm('This will clear all cached data (packs, service worker, etc.) and reload the app. Continue?')) {
+      return;
+    }
+
+    clearing = true;
+
+    try {
+      // 1. Clear all IndexedDB databases
+      if ('indexedDB' in window) {
+        const dbs = await indexedDB.databases();
+        for (const db of dbs) {
+          if (db.name) {
+            indexedDB.deleteDatabase(db.name);
+            console.log(`Deleted database: ${db.name}`);
+          }
+        }
+      }
+
+      // 2. Clear all caches (Service Worker caches)
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(
+          cacheNames.map(cacheName => {
+            console.log(`Deleting cache: ${cacheName}`);
+            return caches.delete(cacheName);
+          })
+        );
+      }
+
+      // 3. Unregister all service workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(
+          registrations.map(registration => {
+            console.log('Unregistering service worker');
+            return registration.unregister();
+          })
+        );
+      }
+
+      // 4. Clear localStorage (except user settings if you want to preserve them)
+      // Uncomment the next line if you want to clear everything including settings:
+      // localStorage.clear();
+
+      // 5. Clear sessionStorage
+      sessionStorage.clear();
+
+      // 6. Force reload from server (bypass cache)
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      alert('Error clearing cache. Check console for details.');
+      clearing = false;
+    }
+  }
 
   function applySettings() {
     // Apply theme
@@ -149,6 +209,22 @@
       <span class="icon emoji">📦</span>
       <span class="text">Manage Packs</span>
       <span class="arrow">→</span>
+    </button>
+  </div>
+
+  <!-- Cache Management Section -->
+  <div class="cache-management-section">
+    <h3><span class="emoji">🔄</span> Cache Management</h3>
+    <p class="section-description">
+      Clear all cached data including packs, service workers, and databases. Use this if packs aren't installing or the app is stuck with old data.
+    </p>
+    <button 
+      class="clear-cache-button" 
+      on:click={clearCacheAndReload}
+      disabled={clearing}
+    >
+      <span class="icon emoji">🗑️</span>
+      <span class="text">{clearing ? 'Clearing...' : 'Clear Cache & Reload'}</span>
     </button>
   </div>
 
@@ -363,6 +439,65 @@
   .packs-button .arrow {
     font-size: 1.2rem;
     opacity: 0.7;
+  }
+
+  .cache-management-section {
+    margin-top: 1.5rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: linear-gradient(
+      135deg,
+      rgba(244, 67, 54, 0.05),
+      rgba(233, 30, 99, 0.05)
+    );
+    border: 1px solid rgba(244, 67, 54, 0.2);
+    border-radius: 8px;
+  }
+
+  .cache-management-section h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.1rem;
+    color: #f0f0f0;
+  }
+
+  .clear-cache-button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, #f44336 0%, #e91e63 100%);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+  }
+
+  .clear-cache-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+  }
+
+  .clear-cache-button:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  .clear-cache-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .clear-cache-button .icon {
+    font-size: 1.5rem;
+  }
+
+  .clear-cache-button .text {
+    flex: 1;
+    text-align: left;
   }
 
   .note {
