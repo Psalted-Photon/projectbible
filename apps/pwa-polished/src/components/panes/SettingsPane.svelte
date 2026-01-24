@@ -22,7 +22,12 @@
   });
 
   async function clearCacheAndReload() {
-    if (!confirm('This will clear all cached data (packs, service worker, etc.) and reload the app. Continue?')) {
+    const warningMessage =
+      'This will delete ALL cached data on this device (downloaded packs, IndexedDB databases, service worker cache, and session storage). You will need to reinstall packs after this. Continue?';
+    if (!confirm(warningMessage)) {
+      return;
+    }
+    if (!confirm('Please confirm again: this will permanently delete local packs and cached data from this device. If you are signed in, your cloud-synced settings and reading plans will restore after login. Proceed?')) {
       return;
     }
 
