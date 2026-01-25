@@ -1,6 +1,7 @@
 {
-  "version": "1.0.0",
-  "generatedAt": "2026-01-24T04:29:53.994Z",
+  "manifestVersion": "1.0.0",
+  "releaseTag": "packs-v1.0.0",
+  "createdAt": "2026-01-24T04:29:53.994Z",
   "packs": [
     {
       "id": "ancient-languages",
