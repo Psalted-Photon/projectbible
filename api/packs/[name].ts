@@ -34,7 +34,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // CORS + streaming headers
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Content-Type", "application/octet-stream");
+    
+    // Force JSON content type for manifest, otherwise use octet-stream
+    if (name === 'manifest.json') {
+      res.setHeader("Content-Type", "application/json");
+    } else {
+      res.setHeader("Content-Type", "application/octet-stream");
+    }
+    
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
 
     // Stream GitHub → Vercel → Browser
