@@ -90,15 +90,38 @@ export class PackLoader {
    */
   async fetchManifest(): Promise<PackManifest> {
     try {
-      const response = await fetch(this.options.manifestUrl);
+      console.log('📡 Fetching manifest from:', this.options.manifestUrl);
+      const response = await fetch(this.options.manifestUrl, {
+        cache: 'no-store' // Force bypass cache
+      });
+      
+      console.log('📡 Response status:', response.status, response.statusText);
+      console.log('📡 Content-Type:', response.headers.get('Content-Type'));
       
       if (!response.ok) {
         throw new Error(`Failed to fetch manifest: ${response.status} ${response.statusText}`);
       }
       
-      const manifest = await response.json();
+      const text = await response.text();
+      console.log('📡 Raw response (first 500 chars):', text.substring(0, 500));
+      
+      let manifest;
+      try {
+        manifest = JSON.parse(text);
+        console.log('📡 Parsed manifest:', {
+          hasManifestVersion: !!manifest.manifestVersion,
+          hasReleaseTag: !!manifest.releaseTag,
+          hasCreatedAt: !!manifest.createdAt,
+          hasPacks: !!manifest.packs,
+          packCount: manifest.packs?.length
+        });
+      } catch (parseError) {
+        console.error('📡 JSON parse failed:', parseError);
+        throw new Error(`Failed to parse manifest JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      }
       
       if (!validateManifest(manifest)) {
+        console.error('📡 Manifest validation failed. Manifest object:', manifest);
         throw new Error('Invalid manifest format');
       }
       
