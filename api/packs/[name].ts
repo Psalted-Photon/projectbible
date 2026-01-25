@@ -38,11 +38,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Force JSON content type for manifest, otherwise use octet-stream
     if (name === 'manifest.json') {
       res.setHeader("Content-Type", "application/json");
+      // Don't cache manifest - allow updates
+      res.setHeader("Cache-Control", "no-cache, must-revalidate");
     } else {
       res.setHeader("Content-Type", "application/octet-stream");
+      // Cache packs for 1 year (they're immutable)
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     }
-    
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
 
     // Stream GitHub → Vercel → Browser
     const reader = gh.body.getReader();
