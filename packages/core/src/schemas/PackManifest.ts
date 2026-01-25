@@ -99,6 +99,7 @@ export function validateManifest(manifest: any): manifest is PackManifest {
  */
 export function validatePackEntry(pack: any): pack is PackEntry {
   if (!pack || typeof pack !== 'object') {
+    console.error('📦 Pack validation failed: not an object', pack);
     return false;
   }
   
@@ -109,7 +110,14 @@ export function validatePackEntry(pack: any): pack is PackEntry {
   ];
   
   for (const field of requiredFields) {
-    if (typeof pack[field] !== 'string' && typeof pack[field] !== 'number') {
+    const value = pack[field];
+    const valueType = typeof value;
+    if (valueType !== 'string' && valueType !== 'number') {
+      console.error(`📦 Pack validation failed for field "${field}":`, {
+        value,
+        type: valueType,
+        packId: pack.id
+      });
       return false;
     }
   }
