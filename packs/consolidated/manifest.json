@@ -58,7 +58,7 @@
       "minAppVersion": "1.0.0",
       "size": 40226816,
       "sizeMB": 38.36,
-      "sha256": "87a95b4ac0e8c8e8c8e8c8e8c8e8c8e8c8e8c8e8c8e8c8e8c8e8c8e8c8e8c8e8",
+      "sha256": "87a95b4ac5021b57e7ff9ce6af317154c02f89230fb121359aafeaaa2604d6d2",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
       "createdAt": "2026-01-24T00:00:00.000Z"
