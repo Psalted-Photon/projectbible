@@ -144,7 +144,7 @@ async function ensurePack(filename) {
 
 async function ensurePacks() {
   // Skip bundling in production - packs are downloaded from GitHub Releases
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
     console.log('📦 Skipping pack bundling in production mode (packs will be downloaded from GitHub Releases)');
     return;
   }
