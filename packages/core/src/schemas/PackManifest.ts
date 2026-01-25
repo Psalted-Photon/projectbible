@@ -70,27 +70,48 @@ export interface PackEntry {
  * Validate a pack manifest
  */
 export function validateManifest(manifest: any): manifest is PackManifest {
+  console.log('🔍 validateManifest called with:', manifest);
+  
   if (!manifest || typeof manifest !== 'object') {
+    console.error('❌ Manifest validation failed: not an object');
     return false;
   }
   
   // Check required top-level fields
+  console.log('🔍 Checking top-level fields:', {
+    manifestVersion: manifest.manifestVersion,
+    manifestVersionType: typeof manifest.manifestVersion,
+    hasPacks: Array.isArray(manifest.packs),
+    packsLength: manifest.packs?.length,
+    createdAt: manifest.createdAt,
+    createdAtType: typeof manifest.createdAt,
+    releaseTag: manifest.releaseTag,
+    releaseTagType: typeof manifest.releaseTag
+  });
+  
   if (
     typeof manifest.manifestVersion !== 'string' ||
     !Array.isArray(manifest.packs) ||
     typeof manifest.createdAt !== 'string' ||
     typeof manifest.releaseTag !== 'string'
   ) {
+    console.error('❌ Manifest validation failed: missing or invalid top-level fields');
     return false;
   }
   
+  console.log('✅ Top-level fields valid, checking', manifest.packs.length, 'pack entries...');
+  
   // Validate each pack entry
-  for (const pack of manifest.packs) {
+  for (let i = 0; i < manifest.packs.length; i++) {
+    const pack = manifest.packs[i];
+    console.log(`🔍 Validating pack ${i + 1}/${manifest.packs.length}:`, pack.id);
     if (!validatePackEntry(pack)) {
+      console.error(`❌ Pack entry validation failed for pack ${i + 1}:`, pack.id);
       return false;
     }
   }
   
+  console.log('✅ All pack entries valid!');
   return true;
 }
 
