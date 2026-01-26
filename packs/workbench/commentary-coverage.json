@@ -1,0 +1,16 @@
+{
+  "totalEntries": 16,
+  "packSize": 53248,
+  "byAuthor": {
+    "Unknown": 16
+  },
+  "byBook": {
+    "Genesis": 6,
+    "Romans": 6,
+    "Psalms": 4
+  },
+  "byTestament": {
+    "OT": 10,
+    "NT": 6
+  }
+}

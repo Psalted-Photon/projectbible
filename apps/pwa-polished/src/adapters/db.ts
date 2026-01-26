@@ -11,7 +11,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 18; // Ensure sync queue + idempotency stores exist
+const DB_VERSION = 19; // Add commentary_entries store
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -19,7 +19,7 @@ let dbInstance: IDBDatabase | null = null;
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -139,6 +139,19 @@ export interface DBMorphology {
   word?: string;               // Old field name (use text instead)
   parsing?: string;            // Old field name (use morph_code instead)
   gloss?: string;              // Old field name (use gloss_en instead)
+}
+
+export interface DBCommentaryEntry {
+  id: string; // `${book}:${chapter}:${verse_start}:${author}`
+  book: string;
+  chapter: number;
+  verseStart: number;
+  verseEnd?: number;
+  author: string;
+  title?: string;
+  text: string;
+  source?: string;
+  year?: number;
 }
 
 export interface DBWordOccurrence {
@@ -634,6 +647,15 @@ export function openDB(): Promise<IDBDatabase> {
         namesStore.createIndex('placeId', 'placeId', { unique: false });
         namesStore.createIndex('name', 'name', { unique: false });
         namesStore.createIndex('language', 'language', { unique: false });
+      }
+      
+      // Commentary entries store (Bible commentaries)
+      if (!db.objectStoreNames.contains('commentary_entries')) {
+        const commentaryStore = db.createObjectStore('commentary_entries', { keyPath: 'id' });
+        commentaryStore.createIndex('verse', ['book', 'chapter', 'verseStart'], { unique: false });
+        commentaryStore.createIndex('author', 'author', { unique: false });
+        commentaryStore.createIndex('book', 'book', { unique: false });
+        commentaryStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
       }
       
       // Pleiades place locations store (coordinates)

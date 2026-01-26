@@ -5,13 +5,19 @@
 
   let searchQuery = "";
 
-  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'wordstudy') {
+  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries') {
     // Set initial content state based on type
     let contentState = {};
     
     if (contentType === 'bible') {
       contentState = {
         translation: 'WEB',
+        book: 'Genesis',
+        chapter: 1,
+      };
+    } else if (contentType === 'commentaries') {
+      contentState = {
+        author: undefined,
         book: 'Genesis',
         chapter: 1,
       };
@@ -51,6 +57,11 @@
     <button class="content-button map" on:click={() => handleContentSelect('map')}>
       <span class="icon emoji">🗺️</span>
       <span class="label">Map</span>
+    </button>
+    
+    <button class="content-button commentaries" on:click={() => handleContentSelect('commentaries')}>
+      <span class="icon emoji">📜</span>
+      <span class="label">Commentary</span>
     </button>
     
     <button class="content-button notes" on:click={() => handleContentSelect('notes')}>

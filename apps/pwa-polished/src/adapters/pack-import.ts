@@ -48,7 +48,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
     const packInfo: DBPack = {
       id: metadata.pack_id || metadata.packId || metadata.id,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio',
+      type: packType as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -105,6 +105,46 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         }
 
         console.log(`✅ Cross-references pack imported: ${crossRefs.length} entries`);
+      }
+    } else if (packInfo.type === 'commentary') {
+      // Import commentary entries
+      console.log('Importing commentary pack...');
+      
+      const commentaryRows = db.exec(`
+        SELECT book, chapter, verse_start, verse_end, author, title, text, source, year
+        FROM commentary_entries
+      `);
+
+      if (commentaryRows.length && commentaryRows[0].values.length) {
+        const entries = commentaryRows[0].values.map(([book, chapter, verseStart, verseEnd, author, title, text, source, year]) => ({
+          id: `${book}:${chapter}:${verseStart}:${author}`,
+          book: book as string,
+          chapter: chapter as number,
+          verseStart: verseStart as number,
+          verseEnd: verseEnd as number | undefined,
+          author: author as string,
+          title: title as string | undefined,
+          text: text as string,
+          source: source as string | undefined,
+          year: year as number | undefined
+        }));
+
+        console.log(`Importing ${entries.length} commentary entries...`);
+
+        // Batch insert commentary entries
+        const CHUNK_SIZE = 500;
+        for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+          const chunk = entries.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('commentary_entries', (store) => {
+            chunk.forEach(entry => store.put(entry));
+          });
+          
+          if ((i / CHUNK_SIZE + 1) % 10 === 0) {
+            console.log(`  Progress: ${i + chunk.length}/${entries.length} (${((i + chunk.length) / entries.length * 100).toFixed(1)}%)`);
+          }
+        }
+
+        console.log(`✅ Commentary pack imported: ${entries.length} entries`);
       }
     } else if (packInfo.type === 'text') {
       // Check if this is a multi-edition pack

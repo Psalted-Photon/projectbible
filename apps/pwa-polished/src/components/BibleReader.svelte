@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import NavigationBar from "./NavigationBar.svelte";
   import SelectionToast from "./SelectionToast.svelte";
+  import CommentaryModal from "./CommentaryModal.svelte";
   import {
     navigationStore,
     availableTranslations,
@@ -41,6 +42,12 @@
   let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
   let scrollHandler: ((e: Event) => void) | null = null;
 
+  // Commentary modal state
+  let commentaryModalOpen = false;
+  let commentaryModalBook = "";
+  let commentaryModalChapter = 0;
+  let commentaryModalVerse = 0;
+
   // Text selection state
   let showToast = false;
   let toastX = 0;
@@ -57,6 +64,9 @@
   let justOpenedToast = false;
   let touchStartPos: { x: number; y: number } | null = null;
   let hasMoved = false;
+  
+  // Track selected verse number for commentary
+  let selectedVerseNumber: number | null = null;
 
   // Morphology state
   let selectedMorphology: DBMorphology | null = null;
@@ -1368,6 +1378,12 @@
       if (verseEl) {
         verseEl.classList.add("verse-highlighted");
         highlightedElements.push(verseEl as HTMLElement);
+        
+        // Extract verse number for commentary
+        const verseNumStr = verseEl.getAttribute("data-verse");
+        if (verseNumStr) {
+          selectedVerseNumber = parseInt(verseNumStr, 10);
+        }
       }
     }
   }
@@ -1798,6 +1814,16 @@
       case "save":
         alert(`Save verse: ${text}\n\n(Saved verses coming soon)`);
         break;
+      case "commentary":
+        // Open commentary modal
+        if (selectedVerseNumber !== null) {
+          commentaryModalOpen = true;
+          commentaryModalBook = currentBook;
+          commentaryModalChapter = currentChapter;
+          commentaryModalVerse = selectedVerseNumber;
+        }
+        showToast = false;
+        break;
       case "repeats":
         toggleRepeats(text);
         break;
@@ -1920,6 +1946,13 @@
     on:modeChange={handleModeChange}
   />
 {/if}
+
+<CommentaryModal
+  bind:isOpen={commentaryModalOpen}
+  book={commentaryModalBook}
+  chapter={commentaryModalChapter}
+  verse={commentaryModalVerse}
+/>
 
 <div class="bible-reader" bind:this={readerElement}>
   <NavigationBar

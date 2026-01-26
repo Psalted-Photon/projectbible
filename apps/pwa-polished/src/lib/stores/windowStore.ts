@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 
-export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy';
+export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries';
 export type WindowEdge = 'top' | 'left' | 'right' | 'bottom';
 
 export interface WindowState {
@@ -14,6 +14,9 @@ export interface WindowState {
     translation?: string;
     book?: string;
     chapter?: number;
+    highlightedVerse?: number;
+    // For Commentary windows
+    author?: string;
     // For Map windows
     center?: [number, number];
     zoom?: number;

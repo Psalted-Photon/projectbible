@@ -5,6 +5,7 @@
   import MapPane from "./panes/MapPane.svelte";
   import PacksPane from "./panes/PacksPane.svelte";
   import SearchPane from "./panes/SearchPane.svelte";
+  import CommentaryReader from "./CommentaryReader.svelte";
 
   export let pane: PaneState;
 
@@ -110,6 +111,8 @@
       <PacksPane />
     {:else if pane.type === "search"}
       <SearchPane />
+    {:else if pane.type === "commentaries"}
+      <CommentaryReader />
     {/if}
   </div>
 </div>

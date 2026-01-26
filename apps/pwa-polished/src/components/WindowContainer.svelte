@@ -5,6 +5,7 @@
   import BibleReader from "./BibleReader.svelte";
   import EdgeGestureDetector from "./EdgeGestureDetector.svelte";
   import MapPane from "./MapPane.svelte";
+  import CommentaryReader from "./CommentaryReader.svelte";
 
   // Group windows by edge
   $: leftPanels = $windowStore.filter(w => w.edge === 'left');
@@ -39,8 +40,8 @@
       {:else if panel.contentType === 'bible'}
         <BibleReader windowId={panel.id} />
       {:else if panel.contentType === 'map'}
-        <MapPane windowId={panel.id} />
-      {:else if panel.contentType === 'notes'}
+        <MapPane windowId={panel.id} />      {:else if panel.contentType === 'commentaries'}
+        <CommentaryReader windowId={panel.id} />      {:else if panel.contentType === 'notes'}
         <div class="placeholder">
           <h2>Notes</h2>
           <p>Coming soon...</p>
@@ -64,8 +65,8 @@
       {:else if panel.contentType === 'bible'}
         <BibleReader windowId={panel.id} />
       {:else if panel.contentType === 'map'}
-        <MapPane windowId={panel.id} />
-      {:else if panel.contentType === 'notes'}
+        <MapPane windowId={panel.id} />      {:else if panel.contentType === 'commentaries'}
+        <CommentaryReader windowId={panel.id} />      {:else if panel.contentType === 'notes'}
         <div class="placeholder">
           <h2>Notes</h2>
           <p>Coming soon...</p>
@@ -90,6 +91,8 @@
         <BibleReader windowId={panel.id} />
       {:else if panel.contentType === 'map'}
         <MapPane windowId={panel.id} />
+      {:else if panel.contentType === 'commentaries'}
+        <CommentaryReader windowId={panel.id} />
       {:else if panel.contentType === 'notes'}
         <div class="placeholder">
           <h2>Notes</h2>
@@ -115,6 +118,8 @@
         <BibleReader windowId={panel.id} />
       {:else if panel.contentType === 'map'}
         <MapPane windowId={panel.id} />
+      {:else if panel.contentType === 'commentaries'}
+        <CommentaryReader windowId={panel.id} />
       {:else if panel.contentType === 'notes'}
         <div class="placeholder">
           <h2>Notes</h2>
