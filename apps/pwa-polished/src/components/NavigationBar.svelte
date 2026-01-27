@@ -450,15 +450,6 @@
       <span class="emoji">📖</span> Reading Plan
     </button>
 
-    <!-- Commentary Button -->
-    <button
-      class="commentary-button"
-      on:click={() => paneStore.openPane('commentaries', 'right')}
-      title="Open commentary pane"
-    >
-      <span class="emoji">📜</span> Commentary
-    </button>
-
     <!-- Reference Dropdown (Tree Structure) -->
     <div class="nav-dropdown reference-dropdown-trigger">
       <button
@@ -1184,31 +1175,6 @@
   .reading-plan-button:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(66, 165, 245, 0.4);
-  }
-
-  .commentary-button {
-    flex-shrink: 0;
-    height: var(--nav-item-height);
-    padding: 0 16px;
-    background: linear-gradient(135deg, #9c27b0 0%, #673ab7 100%);
-    border: 1px solid #9c27b0;
-    border-radius: 6px;
-    color: white;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1;
-    box-sizing: border-box;
-    white-space: nowrap;
-    transition: all 0.2s;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(156, 39, 176, 0.4);
-    box-shadow: 0 2px 8px rgba(156, 39, 176, 0.3);
-  }
-
-  .commentary-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(156, 39, 176, 0.4);
   }
 
   .search-spinner {

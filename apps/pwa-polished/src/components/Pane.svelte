@@ -111,8 +111,6 @@
       <PacksPane />
     {:else if pane.type === "search"}
       <SearchPane />
-    {:else if pane.type === "commentaries"}
-      <CommentaryReader />
     {/if}
   </div>
 </div>
