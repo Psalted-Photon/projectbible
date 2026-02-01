@@ -7,3 +7,30 @@
 [submodule "apps/guesstheflag"]
 	path = apps/guesstheflag
 	url = https://github.com/Psalted-Photon/guesstheflag.git
+[submodule "external-repos/AI_Commentary"]
+	path = external-repos/AI_Commentary
+	url = https://github.com/eliranwong/AI_Commentary
+[submodule "external-repos/americas-public-bible"]
+	path = external-repos/americas-public-bible
+	url = https://github.com/lmullen/americas-public-bible
+[submodule "external-repos/and-bible"]
+	path = external-repos/and-bible
+	url = https://github.com/AndBible/and-bible
+[submodule "external-repos/bible-commentary"]
+	path = external-repos/bible-commentary
+	url = https://github.com/kolypto/bible-commentary
+[submodule "external-repos/BibleOrgSys"]
+	path = external-repos/BibleOrgSys
+	url = https://github.com/Freely-Given-org/BibleOrgSys
+[submodule "external-repos/BibleQuote-Modules"]
+	path = external-repos/BibleQuote-Modules
+	url = https://github.com/BibleQuote/BibleQuote-Modules
+[submodule "external-repos/nota-expo"]
+	path = external-repos/nota-expo
+	url = https://github.com/baleeds/nota-expo
+[submodule "external-repos/Orature"]
+	path = external-repos/Orature
+	url = https://github.com/Bible-Translation-Tools/Orature
+[submodule "external-repos/ScriptureGuide"]
+	path = external-repos/ScriptureGuide
+	url = https://github.com/HaikuArchives/ScriptureGuide

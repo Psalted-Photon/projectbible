@@ -132,17 +132,28 @@
       if (USE_BUNDLED) {
         installProgress = `Downloading ${pack.name} (${pack.size})...`;
 
-        let response = await fetch(pack.url);
+        // Try local bundle first instead of CDN
+        const localUrl = `/packs/consolidated/${pack.id}.sqlite`;
+        console.log(`Fetching pack from: ${localUrl}`);
+        const response = await fetch(localUrl);
+        
         if (!response.ok) {
-          console.warn(`CDN fetch failed for ${pack.id}. Trying local bundle...`);
-          const localUrl = `/packs/consolidated/${pack.id}.sqlite`;
-          response = await fetch(localUrl);
-        }
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          throw new Error(`HTTP ${response.status}: ${response.statusText} for ${localUrl}`);
         }
 
+        // Verify it's actually SQLite by checking the header
+        const contentType = response.headers.get('content-type');
+        console.log(`Content-Type: ${contentType}`);
+        
         const blob = await response.blob();
+        console.log(`Blob size: ${blob.size}, type: ${blob.type}`);
+        
+        // Check if we got HTML instead of SQLite
+        const firstBytes = await blob.slice(0, 100).text();
+        if (firstBytes.includes('<!DOCTYPE') || firstBytes.includes('<html')) {
+          throw new Error(`Server returned HTML instead of SQLite file. Check that ${localUrl} exists in public directory.`);
+        }
+        
         const file = new File([blob], `${pack.id}.sqlite`, {
           type: "application/x-sqlite3",
         });
