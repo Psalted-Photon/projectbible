@@ -9,6 +9,10 @@
   import { loadPackOnDemand } from "../../lib/progressive-init";
   import { USE_BUNDLED_PACKS } from "../../config";
 
+  console.log("DEV:", import.meta.env.DEV);
+  console.log("PROD:", import.meta.env.PROD);
+  console.log("USE_BUNDLED_PACKS:", USE_BUNDLED_PACKS);
+
   interface PackInfo {
     id: string;
     type: string;
@@ -29,10 +33,10 @@
   let installProgress = "";
   let fileInputElement: HTMLInputElement;
 
-  // Use bundled packs when running locally or when VITE_USE_BUNDLED_PACKS=true
+  // Use bundled packs in dev mode
   const USE_BUNDLED = USE_BUNDLED_PACKS;
-  const CDN_BASE = "/api/packs";
-  const BASE_URL = CDN_BASE;
+  // Base URL depends on environment
+  const BASE_URL = USE_BUNDLED ? "/packs/consolidated" : "/api/packs";
   // Consolidated pack definitions
   const CONSOLIDATED_PACKS = [
     {
@@ -130,31 +134,21 @@
 
     try {
       if (USE_BUNDLED) {
-        installProgress = `Downloading ${pack.name} (${pack.size})...`;
+        installProgress = `Loading ${pack.name} from local files...`;
 
-        // Try local bundle first instead of CDN
-        const localUrl = `/packs/consolidated/${pack.id}.sqlite`;
-        console.log(`Fetching pack from: ${localUrl}`);
-        const response = await fetch(localUrl);
+        console.log("Pack object:", pack);
+        console.log("Pack URL:", pack.url);
+        console.log("BASE_URL:", BASE_URL);
+
+        // Fetch from local bundle (already copied by Vite plugin in dev mode)
+        const response = await fetch(pack.url); // pack.url already has correct BASE_URL
         
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText} for ${localUrl}`);
-        }
-
-        // Verify it's actually SQLite by checking the header
-        const contentType = response.headers.get('content-type');
-        console.log(`Content-Type: ${contentType}`);
-        
-        const blob = await response.blob();
-        console.log(`Blob size: ${blob.size}, type: ${blob.type}`);
-        
-        // Check if we got HTML instead of SQLite
-        const firstBytes = await blob.slice(0, 100).text();
-        if (firstBytes.includes('<!DOCTYPE') || firstBytes.includes('<html')) {
-          throw new Error(`Server returned HTML instead of SQLite file. Check that ${localUrl} exists in public directory.`);
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        const file = new File([blob], `${pack.id}.sqlite`, {
+        const buffer = await response.arrayBuffer();
+        const file = new File([buffer], `${pack.id}.sqlite`, {
           type: "application/x-sqlite3",
         });
 

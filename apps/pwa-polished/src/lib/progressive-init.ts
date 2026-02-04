@@ -131,36 +131,8 @@ export async function loadPackOnDemand(
         stage: 'complete'
       });
     } catch (error) {
-      console.warn(`Pack download failed for ${packId}, trying bundled fallback`, error);
-
-      onProgress?.({
-        packId,
-        loaded: 0,
-        total: 1,
-        percentage: 0,
-        stage: 'downloading'
-      });
-
-      // Fetch from local static hosting
-      const response = await fetch(`/packs/consolidated/${packId}.sqlite`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch bundled pack: ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      const file = new File([blob], `${packId}.sqlite`, {
-        type: 'application/x-sqlite3'
-      });
-      
-      await importPackFromSQLite(file);
-
-      onProgress?.({
-        packId,
-        loaded: 1,
-        total: 1,
-        percentage: 100,
-        stage: 'complete'
-      });
+      console.error(`Pack download failed for ${packId}`, error);
+      throw error; // Re-throw to allow caller to handle
     }
   } finally {
     setProgressHandler();

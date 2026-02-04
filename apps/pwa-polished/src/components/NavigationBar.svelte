@@ -672,7 +672,7 @@
 
   {#if referenceDropdownOpen}
     <div class="dropdown-menu tree-menu reference-dropdown">
-      {#each BIBLE_BOOKS as book, index}
+      {#each BIBLE_BOOKS as book}
         <div 
           class="book-item category-{book.category} testament-{book.testament}"
           class:first-nt={book.name === 'Matthew'}
