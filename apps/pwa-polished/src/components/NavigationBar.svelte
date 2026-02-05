@@ -107,6 +107,12 @@
     referenceDropdownOpen = !referenceDropdownOpen;
     if (referenceDropdownOpen) {
       translationDropdownOpen = false;
+      
+      // Auto-expand current book
+      if (currentBook && !expandedBooks.has(currentBook)) {
+        expandedBooks = new Set([currentBook]);
+      }
+      
       // Position dropdown
       requestAnimationFrame(() => {
         const dropdown = document.querySelector(
@@ -117,6 +123,19 @@
           dropdown.style.left = `${rect.left}px`;
           dropdown.style.top = `${rect.bottom + 4}px`;
           // Let dropdown width be determined by content (fit-content in CSS)
+          
+          // Scroll to current book
+          if (currentBook) {
+            requestAnimationFrame(() => {
+              const currentBookItem = dropdown.querySelector(`.book-item .book-button.current`)?.closest('.book-item') as HTMLElement;
+              if (currentBookItem) {
+                const dropdownRect = dropdown.getBoundingClientRect();
+                const bookRect = currentBookItem.getBoundingClientRect();
+                const scrollOffset = bookRect.top - dropdownRect.top + dropdown.scrollTop;
+                dropdown.scrollTop = scrollOffset;
+              }
+            });
+          }
         }
       });
     }

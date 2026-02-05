@@ -56,6 +56,14 @@
       url: `${BASE_URL}/dictionary-en.sqlite`,
     },
     {
+      id: "commentaries",
+      name: "Multi-Author Commentaries",
+      description: "Clarke, Wesley, Calvin, Barnes, Robertson + 6 more",
+      size: "143.86 MB",
+      icon: "💭",
+      url: `${BASE_URL}/commentaries.sqlite`,
+    },
+    {
       id: "ancient-languages",
       name: "Ancient Languages",
       description: "Hebrew, Greek with morphology",
