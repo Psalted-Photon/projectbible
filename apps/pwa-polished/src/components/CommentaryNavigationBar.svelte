@@ -36,11 +36,17 @@
     authors = await commentaryStore.getAuthors();
   });
 
-  function toggleAuthorDropdown(event: MouseEvent) {
+  async function toggleAuthorDropdown(event: MouseEvent) {
     event.stopPropagation();
     authorDropdownOpen = !authorDropdownOpen;
     if (authorDropdownOpen) {
       referenceDropdownOpen = false;
+      
+      // Refresh authors in case database was just populated
+      if (commentaryStore) {
+        authors = await commentaryStore.getAuthors();
+      }
+      
       // Position dropdown
       requestAnimationFrame(() => {
         const dropdown = document.querySelector(
