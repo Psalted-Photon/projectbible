@@ -1,4 +1,5 @@
 export * from './interfaces.js';
+export type { JournalEntry, JournalStore } from './interfaces.js';
 export { Reader } from './reader.js';
 export * from './reading-plan.js';
 export * from './BibleMetadata.js';

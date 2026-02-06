@@ -205,6 +205,16 @@ export interface UserBookmark {
   createdAt: Date;
 }
 
+export interface JournalEntry {
+  id: string;
+  date: string; // YYYY-MM-DD format
+  title?: string;
+  text: string; // Raw HTML from Lexical (user's actual writing)
+  textLinkified?: string; // Display version with Bible references linked
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Platform interfaces (to be implemented by PWA/Electron adapters)
 
 export interface PackManager {
@@ -367,6 +377,26 @@ export interface UserDataStore {
   getBookmarks(): Promise<UserBookmark[]>;
   saveBookmark(bookmark: Omit<UserBookmark, 'id' | 'createdAt'>): Promise<UserBookmark>;
   deleteBookmark(bookmarkId: string): Promise<void>;
+}
+
+export interface JournalStore {
+  /** Get journal entries within a date range (optional) */
+  getEntries(startDate?: string, endDate?: string): Promise<JournalEntry[]>;
+  
+  /** Get a specific entry by date */
+  getEntryByDate(date: string): Promise<JournalEntry | null>;
+  
+  /** Save a new journal entry */
+  saveEntry(entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<JournalEntry>;
+  
+  /** Update an existing entry */
+  updateEntry(id: string, updates: { title?: string; text?: string; textLinkified?: string }): Promise<void>;
+  
+  /** Delete a journal entry */
+  deleteEntry(id: string): Promise<void>;
+  
+  /** Get the date range of all entries (oldest and newest) */
+  getDateRange(): Promise<{ oldest: string | null; newest: string | null }>;
 }
 
 export interface ReadingHistoryStore {

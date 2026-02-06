@@ -11,6 +11,7 @@
   import { applyTheme, getSettings, updateSettings } from '../adapters/settings';
   import { paneStore } from '../stores/paneStore';
   import { syncOrchestrator, type SyncQueueStats } from '../services/SyncOrchestrator';
+  import { initialSyncService } from '../services/InitialSyncService';
   import { fetchUserSettings, upsertUserSettings } from '../lib/supabase/userSettings';
 
   let isOpen = false;
@@ -94,13 +95,22 @@
 
     const authSubscription = supabaseAuthService.onAuthStateChange((event, session) => {
       userProfileStore.setFromSession(session);
-      if (event === 'SIGNED_IN') {
-        void loadUserSettings();
-        void loadReadingPlan().then(() => {
-          if (currentPlanId) {
-            void syncOrchestrator.runImmediateSync(currentPlanId, 'sign-in');
-          }
-        });
+      if (event === 'SIGNED_IN' && session?.user?.id) {
+        // Pull cloud data FIRST, then load local (which now includes merged cloud data)
+        void initialSyncService.pullAll(session.user.id)
+          .then((result) => {
+            console.log('[ProfileModal] Initial sync complete:', result);
+            return loadUserSettings();
+          })
+          .then(() => loadReadingPlan())
+          .then(() => {
+            if (currentPlanId) {
+              return syncOrchestrator.runImmediateSync(currentPlanId, 'sign-in');
+            }
+          })
+          .catch((error) => {
+            console.error('[ProfileModal] Error during sign-in sync:', error);
+          });
       }
     });
 

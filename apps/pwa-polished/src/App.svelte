@@ -55,8 +55,31 @@
       }
     });
 
+    // Global keyboard shortcuts
+    const handleGlobalKeydown = (e: KeyboardEvent) => {
+      // Check if user is typing in an input field
+      const target = e.target as HTMLElement;
+      const isInputField = target.tagName === 'INPUT' || 
+                          target.tagName === 'TEXTAREA' || 
+                          target.contentEditable === 'true';
+      
+      // J key - open journal (only if not typing)
+      if (e.key === 'j' && !e.ctrlKey && !e.metaKey && !e.altKey && !isInputField) {
+        e.preventDefault();
+        const windowId = windowStore.createWindow('right', 50);
+        if (windowId) {
+          windowStore.setWindowContent(windowId, 'journal', {
+            date: new Date().toISOString().split('T')[0]
+          });
+        }
+      }
+    };
+    
+    document.addEventListener('keydown', handleGlobalKeydown);
+
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener('keydown', handleGlobalKeydown);
       unsubscribeReadingPlan();
     };
   });

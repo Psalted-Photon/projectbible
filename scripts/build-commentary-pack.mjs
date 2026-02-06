@@ -22,7 +22,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Paths
-const INPUT_FILE = join(__dirname, '../data/processed/commentary-unified.ndjson');
+const INPUT_FILE = join(__dirname, '../data/processed/commentary-final.ndjson');
 const OUTPUT_DIR = join(__dirname, '../packs/workbench');
 const OUTPUT_FILE = join(OUTPUT_DIR, 'commentaries.sqlite');
 const REPORT_FILE = join(OUTPUT_DIR, 'commentary-report.md');

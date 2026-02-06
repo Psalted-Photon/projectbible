@@ -48,6 +48,13 @@
   function handleTouchStart(e: TouchEvent) {
     if (atLimit) return; // Don't allow new windows at limit
 
+    // Don't interfere with contenteditable elements (e.g., journal editor)
+    const target = e.target as HTMLElement;
+    if (target.closest('[contenteditable="true"]')) {
+      console.log('⛔ TOUCH START blocked - touching contenteditable');
+      return;
+    }
+
     usingTouch = true; // Mark that we're using touch input
     console.log('👆 TOUCH START - usingTouch set to TRUE');
     const touch = e.touches[0];
@@ -76,6 +83,14 @@
     if (usingTouch) {
       console.log('⛔ MOUSE DOWN blocked - usingTouch is true');
       return; // Ignore mouse events when touch is active
+    }
+
+    // Don't interfere with contenteditable elements (e.g., journal editor)
+    const target = e.target as HTMLElement;
+    if (target.closest('[contenteditable="true"]')) {
+      console.log('⛔ MOUSE DOWN blocked - clicking in contenteditable');
+      e.stopPropagation();
+      return;
     }
 
     const x = e.clientX;
@@ -137,6 +152,12 @@
 
   function handleMouseMove(e: MouseEvent) {
     if (!isDragging) return;
+    
+    // Don't interfere with contenteditable elements
+    const target = e.target as HTMLElement;
+    if (target.closest('[contenteditable="true"]')) {
+      return;
+    }
 
     currentX = e.clientX;
     currentY = e.clientY;
@@ -210,8 +231,17 @@
     }
   }
 
-  function handleMouseUp() {
+  function handleMouseUp(e: MouseEvent) {
     console.log('🔵 MOUSE UP called:', { isDragging, edgePosition, usingTouch });
+    
+    // Don't interfere with contenteditable elements (e.g., journal editor)
+    const target = e.target as HTMLElement;
+    if (target.closest('[contenteditable="true"]')) {
+      console.log('⛔ MOUSE UP blocked - clicking in contenteditable');
+      e.stopPropagation();
+      return;
+    }
+    
     if (!isDragging || !edgePosition) return;
     if (usingTouch) {
       console.log('⛔ MOUSE UP blocked - usingTouch is true');

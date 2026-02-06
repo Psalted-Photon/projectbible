@@ -33,7 +33,7 @@ const __dirname = dirname(__filename);
 const parseXML = promisify(parseString);
 
 // Paths
-const SOURCES_DIR = join(__dirname, '../data-sources/commentaries/raw');
+const SOURCES_DIR = join(__dirname, '../data-sources/commentaries/osis');
 const OUTPUT_FILE = join(__dirname, '../data/processed/commentary-unified.ndjson');
 
 // Canonical book names (66 books)
@@ -140,6 +140,26 @@ const COMMENTARY_METADATA = {
   'Clarke': { author: 'Adam Clarke', title: "Clarke's Commentary", year: 1810, source: 'CrossWire' },
   'Wesley': { author: 'John Wesley', title: "Wesley's Explanatory Notes", year: 1754, source: 'CrossWire' },
   'Constable': { author: 'Thomas L. Constable', title: "Constable's Notes", year: 2023, source: 'Plano Bible Chapel' },
+  'Tsk': { author: 'Treasury of Scripture Knowledge', title: 'Treasury of Scripture Knowledge', year: 1834, source: 'CrossWire' },
+  'TSK': { author: 'Treasury of Scripture Knowledge', title: 'Treasury of Scripture Knowledge', year: 1834, source: 'CrossWire' },
+  'Catena': { author: 'Thomas Aquinas', title: 'Catena Aurea', year: 1263, source: 'CrossWire' },
+  'Lightfoot': { author: 'John Lightfoot', title: "Lightfoot's Commentary", year: 1658, source: 'CrossWire' },
+  'Luther': { author: 'Martin Luther', title: "Luther's Commentary", year: 1545, source: 'CrossWire' },
+  'Calvincommentaries': { author: 'John Calvin', title: "Calvin's Commentaries", year: 1564, source: 'CrossWire' },
+  'CalvinCommentaries': { author: 'John Calvin', title: "Calvin's Commentaries", year: 1564, source: 'CrossWire' },
+  'Family': { author: 'Family Bible Notes', title: 'Family Bible Notes', year: 1860, source: 'CrossWire' },
+  'Abbott': { author: 'Abbott', title: 'Illustrated New Testament', year: 1878, source: 'CrossWire' },
+  'Tfg': { author: 'J.W. McGarvey & P.Y. Pendleton', title: 'The Fourfold Gospel', year: 1905, source: 'CrossWire' },
+  'TFG': { author: 'J.W. McGarvey & P.Y. Pendleton', title: 'The Fourfold Gospel', year: 1905, source: 'CrossWire' },
+  'Rwp': { author: 'A.T. Robertson', title: "Robertson's Word Pictures", year: 1933, source: 'CrossWire' },
+  'RWP': { author: 'A.T. Robertson', title: "Robertson's Word Pictures", year: 1933, source: 'CrossWire' },
+  'Kingcomments': { author: 'KingComments', title: 'KingComments', year: 2010, source: 'CrossWire' },
+  'KingComments': { author: 'KingComments', title: 'KingComments', year: 2010, source: 'CrossWire' },
+  'Quotingpassages': { author: 'Quoting Passages', title: 'Quoting Passages', year: 2000, source: 'CrossWire' },
+  'QuotingPassages': { author: 'Quoting Passages', title: 'Quoting Passages', year: 2000, source: 'CrossWire' },
+  'Netnotesfree': { author: 'NET Bible Translators', title: 'NET Bible Study Notes', year: 2006, source: 'CrossWire' },
+  'NETnotesfree': { author: 'NET Bible Translators', title: 'NET Bible Study Notes', year: 2006, source: 'CrossWire' },
+  'Personal': { author: 'Personal', title: 'Personal Commentary', year: 2000, source: 'CrossWire' },
 };
 
 /**
@@ -161,6 +181,71 @@ function parseOsisID(osisID) {
   const verse = parts[2] ? parseInt(parts[2], 10) : 0; // 0 = chapter-level
   
   return { book, chapter, verse };
+}
+
+/**
+ * Extract author from OSIS metadata (hybrid approach)
+ * 1. Try OSIS <creator role="author">
+ * 2. Try OSIS <contributor role="author">
+ * 3. Try parsing <title>
+ * 4. Fall back to COMMENTARY_METADATA mapping
+ * 5. Default to "Unknown"
+ */
+function extractAuthorFromOSIS(osisDoc, commentaryId) {
+  // Try OSIS header metadata
+  const header = osisDoc?.osis?.osisText?.[0]?.header?.[0];
+  if (header && header.work) {
+    for (const work of header.work) {
+      // Try <creator role="author">
+      if (work.creator) {
+        for (const creator of work.creator) {
+          if (creator.$ && creator.$.role === 'author') {
+            const authorName = extractText(creator).trim();
+            if (authorName && authorName !== 'CrossWire' && authorName !== 'Unknown') {
+              console.log(`  ✓ Extracted author from OSIS <creator>: ${authorName}`);
+              return authorName;
+            }
+          }
+        }
+      }
+      
+      // Try <contributor role="author">
+      if (work.contributor) {
+        for (const contributor of work.contributor) {
+          if (contributor.$ && contributor.$.role === 'author') {
+            const authorName = extractText(contributor).trim();
+            if (authorName && authorName !== 'CrossWire' && authorName !== 'Unknown') {
+              console.log(`  ✓ Extracted author from OSIS <contributor>: ${authorName}`);
+              return authorName;
+            }
+          }
+        }
+      }
+      
+      // Try parsing title for known patterns
+      if (work.title) {
+        const title = extractText(work.title).trim();
+        if (title.includes("Matthew Henry")) return "Matthew Henry";
+        if (title.includes("Jamieson")) return "Jamieson-Fausset-Brown";
+        if (title.includes("Barnes")) return "Albert Barnes";
+        if (title.includes("John Gill")) return "John Gill";
+        if (title.includes("Adam Clarke")) return "Adam Clarke";
+        if (title.includes("John Wesley")) return "John Wesley";
+        if (title.includes("Calvin")) return "John Calvin";
+        if (title.includes("Catena")) return "Thomas Aquinas (Catena Aurea)";
+      }
+    }
+  }
+  
+  // Fall back to COMMENTARY_METADATA mapping
+  if (COMMENTARY_METADATA[commentaryId]) {
+    console.log(`  ✓ Using mapped author: ${COMMENTARY_METADATA[commentaryId].author}`);
+    return COMMENTARY_METADATA[commentaryId].author;
+  }
+  
+  // Final fallback
+  console.log(`  ⚠ No author found, using "Unknown"`);
+  return 'Unknown';
 }
 
 /**
@@ -187,12 +272,20 @@ async function parseOSISCommentary(filePath, commentaryId) {
   const result = await parseXML(xml);
   
   const entries = [];
-  const metadata = COMMENTARY_METADATA[commentaryId] || { 
-    author: 'Unknown', 
-    title: 'Unknown Commentary', 
-    year: 1900, 
-    source: 'Unknown' 
+  
+  // Use hybrid author detection
+  const author = extractAuthorFromOSIS(result, commentaryId);
+  
+  // Get metadata from mapping or use defaults
+  const metadata = COMMENTARY_METADATA[commentaryId] || {
+    author,
+    title: `${author}'s Commentary`,
+    year: 1900,
+    source: 'Unknown'
   };
+  
+  // Override author with detected author
+  metadata.author = author;
   
   // Navigate to div elements (OSIS structure: <osis><osisText><div type="book">...)
   const osisText = result?.osis?.osisText?.[0];
@@ -305,48 +398,53 @@ async function main() {
   const allEntries = [];
   let totalSize = 0;
   
-  // Find all subdirectories in raw/
-  const subdirs = readdirSync(SOURCES_DIR, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .map(dirent => dirent.name);
+  // Find all OSIS files directly in SOURCES_DIR
+  const allItems = readdirSync(SOURCES_DIR, { withFileTypes: true });
+  const osisFiles = allItems
+    .filter(item => item.isFile() && item.name.endsWith('.osis.xml'))
+    .map(item => item.name);
   
-  if (subdirs.length === 0) {
-    console.warn('No commentary source directories found.');
-    console.log('\nExpected structure:');
-    console.log('  data-sources/commentaries/raw/matthew-henry/MHC.osis.xml');
-    console.log('  data-sources/commentaries/raw/jfb/JFB.osis.xml');
+  if (osisFiles.length === 0) {
+    console.warn('No OSIS files found.');
+    console.log(`\nSearched in: ${SOURCES_DIR}`);
+    console.log('Expected: *.osis.xml files');
     console.log('\nSee README.md for download instructions.');
     process.exit(1);
   }
   
-  for (const subdir of subdirs) {
-    const subdirPath = join(SOURCES_DIR, subdir);
-    const files = readdirSync(subdirPath);
+  console.log(`Found ${osisFiles.length} OSIS files to parse\n`);
+  
+  // Process each OSIS file
+  for (const file of osisFiles) {
+    const filePath = join(SOURCES_DIR, file);
+    const stat = statSync(filePath);
     
-    for (const file of files) {
-      const filePath = join(subdirPath, file);
-      const ext = file.split('.').pop().toLowerCase();
-      
-      // Determine commentary ID from filename
-      const commentaryId = file.split('.')[0]; // e.g., "MHC" from "MHC.osis.xml"
-      
-      if (ext === 'xml' || file.includes('.osis.')) {
-        // OSIS XML format
-        try {
-          const entries = await parseOSISCommentary(filePath, commentaryId);
-          allEntries.push(...entries);
-          
-          const fileSize = statSync(filePath).size;
-          totalSize += fileSize;
-          console.log(`  Size: ${(fileSize / 1024 / 1024).toFixed(2)} MB\n`);
-        } catch (error) {
-          console.error(`Error parsing ${file}:`, error.message);
-        }
-      } else if (ext === 'pdf') {
-        console.log(`Skipping PDF (not yet implemented): ${file}`);
-      } else if (ext === 'html' || ext === 'htm') {
-        console.log(`Skipping HTML (not yet implemented): ${file}`);
+    // Skip if directory
+    if (stat.isDirectory()) continue;
+    
+    const ext = file.split('.').pop().toLowerCase();
+    
+    // Determine commentary ID from filename
+    let commentaryId = file.split('.')[0]; // e.g., "barnes" from "barnes.osis.xml"
+    // Capitalize first letter for matching COMMENTARY_METADATA keys
+    commentaryId = commentaryId.charAt(0).toUpperCase() + commentaryId.slice(1);
+    
+    if (ext === 'xml' || file.includes('.osis.')) {
+      // OSIS XML format
+      try {
+        const entries = await parseOSISCommentary(filePath, commentaryId);
+        allEntries.push(...entries);
+        
+        const fileSize = statSync(filePath).size;
+        totalSize += fileSize;
+        console.log(`  Size: ${(fileSize / 1024 / 1024).toFixed(2)} MB\n`);
+      } catch (error) {
+        console.error(`Error parsing ${file}:`, error.message);
       }
+    } else if (ext === 'pdf') {
+      console.log(`Skipping PDF (not yet implemented): ${file}`);
+    } else if (ext === 'html' || ext === 'htm') {
+      console.log(`Skipping HTML (not yet implemented): ${file}`);
     }
   }
   

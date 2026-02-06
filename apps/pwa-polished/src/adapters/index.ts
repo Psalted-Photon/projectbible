@@ -6,12 +6,13 @@
  */
 
 export { openDB, generateId } from './db.js';
-export type { DBPack, DBVerse, DBUserNote, DBUserHighlight, DBUserBookmark, DBCrossReference, DBStrongEntry, DBPronunciation, DBMorphology, DBWordOccurrence, DBPlace, DBPlaceNameLink, DBMapTile, DBHistoricalLayer, DBReadingHistoryEntry, DBActiveReadingPlan, DBReadingPlanDay } from './db.js';
+export type { DBPack, DBVerse, DBUserNote, DBUserHighlight, DBUserBookmark, DBJournalEntry, DBCrossReference, DBStrongEntry, DBPronunciation, DBMorphology, DBWordOccurrence, DBPlace, DBPlaceNameLink, DBMapTile, DBHistoricalLayer, DBReadingHistoryEntry, DBActiveReadingPlan, DBReadingPlanDay } from './db.js';
 
 export { IndexedDBTextStore } from './TextStore.js';
 export { IndexedDBPackManager } from './PackManager.js';
 export { IndexedDBSearchIndex } from './SearchIndex.js';
 export { IndexedDBUserDataStore } from './UserDataStore.js';
+export { IndexedDBJournalStore } from './JournalStore.js';
 export { IndexedDBCrossReferenceStore } from './CrossReferenceStore.js';
 export { IndexedDBLexiconStore } from './LexiconStore.js';
 export { IndexedDBPlaceStore } from './PlaceStore.js';

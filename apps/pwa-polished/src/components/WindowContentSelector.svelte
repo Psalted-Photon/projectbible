@@ -5,7 +5,7 @@
 
   let searchQuery = "";
 
-  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries') {
+  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal') {
     // Set initial content state based on type
     let contentState = {};
     
@@ -25,6 +25,10 @@
       contentState = {
         center: [31.7683, 35.2137], // Jerusalem
         zoom: 8,
+      };
+    } else if (contentType === 'journal') {
+      contentState = {
+        date: new Date().toISOString().split('T')[0], // Today
       };
     }
 
@@ -67,6 +71,11 @@
     <button class="content-button notes" on:click={() => handleContentSelect('notes')}>
       <span class="icon emoji">📝</span>
       <span class="label">Notes</span>
+    </button>
+    
+    <button class="content-button journal" on:click={() => handleContentSelect('journal')}>
+      <span class="icon emoji">✍️</span>
+      <span class="label">Journal</span>
     </button>
     
     <button class="content-button wordstudy" on:click={() => handleContentSelect('wordstudy')}>

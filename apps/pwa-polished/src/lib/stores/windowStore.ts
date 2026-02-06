@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 
-export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries';
+export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal';
 export type WindowEdge = 'top' | 'left' | 'right' | 'bottom';
 
 export interface WindowState {

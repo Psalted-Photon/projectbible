@@ -33,3 +33,9 @@ apps/electron/release/
 apps/pwa/.vite/
 apps/pwa/dev-dist/
 
+
+# Commentary packs (too large for git)
+apps/pwa-polished/public/packs/commentaries.sqlite
+apps/pwa-polished/public/packs/consolidated/commentaries.sqlite
+packs/consolidated/commentaries.sqlite
+packs/workbench/commentaries.sqlite

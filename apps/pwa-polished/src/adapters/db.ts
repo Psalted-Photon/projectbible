@@ -8,10 +8,11 @@
  * - user_notes: user notes
  * - user_highlights: user highlights
  * - user_bookmarks: user bookmarks
+ * - journal_entries: daily journal entries
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 19; // Add commentary_entries store
+const DB_VERSION = 21; // Migration added journal_entries store
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -74,6 +75,16 @@ export interface DBUserBookmark {
   verse: number;
   label?: string;
   createdAt: number;
+}
+
+export interface DBJournalEntry {
+  id: string;
+  date: string; // YYYY-MM-DD format
+  title?: string;
+  text: string; // Raw HTML from Lexical
+  textLinkified?: string; // Display version with Bible references linked
+  createdAt: number; // Unix timestamp
+  updatedAt: number; // Unix timestamp
 }
 
 export interface DBCrossReference {
@@ -411,6 +422,14 @@ export function openDB(): Promise<IDBDatabase> {
       // User bookmarks store
       if (!db.objectStoreNames.contains('user_bookmarks')) {
         db.createObjectStore('user_bookmarks', { keyPath: 'id' });
+      }
+      
+      // Journal entries store
+      if (!db.objectStoreNames.contains('journal_entries')) {
+        const journalStore = db.createObjectStore('journal_entries', { keyPath: 'id' });
+        journalStore.createIndex('date', 'date', { unique: true });
+        journalStore.createIndex('createdAt', 'createdAt', { unique: false });
+        journalStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
       
       // Cross-references store

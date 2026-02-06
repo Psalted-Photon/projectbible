@@ -6,7 +6,7 @@
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { BIBLE_BOOKS } from "../lib/bibleData";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import {
     searchService,
     type SearchCategory,
@@ -48,6 +48,65 @@
   let referenceButtonRef: HTMLElement;
   let searchContainerRef: HTMLElement;
 
+  // Helper function to scroll nav-content to show a button at the left edge
+  // Returns a promise that resolves when the scroll animation completes
+  function scrollToShowButton(buttonRef: HTMLElement): Promise<void> {
+    return new Promise((resolve) => {
+      const navContent = document.querySelector('.nav-content') as HTMLElement;
+      if (!navContent || !buttonRef) {
+        resolve();
+        return;
+      }
+      
+      const navContentRect = navContent.getBoundingClientRect();
+      const buttonRect = buttonRef.getBoundingClientRect();
+      
+      // Calculate how far the button is from the left edge of nav-content
+      const buttonOffsetFromNavLeft = buttonRect.left - navContentRect.left;
+      
+      // Scroll so the button is at the left edge (with a small margin)
+      const targetScroll = navContent.scrollLeft + buttonOffsetFromNavLeft - 12;
+      
+      console.log('🔄 SCROLL START:', {
+        currentScroll: navContent.scrollLeft,
+        targetScroll: Math.max(0, targetScroll),
+        buttonOffsetFromNavLeft
+      });
+      
+      navContent.scrollTo({
+        left: Math.max(0, targetScroll),
+        behavior: 'smooth'
+      });
+      
+      // Poll until scroll actually completes
+      const checkInterval = setInterval(() => {
+        const currentScroll = navContent.scrollLeft;
+        const target = Math.max(0, targetScroll);
+        const distanceRemaining = Math.abs(currentScroll - target);
+        
+        console.log('🔄 SCROLL CHECK:', {
+          currentScroll,
+          target,
+          distanceRemaining
+        });
+        
+        // Consider scroll complete when within 1px of target
+        if (distanceRemaining < 1) {
+          clearInterval(checkInterval);
+          console.log('✅ SCROLL COMPLETE');
+          resolve();
+        }
+      }, 50);
+      
+      // Fallback timeout in case scroll never completes
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        console.log('⏱️ SCROLL TIMEOUT - forcing resolve');
+        resolve();
+      }, 1000);
+    });
+  }
+
   // Listen for external search triggers
   $: if ($triggerSearch > 0) {
     searchQuery = $searchQueryStore;
@@ -82,53 +141,107 @@
     navigationStore.setChronologicalMode(pendingChronologicalMode);
   }
 
-  function toggleTranslationDropdown(event: MouseEvent) {
+  async function toggleTranslationDropdown(event: MouseEvent) {
     event.stopPropagation();
     translationDropdownOpen = !translationDropdownOpen;
     if (translationDropdownOpen) {
       referenceDropdownOpen = false;
-      // Position dropdown
+      
+      // Auto-scroll to show the dropdown trigger and wait for scroll to complete
+      await scrollToShowButton(translationButtonRef);
+      
+      // Position dropdown after scroll completes
       requestAnimationFrame(() => {
         const dropdown = document.querySelector(
           ".translation-dropdown",
         ) as HTMLElement;
         if (dropdown && translationButtonRef) {
+          const mainContent = document.querySelector('.main-content') as HTMLElement;
+          const leftOffset = mainContent?.getBoundingClientRect().left || 0;
           const rect = translationButtonRef.getBoundingClientRect();
-          dropdown.style.left = `${rect.left}px`;
+          dropdown.style.left = `${rect.left - leftOffset}px`;
           dropdown.style.top = `${rect.bottom + 4}px`;
           dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+          
+          // Refresh position calculations (mimics close/reopen)
+          requestAnimationFrame(() => {
+            const mainContent = document.querySelector('.main-content') as HTMLElement;
+            const leftOffset = mainContent?.getBoundingClientRect().left || 0;
+            const rect = translationButtonRef.getBoundingClientRect();
+            dropdown.style.left = `${rect.left - leftOffset}px`;
+            dropdown.style.top = `${rect.bottom + 4}px`;
+            dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+          });
         }
       });
     }
   }
 
-  function toggleReferenceDropdown(event: MouseEvent) {
+  async function toggleReferenceDropdown(event: MouseEvent) {
     event.stopPropagation();
-    referenceDropdownOpen = !referenceDropdownOpen;
-    if (referenceDropdownOpen) {
+    console.log('📖 REFERENCE DROPDOWN TOGGLE - Opening:', !referenceDropdownOpen);
+    const opening = !referenceDropdownOpen;
+    referenceDropdownOpen = opening;
+    
+    if (opening) {
       translationDropdownOpen = false;
       
       // Auto-expand current book
       if (currentBook && !expandedBooks.has(currentBook)) {
+        console.log('📖 Expanding current book:', currentBook);
         expandedBooks = new Set([currentBook]);
       }
       
-      // Position dropdown
+      // Wait for Svelte to render the dropdown
+      await tick();
+      console.log('📖 Svelte tick complete - dropdown should be rendered');
+      
+      // Auto-scroll to show the dropdown trigger and wait for scroll to complete
+      await scrollToShowButton(referenceButtonRef);
+      console.log('📖 Scroll complete');
+      
+      // Close and reopen the dropdown to force width recalculation
+      console.log('📖 Closing dropdown to force refresh...');
+      referenceDropdownOpen = false;
+      await tick();
+      
+      console.log('📖 Reopening dropdown with fresh width calculation...');
+      referenceDropdownOpen = true;
+      await tick();
+      
+      // Position dropdown after it's been refreshed
       requestAnimationFrame(() => {
         const dropdown = document.querySelector(
           ".reference-dropdown",
         ) as HTMLElement;
+        console.log('📖 DROPDOWN ELEMENT:', dropdown ? 'FOUND' : 'NOT FOUND');
         if (dropdown && referenceButtonRef) {
+          console.log('📖 AFTER REFRESH:', {
+            offsetWidth: dropdown.offsetWidth,
+            scrollWidth: dropdown.scrollWidth,
+            clientWidth: dropdown.clientWidth,
+            computedWidth: window.getComputedStyle(dropdown).width,
+            display: window.getComputedStyle(dropdown).display
+          });
+          
+          const mainContent = document.querySelector('.main-content') as HTMLElement;
+          const leftOffset = mainContent?.getBoundingClientRect().left || 0;
           const rect = referenceButtonRef.getBoundingClientRect();
-          dropdown.style.left = `${rect.left}px`;
+          console.log('📖 POSITIONING:', {
+            leftOffset,
+            buttonLeft: rect.left,
+            finalLeft: rect.left - leftOffset,
+            buttonTop: rect.bottom
+          });
+          dropdown.style.left = `${rect.left - leftOffset}px`;
           dropdown.style.top = `${rect.bottom + 4}px`;
-          // Let dropdown width be determined by content (fit-content in CSS)
           
           // Scroll to current book
           if (currentBook) {
             requestAnimationFrame(() => {
               const currentBookItem = dropdown.querySelector(`.book-item .book-button.current`)?.closest('.book-item') as HTMLElement;
               if (currentBookItem) {
+                console.log('📖 Scrolling to current book:', currentBook);
                 const dropdownRect = dropdown.getBoundingClientRect();
                 const bookRect = currentBookItem.getBoundingClientRect();
                 const scrollOffset = bookRect.top - dropdownRect.top + dropdown.scrollTop;
@@ -260,6 +373,11 @@
 
       showResults = true;
 
+      // Auto-scroll to show the search container
+      if (searchContainerRef) {
+        scrollToShowButton(searchContainerRef);
+      }
+
       // Position search results dropdown
       if (searchContainerRef) {
         requestAnimationFrame(() => {
@@ -267,8 +385,10 @@
             ".search-results-dropdown",
           ) as HTMLElement;
           if (dropdown) {
+            const mainContent = document.querySelector('.main-content') as HTMLElement;
+            const leftOffset = mainContent?.getBoundingClientRect().left || 0;
             const rect = searchContainerRef.getBoundingClientRect();
-            dropdown.style.left = `${rect.left}px`;
+            dropdown.style.left = `${rect.left - leftOffset}px`;
             dropdown.style.top = `${rect.bottom + 4}px`;
             dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
           }
@@ -390,13 +510,16 @@
   }
 
   function updateDropdownPositions() {
+    const mainContent = document.querySelector('.main-content') as HTMLElement;
+    const leftOffset = mainContent?.getBoundingClientRect().left || 0;
+    
     if (translationDropdownOpen) {
       const dropdown = document.querySelector(
         ".translation-dropdown",
       ) as HTMLElement;
       if (dropdown && translationButtonRef) {
         const rect = translationButtonRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.left = `${rect.left - leftOffset}px`;
         dropdown.style.top = `${rect.bottom + 4}px`;
         dropdown.style.width = `${Math.max(rect.width, 200)}px`;
       }
@@ -407,7 +530,7 @@
       ) as HTMLElement;
       if (dropdown && referenceButtonRef) {
         const rect = referenceButtonRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.left = `${rect.left - leftOffset}px`;
         dropdown.style.top = `${rect.bottom + 4}px`;
         dropdown.style.width = `${Math.max(rect.width, 250)}px`;
       }
@@ -418,7 +541,7 @@
       ) as HTMLElement;
       if (dropdown && searchContainerRef) {
         const rect = searchContainerRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.left = `${rect.left - leftOffset}px`;
         dropdown.style.top = `${rect.bottom + 4}px`;
         dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
       }

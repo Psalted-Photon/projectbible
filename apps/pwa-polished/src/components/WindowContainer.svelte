@@ -6,6 +6,7 @@
   import EdgeGestureDetector from "./EdgeGestureDetector.svelte";
   import MapPane from "./MapPane.svelte";
   import CommentaryReader from "./CommentaryReader.svelte";
+  import JournalWriter from "./JournalWriter.svelte";
 
   // Group windows by edge
   $: leftPanels = $windowStore.filter(w => w.edge === 'left');
@@ -46,6 +47,8 @@
           <h2>Notes</h2>
           <p>Coming soon...</p>
         </div>
+      {:else if panel.contentType === 'journal'}
+        <JournalWriter windowId={panel.id} />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>
@@ -71,6 +74,8 @@
           <h2>Notes</h2>
           <p>Coming soon...</p>
         </div>
+      {:else if panel.contentType === 'journal'}
+        <JournalWriter windowId={panel.id} />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>
@@ -98,6 +103,8 @@
           <h2>Notes</h2>
           <p>Coming soon...</p>
         </div>
+      {:else if panel.contentType === 'journal'}
+        <JournalWriter windowId={panel.id} />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>
@@ -125,6 +132,8 @@
           <h2>Notes</h2>
           <p>Coming soon...</p>
         </div>
+      {:else if panel.contentType === 'journal'}
+        <JournalWriter windowId={panel.id} />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>
