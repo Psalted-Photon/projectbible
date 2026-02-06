@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-02-06T03:22:08.143Z",
+  "createdAt": "2026-02-06T03:30:34.039Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -50,7 +50,7 @@
     },
     {
       "id": "commentaries",
-      "type": "commentary",
+      "type": "study",
       "name": "Multi-Author Commentaries",
       "description": "Verse-by-verse Bible commentaries from multiple sources",
       "version": "1.0.0",
@@ -61,7 +61,7 @@
       "sha256": "5ddab29d5157e423a27f7c46a514d1dafdeee72376781f268a7490a20145466c",
       "dependencies": [],
       "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/commentaries.sqlite",
-      "createdAt": "2026-02-06T03:22:11.716Z"
+      "createdAt": "2026-02-06T03:30:37.502Z"
     },
     {
       "id": "dictionary-en",
@@ -76,7 +76,7 @@
       "sha256": "87a95b4ac5021b57e7ff9ce6af317154c02f89230fb121359aafeaaa2604d6d2",
       "dependencies": [],
       "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/dictionary-en.sqlite",
-      "createdAt": "2026-02-06T03:22:11.608Z"
+      "createdAt": "2026-02-06T03:30:37.395Z"
     },
     {
       "id": "lexical",

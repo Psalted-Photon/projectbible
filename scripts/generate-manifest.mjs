@@ -78,7 +78,7 @@ const PACK_CONFIGS = {
   },
   'commentaries.sqlite': {
     id: 'commentaries',
-    type: 'commentary',
+    type: 'study',
     name: 'Multi-Author Commentaries',
     description: 'Verse-by-verse Bible commentaries from multiple sources',
     dependencies: []

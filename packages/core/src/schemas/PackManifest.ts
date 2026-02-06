@@ -27,7 +27,7 @@ export interface PackEntry {
   id: string;
   
   /** Pack type */
-  type: 'translation' | 'lexicon' | 'study' | 'audio' | 'bootstrap';
+  type: 'translation' | 'lexicon' | 'dictionary' | 'study' | 'audio' | 'bootstrap';
   
   /** Pack version (semver) */
   version: string;
