@@ -24,7 +24,7 @@ const PACKS_DIR = join(repoRoot, 'packs/consolidated');
 const OUTPUT_PATH = join(PACKS_DIR, 'manifest.json');
 
 // GitHub Release URL pattern
-const GITHUB_RELEASE_BASE = 'https://github.com/Psalted-Photon/projectbible/releases/download/v1.0.0';
+const GITHUB_RELEASE_BASE = 'https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0';
 
 const PACK_CONFIGS = {
   'translations.sqlite': {
@@ -68,6 +68,20 @@ const PACK_CONFIGS = {
     name: 'BSB Audio Part 2',
     description: 'Proverbs through Revelation audio narration',
     dependencies: []
+  },
+  'dictionary-en.sqlite': {
+    id: 'dictionary-en',
+    type: 'dictionary',
+    name: 'English Dictionary Pack',
+    description: 'English dictionary definitions and word data',
+    dependencies: []
+  },
+  'commentaries.sqlite': {
+    id: 'commentaries',
+    type: 'commentary',
+    name: 'Multi-Author Commentaries',
+    description: 'Verse-by-verse Bible commentaries from multiple sources',
+    dependencies: []
   }
 };
 
@@ -107,8 +121,9 @@ function getPackMetadata(packPath) {
 }
 
 const manifest = {
-  version: '1.0.0',
-  generatedAt: new Date().toISOString(),
+  manifestVersion: '1.0.0',
+  releaseTag: 'packs-v1.0.0',
+  createdAt: new Date().toISOString(),
   packs: []
 };
 

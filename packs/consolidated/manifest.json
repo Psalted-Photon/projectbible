@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-01-24T04:29:53.994Z",
+  "createdAt": "2026-02-06T03:22:08.143Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -15,7 +15,7 @@
       "sizeMB": 67.11,
       "sha256": "5767f5aa12754262d14e89d586aeaa18baafbfda0d9d9c02d4acdec07bfec01a",
       "dependencies": [],
-      "downloadUrl": "/api/packs/ancient-languages.sqlite",
+      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/ancient-languages.sqlite",
       "createdAt": "2026-01-21T00:22:08.621Z"
     },
     {
@@ -49,6 +49,21 @@
       "createdAt": "2026-01-21T00:17:49.803Z"
     },
     {
+      "id": "commentaries",
+      "type": "commentary",
+      "name": "Multi-Author Commentaries",
+      "description": "Verse-by-verse Bible commentaries from multiple sources",
+      "version": "1.0.0",
+      "schemaVersion": "1.0",
+      "minAppVersion": "1.0.0",
+      "size": 150847488,
+      "sizeMB": 143.86,
+      "sha256": "5ddab29d5157e423a27f7c46a514d1dafdeee72376781f268a7490a20145466c",
+      "dependencies": [],
+      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/commentaries.sqlite",
+      "createdAt": "2026-02-06T03:22:11.716Z"
+    },
+    {
       "id": "dictionary-en",
       "type": "dictionary",
       "name": "English Dictionary Pack",
@@ -60,8 +75,8 @@
       "sizeMB": 38.36,
       "sha256": "87a95b4ac5021b57e7ff9ce6af317154c02f89230fb121359aafeaaa2604d6d2",
       "dependencies": [],
-      "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-01-24T00:00:00.000Z"
+      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/dictionary-en.sqlite",
+      "createdAt": "2026-02-06T03:22:11.608Z"
     },
     {
       "id": "lexical",
@@ -75,14 +90,14 @@
       "sizeMB": 365.45,
       "sha256": "c29a238f55c9609e32a568b198994d799ebd3cc2ee831d5e676dc4b5d07b31d5",
       "dependencies": [],
-      "downloadUrl": "/api/packs/lexical.sqlite",
+      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/lexical.sqlite",
       "createdAt": "2026-01-20T23:41:45.543Z"
     },
     {
       "id": "study-tools",
       "type": "study",
       "name": "Study Tools Pack",
-      "description": "Maps, places, OpenBible, Pleiades, chronological ordering, cross-references",
+      "description": "Maps, places, chronological ordering, cross-references",
       "version": "1.0.0",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
@@ -90,8 +105,8 @@
       "sizeMB": 438.89,
       "sha256": "c115945a7e43acd277d2fb12ec6b802eef3722ca57e8571ea7c155b7d24add72",
       "dependencies": [],
-      "downloadUrl": "/api/packs/study-tools.sqlite",
-      "createdAt": "2026-01-24T04:29:53.994Z"
+      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/study-tools.sqlite",
+      "createdAt": "2026-01-24T04:27:15.155Z"
     },
     {
       "id": "translations",
@@ -105,7 +120,7 @@
       "sizeMB": 33.8,
       "sha256": "fb397fd037f93a6ae912751798dc1b37d3829c539983dccdde522bfb5ea5e40e",
       "dependencies": [],
-      "downloadUrl": "/api/packs/translations.sqlite",
+      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/translations.sqlite",
       "createdAt": "2026-01-21T00:22:07.977Z"
     }
   ]
