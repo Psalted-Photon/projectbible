@@ -150,6 +150,13 @@ for (const [filename, config] of Object.entries(PACK_CONFIGS)) {
   const dbMetadata = getPackMetadata(packPath);
   
   // Build pack entry
+  // Use /api/packs/ proxy for all packs except large audio files (>50MB Vercel limit)
+  // Audio packs use direct GitHub URLs to avoid Vercel serverless function size limits
+  const useDirectGitHub = config.type === 'audio';
+  const downloadUrl = useDirectGitHub
+    ? `${GITHUB_RELEASE_BASE}/${filename}`
+    : `/api/packs/${filename}`;
+  
   const packEntry = {
     id: config.id,
     type: config.type,
@@ -166,7 +173,7 @@ for (const [filename, config] of Object.entries(PACK_CONFIGS)) {
     
     dependencies: config.dependencies,
     
-    downloadUrl: `${GITHUB_RELEASE_BASE}/${filename}`,
+    downloadUrl: downloadUrl,
     
     createdAt: dbMetadata.createdAt || new Date().toISOString()
   };
