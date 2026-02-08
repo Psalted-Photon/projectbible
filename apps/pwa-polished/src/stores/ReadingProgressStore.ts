@@ -187,17 +187,17 @@ export class ReadingProgressStore {
 
   async applyCloudRow(row: ReadingProgressRow): Promise<void> {
     const entry: ReadingProgressEntry = {
-      id: `${row.plan_id}-${row.day_number}`,
-      planId: row.plan_id,
-      dayNumber: row.day_number,
-      completed: Boolean(row.completed),
-      createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-      completedAt: row.completed_at ? new Date(row.completed_at).getTime() : undefined,
-      startedReadingAt: row.started_reading_at
-        ? new Date(row.started_reading_at).getTime()
+      id: `${row.out_plan_id}-${row.out_day_number}`,
+      planId: row.out_plan_id,
+      dayNumber: row.out_day_number,
+      completed: Boolean(row.out_completed),
+      createdAt: row.out_created_at ? new Date(row.out_created_at).getTime() : Date.now(),
+      completedAt: row.out_completed_at ? new Date(row.out_completed_at).getTime() : undefined,
+      startedReadingAt: row.out_started_reading_at
+        ? new Date(row.out_started_reading_at).getTime()
         : undefined,
-      chaptersRead: Array.isArray(row.chapters_read) ? row.chapters_read : [],
-      catchUpAdjustment: row.catch_up_adjustment ?? undefined,
+      chaptersRead: Array.isArray(row.out_chapters_read) ? row.out_chapters_read : [],
+      catchUpAdjustment: row.out_catch_up_adjustment ?? undefined,
     };
 
     await writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));

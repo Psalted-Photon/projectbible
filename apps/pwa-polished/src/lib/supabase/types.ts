@@ -1,32 +1,32 @@
 export interface ReadingProgressRow {
-  id: string;
-  user_id: string;
-  plan_id: string;
-  day_number: number;
-  completed: boolean;
-  created_at: string;
-  completed_at: string | null;
-  started_reading_at: string | null;
-  chapters_read: any[];
-  catch_up_adjustment: any | null;
-  operation_id: string | null;
-  updated_at: string;
+  out_id: string;
+  out_user_id: string;
+  out_plan_id: string;
+  out_day_number: number;
+  out_completed: boolean;
+  out_created_at: string;
+  out_completed_at: string | null;
+  out_started_reading_at: string | null;
+  out_chapters_read: any[];
+  out_catch_up_adjustment: any | null;
+  out_operation_id: string | null;
+  out_updated_at: string;
 }
 
 export interface PlanMetadataRow {
-  id: string;
-  user_id: string;
-  plan_id: string;
-  status: string;
-  plan_definition_hash: string;
-  plan_version: number;
-  activated_at: string;
-  archived_at: string | null;
-  last_synced_at: string | null;
-  sync_conflicts: any | null;
-  catch_up_adjustment: any | null;
-  operation_id: string | null;
-  updated_at: string;
+  out_id: string;
+  out_user_id: string;
+  out_plan_id: string;
+  out_status: string;
+  out_plan_definition_hash: string;
+  out_plan_version: number;
+  out_activated_at: string;
+  out_archived_at: string | null;
+  out_last_synced_at: string | null;
+  out_sync_conflicts: any | null;
+  out_catch_up_adjustment: any | null;
+  out_operation_id: string | null;
+  out_updated_at: string;
 }
 
 export interface SyncOperation {
