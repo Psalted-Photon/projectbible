@@ -653,6 +653,41 @@
       saveActivePlan();
       savePlanToHistory(currentReadingPlan, currentPlanId);
       
+      // Initialize plan in IndexedDB for sync
+      planGenerationStatus = 'Initializing cloud sync...';
+      
+      // Calculate plan definition hash
+      const planJson = JSON.stringify(currentReadingPlan);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(planJson));
+      const planHash = Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      
+      // Create plan metadata
+      await planMetadataStore.upsertPlanMetadata({
+        planId: currentPlanId,
+        status: 'active',
+        planDefinitionHash: planHash,
+        planVersion: 1,
+        activatedAt: Date.now()
+      });
+      
+      // Create day 1 progress entry
+      if (currentReadingPlan.days.length > 0) {
+        const day1Chapters = currentReadingPlan.days[0].chapters;
+        await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
+      }
+      
+      // Queue initial syncs
+      await syncOrchestrator.enqueue('plan-status-change', { planId: currentPlanId, status: 'active' }, 1);
+      if (currentReadingPlan.days.length > 0) {
+        await syncOrchestrator.enqueue('day-complete', { 
+          planId: currentPlanId, 
+          dayNumber: 1, 
+          completed: false 
+        }, 2);
+      }
+      
       planGenerationStatus = `✓ Plan created! ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
       
       setTimeout(() => {

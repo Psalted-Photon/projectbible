@@ -135,6 +135,7 @@ export class SyncOrchestrator {
     };
 
     await writeTransaction("sync_queue", (store) => store.put(item));
+    console.log('[Sync] Queued:', type, 'for', planId, 'priority:', priority);
 
     if (type === "chapter-toggle") {
       this.scheduleDebounced();
@@ -214,6 +215,7 @@ export class SyncOrchestrator {
 
     try {
       const pending = await this.getPendingItems();
+      console.log('[Sync] Processing', pending.length, 'items');
       pending.sort((a, b) => {
         if (a.priority !== b.priority) return a.priority - b.priority;
         return a.createdAt - b.createdAt;
@@ -228,7 +230,9 @@ export class SyncOrchestrator {
 
         await this.markProcessing(item);
         try {
+          console.log('[Sync] Executing:', item.type, item.planId);
           await this.executeItem(item);
+          console.log('[Sync] ✓', item.type, 'completed');
           await this.markDone(item);
           await this.recordOperation(item.operationId);
           this.setLastSyncedAt(Date.now());
@@ -276,7 +280,9 @@ export class SyncOrchestrator {
 
     if (item.type === "plan-status-change" || item.type === "catch-up-apply") {
       const metadata = await planMetadataStore.getPlanMetadata(planId);
-      if (!metadata) return;
+      if (!metadata) {
+        throw new Error(`Plan metadata missing for ${planId}. Plan not properly initialized.`);
+      }
       const result = await syncPlanMetadata({
         operationId: item.operationId,
         userId,
@@ -302,7 +308,9 @@ export class SyncOrchestrator {
     }
 
     const entry = await readingProgressStore.getDayProgress(planId, dayNumber);
-    if (!entry) return;
+    if (!entry) {
+      throw new Error(`Progress entry missing for ${planId} day ${dayNumber}. Initialize progress before syncing.`);
+    }
 
     const result = await syncReadingProgress({
       operationId: item.operationId,
@@ -350,6 +358,12 @@ export class SyncOrchestrator {
     const lastError = this.formatError(error);
 
     this.lastError = lastError;
+    console.error('[Sync] Failed:', {
+      type: item.type,
+      planId: item.planId,
+      attempts,
+      error: lastError
+    });
 
     if (attempts >= MAX_ATTEMPTS) {
       await writeTransaction("sync_queue", (store) =>
