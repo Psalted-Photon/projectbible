@@ -1,46 +1,16 @@
--- =====================================================
--- SYNC FUNCTIONS FOR READING PLANS
--- =====================================================
--- This file contains the Supabase database functions for syncing
--- reading plans across devices with proper conflict resolution.
---
--- IMPORTANT: RETURNS TABLE parameters use 'out_' prefix to avoid
--- PostgreSQL column shadowing issues (error 42702).
--- =====================================================
+-- Ensure unique constraints exist for ON CONFLICT clauses
+CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_metadata_user_plan 
+  ON plan_metadata (user_id, plan_id);
 
--- Drop existing function overloads if they exist
-DO $$ 
-BEGIN
-  DROP FUNCTION IF EXISTS sync_reading_progress(TEXT, TEXT, TEXT, INTEGER, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, JSONB, JSONB);
-  DROP FUNCTION IF EXISTS sync_reading_progress(TEXT, TEXT, TEXT, INTEGER, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, JSONB);
-  DROP FUNCTION IF EXISTS sync_reading_progress(UUID, UUID, INTEGER, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, JSONB, JSONB);
-  DROP FUNCTION IF EXISTS sync_reading_progress(UUID, UUID, INTEGER, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, JSONB);
-EXCEPTION
-  WHEN OTHERS THEN NULL;
-END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reading_progress_user_plan_day 
+  ON reading_progress (user_id, plan_id, day_number);
 
-DO $$ 
-BEGIN
-  DROP FUNCTION IF EXISTS sync_plan_metadata(TEXT, TEXT, TEXT, TEXT, TEXT, INTEGER, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, JSONB, JSONB);
-  DROP FUNCTION IF EXISTS sync_plan_metadata(TEXT, TEXT, TEXT, TEXT, TEXT, INTEGER, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, JSONB);
-  DROP FUNCTION IF EXISTS sync_plan_metadata(UUID, UUID, TEXT, TEXT, INTEGER, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, JSONB, JSONB);
-  DROP FUNCTION IF EXISTS sync_plan_metadata(UUID, UUID, TEXT, TEXT, INTEGER, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, JSONB);
-EXCEPTION
-  WHEN OTHERS THEN NULL;
-END $$;
+-- Drop both functions
+DROP FUNCTION IF EXISTS sync_reading_progress CASCADE;
+DROP FUNCTION IF EXISTS sync_plan_metadata CASCADE;
 
 -- =====================================================
--- FUNCTION: sync_reading_progress
--- =====================================================
--- Syncs reading progress for a specific day in a reading plan.
--- Uses operation_id for idempotency to prevent duplicate syncs.
---
--- Parameters use TEXT type because Supabase client sends UUIDs as strings.
--- Internal conversion to UUID happens via ::uuid casts.
--- plan_id is TEXT because it stores values like "plan_1770515723387".
---
--- RETURNS TABLE uses 'out_' prefix to avoid PostgreSQL error 42702:
--- "column reference 'operation_id' is ambiguous"
+-- FUNCTION: sync_reading_progress (CORRECTED)
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION sync_reading_progress(
@@ -75,7 +45,7 @@ AS $$
 DECLARE
   v_op_uuid UUID;
   v_user_uuid UUID;
-  v_existing_op_id TEXT;
+  v_existing_op_id UUID;
 BEGIN
   -- Convert TEXT parameters to UUID
   v_op_uuid := p_operation_id::uuid;
@@ -84,12 +54,12 @@ BEGIN
   -- Check if this operation_id already exists (idempotency check)
   SELECT so.operation_id INTO v_existing_op_id
   FROM sync_operations so
-  WHERE so.operation_id = p_operation_id;
+  WHERE so.operation_id = v_op_uuid;
 
   -- If operation doesn't exist, record it
   IF v_existing_op_id IS NULL THEN
     INSERT INTO sync_operations (operation_id, user_id)
-    VALUES (p_operation_id, v_user_uuid);
+    VALUES (v_op_uuid, v_user_uuid);
   END IF;
 
   -- Insert or update reading_progress
@@ -147,17 +117,7 @@ END;
 $$;
 
 -- =====================================================
--- FUNCTION: sync_plan_metadata
--- =====================================================
--- Syncs reading plan metadata (status, activation dates, etc.).
--- Uses operation_id for idempotency to prevent duplicate syncs.
---
--- Parameters use TEXT type because Supabase client sends UUIDs as strings.
--- Internal conversion to UUID happens via ::uuid casts.
--- plan_id is TEXT because it stores values like "plan_1770515723387".
---
--- RETURNS TABLE uses 'out_' prefix to avoid PostgreSQL error 42702:
--- "column reference 'operation_id' is ambiguous"
+-- FUNCTION: sync_plan_metadata (CORRECTED)
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION sync_plan_metadata(
@@ -195,7 +155,7 @@ AS $$
 DECLARE
   v_op_uuid UUID;
   v_user_uuid UUID;
-  v_existing_op_id TEXT;
+  v_existing_op_id UUID;
 BEGIN
   -- Convert TEXT parameters to UUID
   v_op_uuid := p_operation_id::uuid;
@@ -204,12 +164,12 @@ BEGIN
   -- Check if this operation_id already exists (idempotency check)
   SELECT so.operation_id INTO v_existing_op_id
   FROM sync_operations so
-  WHERE so.operation_id = p_operation_id;
+  WHERE so.operation_id = v_op_uuid;
 
   -- If operation doesn't exist, record it
   IF v_existing_op_id IS NULL THEN
     INSERT INTO sync_operations (operation_id, user_id)
-    VALUES (p_operation_id, v_user_uuid);
+    VALUES (v_op_uuid, v_user_uuid);
   END IF;
 
   -- Insert or update plan_metadata
@@ -272,12 +232,5 @@ BEGIN
     AND pm.plan_id = p_plan_id;
 END;
 $$;
-
--- =====================================================
--- RELOAD POSTGREST SCHEMA CACHE
--- =====================================================
--- Force PostgREST to reload its schema cache to recognize
--- the new function signatures immediately.
--- =====================================================
 
 NOTIFY pgrst, 'reload schema';

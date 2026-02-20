@@ -41,7 +41,7 @@ class InitialSyncService {
       // Step 2: Apply each plan's metadata to local store
       for (const cloudPlan of cloudPlans) {
         try {
-          await planMetadataStore.applyCloudRow(cloudPlan);
+          await planMetadataStore.applyDirectRow(cloudPlan);
           result.plansPulled++;
           console.log(`[InitialSync] Applied plan metadata: ${cloudPlan.plan_id}`);
         } catch (error) {
