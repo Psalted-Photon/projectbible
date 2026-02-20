@@ -1,9 +1,17 @@
 -- Ensure unique constraints exist for ON CONFLICT clauses
-CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_metadata_user_plan 
-  ON plan_metadata (user_id, plan_id);
+ALTER TABLE plan_metadata
+DROP CONSTRAINT IF EXISTS plan_metadata_user_plan_unique;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_reading_progress_user_plan_day 
-  ON reading_progress (user_id, plan_id, day_number);
+ALTER TABLE plan_metadata
+ADD CONSTRAINT plan_metadata_user_plan_unique
+UNIQUE (user_id, plan_id);
+
+ALTER TABLE reading_progress
+DROP CONSTRAINT IF EXISTS reading_progress_user_plan_day_unique;
+
+ALTER TABLE reading_progress
+ADD CONSTRAINT reading_progress_user_plan_day_unique
+UNIQUE (user_id, plan_id, day_number);
 
 -- Drop both functions
 DROP FUNCTION IF EXISTS sync_reading_progress CASCADE;
