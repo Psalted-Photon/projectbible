@@ -91,11 +91,6 @@
     loadCatchUpDays();
   }
 
-  function formatSyncStatusLabel(): string {
-    return syncStatus;
-  }
-
-  
   function loadActivePlan() {
     try {
       const stored = localStorage.getItem(STORAGE_ACTIVE_PLAN);
@@ -412,7 +407,6 @@
     if (!currentPlanId) return;
     const effectiveChapters = getEffectiveChapters(day);
     const progress = getDayProgress(day.dayNumber);
-    const wasCompleted = progress?.completed ?? false;
     const currentlyChecked = isChapterChecked(progress, chapter.book, chapter.chapter);
     const updated = await readingProgressStore.setChapterAction(
       currentPlanId,
@@ -1621,12 +1615,6 @@
     font-size: 12px;
     color: #9ccc65;
     align-self: center;
-  }
-
-  .sync-actions {
-    margin-top: 8px;
-    display: flex;
-    gap: 8px;
   }
 
   .sync-error {

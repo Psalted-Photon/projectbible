@@ -45,9 +45,8 @@
   let defaultOT = '';
   let defaultNT = '';
 
-  let syncStatus: SyncStatus = 'disconnected';
+  let syncStatus: SyncStatus = 'idle';
   let lastSyncedAt: Date | null = null;
-  let syncError: string | null = null;
 
   const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan';
 
@@ -82,7 +81,6 @@
     const unsubscribeSync = syncService.subscribe((state: SyncState) => {
       syncStatus = state.status;
       lastSyncedAt = state.lastSyncedAt;
-      syncError = state.error;
     });
 
     supabaseAuthService.getSession().then((session) => {
@@ -445,7 +443,7 @@
               <button
                 class="sync-btn"
                 on:click={handleManualSync}
-                disabled={syncStatus === 'connecting'}
+                disabled={syncStatus === 'syncing'}
                 title="Sync now"
                 aria-label="Sync now"
               >
@@ -540,7 +538,7 @@
           {:else}
             <div class="settings-tab">
               <div class="setting-group">
-                <label>Theme</label>
+                <p class="setting-label">Theme</p>
                 <select bind:value={theme}>
                   <option value="auto">Auto</option>
                   <option value="sepia">Sepia</option>
@@ -549,7 +547,7 @@
                 </select>
               </div>
               <div class="setting-group">
-                <label>Default OT Translation</label>
+                <p class="setting-label">Default OT Translation</p>
                 <select bind:value={defaultOT}>
                   <option value="">Not set</option>
                   {#each $availableTranslations as translation}
@@ -558,7 +556,7 @@
                 </select>
               </div>
               <div class="setting-group">
-                <label>Default NT Translation</label>
+                <p class="setting-label">Default NT Translation</p>
                 <select bind:value={defaultNT}>
                   <option value="">Not set</option>
                   {#each $availableTranslations as translation}
@@ -580,7 +578,7 @@
                 </button>
               </div>
               <div class="setting-group">
-                <label>Change Name</label>
+                <p class="setting-label">Change Name</p>
                 <input class="auth-input" type="text" placeholder="Your name" bind:value={nameUpdate} />
                 <button class="primary-btn" on:click={handleChangeName}>
                   Update Name
@@ -593,7 +591,7 @@
                 {/if}
               </div>
               <div class="setting-group">
-                <label>Change Password</label>
+                <p class="setting-label">Change Password</p>
                 <input
                   class="auth-input"
                   type="password"
@@ -628,7 +626,7 @@
                 {/if}
               </div>
               <div class="setting-group danger">
-                <label>Delete Account</label>
+                <p class="setting-label">Delete Account</p>
                 <button class="danger-btn" on:click={() => (showDeleteConfirm = !showDeleteConfirm)}>
                   Delete Account
                 </button>
@@ -930,6 +928,12 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .setting-label {
+    margin: 0;
+    font-size: 13px;
+    color: #ccc;
   }
 
   .setting-group select {

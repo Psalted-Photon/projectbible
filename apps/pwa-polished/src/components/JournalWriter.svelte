@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import LexicalEditor from '../lib/components/LexicalEditor.svelte';
   import JournalNavigationBar from './JournalNavigationBar.svelte';
-  import { syncedJournalStore, journalRemoteChanges } from '../adapters/SyncedJournalStore';
+  import { syncedJournalStore, subscribeToJournalRemoteChanges } from '../adapters/SyncedJournalStore';
   import type { JournalEntry } from '@projectbible/core';
   
   export let windowId: string | undefined = undefined;
@@ -48,11 +48,9 @@
   onMount(() => {
     loadEntry(currentDate);
     
-    // Re-load when a remote sync change arrives (skip the immediate emission on subscribe)
-    let firstEmit = true;
-    remoteChangeUnsub = journalRemoteChanges.subscribe(() => {
-      if (firstEmit) { firstEmit = false; return; }
-      // Don't clobber unsaved local edits — remote change queued until next navigation
+    // Re-load when a remote sync change arrives
+    remoteChangeUnsub = subscribeToJournalRemoteChanges(() => {
+      // Don't clobber unsaved local edits
       if (!isDirty) {
         console.log('[JournalWriter] Remote change detected, reloading entry');
         loadEntry(currentDate);
