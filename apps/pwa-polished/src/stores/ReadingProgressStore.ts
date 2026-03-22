@@ -1,5 +1,4 @@
 import { openDB, readTransaction, writeTransaction, batchWriteTransaction } from "../adapters/db";
-import type { ReadingProgressRow } from "../lib/supabase/types";
 
 export type ChapterActionType = "checked" | "unchecked";
 
@@ -182,24 +181,6 @@ export class ReadingProgressStore {
   }
 
   async setCatchUpAdjustment(entry: ReadingProgressEntry): Promise<void> {
-    await writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));
-  }
-
-  async applyCloudRow(row: ReadingProgressRow): Promise<void> {
-    const entry: ReadingProgressEntry = {
-      id: `${row.out_plan_id}-${row.out_day_number}`,
-      planId: row.out_plan_id,
-      dayNumber: row.out_day_number,
-      completed: Boolean(row.out_completed),
-      createdAt: row.out_created_at ? new Date(row.out_created_at).getTime() : Date.now(),
-      completedAt: row.out_completed_at ? new Date(row.out_completed_at).getTime() : undefined,
-      startedReadingAt: row.out_started_reading_at
-        ? new Date(row.out_started_reading_at).getTime()
-        : undefined,
-      chaptersRead: Array.isArray(row.out_chapters_read) ? row.out_chapters_read : [],
-      catchUpAdjustment: row.out_catch_up_adjustment ?? undefined,
-    };
-
     await writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));
   }
 

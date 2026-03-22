@@ -10,8 +10,7 @@
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
   import { applyTheme, getSettings, updateSettings } from '../adapters/settings';
   import { paneStore } from '../stores/paneStore';
-  import { syncOrchestrator, type SyncQueueStats } from '../services/SyncOrchestrator';
-  import { initialSyncService } from '../services/InitialSyncService';
+  import { syncService, type SyncState, type SyncStatus } from '../lib/sync';
   import { fetchUserSettings, upsertUserSettings } from '../lib/supabase/userSettings';
 
   let isOpen = false;
@@ -46,14 +45,9 @@
   let defaultOT = '';
   let defaultNT = '';
 
-  let syncStats: SyncQueueStats = {
-    pending: 0,
-    processing: 0,
-    failed: 0,
-    done: 0,
-    lastSyncedAt: null,
-    lastError: null,
-  };
+  let syncStatus: SyncStatus = 'disconnected';
+  let lastSyncedAt: Date | null = null;
+  let syncError: string | null = null;
 
   const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan';
 
@@ -85,8 +79,10 @@
       }
     });
 
-    const unsubscribeSync = syncOrchestrator.subscribe((stats) => {
-      syncStats = stats;
+    const unsubscribeSync = syncService.subscribe((state: SyncState) => {
+      syncStatus = state.status;
+      lastSyncedAt = state.lastSyncedAt;
+      syncError = state.error;
     });
 
     supabaseAuthService.getSession().then((session) => {
@@ -96,20 +92,11 @@
     const authSubscription = supabaseAuthService.onAuthStateChange((event, session) => {
       userProfileStore.setFromSession(session);
       if (event === 'SIGNED_IN' && session?.user?.id) {
-        // Pull cloud data FIRST, then load local (which now includes merged cloud data)
-        void initialSyncService.pullAll(session.user.id)
-          .then((result) => {
-            console.log('[ProfileModal] Initial sync complete:', result);
-            return loadUserSettings();
-          })
+        // SyncService handles sync automatically on sign-in
+        void loadUserSettings()
           .then(() => loadReadingPlan())
-          .then(() => {
-            if (currentPlanId) {
-              return syncOrchestrator.runImmediateSync(currentPlanId, 'sign-in');
-            }
-          })
           .catch((error) => {
-            console.error('[ProfileModal] Error during sign-in sync:', error);
+            console.error('[ProfileModal] Error during sign-in:', error);
           });
       }
     });
@@ -405,17 +392,19 @@
   }
 
   function formatSyncStatus() {
-    if (syncStats.processing > 0) return 'Syncing...';
-    if (syncStats.failed > 0) return `Sync failed (${syncStats.failed})`;
-    if (syncStats.pending > 0) return `Queued (${syncStats.pending})`;
-    if (syncStats.lastSyncedAt) return `Synced ${new Date(syncStats.lastSyncedAt).toLocaleTimeString()}`;
-    return 'Not synced';
+    switch (syncStatus) {
+      case 'syncing': return 'Syncing...';
+      case 'idle': return lastSyncedAt ? `Synced ${lastSyncedAt.toLocaleTimeString()}` : 'Ready';
+      case 'error': return `Sync error`;
+      case 'offline': return 'Offline';
+      default: return isSignedIn ? 'Ready' : 'Not synced';
+    }
   }
 
   async function handleManualSync() {
-    if (!isSignedIn || !currentPlanId) return;
+    if (!isSignedIn) return;
     try {
-      await syncOrchestrator.runImmediateSync(currentPlanId, 'manual-sync');
+      await syncService.forceSync();
     } catch (error) {
       console.error('Manual sync failed:', error);
     }
@@ -452,11 +441,11 @@
         <div class="profile-actions">
           <div class="sync-status">
             <span class="sync-indicator">{formatSyncStatus()}</span>
-            {#if isSignedIn && currentPlanId}
+            {#if isSignedIn}
               <button
                 class="sync-btn"
                 on:click={handleManualSync}
-                disabled={syncStats.processing > 0}
+                disabled={syncStatus === 'connecting'}
                 title="Sync now"
                 aria-label="Sync now"
               >

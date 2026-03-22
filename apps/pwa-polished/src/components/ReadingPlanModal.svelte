@@ -10,7 +10,7 @@
     type ReadingProgressEntry,
   } from '../stores/ReadingProgressStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
-  import { syncOrchestrator, type SyncQueueStats } from '../services/SyncOrchestrator';
+  import { syncService, type SyncState } from '../lib/sync';
   import { userProfileStore } from '../stores/userProfileStore';
   
   export let isOpen = false;
@@ -54,14 +54,6 @@
     todayRead: 0,
   };
   let syncStatus = 'Not synced';
-  let syncStats: SyncQueueStats = {
-    pending: 0,
-    processing: 0,
-    failed: 0,
-    done: 0,
-    lastSyncedAt: null,
-    lastError: null,
-  };
   let syncError: string | null = null;
   let userName: string | null = null;
   
@@ -72,10 +64,13 @@
   onMount(() => {
     loadActivePlan();
     loadPlanHistory();
-    const unsubscribeSync = syncOrchestrator.subscribe((stats) => {
-      syncStats = stats;
-      syncError = stats.lastError;
-      syncStatus = formatSyncStatus(stats);
+    const unsubscribeSync = syncService.subscribe((state: SyncState) => {
+      syncError = state.error;
+      if (state.status === 'syncing') syncStatus = 'Syncing...';
+      else if (state.status === 'idle') syncStatus = state.lastSyncedAt ? `Synced ${state.lastSyncedAt.toLocaleTimeString()}` : 'Ready';
+      else if (state.status === 'error') syncStatus = 'Sync error';
+      else if (state.status === 'offline') syncStatus = 'Offline';
+      else syncStatus = 'Not synced';
     });
     const unsubscribeProfile = userProfileStore.subscribe((profile) => {
       userName = profile.name;
@@ -96,24 +91,8 @@
     loadCatchUpDays();
   }
 
-  function formatSyncStatus(stats: SyncQueueStats): string {
-    if (stats.processing > 0) {
-      return stats.pending > 0
-        ? `Auto-syncing (${stats.pending} queued)`
-        : 'Auto-syncing...';
-    }
-    if (stats.failed > 0) {
-      return `Sync failed (${stats.failed})`;
-    }
-    if (stats.pending > 0) {
-      return `Queued (${stats.pending})`;
-    }
-    if (stats.lastSyncedAt) {
-      const ageMs = Date.now() - stats.lastSyncedAt;
-      if (ageMs < 30000) return 'Synced just now';
-      return `Synced ${new Date(stats.lastSyncedAt).toLocaleTimeString()}`;
-    }
-    return 'Not synced';
+  function formatSyncStatusLabel(): string {
+    return syncStatus;
   }
 
   
@@ -277,11 +256,7 @@
       dayProgressMap.set(entry.dayNumber, entry);
     }
     await persistCatchUpAdjustment('spread', suggestions);
-    await syncOrchestrator.enqueue(
-      'catch-up-apply',
-      { planId: currentPlanId, mode: 'spread', appliedAt: Date.now(), data: suggestions },
-      1,
-    );
+    // PowerSync will automatically sync the local writes
   }
 
   function applyDedicatedCatchUp() {
@@ -289,11 +264,7 @@
     saveCatchUpDays(days);
     if (currentPlanId) {
       void persistCatchUpAdjustment('dedicated', days);
-      void syncOrchestrator.enqueue(
-        'catch-up-apply',
-        { planId: currentPlanId, mode: 'dedicated', appliedAt: Date.now(), data: days },
-        1,
-      );
+      // PowerSync will automatically sync the local writes
     }
   }
 
@@ -452,32 +423,7 @@
     );
     dayProgressMap = new Map(dayProgressMap);
     dayProgressMap.set(day.dayNumber, updated);
-
-    if (updated.completed !== wasCompleted) {
-      await syncOrchestrator.enqueue(
-        updated.completed ? 'day-complete' : 'day-incomplete',
-        {
-          planId: currentPlanId,
-          dayNumber: day.dayNumber,
-          completed: updated.completed,
-          completedAt: updated.completedAt,
-          chaptersRead: updated.chaptersRead,
-        },
-        1,
-      );
-    } else {
-      await syncOrchestrator.enqueue(
-        'chapter-toggle',
-        {
-          planId: currentPlanId,
-          dayNumber: day.dayNumber,
-          chapter: { book: chapter.book, chapter: chapter.chapter },
-          action: currentlyChecked ? 'unchecked' : 'checked',
-          timestamp: Date.now(),
-        },
-        5,
-      );
-    }
+    // PowerSync will automatically sync the local writes
   }
 
   async function markDayComplete(day: any) {
@@ -490,25 +436,14 @@
     );
     dayProgressMap = new Map(dayProgressMap);
     dayProgressMap.set(day.dayNumber, updated);
-    await syncOrchestrator.enqueue(
-      'day-complete',
-      {
-        planId: currentPlanId,
-        dayNumber: day.dayNumber,
-        completed: true,
-        completedAt: updated.completedAt,
-        chaptersRead: updated.chaptersRead,
-      },
-      1,
-    );
+    // SyncService will automatically sync the local writes
   }
 
   async function syncNow() {
     if (!currentPlanId) return;
     try {
       syncStatus = 'Syncing...';
-      await syncOrchestrator.runImmediateSync(currentPlanId, 'manual');
-      await syncOrchestrator.processQueue();
+      await syncService.forceSync();
       syncStatus = `Synced ${new Date().toLocaleTimeString()}`;
     } catch (error) {
       console.error('Sync failed:', error);
@@ -677,16 +612,7 @@
         const day1Chapters = currentReadingPlan.days[0].chapters;
         await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
       }
-      
-      // Queue initial syncs
-      await syncOrchestrator.enqueue('plan-status-change', { planId: currentPlanId, status: 'active' }, 1);
-      if (currentReadingPlan.days.length > 0) {
-        await syncOrchestrator.enqueue('day-complete', { 
-          planId: currentPlanId, 
-          dayNumber: 1, 
-          completed: false 
-        }, 2);
-      }
+      // PowerSync will automatically sync the local writes
       
       planGenerationStatus = `✓ Plan created! ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
       
@@ -1024,13 +950,6 @@
                   <button class="export-btn" on:click={syncNow}>Sync Now</button>
                   <span class="sync-status">{syncStatus}</span>
                 </div>
-                {#if syncStats.failed > 0}
-                  <div class="sync-actions">
-                    <button class="export-btn" on:click={() => syncOrchestrator.retryFailed()}>
-                      Retry failed
-                    </button>
-                  </div>
-                {/if}
                 {#if syncError}
                   <div class="sync-error">{syncError}</div>
                 {/if}

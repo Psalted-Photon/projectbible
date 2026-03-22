@@ -2,13 +2,13 @@
   import { onMount, onDestroy } from 'svelte';
   import LexicalEditor from '../lib/components/LexicalEditor.svelte';
   import JournalNavigationBar from './JournalNavigationBar.svelte';
-  import { IndexedDBJournalStore } from '../adapters/JournalStore';
+  import { SyncedJournalStore } from '../adapters/SyncedJournalStore';
   import type { JournalEntry } from '@projectbible/core';
   
   export let windowId: string | undefined = undefined;
   
   let editorRef: any;
-  let journalStore: IndexedDBJournalStore;
+  let journalStore: SyncedJournalStore;
   let currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   let currentEntry: JournalEntry | null = null;
   let title = '';
@@ -45,7 +45,7 @@
   }
   
   onMount(() => {
-    journalStore = new IndexedDBJournalStore();
+    journalStore = new SyncedJournalStore();
     loadEntry(currentDate);
     
     // Add global click handler for Bible references

@@ -1,5 +1,4 @@
 import { openDB, readTransaction, writeTransaction } from "../adapters/db";
-import type { PlanMetadataRow } from "../lib/supabase/types";
 
 export type PlanStatus = "active" | "completed" | "archived";
 
@@ -66,38 +65,6 @@ export class PlanMetadataStore {
     };
 
     await this.upsertPlanMetadata(updated);
-  }
-
-  async applyCloudRow(row: PlanMetadataRow): Promise<void> {
-    const metadata: PlanMetadata = {
-      planId: row.out_plan_id,
-      status: row.out_status as PlanStatus,
-      planDefinitionHash: row.out_plan_definition_hash,
-      planVersion: row.out_plan_version,
-      activatedAt: row.out_activated_at ? new Date(row.out_activated_at).getTime() : Date.now(),
-      archivedAt: row.out_archived_at ? new Date(row.out_archived_at).getTime() : undefined,
-      lastSyncedAt: row.out_last_synced_at ? new Date(row.out_last_synced_at).getTime() : undefined,
-      syncConflicts: row.out_sync_conflicts ?? undefined,
-      catchUpAdjustment: row.out_catch_up_adjustment ?? undefined,
-    };
-
-    await this.upsertPlanMetadata(metadata);
-  }
-
-  async applyDirectRow(row: any): Promise<void> {
-    const metadata: PlanMetadata = {
-      planId: row.plan_id,
-      status: row.status as PlanStatus,
-      planDefinitionHash: row.plan_definition_hash,
-      planVersion: row.plan_version,
-      activatedAt: row.activated_at ? new Date(row.activated_at).getTime() : Date.now(),
-      archivedAt: row.archived_at ? new Date(row.archived_at).getTime() : undefined,
-      lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at).getTime() : undefined,
-      syncConflicts: row.sync_conflicts ?? undefined,
-      catchUpAdjustment: row.catch_up_adjustment ?? undefined,
-    };
-
-    await this.upsertPlanMetadata(metadata);
   }
 
   private serialize(metadata: PlanMetadata) {

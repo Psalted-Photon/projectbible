@@ -9,7 +9,7 @@
   import { windowStore } from "./lib/stores/windowStore";
   import { currentDownload, showProgressModal } from "./lib/pack-triggers";
   import { onMount } from "svelte";
-  import { syncOrchestrator } from "./services/SyncOrchestrator";
+  import { syncService } from "./lib/sync";
   import { readingPlanModalStore } from "./stores/readingPlanModalStore";
 
   let appReady = false;
@@ -39,14 +39,13 @@
         lastHiddenAt = Date.now();
         return;
       }
-      if (!lastHiddenAt) return;
-      const elapsed = Date.now() - lastHiddenAt;
-      if (elapsed > 5 * 60 * 1000) {
-        void syncOrchestrator.processQueue();
-      }
+      // SyncService handles reconnection automatically
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
+    
+    // Initialize sync service (connects if user is already signed in)
+    void syncService.init();
     void init();
 
     const unsubscribeReadingPlan = readingPlanModalStore.subscribe((value) => {

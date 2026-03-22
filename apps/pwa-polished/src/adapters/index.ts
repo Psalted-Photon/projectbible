@@ -13,6 +13,8 @@ export { IndexedDBPackManager } from './PackManager.js';
 export { IndexedDBSearchIndex } from './SearchIndex.js';
 export { IndexedDBUserDataStore } from './UserDataStore.js';
 export { IndexedDBJournalStore } from './JournalStore.js';
+export { SyncedUserDataStore } from './SyncedUserDataStore.js';
+export { SyncedJournalStore } from './SyncedJournalStore.js';
 export { IndexedDBCrossReferenceStore } from './CrossReferenceStore.js';
 export { IndexedDBLexiconStore } from './LexiconStore.js';
 export { IndexedDBPlaceStore } from './PlaceStore.js';
