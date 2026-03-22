@@ -2,13 +2,12 @@
   import { onMount, onDestroy } from 'svelte';
   import LexicalEditor from '../lib/components/LexicalEditor.svelte';
   import JournalNavigationBar from './JournalNavigationBar.svelte';
-  import { SyncedJournalStore } from '../adapters/SyncedJournalStore';
+  import { syncedJournalStore, journalRemoteChanges } from '../adapters/SyncedJournalStore';
   import type { JournalEntry } from '@projectbible/core';
   
   export let windowId: string | undefined = undefined;
   
   let editorRef: any;
-  let journalStore: SyncedJournalStore;
   let currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   let currentEntry: JournalEntry | null = null;
   let title = '';
@@ -44,15 +43,29 @@
     }
   }
   
+  let remoteChangeUnsub: (() => void) | null = null;
+  
   onMount(() => {
-    journalStore = new SyncedJournalStore();
     loadEntry(currentDate);
+    
+    // Re-load when a remote sync change arrives (skip the immediate emission on subscribe)
+    let firstEmit = true;
+    remoteChangeUnsub = journalRemoteChanges.subscribe(() => {
+      if (firstEmit) { firstEmit = false; return; }
+      // Don't clobber unsaved local edits — remote change queued until next navigation
+      if (!isDirty) {
+        console.log('[JournalWriter] Remote change detected, reloading entry');
+        loadEntry(currentDate);
+      }
+    });
     
     // Add global click handler for Bible references
     document.addEventListener('click', handleReferenceClick);
   });
   
   onDestroy(() => {
+    // Unsubscribe from remote-change signal
+    remoteChangeUnsub?.();
     // Clean up click handler
     document.removeEventListener('click', handleReferenceClick);
   });
@@ -60,7 +73,7 @@
   async function loadEntry(date: string) {
     console.log('[JournalWriter] Loading entry for date:', date);
     try {
-      const entry = await journalStore.getEntryByDate(date);
+      const entry = await syncedJournalStore.getEntryByDate(date);
       if (entry) {
         console.log('[JournalWriter] Found entry:', entry.id);
         currentEntry = entry;
@@ -106,7 +119,7 @@
       const linkified = linkifyReferences(text);
       
       if (currentEntry) {
-        await journalStore.updateEntry(currentEntry.id, {
+        await syncedJournalStore.updateEntry(currentEntry.id, {
           title: title.trim() || undefined,
           text,
           textLinkified: linkified
@@ -116,7 +129,7 @@
         currentEntry.textLinkified = linkified;
         currentEntry.updatedAt = new Date();
       } else {
-        const newEntry = await journalStore.saveEntry({
+        const newEntry = await syncedJournalStore.saveEntry({
           date: currentDate,
           title: title.trim() || undefined,
           text,

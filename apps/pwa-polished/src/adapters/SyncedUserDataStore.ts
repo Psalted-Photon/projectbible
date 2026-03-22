@@ -14,6 +14,13 @@ import { realtimeService } from '../lib/sync/RealtimeService';
 import { shouldApplyRemoteChange, nowISO } from '../lib/sync/conflictResolver';
 import { openDB } from './db';
 import type { DBUserNote, DBUserHighlight, DBUserBookmark } from './db';
+import { writable } from 'svelte/store';
+
+/**
+ * Svelte store that increments whenever a remote user-data change is applied.
+ * Components subscribe to re-load notes/highlights/bookmarks when this fires.
+ */
+export const userDataRemoteChanges = writable(0);
 
 /**
  * Apply remote notes to local IndexedDB
@@ -132,6 +139,7 @@ export class SyncedUserDataStore implements UserDataStore {
         } else if (change.new) {
           await applyRemoteNotes([change.new]);
         }
+        userDataRemoteChanges.update(n => n + 1);
       })
     );
     
@@ -143,6 +151,7 @@ export class SyncedUserDataStore implements UserDataStore {
         } else if (change.new) {
           await applyRemoteHighlights([change.new]);
         }
+        userDataRemoteChanges.update(n => n + 1);
       })
     );
     
@@ -154,6 +163,7 @@ export class SyncedUserDataStore implements UserDataStore {
         } else if (change.new) {
           await applyRemoteBookmarks([change.new]);
         }
+        userDataRemoteChanges.update(n => n + 1);
       })
     );
   }
@@ -336,3 +346,9 @@ export class SyncedUserDataStore implements UserDataStore {
     }
   }
 }
+
+/**
+ * Singleton instance — import this instead of creating new SyncedUserDataStore().
+ * Call initialize() from SyncService on sign-in; dispose() on sign-out.
+ */
+export const syncedUserDataStore = new SyncedUserDataStore();

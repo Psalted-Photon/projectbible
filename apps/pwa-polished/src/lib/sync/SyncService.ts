@@ -12,6 +12,8 @@ import { supabase } from '../supabase/client';
 import { syncQueue } from './SyncQueueService';
 import { realtimeService } from './RealtimeService';
 import type { SyncState, SyncTable } from './types';
+import { syncedJournalStore } from '../../adapters/SyncedJournalStore';
+import { syncedUserDataStore } from '../../adapters/SyncedUserDataStore';
 
 type StateListener = (state: SyncState) => void;
 
@@ -138,6 +140,10 @@ class SyncService {
       // Connect to Realtime
       await realtimeService.connect(userId);
       
+      // Initialize store Realtime subscriptions (registers handlers on the live channel)
+      await syncedJournalStore.initialize();
+      await syncedUserDataStore.initialize();
+      
       // Pull initial data
       await this.pullRemoteData();
       
@@ -165,6 +171,10 @@ class SyncService {
     
     // Disconnect from Realtime
     await realtimeService.disconnect();
+    
+    // Dispose store Realtime subscriptions (so they re-initialize on next sign-in)
+    syncedJournalStore.dispose();
+    syncedUserDataStore.dispose();
     
     // Clear pending sync queue (don't sync anonymous data)
     await syncQueue.clear();

@@ -14,6 +14,13 @@ import { realtimeService } from '../lib/sync/RealtimeService';
 import { shouldApplyRemoteChange, nowISO } from '../lib/sync/conflictResolver';
 import { openDB } from './db';
 import type { DBJournalEntry } from './db';
+import { writable } from 'svelte/store';
+
+/**
+ * Svelte store that increments whenever a remote journal change is applied.
+ * Components subscribe to re-load entries from IndexedDB when this fires.
+ */
+export const journalRemoteChanges = writable(0);
 
 /**
  * Apply remote journal entries to local IndexedDB
@@ -71,6 +78,8 @@ export class SyncedJournalStore implements JournalStore {
         } else if (change.new) {
           await applyRemoteJournalEntries([change.new]);
         }
+        // Signal Svelte components to re-load
+        journalRemoteChanges.update(n => n + 1);
       })
     );
   }
@@ -152,3 +161,9 @@ export class SyncedJournalStore implements JournalStore {
     return this.local.getDateRange();
   }
 }
+
+/**
+ * Singleton instance — import this instead of creating new SyncedJournalStore().
+ * Call initialize() from SyncService on sign-in; dispose() on sign-out.
+ */
+export const syncedJournalStore = new SyncedJournalStore();
