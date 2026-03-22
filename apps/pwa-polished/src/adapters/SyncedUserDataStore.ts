@@ -353,6 +353,13 @@ export class SyncedUserDataStore implements UserDataStore {
 
 /**
  * Singleton instance — import this instead of creating new SyncedUserDataStore().
- * Call initialize() from SyncService on sign-in; dispose() on sign-out.
+ * Registers itself with SyncService so initialize()/dispose() are called automatically.
  */
 export const syncedUserDataStore = new SyncedUserDataStore();
+
+// Self-register with SyncService so no circular imports are needed in SyncService.
+import { syncService } from '../lib/sync/SyncService';
+syncService.registerSyncStore(syncedUserDataStore);
+syncService.registerApplyFn('user_notes', applyRemoteNotes);
+syncService.registerApplyFn('user_highlights', applyRemoteHighlights);
+syncService.registerApplyFn('user_bookmarks', applyRemoteBookmarks);

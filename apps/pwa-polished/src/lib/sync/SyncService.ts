@@ -12,8 +12,11 @@ import { supabase } from '../supabase/client';
 import { syncQueue } from './SyncQueueService';
 import { realtimeService } from './RealtimeService';
 import type { SyncState, SyncTable } from './types';
-import { syncedJournalStore } from '../../adapters/SyncedJournalStore';
-import { syncedUserDataStore } from '../../adapters/SyncedUserDataStore';
+
+interface SyncStore {
+  initialize(): Promise<void>;
+  dispose(): void;
+}
 
 type StateListener = (state: SyncState) => void;
 
@@ -30,6 +33,23 @@ class SyncService {
   private initialized = false;
   private authUnsubscribe: (() => void) | null = null;
   private queueUnsubscribe: (() => void) | null = null;
+  private syncStores: SyncStore[] = [];
+  private applyFns: Map<SyncTable, (rows: any[]) => Promise<void>> = new Map();
+
+  /**
+   * Register a synced store. Called by adapter modules at import time.
+   * SyncService will call initialize() on sign-in and dispose() on sign-out.
+   */
+  registerSyncStore(store: SyncStore): void {
+    this.syncStores.push(store);
+  }
+
+  /**
+   * Register a remote-pull function for a table. Called by adapter modules at import time.
+   */
+  registerApplyFn(table: SyncTable, fn: (rows: any[]) => Promise<void>): void {
+    this.applyFns.set(table, fn);
+  }
   
   /**
    * Initialize the sync service
@@ -141,8 +161,9 @@ class SyncService {
       await realtimeService.connect(userId);
       
       // Initialize store Realtime subscriptions (registers handlers on the live channel)
-      await syncedJournalStore.initialize();
-      await syncedUserDataStore.initialize();
+      for (const store of this.syncStores) {
+        await store.initialize();
+      }
       
       // Pull initial data
       await this.pullRemoteData();
@@ -173,8 +194,9 @@ class SyncService {
     await realtimeService.disconnect();
     
     // Dispose store Realtime subscriptions (so they re-initialize on next sign-in)
-    syncedJournalStore.dispose();
-    syncedUserDataStore.dispose();
+    for (const store of this.syncStores) {
+      store.dispose();
+    }
     
     // Clear pending sync queue (don't sync anonymous data)
     await syncQueue.clear();
@@ -208,22 +230,11 @@ class SyncService {
   private async pullRemoteData(): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    
-    // Import the store updaters dynamically to avoid circular deps
-    const { applyRemoteNotes, applyRemoteHighlights, applyRemoteBookmarks } = 
-      await import('../../adapters/SyncedUserDataStore');
-    const { applyRemoteJournalEntries } = 
-      await import('../../adapters/SyncedJournalStore');
-    
-    // Pull each table
-    const pulls = [
-      this.pullTable('user_notes', user.id, applyRemoteNotes),
-      this.pullTable('user_highlights', user.id, applyRemoteHighlights),
-      this.pullTable('user_bookmarks', user.id, applyRemoteBookmarks),
-      this.pullTable('journal_entries', user.id, applyRemoteJournalEntries),
-      // TODO: Add reading_plans, reading_progress, reading_history
-    ];
-    
+
+    const pulls: Promise<void>[] = [];
+    for (const [table, applyFn] of this.applyFns) {
+      pulls.push(this.pullTable(table, user.id, applyFn));
+    }
     await Promise.all(pulls);
   }
   

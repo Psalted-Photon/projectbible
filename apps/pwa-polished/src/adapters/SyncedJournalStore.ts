@@ -168,6 +168,11 @@ export class SyncedJournalStore implements JournalStore {
 
 /**
  * Singleton instance — import this instead of creating new SyncedJournalStore().
- * Call initialize() from SyncService on sign-in; dispose() on sign-out.
+ * Registers itself with SyncService so initialize()/dispose() are called automatically.
  */
 export const syncedJournalStore = new SyncedJournalStore();
+
+// Self-register with SyncService so no circular imports are needed in SyncService.
+import { syncService } from '../lib/sync/SyncService';
+syncService.registerSyncStore(syncedJournalStore);
+syncService.registerApplyFn('journal_entries', applyRemoteJournalEntries);
