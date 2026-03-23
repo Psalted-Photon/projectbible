@@ -10,6 +10,7 @@
   let editorInput: HTMLDivElement;
   let editor: any;
   let initialValueSet = false;
+  let isSettingContent = false; // Guard to prevent change events fired by setContent from triggering a save
   
   export function focus() {
     console.log('[LexicalEditor] focus() called');
@@ -25,6 +26,7 @@
     console.log('[LexicalEditor] setContent called, html length:', html?.length || 0);
     console.log('[LexicalEditor] Before setContent, activeElement:', document.activeElement);
     
+    isSettingContent = true;
     import('lexical').then(({ $getRoot, $insertNodes }) => {
       import('@lexical/html').then(({ $generateNodesFromDOM }) => {
         editor.update(() => {
@@ -34,7 +36,7 @@
           const root = $getRoot();
           root.clear();
           $insertNodes(nodes);
-        });
+        }, { onUpdate: () => { isSettingContent = false; } });
         
         // Focus after content is set, but only if not already focused
         // This avoids interrupting natural focus from clicks
@@ -140,6 +142,9 @@
       
       // Listen for changes
       const removeUpdateListener = editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves }: any) => {
+        // Skip events caused by setContent — those are not user edits
+        if (isSettingContent) return;
+        
         // Mark as dirty if there are actual changes
         if (dirtyElements.size > 0 || dirtyLeaves.size > 0) {
           isDirty = true;

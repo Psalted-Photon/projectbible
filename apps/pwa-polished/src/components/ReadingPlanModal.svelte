@@ -11,6 +11,7 @@
   } from '../stores/ReadingProgressStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
   import { syncService, type SyncState } from '../lib/sync';
+  import { syncQueue } from '../lib/sync/SyncQueueService';
   import { userProfileStore } from '../stores/userProfileStore';
   
   export let isOpen = false;
@@ -599,6 +600,26 @@
         planDefinitionHash: planHash,
         planVersion: 1,
         activatedAt: Date.now()
+      });
+
+      // Queue reading plan to Supabase (user_id is merged automatically by SyncQueueService)
+      await syncQueue.enqueue({
+        type: 'INSERT',
+        table: 'reading_plans',
+        id: currentPlanId!,
+        data: {
+          id: currentPlanId!,
+          name: `${currentReadingPlan.totalDays}-day reading plan`,
+          config: JSON.stringify(config),
+          current_day_number: 1,
+          status: 'active',
+          plan_definition_hash: planHash,
+          plan_version: 1,
+          activated_at: Date.now(),
+          started_at: Date.now(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
       });
       
       // Create day 1 progress entry

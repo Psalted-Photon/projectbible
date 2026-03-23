@@ -11,9 +11,9 @@
   import { onMount } from "svelte";
   import { syncService } from "./lib/sync";
   import { readingPlanModalStore } from "./stores/readingPlanModalStore";
+  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
 
   let appReady = false;
-  let lastHiddenAt: number | null = null;
   let showReadingPlanModal = false;
 
   // Initialize Eruda for mobile debugging
@@ -35,10 +35,7 @@
     };
 
     const handleVisibility = () => {
-      if (document.hidden) {
-        lastHiddenAt = Date.now();
-        return;
-      }
+      if (document.hidden) return;
       // SyncService handles reconnection automatically
     };
 
