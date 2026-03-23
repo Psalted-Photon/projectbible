@@ -162,9 +162,12 @@ class SyncQueueService {
   private async executeOperation(op: SyncOperation, userId: string): Promise<void> {
     switch (op.type) {
       case 'INSERT': {
+        // No explicit onConflict — PostgREST resolves conflicts via the table's primary key.
+        // Using onConflict: 'id,user_id' requires a named unique index separate from the PK
+        // which not all tables have, causing "no unique constraint" errors.
         const { error } = await supabase
           .from(op.table)
-          .upsert({ ...op.data, user_id: userId }, { onConflict: 'id,user_id' });
+          .upsert({ ...op.data, user_id: userId });
         if (error) throw error;
         break;
       }
