@@ -442,8 +442,11 @@
 
   /** Map a ReadingProgressEntry to Supabase reading_progress columns and enqueue. */
   function queueProgressEntry(entry: ReadingProgressEntry): Promise<void> {
+    // The live reading_progress table uses TIMESTAMPTZ for date columns —
+    // convert epoch-ms to ISO strings; Supabase rejects raw ms values.
+    const toIso = (ms: number | undefined) => ms ? new Date(ms).toISOString() : null;
     return syncQueue.enqueue({
-      type: 'INSERT', // SyncQueueService uses upsert for INSERT
+      type: 'INSERT',
       table: 'reading_progress',
       id: entry.id,
       data: {
@@ -451,9 +454,9 @@
         plan_id: entry.planId,
         day_number: entry.dayNumber,
         completed: entry.completed ? 1 : 0,
-        created_at: entry.createdAt,
-        completed_at: entry.completedAt ?? null,
-        started_reading_at: entry.startedReadingAt ?? null,
+        created_at: toIso(entry.createdAt),
+        completed_at: toIso(entry.completedAt),
+        started_reading_at: toIso(entry.startedReadingAt),
         chapters_read: JSON.stringify(entry.chaptersRead),
         catch_up_adjustment: entry.catchUpAdjustment
           ? JSON.stringify(entry.catchUpAdjustment)

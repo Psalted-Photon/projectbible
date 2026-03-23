@@ -124,15 +124,20 @@ export async function applyRemoteReadingProgress(rows: any[]): Promise<void> {
             : row.catch_up_adjustment)
         : undefined;
 
+      // created_at / completed_at / started_reading_at may be ISO strings
+      // (TIMESTAMPTZ) or epoch-ms numbers — normalise to epoch-ms for IndexedDB.
+      const toMs = (v: any): number | undefined =>
+        v == null ? undefined : typeof v === 'number' ? v : new Date(v).getTime();
+
       // Write directly to IndexedDB (bypasses the read-progress write queue)
       await readingProgressStore.upsertEntries([{
         id: row.id,
         planId: row.plan_id,
         dayNumber: row.day_number,
         completed: row.completed === 1 || row.completed === true,
-        createdAt: row.created_at ?? 0,
-        completedAt: row.completed_at,
-        startedReadingAt: row.started_reading_at,
+        createdAt: toMs(row.created_at) ?? 0,
+        completedAt: toMs(row.completed_at),
+        startedReadingAt: toMs(row.started_reading_at),
         chaptersRead,
         catchUpAdjustment,
       }]);
