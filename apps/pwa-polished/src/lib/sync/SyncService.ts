@@ -31,6 +31,7 @@ class SyncService {
   
   private listeners: Set<StateListener> = new Set();
   private initialized = false;
+  private signingIn = false; // mutex — prevents double-call from onAuthStateChange + getUser()
   private authUnsubscribe: (() => void) | null = null;
   private queueUnsubscribe: (() => void) | null = null;
   private syncStores: SyncStore[] = [];
@@ -152,6 +153,8 @@ class SyncService {
   // ========== Private ==========
   
   private async onSignIn(userId: string): Promise<void> {
+    if (this.signingIn) return;
+    this.signingIn = true;
     console.log('[SyncService] User signed in:', userId.slice(0, 8) + '...');
     
     this.updateState({ status: 'syncing' });
@@ -184,6 +187,8 @@ class SyncService {
         status: 'error', 
         error: err.message 
       });
+    } finally {
+      this.signingIn = false;
     }
   }
   

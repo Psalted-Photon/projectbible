@@ -73,19 +73,28 @@ export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
     console.error('[SyncedReading] Failed to restore reading plan:', err);
   }
 
-  // Also update the plan history
+  // Also update the plan history — include full plan object so the history tab renders correctly
   try {
-    const history = rows.map(r => ({
-      id: r.id,
-      name: r.name ?? '',
-      status: r.status,
-      startedAt: r.started_at,
-      completedAt: r.completed_at,
-    }));
+    const history: any[] = [];
+    for (const r of rows) {
+      try {
+        const cfg = typeof r.config === 'string' ? JSON.parse(r.config) : r.config;
+        if (cfg.startDate && typeof cfg.startDate === 'string') cfg.startDate = new Date(cfg.startDate);
+        if (cfg.endDate && typeof cfg.endDate === 'string') cfg.endDate = new Date(cfg.endDate);
+        const plan = generateReadingPlan(cfg);
+        history.push({
+          id: r.id,
+          plan,
+          createdAt: r.activated_at ? new Date(r.activated_at).toISOString() : new Date().toISOString(),
+          completedAt: r.completed_at ? new Date(r.completed_at).toISOString() : null,
+        });
+      } catch {
+        // Skip rows with invalid config
+      }
+    }
 
     const existingHistory = localStorage.getItem(STORAGE_PLAN_HISTORY);
     const merged = existingHistory ? JSON.parse(existingHistory) : [];
-    // Merge: overwrite entries with same id from server
     const ids = new Set(history.map((h: any) => h.id));
     const kept = merged.filter((h: any) => !ids.has(h.id));
     localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify([...kept, ...history]));
