@@ -82,6 +82,12 @@
     };
   });
 
+  // Re-read localStorage every time the modal opens so that plans synced
+  // in the background (after onMount ran) are picked up immediately.
+  $: if (isOpen) {
+    loadActivePlan();
+  }
+
   $: if (currentReadingPlan) {
     dayProgressMap;
     verseStats = computeVerseStats();
