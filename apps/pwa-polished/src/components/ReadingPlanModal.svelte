@@ -458,6 +458,7 @@
         catch_up_adjustment: entry.catchUpAdjustment
           ? JSON.stringify(entry.catchUpAdjustment)
           : null,
+        updated_at: new Date().toISOString(),
       },
     });
   }

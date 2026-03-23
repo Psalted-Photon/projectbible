@@ -258,8 +258,8 @@ class SyncService {
       return;
     }
     
+    console.log(`[SyncService] Pulled ${data?.length ?? 0} rows from ${table}`);
     if (data && data.length > 0) {
-      console.log(`[SyncService] Pulled ${data.length} rows from ${table}`);
       await applyFn(data);
     }
   }

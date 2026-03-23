@@ -56,15 +56,17 @@ class SyncQueueService {
     let failed = 0;
     
     try {
-      const items = await this.getPendingItems();
-      
-      for (const item of items) {
-        const ok = await this.processItem(item);
-        if (ok) {
-          success++;
-        } else {
-          failed++;
+      // Drain loop: keep processing until no pending items remain.
+      // Items enqueued while a previous batch is in-flight are handled here
+      // instead of being silently dropped until the next external trigger.
+      let batch = await this.getPendingItems();
+      while (batch.length > 0) {
+        for (const item of batch) {
+          const ok = await this.processItem(item);
+          if (ok) success++;
+          else failed++;
         }
+        batch = await this.getPendingItems();
       }
       
       this.notifyListeners();
