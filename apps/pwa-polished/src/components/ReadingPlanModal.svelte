@@ -424,7 +424,7 @@
     );
     dayProgressMap = new Map(dayProgressMap);
     dayProgressMap.set(day.dayNumber, updated);
-    // PowerSync will automatically sync the local writes
+    await queueProgressEntry(updated);
   }
 
   async function markDayComplete(day: any) {
@@ -437,7 +437,29 @@
     );
     dayProgressMap = new Map(dayProgressMap);
     dayProgressMap.set(day.dayNumber, updated);
-    // SyncService will automatically sync the local writes
+    await queueProgressEntry(updated);
+  }
+
+  /** Map a ReadingProgressEntry to Supabase reading_progress columns and enqueue. */
+  function queueProgressEntry(entry: ReadingProgressEntry): Promise<void> {
+    return syncQueue.enqueue({
+      type: 'INSERT', // SyncQueueService uses upsert for INSERT
+      table: 'reading_progress',
+      id: entry.id,
+      data: {
+        id: entry.id,
+        plan_id: entry.planId,
+        day_number: entry.dayNumber,
+        completed: entry.completed ? 1 : 0,
+        created_at: entry.createdAt,
+        completed_at: entry.completedAt ?? null,
+        started_reading_at: entry.startedReadingAt ?? null,
+        chapters_read: JSON.stringify(entry.chaptersRead),
+        catch_up_adjustment: entry.catchUpAdjustment
+          ? JSON.stringify(entry.catchUpAdjustment)
+          : null,
+      },
+    });
   }
 
   async function syncNow() {
