@@ -128,7 +128,6 @@ export interface ChapterRef {
 export const BIBLE_BOOKS: BookInfo[] = [
   // Old Testament
   { name: 'Genesis', testament: 'OT', chapters: 50, chronologicalOrder: 1 },
-  { name: 'Job', testament: 'OT', chapters: 42, chronologicalOrder: 2 }, // Patriarchal era (post-Genesis 11)
   { name: 'Exodus', testament: 'OT', chapters: 40, chronologicalOrder: 3 },
   { name: 'Leviticus', testament: 'OT', chapters: 27, chronologicalOrder: 4 },
   { name: 'Numbers', testament: 'OT', chapters: 36, chronologicalOrder: 5 },
@@ -145,6 +144,7 @@ export const BIBLE_BOOKS: BookInfo[] = [
   { name: 'Ezra', testament: 'OT', chapters: 10, chronologicalOrder: 16 },
   { name: 'Nehemiah', testament: 'OT', chapters: 13, chronologicalOrder: 17 },
   { name: 'Esther', testament: 'OT', chapters: 10, chronologicalOrder: 18 },
+  { name: 'Job', testament: 'OT', chapters: 42, chronologicalOrder: 2 }, // Patriarchal era (post-Genesis 11)
   { name: 'Psalms', testament: 'OT', chapters: 150, chronologicalOrder: 19 },
   { name: 'Proverbs', testament: 'OT', chapters: 31, chronologicalOrder: 20 },
   { name: 'Ecclesiastes', testament: 'OT', chapters: 12, chronologicalOrder: 21 },
@@ -173,27 +173,27 @@ export const BIBLE_BOOKS: BookInfo[] = [
   { name: 'Luke', testament: 'NT', chapters: 24, chronologicalOrder: 42 },
   { name: 'John', testament: 'NT', chapters: 21, chronologicalOrder: 43 },
   { name: 'Acts', testament: 'NT', chapters: 28, chronologicalOrder: 44 },
-  { name: 'James', testament: 'NT', chapters: 5, chronologicalOrder: 45 }, // ~49 AD
-  { name: 'Galatians', testament: 'NT', chapters: 6, chronologicalOrder: 46 }, // ~48-49 AD
-  { name: '1 Thessalonians', testament: 'NT', chapters: 5, chronologicalOrder: 47 }, // ~50-51 AD
-  { name: '2 Thessalonians', testament: 'NT', chapters: 3, chronologicalOrder: 48 }, // ~51-52 AD
+  { name: 'Romans', testament: 'NT', chapters: 16, chronologicalOrder: 51 }, // ~57 AD
   { name: '1 Corinthians', testament: 'NT', chapters: 16, chronologicalOrder: 49 }, // ~54-55 AD
   { name: '2 Corinthians', testament: 'NT', chapters: 13, chronologicalOrder: 50 }, // ~55-56 AD
-  { name: 'Romans', testament: 'NT', chapters: 16, chronologicalOrder: 51 }, // ~57 AD
+  { name: 'Galatians', testament: 'NT', chapters: 6, chronologicalOrder: 46 }, // ~48-49 AD
   { name: 'Ephesians', testament: 'NT', chapters: 6, chronologicalOrder: 52 }, // ~60-62 AD (Prison)
   { name: 'Philippians', testament: 'NT', chapters: 4, chronologicalOrder: 53 }, // ~60-62 AD (Prison)
   { name: 'Colossians', testament: 'NT', chapters: 4, chronologicalOrder: 54 }, // ~60-62 AD (Prison)
-  { name: 'Philemon', testament: 'NT', chapters: 1, chronologicalOrder: 55 }, // ~60-62 AD (Prison)
+  { name: '1 Thessalonians', testament: 'NT', chapters: 5, chronologicalOrder: 47 }, // ~50-51 AD
+  { name: '2 Thessalonians', testament: 'NT', chapters: 3, chronologicalOrder: 48 }, // ~51-52 AD
   { name: '1 Timothy', testament: 'NT', chapters: 6, chronologicalOrder: 56 }, // ~62-64 AD
-  { name: 'Titus', testament: 'NT', chapters: 3, chronologicalOrder: 57 }, // ~62-64 AD
   { name: '2 Timothy', testament: 'NT', chapters: 4, chronologicalOrder: 58 }, // ~66-67 AD
+  { name: 'Titus', testament: 'NT', chapters: 3, chronologicalOrder: 57 }, // ~62-64 AD
+  { name: 'Philemon', testament: 'NT', chapters: 1, chronologicalOrder: 55 }, // ~60-62 AD (Prison)
   { name: 'Hebrews', testament: 'NT', chapters: 13, chronologicalOrder: 59 }, // ~60s AD
+  { name: 'James', testament: 'NT', chapters: 5, chronologicalOrder: 45 }, // ~49 AD
   { name: '1 Peter', testament: 'NT', chapters: 5, chronologicalOrder: 60 }, // ~62-64 AD
   { name: '2 Peter', testament: 'NT', chapters: 3, chronologicalOrder: 61 }, // ~64-68 AD
-  { name: 'Jude', testament: 'NT', chapters: 1, chronologicalOrder: 62 }, // ~65-80 AD
   { name: '1 John', testament: 'NT', chapters: 5, chronologicalOrder: 63 }, // ~85-95 AD
   { name: '2 John', testament: 'NT', chapters: 1, chronologicalOrder: 64 }, // ~85-95 AD
   { name: '3 John', testament: 'NT', chapters: 1, chronologicalOrder: 65 }, // ~85-95 AD
+  { name: 'Jude', testament: 'NT', chapters: 1, chronologicalOrder: 62 }, // ~65-80 AD
   { name: 'Revelation', testament: 'NT', chapters: 22, chronologicalOrder: 66 } // ~95 AD
 ];
 
