@@ -12,7 +12,9 @@ export interface NavigationState {
 // Available translations (will be populated from packs later)
 export const availableTranslations = writable<string[]>(['WEB', 'KJV']);
 
-// Current navigation state
+const NAV_STORAGE_KEY = 'projectbible_nav';
+
+// Default used only on first ever launch per device
 const initialState: NavigationState = {
   translation: 'WEB',
   book: 'John',
@@ -20,24 +22,62 @@ const initialState: NavigationState = {
   highlightedVerse: null
 };
 
+function loadPersistedState(): NavigationState {
+  try {
+    const raw = localStorage.getItem(NAV_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...initialState, ...parsed, highlightedVerse: null };
+    }
+  } catch {
+    // ignore parse errors; fall through to default
+  }
+  return initialState;
+}
+
+function persistState(state: NavigationState): void {
+  try {
+    const { translation, book, chapter, isChronologicalMode } = state;
+    localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ translation, book, chapter, isChronologicalMode }));
+  } catch {
+    // ignore quota/private-browsing errors
+  }
+}
+
 const navigationHistory = writable<NavigationState[]>([]);
 
 function createNavigationStore() {
-  const { subscribe, set, update } = writable<NavigationState>(initialState);
+  const { subscribe, set, update } = writable<NavigationState>(loadPersistedState());
 
   return {
     subscribe,
     setTranslation: (translation: string) => {
-      update(state => ({ ...state, translation, highlightedVerse: null }));
+      update(state => {
+        const next = { ...state, translation, highlightedVerse: null };
+        persistState(next);
+        return next;
+      });
     },
     setBook: (book: string) => {
-      update(state => ({ ...state, book, chapter: 1, highlightedVerse: null }));
+      update(state => {
+        const next = { ...state, book, chapter: 1, highlightedVerse: null };
+        persistState(next);
+        return next;
+      });
     },
     setChapter: (chapter: number) => {
-      update(state => ({ ...state, chapter, highlightedVerse: null }));
+      update(state => {
+        const next = { ...state, chapter, highlightedVerse: null };
+        persistState(next);
+        return next;
+      });
     },
     setChronologicalMode: (isChronologicalMode: boolean) => {
-      update(state => ({ ...state, isChronologicalMode }));
+      update(state => {
+        const next = { ...state, isChronologicalMode };
+        persistState(next);
+        return next;
+      });
     },
     navigateTo: (
       translation: string,
@@ -45,13 +85,11 @@ function createNavigationStore() {
       chapter: number,
       highlightedVerse: number | null = null,
     ) => {
-      update(state => ({
-        ...state,
-        translation,
-        book,
-        chapter,
-        highlightedVerse,
-      }));
+      update(state => {
+        const next = { ...state, translation, book, chapter, highlightedVerse };
+        persistState(next);
+        return next;
+      });
     },
     pushHistory: (state: NavigationState) => {
       navigationHistory.update((history) => [...history, state]);
@@ -63,10 +101,14 @@ function createNavigationStore() {
         return history.slice(0, -1);
       });
       if (previous) {
+        persistState(previous);
         set(previous);
       }
     },
-    reset: () => set(initialState)
+    reset: () => {
+      persistState(initialState);
+      set(initialState);
+    }
   };
 }
 
