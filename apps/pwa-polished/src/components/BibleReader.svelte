@@ -801,6 +801,11 @@
 
       lastScrollTop = scrollTop;
 
+      // Load previous chapter when near the top
+      if (scrollTop <= 200 && !isLoadingPrevChapter) {
+        loadPreviousChapter();
+      }
+
       // Check for loading next chapter (non-debounced for responsiveness)
       if (scrollPosition >= scrollHeight - 200 && !isLoadingNextChapter) {
         loadNextChapter();
@@ -942,8 +947,7 @@
     }
   }
 
-  // @ts-expect-error - Unused function kept for future feature
-  async function _loadPreviousChapter() {
+  async function loadPreviousChapter() {
     if (isLoadingPrevChapter || chapters.length === 0) return;
     isLoadingPrevChapter = true;
 
