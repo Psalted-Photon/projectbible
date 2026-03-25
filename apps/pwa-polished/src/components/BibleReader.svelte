@@ -41,6 +41,7 @@
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
   let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
   let scrollHandler: ((e: Event) => void) | null = null;
+  let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Commentary modal state
   let commentaryModalOpen = false;
@@ -724,6 +725,48 @@
     }
   }
 
+  // Returns the book/chapter of the chapter section most visible in the reader viewport
+  function detectVisibleChapter(): { book: string; chapter: number } | null {
+    if (!readerElement) return null;
+    const sections = readerElement.querySelectorAll<HTMLElement>('[data-chapter-section]');
+    if (sections.length === 0) return null;
+    const readerTop = readerElement.scrollTop;
+    const readerBottom = readerTop + readerElement.clientHeight;
+    let bestBook = '';
+    let bestChapter = 0;
+    let bestVisible = -1;
+    sections.forEach(el => {
+      const top = el.offsetTop;
+      const bottom = top + el.offsetHeight;
+      const visibleTop = Math.max(top, readerTop);
+      const visibleBottom = Math.min(bottom, readerBottom);
+      const visible = Math.max(0, visibleBottom - visibleTop);
+      if (visible > bestVisible) {
+        bestVisible = visible;
+        bestBook = el.dataset.book || '';
+        bestChapter = Number(el.dataset.chapter) || 0;
+      }
+    });
+    return bestBook ? { book: bestBook, chapter: bestChapter } : null;
+  }
+
+  function saveScrollPosition() {
+    // Only save for the main reader (not windowed panes — they have their own contentState)
+    if (windowId) return;
+    const visible = detectVisibleChapter();
+    if (!visible) return;
+    try {
+      localStorage.setItem('projectbible_nav', JSON.stringify({
+        translation: currentTranslation,
+        book: visible.book,
+        chapter: visible.chapter,
+        isChronologicalMode,
+      }));
+    } catch {
+      // ignore quota / private-browsing errors
+    }
+  }
+
   function startScrollDetection() {
     // Clean up any existing listener first
     if (scrollHandler && readerElement) {
@@ -762,6 +805,10 @@
       if (scrollPosition >= scrollHeight - 200 && !isLoadingNextChapter) {
         loadNextChapter();
       }
+
+      // Save scroll position after user stops scrolling (debounced)
+      if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
+      scrollSaveTimer = setTimeout(saveScrollPosition, 500);
     };
 
     // Attach scroll event listener
@@ -1905,6 +1952,12 @@
     readerElement?.addEventListener("touchcancel", handleTouchEnd);
     document.addEventListener("click", handleClickOutside);
 
+    // Save position when tab is hidden (phone lock, tab switch, close)
+    const handleVisibilityChange = () => {
+      if (document.hidden) saveScrollPosition();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
@@ -1915,7 +1968,9 @@
       readerElement?.removeEventListener("touchend", handleTouchEnd);
       readerElement?.removeEventListener("touchcancel", handleTouchEnd);
       document.removeEventListener("click", handleClickOutside);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       stopScrollDetection();
+      if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
       if (longPressTimer) clearTimeout(longPressTimer);
 
       // Cleanup hover element
@@ -1973,7 +2028,7 @@
       <div class="no-content">No verses found for this chapter.</div>
     {:else}
       {#each chapters as chapterData (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}`)}
-        <div class="chapter-section">
+        <div class="chapter-section" data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
           <div class="chapter-header">
             <h1>{chapterData.book} {chapterData.chapter}</h1>
           </div>
