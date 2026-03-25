@@ -471,11 +471,6 @@
       if (resetScroll && readerElement) {
         readerElement.scrollTo({ top: 0, behavior: "auto" });
       }
-
-      // Pre-load the chapter immediately before and after so the reader
-      // never hits a wall when starting to scroll in either direction
-      void loadPreviousChapter();
-      void loadNextChapter();
     } catch (err: unknown) {
       console.error("Error loading chapter:", err);
       error = `Failed to load ${book} ${chapter}. Make sure you have packs installed.`;
@@ -1928,7 +1923,6 @@
 
     (async () => {
       await loadAvailableTranslations();
-      await loadChapter(currentTranslation, currentBook, currentChapter);
       await loadChronologicalPack();
     })();
 
