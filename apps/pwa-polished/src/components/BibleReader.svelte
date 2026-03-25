@@ -471,6 +471,11 @@
       if (resetScroll && readerElement) {
         readerElement.scrollTo({ top: 0, behavior: "auto" });
       }
+
+      // Pre-load the chapter immediately before and after so the reader
+      // never hits a wall when starting to scroll in either direction
+      void loadPreviousChapter();
+      void loadNextChapter();
     } catch (err: unknown) {
       console.error("Error loading chapter:", err);
       error = `Failed to load ${book} ${chapter}. Make sure you have packs installed.`;
@@ -801,8 +806,9 @@
 
       lastScrollTop = scrollTop;
 
-      // Load previous chapter when near the top
-      if (scrollTop <= 200 && !isLoadingPrevChapter) {
+      // Load previous chapter when near the top (scrollDelta <= 0 guards against
+      // the synthetic scroll event fired by our own scrollTop correction in loadPreviousChapter)
+      if (scrollTop <= 200 && scrollDelta <= 0 && !isLoadingPrevChapter) {
         loadPreviousChapter();
       }
 
@@ -1042,14 +1048,16 @@
           ...chapters,
         ];
 
-        // Restore scroll position adjusted for new content
-        requestAnimationFrame(() => {
-          if (readerElement) {
-            const newScrollHeight = readerElement.scrollHeight;
-            readerElement.scrollTop =
-              readerElement.scrollTop + (newScrollHeight - oldScrollHeight);
-          }
-        });
+        // Wait for Svelte to flush DOM updates, then correct scroll position
+        // synchronously. Using await tick() instead of rAF ensures:
+        //  1. newScrollHeight is always the post-prepend value (no stale reads)
+        //  2. isLoadingPrevChapter stays true until AFTER correction (no re-entry)
+        await tick();
+        if (readerElement) {
+          const newScrollHeight = readerElement.scrollHeight;
+          readerElement.scrollTop =
+            readerElement.scrollTop + (newScrollHeight - oldScrollHeight);
+        }
       }
     } catch (err) {
       console.error("Error loading previous chapter:", err);
