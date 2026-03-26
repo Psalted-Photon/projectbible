@@ -470,9 +470,11 @@
       }
 
       if (resetScroll && readerElement) {
+        // Set flag BEFORE tick so any clamp-induced scroll event is consumed
         scrollResetPending = true;
+        await tick(); // flush DOM so scrollHeight reflects the new single-chapter content
         lastScrollTop = 0;
-        readerElement.scrollTo({ top: 0, behavior: "auto" });
+        readerElement.scrollTop = 0; // direct assignment — always instant, ignores scroll-behavior CSS
       }
     } catch (err: unknown) {
       console.error("Error loading chapter:", err);
@@ -782,10 +784,10 @@
     scrollHandler = () => {
       if (!readerElement) return;
 
-      // Consume the one synthetic scroll event fired when we reset to top on navigation
+      // Consume the synthetic scroll event fired by our own scrollTop=0 reset on navigation
       if (scrollResetPending) {
         scrollResetPending = false;
-        lastScrollTop = readerElement.scrollTop;
+        lastScrollTop = 0; // scrollTop is 0 after reset — anchor here so first user scroll has correct delta
         return;
       }
 
@@ -808,14 +810,16 @@
 
       lastScrollTop = scrollTop;
 
-      // Load previous chapter when near the top (scrollDelta <= 0 guards against
-      // the synthetic scroll event fired by our own scrollTop correction in loadPreviousChapter)
-      if (scrollTop <= 200 && scrollDelta <= 0 && !isLoadingPrevChapter) {
+      // Load previous chapter when near the top.
+      // scrollDelta <= 0: ignore downward synthetic events from our own scrollTop correction.
+      // !loading: ignore scroll events that fire during a navigation reset (loadChapter sets loading=true).
+      if (scrollTop <= 200 && scrollDelta <= 0 && !isLoadingPrevChapter && !loading) {
         loadPreviousChapter();
       }
 
-      // Check for loading next chapter (non-debounced for responsiveness)
-      if (scrollPosition >= scrollHeight - 200 && !isLoadingNextChapter) {
+      // Check for loading next chapter.
+      // !loading: same guard — don't auto-load adjacent chapter mid-navigation.
+      if (scrollPosition >= scrollHeight - 200 && !isLoadingNextChapter && !loading) {
         loadNextChapter();
       }
 
@@ -2242,9 +2246,10 @@
     text-decoration: underline;
   }
 
-  /* Smooth scrolling */
+  /* Native momentum scrolling on iOS only — no scroll-behavior:smooth because CSS smooth
+     overrides behavior:"auto" on programmatic scrolls, causing dozens of events during the
+     animation that all satisfy scrollTop<=200 and trigger cascading loadPreviousChapter calls. */
   .bible-reader {
-    scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
   }
 
