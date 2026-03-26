@@ -38,6 +38,7 @@
   let isLoadingPrevChapter = false;
   let lastNavigationKey = "";
   let lastScrollTop = 0;
+  let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
   let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
   let scrollHandler: ((e: Event) => void) | null = null;
@@ -469,6 +470,8 @@
       }
 
       if (resetScroll && readerElement) {
+        scrollResetPending = true;
+        lastScrollTop = 0;
         readerElement.scrollTo({ top: 0, behavior: "auto" });
       }
     } catch (err: unknown) {
@@ -611,9 +614,6 @@
 
         if (!match) {
           navigationStore.setTranslation(translations[0].id);
-        } else if (match.id !== currentTranslation) {
-          // Update to the exact case from database
-          navigationStore.setTranslation(match.id);
         }
 
         // NOTE: Auto-loading from /public is disabled
@@ -781,6 +781,13 @@
     // Create scroll handler with proper reference
     scrollHandler = () => {
       if (!readerElement) return;
+
+      // Consume the one synthetic scroll event fired when we reset to top on navigation
+      if (scrollResetPending) {
+        scrollResetPending = false;
+        lastScrollTop = readerElement.scrollTop;
+        return;
+      }
 
       const scrollTop = readerElement.scrollTop;
       const scrollPosition = scrollTop + readerElement.clientHeight;
@@ -2069,6 +2076,7 @@
     position: relative;
     overflow-y: auto;
     overflow-x: hidden;
+    overflow-anchor: none; /* Disable browser scroll anchoring — we manually correct scrollTop on prepend */
     background: #1a1a1a;
     color: #e0e0e0;
     display: flex;
