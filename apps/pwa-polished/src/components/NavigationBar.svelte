@@ -48,63 +48,20 @@
   let referenceButtonRef: HTMLElement;
   let searchContainerRef: HTMLElement;
 
-  // Helper function to scroll nav-content to show a button at the left edge
-  // Returns a promise that resolves when the scroll animation completes
-  function scrollToShowButton(buttonRef: HTMLElement): Promise<void> {
-    return new Promise((resolve) => {
-      const navContent = document.querySelector('.nav-content') as HTMLElement;
-      if (!navContent || !buttonRef) {
-        resolve();
-        return;
-      }
-      
-      const navContentRect = navContent.getBoundingClientRect();
-      const buttonRect = buttonRef.getBoundingClientRect();
-      
-      // Calculate how far the button is from the left edge of nav-content
-      const buttonOffsetFromNavLeft = buttonRect.left - navContentRect.left;
-      
-      // Scroll so the button is at the left edge (with a small margin)
-      const targetScroll = navContent.scrollLeft + buttonOffsetFromNavLeft - 12;
-      
-      console.log('🔄 SCROLL START:', {
-        currentScroll: navContent.scrollLeft,
-        targetScroll: Math.max(0, targetScroll),
-        buttonOffsetFromNavLeft
-      });
-      
-      navContent.scrollTo({
-        left: Math.max(0, targetScroll),
-        behavior: 'smooth'
-      });
-      
-      // Poll until scroll actually completes
-      const checkInterval = setInterval(() => {
-        const currentScroll = navContent.scrollLeft;
-        const target = Math.max(0, targetScroll);
-        const distanceRemaining = Math.abs(currentScroll - target);
-        
-        console.log('🔄 SCROLL CHECK:', {
-          currentScroll,
-          target,
-          distanceRemaining
-        });
-        
-        // Consider scroll complete when within 1px of target
-        if (distanceRemaining < 1) {
-          clearInterval(checkInterval);
-          console.log('✅ SCROLL COMPLETE');
-          resolve();
-        }
-      }, 50);
-      
-      // Fallback timeout in case scroll never completes
-      setTimeout(() => {
-        clearInterval(checkInterval);
-        console.log('⏱️ SCROLL TIMEOUT - forcing resolve');
-        resolve();
-      }, 1000);
-    });
+  // Whether the dropdown has been positioned — controls visibility (hidden until JS places it)
+  let translationDropdownPositioned = false;
+  let referenceDropdownPositioned = false;
+
+  // Scroll nav-content instantly so the button is visible before we measure its position
+  function scrollToShowButton(buttonRef: HTMLElement): void {
+    const navContent = document.querySelector('.nav-content') as HTMLElement;
+    if (!navContent || !buttonRef) return;
+    const navContentRect = navContent.getBoundingClientRect();
+    const buttonRect = buttonRef.getBoundingClientRect();
+    const buttonOffsetFromNavLeft = buttonRect.left - navContentRect.left;
+    const targetScroll = navContent.scrollLeft + buttonOffsetFromNavLeft - 12;
+    // Direct assignment = instant, no animation, no polling needed
+    navContent.scrollLeft = Math.max(0, targetScroll);
   }
 
   // Listen for external search triggers
@@ -143,115 +100,81 @@
 
   async function toggleTranslationDropdown(event: MouseEvent) {
     event.stopPropagation();
-    translationDropdownOpen = !translationDropdownOpen;
-    if (translationDropdownOpen) {
-      referenceDropdownOpen = false;
-      
-      // Auto-scroll to show the dropdown trigger and wait for scroll to complete
-      await scrollToShowButton(translationButtonRef);
-      
-      // Position dropdown after scroll completes
-      requestAnimationFrame(() => {
-        const dropdown = document.querySelector(
-          ".translation-dropdown",
-        ) as HTMLElement;
-        if (dropdown && translationButtonRef) {
-          const mainContent = document.querySelector('.main-content') as HTMLElement;
-          const leftOffset = mainContent?.getBoundingClientRect().left || 0;
-          const rect = translationButtonRef.getBoundingClientRect();
-          dropdown.style.left = `${rect.left - leftOffset}px`;
-          dropdown.style.top = `${rect.bottom + 4}px`;
-          dropdown.style.width = `${Math.max(rect.width, 200)}px`;
-          
-          // Refresh position calculations (mimics close/reopen)
-          requestAnimationFrame(() => {
-            const mainContent = document.querySelector('.main-content') as HTMLElement;
-            const leftOffset = mainContent?.getBoundingClientRect().left || 0;
-            const rect = translationButtonRef.getBoundingClientRect();
-            dropdown.style.left = `${rect.left - leftOffset}px`;
-            dropdown.style.top = `${rect.bottom + 4}px`;
-            dropdown.style.width = `${Math.max(rect.width, 200)}px`;
-          });
-        }
-      });
+    const opening = !translationDropdownOpen;
+
+    if (!opening) {
+      translationDropdownOpen = false;
+      translationDropdownPositioned = false;
+      return;
     }
+
+    referenceDropdownOpen = false;
+    referenceDropdownPositioned = false;
+
+    // Scroll nav instantly so button position is correct before we measure
+    scrollToShowButton(translationButtonRef);
+    translationDropdownOpen = true;
+    await tick(); // let Svelte render the dropdown element
+
+    requestAnimationFrame(() => {
+      const dropdown = document.querySelector('.translation-dropdown') as HTMLElement;
+      if (dropdown && translationButtonRef) {
+        const mainContent = document.querySelector('.main-content') as HTMLElement;
+        const leftOffset = mainContent?.getBoundingClientRect().left || 0;
+        const rect = translationButtonRef.getBoundingClientRect();
+        dropdown.style.left = `${rect.left - leftOffset}px`;
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+        translationDropdownPositioned = true; // reveal now that it's placed
+      }
+    });
   }
 
   async function toggleReferenceDropdown(event: MouseEvent) {
     event.stopPropagation();
-    console.log('📖 REFERENCE DROPDOWN TOGGLE - Opening:', !referenceDropdownOpen);
     const opening = !referenceDropdownOpen;
-    referenceDropdownOpen = opening;
-    
-    if (opening) {
-      translationDropdownOpen = false;
-      
-      // Auto-expand current book
-      if (currentBook && !expandedBooks.has(currentBook)) {
-        console.log('📖 Expanding current book:', currentBook);
-        expandedBooks = new Set([currentBook]);
-      }
-      
-      // Wait for Svelte to render the dropdown
-      await tick();
-      console.log('📖 Svelte tick complete - dropdown should be rendered');
-      
-      // Auto-scroll to show the dropdown trigger and wait for scroll to complete
-      await scrollToShowButton(referenceButtonRef);
-      console.log('📖 Scroll complete');
-      
-      // Close and reopen the dropdown to force width recalculation
-      console.log('📖 Closing dropdown to force refresh...');
+
+    if (!opening) {
       referenceDropdownOpen = false;
-      await tick();
-      
-      console.log('📖 Reopening dropdown with fresh width calculation...');
-      referenceDropdownOpen = true;
-      await tick();
-      
-      // Position dropdown after it's been refreshed
-      requestAnimationFrame(() => {
-        const dropdown = document.querySelector(
-          ".reference-dropdown",
-        ) as HTMLElement;
-        console.log('📖 DROPDOWN ELEMENT:', dropdown ? 'FOUND' : 'NOT FOUND');
-        if (dropdown && referenceButtonRef) {
-          console.log('📖 AFTER REFRESH:', {
-            offsetWidth: dropdown.offsetWidth,
-            scrollWidth: dropdown.scrollWidth,
-            clientWidth: dropdown.clientWidth,
-            computedWidth: window.getComputedStyle(dropdown).width,
-            display: window.getComputedStyle(dropdown).display
-          });
-          
-          const mainContent = document.querySelector('.main-content') as HTMLElement;
-          const leftOffset = mainContent?.getBoundingClientRect().left || 0;
-          const rect = referenceButtonRef.getBoundingClientRect();
-          console.log('📖 POSITIONING:', {
-            leftOffset,
-            buttonLeft: rect.left,
-            finalLeft: rect.left - leftOffset,
-            buttonTop: rect.bottom
-          });
-          dropdown.style.left = `${rect.left - leftOffset}px`;
-          dropdown.style.top = `${rect.bottom + 4}px`;
-          
-          // Scroll to current book
-          if (currentBook) {
-            requestAnimationFrame(() => {
-              const currentBookItem = dropdown.querySelector(`.book-item .book-button.current`)?.closest('.book-item') as HTMLElement;
-              if (currentBookItem) {
-                console.log('📖 Scrolling to current book:', currentBook);
-                const dropdownRect = dropdown.getBoundingClientRect();
-                const bookRect = currentBookItem.getBoundingClientRect();
-                const scrollOffset = bookRect.top - dropdownRect.top + dropdown.scrollTop;
-                dropdown.scrollTop = scrollOffset;
-              }
-            });
-          }
-        }
-      });
+      referenceDropdownPositioned = false;
+      return;
     }
+
+    translationDropdownOpen = false;
+    translationDropdownPositioned = false;
+
+    if (currentBook && !expandedBooks.has(currentBook)) {
+      expandedBooks = new Set([currentBook]);
+    }
+
+    // Scroll nav instantly so button position is correct before we measure
+    scrollToShowButton(referenceButtonRef);
+    referenceDropdownOpen = true;
+    await tick(); // let Svelte render the dropdown element
+
+    requestAnimationFrame(() => {
+      const dropdown = document.querySelector('.reference-dropdown') as HTMLElement;
+      if (dropdown && referenceButtonRef) {
+        const mainContent = document.querySelector('.main-content') as HTMLElement;
+        const leftOffset = mainContent?.getBoundingClientRect().left || 0;
+        const rect = referenceButtonRef.getBoundingClientRect();
+        dropdown.style.left = `${rect.left - leftOffset}px`;
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        referenceDropdownPositioned = true; // reveal now that it's placed
+
+        // Scroll the list to the current book
+        if (currentBook) {
+          requestAnimationFrame(() => {
+            const currentBookItem = dropdown.querySelector('.book-item .book-button.current')?.closest('.book-item') as HTMLElement;
+            if (currentBookItem) {
+              const dropdownRect = dropdown.getBoundingClientRect();
+              const bookRect = currentBookItem.getBoundingClientRect();
+              dropdown.scrollTop = bookRect.top - dropdownRect.top + dropdown.scrollTop;
+            }
+          });
+        }
+      }
+    });
   }
 
   function selectTranslation(translation: string) {
@@ -321,6 +244,8 @@
     ) {
       translationDropdownOpen = false;
       referenceDropdownOpen = false;
+      translationDropdownPositioned = false;
+      referenceDropdownPositioned = false;
       showResults = false;
     }
   }
@@ -799,7 +724,7 @@
 
   <!-- Dropdowns rendered outside nav-content to avoid overflow clipping -->
   {#if translationDropdownOpen}
-    <div class="dropdown-menu translation-dropdown">
+    <div class="dropdown-menu translation-dropdown" class:positioned={translationDropdownPositioned}>
       {#each $availableTranslations as translation}
         <button
           class="dropdown-item"
@@ -813,7 +738,7 @@
   {/if}
 
   {#if referenceDropdownOpen}
-    <div class="dropdown-menu tree-menu reference-dropdown">
+    <div class="dropdown-menu tree-menu reference-dropdown" class:positioned={referenceDropdownPositioned}>
       {#each BIBLE_BOOKS as book}
         <div 
           class="book-item category-{book.category} testament-{book.testament}"
@@ -1101,12 +1026,20 @@
     z-index: 10001; /* Higher than nav bar */
   }
 
-  /* Dropdowns outside nav-content use fixed positioning */
+  /* Dropdowns outside nav-content use fixed positioning.
+     Start invisible so there's no flash at left:0/top:0 before JS places them.
+     The .positioned class is added after JS sets left/top. */
   .translation-dropdown,
   .reference-dropdown {
     position: fixed;
     left: 0;
     top: 0;
+    visibility: hidden;
+  }
+
+  .translation-dropdown.positioned,
+  .reference-dropdown.positioned {
+    visibility: visible;
   }
 
   .tree-menu {
