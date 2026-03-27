@@ -158,6 +158,10 @@
     requestAnimationFrame(() => {
       const dropdown = document.querySelector('.reference-dropdown') as HTMLElement;
       if (dropdown && referenceButtonRef) {
+        // Clear any inline width that may have been stamped by updateDropdownPositions
+        // firing during the async tick (e.g. triggered by the nav-scroll macrotask).
+        // Without this, offsetWidth reads the stale 250px override instead of fit-content.
+        dropdown.style.removeProperty('width');
         const mainContent = document.querySelector('.main-content') as HTMLElement;
         const leftOffset = mainContent?.getBoundingClientRect().left || 0;
         const rect = referenceButtonRef.getBoundingClientRect();
@@ -455,7 +459,7 @@
         dropdown.style.width = `${Math.max(rect.width, 200)}px`;
       }
     }
-    if (referenceDropdownOpen) {
+    if (referenceDropdownOpen && referenceDropdownPositioned) {
       const dropdown = document.querySelector(
         ".reference-dropdown",
       ) as HTMLElement;
@@ -463,7 +467,7 @@
         const rect = referenceButtonRef.getBoundingClientRect();
         dropdown.style.left = `${rect.left - leftOffset}px`;
         dropdown.style.top = `${rect.bottom + 4}px`;
-        dropdown.style.width = `${Math.max(rect.width, 250)}px`;
+        // No width override — reference dropdown uses CSS fit-content based on chapter grid
       }
     }
     if (showResults) {
