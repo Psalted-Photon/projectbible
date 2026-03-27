@@ -122,7 +122,10 @@
         const mainContent = document.querySelector('.main-content') as HTMLElement;
         const leftOffset = mainContent?.getBoundingClientRect().left || 0;
         const rect = translationButtonRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left - leftOffset}px`;
+        const naturalLeft = rect.left - leftOffset;
+        // Clamp so the dropdown doesn't overflow the right edge of the viewport
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, window.innerWidth - dropdown.offsetWidth - 4));
+        dropdown.style.left = `${clampedLeft}px`;
         dropdown.style.top = `${rect.bottom + 4}px`;
         dropdown.style.width = `${Math.max(rect.width, 200)}px`;
         translationDropdownPositioned = true; // reveal now that it's placed
@@ -158,7 +161,10 @@
         const mainContent = document.querySelector('.main-content') as HTMLElement;
         const leftOffset = mainContent?.getBoundingClientRect().left || 0;
         const rect = referenceButtonRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left - leftOffset}px`;
+        const naturalLeft = rect.left - leftOffset;
+        // Clamp so the dropdown doesn't overflow the right edge of the viewport
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, window.innerWidth - dropdown.offsetWidth - 4));
+        dropdown.style.left = `${clampedLeft}px`;
         dropdown.style.top = `${rect.bottom + 4}px`;
         referenceDropdownPositioned = true; // reveal now that it's placed
 
@@ -1028,12 +1034,15 @@
 
   /* Dropdowns outside nav-content use fixed positioning.
      Start invisible so there's no flash at left:0/top:0 before JS places them.
-     The .positioned class is added after JS sets left/top. */
+     The .positioned class is added after JS sets left/top.
+     right:auto cancels the right:0 inherited from .dropdown-menu — without it, fit-content
+     is constrained to (viewport_width - left), which is too narrow on small screens. */
   .translation-dropdown,
   .reference-dropdown {
     position: fixed;
     left: 0;
     top: 0;
+    right: auto;
     visibility: hidden;
   }
 
