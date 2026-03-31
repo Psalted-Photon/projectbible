@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 21; // Migration added journal_entries store
+const DB_VERSION = 22; // Migration added tsk_references store
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -20,7 +20,7 @@ let dbInstance: IDBDatabase | null = null;
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -163,6 +163,15 @@ export interface DBCommentaryEntry {
   text: string;
   source?: string;
   year?: number;
+}
+
+export interface DBTskReference {
+  id?: number; // Auto-increment
+  book: string;
+  chapter: number;
+  verse: number;
+  keyword: string | null;
+  references_json: string; // JSON array of ref strings
 }
 
 export interface DBWordOccurrence {
@@ -708,6 +717,13 @@ export function openDB(): Promise<IDBDatabase> {
         openBibleIdentsStore.createIndex('ancientPlaceId', 'ancientPlaceId', { unique: false });
         openBibleIdentsStore.createIndex('modernLocationId', 'modernLocationId', { unique: false });
         openBibleIdentsStore.createIndex('confidence', 'confidence', { unique: false });
+      }
+
+      // TSK cross-references store (Treasury of Scripture Knowledge keyword→verse chains)
+      if (!db.objectStoreNames.contains('tsk_references')) {
+        const tskStore = db.createObjectStore('tsk_references', { keyPath: 'id', autoIncrement: true });
+        tskStore.createIndex('verse', ['book', 'chapter', 'verse'], { unique: false });
+        tskStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
       }
     };
   });

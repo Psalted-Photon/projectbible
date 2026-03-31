@@ -3,6 +3,7 @@ import { join, basename } from 'path';
 
 const IMP_DIR = 'C:\\Users\\Marlowe\\Desktop\\ProjectBible\\data-sources\\commentaries\\imp';
 const OUTPUT_FILE = 'C:\\Users\\Marlowe\\Desktop\\ProjectBible\\data\\processed\\commentary-imp.ndjson';
+const TSK_REFS_FILE = 'C:\\Users\\Marlowe\\Desktop\\ProjectBible\\data\\processed\\tsk-references.ndjson';
 
 // Book name mapping
 const BOOK_MAP = {
@@ -36,6 +37,7 @@ const COMMENTARY_META = {
 console.log('Parsing IMP commentary files...\n');
 
 const entries = [];
+const tskRefs = []; // TSK keyword→references entries (separate output)
 const files = readdirSync(IMP_DIR).filter(f => f.endsWith('.imp'));
 
 for (const file of files) {
@@ -111,6 +113,41 @@ for (const file of files) {
       source: 'CrossWire',
       year: meta.year
     });
+
+    // TSK-specific: extract keyword → scripture reference groups
+    // Format in IMP: "keyword.<br /><scripRef>Ref1; Ref2</scripRef><br />keyword2.<scripRef>Ref3</scripRef>"
+    // We skip outline entries: <scripRef passage="Ge 1:3">3</scripRef> (content is just a verse number)
+    if (commentaryId === 'tsk') {
+      // Work on the raw text (before stripping) using the original IMP block
+      const rawBlock = lines.slice(1).join('\n');
+      // Match only standalone <scripRef> tags (no `passage=` attribute — those are outline entries)
+      const scripRefRe = /([^<]*?)<scripRef>([^<]+)<\/scripRef>/g;
+      let m;
+      while ((m = scripRefRe.exec(rawBlock)) !== null) {
+        // Extract keyword from the text before the <scripRef>
+        let keyword = m[1]
+          .replace(/<[^>]+>/g, ' ') // strip HTML tags
+          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&apos;/g, "'").replace(/&quot;/g, '"')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .replace(/[.,;:\s]+$/, '') // strip trailing punctuation
+          .trim();
+        
+        // Parse semicolon-separated references
+        const refsRaw = m[2].trim();
+        const refs = refsRaw.split(';').map(r => r.trim()).filter(r => r.length > 0);
+        
+        if (refs.length === 0) continue;
+        
+        tskRefs.push({
+          book,
+          chapter: parseInt(chapter),
+          verse: parseInt(verseNum),
+          keyword: keyword || null,
+          references: refs
+        });
+      }
+    }
     
     parsed++;
   }
@@ -118,10 +155,19 @@ for (const file of files) {
   console.log(`  ✓ Parsed ${parsed.toLocaleString()} entries`);
 }
 
-console.log(`\n✅ Total: ${entries.toLocaleString()} entries`);
+console.log(`\n✅ Total: ${entries.length.toLocaleString()} entries`);
 console.log(`Writing to ${OUTPUT_FILE}...`);
 
 const ndjson = entries.map(e => JSON.stringify(e)).join('\n') + '\n';
 writeFileSync(OUTPUT_FILE, ndjson, 'utf-8');
+
+// Write TSK keyword→references file
+if (tskRefs.length > 0) {
+  console.log(`\n📖 TSK references: ${tskRefs.length.toLocaleString()} keyword groups`);
+  console.log(`Writing to ${TSK_REFS_FILE}...`);
+  const tskNdjson = tskRefs.map(e => JSON.stringify(e)).join('\n') + '\n';
+  writeFileSync(TSK_REFS_FILE, tskNdjson, 'utf-8');
+  console.log('TSK references written!');
+}
 
 console.log('Done!');

@@ -48,7 +48,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
     const packInfo: DBPack = {
       id: metadata.pack_id || metadata.packId || metadata.id,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary',
+      type: packType as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -145,6 +145,36 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         }
 
         console.log(`✅ Commentary pack imported: ${entries.length} entries`);
+      }
+    } else if (packInfo.type === 'references') {
+      // Import TSK keyword→references
+      console.log('Importing TSK references pack...');
+
+      const tskRows = db.exec(`
+        SELECT book, chapter, verse, keyword, references_json
+        FROM tsk_references
+      `);
+
+      if (tskRows.length && tskRows[0].values.length) {
+        const entries = tskRows[0].values.map(([book, chapter, verse, keyword, references_json]) => ({
+          book: book as string,
+          chapter: chapter as number,
+          verse: verse as number,
+          keyword: keyword as string | null,
+          references_json: references_json as string
+        }));
+
+        console.log(`Importing ${entries.length} TSK reference groups...`);
+
+        const CHUNK_SIZE = 500;
+        for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+          const chunk = entries.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('tsk_references', (store) => {
+            chunk.forEach(entry => store.put(entry));
+          });
+        }
+
+        console.log(`✅ TSK references pack imported: ${entries.length} groups`);
       }
     } else if (packInfo.type === 'text') {
       // Check if this is a multi-edition pack

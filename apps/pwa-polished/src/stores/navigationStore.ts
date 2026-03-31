@@ -7,6 +7,8 @@ export interface NavigationState {
   chapter: number;
   isChronologicalMode?: boolean;
   highlightedVerse?: number | null;
+  showReferences?: boolean;
+  showCommentaries?: boolean;
 }
 
 // Available translations (will be populated from packs later)
@@ -19,7 +21,9 @@ const initialState: NavigationState = {
   translation: 'WEB',
   book: 'John',
   chapter: 1,
-  highlightedVerse: null
+  highlightedVerse: null,
+  showReferences: true,
+  showCommentaries: true,
 };
 
 function loadPersistedState(): NavigationState {
@@ -37,8 +41,8 @@ function loadPersistedState(): NavigationState {
 
 function persistState(state: NavigationState): void {
   try {
-    const { translation, book, chapter, isChronologicalMode } = state;
-    localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ translation, book, chapter, isChronologicalMode }));
+    const { translation, book, chapter, isChronologicalMode, showReferences, showCommentaries } = state;
+    localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ translation, book, chapter, isChronologicalMode, showReferences, showCommentaries }));
   } catch {
     // ignore quota/private-browsing errors
   }
@@ -75,6 +79,20 @@ function createNavigationStore() {
     setChronologicalMode: (isChronologicalMode: boolean) => {
       update(state => {
         const next = { ...state, isChronologicalMode };
+        persistState(next);
+        return next;
+      });
+    },
+    setShowReferences: (showReferences: boolean) => {
+      update(state => {
+        const next = { ...state, showReferences };
+        persistState(next);
+        return next;
+      });
+    },
+    setShowCommentaries: (showCommentaries: boolean) => {
+      update(state => {
+        const next = { ...state, showCommentaries };
         persistState(next);
         return next;
       });

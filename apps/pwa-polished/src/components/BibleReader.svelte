@@ -3,6 +3,7 @@
   import NavigationBar from "./NavigationBar.svelte";
   import SelectionToast from "./SelectionToast.svelte";
   import CommentaryModal from "./CommentaryModal.svelte";
+  import AnnotationPanel from "./AnnotationPanel.svelte";
   import {
     navigationStore,
     availableTranslations,
@@ -16,6 +17,11 @@
   import { getSettings } from "../adapters/settings";
   import { readTransaction } from "../adapters/db";
   import type { DBMorphology } from "../adapters/db";
+  import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
+  import type { CommentaryEntry } from "../adapters/CommentaryStore";
+  import { IndexedDBTskReferenceStore } from "../adapters/TskReferenceStore";
+  import type { TskEntry } from "../adapters/TskReferenceStore";
+  import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
 
   export let windowId: string | undefined = undefined;
 
@@ -49,6 +55,27 @@
   let commentaryModalBook = "";
   let commentaryModalChapter = 0;
   let commentaryModalVerse = 0;
+
+  // Annotation store instances
+  const commentaryStore = new IndexedDBCommentaryStore();
+  const tskStore = new IndexedDBTskReferenceStore();
+
+  // Annotation data maps (keyed by verse number)
+  let commentaryByVerse = new Map<number, CommentaryEntry[]>();
+  let tskByVerse = new Map<number, TskEntry[]>();
+
+  // Annotation panel state
+  let annotationPanelOpen = false;
+  let annotationPanelVerse = 0;
+  let annotationPanelBook = "";
+  let annotationPanelChapter = 0;
+  let annotationPanelTab: "references" | "commentary" = "references";
+  let annotationPanelTsk: TskEntry[] = [];
+  let annotationPanelCommentary: CommentaryEntry[] = [];
+
+  // Annotation toggles (reactive from store)
+  $: showReferences = $navigationStore.showReferences ?? true;
+  $: showCommentaries = $navigationStore.showCommentaries ?? true;
 
   // Text selection state
   let showToast = false;
@@ -469,6 +496,9 @@
         isIndexedPack = false;
       }
 
+      // Load annotation data (commentary + TSK references)
+      await loadAnnotations(book, chapter);
+
       if (resetScroll && readerElement) {
         // Set flag BEFORE tick so any clamp-induced scroll event is consumed
         scrollResetPending = true;
@@ -483,6 +513,37 @@
     } finally {
       loading = false;
     }
+  }
+
+  async function loadAnnotations(book: string, chapter: number) {
+    commentaryByVerse = new Map<number, CommentaryEntry[]>();
+    tskByVerse = new Map<number, TskEntry[]>();
+    try {
+      if (showCommentaries) {
+        const entries = await commentaryStore.getChapterCommentary(book, chapter);
+        for (const e of entries) {
+          const v = e.verseStart;
+          if (!commentaryByVerse.has(v)) commentaryByVerse.set(v, []);
+          commentaryByVerse.get(v)!.push(e);
+        }
+        commentaryByVerse = commentaryByVerse; // trigger reactivity
+      }
+      if (showReferences) {
+        tskByVerse = await tskStore.getChapterReferences(book, chapter);
+      }
+    } catch (err) {
+      console.warn("Annotation load error:", err);
+    }
+  }
+
+  function openAnnotationPanel(verse: number, tab: "references" | "commentary") {
+    annotationPanelVerse = verse;
+    annotationPanelBook = currentBook;
+    annotationPanelChapter = currentChapter;
+    annotationPanelTab = tab;
+    annotationPanelTsk = tskByVerse.get(verse) ?? [];
+    annotationPanelCommentary = commentaryByVerse.get(verse) ?? [];
+    annotationPanelOpen = true;
   }
 
   async function loadMorphologyCache(
@@ -2026,6 +2087,17 @@
   verse={commentaryModalVerse}
 />
 
+<AnnotationPanel
+  bind:open={annotationPanelOpen}
+  book={annotationPanelBook}
+  chapter={annotationPanelChapter}
+  verse={annotationPanelVerse}
+  tskEntries={annotationPanelTsk}
+  commentaryEntries={annotationPanelCommentary}
+  initialTab={annotationPanelTab}
+  on:close={() => (annotationPanelOpen = false)}
+/>
+
 <div class="bible-reader" bind:this={readerElement}>
   <NavigationBar
     {windowId}
@@ -2059,6 +2131,30 @@
               {/if}
               <div class="verse" data-verse={verse}>
                 <span class="verse-number">{verse}</span>
+                {#if showCommentaries && commentaryByVerse.has(verse)}
+                  {#each [...new Set(commentaryByVerse.get(verse)!.map((e) => e.author))] as author}
+                    <span
+                      class="anno-icon"
+                      style="background:{getAuthorColor(author)}"
+                      title={author}
+                      role="button"
+                      tabindex="0"
+                      on:click|stopPropagation={() => openAnnotationPanel(verse, 'commentary')}
+                      on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'commentary')}
+                    >{getAuthorInitials(author)}</span>
+                  {/each}
+                {/if}
+                {#if showReferences && tskByVerse.has(verse)}
+                  <span
+                    class="anno-ref"
+                    style="color:{TSK_COLOR}"
+                    title="TSK Cross-References"
+                    role="button"
+                    tabindex="0"
+                    on:click|stopPropagation={() => openAnnotationPanel(verse, 'references')}
+                    on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'references')}
+                  >◆</span>
+                {/if}
                 <span class="verse-text"
                   >{@html html || renderVerseHtml(text)}</span
                 >
@@ -2145,6 +2241,32 @@
     font-size: var(--base-font-size, 1.125rem);
     line-height: var(--line-spacing, 1.8);
     cursor: text;
+  }
+
+  .anno-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 14px;
+    border-radius: 9px;
+    font-size: 7px;
+    font-weight: 700;
+    color: #fff;
+    cursor: pointer;
+    margin: 0 1px;
+    vertical-align: super;
+    line-height: 1;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .anno-ref {
+    font-size: 10px;
+    cursor: pointer;
+    margin: 0 1px;
+    vertical-align: super;
+    user-select: none;
   }
 
   /* Morphology-tagged words */

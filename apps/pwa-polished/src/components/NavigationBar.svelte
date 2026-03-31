@@ -30,6 +30,8 @@
   let expandedBooks = new Set<string>();
   let isChronologicalMode = false;
   let pendingChronologicalMode = false;
+  let pendingShowReferences = true;
+  let pendingShowCommentaries = true;
   let searchQuery = "";
   let searchFocused = false;
   let blurTimeout: number | undefined;
@@ -91,11 +93,15 @@
   ) {
     isChronologicalMode = $navigationStore.isChronologicalMode;
     pendingChronologicalMode = $navigationStore.isChronologicalMode;
+    pendingShowReferences = $navigationStore.showReferences ?? true;
+    pendingShowCommentaries = $navigationStore.showCommentaries ?? true;
   }
 
   function updateChronologicalMode() {
     isChronologicalMode = pendingChronologicalMode;
     navigationStore.setChronologicalMode(pendingChronologicalMode);
+    navigationStore.setShowReferences(pendingShowReferences);
+    navigationStore.setShowCommentaries(pendingShowCommentaries);
   }
 
   async function toggleTranslationDropdown(event: MouseEvent) {
@@ -529,11 +535,19 @@
       </button>
     </div>
 
-    <!-- Chronological Mode Checkbox -->
+    <!-- Display Mode Checkboxes: Chronological / References / Commentaries -->
     <div class="nav-checkbox">
-      <label>
+      <label title="Read chapters in historical/chronological order">
         <input type="checkbox" bind:checked={pendingChronologicalMode} />
         Chronological?
+      </label>
+      <label class="nav-checkbox-anno" title="Show TSK cross-reference markers on verse keywords">
+        <input type="checkbox" bind:checked={pendingShowReferences} />
+        References
+      </label>
+      <label class="nav-checkbox-anno" title="Show inline commentary badges on verses">
+        <input type="checkbox" bind:checked={pendingShowCommentaries} />
+        Commentaries
       </label>
       <button class="update-btn" on:click={updateChronologicalMode}
         >Update</button
@@ -888,6 +902,11 @@
     gap: 6px;
     cursor: pointer;
     margin: 0;
+  }
+
+  .nav-checkbox-anno {
+    border-left: 1px solid #3a3a3a;
+    padding-left: 8px;
   }
 
   .nav-checkbox input[type="checkbox"] {
