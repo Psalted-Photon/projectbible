@@ -68,7 +68,7 @@
       name: "TSK References",
       description: "Treasury of Scripture Knowledge — 43,000+ cross-reference entries by keyword",
       size: "3.80 MB",
-      icon: "◆",
+      icon: "🔗",
       url: `${BASE_URL}/tsk-references.sqlite`,
     },
     {
