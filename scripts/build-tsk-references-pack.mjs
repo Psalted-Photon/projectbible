@@ -63,7 +63,7 @@ async function build() {
 
   // Metadata
   const metaRows = [
-    ['id',            'tsk-references.v1'],
+    ['pack_id',       'tsk-references'],
     ['type',          'references'],
     ['version',       '1.0.0'],
     ['schemaVersion', '1.0'],

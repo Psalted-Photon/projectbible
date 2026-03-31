@@ -45,8 +45,11 @@ export async function importPackFromSQLite(file: File): Promise<void> {
     // Normalize 'translation' to 'text' for consolidated packs
     if (packType === 'translation') packType = 'text';
     
+    const rawId = metadata.pack_id || metadata.packId || metadata.id;
     const packInfo: DBPack = {
-      id: metadata.pack_id || metadata.packId || metadata.id,
+      // Strip legacy .vN suffixes (e.g. 'tsk-references.v1' → 'tsk-references') so the
+      // stored ID always matches the canonical manifest IDs used by the UI.
+      id: rawId?.replace(/\.v\d+$/, '') ?? rawId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
       type: packType as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references',
       translationId: metadata.translation_id || metadata.translationId,
@@ -165,6 +168,10 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         }));
 
         console.log(`Importing ${entries.length} TSK reference groups...`);
+
+        // Clear existing data first — tsk_references uses autoIncrement so put() always
+        // appends new rows. Without this, reinstalling doubles every entry.
+        await writeTransaction('tsk_references', (store) => store.clear());
 
         const CHUNK_SIZE = 500;
         for (let i = 0; i < entries.length; i += CHUNK_SIZE) {

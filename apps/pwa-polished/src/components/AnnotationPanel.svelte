@@ -60,6 +60,7 @@
   }
 
   function verseLabel() {
+    if (!book) return '';
     return verse ? `${book} ${chapter}:${verse}` : `${book} ${chapter}`;
   }
 </script>
