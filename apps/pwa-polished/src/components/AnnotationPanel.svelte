@@ -144,7 +144,7 @@
               {#if entry.title && entry.title !== group.author}
                 <div class="entry-title">{entry.title}</div>
               {/if}
-              <div class="entry-text">{entry.text}</div>
+              <div class="entry-text">{@html entry.text}</div>
             {/each}
           </div>
         {/each}

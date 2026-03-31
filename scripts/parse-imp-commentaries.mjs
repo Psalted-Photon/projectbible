@@ -121,7 +121,8 @@ for (const file of files) {
       // Work on the raw text (before stripping) using the original IMP block
       const rawBlock = lines.slice(1).join('\n');
       // Match only standalone <scripRef> tags (no `passage=` attribute — those are outline entries)
-      const scripRefRe = /([^<]*?)<scripRef>([^<]+)<\/scripRef>/g;
+      // The group before <scripRef> allows HTML tags (like <br />) interspersed with keyword text
+      const scripRefRe = /((?:[^<]|<(?!scripRef)[^>]*>)*?)<scripRef>([^<]+)<\/scripRef>/g;
       let m;
       while ((m = scripRefRe.exec(rawBlock)) !== null) {
         // Extract keyword from the text before the <scripRef>
