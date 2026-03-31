@@ -118,11 +118,17 @@ for (const file of files) {
     // Format in IMP: "keyword.<br /><scripRef>Ref1; Ref2</scripRef><br />keyword2.<scripRef>Ref3</scripRef>"
     // We skip outline entries: <scripRef passage="Ge 1:3">3</scripRef> (content is just a verse number)
     if (commentaryId === 'tsk') {
-      // Work on the raw text (before stripping) using the original IMP block
-      const rawBlock = lines.slice(1).join('\n');
+      // Work on the raw text (before stripping) using the original IMP block.
+      // First, strip all outline/passage <scripRef passage="...">content</scripRef> blocks entirely
+      // — these are book-structure anchors, not keyword cross-references, and their content
+      // would otherwise leak into subsequent keyword captures.
+      const rawBlock = lines.slice(1).join('\n')
+        .replace(/<scripRef\s+passage=[^>]+>[^<]*<\/scripRef>/g, '');
       // Match only standalone <scripRef> tags (no `passage=` attribute — those are outline entries)
-      // The group before <scripRef> allows HTML tags (like <br />) interspersed with keyword text
-      const scripRefRe = /((?:[^<]|<(?!scripRef)[^>]*>)*?)<scripRef>([^<]+)<\/scripRef>/g;
+      // The group before <scripRef> allows HTML tags (like <br />) interspersed with keyword text.
+      // (?!/?scripRef) — lookahead blocks BOTH opening <scripRef> and closing </scripRef> tags
+      // so the engine never consumes them as "skippable HTML", preventing keyword leakage.
+      const scripRefRe = /((?:[^<]|<(?!\/?scripRef)[^>]*>)*?)<scripRef>([^<]+)<\/scripRef>/g;
       let m;
       while ((m = scripRefRe.exec(rawBlock)) !== null) {
         // Extract keyword from the text before the <scripRef>
@@ -133,10 +139,13 @@ for (const file of files) {
           .trim()
           .replace(/[.,;:\s]+$/, '') // strip trailing punctuation
           .trim();
+
+        // Guard: discard any keyword that is still an HTML-tag remnant (e.g. "br />", "img />")
+        if (keyword && /^[a-zA-Z]+\s*\/?>/.test(keyword)) keyword = '';
         
-        // Parse semicolon-separated references
+        // Parse semicolon-separated references; filter out TSK metadata markers like *margins, *marg:
         const refsRaw = m[2].trim();
-        const refs = refsRaw.split(';').map(r => r.trim()).filter(r => r.length > 0);
+        const refs = refsRaw.split(';').map(r => r.trim()).filter(r => r.length > 0 && !r.startsWith('*'));
         
         if (refs.length === 0) continue;
         

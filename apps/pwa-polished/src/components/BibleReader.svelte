@@ -536,10 +536,10 @@
     }
   }
 
-  function openAnnotationPanel(verse: number, tab: "references" | "commentary") {
+  function openAnnotationPanel(verse: number, tab: "references" | "commentary", book = currentBook, chapter = currentChapter) {
     annotationPanelVerse = verse;
-    annotationPanelBook = currentBook;
-    annotationPanelChapter = currentChapter;
+    annotationPanelBook = book;
+    annotationPanelChapter = chapter;
     annotationPanelTab = tab;
     annotationPanelTsk = tskByVerse.get(verse) ?? [];
     annotationPanelCommentary = commentaryByVerse.get(verse) ?? [];
@@ -2139,8 +2139,8 @@
                       title={author}
                       role="button"
                       tabindex="0"
-                      on:click|stopPropagation={() => openAnnotationPanel(verse, 'commentary')}
-                      on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'commentary')}
+                      on:click|stopPropagation={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter)}
+                      on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter)}
                     >{getAuthorInitials(author)}</span>
                   {/each}
                 {/if}
@@ -2151,8 +2151,8 @@
                     title="TSK Cross-References"
                     role="button"
                     tabindex="0"
-                    on:click|stopPropagation={() => openAnnotationPanel(verse, 'references')}
-                    on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'references')}
+                    on:click|stopPropagation={() => openAnnotationPanel(verse, 'references', chapterData.book, chapterData.chapter)}
+                    on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'references', chapterData.book, chapterData.chapter)}
                   >◆</span>
                 {/if}
                 <span class="verse-text"
