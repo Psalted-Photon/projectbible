@@ -2262,6 +2262,7 @@
   }
 
   .anno-ref {
+    color: #D97706; /* amber/gold for TSK diamonds */
     font-size: 10px;
     cursor: pointer;
     margin: 0 1px;
