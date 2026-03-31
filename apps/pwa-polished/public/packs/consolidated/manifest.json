@@ -110,7 +110,7 @@
     },
     {
       "id": "tsk-references",
-      "type": "references",
+      "type": "study",
       "name": "TSK Cross-Reference Pack",
       "description": "Treasury of Scripture Knowledge cross-references (43,148 verse keyword entries)",
       "version": "1.0.0",
