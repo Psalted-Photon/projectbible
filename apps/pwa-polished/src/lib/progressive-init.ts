@@ -100,12 +100,25 @@ export async function loadPackOnDemand(
 
   try {
     const installed = await listInstalledPacksFromDb();
-    if (installed.some((pack) => pack.id === packId)) {
-      console.log(`Pack ${packId} already installed`);
-      return;
+    const loader = getPackLoaderInstance();
+
+    // Version-aware installed check: only skip if version matches manifest
+    const installedPack = installed.find((pack) => pack.id === packId);
+    if (installedPack) {
+      try {
+        const manifest = await loader.fetchManifest();
+        const manifestPack = (manifest as any)?.packs?.find((p: any) => p.id === packId);
+        if (!manifestPack || installedPack.version === manifestPack.version) {
+          console.log(`Pack ${packId} already installed and up-to-date (${installedPack.version})`);
+          return;
+        }
+        console.log(`Pack ${packId} update available: ${installedPack.version} → ${manifestPack.version}`);
+      } catch {
+        console.log(`Pack ${packId} already installed`);
+        return;
+      }
     }
 
-    const loader = getPackLoaderInstance();
     try {
       const data = await loader.downloadPack(packId);
 

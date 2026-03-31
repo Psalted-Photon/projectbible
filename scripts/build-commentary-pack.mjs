@@ -13,7 +13,8 @@
  */
 
 import Database from 'better-sqlite3';
-import { readFileSync, existsSync, mkdirSync, statSync } from 'fs';
+import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync as fsWriteFileSync } from 'fs';
+import { createInterface } from 'readline';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
@@ -51,12 +52,25 @@ async function buildCommentaryPack() {
     mkdirSync(OUTPUT_DIR, { recursive: true });
   }
   
-  // Load commentary entries
+  // Load commentary entries via streaming (handles files >500MB)
   console.log(`Loading entries from ${INPUT_FILE}...`);
-  const ndjson = readFileSync(INPUT_FILE, 'utf-8');
-  const lines = ndjson.trim().split('\n');
-  const entries = lines.map(line => JSON.parse(line));
-  console.log(`Loaded ${entries.length.toLocaleString()} entries\n`);
+  const entries = [];
+  const rl = createInterface({ input: createReadStream(INPUT_FILE, { encoding: 'utf-8' }), crlfDelay: Infinity });
+  for await (const line of rl) {
+    if (line.trim()) entries.push(JSON.parse(line));
+  }
+  console.log(`Loaded ${entries.length.toLocaleString()} entries`);
+
+  // Deduplicate by book:chapter:verse_start:author — keep last occurrence
+  // (IMP entries are appended after OSIS, so IMP wins on any overlap)
+  const dedupMap = new Map();
+  for (const entry of entries) {
+    dedupMap.set(`${entry.book}:${entry.chapter}:${entry.verse_start}:${entry.author}`, entry);
+  }
+  const beforeDedup = entries.length;
+  entries.length = 0;
+  for (const e of dedupMap.values()) entries.push(e);
+  console.log(`Deduplicated: ${beforeDedup.toLocaleString()} → ${entries.length.toLocaleString()} entries\n`);
   
   // Create database
   console.log(`Creating pack: ${OUTPUT_FILE}`);
@@ -101,7 +115,7 @@ async function buildCommentaryPack() {
   const metadata = {
     id: 'commentaries.v1',
     type: 'commentary',
-    version: '1.0.0',
+    version: '1.0.3',
     schemaVersion: '1.0',
     name: 'Bible Commentaries Collection',
     description: 'Historical and modern Bible commentaries including Matthew Henry, JFB, Barnes, Keil & Delitzsch, and more',
@@ -287,7 +301,7 @@ function writeFileSync(filePath, data) {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
-  import('fs').then(fs => fs.writeFileSync(filePath, data, 'utf-8'));
+  fsWriteFileSync(filePath, data, 'utf-8');
 }
 
 // Run

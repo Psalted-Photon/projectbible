@@ -77,7 +77,9 @@ export async function clearAllData(): Promise<void> {
 export async function removePack(packId: string): Promise<void> {
   const db = await openDB();
 
-  const tx = db.transaction(['packs', 'verses', 'places', 'map_tiles', 'historical_layers', 'morphology'], 'readwrite');
+  const storeNames: string[] = ['packs', 'verses', 'places', 'map_tiles', 'historical_layers', 'morphology'];
+  if (packId.startsWith('commentaries')) storeNames.push('commentary_entries');
+  const tx = db.transaction(storeNames as string[], 'readwrite');
     
     // Delete pack metadata
     await new Promise<void>((resolve, reject) => {
@@ -167,6 +169,15 @@ export async function removePack(packId: string): Promise<void> {
       layersCursor.onerror = () => reject(layersCursor.error);
     });
     
+  // Clear all commentary entries when uninstalling a commentary pack
+  if (packId.startsWith('commentaries')) {
+    await new Promise<void>((resolve, reject) => {
+      const request = tx.objectStore('commentary_entries').clear();
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   await waitForTransaction(tx);
 }
 

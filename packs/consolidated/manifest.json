@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-02-06T12:22:28.198Z",
+  "createdAt": "2026-03-31T01:43:46.745Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -53,15 +53,15 @@
       "type": "study",
       "name": "Multi-Author Commentaries",
       "description": "Verse-by-verse Bible commentaries from multiple sources",
-      "version": "1.0.0",
+      "version": "1.0.3",
       "schemaVersion": "1.0",
       "minAppVersion": "1.0.0",
-      "size": 150847488,
-      "sizeMB": 143.86,
-      "sha256": "5ddab29d5157e423a27f7c46a514d1dafdeee72376781f268a7490a20145466c",
+      "size": 152702976,
+      "sizeMB": 145.63,
+      "sha256": "81b49e84300d3161d52ca5508652c472ffa703f8587de4bfb1b186fc79b9a0ab",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-02-06T12:22:32.307Z"
+      "createdAt": "2026-03-31T01:43:51.059Z"
     },
     {
       "id": "dictionary-en",
@@ -76,7 +76,7 @@
       "sha256": "87a95b4ac5021b57e7ff9ce6af317154c02f89230fb121359aafeaaa2604d6d2",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-02-06T12:22:32.167Z"
+      "createdAt": "2026-03-31T01:43:50.954Z"
     },
     {
       "id": "lexical",

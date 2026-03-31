@@ -1,55 +1,56 @@
 # Commentary Pack Report
 
-**Generated:** 2026-02-05T01:00:07.695Z
+**Generated:** 2026-03-31T01:41:42.809Z
 **Pack:** C:\Users\Marlowe\Desktop\ProjectBible\packs\workbench\commentaries.sqlite
-**Pack Size:** 143.86 MB (0.14 GB)
-**Total Entries:** 93,837
+**Pack Size:** 145.63 MB (0.14 GB)
+**Total Entries:** 119,082
 
 ## Testament Coverage
 
-- Old Testament: 48,367 entries
-- New Testament: 45,470 entries
+- Old Testament: 66,885 entries
+- New Testament: 52,197 entries
 
 ## Entries by Author
 
 | Author | Entries | Percentage |
 |--------|---------|------------|
-| Adam Clarke | 21,051 | 22.4% |
-| John Wesley | 16,709 | 17.8% |
-| Treasury of Scripture Knowledge | 13,355 | 14.2% |
-| John Calvin | 10,067 | 10.7% |
-| KingComments | 7,590 | 8.1% |
-| A.T. Robertson | 7,201 | 7.7% |
-| Albert Barnes | 5,621 | 6.0% |
-| E.W. Bullinger | 4,221 | 4.5% |
-| Family Bible Notes | 3,861 | 4.1% |
-| Abbott | 3,340 | 3.6% |
-| Thomas Aquinas (Catena Aurea) | 821 | 0.9% |
+| NET Bible Translators | 25,233 | 21.2% |
+| Adam Clarke | 21,051 | 17.7% |
+| John Wesley | 16,715 | 14.0% |
+| Treasury of Scripture Knowledge | 13,355 | 11.2% |
+| John Calvin | 10,067 | 8.5% |
+| KingComments | 7,590 | 6.4% |
+| A.T. Robertson | 7,201 | 6.0% |
+| Albert Barnes | 5,621 | 4.7% |
+| E.W. Bullinger | 4,221 | 3.5% |
+| Family Bible Notes | 3,867 | 3.2% |
+| Abbott | 3,340 | 2.8% |
+| Thomas Aquinas (Catena Aurea) | 821 | 0.7% |
 
 ## Entries by Book (Top 20)
 
 | Book | Entries |
 |------|----------|
-| Matthew | 6,943 |
-| Acts | 6,905 |
-| Luke | 6,416 |
-| John | 6,041 |
-| Psalms | 5,542 |
-| Isaiah | 4,108 |
-| Jeremiah | 3,803 |
-| Mark | 3,348 |
-| Genesis | 3,327 |
-| Romans | 2,996 |
-| Ezekiel | 2,914 |
-| Job | 2,524 |
-| Exodus | 2,507 |
-| Hebrews | 2,094 |
-| Deuteronomy | 2,088 |
-| Proverbs | 2,038 |
-| Numbers | 2,034 |
-| Leviticus | 1,587 |
-| 1 Corinthians | 1,533 |
-| Joshua | 1,504 |
+| Acts | 7,891 |
+| Matthew | 7,780 |
+| Psalms | 7,748 |
+| Luke | 7,538 |
+| John | 6,873 |
+| Isaiah | 5,267 |
+| Jeremiah | 5,068 |
+| Genesis | 4,640 |
+| Mark | 3,855 |
+| Ezekiel | 3,749 |
+| Job | 3,513 |
+| Exodus | 3,485 |
+| Romans | 3,301 |
+| Proverbs | 2,934 |
+| Deuteronomy | 2,812 |
+| Numbers | 2,774 |
+| Hebrews | 2,309 |
+| Leviticus | 2,309 |
+| Joshua | 1,987 |
+| 1 Samuel | 1,753 |
 
 ## Pack Metadata
 
@@ -57,7 +58,7 @@
 {
   "id": "commentaries.v1",
   "type": "commentary",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "schemaVersion": "1.0",
   "name": "Bible Commentaries Collection",
   "description": "Historical and modern Bible commentaries including Matthew Henry, JFB, Barnes, Keil & Delitzsch, and more",

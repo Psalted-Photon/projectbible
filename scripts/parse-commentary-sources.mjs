@@ -21,7 +21,7 @@
  *   node scripts/parse-commentary-sources.mjs
  */
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, createWriteStream } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { parseString } from 'xml2js';
@@ -30,7 +30,12 @@ import { promisify } from 'util';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const parseXML = promisify(parseString);
+const parseXMLRaw = promisify(parseString);
+const parseXML = (xml) => parseXMLRaw(xml, {
+  explicitChildren: true,
+  preserveChildrenOrder: true,
+  charsAsChildren: true,
+});
 
 // Paths
 const SOURCES_DIR = join(__dirname, '../data-sources/commentaries/osis');
@@ -250,14 +255,45 @@ function extractAuthorFromOSIS(osisDoc, commentaryId) {
 
 /**
  * Extract text from OSIS XML node (recursive)
+ *
+ * xml2js stores mixed content (e.g. "text <ref>Psa 1:1</ref> more text") as:
+ *   node._ = "text  more text"   ← surrounding text with gaps
+ *   node.ref = [{ _: 'Psa 1:1' }] ← child element text in a named key
+ *
+ * The old code short-circuited on node._ and dropped all named child text,
+ * causing empty () and missing words for Abbott, KingComments, etc.
+ * This version reconstructs document order via node.$$ when available,
+ * and falls back to interleaving node._ with all named child keys.
  */
 function extractText(node) {
   if (typeof node === 'string') return node;
   if (Array.isArray(node)) return node.map(extractText).join(' ');
   if (typeof node === 'object') {
-    if (node._) return extractText(node._);
-    if (node.$$) return extractText(node.$$);
-    return '';
+    // With preserveChildrenOrder:true + charsAsChildren:true, xml2js populates
+    // node.$$ with document-order array of text nodes (#text) and child elements.
+    // This is the most accurate path for mixed content like:
+    //   "text <hi>word</hi> more text <reference>Matt 1:1</reference> end"
+    if (node.$$ && node.$$.length > 0) {
+      return node.$$.map(child => {
+        if (child['#name'] === '__text__') return child._  || '';
+        return extractText(child);
+      }).join('');
+    }
+    // Fallback for nodes without $$ (e.g. simple text-only elements)
+    if (node._) return node._;
+    // Last resort: recurse named child keys
+    const parts = [];
+    for (const key of Object.keys(node)) {
+      if (key === '_' || key === '$' || key === '$$') continue;
+      const child = node[key];
+      if (Array.isArray(child)) {
+        for (const item of child) {
+          const t = extractText(item);
+          if (t) parts.push(t);
+        }
+      }
+    }
+    return parts.join(' ');
   }
   return '';
 }
@@ -373,13 +409,37 @@ async function parseOSISCommentary(filePath, commentaryId) {
 }
 
 /**
- * Clean text: remove excess whitespace, HTML tags, footnotes
+ * Clean text: decode HTML entities, remove tags, remove empty parens, normalize whitespace
  */
 function cleanText(text) {
   return text
-    .replace(/<[^>]+>/g, '') // Remove HTML tags
-    .replace(/\[\d+\]/g, '') // Remove footnote markers [1]
-    .replace(/\s+/g, ' ')    // Normalize whitespace
+    // Repair Windows-1252 mojibake (UTF-8 bytes misread as Latin-1/cp1252)
+    // Must run BEFORE entity decoding since some repair targets overlap with entity chars
+    .replace(/\u00e2\u20ac\u201c/g, '\u2013')   // â€" → – (en dash U+2013: E2 80 93)
+    .replace(/\u00e2\u20ac\u201d/g, '\u2014')   // â€" → — (em dash U+2014: E2 80 94)
+    .replace(/\u00e2\u20ac\u0153/g, '\u201c')   // â€œ → " (left double quote U+201C: E2 80 9C)
+    .replace(/\u00e2\u20ac[\u009d\ufffd]/g, '\u201d') // â€? → " (right double quote U+201D: E2 80 9D)
+    .replace(/\u00e2\u20ac\u2122/g, '\u2019')   // â€™ → ' (right single quote U+2019: E2 80 99)
+    .replace(/\u00e2\u20ac\u02dc/g, '\u2018')   // â€˜ → ' (left single quote U+2018: E2 80 98)
+    .replace(/\u00e2\u20ac\u00a6/g, '\u2026')   // â€¦ → … (ellipsis U+2026: E2 80 A6)
+    // Repair 2-byte UTF-8 sequences misread as Latin-1 (covers Greek, Extended Latin, etc.)
+    // Pattern: 0xC2-0xCF followed by 0x80-0xBF (the valid 2-byte UTF-8 continuation range)
+    .replace(/[\u00c2-\u00cf][\u0080-\u00bf]/g, (m) => {
+      const b1 = m.charCodeAt(0), b2 = m.charCodeAt(1);
+      return String.fromCodePoint(((b1 & 0x1f) << 6) | (b2 & 0x3f));
+    })
+    .replace(/&amp;/g, '&')   // Decode HTML entities before stripping tags
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&apos;/g, "'")
+    .replace(/<[^>]+>/g, ' ') // Remove HTML tags (replace with space to avoid word concat)
+    .replace(/\[\d+\]/g, '')  // Remove footnote markers [1]
+    .replace(/\(\s*;?\s*cf\.?\s*\)/g, '') // Remove empty citation parens like (cf. ) or (; )
+    .replace(/\(\s*\)/g, '')  // Remove any remaining empty parens ()
+    .replace(/\(\s*;\s*\)/g, '') // Remove (;) variants
+    .replace(/\s+/g, ' ')     // Normalize whitespace
     .trim();
 }
 
@@ -448,18 +508,21 @@ async function main() {
     }
   }
   
-  // Write NDJSON output
+  // Write NDJSON output line-by-line (avoids string length overflow on large datasets)
   console.log(`\nWriting ${allEntries.length} entries to ${OUTPUT_FILE}`);
-  
-  const ndjson = allEntries.map(entry => JSON.stringify(entry)).join('\n');
-  writeFileSync(OUTPUT_FILE, ndjson, 'utf-8');
+  const stream = createWriteStream(OUTPUT_FILE, { encoding: 'utf-8' });
+  for (const entry of allEntries) {
+    stream.write(JSON.stringify(entry) + '\n');
+  }
+  await new Promise((resolve, reject) => { stream.end(); stream.on('finish', resolve); stream.on('error', reject); });
   
   // Statistics
+  const outputSizeMB = (statSync(OUTPUT_FILE).size / 1024 / 1024).toFixed(2);
   console.log('\n=== Parsing Complete ===');
   console.log(`Total entries: ${allEntries.length.toLocaleString()}`);
   console.log(`Total source size: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
   console.log(`Output file: ${OUTPUT_FILE}`);
-  console.log(`Output size: ${(Buffer.byteLength(ndjson, 'utf-8') / 1024 / 1024).toFixed(2)} MB`);
+  console.log(`Output size: ${outputSizeMB} MB`);
   
   // Coverage by author
   const byAuthor = {};

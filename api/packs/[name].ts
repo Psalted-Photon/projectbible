@@ -42,8 +42,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.setHeader("Cache-Control", "no-cache, must-revalidate");
     } else {
       res.setHeader("Content-Type", "application/octet-stream");
-      // Cache packs for 1 year (they're immutable)
-      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      // Do not cache at HTTP level — app-level IndexedDB handles caching
+      res.setHeader("Cache-Control", "no-cache, must-revalidate");
     }
 
     // Stream GitHub → Vercel → Browser

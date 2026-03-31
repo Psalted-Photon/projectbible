@@ -70,11 +70,31 @@ for (const file of files) {
     const text = lines.slice(1).join('\n').trim();
     if (!text || text.length < 10) continue;
     
-    // Clean text: remove HTML tags, scripture refs, etc.
+    // Clean text: remove HTML tags, scripture refs, decode entities
     let cleanText = text
-      .replace(/<scripRef[^>]*>.*?<\/scripRef>/g, '')
-      .replace(/<\/?[bi]>/g, '')
-      .replace(/<br\s*\/?>/g, ' ')
+      .replace(/<scripRef[^>]*>.*?<\/scripRef>/gs, '') // Remove <scripRef> including contents
+      // Repair Windows-1252 mojibake (UTF-8 bytes misread as Latin-1/cp1252)
+      .replace(/\u00e2\u20ac\u201c/g, '\u2013')   // â€" → – (en dash)
+      .replace(/\u00e2\u20ac\u201d/g, '\u2014')   // â€" → — (em dash)
+      .replace(/\u00e2\u20ac\u0153/g, '\u201c')   // â€œ → " (left double quote)
+      .replace(/\u00e2\u20ac[\u009d\ufffd]/g, '\u201d') // â€? → " (right double quote)
+      .replace(/\u00e2\u20ac\u2122/g, '\u2019')   // â€™ → ' (right single quote)
+      .replace(/\u00e2\u20ac\u02dc/g, '\u2018')   // â€˜ → ' (left single quote)
+      .replace(/\u00e2\u20ac\u00a6/g, '\u2026')   // â€¦ → … (ellipsis)
+      // Repair 2-byte UTF-8 sequences misread as Latin-1 (covers Greek, etc.)
+      .replace(/[\u00c2-\u00cf][\u0080-\u00bf]/g, (m) => {
+        const b1 = m.charCodeAt(0), b2 = m.charCodeAt(1);
+        return String.fromCodePoint(((b1 & 0x1f) << 6) | (b2 & 0x3f));
+      })
+      .replace(/&amp;/g, '&')   // Decode HTML entities before stripping tags
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&apos;/g, "'")
+      .replace(/<[^>]+>/g, ' ') // Strip all remaining HTML tags (replace with space)
+      .replace(/\(\s*;?\s*cf\.?\s*\)/g, '') // Remove empty citation parens
+      .replace(/\(\s*\)/g, '')  // Remove empty parens ()
       .replace(/\s+/g, ' ')
       .trim();
     
