@@ -64,6 +64,14 @@
       url: `${BASE_URL}/commentaries.sqlite`,
     },
     {
+      id: "tsk-references",
+      name: "TSK References",
+      description: "Treasury of Scripture Knowledge — 43,000+ cross-reference entries by keyword",
+      size: "3.80 MB",
+      icon: "◆",
+      url: `${BASE_URL}/tsk-references.sqlite`,
+    },
+    {
       id: "ancient-languages",
       name: "Ancient Languages",
       description: "Hebrew, Greek with morphology",
@@ -341,6 +349,8 @@
         return "🗺️";
       case "cross-references":
         return "🔗";
+      case "references":
+        return "◆";
       case "morphology":
         return "🔤";
       default:
