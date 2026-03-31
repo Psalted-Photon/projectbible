@@ -109,6 +109,21 @@
       "createdAt": "2026-01-24T04:27:15.155Z"
     },
     {
+      "id": "tsk-references",
+      "type": "references",
+      "name": "TSK Cross-Reference Pack",
+      "description": "Treasury of Scripture Knowledge cross-references (43,148 verse keyword entries)",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 3989504,
+      "sizeMB": 3.80,
+      "sha256": "c95e64f1e5e1b3a9637e9a8f5fb97b9b958f7f5dc87894ed5a932631987f5172",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/tsk-references.sqlite",
+      "createdAt": "2026-03-30T21:40:00.000Z"
+    },
+    {
       "id": "translations",
       "type": "translation",
       "name": "English Translations Pack",

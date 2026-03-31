@@ -41,5 +41,13 @@
       "sha256": "c115945a7e43acd277d2fb12ec6b802eef3722ca57e8571ea7c155b7d24add72",
       "size": 439000000
     }
+  ,{
+    "id": "tsk-references",
+    "type": "references",
+    "version": "1.0.0",
+    "url": "/api/packs/tsk-references.sqlite",
+    "sha256": "c95e64f1e5e1b3a9637e9a8f5fb97b9b958f7f5dc87894ed5a932631987f5172",
+    "size": 3989504
+  }
   ]
 }
