@@ -1,12 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
+  import { get } from "svelte/store";
   import type { CommentaryEntry } from "../adapters/CommentaryStore";
-  import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
   import type { TskEntry } from "../adapters/TskReferenceStore";
-  import { IndexedDBTskReferenceStore } from "../adapters/TskReferenceStore";
+  import { IndexedDBTextStore } from "../adapters/TextStore";
   import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
   import { parseRefString } from "../lib/parseRefString";
-  import type { RefTarget } from "../lib/parseRefString";
+  import { navigationStore } from "../stores/navigationStore";
 
   export let open = false;
   export let book = "";
@@ -14,17 +14,26 @@
   export let verse = 0;
   export let tskEntries: TskEntry[] = [];
   export let commentaryEntries: CommentaryEntry[] = [];
-  /** Which tab to show on open: 'references' | 'commentary' */
   export let initialTab: "references" | "commentary" = "references";
 
-  // ——— Internal display state (decoupled from props after first ref-click) ———
+  // ——— Internal display state (list mode) ———
   let displayBook = book;
   let displayChapter = chapter;
   let displayVerse = verse;
   let displayTskEntries: TskEntry[] = tskEntries;
   let displayCommentaryEntries: CommentaryEntry[] = commentaryEntries;
 
+  // ——— Verse-view mode state ———
+  type PanelMode = 'list' | 'verseView';
+  let panelMode: PanelMode = 'list';
+  let viewVerses: Array<{ book: string; chapter: number; verse: number; text: string; heading?: string | null }> = [];
+  let viewBook = '';
+  let viewChapter = 0;
+  let viewTargetVerse = 0;
+  let viewBodyEl: HTMLDivElement | null = null;
+
   interface HistoryEntry {
+    mode: 'list';
     book: string;
     chapter: number;
     verse: number;
@@ -36,12 +45,13 @@
   let panelLoading = false;
   let lastPropsKey = '';
 
-  // Sync display state from props whenever the source verse changes or panel opens fresh.
+  // Sync display state from props whenever the source verse changes or panel re-opens.
   $: {
     const key = open ? `${book}:${chapter}:${verse}` : '';
     if (open && key !== lastPropsKey) {
       lastPropsKey = key;
       panelHistory = [];
+      panelMode = 'list';
       displayBook = book;
       displayChapter = chapter;
       displayVerse = verse;
@@ -50,19 +60,25 @@
     } else if (!open && lastPropsKey !== '') {
       lastPropsKey = '';
       panelHistory = [];
+      panelMode = 'list';
     }
   }
 
-  const tskStore = new IndexedDBTskReferenceStore();
-  const commentaryStore = new IndexedDBCommentaryStore();
+  // Auto-scroll highlighted verse into view after viewVerses renders.
+  $: if (panelMode === 'verseView' && viewVerses.length > 0) {
+    // Wait one tick for the DOM to render, then scroll.
+    setTimeout(() => {
+      const el = viewBodyEl?.querySelector('.view-verse.highlighted') as HTMLElement | null;
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+  }
+
+  const textStore = new IndexedDBTextStore();
 
   let activeTab: "references" | "commentary" = initialTab;
   $: if (open) activeTab = initialTab;
 
-  const dispatch = createEventDispatcher<{
-    close: void;
-    refNavigate: RefTarget;
-  }>();
+  const dispatch = createEventDispatcher<{ close: void }>();
 
   function close() {
     dispatch("close");
@@ -76,7 +92,9 @@
     const target = parseRefString(ref, displayBook, displayChapter);
     if (!target) return;
     panelLoading = true;
+    // Push current list-mode state so Back can restore it.
     panelHistory = [...panelHistory, {
+      mode: 'list',
       book: displayBook,
       chapter: displayChapter,
       verse: displayVerse,
@@ -84,30 +102,27 @@
       commentaryEntries: displayCommentaryEntries,
       tab: activeTab,
     }];
-    const [tsk, commentary] = await Promise.all([
-      tskStore.getVerseReferences(target.book, target.chapter, target.verse),
-      commentaryStore.getCommentary({ book: target.book, chapter: target.chapter, verse: target.verse }),
-    ]);
-    displayBook = target.book;
-    displayChapter = target.chapter;
-    displayVerse = target.verse;
-    displayTskEntries = tsk;
-    displayCommentaryEntries = commentary;
+    const translation = get(navigationStore).translation;
+    const verses = await textStore.getChapter(translation, target.book, target.chapter);
+    viewVerses = verses;
+    viewBook = target.book;
+    viewChapter = target.chapter;
+    viewTargetVerse = target.verse;
+    panelMode = 'verseView';
     panelLoading = false;
-    dispatch('refNavigate', target);
   }
 
   function handlePanelBack() {
     const prev = panelHistory[panelHistory.length - 1];
     if (!prev) return;
     panelHistory = panelHistory.slice(0, -1);
+    panelMode = 'list';
     displayBook = prev.book;
     displayChapter = prev.chapter;
     displayVerse = prev.verse;
     displayTskEntries = prev.tskEntries;
     displayCommentaryEntries = prev.commentaryEntries;
     activeTab = prev.tab;
-    dispatch('refNavigate', { book: prev.book, chapter: prev.chapter, verse: prev.verse });
   }
 
   // Group TSK entries by keyword
@@ -141,7 +156,10 @@
     return Array.from(map.entries()).map(([author, entries]) => ({ author, entries }));
   }
 
-  function verseLabel() {
+  function verseLabel(): string {
+    if (panelMode === 'verseView') {
+      return viewBook ? `${viewBook} ${viewChapter}` : '';
+    }
     if (!displayBook) return '';
     return displayVerse
       ? `${displayBook} ${displayChapter}:${displayVerse}`
@@ -161,91 +179,110 @@
     {#if panelHistory.length > 0}
       <button class="panel-back-btn" on:click={handlePanelBack}>← Back</button>
     {/if}
-    <div class="panel-tabs">
-      <button
-        class="tab-btn"
-        class:active={activeTab === "references"}
-        on:click={() => (activeTab = "references")}
-      >
-        ◆ References
-        {#if displayTskEntries.length > 0}
-          <span class="badge" style="background:{TSK_COLOR}">{displayTskEntries.length}</span>
-        {/if}
-      </button>
-      <button
-        class="tab-btn"
-        class:active={activeTab === "commentary"}
-        on:click={() => (activeTab = "commentary")}
-      >
-        ● Commentaries
-        {#if displayCommentaryEntries.length > 0}
-          <span class="badge" style="background:#666">{displayCommentaryEntries.length}</span>
-        {/if}
-      </button>
-    </div>
+    {#if panelMode === 'list'}
+      <div class="panel-tabs">
+        <button
+          class="tab-btn"
+          class:active={activeTab === "references"}
+          on:click={() => (activeTab = "references")}
+        >
+          ◆ References
+          {#if displayTskEntries.length > 0}
+            <span class="badge" style="background:{TSK_COLOR}">{displayTskEntries.length}</span>
+          {/if}
+        </button>
+        <button
+          class="tab-btn"
+          class:active={activeTab === "commentary"}
+          on:click={() => (activeTab = "commentary")}
+        >
+          ● Commentaries
+          {#if displayCommentaryEntries.length > 0}
+            <span class="badge" style="background:#666">{displayCommentaryEntries.length}</span>
+          {/if}
+        </button>
+      </div>
+    {/if}
     <div class="panel-title">{verseLabel()}</div>
     <button class="close-btn" on:click={close} aria-label="Close">✕</button>
   </div>
 
   <!-- Content -->
-  <div class="panel-body">
+  <div class="panel-body" bind:this={viewBodyEl}>
     {#if panelLoading}
       <div class="panel-loading">Loading…</div>
-    {/if}
-    {#if activeTab === "references"}
-      {#if tskEntries.length === 0}
-        <p class="empty-msg">No TSK cross-references for this verse.<br/><span class="hint">Import the <em>tsk-references.sqlite</em> pack to enable them.</span></p>
-      {:else}
-        {#each tskByKeyword as group}
-          <div class="ref-group">
-            {#if group.keyword}
-              <div class="ref-keyword">
-                <span class="diamond" style="color:{TSK_COLOR}">◆</span>
-                <strong>{group.keyword}</strong>
-              </div>
-            {/if}
-            <ul class="ref-list">
-              {#each group.refs as ref}
-                {@const refTarget = parseRefString(ref, displayBook, displayChapter)}
-                <li class="ref-item">
-                  <button
-                    class="ref-link-btn"
-                    class:navigable={!!refTarget}
-                    on:click={() => handleRefClick(ref)}
-                  >{ref}</button>
-                </li>
-              {/each}
-            </ul>
-          </div>
-        {/each}
+    {:else if panelMode === 'verseView'}
+      <!-- ——— Mini verse reader ——— -->
+      <div class="view-chapter-header">{viewBook} {viewChapter}</div>
+      {#each viewVerses as v (v.verse)}
+        {#if v.heading}
+          <div class="view-heading">{v.heading}</div>
+        {/if}
+        <div class="view-verse" class:highlighted={v.verse === viewTargetVerse}>
+          <span class="view-verse-num">{v.verse}</span>
+          <span class="view-verse-text">{v.text}</span>
+        </div>
+      {/each}
+      {#if viewVerses.length === 0}
+        <p class="empty-msg">No text found for {viewBook} {viewChapter}.<br/><span class="hint">Make sure a Bible translation pack is installed.</span></p>
       {/if}
-    {/if}
-
-    {#if activeTab === "commentary"}
-      {#if commentaryEntries.length === 0}
-        <p class="empty-msg">No commentary for this verse.<br/><span class="hint">Import the <em>commentaries.sqlite</em> pack to enable them.</span></p>
-      {:else}
-        {#each commentaryByAuthor as group}
-          <div class="commentary-group">
-            <div
-              class="commentary-author-header"
-              style="border-left: 4px solid {getAuthorColor(group.author)}"
-            >
-              <span
-                class="author-badge"
-                style="background:{getAuthorColor(group.author)}"
-                title={group.author}
-              >{getAuthorInitials(group.author)}</span>
-              <span class="author-name">{group.author}</span>
-            </div>
-            {#each group.entries as entry}
-              {#if entry.title && entry.title !== group.author}
-                <div class="entry-title">{entry.title}</div>
+    {:else}
+      <!-- ——— List mode: tabs ——— -->
+      {#if activeTab === "references"}
+        {#if displayTskEntries.length === 0}
+          <p class="empty-msg">No TSK cross-references for this verse.<br/><span class="hint">Import the <em>tsk-references.sqlite</em> pack to enable them.</span></p>
+        {:else}
+          {#each tskByKeyword as group}
+            <div class="ref-group">
+              {#if group.keyword}
+                <div class="ref-keyword">
+                  <span class="diamond" style="color:{TSK_COLOR}">◆</span>
+                  <strong>{group.keyword}</strong>
+                </div>
               {/if}
-              <div class="entry-text">{@html entry.text}</div>
-            {/each}
-          </div>
-        {/each}
+              <ul class="ref-list">
+                {#each group.refs as ref}
+                  {@const refTarget = parseRefString(ref, displayBook, displayChapter)}
+                  <li class="ref-item">
+                    <button
+                      class="ref-link-btn"
+                      class:navigable={!!refTarget}
+                      on:click={() => handleRefClick(ref)}
+                    >{ref}</button>
+                  </li>
+                {/each}
+              </ul>
+            </div>
+          {/each}
+        {/if}
+      {/if}
+
+      {#if activeTab === "commentary"}
+        {#if displayCommentaryEntries.length === 0}
+          <p class="empty-msg">No commentary for this verse.<br/><span class="hint">Import the <em>commentaries.sqlite</em> pack to enable them.</span></p>
+        {:else}
+          {#each commentaryByAuthor as group}
+            <div class="commentary-group">
+              <div
+                class="commentary-author-header"
+                style="border-left: 4px solid {getAuthorColor(group.author)}"
+              >
+                <span
+                  class="author-badge"
+                  style="background:{getAuthorColor(group.author)}"
+                  title={group.author}
+                >{getAuthorInitials(group.author)}</span>
+                <span class="author-name">{group.author}</span>
+              </div>
+              {#each group.entries as entry}
+                {#if entry.title && entry.title !== group.author}
+                  <div class="entry-title">{entry.title}</div>
+                {/if}
+                <div class="entry-text">{@html entry.text}</div>
+              {/each}
+            </div>
+          {/each}
+        {/if}
       {/if}
     {/if}
   </div>
@@ -518,5 +555,56 @@
     font-size: 12px;
     padding: 8px 0 4px;
     text-align: center;
+  }
+
+  /* ——— Verse-view mini reader ——— */
+  .view-chapter-header {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ccc;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+
+  .view-heading {
+    font-size: 12px;
+    font-weight: 600;
+    color: #777;
+    margin: 10px 0 4px;
+    font-style: italic;
+  }
+
+  .view-verse {
+    display: flex;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    margin-bottom: 2px;
+    line-height: 1.7;
+  }
+
+  .view-verse.highlighted {
+    background: rgba(255, 215, 0, 0.1);
+    border-left: 3px solid rgba(255, 215, 0, 0.6);
+    padding-left: 8px;
+  }
+
+  .view-verse-num {
+    font-size: 10px;
+    color: #555;
+    flex-shrink: 0;
+    padding-top: 4px;
+    min-width: 18px;
+    text-align: right;
+  }
+
+  .view-verse.highlighted .view-verse-num {
+    color: rgba(255, 215, 0, 0.7);
+  }
+
+  .view-verse-text {
+    font-size: 14px;
+    color: #d8d8d8;
   }
 </style>
