@@ -1,9 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import type { CommentaryEntry } from "../adapters/CommentaryStore";
+  import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
   import type { TskEntry } from "../adapters/TskReferenceStore";
-  import { getAuthorColor, getAuthorInitials } from "../lib/annotationConfig";
-  import { TSK_COLOR } from "../lib/annotationConfig";
+  import { IndexedDBTskReferenceStore } from "../adapters/TskReferenceStore";
+  import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
+  import { parseRefString } from "../lib/parseRefString";
+  import type { RefTarget } from "../lib/parseRefString";
 
   export let open = false;
   export let book = "";
@@ -14,11 +17,52 @@
   /** Which tab to show on open: 'references' | 'commentary' */
   export let initialTab: "references" | "commentary" = "references";
 
-  let activeTab: "references" | "commentary" = initialTab;
+  // ——— Internal display state (decoupled from props after first ref-click) ———
+  let displayBook = book;
+  let displayChapter = chapter;
+  let displayVerse = verse;
+  let displayTskEntries: TskEntry[] = tskEntries;
+  let displayCommentaryEntries: CommentaryEntry[] = commentaryEntries;
 
+  interface HistoryEntry {
+    book: string;
+    chapter: number;
+    verse: number;
+    tskEntries: TskEntry[];
+    commentaryEntries: CommentaryEntry[];
+    tab: 'references' | 'commentary';
+  }
+  let panelHistory: HistoryEntry[] = [];
+  let panelLoading = false;
+  let lastPropsKey = '';
+
+  // Sync display state from props whenever the source verse changes or panel opens fresh.
+  $: {
+    const key = open ? `${book}:${chapter}:${verse}` : '';
+    if (open && key !== lastPropsKey) {
+      lastPropsKey = key;
+      panelHistory = [];
+      displayBook = book;
+      displayChapter = chapter;
+      displayVerse = verse;
+      displayTskEntries = tskEntries;
+      displayCommentaryEntries = commentaryEntries;
+    } else if (!open && lastPropsKey !== '') {
+      lastPropsKey = '';
+      panelHistory = [];
+    }
+  }
+
+  const tskStore = new IndexedDBTskReferenceStore();
+  const commentaryStore = new IndexedDBCommentaryStore();
+
+  let activeTab: "references" | "commentary" = initialTab;
   $: if (open) activeTab = initialTab;
 
-  const dispatch = createEventDispatcher<{ close: void }>();
+  const dispatch = createEventDispatcher<{
+    close: void;
+    refNavigate: RefTarget;
+  }>();
 
   function close() {
     dispatch("close");
@@ -28,8 +72,46 @@
     if (e.target === e.currentTarget) close();
   }
 
+  async function handleRefClick(ref: string) {
+    const target = parseRefString(ref, displayBook, displayChapter);
+    if (!target) return;
+    panelLoading = true;
+    panelHistory = [...panelHistory, {
+      book: displayBook,
+      chapter: displayChapter,
+      verse: displayVerse,
+      tskEntries: displayTskEntries,
+      commentaryEntries: displayCommentaryEntries,
+      tab: activeTab,
+    }];
+    const [tsk, commentary] = await Promise.all([
+      tskStore.getVerseReferences(target.book, target.chapter, target.verse),
+      commentaryStore.getCommentary({ book: target.book, chapter: target.chapter, verse: target.verse }),
+    ]);
+    displayBook = target.book;
+    displayChapter = target.chapter;
+    displayVerse = target.verse;
+    displayTskEntries = tsk;
+    displayCommentaryEntries = commentary;
+    panelLoading = false;
+    dispatch('refNavigate', target);
+  }
+
+  function handlePanelBack() {
+    const prev = panelHistory[panelHistory.length - 1];
+    if (!prev) return;
+    panelHistory = panelHistory.slice(0, -1);
+    displayBook = prev.book;
+    displayChapter = prev.chapter;
+    displayVerse = prev.verse;
+    displayTskEntries = prev.tskEntries;
+    displayCommentaryEntries = prev.commentaryEntries;
+    activeTab = prev.tab;
+    dispatch('refNavigate', { book: prev.book, chapter: prev.chapter, verse: prev.verse });
+  }
+
   // Group TSK entries by keyword
-  $: tskByKeyword = groupTskByKeyword(tskEntries);
+  $: tskByKeyword = groupTskByKeyword(displayTskEntries);
 
   function groupTskByKeyword(entries: TskEntry[]): Array<{ keyword: string | null; refs: string[] }> {
     const map = new Map<string, string[]>();
@@ -46,7 +128,7 @@
   }
 
   // Group commentary entries by author
-  $: commentaryByAuthor = groupCommentaryByAuthor(commentaryEntries);
+  $: commentaryByAuthor = groupCommentaryByAuthor(displayCommentaryEntries);
 
   function groupCommentaryByAuthor(
     entries: CommentaryEntry[]
@@ -60,8 +142,10 @@
   }
 
   function verseLabel() {
-    if (!book) return '';
-    return verse ? `${book} ${chapter}:${verse}` : `${book} ${chapter}`;
+    if (!displayBook) return '';
+    return displayVerse
+      ? `${displayBook} ${displayChapter}:${displayVerse}`
+      : `${displayBook} ${displayChapter}`;
   }
 </script>
 
@@ -74,6 +158,9 @@
 <div class="annotation-panel" class:open>
   <!-- Header -->
   <div class="panel-header">
+    {#if panelHistory.length > 0}
+      <button class="panel-back-btn" on:click={handlePanelBack}>← Back</button>
+    {/if}
     <div class="panel-tabs">
       <button
         class="tab-btn"
@@ -81,8 +168,8 @@
         on:click={() => (activeTab = "references")}
       >
         ◆ References
-        {#if tskEntries.length > 0}
-          <span class="badge" style="background:{TSK_COLOR}">{tskEntries.length}</span>
+        {#if displayTskEntries.length > 0}
+          <span class="badge" style="background:{TSK_COLOR}">{displayTskEntries.length}</span>
         {/if}
       </button>
       <button
@@ -91,8 +178,8 @@
         on:click={() => (activeTab = "commentary")}
       >
         ● Commentaries
-        {#if commentaryEntries.length > 0}
-          <span class="badge" style="background:#666">{commentaryEntries.length}</span>
+        {#if displayCommentaryEntries.length > 0}
+          <span class="badge" style="background:#666">{displayCommentaryEntries.length}</span>
         {/if}
       </button>
     </div>
@@ -102,6 +189,9 @@
 
   <!-- Content -->
   <div class="panel-body">
+    {#if panelLoading}
+      <div class="panel-loading">Loading…</div>
+    {/if}
     {#if activeTab === "references"}
       {#if tskEntries.length === 0}
         <p class="empty-msg">No TSK cross-references for this verse.<br/><span class="hint">Import the <em>tsk-references.sqlite</em> pack to enable them.</span></p>
@@ -116,7 +206,14 @@
             {/if}
             <ul class="ref-list">
               {#each group.refs as ref}
-                <li class="ref-item">{ref}</li>
+                {@const refTarget = parseRefString(ref, displayBook, displayChapter)}
+                <li class="ref-item">
+                  <button
+                    class="ref-link-btn"
+                    class:navigable={!!refTarget}
+                    on:click={() => handleRefClick(ref)}
+                  >{ref}</button>
+                </li>
               {/each}
             </ul>
           </div>
@@ -371,5 +468,55 @@
   .hint {
     font-size: 11px;
     color: #555;
+  }
+
+  /* ——— Panel back button ——— */
+  .panel-back-btn {
+    background: none;
+    border: 1px solid #444;
+    color: #aaa;
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .panel-back-btn:hover {
+    color: #e0e0e0;
+    border-color: #667eea;
+  }
+
+  /* ——— Clickable ref link buttons ——— */
+  .ref-link-btn {
+    background: none;
+    border: none;
+    color: #8ab4f8;
+    font: inherit;
+    font-size: 12px;
+    padding: 0;
+    cursor: default;
+    text-align: left;
+  }
+
+  .ref-link-btn.navigable {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+  }
+
+  .ref-link-btn.navigable:hover {
+    color: #c0d8ff;
+    text-decoration-style: solid;
+  }
+
+  /* ——— Loading indicator ——— */
+  .panel-loading {
+    color: #666;
+    font-size: 12px;
+    padding: 8px 0 4px;
+    text-align: center;
   }
 </style>

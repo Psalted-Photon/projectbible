@@ -546,6 +546,11 @@
     annotationPanelOpen = true;
   }
 
+  function handleRefNavigate(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
+    const { book, chapter, verse } = e.detail;
+    navigationStore.navigateTo(currentTranslation, book, chapter, verse);
+  }
+
   async function loadMorphologyCache(
     translation: string,
     book: string,
@@ -2095,6 +2100,7 @@
   tskEntries={annotationPanelTsk}
   commentaryEntries={annotationPanelCommentary}
   initialTab={annotationPanelTab}
+  on:refNavigate={handleRefNavigate}
   on:close={() => (annotationPanelOpen = false)}
 />
 
