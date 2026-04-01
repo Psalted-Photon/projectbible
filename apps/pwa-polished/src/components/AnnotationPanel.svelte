@@ -156,9 +156,10 @@
     return Array.from(map.entries()).map(([author, entries]) => ({ author, entries }));
   }
 
-  function trimKeyword(kw: string): string {
-    const cut = kw.indexOf('."');
-    const phrase = cut > 0 ? kw.slice(0, cut + 1) : kw;
+  function trimKeyword(kw: string | null): string {
+    if (!kw) return '';
+    const cut = kw.indexOf('"');
+    const phrase = cut > 0 ? kw.slice(0, cut).trimEnd() : kw;
     return phrase.length > 80 ? phrase.slice(0, 80) + '…' : phrase;
   }
 
