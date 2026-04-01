@@ -170,8 +170,9 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         console.log(`Importing ${entries.length} TSK reference groups...`);
 
         // Clear existing data first — tsk_references uses autoIncrement so put() always
-        // appends new rows. Without this, reinstalling doubles every entry.
-        await writeTransaction('tsk_references', (store) => store.clear());
+        // appends new rows. Use batchWriteTransaction so we wait for transaction.oncomplete
+        // before inserting, preventing a race where inserts begin before the clear commits.
+        await batchWriteTransaction('tsk_references', (store) => store.clear());
 
         const CHUNK_SIZE = 500;
         for (let i = 0; i < entries.length; i += CHUNK_SIZE) {

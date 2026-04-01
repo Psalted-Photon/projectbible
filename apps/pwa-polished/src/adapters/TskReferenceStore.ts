@@ -6,10 +6,12 @@ function isCleanRef(ref: string): boolean {
   return ref.length > 0 && !ref.startsWith('*') && !/^(br|p|div|span|img|h[1-6]|ul|ol|li|script|style)[>\s/]/i.test(ref);
 }
 
-/** Nullify keywords that are parser artifacts (e.g. '*margins'). */
+/** Nullify keywords that are parser artifacts (e.g. '*margins', 'br />'). */
 function cleanKeyword(kw: string | null): string | null {
   if (!kw) return null;
-  return kw.startsWith('*') ? null : kw;
+  if (kw.startsWith('*')) return null;
+  if (/^(br|p|div|span|img|h[1-6]|ul|ol|li|script|style)[>\s/]/i.test(kw)) return null;
+  return kw;
 }
 
 export interface TskEntry {
