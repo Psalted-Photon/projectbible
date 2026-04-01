@@ -156,6 +156,12 @@
     return Array.from(map.entries()).map(([author, entries]) => ({ author, entries }));
   }
 
+  function trimKeyword(kw: string): string {
+    const cut = kw.indexOf('."');
+    const phrase = cut > 0 ? kw.slice(0, cut + 1) : kw;
+    return phrase.length > 80 ? phrase.slice(0, 80) + '…' : phrase;
+  }
+
   function verseLabel(): string {
     if (panelMode === 'verseView') {
       return viewBook ? `${viewBook} ${viewChapter}` : '';
@@ -237,7 +243,7 @@
               {#if group.keyword}
                 <div class="ref-keyword">
                   <span class="diamond" style="color:{TSK_COLOR}">◆</span>
-                  <strong>{group.keyword}</strong>
+                  <strong title={group.keyword}>{trimKeyword(group.keyword)}</strong>
                 </div>
               {/if}
               <ul class="ref-list">

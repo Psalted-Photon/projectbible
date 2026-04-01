@@ -3,13 +3,13 @@ import type { DBTskReference } from './db.js';
 
 /** Strip HTML/parser artifacts (e.g. 'br />', '*margins') from a reference string. */
 function isCleanRef(ref: string): boolean {
-  return ref.length > 0 && !ref.startsWith('*') && !/^[a-z]+[\s/>]/.test(ref);
+  return ref.length > 0 && !ref.startsWith('*') && !/^(br|p|div|span|img|h[1-6]|ul|ol|li|a|script|style)[>\s/]/i.test(ref);
 }
 
 /** Nullify keywords that are HTML parser artifacts. */
 function cleanKeyword(kw: string | null): string | null {
   if (!kw) return null;
-  return (!kw.startsWith('*') && !/^[a-z]+[\s/>]/.test(kw)) ? kw : null;
+  return (!kw.startsWith('*') && !/^(br|p|div|span|img|h[1-6]|ul|ol|li|a|script|style)[>\s/]/i.test(kw)) ? kw : null;
 }
 
 export interface TskEntry {
