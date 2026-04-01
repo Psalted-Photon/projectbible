@@ -1,6 +1,17 @@
 import { openDB } from './db.js';
 import type { DBTskReference } from './db.js';
 
+/** Strip HTML/parser artifacts (e.g. 'br />', '*margins') from a reference string. */
+function isCleanRef(ref: string): boolean {
+  return ref.length > 0 && !ref.startsWith('*') && !/^[a-z]+[\s/>]/.test(ref);
+}
+
+/** Nullify keywords that are HTML parser artifacts. */
+function cleanKeyword(kw: string | null): string | null {
+  if (!kw) return null;
+  return (!kw.startsWith('*') && !/^[a-z]+[\s/>]/.test(kw)) ? kw : null;
+}
+
 export interface TskEntry {
   id?: number;
   book: string;
@@ -34,8 +45,8 @@ export class IndexedDBTskReferenceStore {
             book: r.book,
             chapter: r.chapter,
             verse: r.verse,
-            keyword: r.keyword,
-            references: JSON.parse(r.references_json) as string[]
+            keyword: cleanKeyword(r.keyword),
+            references: (JSON.parse(r.references_json) as string[]).filter(isCleanRef)
           })));
         };
         request.onerror = () => reject(request.error);
@@ -67,8 +78,8 @@ export class IndexedDBTskReferenceStore {
               book: r.book,
               chapter: r.chapter,
               verse: r.verse,
-              keyword: r.keyword,
-              references: JSON.parse(r.references_json) as string[]
+              keyword: cleanKeyword(r.keyword),
+              references: (JSON.parse(r.references_json) as string[]).filter(isCleanRef)
             };
             if (!map.has(r.verse)) map.set(r.verse, []);
             map.get(r.verse)!.push(entry);

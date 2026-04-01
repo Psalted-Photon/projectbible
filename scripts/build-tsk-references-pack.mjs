@@ -65,7 +65,7 @@ async function build() {
   const metaRows = [
     ['pack_id',       'tsk-references'],
     ['type',          'references'],
-    ['version',       '1.0.0'],
+    ['version',       '1.0.1'],
     ['schemaVersion', '1.0'],
     ['name',          'Treasury of Scripture Knowledge — Cross-References'],
     ['language',      'en'],
