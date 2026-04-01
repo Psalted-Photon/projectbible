@@ -148,7 +148,18 @@ for (const file of files) {
         const refs = refsRaw.split(';').map(r => r.trim()).filter(r => r.length > 0 && !r.startsWith('*'));
         
         if (refs.length === 0) continue;
-        
+
+        // If this scripRef block has no keyword text, it is a continuation of the
+        // previous group (e.g. a second <scripRef> directly after the first with only
+        // <br /> between them). Merge refs into the last entry for this verse.
+        if (!keyword && tskRefs.length > 0) {
+          const last = tskRefs[tskRefs.length - 1];
+          if (last.book === book && last.chapter === parseInt(chapter) && last.verse === parseInt(verseNum)) {
+            last.references.push(...refs);
+            continue;
+          }
+        }
+
         tskRefs.push({
           book,
           chapter: parseInt(chapter),
