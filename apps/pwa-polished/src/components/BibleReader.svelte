@@ -541,12 +541,14 @@
     tskByVerse = new Map<number, TskEntry[]>();
     commentaryByVerse = new Map<number, CommentaryEntry[]>();
     try {
-      // Always load all commentary entries for the chapter so we can re-filter instantly
-      allCommentaryEntries = await commentaryStore.getChapterCommentary(book, chapter);
+      // Load all data unconditionally — display is controlled reactively by showReferences / selectedCommentaryAuthors
+      const [entries, tsk] = await Promise.all([
+        commentaryStore.getChapterCommentary(book, chapter),
+        tskStore.getChapterReferences(book, chapter),
+      ]);
+      allCommentaryEntries = entries;
+      tskByVerse = tsk;
       rebuildCommentaryByVerse();
-      if (showReferences) {
-        tskByVerse = await tskStore.getChapterReferences(book, chapter);
-      }
     } catch (err) {
       console.warn("Annotation load error:", err);
     }
