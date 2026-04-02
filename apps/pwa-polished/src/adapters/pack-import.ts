@@ -1,5 +1,5 @@
 import type { DBPack, DBVerse } from './db.js';
-import { batchWriteTransaction, writeTransaction } from './db.js';
+import { batchWriteTransaction, writeTransaction, openDB } from './db.js';
 
 /**
  * Import a pack from a SQLite file into IndexedDB
@@ -169,18 +169,21 @@ export async function importPackFromSQLite(file: File): Promise<void> {
 
         console.log(`Importing ${entries.length} TSK reference groups...`);
 
-        // Clear existing data first — tsk_references uses autoIncrement so put() always
-        // appends new rows. Use batchWriteTransaction so we wait for transaction.oncomplete
-        // before inserting, preventing a race where inserts begin before the clear commits.
-        await batchWriteTransaction('tsk_references', (store) => store.clear());
-
-        const CHUNK_SIZE = 500;
-        for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
-          const chunk = entries.slice(i, i + CHUNK_SIZE);
-          await batchWriteTransaction('tsk_references', (store) => {
-            chunk.forEach(entry => store.put(entry));
-          });
-        }
+        // Clear + insert in a SINGLE transaction so there is no possible race.
+        // Using separate transactions risks inserts starting before the clear commits.
+        const idb = await openDB();
+        await new Promise<void>((resolve, reject) => {
+          const tx = idb.transaction('tsk_references', 'readwrite');
+          const store = tx.objectStore('tsk_references');
+          const clearReq = store.clear();
+          clearReq.onsuccess = () => {
+            for (const entry of entries) store.put(entry);
+          };
+          clearReq.onerror = () => reject(clearReq.error);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(new Error('tsk_references transaction aborted'));
+        });
 
         console.log(`✅ TSK references pack imported: ${entries.length} groups`);
       }
