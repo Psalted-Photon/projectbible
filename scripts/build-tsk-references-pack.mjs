@@ -15,7 +15,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { createReadStream, existsSync, mkdirSync } from 'fs';
+import { createReadStream, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { createInterface } from 'readline';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -37,6 +37,7 @@ async function build() {
   if (!existsSync(OUTPUT_DIR)) mkdirSync(OUTPUT_DIR, { recursive: true });
 
   // Remove old DB
+  if (existsSync(OUTPUT_FILE)) unlinkSync(OUTPUT_FILE);
   const db = new Database(OUTPUT_FILE);
 
   db.pragma('journal_mode = WAL');
