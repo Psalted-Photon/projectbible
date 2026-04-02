@@ -74,8 +74,29 @@
   let annotationPanelCommentary: CommentaryEntry[] = [];
 
   // Annotation toggles (reactive from store)
-  $: showReferences = $navigationStore.showReferences ?? true;
-  $: showCommentaries = $navigationStore.showCommentaries ?? true;
+  $: showReferences = $navigationStore.showReferences ?? false;
+  $: selectedCommentaryAuthors = $navigationStore.selectedCommentaryAuthors ?? [];
+  $: showCommentaries = selectedCommentaryAuthors.length > 0;
+
+  // All commentary entries for the current chapter (cached; re-filtered when authors change)
+  let allCommentaryEntries: CommentaryEntry[] = [];
+
+  // Rebuild the verse map whenever selected authors change
+  $: {
+    selectedCommentaryAuthors;
+    rebuildCommentaryByVerse();
+  }
+
+  function rebuildCommentaryByVerse() {
+    const map = new Map<number, CommentaryEntry[]>();
+    for (const e of allCommentaryEntries) {
+      if (selectedCommentaryAuthors.length === 0 || !selectedCommentaryAuthors.includes(e.author)) continue;
+      const v = e.verseStart;
+      if (!map.has(v)) map.set(v, []);
+      map.get(v)!.push(e);
+    }
+    commentaryByVerse = map;
+  }
 
   // Text selection state
   let showToast = false;
@@ -516,18 +537,13 @@
   }
 
   async function loadAnnotations(book: string, chapter: number) {
-    commentaryByVerse = new Map<number, CommentaryEntry[]>();
+    allCommentaryEntries = [];
     tskByVerse = new Map<number, TskEntry[]>();
+    commentaryByVerse = new Map<number, CommentaryEntry[]>();
     try {
-      if (showCommentaries) {
-        const entries = await commentaryStore.getChapterCommentary(book, chapter);
-        for (const e of entries) {
-          const v = e.verseStart;
-          if (!commentaryByVerse.has(v)) commentaryByVerse.set(v, []);
-          commentaryByVerse.get(v)!.push(e);
-        }
-        commentaryByVerse = commentaryByVerse; // trigger reactivity
-      }
+      // Always load all commentary entries for the chapter so we can re-filter instantly
+      allCommentaryEntries = await commentaryStore.getChapterCommentary(book, chapter);
+      rebuildCommentaryByVerse();
       if (showReferences) {
         tskByVerse = await tskStore.getChapterReferences(book, chapter);
       }

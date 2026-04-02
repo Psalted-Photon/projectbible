@@ -20,6 +20,7 @@
   import { readingPlanModalStore } from "../stores/readingPlanModalStore";
   import { paneStore } from "../stores/paneStore";
   import { userProfileStore } from "../stores/userProfileStore";
+  import { COMMENTARY_AUTHORS } from "../lib/annotationConfig";
 
   export let windowId: string | undefined = undefined;
   export let visible: boolean = true;
@@ -27,11 +28,11 @@
 
   let translationDropdownOpen = false;
   let referenceDropdownOpen = false;
+  let commDropdownOpen = false;
   let expandedBooks = new Set<string>();
-  let isChronologicalMode = false;
-  let pendingChronologicalMode = false;
-  let pendingShowReferences = true;
-  let pendingShowCommentaries = true;
+  let pendingShowReferences = false;
+  let selectedCommentaryAuthors: string[] = [];
+  let settingsInitialized = false;
   let searchQuery = "";
   let searchFocused = false;
   let blurTimeout: number | undefined;
@@ -85,23 +86,24 @@
   $: isSignedIn = $userProfileStore.isSignedIn;
   $: currentBookCategory = BIBLE_BOOKS.find(b => b.name === currentBook)?.category || '';
 
-  // Initialize from store but don't auto-sync
-  $: if (
-    $navigationStore.isChronologicalMode !== undefined &&
-    isChronologicalMode === false &&
-    pendingChronologicalMode === false
-  ) {
-    isChronologicalMode = $navigationStore.isChronologicalMode;
-    pendingChronologicalMode = $navigationStore.isChronologicalMode;
-    pendingShowReferences = $navigationStore.showReferences ?? true;
-    pendingShowCommentaries = $navigationStore.showCommentaries ?? true;
+  // Initialize from store once on first load
+  $: if (!settingsInitialized && $navigationStore) {
+    settingsInitialized = true;
+    pendingShowReferences = $navigationStore.showReferences ?? false;
+    selectedCommentaryAuthors = $navigationStore.selectedCommentaryAuthors ?? [];
   }
 
-  function updateChronologicalMode() {
-    isChronologicalMode = pendingChronologicalMode;
-    navigationStore.setChronologicalMode(pendingChronologicalMode);
+  function applySettings() {
     navigationStore.setShowReferences(pendingShowReferences);
-    navigationStore.setShowCommentaries(pendingShowCommentaries);
+  }
+
+  function toggleCommAuthor(author: string) {
+    if (selectedCommentaryAuthors.includes(author)) {
+      selectedCommentaryAuthors = selectedCommentaryAuthors.filter(a => a !== author);
+    } else {
+      selectedCommentaryAuthors = [...selectedCommentaryAuthors, author];
+    }
+    navigationStore.setSelectedCommentaryAuthors(selectedCommentaryAuthors);
   }
 
   async function toggleTranslationDropdown(event: MouseEvent) {
@@ -256,10 +258,12 @@
       !target.closest(".nav-dropdown") &&
       !target.closest(".dropdown-menu") &&
       !target.closest(".search-container") &&
-      !target.closest(".search-results-dropdown")
+      !target.closest(".search-results-dropdown") &&
+      !target.closest(".comm-dropdown-wrapper")
     ) {
       translationDropdownOpen = false;
       referenceDropdownOpen = false;
+      commDropdownOpen = false;
       translationDropdownPositioned = false;
       referenceDropdownPositioned = false;
       showResults = false;
@@ -535,23 +539,45 @@
       </button>
     </div>
 
-    <!-- Display Mode Checkboxes: Chronological / References / Commentaries -->
+    <!-- References checkbox + Comm author dropdown -->
     <div class="nav-checkbox">
-      <label title="Read chapters in historical/chronological order">
-        <input type="checkbox" bind:checked={pendingChronologicalMode} />
-        Chronological?
-      </label>
       <label class="nav-checkbox-anno" title="Show TSK cross-reference markers on verse keywords">
         <input type="checkbox" bind:checked={pendingShowReferences} />
         References
       </label>
-      <label class="nav-checkbox-anno" title="Show inline commentary badges on verses">
-        <input type="checkbox" bind:checked={pendingShowCommentaries} />
-        Commentaries
-      </label>
-      <button class="update-btn" on:click={updateChronologicalMode}
-        >Update</button
+      <button class="update-btn" on:click={applySettings}>Update</button>
+    </div>
+
+    <!-- Comm dropdown -->
+    <div class="comm-dropdown-wrapper">
+      <button
+        class="comm-btn"
+        class:active={commDropdownOpen}
+        class:has-selection={selectedCommentaryAuthors.length > 0}
+        on:click={() => (commDropdownOpen = !commDropdownOpen)}
+        title="Commentary author filter"
       >
+        Comm
+        {#if selectedCommentaryAuthors.length > 0}
+          <span class="comm-count">{selectedCommentaryAuthors.length}</span>
+        {/if}
+        <span class="nav-arrow">{commDropdownOpen ? "▲" : "▼"}</span>
+      </button>
+      {#if commDropdownOpen}
+        <div class="comm-dropdown-panel">
+          {#each Object.entries(COMMENTARY_AUTHORS) as [key, cfg]}
+            <label class="comm-author-row">
+              <input
+                type="checkbox"
+                checked={selectedCommentaryAuthors.includes(key)}
+                on:change={() => toggleCommAuthor(key)}
+              />
+              <span class="comm-author-swatch" style="background:{cfg.color}">{cfg.initials}</span>
+              <span class="comm-author-name">{cfg.fullName}</span>
+            </label>
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <!-- Reading Plan Button -->
@@ -931,6 +957,106 @@
   .update-btn:hover {
     background: #5568d3;
     border-color: #5568d3;
+  }
+
+  /* Comm dropdown */
+  .comm-dropdown-wrapper {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .comm-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 14px;
+    height: var(--nav-item-height);
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #e0e0e0;
+    cursor: pointer;
+    font-size: 14px;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+
+  .comm-btn.active,
+  .comm-btn:hover {
+    border-color: #667eea;
+    color: #fff;
+  }
+
+  .comm-btn.has-selection {
+    border-color: #667eea;
+  }
+
+  .comm-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    background: #667eea;
+    border-radius: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .comm-dropdown-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 1000;
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    padding: 8px 0;
+    min-width: 220px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+
+  .comm-author-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #e0e0e0;
+    transition: background 0.15s;
+  }
+
+  .comm-author-row:hover {
+    background: #2a2a2a;
+  }
+
+  .comm-author-row input[type="checkbox"] {
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .comm-author-swatch {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+  }
+
+  .comm-author-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .nav-button {
