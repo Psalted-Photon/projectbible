@@ -592,7 +592,6 @@
         {/if}
         <span class="nav-arrow">{commDropdownOpen ? "▲" : "▼"}</span>
       </button>
-      <button class="update-btn" on:click={applySettings}>Update</button>
     </div>
 
     <!-- Reading Plan Button -->

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import { get } from "svelte/store";
   import NavigationBar from "./NavigationBar.svelte";
   import SelectionToast from "./SelectionToast.svelte";
   import CommentaryModal from "./CommentaryModal.svelte";
@@ -837,11 +838,15 @@
     const visible = detectVisibleChapter();
     if (!visible) return;
     try {
+      const nav = get(navigationStore);
       localStorage.setItem('projectbible_nav', JSON.stringify({
         translation: currentTranslation,
         book: visible.book,
         chapter: visible.chapter,
         isChronologicalMode,
+        showReferences: nav.showReferences ?? false,
+        showCommentaries: nav.showCommentaries ?? false,
+        selectedCommentaryAuthors: nav.selectedCommentaryAuthors ?? [],
       }));
     } catch {
       // ignore quota / private-browsing errors
