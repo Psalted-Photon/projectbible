@@ -4,7 +4,6 @@
     availableTranslations,
     canGoBack,
   } from "../stores/navigationStore";
-  import { get } from "svelte/store";
   import { windowStore } from "../lib/stores/windowStore";
   import { BIBLE_BOOKS } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
@@ -31,9 +30,6 @@
   let referenceDropdownOpen = false;
   let commDropdownOpen = false;
   let expandedBooks = new Set<string>();
-  let pendingShowReferences = get(navigationStore).showReferences ?? false;
-  let pendingSelectedCommentaryAuthors: string[] = get(navigationStore).selectedCommentaryAuthors ?? [];
-  let selectedCommentaryAuthors: string[] = [...pendingSelectedCommentaryAuthors];
   let searchQuery = "";
   let searchFocused = false;
   let blurTimeout: number | undefined;
@@ -90,19 +86,16 @@
   $: currentBookCategory = BIBLE_BOOKS.find(b => b.name === currentBook)?.category || '';
 
   function applySettings() {
-    selectedCommentaryAuthors = [...pendingSelectedCommentaryAuthors];
-    navigationStore.setShowReferences(pendingShowReferences);
-    navigationStore.setSelectedCommentaryAuthors(pendingSelectedCommentaryAuthors);
     commDropdownOpen = false;
     commDropdownPositioned = false;
   }
 
-  function togglePendingCommAuthor(author: string) {
-    if (pendingSelectedCommentaryAuthors.includes(author)) {
-      pendingSelectedCommentaryAuthors = pendingSelectedCommentaryAuthors.filter(a => a !== author);
-    } else {
-      pendingSelectedCommentaryAuthors = [...pendingSelectedCommentaryAuthors, author];
-    }
+  function toggleCommAuthor(author: string) {
+    const current = $navigationStore.selectedCommentaryAuthors ?? [];
+    const next = current.includes(author)
+      ? current.filter(a => a !== author)
+      : [...current, author];
+    navigationStore.setSelectedCommentaryAuthors(next);
   }
 
   async function toggleCommDropdown(event: MouseEvent) {
@@ -112,8 +105,6 @@
     if (!opening) {
       commDropdownOpen = false;
       commDropdownPositioned = false;
-      // Reset pending to committed state on close without Update
-      pendingSelectedCommentaryAuthors = [...selectedCommentaryAuthors];
       return;
     }
 
@@ -296,8 +287,6 @@
       translationDropdownPositioned = false;
       referenceDropdownPositioned = false;
       commDropdownPositioned = false;
-      // Reset pending comm authors to committed state on outside click
-      pendingSelectedCommentaryAuthors = [...selectedCommentaryAuthors];
       showResults = false;
     }
   }
@@ -582,20 +571,24 @@
     <!-- References + Commentaries + Update — single unified control -->
     <div class="nav-checkbox">
       <label title="Show TSK cross-reference markers on verse keywords">
-        <input type="checkbox" bind:checked={pendingShowReferences} />
+        <input
+          type="checkbox"
+          checked={$navigationStore.showReferences ?? false}
+          on:change={(e) => navigationStore.setShowReferences(e.currentTarget.checked)}
+        />
         References
       </label>
       <button
         bind:this={commButtonRef}
         class="comm-toggle-btn nav-checkbox-anno"
         class:active={commDropdownOpen}
-        class:has-selection={selectedCommentaryAuthors.length > 0}
+        class:has-selection={($navigationStore.selectedCommentaryAuthors?.length ?? 0) > 0}
         on:click={toggleCommDropdown}
         title="Filter commentary authors"
       >
         Commentaries
-        {#if selectedCommentaryAuthors.length > 0}
-          <span class="comm-count">{selectedCommentaryAuthors.length}</span>
+        {#if ($navigationStore.selectedCommentaryAuthors?.length ?? 0) > 0}
+          <span class="comm-count">{$navigationStore.selectedCommentaryAuthors?.length}</span>
         {/if}
         <span class="nav-arrow">{commDropdownOpen ? "▲" : "▼"}</span>
       </button>
@@ -856,8 +849,8 @@
         <label class="comm-author-row">
           <input
             type="checkbox"
-            checked={pendingSelectedCommentaryAuthors.includes(key)}
-            on:change={() => togglePendingCommAuthor(key)}
+            checked={($navigationStore.selectedCommentaryAuthors ?? []).includes(key)}
+            on:change={() => toggleCommAuthor(key)}
           />
           <span class="comm-author-swatch" style="background:{cfg.color}">{cfg.initials}</span>
           <span class="comm-author-name">{cfg.fullName}</span>
