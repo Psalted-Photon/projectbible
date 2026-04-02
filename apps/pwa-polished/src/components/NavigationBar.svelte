@@ -31,9 +31,9 @@
   let referenceDropdownOpen = false;
   let commDropdownOpen = false;
   let expandedBooks = new Set<string>();
-  let pendingShowReferences = false;
-  let pendingSelectedCommentaryAuthors: string[] = [];
-  let selectedCommentaryAuthors: string[] = [];
+  let pendingShowReferences = get(navigationStore).showReferences ?? false;
+  let pendingSelectedCommentaryAuthors: string[] = get(navigationStore).selectedCommentaryAuthors ?? [];
+  let selectedCommentaryAuthors: string[] = [...pendingSelectedCommentaryAuthors];
   let searchQuery = "";
   let searchFocused = false;
   let blurTimeout: number | undefined;
@@ -534,13 +534,6 @@
   }
 
   onMount(() => {
-    // Read persisted settings once on mount — onMount is guaranteed to run after
-    // the store has loaded its localStorage value, so this is the reliable init point.
-    const saved = get(navigationStore);
-    pendingShowReferences = saved.showReferences ?? false;
-    selectedCommentaryAuthors = saved.selectedCommentaryAuthors ?? [];
-    pendingSelectedCommentaryAuthors = [...selectedCommentaryAuthors];
-
     document.addEventListener("click", closeDropdowns);
 
     // Update dropdown positions on scroll
