@@ -4,6 +4,7 @@
     availableTranslations,
     canGoBack,
   } from "../stores/navigationStore";
+  import { get } from "svelte/store";
   import { windowStore } from "../lib/stores/windowStore";
   import { BIBLE_BOOKS } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
@@ -33,7 +34,6 @@
   let pendingShowReferences = false;
   let pendingSelectedCommentaryAuthors: string[] = [];
   let selectedCommentaryAuthors: string[] = [];
-  let settingsInitialized = false;
   let searchQuery = "";
   let searchFocused = false;
   let blurTimeout: number | undefined;
@@ -88,14 +88,6 @@
   $: currentReference = `${currentBook} ${currentChapter}`;
   $: isSignedIn = $userProfileStore.isSignedIn;
   $: currentBookCategory = BIBLE_BOOKS.find(b => b.name === currentBook)?.category || '';
-
-  // Initialize from store once on first load
-  $: if (!settingsInitialized && $navigationStore) {
-    settingsInitialized = true;
-    pendingShowReferences = $navigationStore.showReferences ?? false;
-    selectedCommentaryAuthors = $navigationStore.selectedCommentaryAuthors ?? [];
-    pendingSelectedCommentaryAuthors = [...selectedCommentaryAuthors];
-  }
 
   function applySettings() {
     selectedCommentaryAuthors = [...pendingSelectedCommentaryAuthors];
@@ -542,6 +534,13 @@
   }
 
   onMount(() => {
+    // Read persisted settings once on mount — onMount is guaranteed to run after
+    // the store has loaded its localStorage value, so this is the reliable init point.
+    const saved = get(navigationStore);
+    pendingShowReferences = saved.showReferences ?? false;
+    selectedCommentaryAuthors = saved.selectedCommentaryAuthors ?? [];
+    pendingSelectedCommentaryAuthors = [...selectedCommentaryAuthors];
+
     document.addEventListener("click", closeDropdowns);
 
     // Update dropdown positions on scroll
