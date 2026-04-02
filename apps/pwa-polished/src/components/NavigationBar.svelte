@@ -31,6 +31,7 @@
   let commDropdownOpen = false;
   let expandedBooks = new Set<string>();
   let pendingShowReferences = false;
+  let pendingSelectedCommentaryAuthors: string[] = [];
   let selectedCommentaryAuthors: string[] = [];
   let settingsInitialized = false;
   let searchQuery = "";
@@ -49,11 +50,13 @@
   // Refs for dropdown positioning
   let translationButtonRef: HTMLElement;
   let referenceButtonRef: HTMLElement;
+  let commButtonRef: HTMLElement;
   let searchContainerRef: HTMLElement;
 
   // Whether the dropdown has been positioned — controls visibility (hidden until JS places it)
   let translationDropdownPositioned = false;
   let referenceDropdownPositioned = false;
+  let commDropdownPositioned = false;
 
   // Scroll nav-content instantly so the button is visible before we measure its position
   function scrollToShowButton(buttonRef: HTMLElement): void {
@@ -91,19 +94,53 @@
     settingsInitialized = true;
     pendingShowReferences = $navigationStore.showReferences ?? false;
     selectedCommentaryAuthors = $navigationStore.selectedCommentaryAuthors ?? [];
+    pendingSelectedCommentaryAuthors = [...selectedCommentaryAuthors];
   }
 
   function applySettings() {
+    selectedCommentaryAuthors = [...pendingSelectedCommentaryAuthors];
     navigationStore.setShowReferences(pendingShowReferences);
+    navigationStore.setSelectedCommentaryAuthors(pendingSelectedCommentaryAuthors);
+    commDropdownOpen = false;
+    commDropdownPositioned = false;
   }
 
-  function toggleCommAuthor(author: string) {
-    if (selectedCommentaryAuthors.includes(author)) {
-      selectedCommentaryAuthors = selectedCommentaryAuthors.filter(a => a !== author);
+  function togglePendingCommAuthor(author: string) {
+    if (pendingSelectedCommentaryAuthors.includes(author)) {
+      pendingSelectedCommentaryAuthors = pendingSelectedCommentaryAuthors.filter(a => a !== author);
     } else {
-      selectedCommentaryAuthors = [...selectedCommentaryAuthors, author];
+      pendingSelectedCommentaryAuthors = [...pendingSelectedCommentaryAuthors, author];
     }
-    navigationStore.setSelectedCommentaryAuthors(selectedCommentaryAuthors);
+  }
+
+  async function toggleCommDropdown(event: MouseEvent) {
+    event.stopPropagation();
+    const opening = !commDropdownOpen;
+
+    if (!opening) {
+      commDropdownOpen = false;
+      commDropdownPositioned = false;
+      // Reset pending to committed state on close without Update
+      pendingSelectedCommentaryAuthors = [...selectedCommentaryAuthors];
+      return;
+    }
+
+    commDropdownOpen = true;
+    await tick();
+
+    requestAnimationFrame(() => {
+      const dropdown = document.querySelector('.comm-dropdown') as HTMLElement;
+      if (dropdown && commButtonRef) {
+        const mainContent = document.querySelector('.main-content') as HTMLElement;
+        const leftOffset = mainContent?.getBoundingClientRect().left || 0;
+        const rect = commButtonRef.getBoundingClientRect();
+        const naturalLeft = rect.left - leftOffset;
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, window.innerWidth - dropdown.offsetWidth - 4));
+        dropdown.style.left = `${clampedLeft}px`;
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        commDropdownPositioned = true;
+      }
+    });
   }
 
   async function toggleTranslationDropdown(event: MouseEvent) {
@@ -259,13 +296,16 @@
       !target.closest(".dropdown-menu") &&
       !target.closest(".search-container") &&
       !target.closest(".search-results-dropdown") &&
-      !target.closest(".comm-dropdown-wrapper")
+      !target.closest(".nav-checkbox")
     ) {
       translationDropdownOpen = false;
       referenceDropdownOpen = false;
       commDropdownOpen = false;
       translationDropdownPositioned = false;
       referenceDropdownPositioned = false;
+      commDropdownPositioned = false;
+      // Reset pending comm authors to committed state on outside click
+      pendingSelectedCommentaryAuthors = [...selectedCommentaryAuthors];
       showResults = false;
     }
   }
@@ -480,6 +520,14 @@
         // No width override — reference dropdown uses CSS fit-content based on chapter grid
       }
     }
+    if (commDropdownOpen && commDropdownPositioned) {
+      const dropdown = document.querySelector('.comm-dropdown') as HTMLElement;
+      if (dropdown && commButtonRef) {
+        const rect = commButtonRef.getBoundingClientRect();
+        dropdown.style.left = `${rect.left - leftOffset}px`;
+        dropdown.style.top = `${rect.bottom + 4}px`;
+      }
+    }
     if (showResults) {
       const dropdown = document.querySelector(
         ".search-results-dropdown",
@@ -539,45 +587,27 @@
       </button>
     </div>
 
-    <!-- References checkbox + Comm author dropdown -->
+    <!-- References + Commentaries + Update — single unified control -->
     <div class="nav-checkbox">
-      <label class="nav-checkbox-anno" title="Show TSK cross-reference markers on verse keywords">
+      <label title="Show TSK cross-reference markers on verse keywords">
         <input type="checkbox" bind:checked={pendingShowReferences} />
         References
       </label>
-      <button class="update-btn" on:click={applySettings}>Update</button>
-    </div>
-
-    <!-- Comm dropdown -->
-    <div class="comm-dropdown-wrapper">
       <button
-        class="comm-btn"
+        bind:this={commButtonRef}
+        class="comm-toggle-btn nav-checkbox-anno"
         class:active={commDropdownOpen}
         class:has-selection={selectedCommentaryAuthors.length > 0}
-        on:click={() => (commDropdownOpen = !commDropdownOpen)}
-        title="Commentary author filter"
+        on:click={toggleCommDropdown}
+        title="Filter commentary authors"
       >
-        Comm
+        Commentaries
         {#if selectedCommentaryAuthors.length > 0}
           <span class="comm-count">{selectedCommentaryAuthors.length}</span>
         {/if}
         <span class="nav-arrow">{commDropdownOpen ? "▲" : "▼"}</span>
       </button>
-      {#if commDropdownOpen}
-        <div class="comm-dropdown-panel">
-          {#each Object.entries(COMMENTARY_AUTHORS) as [key, cfg]}
-            <label class="comm-author-row">
-              <input
-                type="checkbox"
-                checked={selectedCommentaryAuthors.includes(key)}
-                on:change={() => toggleCommAuthor(key)}
-              />
-              <span class="comm-author-swatch" style="background:{cfg.color}">{cfg.initials}</span>
-              <span class="comm-author-name">{cfg.fullName}</span>
-            </label>
-          {/each}
-        </div>
-      {/if}
+      <button class="update-btn" on:click={applySettings}>Update</button>
     </div>
 
     <!-- Reading Plan Button -->
@@ -827,6 +857,22 @@
       {/each}
     </div>
   {/if}
+
+  {#if commDropdownOpen}
+    <div class="dropdown-menu comm-dropdown" class:positioned={commDropdownPositioned}>
+      {#each Object.entries(COMMENTARY_AUTHORS) as [key, cfg]}
+        <label class="comm-author-row">
+          <input
+            type="checkbox"
+            checked={pendingSelectedCommentaryAuthors.includes(key)}
+            on:change={() => togglePendingCommAuthor(key)}
+          />
+          <span class="comm-author-swatch" style="background:{cfg.color}">{cfg.initials}</span>
+          <span class="comm-author-name">{cfg.fullName}</span>
+        </label>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <!-- Power Search Modal -->
@@ -960,35 +1006,28 @@
   }
 
   /* Comm dropdown */
-  .comm-dropdown-wrapper {
-    position: relative;
-    flex-shrink: 0;
-  }
-
-  .comm-btn {
+  .comm-toggle-btn {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 0 14px;
-    height: var(--nav-item-height);
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    background: transparent;
+    border: none;
+    border-left: 1px solid #3a3a3a;
+    padding: 0 0 0 8px;
     color: #e0e0e0;
     cursor: pointer;
     font-size: 14px;
     white-space: nowrap;
-    transition: all 0.2s;
+    height: 100%;
   }
 
-  .comm-btn.active,
-  .comm-btn:hover {
-    border-color: #667eea;
+  .comm-toggle-btn.active,
+  .comm-toggle-btn:hover {
     color: #fff;
   }
 
-  .comm-btn.has-selection {
-    border-color: #667eea;
+  .comm-toggle-btn.has-selection {
+    color: #a78bfa;
   }
 
   .comm-count {
@@ -1005,17 +1044,9 @@
     color: #fff;
   }
 
-  .comm-dropdown-panel {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    z-index: 1000;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 8px;
+  .comm-dropdown {
+    min-width: 240px;
     padding: 8px 0;
-    min-width: 220px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
   }
 
   .comm-author-row {
