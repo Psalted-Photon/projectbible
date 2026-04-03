@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-04-03T16:23:06.101Z",
+  "createdAt": "2026-04-03T17:13:02.586Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -61,7 +61,7 @@
       "sha256": "81b49e84300d3161d52ca5508652c472ffa703f8587de4bfb1b186fc79b9a0ab",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-04-03T16:23:10.536Z"
+      "createdAt": "2026-04-03T17:13:06.141Z"
     },
     {
       "id": "dictionary-en",
@@ -76,7 +76,7 @@
       "sha256": "87a95b4ac5021b57e7ff9ce6af317154c02f89230fb121359aafeaaa2604d6d2",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-04-03T16:23:10.425Z"
+      "createdAt": "2026-04-03T17:13:06.035Z"
     },
     {
       "id": "lexical",
@@ -113,15 +113,15 @@
       "type": "translation",
       "name": "English Translations Pack",
       "description": "KJV, WEB, BSB, NET, LXX2012 English translations",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 36106240,
-      "sizeMB": 34.43,
-      "sha256": "e5938f69fccdda52f0f9995787f63054f025014f7f236b3e096b6e839b3c8a19",
+      "size": 36085760,
+      "sizeMB": 34.41,
+      "sha256": "0b7ad11beb262af87a39435eb2700523b5d86cc87f12fef9cae50396fa0cf9bb",
       "dependencies": [],
       "downloadUrl": "/api/packs/translations.sqlite",
-      "createdAt": "2026-04-03T16:21:23.271Z"
+      "createdAt": "2026-04-03T17:11:56.191Z"
     }
   ]
 }

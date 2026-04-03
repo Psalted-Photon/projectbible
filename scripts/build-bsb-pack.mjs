@@ -282,7 +282,7 @@ function parseUSFM(content) {
     
     // Add cross-ref at end of verse text (before newline)
     if (content[i] === '\n' && currentVerse !== null && pendingCrossRef && verseText.trim()) {
-      verseText += ` + ${pendingCrossRef}`;
+      verseText += ` + ${pendingCrossRef}\x01`;
       pendingCrossRef = '';
     }
     
@@ -420,7 +420,7 @@ async function buildBSBPack() {
       
       console.log(`Processing ${book.name}...`);
       
-      const content = readFileSync(filePath, 'utf-8');
+      const content = readFileSync(filePath, 'utf-8').replace(/\r/g, '');
       const rawVerses = parseUSFM(content);
       const verses = processVerses(rawVerses);
       

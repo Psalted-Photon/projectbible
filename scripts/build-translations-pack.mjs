@@ -74,7 +74,7 @@ output.exec(`
 console.log('Inserting pack metadata...');
 const insertMeta = output.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)');
 insertMeta.run('id', 'translations');
-insertMeta.run('version', '1.0.0');
+insertMeta.run('version', '1.0.1');
 insertMeta.run('type', 'translation');
 insertMeta.run('schemaVersion', '1');
 insertMeta.run('minAppVersion', '1.0.0');

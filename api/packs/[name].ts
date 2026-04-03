@@ -9,8 +9,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    const updatedPacks = ['translations.sqlite', 'bsb.sqlite'];
+    const tag = updatedPacks.includes(name as string) ? 'packs-v1.1.0' : 'packs-v1.0.0';
     const githubUrl =
-      `https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/${name}`;
+      `https://github.com/Psalted-Photon/projectbible/releases/download/${tag}/${name}`;
 
     const headers: Record<string, string> = {
       "User-Agent": "ProjectBible-PackProxy",
