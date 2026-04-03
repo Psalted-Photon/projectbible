@@ -87,10 +87,16 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
     }
 
     const noteStart = j;
-    let hasRefToken = markerMatch !== null;
+    let hasRefToken = false;
     let noteEnd = source.length;
 
     for (let k = j; k < source.length; k++) {
+      // Unambiguous sentinel inserted by pack builder
+      if (source.charCodeAt(k) === 1) {
+        noteEnd = k;
+        break;
+      }
+
       if (!hasRefToken && /\b\d+:\d+\b/.test(source.slice(j, k + 1))) {
         hasRefToken = true;
       }
@@ -143,6 +149,8 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
     }
 
     i = noteEnd;
+    // Skip sentinel if present
+    if (i < source.length && source.charCodeAt(i) === 1) i++;
   }
 
   return { html: out, noteCount: noteIndex };

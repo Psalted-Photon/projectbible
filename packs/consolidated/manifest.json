@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-03-31T01:43:46.745Z",
+  "createdAt": "2026-04-03T16:23:06.101Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -61,7 +61,7 @@
       "sha256": "81b49e84300d3161d52ca5508652c472ffa703f8587de4bfb1b186fc79b9a0ab",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-03-31T01:43:51.059Z"
+      "createdAt": "2026-04-03T16:23:10.536Z"
     },
     {
       "id": "dictionary-en",
@@ -76,7 +76,7 @@
       "sha256": "87a95b4ac5021b57e7ff9ce6af317154c02f89230fb121359aafeaaa2604d6d2",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-03-31T01:43:50.954Z"
+      "createdAt": "2026-04-03T16:23:10.425Z"
     },
     {
       "id": "lexical",
@@ -109,21 +109,6 @@
       "createdAt": "2026-01-24T04:27:15.155Z"
     },
     {
-      "id": "tsk-references",
-      "type": "study",
-      "name": "TSK Cross-Reference Pack",
-      "description": "Treasury of Scripture Knowledge cross-references (35,747 verse keyword entries)",
-      "version": "1.0.2",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 4861952,
-      "sizeMB": 4.64,
-      "sha256": "6172543ef291a9b991c57990eb8fafe6711f0b3549f3be44d98f25dc1836a77b",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-03-30T21:40:00.000Z"
-    },
-    {
       "id": "translations",
       "type": "translation",
       "name": "English Translations Pack",
@@ -131,12 +116,12 @@
       "version": "1.0.0",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 35442688,
-      "sizeMB": 33.8,
-      "sha256": "fb397fd037f93a6ae912751798dc1b37d3829c539983dccdde522bfb5ea5e40e",
+      "size": 36106240,
+      "sizeMB": 34.43,
+      "sha256": "e5938f69fccdda52f0f9995787f63054f025014f7f236b3e096b6e839b3c8a19",
       "dependencies": [],
       "downloadUrl": "/api/packs/translations.sqlite",
-      "createdAt": "2026-01-21T00:22:07.977Z"
+      "createdAt": "2026-04-03T16:21:23.271Z"
     }
   ]
 }

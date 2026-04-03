@@ -249,9 +249,9 @@ function parseUSFM(content) {
           i++;
         }
         
-        // Add footnote as inline note
+        // Add footnote as inline note (\x01 sentinel marks end of note unambiguously)
         if (footnoteText.trim()) {
-          verseText += ` + ${footnoteText.trim()}`;
+          verseText += ` + ${footnoteText.trim()}\x01`;
         }
         continue;
       }
