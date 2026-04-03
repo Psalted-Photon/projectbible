@@ -87,7 +87,7 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
     }
 
     const noteStart = j;
-    let hasRefToken = false;
+    let hasRefToken = markerMatch !== null;
     let noteEnd = source.length;
 
     for (let k = j; k < source.length; k++) {

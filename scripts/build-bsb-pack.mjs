@@ -256,10 +256,18 @@ function parseUSFM(content) {
         continue;
       }
       
-      // Skip other markers (paragraph, poetry, etc.)
-      if (['p', 'm', 'b', 'q', 'q1', 'q2', 'pmo', 'id', 'h', 'toc1', 'toc2', 'mt1', 'mt2'].includes(marker)) {
-        // Skip to end of line
+      // Skip structural markers that carry no verse text
+      if (['b', 'id', 'h', 'toc1', 'toc2', 'mt1', 'mt2', 'ms', 'mr', 'd'].includes(marker)) {
         while (i < content.length && content[i] !== '\n') i++;
+        continue;
+      }
+
+      // Paragraph/poetry continuation markers — the rest of the line may contain verse text.
+      // Inject a space separator so words don't run together, then let the main loop read the text.
+      if (['p', 'm', 'q', 'q1', 'q2', 'q3', 'qm', 'qr', 'pmo', 'pm', 'pi', 'pi1', 'pi2'].includes(marker)) {
+        if (currentVerse !== null && verseText.trim().length > 0) {
+          verseText += ' ';
+        }
         continue;
       }
       
