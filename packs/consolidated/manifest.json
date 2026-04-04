@@ -123,5 +123,20 @@
       "downloadUrl": "/api/packs/translations.sqlite",
       "createdAt": "2026-04-03T17:11:56.191Z"
     }
+    {
+      "id": "tsk-references",
+      "type": "study",
+      "name": "TSK References",
+      "description": "Treasury of Scripture Knowledge — 43,000+ cross-reference entries by keyword",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 4866048,
+      "sizeMB": 4.64,
+      "sha256": "6172543ef291a9b991c57990eb8fafe6711f0b3549f3be44d98f25dc1836a77b",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/tsk-references.sqlite",
+      "createdAt": "2026-04-01T00:00:00.000Z"
+    }
   ]
 }
