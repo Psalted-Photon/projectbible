@@ -7,7 +7,7 @@
  * - Conflict resolution using timestamps
  */
 
-import type { UserDataStore, UserNote, UserHighlight, UserBookmark, BCV } from '@projectbible/core';
+import type { UserDataStore, UserNote, UserHighlight, UserWordHighlight, UserBookmark, BCV } from '@projectbible/core';
 import { IndexedDBUserDataStore } from './UserDataStore';
 import { syncQueue } from '../lib/sync/SyncQueueService';
 import { realtimeService } from '../lib/sync/RealtimeService';
@@ -241,9 +241,13 @@ export class SyncedUserDataStore implements UserDataStore {
     return this.local.getHighlights(reference);
   }
   
-  async saveHighlight(highlight: Omit<UserHighlight, 'id' | 'createdAt'>): Promise<UserHighlight> {
+  async getChapterHighlights(book: string, chapter: number): Promise<UserHighlight[]> {
+    return this.local.getChapterHighlights(book, chapter);
+  }
+
+  async saveHighlight(highlight: Omit<UserHighlight, 'id' | 'createdAt' | 'color'>): Promise<UserHighlight> {
     const saved = await this.local.saveHighlight(highlight);
-    
+
     await syncQueue.enqueue({
       type: 'INSERT',
       table: 'user_highlights',
@@ -253,12 +257,54 @@ export class SyncedUserDataStore implements UserDataStore {
         book: highlight.reference.book,
         chapter: highlight.reference.chapter,
         verse: highlight.reference.verse,
-        color: highlight.color,
+        color: highlight.style.color,
+        style: highlight.style,
         created_at: saved.createdAt.toISOString(),
       },
     });
-    
+
     return saved;
+  }
+
+  async getWordHighlights(reference?: BCV, translation?: string): Promise<UserWordHighlight[]> {
+    return this.local.getWordHighlights(reference, translation);
+  }
+
+  async getChapterWordHighlights(book: string, chapter: number): Promise<UserWordHighlight[]> {
+    return this.local.getChapterWordHighlights(book, chapter);
+  }
+
+  async saveWordHighlight(highlight: Omit<UserWordHighlight, 'id' | 'createdAt'>): Promise<UserWordHighlight> {
+    const saved = await this.local.saveWordHighlight(highlight);
+
+    await syncQueue.enqueue({
+      type: 'INSERT',
+      table: 'user_word_highlights',
+      id: saved.id,
+      data: {
+        id: saved.id,
+        book: highlight.reference.book,
+        chapter: highlight.reference.chapter,
+        verse: highlight.reference.verse,
+        translation: highlight.translation,
+        word_start: highlight.wordStart,
+        word_length: highlight.wordLength,
+        style: highlight.style,
+        created_at: saved.createdAt.toISOString(),
+      },
+    });
+
+    return saved;
+  }
+
+  async deleteWordHighlight(highlightId: string): Promise<void> {
+    await this.local.deleteWordHighlight(highlightId);
+
+    await syncQueue.enqueue({
+      type: 'DELETE',
+      table: 'user_word_highlights',
+      id: highlightId,
+    });
   }
   
   async deleteHighlight(highlightId: string): Promise<void> {

@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 22; // Migration added tsk_references store
+const DB_VERSION = 23; // Migration 23: add style to user_highlights, add user_word_highlights store
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -65,6 +65,20 @@ export interface DBUserHighlight {
   chapter: number;
   verse: number;
   color: string;
+  /** JSON-serialized HighlightStyle. Falls back to deriving from `color` when absent. */
+  style?: string;
+  createdAt: number;
+}
+
+export interface DBUserWordHighlight {
+  id: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  translation: string;
+  wordStart: number;
+  wordLength: number;
+  style: string; // JSON-serialized HighlightStyle
   createdAt: number;
 }
 
@@ -724,6 +738,14 @@ export function openDB(): Promise<IDBDatabase> {
         const tskStore = db.createObjectStore('tsk_references', { keyPath: 'id', autoIncrement: true });
         tskStore.createIndex('verse', ['book', 'chapter', 'verse'], { unique: false });
         tskStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
+      }
+
+      // User word highlights store (translation-specific; degrades to verse-level on other translations)
+      if (!db.objectStoreNames.contains('user_word_highlights')) {
+        const wordHlStore = db.createObjectStore('user_word_highlights', { keyPath: 'id' });
+        wordHlStore.createIndex('book_chapter_verse', ['book', 'chapter', 'verse'], { unique: false });
+        wordHlStore.createIndex('translation', 'translation', { unique: false });
+        wordHlStore.createIndex('book_chapter_verse_translation', ['book', 'chapter', 'verse', 'translation'], { unique: false });
       }
     };
   });

@@ -1,6 +1,26 @@
-import type { UserDataStore, UserNote, UserHighlight, UserBookmark, BCV } from '@projectbible/core';
+import type { UserDataStore, UserNote, UserHighlight, UserWordHighlight, UserBookmark, BCV, HighlightStyle } from '@projectbible/core';
 import { generateId, readTransaction, writeTransaction } from './db.js';
-import type { DBUserNote, DBUserHighlight, DBUserBookmark } from './db.js';
+import type { DBUserNote, DBUserHighlight, DBUserWordHighlight, DBUserBookmark } from './db.js';
+
+// ---------------------------------------------------------------------------
+// Highlight style helpers
+// ---------------------------------------------------------------------------
+
+function serializeStyle(style: HighlightStyle): string {
+  return JSON.stringify(style);
+}
+
+function deserializeStyle(raw: string | undefined, fallbackColor: string): HighlightStyle {
+  if (raw) {
+    try {
+      return JSON.parse(raw) as HighlightStyle;
+    } catch {
+      // fall through to default
+    }
+  }
+  // Legacy: derive a background style from the stored color column
+  return { type: 'background', color: fallbackColor };
+}
 
 export class IndexedDBUserDataStore implements UserDataStore {
   // ========== NOTES ==========
@@ -119,39 +139,25 @@ export class IndexedDBUserDataStore implements UserDataStore {
   async getHighlights(reference?: BCV): Promise<UserHighlight[]> {
     try {
       const db = await import('./db.js').then(m => m.openDB());
-      
       return new Promise((resolve, reject) => {
         const transaction = db.transaction('user_highlights', 'readonly');
         const store = transaction.objectStore('user_highlights');
-        
         let request: IDBRequest<DBUserHighlight[]>;
-        
         if (reference) {
-          // Get highlights for specific verse
           const index = store.index('book_chapter_verse');
-          const range = IDBKeyRange.only([reference.book, reference.chapter, reference.verse]);
-          request = index.getAll(range);
+          request = index.getAll(IDBKeyRange.only([reference.book, reference.chapter, reference.verse]));
         } else {
-          // Get all highlights
           request = store.getAll();
         }
-        
         request.onsuccess = () => {
-          const dbHighlights = request.result;
-          const highlights: UserHighlight[] = dbHighlights.map(h => ({
+          resolve(request.result.map(h => ({
             id: h.id,
-            reference: {
-              book: h.book,
-              chapter: h.chapter,
-              verse: h.verse
-            },
+            reference: { book: h.book, chapter: h.chapter, verse: h.verse },
             color: h.color,
-            createdAt: new Date(h.createdAt)
-          }));
-          
-          resolve(highlights);
+            style: deserializeStyle(h.style, h.color),
+            createdAt: new Date(h.createdAt),
+          })));
         };
-        
         request.onerror = () => reject(request.error);
       });
     } catch (error) {
@@ -159,32 +165,145 @@ export class IndexedDBUserDataStore implements UserDataStore {
       return [];
     }
   }
-  
-  async saveHighlight(highlight: Omit<UserHighlight, 'id' | 'createdAt'>): Promise<UserHighlight> {
+
+  async getChapterHighlights(book: string, chapter: number): Promise<UserHighlight[]> {
+    try {
+      const db = await import('./db.js').then(m => m.openDB());
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('user_highlights', 'readonly');
+        const store = transaction.objectStore('user_highlights');
+        // Use the compound index with a key range covering all verses in the chapter
+        const index = store.index('book_chapter_verse');
+        const range = IDBKeyRange.bound([book, chapter, 0], [book, chapter, 9999]);
+        const request = index.getAll(range) as IDBRequest<DBUserHighlight[]>;
+        request.onsuccess = () => {
+          resolve(request.result.map(h => ({
+            id: h.id,
+            reference: { book: h.book, chapter: h.chapter, verse: h.verse },
+            color: h.color,
+            style: deserializeStyle(h.style, h.color),
+            createdAt: new Date(h.createdAt),
+          })));
+        };
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error('Error getting chapter highlights:', error);
+      return [];
+    }
+  }
+
+  async saveHighlight(highlight: Omit<UserHighlight, 'id' | 'createdAt' | 'color'>): Promise<UserHighlight> {
     const now = Date.now();
     const id = generateId();
-    
     const dbHighlight: DBUserHighlight = {
       id,
       book: highlight.reference.book,
       chapter: highlight.reference.chapter,
       verse: highlight.reference.verse,
-      color: highlight.color,
-      createdAt: now
+      color: highlight.style.color,
+      style: serializeStyle(highlight.style),
+      createdAt: now,
     };
-    
     await writeTransaction('user_highlights', (store) => store.put(dbHighlight));
-    
     return {
       id,
       reference: highlight.reference,
-      color: highlight.color,
-      createdAt: new Date(now)
+      color: highlight.style.color,
+      style: highlight.style,
+      createdAt: new Date(now),
     };
   }
-  
+
   async deleteHighlight(highlightId: string): Promise<void> {
     await writeTransaction('user_highlights', (store) => store.delete(highlightId));
+  }
+
+  // ========== WORD HIGHLIGHTS ==========
+
+  async getWordHighlights(reference?: BCV, translation?: string): Promise<UserWordHighlight[]> {
+    try {
+      const db = await import('./db.js').then(m => m.openDB());
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('user_word_highlights', 'readonly');
+        const store = transaction.objectStore('user_word_highlights');
+        let request: IDBRequest<DBUserWordHighlight[]>;
+        if (reference && translation) {
+          const index = store.index('book_chapter_verse_translation');
+          request = index.getAll(IDBKeyRange.only([reference.book, reference.chapter, reference.verse, translation]));
+        } else if (reference) {
+          const index = store.index('book_chapter_verse');
+          request = index.getAll(IDBKeyRange.only([reference.book, reference.chapter, reference.verse]));
+        } else {
+          request = store.getAll();
+        }
+        request.onsuccess = () => {
+          resolve(request.result.map(h => ({
+            id: h.id,
+            reference: { book: h.book, chapter: h.chapter, verse: h.verse },
+            translation: h.translation,
+            wordStart: h.wordStart,
+            wordLength: h.wordLength,
+            style: deserializeStyle(h.style, '#ffeb3b'),
+            createdAt: new Date(h.createdAt),
+          })));
+        };
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error('Error getting word highlights:', error);
+      return [];
+    }
+  }
+
+  async getChapterWordHighlights(book: string, chapter: number): Promise<UserWordHighlight[]> {
+    try {
+      const db = await import('./db.js').then(m => m.openDB());
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('user_word_highlights', 'readonly');
+        const store = transaction.objectStore('user_word_highlights');
+        const index = store.index('book_chapter_verse');
+        const range = IDBKeyRange.bound([book, chapter, 0], [book, chapter, 9999]);
+        const request = index.getAll(range) as IDBRequest<DBUserWordHighlight[]>;
+        request.onsuccess = () => {
+          resolve(request.result.map(h => ({
+            id: h.id,
+            reference: { book: h.book, chapter: h.chapter, verse: h.verse },
+            translation: h.translation,
+            wordStart: h.wordStart,
+            wordLength: h.wordLength,
+            style: deserializeStyle(h.style, '#ffeb3b'),
+            createdAt: new Date(h.createdAt),
+          })));
+        };
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error('Error getting chapter word highlights:', error);
+      return [];
+    }
+  }
+
+  async saveWordHighlight(highlight: Omit<UserWordHighlight, 'id' | 'createdAt'>): Promise<UserWordHighlight> {
+    const now = Date.now();
+    const id = generateId();
+    const dbItem: DBUserWordHighlight = {
+      id,
+      book: highlight.reference.book,
+      chapter: highlight.reference.chapter,
+      verse: highlight.reference.verse,
+      translation: highlight.translation,
+      wordStart: highlight.wordStart,
+      wordLength: highlight.wordLength,
+      style: serializeStyle(highlight.style),
+      createdAt: now,
+    };
+    await writeTransaction('user_word_highlights', (store) => store.put(dbItem));
+    return { ...highlight, id, createdAt: new Date(now) };
+  }
+
+  async deleteWordHighlight(highlightId: string): Promise<void> {
+    await writeTransaction('user_word_highlights', (store) => store.delete(highlightId));
   }
   
   // ========== BOOKMARKS ==========

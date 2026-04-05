@@ -14,6 +14,7 @@ export interface SyncOperation {
 export type SyncTable = 
   | 'user_notes'
   | 'user_highlights'
+  | 'user_word_highlights'
   | 'user_bookmarks'
   | 'journal_entries'
   | 'reading_plans'

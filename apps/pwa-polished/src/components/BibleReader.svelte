@@ -5,6 +5,11 @@
   import SelectionToast from "./SelectionToast.svelte";
   import CommentaryModal from "./CommentaryModal.svelte";
   import AnnotationPanel from "./AnnotationPanel.svelte";
+  import HighlightModal from "./HighlightModal.svelte";
+  import { IndexedDBUserDataStore } from "../adapters/UserDataStore";
+  import { applyChapterHighlights } from "../lib/highlightRenderer";
+  import { syncQueue } from "../lib/sync/SyncQueueService";
+  import type { UserHighlight, UserWordHighlight, HighlightStyle } from "@projectbible/core";
   import {
     navigationStore,
     availableTranslations,
@@ -118,6 +123,16 @@
   
   // Track selected verse number for commentary
   let selectedVerseNumber: number | null = null;
+
+  // Highlight state
+  const userDataStore = new IndexedDBUserDataStore();
+  let highlightModalOpen = false;
+  let highlightModalRef: { book: string; chapter: number; verse: number } | null = null;
+  let highlightModalExisting: UserHighlight | UserWordHighlight | null = null;
+  let highlightSelectionType: 'verse' | 'word' = 'verse';
+  // Cached highlights for current chapter
+  let chapterVerseHighlights: UserHighlight[] = [];
+  let chapterWordHighlights: UserWordHighlight[] = [];
 
   // Morphology state
   let selectedMorphology: DBMorphology | null = null;
@@ -521,6 +536,9 @@
       // Load annotation data (commentary + TSK references)
       await loadAnnotations(book, chapter);
 
+      // Load and apply persisted highlights
+      await loadAndApplyHighlights(book, chapter);
+
       if (resetScroll && readerElement) {
         // Set flag BEFORE tick so any clamp-induced scroll event is consumed
         scrollResetPending = true;
@@ -534,6 +552,27 @@
       chapters = [];
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadAndApplyHighlights(book: string, chapter: number) {
+    try {
+      const [vHl, wHl] = await Promise.all([
+        userDataStore.getChapterHighlights(book, chapter),
+        userDataStore.getChapterWordHighlights(book, chapter),
+      ]);
+      chapterVerseHighlights = vHl;
+      chapterWordHighlights = wHl;
+      await tick();
+      if (!readerElement) return;
+      const section = readerElement.querySelector<HTMLElement>(
+        `[data-chapter-section][data-book="${book}"][data-chapter="${chapter}"]`
+      );
+      if (section) {
+        applyChapterHighlights(section, vHl, wHl, currentTranslation);
+      }
+    } catch (err) {
+      console.warn('[Highlights] load error:', err);
     }
   }
 
@@ -1957,9 +1996,26 @@
       case "map":
         alert(`Show on map: ${text}\n\n(Map integration coming soon)`);
         break;
-      case "highlight":
-        alert(`Highlight: ${text}\n\n(Highlights coming soon)`);
+      case "highlight": {
+        if (selectedVerseNumber === null) break;
+        const hlRef = { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber };
+        // Find existing highlight for this verse
+        const existingV = chapterVerseHighlights.find(
+          h => h.reference.verse === selectedVerseNumber
+        ) ?? null;
+        const existingW = selectionMode === 'word'
+          ? chapterWordHighlights.find(
+              h => h.reference.verse === selectedVerseNumber &&
+                   h.translation === currentTranslation
+            ) ?? null
+          : null;
+        highlightModalRef = hlRef;
+        highlightModalExisting = selectionMode === 'word' ? (existingW ?? existingV) : existingV;
+        highlightSelectionType = selectionMode;
+        highlightModalOpen = true;
+        showToast = false;
         break;
+      }
       case "save":
         alert(`Save verse: ${text}\n\n(Saved verses coming soon)`);
         break;
@@ -2109,6 +2165,96 @@
   chapter={commentaryModalChapter}
   verse={commentaryModalVerse}
 />
+
+{#if highlightModalOpen && highlightModalRef}
+  <HighlightModal
+    reference={highlightModalRef}
+    existingHighlight={highlightModalExisting}
+    selectionType={highlightSelectionType}
+    on:save={async (e) => {
+      if (!highlightModalRef) return;
+      const style: HighlightStyle = e.detail;
+      highlightModalOpen = false;
+
+      if (highlightSelectionType === 'word' && selectionRange) {
+        // Remove existing word highlight for this verse+translation if any
+        const prev = chapterWordHighlights.find(
+          h => h.reference.verse === highlightModalRef!.verse && h.translation === currentTranslation
+        );
+        if (prev) {
+          await userDataStore.deleteWordHighlight(prev.id);
+          await syncQueue.enqueue({ type: 'DELETE', table: 'user_word_highlights', id: prev.id });
+        }
+        // Determine word offset from selection
+        const textSpan = readerElement?.querySelector<HTMLElement>(
+          `[data-verse="${highlightModalRef.verse}"] .verse-text`
+        );
+        let wordStart = 0; let wordLength = 0;
+        if (textSpan && selectionRange) {
+          const verseText = textSpan.textContent ?? '';
+          const rangeText = selectionRange.toString();
+          const idx = verseText.indexOf(rangeText);
+          if (idx >= 0) { wordStart = idx; wordLength = rangeText.length; }
+        }
+        const saved = await userDataStore.saveWordHighlight({
+          reference: highlightModalRef,
+          translation: currentTranslation,
+          wordStart, wordLength, style,
+        });
+        await syncQueue.enqueue({ type: 'INSERT', table: 'user_word_highlights', id: saved.id, data: {
+          id: saved.id, book: saved.reference.book, chapter: saved.reference.chapter,
+          verse: saved.reference.verse, translation: saved.translation,
+          word_start: saved.wordStart, word_length: saved.wordLength,
+          style: JSON.stringify(saved.style), created_at: saved.createdAt.toISOString(),
+        }});
+        chapterWordHighlights = await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter);
+      } else {
+        // Verse-level
+        const prev = chapterVerseHighlights.find(h => h.reference.verse === highlightModalRef!.verse);
+        if (prev) {
+          await userDataStore.deleteHighlight(prev.id);
+          await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: prev.id });
+        }
+        const saved = await userDataStore.saveHighlight({ reference: highlightModalRef, style });
+        await syncQueue.enqueue({ type: 'INSERT', table: 'user_highlights', id: saved.id, data: {
+          id: saved.id, book: saved.reference.book, chapter: saved.reference.chapter,
+          verse: saved.reference.verse, color: saved.style.color,
+          style: JSON.stringify(saved.style), created_at: saved.createdAt.toISOString(),
+        }});
+        chapterVerseHighlights = await userDataStore.getChapterHighlights(highlightModalRef.book, highlightModalRef.chapter);
+      }
+      // Re-apply all highlights for the chapter
+      await tick();
+      const section = readerElement?.querySelector<HTMLElement>(
+        `[data-chapter-section][data-book="${highlightModalRef.book}"][data-chapter="${highlightModalRef.chapter}"]`
+      );
+      if (section) applyChapterHighlights(section, chapterVerseHighlights, chapterWordHighlights, currentTranslation);
+    }}
+    on:remove={async () => {
+      if (!highlightModalRef) return;
+      highlightModalOpen = false;
+      if (highlightModalExisting) {
+        const isWord = 'wordStart' in highlightModalExisting;
+        if (isWord) {
+          await userDataStore.deleteWordHighlight(highlightModalExisting.id);
+          await syncQueue.enqueue({ type: 'DELETE', table: 'user_word_highlights', id: highlightModalExisting.id });
+          chapterWordHighlights = await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter);
+        } else {
+          await userDataStore.deleteHighlight(highlightModalExisting.id);
+          await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: highlightModalExisting.id });
+          chapterVerseHighlights = await userDataStore.getChapterHighlights(highlightModalRef.book, highlightModalRef.chapter);
+        }
+        // Re-apply after removal
+        await tick();
+        const section = readerElement?.querySelector<HTMLElement>(
+          `[data-chapter-section][data-book="${highlightModalRef.book}"][data-chapter="${highlightModalRef.chapter}"]`
+        );
+        if (section) applyChapterHighlights(section, chapterVerseHighlights, chapterWordHighlights, currentTranslation);
+      }
+    }}
+    on:close={() => { highlightModalOpen = false; }}
+  />
+{/if}
 
 <AnnotationPanel
   bind:open={annotationPanelOpen}
@@ -2291,6 +2437,11 @@
     margin: 0 1px;
     vertical-align: super;
     user-select: none;
+  }
+
+  /* Highlight text-color global helper (set by highlightRenderer) */
+  :global(.hl-text-colored) {
+    color: var(--hl-text-color, inherit) !important;
   }
 
   /* Morphology-tagged words */

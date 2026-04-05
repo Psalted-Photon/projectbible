@@ -12,6 +12,7 @@
   import { syncService } from "./lib/sync";
   import { readingPlanModalStore } from "./stores/readingPlanModalStore";
   import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
+  import "./adapters/SyncedHighlightAdapter"; // registers verse/word highlight pull handlers
 
   let appReady = false;
   let showReadingPlanModal = false;

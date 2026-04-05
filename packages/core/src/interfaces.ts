@@ -191,10 +191,35 @@ export interface UserNote {
   updatedAt: Date;
 }
 
+export type HighlightType = 'background' | 'text-color' | 'underline';
+
+export type UnderlineStyle = 'solid' | 'dashed' | 'wavy';
+
+export interface HighlightStyle {
+  type: HighlightType;
+  color: string;
+  underlineStyle?: UnderlineStyle;
+}
+
 export interface UserHighlight {
   id: string;
   reference: BCV;
+  /** @deprecated Use `style` instead. Kept for backward compatibility. */
   color: string;
+  style: HighlightStyle;
+  createdAt: Date;
+}
+
+export interface UserWordHighlight {
+  id: string;
+  reference: BCV;
+  /** The translation this word offset applies to (e.g. "KJV", "BSB"). */
+  translation: string;
+  /** 0-based character offset within the plain verse text. */
+  wordStart: number;
+  /** Character length of the highlighted span. */
+  wordLength: number;
+  style: HighlightStyle;
   createdAt: Date;
 }
 
@@ -368,10 +393,17 @@ export interface UserDataStore {
   saveNote(note: Omit<UserNote, 'id' | 'createdAt' | 'updatedAt'>): Promise<UserNote>;
   deleteNote(noteId: string): Promise<void>;
   
-  // Highlights
+  // Verse highlights (cross-translation)
   getHighlights(reference?: BCV): Promise<UserHighlight[]>;
-  saveHighlight(highlight: Omit<UserHighlight, 'id' | 'createdAt'>): Promise<UserHighlight>;
+  getChapterHighlights(book: string, chapter: number): Promise<UserHighlight[]>;
+  saveHighlight(highlight: Omit<UserHighlight, 'id' | 'createdAt' | 'color'>): Promise<UserHighlight>;
   deleteHighlight(highlightId: string): Promise<void>;
+
+  // Word highlights (translation-specific; fall back to verse-level on other translations)
+  getWordHighlights(reference?: BCV, translation?: string): Promise<UserWordHighlight[]>;
+  getChapterWordHighlights(book: string, chapter: number): Promise<UserWordHighlight[]>;
+  saveWordHighlight(highlight: Omit<UserWordHighlight, 'id' | 'createdAt'>): Promise<UserWordHighlight>;
+  deleteWordHighlight(highlightId: string): Promise<void>;
   
   // Bookmarks
   getBookmarks(): Promise<UserBookmark[]>;

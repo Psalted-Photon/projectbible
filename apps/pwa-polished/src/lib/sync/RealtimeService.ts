@@ -11,7 +11,8 @@ import type { SyncTable, RemoteChange } from './types';
 
 const SYNC_TABLES: SyncTable[] = [
   'user_notes',
-  'user_highlights', 
+  'user_highlights',
+  'user_word_highlights',
   'user_bookmarks',
   'journal_entries',
   'reading_plans',
