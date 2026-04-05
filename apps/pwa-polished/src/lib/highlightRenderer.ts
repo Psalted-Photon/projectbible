@@ -4,10 +4,10 @@
  * Applies and removes visual highlight effects on verse DOM elements.
  *
  * Approach:
- *  - background: CSS background-color on the inline .verse-text span so the
- *    highlight wraps to text width, not the full block container.
- *    Opacity is seeded-random (0.42–0.62) for natural variation per verse.
- *    box-decoration-break:clone gives each wrapped line its own swatch.
+ *  - background: SVG data URI applied as background-image on the inline
+ *    .verse-text span. The SVG uses a seeded wavy filled path for an organic,
+ *    hand-drawn highlighter appearance. box-decoration-break:clone gives
+ *    each wrapped line its own swatch.
  *  - text-color: CSS custom property on the verse-text span.
  *  - underline: CSS text-decoration on the verse-text span.
  *
@@ -37,19 +37,55 @@ function seededRandom(seed: string): () => number {
 }
 
 // ---------------------------------------------------------------------------
+// SVG wavy highlight generator
+// ---------------------------------------------------------------------------
+
+/**
+ * Build an SVG data URI for a wavy filled highlight shape.
+ * Uses seeded randomness so the same verse always gets the same organic shape.
+ * ViewBox: 0 0 100 10 — rendered via background-size:100% 100% to fill the span.
+ */
+function generateWavySvgDataUri(color: string, rng: () => number): string {
+  const opacity = (0.38 + rng() * 0.24).toFixed(3);
+  const r = parseInt(color.slice(1, 3), 16);
+  const g = parseInt(color.slice(3, 5), 16);
+  const b = parseInt(color.slice(5, 7), 16);
+
+  // Random y-offsets for top (baseline y=2) and bottom (baseline y=8) edges
+  const amp = 0.8 + rng() * 1.0;
+  const N = 7;
+  const topY = Array.from({ length: N + 1 }, () => 2.0 + (rng() * 2 - 1) * amp);
+  const botY = Array.from({ length: N + 1 }, () => 8.0 + (rng() * 2 - 1) * amp);
+
+  // Top edge: left-to-right smooth quadratic bezier through control midpoints
+  let d = `M0,${topY[0].toFixed(2)}`;
+  for (let i = 1; i <= N; i++) {
+    const x = (i / N * 100).toFixed(1);
+    const cpX = ((i - 0.5) / N * 100).toFixed(1);
+    const cpY = ((topY[i - 1] + topY[i]) / 2).toFixed(2);
+    d += ` Q${cpX},${cpY} ${x},${topY[i].toFixed(2)}`;
+  }
+
+  // Right bridge + bottom edge: right-to-left
+  d += ` L100,${botY[N].toFixed(2)}`;
+  for (let i = N - 1; i >= 0; i--) {
+    const x = (i / N * 100).toFixed(1);
+    const cpX = ((i + 0.5) / N * 100).toFixed(1);
+    const cpY = ((botY[i] + botY[i + 1]) / 2).toFixed(2);
+    d += ` Q${cpX},${cpY} ${x},${botY[i].toFixed(2)}`;
+  }
+  d += ' Z';
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 10" preserveAspectRatio="none"><path d="${d}" fill="rgb(${r},${g},${b})" fill-opacity="${opacity}"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;  
+}
+
+// ---------------------------------------------------------------------------
 // Apply / remove helpers
 // ---------------------------------------------------------------------------
 
-const SVG_CLASS = 'hl-svg-overlay'; // kept only for cleaning up any legacy DOM nodes
-const HL_BG_CLASS = 'hl-bg-colored';
+const SVG_CLASS = 'hl-svg-overlay'; // kept for cleaning up any legacy DOM nodes
 const WORD_WRAP_CLASS = 'hl-word-span';
-
-function hexToRgba(hex: string, opacity: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${opacity.toFixed(2)})`;
-}
 
 /**
  * Apply a highlight style to a .verse element.
@@ -96,13 +132,14 @@ export function applyWordHighlightToSpan(
   seed: string
 ): void {
   span.removeAttribute('data-hl-style');
-  span.style.removeProperty('background-color');
+  span.style.removeProperty('background-image');
+  span.style.removeProperty('background-size');
+  span.style.removeProperty('background-repeat');
   span.style.removeProperty('-webkit-box-decoration-break');
   span.style.removeProperty('box-decoration-break');
   span.style.removeProperty('--hl-text-color');
   span.style.removeProperty('text-decoration');
   span.style.removeProperty('text-underline-offset');
-  span.classList.remove(HL_BG_CLASS);
   span.querySelector(`.${SVG_CLASS}`)?.remove();
 
   switch (style.type) {
@@ -125,7 +162,7 @@ export function applyWordHighlightToSpan(
 }
 
 /**
- * Apply a background colour to an element.
+ * Apply a background colour to an element using a seeded wavy SVG data URI.
  *
  * For verse containers (.verse): resolves to the inline .verse-text child so
  * the highlight wraps only the text width, not the full block container.
@@ -136,13 +173,14 @@ export function applyWordHighlightToSpan(
  */
 function _applyBackground(el: HTMLElement, color: string, seed: string): void {
   const rng = seededRandom(seed);
-  const opacity = 0.42 + rng() * 0.20; // 0.42 – 0.62, seeded for natural variation
+  const dataUri = generateWavySvgDataUri(color, rng);
 
   const target = el.querySelector<HTMLElement>('.verse-text') ?? el;
-  target.style.backgroundColor = hexToRgba(color, opacity);
+  target.style.backgroundImage = dataUri;
+  target.style.backgroundSize = '100% 100%';
+  target.style.backgroundRepeat = 'no-repeat';
   target.style.setProperty('-webkit-box-decoration-break', 'clone');
   target.style.setProperty('box-decoration-break', 'clone');
-  target.classList.add(HL_BG_CLASS);
 }
 
 /**
@@ -155,13 +193,15 @@ export function removeHighlightFromElement(el: HTMLElement): void {
   // Remove text-color and background
   const textSpan = el.querySelector<HTMLElement>('.verse-text');
   if (textSpan) {
-    textSpan.style.removeProperty('background-color');
+    textSpan.style.removeProperty('background-image');
+    textSpan.style.removeProperty('background-size');
+    textSpan.style.removeProperty('background-repeat');
     textSpan.style.removeProperty('-webkit-box-decoration-break');
     textSpan.style.removeProperty('box-decoration-break');
     textSpan.style.removeProperty('--hl-text-color');
     textSpan.style.removeProperty('text-decoration');
     textSpan.style.removeProperty('text-underline-offset');
-    textSpan.classList.remove('hl-text-colored', 'hl-text-underlined', HL_BG_CLASS);
+    textSpan.classList.remove('hl-text-colored', 'hl-text-underlined');
   }
 
   // Remove any injected word spans

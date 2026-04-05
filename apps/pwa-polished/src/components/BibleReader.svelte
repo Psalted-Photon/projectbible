@@ -130,6 +130,8 @@
   let highlightModalRef: { book: string; chapter: number; verse: number } | null = null;
   let highlightModalExisting: UserHighlight | UserWordHighlight | null = null;
   let highlightSelectionType: 'verse' | 'word' = 'verse';
+  let pendingWordStart = 0;
+  let pendingWordLength = 0;
   // Cached highlights for current chapter
   let chapterVerseHighlights: UserHighlight[] = [];
   let chapterWordHighlights: UserWordHighlight[] = [];
@@ -2012,6 +2014,28 @@
         highlightModalRef = hlRef;
         highlightModalExisting = selectionMode === 'word' ? (existingW ?? existingV) : existingV;
         highlightSelectionType = selectionMode;
+        // Capture word offset synchronously now, before any DOM mutations
+        pendingWordStart = 0; pendingWordLength = 0;
+        if (selectionMode === 'word' && selectionRange) {
+          const wSpan = readerElement?.querySelector<HTMLElement>(
+            `[data-verse="${selectedVerseNumber}"] .verse-text`
+          );
+          if (wSpan) {
+            const sr = selectionRange;
+            let cur = 0, found = false;
+            const sn = sr.startContainer, en = sr.endContainer;
+            const walkW = (n: Node): void => {
+              if (n.nodeType === Node.TEXT_NODE) {
+                const t = n as Text;
+                if (t === sn) { pendingWordStart = cur + sr.startOffset; found = true; }
+                if (t === en) pendingWordLength = (cur + sr.endOffset) - pendingWordStart;
+                cur += t.length;
+              } else n.childNodes.forEach(walkW);
+            };
+            walkW(wSpan);
+            if (!found) { pendingWordStart = 0; pendingWordLength = 0; }
+          }
+        }
         highlightModalOpen = true;
         showToast = false;
         break;
@@ -2185,31 +2209,9 @@
           await userDataStore.deleteWordHighlight(prev.id);
           await syncQueue.enqueue({ type: 'DELETE', table: 'user_word_highlights', id: prev.id });
         }
-        // Determine word offset from selection
-        const textSpan = readerElement?.querySelector<HTMLElement>(
-          `[data-verse="${highlightModalRef.verse}"] .verse-text`
-        );
-        let wordStart = 0; let wordLength = 0;
-        if (textSpan && selectionRange) {
-          // Walk DOM text nodes to find exact byte offset of the selection.
-          // Using startContainer/endContainer directly avoids indexOf() misidentifying
-          // repeated words (e.g. the second "God" in "God said to God").
-          const sr = selectionRange; // capture for closure — TS can't narrow through callbacks
-          let cursor = 0;
-          let startFound = false;
-          const startNode = sr.startContainer;
-          const endNode = sr.endContainer;
-          const walkText = (node: Node) => {
-            if (node.nodeType === Node.TEXT_NODE) {
-              const tn = node as Text;
-              if (tn === startNode) { wordStart = cursor + sr.startOffset; startFound = true; }
-              if (tn === endNode) { wordLength = (cursor + sr.endOffset) - wordStart; }
-              cursor += tn.length;
-            } else { node.childNodes.forEach(walkText); }
-          };
-          walkText(textSpan);
-          if (!startFound) { wordStart = 0; wordLength = 0; }
-        }
+        // Word offset was captured synchronously at toast action time (before DOM mutations)
+        const wordStart = pendingWordStart;
+        const wordLength = pendingWordLength;
         const saved = await userDataStore.saveWordHighlight({
           reference: highlightModalRef,
           translation: currentTranslation,
