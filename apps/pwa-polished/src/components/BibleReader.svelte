@@ -2191,10 +2191,24 @@
         );
         let wordStart = 0; let wordLength = 0;
         if (textSpan && selectionRange) {
-          const verseText = textSpan.textContent ?? '';
-          const rangeText = selectionRange.toString();
-          const idx = verseText.indexOf(rangeText);
-          if (idx >= 0) { wordStart = idx; wordLength = rangeText.length; }
+          // Walk DOM text nodes to find exact byte offset of the selection.
+          // Using startContainer/endContainer directly avoids indexOf() misidentifying
+          // repeated words (e.g. the second "God" in "God said to God").
+          const sr = selectionRange; // capture for closure — TS can't narrow through callbacks
+          let cursor = 0;
+          let startFound = false;
+          const startNode = sr.startContainer;
+          const endNode = sr.endContainer;
+          const walkText = (node: Node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+              const tn = node as Text;
+              if (tn === startNode) { wordStart = cursor + sr.startOffset; startFound = true; }
+              if (tn === endNode) { wordLength = (cursor + sr.endOffset) - wordStart; }
+              cursor += tn.length;
+            } else { node.childNodes.forEach(walkText); }
+          };
+          walkText(textSpan);
+          if (!startFound) { wordStart = 0; wordLength = 0; }
         }
         const saved = await userDataStore.saveWordHighlight({
           reference: highlightModalRef,

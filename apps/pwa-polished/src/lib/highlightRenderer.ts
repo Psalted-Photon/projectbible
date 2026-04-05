@@ -4,9 +4,10 @@
  * Applies and removes visual highlight effects on verse DOM elements.
  *
  * Approach:
- *  - background: SVG wavy-path overlay injected behind verse text.
- *    Path shape is deterministic (seeded by book/chapter/verse) so it looks
- *    the same on every device / reload without storing geometry.
+ *  - background: CSS background-color on the inline .verse-text span so the
+ *    highlight wraps to text width, not the full block container.
+ *    Opacity is seeded-random (0.42–0.62) for natural variation per verse.
+ *    box-decoration-break:clone gives each wrapped line its own swatch.
  *  - text-color: CSS custom property on the verse-text span.
  *  - underline: CSS text-decoration on the verse-text span.
  *
@@ -36,61 +37,19 @@ function seededRandom(seed: string): () => number {
 }
 
 // ---------------------------------------------------------------------------
-// SVG wavy-path generation
-// ---------------------------------------------------------------------------
-
-/**
- * Generates an SVG `d` attribute describing a filled, slightly wavy band
- * that mimics an imperfect marker stroke across the full width.
- *
- * @param width   Element pixel width
- * @param height  Element pixel height (line height roughly)
- * @param rng     Seeded random function
- */
-function generateWavyPath(width: number, height: number, rng: () => number): string {
-  const POINTS = 10;
-  const baseTop = height * 0.15;
-  const baseBottom = height * 0.85;
-  const jitter = Math.min(height * 0.18, 5); // max ±5px organic variation
-
-  // Generate top-edge control points left → right
-  const topPoints: [number, number][] = [];
-  for (let i = 0; i <= POINTS; i++) {
-    const x = (width / POINTS) * i;
-    const y = baseTop + (rng() - 0.5) * 2 * jitter;
-    topPoints.push([x, y]);
-  }
-
-  // Generate bottom-edge control points right → left (so path closes cleanly)
-  const bottomPoints: [number, number][] = [];
-  for (let i = POINTS; i >= 0; i--) {
-    const x = (width / POINTS) * i;
-    const y = baseBottom + (rng() - 0.5) * 2 * jitter;
-    bottomPoints.push([x, y]);
-  }
-
-  // Build path: M then smooth quadratic curves
-  const pathParts: string[] = [`M ${topPoints[0][0].toFixed(1)} ${topPoints[0][1].toFixed(1)}`];
-
-  for (let i = 1; i < topPoints.length; i++) {
-    const [x, y] = topPoints[i];
-    pathParts.push(`L ${x.toFixed(1)} ${y.toFixed(1)}`);
-  }
-
-  for (const [x, y] of bottomPoints) {
-    pathParts.push(`L ${x.toFixed(1)} ${y.toFixed(1)}`);
-  }
-
-  pathParts.push('Z');
-  return pathParts.join(' ');
-}
-
-// ---------------------------------------------------------------------------
 // Apply / remove helpers
 // ---------------------------------------------------------------------------
 
-const SVG_CLASS = 'hl-svg-overlay';
+const SVG_CLASS = 'hl-svg-overlay'; // kept only for cleaning up any legacy DOM nodes
+const HL_BG_CLASS = 'hl-bg-colored';
 const WORD_WRAP_CLASS = 'hl-word-span';
+
+function hexToRgba(hex: string, opacity: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity.toFixed(2)})`;
+}
 
 /**
  * Apply a highlight style to a .verse element.
@@ -137,10 +96,14 @@ export function applyWordHighlightToSpan(
   seed: string
 ): void {
   span.removeAttribute('data-hl-style');
+  span.style.removeProperty('background-color');
+  span.style.removeProperty('-webkit-box-decoration-break');
+  span.style.removeProperty('box-decoration-break');
   span.style.removeProperty('--hl-text-color');
   span.style.removeProperty('text-decoration');
-  const existingSvg = span.querySelector(`.${SVG_CLASS}`);
-  if (existingSvg) existingSvg.remove();
+  span.style.removeProperty('text-underline-offset');
+  span.classList.remove(HL_BG_CLASS);
+  span.querySelector(`.${SVG_CLASS}`)?.remove();
 
   switch (style.type) {
     case 'background': {
@@ -161,47 +124,25 @@ export function applyWordHighlightToSpan(
   span.setAttribute('data-hl-style', JSON.stringify(style));
 }
 
+/**
+ * Apply a background colour to an element.
+ *
+ * For verse containers (.verse): resolves to the inline .verse-text child so
+ * the highlight wraps only the text width, not the full block container.
+ * For word spans (no .verse-text child): applies directly to the span.
+ *
+ * box-decoration-break:clone ensures each wrapped line of text gets its own
+ * background swatch — exactly how a real highlighter marker works.
+ */
 function _applyBackground(el: HTMLElement, color: string, seed: string): void {
   const rng = seededRandom(seed);
-  const opacity = 0.35 + rng() * 0.20; // 0.35 – 0.55
+  const opacity = 0.42 + rng() * 0.20; // 0.42 – 0.62, seeded for natural variation
 
-  // Make element a positioning context for the SVG overlay
-  const existingPosition = el.style.position;
-  if (!existingPosition || existingPosition === 'static') {
-    el.style.position = 'relative';
-  }
-
-  const width = el.offsetWidth || 300;
-  const height = el.offsetHeight || 28;
-  const path = generateWavyPath(width, height, rng);
-
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg') as SVGSVGElement;
-  svg.classList.add(SVG_CLASS);
-  svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('width', String(width));
-  svg.setAttribute('height', String(height));
-  svg.style.cssText = `
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 0;
-    overflow: visible;
-  `;
-
-  const pathEl = document.createElementNS(svgNS, 'path');
-  pathEl.setAttribute('d', path);
-  pathEl.setAttribute('fill', color);
-  pathEl.setAttribute('fill-opacity', opacity.toFixed(3));
-
-  svg.appendChild(pathEl);
-  el.insertBefore(svg, el.firstChild);
-
-  // Ensure text content sits above the SVG
-  const textSpan = el.querySelector<HTMLElement>('.verse-text');
-  if (textSpan) textSpan.style.position = 'relative';
+  const target = el.querySelector<HTMLElement>('.verse-text') ?? el;
+  target.style.backgroundColor = hexToRgba(color, opacity);
+  target.style.setProperty('-webkit-box-decoration-break', 'clone');
+  target.style.setProperty('box-decoration-break', 'clone');
+  target.classList.add(HL_BG_CLASS);
 }
 
 /**
@@ -211,14 +152,16 @@ export function removeHighlightFromElement(el: HTMLElement): void {
   // Remove SVG overlay
   el.querySelector(`.${SVG_CLASS}`)?.remove();
 
-  // Remove text-color
+  // Remove text-color and background
   const textSpan = el.querySelector<HTMLElement>('.verse-text');
   if (textSpan) {
+    textSpan.style.removeProperty('background-color');
+    textSpan.style.removeProperty('-webkit-box-decoration-break');
+    textSpan.style.removeProperty('box-decoration-break');
     textSpan.style.removeProperty('--hl-text-color');
     textSpan.style.removeProperty('text-decoration');
     textSpan.style.removeProperty('text-underline-offset');
-    textSpan.style.removeProperty('position');
-    textSpan.classList.remove('hl-text-colored', 'hl-text-underlined');
+    textSpan.classList.remove('hl-text-colored', 'hl-text-underlined', HL_BG_CLASS);
   }
 
   // Remove any injected word spans
