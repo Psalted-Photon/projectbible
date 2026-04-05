@@ -51,13 +51,13 @@ function generateWavySvgDataUri(color: string, rng: () => number): string {
   const g = parseInt(color.slice(3, 5), 16);
   const b = parseInt(color.slice(5, 7), 16);
 
-  // Random y-offsets for top (baseline y=1.2) and bottom (baseline y=9.2) edges.
-  // Wider band covers full letter height (ascenders to descenders).
-  // Smaller amplitude = tighter splotch edges.
+  // Random y-offsets for top (baseline y=0.5) and bottom (baseline y=9.5) edges.
+  // Baselines are pushed to the very edges of the 0-10 viewBox so when the SVG
+  // tiles vertically (one tile per line), there is no visible seam between tiles.
   const amp = 0.4 + rng() * 0.5;
   const N = 7;
-  const topY = Array.from({ length: N + 1 }, () => 1.2 + (rng() * 2 - 1) * amp);
-  const botY = Array.from({ length: N + 1 }, () => 9.2 + (rng() * 2 - 1) * amp);
+  const topY = Array.from({ length: N + 1 }, () => 0.5 + (rng() * 2 - 1) * amp);
+  const botY = Array.from({ length: N + 1 }, () => 9.5 + (rng() * 2 - 1) * amp);
 
   // Top edge: left-to-right smooth quadratic bezier through control midpoints
   let d = `M0,${topY[0].toFixed(2)}`;
@@ -170,17 +170,22 @@ export function applyWordHighlightToSpan(
  * the highlight wraps only the text width, not the full block container.
  * For word spans (no .verse-text child): applies directly to the span.
  *
- * box-decoration-break:clone ensures each wrapped line of text gets its own
- * background swatch — exactly how a real highlighter marker works.
+ * The SVG tiles vertically once per line-height so every wrapped line gets its
+ * own full wavy swatch — no dependency on box-decoration-break which is
+ * unreliable for background-image in mobile browsers.
  */
 function _applyBackground(el: HTMLElement, color: string, seed: string): void {
   const rng = seededRandom(seed);
   const dataUri = generateWavySvgDataUri(color, rng);
 
   const target = el.querySelector<HTMLElement>('.verse-text') ?? el;
+  // Use computed line-height as tile height so the SVG repeats exactly once
+  // per text line regardless of font size or user zoom.
+  const computedLH = window.getComputedStyle(target).lineHeight;
+  const tileH = (computedLH && computedLH !== 'normal') ? computedLH : '1.8em';
   target.style.backgroundImage = dataUri;
-  target.style.backgroundSize = '100% 100%';
-  target.style.backgroundRepeat = 'no-repeat';
+  target.style.backgroundSize = `100% ${tileH}`;
+  target.style.backgroundRepeat = 'repeat-y';
   target.style.setProperty('-webkit-box-decoration-break', 'clone');
   target.style.setProperty('box-decoration-break', 'clone');
 }
