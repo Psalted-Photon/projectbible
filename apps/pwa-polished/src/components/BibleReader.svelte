@@ -1365,10 +1365,6 @@
       ?.textContent?.trim();
     const verseNumInt = verseNum ? parseInt(verseNum) : null;
 
-    // Always track which verse is active so highlight/commentary actions work
-    // in word mode too (previously only set in verse-mode highlightSelection branch)
-    if (verseNumInt !== null) selectedVerseNumber = verseNumInt;
-
     // Check if this is an original language translation
     if (isOriginalLanguage(currentTranslation)) {
       // Greek/Hebrew word click detection
@@ -2015,15 +2011,12 @@
         highlightModalRef = hlRef;
         highlightModalExisting = selectionMode === 'word' ? (existingW ?? existingV) : existingV;
         highlightSelectionType = selectionMode;
-        // Capture word offset synchronously now, before any DOM mutations.
-        // Derive the .verse-text element directly from the selection start node
-        // so this works regardless of whether selectedVerseNumber is stale.
+        // Capture word offset synchronously now, before any DOM mutations
         pendingWordStart = 0; pendingWordLength = 0;
         if (selectionMode === 'word' && selectionRange) {
-          const startEl = selectionRange.startContainer.nodeType === Node.TEXT_NODE
-            ? (selectionRange.startContainer as Text).parentElement
-            : selectionRange.startContainer as HTMLElement;
-          const wSpan = startEl?.closest<HTMLElement>('.verse-text');
+          const wSpan = readerElement?.querySelector<HTMLElement>(
+            `[data-verse="${selectedVerseNumber}"] .verse-text`
+          );
           if (wSpan) {
             const sr = selectionRange;
             let cur = 0, found = false;
