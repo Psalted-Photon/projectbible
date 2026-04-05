@@ -26,6 +26,17 @@
     { value: '#bfdbfe', label: 'Blue' },
   ] as const;
 
+  const BOLD_MARKER_COLORS = [
+    { value: '#ca8a04', label: 'Dark Gold' },
+    { value: '#15803d', label: 'Forest Green' },
+    { value: '#c2410c', label: 'Rust Orange' },
+    { value: '#0891b2', label: 'Dark Cyan' },
+    { value: '#6d28d9', label: 'Deep Violet' },
+    { value: '#b91c1c', label: 'Deep Red' },
+    { value: '#1d4ed8', label: 'Navy Blue' },
+    { value: '#0f766e', label: 'Deep Teal' },
+  ] as const;
+
   const TEXT_COLORS = [
     { value: '#eab308', label: 'Gold' },
     { value: '#f97316', label: 'Coral' },
@@ -147,6 +158,21 @@
             aria-pressed={isActiveMarker(value)}
           >
             {#if isActiveMarker(value)}<span class="hl-check">✓</span>{/if}
+          </button>
+        {/each}
+      </div>
+      <div class="hl-swatches" style="margin-top: 8px">
+        {#each BOLD_MARKER_COLORS as { value, label }}
+          <button
+            class="hl-swatch hl-swatch-marker"
+            class:hl-swatch-active={isActiveMarker(value)}
+            style="--swatch-color: {value}"
+            title={label}
+            on:click={() => selectMarker(value)}
+            aria-label="{label} marker"
+            aria-pressed={isActiveMarker(value)}
+          >
+            {#if isActiveMarker(value)}<span class="hl-check hl-check-bold">✓</span>{/if}
           </button>
         {/each}
       </div>
@@ -383,6 +409,12 @@
 
   .hl-check-text {
     background: var(--swatch-color, #fff);
+    color: #111;
+  }
+
+  /* On dark/bold swatches the checkmark badge uses white text for contrast */
+  .hl-check-bold {
+    background: rgba(255,255,255,0.9);
     color: #111;
   }
 

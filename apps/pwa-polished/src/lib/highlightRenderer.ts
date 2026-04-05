@@ -51,11 +51,13 @@ function generateWavySvgDataUri(color: string, rng: () => number): string {
   const g = parseInt(color.slice(3, 5), 16);
   const b = parseInt(color.slice(5, 7), 16);
 
-  // Random y-offsets for top (baseline y=2) and bottom (baseline y=8) edges
-  const amp = 0.8 + rng() * 1.0;
+  // Random y-offsets for top (baseline y=1.2) and bottom (baseline y=9.2) edges.
+  // Wider band covers full letter height (ascenders to descenders).
+  // Smaller amplitude = tighter splotch edges.
+  const amp = 0.4 + rng() * 0.5;
   const N = 7;
-  const topY = Array.from({ length: N + 1 }, () => 2.0 + (rng() * 2 - 1) * amp);
-  const botY = Array.from({ length: N + 1 }, () => 8.0 + (rng() * 2 - 1) * amp);
+  const topY = Array.from({ length: N + 1 }, () => 1.2 + (rng() * 2 - 1) * amp);
+  const botY = Array.from({ length: N + 1 }, () => 9.2 + (rng() * 2 - 1) * amp);
 
   // Top edge: left-to-right smooth quadratic bezier through control midpoints
   let d = `M0,${topY[0].toFixed(2)}`;
