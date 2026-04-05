@@ -1518,20 +1518,21 @@
 
       // Create floating drag handles positioned absolutely
       const rects = range.getClientRects();
-      if (rects.length > 0) {
+      // Handles are appended to .text-container (position:relative), so all
+      // offsets must be relative to that element's bounding rect — not the
+      // scrollable .bible-reader which sits above the NavBar.
+      const textContainer = readerElement?.querySelector(".text-container");
+      if (rects.length > 0 && textContainer) {
         const firstRect = rects[0];
         const lastRect = rects[rects.length - 1];
-
-        // Get the scrollable container offset
-        const readerRect = readerElement?.getBoundingClientRect();
-        const scrollTop = readerElement?.scrollTop || 0;
+        const containerRect = textContainer.getBoundingClientRect();
 
         // Left handle at start of selection
         const leftHandle = document.createElement("div");
         leftHandle.className = "drag-handle-float left";
         leftHandle.style.position = "absolute";
-        leftHandle.style.left = `${firstRect.left - (readerRect?.left || 0)}px`;
-        leftHandle.style.top = `${firstRect.top - (readerRect?.top || 0) + scrollTop}px`;
+        leftHandle.style.left = `${firstRect.left - containerRect.left}px`;
+        leftHandle.style.top = `${firstRect.top - containerRect.top + textContainer.scrollTop}px`;
         leftHandle.style.height = `${firstRect.height}px`;
         leftHandle.addEventListener("mousedown", (e) => startDrag(e, "left"));
         leftHandle.addEventListener(
@@ -1544,8 +1545,8 @@
         const rightHandle = document.createElement("div");
         rightHandle.className = "drag-handle-float right";
         rightHandle.style.position = "absolute";
-        rightHandle.style.left = `${lastRect.right - (readerRect?.left || 0)}px`;
-        rightHandle.style.top = `${lastRect.top - (readerRect?.top || 0) + scrollTop}px`;
+        rightHandle.style.left = `${lastRect.right - containerRect.left}px`;
+        rightHandle.style.top = `${lastRect.top - containerRect.top + textContainer.scrollTop}px`;
         rightHandle.style.height = `${lastRect.height}px`;
         rightHandle.addEventListener("mousedown", (e) => startDrag(e, "right"));
         rightHandle.addEventListener(
@@ -1554,13 +1555,9 @@
           { passive: false },
         );
 
-        // Append to text container
-        const textContainer = readerElement?.querySelector(".text-container");
-        if (textContainer) {
-          textContainer.appendChild(leftHandle);
-          textContainer.appendChild(rightHandle);
-          highlightedElements.push(leftHandle, rightHandle);
-        }
+        textContainer.appendChild(leftHandle);
+        textContainer.appendChild(rightHandle);
+        highlightedElements.push(leftHandle, rightHandle);
       }
     } else {
       // Highlight the entire verse
@@ -2200,7 +2197,7 @@
       const style: HighlightStyle = e.detail;
       highlightModalOpen = false;
 
-      if (highlightSelectionType === 'word' && selectionRange) {
+      if (highlightSelectionType === 'word' && pendingWordLength > 0) {
         // Remove existing word highlight for this verse+translation if any
         const prev = chapterWordHighlights.find(
           h => h.reference.verse === highlightModalRef!.verse && h.translation === currentTranslation
