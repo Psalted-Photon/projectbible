@@ -789,6 +789,25 @@
   }
   
   $: todayReading = getTodayReading();
+
+  function getNextReadingDay() {
+    if (!currentReadingPlan) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return currentReadingPlan.days.find(day => {
+      const dayDate = new Date(day.date);
+      dayDate.setHours(0, 0, 0, 0);
+      return dayDate.getTime() > today.getTime() && !getDayProgress(day.dayNumber)?.completed;
+    }) ?? null;
+  }
+
+  function scrollToDayInList(dayNumber: number) {
+    viewMode = 'list';
+    setTimeout(() => {
+      const el = document.querySelector(`[data-day-number="${dayNumber}"]`) as HTMLElement | null;
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  }
 </script>
 
 {#if isOpen}
@@ -927,6 +946,48 @@
         {:else if currentTab === 'active'}
           <div class="active-plan-tab">
             {#if currentReadingPlan}
+              <!-- Welcome banner + today's reading — always first -->
+              <div class="welcome-banner">
+                <div class="welcome-greeting">
+                  Welcome{userName ? `, ${userName}` : ''}!
+                </div>
+                {#if todayReading}
+                  <div class="welcome-subtitle">Here's your reading for today:</div>
+                  <div class="today-reading">
+                    <div class="today-reading-header">
+                      <span class="today-day-label">Day {todayReading.dayNumber} &mdash; {new Date(todayReading.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      <button class="jump-to-day-btn" on:click={() => scrollToDayInList(todayReading.dayNumber)}>Jump to day ↓</button>
+                    </div>
+                    <p class="chapters-list">
+                      {#each todayReading.chapters as chapter, i}
+                        <button
+                          class="chapter-link"
+                          on:click={() => handleChapterClick(todayReading, chapter)}
+                        >
+                          {chapter.book} {chapter.chapter}
+                        </button>{#if i < todayReading.chapters.length - 1}, {/if}
+                      {/each}
+                    </p>
+                    <div class="today-reading-actions">
+                      <button
+                        class="start-reading-btn"
+                        on:click={() => handleChapterClick(todayReading, todayReading.chapters[0])}
+                      >
+                        Start Reading →
+                      </button>
+                      <button class="mark-day-btn" on:click={() => markDayComplete(todayReading)}>Mark Day Complete</button>
+                    </div>
+                  </div>
+                {:else}
+                  {@const nextDay = getNextReadingDay()}
+                  {#if nextDay}
+                    <div class="welcome-subtitle no-reading-today">No reading scheduled for today. Next reading: <strong>Day {nextDay.dayNumber}</strong> on {new Date(nextDay.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}.</div>
+                  {:else}
+                    <div class="welcome-subtitle no-reading-today">No reading scheduled for today.</div>
+                  {/if}
+                {/if}
+              </div>
+
               <div class="plan-overview">
                 <div class="overview-header">
                   <h3><span class="emoji">📊</span> Plan Overview</h3>
@@ -940,33 +1001,6 @@
                   <div><strong>End:</strong> {new Date(currentReadingPlan.config.endDate).toLocaleDateString()}</div>
                 </div>
               </div>
-              
-              {#if todayReading}
-                <div class="today-reading">
-                  <h3><span class="emoji">📖</span> Today's Reading (Day {todayReading.dayNumber})</h3>
-                  <p class="chapters-list">
-                    {#each todayReading.chapters as chapter, i}
-                      <button 
-                        class="chapter-link" 
-                        on:click={() => handleChapterClick(todayReading, chapter)}
-                      >
-                        {chapter.book} {chapter.chapter}
-                      </button>{#if i < todayReading.chapters.length - 1}, {/if}
-                    {/each}
-                  </p>
-                  <p class="chapter-count">{todayReading.chapters.length} chapters</p>
-                  <button 
-                    class="start-reading-btn" 
-                    on:click={() => handleChapterClick(todayReading, todayReading.chapters[0])}
-                  >
-                    Start Reading →
-                  </button>
-                </div>
-              {:else}
-                <div class="no-reading">
-                  <p>Today is not a reading day in this plan.</p>
-                </div>
-              {/if}
 
               <div class="plan-progress">
                 <div class="progress-header">
@@ -1538,11 +1572,6 @@
     margin-bottom: 20px;
   }
   
-  .today-reading h3 {
-    margin: 0 0 10px 0;
-    color: #8bc34a;
-  }
-  
   .chapters-list {
     margin: 5px 0;
     font-size: 15px;
@@ -1563,12 +1592,6 @@
     color: #66bb6a;
   }
   
-  .chapter-count {
-    margin: 5px 0;
-    font-size: 13px;
-    color: #9ccc65;
-  }
-  
   .start-reading-btn {
     margin-top: 10px;
     padding: 8px 16px;
@@ -1584,13 +1607,77 @@
     background: #66bb6a;
   }
   
-  .no-reading {
-    padding: 15px;
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
+  .welcome-banner {
+    background: linear-gradient(135deg, #1a2e1a 0%, #1e2e1a 100%);
+    border: 1px solid #2e5d2e;
+    border-left: 4px solid #4caf50;
     border-radius: 8px;
-    margin-bottom: 20px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+
+  .welcome-greeting {
+    font-size: 18px;
+    font-weight: 700;
+    color: #c5e1a5;
+    margin-bottom: 4px;
+  }
+
+  .welcome-subtitle {
+    font-size: 13px;
+    color: #9ccc65;
+    margin-bottom: 10px;
+  }
+
+  .welcome-subtitle.no-reading-today {
+    margin-bottom: 0;
     color: #888;
+  }
+
+  .welcome-banner .today-reading {
+    background: transparent;
+    border: none;
+    border-top: 1px solid #2e5d2e;
+    border-left: none;
+    border-radius: 0;
+    margin-bottom: 0;
+    padding: 10px 0 0 0;
+  }
+
+  .today-reading-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .today-day-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #aed581;
+  }
+
+  .jump-to-day-btn {
+    background: none;
+    border: 1px solid #4caf50;
+    color: #4caf50;
+    border-radius: 4px;
+    padding: 3px 9px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .jump-to-day-btn:hover {
+    background: #4caf50;
+    color: #fff;
+  }
+
+  .today-reading-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
   }
 
   .plan-progress {
