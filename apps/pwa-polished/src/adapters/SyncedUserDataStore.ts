@@ -12,7 +12,7 @@ import { IndexedDBUserDataStore } from './UserDataStore';
 import { syncQueue } from '../lib/sync/SyncQueueService';
 import { realtimeService } from '../lib/sync/RealtimeService';
 import { shouldApplyRemoteChange, nowISO } from '../lib/sync/conflictResolver';
-import { openDB } from './db';
+import { openDB, writeTransaction } from './db';
 import type { DBUserNote, DBUserHighlight, DBUserBookmark } from './db';
 
 /**
@@ -31,31 +31,26 @@ export function subscribeToUserDataRemoteChanges(fn: () => void): () => void {
  * Called by SyncService on initial pull
  */
 export async function applyRemoteNotes(rows: any[]): Promise<void> {
+  if (!rows || rows.length === 0) return;
   const db = await openDB();
-  const tx = db.transaction('user_notes', 'readwrite');
-  const store = tx.objectStore('user_notes');
-  
   for (const row of rows) {
-    // Check if local version exists
-    const localReq = store.get(row.id);
-    await new Promise<void>((resolve) => {
-      localReq.onsuccess = () => {
-        const local = localReq.result as DBUserNote | undefined;
-        if (!local || shouldApplyRemoteChange(local.updatedAt, row.updated_at)) {
-          store.put({
-            id: row.id,
-            book: row.book,
-            chapter: row.chapter,
-            verse: row.verse,
-            text: row.text,
-            createdAt: new Date(row.created_at).getTime(),
-            updatedAt: new Date(row.updated_at).getTime(),
-          });
-        }
-        resolve();
-      };
-      localReq.onerror = () => resolve();
+    const local = await new Promise<DBUserNote | undefined>((resolve) => {
+      const tx = db.transaction('user_notes', 'readonly');
+      const req = tx.objectStore('user_notes').get(row.id);
+      req.onsuccess = () => resolve(req.result as DBUserNote | undefined);
+      req.onerror = () => resolve(undefined);
     });
+    if (!local || shouldApplyRemoteChange(local.updatedAt, row.updated_at)) {
+      await writeTransaction('user_notes', (store) => store.put({
+        id: row.id,
+        book: row.book,
+        chapter: row.chapter,
+        verse: row.verse,
+        text: row.text,
+        createdAt: new Date(row.created_at).getTime(),
+        updatedAt: new Date(row.updated_at).getTime(),
+      }));
+    }
   }
 }
 
@@ -63,29 +58,26 @@ export async function applyRemoteNotes(rows: any[]): Promise<void> {
  * Apply remote highlights to local IndexedDB
  */
 export async function applyRemoteHighlights(rows: any[]): Promise<void> {
+  if (!rows || rows.length === 0) return;
   const db = await openDB();
-  const tx = db.transaction('user_highlights', 'readwrite');
-  const store = tx.objectStore('user_highlights');
-  
   for (const row of rows) {
-    const localReq = store.get(row.id);
-    await new Promise<void>((resolve) => {
-      localReq.onsuccess = () => {
-        const local = localReq.result as DBUserHighlight | undefined;
-        if (!local || shouldApplyRemoteChange(local.createdAt, row.created_at)) {
-          store.put({
-            id: row.id,
-            book: row.book,
-            chapter: row.chapter,
-            verse: row.verse,
-            color: row.color,
-            createdAt: new Date(row.created_at).getTime(),
-          });
-        }
-        resolve();
-      };
-      localReq.onerror = () => resolve();
+    const local = await new Promise<DBUserHighlight | undefined>((resolve) => {
+      const tx = db.transaction('user_highlights', 'readonly');
+      const req = tx.objectStore('user_highlights').get(row.id);
+      req.onsuccess = () => resolve(req.result as DBUserHighlight | undefined);
+      req.onerror = () => resolve(undefined);
     });
+    if (!local || shouldApplyRemoteChange(local.createdAt, row.created_at)) {
+      await writeTransaction('user_highlights', (store) => store.put({
+        id: row.id,
+        book: row.book,
+        chapter: row.chapter,
+        verse: row.verse,
+        color: row.color,
+        style: row.style ? (typeof row.style === 'string' ? row.style : JSON.stringify(row.style)) : undefined,
+        createdAt: new Date(row.created_at).getTime(),
+      }));
+    }
   }
 }
 
@@ -93,29 +85,25 @@ export async function applyRemoteHighlights(rows: any[]): Promise<void> {
  * Apply remote bookmarks to local IndexedDB
  */
 export async function applyRemoteBookmarks(rows: any[]): Promise<void> {
+  if (!rows || rows.length === 0) return;
   const db = await openDB();
-  const tx = db.transaction('user_bookmarks', 'readwrite');
-  const store = tx.objectStore('user_bookmarks');
-  
   for (const row of rows) {
-    const localReq = store.get(row.id);
-    await new Promise<void>((resolve) => {
-      localReq.onsuccess = () => {
-        const local = localReq.result as DBUserBookmark | undefined;
-        if (!local || shouldApplyRemoteChange(local.createdAt, row.created_at)) {
-          store.put({
-            id: row.id,
-            book: row.book,
-            chapter: row.chapter,
-            verse: row.verse,
-            label: row.label,
-            createdAt: new Date(row.created_at).getTime(),
-          });
-        }
-        resolve();
-      };
-      localReq.onerror = () => resolve();
+    const local = await new Promise<DBUserBookmark | undefined>((resolve) => {
+      const tx = db.transaction('user_bookmarks', 'readonly');
+      const req = tx.objectStore('user_bookmarks').get(row.id);
+      req.onsuccess = () => resolve(req.result as DBUserBookmark | undefined);
+      req.onerror = () => resolve(undefined);
     });
+    if (!local || shouldApplyRemoteChange(local.createdAt, row.created_at)) {
+      await writeTransaction('user_bookmarks', (store) => store.put({
+        id: row.id,
+        book: row.book,
+        chapter: row.chapter,
+        verse: row.verse,
+        label: row.label,
+        createdAt: new Date(row.created_at).getTime(),
+      }));
+    }
   }
 }
 

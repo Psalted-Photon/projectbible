@@ -170,12 +170,7 @@ class SyncService {
       
       // Pull initial data
       await this.pullRemoteData();
-      
-      // Process any queued writes
-      if (navigator.onLine) {
-        await syncQueue.processQueue();
-      }
-      
+
       this.updateState({ 
         status: 'idle', 
         lastSyncedAt: new Date(),
@@ -188,6 +183,10 @@ class SyncService {
         error: err.message 
       });
     } finally {
+      // Always flush pending writes — even if pulling failed
+      if (navigator.onLine) {
+        void syncQueue.processQueue();
+      }
       this.signingIn = false;
     }
   }
@@ -238,7 +237,11 @@ class SyncService {
 
     const pulls: Promise<void>[] = [];
     for (const [table, applyFn] of this.applyFns) {
-      pulls.push(this.pullTable(table, user.id, applyFn));
+      pulls.push(
+        this.pullTable(table, user.id, applyFn).catch((err) => {
+          console.error(`[SyncService] pullTable(${table}) threw unexpectedly:`, err);
+        })
+      );
     }
     await Promise.all(pulls);
   }

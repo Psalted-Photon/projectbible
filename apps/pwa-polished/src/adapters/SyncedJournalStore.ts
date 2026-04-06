@@ -12,7 +12,7 @@ import { IndexedDBJournalStore } from './JournalStore';
 import { syncQueue } from '../lib/sync/SyncQueueService';
 import { realtimeService } from '../lib/sync/RealtimeService';
 import { shouldApplyRemoteChange, nowISO } from '../lib/sync/conflictResolver';
-import { openDB } from './db';
+import { openDB, writeTransaction } from './db';
 import type { DBJournalEntry } from './db';
 
 /**
@@ -31,31 +31,31 @@ export function subscribeToJournalRemoteChanges(fn: () => void): () => void {
  * Called by SyncService on initial pull
  */
 export async function applyRemoteJournalEntries(rows: any[]): Promise<void> {
+  if (!rows || rows.length === 0) return;
   const db = await openDB();
-  const tx = db.transaction('journal_entries', 'readwrite');
-  const store = tx.objectStore('journal_entries');
-  
   for (const row of rows) {
-    const localReq = store.get(row.id);
-    await new Promise<void>((resolve) => {
-      localReq.onsuccess = () => {
-        const local = localReq.result as DBJournalEntry | undefined;
-        if (!local || shouldApplyRemoteChange(local.updatedAt, row.updated_at)) {
-          store.put({
-            id: row.id,
-            date: row.date,
-            title: row.title,
-            text: row.text,
-            // Note: textLinkified is display-only, derived locally
-            textLinkified: local?.textLinkified,
-            createdAt: new Date(row.created_at).getTime(),
-            updatedAt: new Date(row.updated_at).getTime(),
-          });
-        }
-        resolve();
-      };
-      localReq.onerror = () => resolve();
+    // Each row uses its own readonly transaction for the read, then a separate
+    // readwrite transaction for the write. Never await across a single transaction
+    // boundary — that causes TransactionInactiveError.
+    const local = await new Promise<DBJournalEntry | undefined>((resolve) => {
+      const tx = db.transaction('journal_entries', 'readonly');
+      const req = tx.objectStore('journal_entries').get(row.id);
+      req.onsuccess = () => resolve(req.result as DBJournalEntry | undefined);
+      req.onerror = () => resolve(undefined);
     });
+
+    if (!local || shouldApplyRemoteChange(local.updatedAt, row.updated_at)) {
+      await writeTransaction('journal_entries', (store) => store.put({
+        id: row.id,
+        date: row.date,
+        title: row.title,
+        text: row.text,
+        // textLinkified is display-only, derived locally — preserve if we have it
+        textLinkified: local?.textLinkified,
+        createdAt: new Date(row.created_at).getTime(),
+        updatedAt: new Date(row.updated_at).getTime(),
+      }));
+    }
   }
 }
 

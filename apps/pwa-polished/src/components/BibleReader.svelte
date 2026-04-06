@@ -7,6 +7,7 @@
   import AnnotationPanel from "./AnnotationPanel.svelte";
   import HighlightModal from "./HighlightModal.svelte";
   import { IndexedDBUserDataStore } from "../adapters/UserDataStore";
+  import { subscribeToHighlightRemoteChanges } from "../adapters/SyncedHighlightAdapter";
   import { applyChapterHighlights } from "../lib/highlightRenderer";
   import { syncQueue } from "../lib/sync/SyncQueueService";
   import type { UserHighlight, UserWordHighlight, HighlightStyle } from "@projectbible/core";
@@ -2136,6 +2137,16 @@
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // Reload highlights when a remote change arrives (cross-device sync)
+    const unsubscribeHighlightChanges = subscribeToHighlightRemoteChanges(() => {
+      const visible = detectVisibleChapter();
+      if (visible) {
+        loadAndApplyHighlights(visible.book, visible.chapter);
+      } else if (chapters.length > 0) {
+        loadAndApplyHighlights(chapters[0].book, chapters[0].chapter);
+      }
+    });
+
     return () => {
       window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
@@ -2147,6 +2158,7 @@
       readerElement?.removeEventListener("touchcancel", handleTouchEnd);
       document.removeEventListener("click", handleClickOutside);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      unsubscribeHighlightChanges();
       stopScrollDetection();
       if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
       if (longPressTimer) clearTimeout(longPressTimer);
