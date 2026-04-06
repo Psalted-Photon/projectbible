@@ -34,9 +34,9 @@ export async function applyRemoteJournalEntries(rows: any[]): Promise<void> {
   if (!rows || rows.length === 0) return;
   const db = await openDB();
   for (const row of rows) {
-    // Each row uses its own readonly transaction for the read, then a separate
-    // readwrite transaction for the write. Never await across a single transaction
-    // boundary — that causes TransactionInactiveError.
+    // Each lookup uses its own readonly transaction to avoid TransactionInactiveError.
+
+    // 1. Look up the local entry that shares this remote row's ID.
     const local = await new Promise<DBJournalEntry | undefined>((resolve) => {
       const tx = db.transaction('journal_entries', 'readonly');
       const req = tx.objectStore('journal_entries').get(row.id);
@@ -44,6 +44,43 @@ export async function applyRemoteJournalEntries(rows: any[]): Promise<void> {
       req.onerror = () => resolve(undefined);
     });
 
+    // 2. Look up any existing entry that already occupies this date (different ID).
+    //    The 'date' index has unique:true, so a collision with a different id would
+    //    cause a ConstraintError on put(). We resolve it here instead.
+    const dateConflict = await new Promise<DBJournalEntry | undefined>((resolve) => {
+      const tx = db.transaction('journal_entries', 'readonly');
+      const req = tx.objectStore('journal_entries').index('date').get(row.date);
+      req.onsuccess = () => {
+        const found = req.result as DBJournalEntry | undefined;
+        // Only a conflict if it's a different id (same id is just an update)
+        resolve(found && found.id !== row.id ? found : undefined);
+      };
+      req.onerror = () => resolve(undefined);
+    });
+
+    if (dateConflict) {
+      // A different local entry already occupies this date. Resolve by timestamp.
+      if (shouldApplyRemoteChange(dateConflict.updatedAt, row.updated_at)) {
+        // Remote row is newer — delete the conflicting local entry first, then write remote.
+        console.warn(`[SyncedJournal] Date conflict on ${row.date}: replacing local id ${dateConflict.id} with remote id ${row.id}`);
+        await writeTransaction('journal_entries', (store) => store.delete(dateConflict.id));
+        await writeTransaction('journal_entries', (store) => store.put({
+          id: row.id,
+          date: row.date,
+          title: row.title,
+          text: row.text,
+          textLinkified: dateConflict.textLinkified,
+          createdAt: new Date(row.created_at).getTime(),
+          updatedAt: new Date(row.updated_at).getTime(),
+        }));
+      } else {
+        // Local entry is newer — skip the remote row.
+        console.warn(`[SyncedJournal] Date conflict on ${row.date}: keeping local id ${dateConflict.id}, skipping remote id ${row.id}`);
+      }
+      continue;
+    }
+
+    // No date collision — normal upsert path.
     if (!local || shouldApplyRemoteChange(local.updatedAt, row.updated_at)) {
       await writeTransaction('journal_entries', (store) => store.put({
         id: row.id,
