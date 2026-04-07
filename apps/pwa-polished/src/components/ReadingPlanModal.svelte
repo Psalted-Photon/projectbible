@@ -770,7 +770,7 @@
     isOpen = false;
   }
   
-  $: todayReading = getTodayReading();
+  $: todayReading = currentReadingPlan ? getTodayReading() : null;
 
   function getNextReadingDay() {
     if (!currentReadingPlan) return null;
