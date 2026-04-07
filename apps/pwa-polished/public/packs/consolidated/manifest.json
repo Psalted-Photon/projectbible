@@ -124,6 +124,21 @@
       "createdAt": "2026-04-03T17:11:56.191Z"
     },
     {
+      "id": "section-headings",
+      "type": "headings",
+      "name": "Section Headings",
+      "description": "Pericope titles for all 66 books — works with any installed translation",
+      "version": "1.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 299008,
+      "sizeMB": 0.29,
+      "sha256": "8871d350ab99927b16852e80abe174cd732253edae1dfe03a8ea727d8f2e2948",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/section-headings.sqlite",
+      "createdAt": "2026-04-07T00:00:00.000Z"
+    },
+    {
       "id": "tsk-references",
       "type": "study",
       "name": "TSK References",

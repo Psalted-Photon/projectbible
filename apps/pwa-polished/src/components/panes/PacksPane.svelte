@@ -96,6 +96,14 @@
       url: `${BASE_URL}/study-tools.sqlite`,
     },
     {
+      id: "section-headings",
+      name: "Section Headings",
+      description: "Pericope titles for all 66 books — works with any translation",
+      size: "0.29 MB",
+      icon: "📑",
+      url: `${BASE_URL}/section-headings.sqlite`,
+    },
+    {
       id: "bsb-audio-pt1",
       name: "BSB Audio Part 1",
       description: "Genesis - Psalms",
