@@ -3,12 +3,13 @@
   import LexicalEditor from '../lib/components/LexicalEditor.svelte';
   import JournalNavigationBar from './JournalNavigationBar.svelte';
   import { syncedJournalStore, subscribeToJournalRemoteChanges } from '../adapters/SyncedJournalStore';
+  import { localDateStr } from '../stores/clockStore';
   import type { JournalEntry } from '@projectbible/core';
   
   export let windowId: string | undefined = undefined;
   
   let editorRef: any;
-  let currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  let currentDate = localDateStr(new Date()); // YYYY-MM-DD in local timezone
   let currentEntry: JournalEntry | null = null;
   let title = '';
   let text = '';
@@ -177,14 +178,14 @@
   }
   
   function navigateDate(offset: number) {
-    const date = new Date(currentDate);
+    const date = new Date(currentDate + 'T12:00:00'); // noon avoids any DST boundary issue
     date.setDate(date.getDate() + offset);
-    currentDate = date.toISOString().split('T')[0];
+    currentDate = localDateStr(date);
     loadEntry(currentDate);
   }
   
   function jumpToToday() {
-    currentDate = new Date().toISOString().split('T')[0];
+    currentDate = localDateStr(new Date());
     loadEntry(currentDate);
   }
   

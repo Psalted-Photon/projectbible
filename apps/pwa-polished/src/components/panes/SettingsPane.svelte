@@ -8,6 +8,26 @@
   let lineSpacing = 1.8;
   let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
   let wordWrap: boolean = true;
+  let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const TIMEZONE_OPTIONS: { label: string; value: string }[] = [
+    { label: 'Auto-detect (browser)', value: '' },
+    { label: 'UTC',                        value: 'UTC' },
+    { label: 'Atlantic (Halifax)',          value: 'America/Halifax' },
+    { label: 'Eastern (New York)',          value: 'America/New_York' },
+    { label: 'Central (Chicago)',           value: 'America/Chicago' },
+    { label: 'Mountain (Denver)',           value: 'America/Denver' },
+    { label: 'Mountain no-DST (Phoenix)',   value: 'America/Phoenix' },
+    { label: 'Pacific (Los Angeles)',       value: 'America/Los_Angeles' },
+    { label: 'Alaska (Anchorage)',          value: 'America/Anchorage' },
+    { label: 'Hawaii (Honolulu)',           value: 'Pacific/Honolulu' },
+    { label: 'London (GMT/BST)',            value: 'Europe/London' },
+    { label: 'Paris / Berlin (CET/CEST)',   value: 'Europe/Paris' },
+    { label: 'Jerusalem',                   value: 'Asia/Jerusalem' },
+    { label: 'Kolkata (IST)',               value: 'Asia/Kolkata' },
+    { label: 'Tokyo (JST)',                 value: 'Asia/Tokyo' },
+    { label: 'Sydney (AEST/AEDT)',          value: 'Australia/Sydney' },
+  ];
   let savedMessage = false;
   let clearing = false;
 
@@ -19,6 +39,7 @@
     lineSpacing = settings.lineSpacing || 1.8;
     verseLayout = settings.verseLayout || "one-per-line";
     wordWrap = settings.wordWrap !== undefined ? settings.wordWrap : true;
+    timezone = settings.timezone || '';
   });
 
   function deleteIndexedDbDatabase(name: string): Promise<void> {
@@ -146,6 +167,7 @@
       lineSpacing,
       verseLayout,
       wordWrap,
+      timezone: timezone || undefined,
     });
 
     // Apply settings immediately
@@ -224,6 +246,17 @@
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={wordWrap} />
       <span class="label-text">Word Wrap (wrap long lines)</span>
+    </label>
+  </div>
+
+  <div class="setting-group">
+    <label>
+      <span class="label-text">Time Zone</span>
+      <select bind:value={timezone}>
+        {#each TIMEZONE_OPTIONS as opt}
+          <option value={opt.value}>{opt.label}</option>
+        {/each}
+      </select>
     </label>
   </div>
 

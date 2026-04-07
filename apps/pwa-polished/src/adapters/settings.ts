@@ -26,6 +26,11 @@ export interface UserSettings {
   lineSpacing?: number; // Line height multiplier (default 1.5)
   verseLayout?: 'one-per-line' | 'paragraph'; // Verse layout mode
   wordWrap?: boolean; // Enable/disable word wrapping (default true)
+
+  // Clock / timezone
+  // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected
+  // timezone. Used by clockStore.localDateStr() for all date comparisons.
+  timezone?: string;
 }
 
 function normalizeSettings(raw: UserSettings): UserSettings {

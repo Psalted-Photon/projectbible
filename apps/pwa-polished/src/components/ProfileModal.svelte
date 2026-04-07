@@ -12,6 +12,7 @@
   import { paneStore } from '../stores/paneStore';
   import { syncService, type SyncState, type SyncStatus } from '../lib/sync';
   import { fetchUserSettings, upsertUserSettings } from '../lib/supabase/userSettings';
+  import { localDateStr } from '../stores/clockStore';
 
   let isOpen = false;
   $: isOpen = $profileModalStore;
@@ -296,13 +297,8 @@
 
   function getTodayReading(plan: any) {
     if (!plan) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return plan.days.find((day: any) => {
-      const dayDate = new Date(day.date);
-      dayDate.setHours(0, 0, 0, 0);
-      return dayDate.getTime() === today.getTime();
-    });
+    const todayStr = localDateStr(new Date());
+    return plan.days.find((day: any) => localDateStr(new Date(day.date)) === todayStr);
   }
 
   async function loadReadingPlan() {
@@ -338,9 +334,7 @@
   }
 
   function isSameDate(timestamp: number, reference: Date): boolean {
-    const date = new Date(timestamp);
-    date.setHours(0, 0, 0, 0);
-    return date.getTime() === reference.getTime();
+    return localDateStr(timestamp) === localDateStr(reference);
   }
 
   function computeVerseStats(plan: any, progressEntries: any[]) {
@@ -352,7 +346,6 @@
     let read = 0;
     let todayRead = 0;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     plan.days.forEach((day: any) => {
       const progress = progressEntries.find((entry) => entry.dayNumber === day.dayNumber);

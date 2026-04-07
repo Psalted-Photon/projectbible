@@ -4,6 +4,7 @@
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
   import { suggestCatchUp, getDaysAheadBehind, calculateStreak } from '../../../../packages/core/src/ReadingPlanEngine';
   import { navigationStore } from '../stores/navigationStore';
+  import { localDateStr } from '../stores/clockStore';
   import {
     readingProgressStore,
     getLatestChapterState,
@@ -26,8 +27,8 @@
   
   // Create plan form state
   let planPreset = '';
-  let planStartDate = new Date().toISOString().split('T')[0];
-  let planEndDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  let planStartDate = localDateStr(new Date());
+  let planEndDate = localDateStr(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000));
   let dayChecks = [true, true, true, true, true, true, true]; // Sun-Sat
   let selectedBooks = new Set(BIBLE_BOOKS.map(b => b.name));
   let ordering: 'canonical' | 'chronological' | 'shuffled' = 'canonical';
@@ -141,12 +142,6 @@
     return VERSE_COUNTS[bookName]?.[chapter - 1] ?? 0;
   }
 
-  function isSameDate(timestamp: number, reference: Date): boolean {
-    const date = new Date(timestamp);
-    date.setHours(0, 0, 0, 0);
-    return date.getTime() === reference.getTime();
-  }
-
   function computeVerseStats() {
     if (!currentReadingPlan) {
       return { total: 0, read: 0, remaining: 0, todayRead: 0 };
@@ -155,8 +150,7 @@
     let total = 0;
     let read = 0;
     let todayRead = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayStr = localDateStr(new Date());
 
     currentReadingPlan.days.forEach((day) => {
       const progress = getDayProgress(day.dayNumber);
@@ -173,7 +167,7 @@
         const latest = chapterProgress.actions[chapterProgress.actions.length - 1];
         if (latest.type === 'checked') {
           read += verseCount;
-          if (isSameDate(latest.timestamp, today)) {
+          if (localDateStr(latest.timestamp) === todayStr) {
             todayRead += verseCount;
           }
         }
@@ -190,13 +184,10 @@
 
   function getOverdueDays() {
     if (!currentReadingPlan) return [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayStr = localDateStr(new Date());
     return currentReadingPlan.days.filter((day) => {
-      const dayDate = new Date(day.date);
-      dayDate.setHours(0, 0, 0, 0);
       const progress = getDayProgress(day.dayNumber);
-      return dayDate < today && !progress?.completed;
+      return localDateStr(new Date(day.date)) < todayStr && !progress?.completed;
     });
   }
 
@@ -376,16 +367,14 @@
 
   function getDayStatus(day: any): 'unread' | 'current' | 'completed' | 'ahead' | 'overdue' {
     const progress = getDayProgress(day.dayNumber);
-    const dayDate = new Date(day.date);
-    dayDate.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const dayStr = localDateStr(new Date(day.date));
+    const todayStr = localDateStr(new Date());
 
     if (progress?.completed) {
-      return dayDate.getTime() > today.getTime() ? 'ahead' : 'completed';
+      return dayStr > todayStr ? 'ahead' : 'completed';
     }
-    if (dayDate.getTime() < today.getTime()) return 'overdue';
-    if (dayDate.getTime() === today.getTime()) return 'current';
+    if (dayStr < todayStr) return 'overdue';
+    if (dayStr === todayStr) return 'current';
     return 'unread';
   }
 
@@ -767,15 +756,8 @@
   
   function getTodayReading() {
     if (!currentReadingPlan) return null;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    return currentReadingPlan.days.find(day => {
-      const dayDate = new Date(day.date);
-      dayDate.setHours(0, 0, 0, 0);
-      return dayDate.getTime() === today.getTime();
-    });
+    const todayStr = localDateStr(new Date());
+    return currentReadingPlan.days.find(day => localDateStr(new Date(day.date)) === todayStr);
   }
   
   function navigateToChapter(book: string, chapter: number) {
@@ -792,12 +774,9 @@
 
   function getNextReadingDay() {
     if (!currentReadingPlan) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayStr = localDateStr(new Date());
     return currentReadingPlan.days.find(day => {
-      const dayDate = new Date(day.date);
-      dayDate.setHours(0, 0, 0, 0);
-      return dayDate.getTime() > today.getTime() && !getDayProgress(day.dayNumber)?.completed;
+      return localDateStr(new Date(day.date)) > todayStr && !getDayProgress(day.dayNumber)?.completed;
     }) ?? null;
   }
 
