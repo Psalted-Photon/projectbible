@@ -10,8 +10,7 @@
   import { currentDownload, showProgressModal } from "./lib/pack-triggers";
   import { onMount } from "svelte";
   import { syncService } from "./lib/sync";
-  import { readingPlanModalStore } from "./stores/readingPlanModalStore";
-  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
+  import { readingPlanModalStore } from "./stores/readingPlanModalStore";  import { localDateStr } from './stores/clockStore';  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
   import "./adapters/SyncedHighlightAdapter"; // registers verse/word highlight pull handlers
 
   let appReady = false;
@@ -66,7 +65,7 @@
         const windowId = windowStore.createWindow('right', 50);
         if (windowId) {
           windowStore.setWindowContent(windowId, 'journal', {
-            date: new Date().toISOString().split('T')[0]
+            date: localDateStr(new Date())
           });
         }
       }

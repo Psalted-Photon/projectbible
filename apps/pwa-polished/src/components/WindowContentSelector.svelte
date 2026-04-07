@@ -1,5 +1,6 @@
 <script lang="ts">
   import { windowStore } from "../lib/stores/windowStore";
+  import { localDateStr } from '../stores/clockStore';
 
   export let windowId: string;
 
@@ -28,7 +29,7 @@
       };
     } else if (contentType === 'journal') {
       contentState = {
-        date: new Date().toISOString().split('T')[0], // Today
+        date: localDateStr(new Date()), // Today
       };
     }
 

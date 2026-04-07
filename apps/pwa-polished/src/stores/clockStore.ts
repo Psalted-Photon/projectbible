@@ -16,12 +16,29 @@ import { getSettings } from '../adapters/settings';
 
 // ---------------------------------------------------------------------------
 // Core helper: format any Date as YYYY-MM-DD in the user's local timezone.
-// Using 'en-CA' locale because it natively produces YYYY-MM-DD format.
+// Uses formatToParts with explicit year/month/day fields so the result is
+// always exactly YYYY-MM-DD regardless of browser locale quirks (some
+// Chromium builds append time to .format() output without explicit fields).
 // ---------------------------------------------------------------------------
 export function localDateStr(d: Date | number): string {
   const date = typeof d === 'number' ? new Date(d) : d;
   const tz = getSettings().timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(date);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)?.value ?? '00';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+// ---------------------------------------------------------------------------
+// sameLocalDay: equality check for two dates in the user's local timezone.
+// Delegates to localDateStr so timezone selection is respected.
+// ---------------------------------------------------------------------------
+export function sameLocalDay(a: Date | number, b: Date | number): boolean {
+  return localDateStr(a) === localDateStr(b);
 }
 
 // ---------------------------------------------------------------------------
@@ -29,23 +46,19 @@ export function localDateStr(d: Date | number): string {
 // Used to schedule the midnight store refresh.
 // ---------------------------------------------------------------------------
 function msUntilNextMidnight(): number {
-  const tz = getSettings().timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = new Date();
 
-  // Find tomorrow's date string in the target timezone
+  // Find tomorrow's YYYY-MM-DD string using the fixed localDateStr
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const tomorrowStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(tomorrow);
+  const tomorrowStr = localDateStr(tomorrow);
 
-  // Parse that date string back as a local midnight moment (UTC equiv)
-  // We do this by constructing individual parts
-  // Binary search for the first ms that renders as tomorrowStr in this timezone
+  // Binary search for the first ms that renders as tomorrowStr
   let lo = now.getTime();
   let hi = lo + 26 * 60 * 60 * 1000; // 26 hours out is always tomorrow or beyond
-  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz });
 
   while (hi - lo > 1000) {
     const mid = Math.floor((lo + hi) / 2);
-    if (fmt.format(new Date(mid)) >= tomorrowStr) {
+    if (localDateStr(new Date(mid)) >= tomorrowStr) {
       hi = mid;
     } else {
       lo = mid;
