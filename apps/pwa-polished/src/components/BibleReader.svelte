@@ -180,6 +180,7 @@
     windowState?.contentState?.chapter ?? $navigationStore.chapter;
   $: currentTranslation =
     windowState?.contentState?.translation ?? $navigationStore.translation;
+  $: translationFontClass = getTranslationFontClass(currentTranslation);
   $: isChronologicalMode = $navigationStore.isChronologicalMode ?? false;
   $: highlightVerse =
     windowState?.contentState?.highlightedVerse ??
@@ -604,6 +605,20 @@
     } catch (err) {
       console.warn("Annotation load error:", err);
     }
+  }
+
+  function getTranslationFontClass(id: string): string {
+    const t = (id || '').toLowerCase();
+    if (t === 'kjv' || t === 'kjvpce') return 'translation-font-kjv';
+    if (t === 'web' || t === 'bsb') return 'translation-font-web';
+    // Greek source texts
+    const looksEnglish = t.includes('english') || t.includes('brenton');
+    if (t === 'byz' || t === 'tr') return 'translation-font-greek';
+    if (t.includes('gnt') || t.includes('sblgnt') || t.includes('opengnt')) return 'translation-font-greek';
+    if (t.includes('greek')) return 'translation-font-greek';
+    const isLxx = t.includes('lxx') || t.includes('septuagint');
+    if (isLxx && !looksEnglish) return 'translation-font-greek';
+    return '';
   }
 
   function openAnnotationPanel(verse: number, tab: "references" | "commentary", book = currentBook, chapter = currentChapter) {
@@ -2333,7 +2348,7 @@
             <h1>{chapterData.book} {chapterData.chapter}</h1>
           </div>
           <div
-            class="verses"
+            class="verses {translationFontClass}"
             class:paragraph-layout={verseLayout === "paragraph"}
           >
             {#each chapterData.verses as { verse, text, html, heading, headingLevel } (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
@@ -2452,6 +2467,33 @@
     font-size: var(--base-font-size, 1.125rem);
     line-height: var(--line-spacing, 1.8);
     cursor: text;
+  }
+
+  /* ── Translation-specific fonts ─────────────────────────────────────── */
+
+  /* KJV / KJVPCE — Gothic blackletter */
+  .verses.translation-font-kjv .verse-text {
+    font-family: 'BerryRotunda', Georgia, serif;
+  }
+  .verses.translation-font-kjv .section-heading {
+    font-family: 'Teutonic4', 'BerryRotunda', Georgia, serif;
+  }
+
+  /* WEB / BSB — classical open-Bible serif */
+  .verses.translation-font-web .verse-text {
+    font-family: 'EB Garamond', Georgia, serif;
+  }
+  .verses.translation-font-web .section-heading {
+    font-family: 'Cinzel', Georgia, serif;
+  }
+
+  /* Greek source texts — EB Garamond handles polytonic well */
+  .verses.translation-font-greek .verse-text {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: calc(var(--base-font-size, 1.125rem) + 1px);
+  }
+  .verses.translation-font-greek .section-heading {
+    font-family: 'Jura', system-ui, sans-serif;
   }
 
   .anno-icon {
