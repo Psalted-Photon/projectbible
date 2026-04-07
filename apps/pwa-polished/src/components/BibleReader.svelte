@@ -24,6 +24,7 @@
   import { getSettings } from "../adapters/settings";
   import { readTransaction } from "../adapters/db";
   import type { DBMorphology } from "../adapters/db";
+  import { HeadingsStore } from "../adapters/HeadingsStore";
   import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
   import type { CommentaryEntry } from "../adapters/CommentaryStore";
   import { IndexedDBTskReferenceStore } from "../adapters/TskReferenceStore";
@@ -34,6 +35,7 @@
 
   let readerElement: HTMLDivElement;
   let textStore: IndexedDBTextStore;
+  const headingsStore = new HeadingsStore();
   let chapters: Array<{
     book: string;
     chapter: number;
@@ -42,6 +44,7 @@
       text: string;
       html?: string;
       heading?: string | null;
+      headingLevel?: number | null;
     }>;
   }> = [];
   let loading = true;
@@ -54,6 +57,7 @@
   let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
   let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
+  let showSectionHeadings = true;
   let scrollHandler: ((e: Event) => void) | null = null;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -159,6 +163,7 @@
   function loadUserSettings() {
     const settings = getSettings();
     verseLayout = settings.verseLayout || "one-per-line";
+    showSectionHeadings = settings.showSectionHeadings !== false; // default true
   }
 
   // Listen for settings updates
@@ -502,13 +507,17 @@
         return;
       }
 
+      const chapterHeadingMap = await headingsStore.getChapterHeadings(book, chapter);
       const processedVerses = chapterVerses.map((v) => {
         const { heading, textWithoutHeading } = extractHeading(v.text);
+        const hlEntry = chapterHeadingMap.get(v.verse);
+        const finalHeading = heading || v.heading || hlEntry?.heading || null;
         return {
           verse: v.verse,
           text: textWithoutHeading,
           html: renderVerseHtml(textWithoutHeading),
-          heading: heading || v.heading,
+          heading: finalHeading,
+          headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
         };
       });
 
@@ -1063,12 +1072,16 @@
       );
 
       if (nextVerses.length > 0) {
+        const nextHeadingMap = await headingsStore.getChapterHeadings(nextBook, nextChapter);
         const processedVerses = nextVerses.map((v) => {
           const { heading, textWithoutHeading } = extractHeading(v.text);
+          const hlEntry = nextHeadingMap.get(v.verse);
+          const finalHeading = heading || v.heading || hlEntry?.heading || null;
           return {
             verse: v.verse,
             text: textWithoutHeading,
-            heading: heading || v.heading,
+            heading: finalHeading,
+            headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
           };
         });
 
@@ -1162,12 +1175,16 @@
       );
 
       if (prevVerses.length > 0) {
+        const prevHeadingMap = await headingsStore.getChapterHeadings(prevBook, prevChapter);
         const processedVerses = prevVerses.map((v) => {
           const { heading, textWithoutHeading } = extractHeading(v.text);
+          const hlEntry = prevHeadingMap.get(v.verse);
+          const finalHeading = heading || v.heading || hlEntry?.heading || null;
           return {
             verse: v.verse,
             text: textWithoutHeading,
-            heading: heading || v.heading,
+            heading: finalHeading,
+            headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
           };
         });
 
@@ -2319,9 +2336,9 @@
             class="verses"
             class:paragraph-layout={verseLayout === "paragraph"}
           >
-            {#each chapterData.verses as { verse, text, html, heading } (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
-              {#if heading}
-                <div class="section-heading">{heading}</div>
+            {#each chapterData.verses as { verse, text, html, heading, headingLevel } (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
+              {#if heading && showSectionHeadings}
+                <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
               {/if}
               <div class="verse" data-verse={verse}>
                 <span class="verse-number">{verse}</span>
@@ -2517,9 +2534,21 @@
     border-top: 1px solid #444;
   }
 
+  .section-heading--s2 {
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: #a8a8a8;
+    margin: 14px 0 6px 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
   @media (max-width: 768px) {
     .section-heading {
       font-size: 1.3rem;
+    }
+    .section-heading--s2 {
+      font-size: 1.1rem;
     }
   }
 

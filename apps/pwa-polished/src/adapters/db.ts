@@ -12,15 +12,24 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 23; // Migration 23: add style to user_highlights, add user_word_highlights store
+const DB_VERSION = 24; // Migration 24: add section_headings store for pericope titles overlay
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
 
+export interface DBSectionHeading {
+  id: string;      // `${book}:${chapter}:${verse}`
+  book: string;
+  chapter: number;
+  verse: number;
+  heading: string;
+  level: number;   // 1 for \s1, 2 for \s2
+}
+
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -746,6 +755,12 @@ export function openDB(): Promise<IDBDatabase> {
         wordHlStore.createIndex('book_chapter_verse', ['book', 'chapter', 'verse'], { unique: false });
         wordHlStore.createIndex('translation', 'translation', { unique: false });
         wordHlStore.createIndex('book_chapter_verse_translation', ['book', 'chapter', 'verse', 'translation'], { unique: false });
+      }
+
+      // Section headings store (pericope titles from headings.sqlite pack)
+      if (!db.objectStoreNames.contains('section_headings')) {
+        const headingsStore = db.createObjectStore('section_headings', { keyPath: 'id' });
+        headingsStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
       }
     };
   });

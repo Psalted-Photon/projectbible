@@ -73,7 +73,41 @@ export async function importPackFromSQLite(file: File): Promise<void> {
     console.log(`Pack metadata stored: ${packInfo.id}`);
 
     // Import pack-specific data based on type
-    if (packInfo.type === 'cross-references') {
+    if (packInfo.type === 'headings') {
+      // Import section headings (pericope titles) from standalone headings pack
+      console.log('Importing section headings pack...');
+
+      const rows = db.exec('SELECT book, chapter, verse, heading, level FROM section_headings');
+
+      if (rows.length && rows[0].values.length) {
+        const entries = rows[0].values.map(([book, chapter, verse, heading, level]) => ({
+          id: `${book}:${chapter}:${verse}`,
+          book: book as string,
+          chapter: chapter as number,
+          verse: verse as number,
+          heading: heading as string,
+          level: (level as number) ?? 1,
+        }));
+
+        console.log(`Importing ${entries.length} section headings...`);
+
+        const idb = await openDB();
+        await new Promise<void>((resolve, reject) => {
+          const tx = idb.transaction('section_headings', 'readwrite');
+          const store = tx.objectStore('section_headings');
+          const clearReq = store.clear();
+          clearReq.onsuccess = () => {
+            for (const entry of entries) store.put(entry);
+          };
+          clearReq.onerror = () => reject(clearReq.error);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(new Error('section_headings transaction aborted'));
+        });
+
+        console.log(`✅ Section headings pack imported: ${entries.length} entries`);
+      }
+    } else if (packInfo.type === 'cross-references') {
       // Import cross-references
       const xrefRows = db.exec(`
         SELECT from_book, from_chapter, from_verse, to_book, to_chapter, 
