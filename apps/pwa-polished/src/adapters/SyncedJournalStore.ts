@@ -62,6 +62,8 @@ export async function applyRemoteJournalEntries(rows: any[]): Promise<void> {
       // A different local entry already occupies this date. Resolve by timestamp.
       if (shouldApplyRemoteChange(dateConflict.updatedAt, row.updated_at)) {
         // Remote row is newer — delete the conflicting local entry first, then write remote.
+        // Also enqueue a DELETE so the losing local entry (which was previously uploaded)
+        // gets removed from Supabase.
         console.warn(`[SyncedJournal] Date conflict on ${row.date}: replacing local id ${dateConflict.id} with remote id ${row.id}`);
         await writeTransaction('journal_entries', (store) => store.delete(dateConflict.id));
         await writeTransaction('journal_entries', (store) => store.put({
@@ -73,9 +75,12 @@ export async function applyRemoteJournalEntries(rows: any[]): Promise<void> {
           createdAt: new Date(row.created_at).getTime(),
           updatedAt: new Date(row.updated_at).getTime(),
         }));
+        // Clean up the losing entry from Supabase
+        syncQueue.enqueue({ type: 'DELETE', table: 'journal_entries', id: dateConflict.id });
       } else {
-        // Local entry is newer — skip the remote row.
-        console.warn(`[SyncedJournal] Date conflict on ${row.date}: keeping local id ${dateConflict.id}, skipping remote id ${row.id}`);
+        // Local entry is newer — skip the remote row and delete the losing remote entry from Supabase.
+        console.warn(`[SyncedJournal] Date conflict on ${row.date}: keeping local id ${dateConflict.id}, deleting remote id ${row.id}`);
+        syncQueue.enqueue({ type: 'DELETE', table: 'journal_entries', id: row.id });
       }
       continue;
     }
