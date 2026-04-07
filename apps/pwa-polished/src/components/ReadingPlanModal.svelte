@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { generateReadingPlan, BIBLE_BOOKS, type ReadingPlanConfig, type ReadingPlan } from '@projectbible/core';
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
   import { suggestCatchUp, getDaysAheadBehind, calculateStreak } from '../../../../packages/core/src/ReadingPlanEngine';
@@ -780,12 +780,11 @@
     }) ?? null;
   }
 
-  function scrollToDayInList(dayNumber: number) {
+  async function scrollToDayInList(dayNumber: number) {
     viewMode = 'list';
-    setTimeout(() => {
-      const el = document.querySelector(`[data-day-number="${dayNumber}"]`) as HTMLElement | null;
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 60);
+    await tick();
+    const el = document.querySelector(`[data-day-number="${dayNumber}"]`) as HTMLElement | null;
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 </script>
 
@@ -926,35 +925,51 @@
           <div class="active-plan-tab">
             {#if currentReadingPlan}
               <!-- Welcome banner + today's reading — always first -->
-              <div class="welcome-banner">
+              {@const todayDone = !!(todayReading && getDayProgress(todayReading.dayNumber)?.completed)}
+              <div class="welcome-banner" class:plan-done={todayDone}>
                 <div class="welcome-greeting">
                   Welcome{userName ? `, ${userName}` : ''}!
                 </div>
                 {#if todayReading}
                   <div class="welcome-subtitle">Here's your reading for today:</div>
-                  <div class="today-reading">
+                  <div class="today-reading" class:day-done={todayDone}>
                     <div class="today-reading-header">
                       <span class="today-day-label">Day {todayReading.dayNumber} &mdash; {new Date(todayReading.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                       <button class="jump-to-day-btn" on:click={() => scrollToDayInList(todayReading.dayNumber)}>Jump to day ↓</button>
                     </div>
-                    <p class="chapters-list">
-                      {#each todayReading.chapters as chapter, i}
-                        <button
-                          class="chapter-link"
-                          on:click={() => handleChapterClick(todayReading, chapter)}
-                        >
-                          {chapter.book} {chapter.chapter}
-                        </button>{#if i < todayReading.chapters.length - 1}, {/if}
+                    <div class="chapters-list">
+                      {#each todayReading.chapters as chapter}
+                        <label class="banner-chapter-row">
+                          <input
+                            type="checkbox"
+                            checked={isChapterChecked(getDayProgress(todayReading.dayNumber), chapter.book, chapter.chapter)}
+                            on:change={() => toggleChapter(todayReading, chapter)}
+                          />
+                          <button
+                            class="chapter-link"
+                            on:click={() => handleChapterClick(todayReading, chapter)}
+                          >{chapter.book} {chapter.chapter}</button>
+                        </label>
                       {/each}
-                    </p>
+                    </div>
                     <div class="today-reading-actions">
-                      <button
-                        class="start-reading-btn"
-                        on:click={() => handleChapterClick(todayReading, todayReading.chapters[0])}
-                      >
-                        Start Reading →
-                      </button>
-                      <button class="mark-day-btn" on:click={() => markDayComplete(todayReading)}>Mark Day Complete</button>
+                      {#if todayDone}
+                        <span class="day-complete-badge">✓ Day Complete</span>
+                        <button
+                          class="start-reading-btn"
+                          on:click={() => handleChapterClick(todayReading, todayReading.chapters[0])}
+                        >
+                          Read Again →
+                        </button>
+                      {:else}
+                        <button
+                          class="start-reading-btn"
+                          on:click={() => handleChapterClick(todayReading, todayReading.chapters[0])}
+                        >
+                          Start Reading →
+                        </button>
+                        <button class="mark-day-btn" on:click={() => markDayComplete(todayReading)}>Mark Day Complete</button>
+                      {/if}
                     </div>
                   </div>
                 {:else}
@@ -1093,6 +1108,7 @@
                   {#each getDisplayedDays() as day}
                     <div
                       class="list-day"
+                      data-day-number={day.dayNumber}
                       class:today={todayReading && day.dayNumber === todayReading.dayNumber}
                       class:status-unread={getDayStatus(day) === 'unread'}
                       class:status-current={getDayStatus(day) === 'current'}
@@ -1543,38 +1559,76 @@
   }
   
   .today-reading {
-    background: #1a2e1a;
-    border: 1px solid #2e5d2e;
+    background: #0d1b2e;
+    border: 1px solid #1d4ed8;
     padding: 15px;
     border-radius: 8px;
-    border-left: 4px solid #4caf50;
+    border-left: 4px solid #3b82f6;
     margin-bottom: 20px;
+  }
+
+  .today-reading.day-done {
+    background: #1a2e1a;
+    border: 1px solid #2e5d2e;
+    border-left: 4px solid #4caf50;
   }
   
   .chapters-list {
-    margin: 5px 0;
+    margin: 5px 0 8px 0;
     font-size: 15px;
+    color: #93c5fd;
+  }
+
+  .today-reading.day-done .chapters-list {
     color: #aed581;
   }
-  
+
+  .banner-chapter-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 0;
+    cursor: pointer;
+  }
+
+  .banner-chapter-row input[type="checkbox"] {
+    accent-color: #3b82f6;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .today-reading.day-done .banner-chapter-row input[type="checkbox"] {
+    accent-color: #4caf50;
+  }
+
   .chapter-link {
     background: none;
     border: none;
-    color: #4caf50;
+    color: #3b82f6;
     font-weight: 500;
     cursor: pointer;
     text-decoration: underline;
-    padding: 0;
+    padding: 0 2px;
   }
-  
+
+  .today-reading.day-done .chapter-link {
+    color: #4caf50;
+  }
+
   .chapter-link:hover {
+    color: #60a5fa;
+  }
+
+  .today-reading.day-done .chapter-link:hover {
     color: #66bb6a;
   }
   
   .start-reading-btn {
     margin-top: 10px;
     padding: 8px 16px;
-    background: #4caf50;
+    background: #1d4ed8;
     color: white;
     border: none;
     border-radius: 4px;
@@ -1583,29 +1637,51 @@
   }
   
   .start-reading-btn:hover {
+    background: #2563eb;
+  }
+
+  .today-reading.day-done .start-reading-btn {
+    background: #4caf50;
+  }
+
+  .today-reading.day-done .start-reading-btn:hover {
     background: #66bb6a;
   }
   
   .welcome-banner {
-    background: linear-gradient(135deg, #1a2e1a 0%, #1e2e1a 100%);
-    border: 1px solid #2e5d2e;
-    border-left: 4px solid #4caf50;
+    background: linear-gradient(135deg, #0d1b2e 0%, #0f1d30 100%);
+    border: 1px solid #1d4ed8;
+    border-left: 4px solid #3b82f6;
     border-radius: 8px;
     padding: 16px 18px;
     margin-bottom: 18px;
   }
 
+  .welcome-banner.plan-done {
+    background: linear-gradient(135deg, #1a2e1a 0%, #1e2e1a 100%);
+    border: 1px solid #2e5d2e;
+    border-left: 4px solid #4caf50;
+  }
+
   .welcome-greeting {
     font-size: 18px;
     font-weight: 700;
-    color: #c5e1a5;
+    color: #bfdbfe;
     margin-bottom: 4px;
+  }
+
+  .welcome-banner.plan-done .welcome-greeting {
+    color: #c5e1a5;
   }
 
   .welcome-subtitle {
     font-size: 13px;
-    color: #9ccc65;
+    color: #93c5fd;
     margin-bottom: 10px;
+  }
+
+  .welcome-banner.plan-done .welcome-subtitle {
+    color: #9ccc65;
   }
 
   .welcome-subtitle.no-reading-today {
@@ -1616,11 +1692,15 @@
   .welcome-banner .today-reading {
     background: transparent;
     border: none;
-    border-top: 1px solid #2e5d2e;
+    border-top: 1px solid #1d4ed8;
     border-left: none;
     border-radius: 0;
     margin-bottom: 0;
     padding: 10px 0 0 0;
+  }
+
+  .welcome-banner.plan-done .today-reading {
+    border-top-color: #2e5d2e;
   }
 
   .today-reading-header {
@@ -1633,13 +1713,17 @@
   .today-day-label {
     font-size: 13px;
     font-weight: 600;
+    color: #93c5fd;
+  }
+
+  .today-reading.day-done .today-day-label {
     color: #aed581;
   }
 
   .jump-to-day-btn {
     background: none;
-    border: 1px solid #4caf50;
-    color: #4caf50;
+    border: 1px solid #3b82f6;
+    color: #3b82f6;
     border-radius: 4px;
     padding: 3px 9px;
     font-size: 12px;
@@ -1648,6 +1732,16 @@
   }
 
   .jump-to-day-btn:hover {
+    background: #3b82f6;
+    color: #fff;
+  }
+
+  .today-reading.day-done .jump-to-day-btn {
+    border-color: #4caf50;
+    color: #4caf50;
+  }
+
+  .today-reading.day-done .jump-to-day-btn:hover {
     background: #4caf50;
     color: #fff;
   }
@@ -1657,6 +1751,20 @@
     gap: 8px;
     margin-top: 10px;
     flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .day-complete-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #1a2e1a;
+    border: 1px solid #4caf50;
+    color: #66bb6a;
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
   }
 
   .plan-progress {
@@ -1928,6 +2036,11 @@
   }
   
   .day-card.today {
+    border-color: #3b82f6;
+    background: #0d1b2e;
+  }
+
+  .day-card.today.status-completed {
     border-color: #4caf50;
     background: #1a2e1a;
   }
@@ -2007,8 +2120,8 @@
   }
 
   .list-day.status-current {
-    background: #1a3d1a;
-    border-left-color: #4caf50;
+    background: #0d1b2e;
+    border-left-color: #3b82f6;
   }
 
   .list-day.status-completed {
@@ -2031,6 +2144,11 @@
   }
   
   .list-day.today {
+    border-left-color: #3b82f6;
+    background: #0d1b2e;
+  }
+
+  .list-day.today.status-completed {
     border-left-color: #4caf50;
     background: #1a2e1a;
   }
