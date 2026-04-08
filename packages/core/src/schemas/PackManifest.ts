@@ -144,7 +144,7 @@ export function validatePackEntry(pack: any): pack is PackEntry {
   }
   
   // Validate type
-  const validTypes = ['translation', 'lexicon', 'dictionary', 'study', 'audio', 'bootstrap'];
+  const validTypes = ['translation', 'lexicon', 'dictionary', 'study', 'audio', 'bootstrap', 'headings'];
   if (!validTypes.includes(pack.type)) {
     console.error(`📦 Pack validation failed: invalid type "${pack.type}" for pack ${pack.id}. Valid types:`, validTypes);
     return false;
