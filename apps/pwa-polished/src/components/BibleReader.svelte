@@ -2478,6 +2478,7 @@
   }
   .verses.translation-font-kjv .section-heading {
     font-family: 'Teutonic4', 'BerryRotunda', Georgia, serif;
+    /* font-size overridden below near .section-heading block */
   }
 
   /* WEB / BSB — classical open-Bible serif */
@@ -2592,7 +2593,7 @@
   /* Remove verse-level hover - we'll handle word-level in JS */
   .section-heading {
     font-weight: 600;
-    font-size: calc(var(--base-font-size, 18px) + 5px);
+    font-size: calc(var(--base-font-size, 18px) + 3px);
     color: #d0d0d0;
     margin: 24px 0 12px 0;
     padding-top: 12px;
@@ -2601,19 +2602,28 @@
 
   .section-heading--s2 {
     font-weight: 500;
-    font-size: calc(var(--base-font-size, 18px) + 2px);
+    font-size: calc(var(--base-font-size, 18px) + 1px);
     color: #a8a8a8;
     margin: 14px 0 6px 0;
     padding-top: 0;
     border-top: none;
   }
 
+  /* KJV — larger headings to suit the blackletter aesthetic */
+  .verses.translation-font-kjv .section-heading {
+    font-size: calc(var(--base-font-size, 18px) + 7px);
+  }
+
+  .verses.translation-font-kjv .section-heading--s2 {
+    font-size: calc(var(--base-font-size, 18px) + 5px);
+  }
+
   @media (max-width: 768px) {
     .section-heading {
-      font-size: calc(var(--base-font-size, 18px) + 5px);
+      font-size: calc(var(--base-font-size, 18px) + 3px);
     }
     .section-heading--s2 {
-      font-size: calc(var(--base-font-size, 18px) + 2px);
+      font-size: calc(var(--base-font-size, 18px) + 1px);
     }
   }
 
