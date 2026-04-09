@@ -24,7 +24,9 @@ export interface UserSettings {
   theme?: 'light' | 'dark';
   fontSize?: number; // Base font size in pixels (default 15)
   lineSpacing?: number; // Line height multiplier (default 1.5)
-  verseLayout?: 'one-per-line' | 'paragraph'; // Verse layout mode
+  verseLayout?: 'one-per-line' | 'paragraph' | 'paragraph-no-verse-numbers'; // Verse layout mode
+  showCrossRefIcons?: boolean;    // Show ◆ cross-reference icons (default true)
+  showCommentaryBadges?: boolean; // Show commentary badges (default true)
 }
 
 function normalizeSettings(raw: UserSettings): UserSettings {

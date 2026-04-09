@@ -11,12 +11,12 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 8; // Updated for OpenBible biblical places integration
+const DB_VERSION = 9; // Added commentary_entries store
 
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology';
+  type: 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'commentary';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -443,6 +443,15 @@ export function openDB(): Promise<IDBDatabase> {
         openBibleIdentsStore.createIndex('ancientPlaceId', 'ancientPlaceId', { unique: false });
         openBibleIdentsStore.createIndex('modernLocationId', 'modernLocationId', { unique: false });
         openBibleIdentsStore.createIndex('confidence', 'confidence', { unique: false });
+      }
+
+      // Commentary entries store (imported from commentaries.sqlite)
+      if (!db.objectStoreNames.contains('commentary_entries')) {
+        const commentaryStore = db.createObjectStore('commentary_entries', { keyPath: 'id', autoIncrement: true });
+        commentaryStore.createIndex('verse', ['book', 'chapter', 'verse_start'], { unique: false });
+        commentaryStore.createIndex('author', 'author', { unique: false });
+        commentaryStore.createIndex('book', 'book', { unique: false });
+        commentaryStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
       }
     };
   });

@@ -1,4 +1,4 @@
-import { IndexedDBTextStore, IndexedDBPackManager, IndexedDBSearchIndex, IndexedDBCrossReferenceStore, importPackFromSQLite, getSettings, updateSettings, getDailyDriverFor, getPrimaryDailyDriver, type UserSettings, openDB } from './adapters/index.js';
+import { IndexedDBTextStore, IndexedDBPackManager, IndexedDBSearchIndex, IndexedDBCrossReferenceStore, IndexedDBCommentaryStore, importPackFromSQLite, getSettings, updateSettings, getDailyDriverFor, getPrimaryDailyDriver, type UserSettings, openDB } from './adapters/index.js';
 import { clearAllData, clearPacksOnly, getDatabaseStats, removePack } from './adapters/db-manager.js';
 import { generateReadingPlan, BIBLE_BOOKS as BIBLE_BOOKS_INFO, type ReadingPlanConfig, type ReadingPlan } from '@projectbible/core';
 import { DevTools } from './components/DevTools.js';
@@ -15,6 +15,7 @@ const textStore = new IndexedDBTextStore();
 const packManager = new IndexedDBPackManager();
 const searchIndex = new IndexedDBSearchIndex();
 const crossRefStore = new IndexedDBCrossReferenceStore();
+const commentaryStore = new IndexedDBCommentaryStore();
 
 // State management for verse selection
 const selectedVerses = new Set<string>(); // Store as "book:chapter:verse"
@@ -468,7 +469,16 @@ root.innerHTML = `
           <select id="verseLayoutSelect" style="margin-left: 10px; padding: 4px;">
             <option value="one-per-line">Each verse on new line</option>
             <option value="paragraph">Paragraph (flow like book)</option>
+            <option value="paragraph-no-verse-numbers">Paragraph (NoNum)</option>
           </select>
+        </label>
+        <label style="display: block; margin: 10px 0;">
+          <input type="checkbox" id="showCrossRefIcons" checked style="margin-right: 6px;">
+          Show cross-reference icons (◆)
+        </label>
+        <label style="display: block; margin: 10px 0;">
+          <input type="checkbox" id="showCommentaryBadges" checked style="margin-right: 6px;">
+          Show commentary badges (CM)
         </label>
       </div>
       
@@ -527,6 +537,12 @@ root.innerHTML = `
   <div id="xrefModal" class="modal" style="display: none; position: fixed; padding: 15px; border-radius: 8px; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000;">
     <button id="closeXrefModal" class="modal-close" style="position: absolute; top: 8px; right: 8px; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
     <div id="xrefModalContent"></div>
+  </div>
+
+  <!-- Commentary popup -->
+  <div id="commentaryModal" class="modal" style="display: none; position: fixed; padding: 15px; border-radius: 8px; max-width: 480px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000;">
+    <button id="closeCommentaryModal" class="modal-close" style="position: absolute; top: 8px; right: 8px; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 16px; line-height: 1;">&times;</button>
+    <div id="commentaryModalContent"></div>
   </div>
   
   <!-- Verse action menu popup -->
@@ -640,6 +656,7 @@ document.getElementById('downloadBtn')?.addEventListener('click', async () => {
 // Keep popups inside the viewport, regardless of where they are opened.
 installViewportClampedPopup('wordStudyModal', { preferBelow: 'auto' as any });
 installViewportClampedPopup('xrefModal', { preferBelow: 'auto' as any });
+installViewportClampedPopup('commentaryModal', { preferBelow: 'auto' as any });
 installViewportClampedPopup('verseActionModal', { preferBelow: 'auto' as any });
 
 // Import pack handler
@@ -1093,6 +1110,11 @@ function populateDailyDriverDropdowns(translations: Array<{id: string, name: str
   }
   if (settings.verseLayout) verseLayoutSelect.value = settings.verseLayout;
 
+  const showCrossRefIconsChk = document.getElementById('showCrossRefIcons') as HTMLInputElement;
+  const showCommentaryBadgesChk = document.getElementById('showCommentaryBadges') as HTMLInputElement;
+  if (showCrossRefIconsChk) showCrossRefIconsChk.checked = settings.showCrossRefIcons !== false;
+  if (showCommentaryBadgesChk) showCommentaryBadgesChk.checked = settings.showCommentaryBadges !== false;
+
   // Update slider value displays
   fontSizeSlider.addEventListener('input', () => {
     fontSizeValue.textContent = `${fontSizeSlider.value}px`;
@@ -1140,7 +1162,9 @@ document.getElementById('saveSettings')?.addEventListener('click', () => {
   const theme = (document.getElementById('themeSelect') as HTMLSelectElement).value as 'light' | 'dark';
   const fontSize = parseInt((document.getElementById('fontSizeSlider') as HTMLInputElement).value);
   const lineSpacing = parseFloat((document.getElementById('lineSpacingSlider') as HTMLInputElement).value);
-  const verseLayout = (document.getElementById('verseLayoutSelect') as HTMLSelectElement).value as 'one-per-line' | 'paragraph';
+  const verseLayout = (document.getElementById('verseLayoutSelect') as HTMLSelectElement).value as 'one-per-line' | 'paragraph' | 'paragraph-no-verse-numbers';
+  const showCrossRefIcons = (document.getElementById('showCrossRefIcons') as HTMLInputElement).checked;
+  const showCommentaryBadges = (document.getElementById('showCommentaryBadges') as HTMLInputElement).checked;
   
   updateSettings({
     dailyDriverEnglishOT: ddEnglishOT || undefined,
@@ -1152,7 +1176,9 @@ document.getElementById('saveSettings')?.addEventListener('click', () => {
     theme,
     fontSize,
     lineSpacing,
-    verseLayout
+    verseLayout,
+    showCrossRefIcons,
+    showCommentaryBadges
   });
   
   // Apply settings immediately
@@ -2221,15 +2247,18 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
     const verses = await textStore.getChapter(translation, book, chapter);
     
     if (verses.length > 0) {
-      // Get cross-references for all verses in this chapter
-      const verseCrossRefs = await Promise.all(
-        verses.map(v => crossRefStore.getCrossReferences({ book, chapter, verse: v.verse }))
-      );
+      // Get cross-references and commentary flags for all verses in this chapter
+      const [verseCrossRefs, verseHasCommentary] = await Promise.all([
+        Promise.all(verses.map(v => crossRefStore.getCrossReferences({ book, chapter, verse: v.verse }))),
+        Promise.all(verses.map(v => commentaryStore.hasCommentary({ book, chapter, verse: v.verse })))
+      ]);
       
       const settings = getSettings();
       const verseLayout = settings.verseLayout || 'one-per-line';
       const fontSize = settings.fontSize || 15;
       const lineSpacing = settings.lineSpacing || 1.5;
+      const showXrefIcons = settings.showCrossRefIcons !== false;
+      const showCommentBadges = settings.showCommentaryBadges !== false;
       
       const headingClass = getHeadingFontClass(translation);
       const headingClasses = ['reader-title', headingClass].filter(Boolean).join(' ');
@@ -2248,6 +2277,7 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
         
         verses.forEach((v, idx) => {
           const hasCrossRefs = verseCrossRefs[idx].length > 0;
+          const hasCommentary = verseHasCommentary[idx];
           const verseKey = `${book}:${chapter}:${v.verse}`;
           const isSelected = selectedVerses.has(verseKey);
           const wordsHtml = renderVerseWordsHtml(v.text);
@@ -2255,20 +2285,60 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
           // If there's a heading, flush current paragraph and add heading
           if (v.heading) {
             flushParagraph();
-            paragraphHtml += `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.15em; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`;
+            paragraphHtml += `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: ${fontSize + 5}px; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`;
           }
           
+          // Build verse marker: stacked verse number + optional CM badge, then optional ◆ xref icon
+          const halfSize = Math.round(fontSize * 0.5);
+          const comBadge = (hasCommentary && showCommentBadges)
+            ? `<span class="commentary-badge" style="font-size:${halfSize}px;color:#c0392b;cursor:pointer;font-weight:700;line-height:1" onclick="event.stopPropagation();showCommentary('${book}',${chapter},${v.verse},event)" title="Commentary">CM</span>`
+            : '';
+          const xrefIcon = (hasCrossRefs && showXrefIcons)
+            ? `<span class="xref-icon" style="font-size:${fontSize}px;cursor:pointer;color:#aaa" onclick="event.stopPropagation();showCrossReferences('${book}',${chapter},${v.verse},event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)">&#9670;</span>`
+            : '';
+          const verseMarker = `<span class="verse-marker" style="display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;line-height:0.9;margin:0 2px 0 0"><span style="font-size:${halfSize}px;color:#888">${v.verse}</span>${comBadge}</span>${xrefIcon}`;
+
           // Add verse to current paragraph
-          const verseSpan = `<span class="verse-span" data-book="${book}" data-chapter="${chapter}" data-verse="${v.verse}" style="cursor: pointer; background: ${isSelected ? '#ffffcc' : 'transparent'}; padding: 2px 4px; border-radius: 2px; transition: background 0.2s;">` +
-            `<sup style="color: #555; cursor: ${hasCrossRefs ? 'pointer' : 'default'}; font-size: 11px;" ` +
-            `${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${book}', ${chapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>` +
-            `${v.verse}${hasCrossRefs ? ' 🔗' : ''}</sup> ${wordsHtml}</span>`;
+          const verseSpan = `<span class="verse-span" data-book="${book}" data-chapter="${chapter}" data-verse="${v.verse}" style="cursor: pointer; background: ${isSelected ? '#ffffcc' : 'transparent'}; padding: 2px 4px; border-radius: 2px; transition: background 0.2s;">${verseMarker} ${wordsHtml}</span>`;
           
           currentParagraph.push(verseSpan);
         });
         
         flushParagraph();
         
+        resultDiv.innerHTML = `
+          ${renderBackButtonHtml()}
+          <h3 class="${headingClasses}">${book} ${chapter}</h3>
+          ${paragraphHtml}
+        `;
+      } else if (verseLayout === 'paragraph-no-verse-numbers') {
+        // Paragraph (NoNum): text flows together, headings visible, no verse numbers at all
+        let paragraphHtml = '';
+        let currentParagraph: string[] = [];
+
+        const flushParagraph = () => {
+          if (currentParagraph.length > 0) {
+            paragraphHtml += `<p class="verse-paragraph" style="margin: 8px 0; padding: 8px; line-height: ${lineSpacing}; font-size: ${fontSize}px;">${currentParagraph.join('&ensp;')}</p>`;
+            currentParagraph = [];
+          }
+        };
+
+        verses.forEach((v) => {
+          const verseKey = `${book}:${chapter}:${v.verse}`;
+          const isSelected = selectedVerses.has(verseKey);
+          const wordsHtml = renderVerseWordsHtml(v.text);
+
+          if (v.heading) {
+            flushParagraph();
+            paragraphHtml += `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: ${fontSize + 5}px; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`;
+          }
+
+          const verseSpan = `<span class="verse-span" data-book="${book}" data-chapter="${chapter}" data-verse="${v.verse}" style="cursor: pointer; background: ${isSelected ? '#ffffcc' : 'transparent'}; border-radius: 2px; transition: background 0.2s;">${wordsHtml}</span>`;
+          currentParagraph.push(verseSpan);
+        });
+
+        flushParagraph();
+
         resultDiv.innerHTML = `
           ${renderBackButtonHtml()}
           <h3 class="${headingClasses}">${book} ${chapter}</h3>
@@ -2281,15 +2351,25 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
           <h3 class="${headingClasses}">${book} ${chapter}</h3>
           ${verses.map((v, idx) => {
             const hasCrossRefs = verseCrossRefs[idx].length > 0;
+            const hasCommentary = verseHasCommentary[idx];
             const verseKey = `${book}:${chapter}:${v.verse}`;
             const isSelected = selectedVerses.has(verseKey);
             const wordsHtml = renderVerseWordsHtml(v.text);
             
             // Render section heading if present - Cinzel font, bold
             const headingHtml = v.heading 
-              ? `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.15em; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`
+              ? `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: ${fontSize + 5}px; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`
               : '';
             
+            const halfSize = Math.round(fontSize * 0.5);
+            const comBadge = (hasCommentary && showCommentBadges)
+              ? `<span class="commentary-badge" style="font-size:${halfSize}px;color:#c0392b;cursor:pointer;font-weight:700;line-height:1" onclick="event.stopPropagation();showCommentary('${book}',${chapter},${v.verse},event)" title="Commentary">CM</span>`
+              : '';
+            const xrefIcon = (hasCrossRefs && showXrefIcons)
+              ? `<span class="xref-icon" style="font-size:${fontSize}px;cursor:pointer;color:#aaa" onclick="event.stopPropagation();showCrossReferences('${book}',${chapter},${v.verse},event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)">&#9670;</span>`
+              : '';
+            const verseMarker = `<span class="verse-marker" style="display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;line-height:0.9;margin:0 2px 0 0"><span style="font-size:${halfSize}px;color:#888">${v.verse}</span>${comBadge}</span>${xrefIcon}`;
+
             return `
               ${headingHtml}
               <p class="verse-text" 
@@ -2297,11 +2377,7 @@ document.getElementById('readChapter')?.addEventListener('click', async () => {
                  data-chapter="${chapter}" 
                  data-verse="${v.verse}"
                  style="margin: 8px 0; padding: 8px; border-radius: 4px; cursor: pointer; background: ${isSelected ? '#ffffcc' : 'transparent'}; transition: background 0.2s; line-height: ${lineSpacing}; font-size: ${fontSize}px;">
-                <sup style="color: #555; cursor: ${hasCrossRefs ? 'pointer' : 'default'};" 
-                     ${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${book}', ${chapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>
-                  ${v.verse}${hasCrossRefs ? ' 🔗' : ''}
-                </sup> 
-                ${wordsHtml}
+                ${verseMarker} ${wordsHtml}
               </p>
             `;
           }).join('')}
@@ -2442,10 +2518,13 @@ async function loadNextChapter() {
       const headingClass = getHeadingFontClass(translation);
       const headingClasses = ['reader-title', headingClass].filter(Boolean).join(' ');
       
-      // Get cross-references
-      const verseCrossRefs = await Promise.all(
-        verses.map(v => crossRefStore.getCrossReferences({ book: nextBook, chapter: nextChapter, verse: v.verse }))
-      );
+      // Get cross-references and commentary flags
+      const [verseCrossRefs, verseHasCommentary] = await Promise.all([
+        Promise.all(verses.map(v => crossRefStore.getCrossReferences({ book: nextBook, chapter: nextChapter, verse: v.verse }))),
+        Promise.all(verses.map(v => commentaryStore.hasCommentary({ book: nextBook, chapter: nextChapter, verse: v.verse })))
+      ]);
+      const showXrefIcons = settings.showCrossRefIcons !== false;
+      const showCommentBadges = settings.showCommentaryBadges !== false;
       
       let nextChapterHtml = `<h3 class="${headingClasses}" style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #ccc;">${nextBook} ${nextChapter}</h3>`;
       
@@ -2462,34 +2541,74 @@ async function loadNextChapter() {
         
         verses.forEach((v, idx) => {
           const hasCrossRefs = verseCrossRefs[idx].length > 0;
-          const verseKey = `${nextBook}:${nextChapter}:${v.verse}`;
+          const hasCommentary = verseHasCommentary[idx];
           const wordsHtml = renderVerseWordsHtml(v.text);
           
           if (v.heading) {
             flushParagraph();
-            paragraphHtml += `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.15em; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`;
+            paragraphHtml += `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: ${fontSize + 5}px; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`;
           }
           
-          const verseSpan = `<span class="verse-span" data-book="${nextBook}" data-chapter="${nextChapter}" data-verse="${v.verse}" style="cursor: pointer; padding: 2px 4px; border-radius: 2px;">` +
-            `<sup style="color: #555; cursor: ${hasCrossRefs ? 'pointer' : 'default'}; font-size: 11px;" ` +
-            `${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${nextBook}', ${nextChapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>` +
-            `${v.verse}${hasCrossRefs ? ' 🔗' : ''}</sup> ${wordsHtml}</span>`;
+          const halfSize = Math.round(fontSize * 0.5);
+          const comBadge = (hasCommentary && showCommentBadges)
+            ? `<span class="commentary-badge" style="font-size:${halfSize}px;color:#c0392b;cursor:pointer;font-weight:700;line-height:1" onclick="event.stopPropagation();showCommentary('${nextBook}',${nextChapter},${v.verse},event)" title="Commentary">CM</span>`
+            : '';
+          const xrefIcon = (hasCrossRefs && showXrefIcons)
+            ? `<span class="xref-icon" style="font-size:${fontSize}px;cursor:pointer;color:#aaa" onclick="event.stopPropagation();showCrossReferences('${nextBook}',${nextChapter},${v.verse},event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)">&#9670;</span>`
+            : '';
+          const verseMarker = `<span class="verse-marker" style="display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;line-height:0.9;margin:0 2px 0 0"><span style="font-size:${halfSize}px;color:#888">${v.verse}</span>${comBadge}</span>${xrefIcon}`;
+
+          const verseSpan = `<span class="verse-span" data-book="${nextBook}" data-chapter="${nextChapter}" data-verse="${v.verse}" style="cursor: pointer; padding: 2px 4px; border-radius: 2px;">${verseMarker} ${wordsHtml}</span>`;
           
           currentParagraph.push(verseSpan);
         });
         
         flushParagraph();
         nextChapterHtml += paragraphHtml;
+      } else if (verseLayout === 'paragraph-no-verse-numbers') {
+        let paragraphHtml = '';
+        let currentParagraph: string[] = [];
+
+        const flushParagraph = () => {
+          if (currentParagraph.length > 0) {
+            paragraphHtml += `<p class="verse-paragraph" style="margin: 8px 0; padding: 8px; line-height: ${lineSpacing}; font-size: ${fontSize}px;">${currentParagraph.join('&ensp;')}</p>`;
+            currentParagraph = [];
+          }
+        };
+
+        verses.forEach((v) => {
+          const wordsHtml = renderVerseWordsHtml(v.text);
+
+          if (v.heading) {
+            flushParagraph();
+            paragraphHtml += `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: ${fontSize + 5}px; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`;
+          }
+
+          const verseSpan = `<span class="verse-span" data-book="${nextBook}" data-chapter="${nextChapter}" data-verse="${v.verse}" style="cursor: pointer; border-radius: 2px;">${wordsHtml}</span>`;
+          currentParagraph.push(verseSpan);
+        });
+
+        flushParagraph();
+        nextChapterHtml += paragraphHtml;
       } else {
         nextChapterHtml += verses.map((v, idx) => {
           const hasCrossRefs = verseCrossRefs[idx].length > 0;
-          const verseKey = `${nextBook}:${nextChapter}:${v.verse}`;
+          const hasCommentary = verseHasCommentary[idx];
           const wordsHtml = renderVerseWordsHtml(v.text);
           
           const headingHtml = v.heading 
-            ? `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.15em; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`
+            ? `<div class="section-heading" style="font-family: 'Cinzel', serif; font-weight: 700; font-size: ${fontSize + 5}px; color: #2c3e50; margin: 20px 0 10px 0; padding-top: 12px; border-top: 1px solid #ddd;">${escapeHtml(v.heading)}</div>`
             : '';
           
+          const halfSize = Math.round(fontSize * 0.5);
+          const comBadge = (hasCommentary && showCommentBadges)
+            ? `<span class="commentary-badge" style="font-size:${halfSize}px;color:#c0392b;cursor:pointer;font-weight:700;line-height:1" onclick="event.stopPropagation();showCommentary('${nextBook}',${nextChapter},${v.verse},event)" title="Commentary">CM</span>`
+            : '';
+          const xrefIcon = (hasCrossRefs && showXrefIcons)
+            ? `<span class="xref-icon" style="font-size:${fontSize}px;cursor:pointer;color:#aaa" onclick="event.stopPropagation();showCrossReferences('${nextBook}',${nextChapter},${v.verse},event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)">&#9670;</span>`
+            : '';
+          const verseMarker = `<span class="verse-marker" style="display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;line-height:0.9;margin:0 2px 0 0"><span style="font-size:${halfSize}px;color:#888">${v.verse}</span>${comBadge}</span>${xrefIcon}`;
+
           return `
             ${headingHtml}
             <p class="verse-text" 
@@ -2497,10 +2616,7 @@ async function loadNextChapter() {
                data-chapter="${nextChapter}" 
                data-verse="${v.verse}"
                style="margin: 8px 0; padding: 8px; border-radius: 4px; cursor: pointer; transition: background 0.2s; line-height: ${lineSpacing}; font-size: ${fontSize}px;">
-              <sup style="color: #555; cursor: ${hasCrossRefs ? 'pointer' : 'default'};" 
-                   ${hasCrossRefs ? `onclick="event.stopPropagation(); showCrossReferences('${nextBook}', ${nextChapter}, ${v.verse}, event)" title="View ${verseCrossRefs[idx].length} cross-reference(s)"` : ''}>\n                ${v.verse}${hasCrossRefs ? ' 🔗' : ''}
-              </sup> 
-              ${wordsHtml}
+              ${verseMarker} ${wordsHtml}
             </p>
           `;
         }).join('');
@@ -2858,20 +2974,77 @@ function closeXrefModal() {
   currentFootnoteState = null;
 }
 
+// Commentary popup
+async function showCommentary(book: string, chapter: number, verse: number, event: MouseEvent) {
+  const modal = document.getElementById('commentaryModal')!;
+  const content = document.getElementById('commentaryModalContent')!;
+
+  modal.style.display = 'none';
+
+  try {
+    const entries = await commentaryStore.getCommentary({ book, chapter, verse });
+
+    if (entries.length === 0) {
+      content.innerHTML = `
+        <h4 style="margin: 0 0 10px 0; padding-right: 20px; font-size: 14px;">${book} ${chapter}:${verse}</h4>
+        <p style="color: #555;">No commentary available for this verse.</p>
+      `;
+    } else {
+      content.innerHTML = `
+        <h4 style="margin: 0 0 10px 0; padding-right: 20px; font-size: 14px;">${book} ${chapter}:${verse}</h4>
+        <div style="max-height: 360px; overflow-y: auto;">
+          ${entries.map(e => `
+            <div style="padding: 10px; margin: 8px 0; background: #f0f0f0; border-radius: 4px; border-left: 3px solid #c0392b;">
+              <div style="font-weight: 600; font-size: 13px; color: #c0392b; margin-bottom: 6px;">${escapeHtml(e.author)}${e.year ? ` (${e.year})` : ''}</div>
+              <div style="font-size: 13px; color: #333; line-height: 1.5;">${e.text}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    modal.style.display = 'block';
+    modal.style.visibility = 'hidden';
+
+    requestAnimationFrame(() => {
+      const targetEl = (event.target as HTMLElement | null);
+      const anchorRect = targetEl?.getBoundingClientRect
+        ? targetEl.getBoundingClientRect()
+        : new DOMRect(event.clientX, event.clientY, 0, 0);
+      positionFixedPopupWithinViewport(modal, anchorRect, { preferBelow: true });
+      modal.style.visibility = 'visible';
+    });
+  } catch (error) {
+    content.innerHTML = `<p style="color: red;">Error loading commentary: ${error instanceof Error ? error.message : 'Unknown'}</p>`;
+  }
+}
+
+function closeCommentaryModal() {
+  const modal = document.getElementById('commentaryModal')!;
+  modal.style.display = 'none';
+}
+
 // Make functions globally available for onclick handlers
 (window as any).showCrossReferences = showCrossReferences;
 (window as any).closeXrefModal = closeXrefModal;
+(window as any).showCommentary = showCommentary;
+(window as any).closeCommentaryModal = closeCommentaryModal;
 
-// Close modal when clicking outside
+// Close modals when clicking outside
 document.addEventListener('click', (e) => {
-  const modal = document.getElementById('xrefModal')!;
+  const xrefModal = document.getElementById('xrefModal')!;
+  const commentaryModal = document.getElementById('commentaryModal')!;
   const target = e.target as HTMLElement;
-  if (modal.style.display === 'block' && !modal.contains(target) && !target.closest('sup')) {
+  if (xrefModal.style.display === 'block' && !xrefModal.contains(target) && !target.closest('.xref-icon') && !target.closest('sup')) {
     closeXrefModal();
+  }
+  if (commentaryModal.style.display === 'block' && !commentaryModal.contains(target) && !target.closest('.commentary-badge')) {
+    closeCommentaryModal();
   }
 });
 
 document.getElementById('closeXrefModal')?.addEventListener('click', closeXrefModal);
+document.getElementById('closeCommentaryModal')?.addEventListener('click', closeCommentaryModal);
 
 // Search handler
 document.getElementById('searchBtn')?.addEventListener('click', performSearch);
