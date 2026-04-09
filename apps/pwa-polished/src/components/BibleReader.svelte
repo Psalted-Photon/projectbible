@@ -56,7 +56,7 @@
   let lastScrollTop = 0;
   let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
-  let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
+  let verseLayout: "one-per-line" | "paragraph" | "paragraph-no-verse-numbers" = "one-per-line";
   let showSectionHeadings = true;
   let scrollHandler: ((e: Event) => void) | null = null;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2350,6 +2350,7 @@
           <div
             class="verses {translationFontClass}"
             class:paragraph-layout={verseLayout === "paragraph"}
+            class:nonumber-layout={verseLayout === "paragraph-no-verse-numbers"}
           >
             {#each chapterData.verses as { verse, text, html, heading, headingLevel } (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
               {#if heading && showSectionHeadings}
@@ -2457,7 +2458,7 @@
   .verse-number {
     display: inline-block;
     min-width: 2rem;
-    font-size: 0.75rem;
+    font-size: calc(var(--base-font-size, 18px) * 0.5);
     color: #888;
     vertical-align: super;
     margin-right: 0.25rem;
@@ -2546,8 +2547,30 @@
 
   .verses.paragraph-layout .verse-number {
     vertical-align: baseline;
-    font-size: 0.7em;
+    font-size: calc(var(--base-font-size, 18px) * 0.5);
     color: #888;
+  }
+
+  /* No verse numbers layout — paragraph flow, chapter number only */
+  .verses.nonumber-layout .verse {
+    display: inline;
+    margin-bottom: 0;
+  }
+
+  .verses.nonumber-layout .verse-number {
+    display: none;
+  }
+
+  .verses.nonumber-layout .anno-icon {
+    display: none;
+  }
+
+  .verses.nonumber-layout .anno-ref {
+    display: none;
+  }
+
+  .verses.nonumber-layout .verse-text::after {
+    content: "\00a0\00a0";
   }
 
   /* Increase font size for mobile devices */
@@ -2562,14 +2585,14 @@
     }
 
     .verse-number {
-      font-size: 0.9rem;
+      font-size: calc(var(--base-font-size, 18px) * 0.5);
     }
   }
 
   /* Remove verse-level hover - we'll handle word-level in JS */
   .section-heading {
     font-weight: 600;
-    font-size: 1.1rem;
+    font-size: calc(var(--base-font-size, 18px) + 5px);
     color: #d0d0d0;
     margin: 24px 0 12px 0;
     padding-top: 12px;
@@ -2578,7 +2601,7 @@
 
   .section-heading--s2 {
     font-weight: 500;
-    font-size: 0.95rem;
+    font-size: calc(var(--base-font-size, 18px) + 2px);
     color: #a8a8a8;
     margin: 14px 0 6px 0;
     padding-top: 0;
@@ -2587,10 +2610,10 @@
 
   @media (max-width: 768px) {
     .section-heading {
-      font-size: 1.3rem;
+      font-size: calc(var(--base-font-size, 18px) + 5px);
     }
     .section-heading--s2 {
-      font-size: 1.1rem;
+      font-size: calc(var(--base-font-size, 18px) + 2px);
     }
   }
 

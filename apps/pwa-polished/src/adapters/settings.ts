@@ -24,7 +24,7 @@ export interface UserSettings {
   theme?: 'light' | 'dark' | 'auto' | 'sepia';
   fontSize?: number; // Base font size in pixels (default 15)
   lineSpacing?: number; // Line height multiplier (default 1.5)
-  verseLayout?: 'one-per-line' | 'paragraph'; // Verse layout mode
+  verseLayout?: 'one-per-line' | 'paragraph' | 'paragraph-no-verse-numbers'; // Verse layout mode
   wordWrap?: boolean; // Enable/disable word wrapping (default true)
   showSectionHeadings?: boolean; // Show pericope/section headings between verses (default true)
 

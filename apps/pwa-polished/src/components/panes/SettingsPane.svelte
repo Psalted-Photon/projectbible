@@ -6,7 +6,7 @@
   let theme: "light" | "dark" | "auto" | "sepia" = "dark";
   let fontSize = 18;
   let lineSpacing = 1.8;
-  let verseLayout: "one-per-line" | "paragraph" = "one-per-line";
+  let verseLayout: "one-per-line" | "paragraph" | "paragraph-no-verse-numbers" = "one-per-line";
   let wordWrap: boolean = true;
   let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -238,6 +238,7 @@
       <select bind:value={verseLayout}>
         <option value="one-per-line">Each verse on new line</option>
         <option value="paragraph">Paragraph (flow like book)</option>
+        <option value="paragraph-no-verse-numbers">Paragraph (NoNum)</option>
       </select>
     </label>
   </div>
