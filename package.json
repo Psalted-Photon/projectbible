@@ -35,6 +35,7 @@
     "build:places": "node scripts/build-places-pack.mjs",
     "build:maps": "node scripts/build-map-pack.mjs",
     "build:cross-refs": "node scripts/build-cross-references.mjs",
+    "build:tsk-cross-refs": "node scripts/parse-tsk-osis.mjs && node scripts/build-tsk-cross-references-pack.mjs",
     "build:samples": "powershell -ExecutionPolicy Bypass -File scripts/build-sample-packs.ps1",
     "test:packs": "node scripts/test-pack-read.mjs",
     "verify-pack": "node scripts/verify-pack.mjs",

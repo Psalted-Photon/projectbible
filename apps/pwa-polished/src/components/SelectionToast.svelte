@@ -65,8 +65,8 @@
       Save
     </button>
     
-    <button class="action-btn" on:click={() => handleAction('commentary')}>
-      Commentary
+    <button class="action-btn" on:click={() => handleAction('notes')}>
+      Notes
     </button>
     
     <button class="action-btn" on:click={() => handleAction('repeats')}>

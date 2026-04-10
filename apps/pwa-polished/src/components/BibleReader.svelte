@@ -3,7 +3,9 @@
   import { get } from "svelte/store";
   import NavigationBar from "./NavigationBar.svelte";
   import SelectionToast from "./SelectionToast.svelte";
-  import CommentaryModal from "./CommentaryModal.svelte";
+  import NotePopup from "./NotePopup.svelte";
+  import { userProfileStore } from "../stores/userProfileStore";
+  import { profileModalStore } from "../stores/profileModalStore";
   import AnnotationPanel from "./AnnotationPanel.svelte";
   import HighlightModal from "./HighlightModal.svelte";
   import { IndexedDBUserDataStore } from "../adapters/UserDataStore";
@@ -61,11 +63,20 @@
   let scrollHandler: ((e: Event) => void) | null = null;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Commentary modal state
-  let commentaryModalOpen = false;
-  let commentaryModalBook = "";
-  let commentaryModalChapter = 0;
-  let commentaryModalVerse = 0;
+  // Note popup state
+  let notePopupOpen = false;
+  let notePopupBook = "";
+  let notePopupChapter = 0;
+  let notePopupVerse = 0;
+  let notePopupContent = "";
+  let notePopupNoteId: string | null = null;
+  let notePopupX = 0;
+  let notePopupY = 0;
+  let notePopupW = 320;
+  let notePopupH = 240;
+
+  // Verse notes map (verse number → note id) for the current chapter
+  let verseNotesMap = new Map<number, string>();
 
   // Annotation store instances
   const commentaryStore = new IndexedDBCommentaryStore();
@@ -604,6 +615,79 @@
       rebuildCommentaryByVerse();
     } catch (err) {
       console.warn("Annotation load error:", err);
+    }
+    // Load user verse notes for this chapter
+    await loadVerseNotes(book, chapter);
+  }
+
+  async function loadVerseNotes(book: string, chapter: number) {
+    try {
+      const notes = await userDataStore.getNotes();
+      const map = new Map<number, string>();
+      for (const note of notes) {
+        if (note.reference.book === book && note.reference.chapter === chapter && note.text?.trim()) {
+          map.set(note.reference.verse, note.id);
+        }
+      }
+      verseNotesMap = map;
+    } catch (err) {
+      console.warn("[Notes] load error:", err);
+    }
+  }
+
+  function getNotePosition(book: string, chapter: number, verse: number): { x: number; y: number; w: number; h: number } {
+    const key = `verse-note-pos-${book}-${chapter}-${verse}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    // Default: centered on screen
+    return {
+      x: Math.max(0, Math.round((window.innerWidth - 320) / 2)),
+      y: Math.max(0, Math.round((window.innerHeight - 240) / 2)),
+      w: 320,
+      h: 240,
+    };
+  }
+
+  async function openNotePopup(verse: number, book: string, chapter: number) {
+    const profile = $userProfileStore;
+    if (!profile.isSignedIn) {
+      profileModalStore.open();
+      return;
+    }
+    try {
+      const notes = await userDataStore.getNotes({ book, chapter, verse });
+      const existing = notes[0] ?? null;
+      const pos = getNotePosition(book, chapter, verse);
+      notePopupBook = book;
+      notePopupChapter = chapter;
+      notePopupVerse = verse;
+      notePopupContent = existing?.text ?? '';
+      notePopupNoteId = existing?.id ?? null;
+      notePopupX = pos.x;
+      notePopupY = pos.y;
+      notePopupW = pos.w;
+      notePopupH = pos.h;
+      notePopupOpen = true;
+    } catch (err) {
+      console.error("[Notes] open error:", err);
+    }
+  }
+
+  function handleNoteSaved(e: CustomEvent<{ book: string; chapter: number; verse: number; noteId: string }>) {
+    const { book, chapter, verse, noteId } = e.detail;
+    if (book === currentBook && chapter === currentChapter) {
+      verseNotesMap.set(verse, noteId);
+      verseNotesMap = verseNotesMap; // trigger Svelte reactivity
+    }
+  }
+
+  function handleNoteDeleted(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
+    const { book, chapter, verse } = e.detail;
+    if (book === currentBook && chapter === currentChapter) {
+      verseNotesMap.delete(verse);
+      verseNotesMap = verseNotesMap; // trigger Svelte reactivity
     }
   }
 
@@ -1899,7 +1983,7 @@
     );
   }
 
-  function handleToastAction(event: CustomEvent) {
+  async function handleToastAction(event: CustomEvent) {
     const { action, text } = event.detail;
     console.log(`Action: ${action} on "${text}"`);
 
@@ -2073,13 +2157,10 @@
       case "save":
         alert(`Save verse: ${text}\n\n(Saved verses coming soon)`);
         break;
-      case "commentary":
-        // Open commentary modal
+      case "notes":
+        // Open note popup for selected verse (requires sign-in)
         if (selectedVerseNumber !== null) {
-          commentaryModalOpen = true;
-          commentaryModalBook = currentBook;
-          commentaryModalChapter = currentChapter;
-          commentaryModalVerse = selectedVerseNumber;
+          await openNotePopup(selectedVerseNumber, currentBook, currentChapter);
         }
         showToast = false;
         break;
@@ -2224,12 +2305,22 @@
   />
 {/if}
 
-<CommentaryModal
-  bind:isOpen={commentaryModalOpen}
-  book={commentaryModalBook}
-  chapter={commentaryModalChapter}
-  verse={commentaryModalVerse}
-/>
+{#if notePopupOpen}
+  <NotePopup
+    book={notePopupBook}
+    chapter={notePopupChapter}
+    verse={notePopupVerse}
+    initialContent={notePopupContent}
+    noteId={notePopupNoteId}
+    x={notePopupX}
+    y={notePopupY}
+    width={notePopupW}
+    height={notePopupH}
+    on:close={() => (notePopupOpen = false)}
+    on:noteSaved={handleNoteSaved}
+    on:noteDeleted={handleNoteDeleted}
+  />
+{/if}
 
 {#if highlightModalOpen && highlightModalRef}
   <HighlightModal
@@ -2385,6 +2476,16 @@
                 <span class="verse-text"
                   >{@html html || renderVerseHtml(text)}</span
                 >
+                {#if verseNotesMap.has(verse)}
+                  <span
+                    class="verse-note-icon"
+                    role="button"
+                    tabindex="0"
+                    title="View note"
+                    on:click|stopPropagation={() => openNotePopup(verse, chapterData.book, chapterData.chapter)}
+                    on:keypress|stopPropagation={(e) => e.key === 'Enter' && openNotePopup(verse, chapterData.book, chapterData.chapter)}
+                  >✎</span>
+                {/if}
               </div>
             {/each}
           </div>
@@ -2523,6 +2624,21 @@
     margin: 0 1px;
     vertical-align: super;
     user-select: none;
+  }
+
+  .verse-note-icon {
+    color: #5b9bd5;
+    font-size: 0.82em;
+    cursor: pointer;
+    margin-left: 0.25em;
+    vertical-align: baseline;
+    user-select: none;
+    opacity: 0.85;
+    transition: opacity 0.15s;
+  }
+
+  .verse-note-icon:hover {
+    opacity: 1;
   }
 
   /* Highlight text-color global helper (set by highlightRenderer) */
