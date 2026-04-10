@@ -2157,13 +2157,23 @@
       case "save":
         alert(`Save verse: ${text}\n\n(Saved verses coming soon)`);
         break;
-      case "notes":
-        // Open note popup for selected verse (requires sign-in)
-        if (selectedVerseNumber !== null) {
-          await openNotePopup(selectedVerseNumber, currentBook, currentChapter);
+      case "notes": {
+        // Open note popup for selected verse (requires sign-in).
+        // selectedVerseNumber is set in verse mode; in word mode derive it from the DOM.
+        let verseNumForNote = selectedVerseNumber;
+        if (verseNumForNote === null && selectionRange) {
+          const verseEl = (selectionRange.startContainer as Node).parentElement?.closest('.verse') as HTMLElement | null;
+          if (verseEl) {
+            const n = parseInt(verseEl.getAttribute('data-verse') || '', 10);
+            if (!isNaN(n)) verseNumForNote = n;
+          }
+        }
+        if (verseNumForNote !== null) {
+          await openNotePopup(verseNumForNote, currentBook, currentChapter);
         }
         showToast = false;
         break;
+      }
       case "repeats":
         toggleRepeats(text);
         break;
