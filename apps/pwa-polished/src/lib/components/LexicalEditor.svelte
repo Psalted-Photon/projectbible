@@ -13,6 +13,8 @@
 
   // Toolbar active state
   let activeFormats = new Set<string>();
+  let activeAlign = 'left';
+  let fontSize = '16';
 
   // Cleanup functions — no window globals, supports multiple instances
   const cleanupFns: Array<() => void> = [];
@@ -52,11 +54,13 @@
         htmlModule,
         richTextModule,
         historyModule,
+        selectionModule,
       ] = await Promise.all([
         import('lexical'),
         import('@lexical/html'),
         import('@lexical/rich-text'),
         import('@lexical/history'),
+        import('@lexical/selection'),
       ]);
 
       const {
@@ -66,9 +70,11 @@
         $getSelection,
         $isRangeSelection,
         FORMAT_TEXT_COMMAND,
+        FORMAT_ELEMENT_COMMAND,
         UNDO_COMMAND,
         REDO_COMMAND,
       } = lexicalModule;
+      const { $patchStyleText, $getSelectionStyleValueForProperty } = selectionModule;
       const { $generateHtmlFromNodes, $generateNodesFromDOM } = htmlModule;
       const { registerRichText } = richTextModule;
       const { createEmptyHistoryState, registerHistory } = historyModule;
@@ -117,18 +123,20 @@
 
           editorState.read(() => {
             const sel = $getSelection();
-            const newFormats = new Set<string>();
 
             if ($isRangeSelection(sel)) {
-              if (sel.hasFormat('bold')) newFormats.add('bold');
-              if (sel.hasFormat('italic')) newFormats.add('italic');
-              if (sel.hasFormat('underline')) newFormats.add('underline');
-              if (sel.hasFormat('strikethrough')) newFormats.add('strikethrough');
-              if (sel.hasFormat('superscript')) newFormats.add('superscript');
-              if (sel.hasFormat('subscript')) newFormats.add('subscript');
-            }
+              // Block alignment (reliable block-level property)
+              try {
+                const anchor = sel.anchor.getNode();
+                const element = anchor.getKey() === 'root' ? anchor : anchor.getTopLevelElementOrThrow();
+                const fmt = (element as any).getFormatType?.();
+                activeAlign = fmt || 'left';
+              } catch {}
 
-            activeFormats = newFormats;
+              // Font size from inline style
+              const rawSize = $getSelectionStyleValueForProperty(sel as any, 'font-size', '');
+              if (rawSize) fontSize = rawSize.replace('px', '');
+            }
 
             const html = $generateHtmlFromNodes(editor, null);
             dispatch('change', html);
@@ -139,8 +147,12 @@
       // Expose commands for toolbar buttons
       (editor as any).__lexCmd = {
         FORMAT_TEXT_COMMAND,
+        FORMAT_ELEMENT_COMMAND,
         UNDO_COMMAND,
         REDO_COMMAND,
+        $patchStyleText,
+        $getSelection,
+        $isRangeSelection,
       };
     } catch (error) {
       console.error('Failed to initialize Lexical editor:', error);
@@ -156,13 +168,34 @@
 
   function fmt(format: string) {
     if (!editor) return;
-    const { FORMAT_TEXT_COMMAND } = editor.__lexCmd;
-    editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
+    const next = new Set(activeFormats);
+    if (next.has(format)) next.delete(format); else next.add(format);
+    activeFormats = next;
+    editor.dispatchCommand(editor.__lexCmd.FORMAT_TEXT_COMMAND, format);
     editor.focus();
   }
 
   function undo() { editor?.dispatchCommand(editor.__lexCmd.UNDO_COMMAND, undefined); editor?.focus(); }
   function redo() { editor?.dispatchCommand(editor.__lexCmd.REDO_COMMAND, undefined); editor?.focus(); }
+
+  function alignBlock(type: string) {
+    if (!editor) return;
+    editor.dispatchCommand(editor.__lexCmd.FORMAT_ELEMENT_COMMAND, type);
+    editor.focus();
+  }
+
+  function setFontSize(val: string) {
+    if (!editor || !val) return;
+    const { $patchStyleText, $getSelection, $isRangeSelection } = editor.__lexCmd;
+    editor.update(() => {
+      const sel = $getSelection();
+      if ($isRangeSelection(sel)) {
+        $patchStyleText(sel, { 'font-size': val + 'px' });
+      }
+    });
+    fontSize = val;
+    editor.focus();
+  }
 </script>
 
 <div class="lexical-editor">
@@ -216,6 +249,30 @@
       type="button"
       class:active={activeFormats.has('subscript')}
     >x<sub>2</sub></button>
+
+    <span class="sep"></span>
+
+    <!-- Alignment -->
+    <button on:click={() => alignBlock('left')} title="Align left" aria-label="Align left" type="button" class:active={activeAlign === 'left'}>L</button>
+    <button on:click={() => alignBlock('center')} title="Align center" aria-label="Align center" type="button" class:active={activeAlign === 'center'}>C</button>
+    <button on:click={() => alignBlock('right')} title="Align right" aria-label="Align right" type="button" class:active={activeAlign === 'right'}>R</button>
+
+    <span class="sep"></span>
+
+    <!-- Font size -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <select
+      class="toolbar-select"
+      value={fontSize}
+      on:change={(e) => setFontSize((e.target as HTMLSelectElement).value)}
+      on:mousedown={stopProp}
+      title="Font size"
+      aria-label="Font size"
+    >
+      {#each ['10','12','14','16','18','20','24','28','32'] as sz}
+        <option value={sz}>{sz}</option>
+      {/each}
+    </select>
 
     {#if isDirty}
       <span class="dirty-indicator" title="Unsaved changes">●</span>
@@ -291,6 +348,17 @@
     background: var(--border-color, #ddd);
     flex-shrink: 0;
     margin: 0 2px;
+  }
+
+  .toolbar-select {
+    padding: 3px 4px;
+    border: 1px solid var(--border-color, #ddd);
+    background: var(--button-bg, white);
+    color: var(--text-color, #222);
+    border-radius: 4px;
+    font-size: 13px;
+    min-height: 28px;
+    cursor: pointer;
   }
 
   .dirty-indicator {

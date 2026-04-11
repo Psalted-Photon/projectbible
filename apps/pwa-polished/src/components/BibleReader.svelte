@@ -2637,7 +2637,7 @@
   }
 
   .verse-note-icon {
-    color: #5b9bd5;
+    color: #f7c948;
     font-size: 0.82em;
     cursor: pointer;
     margin-left: 0.25em;
