@@ -16,6 +16,10 @@
   let activeAlign = 'left';
   let fontSize = '16';
 
+  // Stored for pointerdown re-apply (assigned in onMount)
+  let lexGetSelection: any = null;
+  let lexIsRangeSelection: any = null;
+
   // Cleanup functions — no window globals, supports multiple instances
   const cleanupFns: Array<() => void> = [];
 
@@ -76,6 +80,8 @@
       } = lexicalModule;
       const { $patchStyleText, $getSelectionStyleValueForProperty } = selectionModule;
       const { $generateHtmlFromNodes, $generateNodesFromDOM } = htmlModule;
+      lexGetSelection = $getSelection;
+      lexIsRangeSelection = $isRangeSelection;
       const { registerRichText } = richTextModule;
       const { createEmptyHistoryState, registerHistory } = historyModule;
 
@@ -106,6 +112,21 @@
 
       editorInput.addEventListener('blur', () => dispatch('blur'));
 
+      // Re-apply active pending formats when user clicks a new cursor position
+      editorInput.addEventListener('pointerdown', () => {
+        if (activeFormats.size === 0) return;
+        requestAnimationFrame(() => {
+          if (!editor) return;
+          editor.update(() => {
+            const sel = lexGetSelection();
+            if (!lexIsRangeSelection(sel)) return;
+            activeFormats.forEach((f: string) => {
+              if (!sel.hasFormat(f)) sel.formatText(f);
+            });
+          });
+        });
+      });
+
       if (value) {
         editor.update(() => {
           const dom = new DOMParser().parseFromString(value, 'text/html');
@@ -125,16 +146,6 @@
             const sel = $getSelection();
 
             if ($isRangeSelection(sel)) {
-              // Format buttons: Lexical is source of truth
-              const newFormats = new Set<string>();
-              if (sel.hasFormat('bold')) newFormats.add('bold');
-              if (sel.hasFormat('italic')) newFormats.add('italic');
-              if (sel.hasFormat('underline')) newFormats.add('underline');
-              if (sel.hasFormat('strikethrough')) newFormats.add('strikethrough');
-              if (sel.hasFormat('superscript')) newFormats.add('superscript');
-              if (sel.hasFormat('subscript')) newFormats.add('subscript');
-              activeFormats = newFormats;
-
               // Block alignment
               try {
                 const anchor = sel.anchor.getNode();
@@ -178,6 +189,9 @@
 
   function fmt(format: string) {
     if (!editor) return;
+    const next = new Set(activeFormats);
+    if (next.has(format)) next.delete(format); else next.add(format);
+    activeFormats = next;
     editor.dispatchCommand(editor.__lexCmd.FORMAT_TEXT_COMMAND, format);
     editor.focus();
   }

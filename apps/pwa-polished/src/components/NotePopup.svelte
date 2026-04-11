@@ -411,13 +411,6 @@
     border-radius: 0 0 4px 4px;
     /* Baby sky-blue with horizontal ruling lines */
     background-color: #d6eaf8;
-    background-image: repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 27px,
-      #a8c8e8 27px,
-      #a8c8e8 28px
-    );
     /* CSS custom-property overrides consumed by LexicalEditor */
     --background-color: transparent;
     --toolbar-bg: #c2daf0;
