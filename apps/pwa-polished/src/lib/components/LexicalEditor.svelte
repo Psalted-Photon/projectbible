@@ -125,7 +125,17 @@
             const sel = $getSelection();
 
             if ($isRangeSelection(sel)) {
-              // Block alignment (reliable block-level property)
+              // Format buttons: Lexical is source of truth
+              const newFormats = new Set<string>();
+              if (sel.hasFormat('bold')) newFormats.add('bold');
+              if (sel.hasFormat('italic')) newFormats.add('italic');
+              if (sel.hasFormat('underline')) newFormats.add('underline');
+              if (sel.hasFormat('strikethrough')) newFormats.add('strikethrough');
+              if (sel.hasFormat('superscript')) newFormats.add('superscript');
+              if (sel.hasFormat('subscript')) newFormats.add('subscript');
+              activeFormats = newFormats;
+
+              // Block alignment
               try {
                 const anchor = sel.anchor.getNode();
                 const element = anchor.getKey() === 'root' ? anchor : anchor.getTopLevelElementOrThrow();
@@ -133,7 +143,7 @@
                 activeAlign = fmt || 'left';
               } catch {}
 
-              // Font size from inline style
+              // Font size
               const rawSize = $getSelectionStyleValueForProperty(sel as any, 'font-size', '');
               if (rawSize) fontSize = rawSize.replace('px', '');
             }
@@ -168,9 +178,6 @@
 
   function fmt(format: string) {
     if (!editor) return;
-    const next = new Set(activeFormats);
-    if (next.has(format)) next.delete(format); else next.add(format);
-    activeFormats = next;
     editor.dispatchCommand(editor.__lexCmd.FORMAT_TEXT_COMMAND, format);
     editor.focus();
   }
@@ -201,13 +208,14 @@
 <div class="lexical-editor">
   <div class="toolbar">
     <!-- Undo / Redo -->
-    <button on:click={undo} title="Undo (Ctrl+Z)" aria-label="Undo" type="button">↩</button>
-    <button on:click={redo} title="Redo (Ctrl+Y)" aria-label="Redo" type="button">↪</button>
+    <button on:mousedown|preventDefault on:click={undo} title="Undo (Ctrl+Z)" aria-label="Undo" type="button">↩</button>
+    <button on:mousedown|preventDefault on:click={redo} title="Redo (Ctrl+Y)" aria-label="Redo" type="button">↪</button>
 
     <span class="sep"></span>
 
     <!-- Inline formats -->
     <button
+      on:mousedown|preventDefault
       on:click={() => fmt('bold')}
       title="Bold (Ctrl+B)"
       aria-label="Bold"
@@ -215,6 +223,7 @@
       class:active={activeFormats.has('bold')}
     ><strong>B</strong></button>
     <button
+      on:mousedown|preventDefault
       on:click={() => fmt('italic')}
       title="Italic (Ctrl+I)"
       aria-label="Italic"
@@ -222,6 +231,7 @@
       class:active={activeFormats.has('italic')}
     ><em>I</em></button>
     <button
+      on:mousedown|preventDefault
       on:click={() => fmt('underline')}
       title="Underline (Ctrl+U)"
       aria-label="Underline"
@@ -229,6 +239,7 @@
       class:active={activeFormats.has('underline')}
     ><u>U</u></button>
     <button
+      on:mousedown|preventDefault
       on:click={() => fmt('strikethrough')}
       title="Strikethrough"
       aria-label="Strikethrough"
@@ -236,6 +247,7 @@
       class:active={activeFormats.has('strikethrough')}
     ><s>S</s></button>
     <button
+      on:mousedown|preventDefault
       on:click={() => fmt('superscript')}
       title="Superscript"
       aria-label="Superscript"
@@ -243,6 +255,7 @@
       class:active={activeFormats.has('superscript')}
     >x<sup>2</sup></button>
     <button
+      on:mousedown|preventDefault
       on:click={() => fmt('subscript')}
       title="Subscript"
       aria-label="Subscript"
@@ -253,9 +266,27 @@
     <span class="sep"></span>
 
     <!-- Alignment -->
-    <button on:click={() => alignBlock('left')} title="Align left" aria-label="Align left" type="button" class:active={activeAlign === 'left'}>L</button>
-    <button on:click={() => alignBlock('center')} title="Align center" aria-label="Align center" type="button" class:active={activeAlign === 'center'}>C</button>
-    <button on:click={() => alignBlock('right')} title="Align right" aria-label="Align right" type="button" class:active={activeAlign === 'right'}>R</button>
+    <button on:mousedown|preventDefault on:click={() => alignBlock('left')} title="Align left" aria-label="Align left" type="button" class:active={activeAlign === 'left'}>
+      <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="0" y="0" width="14" height="2" rx="1" fill="currentColor"/>
+        <rect x="0" y="5" width="9" height="2" rx="1" fill="currentColor"/>
+        <rect x="0" y="10" width="11" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+    <button on:mousedown|preventDefault on:click={() => alignBlock('center')} title="Align center" aria-label="Align center" type="button" class:active={activeAlign === 'center'}>
+      <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="0" y="0" width="14" height="2" rx="1" fill="currentColor"/>
+        <rect x="2.5" y="5" width="9" height="2" rx="1" fill="currentColor"/>
+        <rect x="1.5" y="10" width="11" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+    <button on:mousedown|preventDefault on:click={() => alignBlock('right')} title="Align right" aria-label="Align right" type="button" class:active={activeAlign === 'right'}>
+      <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="0" y="0" width="14" height="2" rx="1" fill="currentColor"/>
+        <rect x="5" y="5" width="9" height="2" rx="1" fill="currentColor"/>
+        <rect x="3" y="10" width="11" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
 
     <span class="sep"></span>
 
