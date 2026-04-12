@@ -14,6 +14,7 @@
   import { syncService, type SyncState } from '../lib/sync';
   import { syncQueue } from '../lib/sync/SyncQueueService';
   import { userProfileStore } from '../stores/userProfileStore';
+  import CalendarView from './CalendarView.svelte';
   
   export let isOpen = false;
   
@@ -1056,53 +1057,12 @@
               </div>
               
               {#if viewMode === 'calendar'}
-                <div class="calendar-view">
-                  {#each getDisplayedDays().slice(0, 30) as day}
-                    <div
-                      class="day-card"
-                      class:today={todayReading && day.dayNumber === todayReading.dayNumber}
-                      class:status-unread={getDayStatus(day) === 'unread'}
-                      class:status-current={getDayStatus(day) === 'current'}
-                      class:status-completed={getDayStatus(day) === 'completed'}
-                      class:status-ahead={getDayStatus(day) === 'ahead'}
-                      class:status-overdue={getDayStatus(day) === 'overdue'}
-                      class:catchup-day={day.isCatchUp}
-                    >
-                      <div class="day-header">
-                        <strong>{day.isCatchUp ? 'Catch-up Day' : 'Day'} {day.dayNumber}</strong>
-                        <span class="day-date">{new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                        {#if day.isCatchUp}
-                          <span class="catchup-badge">Catch-up</span>
-                        {/if}
-                        <span class="day-progress">
-                          {getDayProgressCounts(day).checked}/{getDayProgressCounts(day).total}
-                        </span>
-                      </div>
-                      <div class="day-chapters">
-                        {#each day.chapters as chapter}
-                          <div class="chapter-row">
-                            <label class="chapter-checkbox">
-                              <input
-                                type="checkbox"
-                                checked={isChapterChecked(getDayProgress(day.dayNumber), chapter.book, chapter.chapter)}
-                                on:change={() => toggleChapter(day, chapter)}
-                              />
-                              <button
-                                class="chapter-link"
-                                on:click={() => handleChapterClick(day, chapter)}
-                              >
-                                {chapter.book} {chapter.chapter}
-                              </button>
-                            </label>
-                          </div>
-                        {/each}
-                      </div>
-                      <button class="mark-day-btn" on:click={() => markDayComplete(day)}>
-                        Mark Day Complete
-                      </button>
-                    </div>
-                  {/each}
-                </div>
+                <CalendarView
+                  plan={currentReadingPlan}
+                  {dayProgressMap}
+                  todayStr={localDateStr(new Date())}
+                  onDayClick={(dayNumber) => scrollToDayInList(dayNumber)}
+                />
               {:else if viewMode === 'list'}
                 <div class="list-view">
                   {#each getDisplayedDays() as day}
@@ -1989,92 +1949,20 @@
     margin: 0;
   }
   
-  .calendar-view {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 15px;
-  }
-  
-  .day-card {
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 8px;
-    padding: 12px;
-    transition: all 0.2s;
-  }
-
-  .day-card.status-unread {
-    background: #2a2a2a;
-  }
-
-  .day-card.status-current {
-    background: #1a3d1a;
-    border-left: 4px solid #4caf50;
-  }
-
-  .day-card.status-completed {
-    background: #1a2a1a;
-    border-left: 4px solid #8bc34a;
-  }
-
-  .day-card.status-ahead {
-    background: #2a2010;
-    border-left: 4px solid #ffc107;
-  }
-
-  .day-card.status-overdue {
-    background: #2a1a1a;
-    border-left: 4px solid #d32f2f;
-  }
-
-  .day-card.catchup-day {
-    border-style: dashed;
-  }
-  
-  .day-card:hover {
-    border-color: #4a4a4a;
-  }
-  
-  .day-card.today {
-    border-color: #3b82f6;
-    background: #0d1b2e;
-  }
-
-  .day-card.today.status-completed {
-    border-color: #4caf50;
-    background: #1a2e1a;
-  }
-  
-  .day-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #3a3a3a;
-    color: #e0e0e0;
-  }
-
-  .day-progress {
-    font-size: 12px;
-    color: #bbb;
-  }
-  
-  .day-date {
-    font-size: 12px;
-    color: #888;
-  }
-  
-  .day-chapters {
-    font-size: 13px;
-    color: #ccc;
-  }
-  
-  .chapter-row {
-    margin: 4px 0;
-  }
-
   .chapter-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chapter-checkbox input {
+    accent-color: #4caf50;
+    width: 14px;
+    height: 14px;
+  }
+
+  .mark-day-btn {
+    margin-top: 10px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
