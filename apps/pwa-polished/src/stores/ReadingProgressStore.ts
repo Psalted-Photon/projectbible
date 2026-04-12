@@ -2,6 +2,29 @@ import { openDB, readTransaction, writeTransaction, batchWriteTransaction } from
 
 export type ChapterActionType = "checked" | "unchecked";
 
+// ---------------------------------------------------------------------------
+// Harmony progress types
+// ---------------------------------------------------------------------------
+
+export interface HarmonyPassageProgress {
+  label: string;
+  book: string;
+  startChapter: number;
+  startVerse: number;
+  endChapter: number;
+  endVerse: number | null;
+  completed: boolean;
+  completedAt?: number;
+}
+
+export interface HarmonySectionProgress {
+  sectionId: number | string;
+  title: string;
+  passages: HarmonyPassageProgress[];
+  completed: boolean;
+  completedAt?: number;
+}
+
 export interface ChapterAction {
   type: ChapterActionType;
   timestamp: number;
@@ -28,6 +51,8 @@ export interface ReadingProgressEntry {
   startedReadingAt?: number;
   chaptersRead: ChapterProgress[];
   catchUpAdjustment?: CatchUpAdjustment;
+  /** Harmony plans: verse-range + section level progress */
+  harmonySections?: HarmonySectionProgress[];
 }
 
 function buildEntryId(planId: string, dayNumber: number): string {
@@ -45,6 +70,22 @@ function isChapterChecked(chapterProgress: ChapterProgress | undefined): boolean
 }
 
 function recomputeCompletion(entry: ReadingProgressEntry): ReadingProgressEntry {
+  // Harmony plans: complete when all passages in all sections are done
+  if (entry.harmonySections && entry.harmonySections.length > 0) {
+    const allDone = entry.harmonySections.every(sec => sec.completed);
+    if (allDone) {
+      if (!entry.completed) {
+        entry.completed = true;
+        entry.completedAt = Date.now();
+      }
+    } else {
+      entry.completed = false;
+      entry.completedAt = undefined;
+    }
+    return entry;
+  }
+
+  // Standard plans: complete when all chapters checked
   const allChecked = entry.chaptersRead.every((chapterProgress) =>
     isChapterChecked(chapterProgress),
   );
@@ -184,6 +225,132 @@ export class ReadingProgressStore {
     await writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));
   }
 
+  /**
+   * Initialize a harmony-plan day entry with section/passage structure.
+   * Call this before the first passage is started on a harmony day.
+   */
+  async ensureHarmonyDayProgress(
+    planId: string,
+    dayNumber: number,
+    sections: HarmonySectionProgress[],
+    chapterRefs: Array<{ book: string; chapter: number }>,
+  ): Promise<ReadingProgressEntry> {
+    const existing = await this.getDayProgress(planId, dayNumber);
+    if (existing) return existing;
+
+    const entry: ReadingProgressEntry = {
+      id: buildEntryId(planId, dayNumber),
+      planId,
+      dayNumber,
+      completed: false,
+      createdAt: Date.now(),
+      chaptersRead: chapterRefs.map(ch => ({ book: ch.book, chapter: ch.chapter, actions: [] })),
+      harmonySections: sections,
+    };
+
+    await writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));
+    return entry;
+  }
+
+  /**
+   * Mark a single harmony passage complete and persist.
+   */
+  async markPassageComplete(
+    planId: string,
+    dayNumber: number,
+    sectionId: number | string,
+    passageLabel: string,
+  ): Promise<ReadingProgressEntry | undefined> {
+    const entry = await this.getDayProgress(planId, dayNumber);
+    if (!entry || !entry.harmonySections) return entry;
+
+    const now = Date.now();
+    const section = entry.harmonySections.find(s => s.sectionId === sectionId);
+    if (!section) return entry;
+
+    const passage = section.passages.find(p => p.label === passageLabel);
+    if (passage && !passage.completed) {
+      passage.completed = true;
+      passage.completedAt = now;
+    }
+
+    // Section done when all its passages are complete
+    if (section.passages.every(p => p.completed) && !section.completed) {
+      section.completed = true;
+      section.completedAt = now;
+    }
+
+    const updated = recomputeCompletion(entry);
+    await writeTransaction("reading_progress", (store) => store.put(this.serialize(updated)));
+    return updated;
+  }
+
+  /**
+   * Toggle a single harmony passage complete/incomplete and persist.
+   */
+  async togglePassageComplete(
+    planId: string,
+    dayNumber: number,
+    sectionId: number | string,
+    passageLabel: string,
+  ): Promise<ReadingProgressEntry | undefined> {
+    const entry = await this.getDayProgress(planId, dayNumber);
+    if (!entry || !entry.harmonySections) return entry;
+
+    const now = Date.now();
+    const section = entry.harmonySections.find(s => s.sectionId === sectionId);
+    if (!section) return entry;
+
+    const passage = section.passages.find(p => p.label === passageLabel);
+    if (passage) {
+      passage.completed = !passage.completed;
+      passage.completedAt = passage.completed ? now : undefined;
+    }
+
+    // Recompute section completion
+    const sectionDone = section.passages.every(p => p.completed) && section.passages.length > 0;
+    section.completed = sectionDone;
+    section.completedAt = sectionDone ? (section.completedAt ?? now) : undefined;
+
+    const updated = recomputeCompletion(entry);
+    await writeTransaction("reading_progress", (store) => store.put(this.serialize(updated)));
+    return updated;
+  }
+
+  /**
+   * Mark all passages and sections complete for a harmony day at once.
+   */
+  async markHarmonyDayComplete(
+    planId: string,
+    dayNumber: number,
+  ): Promise<ReadingProgressEntry | undefined> {
+    const entry = await this.getDayProgress(planId, dayNumber);
+    if (!entry) return undefined;
+
+    const now = Date.now();
+
+    if (entry.harmonySections) {
+      for (const section of entry.harmonySections) {
+        for (const passage of section.passages) {
+          if (!passage.completed) {
+            passage.completed = true;
+            passage.completedAt = now;
+          }
+        }
+        if (!section.completed) {
+          section.completed = true;
+          section.completedAt = now;
+        }
+      }
+    }
+
+    entry.completed = true;
+    entry.completedAt = now;
+
+    await writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));
+    return entry;
+  }
+
   private serialize(entry: ReadingProgressEntry) {
     return {
       id: entry.id,
@@ -195,6 +362,7 @@ export class ReadingProgressStore {
       startedReadingAt: entry.startedReadingAt,
       chaptersRead: JSON.stringify(entry.chaptersRead),
       catchUpAdjustment: entry.catchUpAdjustment ? JSON.stringify(entry.catchUpAdjustment) : undefined,
+      harmonySections: entry.harmonySections ? JSON.stringify(entry.harmonySections) : undefined,
     };
   }
 
@@ -210,6 +378,9 @@ export class ReadingProgressStore {
       chaptersRead: record.chaptersRead ? JSON.parse(record.chaptersRead) : [],
       catchUpAdjustment: record.catchUpAdjustment
         ? JSON.parse(record.catchUpAdjustment)
+        : undefined,
+      harmonySections: record.harmonySections
+        ? JSON.parse(record.harmonySections)
         : undefined,
     };
   }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { generateReadingPlan, BIBLE_BOOKS, type ReadingPlanConfig, type ReadingPlan } from '@projectbible/core';
+  import { get } from 'svelte/store';
+  import { generateReadingPlan, BIBLE_BOOKS, type ReadingPlanConfig, type ReadingPlan, type HarmonySection, type HarmonyPassage } from '@projectbible/core';
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
   import { suggestCatchUp, getDaysAheadBehind, calculateStreak } from '../../../../packages/core/src/ReadingPlanEngine';
   import { navigationStore } from '../stores/navigationStore';
@@ -9,12 +10,16 @@
     readingProgressStore,
     getLatestChapterState,
     type ReadingProgressEntry,
+    type HarmonySectionProgress,
+    type HarmonyPassageProgress,
   } from '../stores/ReadingProgressStore';
+  import { harmonyNavStore } from '../stores/harmonyNavStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
   import { syncService, type SyncState } from '../lib/sync';
   import { syncQueue } from '../lib/sync/SyncQueueService';
   import { userProfileStore } from '../stores/userProfileStore';
   import CalendarView from './CalendarView.svelte';
+  import harmonyData from '../data/robertson-harmony.json';
   
   export let isOpen = false;
   
@@ -400,6 +405,108 @@
     navigateToChapter(chapter.book, chapter.chapter);
   }
 
+  // ---------------------------------------------------------------------------
+  // Harmony day helpers
+  // ---------------------------------------------------------------------------
+
+  /** Build a HarmonySectionProgress[] template from day.harmonySections */
+  function buildHarmonySectionTemplate(day: any): HarmonySectionProgress[] {
+    const sections: HarmonySection[] = day.harmonySections ?? [];
+    return sections.map(sec => ({
+      sectionId: sec.section,
+      title: sec.title,
+      completed: false,
+      passages: sec.passages.map((p: HarmonyPassage) => ({
+        label: p.label,
+        book: p.book,
+        startChapter: p.startChapter,
+        startVerse: p.startVerse,
+        endChapter: p.endChapter,
+        endVerse: p.endVerse,
+        completed: false,
+      })),
+    }));
+  }
+
+  function isPassageChecked(dayNum: number, sectionId: number | string, passageLabel: string): boolean {
+    const progress = getDayProgress(dayNum);
+    if (!progress?.harmonySections) return false;
+    const sec = progress.harmonySections.find(s => s.sectionId === sectionId);
+    return sec?.passages.find(p => p.label === passageLabel)?.completed ?? false;
+  }
+
+  function getDayProgressCountsHarmony(day: any): { checked: number; total: number } {
+    const sections: HarmonySection[] = day.harmonySections ?? [];
+    const total = sections.reduce((n: number, s: HarmonySection) => n + s.passages.length, 0);
+    const progress = getDayProgress(day.dayNumber);
+    if (!progress?.harmonySections) return { checked: 0, total };
+    const checked = progress.harmonySections.reduce((n, s) => n + s.passages.filter(p => p.completed).length, 0);
+    return { checked, total };
+  }
+
+  async function ensureHarmonyDayStarted(day: any) {
+    if (!currentPlanId) return;
+    const sections: HarmonySection[] = day.harmonySections ?? [];
+    const template = buildHarmonySectionTemplate(day);
+    const chapterRefs = sections.flatMap(s => s.chapter_refs);
+    const unique = [...new Map(chapterRefs.map(r => [r.book + r.chapter, r])).values()];
+    const progress = await readingProgressStore.ensureHarmonyDayProgress(currentPlanId, day.dayNumber, template, unique);
+    if (!progress.startedReadingAt) {
+      const now = Date.now();
+      await readingProgressStore.setStartedReadingAt(currentPlanId, day.dayNumber, now);
+      dayProgressMap = new Map(dayProgressMap);
+      dayProgressMap.set(day.dayNumber, { ...progress, startedReadingAt: now });
+    } else {
+      dayProgressMap = new Map(dayProgressMap);
+      dayProgressMap.set(day.dayNumber, progress);
+    }
+  }
+
+  async function handlePassageClick(day: any, passage: HarmonyPassage, passageIndex: number) {
+    if (!currentPlanId) return;
+    await ensureHarmonyDayStarted(day);
+
+    const sections: HarmonySection[] = day.harmonySections ?? [];
+    const allPassages: HarmonyPassage[] = sections.flatMap(s => s.passages);
+    const storedProgress = getDayProgress(day.dayNumber);
+    const template = buildHarmonySectionTemplate(day);
+    const allSectionsForDay: HarmonySectionProgress[] = storedProgress?.harmonySections ?? template;
+
+    harmonyNavStore.setSession({
+      planId: currentPlanId,
+      dayNumber: day.dayNumber,
+      allPassages,
+      passageIndex,
+      allSectionsForDay,
+    });
+
+    const nav = get(navigationStore);
+    navigationStore.navigateTo(nav.translation, passage.book, passage.startChapter, passage.startVerse);
+    isOpen = false;
+  }
+
+  async function togglePassage(day: any, sectionId: number | string, passageLabel: string) {
+    if (!currentPlanId) return;
+    await ensureHarmonyDayStarted(day);
+    const updated = await readingProgressStore.togglePassageComplete(currentPlanId, day.dayNumber, sectionId, passageLabel);
+    if (updated) {
+      dayProgressMap = new Map(dayProgressMap);
+      dayProgressMap.set(day.dayNumber, updated);
+      await queueProgressEntry(updated);
+    }
+  }
+
+  async function markHarmonyDayComplete(day: any) {
+    if (!currentPlanId) return;
+    await ensureHarmonyDayStarted(day);
+    const updated = await readingProgressStore.markHarmonyDayComplete(currentPlanId, day.dayNumber);
+    if (updated) {
+      dayProgressMap = new Map(dayProgressMap);
+      dayProgressMap.set(day.dayNumber, updated);
+      await queueProgressEntry(updated);
+    }
+  }
+
   async function toggleChapter(day: any, chapter: any) {
     if (!currentPlanId) return;
     const effectiveChapters = getEffectiveChapters(day);
@@ -750,6 +857,46 @@
           showOverallStats: true,
           showDailyStats: true
         };
+      case 'gospel-harmony-30':
+        return {
+          startDate: today,
+          endDate: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000),
+          books: [],
+          ordering: 'harmony',
+          harmonyData: harmonyData as unknown as HarmonySection[],
+          showOverallStats: true,
+          showDailyStats: true,
+        };
+      case 'gospel-harmony-60':
+        return {
+          startDate: today,
+          endDate: new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000),
+          books: [],
+          ordering: 'harmony',
+          harmonyData: harmonyData as unknown as HarmonySection[],
+          showOverallStats: true,
+          showDailyStats: true,
+        };
+      case 'gospel-harmony-90':
+        return {
+          startDate: today,
+          endDate: new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000),
+          books: [],
+          ordering: 'harmony',
+          harmonyData: harmonyData as unknown as HarmonySection[],
+          showOverallStats: true,
+          showDailyStats: true,
+        };
+      case 'gospel-harmony-184':
+        return {
+          startDate: today,
+          endDate: new Date(today.getTime() + 184 * 24 * 60 * 60 * 1000),
+          books: [],
+          ordering: 'harmony',
+          harmonyData: harmonyData as unknown as HarmonySection[],
+          showOverallStats: true,
+          showDailyStats: true,
+        };
       default:
         throw new Error('Unknown preset: ' + preset);
     }
@@ -836,7 +983,13 @@
                 <option value="nt-90-days">New Testament in 90 Days</option>
                 <option value="gospels-30-days">Gospels in 30 Days</option>
                 <option value="chronological-1-year">Chronological Bible in 1 Year</option>
-                <option value="psalms-proverbs">Psalms & Proverbs</option>
+                <option value="psalms-proverbs">Psalms &amp; Proverbs</option>
+                <optgroup label="Robertson Gospel Harmony">
+                  <option value="gospel-harmony-30">Robertson Gospel Harmony — 30 Days</option>
+                  <option value="gospel-harmony-60">Robertson Gospel Harmony — 60 Days</option>
+                  <option value="gospel-harmony-90">Robertson Gospel Harmony — 90 Days</option>
+                  <option value="gospel-harmony-184">Robertson Gospel Harmony — 1 Section/Day (184)</option>
+                </optgroup>
               </select>
             </div>
             
@@ -1083,32 +1236,67 @@
                           <span class="catchup-badge">Catch-up</span>
                         {/if}
                         <span class="day-progress">
-                          {getDayProgressCounts(day).checked}/{getDayProgressCounts(day).total}
+                          {#if day.harmonySections?.length > 0}
+                            {getDayProgressCountsHarmony(day).checked}/{getDayProgressCountsHarmony(day).total}
+                          {:else}
+                            {getDayProgressCounts(day).checked}/{getDayProgressCounts(day).total}
+                          {/if}
                         </span>
                       </div>
-                      <div class="list-day-chapters">
-                        {#each day.chapters as chapter, i}
-                          <label class="chapter-checkbox">
-                            <input
-                              type="checkbox"
-                              checked={isChapterChecked(getDayProgress(day.dayNumber), chapter.book, chapter.chapter)}
-                              on:change={() => toggleChapter(day, chapter)}
-                            />
-                            <button
-                              class="chapter-link"
-                              on:click={() => handleChapterClick(day, chapter)}
-                            >
-                              {chapter.book} {chapter.chapter}
-                            </button>
-                          </label>
-                          {#if i < day.chapters.length - 1}
-                            <span class="chapter-separator">,</span>
-                          {/if}
-                        {/each}
-                      </div>
-                      <button class="mark-day-btn" on:click={() => markDayComplete(day)}>
-                        Mark Day Complete
-                      </button>
+                      {#if day.harmonySections?.length > 0}
+                        <!-- Harmony plan day: section + passage checklist -->
+                        <div class="list-day-harmony">
+                          {#each day.harmonySections as sec}
+                            <div class="harmony-section">
+                              <div class="harmony-section-title">§{sec.section} — {sec.title}</div>
+                              {#each sec.passages as passage, pi}
+                                {@const pIdx = day.harmonySections.slice(0, day.harmonySections.indexOf(sec)).reduce((n, s) => n + s.passages.length, 0) + pi}
+                                <label class="harmony-passage-row">
+                                  <input
+                                    type="checkbox"
+                                    checked={isPassageChecked(day.dayNumber, sec.section, passage.label)}
+                                    on:change={() => togglePassage(day, sec.section, passage.label)}
+                                  />
+                                  <button
+                                    class="chapter-link harmony-passage-link"
+                                    on:click={() => handlePassageClick(day, passage, pIdx)}
+                                  >
+                                    {passage.label}
+                                  </button>
+                                </label>
+                              {/each}
+                            </div>
+                          {/each}
+                        </div>
+                        <button class="mark-day-btn" on:click={() => markHarmonyDayComplete(day)}>
+                          Mark Day Complete
+                        </button>
+                      {:else}
+                        <!-- Standard plan day: chapter checklist -->
+                        <div class="list-day-chapters">
+                          {#each day.chapters as chapter, i}
+                            <label class="chapter-checkbox">
+                              <input
+                                type="checkbox"
+                                checked={isChapterChecked(getDayProgress(day.dayNumber), chapter.book, chapter.chapter)}
+                                on:change={() => toggleChapter(day, chapter)}
+                              />
+                              <button
+                                class="chapter-link"
+                                on:click={() => handleChapterClick(day, chapter)}
+                              >
+                                {chapter.book} {chapter.chapter}
+                              </button>
+                            </label>
+                            {#if i < day.chapters.length - 1}
+                              <span class="chapter-separator">,</span>
+                            {/if}
+                          {/each}
+                        </div>
+                        <button class="mark-day-btn" on:click={() => markDayComplete(day)}>
+                          Mark Day Complete
+                        </button>
+                      {/if}
                     </div>
                   {/each}
                 </div>
@@ -2050,6 +2238,36 @@
   .list-day-chapters {
     font-size: 14px;
     color: #aaa;
+  }
+
+  /* Harmony plan day styles */
+  .list-day-harmony {
+    font-size: 14px;
+  }
+
+  .harmony-section {
+    margin-bottom: 10px;
+  }
+
+  .harmony-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+
+  .harmony-passage-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    cursor: pointer;
+  }
+
+  .harmony-passage-link {
+    font-size: 13px;
   }
 
   .chapter-separator {

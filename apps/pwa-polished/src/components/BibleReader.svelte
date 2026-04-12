@@ -32,6 +32,8 @@
   import { IndexedDBTskReferenceStore } from "../adapters/TskReferenceStore";
   import type { TskEntry } from "../adapters/TskReferenceStore";
   import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
+  import { harmonyNavStore } from "../stores/harmonyNavStore";
+  import { readingProgressStore } from "../stores/ReadingProgressStore";
 
   export let windowId: string | undefined = undefined;
 
@@ -197,6 +199,58 @@
     windowState?.contentState?.highlightedVerse ??
     $navigationStore.highlightedVerse ??
     null;
+
+  // ---------------------------------------------------------------------------
+  // Harmony reading session
+  // ---------------------------------------------------------------------------
+  $: harmonyState = $harmonyNavStore;
+  $: currentHarmonyPassage = harmonyState
+    ? harmonyState.allPassages[harmonyState.passageIndex]
+    : null;
+  $: isLastHarmonyPassage = harmonyState
+    ? harmonyState.passageIndex === harmonyState.allPassages.length - 1
+    : false;
+
+  function isLastVerseOfCurrentPassage(
+    verse: number,
+    verseIdx: number,
+    chData: { book: string; chapter: number; verses: any[] },
+  ): boolean {
+    if (!currentHarmonyPassage) return false;
+    if (currentHarmonyPassage.book !== chData.book) return false;
+    if (currentHarmonyPassage.endChapter !== chData.chapter) return false;
+    if (currentHarmonyPassage.endVerse !== null) {
+      return verse === currentHarmonyPassage.endVerse;
+    }
+    return verseIdx === chData.verses.length - 1;
+  }
+
+  async function handleHarmonyContinue() {
+    if (!harmonyState || !currentHarmonyPassage) return;
+    const { planId, dayNumber, allSectionsForDay } = harmonyState;
+    const section = allSectionsForDay.find(sec =>
+      sec.passages.some(p => p.label === currentHarmonyPassage!.label),
+    );
+    if (section) {
+      const updated = await readingProgressStore.markPassageComplete(
+        planId, dayNumber, section.sectionId, currentHarmonyPassage.label,
+      );
+      if (updated) {
+        // Keep allSectionsForDay in sync
+        harmonyNavStore.setSession({ ...harmonyState, allSectionsForDay: updated.harmonySections ?? allSectionsForDay });
+      }
+    }
+    const next = harmonyNavStore.advance();
+    if (next) {
+      navigationStore.navigateTo(currentTranslation, next.book, next.startChapter, next.startVerse);
+    }
+  }
+
+  async function handleHarmonyComplete() {
+    if (!harmonyState) return;
+    await readingProgressStore.markHarmonyDayComplete(harmonyState.planId, harmonyState.dayNumber);
+    harmonyNavStore.clearSession();
+  }
 
   // DEBUG: Log when reactive values change
   $: console.log("📖 REACTIVE UPDATE:", {
@@ -2453,7 +2507,7 @@
             class:paragraph-layout={verseLayout === "paragraph"}
             class:nonumber-layout={verseLayout === "paragraph-no-verse-numbers"}
           >
-            {#each chapterData.verses as { verse, text, html, heading, headingLevel } (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
+            {#each chapterData.verses as { verse, text, html, heading, headingLevel }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}  
               {#if heading && showSectionHeadings}
                 <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
               {/if}
@@ -2495,6 +2549,21 @@
                     on:click|stopPropagation={() => openNotePopup(verse, chapterData.book, chapterData.chapter)}
                     on:keypress|stopPropagation={(e) => e.key === 'Enter' && openNotePopup(verse, chapterData.book, chapterData.chapter)}
                   >✎</span>
+                {/if}
+                {#if isLastVerseOfCurrentPassage(verse, verseIdx, chapterData)}
+                  {#if isLastHarmonyPassage}
+                    <button
+                      class="harmony-day-complete-btn"
+                      on:click={handleHarmonyComplete}
+                      title="Mark this reading day complete"
+                    >✓ Day Complete</button>
+                  {:else}
+                    <button
+                      class="harmony-continue-btn"
+                      on:click={handleHarmonyContinue}
+                      title="Continue to next passage"
+                    >Continue →</button>
+                  {/if}
                 {/if}
               </div>
             {/each}
@@ -2649,6 +2718,44 @@
 
   .verse-note-icon:hover {
     opacity: 1;
+  }
+
+  /* Harmony reading session inline buttons */
+  .harmony-continue-btn,
+  .harmony-day-complete-btn {
+    display: inline-block;
+    margin-left: 0.5em;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 0.78em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid;
+    vertical-align: baseline;
+    transition: background 0.15s, color 0.15s;
+    user-select: none;
+  }
+
+  .harmony-continue-btn {
+    background: transparent;
+    color: #7ab3f0;
+    border-color: #7ab3f0;
+  }
+
+  .harmony-continue-btn:hover {
+    background: #7ab3f0;
+    color: #1a1a2e;
+  }
+
+  .harmony-day-complete-btn {
+    background: transparent;
+    color: #6fcf97;
+    border-color: #6fcf97;
+  }
+
+  .harmony-day-complete-btn:hover {
+    background: #6fcf97;
+    color: #1a2e1a;
   }
 
   /* Highlight text-color global helper (set by highlightRenderer) */

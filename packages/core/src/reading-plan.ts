@@ -31,7 +31,10 @@ export interface ReadingPlanConfig {
   books: BookSelection[];
   
   /** How to order the readings */
-  ordering: 'canonical' | 'shuffled' | 'chronological';
+  ordering: 'canonical' | 'shuffled' | 'chronological' | 'harmony';
+
+  /** Robertson-Broadus Harmony data — required when ordering === 'harmony' */
+  harmonyData?: HarmonySection[];
   
   /** Add one Psalm per day */
   dailyPsalm?: boolean;
@@ -117,11 +120,39 @@ export interface DayReading {
   
   /** Estimated reading time in minutes (based on 200 words/min) */
   estimatedMinutes?: number;
+
+  /** Harmony plan: the sections assigned to this day (Robertson-Broadus) */
+  harmonySections?: HarmonySection[];
 }
 
 export interface ChapterRef {
   book: string;
   chapter: number;
+}
+
+// ---------------------------------------------------------------------------
+// Gospel Harmony types (Robertson-Broadus)
+// ---------------------------------------------------------------------------
+
+export interface HarmonyPassage {
+  /** Human-readable label, e.g. "Mark 6:30-44" */
+  label: string;
+  book: string;
+  startChapter: number;
+  startVerse: number;
+  endChapter: number;
+  /** null means read to end of chapter */
+  endVerse: number | null;
+}
+
+export interface HarmonySection {
+  /** Robertson section number — number for most, string "128a"/"128b" */
+  section: number | string;
+  part: string;
+  part_title: string;
+  title: string;
+  passages: HarmonyPassage[];
+  chapter_refs: ChapterRef[];
 }
 
 // Complete Bible book list with chapter counts
@@ -201,6 +232,11 @@ export const BIBLE_BOOKS: BookInfo[] = [
  * Generate a reading plan based on the configuration
  */
 export function generateReadingPlan(config: ReadingPlanConfig): ReadingPlan {
+  // Harmony plans use a completely different generation path
+  if (config.ordering === 'harmony' && config.harmonyData?.length) {
+    return generateHarmonyPlan(config);
+  }
+
   // Step 1: Build the complete list of chapters to read
   const chapters = buildChapterList(config);
   
@@ -309,6 +345,10 @@ function orderChapters(chapters: ChapterRef[], ordering: ReadingPlanConfig['orde
         return a.chapter - b.chapter;
       });
       
+    case 'harmony':
+      // Harmony plans never reach this branch; handled by generateHarmonyPlan()
+      return result;
+
     default:
       return result;
   }
@@ -490,4 +530,117 @@ export function createPsalmsProverbsPlan(
     ],
     ordering: 'canonical'
   });
+}
+
+// ---------------------------------------------------------------------------
+// Gospel Harmony plan generator
+// ---------------------------------------------------------------------------
+
+/**
+ * Build groups of HarmonySections for day assignment.
+ *
+ * Robertson has 185 section objects but only 184 section numbers because
+ * §128 is subdivided into §128a and §128b.  For the 184-day preset (one
+ * section per day) these are grouped together so day 128 covers both.
+ *
+ * For all other presets the two are treated as independent units, giving
+ * 185 distributable items.
+ */
+function buildHarmonyGroups(sections: HarmonySection[], oneSectionPerDay: boolean): HarmonySection[][] {
+  if (oneSectionPerDay) {
+    // Group §128a + §128b into one day; all others are solo groups
+    const groups: HarmonySection[][] = [];
+    let i = 0;
+    while (i < sections.length) {
+      const s = sections[i];
+      const nextS = sections[i + 1];
+      if (
+        typeof s.section === 'string' && s.section.endsWith('a') &&
+        nextS && typeof nextS.section === 'string' && nextS.section.endsWith('b') &&
+        s.section.replace('a', '') === nextS.section.replace('b', '')
+      ) {
+        // Pair them
+        groups.push([s, nextS]);
+        i += 2;
+      } else {
+        groups.push([s]);
+        i++;
+      }
+    }
+    return groups;
+  }
+
+  // For multi-section-per-day plans use individual sections
+  return sections.map(s => [s]);
+}
+
+/**
+ * Deduplicate chapter refs across multiple sections
+ */
+function mergeChapterRefs(sections: HarmonySection[]): ChapterRef[] {
+  const seen = new Set<string>();
+  const refs: ChapterRef[] = [];
+  for (const section of sections) {
+    for (const ref of section.chapter_refs) {
+      const key = `${ref.book}::${ref.chapter}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        refs.push(ref);
+      }
+    }
+  }
+  return refs;
+}
+
+/**
+ * Generate a reading plan driven by Robertson-Broadus Gospel Harmony sections.
+ */
+function generateHarmonyPlan(config: ReadingPlanConfig): ReadingPlan {
+  const sections = config.harmonyData!;
+  const readingDays = getReadingDays(config.startDate, config.endDate, config.excludedWeekdays);
+
+  if (readingDays.length === 0) {
+    throw new Error('No reading days available in the specified date range');
+  }
+
+  // Determine whether this is the 1-section-per-day (184-day) preset
+  const oneSectionPerDay = readingDays.length <= sections.length;
+  const groups = buildHarmonyGroups(sections, oneSectionPerDay && readingDays.length <= 185);
+
+  const totalGroups = groups.length;
+  const totalDays = Math.min(readingDays.length, totalGroups);
+
+  // Remainder-based distribution: first `remainder` days get base+1 groups
+  const base = Math.floor(totalGroups / totalDays);
+  const remainder = totalGroups % totalDays;
+
+  const days: DayReading[] = [];
+  let groupIndex = 0;
+
+  for (let i = 0; i < totalDays; i++) {
+    const groupsForDay = base + (i < remainder ? 1 : 0);
+    const dayGroups = groups.slice(groupIndex, groupIndex + groupsForDay);
+    groupIndex += groupsForDay;
+
+    // Flatten sections from all groups this day
+    const daySections = dayGroups.flat();
+    const chapterRefs = mergeChapterRefs(daySections);
+
+    days.push({
+      date: readingDays[i],
+      dayNumber: i + 1,
+      chapters: chapterRefs,
+      harmonySections: daySections,
+    });
+  }
+
+  const totalChapters = days.reduce((sum, d) => sum + d.chapters.length, 0);
+
+  return {
+    config,
+    totalDays: days.length,
+    totalChapters,
+    avgChaptersPerDay: totalChapters / days.length,
+    days,
+  };
 }
