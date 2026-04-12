@@ -11,7 +11,6 @@
     getLatestChapterState,
     type ReadingProgressEntry,
     type HarmonySectionProgress,
-    type HarmonyPassageProgress,
   } from '../stores/ReadingProgressStore';
   import { harmonyNavStore } from '../stores/harmonyNavStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
@@ -345,6 +344,7 @@
       dayNumber: day.dayNumber,
       date: new Date(day.date),
       chapters: day.chapters,
+      harmonySections: undefined as HarmonySection[] | undefined,
       isCatchUp: true,
     }));
 
