@@ -115,7 +115,7 @@ async function buildCommentaryPack() {
   const metadata = {
     id: 'commentaries.v1',
     type: 'commentary',
-    version: '1.0.3',
+    version: '1.1.0',
     schemaVersion: '1.0',
     name: 'Bible Commentaries Collection',
     description: 'Historical and modern Bible commentaries including Matthew Henry, JFB, Barnes, Keil & Delitzsch, and more',

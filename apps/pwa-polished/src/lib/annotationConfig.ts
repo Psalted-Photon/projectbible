@@ -21,6 +21,9 @@ export const COMMENTARY_AUTHORS: Record<string, AuthorConfig> = {
   'Family Bible Notes':    { color: '#65A30D', initials: 'Fb', fullName: 'Family Bible Notes' },
   'Abbott':                { color: '#475569', initials: 'Ab', fullName: 'Abbott' },
   'Thomas Aquinas':        { color: '#B45309', initials: 'Aq', fullName: 'Thomas Aquinas (Catena Aurea)' },
+  'Matthew Henry':         { color: '#7C3AED', initials: 'Mh', fullName: 'Matthew Henry' },
+  'Jamieson-Fausset-Brown':{ color: '#0F766E', initials: 'Jf', fullName: 'Jamieson-Fausset-Brown' },
+  'Charles Spurgeon':      { color: '#92400E', initials: 'Sp', fullName: 'Charles Spurgeon' },
 };
 
 /** Gold color used for all TSK cross-reference diamonds */

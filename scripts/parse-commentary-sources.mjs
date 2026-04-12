@@ -139,6 +139,7 @@ const UNMAPPED_OSIS_BOOKS = new Set();
 const COMMENTARY_METADATA = {
   'MHC': { author: 'Matthew Henry', title: "Matthew Henry's Complete Commentary", year: 1706, source: 'CrossWire' },
   'JFB': { author: 'Jamieson-Fausset-Brown', title: 'Commentary Critical and Explanatory', year: 1871, source: 'CrossWire' },
+  'TDavid': { author: 'Charles Spurgeon', title: 'The Treasury of David', year: 1885, source: 'CrossWire' },
   'Barnes': { author: 'Albert Barnes', title: "Barnes' Notes on the Bible", year: 1834, source: 'CrossWire' },
   'KD': { author: 'Keil & Delitzsch', title: 'Commentary on the Old Testament', year: 1866, source: 'CrossWire' },
   'Gill': { author: 'John Gill', title: "Gill's Exposition of the Bible", year: 1746, source: 'CrossWire' },
