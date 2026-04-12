@@ -1236,21 +1236,22 @@
                           <span class="catchup-badge">Catch-up</span>
                         {/if}
                         <span class="day-progress">
-                          {#if day.harmonySections?.length > 0}
+                          {#if day.harmonySections && day.harmonySections.length > 0}
                             {getDayProgressCountsHarmony(day).checked}/{getDayProgressCountsHarmony(day).total}
                           {:else}
                             {getDayProgressCounts(day).checked}/{getDayProgressCounts(day).total}
                           {/if}
                         </span>
                       </div>
-                      {#if day.harmonySections?.length > 0}
+                      {#if day.harmonySections && day.harmonySections.length > 0}
+                        {@const daySections = day.harmonySections}
                         <!-- Harmony plan day: section + passage checklist -->
                         <div class="list-day-harmony">
-                          {#each day.harmonySections as sec}
+                          {#each daySections as sec}
                             <div class="harmony-section">
                               <div class="harmony-section-title">§{sec.section} — {sec.title}</div>
                               {#each sec.passages as passage, pi}
-                                {@const pIdx = day.harmonySections.slice(0, day.harmonySections.indexOf(sec)).reduce((n, s) => n + s.passages.length, 0) + pi}
+                                {@const pIdx = daySections.slice(0, daySections.indexOf(sec)).reduce((n: number, s) => n + s.passages.length, 0) + pi}
                                 <label class="harmony-passage-row">
                                   <input
                                     type="checkbox"
