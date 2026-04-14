@@ -70,6 +70,13 @@
   let syncStatus = 'Not synced';
   let syncError: string | null = null;
   let userName: string | null = null;
+  let isSignedIn = false;
+
+  // Congrats overlay + inline rename + two-step delete state
+  let congratsPlanName: string | null = null;
+  let planRenamingId: string | null = null;
+  let planRenameValue = '';
+  let planDeleteConfirmId: string | null = null;
   
   // Derived book lists
   const OT_BOOKS = BIBLE_BOOKS.filter(b => b.testament === 'OT').map(b => b.name);
@@ -88,6 +95,7 @@
     });
     const unsubscribeProfile = userProfileStore.subscribe((profile) => {
       userName = profile.name;
+      isSignedIn = profile.isSignedIn;
     });
     return () => {
       unsubscribeSync();
@@ -113,8 +121,8 @@
 
   function loadActivePlan() {
     try {
-      // Try new multi-plan key first
-      const storedNew = localStorage.getItem(STORAGE_ACTIVE_PLANS);
+      // Try localStorage first (signed-in), then sessionStorage (signed-out / temporary)
+      const storedNew = localStorage.getItem(STORAGE_ACTIVE_PLANS) ?? sessionStorage.getItem(STORAGE_ACTIVE_PLANS);
       if (storedNew) {
         const data: Array<{id: string, plan: ReadingPlan}> = JSON.parse(storedNew);
         activePlans = data;
@@ -150,9 +158,9 @@
       const selected = activePlans.find(p => p.id === selectedPlanId);
       currentReadingPlan = selected?.plan ?? null;
       currentPlanId = selectedPlanId;
-      // Default activePlanViewTab to selectd plan
-      if (!activePlanViewTab || activePlanViewTab !== 'all') {
-        activePlanViewTab = selectedPlanId ?? '';
+      // Default activePlanViewTab: 'all' when 2+ plans, else selected plan
+      if (!activePlanViewTab || !['all', ...activePlans.map(p => p.id)].includes(activePlanViewTab)) {
+        activePlanViewTab = activePlans.length >= 2 ? 'all' : (selectedPlanId ?? '');
       }
     } catch (e) {
       console.error('Error loading active plan:', e);
@@ -167,10 +175,11 @@
         activePlans[idx] = { id: currentPlanId, plan: currentReadingPlan };
       }
     }
+    const storage = isSignedIn ? localStorage : sessionStorage;
     if (activePlans.length > 0) {
-      localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(activePlans));
+      storage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(activePlans));
     } else {
-      localStorage.removeItem(STORAGE_ACTIVE_PLANS);
+      storage.removeItem(STORAGE_ACTIVE_PLANS);
     }
   }
   
@@ -178,6 +187,32 @@
     try {
       const historyStr = localStorage.getItem(STORAGE_PLAN_HISTORY);
       planHistory = historyStr ? JSON.parse(historyStr) : [];
+
+      // Phase 3: migrate abandoned (completedAt===null) history items back to activePlans
+      const abandoned = planHistory.filter(
+        (h: any) => h.completedAt === null && !activePlans.some(p => p.id === h.id)
+      );
+      if (abandoned.length > 0) {
+        for (const h of abandoned) {
+          if (h.plan) {
+            try {
+              h.plan.config.startDate = new Date(h.plan.config.startDate);
+              h.plan.config.endDate = new Date(h.plan.config.endDate);
+              h.plan.days?.forEach((d: any) => { d.date = new Date(d.date); });
+            } catch {/* ignore */}
+          }
+          activePlans = [...activePlans, { id: h.id, plan: h.plan }];
+        }
+        if (isSignedIn) {
+          localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(activePlans));
+        }
+        if (!selectedPlanId) {
+          selectedPlanId = activePlans[activePlans.length - 1].id;
+          currentReadingPlan = activePlans[activePlans.length - 1].plan;
+          currentPlanId = selectedPlanId;
+        }
+        if (activePlans.length >= 2) activePlanViewTab = 'all';
+      }
     } catch (e) {
       console.error('Error loading plan history:', e);
       planHistory = [];
@@ -563,6 +598,7 @@
     dayProgressMap = new Map(dayProgressMap);
     dayProgressMap.set(day.dayNumber, updated);
     await queueProgressEntry(updated);
+    if (!currentlyChecked) checkPlanCompletion(currentPlanId);
   }
 
   async function markDayComplete(day: any) {
@@ -576,6 +612,7 @@
     dayProgressMap = new Map(dayProgressMap);
     dayProgressMap.set(day.dayNumber, updated);
     await queueProgressEntry(updated);
+    checkPlanCompletion(currentPlanId);
   }
 
   /** Map a ReadingProgressEntry to Supabase reading_progress columns and enqueue. */
@@ -752,8 +789,7 @@
     for (const entry of activePlans) {
       const todayDay = entry.plan.days.find(d => localDateStr(new Date(d.date)) === todayStr);
       if (!todayDay) continue;
-      const planName = entry.plan.config.name ||
-        entry.plan.config.ordering.charAt(0).toUpperCase() + entry.plan.config.ordering.slice(1);
+      const planName = getPlanDisplayName(entry.plan.config);
       for (const ch of todayDay.chapters) {
         const key = `${ch.book}-${ch.chapter}`;
         if (!seen.has(key)) {
@@ -763,6 +799,114 @@
       }
     }
     return chapters;
+  }
+
+  function getPlanDisplayName(config: ReadingPlanConfig): string {
+    if (config.name) return config.name;
+    if (config.ordering === 'harmony') return 'Gospel Harmony';
+    if (config.ordering === 'chronological') return 'Chronological Plan';
+    return 'Custom Plan';
+  }
+
+  function getNextChapterForPlan(plan: ReadingPlan): {book: string, chapter: number} | null {
+    const todayStr = localDateStr(new Date());
+    // Try today first
+    const todayDay = plan.days.find(d => localDateStr(new Date(d.date)) === todayStr);
+    if (todayDay?.chapters?.length) return todayDay.chapters[0];
+    // Else next upcoming day
+    const future = plan.days.find(d => localDateStr(new Date(d.date)) > todayStr);
+    if (future?.chapters?.length) return future.chapters[0];
+    return null;
+  }
+
+  function renamePlan(planId: string, newName: string) {
+    const trimmed = newName.trim();
+    const idx = activePlans.findIndex(p => p.id === planId);
+    if (idx >= 0 && trimmed) {
+      activePlans[idx].plan.config.name = trimmed;
+      activePlans = [...activePlans];
+      saveActivePlan();
+      // Also update history entry if present
+      const hIdx = planHistory.findIndex((h: any) => h.id === planId);
+      if (hIdx >= 0) {
+        planHistory[hIdx].plan.config.name = trimmed;
+        planHistory = [...planHistory];
+        localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
+      }
+    }
+    planRenamingId = null;
+    planRenameValue = '';
+  }
+
+  function archivePlan(planId: string) {
+    const entry = activePlans.find(p => p.id === planId);
+    if (!entry) return;
+    const name = getPlanDisplayName(entry.plan.config);
+    // Remove from active
+    activePlans = activePlans.filter(p => p.id !== planId);
+    if (activePlans.length > 0) {
+      selectedPlanId = activePlans[activePlans.length - 1].id;
+      currentReadingPlan = activePlans.find(p => p.id === selectedPlanId)?.plan ?? null;
+      currentPlanId = selectedPlanId;
+      activePlanViewTab = activePlans.length >= 2 ? 'all' : selectedPlanId;
+    } else {
+      selectedPlanId = null; currentReadingPlan = null; currentPlanId = null; activePlanViewTab = '';
+    }
+    saveActivePlan();
+    // Set completedAt in history
+    const hIdx = planHistory.findIndex((h: any) => h.id === planId);
+    if (hIdx >= 0) {
+      planHistory[hIdx].completedAt = new Date().toISOString();
+    } else {
+      planHistory.unshift({ id: planId, plan: entry.plan, createdAt: new Date().toISOString(), completedAt: new Date().toISOString() });
+    }
+    planHistory = [...planHistory];
+    localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
+    congratsPlanName = name;
+  }
+
+  function focusAndSelect(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+
+  function deletePlanFromActive(planId: string) {
+    activePlans = activePlans.filter(p => p.id !== planId);
+    if (selectedPlanId === planId) {
+      selectedPlanId = activePlans.length > 0 ? activePlans[activePlans.length - 1].id : null;
+      currentReadingPlan = selectedPlanId ? activePlans.find(p => p.id === selectedPlanId)?.plan ?? null : null;
+      currentPlanId = selectedPlanId;
+    }
+    if (activePlans.length >= 2) {
+      activePlanViewTab = 'all';
+    } else if (activePlans.length === 1) {
+      activePlanViewTab = activePlans[0].id;
+    } else {
+      activePlanViewTab = '';
+    }
+    saveActivePlan();
+  }
+
+  function checkPlanCompletion(planId: string | null) {
+    if (!planId) return;
+    const entry = activePlans.find(p => p.id === planId);
+    if (!entry) return;
+    let total = 0;
+    let checked = 0;
+    for (const day of entry.plan.days) {
+      for (const ch of day.chapters) {
+        total++;
+        const progress = dayProgressMap.get(day.dayNumber);
+        const cp = progress?.chaptersRead?.find((c: any) => c.book === ch.book && c.chapter === ch.chapter);
+        if (cp?.actions?.length) {
+          const latest = cp.actions[cp.actions.length - 1];
+          if (latest.type === 'checked') checked++;
+        }
+      }
+    }
+    if (total > 0 && checked >= total) {
+      archivePlan(planId);
+    }
   }
   
   function selectAllBooks() {
@@ -807,58 +951,61 @@
       selectedPlanId = newPlanId;
       currentReadingPlan = newPlan;
       currentPlanId = newPlanId;
-      activePlanViewTab = newPlanId;
+      activePlanViewTab = activePlans.length >= 2 ? 'all' : newPlanId;
       
       saveActivePlan();
       savePlanToHistory(newPlan, newPlanId);
-      
-      // Initialize plan in IndexedDB for sync
-      planGenerationStatus = 'Initializing cloud sync...';
-      
-      // Calculate plan definition hash
-      const planJson = JSON.stringify(currentReadingPlan);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(planJson));
-      const planHash = Array.from(new Uint8Array(hashBuffer))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-      
-      // Create plan metadata
-      await planMetadataStore.upsertPlanMetadata({
-        planId: currentPlanId,
-        status: 'active',
-        planDefinitionHash: planHash,
-        planVersion: 1,
-        activatedAt: Date.now()
-      });
 
-      // Queue reading plan to Supabase (user_id is merged automatically by SyncQueueService)
-      await syncQueue.enqueue({
-        type: 'INSERT',
-        table: 'reading_plans',
-        id: currentPlanId!,
-        data: {
-          id: currentPlanId!,
-          name: config.name || `${currentReadingPlan.totalDays}-day reading plan`,
-          config: JSON.stringify(config),
-          current_day_number: 1,
+      if (isSignedIn) {
+        // Initialize plan in IndexedDB for sync
+        planGenerationStatus = 'Initializing cloud sync...';
+
+        // Calculate plan definition hash
+        const planJson = JSON.stringify(currentReadingPlan);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(planJson));
+        const planHash = Array.from(new Uint8Array(hashBuffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+
+        // Create plan metadata
+        await planMetadataStore.upsertPlanMetadata({
+          planId: currentPlanId,
           status: 'active',
-          plan_definition_hash: planHash,
-          plan_version: 1,
-          activated_at: Date.now(),
-          started_at: Date.now(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      });
-      
-      // Create day 1 progress entry
-      if (currentReadingPlan.days.length > 0) {
-        const day1Chapters = currentReadingPlan.days[0].chapters;
-        await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
+          planDefinitionHash: planHash,
+          planVersion: 1,
+          activatedAt: Date.now()
+        });
+
+        // Queue reading plan to Supabase (user_id is merged automatically by SyncQueueService)
+        await syncQueue.enqueue({
+          type: 'INSERT',
+          table: 'reading_plans',
+          id: currentPlanId!,
+          data: {
+            id: currentPlanId!,
+            name: config.name || `${currentReadingPlan.totalDays}-day reading plan`,
+            config: JSON.stringify(config),
+            current_day_number: 1,
+            status: 'active',
+            plan_definition_hash: planHash,
+            plan_version: 1,
+            activated_at: Date.now(),
+            started_at: Date.now(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        });
+
+        // Create day 1 progress entry
+        if (currentReadingPlan.days.length > 0) {
+          const day1Chapters = currentReadingPlan.days[0].chapters;
+          await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
+        }
+
+        planGenerationStatus = `✓ Plan created! ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
+      } else {
+        planGenerationStatus = `✓ Plan created (local only — sign in to save permanently). ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
       }
-      // PowerSync will automatically sync the local writes
-      
-      planGenerationStatus = `✓ Plan created! ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
       
       setTimeout(() => {
         currentTab = 'active';
@@ -915,6 +1062,7 @@
     switch (preset) {
       case 'bible-1-year':
         return {
+          name: 'Bible in 1 Year',
           startDate: today,
           endDate: oneYearLater,
           books: BIBLE_BOOKS.map(b => ({ book: b.name })),
@@ -924,6 +1072,7 @@
         };
       case 'nt-90-days':
         return {
+          name: 'NT in 90 Days',
           startDate: today,
           endDate: ninetyDaysLater,
           books: BIBLE_BOOKS.filter(b => b.testament === 'NT').map(b => ({ book: b.name })),
@@ -933,6 +1082,7 @@
         };
       case 'gospels-30-days':
         return {
+          name: 'Gospels in 30 Days',
           startDate: today,
           endDate: thirtyDaysLater,
           books: ['Matthew', 'Mark', 'Luke', 'John'].map(book => ({ book })),
@@ -942,6 +1092,7 @@
         };
       case 'chronological-1-year':
         return {
+          name: 'Chronological 1 Year',
           startDate: today,
           endDate: oneYearLater,
           books: BIBLE_BOOKS.map(b => ({ book: b.name })),
@@ -951,6 +1102,7 @@
         };
       case 'psalms-proverbs':
         return {
+          name: 'Psalms & Proverbs',
           startDate: today,
           endDate: new Date(today.getTime() + 150 * 24 * 60 * 60 * 1000),
           books: [{ book: 'Psalms' }, { book: 'Proverbs' }],
@@ -960,6 +1112,7 @@
         };
       case 'gospel-harmony-30':
         return {
+          name: 'Gospel Harmony (30 Days)',
           startDate: today,
           endDate: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000),
           books: [],
@@ -970,6 +1123,7 @@
         };
       case 'gospel-harmony-60':
         return {
+          name: 'Gospel Harmony (60 Days)',
           startDate: today,
           endDate: new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000),
           books: [],
@@ -980,6 +1134,7 @@
         };
       case 'gospel-harmony-90':
         return {
+          name: 'Gospel Harmony (90 Days)',
           startDate: today,
           endDate: new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000),
           books: [],
@@ -990,6 +1145,7 @@
         };
       case 'gospel-harmony-184':
         return {
+          name: 'Gospel Harmony (Full)',
           startDate: today,
           endDate: new Date(today.getTime() + 184 * 24 * 60 * 60 * 1000),
           books: [],
@@ -1069,7 +1225,7 @@
           class:active={currentTab === 'history'}
           on:click={() => { currentTab = 'history'; loadPlanHistory(); }}
         >
-          History
+          Completed Archive
         </button>
       </div>
       
@@ -1176,6 +1332,12 @@
               </div>
             {/if}
             
+            {#if !isSignedIn}
+              <div class="auth-warning">
+                <span>⚠</span>
+                <span>You are not signed in. This plan will be stored temporarily and <strong>lost when you close this tab</strong>. <a href="#" on:click|preventDefault={() => closeModal()}>Sign in</a> to save permanently.</span>
+              </div>
+            {/if}
             <button class="generate-btn" on:click={generatePlan}>Generate Plan</button>
             {#if planGenerationStatus}
               <div class="status">{planGenerationStatus}</div>
@@ -1185,15 +1347,6 @@
           <div class="active-plan-tab">
             {#if activePlans.length >= 2}
               <div class="plan-tab-strip">
-                {#each activePlans as entry}
-                  <button
-                    class="plan-tab-btn"
-                    class:active={activePlanViewTab === entry.id}
-                    on:click={() => selectPlanTab(entry.id)}
-                  >
-                    {entry.plan.config.name || entry.plan.config.ordering.charAt(0).toUpperCase() + entry.plan.config.ordering.slice(1)}
-                  </button>
-                {/each}
                 <button
                   class="plan-tab-btn plan-tab-all"
                   class:active={activePlanViewTab === 'all'}
@@ -1201,27 +1354,59 @@
                 >
                   All Plans
                 </button>
+                {#each activePlans as entry}
+                  <button
+                    class="plan-tab-btn"
+                    class:active={activePlanViewTab === entry.id}
+                    on:click={() => selectPlanTab(entry.id)}
+                  >
+                    {getPlanDisplayName(entry.plan.config)}
+                  </button>
+                {/each}
               </div>
             {/if}
 
             {#if activePlanViewTab === 'all'}
-              <!-- Master Today mixing board -->
-              {@const masterChapters = getMasterTodayChapters()}
-              <div class="master-today">
-                <h3><span class="emoji">📋</span> Master Today — All Plans</h3>
-                {#if masterChapters.length > 0}
-                  <div class="master-today-list">
-                    {#each masterChapters as item}
-                      <div class="master-today-item">
-                        <span class="master-chapter">{item.book} {item.chapter}</span>
-                        <span class="master-plan-badge">{item.planName}</span>
-                        <button class="chapter-link" on:click={() => navigateToChapter(item.book, item.chapter)}>Read →</button>
-                      </div>
-                    {/each}
+              <!-- Plan Manager -->
+              <div class="plan-manager">
+                <h3 class="plan-manager-title">Active Reading Plans</h3>
+                {#each activePlans as entry (entry.id)}
+                  {@const nextCh = getNextChapterForPlan(entry.plan)}
+                  <div class="plan-manager-row" class:delete-confirm={planDeleteConfirmId === entry.id}>
+                    <div class="plan-manager-name">
+                      {#if planRenamingId === entry.id}
+                        <input
+                          class="plan-rename-input"
+                          type="text"
+                          bind:value={planRenameValue}
+                          on:keydown={(e) => { if (e.key === 'Enter') renamePlan(entry.id, planRenameValue); if (e.key === 'Escape') { planRenamingId = null; planRenameValue = ''; } }}
+                          on:blur={() => renamePlan(entry.id, planRenameValue || getPlanDisplayName(entry.plan.config))}
+                          use:focusAndSelect
+                        />
+                      {:else}
+                        <span class="plan-name-text">{getPlanDisplayName(entry.plan.config)}</span>
+                      {/if}
+                    </div>
+                    <div class="plan-manager-meta">
+                      Started {new Date(entry.plan.config.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} &bull; {entry.plan.totalDays} days
+                    </div>
+                    <div class="plan-manager-actions">
+                      {#if nextCh}
+                        <button class="pm-chapter-link" on:click={() => { selectPlanTab(entry.id); navigateToChapter(nextCh.book, nextCh.chapter); }}>{nextCh.book} {nextCh.chapter} →</button>
+                      {/if}
+                      {#if planRenamingId !== entry.id}
+                        <button class="pm-rename-btn" on:click={() => { planRenamingId = entry.id; planRenameValue = getPlanDisplayName(entry.plan.config); planDeleteConfirmId = null; }}>Rename</button>
+                      {/if}
+                      {#if planDeleteConfirmId === entry.id}
+                        <span class="pm-delete-confirm-msg">Delete this plan?</span>
+                        <button class="pm-delete-btn confirm" on:click={() => { deletePlanFromActive(entry.id); planDeleteConfirmId = null; }}>Yes, delete</button>
+                        <button class="pm-cancel-btn" on:click={() => planDeleteConfirmId = null}>Cancel</button>
+                      {:else}
+                        <button class="pm-delete-btn" on:click={() => { planDeleteConfirmId = entry.id; planRenamingId = null; }}>Delete</button>
+                      {/if}
+                    </div>
                   </div>
-                {:else}
-                  <p>No reading scheduled for today across any active plans.</p>
-                {/if}
+                {/each}
               </div>
             {:else if currentReadingPlan}
               <!-- Welcome banner + today's reading — always first -->
@@ -1529,24 +1714,26 @@
             {/if}
           </div>
         {:else}
+          {@const completedPlans = planHistory.filter((h) => h.completedAt !== null)}
           <div class="history-tab">
-            {#if planHistory.length > 0}
-              {#each planHistory as item}
+            {#if completedPlans.length > 0}
+              {#each completedPlans as item}
                 <div class="history-item">
                   <div class="history-header">
                     <div>
                       <div class="history-title">
-                        {item.plan.config.name || item.plan.config.ordering.charAt(0).toUpperCase() + item.plan.config.ordering.slice(1)} Plan
+                        {getPlanDisplayName(item.plan.config)}
                       </div>
-                      <div class="history-date">Created {new Date(item.createdAt).toLocaleDateString()}</div>
+                      <div class="history-date">
+                        Completed {new Date(item.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
                     </div>
                     <div class="history-actions">
-                      <button class="restore-btn" on:click={() => restorePlanFromHistory(item)}>Restore</button>
                       <button class="delete-btn" on:click={() => deletePlanFromHistory(item.id)}>Delete</button>
                     </div>
                   </div>
                   <div class="history-stats">
-                    <strong>{item.plan.totalDays}</strong> days • <strong>{item.plan.totalChapters}</strong> chapters
+                    <strong>{item.plan.totalDays}</strong> days &bull; <strong>{item.plan.totalChapters}</strong> chapters
                   </div>
                   <div class="history-dates">
                     {new Date(item.plan.config.startDate).toLocaleDateString()} → {new Date(item.plan.config.endDate).toLocaleDateString()}
@@ -1554,13 +1741,26 @@
                 </div>
               {/each}
             {:else}
-              <p>No past plans yet.</p>
+              <p class="empty-archive">No completed plans yet. Finish a plan to see it here!</p>
             {/if}
           </div>
         {/if}
       </div>
     </div>
   </div>
+
+  {#if congratsPlanName}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="congrats-overlay" on:click={() => congratsPlanName = null}>
+      <div class="congrats-card" on:click|stopPropagation>
+        <div class="congrats-emoji">🎉</div>
+        <h2 class="congrats-title">Plan Complete!</h2>
+        <p class="congrats-body">You finished <strong>{congratsPlanName}</strong>. It has been moved to your Completed Archive.</p>
+        <button class="congrats-close-btn" on:click={() => congratsPlanName = null}>Awesome!</button>
+      </div>
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -2572,4 +2772,193 @@
     color: #888;
     font-weight: normal;
   }
+
+  /* Auth warning banner */
+  .auth-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: rgba(250, 200, 0, 0.1);
+    border: 1px solid rgba(250, 200, 0, 0.4);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: #d4a800;
+    line-height: 1.5;
+  }
+  .auth-warning a {
+    color: #f5c518;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  /* Plan Manager (All Plans view) */
+  .plan-manager {
+    padding: 4px 0;
+  }
+  .plan-manager-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #ccc;
+    margin: 0 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333;
+  }
+  .plan-manager-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #222;
+    border: 1px solid #333;
+    margin-bottom: 8px;
+    transition: border-color 0.15s;
+  }
+  .plan-manager-row.delete-confirm {
+    border-color: #b91c1c;
+    background: rgba(185, 28, 28, 0.08);
+  }
+  .plan-manager-name {
+    flex: 1 1 160px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #e8e8e8;
+  }
+  .plan-name-text {
+    cursor: default;
+  }
+  .plan-rename-input {
+    background: #1a1a1a;
+    border: 1px solid #666;
+    border-radius: 4px;
+    color: #e8e8e8;
+    font-size: 14px;
+    padding: 3px 8px;
+    width: 100%;
+    max-width: 260px;
+  }
+  .plan-manager-meta {
+    font-size: 12px;
+    color: #888;
+    flex: 1 1 auto;
+  }
+  .plan-manager-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .pm-chapter-link {
+    padding: 4px 10px;
+    background: linear-gradient(135deg, #1d4ed8, #1e40af);
+    color: #fff;
+    border: 1px solid #3b82f6;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .pm-chapter-link:hover { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+  .pm-rename-btn {
+    padding: 4px 10px;
+    background: #2a2a2a;
+    color: #aaa;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .pm-rename-btn:hover { background: #333; color: #ddd; }
+  .pm-delete-btn {
+    padding: 4px 10px;
+    background: transparent;
+    color: #888;
+    border: 1px solid #555;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .pm-delete-btn:hover { color: #f87171; border-color: #b91c1c; }
+  .pm-delete-btn.confirm {
+    background: #b91c1c;
+    color: #fff;
+    border-color: #dc2626;
+  }
+  .pm-delete-btn.confirm:hover { background: #dc2626; }
+  .pm-cancel-btn {
+    padding: 4px 10px;
+    background: #333;
+    color: #aaa;
+    border: 1px solid #555;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .pm-cancel-btn:hover { color: #ddd; }
+  .pm-delete-confirm-msg {
+    font-size: 12px;
+    color: #f87171;
+    font-weight: 600;
+  }
+
+  /* Completed Archive empty state */
+  .empty-archive {
+    color: #888;
+    font-style: italic;
+    text-align: center;
+    padding: 24px 0;
+  }
+
+  /* Congrats overlay */
+  .congrats-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 20px;
+  }
+  .congrats-card {
+    background: #1a1a1a;
+    border: 1px solid #3f3f3f;
+    border-radius: 16px;
+    padding: 40px 48px;
+    text-align: center;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+  }
+  .congrats-emoji {
+    font-size: 56px;
+    line-height: 1;
+    margin-bottom: 16px;
+  }
+  .congrats-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #f0e68c;
+    margin: 0 0 12px;
+  }
+  .congrats-body {
+    font-size: 15px;
+    color: #ccc;
+    margin: 0 0 24px;
+    line-height: 1.6;
+  }
+  .congrats-close-btn {
+    padding: 10px 28px;
+    background: linear-gradient(135deg, #d97706, #b45309);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .congrats-close-btn:hover { background: linear-gradient(135deg, #f59e0b, #d97706); }
 </style>
