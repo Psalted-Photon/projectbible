@@ -25,13 +25,20 @@
   let currentTab: 'create' | 'active' | 'history' = 'create';
   let currentReadingPlan: ReadingPlan | null = null;
   let currentPlanId: string | null = null;
+
+  // Multi-plan state
+  let activePlans: Array<{id: string, plan: ReadingPlan}> = [];
+  let selectedPlanId: string | null = null;
+  let activePlanViewTab: string = ''; // plan id or 'all'
   
   // Storage keys
-  const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan';
+  const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan'; // legacy key (migration source)
+  const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans'; // new multi-plan key
   const STORAGE_PLAN_HISTORY = 'projectbible_reading_plan_history';
   
   // Create plan form state
   let planPreset = '';
+  let planName = '';
   let planStartDate = localDateStr(new Date());
   let planEndDate = localDateStr(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000));
   let dayChecks = [true, true, true, true, true, true, true]; // Sun-Sat
@@ -106,18 +113,46 @@
 
   function loadActivePlan() {
     try {
-      const stored = localStorage.getItem(STORAGE_ACTIVE_PLAN);
-      if (stored) {
-        const data = JSON.parse(stored);
-        currentReadingPlan = data.plan;
-        currentPlanId = data.id;
-        if (currentReadingPlan) {
-          currentReadingPlan.config.startDate = new Date(currentReadingPlan.config.startDate);
-          currentReadingPlan.config.endDate = new Date(currentReadingPlan.config.endDate);
-          currentReadingPlan.days.forEach(day => {
-            day.date = new Date(day.date);
-          });
+      // Try new multi-plan key first
+      const storedNew = localStorage.getItem(STORAGE_ACTIVE_PLANS);
+      if (storedNew) {
+        const data: Array<{id: string, plan: ReadingPlan}> = JSON.parse(storedNew);
+        activePlans = data;
+        for (const entry of activePlans) {
+          if (entry.plan) {
+            entry.plan.config.startDate = new Date(entry.plan.config.startDate);
+            entry.plan.config.endDate = new Date(entry.plan.config.endDate);
+            entry.plan.days.forEach(day => { day.date = new Date(day.date); });
+          }
         }
+        // Restore selectedPlanId if still valid, else pick last
+        if (!selectedPlanId || !activePlans.find(p => p.id === selectedPlanId)) {
+          selectedPlanId = activePlans.length > 0 ? activePlans[activePlans.length - 1].id : null;
+        }
+      } else {
+        // Migrate from legacy single-plan key
+        const storedOld = localStorage.getItem(STORAGE_ACTIVE_PLAN);
+        if (storedOld) {
+          const data = JSON.parse(storedOld);
+          activePlans = [{ id: data.id, plan: data.plan }];
+          if (activePlans[0].plan) {
+            activePlans[0].plan.config.startDate = new Date(activePlans[0].plan.config.startDate);
+            activePlans[0].plan.config.endDate = new Date(activePlans[0].plan.config.endDate);
+            activePlans[0].plan.days.forEach(day => { day.date = new Date(day.date); });
+          }
+          selectedPlanId = data.id;
+          // Write to new key and remove legacy key
+          localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(activePlans));
+          localStorage.removeItem(STORAGE_ACTIVE_PLAN);
+        }
+      }
+      // Sync currentReadingPlan / currentPlanId from selected
+      const selected = activePlans.find(p => p.id === selectedPlanId);
+      currentReadingPlan = selected?.plan ?? null;
+      currentPlanId = selectedPlanId;
+      // Default activePlanViewTab to selectd plan
+      if (!activePlanViewTab || activePlanViewTab !== 'all') {
+        activePlanViewTab = selectedPlanId ?? '';
       }
     } catch (e) {
       console.error('Error loading active plan:', e);
@@ -125,11 +160,17 @@
   }
   
   function saveActivePlan() {
+    // Update the activePlans entry for the current plan if it was modified in-place
     if (currentReadingPlan && currentPlanId) {
-      localStorage.setItem(STORAGE_ACTIVE_PLAN, JSON.stringify({
-        id: currentPlanId,
-        plan: currentReadingPlan
-      }));
+      const idx = activePlans.findIndex(p => p.id === currentPlanId);
+      if (idx >= 0) {
+        activePlans[idx] = { id: currentPlanId, plan: currentReadingPlan };
+      }
+    }
+    if (activePlans.length > 0) {
+      localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(activePlans));
+    } else {
+      localStorage.removeItem(STORAGE_ACTIVE_PLANS);
     }
   }
   
@@ -646,9 +687,6 @@
         createdAt: new Date().toISOString(),
         completedAt: null
       });
-      if (planHistory.length > 10) {
-        planHistory = planHistory.slice(0, 10);
-      }
       localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
     } catch (e) {
       console.error('Error saving plan to history:', e);
@@ -656,10 +694,22 @@
   }
   
   function deleteCurrentPlan() {
-    if (confirm('Are you sure you want to delete the current reading plan?')) {
-      localStorage.removeItem(STORAGE_ACTIVE_PLAN);
-      currentReadingPlan = null;
-      currentPlanId = null;
+    if (!selectedPlanId) return;
+    if (confirm('Are you sure you want to delete this reading plan?')) {
+      activePlans = activePlans.filter(p => p.id !== selectedPlanId);
+      if (activePlans.length > 0) {
+        selectedPlanId = activePlans[activePlans.length - 1].id;
+        currentReadingPlan = activePlans.find(p => p.id === selectedPlanId)?.plan ?? null;
+        currentPlanId = selectedPlanId;
+        activePlanViewTab = selectedPlanId;
+        localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(activePlans));
+      } else {
+        selectedPlanId = null;
+        currentReadingPlan = null;
+        currentPlanId = null;
+        activePlanViewTab = '';
+        localStorage.removeItem(STORAGE_ACTIVE_PLANS);
+      }
       dayProgressMap = new Map();
       lastLoadedPlanId = null;
     }
@@ -670,6 +720,49 @@
       planHistory = planHistory.filter(p => p.id !== planId);
       localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
     }
+  }
+
+  function selectPlanTab(planId: string) {
+    activePlanViewTab = planId;
+    if (planId !== 'all') {
+      selectedPlanId = planId;
+      const entry = activePlans.find(p => p.id === planId);
+      currentReadingPlan = entry?.plan ?? null;
+      currentPlanId = planId;
+    }
+  }
+
+  function restorePlanFromHistory(item: any) {
+    if (activePlans.some(p => p.id === item.id)) {
+      // Already active — just switch to it
+      selectPlanTab(item.id);
+      currentTab = 'active';
+      return;
+    }
+    activePlans = [...activePlans, { id: item.id, plan: item.plan }];
+    selectPlanTab(item.id);
+    saveActivePlan();
+    currentTab = 'active';
+  }
+
+  function getMasterTodayChapters() {
+    const todayStr = localDateStr(new Date());
+    const seen = new Set<string>();
+    const chapters: Array<{book: string, chapter: number, planId: string, planName: string}> = [];
+    for (const entry of activePlans) {
+      const todayDay = entry.plan.days.find(d => localDateStr(new Date(d.date)) === todayStr);
+      if (!todayDay) continue;
+      const planName = entry.plan.config.name ||
+        entry.plan.config.ordering.charAt(0).toUpperCase() + entry.plan.config.ordering.slice(1);
+      for (const ch of todayDay.chapters) {
+        const key = `${ch.book}-${ch.chapter}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          chapters.push({ book: ch.book, chapter: ch.chapter, planId: entry.id, planName });
+        }
+      }
+    }
+    return chapters;
   }
   
   function selectAllBooks() {
@@ -706,11 +799,18 @@
         : buildPresetPlanConfig(planPreset);
       
       planGenerationStatus = 'Calculating reading schedule...';
-      currentReadingPlan = generateReadingPlan(config);
-      currentPlanId = `plan_${Date.now()}`;
+      const newPlan = generateReadingPlan(config);
+      const newPlanId = `plan_${Date.now()}`;
+
+      // Push to multi-plan array and select the new plan
+      activePlans = [...activePlans, { id: newPlanId, plan: newPlan }];
+      selectedPlanId = newPlanId;
+      currentReadingPlan = newPlan;
+      currentPlanId = newPlanId;
+      activePlanViewTab = newPlanId;
       
       saveActivePlan();
-      savePlanToHistory(currentReadingPlan, currentPlanId);
+      savePlanToHistory(newPlan, newPlanId);
       
       // Initialize plan in IndexedDB for sync
       planGenerationStatus = 'Initializing cloud sync...';
@@ -738,7 +838,7 @@
         id: currentPlanId!,
         data: {
           id: currentPlanId!,
-          name: `${currentReadingPlan.totalDays}-day reading plan`,
+          name: config.name || `${currentReadingPlan.totalDays}-day reading plan`,
           config: JSON.stringify(config),
           current_day_number: 1,
           status: 'active',
@@ -790,6 +890,7 @@
       excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
       books,
       ordering,
+      name: planName.trim() || undefined,
       dailyPsalm: optDailyPsalm,
       randomizePsalms: optRandomizePsalms,
       dailyProverb: optDailyProverb,
@@ -992,6 +1093,11 @@
                 </optgroup>
               </select>
             </div>
+
+            <div class="form-group">
+              <label for="planName">Plan Name <span class="optional">(optional)</span>:</label>
+              <input id="planName" type="text" bind:value={planName} placeholder="e.g. Morning Devotions" maxlength="80" />
+            </div>
             
             {#if planPreset === ''}
               <div class="custom-options">
@@ -1077,7 +1183,47 @@
           </div>
         {:else if currentTab === 'active'}
           <div class="active-plan-tab">
-            {#if currentReadingPlan}
+            {#if activePlans.length >= 2}
+              <div class="plan-tab-strip">
+                {#each activePlans as entry}
+                  <button
+                    class="plan-tab-btn"
+                    class:active={activePlanViewTab === entry.id}
+                    on:click={() => selectPlanTab(entry.id)}
+                  >
+                    {entry.plan.config.name || entry.plan.config.ordering.charAt(0).toUpperCase() + entry.plan.config.ordering.slice(1)}
+                  </button>
+                {/each}
+                <button
+                  class="plan-tab-btn plan-tab-all"
+                  class:active={activePlanViewTab === 'all'}
+                  on:click={() => selectPlanTab('all')}
+                >
+                  All Plans
+                </button>
+              </div>
+            {/if}
+
+            {#if activePlanViewTab === 'all'}
+              <!-- Master Today mixing board -->
+              {@const masterChapters = getMasterTodayChapters()}
+              <div class="master-today">
+                <h3><span class="emoji">📋</span> Master Today — All Plans</h3>
+                {#if masterChapters.length > 0}
+                  <div class="master-today-list">
+                    {#each masterChapters as item}
+                      <div class="master-today-item">
+                        <span class="master-chapter">{item.book} {item.chapter}</span>
+                        <span class="master-plan-badge">{item.planName}</span>
+                        <button class="chapter-link" on:click={() => navigateToChapter(item.book, item.chapter)}>Read →</button>
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <p>No reading scheduled for today across any active plans.</p>
+                {/if}
+              </div>
+            {:else if currentReadingPlan}
               <!-- Welcome banner + today's reading — always first -->
               {@const todayDone = !!(todayReading && getDayProgress(todayReading.dayNumber)?.completed)}
               <div class="welcome-banner" class:plan-done={todayDone}>
@@ -1390,11 +1536,14 @@
                   <div class="history-header">
                     <div>
                       <div class="history-title">
-                        {item.plan.config.ordering.charAt(0).toUpperCase() + item.plan.config.ordering.slice(1)} Plan
+                        {item.plan.config.name || item.plan.config.ordering.charAt(0).toUpperCase() + item.plan.config.ordering.slice(1)} Plan
                       </div>
                       <div class="history-date">Created {new Date(item.createdAt).toLocaleDateString()}</div>
                     </div>
-                    <button class="delete-btn" on:click={() => deletePlanFromHistory(item.id)}>Delete</button>
+                    <div class="history-actions">
+                      <button class="restore-btn" on:click={() => restorePlanFromHistory(item)}>Restore</button>
+                      <button class="delete-btn" on:click={() => deletePlanFromHistory(item.id)}>Delete</button>
+                    </div>
                   </div>
                   <div class="history-stats">
                     <strong>{item.plan.totalDays}</strong> days • <strong>{item.plan.totalChapters}</strong> chapters
@@ -2316,5 +2465,111 @@
   .history-dates {
     font-size: 13px;
     color: #888;
+  }
+
+  /* Multi-plan tab strip */
+  .plan-tab-strip {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #1e3a5f;
+    padding-bottom: 8px;
+  }
+
+  .plan-tab-btn {
+    padding: 6px 14px;
+    background: #0d1b2e;
+    color: #aaa;
+    border: 1px solid #1e3a5f;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+  }
+
+  .plan-tab-btn:hover {
+    background: #1e3a5f;
+    color: #e0e0e0;
+  }
+
+  .plan-tab-btn.active {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+    color: #fff;
+    border-color: #3b82f6;
+  }
+
+  .plan-tab-all.active {
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    border-color: #8b5cf6;
+  }
+
+  /* Master Today mixing board */
+  .master-today {
+    padding: 16px 0;
+  }
+
+  .master-today h3 {
+    margin: 0 0 14px;
+    color: #e0e0e0;
+  }
+
+  .master-today-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .master-today-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #0d1b2e;
+    border: 1px solid #1e3a5f;
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+
+  .master-chapter {
+    font-weight: 600;
+    color: #e0e0e0;
+    flex: 1;
+  }
+
+  .master-plan-badge {
+    font-size: 11px;
+    color: #aaa;
+    background: #1a2742;
+    border: 1px solid #1e3a5f;
+    border-radius: 10px;
+    padding: 2px 8px;
+  }
+
+  /* History Restore button */
+  .history-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .restore-btn {
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+    color: #fff;
+    border: 1px solid #3b82f6;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .restore-btn:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  }
+
+  /* Plan name input optional label */
+  .optional {
+    font-size: 12px;
+    color: #888;
+    font-weight: normal;
   }
 </style>

@@ -30,6 +30,9 @@ export interface ReadingPlanConfig {
   /** Books to include in the plan */
   books: BookSelection[];
   
+  /** Optional display name for the plan */
+  name?: string;
+
   /** How to order the readings */
   ordering: 'canonical' | 'shuffled' | 'chronological' | 'harmony';
 

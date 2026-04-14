@@ -12,7 +12,8 @@
 import { generateReadingPlan } from '@projectbible/core';
 import { readingProgressStore } from '../stores/ReadingProgressStore';
 
-const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan';
+const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan'; // legacy key
+const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans'; // new multi-plan key
 const STORAGE_PLAN_HISTORY = 'projectbible_reading_plan_history';
 
 // ─── Reading Plans ────────────────────────────────────────────────────
@@ -52,21 +53,37 @@ export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
     const plan = generateReadingPlan(config);
 
     // Only overwrite localStorage if the remote plan is newer than what we have (or we have nothing)
-    const existing = localStorage.getItem(STORAGE_ACTIVE_PLAN);
-    if (existing) {
+    const existingNew = localStorage.getItem(STORAGE_ACTIVE_PLANS);
+    if (existingNew) {
       try {
-        const existingData = JSON.parse(existing);
-        // If the same plan id is already in localStorage, don't overwrite
-        if (existingData.id === activePlanRow.id) return;
+        const existingArray: Array<{id: string}> = JSON.parse(existingNew);
+        // If the same plan id is already in the active plans array, don't overwrite
+        if (existingArray.some(e => e.id === activePlanRow.id)) return;
       } catch {
         // Corrupted localStorage — fall through and overwrite
       }
+    } else {
+      // Also check legacy single-plan key
+      const existingOld = localStorage.getItem(STORAGE_ACTIVE_PLAN);
+      if (existingOld) {
+        try {
+          const existingData = JSON.parse(existingOld);
+          if (existingData.id === activePlanRow.id) return;
+        } catch {
+          // Fall through
+        }
+      }
     }
 
-    localStorage.setItem(STORAGE_ACTIVE_PLAN, JSON.stringify({
-      plan,
-      id: activePlanRow.id,
-    }));
+    // Write to new array key; merge with any existing plans
+    const currentPlans: Array<{id: string, plan: any}> = existingNew ? JSON.parse(existingNew) : [];
+    const alreadyPresent = currentPlans.some(e => e.id === activePlanRow.id);
+    if (!alreadyPresent) {
+      currentPlans.push({ id: activePlanRow.id, plan });
+      localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(currentPlans));
+      // Remove legacy key if it exists
+      localStorage.removeItem(STORAGE_ACTIVE_PLAN);
+    }
 
     console.log('[SyncedReading] Restored active reading plan:', activePlanRow.id);
   } catch (err) {

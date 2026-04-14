@@ -49,7 +49,8 @@
   let syncStatus: SyncStatus = 'idle';
   let lastSyncedAt: Date | null = null;
 
-  const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan';
+  const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan'; // legacy key
+  const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans'; // new multi-plan key
 
   let currentReadingPlan: any = null;
   let currentPlanId: string | null = null;
@@ -303,9 +304,18 @@
 
   async function loadReadingPlan() {
     try {
-      const stored = localStorage.getItem(STORAGE_ACTIVE_PLAN);
-      if (!stored) return;
-      const data = JSON.parse(stored);
+      // Try new multi-plan key first; use the last (most recently added) plan for the widget
+      const storedNew = localStorage.getItem(STORAGE_ACTIVE_PLANS);
+      let data: {id: string, plan: any} | null = null;
+      if (storedNew) {
+        const arr: Array<{id: string, plan: any}> = JSON.parse(storedNew);
+        if (arr.length > 0) data = arr[arr.length - 1];
+      } else {
+        // Fall back to legacy key
+        const storedOld = localStorage.getItem(STORAGE_ACTIVE_PLAN);
+        if (storedOld) data = JSON.parse(storedOld);
+      }
+      if (!data) return;
       currentReadingPlan = data.plan;
       currentPlanId = data.id;
       if (currentReadingPlan) {
