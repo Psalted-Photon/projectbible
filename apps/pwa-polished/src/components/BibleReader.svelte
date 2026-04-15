@@ -323,7 +323,7 @@
   async function handleHarmonyContinueOnly(ctx: any) {
     const next = ctx.nextPassage as HarmonyPassage;
     if (!next) return;
-    navigationStore.navigateTo(currentTranslation, next.book, next.startChapter, next.startVerse);
+    doScrollToVerse(next.book, next.startChapter, next.startVerse);
   }
 
   async function handleHarmonyCheckAndContinue(ctx: any) {
@@ -335,7 +335,7 @@
     }
     const next = ctx.nextPassage as HarmonyPassage;
     if (next) {
-      navigationStore.navigateTo(currentTranslation, next.book, next.startChapter, next.startVerse);
+      doScrollToVerse(next.book, next.startChapter, next.startVerse);
     }
   }
 
@@ -404,10 +404,13 @@
         console.log(
           `📚 Translation changed from ${prevTranslation} to ${currentTranslation}, verifying book exists...`,
         );
+        // Capture scroll target before any async work clears it
+        const scrollVerse = $navigationStore.scrollTargetVerse ?? null;
         // Verify the book exists in new translation, fallback if not
-        verifyAndLoadChapter(currentTranslation, currentBook, currentChapter);
+        verifyAndLoadChapter(currentTranslation, currentBook, currentChapter, scrollVerse);
       } else {
-        loadChapter(currentTranslation, currentBook, currentChapter, true);
+        const scrollVerse = $navigationStore.scrollTargetVerse ?? null;
+        loadChapter(currentTranslation, currentBook, currentChapter, true, scrollVerse);
       }
     }
   }
@@ -420,18 +423,19 @@
     clearSearchHighlight();
   }
 
-  $: if (chapters.length > 0 && $navigationStore.scrollTargetVerse != null) {
-    doScrollVerseToTop($navigationStore.scrollTargetVerse);
-  }
-
-  async function doScrollVerseToTop(verse: number) {
-    await tick();
-    const verseEl = readerElement?.querySelector(
-      `.verse[data-verse="${verse}"]`,
-    ) as HTMLElement | null;
-    if (!verseEl) return;
-    verseEl.scrollIntoView({ behavior: 'instant', block: 'start' });
-    navigationStore.clearScrollTarget();
+  // Scroll helper: same-chapter → direct DOM scroll; different chapter → navigateTo sets
+  // scrollTargetVerse which loadChapter reads after resetting scrollTop.
+  function doScrollToVerse(book: string, chapter: number, verse: number) {
+    if (book === currentBook && chapter === currentChapter) {
+      // Chapter already loaded — scroll directly, no store navigation needed.
+      const el = readerElement?.querySelector(
+        `.verse[data-verse="${verse}"]`,
+      ) as HTMLElement | null;
+      if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
+    } else {
+      // Different chapter — navigateTo sets scrollTargetVerse; loadChapter picks it up.
+      navigationStore.navigateTo(currentTranslation, book, chapter, verse);
+    }
   }
 
   // Start/stop scroll detection when both book and element are ready
@@ -677,6 +681,7 @@
     book: string,
     chapter: number,
     resetScroll = false,
+    scrollToVerse: number | null = null,
   ) {
     console.log("📄 loadChapter called:", {
       translation,
@@ -757,6 +762,16 @@
         await tick(); // flush DOM so scrollHeight reflects the new single-chapter content
         lastScrollTop = 0;
         readerElement.scrollTop = 0; // direct assignment — always instant, ignores scroll-behavior CSS
+        if (scrollToVerse != null) {
+          const verseEl = readerElement.querySelector(
+            `.verse[data-verse="${scrollToVerse}"]`,
+          ) as HTMLElement | null;
+          if (verseEl) {
+            verseEl.scrollIntoView({ behavior: 'instant', block: 'start' });
+            lastScrollTop = readerElement.scrollTop;
+          }
+          navigationStore.clearScrollTarget();
+        }
       }
     } catch (err: unknown) {
       console.error("Error loading chapter:", err);
@@ -976,6 +991,7 @@
     translation: string,
     book: string,
     chapter: number,
+    scrollToVerse: number | null = null,
   ) {
     // Try to load the requested chapter
     const verses = await textStore.getChapter(translation, book, 1);
@@ -1014,7 +1030,7 @@
       navigationStore.navigateTo(translation, fallbackBook, fallbackChapter);
     } else {
       // Book exists, load normally
-      loadChapter(translation, book, chapter, true);
+      loadChapter(translation, book, chapter, true, scrollToVerse);
     }
   }
 
