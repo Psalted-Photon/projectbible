@@ -1335,7 +1335,7 @@
             {#if !isSignedIn}
               <div class="auth-warning">
                 <span>⚠</span>
-                <span>You are not signed in. This plan will be stored temporarily and <strong>lost when you close this tab</strong>. <a href="#" on:click|preventDefault={() => closeModal()}>Sign in</a> to save permanently.</span>
+                <span>You are not signed in. This plan will be stored temporarily and <strong>lost when you close this tab</strong>. <button class="auth-warning-signin-btn" on:click={() => closeModal()}>Sign in</button> to save permanently.</span>
               </div>
             {/if}
             <button class="generate-btn" on:click={generatePlan}>Generate Plan</button>
@@ -2704,68 +2704,6 @@
     border-color: #8b5cf6;
   }
 
-  /* Master Today mixing board */
-  .master-today {
-    padding: 16px 0;
-  }
-
-  .master-today h3 {
-    margin: 0 0 14px;
-    color: #e0e0e0;
-  }
-
-  .master-today-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .master-today-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: #0d1b2e;
-    border: 1px solid #1e3a5f;
-    border-radius: 6px;
-    padding: 8px 12px;
-  }
-
-  .master-chapter {
-    font-weight: 600;
-    color: #e0e0e0;
-    flex: 1;
-  }
-
-  .master-plan-badge {
-    font-size: 11px;
-    color: #aaa;
-    background: #1a2742;
-    border: 1px solid #1e3a5f;
-    border-radius: 10px;
-    padding: 2px 8px;
-  }
-
-  /* History Restore button */
-  .history-actions {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .restore-btn {
-    padding: 6px 12px;
-    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-    color: #fff;
-    border: 1px solid #3b82f6;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-  }
-
-  .restore-btn:hover {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  }
-
   /* Plan name input optional label */
   .optional {
     font-size: 12px;
@@ -2787,10 +2725,14 @@
     color: #d4a800;
     line-height: 1.5;
   }
-  .auth-warning a {
+  .auth-warning-signin-btn {
+    background: none;
+    border: none;
     color: #f5c518;
     text-decoration: underline;
     cursor: pointer;
+    padding: 0;
+    font: inherit;
   }
 
   /* Plan Manager (All Plans view) */

@@ -34,6 +34,67 @@
   import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
   import { harmonyNavStore } from "../stores/harmonyNavStore";
   import { readingProgressStore } from "../stores/ReadingProgressStore";
+  import { localDateStr } from "../stores/clockStore";
+  import type { HarmonyPassage, HarmonySection } from "@projectbible/core";
+
+  const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans';
+
+  function bibleReaderGetPlanDisplayName(config: any): string {
+    if (config?.name) return config.name;
+    if (config?.ordering === 'harmony') return 'Gospel Harmony';
+    if (config?.ordering === 'chronological') return 'Chronological Plan';
+    return 'Custom Plan';
+  }
+
+  function computeAllPlanContexts(book: string, chapter: number): any[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_ACTIVE_PLANS) ?? sessionStorage.getItem(STORAGE_ACTIVE_PLANS);
+      if (!raw) return [];
+      const activePlans: Array<{ id: string; plan: any }> = JSON.parse(raw);
+      const todayStr = localDateStr(new Date());
+      const results: any[] = [];
+      for (const entry of activePlans) {
+        const plan = entry.plan;
+        const todayDay = plan.days?.find((d: any) => localDateStr(new Date(d.date)) === todayStr);
+        if (!todayDay) continue;
+        if (plan.config?.ordering === 'harmony') {
+          const sections: HarmonySection[] = todayDay.harmonySections ?? [];
+          const allPassages: HarmonyPassage[] = sections.flatMap((s: HarmonySection) => s.passages);
+          for (let i = 0; i < allPassages.length; i++) {
+            const p = allPassages[i];
+            if (p.book !== book) continue;
+            if (p.endChapter !== chapter) continue;
+            results.push({
+              type: 'harmony',
+              planId: entry.id,
+              planName: bibleReaderGetPlanDisplayName(plan.config),
+              dayNumber: todayDay.dayNumber,
+              passage: p,
+              nextPassage: i < allPassages.length - 1 ? allPassages[i + 1] : null,
+              isLastPassage: i === allPassages.length - 1,
+              harmonySections: sections,
+            });
+          }
+        } else {
+          const todayChapters: Array<{ book: string; chapter: number }> = todayDay.chapters ?? [];
+          const chapIdx = todayChapters.findIndex((c: any) => c.book === book && c.chapter === chapter);
+          if (chapIdx < 0) continue;
+          results.push({
+            type: 'standard',
+            planId: entry.id,
+            planName: bibleReaderGetPlanDisplayName(plan.config),
+            dayNumber: todayDay.dayNumber,
+            nextChapter: chapIdx < todayChapters.length - 1 ? todayChapters[chapIdx + 1] : null,
+            isLastChapter: chapIdx === todayChapters.length - 1,
+            todayChapters,
+          });
+        }
+      }
+      return results;
+    } catch {
+      return [];
+    }
+  }
 
   export let windowId: string | undefined = undefined;
 
@@ -250,6 +311,52 @@
     if (!harmonyState) return;
     await readingProgressStore.markHarmonyDayComplete(harmonyState.planId, harmonyState.dayNumber);
     harmonyNavStore.clearSession();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Always-on plan continue handlers (no harmonyNavStore session required)
+  // ---------------------------------------------------------------------------
+  async function handleHarmonyContinueAlwaysOn(ctx: any) {
+    const section = (ctx.harmonySections as HarmonySection[]).find((s: HarmonySection) =>
+      s.passages.some((p: HarmonyPassage) => p.label === (ctx.passage as HarmonyPassage).label)
+    );
+    if (section) {
+      await readingProgressStore.markPassageComplete(ctx.planId, ctx.dayNumber, section.section, ctx.passage.label);
+    }
+    const next = ctx.nextPassage as HarmonyPassage;
+    navigationStore.navigateTo(currentTranslation, next.book, next.startChapter, next.startVerse);
+  }
+
+  async function handleHarmonyDayCompleteAlwaysOn(ctx: any) {
+    const section = (ctx.harmonySections as HarmonySection[]).find((s: HarmonySection) =>
+      s.passages.some((p: HarmonyPassage) => p.label === (ctx.passage as HarmonyPassage).label)
+    );
+    if (section) {
+      await readingProgressStore.markPassageComplete(ctx.planId, ctx.dayNumber, section.section, ctx.passage.label);
+    }
+    await readingProgressStore.markHarmonyDayComplete(ctx.planId, ctx.dayNumber);
+    harmonyNavStore.clearSession();
+  }
+
+  async function handleMarkAndContinue(ctx: any, book: string, chapter: number) {
+    await readingProgressStore.setChapterAction(
+      ctx.planId, ctx.dayNumber, ctx.todayChapters, { book, chapter }, 'checked'
+    );
+    if (ctx.nextChapter) {
+      navigationStore.setBook(ctx.nextChapter.book);
+      navigationStore.setChapter(ctx.nextChapter.chapter);
+    }
+  }
+
+  function handleContinueOnly(ctx: any) {
+    if (ctx.nextChapter) {
+      navigationStore.setBook(ctx.nextChapter.book);
+      navigationStore.setChapter(ctx.nextChapter.chapter);
+    }
+  }
+
+  async function handleStandardDayComplete(ctx: any) {
+    await readingProgressStore.markDayComplete(ctx.planId, ctx.dayNumber, ctx.todayChapters);
   }
 
   // DEBUG: Log when reactive values change
@@ -2498,6 +2605,9 @@
       <div class="no-content">No verses found for this chapter.</div>
     {:else}
       {#each chapters as chapterData (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}`)}
+        {@const chPlanCtxs = computeAllPlanContexts(chapterData.book, chapterData.chapter)}
+        {@const chHarmCtxs = chPlanCtxs.filter((c) => c.type === 'harmony')}
+        {@const chStdCtxs = chPlanCtxs.filter((c) => c.type === 'standard')}
         <div class="chapter-section" data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
           <div class="chapter-header">
             <h1>{chapterData.book} {chapterData.chapter}</h1>
@@ -2507,7 +2617,8 @@
             class:paragraph-layout={verseLayout === "paragraph"}
             class:nonumber-layout={verseLayout === "paragraph-no-verse-numbers"}
           >
-            {#each chapterData.verses as { verse, text, html, heading, headingLevel }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}  
+            {#each chapterData.verses as { verse, text, html, heading, headingLevel }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
+              {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
               {#if heading && showSectionHeadings}
                 <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
               {/if}
@@ -2550,24 +2661,50 @@
                     on:keypress|stopPropagation={(e) => e.key === 'Enter' && openNotePopup(verse, chapterData.book, chapterData.chapter)}
                   >✎</span>
                 {/if}
-                {#if isLastVerseOfCurrentPassage(verse, verseIdx, chapterData)}
-                  {#if isLastHarmonyPassage}
-                    <button
-                      class="harmony-day-complete-btn"
-                      on:click={handleHarmonyComplete}
-                      title="Mark this reading day complete"
-                    >✓ Day Complete</button>
-                  {:else}
-                    <button
-                      class="harmony-continue-btn"
-                      on:click={handleHarmonyContinue}
-                      title="Continue to next passage"
-                    >Continue →</button>
-                  {/if}
+                {#if hCtxsForVerse.length > 0}
+                  {#each hCtxsForVerse as hCtx}
+                    {#if hCtx.isLastPassage}
+                      <button
+                        class="harmony-day-complete-btn"
+                        on:click={() => handleHarmonyDayCompleteAlwaysOn(hCtx)}
+                        title="Mark this reading day complete"
+                      >✓ Day Complete</button>
+                    {:else}
+                      <button
+                        class="harmony-continue-btn"
+                        on:click={() => handleHarmonyContinueAlwaysOn(hCtx)}
+                        title="Continue to next passage"
+                      >Continue →</button>
+                    {/if}
+                  {/each}
                 {/if}
               </div>
             {/each}
           </div>
+          {#if chStdCtxs.length > 0}
+            <div class="chapter-plan-footer">
+              {#each chStdCtxs as ctx}
+                <div class="plan-continue-row">
+                  <span class="plan-continue-name">📖 {ctx.planName}</span>
+                  {#if ctx.isLastChapter}
+                    <button
+                      class="plan-day-complete-btn"
+                      on:click={() => handleStandardDayComplete(ctx)}
+                    >✓ Day Complete</button>
+                  {:else}
+                    <button
+                      class="plan-mark-continue-btn"
+                      on:click={() => handleMarkAndContinue(ctx, chapterData.book, chapterData.chapter)}
+                    >✓ Done — {ctx.nextChapter?.book} {ctx.nextChapter?.chapter} →</button>
+                    <button
+                      class="plan-continue-only-btn"
+                      on:click={() => handleContinueOnly(ctx)}
+                    >{ctx.nextChapter?.book} {ctx.nextChapter?.chapter} →</button>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/each}
     {/if}
@@ -2754,6 +2891,73 @@
   }
 
   .harmony-day-complete-btn:hover {
+    background: #6fcf97;
+    color: #1a2e1a;
+  }
+
+  /* Standard plan continue footer */
+  .chapter-plan-footer {
+    margin: 0;
+    border-top: 1px solid #2e2e2e;
+    padding: 14px 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: #111;
+  }
+
+  .plan-continue-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .plan-continue-name {
+    font-size: 12px;
+    color: #888;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .plan-mark-continue-btn,
+  .plan-continue-only-btn,
+  .plan-day-complete-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .plan-mark-continue-btn {
+    background: linear-gradient(135deg, #1d4ed8, #1e40af);
+    color: #fff;
+    border-color: #3b82f6;
+  }
+  .plan-mark-continue-btn:hover {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  }
+
+  .plan-continue-only-btn {
+    background: transparent;
+    color: #7ab3f0;
+    border-color: #3b5fa0;
+  }
+  .plan-continue-only-btn:hover {
+    background: rgba(122, 179, 240, 0.12);
+  }
+
+  .plan-day-complete-btn {
+    background: transparent;
+    color: #6fcf97;
+    border-color: #6fcf97;
+  }
+  .plan-day-complete-btn:hover {
     background: #6fcf97;
     color: #1a2e1a;
   }
