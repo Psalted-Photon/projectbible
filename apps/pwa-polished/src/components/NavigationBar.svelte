@@ -295,13 +295,7 @@
     const target = event.target as HTMLInputElement;
     searchQuery = target.value;
 
-    // Debounce search
-    clearTimeout(searchTimeout);
-    if (searchQuery.trim()) {
-      searchTimeout = setTimeout(async () => {
-        await performSearch();
-      }, 300);
-    } else {
+    if (!searchQuery.trim()) {
       searchResults = [];
       showResults = false;
     }

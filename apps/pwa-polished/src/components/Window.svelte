@@ -7,6 +7,7 @@
   let isDraggingResize = false;
   let dragStartPos = 0;
   let startSize = 0;
+  let isInCloseZone = false;
 
   onMount(() => {
     const windowNumber = window.id.split('-')[1];
@@ -105,6 +106,19 @@
       });
     }
 
+    // Close zone: within 12px (3× bumper width) of origin edge
+    let distFromOrigin: number;
+    if (window.edge === 'left') {
+      distFromOrigin = currentPos;
+    } else if (window.edge === 'right') {
+      distFromOrigin = globalThis.window.innerWidth - currentPos;
+    } else if (window.edge === 'top') {
+      distFromOrigin = currentPos;
+    } else {
+      distFromOrigin = globalThis.window.innerHeight - currentPos;
+    }
+    isInCloseZone = distFromOrigin < 12;
+
     windowStore.updateWindowSize(window.id, newSize);
   }
 
@@ -119,6 +133,11 @@
 
     isDraggingResize = false;
     windowStore.setResizing(window.id, false);
+
+    if (isInCloseZone) {
+      windowStore.closeWindow(window.id);
+    }
+    isInCloseZone = false;
   }
 
   function handleCloseClick() {
@@ -144,6 +163,7 @@
   <!-- Resize handle -->
   <div 
     class="resize-handle resize-{window.edge}"
+    class:close-zone={isInCloseZone}
     on:mousedown={handleResizeStart}
     on:touchstart={handleResizeStart}
     role="button"
@@ -212,6 +232,10 @@
   .resize-handle:hover,
   .panel.resizing .resize-handle {
     background: rgba(102, 126, 234, 0.3);
+  }
+
+  .resize-handle.close-zone {
+    background: rgba(220, 38, 38, 0.8);
   }
 
   .resize-left {
