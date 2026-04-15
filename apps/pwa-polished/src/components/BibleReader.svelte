@@ -72,6 +72,8 @@
               passage: p,
               nextPassage: i < allPassages.length - 1 ? allPassages[i + 1] : null,
               isLastPassage: i === allPassages.length - 1,
+              passageIndex: i,
+              totalPassages: allPassages.length,
               harmonySections: sections,
             });
           }
@@ -192,6 +194,7 @@
   let selectionRange: Range | null = null;
   let longPressTimer: number | null = null;
   let searchHighlightedElement: HTMLElement | null = null;
+  let dayCompleteMessage: string | null = null;
   let highlightedElements: HTMLElement[] = [];
   let isDragging = false;
   let dragEdge: "left" | "right" | null = null;
@@ -316,7 +319,14 @@
   // ---------------------------------------------------------------------------
   // Always-on plan continue handlers (no harmonyNavStore session required)
   // ---------------------------------------------------------------------------
-  async function handleHarmonyContinueAlwaysOn(ctx: any) {
+
+  async function handleHarmonyContinueOnly(ctx: any) {
+    const next = ctx.nextPassage as HarmonyPassage;
+    if (!next) return;
+    navigationStore.navigateTo(currentTranslation, next.book, next.startChapter, next.startVerse);
+  }
+
+  async function handleHarmonyCheckAndContinue(ctx: any) {
     const section = (ctx.harmonySections as HarmonySection[]).find((s: HarmonySection) =>
       s.passages.some((p: HarmonyPassage) => p.label === (ctx.passage as HarmonyPassage).label)
     );
@@ -324,10 +334,12 @@
       await readingProgressStore.markPassageComplete(ctx.planId, ctx.dayNumber, section.section, ctx.passage.label);
     }
     const next = ctx.nextPassage as HarmonyPassage;
-    navigationStore.navigateTo(currentTranslation, next.book, next.startChapter, next.startVerse);
+    if (next) {
+      navigationStore.navigateTo(currentTranslation, next.book, next.startChapter, next.startVerse);
+    }
   }
 
-  async function handleHarmonyDayCompleteAlwaysOn(ctx: any) {
+  async function handleHarmonyCheckAndFinishDay(ctx: any) {
     const section = (ctx.harmonySections as HarmonySection[]).find((s: HarmonySection) =>
       s.passages.some((p: HarmonyPassage) => p.label === (ctx.passage as HarmonyPassage).label)
     );
@@ -336,6 +348,7 @@
     }
     await readingProgressStore.markHarmonyDayComplete(ctx.planId, ctx.dayNumber);
     harmonyNavStore.clearSession();
+    dayCompleteMessage = ctx.planName;
   }
 
   async function handleMarkAndContinue(ctx: any, book: string, chapter: number) {
@@ -405,6 +418,20 @@
 
   $: if (!highlightVerse) {
     clearSearchHighlight();
+  }
+
+  $: if (chapters.length > 0 && $navigationStore.scrollTargetVerse != null) {
+    doScrollVerseToTop($navigationStore.scrollTargetVerse);
+  }
+
+  async function doScrollVerseToTop(verse: number) {
+    await tick();
+    const verseEl = readerElement?.querySelector(
+      `.verse[data-verse="${verse}"]`,
+    ) as HTMLElement | null;
+    if (!verseEl) return;
+    verseEl.scrollIntoView({ behavior: 'instant', block: 'start' });
+    navigationStore.clearScrollTarget();
   }
 
   // Start/stop scroll detection when both book and element are ready
@@ -2663,19 +2690,26 @@
                 {/if}
                 {#if hCtxsForVerse.length > 0}
                   {#each hCtxsForVerse as hCtx}
-                    {#if hCtx.isLastPassage}
-                      <button
-                        class="harmony-day-complete-btn"
-                        on:click={() => handleHarmonyDayCompleteAlwaysOn(hCtx)}
-                        title="Mark this reading day complete"
-                      >✓ Day Complete</button>
-                    {:else}
-                      <button
-                        class="harmony-continue-btn"
-                        on:click={() => handleHarmonyContinueAlwaysOn(hCtx)}
-                        title="Continue to next passage"
-                      >Continue →</button>
-                    {/if}
+                    <div class="harmony-btn-row">
+                      {#if hCtx.isLastPassage}
+                        <button
+                          class="harmony-finish-btn"
+                          on:click={() => handleHarmonyCheckAndFinishDay(hCtx)}
+                          title="Mark this passage and day complete"
+                        >✓ Finish Day ({hCtx.passageIndex + 1} of {hCtx.totalPassages})</button>
+                      {:else}
+                        <button
+                          class="harmony-continue-only-btn"
+                          on:click={() => handleHarmonyContinueOnly(hCtx)}
+                          title="Go to next passage without marking this one"
+                        >Continue ({hCtx.passageIndex + 1} of {hCtx.totalPassages})</button>
+                        <button
+                          class="harmony-check-continue-btn"
+                          on:click={() => handleHarmonyCheckAndContinue(hCtx)}
+                          title="Check off this passage and continue"
+                        >✓ Check off &amp; Continue</button>
+                      {/if}
+                    </div>
                   {/each}
                 {/if}
               </div>
@@ -2710,6 +2744,19 @@
     {/if}
   </div>
 </div>
+
+{#if dayCompleteMessage}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="day-complete-overlay" on:click={() => dayCompleteMessage = null}>
+    <div class="day-complete-card" on:click|stopPropagation>
+      <div class="day-complete-emoji">🎉</div>
+      <p class="day-complete-title">Day Complete!</p>
+      <p class="day-complete-plan">{dayCompleteMessage}</p>
+      <button class="day-complete-btn" on:click={() => dayCompleteMessage = null}>Great!</button>
+    </div>
+  </div>
+{/if}
 
 
 
@@ -2858,11 +2905,19 @@
   }
 
   /* Harmony reading session inline buttons */
-  .harmony-continue-btn,
-  .harmony-day-complete-btn {
-    display: inline-block;
+  .harmony-btn-row {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
     margin-left: 0.5em;
-    padding: 1px 8px;
+    vertical-align: baseline;
+  }
+
+  .harmony-continue-only-btn,
+  .harmony-check-continue-btn,
+  .harmony-finish-btn {
+    display: inline-block;
+    padding: 2px 10px;
     border-radius: 10px;
     font-size: 0.78em;
     font-weight: 600;
@@ -2873,26 +2928,87 @@
     user-select: none;
   }
 
-  .harmony-continue-btn {
+  .harmony-continue-only-btn {
     background: transparent;
     color: #7ab3f0;
     border-color: #7ab3f0;
   }
-
-  .harmony-continue-btn:hover {
+  .harmony-continue-only-btn:hover {
     background: #7ab3f0;
     color: #1a1a2e;
   }
 
-  .harmony-day-complete-btn {
+  .harmony-check-continue-btn {
+    background: transparent;
+    color: #a78bfa;
+    border-color: #a78bfa;
+  }
+  .harmony-check-continue-btn:hover {
+    background: #a78bfa;
+    color: #1a1a2e;
+  }
+
+  .harmony-finish-btn {
     background: transparent;
     color: #6fcf97;
     border-color: #6fcf97;
   }
-
-  .harmony-day-complete-btn:hover {
+  .harmony-finish-btn:hover {
     background: #6fcf97;
     color: #1a2e1a;
+  }
+
+  /* Day complete overlay */
+  :global(.day-complete-overlay) {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+  }
+
+  :global(.day-complete-card) {
+    background: #1e2a3a;
+    border: 1px solid #2e4a6a;
+    border-radius: 12px;
+    padding: 32px 40px;
+    text-align: center;
+    max-width: 320px;
+    width: 90%;
+  }
+
+  :global(.day-complete-emoji) {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+
+  :global(.day-complete-title) {
+    font-size: 22px;
+    font-weight: 700;
+    color: #e0e0e0;
+    margin: 0 0 6px;
+  }
+
+  :global(.day-complete-plan) {
+    font-size: 14px;
+    color: #aaa;
+    margin: 0 0 20px;
+  }
+
+  :global(.day-complete-btn) {
+    background: linear-gradient(135deg, #1d4ed8, #1e40af);
+    color: #fff;
+    border: 1px solid #3b82f6;
+    border-radius: 6px;
+    padding: 10px 28px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  :global(.day-complete-btn):hover {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
   }
 
   /* Standard plan continue footer */

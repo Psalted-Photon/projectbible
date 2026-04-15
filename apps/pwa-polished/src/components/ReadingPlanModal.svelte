@@ -819,6 +819,14 @@
     return null;
   }
 
+  function getTodayPassageProgress(dayNumber: number): { done: number; total: number } {
+    const prog = getDayProgress(dayNumber);
+    const sections = todayReading?.harmonySections ?? [];
+    const total = sections.flatMap((s: any) => s.passages).length;
+    const done = (prog?.harmonySections ?? []).flatMap((s: any) => s.passages).filter((p: any) => p.completed).length;
+    return { done, total };
+  }
+
   function renamePlan(planId: string, newName: string) {
     const trimmed = newName.trim();
     const idx = activePlans.findIndex(p => p.id === planId);
@@ -1423,19 +1431,36 @@
                       <button class="jump-to-day-btn" on:click={() => scrollToDayInList(todayReading.dayNumber)}>Jump to day ↓</button>
                     </div>
                     <div class="chapters-list">
-                      {#each todayReading.chapters as chapter}
-                        <label class="banner-chapter-row">
-                          <input
-                            type="checkbox"
-                            checked={isChapterChecked(getDayProgress(todayReading.dayNumber), chapter.book, chapter.chapter)}
-                            on:change={() => toggleChapter(todayReading, chapter)}
-                          />
-                          <button
-                            class="chapter-link"
-                            on:click={() => handleChapterClick(todayReading, chapter)}
-                          >{chapter.book} {chapter.chapter}</button>
-                        </label>
-                      {/each}
+                      {#if todayReading.harmonySections?.length}
+                        {@const pp = getTodayPassageProgress(todayReading.dayNumber)}
+                        <div class="today-harmony-progress">{pp.done}/{pp.total} passages</div>
+                        {#each todayReading.harmonySections as sec, sIdx}
+                          <div class="banner-harmony-section">
+                            <span class="banner-section-title">§{sec.section} — {sec.title}</span>
+                            {#each sec.passages as passage, pi}
+                              {@const pIdx = todayReading.harmonySections.slice(0, sIdx).reduce((n: number, s: any) => n + s.passages.length, 0) + pi}
+                              <button
+                                class="chapter-link harmony-passage-link banner-passage-link"
+                                on:click={() => handlePassageClick(todayReading, passage, pIdx)}
+                              >{passage.label}</button>
+                            {/each}
+                          </div>
+                        {/each}
+                      {:else}
+                        {#each todayReading.chapters as chapter}
+                          <label class="banner-chapter-row">
+                            <input
+                              type="checkbox"
+                              checked={isChapterChecked(getDayProgress(todayReading.dayNumber), chapter.book, chapter.chapter)}
+                              on:change={() => toggleChapter(todayReading, chapter)}
+                            />
+                            <button
+                              class="chapter-link"
+                              on:click={() => handleChapterClick(todayReading, chapter)}
+                            >{chapter.book} {chapter.chapter}</button>
+                          </label>
+                        {/each}
+                      {/if}
                     </div>
                     <div class="today-reading-actions">
                       {#if todayDone}
@@ -2099,6 +2124,34 @@
 
   .today-reading.day-done .banner-chapter-row input[type="checkbox"] {
     accent-color: #4caf50;
+  }
+
+  /* Harmony sections in today banner */
+  .today-harmony-progress {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 8px;
+  }
+
+  .banner-harmony-section {
+    margin-bottom: 10px;
+  }
+
+  .banner-section-title {
+    display: block;
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+
+  .banner-passage-link {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 2px 4px;
+    font-size: 13px;
   }
 
   .chapter-link {

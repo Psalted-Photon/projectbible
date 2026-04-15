@@ -7,6 +7,7 @@ export interface NavigationState {
   chapter: number;
   isChronologicalMode?: boolean;
   highlightedVerse?: number | null;
+  scrollTargetVerse?: number | null;
   showReferences?: boolean;
   showCommentaries?: boolean;
   selectedCommentaryAuthors?: string[];
@@ -110,13 +111,16 @@ function createNavigationStore() {
       translation: string,
       book: string,
       chapter: number,
-      highlightedVerse: number | null = null,
+      scrollTargetVerse: number | null = null,
     ) => {
       update(state => {
-        const next = { ...state, translation, book, chapter, highlightedVerse };
+        const next = { ...state, translation, book, chapter, highlightedVerse: null, scrollTargetVerse };
         persistState(next);
         return next;
       });
+    },
+    clearScrollTarget: () => {
+      update(state => ({ ...state, scrollTargetVerse: null }));
     },
     pushHistory: (state: NavigationState) => {
       navigationHistory.update((history) => [...history, state]);
