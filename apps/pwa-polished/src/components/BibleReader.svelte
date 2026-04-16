@@ -431,11 +431,35 @@
       const el = readerElement?.querySelector(
         `.verse[data-verse="${verse}"]`,
       ) as HTMLElement | null;
-      if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
+      if (el) scrollToVerseEl(el);
     } else {
       // Different chapter — navigateTo sets scrollTargetVerse; loadChapter picks it up.
       navigationStore.navigateTo(currentTranslation, book, chapter, verse);
     }
+  }
+
+  // Scroll to a verse element, pulling in any immediately-preceding section heading
+  // that falls within 55% of the screen height above the verse.
+  function scrollToVerseEl(verseEl: HTMLElement): void {
+    const budget = window.innerHeight * 0.55;
+    let scrollTarget: HTMLElement = verseEl;
+    let prev = verseEl.previousElementSibling as HTMLElement | null;
+    let accumulated = 0;
+    while (prev) {
+      accumulated += prev.getBoundingClientRect().height;
+      if (accumulated > budget) break;
+      if (prev.classList.contains('section-heading')) {
+        scrollTarget = prev;
+        break;
+      }
+      prev = prev.previousElementSibling as HTMLElement | null;
+    }
+    navBarOffset = -68;
+    const containerRect = readerElement.getBoundingClientRect();
+    const targetRect = scrollTarget.getBoundingClientRect();
+    const newScrollTop = readerElement.scrollTop + (targetRect.top - containerRect.top) - 8;
+    readerElement.scrollTop = Math.max(0, newScrollTop);
+    lastScrollTop = readerElement.scrollTop;
   }
 
   // Start/stop scroll detection when both book and element are ready
@@ -767,8 +791,7 @@
             `.verse[data-verse="${scrollToVerse}"]`,
           ) as HTMLElement | null;
           if (verseEl) {
-            verseEl.scrollIntoView({ behavior: 'instant', block: 'start' });
-            lastScrollTop = readerElement.scrollTop;
+            scrollToVerseEl(verseEl);
           }
           navigationStore.clearScrollTarget();
         }
