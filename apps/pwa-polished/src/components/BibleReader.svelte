@@ -323,7 +323,12 @@
   async function handleHarmonyContinueOnly(ctx: any) {
     const next = ctx.nextPassage as HarmonyPassage;
     if (!next) return;
+    clearReadingPlanHighlight();
+    navigationStore.setReadingPlanActiveTarget(next.book, next.startChapter, next.startVerse, false);
     doScrollToVerse(next.book, next.startChapter, next.startVerse);
+    if (next.book === currentBook && next.startChapter === currentChapter) {
+      await applyReadingPlanHighlight();
+    }
   }
 
   async function handleHarmonyCheckAndContinue(ctx: any) {
@@ -335,7 +340,12 @@
     }
     const next = ctx.nextPassage as HarmonyPassage;
     if (next) {
+      clearReadingPlanHighlight();
+      navigationStore.setReadingPlanActiveTarget(next.book, next.startChapter, next.startVerse, false);
       doScrollToVerse(next.book, next.startChapter, next.startVerse);
+      if (next.book === currentBook && next.startChapter === currentChapter) {
+        await applyReadingPlanHighlight();
+      }
     }
   }
 
@@ -348,6 +358,8 @@
     }
     await readingProgressStore.markHarmonyDayComplete(ctx.planId, ctx.dayNumber);
     harmonyNavStore.clearSession();
+    navigationStore.clearReadingPlanActiveTarget();
+    clearReadingPlanHighlight();
     dayCompleteMessage = ctx.planName;
   }
 
@@ -356,6 +368,13 @@
       ctx.planId, ctx.dayNumber, ctx.todayChapters, { book, chapter }, 'checked'
     );
     if (ctx.nextChapter) {
+      const isConsecutive = $navigationStore.readingPlanActiveTarget?.consecutiveDay ?? true;
+      if (isConsecutive) {
+        navigationStore.clearReadingPlanActiveTarget();
+        clearReadingPlanHighlight();
+      } else {
+        navigationStore.setReadingPlanActiveTarget(ctx.nextChapter.book, ctx.nextChapter.chapter, null, false);
+      }
       navigationStore.setBook(ctx.nextChapter.book);
       navigationStore.setChapter(ctx.nextChapter.chapter);
     }
@@ -363,6 +382,13 @@
 
   function handleContinueOnly(ctx: any) {
     if (ctx.nextChapter) {
+      const isConsecutive = $navigationStore.readingPlanActiveTarget?.consecutiveDay ?? true;
+      if (isConsecutive) {
+        navigationStore.clearReadingPlanActiveTarget();
+        clearReadingPlanHighlight();
+      } else {
+        navigationStore.setReadingPlanActiveTarget(ctx.nextChapter.book, ctx.nextChapter.chapter, null, false);
+      }
       navigationStore.setBook(ctx.nextChapter.book);
       navigationStore.setChapter(ctx.nextChapter.chapter);
     }
@@ -370,6 +396,8 @@
 
   async function handleStandardDayComplete(ctx: any) {
     await readingProgressStore.markDayComplete(ctx.planId, ctx.dayNumber, ctx.todayChapters);
+    navigationStore.clearReadingPlanActiveTarget();
+    clearReadingPlanHighlight();
   }
 
   // DEBUG: Log when reactive values change
@@ -795,6 +823,10 @@
           }
           navigationStore.clearScrollTarget();
         }
+        const rpTarget = $navigationStore.readingPlanActiveTarget;
+        if (rpTarget && rpTarget.book === book && rpTarget.chapter === chapter) {
+          await applyReadingPlanHighlight();
+        }
       }
     } catch (err: unknown) {
       console.error("Error loading chapter:", err);
@@ -803,6 +835,31 @@
     } finally {
       loading = false;
     }
+  }
+
+  function clearReadingPlanHighlight(): void {
+    readerElement?.querySelectorAll('.rp-verse-highlight').forEach(el => {
+      el.classList.remove('rp-verse-highlight');
+      (el as HTMLElement).style.removeProperty('--rp-hl-left');
+    });
+  }
+
+  async function applyReadingPlanHighlight(): Promise<void> {
+    await tick();
+    const target = $navigationStore.readingPlanActiveTarget;
+    if (!readerElement) return;
+    clearReadingPlanHighlight();
+    let verseEl: HTMLElement | null = null;
+    if (target?.verse != null) {
+      verseEl = readerElement.querySelector(`.verse[data-verse="${target.verse}"]`) as HTMLElement | null;
+    } else {
+      verseEl = readerElement.querySelector('.verse') as HTMLElement | null;
+    }
+    if (!verseEl) return;
+    const numEl = verseEl.querySelector('.verse-number') as HTMLElement | null;
+    const leftOffset = numEl ? numEl.getBoundingClientRect().width + 4 : 32;
+    verseEl.style.setProperty('--rp-hl-left', `${leftOffset}px`);
+    verseEl.classList.add('rp-verse-highlight');
   }
 
   async function loadAndApplyHighlights(book: string, chapter: number) {
@@ -2856,6 +2913,7 @@
 
   .verse {
     margin-bottom: 0.5rem;
+    position: relative;
   }
 
   .verse-number {
@@ -3309,6 +3367,19 @@
     margin-left: -8px;
     border-radius: 2px;
     box-shadow: 0 0 0 1px rgba(255, 183, 77, 0.25);
+  }
+
+  :global(.rp-verse-highlight::before) {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: var(--rp-hl-left, 2em);
+    width: 200px;
+    height: 100%;
+    background: linear-gradient(to right, rgba(34, 197, 94, 0.40), transparent);
+    pointer-events: none;
+    border-radius: 3px;
+    z-index: 0;
   }
 
   /* Floating drag handles for text selection */

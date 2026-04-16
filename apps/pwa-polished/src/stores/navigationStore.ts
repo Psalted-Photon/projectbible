@@ -11,6 +11,7 @@ export interface NavigationState {
   showReferences?: boolean;
   showCommentaries?: boolean;
   selectedCommentaryAuthors?: string[];
+  readingPlanActiveTarget?: { book: string; chapter: number; verse: number | null; consecutiveDay: boolean } | null;
 }
 
 // Available translations (will be populated from packs later)
@@ -121,6 +122,12 @@ function createNavigationStore() {
     },
     clearScrollTarget: () => {
       update(state => ({ ...state, scrollTargetVerse: null }));
+    },
+    setReadingPlanActiveTarget: (book: string, chapter: number, verse: number | null, consecutiveDay: boolean) => {
+      update(state => ({ ...state, readingPlanActiveTarget: { book, chapter, verse, consecutiveDay } }));
+    },
+    clearReadingPlanActiveTarget: () => {
+      update(state => ({ ...state, readingPlanActiveTarget: null }));
     },
     pushHistory: (state: NavigationState) => {
       navigationHistory.update((history) => [...history, state]);
