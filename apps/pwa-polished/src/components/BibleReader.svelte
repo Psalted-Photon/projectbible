@@ -267,53 +267,23 @@
   // ---------------------------------------------------------------------------
   // Harmony reading session
   // ---------------------------------------------------------------------------
-  $: harmonyState = $harmonyNavStore;
-  $: currentHarmonyPassage = harmonyState
-    ? harmonyState.allPassages[harmonyState.passageIndex]
-    : null;
-  $: isLastHarmonyPassage = harmonyState
-    ? harmonyState.passageIndex === harmonyState.allPassages.length - 1
-    : false;
-
-  function isLastVerseOfCurrentPassage(
-    verse: number,
-    verseIdx: number,
-    chData: { book: string; chapter: number; verses: any[] },
-  ): boolean {
-    if (!currentHarmonyPassage) return false;
-    if (currentHarmonyPassage.book !== chData.book) return false;
-    if (currentHarmonyPassage.endChapter !== chData.chapter) return false;
-    if (currentHarmonyPassage.endVerse !== null) {
-      return verse === currentHarmonyPassage.endVerse;
+  // Apply highlight immediately when readingPlanActiveTarget changes but we're already
+  // on the target chapter (navKey doesn't change so loadChapter won't fire).
+  let _lastRpTargetKey: string | null = null;
+  $: {
+    const rpTarget = $navigationStore.readingPlanActiveTarget;
+    const newKey = rpTarget ? `${rpTarget.book}-${rpTarget.chapter}-${rpTarget.verse ?? 'null'}` : null;
+    if (
+      newKey !== null &&
+      newKey !== _lastRpTargetKey &&
+      rpTarget!.book === currentBook &&
+      rpTarget!.chapter === currentChapter &&
+      chapters.length > 0
+    ) {
+      _lastRpTargetKey = newKey;
+      tick().then(() => applyReadingPlanHighlight());
     }
-    return verseIdx === chData.verses.length - 1;
-  }
-
-  async function handleHarmonyContinue() {
-    if (!harmonyState || !currentHarmonyPassage) return;
-    const { planId, dayNumber, allSectionsForDay } = harmonyState;
-    const section = allSectionsForDay.find(sec =>
-      sec.passages.some(p => p.label === currentHarmonyPassage!.label),
-    );
-    if (section) {
-      const updated = await readingProgressStore.markPassageComplete(
-        planId, dayNumber, section.sectionId, currentHarmonyPassage.label,
-      );
-      if (updated) {
-        // Keep allSectionsForDay in sync
-        harmonyNavStore.setSession({ ...harmonyState, allSectionsForDay: updated.harmonySections ?? allSectionsForDay });
-      }
-    }
-    const next = harmonyNavStore.advance();
-    if (next) {
-      navigationStore.navigateTo(currentTranslation, next.book, next.startChapter, next.startVerse);
-    }
-  }
-
-  async function handleHarmonyComplete() {
-    if (!harmonyState) return;
-    await readingProgressStore.markHarmonyDayComplete(harmonyState.planId, harmonyState.dayNumber);
-    harmonyNavStore.clearSession();
+    if (newKey === null) _lastRpTargetKey = null;
   }
 
   // ---------------------------------------------------------------------------

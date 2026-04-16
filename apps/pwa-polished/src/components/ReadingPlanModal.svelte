@@ -778,38 +778,6 @@
     }
   }
 
-  function restorePlanFromHistory(item: any) {
-    if (activePlans.some(p => p.id === item.id)) {
-      // Already active — just switch to it
-      selectPlanTab(item.id);
-      currentTab = 'active';
-      return;
-    }
-    activePlans = [...activePlans, { id: item.id, plan: item.plan }];
-    selectPlanTab(item.id);
-    saveActivePlan();
-    currentTab = 'active';
-  }
-
-  function getMasterTodayChapters() {
-    const todayStr = localDateStr(new Date());
-    const seen = new Set<string>();
-    const chapters: Array<{book: string, chapter: number, planId: string, planName: string}> = [];
-    for (const entry of activePlans) {
-      const todayDay = entry.plan.days.find(d => localDateStr(new Date(d.date)) === todayStr);
-      if (!todayDay) continue;
-      const planName = getPlanDisplayName(entry.plan.config);
-      for (const ch of todayDay.chapters) {
-        const key = `${ch.book}-${ch.chapter}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          chapters.push({ book: ch.book, chapter: ch.chapter, planId: entry.id, planName });
-        }
-      }
-    }
-    return chapters;
-  }
-
   function getPlanDisplayName(config: ReadingPlanConfig): string {
     if (config.name) return config.name;
     if (config.ordering === 'harmony') return 'Gospel Harmony';
@@ -1354,7 +1322,7 @@
             {#if !isSignedIn}
               <div class="auth-warning">
                 <span>⚠</span>
-                <span>You are not signed in. This plan will be stored temporarily and <strong>lost when you close this tab</strong>. <button class="auth-warning-signin-btn" on:click={() => closeModal()}>Sign in</button> to save permanently.</span>
+                <span>You are not signed in. This plan will be stored temporarily and <strong>lost when you close this tab</strong>. <button class="auth-warning-signin-btn" on:click={() => close()}>Sign in</button> to save permanently.</span>
               </div>
             {/if}
             <button class="generate-btn" on:click={generatePlan}>Generate Plan</button>
