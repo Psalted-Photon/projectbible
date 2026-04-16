@@ -566,6 +566,7 @@
     });
 
     const nav = get(navigationStore);
+    navigationStore.setReadingPlanActiveTarget(passage.book, passage.startChapter, passage.startVerse, false);
     navigationStore.navigateTo(nav.translation, passage.book, passage.startChapter, passage.startVerse);
     isOpen = false;
   }

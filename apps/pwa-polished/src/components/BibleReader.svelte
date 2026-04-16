@@ -81,13 +81,15 @@
           const todayChapters: Array<{ book: string; chapter: number }> = todayDay.chapters ?? [];
           const chapIdx = todayChapters.findIndex((c: any) => c.book === book && c.chapter === chapter);
           if (chapIdx < 0) continue;
+          const nextCh = chapIdx < todayChapters.length - 1 ? todayChapters[chapIdx + 1] : null;
           results.push({
             type: 'standard',
             planId: entry.id,
             planName: bibleReaderGetPlanDisplayName(plan.config),
             dayNumber: todayDay.dayNumber,
-            nextChapter: chapIdx < todayChapters.length - 1 ? todayChapters[chapIdx + 1] : null,
+            nextChapter: nextCh,
             isLastChapter: chapIdx === todayChapters.length - 1,
+            isSequentialNext: nextCh !== null && nextCh.book === book && nextCh.chapter === chapter + 1,
             todayChapters,
           });
         }
@@ -278,7 +280,9 @@
       newKey !== _lastRpTargetKey &&
       rpTarget!.book === currentBook &&
       rpTarget!.chapter === currentChapter &&
-      chapters.length > 0
+      chapters.length > 0 &&
+      chapters[0]?.book === rpTarget!.book &&
+      chapters[0]?.chapter === rpTarget!.chapter
     ) {
       _lastRpTargetKey = newKey;
       tick().then(() => applyReadingPlanHighlight());
@@ -338,29 +342,19 @@
       ctx.planId, ctx.dayNumber, ctx.todayChapters, { book, chapter }, 'checked'
     );
     if (ctx.nextChapter) {
-      const isConsecutive = $navigationStore.readingPlanActiveTarget?.consecutiveDay ?? true;
-      if (isConsecutive) {
-        navigationStore.clearReadingPlanActiveTarget();
-        clearReadingPlanHighlight();
-      } else {
-        navigationStore.setReadingPlanActiveTarget(ctx.nextChapter.book, ctx.nextChapter.chapter, null, false);
-      }
+      navigationStore.setReadingPlanActiveTarget(ctx.nextChapter.book, ctx.nextChapter.chapter, null, false);
       navigationStore.setBook(ctx.nextChapter.book);
       navigationStore.setChapter(ctx.nextChapter.chapter);
+      navBarOffset = -68;
     }
   }
 
   function handleContinueOnly(ctx: any) {
     if (ctx.nextChapter) {
-      const isConsecutive = $navigationStore.readingPlanActiveTarget?.consecutiveDay ?? true;
-      if (isConsecutive) {
-        navigationStore.clearReadingPlanActiveTarget();
-        clearReadingPlanHighlight();
-      } else {
-        navigationStore.setReadingPlanActiveTarget(ctx.nextChapter.book, ctx.nextChapter.chapter, null, false);
-      }
+      navigationStore.setReadingPlanActiveTarget(ctx.nextChapter.book, ctx.nextChapter.chapter, null, false);
       navigationStore.setBook(ctx.nextChapter.book);
       navigationStore.setChapter(ctx.nextChapter.chapter);
+      navBarOffset = -68;
     }
   }
 
@@ -795,6 +789,7 @@
         }
         const rpTarget = $navigationStore.readingPlanActiveTarget;
         if (rpTarget && rpTarget.book === book && rpTarget.chapter === chapter) {
+          _lastRpTargetKey = `${rpTarget.book}-${rpTarget.chapter}-${rpTarget.verse ?? 'null'}`;
           await applyReadingPlanHighlight();
         }
       }
@@ -2781,27 +2776,29 @@
               </div>
             {/each}
           </div>
-          {#if chStdCtxs.length > 0}
+          {#if chStdCtxs.some(ctx => ctx.isLastChapter || !ctx.isSequentialNext)}
             <div class="chapter-plan-footer">
               {#each chStdCtxs as ctx}
-                <div class="plan-continue-row">
-                  <span class="plan-continue-name">📖 {ctx.planName}</span>
-                  {#if ctx.isLastChapter}
-                    <button
-                      class="plan-day-complete-btn"
-                      on:click={() => handleStandardDayComplete(ctx)}
-                    >✓ Day Complete</button>
-                  {:else}
-                    <button
-                      class="plan-mark-continue-btn"
-                      on:click={() => handleMarkAndContinue(ctx, chapterData.book, chapterData.chapter)}
-                    >✓ Done — {ctx.nextChapter?.book} {ctx.nextChapter?.chapter} →</button>
-                    <button
-                      class="plan-continue-only-btn"
-                      on:click={() => handleContinueOnly(ctx)}
-                    >{ctx.nextChapter?.book} {ctx.nextChapter?.chapter} →</button>
-                  {/if}
-                </div>
+                {#if ctx.isLastChapter || !ctx.isSequentialNext}
+                  <div class="plan-continue-row">
+                    <span class="plan-continue-name">📖 {ctx.planName}</span>
+                    {#if ctx.isLastChapter}
+                      <button
+                        class="plan-day-complete-btn"
+                        on:click={() => handleStandardDayComplete(ctx)}
+                      >✓ Day Complete</button>
+                    {:else}
+                      <button
+                        class="plan-mark-continue-btn"
+                        on:click={() => handleMarkAndContinue(ctx, chapterData.book, chapterData.chapter)}
+                      >✓ Done — {ctx.nextChapter?.book} {ctx.nextChapter?.chapter} →</button>
+                      <button
+                        class="plan-continue-only-btn"
+                        on:click={() => handleContinueOnly(ctx)}
+                      >{ctx.nextChapter?.book} {ctx.nextChapter?.chapter} →</button>
+                    {/if}
+                  </div>
+                {/if}
               {/each}
             </div>
           {/if}
@@ -3078,14 +3075,14 @@
     background: linear-gradient(135deg, #2563eb, #1d4ed8);
   }
 
-  /* Standard plan continue footer */
+  /* Standard plan continue footer — matches harmony pill button style */
   .chapter-plan-footer {
     margin: 0;
     border-top: 1px solid #2e2e2e;
-    padding: 14px 16px 18px;
+    padding: 10px 16px 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     background: #111;
   }
 
@@ -3093,7 +3090,7 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   .plan-continue-name {
@@ -3106,33 +3103,36 @@
   .plan-mark-continue-btn,
   .plan-continue-only-btn,
   .plan-day-complete-btn {
-    display: inline-flex;
-    align-items: center;
-    padding: 6px 14px;
-    border-radius: 6px;
-    font-size: 13px;
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.78em;
     font-weight: 600;
     cursor: pointer;
-    border: 1px solid transparent;
+    border: 1px solid;
+    vertical-align: baseline;
     transition: background 0.15s, color 0.15s;
+    user-select: none;
   }
 
   .plan-mark-continue-btn {
-    background: linear-gradient(135deg, #1d4ed8, #1e40af);
-    color: #fff;
-    border-color: #3b82f6;
+    background: transparent;
+    color: #a78bfa;
+    border-color: #a78bfa;
   }
   .plan-mark-continue-btn:hover {
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    background: #a78bfa;
+    color: #1a1a2e;
   }
 
   .plan-continue-only-btn {
     background: transparent;
     color: #7ab3f0;
-    border-color: #3b5fa0;
+    border-color: #7ab3f0;
   }
   .plan-continue-only-btn:hover {
-    background: rgba(122, 179, 240, 0.12);
+    background: #7ab3f0;
+    color: #1a1a2e;
   }
 
   .plan-day-complete-btn {
