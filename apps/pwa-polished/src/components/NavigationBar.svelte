@@ -23,7 +23,7 @@
   import { COMMENTARY_AUTHORS } from "../lib/annotationConfig";
 
   export let windowId: string | undefined = undefined;
-  export let visible: boolean = true;
+  export const visible: boolean = true;
   export let style: string = "";
 
   let translationDropdownOpen = false;
@@ -36,7 +36,6 @@
   let searchResults: SearchCategory[] = [];
   let showResults = false;
   let isSearching = false;
-  let searchTimeout: ReturnType<typeof setTimeout>;
   let expandedTranslations = new Set<string>();
   let totalResultCount = 0;
   let displayedResultCount = 0;
@@ -84,11 +83,6 @@
   $: currentReference = `${currentBook} ${currentChapter}`;
   $: isSignedIn = $userProfileStore.isSignedIn;
   $: currentBookCategory = BIBLE_BOOKS.find(b => b.name === currentBook)?.category || '';
-
-  function applySettings() {
-    commDropdownOpen = false;
-    commDropdownPositioned = false;
-  }
 
   function toggleCommAuthor(author: string) {
     const current = $navigationStore.selectedCommentaryAuthors ?? [];
@@ -611,10 +605,12 @@
     </div>
 
     <!-- Search Bar -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       bind:this={searchContainerRef}
       class="search-container"
       on:click|stopPropagation
+      on:keydown|stopPropagation
       role="search"
     >
       <div class="search-input-wrapper" class:focused={searchFocused}>
