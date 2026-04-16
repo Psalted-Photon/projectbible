@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { generateReadingPlan, BIBLE_BOOKS, type ReadingPlanConfig, type ReadingPlan } from '@projectbible/core';
+  import { get } from 'svelte/store';
+  import { generateReadingPlan, BIBLE_BOOKS, type ReadingPlanConfig, type ReadingPlan, type HarmonySection, type HarmonyPassage } from '@projectbible/core';
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
   import { suggestCatchUp, getDaysAheadBehind, calculateStreak } from '../../../../packages/core/src/ReadingPlanEngine';
   import { navigationStore } from '../stores/navigationStore';
@@ -9,25 +10,35 @@
     readingProgressStore,
     getLatestChapterState,
     type ReadingProgressEntry,
+    type HarmonySectionProgress,
   } from '../stores/ReadingProgressStore';
+  import { harmonyNavStore } from '../stores/harmonyNavStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
   import { syncService, type SyncState } from '../lib/sync';
   import { syncQueue } from '../lib/sync/SyncQueueService';
   import { userProfileStore } from '../stores/userProfileStore';
   import CalendarView from './CalendarView.svelte';
+  import harmonyData from '../data/robertson-harmony.json';
   
   export let isOpen = false;
   
   let currentTab: 'create' | 'active' | 'history' = 'create';
   let currentReadingPlan: ReadingPlan | null = null;
   let currentPlanId: string | null = null;
+
+  // Multi-plan state
+  let activePlans: Array<{id: string, plan: ReadingPlan}> = [];
+  let selectedPlanId: string | null = null;
+  let activePlanViewTab: string = ''; // plan id or 'all'
   
   // Storage keys
-  const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan';
+  const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan'; // legacy key (migration source)
+  const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans'; // new multi-plan key
   const STORAGE_PLAN_HISTORY = 'projectbible_reading_plan_history';
   
   // Create plan form state
   let planPreset = '';
+  let planName = '';
   let planStartDate = localDateStr(new Date());
   let planEndDate = localDateStr(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000));
   let dayChecks = [true, true, true, true, true, true, true]; // Sun-Sat
@@ -59,6 +70,13 @@
   let syncStatus = 'Not synced';
   let syncError: string | null = null;
   let userName: string | null = null;
+  let isSignedIn = false;
+
+  // Congrats overlay + inline rename + two-step delete state
+  let congratsPlanName: string | null = null;
+  let planRenamingId: string | null = null;
+  let planRenameValue = '';
+  let planDeleteConfirmId: string | null = null;
   
   // Derived book lists
   const OT_BOOKS = BIBLE_BOOKS.filter(b => b.testament === 'OT').map(b => b.name);
@@ -77,6 +95,7 @@
     });
     const unsubscribeProfile = userProfileStore.subscribe((profile) => {
       userName = profile.name;
+      isSignedIn = profile.isSignedIn;
     });
     return () => {
       unsubscribeSync();
@@ -102,18 +121,46 @@
 
   function loadActivePlan() {
     try {
-      const stored = localStorage.getItem(STORAGE_ACTIVE_PLAN);
-      if (stored) {
-        const data = JSON.parse(stored);
-        currentReadingPlan = data.plan;
-        currentPlanId = data.id;
-        if (currentReadingPlan) {
-          currentReadingPlan.config.startDate = new Date(currentReadingPlan.config.startDate);
-          currentReadingPlan.config.endDate = new Date(currentReadingPlan.config.endDate);
-          currentReadingPlan.days.forEach(day => {
-            day.date = new Date(day.date);
-          });
+      // Try localStorage first (signed-in), then sessionStorage (signed-out / temporary)
+      const storedNew = localStorage.getItem(STORAGE_ACTIVE_PLANS) ?? sessionStorage.getItem(STORAGE_ACTIVE_PLANS);
+      if (storedNew) {
+        const data: Array<{id: string, plan: ReadingPlan}> = JSON.parse(storedNew);
+        activePlans = data;
+        for (const entry of activePlans) {
+          if (entry.plan) {
+            entry.plan.config.startDate = new Date(entry.plan.config.startDate);
+            entry.plan.config.endDate = new Date(entry.plan.config.endDate);
+            entry.plan.days.forEach(day => { day.date = new Date(day.date); });
+          }
         }
+        // Restore selectedPlanId if still valid, else pick last
+        if (!selectedPlanId || !activePlans.find(p => p.id === selectedPlanId)) {
+          selectedPlanId = activePlans.length > 0 ? activePlans[activePlans.length - 1].id : null;
+        }
+      } else {
+        // Migrate from legacy single-plan key
+        const storedOld = localStorage.getItem(STORAGE_ACTIVE_PLAN);
+        if (storedOld) {
+          const data = JSON.parse(storedOld);
+          activePlans = [{ id: data.id, plan: data.plan }];
+          if (activePlans[0].plan) {
+            activePlans[0].plan.config.startDate = new Date(activePlans[0].plan.config.startDate);
+            activePlans[0].plan.config.endDate = new Date(activePlans[0].plan.config.endDate);
+            activePlans[0].plan.days.forEach(day => { day.date = new Date(day.date); });
+          }
+          selectedPlanId = data.id;
+          // Write to new key and remove legacy key
+          localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(activePlans));
+          localStorage.removeItem(STORAGE_ACTIVE_PLAN);
+        }
+      }
+      // Sync currentReadingPlan / currentPlanId from selected
+      const selected = activePlans.find(p => p.id === selectedPlanId);
+      currentReadingPlan = selected?.plan ?? null;
+      currentPlanId = selectedPlanId;
+      // Default activePlanViewTab: 'all' when 2+ plans, else selected plan
+      if (!activePlanViewTab || !['all', ...activePlans.map(p => p.id)].includes(activePlanViewTab)) {
+        activePlanViewTab = activePlans.length >= 2 ? 'all' : (selectedPlanId ?? '');
       }
     } catch (e) {
       console.error('Error loading active plan:', e);
@@ -121,11 +168,18 @@
   }
   
   function saveActivePlan() {
+    // Update the activePlans entry for the current plan if it was modified in-place
     if (currentReadingPlan && currentPlanId) {
-      localStorage.setItem(STORAGE_ACTIVE_PLAN, JSON.stringify({
-        id: currentPlanId,
-        plan: currentReadingPlan
-      }));
+      const idx = activePlans.findIndex(p => p.id === currentPlanId);
+      if (idx >= 0) {
+        activePlans[idx] = { id: currentPlanId, plan: currentReadingPlan };
+      }
+    }
+    const storage = isSignedIn ? localStorage : sessionStorage;
+    if (activePlans.length > 0) {
+      storage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(activePlans));
+    } else {
+      storage.removeItem(STORAGE_ACTIVE_PLANS);
     }
   }
   
@@ -133,6 +187,32 @@
     try {
       const historyStr = localStorage.getItem(STORAGE_PLAN_HISTORY);
       planHistory = historyStr ? JSON.parse(historyStr) : [];
+
+      // Phase 3: migrate abandoned (completedAt===null) history items back to activePlans
+      const abandoned = planHistory.filter(
+        (h: any) => h.completedAt === null && !activePlans.some(p => p.id === h.id)
+      );
+      if (abandoned.length > 0) {
+        for (const h of abandoned) {
+          if (h.plan) {
+            try {
+              h.plan.config.startDate = new Date(h.plan.config.startDate);
+              h.plan.config.endDate = new Date(h.plan.config.endDate);
+              h.plan.days?.forEach((d: any) => { d.date = new Date(d.date); });
+            } catch {/* ignore */}
+          }
+          activePlans = [...activePlans, { id: h.id, plan: h.plan }];
+        }
+        if (isSignedIn) {
+          localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(activePlans));
+        }
+        if (!selectedPlanId) {
+          selectedPlanId = activePlans[activePlans.length - 1].id;
+          currentReadingPlan = activePlans[activePlans.length - 1].plan;
+          currentPlanId = selectedPlanId;
+        }
+        if (activePlans.length >= 2) activePlanViewTab = 'all';
+      }
     } catch (e) {
       console.error('Error loading plan history:', e);
       planHistory = [];
@@ -340,6 +420,7 @@
       dayNumber: day.dayNumber,
       date: new Date(day.date),
       chapters: day.chapters,
+      harmonySections: undefined as HarmonySection[] | undefined,
       isCatchUp: true,
     }));
 
@@ -409,6 +490,108 @@
     navigateToChapter(chapter.book, chapter.chapter, getEffectiveChapters(day));
   }
 
+  // ---------------------------------------------------------------------------
+  // Harmony day helpers
+  // ---------------------------------------------------------------------------
+
+  /** Build a HarmonySectionProgress[] template from day.harmonySections */
+  function buildHarmonySectionTemplate(day: any): HarmonySectionProgress[] {
+    const sections: HarmonySection[] = day.harmonySections ?? [];
+    return sections.map(sec => ({
+      sectionId: sec.section,
+      title: sec.title,
+      completed: false,
+      passages: sec.passages.map((p: HarmonyPassage) => ({
+        label: p.label,
+        book: p.book,
+        startChapter: p.startChapter,
+        startVerse: p.startVerse,
+        endChapter: p.endChapter,
+        endVerse: p.endVerse,
+        completed: false,
+      })),
+    }));
+  }
+
+  function isPassageChecked(dayNum: number, sectionId: number | string, passageLabel: string): boolean {
+    const progress = getDayProgress(dayNum);
+    if (!progress?.harmonySections) return false;
+    const sec = progress.harmonySections.find(s => s.sectionId === sectionId);
+    return sec?.passages.find(p => p.label === passageLabel)?.completed ?? false;
+  }
+
+  function getDayProgressCountsHarmony(day: any): { checked: number; total: number } {
+    const sections: HarmonySection[] = day.harmonySections ?? [];
+    const total = sections.reduce((n: number, s: HarmonySection) => n + s.passages.length, 0);
+    const progress = getDayProgress(day.dayNumber);
+    if (!progress?.harmonySections) return { checked: 0, total };
+    const checked = progress.harmonySections.reduce((n, s) => n + s.passages.filter(p => p.completed).length, 0);
+    return { checked, total };
+  }
+
+  async function ensureHarmonyDayStarted(day: any) {
+    if (!currentPlanId) return;
+    const sections: HarmonySection[] = day.harmonySections ?? [];
+    const template = buildHarmonySectionTemplate(day);
+    const chapterRefs = sections.flatMap(s => s.chapter_refs);
+    const unique = [...new Map(chapterRefs.map(r => [r.book + r.chapter, r])).values()];
+    const progress = await readingProgressStore.ensureHarmonyDayProgress(currentPlanId, day.dayNumber, template, unique);
+    if (!progress.startedReadingAt) {
+      const now = Date.now();
+      await readingProgressStore.setStartedReadingAt(currentPlanId, day.dayNumber, now);
+      dayProgressMap = new Map(dayProgressMap);
+      dayProgressMap.set(day.dayNumber, { ...progress, startedReadingAt: now });
+    } else {
+      dayProgressMap = new Map(dayProgressMap);
+      dayProgressMap.set(day.dayNumber, progress);
+    }
+  }
+
+  async function handlePassageClick(day: any, passage: HarmonyPassage, passageIndex: number) {
+    if (!currentPlanId) return;
+    await ensureHarmonyDayStarted(day);
+
+    const sections: HarmonySection[] = day.harmonySections ?? [];
+    const allPassages: HarmonyPassage[] = sections.flatMap(s => s.passages);
+    const storedProgress = getDayProgress(day.dayNumber);
+    const template = buildHarmonySectionTemplate(day);
+    const allSectionsForDay: HarmonySectionProgress[] = storedProgress?.harmonySections ?? template;
+
+    harmonyNavStore.setSession({
+      planId: currentPlanId,
+      dayNumber: day.dayNumber,
+      allPassages,
+      passageIndex,
+      allSectionsForDay,
+    });
+
+    const nav = get(navigationStore);
+    navigationStore.navigateTo(nav.translation, passage.book, passage.startChapter, passage.startVerse);
+    isOpen = false;
+  }
+
+  async function togglePassage(day: any, sectionId: number | string, passageLabel: string) {
+    if (!currentPlanId) return;
+    await ensureHarmonyDayStarted(day);
+    const updated = await readingProgressStore.togglePassageComplete(currentPlanId, day.dayNumber, sectionId, passageLabel);
+    if (updated) {
+      dayProgressMap = new Map(dayProgressMap);
+      dayProgressMap.set(day.dayNumber, updated);
+      await queueProgressEntry(updated);
+    }
+  }
+
+  async function markHarmonyDayComplete(day: any) {
+    if (!currentPlanId) return;
+    await ensureHarmonyDayStarted(day);
+    const updated = await readingProgressStore.markHarmonyDayComplete(currentPlanId, day.dayNumber);
+    if (updated) {
+      dayProgressMap = new Map(dayProgressMap);
+      dayProgressMap.set(day.dayNumber, updated);
+      await queueProgressEntry(updated);
+    }
+  }
+
   async function toggleChapter(day: any, chapter: any) {
     if (!currentPlanId) return;
     const effectiveChapters = getEffectiveChapters(day);
@@ -424,6 +607,7 @@
     dayProgressMap = new Map(dayProgressMap);
     dayProgressMap.set(day.dayNumber, updated);
     await queueProgressEntry(updated);
+    if (!currentlyChecked) checkPlanCompletion(currentPlanId);
   }
 
   async function markDayComplete(day: any) {
@@ -437,6 +621,7 @@
     dayProgressMap = new Map(dayProgressMap);
     dayProgressMap.set(day.dayNumber, updated);
     await queueProgressEntry(updated);
+    checkPlanCompletion(currentPlanId);
   }
 
   /** Map a ReadingProgressEntry to Supabase reading_progress columns and enqueue. */
@@ -548,9 +733,6 @@
         createdAt: new Date().toISOString(),
         completedAt: null
       });
-      if (planHistory.length > 10) {
-        planHistory = planHistory.slice(0, 10);
-      }
       localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
     } catch (e) {
       console.error('Error saving plan to history:', e);
@@ -558,10 +740,22 @@
   }
   
   function deleteCurrentPlan() {
-    if (confirm('Are you sure you want to delete the current reading plan?')) {
-      localStorage.removeItem(STORAGE_ACTIVE_PLAN);
-      currentReadingPlan = null;
-      currentPlanId = null;
+    if (!selectedPlanId) return;
+    if (confirm('Are you sure you want to delete this reading plan?')) {
+      activePlans = activePlans.filter(p => p.id !== selectedPlanId);
+      if (activePlans.length > 0) {
+        selectedPlanId = activePlans[activePlans.length - 1].id;
+        currentReadingPlan = activePlans.find(p => p.id === selectedPlanId)?.plan ?? null;
+        currentPlanId = selectedPlanId;
+        activePlanViewTab = selectedPlanId;
+        localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(activePlans));
+      } else {
+        selectedPlanId = null;
+        currentReadingPlan = null;
+        currentPlanId = null;
+        activePlanViewTab = '';
+        localStorage.removeItem(STORAGE_ACTIVE_PLANS);
+      }
       dayProgressMap = new Map();
       lastLoadedPlanId = null;
     }
@@ -571,6 +765,164 @@
     if (confirm('Are you sure you want to delete this plan from history?')) {
       planHistory = planHistory.filter(p => p.id !== planId);
       localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
+    }
+  }
+
+  function selectPlanTab(planId: string) {
+    activePlanViewTab = planId;
+    if (planId !== 'all') {
+      selectedPlanId = planId;
+      const entry = activePlans.find(p => p.id === planId);
+      currentReadingPlan = entry?.plan ?? null;
+      currentPlanId = planId;
+    }
+  }
+
+  function restorePlanFromHistory(item: any) {
+    if (activePlans.some(p => p.id === item.id)) {
+      // Already active — just switch to it
+      selectPlanTab(item.id);
+      currentTab = 'active';
+      return;
+    }
+    activePlans = [...activePlans, { id: item.id, plan: item.plan }];
+    selectPlanTab(item.id);
+    saveActivePlan();
+    currentTab = 'active';
+  }
+
+  function getMasterTodayChapters() {
+    const todayStr = localDateStr(new Date());
+    const seen = new Set<string>();
+    const chapters: Array<{book: string, chapter: number, planId: string, planName: string}> = [];
+    for (const entry of activePlans) {
+      const todayDay = entry.plan.days.find(d => localDateStr(new Date(d.date)) === todayStr);
+      if (!todayDay) continue;
+      const planName = getPlanDisplayName(entry.plan.config);
+      for (const ch of todayDay.chapters) {
+        const key = `${ch.book}-${ch.chapter}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          chapters.push({ book: ch.book, chapter: ch.chapter, planId: entry.id, planName });
+        }
+      }
+    }
+    return chapters;
+  }
+
+  function getPlanDisplayName(config: ReadingPlanConfig): string {
+    if (config.name) return config.name;
+    if (config.ordering === 'harmony') return 'Gospel Harmony';
+    if (config.ordering === 'chronological') return 'Chronological Plan';
+    return 'Custom Plan';
+  }
+
+  function getNextChapterForPlan(plan: ReadingPlan): {book: string, chapter: number} | null {
+    const todayStr = localDateStr(new Date());
+    // Try today first
+    const todayDay = plan.days.find(d => localDateStr(new Date(d.date)) === todayStr);
+    if (todayDay?.chapters?.length) return todayDay.chapters[0];
+    // Else next upcoming day
+    const future = plan.days.find(d => localDateStr(new Date(d.date)) > todayStr);
+    if (future?.chapters?.length) return future.chapters[0];
+    return null;
+  }
+
+  function getTodayPassageProgress(dayNumber: number): { done: number; total: number } {
+    const prog = getDayProgress(dayNumber);
+    const sections = todayReading?.harmonySections ?? [];
+    const total = sections.flatMap((s: any) => s.passages).length;
+    const done = (prog?.harmonySections ?? []).flatMap((s: any) => s.passages).filter((p: any) => p.completed).length;
+    return { done, total };
+  }
+
+  function renamePlan(planId: string, newName: string) {
+    const trimmed = newName.trim();
+    const idx = activePlans.findIndex(p => p.id === planId);
+    if (idx >= 0 && trimmed) {
+      activePlans[idx].plan.config.name = trimmed;
+      activePlans = [...activePlans];
+      saveActivePlan();
+      // Also update history entry if present
+      const hIdx = planHistory.findIndex((h: any) => h.id === planId);
+      if (hIdx >= 0) {
+        planHistory[hIdx].plan.config.name = trimmed;
+        planHistory = [...planHistory];
+        localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
+      }
+    }
+    planRenamingId = null;
+    planRenameValue = '';
+  }
+
+  function archivePlan(planId: string) {
+    const entry = activePlans.find(p => p.id === planId);
+    if (!entry) return;
+    const name = getPlanDisplayName(entry.plan.config);
+    // Remove from active
+    activePlans = activePlans.filter(p => p.id !== planId);
+    if (activePlans.length > 0) {
+      selectedPlanId = activePlans[activePlans.length - 1].id;
+      currentReadingPlan = activePlans.find(p => p.id === selectedPlanId)?.plan ?? null;
+      currentPlanId = selectedPlanId;
+      activePlanViewTab = activePlans.length >= 2 ? 'all' : selectedPlanId;
+    } else {
+      selectedPlanId = null; currentReadingPlan = null; currentPlanId = null; activePlanViewTab = '';
+    }
+    saveActivePlan();
+    // Set completedAt in history
+    const hIdx = planHistory.findIndex((h: any) => h.id === planId);
+    if (hIdx >= 0) {
+      planHistory[hIdx].completedAt = new Date().toISOString();
+    } else {
+      planHistory.unshift({ id: planId, plan: entry.plan, createdAt: new Date().toISOString(), completedAt: new Date().toISOString() });
+    }
+    planHistory = [...planHistory];
+    localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
+    congratsPlanName = name;
+  }
+
+  function focusAndSelect(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+
+  function deletePlanFromActive(planId: string) {
+    activePlans = activePlans.filter(p => p.id !== planId);
+    if (selectedPlanId === planId) {
+      selectedPlanId = activePlans.length > 0 ? activePlans[activePlans.length - 1].id : null;
+      currentReadingPlan = selectedPlanId ? activePlans.find(p => p.id === selectedPlanId)?.plan ?? null : null;
+      currentPlanId = selectedPlanId;
+    }
+    if (activePlans.length >= 2) {
+      activePlanViewTab = 'all';
+    } else if (activePlans.length === 1) {
+      activePlanViewTab = activePlans[0].id;
+    } else {
+      activePlanViewTab = '';
+    }
+    saveActivePlan();
+  }
+
+  function checkPlanCompletion(planId: string | null) {
+    if (!planId) return;
+    const entry = activePlans.find(p => p.id === planId);
+    if (!entry) return;
+    let total = 0;
+    let checked = 0;
+    for (const day of entry.plan.days) {
+      for (const ch of day.chapters) {
+        total++;
+        const progress = dayProgressMap.get(day.dayNumber);
+        const cp = progress?.chaptersRead?.find((c: any) => c.book === ch.book && c.chapter === ch.chapter);
+        if (cp?.actions?.length) {
+          const latest = cp.actions[cp.actions.length - 1];
+          if (latest.type === 'checked') checked++;
+        }
+      }
+    }
+    if (total > 0 && checked >= total) {
+      archivePlan(planId);
     }
   }
   
@@ -608,59 +960,69 @@
         : buildPresetPlanConfig(planPreset);
       
       planGenerationStatus = 'Calculating reading schedule...';
-      currentReadingPlan = generateReadingPlan(config);
-      currentPlanId = `plan_${Date.now()}`;
+      const newPlan = generateReadingPlan(config);
+      const newPlanId = `plan_${Date.now()}`;
+
+      // Push to multi-plan array and select the new plan
+      activePlans = [...activePlans, { id: newPlanId, plan: newPlan }];
+      selectedPlanId = newPlanId;
+      currentReadingPlan = newPlan;
+      currentPlanId = newPlanId;
+      activePlanViewTab = activePlans.length >= 2 ? 'all' : newPlanId;
       
       saveActivePlan();
-      savePlanToHistory(currentReadingPlan, currentPlanId);
-      
-      // Initialize plan in IndexedDB for sync
-      planGenerationStatus = 'Initializing cloud sync...';
-      
-      // Calculate plan definition hash
-      const planJson = JSON.stringify(currentReadingPlan);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(planJson));
-      const planHash = Array.from(new Uint8Array(hashBuffer))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-      
-      // Create plan metadata
-      await planMetadataStore.upsertPlanMetadata({
-        planId: currentPlanId,
-        status: 'active',
-        planDefinitionHash: planHash,
-        planVersion: 1,
-        activatedAt: Date.now()
-      });
+      savePlanToHistory(newPlan, newPlanId);
 
-      // Queue reading plan to Supabase (user_id is merged automatically by SyncQueueService)
-      await syncQueue.enqueue({
-        type: 'INSERT',
-        table: 'reading_plans',
-        id: currentPlanId!,
-        data: {
-          id: currentPlanId!,
-          name: `${currentReadingPlan.totalDays}-day reading plan`,
-          config: JSON.stringify(config),
-          current_day_number: 1,
+      if (isSignedIn) {
+        // Initialize plan in IndexedDB for sync
+        planGenerationStatus = 'Initializing cloud sync...';
+
+        // Calculate plan definition hash
+        const planJson = JSON.stringify(currentReadingPlan);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(planJson));
+        const planHash = Array.from(new Uint8Array(hashBuffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+
+        // Create plan metadata
+        await planMetadataStore.upsertPlanMetadata({
+          planId: currentPlanId,
           status: 'active',
-          plan_definition_hash: planHash,
-          plan_version: 1,
-          activated_at: Date.now(),
-          started_at: Date.now(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      });
-      
-      // Create day 1 progress entry
-      if (currentReadingPlan.days.length > 0) {
-        const day1Chapters = currentReadingPlan.days[0].chapters;
-        await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
+          planDefinitionHash: planHash,
+          planVersion: 1,
+          activatedAt: Date.now()
+        });
+
+        // Queue reading plan to Supabase (user_id is merged automatically by SyncQueueService)
+        await syncQueue.enqueue({
+          type: 'INSERT',
+          table: 'reading_plans',
+          id: currentPlanId!,
+          data: {
+            id: currentPlanId!,
+            name: config.name || `${currentReadingPlan.totalDays}-day reading plan`,
+            config: JSON.stringify(config),
+            current_day_number: 1,
+            status: 'active',
+            plan_definition_hash: planHash,
+            plan_version: 1,
+            activated_at: Date.now(),
+            started_at: Date.now(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        });
+
+        // Create day 1 progress entry
+        if (currentReadingPlan.days.length > 0) {
+          const day1Chapters = currentReadingPlan.days[0].chapters;
+          await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
+        }
+
+        planGenerationStatus = `✓ Plan created! ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
+      } else {
+        planGenerationStatus = `✓ Plan created (local only — sign in to save permanently). ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
       }
-      // PowerSync will automatically sync the local writes
-      
-      planGenerationStatus = `✓ Plan created! ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
       
       setTimeout(() => {
         currentTab = 'active';
@@ -692,6 +1054,7 @@
       excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
       books,
       ordering,
+      name: planName.trim() || undefined,
       dailyPsalm: optDailyPsalm,
       randomizePsalms: optRandomizePsalms,
       dailyProverb: optDailyProverb,
@@ -716,6 +1079,7 @@
     switch (preset) {
       case 'bible-1-year':
         return {
+          name: 'Bible in 1 Year',
           startDate: today,
           endDate: oneYearLater,
           books: BIBLE_BOOKS.map(b => ({ book: b.name })),
@@ -725,6 +1089,7 @@
         };
       case 'nt-90-days':
         return {
+          name: 'NT in 90 Days',
           startDate: today,
           endDate: ninetyDaysLater,
           books: BIBLE_BOOKS.filter(b => b.testament === 'NT').map(b => ({ book: b.name })),
@@ -734,6 +1099,7 @@
         };
       case 'gospels-30-days':
         return {
+          name: 'Gospels in 30 Days',
           startDate: today,
           endDate: thirtyDaysLater,
           books: ['Matthew', 'Mark', 'Luke', 'John'].map(book => ({ book })),
@@ -743,6 +1109,7 @@
         };
       case 'chronological-1-year':
         return {
+          name: 'Chronological 1 Year',
           startDate: today,
           endDate: oneYearLater,
           books: BIBLE_BOOKS.map(b => ({ book: b.name })),
@@ -752,12 +1119,57 @@
         };
       case 'psalms-proverbs':
         return {
+          name: 'Psalms & Proverbs',
           startDate: today,
           endDate: new Date(today.getTime() + 150 * 24 * 60 * 60 * 1000),
           books: [{ book: 'Psalms' }, { book: 'Proverbs' }],
           ordering: 'canonical',
           showOverallStats: true,
           showDailyStats: true
+        };
+      case 'gospel-harmony-30':
+        return {
+          name: 'Gospel Harmony (30 Days)',
+          startDate: today,
+          endDate: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000),
+          books: [],
+          ordering: 'harmony',
+          harmonyData: harmonyData as unknown as HarmonySection[],
+          showOverallStats: true,
+          showDailyStats: true,
+        };
+      case 'gospel-harmony-60':
+        return {
+          name: 'Gospel Harmony (60 Days)',
+          startDate: today,
+          endDate: new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000),
+          books: [],
+          ordering: 'harmony',
+          harmonyData: harmonyData as unknown as HarmonySection[],
+          showOverallStats: true,
+          showDailyStats: true,
+        };
+      case 'gospel-harmony-90':
+        return {
+          name: 'Gospel Harmony (90 Days)',
+          startDate: today,
+          endDate: new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000),
+          books: [],
+          ordering: 'harmony',
+          harmonyData: harmonyData as unknown as HarmonySection[],
+          showOverallStats: true,
+          showDailyStats: true,
+        };
+      case 'gospel-harmony-184':
+        return {
+          name: 'Gospel Harmony (Full)',
+          startDate: today,
+          endDate: new Date(today.getTime() + 184 * 24 * 60 * 60 * 1000),
+          books: [],
+          ordering: 'harmony',
+          harmonyData: harmonyData as unknown as HarmonySection[],
+          showOverallStats: true,
+          showDailyStats: true,
         };
       default:
         throw new Error('Unknown preset: ' + preset);
@@ -832,7 +1244,7 @@
           class:active={currentTab === 'history'}
           on:click={() => { currentTab = 'history'; loadPlanHistory(); }}
         >
-          History
+          Completed Archive
         </button>
       </div>
       
@@ -847,8 +1259,19 @@
                 <option value="nt-90-days">New Testament in 90 Days</option>
                 <option value="gospels-30-days">Gospels in 30 Days</option>
                 <option value="chronological-1-year">Chronological Bible in 1 Year</option>
-                <option value="psalms-proverbs">Psalms & Proverbs</option>
+                <option value="psalms-proverbs">Psalms &amp; Proverbs</option>
+                <optgroup label="Robertson Gospel Harmony">
+                  <option value="gospel-harmony-30">Robertson Gospel Harmony — 30 Days</option>
+                  <option value="gospel-harmony-60">Robertson Gospel Harmony — 60 Days</option>
+                  <option value="gospel-harmony-90">Robertson Gospel Harmony — 90 Days</option>
+                  <option value="gospel-harmony-184">Robertson Gospel Harmony — 1 Section/Day (184)</option>
+                </optgroup>
               </select>
+            </div>
+
+            <div class="form-group">
+              <label for="planName">Plan Name <span class="optional">(optional)</span>:</label>
+              <input id="planName" type="text" bind:value={planName} placeholder="e.g. Morning Devotions" maxlength="80" />
             </div>
             
             {#if planPreset === ''}
@@ -928,6 +1351,12 @@
               </div>
             {/if}
             
+            {#if !isSignedIn}
+              <div class="auth-warning">
+                <span>⚠</span>
+                <span>You are not signed in. This plan will be stored temporarily and <strong>lost when you close this tab</strong>. <button class="auth-warning-signin-btn" on:click={() => closeModal()}>Sign in</button> to save permanently.</span>
+              </div>
+            {/if}
             <button class="generate-btn" on:click={generatePlan}>Generate Plan</button>
             {#if planGenerationStatus}
               <div class="status">{planGenerationStatus}</div>
@@ -935,7 +1364,70 @@
           </div>
         {:else if currentTab === 'active'}
           <div class="active-plan-tab">
-            {#if currentReadingPlan}
+            {#if activePlans.length >= 2}
+              <div class="plan-tab-strip">
+                <button
+                  class="plan-tab-btn plan-tab-all"
+                  class:active={activePlanViewTab === 'all'}
+                  on:click={() => selectPlanTab('all')}
+                >
+                  All Plans
+                </button>
+                {#each activePlans as entry}
+                  <button
+                    class="plan-tab-btn"
+                    class:active={activePlanViewTab === entry.id}
+                    on:click={() => selectPlanTab(entry.id)}
+                  >
+                    {getPlanDisplayName(entry.plan.config)}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+
+            {#if activePlanViewTab === 'all'}
+              <!-- Plan Manager -->
+              <div class="plan-manager">
+                <h3 class="plan-manager-title">Active Reading Plans</h3>
+                {#each activePlans as entry (entry.id)}
+                  {@const nextCh = getNextChapterForPlan(entry.plan)}
+                  <div class="plan-manager-row" class:delete-confirm={planDeleteConfirmId === entry.id}>
+                    <div class="plan-manager-name">
+                      {#if planRenamingId === entry.id}
+                        <input
+                          class="plan-rename-input"
+                          type="text"
+                          bind:value={planRenameValue}
+                          on:keydown={(e) => { if (e.key === 'Enter') renamePlan(entry.id, planRenameValue); if (e.key === 'Escape') { planRenamingId = null; planRenameValue = ''; } }}
+                          on:blur={() => renamePlan(entry.id, planRenameValue || getPlanDisplayName(entry.plan.config))}
+                          use:focusAndSelect
+                        />
+                      {:else}
+                        <span class="plan-name-text">{getPlanDisplayName(entry.plan.config)}</span>
+                      {/if}
+                    </div>
+                    <div class="plan-manager-meta">
+                      Started {new Date(entry.plan.config.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} &bull; {entry.plan.totalDays} days
+                    </div>
+                    <div class="plan-manager-actions">
+                      {#if nextCh}
+                        <button class="pm-chapter-link" on:click={() => { selectPlanTab(entry.id); navigateToChapter(nextCh.book, nextCh.chapter); }}>{nextCh.book} {nextCh.chapter} →</button>
+                      {/if}
+                      {#if planRenamingId !== entry.id}
+                        <button class="pm-rename-btn" on:click={() => { planRenamingId = entry.id; planRenameValue = getPlanDisplayName(entry.plan.config); planDeleteConfirmId = null; }}>Rename</button>
+                      {/if}
+                      {#if planDeleteConfirmId === entry.id}
+                        <span class="pm-delete-confirm-msg">Delete this plan?</span>
+                        <button class="pm-delete-btn confirm" on:click={() => { deletePlanFromActive(entry.id); planDeleteConfirmId = null; }}>Yes, delete</button>
+                        <button class="pm-cancel-btn" on:click={() => planDeleteConfirmId = null}>Cancel</button>
+                      {:else}
+                        <button class="pm-delete-btn" on:click={() => { planDeleteConfirmId = entry.id; planRenamingId = null; }}>Delete</button>
+                      {/if}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {:else if currentReadingPlan}
               <!-- Welcome banner + today's reading — always first -->
               {@const todayDone = !!(todayReading && getDayProgress(todayReading.dayNumber)?.completed)}
               <div class="welcome-banner" class:plan-done={todayDone}>
@@ -950,19 +1442,36 @@
                       <button class="jump-to-day-btn" on:click={() => scrollToDayInList(todayReading.dayNumber)}>Jump to day ↓</button>
                     </div>
                     <div class="chapters-list">
-                      {#each todayReading.chapters as chapter}
-                        <label class="banner-chapter-row">
-                          <input
-                            type="checkbox"
-                            checked={isChapterChecked(getDayProgress(todayReading.dayNumber), chapter.book, chapter.chapter)}
-                            on:change={() => toggleChapter(todayReading, chapter)}
-                          />
-                          <button
-                            class="chapter-link"
-                            on:click={() => handleChapterClick(todayReading, chapter)}
-                          >{chapter.book} {chapter.chapter}</button>
-                        </label>
-                      {/each}
+                      {#if todayReading.harmonySections?.length}
+                        {@const pp = getTodayPassageProgress(todayReading.dayNumber)}
+                        <div class="today-harmony-progress">{pp.done}/{pp.total} passages</div>
+                        {#each todayReading.harmonySections as sec, sIdx}
+                          <div class="banner-harmony-section">
+                            <span class="banner-section-title">§{sec.section} — {sec.title}</span>
+                            {#each sec.passages as passage, pi}
+                              {@const pIdx = todayReading.harmonySections.slice(0, sIdx).reduce((n: number, s: any) => n + s.passages.length, 0) + pi}
+                              <button
+                                class="chapter-link harmony-passage-link banner-passage-link"
+                                on:click={() => handlePassageClick(todayReading, passage, pIdx)}
+                              >{passage.label}</button>
+                            {/each}
+                          </div>
+                        {/each}
+                      {:else}
+                        {#each todayReading.chapters as chapter}
+                          <label class="banner-chapter-row">
+                            <input
+                              type="checkbox"
+                              checked={isChapterChecked(getDayProgress(todayReading.dayNumber), chapter.book, chapter.chapter)}
+                              on:change={() => toggleChapter(todayReading, chapter)}
+                            />
+                            <button
+                              class="chapter-link"
+                              on:click={() => handleChapterClick(todayReading, chapter)}
+                            >{chapter.book} {chapter.chapter}</button>
+                          </label>
+                        {/each}
+                      {/if}
                     </div>
                     <div class="today-reading-actions">
                       {#if todayDone}
@@ -1094,32 +1603,68 @@
                           <span class="catchup-badge">Catch-up</span>
                         {/if}
                         <span class="day-progress">
-                          {getDayProgressCounts(day).checked}/{getDayProgressCounts(day).total}
+                          {#if day.harmonySections && day.harmonySections.length > 0}
+                            {getDayProgressCountsHarmony(day).checked}/{getDayProgressCountsHarmony(day).total}
+                          {:else}
+                            {getDayProgressCounts(day).checked}/{getDayProgressCounts(day).total}
+                          {/if}
                         </span>
                       </div>
-                      <div class="list-day-chapters">
-                        {#each day.chapters as chapter, i}
-                          <label class="chapter-checkbox">
-                            <input
-                              type="checkbox"
-                              checked={isChapterChecked(getDayProgress(day.dayNumber), chapter.book, chapter.chapter)}
-                              on:change={() => toggleChapter(day, chapter)}
-                            />
-                            <button
-                              class="chapter-link"
-                              on:click={() => handleChapterClick(day, chapter)}
-                            >
-                              {chapter.book} {chapter.chapter}
-                            </button>
-                          </label>
-                          {#if i < day.chapters.length - 1}
-                            <span class="chapter-separator">,</span>
-                          {/if}
-                        {/each}
-                      </div>
-                      <button class="mark-day-btn" on:click={() => markDayComplete(day)}>
-                        Mark Day Complete
-                      </button>
+                      {#if day.harmonySections && day.harmonySections.length > 0}
+                        {@const daySections = day.harmonySections}
+                        <!-- Harmony plan day: section + passage checklist -->
+                        <div class="list-day-harmony">
+                          {#each daySections as sec}
+                            <div class="harmony-section">
+                              <div class="harmony-section-title">§{sec.section} — {sec.title}</div>
+                              {#each sec.passages as passage, pi}
+                                {@const pIdx = daySections.slice(0, daySections.indexOf(sec)).reduce((n: number, s) => n + s.passages.length, 0) + pi}
+                                <label class="harmony-passage-row">
+                                  <input
+                                    type="checkbox"
+                                    checked={isPassageChecked(day.dayNumber, sec.section, passage.label)}
+                                    on:change={() => togglePassage(day, sec.section, passage.label)}
+                                  />
+                                  <button
+                                    class="chapter-link harmony-passage-link"
+                                    on:click={() => handlePassageClick(day, passage, pIdx)}
+                                  >
+                                    {passage.label}
+                                  </button>
+                                </label>
+                              {/each}
+                            </div>
+                          {/each}
+                        </div>
+                        <button class="mark-day-btn" on:click={() => markHarmonyDayComplete(day)}>
+                          Mark Day Complete
+                        </button>
+                      {:else}
+                        <!-- Standard plan day: chapter checklist -->
+                        <div class="list-day-chapters">
+                          {#each day.chapters as chapter, i}
+                            <label class="chapter-checkbox">
+                              <input
+                                type="checkbox"
+                                checked={isChapterChecked(getDayProgress(day.dayNumber), chapter.book, chapter.chapter)}
+                                on:change={() => toggleChapter(day, chapter)}
+                              />
+                              <button
+                                class="chapter-link"
+                                on:click={() => handleChapterClick(day, chapter)}
+                              >
+                                {chapter.book} {chapter.chapter}
+                              </button>
+                            </label>
+                            {#if i < day.chapters.length - 1}
+                              <span class="chapter-separator">,</span>
+                            {/if}
+                          {/each}
+                        </div>
+                        <button class="mark-day-btn" on:click={() => markDayComplete(day)}>
+                          Mark Day Complete
+                        </button>
+                      {/if}
                     </div>
                   {/each}
                 </div>
@@ -1205,21 +1750,26 @@
             {/if}
           </div>
         {:else}
+          {@const completedPlans = planHistory.filter((h) => h.completedAt !== null)}
           <div class="history-tab">
-            {#if planHistory.length > 0}
-              {#each planHistory as item}
+            {#if completedPlans.length > 0}
+              {#each completedPlans as item}
                 <div class="history-item">
                   <div class="history-header">
                     <div>
                       <div class="history-title">
-                        {item.plan.config.ordering.charAt(0).toUpperCase() + item.plan.config.ordering.slice(1)} Plan
+                        {getPlanDisplayName(item.plan.config)}
                       </div>
-                      <div class="history-date">Created {new Date(item.createdAt).toLocaleDateString()}</div>
+                      <div class="history-date">
+                        Completed {new Date(item.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
                     </div>
-                    <button class="delete-btn" on:click={() => deletePlanFromHistory(item.id)}>Delete</button>
+                    <div class="history-actions">
+                      <button class="delete-btn" on:click={() => deletePlanFromHistory(item.id)}>Delete</button>
+                    </div>
                   </div>
                   <div class="history-stats">
-                    <strong>{item.plan.totalDays}</strong> days • <strong>{item.plan.totalChapters}</strong> chapters
+                    <strong>{item.plan.totalDays}</strong> days &bull; <strong>{item.plan.totalChapters}</strong> chapters
                   </div>
                   <div class="history-dates">
                     {new Date(item.plan.config.startDate).toLocaleDateString()} → {new Date(item.plan.config.endDate).toLocaleDateString()}
@@ -1227,13 +1777,26 @@
                 </div>
               {/each}
             {:else}
-              <p>No past plans yet.</p>
+              <p class="empty-archive">No completed plans yet. Finish a plan to see it here!</p>
             {/if}
           </div>
         {/if}
       </div>
     </div>
   </div>
+
+  {#if congratsPlanName}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="congrats-overlay" on:click={() => congratsPlanName = null}>
+      <div class="congrats-card" on:click|stopPropagation>
+        <div class="congrats-emoji">🎉</div>
+        <h2 class="congrats-title">Plan Complete!</h2>
+        <p class="congrats-body">You finished <strong>{congratsPlanName}</strong>. It has been moved to your Completed Archive.</p>
+        <button class="congrats-close-btn" on:click={() => congratsPlanName = null}>Awesome!</button>
+      </div>
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -1572,6 +2135,34 @@
 
   .today-reading.day-done .banner-chapter-row input[type="checkbox"] {
     accent-color: #4caf50;
+  }
+
+  /* Harmony sections in today banner */
+  .today-harmony-progress {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 8px;
+  }
+
+  .banner-harmony-section {
+    margin-bottom: 10px;
+  }
+
+  .banner-section-title {
+    display: block;
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+
+  .banner-passage-link {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 2px 4px;
+    font-size: 13px;
   }
 
   .chapter-link {
@@ -2063,6 +2654,36 @@
     color: #aaa;
   }
 
+  /* Harmony plan day styles */
+  .list-day-harmony {
+    font-size: 14px;
+  }
+
+  .harmony-section {
+    margin-bottom: 10px;
+  }
+
+  .harmony-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+
+  .harmony-passage-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    cursor: pointer;
+  }
+
+  .harmony-passage-link {
+    font-size: 13px;
+  }
+
   .chapter-separator {
     margin: 0 6px;
     color: #555;
@@ -2109,4 +2730,241 @@
     font-size: 13px;
     color: #888;
   }
+
+  /* Multi-plan tab strip */
+  .plan-tab-strip {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #1e3a5f;
+    padding-bottom: 8px;
+  }
+
+  .plan-tab-btn {
+    padding: 6px 14px;
+    background: #0d1b2e;
+    color: #aaa;
+    border: 1px solid #1e3a5f;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+  }
+
+  .plan-tab-btn:hover {
+    background: #1e3a5f;
+    color: #e0e0e0;
+  }
+
+  .plan-tab-btn.active {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+    color: #fff;
+    border-color: #3b82f6;
+  }
+
+  .plan-tab-all.active {
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    border-color: #8b5cf6;
+  }
+
+  /* Plan name input optional label */
+  .optional {
+    font-size: 12px;
+    color: #888;
+    font-weight: normal;
+  }
+
+  /* Auth warning banner */
+  .auth-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: rgba(250, 200, 0, 0.1);
+    border: 1px solid rgba(250, 200, 0, 0.4);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: #d4a800;
+    line-height: 1.5;
+  }
+  .auth-warning-signin-btn {
+    background: none;
+    border: none;
+    color: #f5c518;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+  }
+
+  /* Plan Manager (All Plans view) */
+  .plan-manager {
+    padding: 4px 0;
+  }
+  .plan-manager-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #ccc;
+    margin: 0 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333;
+  }
+  .plan-manager-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #222;
+    border: 1px solid #333;
+    margin-bottom: 8px;
+    transition: border-color 0.15s;
+  }
+  .plan-manager-row.delete-confirm {
+    border-color: #b91c1c;
+    background: rgba(185, 28, 28, 0.08);
+  }
+  .plan-manager-name {
+    flex: 1 1 160px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #e8e8e8;
+  }
+  .plan-name-text {
+    cursor: default;
+  }
+  .plan-rename-input {
+    background: #1a1a1a;
+    border: 1px solid #666;
+    border-radius: 4px;
+    color: #e8e8e8;
+    font-size: 14px;
+    padding: 3px 8px;
+    width: 100%;
+    max-width: 260px;
+  }
+  .plan-manager-meta {
+    font-size: 12px;
+    color: #888;
+    flex: 1 1 auto;
+  }
+  .plan-manager-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .pm-chapter-link {
+    padding: 4px 10px;
+    background: linear-gradient(135deg, #1d4ed8, #1e40af);
+    color: #fff;
+    border: 1px solid #3b82f6;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .pm-chapter-link:hover { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+  .pm-rename-btn {
+    padding: 4px 10px;
+    background: #2a2a2a;
+    color: #aaa;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .pm-rename-btn:hover { background: #333; color: #ddd; }
+  .pm-delete-btn {
+    padding: 4px 10px;
+    background: transparent;
+    color: #888;
+    border: 1px solid #555;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .pm-delete-btn:hover { color: #f87171; border-color: #b91c1c; }
+  .pm-delete-btn.confirm {
+    background: #b91c1c;
+    color: #fff;
+    border-color: #dc2626;
+  }
+  .pm-delete-btn.confirm:hover { background: #dc2626; }
+  .pm-cancel-btn {
+    padding: 4px 10px;
+    background: #333;
+    color: #aaa;
+    border: 1px solid #555;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .pm-cancel-btn:hover { color: #ddd; }
+  .pm-delete-confirm-msg {
+    font-size: 12px;
+    color: #f87171;
+    font-weight: 600;
+  }
+
+  /* Completed Archive empty state */
+  .empty-archive {
+    color: #888;
+    font-style: italic;
+    text-align: center;
+    padding: 24px 0;
+  }
+
+  /* Congrats overlay */
+  .congrats-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 20px;
+  }
+  .congrats-card {
+    background: #1a1a1a;
+    border: 1px solid #3f3f3f;
+    border-radius: 16px;
+    padding: 40px 48px;
+    text-align: center;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+  }
+  .congrats-emoji {
+    font-size: 56px;
+    line-height: 1;
+    margin-bottom: 16px;
+  }
+  .congrats-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #f0e68c;
+    margin: 0 0 12px;
+  }
+  .congrats-body {
+    font-size: 15px;
+    color: #ccc;
+    margin: 0 0 24px;
+    line-height: 1.6;
+  }
+  .congrats-close-btn {
+    padding: 10px 28px;
+    background: linear-gradient(135deg, #d97706, #b45309);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .congrats-close-btn:hover { background: linear-gradient(135deg, #f59e0b, #d97706); }
 </style>
