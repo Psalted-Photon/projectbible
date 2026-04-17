@@ -3345,7 +3345,7 @@
     top: 0;
     left: var(--rp-hl-left, 2em);
     width: 200px;
-    height: 100%;
+    height: 1em;
     background: linear-gradient(to right, rgba(34, 197, 94, 0.40), transparent);
     pointer-events: none;
     border-radius: 3px;
