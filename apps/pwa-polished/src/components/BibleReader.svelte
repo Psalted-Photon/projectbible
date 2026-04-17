@@ -32,7 +32,7 @@
   import { IndexedDBTskReferenceStore } from "../adapters/TskReferenceStore";
   import type { TskEntry } from "../adapters/TskReferenceStore";
   import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
-  import { harmonyNavStore } from "../stores/harmonyNavStore";
+  import { readingSessionStore } from "../stores/readingSessionStore";
   import { readingProgressStore } from "../stores/ReadingProgressStore";
   import { localDateStr } from "../stores/clockStore";
   import type { HarmonyPassage, HarmonySection } from "@projectbible/core";
@@ -48,52 +48,59 @@
 
   function computeAllPlanContexts(book: string, chapter: number): any[] {
     try {
-      const raw = localStorage.getItem(STORAGE_ACTIVE_PLANS) ?? sessionStorage.getItem(STORAGE_ACTIVE_PLANS);
+      const session = get(readingSessionStore);
+      if (!session) return []; // No active reading session → no plan UI
+
+      const raw = localStorage.getItem(STORAGE_ACTIVE_PLANS);
       if (!raw) return [];
       const activePlans: Array<{ id: string; plan: any }> = JSON.parse(raw);
+      const planEntry = activePlans.find(p => p.id === session.planId);
+      if (!planEntry) return [];
+
+      const plan = planEntry.plan;
       const todayStr = localDateStr(new Date());
+      const todayDay = plan.days?.find((d: any) => localDateStr(new Date(d.date)) === todayStr);
+      if (!todayDay) return [];
+
       const results: any[] = [];
-      for (const entry of activePlans) {
-        const plan = entry.plan;
-        const todayDay = plan.days?.find((d: any) => localDateStr(new Date(d.date)) === todayStr);
-        if (!todayDay) continue;
-        if (plan.config?.ordering === 'harmony') {
-          const sections: HarmonySection[] = todayDay.harmonySections ?? [];
-          const allPassages: HarmonyPassage[] = sections.flatMap((s: HarmonySection) => s.passages);
-          for (let i = 0; i < allPassages.length; i++) {
-            const p = allPassages[i];
-            if (p.book !== book) continue;
-            if (p.endChapter !== chapter) continue;
-            results.push({
-              type: 'harmony',
-              planId: entry.id,
-              planName: bibleReaderGetPlanDisplayName(plan.config),
-              dayNumber: todayDay.dayNumber,
-              passage: p,
-              nextPassage: i < allPassages.length - 1 ? allPassages[i + 1] : null,
-              isLastPassage: i === allPassages.length - 1,
-              passageIndex: i,
-              totalPassages: allPassages.length,
-              harmonySections: sections,
-            });
-          }
-        } else {
-          const todayChapters: Array<{ book: string; chapter: number }> = todayDay.chapters ?? [];
-          const chapIdx = todayChapters.findIndex((c: any) => c.book === book && c.chapter === chapter);
-          if (chapIdx < 0) continue;
-          const nextCh = chapIdx < todayChapters.length - 1 ? todayChapters[chapIdx + 1] : null;
-          results.push({
-            type: 'standard',
-            planId: entry.id,
-            planName: bibleReaderGetPlanDisplayName(plan.config),
-            dayNumber: todayDay.dayNumber,
-            nextChapter: nextCh,
-            isLastChapter: chapIdx === todayChapters.length - 1,
-            isSequentialNext: nextCh !== null && nextCh.book === book && nextCh.chapter === chapter + 1,
-            todayChapters,
-          });
-        }
+
+      if (plan.config?.ordering === 'harmony') {
+        const sections: HarmonySection[] = todayDay.harmonySections ?? [];
+        const allPassages: HarmonyPassage[] = sections.flatMap((s: HarmonySection) => s.passages);
+        const sessionIdx = session.passageIndex ?? 0;
+        const p = allPassages[sessionIdx];
+        if (!p) return [];
+        // Buttons appear at the passage's end chapter
+        if (p.book !== book || p.endChapter !== chapter) return [];
+        results.push({
+          type: 'harmony',
+          planId: session.planId,
+          planName: bibleReaderGetPlanDisplayName(plan.config),
+          dayNumber: session.dayNumber,
+          passage: p,
+          nextPassage: sessionIdx < allPassages.length - 1 ? allPassages[sessionIdx + 1] : null,
+          isLastPassage: sessionIdx === allPassages.length - 1,
+          passageIndex: sessionIdx,
+          totalPassages: allPassages.length,
+          harmonySections: sections,
+        });
+      } else {
+        const todayChapters: Array<{ book: string; chapter: number }> = todayDay.chapters ?? [];
+        const chapIdx = todayChapters.findIndex((c: any) => c.book === book && c.chapter === chapter);
+        if (chapIdx < 0) return [];
+        const nextCh = chapIdx < todayChapters.length - 1 ? todayChapters[chapIdx + 1] : null;
+        results.push({
+          type: 'standard',
+          planId: session.planId,
+          planName: bibleReaderGetPlanDisplayName(plan.config),
+          dayNumber: session.dayNumber,
+          nextChapter: nextCh,
+          isLastChapter: chapIdx === todayChapters.length - 1,
+          isSequentialNext: nextCh !== null && nextCh.book === book && nextCh.chapter === chapter + 1,
+          todayChapters,
+        });
       }
+
       return results;
     } catch {
       return [];
@@ -299,12 +306,13 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Always-on plan continue handlers (no harmonyNavStore session required)
+  // Session-gated plan continue handlers
   // ---------------------------------------------------------------------------
 
   async function handleHarmonyContinueOnly(ctx: any) {
     const next = ctx.nextPassage as HarmonyPassage;
     if (!next) return;
+    readingSessionStore.updatePassageIndex(ctx.passageIndex + 1);
     clearReadingPlanHighlight();
     navigationStore.setReadingPlanActiveTarget(next.book, next.startChapter, next.startVerse, false);
     doScrollToVerse(next.book, next.startChapter, next.startVerse);
@@ -322,6 +330,7 @@
     }
     const next = ctx.nextPassage as HarmonyPassage;
     if (next) {
+      readingSessionStore.updatePassageIndex(ctx.passageIndex + 1);
       clearReadingPlanHighlight();
       navigationStore.setReadingPlanActiveTarget(next.book, next.startChapter, next.startVerse, false);
       doScrollToVerse(next.book, next.startChapter, next.startVerse);
@@ -339,7 +348,7 @@
       await readingProgressStore.markPassageComplete(ctx.planId, ctx.dayNumber, section.section, ctx.passage.label);
     }
     await readingProgressStore.markHarmonyDayComplete(ctx.planId, ctx.dayNumber);
-    harmonyNavStore.clearSession();
+    readingSessionStore.clearSession();
     navigationStore.clearReadingPlanActiveTarget();
     clearReadingPlanHighlight();
     dayCompleteMessage = ctx.planName;
@@ -368,6 +377,7 @@
 
   async function handleStandardDayComplete(ctx: any) {
     await readingProgressStore.markDayComplete(ctx.planId, ctx.dayNumber, ctx.todayChapters);
+    readingSessionStore.clearSession();
     navigationStore.clearReadingPlanActiveTarget();
     clearReadingPlanHighlight();
   }

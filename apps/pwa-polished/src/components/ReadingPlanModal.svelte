@@ -12,7 +12,8 @@
     type ReadingProgressEntry,
     type HarmonySectionProgress,
   } from '../stores/ReadingProgressStore';
-  import { harmonyNavStore } from '../stores/harmonyNavStore';
+  import { readingSessionStore } from '../stores/readingSessionStore';
+  import { profileModalStore } from '../stores/profileModalStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
   import { syncService, type SyncState } from '../lib/sync';
   import { syncQueue } from '../lib/sync/SyncQueueService';
@@ -486,6 +487,13 @@
   }
 
   async function handleChapterClick(day: any, chapter: any) {
+    if (currentPlanId) {
+      readingSessionStore.setSession({
+        planId: currentPlanId,
+        planType: 'standard',
+        dayNumber: day.dayNumber,
+      });
+    }
     await ensureStartedReading(day);
     navigateToChapter(chapter.book, chapter.chapter, getEffectiveChapters(day));
   }
@@ -551,18 +559,11 @@
     if (!currentPlanId) return;
     await ensureHarmonyDayStarted(day);
 
-    const sections: HarmonySection[] = day.harmonySections ?? [];
-    const allPassages: HarmonyPassage[] = sections.flatMap(s => s.passages);
-    const storedProgress = getDayProgress(day.dayNumber);
-    const template = buildHarmonySectionTemplate(day);
-    const allSectionsForDay: HarmonySectionProgress[] = storedProgress?.harmonySections ?? template;
-
-    harmonyNavStore.setSession({
+    readingSessionStore.setSession({
       planId: currentPlanId,
+      planType: 'harmony',
       dayNumber: day.dayNumber,
-      allPassages,
       passageIndex,
-      allSectionsForDay,
     });
 
     const nav = get(navigationStore);
@@ -1193,6 +1194,7 @@
         <button class="close-btn" on:click={close}>&times;</button>
       </div>
       
+      {#if isSignedIn}
       <div class="tabs">
         <button 
           class="tab" 
@@ -1763,6 +1765,13 @@
           </div>
         {/if}
       </div>
+      {:else}
+        <div class="auth-wall">
+          <div class="auth-wall-icon">📖</div>
+          <p class="auth-wall-text">Sign in to create and sync reading plans across all your devices.</p>
+          <button class="auth-wall-btn" on:click={() => { close(); profileModalStore.open(); }}>Sign In to Continue →</button>
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -2778,6 +2787,41 @@
     cursor: pointer;
     padding: 0;
     font: inherit;
+  }
+
+  /* Auth wall (shown when not signed in) */
+  .auth-wall {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    gap: 16px;
+    text-align: center;
+  }
+  .auth-wall-icon {
+    font-size: 48px;
+  }
+  .auth-wall-text {
+    color: #ccc;
+    font-size: 15px;
+    max-width: 300px;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .auth-wall-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 10px 24px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .auth-wall-btn:hover {
+    opacity: 0.85;
   }
 
   /* Plan Manager (All Plans view) */
