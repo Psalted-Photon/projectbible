@@ -3347,6 +3347,10 @@
     box-shadow: 0 0 0 1px rgba(255, 183, 77, 0.25);
   }
 
+  :global(.rp-verse-highlight) {
+    isolation: isolate;
+  }
+
   :global(.rp-verse-highlight::before) {
     content: '';
     position: absolute;
@@ -3357,7 +3361,7 @@
     background: linear-gradient(to right, rgba(34, 197, 94, 0.40), transparent);
     pointer-events: none;
     border-radius: 3px;
-    z-index: 0;
+    z-index: -1;
   }
 
   /* Floating drag handles for text selection */
