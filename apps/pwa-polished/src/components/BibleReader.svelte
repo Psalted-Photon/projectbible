@@ -284,8 +284,16 @@
       chapters[0]?.book === rpTarget!.book &&
       chapters[0]?.chapter === rpTarget!.chapter
     ) {
+      const scrollVerse = $navigationStore.scrollTargetVerse;
       _lastRpTargetKey = newKey;
-      tick().then(() => applyReadingPlanHighlight());
+      tick().then(async () => {
+        if (scrollVerse != null) {
+          const el = readerElement?.querySelector(`.verse[data-verse="${scrollVerse}"]`) as HTMLElement | null;
+          if (el) scrollToVerseEl(el);
+          navigationStore.clearScrollTarget();
+        }
+        await applyReadingPlanHighlight();
+      });
     }
     if (newKey === null) _lastRpTargetKey = null;
   }

@@ -1447,14 +1447,26 @@
                         <span class="day-complete-badge">✓ Day Complete</span>
                         <button
                           class="start-reading-btn"
-                          on:click={() => handleChapterClick(todayReading, todayReading.chapters[0])}
+                          on:click={() => {
+                            if (todayReading.harmonySections?.length) {
+                              handlePassageClick(todayReading, todayReading.harmonySections[0].passages[0], 0);
+                            } else {
+                              handleChapterClick(todayReading, todayReading.chapters[0]);
+                            }
+                          }}
                         >
                           Read Again →
                         </button>
                       {:else}
                         <button
                           class="start-reading-btn"
-                          on:click={() => handleChapterClick(todayReading, todayReading.chapters[0])}
+                          on:click={() => {
+                            if (todayReading.harmonySections?.length) {
+                              handlePassageClick(todayReading, todayReading.harmonySections[0].passages[0], 0);
+                            } else {
+                              handleChapterClick(todayReading, todayReading.chapters[0]);
+                            }
+                          }}
                         >
                           Start Reading →
                         </button>
