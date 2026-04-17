@@ -3350,7 +3350,7 @@
   :global(.rp-verse-highlight::before) {
     content: '';
     position: absolute;
-    top: 0.4em;
+    top: 0.8em;
     left: var(--rp-hl-left, 2em);
     width: 200px;
     height: 1em;
