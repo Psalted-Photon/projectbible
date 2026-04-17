@@ -3350,10 +3350,10 @@
   :global(.rp-verse-highlight::before) {
     content: '';
     position: absolute;
-    top: 0.8em;
+    top: 0.4em;
     left: var(--rp-hl-left, 2em);
     width: 200px;
-    height: 1em;
+    height: 1.4em;
     background: linear-gradient(to right, rgba(34, 197, 94, 0.40), transparent);
     pointer-events: none;
     border-radius: 3px;
