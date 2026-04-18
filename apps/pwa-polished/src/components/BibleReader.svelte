@@ -3364,7 +3364,8 @@
   :global(.rp-verse-highlight::before) {
     content: '';
     position: absolute;
-    top: 0.4em;
+    top: 50%;
+    transform: translateY(-50%);
     left: var(--rp-hl-left, 2em);
     width: 200px;
     height: 1.4em;
