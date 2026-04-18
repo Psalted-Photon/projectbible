@@ -839,8 +839,8 @@
       verseEl = readerElement.querySelector('.verse') as HTMLElement | null;
     }
     if (!verseEl) return;
-    const numEl = verseEl.querySelector('.verse-number') as HTMLElement | null;
-    const leftOffset = numEl ? numEl.getBoundingClientRect().width + 4 : 32;
+    const textEl = verseEl.querySelector('.verse-text') as HTMLElement | null;
+    const leftOffset = textEl ? textEl.offsetLeft : 32;
     verseEl.style.setProperty('--rp-hl-left', `${leftOffset}px`);
     verseEl.classList.add('rp-verse-highlight');
   }
@@ -3362,7 +3362,7 @@
     isolation: isolate;
     background: linear-gradient(to right, rgba(34, 197, 94, 0.40), transparent);
     background-position: var(--rp-hl-left, 2em) center;
-    background-size: 30ch calc(1em + 4px);
+    background-size: 30ch calc(1em + 7px);
     background-repeat: no-repeat;
     border-radius: 3px;
   }
