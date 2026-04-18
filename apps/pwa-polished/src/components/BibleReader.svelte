@@ -3359,19 +3359,11 @@
 
   :global(.rp-verse-highlight) {
     isolation: isolate;
-  }
-
-  :global(.rp-verse-highlight::before) {
-    content: '';
-    position: absolute;
-    top: calc(0.5lh - 0.7em);
-    left: var(--rp-hl-left, 2em);
-    width: 30ch;
-    height: 1.4em;
     background: linear-gradient(to right, rgba(34, 197, 94, 0.40), transparent);
-    pointer-events: none;
+    background-position: var(--rp-hl-left, 2em) center;
+    background-size: 30ch calc(1em + 4px);
+    background-repeat: no-repeat;
     border-radius: 3px;
-    z-index: -1;
   }
 
   /* Floating drag handles for text selection */
