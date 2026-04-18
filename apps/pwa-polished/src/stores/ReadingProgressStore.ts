@@ -128,10 +128,45 @@ export class ReadingProgressStore {
   }
 
   async upsertEntries(entries: ReadingProgressEntry[]): Promise<void> {
-    await batchWriteTransaction("reading_progress", (store) => {
-      entries.forEach((entry) => {
-        store.put(this.serialize(entry));
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("reading_progress", "readwrite");
+      const store = tx.objectStore("reading_progress");
+      let pending = entries.length;
+      if (pending === 0) { resolve(); return; }
+
+      entries.forEach((incoming) => {
+        const key = incoming.id;
+        const getReq = store.get(key);
+        getReq.onsuccess = () => {
+          const existing: ReadingProgressEntry | undefined = getReq.result
+            ? this.deserialize(getReq.result)
+            : undefined;
+          // Conflict resolution: prefer whichever entry has more recent activity
+          let winner = incoming;
+          if (existing) {
+            const existingTs = existing.completedAt ?? existing.createdAt ?? 0;
+            const incomingTs = incoming.completedAt ?? incoming.createdAt ?? 0;
+            const existingActions = (existing.chaptersRead ?? []).reduce((n, c) => n + (c.actions?.length ?? 0), 0);
+            const incomingActions = (incoming.chaptersRead ?? []).reduce((n, c) => n + (c.actions?.length ?? 0), 0);
+            // Prefer local if it has more actions or is more recent
+            if (existingActions > incomingActions || existingTs > incomingTs) {
+              winner = existing;
+            }
+          }
+          store.put(this.serialize(winner));
+          pending--;
+          if (pending === 0) resolve();
+        };
+        getReq.onerror = () => {
+          // On read error, just write the incoming entry
+          store.put(this.serialize(incoming));
+          pending--;
+          if (pending === 0) resolve();
+        };
       });
+
+      tx.onerror = () => reject(tx.error);
     });
   }
 

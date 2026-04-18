@@ -741,10 +741,11 @@
     }
   }
   
-  function deleteCurrentPlan() {
+  async function deleteCurrentPlan() {
     if (!selectedPlanId) return;
     if (confirm('Are you sure you want to delete this reading plan?')) {
-      activePlans = activePlans.filter(p => p.id !== selectedPlanId);
+      const deletedId = selectedPlanId;
+      activePlans = activePlans.filter(p => p.id !== deletedId);
       if (activePlans.length > 0) {
         selectedPlanId = activePlans[activePlans.length - 1].id;
         currentReadingPlan = activePlans.find(p => p.id === selectedPlanId)?.plan ?? null;
@@ -760,13 +761,19 @@
       }
       dayProgressMap = new Map();
       lastLoadedPlanId = null;
+      if (isSignedIn) {
+        await syncQueue.enqueue({ type: 'DELETE', table: 'reading_plans', id: deletedId });
+      }
     }
   }
   
-  function deletePlanFromHistory(planId: string) {
+  async function deletePlanFromHistory(planId: string) {
     if (confirm('Are you sure you want to delete this plan from history?')) {
       planHistory = planHistory.filter(p => p.id !== planId);
       localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
+      if (isSignedIn) {
+        await syncQueue.enqueue({ type: 'DELETE', table: 'reading_plans', id: planId });
+      }
     }
   }
 
@@ -806,7 +813,7 @@
     return { done, total };
   }
 
-  function renamePlan(planId: string, newName: string) {
+  async function renamePlan(planId: string, newName: string) {
     const trimmed = newName.trim();
     const idx = activePlans.findIndex(p => p.id === planId);
     if (idx >= 0 && trimmed) {
@@ -820,15 +827,25 @@
         planHistory = [...planHistory];
         localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
       }
+      if (isSignedIn) {
+        const updatedConfig = activePlans[idx].plan.config;
+        await syncQueue.enqueue({
+          type: 'UPDATE',
+          table: 'reading_plans',
+          id: planId,
+          data: { name: trimmed, config: JSON.stringify(updatedConfig), updated_at: new Date().toISOString() },
+        });
+      }
     }
     planRenamingId = null;
     planRenameValue = '';
   }
 
-  function archivePlan(planId: string) {
+  async function archivePlan(planId: string) {
     const entry = activePlans.find(p => p.id === planId);
     if (!entry) return;
     const name = getPlanDisplayName(entry.plan.config);
+    const archivedAt = Date.now();
     // Remove from active
     activePlans = activePlans.filter(p => p.id !== planId);
     if (activePlans.length > 0) {
@@ -849,6 +866,14 @@
     }
     planHistory = [...planHistory];
     localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
+    if (isSignedIn) {
+      await syncQueue.enqueue({
+        type: 'UPDATE',
+        table: 'reading_plans',
+        id: planId,
+        data: { status: 'archived', archived_at: archivedAt, completed_at: new Date(archivedAt).toISOString(), updated_at: new Date().toISOString() },
+      });
+    }
     congratsPlanName = name;
   }
 
@@ -857,7 +882,7 @@
     node.select();
   }
 
-  function deletePlanFromActive(planId: string) {
+  async function deletePlanFromActive(planId: string) {
     activePlans = activePlans.filter(p => p.id !== planId);
     if (selectedPlanId === planId) {
       selectedPlanId = activePlans.length > 0 ? activePlans[activePlans.length - 1].id : null;
@@ -872,6 +897,9 @@
       activePlanViewTab = '';
     }
     saveActivePlan();
+    if (isSignedIn) {
+      await syncQueue.enqueue({ type: 'DELETE', table: 'reading_plans', id: planId });
+    }
   }
 
   function checkPlanCompletion(planId: string | null) {
@@ -983,10 +1011,11 @@
           },
         });
 
-        // Create day 1 progress entry
+        // Create day 1 progress entry and queue to Supabase
         if (currentReadingPlan.days.length > 0) {
           const day1Chapters = currentReadingPlan.days[0].chapters;
-          await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
+          const day1Entry = await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
+          await queueProgressEntry(day1Entry);
         }
 
         planGenerationStatus = `✓ Plan created! ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;

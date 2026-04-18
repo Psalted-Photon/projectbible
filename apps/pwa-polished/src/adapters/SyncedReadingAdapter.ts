@@ -26,98 +26,80 @@ const STORAGE_PLAN_HISTORY = 'projectbible_reading_plan_history';
 export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
   if (!rows || rows.length === 0) return;
 
-  // Sort by activated_at descending, active plans first
-  const sorted = [...rows].sort((a, b) => {
-    if (a.status === 'active' && b.status !== 'active') return -1;
-    if (b.status === 'active' && a.status !== 'active') return 1;
-    return (b.activated_at ?? 0) - (a.activated_at ?? 0);
-  });
+  // Separate active from archived/deleted
+  const activeRows = rows.filter(r => r.status === 'active');
+  const archivedRows = rows.filter(r => r.status === 'archived' || r.status === 'completed');
+  // Rows with status === 'deleted' or anything else are skipped entirely
 
-  const activePlanRow = sorted.find(r => r.status === 'active') ?? sorted[0];
-  if (!activePlanRow) return;
+  // ── Active plans: restore ALL active rows ──────────────────────────────────
+  const currentPlansRaw = localStorage.getItem(STORAGE_ACTIVE_PLANS);
+  const currentPlans: Array<{id: string, plan: any}> = currentPlansRaw ? JSON.parse(currentPlansRaw) : [];
 
-  try {
-    const config = typeof activePlanRow.config === 'string'
-      ? JSON.parse(activePlanRow.config)
-      : activePlanRow.config;
-
-    // Restore Date objects that were serialized as strings
-    if (config.startDate && typeof config.startDate === 'string') {
-      config.startDate = new Date(config.startDate);
+  let changed = false;
+  for (const row of activeRows) {
+    // Skip if already present locally (local state is authoritative)
+    if (currentPlans.some(e => e.id === row.id)) continue;
+    try {
+      const config = typeof row.config === 'string' ? JSON.parse(row.config) : row.config;
+      if (config.startDate && typeof config.startDate === 'string') config.startDate = new Date(config.startDate);
+      if (config.endDate && typeof config.endDate === 'string') config.endDate = new Date(config.endDate);
+      const plan = generateReadingPlan(config);
+      // Preserve the persisted name (may have been renamed)
+      if (row.name) plan.config.name = row.name;
+      currentPlans.push({ id: row.id, plan });
+      changed = true;
+      console.log('[SyncedReading] Restored active reading plan:', row.id);
+    } catch (err) {
+      console.error('[SyncedReading] Failed to restore reading plan:', row.id, err);
     }
-    if (config.endDate && typeof config.endDate === 'string') {
-      config.endDate = new Date(config.endDate);
-    }
-
-    // Regenerate the full plan from the stored config
-    const plan = generateReadingPlan(config);
-
-    // Only overwrite localStorage if the remote plan is newer than what we have (or we have nothing)
-    const existingNew = localStorage.getItem(STORAGE_ACTIVE_PLANS);
-    if (existingNew) {
-      try {
-        const existingArray: Array<{id: string}> = JSON.parse(existingNew);
-        // If the same plan id is already in the active plans array, don't overwrite
-        if (existingArray.some(e => e.id === activePlanRow.id)) return;
-      } catch {
-        // Corrupted localStorage — fall through and overwrite
-      }
-    } else {
-      // Also check legacy single-plan key
-      const existingOld = localStorage.getItem(STORAGE_ACTIVE_PLAN);
-      if (existingOld) {
-        try {
-          const existingData = JSON.parse(existingOld);
-          if (existingData.id === activePlanRow.id) return;
-        } catch {
-          // Fall through
-        }
-      }
-    }
-
-    // Write to new array key; merge with any existing plans
-    const currentPlans: Array<{id: string, plan: any}> = existingNew ? JSON.parse(existingNew) : [];
-    const alreadyPresent = currentPlans.some(e => e.id === activePlanRow.id);
-    if (!alreadyPresent) {
-      currentPlans.push({ id: activePlanRow.id, plan });
-      localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(currentPlans));
-      // Remove legacy key if it exists
-      localStorage.removeItem(STORAGE_ACTIVE_PLAN);
-    }
-
-    console.log('[SyncedReading] Restored active reading plan:', activePlanRow.id);
-  } catch (err) {
-    console.error('[SyncedReading] Failed to restore reading plan:', err);
   }
 
-  // Also update the plan history — include full plan object so the history tab renders correctly
+  // Also check legacy single-plan key and migrate if needed
+  if (!currentPlansRaw) {
+    const existingOld = localStorage.getItem(STORAGE_ACTIVE_PLAN);
+    if (existingOld) {
+      try {
+        const existingData = JSON.parse(existingOld);
+        if (!currentPlans.some(e => e.id === existingData.id)) {
+          currentPlans.push({ id: existingData.id, plan: existingData.plan });
+          changed = true;
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  if (changed || currentPlans.length > 0) {
+    localStorage.setItem(STORAGE_ACTIVE_PLANS, JSON.stringify(currentPlans));
+    localStorage.removeItem(STORAGE_ACTIVE_PLAN);
+  }
+
+  // ── History: merge archived rows ───────────────────────────────────────────
   try {
     const history: any[] = [];
-    for (const r of rows) {
+    for (const r of archivedRows) {
       try {
         const cfg = typeof r.config === 'string' ? JSON.parse(r.config) : r.config;
         if (cfg.startDate && typeof cfg.startDate === 'string') cfg.startDate = new Date(cfg.startDate);
         if (cfg.endDate && typeof cfg.endDate === 'string') cfg.endDate = new Date(cfg.endDate);
         const plan = generateReadingPlan(cfg);
+        if (r.name) plan.config.name = r.name;
         history.push({
           id: r.id,
           plan,
           createdAt: r.activated_at ? new Date(r.activated_at).toISOString() : new Date().toISOString(),
-          completedAt: r.completed_at ? new Date(r.completed_at).toISOString() : null,
+          completedAt: r.completed_at ? new Date(r.completed_at).toISOString() : (r.archived_at ? new Date(r.archived_at).toISOString() : null),
         });
-      } catch {
-        // Skip rows with invalid config
-      }
+      } catch { /* skip rows with invalid config */ }
     }
 
-    const existingHistory = localStorage.getItem(STORAGE_PLAN_HISTORY);
-    const merged = existingHistory ? JSON.parse(existingHistory) : [];
-    const ids = new Set(history.map((h: any) => h.id));
-    const kept = merged.filter((h: any) => !ids.has(h.id));
-    localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify([...kept, ...history]));
-  } catch {
-    // History update is best-effort
-  }
+    if (history.length > 0) {
+      const existingHistory = localStorage.getItem(STORAGE_PLAN_HISTORY);
+      const merged: any[] = existingHistory ? JSON.parse(existingHistory) : [];
+      const ids = new Set(history.map((h: any) => h.id));
+      const kept = merged.filter((h: any) => !ids.has(h.id));
+      localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify([...kept, ...history]));
+    }
+  } catch { /* history update is best-effort */ }
 }
 
 // ─── Reading Progress ─────────────────────────────────────────────────
