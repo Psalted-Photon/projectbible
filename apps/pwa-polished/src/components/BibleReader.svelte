@@ -2899,6 +2899,7 @@
   .verse {
     margin-bottom: 0.5rem;
     position: relative;
+    font-size: var(--base-font-size, 18px);
   }
 
   .verse-number {
