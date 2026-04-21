@@ -1008,14 +1008,14 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         if (rows.length && rows[0].values.length) {
           const data = rows[0].values.map(([trans, book, ch, v, order, word, lemma, strongs, morph]) => ({
             id: `${trans}:${book}:${ch}:${v}:${order}`,
-            translation_id: trans as string,
+            translationId: trans as string,
             book: book as string,
             chapter: ch as number,
             verse: v as number,
-            word_order: order as number,
-            word: word as string,
+            word_index: order as number,
+            text: word as string,
             lemma: lemma as string | null,
-            strongs_id: strongs as string | null,
+            strongsId: strongs as string | null,
             morph_code: morph as string | null
           }));
           

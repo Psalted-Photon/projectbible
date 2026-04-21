@@ -238,7 +238,7 @@ const BUNDLED_PACKS: BundledPack[] = [
 const INIT_FLAG_KEY = 'projectbible_polished_initialized';
 const PACK_VERSION_KEY = 'projectbible_pack_version';
 const LEXICAL_INIT_FLAG_KEY = 'projectbible_lexical_initialized';
-const CURRENT_PACK_VERSION = '1.2.0'; // Updated to load all translations and packs
+const CURRENT_PACK_VERSION = '1.3.0'; // Fix morphology field names (camelCase) and translationId aliases
 
 /**
  * Check if app has been initialized with bundled packs

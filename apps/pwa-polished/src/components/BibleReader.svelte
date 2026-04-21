@@ -1004,10 +1004,15 @@
       const store = transaction.objectStore("morphology");
       const index = store.index("verse_ref");
 
+      // Map display translation IDs to the morphology pack's internal ID.
+      // opengnt-morphology.sqlite stores all NT morphology under 'OGNT'.
+      const MORPH_ID_ALIAS: Record<string, string> = { BYZ: 'OGNT', TR: 'OGNT', SBLGNT: 'OGNT' };
+      const morphTranslation = MORPH_ID_ALIAS[translation] ?? translation;
+
       // Query for all verses in this chapter (verse 1-999)
       const range = IDBKeyRange.bound(
-        [translation, book, chapter, 1],
-        [translation, book, chapter, 999],
+        [morphTranslation, book, chapter, 1],
+        [morphTranslation, book, chapter, 999],
       );
 
       const results: DBMorphology[] = await new Promise((resolve, reject) => {
@@ -2258,6 +2263,9 @@
 
   async function handleToastAction(event: CustomEvent) {
     const { action, text } = event.detail;
+    // Capture before any async gap — reactive var may be overwritten by a
+    // subsequent word click while the dynamic import is resolving.
+    const capturedMorphology = selectedMorphology;
     console.log(`Action: ${action} on "${text}"`);
 
     // TODO: Wire up actual actions
@@ -2266,8 +2274,8 @@
         // Open lexical modal with morphology data if available
         console.log('🔍 Starting lexicon lookup for:', text);
         console.log('   Current translation:', currentTranslation);
-        console.log('   Has morphology:', !!selectedMorphology);
-        console.log('   Strong\'s ID:', selectedMorphology?.strongsId);
+        console.log('   Has morphology:', !!capturedMorphology);
+        console.log('   Strong\'s ID:', capturedMorphology?.strongsId);
         
         // Look up lexical data using new consolidated pack system
         (async () => {
@@ -2325,24 +2333,24 @@
             }
             
             // If we have a Strong's ID from morphology, look it up directly
-            if (selectedMorphology?.strongsId) {
-              const entry = await lookupStrongs(selectedMorphology.strongsId);
+            if (capturedMorphology?.strongsId) {
+              const entry = await lookupStrongs(capturedMorphology.strongsId);
               if (entry) {
                 console.log('Found Strong\'s entry:', entry);
               }
               lexicalModalStore.open({
                 selectedText: text,
-                strongsId: selectedMorphology.strongsId,
-                morphologyData: selectedMorphology,
+                strongsId: capturedMorphology.strongsId,
+                morphologyData: capturedMorphology,
                 lexicalEntries: null,
               });
               return;
-            } else if (selectedMorphology) {
+            } else if (capturedMorphology) {
               // Have morphology but no Strong's ID
               lexicalModalStore.open({
                 selectedText: text,
                 strongsId: undefined,
-                morphologyData: selectedMorphology,
+                morphologyData: capturedMorphology,
                 lexicalEntries: null,
               });
               return;
@@ -2368,7 +2376,7 @@
             lexicalModalStore.open({
               selectedText: text,
               strongsId: undefined,
-              morphologyData: selectedMorphology,
+              morphologyData: capturedMorphology,
               lexicalEntries: null,
             });
           }
