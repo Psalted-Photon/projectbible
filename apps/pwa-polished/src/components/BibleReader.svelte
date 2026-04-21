@@ -661,8 +661,11 @@
     const hasSegmenter = typeof Intl !== "undefined" && "Segmenter" in Intl;
 
     if (hasSegmenter) {
-      // Use Intl.Segmenter for robust Unicode word segmentation
-      const segmenter = new (Intl as any).Segmenter("en", {
+      // Use Intl.Segmenter for robust Unicode word segmentation.
+      // "und" (undetermined) uses Unicode default word-break rules without
+      // English-specific tailoring, which correctly handles Greek, Hebrew,
+      // and all other Unicode scripts.
+      const segmenter = new (Intl as any).Segmenter("und", {
         granularity: "word",
       });
       const segments = Array.from(segmenter.segment(verseText));
@@ -1867,17 +1870,20 @@
     text: string,
     offset: number,
   ): { start: number; end: number } | null {
-    // Find word boundaries
+    // Find word boundaries — use Unicode-aware test so Greek and Hebrew
+    // characters (and combining marks) are treated as word characters.
+    const isWordChar = (ch: string) => /[\p{L}\p{M}\p{N}]/u.test(ch);
+
     let start = offset;
     let end = offset;
 
     // Expand left
-    while (start > 0 && /\w/.test(text[start - 1])) {
+    while (start > 0 && isWordChar(text[start - 1])) {
       start--;
     }
 
     // Expand right
-    while (end < text.length && /\w/.test(text[end])) {
+    while (end < text.length && isWordChar(text[end])) {
       end++;
     }
 

@@ -5,6 +5,9 @@ dist/
 .vscode/
 *.log
 
+# Python virtual environment
+.venv/
+
 # Data packs - allow committed packs for mobile deployment
 # (packs are small enough for GitHub, ~16MB each)
 # Ignore generated data sources, but allow final packs
