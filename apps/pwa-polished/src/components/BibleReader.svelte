@@ -479,8 +479,11 @@
 
   // Check if translation is original language (Greek/Hebrew)
   function isOriginalLanguage(translationId: string): boolean {
-    const originalLanguageIds = ["WLC", "LXX", "BYZ", "TR", "SBLGNT"];
-    return originalLanguageIds.includes(translationId);
+    // Case-insensitive: bundled packs use uppercase (WLC, BYZ, TR, LXX) but
+    // the consolidated ancient-languages pack uses lowercase (hebrew-oshb, byz, tr, lxx).
+    const id = translationId.toLowerCase();
+    return id === 'wlc' || id === 'lxx' || id === 'byz' || id === 'tr' ||
+           id === 'sblgnt' || id === 'hebrew-oshb';
   }
 
   // Fetch morphology data for a verse
@@ -1006,7 +1009,11 @@
 
       // Map display translation IDs to the morphology pack's internal ID.
       // opengnt-morphology.sqlite stores all NT morphology under 'OGNT'.
-      const MORPH_ID_ALIAS: Record<string, string> = { BYZ: 'OGNT', TR: 'OGNT', SBLGNT: 'OGNT' };
+      // ancient-languages.sqlite uses lowercase IDs — normalise to uppercase for the alias lookup.
+      const MORPH_ID_ALIAS: Record<string, string> = {
+        BYZ: 'OGNT', TR: 'OGNT', SBLGNT: 'OGNT',
+        byz: 'byz', tr: 'tr', lxx: 'lxx', 'hebrew-oshb': 'hebrew-oshb',
+      };
       const morphTranslation = MORPH_ID_ALIAS[translation] ?? translation;
 
       // Query for all verses in this chapter (verse 1-999)

@@ -427,6 +427,8 @@ export async function importPackFromSQLite(file: File): Promise<void> {
           const columns = wordsTableInfo.length > 0 && wordsTableInfo[0].values 
             ? wordsTableInfo[0].values.map(row => row[1] as string) 
             : [];
+          // ancient-languages consolidated pack stores per-row translation_id in words table
+          const hasRowTranslationId = columns.includes('translation_id');
           const hasGlossEn = columns.includes('gloss_en');
           const hasTransliteration = columns.includes('transliteration');
         
@@ -434,6 +436,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         
         // Build SELECT query based on available columns
         let selectQuery = 'SELECT book, chapter, verse, word_order, text, lemma, morph_code, strongs';
+        if (hasRowTranslationId) selectQuery += ', translation_id';
         if (hasGlossEn) selectQuery += ', gloss_en';
         if (hasTransliteration) selectQuery += ', transliteration';
         selectQuery += ' FROM words';
@@ -443,30 +446,26 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         if (wordsRows.length && wordsRows[0].values.length) {
           const morphologyData = wordsRows[0].values.map((row) => {
             const [book, chapter, verse, wordOrder, text, lemma, morphCode, strongs, ...optional] = row;
-            let gloss: string | undefined;
-            let transliteration: string | undefined;
-            
-            // Extract optional fields based on which columns exist
-            if (hasGlossEn && hasTransliteration) {
-              [gloss, transliteration] = optional as [string, string];
-            } else if (hasGlossEn) {
-              [gloss] = optional as [string];
-            } else if (hasTransliteration) {
-              [transliteration] = optional as [string];
-            }
-            
-            // Determine language from translation ID
-            const language = packInfo.translationId?.startsWith('LXX') || 
-                           packInfo.translationId === 'BYZ' || 
-                           packInfo.translationId === 'TR' 
-              ? 'greek' 
-              : packInfo.translationId === 'WLC' 
-              ? 'hebrew' 
-              : 'greek'; // default to greek for original language packs
+            let optIdx = 0;
+            const rowTransId = hasRowTranslationId ? optional[optIdx++] as string : undefined;
+            const gloss = hasGlossEn ? optional[optIdx++] as string : undefined;
+            const transliteration = hasTransliteration ? optional[optIdx++] as string : undefined;
+
+            // Use per-row translation_id (consolidated packs) or fall back to pack-level ID
+            const effectiveId = rowTransId || packInfo.translationId || 'unknown';
+
+            // Determine language from the effective translation ID (case-insensitive)
+            const idLower = effectiveId.toLowerCase();
+            const language: 'greek' | 'hebrew' | 'aramaic' =
+              idLower.includes('lxx') || idLower === 'byz' || idLower === 'tr' || idLower === 'sblgnt'
+                ? 'greek'
+                : idLower === 'wlc' || idLower.includes('hebrew')
+                ? 'hebrew'
+                : 'greek';
             
             return {
-              id: `${packInfo.translationId}:${book}:${chapter}:${verse}:${wordOrder}`,
-              translationId: packInfo.translationId!,
+              id: `${effectiveId}:${book}:${chapter}:${verse}:${wordOrder}`,
+              translationId: effectiveId,
               book: book as string,
               chapter: chapter as number,
               verse: verse as number,
@@ -477,7 +476,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
               gloss: gloss as string | undefined,
               transliteration: transliteration as string | undefined,
               parsing: morphCode as string,
-              language: language as 'greek' | 'hebrew' | 'aramaic'
+              language
             };
           });
           
