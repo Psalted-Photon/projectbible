@@ -228,6 +228,43 @@ if (existsSync(lxxPath)) {
   console.log(`      ✅ Complete`);
 }
 
+// 5. OpenGNT morphology for Greek NT (byz + tr)
+console.log('\n   Merging OpenGNT morphology (for byz/tr)...');
+const ogntPath = join(PACKS_DIR, 'opengnt-morphology.sqlite');
+if (existsSync(ogntPath)) {
+  const source = new Database(ogntPath, { readonly: true });
+
+  const morphRows = source.prepare(
+    'SELECT book, chapter, verse, word_order, text, lemma, strongs, morph_code, gloss_en, transliteration FROM words'
+  ).all();
+  console.log(`      ${morphRows.length.toLocaleString()} morphology entries`);
+
+  const insertWord = output.prepare(`
+    INSERT OR IGNORE INTO words
+      (translation_id, book, chapter, verse, word_order, text, lemma, strongs, morph_code, gloss_en)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  // OpenGNT strongs values have stray 〔〕 bracket characters — strip them.
+  const cleanStrongs = (s) => s ? s.replace(/[〔〕]/g, '').trim() : s;
+  const cleanGloss   = (g) => g ? g.replace(/[〔〕]/g, '').trim() : g;
+
+  const copyMorph = output.transaction((rows) => {
+    for (const r of rows) {
+      const strongs = cleanStrongs(r.strongs);
+      const gloss   = cleanGloss(r.gloss_en);
+      // Store under 'byz' — also store under 'tr' so both translations benefit
+      insertWord.run('byz', r.book, r.chapter, r.verse, r.word_order, r.text, r.lemma, strongs, r.morph_code, gloss);
+      insertWord.run('tr',  r.book, r.chapter, r.verse, r.word_order, r.text, r.lemma, strongs, r.morph_code, gloss);
+    }
+  });
+  copyMorph(morphRows);
+  totalWords += morphRows.length * 2;
+
+  source.close();
+  console.log('      ✅ Complete');
+}
+
 // Optimize
 console.log('\nOptimizing database...');
 output.exec('VACUUM');
