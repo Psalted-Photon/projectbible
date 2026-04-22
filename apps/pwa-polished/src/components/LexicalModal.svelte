@@ -362,7 +362,7 @@
             <p>{error}</p>
             <p class="hint">Lexical packs may not be fully installed yet.</p>
           </div>
-        {:else if morphologyData}
+        {:else if morphologyData && !strongEntry}
           <!-- Original Language Morphology Display -->
           <div class="morphology-view">
             <div class="info-section">
@@ -667,6 +667,9 @@
             {/if}
           </div>
         {:else if strongEntry}
+          {#if morphologyData}
+            <button class="back-btn" on:click={() => (strongEntry = null)}>← Back to Morphology</button>
+          {/if}
           <div class="tabs">
             <button
               class="tab"
@@ -1113,6 +1116,21 @@
 
   .strongs-link:hover {
     opacity: 0.8;
+  }
+
+  .back-btn {
+    background: none;
+    border: none;
+    color: var(--color-primary, #4a90e2);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 0 12px 0;
+    text-decoration: underline;
+    display: block;
+  }
+
+  .back-btn:hover {
+    opacity: 0.75;
   }
 
   .morphology-view {
