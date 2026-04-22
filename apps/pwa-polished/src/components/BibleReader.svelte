@@ -567,13 +567,16 @@
   }
 
   // Strip Hebrew cantillation marks and vowel points for text comparison
-  function stripHebrewDiacritics(text: string): string {
-    // Remove Hebrew cantillation marks (U+0591 to U+05AF)
-    // Remove Hebrew vowel points (U+05B0 to U+05BD, U+05BF to U+05C2, U+05C4, U+05C5, U+05C7)
-    // Keep consonants and maqqef (־)
+  function normalizeForComparison(text: string): string {
+    // NFD decompose → strip ALL combining diacritics:
+    //   U+0300–036F  Greek polytonic accents (and general combining marks)
+    //   U+0591–05C7  Hebrew cantillation marks + vowel points
+    // Then lowercase and recompose NFC.
+    // This lets "αβρααμ" match "Ἀβραὰμ" and "ב" match "בְּ".
     return text
-      .replace(/[\u0591-\u05AF]/g, "") // Cantillation marks
-      .replace(/[\u05B0-\u05BD\u05BF-\u05C2\u05C4\u05C5\u05C7]/g, "") // Vowel points
+      .normalize("NFD")
+      .replace(/[\u0300-\u036F\u0591-\u05C7]/g, "")
+      .toLowerCase()
       .normalize("NFC");
   }
 
@@ -607,7 +610,7 @@
       }
     }
 
-    // Fallback: try text match (exact)
+    // Fallback 1: exact text match
     let byText = verseMorphs.find((m) => m.text === clickedText);
     if (byText) {
       morphStats.hits++;
@@ -618,17 +621,41 @@
       return byText;
     }
 
-    // Second fallback: try text match without Hebrew diacritics
-    const strippedClickedText = stripHebrewDiacritics(clickedText);
+    // Fallback 2: normalize both sides — strips Greek accents AND Hebrew
+    // cantillation/vowel points, lowercases. Fixes e.g. unaccented "αβρααμ"
+    // (from BYZ verse text) matching "Ἀβραὰμ" (from OpenGNT morphology).
+    const normClicked = normalizeForComparison(clickedText);
     byText = verseMorphs.find(
-      (m) => stripHebrewDiacritics(m.text) === strippedClickedText,
+      (m) => normalizeForComparison(m.text) === normClicked,
     );
     if (byText) {
       morphStats.hits++;
       morphStats.textFallback++;
       if (DEBUG_MORPHOLOGY) {
         console.log(
-          `✅ Morphology match by stripped text: "${clickedText}" → "${strippedClickedText}"`,
+          `✅ Morphology match by normalized text: "${clickedText}" → "${normClicked}"`,
+          byText,
+        );
+      }
+      return byText;
+    }
+
+    // Fallback 3: OSHB stores compound morphemes as "prefix/root" e.g.
+    // "בְּ/רֵאשִׁ֖ית". Intl.Segmenter splits at '/' so the user clicks only
+    // one morpheme part. Match if any part of a compound normalizes to the
+    // clicked text.
+    byText = verseMorphs.find((m) => {
+      if (!m.text.includes('/')) return false;
+      return m.text
+        .split('/')
+        .some((part) => normalizeForComparison(part) === normClicked);
+    });
+    if (byText) {
+      morphStats.hits++;
+      morphStats.textFallback++;
+      if (DEBUG_MORPHOLOGY) {
+        console.log(
+          `✅ Morphology match by compound part: "${clickedText}" in "${byText.text}"`,
           byText,
         );
       }
@@ -638,7 +665,7 @@
     morphStats.misses++;
     if (DEBUG_MORPHOLOGY) {
       console.log(
-        `❌ No morphology match for index ${clickedIndex}, text "${clickedText}", stripped "${strippedClickedText}"`,
+        `❌ No morphology match for index ${clickedIndex}, text "${clickedText}", normalized "${normClicked}"`,
       );
       console.log(
         "   Available texts in verse:",
@@ -2357,8 +2384,21 @@
                 lexicalEntries: null,
               });
               return;
+            } else if (isOriginalLanguage(currentTranslation)) {
+              // Original language word with no morphology in IDB — pack may not
+              // be installed yet or this specific form has no match.
+              // Open the modal in a "no data" state; don't fall through to the
+              // English lexicon lookup.
+              console.log(`ℹ️ No morphology found for original-language word: "${text}"`);
+              lexicalModalStore.open({
+                selectedText: text,
+                strongsId: undefined,
+                morphologyData: null,
+                lexicalEntries: null,
+              });
+              return;
             } else {
-              // Otherwise look up the word
+              // English word — look up in lexical pack
               const entries = await lookupWord(text);
               if (entries.length > 0) {
                 console.log(`Found ${entries.length} lexical entries:`, entries);
