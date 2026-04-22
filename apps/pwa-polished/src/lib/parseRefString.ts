@@ -102,7 +102,7 @@ const BOOK_MAP: Record<string, string> = {
   // Mark
   mr: 'Mark', mk: 'Mark', mar: 'Mark', mark: 'Mark',
   // Luke
-  lu: 'Luke', lk: 'Luke', luc: 'Luke', luke: 'Luke',
+  lu: 'Luke', lk: 'Luke', luc: 'Luke', luke: 'Luke', luk: 'Luke',
   // John (joh/jn preferred; jo kept for legacy TSK)
   joh: 'John', jn: 'John', jo: 'John', john: 'John',
   // Acts
@@ -138,9 +138,9 @@ const BOOK_MAP: Record<string, string> = {
   '1pe': '1 Peter', '1pet': '1 Peter',
   '2pe': '2 Peter', '2pet': '2 Peter',
   // 1–3 John
-  '1jo': '1 John', '1jn': '1 John',
-  '2jo': '2 John', '2jn': '2 John',
-  '3jo': '3 John', '3jn': '3 John',
+  '1jo': '1 John', '1jn': '1 John', '1john': '1 John',
+  '2jo': '2 John', '2jn': '2 John', '2john': '2 John',
+  '3jo': '3 John', '3jn': '3 John', '3john': '3 John',
   // Jude
   jude: 'Jude', jud: 'Jude',
   // Revelation
@@ -206,4 +206,22 @@ export function parseRefString(
   const cv = parseChapterVerse(trimmed, contextChapter);
   if (!cv) return null;
   return { book: contextBook, chapter: cv.chapter, verse: cv.verse };
+}
+
+/**
+ * Parse an OSIS-style ref string (e.g. "Gen.2.4", "1John.4.9-1John.4.10")
+ * into a navigable target. Returns null if the ref can't be parsed.
+ */
+export function parseOsisRef(ref: string): RefTarget | null {
+  if (!ref) return null;
+  // Take only the first ref in a range (strip everything from '-' onward)
+  const primary = ref.split('-')[0].trim();
+  // OSIS format: BOOK.CHAPTER.VERSE  (e.g. Gen.2.4, 1John.4.9)
+  // The book portion is everything up to the first run of digits followed by a dot+digit
+  const m = primary.match(/^([1-9]?[A-Za-z]+)\.([0-9]+)\.([0-9]+)$/);
+  if (!m) return null;
+  const [, bookRaw, chapterStr, verseStr] = m;
+  const canonical = BOOK_MAP[bookRaw.toLowerCase()];
+  if (!canonical) return null;
+  return { book: canonical, chapter: parseInt(chapterStr), verse: parseInt(verseStr) };
 }

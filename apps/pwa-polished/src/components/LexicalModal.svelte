@@ -8,6 +8,9 @@
   } from "../../../../packages/core/src/search/englishLexicalService";
   import { lookupEnglishWord, lookupStrongs } from "../adapters/lexicon-lookup.js";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
+  import { get } from "svelte/store";
+  import { navigationStore } from "../stores/navigationStore";
+  import { parseOsisRef } from "../lib/parseRefString";
 
   // Subscribe to store instead of using props
   $: isOpen = $lexicalModalStore.isOpen;
@@ -294,6 +297,44 @@
       default:
         return "#757575";
     }
+  }
+
+  /**
+   * Convert SWORD/Thayer markup to safe HTML for {@html} rendering.
+   * Handles: <b>, <i>, <BR />, <ref='...'>, __ numbered items.
+   * Any other tags are stripped.
+   */
+  function renderStrongsMarkup(text: string): string {
+    if (!text) return "";
+    return text
+      // Bold and italic pass-through
+      .replace(/<b>([\s\S]*?)<\/b>/gi, "<strong>$1</strong>")
+      .replace(/<i>([\s\S]*?)<\/i>/gi, "<em>$1</em>")
+      // Line breaks (various SWORD spellings)
+      .replace(/<BR\s*\/>/gi, "<br>")
+      // Scripture refs → clickable buttons
+      .replace(
+        /<ref='([^']+)'>([\s\S]*?)<\/ref>/gi,
+        '<button class="scripture-ref" data-ref="$1">$2</button>',
+      )
+      // Numbered items: __ at start of a segment → indented block
+      .replace(/(^|\n|<br>)__(\d+\.)/g, '$1<span class="strongs-item">$2</span> ')
+      // Strip any remaining unknown tags
+      .replace(/<(?!\/?(strong|em|br|button|span)[^>]*>)[^>]+>/gi, "");
+  }
+
+  /** Handle clicks on rendered Strong's markup — catches scripture-ref buttons. */
+  function handleDefinitionClick(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains("scripture-ref")) return;
+    const osisRef = target.dataset.ref;
+    if (!osisRef) return;
+    const parsed = parseOsisRef(osisRef);
+    if (!parsed) return;
+    const current = get(navigationStore);
+    navigationStore.pushHistory(current);
+    navigationStore.navigateTo(current.translation, parsed.book, parsed.chapter, parsed.verse);
+    lexicalModalStore.close();
   }
 </script>
 
@@ -696,7 +737,8 @@
 
           <div class="tab-content">
             {#if activeTab === "definition"}
-              <div class="definition-view">
+              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+              <div class="definition-view" on:click={handleDefinitionClick}>
                 <div class="info-section">
                   <h3>Entry Information</h3>
                   <dl>
@@ -743,20 +785,20 @@
 
                 <div class="info-section">
                   <h3>Full Definition</h3>
-                  <p class="full-def">{strongEntry.definition}</p>
+                  <p class="full-def">{@html renderStrongsMarkup(strongEntry.definition)}</p>
                 </div>
 
                 {#if strongEntry.kjvUsage}
                   <div class="info-section">
                     <h3>KJV Usage</h3>
-                    <p class="usage">{strongEntry.kjvUsage}</p>
+                    <p class="usage">{@html renderStrongsMarkup(strongEntry.kjvUsage)}</p>
                   </div>
                 {/if}
 
                 {#if strongEntry.derivation}
                   <div class="info-section">
                     <h3>Derivation</h3>
-                    <p class="derivation">{strongEntry.derivation}</p>
+                    <p class="derivation">{@html renderStrongsMarkup(strongEntry.derivation)}</p>
                   </div>
                 {/if}
               </div>
@@ -1175,6 +1217,31 @@
     line-height: 1.8;
     color: #ccc;
     margin: 0;
+  }
+
+  /* Scripture reference links rendered inside Strong's definitions */
+  :global(.scripture-ref) {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: var(--color-primary, #4a90e2);
+    text-decoration: underline;
+    cursor: pointer;
+    display: inline;
+  }
+
+  :global(.scripture-ref:hover) {
+    opacity: 0.8;
+  }
+
+  /* Indented numbered items: __1. __2. */
+  :global(.strongs-item) {
+    display: inline-block;
+    font-weight: 600;
+    margin-right: 2px;
   }
 
   .occurrences-view,
