@@ -165,25 +165,38 @@ export async function lookupStrongs(strongsId: string): Promise<LexiconEntry | n
       const store = tx.objectStore(tableName);
       const request = store.get(strongsId);
       
+      const toEntry = (row: any): LexiconEntry => ({
+        strongs: row.id,
+        lemma: row.lemma,
+        transliteration: row.transliteration,
+        definition: row.definition,
+        shortDefinition: row.shortDefinition,
+        partOfSpeech: row.partOfSpeech,
+        language: row.language,
+        derivation: row.derivation,
+        kjvUsage: row.kjvUsage,
+      });
+
       request.onsuccess = () => {
         const row = request.result;
         if (row) {
-          resolve({
-            strongs: row.id,
-            lemma: row.lemma,
-            transliteration: row.transliteration,
-            definition: row.definition,
-            shortDefinition: row.shortDefinition,
-            partOfSpeech: row.partOfSpeech,
-            language: row.language,
-            derivation: row.derivation,
-            kjvUsage: row.kjvUsage
-          });
+          resolve(toEntry(row));
         } else {
-          resolve(null);
+          // Try zero-padded fallback: 'G976' → 'G0976'.
+          // The lexical pack stores Strong's keys zero-padded to 4 digits
+          // (e.g. 'G0976') but OpenGNT omits leading zeros (e.g. 'G976').
+          const m = strongsId.match(/^([GH])(\d+)$/);
+          if (m && m[2].length < 4) {
+            const padded = m[1] + m[2].padStart(4, '0');
+            const req2 = store.get(padded);
+            req2.onsuccess = () => resolve(req2.result ? toEntry(req2.result) : null);
+            req2.onerror = () => resolve(null);
+          } else {
+            resolve(null);
+          }
         }
       };
-      
+
       request.onerror = () => resolve(null);
     });
   } catch (error) {

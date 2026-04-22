@@ -598,15 +598,37 @@
     if (isIndexed) {
       const byIndex = verseMorphs.find((m) => m.word_index === clickedIndex);
       if (byIndex) {
-        morphStats.hits++;
-        morphStats.indexMatches++;
+        // Validate text — OSHB compound words like "בְּ/רֵאשִׁ֖ית" are stored as
+        // one entry at word_index=0 but Intl.Segmenter counts '/' as a word
+        // boundary, giving the second morpheme a visual index of 1. Guard: if
+        // the matched entry's text doesn't correspond to what was clicked, fall
+        // through so text-based fallbacks (especially Fallback 3's compound-
+        // morpheme split) can locate the correct entry.
+        const normClickedPrimary = normalizeForComparison(clickedText);
+        const normEntry = normalizeForComparison(byIndex.text ?? '');
+        const directOk = normEntry === normClickedPrimary;
+        const compoundOk =
+          !directOk &&
+          !!byIndex.text?.includes('/') &&
+          byIndex.text
+            .split('/')
+            .some((p) => normalizeForComparison(p) === normClickedPrimary);
+        if (directOk || compoundOk) {
+          morphStats.hits++;
+          morphStats.indexMatches++;
+          if (DEBUG_MORPHOLOGY) {
+            console.log(
+              `✅ Morphology match by word_index: ${clickedIndex}`,
+              byIndex,
+            );
+          }
+          return byIndex;
+        }
         if (DEBUG_MORPHOLOGY) {
           console.log(
-            `✅ Morphology match by word_index: ${clickedIndex}`,
-            byIndex,
+            `⚠️ word_index ${clickedIndex} text mismatch: entry="${byIndex.text}" clicked="${clickedText}" — falling through to text fallbacks`,
           );
         }
-        return byIndex;
       }
     }
 
@@ -701,6 +723,7 @@
       const segments = Array.from(segmenter.segment(verseText));
 
       let wordIndex = 0;
+      let lastWordSeg: { index: number; text: string } | null = null;
 
       for (const segment of segments as any[]) {
         const segmentStart = segment.index;
@@ -708,16 +731,20 @@
 
         // Check if click is within this segment
         if (clickOffset >= segmentStart && clickOffset < segmentEnd) {
-          // Only count actual words (not whitespace/punctuation)
           if (segment.isWordLike) {
             return { index: wordIndex, text: segment.segment.normalize("NFC") };
           } else {
-            return null;
+            // Click landed on '/', punctuation, or cantillation — return the
+            // nearest preceding word-like segment. Handles OSHB prefix
+            // separator clicks and avoids spurious "❌ Could not determine
+            // clicked word" messages in Hebrew/Greek text.
+            return lastWordSeg;
           }
         }
 
         // Count word index for word-like segments
         if (segment.isWordLike) {
+          lastWordSeg = { index: wordIndex, text: segment.segment.normalize("NFC") };
           wordIndex++;
         }
       }
