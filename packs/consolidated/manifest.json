@@ -8,15 +8,15 @@
       "type": "translation",
       "name": "Ancient Languages Pack",
       "description": "Hebrew, Greek NT (Byzantine, TR), LXX with morphology",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 70373376,
-      "sizeMB": 67.11,
-      "sha256": "5767f5aa12754262d14e89d586aeaa18baafbfda0d9d9c02d4acdec07bfec01a",
+      "size": 107347968,
+      "sizeMB": 102.38,
+      "sha256": "be22e4dab19041d314b56fbfe0579ce65828aa254711a1d3314eb83e0b94f616",
       "dependencies": [],
       "downloadUrl": "/api/packs/ancient-languages.sqlite",
-      "createdAt": "2026-01-21T00:22:08.621Z"
+      "createdAt": "2026-04-21T00:00:00.000Z"
     },
     {
       "id": "bsb-audio-pt1",

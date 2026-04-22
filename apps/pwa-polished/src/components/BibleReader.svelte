@@ -1007,14 +1007,13 @@
       const store = transaction.objectStore("morphology");
       const index = store.index("verse_ref");
 
-      // Map display translation IDs to the morphology pack's internal ID.
-      // opengnt-morphology.sqlite stores all NT morphology under 'OGNT'.
-      // ancient-languages.sqlite uses lowercase IDs — normalise to uppercase for the alias lookup.
+      // Normalise the display translation ID to match what ancient-languages.sqlite
+      // stores in its words table (always lowercase).
+      // e.g. 'BYZ' → 'byz', 'HEBREW-OSHB' → 'hebrew-oshb'
       const MORPH_ID_ALIAS: Record<string, string> = {
-        BYZ: 'OGNT', TR: 'OGNT', SBLGNT: 'OGNT',
-        byz: 'byz', tr: 'tr', lxx: 'lxx', 'hebrew-oshb': 'hebrew-oshb',
+        SBLGNT: 'sblgnt',
       };
-      const morphTranslation = MORPH_ID_ALIAS[translation] ?? translation;
+      const morphTranslation = MORPH_ID_ALIAS[translation] ?? translation.toLowerCase();
 
       // Query for all verses in this chapter (verse 1-999)
       const range = IDBKeyRange.bound(
@@ -1787,25 +1786,22 @@
         isIndexedPack,
       );
 
-      if (morph) {
-        // Found morphology - set up for toast/modal
-        selectedText = clickInfo.text;
-        selectedMorphology = morph;
+      // Always show toast — same as English words.
+      // Morphology may be null (pack not installed / not yet imported); the
+      // user can still Highlight, Search, Notes, etc.
+      selectedText = clickInfo.text;
+      selectedMorphology = morph;
+      selectedVerseNumber = verseNumInt;
 
-        // Create a pseudo-range for highlighting (approximate)
-        const selection = window.getSelection();
-        if (selection) {
-          selection.removeAllRanges();
-        }
-
-        showToastAt(x, y);
-      } else {
-        // No morphology found
-        if (DEBUG_MORPHOLOGY) {
-          console.log("ℹ️ No morphology data available for this word");
-        }
+      if (!morph && DEBUG_MORPHOLOGY) {
+        console.log("ℹ️ No morphology data available for this word");
       }
 
+      // Clear any browser text selection
+      const selection = window.getSelection();
+      if (selection) selection.removeAllRanges();
+
+      showToastAt(x, y);
       return;
     }
 
