@@ -469,13 +469,18 @@ export async function importPackFromSQLite(file: File): Promise<void> {
               book: book as string,
               chapter: chapter as number,
               verse: verse as number,
+              // Canonical field names (DBMorphology interface)
+              word_index: (wordOrder as number) - 1, // convert 1-based word_order to 0-based
+              morph_code: morphCode as string,
+              gloss_en: gloss as string | undefined,
+              // Legacy field names kept for backward compat with existing IDB records
               wordPosition: wordOrder as number,
+              parsing: morphCode as string,
+              gloss: gloss as string | undefined,
               text: text as string,
               lemma: lemma as string,
               strongsId: strongs as string | undefined,
-              gloss: gloss as string | undefined,
               transliteration: transliteration as string | undefined,
-              parsing: morphCode as string,
               language
             };
           });

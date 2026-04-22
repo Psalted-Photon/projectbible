@@ -6,7 +6,7 @@
     englishLexicalService,
     type WordInfo,
   } from "../../../../packages/core/src/search/englishLexicalService";
-  import { lookupEnglishWord } from "../adapters/lexicon-lookup.js";
+  import { lookupEnglishWord, lookupStrongs } from "../adapters/lexicon-lookup.js";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
 
   // Subscribe to store instead of using props
@@ -106,9 +106,24 @@
       }
       
       if (strongsId) {
-        // Direct Strong's lookup for biblical languages
-        strongEntry = await lexiconStore.getStrong(strongsId);
-        if (!strongEntry) {
+        // Use lookupStrongs which queries the correct greek_strongs_entries /
+        // hebrew_strongs_entries stores (lexiconStore.getStrong queries the
+        // empty legacy 'strongs_entries' store).
+        const result = await lookupStrongs(strongsId);
+        if (result) {
+          // Map LexiconEntry shape to StrongEntry shape the template expects
+          strongEntry = {
+            id: strongsId,
+            lemma: result.lemma ?? '',
+            transliteration: result.transliteration ?? '',
+            definition: result.definition ?? '',
+            shortDefinition: result.shortDefinition ?? '',
+            partOfSpeech: result.partOfSpeech ?? '',
+            language: (result.language ?? 'greek') as 'greek' | 'hebrew' | 'aramaic',
+            derivation: result.derivation,
+            kjvUsage: result.kjvUsage,
+          } as StrongEntry;
+        } else {
           error = `Strong's ${strongsId} not found in lexicon`;
         }
       } else if (selectedText) {
@@ -246,11 +261,26 @@
   }
 
   async function loadStrongsEntry(strongsNum: string) {
-    // Clear morphology data and load the Strong's entry
-    morphologyData = null;
-    strongsId = strongsNum;
-    selectedText = "";
-    await loadLexicalData();
+    loading = true;
+    error = "";
+    strongEntry = null;
+    const result = await lookupStrongs(strongsNum);
+    if (result) {
+      strongEntry = {
+        id: strongsNum,
+        lemma: result.lemma ?? '',
+        transliteration: result.transliteration ?? '',
+        definition: result.definition ?? '',
+        shortDefinition: result.shortDefinition ?? '',
+        partOfSpeech: result.partOfSpeech ?? '',
+        language: (result.language ?? 'greek') as 'greek' | 'hebrew' | 'aramaic',
+        derivation: result.derivation,
+        kjvUsage: result.kjvUsage,
+      } as StrongEntry;
+    } else {
+      error = `Strong's ${strongsNum} not found in lexicon`;
+    }
+    loading = false;
   }
 
   function getLanguageColor(lang: string): string {
@@ -346,7 +376,7 @@
                 {#if morphologyData.lemma}
                   <dt>Lemma:</dt>
                   <dd class="morph-lemma" dir={morphologyData.language === 'hebrew' ? 'rtl' : 'ltr'}>
-                    {#if morphologyData.lemma && !/^\d+$/.test(morphologyData.lemma)}
+                    {#if morphologyData.lemma && !/^\d+$/.test(morphologyData.lemma) && !/^[a-z]\/\d/.test(morphologyData.lemma)}
                       {morphologyData.lemma}
                     {:else}
                       {morphologyData.text}
@@ -376,16 +406,14 @@
                   </dd>
                 {/if}
 
-                <dt>English Gloss:</dt>
-                {#if morphologyData.gloss_en}
-                  <dd class="gloss">{morphologyData.gloss_en}</dd>
-                {:else}
-                  <dd class="missing-data">Not available in legacy pack</dd>
+                {#if (morphologyData as any).gloss_en || (morphologyData as any).gloss}
+                  <dt>English Gloss:</dt>
+                  <dd class="gloss">{(morphologyData as any).gloss_en ?? (morphologyData as any).gloss}</dd>
                 {/if}
 
-                {#if morphologyData.morph_code}
+                {#if (morphologyData as any).morph_code || (morphologyData as any).parsing}
                   <dt>Parsing:</dt>
-                  <dd class="parsing">{morphologyData.morph_code}</dd>
+                  <dd class="parsing">{(morphologyData as any).morph_code ?? (morphologyData as any).parsing}</dd>
                 {/if}
 
                 <dt>Language:</dt>
