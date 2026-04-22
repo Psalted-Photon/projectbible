@@ -702,12 +702,38 @@
     clickX: number,
     clickY: number,
     verseText: string,
+    verseTextEl?: Element,
   ): { index: number; text: string } | null {
     // Get the character position from click coordinates
     const range = document.caretRangeFromPoint(clickX, clickY);
     if (!range) return null;
 
-    const clickOffset = range.startOffset;
+    // Compute the absolute character offset within the full verse text string.
+    // range.startOffset is relative to range.startContainer (one text node),
+    // NOT to the full verse text. If any hover span was not properly unwrapped
+    // it splits the text into multiple nodes and startOffset becomes wrong
+    // (e.g. offset 3 within the span's text node → always resolves to word 0).
+    // We fix this by walking all text nodes inside the verse-text element with
+    // a TreeWalker and summing lengths until we reach the caret's node.
+    let clickOffset: number;
+    if (verseTextEl && range.startContainer.nodeType === Node.TEXT_NODE) {
+      let abs = 0;
+      let found = false;
+      const walker = document.createTreeWalker(verseTextEl, NodeFilter.SHOW_TEXT);
+      let node: Node | null = walker.nextNode();
+      while (node) {
+        if (node === range.startContainer) {
+          abs += range.startOffset;
+          found = true;
+          break;
+        }
+        abs += (node.textContent || "").length;
+        node = walker.nextNode();
+      }
+      clickOffset = found ? abs : range.startOffset;
+    } else {
+      clickOffset = range.startOffset;
+    }
 
     // Segment verse text into words
     const hasSegmenter = typeof Intl !== "undefined" && "Segmenter" in Intl;
@@ -1705,14 +1731,25 @@
     hasMoved = false;
   }
 
+  /** Fully unwrap the hover span from the DOM and null the reference. */
+  function clearHoverHighlight() {
+    if (!hoveredWordElement) return;
+    const parent = hoveredWordElement.parentNode;
+    while (hoveredWordElement.firstChild) {
+      parent?.insertBefore(hoveredWordElement.firstChild, hoveredWordElement);
+    }
+    parent?.removeChild(hoveredWordElement);
+    parent?.normalize(); // merge the text nodes back into one
+    hoveredWordElement = null;
+  }
+
   function handleMouseMove(e: MouseEvent) {
     const target = e.target as HTMLElement;
 
-    // Clear any previous hover
-    if (hoveredWordElement) {
-      hoveredWordElement.classList.remove("word-hover");
-      hoveredWordElement = null;
-    }
+    // Clear any previous hover — must fully unwrap the span so the DOM text
+    // nodes are merged back. Leaving orphan spans splits the text node and
+    // corrupts caretRangeFromPoint offsets on the next click.
+    clearHoverHighlight();
 
     // Don't hover when dragging or when toast is open
     if (isDragging || showToast) return;
@@ -1823,7 +1860,7 @@
       if (!verseNumInt) return;
 
       const fullVerseText = verseText.textContent || "";
-      const clickInfo = getClickWordInfo(x, y, fullVerseText);
+      const clickInfo = getClickWordInfo(x, y, fullVerseText, verseText);
 
       if (!clickInfo) {
         if (DEBUG_MORPHOLOGY) {
@@ -2185,11 +2222,8 @@
   }
 
   function showToastAt(x: number, y: number) {
-    // Clear any hover highlight
-    if (hoveredWordElement) {
-      hoveredWordElement.classList.remove("word-hover");
-      hoveredWordElement = null;
-    }
+    // Clear any hover highlight — full unwrap required (see clearHoverHighlight)
+    clearHoverHighlight();
 
     // Position toast above the selection to avoid covering the word
     const toastHeight = 90; // Smaller toast now
