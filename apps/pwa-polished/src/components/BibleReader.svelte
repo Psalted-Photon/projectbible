@@ -1888,9 +1888,45 @@
         console.log("ℹ️ No morphology data available for this word");
       }
 
-      // Clear any browser text selection
-      const selection = window.getSelection();
-      if (selection) selection.removeAllRanges();
+      // Build a DOM Range for the clicked GH word so bumper handles,
+      // word-level highlighting and dragging work identically to English.
+      // getClickWordInfo already called caretRangeFromPoint internally;
+      // calling it again here is safe — same coords, clean DOM state.
+      const ghCaret = document.caretRangeFromPoint(x, y);
+      if (ghCaret) {
+        let ghTextNode: Node = ghCaret.startContainer;
+        if (ghTextNode.nodeType !== Node.TEXT_NODE) {
+          const ghWalker = document.createTreeWalker(
+            ghTextNode,
+            NodeFilter.SHOW_TEXT,
+            null,
+          );
+          const firstGhText = ghWalker.nextNode();
+          if (firstGhText) ghTextNode = firstGhText;
+        }
+        if (ghTextNode.nodeType === Node.TEXT_NODE) {
+          const ghNodeText = ghTextNode.textContent || "";
+          const ghBounds = getWordBounds(ghNodeText, ghCaret.startOffset);
+          if (ghBounds) {
+            try {
+              const ghRange = document.createRange();
+              ghRange.setStart(ghTextNode, ghBounds.start);
+              ghRange.setEnd(ghTextNode, ghBounds.end);
+              selectionRange = ghRange;
+              highlightSelection(ghRange, selectionMode);
+            } catch (ghErr) {
+              console.error("GH range creation failed:", ghErr);
+            }
+          }
+        }
+      }
+
+      // Clear any residual browser text selection (highlightSelection adds
+      // its own selection via addRange, so only clear if no range was built).
+      if (!selectionRange) {
+        const selection = window.getSelection();
+        if (selection) selection.removeAllRanges();
+      }
 
       showToastAt(x, y);
       return;
@@ -2016,6 +2052,18 @@
         const lastRect = rects[rects.length - 1];
         const containerRect = textContainer.getBoundingClientRect();
 
+        // For RTL text (Hebrew), the visual "left" handle is the reading-end
+        // of the word and the visual "right" handle is the reading-start.
+        // Swap the drag-edge assignments so dragging toward reading-start
+        // always extends the selection backward and vice-versa.
+        const isRTL =
+          getComputedStyle(textContainer as Element).direction === "rtl" ||
+          currentTranslation === "hebrew-oshb" ||
+          currentTranslation === "wlc";
+
+        const startEdge = isRTL ? ("right" as const) : ("left" as const);
+        const endEdge = isRTL ? ("left" as const) : ("right" as const);
+
         // Left handle at start of selection
         const leftHandle = document.createElement("div");
         leftHandle.className = "drag-handle-float left";
@@ -2023,10 +2071,10 @@
         leftHandle.style.left = `${firstRect.left - containerRect.left}px`;
         leftHandle.style.top = `${firstRect.top - containerRect.top + textContainer.scrollTop}px`;
         leftHandle.style.height = `${firstRect.height}px`;
-        leftHandle.addEventListener("mousedown", (e) => startDrag(e, "left"));
+        leftHandle.addEventListener("mousedown", (e) => startDrag(e, startEdge));
         leftHandle.addEventListener(
           "touchstart",
-          (e) => startDragTouch(e, "left"),
+          (e) => startDragTouch(e, startEdge),
           { passive: false },
         );
 
@@ -2037,10 +2085,10 @@
         rightHandle.style.left = `${lastRect.right - containerRect.left}px`;
         rightHandle.style.top = `${lastRect.top - containerRect.top + textContainer.scrollTop}px`;
         rightHandle.style.height = `${lastRect.height}px`;
-        rightHandle.addEventListener("mousedown", (e) => startDrag(e, "right"));
+        rightHandle.addEventListener("mousedown", (e) => startDrag(e, endEdge));
         rightHandle.addEventListener(
           "touchstart",
-          (e) => startDragTouch(e, "right"),
+          (e) => startDragTouch(e, endEdge),
           { passive: false },
         );
 
