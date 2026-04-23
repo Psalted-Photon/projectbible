@@ -44,6 +44,12 @@
   let occurrencesLoading = false;
   let occurrencesLoaded = false;
 
+  // Inflection forms state
+  type FormEntry = { form: string; morphCode: string; count: number };
+  let formsData: FormEntry[] = [];
+  let formsLoading = false;
+  let formsLoaded = false;
+
   onMount(() => {
     lexiconStore = new IndexedDBLexiconStore();
   });
@@ -71,6 +77,8 @@
     localLexicalEntries = null;
     occurrences = [];
     occurrencesLoaded = false;
+    formsData = [];
+    formsLoaded = false;
 
     try {
       // Check if we already have lexical entries from the new lookup system
@@ -135,6 +143,7 @@
             language: (result.language ?? 'greek') as 'greek' | 'hebrew' | 'aramaic',
             derivation: result.derivation,
             kjvUsage: result.kjvUsage,
+            pronunciation: result.phonetic ? { phonetic: result.phonetic } : undefined,
           } as StrongEntry;
         } else {
           error = `Strong's ${strongsId} not found in lexicon`;
@@ -349,6 +358,7 @@
         language: (result.language ?? 'greek') as 'greek' | 'hebrew' | 'aramaic',
         derivation: result.derivation,
         kjvUsage: result.kjvUsage,
+        pronunciation: result.phonetic ? { phonetic: result.phonetic } : undefined,
       } as StrongEntry;
     } else {
       error = `Strong's ${strongsNum} not found in lexicon`;
@@ -359,6 +369,57 @@
   // Trigger occurrence load when user switches to that tab
   $: if (activeTab === 'occurrences' && strongEntry && !occurrencesLoaded && !occurrencesLoading) {
     loadOccurrences(strongEntry.id);
+  }
+
+  // Trigger inflection forms load when definition tab is active with a strong entry
+  $: if (activeTab === 'definition' && strongEntry && !formsLoaded && !formsLoading) {
+    loadForms(strongEntry.id);
+  }
+
+  async function loadForms(id: string) {
+    if (formsLoaded) return;
+    formsLoading = true;
+    try {
+      const db = await openDB();
+      const raw = await new Promise<{form: string; morphCode: string}[]>((resolve, reject) => {
+        const tx = db.transaction('morphology', 'readonly');
+        const store = tx.objectStore('morphology');
+        const indexName = store.indexNames.contains('strongsId') ? 'strongsId' : 'by_strongs';
+        const index = store.index(indexName);
+        const found: {form: string; morphCode: string}[] = [];
+        const req = index.openCursor(IDBKeyRange.only(id));
+        req.onsuccess = (e) => {
+          const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+          if (cursor) {
+            const m = cursor.value;
+            const form = (m.text ?? m.word ?? '').trim();
+            const morphCode = (m.morph_code ?? m.parsing ?? '').trim();
+            if (form) found.push({ form, morphCode });
+            cursor.continue();
+          } else {
+            resolve(found);
+          }
+        };
+        req.onerror = () => reject(req.error);
+      });
+      // Group by form + morphCode, count occurrences
+      const formMap = new Map<string, FormEntry>();
+      for (const { form, morphCode } of raw) {
+        const key = `${form}|${morphCode}`;
+        const existing = formMap.get(key);
+        if (existing) {
+          existing.count++;
+        } else {
+          formMap.set(key, { form, morphCode, count: 1 });
+        }
+      }
+      formsData = [...formMap.values()].sort((a, b) => b.count - a.count);
+    } catch (err) {
+      console.error('Failed to load inflection forms:', err);
+    } finally {
+      formsLoading = false;
+      formsLoaded = true;
+    }
   }
 
   function getLanguageColor(lang: string): string {
@@ -839,9 +900,9 @@
                       <dd>{strongEntry.transliteration}</dd>
                     {/if}
 
-                    {#if strongEntry.pronunciation}
+                    {#if strongEntry.pronunciation?.phonetic}
                       <dt>Pronunciation:</dt>
-                      <dd>{strongEntry.pronunciation}</dd>
+                      <dd class="phonetic">{strongEntry.pronunciation.phonetic}</dd>
                     {/if}
 
                     <dt>Language:</dt>
@@ -891,6 +952,31 @@
                   <div class="info-section">
                     <h3>Derivation</h3>
                     <p class="derivation">{@html renderStrongsMarkup(strongEntry.derivation)}</p>
+                  </div>
+                {/if}
+
+                {#if formsData.length > 0}
+                  <div class="info-section">
+                    <h3>Inflection Forms</h3>
+                    <table class="forms-table">
+                      <thead>
+                        <tr><th>Form</th><th>Parsing</th><th>×</th></tr>
+                      </thead>
+                      <tbody>
+                        {#each formsData as f}
+                          <tr>
+                            <td class="form-text">{f.form}</td>
+                            <td class="form-parse">{strongEntry?.language === 'hebrew' || strongEntry?.language === 'aramaic' ? expandOshbCode(f.morphCode) : expandRmacCode(f.morphCode)}</td>
+                            <td class="form-count">{f.count}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                {:else if formsLoading}
+                  <div class="info-section">
+                    <h3>Inflection Forms</h3>
+                    <p class="hint">Loading…</p>
                   </div>
                 {/if}
               </div>
@@ -1391,6 +1477,53 @@
   .occ-ref:hover {
     background: var(--color-primary, #4a90e2);
     color: #fff;
+  }
+
+  .phonetic {
+    font-family: monospace;
+    font-size: 0.95em;
+    color: var(--text-muted, #aaa);
+    letter-spacing: 0.03em;
+  }
+
+  .forms-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+  }
+
+  .forms-table th {
+    text-align: left;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-color, #333);
+    color: var(--text-muted, #888);
+    font-weight: 600;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .forms-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border-color, #2a2a2a);
+    vertical-align: middle;
+  }
+
+  .form-text {
+    font-family: 'Gentium Plus', 'SBL Greek', serif;
+    font-size: 1.05em;
+  }
+
+  .form-parse {
+    color: var(--text-secondary, #ccc);
+    font-size: 0.85em;
+  }
+
+  .form-count {
+    text-align: right;
+    color: var(--text-muted, #888);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .related-view:has(.synonyms-section) {

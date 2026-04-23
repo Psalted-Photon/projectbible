@@ -1,157 +1,177 @@
-{
-  "manifestVersion": "1.0.0",
-  "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-04-03T17:13:02.586Z",
-  "packs": [
-    {
-      "id": "ancient-languages",
-      "type": "translation",
-      "name": "Ancient Languages Pack",
-      "description": "Hebrew, Greek NT (Byzantine, TR), LXX with morphology",
-      "version": "1.1.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 107347968,
-      "sizeMB": 102.38,
-      "sha256": "be22e4dab19041d314b56fbfe0579ce65828aa254711a1d3314eb83e0b94f616",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/ancient-languages.sqlite",
-      "createdAt": "2026-04-21T00:00:00.000Z"
-    },
-    {
-      "id": "bsb-audio-pt1",
-      "type": "audio",
-      "name": "BSB Audio Part 1",
-      "description": "Genesis through Psalms audio narration",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 1890091008,
-      "sizeMB": 1802.53,
-      "sha256": "b8bd9620e1474c3ff9edb6a9ebcf7d8dc959546b2ded28059496cd99d6db1baa",
-      "dependencies": [],
-      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/bsb-audio-pt1.sqlite",
-      "createdAt": "2026-01-21T00:17:19.752Z"
-    },
-    {
-      "id": "bsb-audio-pt2",
-      "type": "audio",
-      "name": "BSB Audio Part 2",
-      "description": "Proverbs through Revelation audio narration",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 1776627712,
-      "sizeMB": 1694.32,
-      "sha256": "41f31fd18ee1d429f209fc0626ea1658e6c6bd5da55bcf265a3e57551944bce9",
-      "dependencies": [],
-      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/bsb-audio-pt2.sqlite",
-      "createdAt": "2026-01-21T00:17:49.803Z"
-    },
-    {
-      "id": "commentaries",
-      "type": "study",
-      "name": "Multi-Author Commentaries",
-      "description": "Verse-by-verse Bible commentaries from multiple sources",
-      "version": "1.1.0",
-      "schemaVersion": "1.0",
-      "minAppVersion": "1.0.0",
-      "size": 196091904,
-      "sizeMB": 187.01,
-      "sha256": "328b243bb453830c052a1a9a5581545a506bb01433b5c93163c3400a87199499",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-04-03T17:13:06.141Z"
-    },
-    {
-      "id": "dictionary-en",
-      "type": "dictionary",
-      "name": "English Dictionary Pack",
-      "description": "English dictionary definitions and word data",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 40226816,
-      "sizeMB": 38.36,
-      "sha256": "87a95b4ac5021b57e7ff9ce6af317154c02f89230fb121359aafeaaa2604d6d2",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-04-03T17:13:06.035Z"
-    },
-    {
-      "id": "lexical",
-      "type": "lexicon",
-      "name": "Lexical Resources Pack",
-      "description": "Strong's dictionaries + English wordlist/thesaurus/grammar",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 383201280,
-      "sizeMB": 365.45,
-      "sha256": "c29a238f55c9609e32a568b198994d799ebd3cc2ee831d5e676dc4b5d07b31d5",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/lexical.sqlite",
-      "createdAt": "2026-01-20T23:41:45.543Z"
-    },
-    {
-      "id": "study-tools",
-      "type": "study",
-      "name": "Study Tools Pack",
-      "description": "Maps, places, chronological ordering, cross-references (full TSK — all 66 books)",
-      "version": "1.1.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 549224448,
-      "sizeMB": 523.78,
-      "sha256": "46cb9af7536bfe43d8799a6442fc1fa71dbe8c983faa873bda940e1d74cb763b",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/study-tools.sqlite",
-      "createdAt": "2026-04-09T00:00:00.000Z"
-    },
-    {
-      "id": "translations",
-      "type": "translation",
-      "name": "English Translations Pack",
-      "description": "KJV, WEB, BSB, NET, LXX2012 English translations",
-      "version": "1.0.1",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 36085760,
-      "sizeMB": 34.41,
-      "sha256": "0b7ad11beb262af87a39435eb2700523b5d86cc87f12fef9cae50396fa0cf9bb",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/translations.sqlite",
-      "createdAt": "2026-04-03T17:11:56.191Z"
-    },
-    {
-      "id": "tsk-references",
-      "type": "study",
-      "name": "TSK References",
-      "description": "Treasury of Scripture Knowledge — 47,800+ cross-reference entries by keyword, all 66 books",
-      "version": "1.0.1",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 6516736,
-      "sizeMB": 6.21,
-      "sha256": "f4f492fd23fdb74d61d30345ca5650444b3fbc9b02a8602ccd04f26b8eb8fb46",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-04-09T00:00:00.000Z"
-    },
-    {
-      "id": "section-headings",
-      "type": "headings",
-      "name": "Section Headings",
-      "description": "Pericope titles for all 66 books — works with any installed translation",
-      "version": "1.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 299008,
-      "sizeMB": 0.29,
-      "sha256": "8871d350ab99927b16852e80abe174cd732253edae1dfe03a8ea727d8f2e2948",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/section-headings.sqlite",
-      "createdAt": "2026-04-07T00:00:00.000Z"
-    }
-  ]
+﻿{
+    "manifestVersion":  "1.0.0",
+    "releaseTag":  "packs-v1.0.0",
+    "createdAt":  "2026-04-03T17:13:02.586Z",
+    "packs":  [
+                  {
+                      "id":  "ancient-languages",
+                      "type":  "translation",
+                      "name":  "Ancient Languages Pack",
+                      "description":  "Hebrew, Greek NT (Byzantine, TR), LXX with morphology",
+                      "version":  "1.1.0",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  107347968,
+                      "sizeMB":  102.38,
+                      "sha256":  "be22e4dab19041d314b56fbfe0579ce65828aa254711a1d3314eb83e0b94f616",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "/api/packs/ancient-languages.sqlite",
+                      "createdAt":  "2026-04-21T00:00:00.000Z"
+                  },
+                  {
+                      "id":  "bsb-audio-pt1",
+                      "type":  "audio",
+                      "name":  "BSB Audio Part 1",
+                      "description":  "Genesis through Psalms audio narration",
+                      "version":  "1.0.0",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  1890091008,
+                      "sizeMB":  1802.53,
+                      "sha256":  "b8bd9620e1474c3ff9edb6a9ebcf7d8dc959546b2ded28059496cd99d6db1baa",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/bsb-audio-pt1.sqlite",
+                      "createdAt":  "2026-01-21T00:17:19.752Z"
+                  },
+                  {
+                      "id":  "bsb-audio-pt2",
+                      "type":  "audio",
+                      "name":  "BSB Audio Part 2",
+                      "description":  "Proverbs through Revelation audio narration",
+                      "version":  "1.0.0",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  1776627712,
+                      "sizeMB":  1694.32,
+                      "sha256":  "41f31fd18ee1d429f209fc0626ea1658e6c6bd5da55bcf265a3e57551944bce9",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/bsb-audio-pt2.sqlite",
+                      "createdAt":  "2026-01-21T00:17:49.803Z"
+                  },
+                  {
+                      "id":  "commentaries",
+                      "type":  "study",
+                      "name":  "Multi-Author Commentaries",
+                      "description":  "Verse-by-verse Bible commentaries from multiple sources",
+                      "version":  "1.1.0",
+                      "schemaVersion":  "1.0",
+                      "minAppVersion":  "1.0.0",
+                      "size":  196091904,
+                      "sizeMB":  187.01,
+                      "sha256":  "328b243bb453830c052a1a9a5581545a506bb01433b5c93163c3400a87199499",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "/api/packs/commentaries.sqlite",
+                      "createdAt":  "2026-04-03T17:13:06.141Z"
+                  },
+                  {
+                      "id":  "dictionary-en",
+                      "type":  "dictionary",
+                      "name":  "English Dictionary Pack",
+                      "description":  "English dictionary definitions and word data",
+                      "version":  "1.0.0",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  40226816,
+                      "sizeMB":  38.36,
+                      "sha256":  "87a95b4ac5021b57e7ff9ce6af317154c02f89230fb121359aafeaaa2604d6d2",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "/api/packs/dictionary-en.sqlite",
+                      "createdAt":  "2026-04-03T17:13:06.035Z"
+                  },
+                  {
+                      "id":  "lexical",
+                      "type":  "lexicon",
+                      "name":  "Lexical Resources Pack",
+                      "description":  "Strong\u0027s dictionaries + English wordlist/thesaurus/grammar",
+                      "version":  "1.1.0",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  383152128,
+                      "sizeMB":  365.35,
+                      "sha256":  "9300e283bff564f8975b54ebc47ea578951a2d496ce134187d8b9267c7bcc158",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "/api/packs/lexical.sqlite",
+                      "createdAt":  "2026-04-22T00:00:00.000Z"
+                  },
+                  {
+                      "id":  "study-tools",
+                      "type":  "study",
+                      "name":  "Study Tools Pack",
+                      "description":  "Maps, places, chronological ordering, cross-references (full TSK â€” all 66 books)",
+                      "version":  "1.1.0",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  549224448,
+                      "sizeMB":  523.78,
+                      "sha256":  "46cb9af7536bfe43d8799a6442fc1fa71dbe8c983faa873bda940e1d74cb763b",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "/api/packs/study-tools.sqlite",
+                      "createdAt":  "2026-04-09T00:00:00.000Z"
+                  },
+                  {
+                      "id":  "translations",
+                      "type":  "translation",
+                      "name":  "English Translations Pack",
+                      "description":  "KJV, WEB, BSB, NET, LXX2012 English translations",
+                      "version":  "1.0.1",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  36085760,
+                      "sizeMB":  34.41,
+                      "sha256":  "0b7ad11beb262af87a39435eb2700523b5d86cc87f12fef9cae50396fa0cf9bb",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "/api/packs/translations.sqlite",
+                      "createdAt":  "2026-04-03T17:11:56.191Z"
+                  },
+                  {
+                      "id":  "tsk-references",
+                      "type":  "study",
+                      "name":  "TSK References",
+                      "description":  "Treasury of Scripture Knowledge â€” 47,800+ cross-reference entries by keyword, all 66 books",
+                      "version":  "1.0.1",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  6516736,
+                      "sizeMB":  6.21,
+                      "sha256":  "f4f492fd23fdb74d61d30345ca5650444b3fbc9b02a8602ccd04f26b8eb8fb46",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "/api/packs/tsk-references.sqlite",
+                      "createdAt":  "2026-04-09T00:00:00.000Z"
+                  },
+                  {
+                      "id":  "section-headings",
+                      "type":  "headings",
+                      "name":  "Section Headings",
+                      "description":  "Pericope titles for all 66 books â€” works with any installed translation",
+                      "version":  "1.0",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  299008,
+                      "sizeMB":  0.29,
+                      "sha256":  "8871d350ab99927b16852e80abe174cd732253edae1dfe03a8ea727d8f2e2948",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "/api/packs/section-headings.sqlite",
+                      "createdAt":  "2026-04-07T00:00:00.000Z"
+                  }
+              ]
 }

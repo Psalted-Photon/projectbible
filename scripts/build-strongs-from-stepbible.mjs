@@ -20,12 +20,38 @@ const repoRoot = join(__dirname, '..');
 
 const GREEK_LEX = join(repoRoot, 'data-sources/stepbible/STEPBible-Data-master/Lexicons/TBESG - Translators Brief lexicon of Extended Strongs for Greek - STEPBible.org CC BY.txt');
 const HEBREW_LEX = join(repoRoot, 'data-sources/stepbible/STEPBible-Data-master/Lexicons/TBESH - Translators Brief lexicon of Extended Strongs for Hebrew - STEPBible.org CC BY.txt');
+const GREEK_XML  = join(repoRoot, 'data-sources/strongs/strongsgreek.xml');
 
 const GREEK_OUTPUT = join(repoRoot, 'packs/strongs-greek.sqlite');
 const HEBREW_OUTPUT = join(repoRoot, 'packs/strongs-hebrew.sqlite');
 
+/**
+ * Parse phonetic pronunciation strings from strongsgreek.xml.
+ * Returns a Map<strongsId, phonetic> e.g. 'G0976' → "bib'-los"
+ */
+function loadPhoneticMap() {
+  const phoneticMap = new Map();
+  if (!existsSync(GREEK_XML)) {
+    console.warn('⚠️  strongsgreek.xml not found – phonetic data skipped');
+    return phoneticMap;
+  }
+  const xml = readFileSync(GREEK_XML, 'utf8');
+  let currentStrongs = null;
+  for (const line of xml.split('\n')) {
+    const em = line.match(/entry strongs="(\d+)"/);
+    if (em) currentStrongs = 'G' + String(parseInt(em[1], 10)).padStart(4, '0');
+    const pm = line.match(/pronunciation strongs="([^"]+)"/);
+    if (pm && currentStrongs && !phoneticMap.has(currentStrongs)) {
+      phoneticMap.set(currentStrongs, pm[1]);
+    }
+  }
+  console.log(`✅ Loaded ${phoneticMap.size} phonetic entries from strongsgreek.xml`);
+  return phoneticMap;
+}
+
 // Parse STEPBible TSV lexicon
 function parseStepBibleLexicon(filePath, language) {
+  const phoneticMap = language === 'greek' ? loadPhoneticMap() : new Map();
   console.log(`📖 Parsing ${filePath}...`);
   
   const content = readFileSync(filePath, 'utf8');
@@ -76,7 +102,8 @@ function parseStepBibleLexicon(filePath, language) {
         language: language,
         derivation: '',
         kjvUsage: '',
-        occurrences: null
+        occurrences: null,
+        phonetic: phoneticMap.get(strongsId) || null
       });
     }
   }
@@ -106,6 +133,7 @@ function createStrongsPack(entries, outputPath, language) {
       id TEXT PRIMARY KEY,
       lemma TEXT NOT NULL,
       transliteration TEXT,
+      phonetic TEXT,
       definition TEXT NOT NULL,
       shortDefinition TEXT,
       partOfSpeech TEXT,
@@ -136,13 +164,13 @@ function createStrongsPack(entries, outputPath, language) {
   
   // Insert Strong's entries
   const insert = db.prepare(`
-    INSERT INTO strongs_entries (id, lemma, transliteration, definition, shortDefinition, partOfSpeech, language, derivation, kjvUsage, occurrences)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO strongs_entries (id, lemma, transliteration, phonetic, definition, shortDefinition, partOfSpeech, language, derivation, kjvUsage, occurrences)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
   const insertMany = db.transaction((entries) => {
     for (const e of entries) {
-      insert.run(e.id, e.lemma, e.transliteration, e.definition, e.shortDefinition, e.partOfSpeech, e.language, e.derivation, e.kjvUsage, e.occurrences);
+      insert.run(e.id, e.lemma, e.transliteration, e.phonetic || null, e.definition, e.shortDefinition, e.partOfSpeech, e.language, e.derivation, e.kjvUsage, e.occurrences);
     }
   });
   

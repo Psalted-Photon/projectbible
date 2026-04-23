@@ -909,14 +909,17 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // Import Greek Strong's entries
       if (tableNames.includes('greek_strongs_entries')) {
         console.log('Importing Greek Strong\'s entries...');
+        // Check if phonetic column exists (added in newer packs)
+        const greekCols = db.exec(`PRAGMA table_info(greek_strongs_entries)`);
+        const hasPhonetic = greekCols.length > 0 && greekCols[0].values.some((r: any[]) => r[1] === 'phonetic');
         const rows = db.exec(`
           SELECT id, lemma, transliteration, definition, shortDefinition, 
-                 partOfSpeech, language, derivation, kjvUsage
+                 partOfSpeech, language, derivation, kjvUsage${hasPhonetic ? ', phonetic' : ''}
           FROM greek_strongs_entries
         `);
         
         if (rows.length && rows[0].values.length) {
-          const data = rows[0].values.map(([id, lemma, trans, def, shortDef, pos, lang, deriv, kjv]) => ({
+          const data = rows[0].values.map(([id, lemma, trans, def, shortDef, pos, lang, deriv, kjv, phonetic]: any[]) => ({
             id: id as string,
             lemma: lemma as string,
             transliteration: trans as string | null,
@@ -925,7 +928,8 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             partOfSpeech: pos as string | null,
             language: lang as string | null,
             derivation: deriv as string | null,
-            kjvUsage: kjv as string | null
+            kjvUsage: kjv as string | null,
+            phonetic: hasPhonetic ? (phonetic as string | null) : null
           }));
           
           for (let i = 0; i < data.length; i += CHUNK_SIZE) {

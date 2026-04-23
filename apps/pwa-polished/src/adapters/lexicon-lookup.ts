@@ -39,6 +39,7 @@ export interface LexiconEntry {
   strongs?: string;
   lemma?: string;
   transliteration?: string;
+  phonetic?: string;
   definition?: string;
   shortDefinition?: string;
   partOfSpeech?: string;
@@ -169,6 +170,7 @@ export async function lookupStrongs(strongsId: string): Promise<LexiconEntry | n
         strongs: row.id,
         lemma: row.lemma,
         transliteration: row.transliteration,
+        phonetic: row.phonetic ?? undefined,
         definition: row.definition,
         shortDefinition: row.shortDefinition,
         partOfSpeech: row.partOfSpeech,
