@@ -11,6 +11,7 @@
   import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
   import { parseOsisRef } from "../lib/parseRefString";
+  import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../lib/morphologyExpander";
 
   // Subscribe to store instead of using props
   $: isOpen = $lexicalModalStore.isOpen;
@@ -453,8 +454,17 @@
                 {/if}
 
                 {#if (morphologyData as any).morph_code || (morphologyData as any).parsing}
+                  {@const _rawCode = (morphologyData as any).morph_code ?? (morphologyData as any).parsing}
+                  {@const _expanded = (morphologyData.language === 'hebrew' || morphologyData.language === 'aramaic')
+                    ? expandOshbCode(_rawCode)
+                    : expandRmacCode(_rawCode)}
                   <dt>Parsing:</dt>
-                  <dd class="parsing">{(morphologyData as any).morph_code ?? (morphologyData as any).parsing}</dd>
+                  <dd class="parsing">
+                    {_expanded || _rawCode}
+                    {#if _expanded && _expanded !== _rawCode}
+                      <span class="code-raw">({_rawCode})</span>
+                    {/if}
+                  </dd>
                 {/if}
 
                 <dt>Language:</dt>
@@ -771,7 +781,10 @@
 
                     {#if strongEntry.partOfSpeech}
                       <dt>Part of Speech:</dt>
-                      <dd>{strongEntry.partOfSpeech}</dd>
+                      <dd>
+                        {expandStepBiblePOS(strongEntry.partOfSpeech)}
+                        <span class="code-raw">({strongEntry.partOfSpeech})</span>
+                      </dd>
                     {/if}
                   </dl>
                 </div>
@@ -1144,6 +1157,14 @@
     font-family: monospace;
     font-size: 14px;
     color: #999;
+  }
+
+  .code-raw {
+    font-size: 0.8em;
+    color: var(--text-muted, #888);
+    margin-left: 0.3em;
+    font-family: monospace;
+    opacity: 0.7;
   }
 
   .strongs-link {
