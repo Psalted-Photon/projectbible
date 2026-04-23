@@ -12,6 +12,7 @@
   import { navigationStore } from "../stores/navigationStore";
   import { parseOsisRef } from "../lib/parseRefString";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../lib/morphologyExpander";
+  import { openDB } from "../adapters/db";
 
   // Subscribe to store instead of using props
   $: isOpen = $lexicalModalStore.isOpen;
@@ -36,6 +37,12 @@
   let loadingDefinition = false;
   let hasOfflineDefinitions = false;
   let localLexicalEntries: any = null;
+
+  // Occurrences tab state
+  type OccurrenceEntry = { book: string; chapter: number; verse: number; word: string; translationId: string };
+  let occurrences: OccurrenceEntry[] = [];
+  let occurrencesLoading = false;
+  let occurrencesLoaded = false;
 
   onMount(() => {
     lexiconStore = new IndexedDBLexiconStore();
@@ -62,6 +69,8 @@
     isEnglishWord = false;
     loadingDefinition = false;
     localLexicalEntries = null;
+    occurrences = [];
+    occurrencesLoaded = false;
 
     try {
       // Check if we already have lexical entries from the new lookup system
@@ -264,6 +273,66 @@
     }
   }
 
+  async function loadOccurrences(id: string) {
+    if (occurrencesLoaded) return;
+    occurrencesLoading = true;
+    try {
+      const db = await openDB();
+      const results = await new Promise<OccurrenceEntry[]>((resolve, reject) => {
+        const tx = db.transaction('morphology', 'readonly');
+        const store = tx.objectStore('morphology');
+        // Try both index names that may exist depending on DB version
+        const indexName = store.indexNames.contains('strongsId') ? 'strongsId' : 'by_strongs';
+        const fieldName = indexName === 'strongsId' ? id : id; // same value either way
+        const index = store.index(indexName);
+        const found: OccurrenceEntry[] = [];
+        const req = index.openCursor(IDBKeyRange.only(fieldName));
+        req.onsuccess = (e) => {
+          const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+          if (cursor) {
+            const m = cursor.value;
+            found.push({
+              book: m.book,
+              chapter: m.chapter,
+              verse: m.verse,
+              word: m.text ?? m.word ?? '',
+              translationId: m.translationId ?? m.translation_id ?? '',
+            });
+            cursor.continue();
+          } else {
+            resolve(found);
+          }
+        };
+        req.onerror = () => reject(req.error);
+      });
+      // Deduplicate by book+chapter+verse (multiple translations may have same verse)
+      const seen = new Set<string>();
+      occurrences = results.filter(o => {
+        const key = `${o.book}|${o.chapter}|${o.verse}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).sort((a, b) => {
+        // Sort by canonical Bible order using book name (approximated by string)
+        if (a.book !== b.book) return a.book < b.book ? -1 : 1;
+        if (a.chapter !== b.chapter) return a.chapter - b.chapter;
+        return a.verse - b.verse;
+      });
+    } catch (err) {
+      console.error('Failed to load occurrences:', err);
+    } finally {
+      occurrencesLoading = false;
+      occurrencesLoaded = true;
+    }
+  }
+
+  function handleOccurrenceClick(occ: OccurrenceEntry) {
+    const nav = get(navigationStore);
+    navigationStore.pushHistory({ ...nav });
+    navigationStore.navigateTo(occ.translationId || 'byz', occ.book, occ.chapter, occ.verse);
+    close();
+  }
+
   async function loadStrongsEntry(strongsNum: string) {
     loading = true;
     error = "";
@@ -285,6 +354,11 @@
       error = `Strong's ${strongsNum} not found in lexicon`;
     }
     loading = false;
+  }
+
+  // Trigger occurrence load when user switches to that tab
+  $: if (activeTab === 'occurrences' && strongEntry && !occurrencesLoaded && !occurrencesLoading) {
+    loadOccurrences(strongEntry.id);
   }
 
   function getLanguageColor(lang: string): string {
@@ -786,6 +860,11 @@
                         <span class="code-raw">({strongEntry.partOfSpeech})</span>
                       </dd>
                     {/if}
+
+                    {#if strongEntry.occurrences}
+                      <dt>Occurrences:</dt>
+                      <dd>{strongEntry.occurrences}× in the Bible</dd>
+                    {/if}
                   </dl>
                 </div>
 
@@ -817,10 +896,22 @@
               </div>
             {:else if activeTab === "occurrences"}
               <div class="occurrences-view">
-                <p class="coming-soon">Occurrence data coming soon...</p>
-                <p class="hint">
-                  This will show where this word appears in Scripture
-                </p>
+                {#if occurrencesLoading}
+                  <p class="hint">Loading occurrences…</p>
+                {:else if occurrences.length === 0 && occurrencesLoaded}
+                  <p class="coming-soon">No occurrences found in imported data.</p>
+                {:else if occurrences.length > 0}
+                  <p class="occ-count">{occurrences.length} occurrence{occurrences.length === 1 ? '' : 's'}</p>
+                  <div class="occ-list">
+                    {#each occurrences as occ}
+                      <button class="occ-ref" on:click={() => handleOccurrenceClick(occ)}>
+                        {occ.book} {occ.chapter}:{occ.verse}
+                      </button>
+                    {/each}
+                  </div>
+                {:else}
+                  <p class="hint">Loading…</p>
+                {/if}
               </div>
             {:else if activeTab === "related"}
               <div class="related-view">
@@ -1271,6 +1362,35 @@
     flex-direction: column;
     padding: 20px;
     gap: 16px;
+  }
+
+  .occ-count {
+    font-size: 13px;
+    color: var(--text-muted, #888);
+    margin: 0;
+  }
+
+  .occ-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .occ-ref {
+    background: none;
+    border: 1px solid var(--color-primary, #4a90e2);
+    border-radius: 4px;
+    color: var(--color-primary, #4a90e2);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 3px 8px;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+
+  .occ-ref:hover {
+    background: var(--color-primary, #4a90e2);
+    color: #fff;
   }
 
   .related-view:has(.synonyms-section) {
