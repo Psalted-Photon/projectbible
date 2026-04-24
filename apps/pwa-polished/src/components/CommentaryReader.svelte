@@ -52,6 +52,8 @@
     loading = true;
     error = "";
     lastScrolledVerseKey = ''; // reset so new chapter allows fresh scroll-to-verse
+    // Clear stale highlightedVerse so old verse doesn't drive scrollToVerse in new chapter
+    if (windowId) windowStore.updateContentState(windowId, { highlightedVerse: undefined });
     try {
       console.log(`📜 Loading commentary for ${book} ${chapter}, author: ${author || 'all'}`);
       
