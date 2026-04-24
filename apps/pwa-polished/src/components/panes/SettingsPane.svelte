@@ -30,6 +30,7 @@
   ];
   let savedMessage = false;
   let clearing = false;
+  let checkingUpdate = false;
 
   // Load settings on mount
   onMount(() => {
@@ -63,6 +64,27 @@
         resolve();
       }
     });
+  }
+
+  async function checkForUpdates() {
+    if (!('serviceWorker' in navigator)) {
+      alert('Service worker not supported in this browser.');
+      return;
+    }
+    checkingUpdate = true;
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration) {
+        await registration.update();
+      }
+      // Give the new SW time to download and activate (skipWaiting is true)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      window.location.reload();
+    } catch (err) {
+      console.error('Update check failed:', err);
+      alert('Could not check for updates. Try again later.');
+      checkingUpdate = false;
+    }
   }
 
   async function clearCacheAndReload() {
@@ -287,10 +309,18 @@
     <p class="section-description">
       Clear all cached data including packs, service workers, and databases. Use this if packs aren't installing or the app is stuck with old data.
     </p>
+    <button
+      class="check-update-button"
+      on:click={checkForUpdates}
+      disabled={checkingUpdate || clearing}
+    >
+      <span class="icon emoji">🔄</span>
+      <span class="text">{checkingUpdate ? 'Checking...' : 'Check for Updates'}</span>
+    </button>
     <button 
       class="clear-cache-button" 
       on:click={clearCacheAndReload}
-      disabled={clearing}
+      disabled={clearing || checkingUpdate}
     >
       <span class="icon emoji">🗑️</span>
       <span class="text">{clearing ? 'Clearing...' : 'Clear Cache & Reload'}</span>
@@ -527,6 +557,47 @@
     margin: 0 0 0.5rem 0;
     font-size: 1.1rem;
     color: #f0f0f0;
+  }
+
+  .check-update-button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+    background: linear-gradient(135deg, #1565c0 0%, #0288d1 100%);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(2, 136, 209, 0.3);
+  }
+
+  .check-update-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(2, 136, 209, 0.4);
+  }
+
+  .check-update-button:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  .check-update-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .check-update-button .icon {
+    font-size: 1.5rem;
+  }
+
+  .check-update-button .text {
+    flex: 1;
+    text-align: left;
   }
 
   .clear-cache-button {
