@@ -140,7 +140,10 @@
   // Commentary anchor verse-sync
   let verseObserver: IntersectionObserver | null = null;
   let anchorSyncDebounce: ReturnType<typeof setTimeout> | null = null;
-  const visibleVersePositions = new Map<number, number>(); // verse number → boundingRect.top
+  // Key: "book::chapter::verse" — prevents verse-number collisions across chapters in multi-chapter view
+  const visibleVersePositions = new Map<string, { book: string; chapter: number; verse: number; top: number }>();
+  // Cache of verse element → { book, chapter } resolved at observe-time (avoids repeated DOM walks)
+  const verseElInfo = new WeakMap<Element, { book: string; chapter: number }>();
   let lastAnchorVerse: number | null = null; // last verse pushed to commentary windows
   let anchorHighlightedElements: HTMLElement[] = []; // DOM elements with .comm-anchor-highlight
   let prevCommDrifted = false; // for detecting drift→sync transition
@@ -408,27 +411,34 @@
       lastNavigationKey,
     );
     if (textStore && navKey !== lastNavigationKey) {
-      console.log("🚀 Triggering loadChapter from reactive block");
+      // If the chapter is already loaded in the continuous-reading chapters array
+      // (e.g. because the user scrolled there and setScrollPosition updated the store),
+      // don't reload — just update lastNavigationKey so we don't trigger again.
+      const alreadyLoaded = chapters.some(
+        c => c.book === currentBook && c.chapter === currentChapter
+      );
 
-      // Check if translation changed and book might not exist (BEFORE updating lastNavigationKey)
+      // Capture previous translation BEFORE updating lastNavigationKey
       const prevTranslation = lastNavigationKey.split("-")[0];
-      const translationChanged =
-        prevTranslation && prevTranslation !== currentTranslation;
-
-      // Update lastNavigationKey AFTER checking previous value
       lastNavigationKey = navKey;
 
-      if (translationChanged) {
-        console.log(
-          `📚 Translation changed from ${prevTranslation} to ${currentTranslation}, verifying book exists...`,
-        );
-        // Capture scroll target before any async work clears it
-        const scrollVerse = $navigationStore.scrollTargetVerse ?? null;
-        // Verify the book exists in new translation, fallback if not
-        verifyAndLoadChapter(currentTranslation, currentBook, currentChapter, scrollVerse);
-      } else {
-        const scrollVerse = $navigationStore.scrollTargetVerse ?? null;
-        loadChapter(currentTranslation, currentBook, currentChapter, true, scrollVerse);
+      if (!alreadyLoaded) {
+        console.log("🚀 Triggering loadChapter from reactive block");
+
+        const translationChanged = prevTranslation && prevTranslation !== currentTranslation;
+
+        if (translationChanged) {
+          console.log(
+            `📚 Translation changed from ${prevTranslation} to ${currentTranslation}, verifying book exists...`,
+          );
+          // Capture scroll target before any async work clears it
+          const scrollVerse = $navigationStore.scrollTargetVerse ?? null;
+          // Verify the book exists in new translation, fallback if not
+          verifyAndLoadChapter(currentTranslation, currentBook, currentChapter, scrollVerse);
+        } else {
+          const scrollVerse = $navigationStore.scrollTargetVerse ?? null;
+          loadChapter(currentTranslation, currentBook, currentChapter, true, scrollVerse);
+        }
       }
     }
   }
@@ -2718,53 +2728,53 @@
 
     verseObserver = new IntersectionObserver(
       (entries) => {
-        if (!(get(navigationStore).commentaryAnchored ?? false)) return;
-
         for (const entry of entries) {
-          const verseNum = parseInt((entry.target as HTMLElement).dataset.verse ?? '0', 10);
+          const el = entry.target as HTMLElement;
+          const verseNum = parseInt(el.dataset.verse ?? '0', 10);
           if (verseNum <= 0) continue;
+          const info = verseElInfo.get(el);
+          if (!info) continue;
+          const key = `${info.book}::${info.chapter}::${verseNum}`;
           if (entry.isIntersecting) {
-            visibleVersePositions.set(verseNum, entry.boundingClientRect.top);
+            visibleVersePositions.set(key, { book: info.book, chapter: info.chapter, verse: verseNum, top: entry.boundingClientRect.top });
           } else {
-            visibleVersePositions.delete(verseNum);
+            visibleVersePositions.delete(key);
           }
         }
 
         if (visibleVersePositions.size === 0) return;
 
-        // Pick the verse closest to the top of the visible zone
-        let topVerse = -1;
+        // Pick the entry closest to the top of the visible zone
+        let topEntry: { book: string; chapter: number; verse: number; top: number } | null = null;
         let minTop = Infinity;
-        for (const [verse, top] of visibleVersePositions) {
-          if (top >= 0 && top < minTop) {
-            minTop = top;
-            topVerse = verse;
-          }
+        for (const e of visibleVersePositions.values()) {
+          if (e.top >= 0 && e.top < minTop) { minTop = e.top; topEntry = e; }
         }
-        // Fall back to nearest verse if none have positive top
-        if (topVerse < 0) {
+        // Fall back: nearest to top regardless of sign
+        if (!topEntry) {
           let closestTop = Infinity;
-          for (const [verse, top] of visibleVersePositions) {
-            if (Math.abs(top) < closestTop) {
-              closestTop = Math.abs(top);
-              topVerse = verse;
-            }
+          for (const e of visibleVersePositions.values()) {
+            if (Math.abs(e.top) < closestTop) { closestTop = Math.abs(e.top); topEntry = e; }
           }
         }
 
-        if (topVerse > 0) {
-          if (anchorSyncDebounce) clearTimeout(anchorSyncDebounce);
-          const capturedVerse = topVerse;
-          anchorSyncDebounce = setTimeout(() => {
-            if (!(get(navigationStore).commentaryAnchored ?? false)) return;
-            lastAnchorVerse = capturedVerse;
-            // Push directly to each commentary window's contentState — never touches
-            // $navigationStore.highlightedVerse so applySearchHighlight never fires (no loop)
-            get(windowStore)
-              .filter(w => w.contentType === 'commentaries')
-              .forEach(w => windowStore.updateContentState(w.id, { highlightedVerse: capturedVerse }));
-          }, 150);
-        }
+        if (!topEntry) return;
+
+        if (anchorSyncDebounce) clearTimeout(anchorSyncDebounce);
+        const captured = { ...topEntry };
+        anchorSyncDebounce = setTimeout(() => {
+          // Always update navbar position — this is what keeps the navbar and
+          // commentary in sync as the user scrolls through multiple chapters
+          navigationStore.setScrollPosition(captured.book, captured.chapter);
+
+          if (!(get(navigationStore).commentaryAnchored ?? false)) return;
+          lastAnchorVerse = captured.verse;
+          // Push directly to each commentary window's contentState — never touches
+          // $navigationStore.highlightedVerse so applySearchHighlight never fires (no loop)
+          get(windowStore)
+            .filter(w => w.contentType === 'commentaries')
+            .forEach(w => windowStore.updateContentState(w.id, { highlightedVerse: captured.verse }));
+        }, 150);
       },
       {
         root: readerElement,
@@ -2774,7 +2784,14 @@
     );
 
     const verseEls = readerElement.querySelectorAll<HTMLElement>('.verse[data-verse]');
-    verseEls.forEach(el => verseObserver!.observe(el));
+    verseEls.forEach(el => {
+      // Resolve and cache book/chapter by walking up to the nearest chapter-section
+      const section = el.closest('[data-book][data-chapter]') as HTMLElement | null;
+      if (section) {
+        verseElInfo.set(el, { book: section.dataset.book!, chapter: parseInt(section.dataset.chapter!, 10) });
+      }
+      verseObserver!.observe(el);
+    });
   }
 
   onMount(() => {

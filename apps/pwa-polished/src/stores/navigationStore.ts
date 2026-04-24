@@ -137,6 +137,17 @@ function createNavigationStore() {
         return next;
       });
     },
+    // Lightweight nav update driven by BibleReader scroll — updates book/chapter in
+    // the store (so navbar and commentary follow) without setting scrollTargetVerse
+    // (which would cause BibleReader to auto-scroll, fighting the user).
+    setScrollPosition: (book: string, chapter: number) => {
+      update(state => {
+        if (state.book === book && state.chapter === chapter) return state;
+        const next = { ...state, book, chapter };
+        persistState(next);
+        return next;
+      });
+    },
     pushHistory: (state: NavigationState) => {
       navigationHistory.update((history) => [...history, state]);
     },
