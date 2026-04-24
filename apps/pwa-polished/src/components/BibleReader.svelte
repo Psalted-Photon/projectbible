@@ -141,6 +141,9 @@
   let verseObserver: IntersectionObserver | null = null;
   let anchorSyncDebounce: ReturnType<typeof setTimeout> | null = null;
   const visibleVersePositions = new Map<number, number>(); // verse number → boundingRect.top
+  let lastAnchorVerse: number | null = null; // last verse pushed to commentary windows
+  let anchorHighlightedElements: HTMLElement[] = []; // DOM elements with .comm-anchor-highlight
+  let prevCommDrifted = false; // for detecting drift→sync transition
 
   // Note popup state
   let notePopupOpen = false;
@@ -436,6 +439,39 @@
 
   $: if (!highlightVerse) {
     clearSearchHighlight();
+  }
+
+  // Commentary anchor: drift = anchor ON but a commentary window is pinned to a different book/chapter
+  $: commCheckpointDrifted = ($navigationStore.commentaryAnchored === true) &&
+    $windowStore.some(w =>
+      w.contentType === 'commentaries' &&
+      w.contentState?.book !== undefined &&
+      (w.contentState.book !== $navigationStore.book || w.contentState.chapter !== $navigationStore.chapter)
+    );
+
+  // Re-sync: when drift clears (user clicked anchor to re-sync), push lastAnchorVerse to all commentary
+  // windows so they scroll to the current Bible verse once their entries have loaded
+  $: {
+    if (prevCommDrifted && !commCheckpointDrifted && lastAnchorVerse !== null) {
+      get(windowStore)
+        .filter(w => w.contentType === 'commentaries')
+        .forEach(w => windowStore.updateContentState(w.id, { highlightedVerse: lastAnchorVerse }));
+    }
+    prevCommDrifted = commCheckpointDrifted;
+  }
+
+  // Union of all checkpoint verse numbers across all open commentary windows
+  $: commCheckpoints = [...new Set(
+    $windowStore.flatMap(w =>
+      w.contentType === 'commentaries' ? ((w.contentState?.checkpoints as number[]) ?? []) : []
+    )
+  )];
+
+  // Apply/clear amber highlights whenever anchor state, drift, or checkpoints change
+  $: if ($navigationStore.commentaryAnchored && !commCheckpointDrifted && commCheckpoints.length > 0 && chapters.length > 0) {
+    applyAnchorHighlights(commCheckpoints);
+  } else {
+    clearAnchorHighlights();
   }
 
   // Scroll helper: same-chapter → direct DOM scroll; different chapter → navigateTo sets
@@ -2124,6 +2160,27 @@
     }
   }
 
+  // Commentary anchor: highlight all checkpoint verses in BibleReader (no scrolling)
+  async function applyAnchorHighlights(checkpoints: number[]) {
+    clearAnchorHighlights();
+    await tick();
+    if (!readerElement) return;
+    for (const n of checkpoints) {
+      const el = readerElement.querySelector(`.verse[data-verse="${n}"]`) as HTMLElement | null;
+      if (el) {
+        el.classList.add('comm-anchor-highlight');
+        anchorHighlightedElements.push(el);
+      }
+    }
+  }
+
+  function clearAnchorHighlights() {
+    for (const el of anchorHighlightedElements) {
+      el.classList.remove('comm-anchor-highlight');
+    }
+    anchorHighlightedElements = [];
+  }
+
   async function applySearchHighlight(verseNumber: number) {
     clearSearchHighlight();
     await tick();
@@ -2699,9 +2756,13 @@
           if (anchorSyncDebounce) clearTimeout(anchorSyncDebounce);
           const capturedVerse = topVerse;
           anchorSyncDebounce = setTimeout(() => {
-            if (get(navigationStore).commentaryAnchored ?? false) {
-              navigationStore.setHighlightedVerseForScroll(capturedVerse);
-            }
+            if (!(get(navigationStore).commentaryAnchored ?? false)) return;
+            lastAnchorVerse = capturedVerse;
+            // Push directly to each commentary window's contentState — never touches
+            // $navigationStore.highlightedVerse so applySearchHighlight never fires (no loop)
+            get(windowStore)
+              .filter(w => w.contentType === 'commentaries')
+              .forEach(w => windowStore.updateContentState(w.id, { highlightedVerse: capturedVerse }));
           }, 150);
         }
       },
@@ -3606,6 +3667,16 @@
     background: linear-gradient(to right, rgba(34, 197, 94, 0.40), transparent);
     background-position: var(--rp-hl-left, 2em) center;
     background-size: 30ch calc(1em + 7px);
+    background-repeat: no-repeat;
+    border-radius: 3px;
+  }
+
+  /* Commentary anchor checkpoint highlights — amber, half width, half opacity of .rp-verse-highlight */
+  :global(.comm-anchor-highlight) {
+    isolation: isolate;
+    background: linear-gradient(to right, rgba(251, 146, 60, 0.20), transparent);
+    background-position: var(--rp-hl-left, 2em) center;
+    background-size: 15ch calc(1em + 7px);
     background-repeat: no-repeat;
     border-radius: 3px;
   }

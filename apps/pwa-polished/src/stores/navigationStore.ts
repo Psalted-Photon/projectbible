@@ -137,12 +137,6 @@ function createNavigationStore() {
         return next;
       });
     },
-    setHighlightedVerseForScroll: (highlightedVerse: number | null) => {
-      update(state => {
-        if (!state.commentaryAnchored) return state;
-        return { ...state, highlightedVerse };
-      });
-    },
     pushHistory: (state: NavigationState) => {
       navigationHistory.update((history) => [...history, state]);
     },

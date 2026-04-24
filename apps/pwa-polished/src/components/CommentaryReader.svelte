@@ -13,6 +13,7 @@
   let loading = true;
   let error = "";
   let lastNavigationKey = "";
+  let lastScrolledVerseKey = ''; // guard: skip scrollToVerse if same checkpoint
 
   // Use per-window state if windowId provided, otherwise use global state
   $: windowState = windowId
@@ -41,9 +42,16 @@
     scrollToVerse(highlightVerse);
   }
 
+  // Emit checkpoint verse numbers to BibleReader via contentState for amber highlights
+  $: if (windowId) {
+    const checkpoints = [...new Set(entries.filter(e => e.verseStart > 0).map(e => e.verseStart))];
+    windowStore.updateContentState(windowId, { checkpoints });
+  }
+
   async function loadCommentary(book: string, chapter: number, author?: string) {
     loading = true;
     error = "";
+    lastScrolledVerseKey = ''; // reset so new chapter allows fresh scroll-to-verse
     try {
       console.log(`📜 Loading commentary for ${book} ${chapter}, author: ${author || 'all'}`);
       
@@ -67,12 +75,17 @@
   function scrollToVerse(verseNum: number) {
     if (!readerElement) return;
 
-    // Find the first entry that contains this verse
-    const targetEntry = entries.find(
-      e => verseNum >= e.verseStart && (!e.verseEnd || verseNum <= e.verseEnd)
-    );
-
+    // Find nearest preceding checkpoint: largest verseStart ≤ verseNum
+    const candidates = entries.filter(e => e.verseStart > 0 && e.verseStart <= verseNum);
+    if (candidates.length === 0) return;
+    const maxVerseStart = Math.max(...candidates.map(e => e.verseStart));
+    const targetEntry = entries.find(e => e.verseStart === maxVerseStart);
     if (!targetEntry) return;
+
+    // Guard: skip if we already scrolled to this checkpoint
+    const key = String(targetEntry.verseStart);
+    if (key === lastScrolledVerseKey) return;
+    lastScrolledVerseKey = key;
 
     // Scroll to the entry element
     const entryEl = readerElement.querySelector(
@@ -81,8 +94,8 @@
 
     if (entryEl) {
       entryEl.classList.add('search-verse-highlighted');
-      entryEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      
+      entryEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
       // Remove highlight after delay
       setTimeout(() => {
         entryEl.classList.remove('search-verse-highlighted');
