@@ -1,56 +1,56 @@
 # Commentary Pack Report
 
-**Generated:** 2026-03-31T01:41:42.809Z
+**Generated:** 2026-04-12T00:13:03.417Z
 **Pack:** C:\Users\Marlowe\Desktop\ProjectBible\packs\workbench\commentaries.sqlite
-**Pack Size:** 145.63 MB (0.14 GB)
-**Total Entries:** 119,082
+**Pack Size:** 187.01 MB (0.18 GB)
+**Total Entries:** 86,819
 
 ## Testament Coverage
 
-- Old Testament: 66,885 entries
-- New Testament: 52,197 entries
+- Old Testament: 42,543 entries
+- New Testament: 44,276 entries
 
 ## Entries by Author
 
 | Author | Entries | Percentage |
 |--------|---------|------------|
-| NET Bible Translators | 25,233 | 21.2% |
-| Adam Clarke | 21,051 | 17.7% |
-| John Wesley | 16,715 | 14.0% |
-| Treasury of Scripture Knowledge | 13,355 | 11.2% |
-| John Calvin | 10,067 | 8.5% |
-| KingComments | 7,590 | 6.4% |
-| A.T. Robertson | 7,201 | 6.0% |
-| Albert Barnes | 5,621 | 4.7% |
-| E.W. Bullinger | 4,221 | 3.5% |
-| Family Bible Notes | 3,867 | 3.2% |
-| Abbott | 3,340 | 2.8% |
-| Thomas Aquinas (Catena Aurea) | 821 | 0.7% |
+| Treasury of Scripture Knowledge | 17,748 | 20.4% |
+| Jamieson-Fausset-Brown | 16,314 | 18.8% |
+| John Calvin | 11,063 | 12.7% |
+| KingComments | 7,590 | 8.7% |
+| Albert Barnes | 7,355 | 8.5% |
+| A.T. Robertson | 7,201 | 8.3% |
+| Matthew Henry | 5,664 | 6.5% |
+| Family Bible Notes | 5,224 | 6.0% |
+| E.W. Bullinger | 4,229 | 4.9% |
+| Abbott | 3,340 | 3.8% |
+| Thomas Aquinas (Catena Aurea) | 821 | 0.9% |
+| Charles Spurgeon | 270 | 0.3% |
 
 ## Entries by Book (Top 20)
 
 | Book | Entries |
 |------|----------|
-| Acts | 7,891 |
-| Matthew | 7,780 |
-| Psalms | 7,748 |
-| Luke | 7,538 |
-| John | 6,873 |
-| Isaiah | 5,267 |
-| Jeremiah | 5,068 |
-| Genesis | 4,640 |
-| Mark | 3,855 |
-| Ezekiel | 3,749 |
-| Job | 3,513 |
-| Exodus | 3,485 |
-| Romans | 3,301 |
-| Proverbs | 2,934 |
-| Deuteronomy | 2,812 |
-| Numbers | 2,774 |
-| Hebrews | 2,309 |
-| Leviticus | 2,309 |
-| Joshua | 1,987 |
-| 1 Samuel | 1,753 |
+| Matthew | 5,989 |
+| Acts | 5,863 |
+| Luke | 5,633 |
+| John | 5,126 |
+| Psalms | 5,060 |
+| Jeremiah | 3,649 |
+| Isaiah | 3,570 |
+| Mark | 3,123 |
+| Genesis | 2,674 |
+| Ezekiel | 2,643 |
+| 1 Corinthians | 2,609 |
+| Romans | 2,527 |
+| Job | 2,408 |
+| Revelation | 2,051 |
+| Proverbs | 1,873 |
+| Hebrews | 1,857 |
+| Exodus | 1,852 |
+| Numbers | 1,643 |
+| 2 Corinthians | 1,589 |
+| Deuteronomy | 1,574 |
 
 ## Pack Metadata
 

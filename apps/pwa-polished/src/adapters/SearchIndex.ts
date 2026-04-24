@@ -1,4 +1,5 @@
 import type { SearchIndex, SearchResult } from '@projectbible/core';
+import { BIBLE_BOOKS } from '../lib/bibleData.js';
 import type { DBVerse } from './db.js';
 
 export class IndexedDBSearchIndex implements SearchIndex {
@@ -83,9 +84,12 @@ export class IndexedDBSearchIndex implements SearchIndex {
             
             cursor.continue();
           } else {
-            // Sort results by book/chapter/verse
+            // Sort results by canonical book order, then chapter/verse
+            const bookOrderMap = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
             results.sort((a, b) => {
-              if (a.book !== b.book) return a.book.localeCompare(b.book);
+              const orderA = bookOrderMap.get(a.book) ?? 999;
+              const orderB = bookOrderMap.get(b.book) ?? 999;
+              if (orderA !== orderB) return orderA - orderB;
               if (a.chapter !== b.chapter) return a.chapter - b.chapter;
               return a.verse - b.verse;
             });

@@ -18,7 +18,7 @@
   let baseLayerControl: L.Control.Layers | null = null;
   let placeMarkers: L.LayerGroup | null = null;
   let placeSearchQuery = '';
-  let placeSearchStatus = 'Search biblical & ancient places';
+  let placeSearchStatus = '';
   let placeSearchResults: MapPlaceResult[] = [];
   let searchingPlaces = false;
   let loading = true;
@@ -220,7 +220,7 @@
     }
 
     searchingPlaces = true;
-    placeSearchStatus = 'Searching biblical & ancient places...';
+    placeSearchStatus = 'Searching...';
     console.log('🗺️ Place search started:', { query });
     await logPlaceStoreStats();
 
@@ -427,6 +427,9 @@
 
     map.flyTo([place.latitude, place.longitude], 11, { animate: true, duration: 1.2 });
     marker.openPopup();
+    placeSearchResults = [];
+    placeSearchQuery = '';
+    placeSearchStatus = '';
   }
 
   function updateLayerControl() {
@@ -516,7 +519,7 @@
         <span class="emoji">🔍</span>
       </button>
     </div>
-    <div class="place-search-status">{placeSearchStatus}</div>
+    {#if placeSearchStatus}<div class="place-search-status">{placeSearchStatus}</div>{/if}
     {#if placeSearchResults.length > 0}
       <div class="place-search-results">
         {#each placeSearchResults as place}
@@ -590,13 +593,13 @@
     position: absolute;
     top: 10px;
     left: 10px;
-    background: rgba(26, 26, 26, 0.95);
+    background: rgba(26, 26, 26, 0.75);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 12px;
+    padding: 8px;
     border-radius: 8px;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
     z-index: 1000;
-    width: min(360px, 90vw);
+    width: min(280px, 80vw);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -612,9 +615,9 @@
     background: #1d1d1d;
     border: 1px solid #333;
     color: #e6e6e6;
-    padding: 8px 10px;
+    padding: 6px 8px;
     border-radius: 6px;
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .place-search-bar input:focus {
