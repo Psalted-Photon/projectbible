@@ -84,6 +84,43 @@
   $: isSignedIn = $userProfileStore.isSignedIn;
   $: currentBookCategory = BIBLE_BOOKS.find(b => b.name === currentBook)?.category || '';
 
+  // Anchor sync: true when anchor is ON but a commentary window has drifted from global nav
+  $: commentaryDrifted = ($navigationStore.commentaryAnchored === true) &&
+    $windowStore.some(w =>
+      w.contentType === 'commentaries' &&
+      w.contentState?.book !== undefined &&
+      (w.contentState.book !== $navigationStore.book || w.contentState.chapter !== $navigationStore.chapter)
+    );
+
+  function handleAnchorClick(event: MouseEvent) {
+    event.stopPropagation();
+    const anchored = $navigationStore.commentaryAnchored ?? false;
+    if (!anchored) {
+      // OFF → ON/Synced: enable anchor, clear per-window pins so windows fall back to global nav
+      navigationStore.setCommentaryAnchored(true);
+      for (const w of $windowStore) {
+        if (w.contentType === 'commentaries') {
+          windowStore.updateContentState(w.id, { book: undefined, chapter: undefined, highlightedVerse: undefined });
+        }
+      }
+    } else if (commentaryDrifted) {
+      // ON/Drifted → ON/Synced: re-sync, anchor stays ON
+      for (const w of $windowStore) {
+        if (w.contentType === 'commentaries') {
+          windowStore.updateContentState(w.id, { book: undefined, chapter: undefined, highlightedVerse: undefined });
+        }
+      }
+    } else {
+      // ON/Synced → OFF: freeze commentary windows at current position
+      navigationStore.setCommentaryAnchored(false);
+      for (const w of $windowStore) {
+        if (w.contentType === 'commentaries') {
+          windowStore.updateContentState(w.id, { book: $navigationStore.book, chapter: $navigationStore.chapter });
+        }
+      }
+    }
+  }
+
   function toggleCommAuthor(author: string) {
     const current = $navigationStore.selectedCommentaryAuthors ?? [];
     const next = current.includes(author)
@@ -603,6 +640,20 @@
         <span class="nav-arrow">{referenceDropdownOpen ? "▲" : "▼"}</span>
       </button>
     </div>
+
+    <!-- Commentary Anchor Sync Button -->
+    <button
+      class="anchor-sync-btn"
+      class:anchored={($navigationStore.commentaryAnchored ?? false) && !commentaryDrifted}
+      class:drifted={commentaryDrifted}
+      on:click={handleAnchorClick}
+      title={commentaryDrifted
+        ? 'Commentary drifted — click to re-sync'
+        : ($navigationStore.commentaryAnchored ?? false)
+          ? 'Commentary synced — click to unlock'
+          : 'Sync commentary to Bible position'}
+      aria-label="Commentary anchor sync"
+    >⚓</button>
 
     <!-- Search Bar -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1826,6 +1877,60 @@
   .reading-plan-button:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(66, 165, 245, 0.4);
+  }
+
+  /* Commentary anchor sync button — 3 states: off (grey) / anchored (green) / drifted (amber) */
+  .anchor-sync-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 33px;
+    height: var(--nav-item-height);
+    padding: 0;
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #555;
+    cursor: pointer;
+    font-size: 14px;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+  }
+
+  .anchor-sync-btn:hover {
+    background: #252525;
+    border-color: #4a4a4a;
+    color: #888;
+  }
+
+  .anchor-sync-btn.anchored {
+    color: #4ade80;
+    border-color: #22c55e;
+    background: #0a1f0f;
+  }
+
+  .anchor-sync-btn.anchored:hover {
+    background: #0f2a1a;
+    border-color: #4ade80;
+  }
+
+  .anchor-sync-btn.drifted {
+    color: #fb923c;
+    border-color: #f97316;
+    background: #1a0f00;
+    animation: anchor-drift 2s ease-in-out infinite;
+  }
+
+  .anchor-sync-btn.drifted:hover {
+    background: #2a1a00;
+    border-color: #fb923c;
+  }
+
+  @keyframes anchor-drift {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
   }
 
   .search-spinner {

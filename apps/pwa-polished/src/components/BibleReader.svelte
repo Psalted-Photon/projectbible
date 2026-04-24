@@ -137,6 +137,11 @@
   let scrollHandler: ((e: Event) => void) | null = null;
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Commentary anchor verse-sync
+  let verseObserver: IntersectionObserver | null = null;
+  let anchorSyncDebounce: ReturnType<typeof setTimeout> | null = null;
+  const visibleVersePositions = new Map<number, number>(); // verse number → boundingRect.top
+
   // Note popup state
   let notePopupOpen = false;
   let notePopupBook = "";
@@ -2641,6 +2646,76 @@
     }
   }
 
+  // Commentary anchor: re-observe verses after each chapter load
+  $: if (chapters.length > 0 && readerElement) {
+    tick().then(setupVerseObserver);
+  }
+
+  function setupVerseObserver() {
+    if (verseObserver) {
+      verseObserver.disconnect();
+      verseObserver = null;
+    }
+    visibleVersePositions.clear();
+    if (!readerElement) return;
+
+    verseObserver = new IntersectionObserver(
+      (entries) => {
+        if (!(get(navigationStore).commentaryAnchored ?? false)) return;
+
+        for (const entry of entries) {
+          const verseNum = parseInt((entry.target as HTMLElement).dataset.verse ?? '0', 10);
+          if (verseNum <= 0) continue;
+          if (entry.isIntersecting) {
+            visibleVersePositions.set(verseNum, entry.boundingClientRect.top);
+          } else {
+            visibleVersePositions.delete(verseNum);
+          }
+        }
+
+        if (visibleVersePositions.size === 0) return;
+
+        // Pick the verse closest to the top of the visible zone
+        let topVerse = -1;
+        let minTop = Infinity;
+        for (const [verse, top] of visibleVersePositions) {
+          if (top >= 0 && top < minTop) {
+            minTop = top;
+            topVerse = verse;
+          }
+        }
+        // Fall back to nearest verse if none have positive top
+        if (topVerse < 0) {
+          let closestTop = Infinity;
+          for (const [verse, top] of visibleVersePositions) {
+            if (Math.abs(top) < closestTop) {
+              closestTop = Math.abs(top);
+              topVerse = verse;
+            }
+          }
+        }
+
+        if (topVerse > 0) {
+          if (anchorSyncDebounce) clearTimeout(anchorSyncDebounce);
+          const capturedVerse = topVerse;
+          anchorSyncDebounce = setTimeout(() => {
+            if (get(navigationStore).commentaryAnchored ?? false) {
+              navigationStore.setHighlightedVerseForScroll(capturedVerse);
+            }
+          }, 150);
+        }
+      },
+      {
+        root: readerElement,
+        threshold: 0,
+        rootMargin: '-5% 0px -50% 0px', // top 45% of viewport is the active zone
+      }
+    );
+
+    const verseEls = readerElement.querySelectorAll<HTMLElement>('.verse[data-verse]');
+    verseEls.forEach(el => verseObserver!.observe(el));
+  }
+
   onMount(() => {
     textStore = new IndexedDBTextStore();
 
@@ -2718,6 +2793,8 @@
       stopScrollDetection();
       if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
       if (longPressTimer) clearTimeout(longPressTimer);
+      if (anchorSyncDebounce) clearTimeout(anchorSyncDebounce);
+      if (verseObserver) { verseObserver.disconnect(); verseObserver = null; }
 
       // Cleanup hover element
       if (hoveredWordElement) {

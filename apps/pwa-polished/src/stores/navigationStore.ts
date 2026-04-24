@@ -12,6 +12,7 @@ export interface NavigationState {
   showCommentaries?: boolean;
   selectedCommentaryAuthors?: string[];
   readingPlanActiveTarget?: { book: string; chapter: number; verse: number | null; consecutiveDay: boolean } | null;
+  commentaryAnchored?: boolean;
 }
 
 // Available translations (will be populated from packs later)
@@ -45,8 +46,8 @@ function loadPersistedState(): NavigationState {
 
 function persistState(state: NavigationState): void {
   try {
-    const { translation, book, chapter, isChronologicalMode, showReferences, showCommentaries, selectedCommentaryAuthors } = state;
-    localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ translation, book, chapter, isChronologicalMode, showReferences, showCommentaries, selectedCommentaryAuthors }));
+    const { translation, book, chapter, isChronologicalMode, showReferences, showCommentaries, selectedCommentaryAuthors, commentaryAnchored } = state;
+    localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ translation, book, chapter, isChronologicalMode, showReferences, showCommentaries, selectedCommentaryAuthors, commentaryAnchored }));
   } catch {
     // ignore quota/private-browsing errors
   }
@@ -128,6 +129,19 @@ function createNavigationStore() {
     },
     clearReadingPlanActiveTarget: () => {
       update(state => ({ ...state, readingPlanActiveTarget: null }));
+    },
+    setCommentaryAnchored: (commentaryAnchored: boolean) => {
+      update(state => {
+        const next = { ...state, commentaryAnchored };
+        persistState(next);
+        return next;
+      });
+    },
+    setHighlightedVerseForScroll: (highlightedVerse: number | null) => {
+      update(state => {
+        if (!state.commentaryAnchored) return state;
+        return { ...state, highlightedVerse };
+      });
     },
     pushHistory: (state: NavigationState) => {
       navigationHistory.update((history) => [...history, state]);

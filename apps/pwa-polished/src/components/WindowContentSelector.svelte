@@ -1,5 +1,6 @@
 <script lang="ts">
   import { windowStore } from "../lib/stores/windowStore";
+  import { navigationStore } from "../stores/navigationStore";
   import { localDateStr } from '../stores/clockStore';
 
   export let windowId: string;
@@ -17,11 +18,18 @@
         chapter: 1,
       };
     } else if (contentType === 'commentaries') {
-      contentState = {
-        author: undefined,
-        book: 'Genesis',
-        chapter: 1,
-      };
+      const navState = $navigationStore;
+      if (navState.commentaryAnchored) {
+        // Anchor ON: no pinned position — falls back to global nav immediately (stays synced)
+        contentState = { author: undefined };
+      } else {
+        // Anchor OFF: open at current Bible position (not hardcoded Genesis 1)
+        contentState = {
+          author: undefined,
+          book: navState.book,
+          chapter: navState.chapter,
+        };
+      }
     } else if (contentType === 'map') {
       contentState = {
         center: [31.7683, 35.2137], // Jerusalem
