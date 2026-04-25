@@ -10,7 +10,7 @@ export interface BundledPack {
   name: string;
   filename: string;
   url: string;
-  type: 'translation' | 'lexicon' | 'maps' | 'commentary';
+  type: 'translation' | 'lexicon' | 'maps' | 'commentary' | 'geonames';
   required: boolean;
   isLexical?: boolean; // For English lexical packs (handled separately)
 }
@@ -144,7 +144,15 @@ const BUNDLED_PACKS: BundledPack[] = [
   //   type: 'maps',
   //   required: false
   // },
-  
+  {
+    id: 'geonames-modern-places-v1',
+    name: 'World Places (GeoNames)',
+    filename: 'geonames.sqlite',
+    url: '/geonames.sqlite',
+    type: 'geonames',
+    required: false
+  },
+
   // Reference Data
   {
     id: 'cross-references',

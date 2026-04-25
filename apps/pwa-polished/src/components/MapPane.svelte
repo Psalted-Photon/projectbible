@@ -25,15 +25,19 @@
   let error: string | null = null;
 
   type MapPlaceResult = {
-    id: string;
+    id: string | number;
     name: string;
     latitude: number;
     longitude: number;
-    source: 'study-tools' | 'openbible' | 'pleiades';
+    source: 'study-tools' | 'openbible' | 'pleiades' | 'geonames';
     modernName?: string;
     description?: string;
     placeType?: string;
     confidence?: number;
+    // GeoNames-specific
+    countryName?: string;
+    admin1Name?: string;
+    population?: number;
   };
 
   const placeStore = new IndexedDBPlaceStore();
@@ -59,7 +63,27 @@
       }
 
       await loadHistoricalLayers();
-      
+
+      // Conditionally add GeoNames attribution if the pack is installed
+      try {
+        const checkDb = await openDB();
+        if (checkDb.objectStoreNames.contains('modern_places')) {
+          const count = await new Promise<number>((res) => {
+            const tx = checkDb.transaction('modern_places', 'readonly');
+            const req = tx.objectStore('modern_places').count();
+            req.onsuccess = () => res(req.result);
+            req.onerror = () => res(0);
+          });
+          if (count > 0 && map) {
+            map.attributionControl.addAttribution(
+              'Places © <a href="https://www.geonames.org" target="_blank">GeoNames</a> (CC BY 4.0)'
+            );
+          }
+        }
+      } catch {
+        // Attribution is non-critical, ignore errors
+      }
+
       loading = false;
     } catch (err) {
       console.error('Map initialization error:', err);
@@ -225,15 +249,21 @@
     await logPlaceStoreStats();
 
     try {
-      const [studyTools, openBible, pleiades] = await Promise.all([
+      const [studyTools, openBible, pleiades, modern] = await Promise.all([
         searchStudyToolsPlaces(query),
         searchOpenBiblePlaces(query),
-        searchPleiadesPlaces(query)
+        searchPleiadesPlaces(query),
+        searchModernPlaces(query)
       ]);
 
-      placeSearchResults = [...studyTools, ...openBible, ...pleiades].slice(0, 50);
+      // Sort modern results by population (largest first) so e.g. Austin TX beats tiny Austin
+      modern.sort((a, b) => (b.population ?? 0) - (a.population ?? 0));
+
+      // Interleave: modern first (most likely what user wants), then biblical/ancient
+      placeSearchResults = [...modern, ...studyTools, ...openBible, ...pleiades].slice(0, 50);
       console.log('🗺️ Place search results:', {
         query,
+        modern: modern.length,
         studyTools: studyTools.length,
         openBible: openBible.length,
         pleiades: pleiades.length,
@@ -241,12 +271,14 @@
       });
 
       if (placeSearchResults.length === 0) {
-        placeSearchStatus = 'No places found. Make sure the Study Tools pack is installed.';
+        placeSearchStatus = 'No places found. Try installing the World Places (GeoNames) pack.';
       } else {
-        const studyToolsCount = studyTools.length;
-        const openBibleCount = openBible.length;
-        const pleiadesCount = pleiades.length;
-        placeSearchStatus = `Found ${studyToolsCount} study + ${openBibleCount} biblical + ${pleiadesCount} ancient places`;
+        const parts: string[] = [];
+        if (modern.length)     parts.push(`${modern.length} modern`);
+        if (studyTools.length) parts.push(`${studyTools.length} study`);
+        if (openBible.length)  parts.push(`${openBible.length} biblical`);
+        if (pleiades.length)   parts.push(`${pleiades.length} ancient`);
+        placeSearchStatus = `Found ${parts.join(' + ')} places`;
       }
     } catch (err) {
       console.error('Place search error:', err);
@@ -295,6 +327,55 @@
       };
       request.onerror = () => resolve(results);
     });
+  }
+
+  async function searchModernPlaces(query: string): Promise<MapPlaceResult[]> {
+    try {
+      const database = await openDB();
+      if (!database.objectStoreNames.contains('modern_places')) return [];
+
+      const queryLower = query.toLowerCase();
+      return new Promise((resolve) => {
+        const tx = database.transaction('modern_places', 'readonly');
+        const store = tx.objectStore('modern_places');
+        const results: MapPlaceResult[] = [];
+
+        // Cursor scan — IndexedDB doesn't support LIKE, so we iterate
+        const request = store.openCursor();
+        request.onsuccess = (event) => {
+          const cursor = (event.target as IDBRequest).result as IDBCursorWithValue | null;
+          if (cursor && results.length < 50) {
+            const p = cursor.value;
+            const matchName    = p.name     && p.name.toLowerCase().includes(queryLower);
+            const matchAscii   = p.asciiName && p.asciiName.toLowerCase().includes(queryLower);
+            const matchAdmin1  = p.admin1Name && p.admin1Name.toLowerCase().includes(queryLower);
+            const matchCountry = p.countryName && p.countryName.toLowerCase().includes(queryLower);
+            if ((matchName || matchAscii || matchAdmin1 || matchCountry) &&
+                p.latitude != null && p.longitude != null) {
+              results.push({
+                id:          String(p.id),
+                name:        p.name,
+                latitude:    p.latitude,
+                longitude:   p.longitude,
+                source:      'geonames',
+                countryName: p.countryName,
+                admin1Name:  p.admin1Name || undefined,
+                population:  p.population || undefined,
+                placeType:   p.featureCode || undefined,
+              });
+            }
+            cursor.continue();
+          } else {
+            console.log('🗺️ Modern places search complete:', { count: results.length });
+            resolve(results);
+          }
+        };
+        request.onerror = () => resolve(results);
+      });
+    } catch (err) {
+      console.warn('Modern places search unavailable:', err);
+      return [];
+    }
   }
 
   async function searchStudyToolsPlaces(query: string): Promise<MapPlaceResult[]> {
@@ -405,17 +486,25 @@
     marker.addTo(placeMarkers);
 
     const details: string[] = [];
-    if (place.modernName) {
-      details.push(`<div>${place.modernName}</div>`);
-    }
-    if (place.placeType) {
-      details.push(`<div><em>${place.placeType}</em></div>`);
-    }
-    if (place.description) {
-      details.push(`<div style="margin-top: 6px;">${place.description}</div>`);
-    }
-    if (place.confidence != null) {
-      details.push(`<div style="margin-top: 6px;">Confidence: ${place.confidence}</div>`);
+    if (place.source === 'geonames') {
+      const loc = [place.admin1Name, place.countryName].filter(Boolean).join(', ');
+      if (loc) details.push(`<div>${loc}</div>`);
+      if (place.population && place.population > 0) {
+        details.push(`<div style="margin-top:4px;color:#aaa;">Pop. ${place.population.toLocaleString()}</div>`);
+      }
+    } else {
+      if (place.modernName) {
+        details.push(`<div>${place.modernName}</div>`);
+      }
+      if (place.placeType) {
+        details.push(`<div><em>${place.placeType}</em></div>`);
+      }
+      if (place.description) {
+        details.push(`<div style="margin-top: 6px;">${place.description}</div>`);
+      }
+      if (place.confidence != null) {
+        details.push(`<div style="margin-top: 6px;">Confidence: ${place.confidence}</div>`);
+      }
     }
 
     marker.bindPopup(`
@@ -458,10 +547,13 @@
       const hasOpenBible = storeNames.includes('openbible_places');
       const hasPleiades = storeNames.includes('pleiades_places');
 
+      const hasModern   = storeNames.includes('modern_places');
+
       const counts = {
         places: hasPlaces ? await countStore(database, 'places') : null,
         openbible_places: hasOpenBible ? await countStore(database, 'openbible_places') : null,
-        pleiades_places: hasPleiades ? await countStore(database, 'pleiades_places') : null
+        pleiades_places: hasPleiades ? await countStore(database, 'pleiades_places') : null,
+        modern_places: hasModern ? await countStore(database, 'modern_places') : null
       };
 
       console.log('🗺️ Place store stats:', {
@@ -524,8 +616,18 @@
       <div class="place-search-results">
         {#each placeSearchResults as place}
           <button class="place-result" on:click={() => zoomToPlace(place)}>
-            <div class="place-result-name">{place.name}</div>
-            {#if place.modernName || place.placeType}
+            <div class="place-result-name">
+              {#if place.source === 'geonames'}<span class="place-badge">🌍</span>{/if}
+              {place.name}
+            </div>
+            {#if place.source === 'geonames'}
+              <div class="place-result-meta">
+                {[place.admin1Name, place.countryName].filter(Boolean).join(', ')}
+                {#if place.population && place.population > 0}
+                  <span class="place-pop"> · {place.population.toLocaleString()}</span>
+                {/if}
+              </div>
+            {:else if place.modernName || place.placeType}
               <div class="place-result-meta">
                 {[place.modernName, place.placeType].filter(Boolean).join(' • ')}
               </div>
@@ -670,11 +772,24 @@
   .place-result-name {
     font-size: 14px;
     font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .place-badge {
+    font-size: 12px;
+    flex-shrink: 0;
   }
 
   .place-result-meta {
     font-size: 12px;
     color: #9a9a9a;
+    margin-top: 2px;
+  }
+
+  .place-pop {
+    color: #7a7a7a;
   }
 
   .layer-selector {

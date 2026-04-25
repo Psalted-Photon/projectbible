@@ -51,7 +51,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // stored ID always matches the canonical manifest IDs used by the UI.
       id: rawId?.replace(/\.v\d+$/, '') ?? rawId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references',
+      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -787,6 +787,59 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       }
 
       console.log(`✅ Places pack ${packInfo.id} imported`);
+    } else if (packInfo.type === 'geonames') {
+      // Import GeoNames modern world places pack
+      console.log('Importing GeoNames world places pack...');
+
+      const geoRows = db.exec(`
+        SELECT id, name, ascii_name, country_code, country_name,
+               admin1_code, admin1_name, admin2_name,
+               feature_class, feature_code,
+               latitude, longitude, population, elevation, timezone
+        FROM modern_places
+      `);
+
+      if (geoRows.length && geoRows[0].values.length) {
+        const total = geoRows[0].values.length;
+        console.log(`Importing ${total.toLocaleString()} modern places...`);
+
+        const places = geoRows[0].values.map(([
+          id, name, asciiName, countryCode, countryName,
+          admin1Code, admin1Name, admin2Name,
+          featureClass, featureCode,
+          lat, lon, pop, elev, tz
+        ]) => ({
+          id:           id as number,
+          name:         name as string,
+          asciiName:    asciiName as string | undefined,
+          countryCode:  countryCode as string | undefined,
+          countryName:  countryName as string | undefined,
+          admin1Code:   admin1Code as string | undefined,
+          admin1Name:   admin1Name as string | undefined,
+          admin2Name:   admin2Name as string | undefined,
+          featureClass: featureClass as string | undefined,
+          featureCode:  featureCode as string | undefined,
+          latitude:     lat as number | null,
+          longitude:    lon as number | null,
+          population:   pop as number | undefined,
+          elevation:    elev as number | null,
+          timezone:     tz as string | undefined,
+        }));
+
+        const CHUNK_SIZE = 2000;
+        for (let i = 0; i < places.length; i += CHUNK_SIZE) {
+          const chunk = places.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('modern_places', (store) => {
+            chunk.forEach(place => store.put(place));
+          });
+          if (i % 20000 === 0 && i > 0) {
+            console.log(`  Imported ${i.toLocaleString()}/${total.toLocaleString()} places...`);
+          }
+        }
+        console.log(`✅ GeoNames pack imported: ${total.toLocaleString()} world places`);
+      } else {
+        console.warn('⚠️  No modern_places table found in this pack');
+      }
     } else if (packInfo.type === 'map') {
       // Import map/places data
       console.log('Importing map pack...');

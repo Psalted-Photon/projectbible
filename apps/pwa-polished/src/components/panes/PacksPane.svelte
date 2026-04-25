@@ -96,6 +96,14 @@
       url: `${BASE_URL}/study-tools.sqlite`,
     },
     {
+      id: "geonames-modern-places-v1",
+      name: "World Places (GeoNames)",
+      description: "Search any modern place: cities, states, countries worldwide. 172,000+ places. License: CC BY 4.0 — geonames.org",
+      size: "37.2 MB",
+      icon: "🌍",
+      url: `${BASE_URL}/geonames.sqlite`,
+    },
+    {
       id: "section-headings",
       name: "Section Headings",
       description: "Pericope titles for all 66 books — works with any translation",
@@ -353,6 +361,8 @@
         return "📚";
       case "places":
         return "📍";
+      case "geonames":
+        return "🌍";
       case "map":
         return "🗺️";
       case "cross-references":

@@ -157,6 +157,23 @@
                       "createdAt":  "2026-04-09T00:00:00.000Z"
                   },
                   {
+                      "id":  "geonames-modern-places-v1",
+                      "type":  "geonames",
+                      "name":  "World Places (GeoNames)",
+                      "description":  "Modern world geography: cities, states, countries. 172,000+ places worldwide. License: CC BY 4.0 — geonames.org",
+                      "version":  "1.0.0",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  39038976,
+                      "sizeMB":  37.24,
+                      "sha256":  "4ea4d1bea107e4b4753235c166cb202842d8b471cda9351be74904454e35a4ca",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "/api/packs/geonames.sqlite",
+                      "createdAt":  "2026-04-24T00:00:00.000Z"
+                  },
+                  {
                       "id":  "section-headings",
                       "type":  "headings",
                       "name":  "Section Headings",

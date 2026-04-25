@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 24; // Migration 24: add section_headings store for pericope titles overlay
+const DB_VERSION = 25; // Migration 25: add modern_places store for GeoNames world places
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -29,7 +29,7 @@ export interface DBSectionHeading {
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -761,6 +761,17 @@ export function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('section_headings')) {
         const headingsStore = db.createObjectStore('section_headings', { keyPath: 'id' });
         headingsStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
+      }
+
+      // Modern world places store (GeoNames — cities, states, countries worldwide)
+      if (!db.objectStoreNames.contains('modern_places')) {
+        const modernStore = db.createObjectStore('modern_places', { keyPath: 'id' });
+        modernStore.createIndex('name',        'name',        { unique: false });
+        modernStore.createIndex('asciiName',   'asciiName',   { unique: false });
+        modernStore.createIndex('countryCode', 'countryCode', { unique: false });
+        modernStore.createIndex('admin1Name',  'admin1Name',  { unique: false });
+        modernStore.createIndex('featureClass','featureClass',{ unique: false });
+        modernStore.createIndex('population',  'population',  { unique: false });
       }
     };
   });
