@@ -1208,35 +1208,14 @@
     if (!verses || verses.length === 0) {
       console.warn(`⚠️ Book "${book}" not found in ${translation}`);
 
-      // Determine fallback book based on translation type
-      const bookInfo = BIBLE_BOOKS.find((b) => b.name === book);
-      const isNTBook = bookInfo?.testament === "NT";
+      // Determine coverage by probing Genesis (data-driven, no hardcoded IDs needed).
+      // If Genesis exists → OT-capable translation → go to Genesis.
+      // If Genesis also empty → NT-only translation → go to Matthew.
+      const genesisVerses = await textStore.getChapter(translation, "Genesis", 1);
+      const fallbackBook = (genesisVerses && genesisVerses.length > 0) ? "Genesis" : "Matthew";
+      const fallbackChapter = 1;
 
-      let fallbackBook = "Genesis";
-      let fallbackChapter = 1;
-
-      // Normalize ID for case-insensitive comparison
-      const tid = translation.toUpperCase();
-
-      // OT-only ancient-language translations
-      if (tid === "WLC" || tid === "LXX" || tid === "OSHB" || tid === "CATSS") {
-        fallbackBook = "Genesis";
-        fallbackChapter = 1;
-      }
-      // NT-only ancient-language translations
-      else if (tid === "BYZ" || tid === "TR" || tid === "SBLGNT") {
-        fallbackBook = "Matthew";
-        fallbackChapter = 1;
-      }
-      // Full Bible translations
-      else {
-        // If we were in NT and switching to OT-only, go to Genesis
-        // If we were in OT and switching to NT-only, go to Matthew
-        fallbackBook = isNTBook ? "Matthew" : "Genesis";
-        fallbackChapter = 1;
-      }
-
-      console.log(`📍 Falling back to ${fallbackBook} ${fallbackChapter}`);
+      console.log(`📍 Falling back to ${fallbackBook} ${fallbackChapter} (Genesis probe: ${genesisVerses?.length ?? 0} verses)`);
 
       // Update navigation store to reflect the fallback
       navigationStore.navigateTo(translation, fallbackBook, fallbackChapter);
