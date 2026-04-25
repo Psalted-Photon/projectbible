@@ -414,18 +414,19 @@
       // If the chapter is already loaded in the continuous-reading chapters array
       // (e.g. because the user scrolled there and setScrollPosition updated the store),
       // don't reload — just update lastNavigationKey so we don't trigger again.
+      // NOTE: always reload when translation changed, even if same book/chapter is cached,
+      // because cached verses are from the old translation.
       const alreadyLoaded = chapters.some(
         c => c.book === currentBook && c.chapter === currentChapter
       );
 
       // Capture previous translation BEFORE updating lastNavigationKey
       const prevTranslation = lastNavigationKey.split("-")[0];
+      const translationChanged = !!(prevTranslation && prevTranslation !== currentTranslation);
       lastNavigationKey = navKey;
 
-      if (!alreadyLoaded) {
+      if (!alreadyLoaded || translationChanged) {
         console.log("🚀 Triggering loadChapter from reactive block");
-
-        const translationChanged = prevTranslation && prevTranslation !== currentTranslation;
 
         if (translationChanged) {
           console.log(
@@ -1214,13 +1215,16 @@
       let fallbackBook = "Genesis";
       let fallbackChapter = 1;
 
-      // WLC, LXX only have OT
-      if (translation === "WLC" || translation === "LXX") {
+      // Normalize ID for case-insensitive comparison
+      const tid = translation.toUpperCase();
+
+      // OT-only ancient-language translations
+      if (tid === "WLC" || tid === "LXX" || tid === "OSHB" || tid === "CATSS") {
         fallbackBook = "Genesis";
         fallbackChapter = 1;
       }
-      // BYZ, TR only have NT
-      else if (translation === "BYZ" || translation === "TR") {
+      // NT-only ancient-language translations
+      else if (tid === "BYZ" || tid === "TR" || tid === "SBLGNT") {
         fallbackBook = "Matthew";
         fallbackChapter = 1;
       }
