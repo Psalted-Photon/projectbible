@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { IndexedDBLexiconStore } from "../adapters/LexiconStore";
   import type { StrongEntry } from "@projectbible/core";
+  import { BIBLE_BOOKS } from "../lib/bibleData.js";
   import {
     englishLexicalService,
     type WordInfo,
@@ -316,14 +317,16 @@
       });
       // Deduplicate by book+chapter+verse (multiple translations may have same verse)
       const seen = new Set<string>();
+      const bookOrderMap = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
       occurrences = results.filter(o => {
         const key = `${o.book}|${o.chapter}|${o.verse}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       }).sort((a, b) => {
-        // Sort by canonical Bible order using book name (approximated by string)
-        if (a.book !== b.book) return a.book < b.book ? -1 : 1;
+        const orderA = bookOrderMap.get(a.book) ?? 999;
+        const orderB = bookOrderMap.get(b.book) ?? 999;
+        if (orderA !== orderB) return orderA - orderB;
         if (a.chapter !== b.chapter) return a.chapter - b.chapter;
         return a.verse - b.verse;
       });
