@@ -27,7 +27,7 @@ export interface PackEntry {
   id: string;
   
   /** Pack type */
-  type: 'translation' | 'lexicon' | 'dictionary' | 'study' | 'audio' | 'bootstrap' | 'references';
+  type: 'translation' | 'lexicon' | 'dictionary' | 'study' | 'audio' | 'bootstrap' | 'references' | 'geonames';
   
   /** Pack version (semver) */
   version: string;
@@ -144,7 +144,7 @@ export function validatePackEntry(pack: any): pack is PackEntry {
   }
   
   // Validate type
-  const validTypes = ['translation', 'lexicon', 'dictionary', 'study', 'audio', 'bootstrap', 'headings'];
+  const validTypes = ['translation', 'lexicon', 'dictionary', 'study', 'audio', 'bootstrap', 'headings', 'geonames'];
   if (!validTypes.includes(pack.type)) {
     console.error(`📦 Pack validation failed: invalid type "${pack.type}" for pack ${pack.id}. Valid types:`, validTypes);
     return false;
