@@ -33,18 +33,33 @@ export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
 
   // ── Active plans: restore ALL active rows ──────────────────────────────────
   const currentPlansRaw = localStorage.getItem(STORAGE_ACTIVE_PLANS);
-  const currentPlans: Array<{id: string, plan: any}> = currentPlansRaw ? JSON.parse(currentPlansRaw) : [];
+  let currentPlans: Array<{id: string, plan: any}> = currentPlansRaw ? JSON.parse(currentPlansRaw) : [];
 
-  let changed = false;
+  // Build a set of plan IDs the server considers active
+  const remoteActiveIds = new Set(activeRows.map(r => r.id));
+
+  // Remove any local plans the server no longer has as active (deleted/archived remotely)
+  const before = currentPlans.length;
+  currentPlans = currentPlans.filter(e => remoteActiveIds.has(e.id));
+  let changed = currentPlans.length !== before;
+
   for (const row of activeRows) {
-    // Skip if already present locally (local state is authoritative)
-    if (currentPlans.some(e => e.id === row.id)) continue;
+    const existing = currentPlans.find(e => e.id === row.id);
+    if (existing) {
+      // Plan already exists locally — only apply a name change from the server
+      if (row.name && existing.plan?.config?.name !== row.name) {
+        existing.plan.config.name = row.name;
+        changed = true;
+        console.log('[SyncedReading] Updated name for reading plan:', row.id, '->', row.name);
+      }
+      continue;
+    }
+    // Plan is new locally — restore it from the server
     try {
       const config = typeof row.config === 'string' ? JSON.parse(row.config) : row.config;
       if (config.startDate && typeof config.startDate === 'string') config.startDate = new Date(config.startDate);
       if (config.endDate && typeof config.endDate === 'string') config.endDate = new Date(config.endDate);
       const plan = generateReadingPlan(config);
-      // Preserve the persisted name (may have been renamed)
       if (row.name) plan.config.name = row.name;
       currentPlans.push({ id: row.id, plan });
       changed = true;
