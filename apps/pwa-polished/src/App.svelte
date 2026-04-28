@@ -25,7 +25,7 @@
       if (allowRotation) {
         screen.orientation.unlock();
       } else {
-        await screen.orientation.lock('portrait');
+        await (screen.orientation as any).lock('portrait');
       }
     } catch {
       // Desktop browsers don't support orientation lock — ignore silently
