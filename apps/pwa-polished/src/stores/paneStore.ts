@@ -27,11 +27,12 @@ function createPaneStore() {
           );
         }
         
+        const isMobilePhone = typeof window !== 'undefined' && window.innerWidth <= 480;
         const newPane: PaneState = {
           id: `${type}-${Date.now()}`,
           type,
           position,
-          width: position === 'left' || position === 'right' ? 40 : undefined,
+          width: position === 'left' || position === 'right' ? (isMobilePhone ? 75 : 40) : undefined,
           height: position === 'bottom' ? 50 : undefined,
           zIndex: Math.max(0, ...panes.map(p => p.zIndex)) + 1,
           isOpen: true
