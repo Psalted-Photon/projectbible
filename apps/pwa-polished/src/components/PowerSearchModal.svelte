@@ -1426,4 +1426,83 @@
   .results-list::-webkit-scrollbar-thumb:hover {
     background: #5a5a5a;
   }
+
+  /* ── Phone portrait (≤480px) ── */
+  @media (max-width: 480px) {
+    .modal-backdrop {
+      padding: 0;
+      align-items: flex-start;
+    }
+
+    .modal-container {
+      max-width: 100vw;
+      max-height: 100dvh;
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+      border-top: none;
+    }
+
+    .modal-header {
+      padding: 12px 16px;
+    }
+
+    .modal-header h2 {
+      font-size: 18px;
+    }
+
+    .close-button {
+      font-size: 22px;
+      width: 32px;
+      height: 32px;
+    }
+
+    .modal-body {
+      flex-direction: column;
+      overflow-y: auto;
+      gap: 0;
+      padding: 12px;
+    }
+
+    .controls-panel {
+      flex: none;
+      width: 100%;
+      overflow-y: visible;
+      padding-right: 0;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #333;
+    }
+
+    .preview-panel {
+      flex: none;
+      width: 100%;
+      min-height: 200px;
+      padding: 12px;
+    }
+
+    .control-section {
+      margin-bottom: 10px;
+    }
+
+    .control-section input[type="text"],
+    .control-section input[type="number"],
+    .control-section select {
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+
+    .input-row {
+      gap: 6px;
+    }
+
+    .proximity-builder {
+      gap: 6px;
+    }
+
+    .btn-primary,
+    .btn-secondary {
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+  }
 </style>

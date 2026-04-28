@@ -650,4 +650,40 @@
     font-size: 0.85rem;
     line-height: 1.5;
   }
+
+  /* ── Phone portrait (≤480px) ── */
+  @media (max-width: 480px) {
+    .settings-pane {
+      padding: 12px;
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    label {
+      margin-bottom: 0.3rem;
+      font-size: 0.85rem;
+    }
+
+    select,
+    input[type="range"],
+    input[type="text"] {
+      padding: 0.45rem 0.5rem;
+      margin-bottom: 0.6rem;
+      font-size: 0.85rem;
+    }
+
+    button {
+      padding: 0.5rem;
+      margin-bottom: 0.6rem;
+      font-size: 0.85rem;
+    }
+
+    .note {
+      padding: 0.6rem;
+      font-size: 0.8rem;
+    }
+  }
 </style>

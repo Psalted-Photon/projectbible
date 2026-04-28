@@ -40,10 +40,17 @@
       color: #e0e0e0;
     }
     
-    /* Increase base font size for mobile devices */
+    /* Increase base font size for tablet devices */
     @media (max-width: 768px) {
       html {
         font-size: 18px;
+      }
+    }
+
+    /* Reduce font size for small phone portrait — override the tablet bump above */
+    @media (max-width: 480px) {
+      html {
+        font-size: 14px;
       }
     }
     

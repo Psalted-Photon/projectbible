@@ -111,4 +111,41 @@
   .result-text {
     line-height: 1.6;
   }
+
+  /* ── Phone portrait (≤480px) ── */
+  @media (max-width: 480px) {
+    h2 {
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .search-box {
+      margin-bottom: 0.75rem;
+      gap: 0.4rem;
+    }
+
+    .search-box input {
+      padding: 0.45rem 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    .search-box button {
+      padding: 0.45rem 0.75rem;
+      font-size: 0.85rem;
+    }
+
+    .result-item {
+      padding: 0.6rem 0.75rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .result-ref {
+      font-size: 0.85rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .result-text {
+      font-size: 0.85rem;
+    }
+  }
 </style>
