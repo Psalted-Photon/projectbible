@@ -27,6 +27,7 @@ export interface UserSettings {
   verseLayout?: 'one-per-line' | 'paragraph' | 'paragraph-no-verse-numbers'; // Verse layout mode
   wordWrap?: boolean; // Enable/disable word wrapping (default true)
   showSectionHeadings?: boolean; // Show pericope/section headings between verses (default true)
+  allowRotation?: boolean; // Allow screen to rotate to landscape (default false = portrait locked)
 
   // Clock / timezone
   // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected

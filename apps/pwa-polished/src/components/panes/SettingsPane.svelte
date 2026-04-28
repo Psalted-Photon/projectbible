@@ -8,6 +8,7 @@
   let lineSpacing = 1.8;
   let verseLayout: "one-per-line" | "paragraph" | "paragraph-no-verse-numbers" = "one-per-line";
   let wordWrap: boolean = true;
+  let allowRotation: boolean = false;
   let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const TIMEZONE_OPTIONS: { label: string; value: string }[] = [
@@ -40,6 +41,7 @@
     lineSpacing = settings.lineSpacing || 1.8;
     verseLayout = settings.verseLayout || "one-per-line";
     wordWrap = settings.wordWrap !== undefined ? settings.wordWrap : true;
+    allowRotation = settings.allowRotation !== undefined ? settings.allowRotation : false;
     timezone = settings.timezone || '';
   });
 
@@ -189,6 +191,7 @@
       lineSpacing,
       verseLayout,
       wordWrap,
+      allowRotation,
       timezone: timezone || undefined,
     });
 
@@ -269,6 +272,13 @@
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={wordWrap} />
       <span class="label-text">Word Wrap (wrap long lines)</span>
+    </label>
+  </div>
+
+  <div class="setting-group">
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={allowRotation} />
+      <span class="label-text">Allow Screen Rotation</span>
     </label>
   </div>
 

@@ -189,7 +189,7 @@ export default defineConfig({
         theme_color: '#1a1a1a',
         background_color: '#1a1a1a',
         display: 'fullscreen',
-        orientation: 'portrait',
+        orientation: 'any',
         start_url: '/',
         scope: '/',
         icons: [

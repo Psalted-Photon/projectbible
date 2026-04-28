@@ -12,9 +12,36 @@
   import { syncService } from "./lib/sync";
   import { readingPlanModalStore } from "./stores/readingPlanModalStore";  import { localDateStr } from './stores/clockStore';  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
   import "./adapters/SyncedHighlightAdapter"; // registers verse/word highlight pull handlers
+  import { getSettings } from "./adapters/settings";
 
   let appReady = false;
   let showReadingPlanModal = false;
+
+  // ── Orientation lock ──────────────────────────────────────────────────────
+  async function applyOrientationLock() {
+    if (typeof screen === 'undefined' || !screen.orientation) return;
+    const { allowRotation } = getSettings();
+    try {
+      if (allowRotation) {
+        screen.orientation.unlock();
+      } else {
+        await screen.orientation.lock('portrait');
+      }
+    } catch {
+      // Desktop browsers don't support orientation lock — ignore silently
+    }
+  }
+
+  function handleOrientationChange() {
+    const root = document.querySelector('.app-root') as HTMLElement | null;
+    if (!root) return;
+    root.style.transition = 'opacity 0.25s ease';
+    root.style.opacity = '0';
+    setTimeout(() => {
+      root.style.opacity = '1';
+    }, 350);
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Initialize Eruda for mobile debugging
   onMount(() => {
@@ -41,6 +68,15 @@
 
     document.addEventListener("visibilitychange", handleVisibility);
     
+    // Apply orientation lock based on saved setting
+    void applyOrientationLock();
+
+    // Re-apply orientation lock whenever settings are saved
+    window.addEventListener('settingsUpdated', applyOrientationLock);
+
+    // Fade-in transition when orientation changes
+    screen.orientation?.addEventListener('change', handleOrientationChange);
+
     // Initialize sync service (connects if user is already signed in)
     void syncService.init();
     void init();
@@ -76,6 +112,8 @@
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       document.removeEventListener('keydown', handleGlobalKeydown);
+      window.removeEventListener('settingsUpdated', applyOrientationLock);
+      screen.orientation?.removeEventListener('change', handleOrientationChange);
       unsubscribeReadingPlan();
     };
   });
