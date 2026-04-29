@@ -33,7 +33,8 @@
     e.preventDefault();
   }
 
-  const CLOSE_THRESHOLD_PX = 40;
+  // Reactive: true when this pane's drag is in the "will close" zone
+  $: isPendingClose = $pendingCloseEdge === pane.position;
 
   function handleResizeMove(e: MouseEvent | TouchEvent) {
     if (!isDraggingResize) return;
@@ -52,12 +53,9 @@
 
     paneStore.resizePane(pane.id, newSize);
 
-    // Check if dragging toward the originating edge to dismiss
-    let nearEdge = false;
-    if (pane.position === "left" && pos.clientX < CLOSE_THRESHOLD_PX) nearEdge = true;
-    if (pane.position === "right" && pos.clientX > window.innerWidth - CLOSE_THRESHOLD_PX) nearEdge = true;
-    if (pane.position === "bottom" && pos.clientY > window.innerHeight - CLOSE_THRESHOLD_PX) nearEdge = true;
-    pendingCloseEdge.set(nearEdge ? pane.position : null);
+    // Fire the moment the unclamped size drops below the 20% minimum —
+    // this is the exact instant the user has pushed as far as the pane goes.
+    pendingCloseEdge.set(newSize < 20 ? pane.position : null);
   }
 
   function handleResizeEnd() {
@@ -110,6 +108,7 @@
   <!-- Resize handle -->
   <div
     class="resize-handle {pane.position}"
+    class:pending-close={isPendingClose}
     role="slider"
     tabindex="0"
     aria-label="Resize pane"
@@ -200,6 +199,11 @@
 
   .resize-handle:hover {
     background: rgba(255, 255, 255, 0.1);
+  }
+
+  .resize-handle.pending-close {
+    background: rgba(220, 30, 30, 0.75);
+    transition: background 0.1s;
   }
 
   .close-btn {
