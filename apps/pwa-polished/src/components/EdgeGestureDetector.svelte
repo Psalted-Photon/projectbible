@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { windowStore, type WindowEdge } from "../lib/stores/windowStore";
+  import { pendingCloseEdge } from "../stores/paneStore";
+
+  $: closingEdge = $pendingCloseEdge;
 
   const EDGE_ZONE_WIDTH = 40; // pixels (doubled for easier phone grab)
   const OPEN_THRESHOLD = 0.05; // 5% of screen width/height
@@ -323,9 +326,9 @@
 
 <!-- Visual bumpers at screen edges -->
 <div class="bumper bumper-top {bumperClass}" class:hovered={hoveredEdge === 'top'}></div>
-<div class="bumper bumper-left {bumperClass}" class:hovered={hoveredEdge === 'left'}></div>
-<div class="bumper bumper-right {bumperClass}" class:hovered={hoveredEdge === 'right'}></div>
-<div class="bumper bumper-bottom {bumperClass}" class:hovered={hoveredEdge === 'bottom'}></div>
+<div class="bumper bumper-left {bumperClass}" class:hovered={hoveredEdge === 'left'} class:pending-close={closingEdge === 'left'}></div>
+<div class="bumper bumper-right {bumperClass}" class:hovered={hoveredEdge === 'right'} class:pending-close={closingEdge === 'right'}></div>
+<div class="bumper bumper-bottom {bumperClass}" class:hovered={hoveredEdge === 'bottom'} class:pending-close={closingEdge === 'bottom'}></div>
 
 <!-- Visual feedback during drag - preview panel -->
 {#if isDragging && edgePosition}
@@ -356,6 +359,10 @@
 
   .bumper.at-limit.hovered {
     background: rgba(139, 0, 0, 0.6); /* stay dark red */
+  }
+
+  .bumper.pending-close {
+    background: rgba(220, 30, 30, 0.85); /* bright red: pane will close on release */
   }
 
   .bumper-top {

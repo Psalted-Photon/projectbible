@@ -68,3 +68,6 @@ function createPaneStore() {
 
 export const paneStore = createPaneStore();
 
+// Signals which pane edge is in "pending close" state during a drag-to-dismiss gesture
+export const pendingCloseEdge = writable<'left' | 'right' | 'bottom' | null>(null);
+

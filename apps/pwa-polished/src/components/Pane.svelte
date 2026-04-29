@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fly } from "svelte/transition";
-  import { paneStore, type PaneState } from "../stores/paneStore";
+  import { get } from "svelte/store";
+  import { paneStore, pendingCloseEdge, type PaneState } from "../stores/paneStore";
   import SettingsPane from "./panes/SettingsPane.svelte";
   import MapPane from "./panes/MapPane.svelte";
   import PacksPane from "./panes/PacksPane.svelte";
@@ -32,6 +33,8 @@
     e.preventDefault();
   }
 
+  const CLOSE_THRESHOLD_PX = 40;
+
   function handleResizeMove(e: MouseEvent | TouchEvent) {
     if (!isDraggingResize) return;
 
@@ -48,9 +51,20 @@
       (pane.position === "right" ? -deltaPercent : deltaPercent);
 
     paneStore.resizePane(pane.id, newSize);
+
+    // Check if dragging toward the originating edge to dismiss
+    let nearEdge = false;
+    if (pane.position === "left" && pos.clientX < CLOSE_THRESHOLD_PX) nearEdge = true;
+    if (pane.position === "right" && pos.clientX > window.innerWidth - CLOSE_THRESHOLD_PX) nearEdge = true;
+    if (pane.position === "bottom" && pos.clientY > window.innerHeight - CLOSE_THRESHOLD_PX) nearEdge = true;
+    pendingCloseEdge.set(nearEdge ? pane.position : null);
   }
 
   function handleResizeEnd() {
+    if (get(pendingCloseEdge) !== null) {
+      handleClose();
+    }
+    pendingCloseEdge.set(null);
     isDraggingResize = false;
   }
 
@@ -161,26 +175,26 @@
   }
 
   .resize-handle.left {
-    right: -4px;
+    right: -8px;
     top: 0;
     bottom: 0;
-    width: 16px;
+    width: 32px;
     cursor: ew-resize;
   }
 
   .resize-handle.right {
-    left: -4px;
+    left: -8px;
     top: 0;
     bottom: 0;
-    width: 16px;
+    width: 32px;
     cursor: ew-resize;
   }
 
   .resize-handle.bottom {
-    top: -4px;
+    top: -8px;
     left: 0;
     right: 0;
-    height: 16px;
+    height: 32px;
     cursor: ns-resize;
   }
 
