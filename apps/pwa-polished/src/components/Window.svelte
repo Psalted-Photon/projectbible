@@ -106,18 +106,9 @@
       });
     }
 
-    // Close zone: within 12px (3× bumper width) of origin edge
-    let distFromOrigin: number;
-    if (window.edge === 'left') {
-      distFromOrigin = currentPos;
-    } else if (window.edge === 'right') {
-      distFromOrigin = globalThis.window.innerWidth - currentPos;
-    } else if (window.edge === 'top') {
-      distFromOrigin = currentPos;
-    } else {
-      distFromOrigin = globalThis.window.innerHeight - currentPos;
-    }
-    isInCloseZone = distFromOrigin < 12;
+    // Close zone: fires the moment unclamped size drops below the 10% minimum —
+    // the instant the user pushes "through" where the window stopped. Zero dead zone.
+    isInCloseZone = newSize < 10;
 
     windowStore.updateWindowSize(window.id, newSize);
   }
@@ -239,34 +230,34 @@
   }
 
   .resize-left {
-    right: -4px;
+    right: -8px;
     top: 0;
     bottom: 0;
-    width: 8px;
+    width: 32px;
     cursor: ew-resize;
   }
 
   .resize-right {
-    left: -4px;
+    left: -8px;
     top: 0;
     bottom: 0;
-    width: 8px;
+    width: 32px;
     cursor: ew-resize;
   }
 
   .resize-top {
-    bottom: -4px;
+    bottom: -8px;
     left: 0;
     right: 0;
-    height: 8px;
+    height: 32px;
     cursor: ns-resize;
   }
 
   .resize-bottom {
-    top: -4px;
+    top: -8px;
     left: 0;
     right: 0;
-    height: 8px;
+    height: 32px;
     cursor: ns-resize;
   }
 
