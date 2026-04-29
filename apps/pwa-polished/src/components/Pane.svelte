@@ -5,7 +5,7 @@
   import MapPane from "./panes/MapPane.svelte";
   import PacksPane from "./panes/PacksPane.svelte";
   import SearchPane from "./panes/SearchPane.svelte";
-  import CommentaryReader from "./CommentaryReader.svelte";
+
 
   export let pane: PaneState;
 
@@ -79,8 +79,10 @@
 <!-- Backdrop -->
 <div
   class="backdrop"
+  role="none"
   style="z-index: {pane.zIndex + 99};"
   on:click={handleBackdropClick}
+  on:keydown={(e) => e.key === 'Escape' && handleBackdropClick()}
   transition:fly={{ opacity: 0, duration: 300 }}
 ></div>
 
@@ -94,6 +96,13 @@
   <!-- Resize handle -->
   <div
     class="resize-handle {pane.position}"
+    role="slider"
+    tabindex="0"
+    aria-label="Resize pane"
+    aria-valuenow={pane.position === 'bottom' ? pane.height : pane.width}
+    aria-valuemin={20}
+    aria-valuemax={80}
+    aria-orientation={pane.position === 'bottom' ? 'horizontal' : 'vertical'}
     on:mousedown={startResize}
     on:touchstart={startResize}
   ></div>
@@ -152,26 +161,26 @@
   }
 
   .resize-handle.left {
-    right: 0;
+    right: -4px;
     top: 0;
     bottom: 0;
-    width: 8px;
+    width: 16px;
     cursor: ew-resize;
   }
 
   .resize-handle.right {
-    left: 0;
+    left: -4px;
     top: 0;
     bottom: 0;
-    width: 8px;
+    width: 16px;
     cursor: ew-resize;
   }
 
   .resize-handle.bottom {
-    top: 0;
+    top: -4px;
     left: 0;
     right: 0;
-    height: 8px;
+    height: 16px;
     cursor: ns-resize;
   }
 

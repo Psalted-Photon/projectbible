@@ -3693,6 +3693,16 @@
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     touch-action: none;
     pointer-events: auto;
+    overflow: visible;
+  }
+
+  :global(.drag-handle-float)::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -1.5px;
+    right: -1.5px;
   }
 
   :global(.drag-handle-float.left) {

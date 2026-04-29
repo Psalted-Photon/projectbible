@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { windowStore, type WindowEdge } from "../lib/stores/windowStore";
 
-  const EDGE_ZONE_WIDTH = 20; // pixels
+  const EDGE_ZONE_WIDTH = 40; // pixels (doubled for easier phone grab)
   const OPEN_THRESHOLD = 0.05; // 5% of screen width/height
 
   let isDragging = false;
