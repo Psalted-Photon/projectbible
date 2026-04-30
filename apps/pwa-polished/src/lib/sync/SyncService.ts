@@ -111,7 +111,13 @@ class SyncService {
     this.updateState({ status: 'syncing', error: null });
     
     try {
-      // Process any pending writes first
+      // Revive any permanently-failed queue items so they get a fresh retry.
+      // Items can get permanently failed after 5 rapid retries (e.g. from a
+      // previous app bug). Without this, "Sync Now" finds 0 pending items and
+      // shows "Synced" while nothing was actually sent.
+      await syncQueue.resetFailed();
+
+      // Process pending writes first
       await syncQueue.processQueue();
       
       // Then pull remote changes

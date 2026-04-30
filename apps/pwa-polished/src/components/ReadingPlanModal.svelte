@@ -98,6 +98,10 @@
         const syncTime = state.lastSyncedAt?.getTime() ?? null;
         if (syncTime && syncTime !== lastKnownSyncTime) {
           lastKnownSyncTime = syncTime;
+          // Re-read the active plan from localStorage first — in a fresh window
+          // the plan may have just been written there by applyRemoteReadingPlans
+          // while currentPlanId was still null from the onMount call.
+          loadActivePlan();
           await loadProgressForPlan();
         }
       }
