@@ -96,6 +96,36 @@ class SyncQueueService {
   }
   
   /**
+   * Reset all permanently-failed items back to 'pending' so they are retried.
+   * Called on sign-in to recover items that failed due to transient errors
+   * (e.g. wrong column type in a previous app version).
+   */
+  async resetFailed(): Promise<void> {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('sync_queue', 'readwrite');
+      const store = tx.objectStore('sync_queue');
+      const index = store.index('status');
+      const req = index.openCursor('failed');
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          const item = cursor.value;
+          item.status = 'pending';
+          item.attempts = 0;
+          item.lastError = undefined;
+          cursor.update(item);
+          cursor.continue();
+        } else {
+          this.notifyListeners();
+          resolve();
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  /**
    * Clear all pending operations (on sign out)
    */
   async clear(): Promise<void> {

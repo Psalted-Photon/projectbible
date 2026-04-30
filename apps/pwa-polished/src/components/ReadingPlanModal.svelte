@@ -642,9 +642,9 @@
 
   /** Map a ReadingProgressEntry to Supabase reading_progress columns and enqueue. */
   function queueProgressEntry(entry: ReadingProgressEntry): Promise<void> {
-    // The live reading_progress table uses TIMESTAMPTZ for date columns —
-    // convert epoch-ms to ISO strings; Supabase rejects raw ms values.
-    const toIso = (ms: number | undefined) => ms ? new Date(ms).toISOString() : null;
+    // reading_progress schema: created_at / completed_at / started_reading_at
+    // are BIGINT (epoch ms) — NOT TIMESTAMPTZ. Send raw numbers, not ISO strings.
+    // updated_at is TIMESTAMPTZ so that one stays as an ISO string.
     return syncQueue.enqueue({
       type: 'INSERT',
       table: 'reading_progress',
@@ -654,9 +654,9 @@
         plan_id: entry.planId,
         day_number: entry.dayNumber,
         completed: entry.completed ? 1 : 0,
-        created_at: toIso(entry.createdAt),
-        completed_at: toIso(entry.completedAt),
-        started_reading_at: toIso(entry.startedReadingAt),
+        created_at: entry.createdAt ?? 0,
+        completed_at: entry.completedAt ?? null,
+        started_reading_at: entry.startedReadingAt ?? null,
         chapters_read: JSON.stringify(entry.chaptersRead),
         catch_up_adjustment: entry.catchUpAdjustment
           ? JSON.stringify(entry.catchUpAdjustment)

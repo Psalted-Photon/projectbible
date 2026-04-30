@@ -160,6 +160,10 @@ class SyncService {
     this.updateState({ status: 'syncing' });
     
     try {
+      // Reset any permanently-failed queue items so they are retried with
+      // the correct payload format after an app update.
+      await syncQueue.resetFailed();
+
       // Connect to Realtime
       await realtimeService.connect(userId);
       
