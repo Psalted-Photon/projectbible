@@ -202,8 +202,9 @@ class SyncService {
       store.dispose();
     }
     
-    // Clear pending sync queue (don't sync anonymous data)
-    await syncQueue.clear();
+    // Do NOT clear the sync queue — pending writes are user-scoped and will
+    // be retried on the next sign-in. Clearing them here causes progress
+    // to be silently lost when the user logs out before a write reaches Supabase.
     
     this.updateState({ 
       status: 'idle', 

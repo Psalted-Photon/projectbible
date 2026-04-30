@@ -86,10 +86,21 @@
   onMount(() => {
     loadActivePlan();
     loadPlanHistory();
-    const unsubscribeSync = syncService.subscribe((state: SyncState) => {
+    let lastKnownSyncTime: number | null = null;
+    const unsubscribeSync = syncService.subscribe(async (state: SyncState) => {
       syncError = state.error;
       if (state.status === 'syncing') syncStatus = 'Syncing...';
-      else if (state.status === 'idle') syncStatus = state.lastSyncedAt ? `Synced ${state.lastSyncedAt.toLocaleTimeString()}` : 'Ready';
+      else if (state.status === 'idle') {
+        syncStatus = state.lastSyncedAt ? `Synced ${state.lastSyncedAt.toLocaleTimeString()}` : 'Ready';
+        // Reload progress from IndexedDB whenever a sync cycle completes so that
+        // data pulled from Supabase (e.g. from another device) is reflected
+        // immediately in both the today's blue section and the day list.
+        const syncTime = state.lastSyncedAt?.getTime() ?? null;
+        if (syncTime && syncTime !== lastKnownSyncTime) {
+          lastKnownSyncTime = syncTime;
+          await loadProgressForPlan();
+        }
+      }
       else if (state.status === 'error') syncStatus = 'Sync error';
       else if (state.status === 'offline') syncStatus = 'Offline';
       else syncStatus = 'Not synced';
@@ -108,6 +119,9 @@
   // in the background (after onMount ran) are picked up immediately.
   $: if (isOpen) {
     loadActivePlan();
+    // Also refresh progress from IndexedDB in case a background sync ran
+    // while the modal was closed (covers the common open-on-phone scenario).
+    loadProgressForPlan();
   }
 
   $: if (currentReadingPlan) {

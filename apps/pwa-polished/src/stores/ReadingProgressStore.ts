@@ -69,6 +69,71 @@ function isChapterChecked(chapterProgress: ChapterProgress | undefined): boolean
   return latest.type === "checked";
 }
 
+/**
+ * Union-merge chaptersRead from two entries.
+ * All unique chapter actions from both sides are preserved; actions are
+ * deduplicated by (timestamp, type) and sorted chronologically.
+ */
+function mergeChaptersRead(a: ChapterProgress[], b: ChapterProgress[]): ChapterProgress[] {
+  const merged = new Map<string, ChapterProgress>();
+  for (const ch of a) {
+    merged.set(getChapterKey(ch.book, ch.chapter), { ...ch, actions: [...ch.actions] });
+  }
+  for (const ch of b) {
+    const key = getChapterKey(ch.book, ch.chapter);
+    if (merged.has(key)) {
+      const existing = merged.get(key)!;
+      const combined = [...existing.actions, ...ch.actions];
+      const seen = new Set<string>();
+      const deduped = combined.filter((a) => {
+        const k = `${a.timestamp}:${a.type}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      deduped.sort((x, y) => x.timestamp - y.timestamp);
+      existing.actions = deduped;
+    } else {
+      merged.set(key, { ...ch, actions: [...ch.actions] });
+    }
+  }
+  return Array.from(merged.values());
+}
+
+/**
+ * Union-merge harmonySections from two entries.
+ * A passage marked complete on either device stays complete.
+ */
+function mergeHarmonySections(a: HarmonySectionProgress[], b: HarmonySectionProgress[]): HarmonySectionProgress[] {
+  const merged: HarmonySectionProgress[] = a.map(s => ({
+    ...s,
+    passages: s.passages.map(p => ({ ...p })),
+  }));
+  for (const inSec of b) {
+    const exSec = merged.find(s => s.sectionId === inSec.sectionId);
+    if (exSec) {
+      for (const inPass of inSec.passages) {
+        const exPass = exSec.passages.find(p => p.label === inPass.label);
+        if (exPass) {
+          if (inPass.completed && !exPass.completed) {
+            exPass.completed = true;
+            exPass.completedAt = inPass.completedAt;
+          }
+        } else {
+          exSec.passages.push({ ...inPass });
+        }
+      }
+      if (inSec.completed && !exSec.completed) {
+        exSec.completed = true;
+        exSec.completedAt = inSec.completedAt;
+      }
+    } else {
+      merged.push({ ...inSec, passages: inSec.passages.map(p => ({ ...p })) });
+    }
+  }
+  return merged;
+}
+
 function recomputeCompletion(entry: ReadingProgressEntry): ReadingProgressEntry {
   // Harmony plans: complete when all passages in all sections are done
   if (entry.harmonySections && entry.harmonySections.length > 0) {
@@ -142,17 +207,49 @@ export class ReadingProgressStore {
           const existing: ReadingProgressEntry | undefined = getReq.result
             ? this.deserialize(getReq.result)
             : undefined;
-          // Conflict resolution: prefer whichever entry has more recent activity
+          // Conflict resolution: union-merge both entries so no progress from
+          // any device is ever discarded.
           let winner = incoming;
           if (existing) {
-            const existingTs = existing.completedAt ?? existing.createdAt ?? 0;
-            const incomingTs = incoming.completedAt ?? incoming.createdAt ?? 0;
-            const existingActions = (existing.chaptersRead ?? []).reduce((n, c) => n + (c.actions?.length ?? 0), 0);
-            const incomingActions = (incoming.chaptersRead ?? []).reduce((n, c) => n + (c.actions?.length ?? 0), 0);
-            // Prefer local if it has more actions or is more recent
-            if (existingActions > incomingActions || existingTs > incomingTs) {
-              winner = existing;
-            }
+            const mergedChapters = mergeChaptersRead(
+              existing.chaptersRead ?? [],
+              incoming.chaptersRead ?? [],
+            );
+            const mergedSections =
+              existing.harmonySections || incoming.harmonySections
+                ? mergeHarmonySections(
+                    existing.harmonySections ?? [],
+                    incoming.harmonySections ?? [],
+                  )
+                : undefined;
+            // completed is true if either device marked it complete
+            const completed = existing.completed || incoming.completed;
+            // completedAt: most recent non-null value
+            const completedAt =
+              existing.completedAt && incoming.completedAt
+                ? Math.max(existing.completedAt, incoming.completedAt)
+                : existing.completedAt ?? incoming.completedAt;
+            // startedReadingAt: earliest non-null value
+            const startedReadingAt =
+              existing.startedReadingAt && incoming.startedReadingAt
+                ? Math.min(existing.startedReadingAt, incoming.startedReadingAt)
+                : existing.startedReadingAt ?? incoming.startedReadingAt;
+            // createdAt: earliest
+            const createdAt = Math.min(
+              existing.createdAt ?? Infinity,
+              incoming.createdAt ?? Infinity,
+            );
+            winner = {
+              ...incoming,
+              chaptersRead: mergedChapters,
+              harmonySections: mergedSections,
+              completed,
+              completedAt,
+              startedReadingAt,
+              createdAt,
+            };
+            // Re-derive completed flag from merged chapter state
+            winner = recomputeCompletion(winner);
           }
           store.put(this.serialize(winner));
           pending--;
