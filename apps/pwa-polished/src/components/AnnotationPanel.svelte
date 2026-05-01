@@ -24,10 +24,30 @@
   let displayTskEntries: TskEntry[] = tskEntries;
   let displayCommentaryEntries: CommentaryEntry[] = commentaryEntries;
 
-  // ——— Verse preview overlay ———
+  // ——— Verse-view mode state ———
   type VerseItem = { book: string; chapter: number; verse: number; text: string; heading?: string | null };
-  let versePreview: { book: string; chapter: number; verse: number; verses: VerseItem[] } | null = null;
-  let previewBodyEl: HTMLDivElement | null = null;
+  type PanelMode = 'list' | 'verseView';
+  let panelMode: PanelMode = 'list';
+  let viewVerses: VerseItem[] = [];
+  let viewBook = '';
+  let viewChapter = 0;
+  let viewTargetVerse = 0;
+  let viewBodyEl: HTMLDivElement | null = null;
+
+  interface HistoryEntry {
+    mode: 'list';
+    book: string;
+    chapter: number;
+    verse: number;
+    tskEntries: TskEntry[];
+    commentaryEntries: CommentaryEntry[];
+    tab: 'references' | 'commentary';
+  }
+  let panelHistory: HistoryEntry[] = [];
+
+  // Single-verse pill popup (shown before expanding to full verseView)
+  let pillPreview: { book: string; chapter: number; verse: number; text: string; allVerses: VerseItem[] } | null = null;
+
   let panelLoading = false;
   let lastPropsKey = '';
 
@@ -36,7 +56,9 @@
     const key = open ? `${book}:${chapter}:${verse}` : '';
     if (open && key !== lastPropsKey) {
       lastPropsKey = key;
-      versePreview = null;
+      panelHistory = [];
+      panelMode = 'list';
+      pillPreview = null;
       displayBook = book;
       displayChapter = chapter;
       displayVerse = verse;
@@ -44,8 +66,18 @@
       displayCommentaryEntries = commentaryEntries;
     } else if (!open && lastPropsKey !== '') {
       lastPropsKey = '';
-      versePreview = null;
+      panelHistory = [];
+      panelMode = 'list';
+      pillPreview = null;
     }
+  }
+
+  // Auto-scroll highlighted verse into view after verseView renders.
+  $: if (panelMode === 'verseView' && viewVerses.length > 0) {
+    setTimeout(() => {
+      const el = viewBodyEl?.querySelector('.view-verse.highlighted') as HTMLElement | null;
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
   }
 
   const textStore = new IndexedDBTextStore();
@@ -69,20 +101,56 @@
     panelLoading = true;
     const translation = get(navigationStore).translation;
     const verses = await textStore.getChapter(translation, target.book, target.chapter);
-    versePreview = { book: target.book, chapter: target.chapter, verse: target.verse, verses };
+    const targetVerse = verses.find(v => v.verse === target.verse);
+    pillPreview = {
+      book: target.book,
+      chapter: target.chapter,
+      verse: target.verse,
+      text: targetVerse?.text ?? '',
+      allVerses: verses,
+    };
     panelLoading = false;
-    setTimeout(() => {
-      previewBodyEl?.querySelector('.preview-verse.highlighted')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 60);
   }
 
-  function handlePreviewVerseClick(v: VerseItem) {
+  function handlePillClick() {
+    if (!pillPreview) return;
+    panelHistory = [...panelHistory, {
+      mode: 'list',
+      book: displayBook,
+      chapter: displayChapter,
+      verse: displayVerse,
+      tskEntries: displayTskEntries,
+      commentaryEntries: displayCommentaryEntries,
+      tab: activeTab,
+    }];
+    viewVerses = pillPreview.allVerses;
+    viewBook = pillPreview.book;
+    viewChapter = pillPreview.chapter;
+    viewTargetVerse = pillPreview.verse;
+    pillPreview = null;
+    panelMode = 'verseView';
+  }
+
+  function dismissPill() {
+    pillPreview = null;
+  }
+
+  function handlePanelBack() {
+    const prev = panelHistory[panelHistory.length - 1];
+    if (!prev) return;
+    panelHistory = panelHistory.slice(0, -1);
+    panelMode = 'list';
+    displayBook = prev.book;
+    displayChapter = prev.chapter;
+    displayVerse = prev.verse;
+    displayTskEntries = prev.tskEntries;
+    displayCommentaryEntries = prev.commentaryEntries;
+    activeTab = prev.tab;
+  }
+
+  function handleViewVerseClick(v: VerseItem) {
     dispatch('navigateTo', { book: v.book, chapter: v.chapter, verse: v.verse });
     close();
-  }
-
-  function dismissPreview() {
-    versePreview = null;
   }
 
   // Event delegation for commentary-ref spans injected by linkifyCommentaryRefs.
@@ -133,6 +201,9 @@
   }
 
   function verseLabel(): string {
+    if (panelMode === 'verseView') {
+      return viewBook ? `${viewBook} ${viewChapter}` : '';
+    }
     if (!displayBook) return '';
     return displayVerse
       ? `${displayBook} ${displayChapter}:${displayVerse}`
@@ -149,36 +220,62 @@
 <div class="annotation-panel" class:open>
   <!-- Header -->
   <div class="panel-header">
-    <div class="panel-tabs">
-      <button
-        class="tab-btn"
-        class:active={activeTab === "references"}
-        on:click={() => (activeTab = "references")}
-      >
-        ◆ References
-        {#if displayTskEntries.length > 0}
-          <span class="badge" style="background:{TSK_COLOR}">{displayTskEntries.length}</span>
-        {/if}
-      </button>
-      <button
-        class="tab-btn"
-        class:active={activeTab === "commentary"}
-        on:click={() => (activeTab = "commentary")}
-      >
-        ● Commentaries
-        {#if displayCommentaryEntries.length > 0}
-          <span class="badge" style="background:#666">{displayCommentaryEntries.length}</span>
-        {/if}
-      </button>
-    </div>
+    {#if panelHistory.length > 0}
+      <button class="panel-back-btn" on:click={handlePanelBack}>← Back</button>
+    {/if}
+    {#if panelMode === 'list'}
+      <div class="panel-tabs">
+        <button
+          class="tab-btn"
+          class:active={activeTab === "references"}
+          on:click={() => (activeTab = "references")}
+        >
+          ◆ References
+          {#if displayTskEntries.length > 0}
+            <span class="badge" style="background:{TSK_COLOR}">{displayTskEntries.length}</span>
+          {/if}
+        </button>
+        <button
+          class="tab-btn"
+          class:active={activeTab === "commentary"}
+          on:click={() => (activeTab = "commentary")}
+        >
+          ● Commentaries
+          {#if displayCommentaryEntries.length > 0}
+            <span class="badge" style="background:#666">{displayCommentaryEntries.length}</span>
+          {/if}
+        </button>
+      </div>
+    {/if}
     <div class="panel-title">{verseLabel()}</div>
     <button class="close-btn" on:click={close} aria-label="Close">✕</button>
   </div>
 
   <!-- Content -->
-  <div class="panel-body">
+  <div class="panel-body" bind:this={viewBodyEl}>
     {#if panelLoading}
       <div class="panel-loading">Loading…</div>
+    {:else if panelMode === 'verseView'}
+      <!-- ——— Full chapter reader ——— -->
+      <div class="view-chapter-header">{viewBook} {viewChapter}</div>
+      {#each viewVerses as v (v.verse)}
+        {#if v.heading}
+          <div class="view-heading">{v.heading}</div>
+        {/if}
+        <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+        <div
+          class="view-verse"
+          class:highlighted={v.verse === viewTargetVerse}
+          style={v.verse === viewTargetVerse ? 'cursor:pointer' : ''}
+          on:click={() => { if (v.verse === viewTargetVerse) handleViewVerseClick(v); }}
+        >
+          <span class="view-verse-num">{v.verse}</span>
+          <span class="view-verse-text">{v.text}</span>
+        </div>
+      {/each}
+      {#if viewVerses.length === 0}
+        <p class="empty-msg">No text found for {viewBook} {viewChapter}.<br/><span class="hint">Make sure a Bible translation pack is installed.</span></p>
+      {/if}
     {:else}
       <!-- ——— List mode: tabs ——— -->
       {#if activeTab === "references"}
@@ -245,32 +342,22 @@
     {/if}
   </div>
 
-  <!-- Ghost verse preview overlay -->
-  {#if versePreview !== null}
+  <!-- Single-verse pill popup -->
+  {#if pillPreview !== null}
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-    <div class="verse-preview-overlay" on:click={dismissPreview}>
+    <div class="pill-overlay" on:click={dismissPill}>
       <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-      <div class="preview-card" on:click|stopPropagation>
-        <div class="preview-header">
-          <span class="preview-title">{versePreview.book} {versePreview.chapter}:{versePreview.verse}</span>
-          <button class="preview-close" on:click={dismissPreview} aria-label="Close preview">✕</button>
-        </div>
-        <div class="preview-body" bind:this={previewBodyEl}>
-          {#each versePreview.verses as v (v.verse)}
-            <button
-              class="preview-verse"
-              class:highlighted={v.verse === versePreview.verse}
-              on:click={() => handlePreviewVerseClick(v)}
-            >
-              <span class="preview-verse-num">{v.verse}</span>
-              <span class="preview-verse-text">{v.text}</span>
-            </button>
-          {/each}
-          {#if versePreview.verses.length === 0}
-            <p class="empty-msg">No text found for {versePreview.book} {versePreview.chapter}.<br/><span class="hint">Make sure a Bible translation pack is installed.</span></p>
+      <div class="pill-card" on:click|stopPropagation>
+        <div class="pill-ref-label">{pillPreview.book} {pillPreview.chapter}:{pillPreview.verse}</div>
+        <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+        <div class="pill-verse-text" on:click={handlePillClick}>
+          {#if pillPreview.text}
+            {pillPreview.text}
+          {:else}
+            <span class="hint">Verse text not available.</span>
           {/if}
         </div>
-        <div class="preview-hint">Tap a verse to open in reader</div>
+        <div class="pill-hint">Tap to expand chapter</div>
       </div>
     </div>
   {/if}
@@ -496,6 +583,24 @@
     color: #555;
   }
 
+  /* ——— Panel back button ——— */
+  .panel-back-btn {
+    background: none;
+    border: 1px solid #444;
+    color: #aaa;
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .panel-back-btn:hover {
+    color: #e0e0e0;
+    border-color: #667eea;
+  }
+
   /* ——— Clickable ref link buttons ——— */
   .ref-link-btn {
     background: none;
@@ -528,93 +633,44 @@
     text-align: center;
   }
 
-  /* ——— Ghost verse preview overlay ——— */
-  .verse-preview-overlay {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(2px);
-    z-index: 10;
-    display: flex;
-    align-items: flex-end;
-    padding: 12px;
-    border-radius: 16px 16px 0 0;
+  /* ——— Verse-view full chapter reader ——— */
+  .view-chapter-header {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ccc;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #2a2a2a;
   }
 
-  .preview-card {
-    width: 100%;
-    max-height: 72%;
-    background: #252525;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.6);
-  }
-
-  .preview-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid #333;
-    flex-shrink: 0;
-  }
-
-  .preview-title {
-    font-size: 14px;
+  .view-heading {
+    font-size: 12px;
     font-weight: 600;
-    color: #e0e0e0;
+    color: #777;
+    margin: 10px 0 4px;
+    font-style: italic;
   }
 
-  .preview-close {
-    background: none;
-    border: none;
-    color: #888;
-    font-size: 16px;
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
-    line-height: 1;
-  }
-
-  .preview-close:hover {
-    color: #e0e0e0;
-    background: #333;
-  }
-
-  .preview-body {
-    overflow-y: auto;
-    flex: 1;
-    overscroll-behavior: contain;
-  }
-
-  .preview-verse {
+  .view-verse {
     display: flex;
     gap: 8px;
-    padding: 6px 16px;
-    width: 100%;
-    text-align: left;
-    background: none;
-    border: none;
-    color: #d0d0d0;
-    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    margin-bottom: 2px;
     line-height: 1.7;
-    font: inherit;
-    font-size: 14px;
   }
 
-  .preview-verse:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .preview-verse.highlighted {
+  .view-verse.highlighted {
     background: rgba(255, 215, 0, 0.1);
     border-left: 3px solid rgba(255, 215, 0, 0.6);
-    padding-left: 13px;
+    padding-left: 8px;
   }
 
-  .preview-verse-num {
+  .view-verse.highlighted:hover {
+    background: rgba(255, 215, 0, 0.18);
+  }
+
+  .view-verse-num {
     font-size: 10px;
     color: #555;
     flex-shrink: 0;
@@ -623,22 +679,60 @@
     text-align: right;
   }
 
-  .preview-verse.highlighted .preview-verse-num {
+  .view-verse.highlighted .view-verse-num {
     color: rgba(255, 215, 0, 0.7);
   }
 
-  .preview-verse-text {
+  .view-verse-text {
     font-size: 14px;
     color: #d8d8d8;
   }
 
-  .preview-hint {
-    text-align: center;
-    color: #555;
+  /* ——— Single-verse pill popup ——— */
+  .pill-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(1px);
+    z-index: 10;
+    display: flex;
+    align-items: flex-end;
+    padding: 12px 16px;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .pill-card {
+    background: #2a2a2a;
+    border-radius: 10px;
+    padding: 12px 14px;
+    width: 100%;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
+  }
+
+  .pill-ref-label {
     font-size: 11px;
-    padding: 8px 16px;
-    border-top: 1px solid #2a2a2a;
-    flex-shrink: 0;
+    color: #888;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    margin-bottom: 6px;
+  }
+
+  .pill-verse-text {
+    font-size: 15px;
+    color: #e8e8e8;
+    line-height: 1.65;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .pill-verse-text:hover {
+    color: #fff;
+  }
+
+  .pill-hint {
+    font-size: 10px;
+    color: #555;
+    margin-top: 8px;
   }
 
   /* ——— Inline commentary ref links ——— */
