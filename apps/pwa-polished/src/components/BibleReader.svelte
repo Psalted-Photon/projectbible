@@ -167,9 +167,13 @@
   const commentaryStore = new IndexedDBCommentaryStore();
   const tskStore = new IndexedDBTskReferenceStore();
 
-  // Annotation data maps (keyed by verse number)
-  let commentaryByVerse = new Map<number, CommentaryEntry[]>();
-  let tskByVerse = new Map<number, TskEntry[]>();
+  // Annotation data maps (keyed by "book:chapter:verse" to support multiple chapters in infinite scroll)
+  let commentaryByVerse = new Map<string, CommentaryEntry[]>();
+  let tskByVerse = new Map<string, TskEntry[]>();
+
+  function annotationKey(book: string, chapter: number, verse: number): string {
+    return `${book}:${chapter}:${verse}`;
+  }
 
   // Annotation panel state
   let annotationPanelOpen = false;
@@ -195,12 +199,12 @@
   }
 
   function rebuildCommentaryByVerse() {
-    const map = new Map<number, CommentaryEntry[]>();
+    const map = new Map<string, CommentaryEntry[]>();
     for (const e of allCommentaryEntries) {
       if (selectedCommentaryAuthors.length === 0 || !selectedCommentaryAuthors.includes(e.author)) continue;
-      const v = e.verseStart;
-      if (!map.has(v)) map.set(v, []);
-      map.get(v)!.push(e);
+      const k = annotationKey(e.book, e.chapter, e.verseStart);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(e);
     }
     commentaryByVerse = map;
   }
@@ -1004,18 +1008,23 @@
     }
   }
 
-  async function loadAnnotations(book: string, chapter: number) {
-    allCommentaryEntries = [];
-    tskByVerse = new Map<number, TskEntry[]>();
-    commentaryByVerse = new Map<number, CommentaryEntry[]>();
+  async function loadAnnotations(book: string, chapter: number, clearFirst = true) {
+    if (clearFirst) {
+      allCommentaryEntries = [];
+      tskByVerse = new Map<string, TskEntry[]>();
+      commentaryByVerse = new Map<string, CommentaryEntry[]>();
+    }
     try {
       // Load all data unconditionally — display is controlled reactively by showReferences / selectedCommentaryAuthors
       const [entries, tsk] = await Promise.all([
         commentaryStore.getChapterCommentary(book, chapter),
         tskStore.getChapterReferences(book, chapter),
       ]);
-      allCommentaryEntries = entries;
-      tskByVerse = tsk;
+      allCommentaryEntries = clearFirst ? entries : [...allCommentaryEntries, ...entries];
+      for (const [verse, list] of tsk) {
+        tskByVerse.set(annotationKey(book, chapter, verse), list);
+      }
+      tskByVerse = tskByVerse; // trigger Svelte reactivity
       rebuildCommentaryByVerse();
     } catch (err) {
       console.warn("Annotation load error:", err);
@@ -1114,8 +1123,8 @@
     annotationPanelBook = book;
     annotationPanelChapter = chapter;
     annotationPanelTab = tab;
-    annotationPanelTsk = tskByVerse.get(verse) ?? [];
-    annotationPanelCommentary = commentaryByVerse.get(verse) ?? [];
+    annotationPanelTsk = tskByVerse.get(annotationKey(book, chapter, verse)) ?? [];
+    annotationPanelCommentary = commentaryByVerse.get(annotationKey(book, chapter, verse)) ?? [];
     annotationPanelOpen = true;
   }
 
@@ -1584,6 +1593,7 @@
           ...chapters,
           { book: nextBook, chapter: nextChapter, verses: processedVerses },
         ];
+        await loadAnnotations(nextBook, nextChapter, false);
       }
     } catch (err) {
       console.error("Error loading next chapter:", err);
@@ -1690,6 +1700,7 @@
           { book: prevBook, chapter: prevChapter, verses: processedVerses },
           ...chapters,
         ];
+        await loadAnnotations(prevBook, prevChapter, false);
 
         // Wait for Svelte to flush DOM updates, then correct scroll position
         // synchronously. Using await tick() instead of rAF ensures:
@@ -3034,8 +3045,8 @@
               {/if}
               <div class="verse" data-verse={verse}>
                 <span class="verse-number">{verse}</span>
-                {#if showCommentaries && commentaryByVerse.has(verse)}
-                  {#each [...new Set(commentaryByVerse.get(verse)!.map((e) => e.author))] as author}
+                {#if showCommentaries && commentaryByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
+                  {#each [...new Set(commentaryByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!.map((e) => e.author))] as author}
                     <span
                       class="anno-icon"
                       style="background:{getAuthorColor(author)}"
@@ -3047,7 +3058,7 @@
                     >{getAuthorInitials(author)}</span>
                   {/each}
                 {/if}
-                {#if showReferences && tskByVerse.has(verse)}
+                {#if showReferences && tskByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
                   <span
                     class="anno-ref"
                     style="color:{TSK_COLOR}"
