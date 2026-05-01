@@ -681,3 +681,4 @@
     text-decoration-style: solid;
     background: rgba(138, 180, 248, 0.1);
   }
+</style>
