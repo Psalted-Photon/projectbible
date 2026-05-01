@@ -6,6 +6,7 @@
   import { IndexedDBTextStore } from "../adapters/TextStore";
   import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
   import { parseRefString } from "../lib/parseRefString";
+  import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
   import { navigationStore } from "../stores/navigationStore";
 
   export let open = false;
@@ -78,7 +79,7 @@
   let activeTab: "references" | "commentary" = initialTab;
   $: if (open) activeTab = initialTab;
 
-  const dispatch = createEventDispatcher<{ close: void }>();
+  const dispatch = createEventDispatcher<{ close: void; navigateTo: { book: string; chapter: number; verse: number } }>();
 
   function close() {
     dispatch("close");
@@ -123,6 +124,20 @@
     displayTskEntries = prev.tskEntries;
     displayCommentaryEntries = prev.commentaryEntries;
     activeTab = prev.tab;
+  }
+
+  function handleGoToVerse() {
+    dispatch('navigateTo', { book: viewBook, chapter: viewChapter, verse: viewTargetVerse });
+    close();
+  }
+
+  // Event delegation for commentary-ref spans injected by linkifyCommentaryRefs.
+  function handleCommentaryBodyClick(e: MouseEvent | KeyboardEvent) {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains('commentary-ref')) return;
+    if (e instanceof KeyboardEvent && e.key !== 'Enter' && e.key !== ' ') return;
+    const ref = target.dataset.ref;
+    if (ref) handleRefClick(ref);
   }
 
   // Group TSK entries by keyword
@@ -233,6 +248,11 @@
       {#if viewVerses.length === 0}
         <p class="empty-msg">No text found for {viewBook} {viewChapter}.<br/><span class="hint">Make sure a Bible translation pack is installed.</span></p>
       {/if}
+      <div class="go-btn-row">
+        <button class="go-btn" on:click={handleGoToVerse}>
+          Go to {viewBook} {viewChapter}:{viewTargetVerse} →
+        </button>
+      </div>
     {:else}
       <!-- ——— List mode: tabs ——— -->
       {#if activeTab === "references"}
@@ -285,7 +305,12 @@
                 {#if entry.title && entry.title !== group.author}
                   <div class="entry-title">{entry.title}</div>
                 {/if}
-                <div class="entry-text">{@html entry.text}</div>
+                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                <div
+                  class="entry-text"
+                  on:click={handleCommentaryBodyClick}
+                  on:keydown={handleCommentaryBodyClick}
+                >{@html linkifyCommentaryRefs(entry.text, entry.book, entry.chapter)}</div>
               {/each}
             </div>
           {/each}
@@ -614,4 +639,45 @@
     font-size: 14px;
     color: #d8d8d8;
   }
-</style>
+
+  /* ——— Go to verse button ——— */
+  .go-btn-row {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 0 4px;
+    border-top: 1px solid #2a2a2a;
+    margin-top: 8px;
+  }
+
+  .go-btn {
+    background: #667eea;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .go-btn:hover {
+    background: #7c8ff5;
+  }
+
+  /* ——— Inline commentary ref links ——— */
+  :global(.commentary-ref) {
+    color: #8ab4f8;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+
+  :global(.commentary-ref:hover) {
+    color: #c0d8ff;
+    text-decoration-style: solid;
+    background: rgba(138, 180, 248, 0.1);
+  }

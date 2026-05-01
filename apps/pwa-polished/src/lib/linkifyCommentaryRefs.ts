@@ -1,0 +1,114 @@
+/**
+ * linkifyCommentaryRefs
+ *
+ * Post-processes commentary HTML to wrap detected Bible references in
+ * clickable <span class="commentary-ref"> elements. Only text nodes are
+ * touched — HTML tags are left completely intact.
+ */
+
+import { parseRefString } from './parseRefString';
+
+// Bible book names and abbreviations recognised in commentary prose.
+// Ordered longest-first so the alternation engine matches greedily.
+const BOOK_PATTERN = [
+  // Multi-word full names with number prefix: "1 Samuel 3:4", "2 Kings 5:1"
+  '[123]\\s+(?:Samuel|Kings|Chronicles|Corinthians|Thessalonians|Timothy|Peter|John)',
+  // Song of Solomon / Songs
+  'Song\\s+of\\s+(?:Solomon|Songs?)',
+  // Long single-word full names (low false-positive risk)
+  'Deuteronomy|Lamentations|Ecclesiastes|Philippians|Colossians|Revelation',
+  'Ephesians|Galatians|Habakkuk|Zephaniah|Zechariah|Nehemiah|Proverbs',
+  'Genesis|Exodus|Leviticus|Numbers|Joshua|Judges|Psalms?|Isaiah|Jeremiah|Ezekiel|Hebrews',
+  'Matthew|Obadiah|Haggai|Malachi|Romans|Hosea|Daniel',
+  'Ruth|Esther|Joel|Amos|Jonah|Micah|Nahum|Luke|Acts|James|Jude',
+  // Numbered abbreviations: 1Sa, 2Ki, 1Co, etc.
+  '[123](?:Sam?|Kgs?|Ki|Chr?(?:on)?|Cor?|Thess?|Tim?|Pet?|J(?:oh?n?|n))',
+  // Standard abbreviations (3+ chars)
+  'Gen|Exo?d?|Lev|Nu(?:m)?|De(?:ut?)?|Jos(?:h)?|Jud?g?|Neh|Es(?:th?)?|Psa?|Pro?v?|Eccl?',
+  'Isa|Jer|Lam|Eze?k?|Da(?:n)?|Hos|Joe?l?|Amo?s?|Oba?d?|Jon(?:ah)?|Mic|Na(?:h)?|Ha(?:b)?',
+  'Ze(?:ph?)?|Ha(?:g)?|Ze(?:ch?)?|Mal|Matt?|Ma(?:rk?)?|Lu(?:ke?)?|Joh?n?|Act?s?|Ro(?:m)?',
+  'Ga(?:l)?|Ep(?:h)?|Ph(?:il?p?|p)|Co(?:l)?|He(?:b)?|Ja(?:s)?|Ti(?:t)?|Phm|Ph(?:ile)?|Re(?:v)?',
+].join('|');
+
+// Chapter + optional verse + optional range  (e.g. 3, 3:4, 3:4-7, 3:4-5:2)
+const CV_PATTERN = '\\d+(?::\\d+(?:[\\-\u2013]\\d+(?::\\d+)?)?)?';
+
+// Full ref pattern: book name/abbrev + whitespace + chapter[:verse[-range]]
+const PROSE_REF_RE = new RegExp(
+  `\\b(${BOOK_PATTERN})\\s+(${CV_PATTERN})\\b`,
+  'g',
+);
+
+// Bare verse reference: "v. 3", "ver. 3", "ver 3", "verse 3" (case-insensitive)
+const BARE_VERSE_RE = /\b(v(?:erse|er)?\.?)\s+(\d+)\b/gi;
+
+/** Escape HTML attribute value characters. */
+function escAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Wrap a validated Bible reference match in a clickable span.
+ * @param raw     The raw matched text (used as display AND data-ref)
+ */
+function wrapRef(raw: string): string {
+  return `<span class="commentary-ref" data-ref="${escAttr(raw.trim())}" tabindex="0" role="link">${raw}</span>`;
+}
+
+/**
+ * Process a single plain-text segment (no HTML tags).
+ * Detects Bible references and wraps them in clickable spans.
+ */
+function processTextSegment(
+  text: string,
+  contextBook: string,
+  contextChapter: number,
+): string {
+  // Reset stateful global regexes before each use
+  PROSE_REF_RE.lastIndex = 0;
+  BARE_VERSE_RE.lastIndex = 0;
+
+  // Step 1: linkify book + chapter[:verse] refs
+  let out = text.replace(PROSE_REF_RE, (match) => {
+    const target = parseRefString(match.trim(), contextBook, contextChapter);
+    return target ? wrapRef(match) : match;
+  });
+
+  // Step 2: linkify bare verse refs (v. N / verse N)
+  // These don't contain '<' so no need to avoid tags here.
+  out = out.replace(BARE_VERSE_RE, (match) => {
+    const target = parseRefString(match.trim(), contextBook, contextChapter);
+    return target ? wrapRef(match) : match;
+  });
+
+  return out;
+}
+
+/**
+ * Post-process commentary HTML: detect Bible references in text content
+ * and wrap them in <span class="commentary-ref"> elements.
+ *
+ * @param html           Raw HTML string from a CommentaryEntry
+ * @param contextBook    Canonical book name (e.g. "Romans") for relative refs
+ * @param contextChapter Chapter number for verse-only refs (e.g. 8)
+ */
+export function linkifyCommentaryRefs(
+  html: string,
+  contextBook: string,
+  contextChapter: number,
+): string {
+  if (!html || !contextBook) return html;
+
+  // Split on HTML tags, preserving the tags themselves in the output array.
+  // Even-indexed items are text segments; odd-indexed are tag strings.
+  const parts = html.split(/(<[^>]*>)/);
+
+  return parts
+    .map((part) => {
+      // Leave HTML tags untouched
+      if (part.startsWith('<')) return part;
+      // Process text segments
+      return processTextSegment(part, contextBook, contextChapter);
+    })
+    .join('');
+}

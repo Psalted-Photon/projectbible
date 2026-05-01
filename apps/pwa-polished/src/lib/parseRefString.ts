@@ -145,6 +145,30 @@ const BOOK_MAP: Record<string, string> = {
   jude: 'Jude', jud: 'Jude',
   // Revelation
   re: 'Revelation', rev: 'Revelation',
+  // Full canonical single-word names not already covered by abbreviations above
+  genesis: 'Genesis', exodus: 'Exodus', leviticus: 'Leviticus',
+  numbers: 'Numbers', deuteronomy: 'Deuteronomy', joshua: 'Joshua',
+  judges: 'Judges', nehemiah: 'Nehemiah', esther: 'Esther',
+  proverbs: 'Proverbs', ecclesiastes: 'Ecclesiastes',
+  isaiah: 'Isaiah', jeremiah: 'Jeremiah', lamentations: 'Lamentations',
+  ezekiel: 'Ezekiel', daniel: 'Daniel', hosea: 'Hosea',
+  obadiah: 'Obadiah', micah: 'Micah', habakkuk: 'Habakkuk',
+  zephaniah: 'Zephaniah', haggai: 'Haggai', zechariah: 'Zechariah',
+  malachi: 'Malachi', matthew: 'Matthew', romans: 'Romans',
+  galatians: 'Galatians', ephesians: 'Ephesians', philippians: 'Philippians',
+  colossians: 'Colossians', hebrews: 'Hebrews', james: 'James',
+  revelation: 'Revelation', titus: 'Titus', philemon: 'Philemon',
+  // Full canonical multi-word names with number prefix (lowercase, space-separated)
+  '1 samuel': '1 Samuel', '2 samuel': '2 Samuel',
+  '1 kings': '1 Kings',   '2 kings': '2 Kings',
+  '1 chronicles': '1 Chronicles', '2 chronicles': '2 Chronicles',
+  '1 corinthians': '1 Corinthians', '2 corinthians': '2 Corinthians',
+  '1 thessalonians': '1 Thessalonians', '2 thessalonians': '2 Thessalonians',
+  '1 timothy': '1 Timothy', '2 timothy': '2 Timothy',
+  '1 peter': '1 Peter', '2 peter': '2 Peter',
+  '1 john': '1 John', '2 john': '2 John', '3 john': '3 John',
+  // Song of Solomon variants
+  'song of solomon': 'Song of Solomon', 'song of songs': 'Song of Solomon',
 };
 
 /**
@@ -152,8 +176,20 @@ const BOOK_MAP: Record<string, string> = {
  * Returns { book (canonical), rest (chapter:verse string) } or null.
  */
 function extractBook(ref: string): { book: string; rest: string } | null {
+  // Handle "1 Samuel 3:4", "2 Kings 5:1" style (digit + space + word)
+  const mNum = ref.match(/^(\d+\s+[A-Za-z]+)\s+(\d.*)$/);
+  if (mNum) {
+    const canonical = BOOK_MAP[mNum[1].toLowerCase()];
+    if (canonical) return { book: canonical, rest: mNum[2] };
+  }
+  // Handle "Song of Solomon 1:1" style (word + " of " + word)
+  const mOf = ref.match(/^([A-Za-z]+\s+of\s+[A-Za-z]+)\s+(\d.*)$/);
+  if (mOf) {
+    const canonical = BOOK_MAP[mOf[1].toLowerCase()];
+    if (canonical) return { book: canonical, rest: mOf[2] };
+  }
   // Match: optional leading digit(s) + letters + mandatory whitespace + at least one digit
-  // e.g. "Ex 20:21", "1Co 15:52", "Ps 97:2"
+  // e.g. "Ex 20:21", "Genesis 1:1", "1Co 15:52", "Ps 97:2"
   const m = ref.match(/^(\d*[A-Za-z]+)\s+(\d.*)$/);
   if (!m) return null;
   const canonical = BOOK_MAP[m[1].toLowerCase()];
@@ -194,6 +230,12 @@ export function parseRefString(
 ): RefTarget | null {
   if (!ref) return null;
   const trimmed = ref.trim();
+
+  // Handle "v. N", "ver. N", "ver N", "verse N", "v N" bare verse references
+  const bareVerse = trimmed.match(/^(?:verse|ver\.?|v\.?)\s+(\d+)\b/i);
+  if (bareVerse) {
+    return { book: contextBook, chapter: contextChapter, verse: parseInt(bareVerse[1]) };
+  }
 
   const extracted = extractBook(trimmed);
   if (extracted) {

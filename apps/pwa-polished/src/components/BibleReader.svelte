@@ -36,6 +36,7 @@
   import { readingProgressStore } from "../stores/ReadingProgressStore";
   import { localDateStr } from "../stores/clockStore";
   import type { HarmonyPassage, HarmonySection } from "@projectbible/core";
+  import { annotationReturnStore } from "../stores/annotationReturnStore";
 
   const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans';
 
@@ -183,6 +184,31 @@
   let annotationPanelTab: "references" | "commentary" = "references";
   let annotationPanelTsk: TskEntry[] = [];
   let annotationPanelCommentary: CommentaryEntry[] = [];
+
+  // Reopen annotation panel after back-navigation from a "Go →" link
+  let _reopenAnnotationVerse: number | null = null;
+  let _reopenAnnotationTab: 'references' | 'commentary' = 'commentary';
+
+  function handleAnnotationNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
+    const { book, chapter, verse } = e.detail;
+    annotationReturnStore.set({
+      book: annotationPanelBook,
+      chapter: annotationPanelChapter,
+      verse: annotationPanelVerse,
+      tab: annotationPanelTab,
+    });
+    annotationPanelOpen = false;
+    navigationStore.navigateTo(currentTranslation, book, chapter, verse);
+  }
+
+  function handleAnnotationReturn() {
+    const ctx = $annotationReturnStore;
+    if (!ctx) return;
+    _reopenAnnotationVerse = ctx.verse;
+    _reopenAnnotationTab = ctx.tab;
+    annotationReturnStore.set(null);
+    navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
+  }
 
   // Annotation toggles (reactive from store)
   $: showReferences = $navigationStore.showReferences ?? false;
@@ -444,6 +470,10 @@
           const scrollVerse = $navigationStore.scrollTargetVerse ?? null;
           loadChapter(currentTranslation, currentBook, currentChapter, true, scrollVerse);
         }
+      } else if (_reopenAnnotationVerse !== null) {
+        // Chapter already in DOM (e.g. already appended by infinite scroll) — open panel directly
+        openAnnotationPanel(_reopenAnnotationVerse, _reopenAnnotationTab, currentBook, currentChapter);
+        _reopenAnnotationVerse = null;
       }
     }
   }
@@ -928,6 +958,12 @@
 
       // Load annotation data (commentary + TSK references)
       await loadAnnotations(book, chapter);
+
+      // Re-open annotation panel if user navigated back via the floating Back button
+      if (_reopenAnnotationVerse !== null) {
+        openAnnotationPanel(_reopenAnnotationVerse, _reopenAnnotationTab, book, chapter);
+        _reopenAnnotationVerse = null;
+      }
 
       // Load and apply persisted highlights
       await loadAndApplyHighlights(book, chapter);
@@ -3005,7 +3041,18 @@
   commentaryEntries={annotationPanelCommentary}
   initialTab={annotationPanelTab}
   on:close={() => (annotationPanelOpen = false)}
+  on:navigateTo={handleAnnotationNavigateTo}
 />
+
+{#if $annotationReturnStore !== null}
+  <button
+    class="annotation-return-btn"
+    on:click={handleAnnotationReturn}
+    aria-label="Return to previous verse and reopen commentary"
+  >
+    ← {$annotationReturnStore.book} {$annotationReturnStore.chapter}:{$annotationReturnStore.verse}
+  </button>
+{/if}
 
 <div class="bible-reader" bind:this={readerElement}>
   <NavigationBar
@@ -3157,6 +3204,31 @@
 
 
 <style>
+  /* ——— Floating annotation back button ——— */
+  .annotation-return-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 16px;
+    z-index: 10;
+    background: #2a2a2a;
+    color: #8ab4f8;
+    border: 1px solid #3a3a3a;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+
+  .annotation-return-btn:hover {
+    background: #333;
+    color: #c0d8ff;
+    border-color: #667eea;
+  }
+
   .bible-reader {
     width: 100%;
     height: 100%;
