@@ -427,7 +427,7 @@
   :global(.editor-input) {
     padding: 16px;
     min-height: 100%;
-    font-family: var(--font-family, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+    font-family: var(--font-family, 'Milonga', cursive);
     font-size: var(--font-size, 16px);
     line-height: 1.6;
     color: var(--text-color, #222);
