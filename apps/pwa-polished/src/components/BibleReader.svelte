@@ -3284,7 +3284,7 @@
   }
 
   .verse {
-    margin-bottom: 1.4rem;
+    margin-bottom: 2.2rem;
     position: relative;
     font-size: var(--base-font-size, 18px);
   }
@@ -3295,7 +3295,7 @@
     font-size: calc(var(--base-font-size, 18px) * 0.5);
     color: #888;
     vertical-align: super;
-    margin-right: 0.3rem;
+    margin-right: 0.1rem;
   }
 
   .verse-text {
