@@ -3280,13 +3280,14 @@
   }
 
   .verses {
-    line-height: 1.8;
+    line-height: var(--line-spacing, 1.8);
   }
 
   .verse {
     margin-bottom: 4.4rem;
     position: relative;
     font-size: var(--base-font-size, 18px);
+    line-height: var(--line-spacing, 1.8);
   }
 
   .verse-number {
