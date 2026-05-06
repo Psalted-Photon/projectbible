@@ -64,6 +64,16 @@
     effectiveLexicalEntries?.modern?.length || effectiveLexicalEntries?.historic?.length,
   );
 
+  let isDictionaryInstalled = false;
+  $: if (isOpen) {
+    openDB().then((db) => {
+      const tx = db.transaction('packs', 'readonly');
+      const req = tx.objectStore('packs').get('dictionary-en');
+      req.onsuccess = () => { isDictionaryInstalled = !!req.result; };
+      req.onerror = () => { isDictionaryInstalled = false; };
+    }).catch(() => { isDictionaryInstalled = false; });
+  }
+
   async function loadLexicalData() {
     loading = true;
     error = "";
@@ -832,9 +842,15 @@
                         For deeper study, look up the original Greek or Hebrew word from an interlinear Bible.
                       {/if}
                     </p>
-                    <p style="margin-top: 12px; padding: 12px; background: #e3f2fd; border-radius: 8px; font-size: 13px;">
-                      <span class="emoji">💡</span> Install the <strong>English Dictionary Pack</strong> from the Packs menu to get 6M+ offline definitions from Wiktionary + Webster 1913!
-                    </p>
+                    {#if isDictionaryInstalled}
+                      <p style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px; color: #555;">
+                        No definition found for this word in the installed dictionary.
+                      </p>
+                    {:else}
+                      <p style="margin-top: 12px; padding: 12px; background: #e3f2fd; border-radius: 8px; font-size: 13px;">
+                        <span class="emoji">💡</span> Install the <strong>English Dictionary Pack</strong> from the Packs menu to get offline definitions from Wiktionary + Webster 1913!
+                      </p>
+                    {/if}
                   </div>
                 {/if}
               </div>

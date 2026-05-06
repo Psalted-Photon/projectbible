@@ -2034,7 +2034,7 @@ function renderVerseWordsHtml(text: string): string {
   const html = applyCinzelToItIsWrittenQuote(baseHtml, isGreek ? 'ot-quote-greek' : 'ot-quote');
 
   let extraClass = '';
-  if (translation === 'web' || translation === 'bsb') extraClass = ' translation-font-web';
+  if (translation === 'web' || translation === 'bsb' || translation === 'net') extraClass = ' translation-font-web';
   if (translation === 'kjv' || translation === 'kjvpce') extraClass = ' translation-font-kjv';
   if (!extraClass && isGreek) extraClass = ' translation-font-greek';
   return `<span class="verse-words${extraClass}" data-translation="${escapeHtml(translation)}">${html}</span>`;
@@ -2043,7 +2043,7 @@ function renderVerseWordsHtml(text: string): string {
 function getHeadingFontClass(translationId: string): string {
   const t = (translationId || '').toLowerCase();
   if (t === 'kjv' || t === 'kjvpce') return 'heading-font-kjv';
-  if (t === 'web' || t === 'bsb') return 'heading-font-web';
+  if (t === 'web' || t === 'bsb' || t === 'net') return 'heading-font-web';
   if (isGreekTranslationId(t)) return 'heading-font-greek';
   return '';
 }
