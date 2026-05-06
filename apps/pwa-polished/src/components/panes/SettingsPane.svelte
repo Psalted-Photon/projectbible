@@ -249,7 +249,7 @@
       <span class="label-text">Line Spacing: {lineSpacing.toFixed(1)}</span>
       <input
         type="range"
-        min="1"
+        min="0.1"
         max="2.5"
         step="0.1"
         bind:value={lineSpacing}
