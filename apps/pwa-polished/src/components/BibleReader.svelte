@@ -3284,7 +3284,7 @@
   }
 
   .verse {
-    margin-bottom: 2.2rem;
+    margin-bottom: 4.4rem;
     position: relative;
     font-size: var(--base-font-size, 18px);
   }
