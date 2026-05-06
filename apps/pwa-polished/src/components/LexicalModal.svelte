@@ -1336,7 +1336,7 @@
     color: #888;
     font-style: italic;
     margin-left: 8px;
-    font-family: system-ui, sans-serif;
+    font-family: 'Milonga', cursive;
   }
 
   .missing-data {

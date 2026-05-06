@@ -68,7 +68,7 @@ async function initApp() {
   if (needsInit || FEATURES.progressiveStartup) {
     // Show loading screen during initialization
     appElement.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; font-family: sans-serif;">
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; font-family: 'Milonga', cursive;">
         <h1 style="margin-bottom: 20px;">ProjectBible</h1>
         <div style="width: 300px; background: #333; border-radius: 8px; padding: 20px;">
           <div id="init-message" style="margin-bottom: 10px; text-align: center;">Loading bootstrap...</div>
@@ -98,7 +98,7 @@ async function initApp() {
     } catch (error) {
       console.error('Failed to initialize app:', error);
       appElement.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; font-family: sans-serif;">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; font-family: 'Milonga', cursive;">
           <h1 style="color: #f44336; margin-bottom: 20px;">Initialization Failed</h1>
           <p style="max-width: 400px; text-align: center; color: #888;">
             Could not initialize the app. Please check your internet connection and refresh the page.
