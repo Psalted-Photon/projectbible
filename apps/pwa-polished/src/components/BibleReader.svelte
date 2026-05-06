@@ -3284,18 +3284,18 @@
   }
 
   .verse {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.85rem;
     position: relative;
     font-size: var(--base-font-size, 18px);
   }
 
   .verse-number {
     display: inline-block;
-    min-width: 2rem;
+    min-width: 1.1rem;
     font-size: calc(var(--base-font-size, 18px) * 0.5);
     color: #888;
     vertical-align: super;
-    margin-right: 0.25rem;
+    margin-right: 0.15rem;
   }
 
   .verse-text {
