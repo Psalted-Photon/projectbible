@@ -277,6 +277,7 @@
     overflow-y: auto;
     padding: 20px;
     flex: 1;
+    font-family: 'Merriweather', Georgia, serif;
   }
   
   .loading {

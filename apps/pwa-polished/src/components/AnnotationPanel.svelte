@@ -474,6 +474,7 @@
     overflow-y: auto;
     padding: 12px 16px 24px;
     overscroll-behavior: contain;
+    font-family: 'Merriweather', Georgia, serif;
   }
 
   /* ——— References ——— */

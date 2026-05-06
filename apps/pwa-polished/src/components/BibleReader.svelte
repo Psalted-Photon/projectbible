@@ -1143,7 +1143,7 @@
   function getTranslationFontClass(id: string): string {
     const t = (id || '').toLowerCase();
     if (t === 'kjv' || t === 'kjvpce') return 'translation-font-kjv';
-    if (t === 'web' || t === 'bsb') return 'translation-font-web';
+    if (t === 'web' || t === 'bsb' || t === 'net') return 'translation-font-web';
     // Greek source texts
     const looksEnglish = t.includes('english') || t.includes('brenton');
     if (t === 'byz' || t === 'tr') return 'translation-font-greek';
@@ -3320,7 +3320,7 @@
     font-family: 'EB Garamond', Georgia, serif;
   }
   .verses.translation-font-web .section-heading {
-    font-family: 'Cinzel', Georgia, serif;
+    font-family: 'Cinzel Decorative', Georgia, serif;
   }
 
   /* Greek source texts — EB Garamond handles polytonic well */
@@ -3329,7 +3329,7 @@
     font-size: calc(var(--base-font-size, 1.125rem) + 1px);
   }
   .verses.translation-font-greek .section-heading {
-    font-family: 'Jura', system-ui, sans-serif;
+    font-family: 'Cinzel Decorative', Georgia, serif;
   }
 
   .anno-icon {
