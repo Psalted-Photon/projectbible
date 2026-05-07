@@ -229,8 +229,9 @@ function alignSpan(spanText, webVerseText, targetText) {
         }
         if (startPos >= 0 && endPos > startPos) {
           // Clamp start to 0 if the first matching word is close to the verse start
-          // (handles short narrator prefixes like "If " or contractions like "Don't"→"Do not")
-          if (startPos <= 15) startPos = 0;
+          // (handles short narrator prefixes like "If " or contractions like "Don't"→"Do not",
+          // and edition differences like "Truly, truly, I" vs "Most certainly I" = 16 chars)
+          if (startPos <= 20) startPos = 0;
           // Extend end past trailing punctuation
           while (endPos < targetText.length && /[.!?,;:"'\u201D\u2019]/.test(targetText[endPos])) endPos++;
           // Clamp to verse end if close
@@ -242,6 +243,26 @@ function alignSpan(spanText, webVerseText, targetText) {
   }
 
   return null;
+}
+
+/**
+ * Expand an aligned span to cover any quoted region it overlaps.
+ * In English, speech quotes always enclose the entire utterance — so if a span
+ * starts or ends inside a quote, the whole quote must be red.
+ * Runs after all 4 strategies; never shrinks a span, only expands.
+ */
+function snapToQuotes(result, targetText) {
+  if (!result) return null;
+  const regions = getQuotedRegions(targetText);
+  if (regions.length === 0) return result;
+  let { s, e } = result;
+  for (const r of regions) {
+    if (s < r.e && e > r.s) {  // span overlaps this quote region
+      s = Math.min(s, r.s);
+      e = Math.max(e, r.e);
+    }
+  }
+  return { s, e };
 }
 
 // ── Load source data ──────────────────────────────────────────────────────────
@@ -320,7 +341,7 @@ for (const { id, getter } of translations) {
 
     const results = [];
     for (const spanDef of spanDefs) {
-      const r = alignSpan(spanDef.text, webText, cleanText);
+      const r = snapToQuotes(alignSpan(spanDef.text, webText, cleanText), cleanText);
       if (r && r.e > r.s) { results.push(r); aligned++; } else skipped++;
     }
 
@@ -345,7 +366,7 @@ for (const { id, getter } of translations) {
 // ── Verification samples ──────────────────────────────────────────────────────
 
 console.log('\n🔬 Verification:');
-const verifyKeys = ['MAT:5:3', 'JHN:3:5', 'JHN:3:16', 'JHN:14:6', 'REV:1:8', 'ACT:9:4'];
+const verifyKeys = ['MAT:5:3', 'JHN:3:5', 'JHN:3:11', 'JHN:3:16', 'JHN:14:6', 'REV:1:8', 'ACT:9:4'];
 for (const key of verifyKeys) {
   console.log(`\n  ${key}:`);
   for (const { id, getter } of translations) {
