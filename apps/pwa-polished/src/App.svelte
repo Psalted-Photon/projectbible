@@ -220,9 +220,20 @@
   }
 
   /* Red-letter (Jesus' words) — theme-aware */
+  /* On light/sepia themes, the parent .themed has filter: invert(1) hue-rotate(180deg)
+     which bleaches red. We apply the same filter on .red-letter itself to cancel it,
+     so the CSS color renders directly. Sepia still goes through sepia(0.5) saturate(0.85)
+     so a more vivid starting color is used there. */
   :global(.red-letter) { color: #CC0000; }
   :global(body.dark-theme .red-letter) { color: #FF3F3F; }
-  :global(body.sepia-theme .red-letter) { color: #AC0000; }
+  :global(body.light-theme .red-letter) {
+    filter: invert(1) hue-rotate(180deg);
+    color: #CC0000;
+  }
+  :global(body.sepia-theme .red-letter) {
+    filter: invert(1) hue-rotate(180deg);
+    color: #FF2020;
+  }
 
   /* Hide scrollbars but keep scroll functionality */
   :global(*) {
