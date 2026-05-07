@@ -1704,6 +1704,8 @@
 
       if (nextVerses.length > 0) {
         const nextHeadingMap = await headingsStore.getChapterHeadings(nextBook, nextChapter);
+        if (showRedLetter && redLetterData === null) await loadRedLetterData();
+        const rlMap = showRedLetter ? getChapterRedLetterMap(currentTranslation, nextBook, nextChapter) : new Map();
         const processedVerses = nextVerses.map((v) => {
           const { heading, textWithoutHeading } = extractHeading(v.text);
           const hlEntry = nextHeadingMap.get(v.verse);
@@ -1711,6 +1713,7 @@
           return {
             verse: v.verse,
             text: textWithoutHeading,
+            html: renderVerseHtml(textWithoutHeading, rlMap.get(v.verse)),
             heading: finalHeading,
             headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
           };
@@ -1808,6 +1811,8 @@
 
       if (prevVerses.length > 0) {
         const prevHeadingMap = await headingsStore.getChapterHeadings(prevBook, prevChapter);
+        if (showRedLetter && redLetterData === null) await loadRedLetterData();
+        const rlMap = showRedLetter ? getChapterRedLetterMap(currentTranslation, prevBook, prevChapter) : new Map();
         const processedVerses = prevVerses.map((v) => {
           const { heading, textWithoutHeading } = extractHeading(v.text);
           const hlEntry = prevHeadingMap.get(v.verse);
@@ -1815,6 +1820,7 @@
           return {
             verse: v.verse,
             text: textWithoutHeading,
+            html: renderVerseHtml(textWithoutHeading, rlMap.get(v.verse)),
             heading: finalHeading,
             headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
           };

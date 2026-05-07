@@ -193,6 +193,48 @@ function alignSpan(spanText, webVerseText, targetText) {
         }
         if (endPos > startPos) {
           while (endPos < targetText.length && /[.!?,;:"'\u201D\u2019]/.test(targetText[endPos])) endPos++;
+          // Clamp start to 0 if the sequence starts close to the verse beginning
+          // (handles short words like "If I" that fall below the 3-letter threshold)
+          if (startPos <= 15) startPos = 0;
+          return { s: startPos, e: endPos };
+        }
+      }
+    }
+  }
+
+  // Strategy 4: whole-verse word-overlap fallback.
+  // Handles edition differences like "Don't"/"Do not" or "only born"/"one and only" where
+  // strategies 1-3 fail but the span clearly covers most of the verse content.
+  {
+    const spanWords = (span.match(/\b[a-zA-Z]{3,}\b/g) || []).map(w => w.toLowerCase());
+    const spanWordSet = new Set(spanWords);
+    const tgtWordList = [];
+    const wordRe4 = /\b[a-zA-Z]{3,}\b/g;
+    let wm4;
+    while ((wm4 = wordRe4.exec(targetText)) !== null) {
+      tgtWordList.push({ w: wm4[0].toLowerCase(), s: wm4.index, e: wm4.index + wm4[0].length });
+    }
+    if (spanWords.length > 0 && tgtWordList.length > 0) {
+      const matched = spanWords.filter(w => tgtWordList.some(t => t.w === w)).length;
+      const overlap = matched / spanWords.length;
+      // Span must cover ≥40% of target verse words and have ≥55% word overlap
+      if (overlap >= 0.55 && spanWords.length >= tgtWordList.length * 0.40) {
+        let startPos = -1;
+        for (const t of tgtWordList) {
+          if (spanWordSet.has(t.w)) { startPos = t.s; break; }
+        }
+        let endPos = -1;
+        for (let wi = tgtWordList.length - 1; wi >= 0; wi--) {
+          if (spanWordSet.has(tgtWordList[wi].w)) { endPos = tgtWordList[wi].e; break; }
+        }
+        if (startPos >= 0 && endPos > startPos) {
+          // Clamp start to 0 if the first matching word is close to the verse start
+          // (handles short narrator prefixes like "If " or contractions like "Don't"→"Do not")
+          if (startPos <= 15) startPos = 0;
+          // Extend end past trailing punctuation
+          while (endPos < targetText.length && /[.!?,;:"'\u201D\u2019]/.test(targetText[endPos])) endPos++;
+          // Clamp to verse end if close
+          if (targetText.length - endPos <= 10) endPos = targetText.length;
           return { s: startPos, e: endPos };
         }
       }
