@@ -288,7 +288,7 @@
   <div class="setting-group">
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={showRedLetter} on:change={saveSettings} />
-      <span class="label-text">Red Letter (Jesus&#8217; Words)</span>
+      <span class="label-text">Words of Jesus in red letters</span>
     </label>
   </div>
 
