@@ -135,7 +135,89 @@
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
   let verseLayout: "one-per-line" | "paragraph" | "paragraph-no-verse-numbers" = "one-per-line";
   let showSectionHeadings = true;
+  let showRedLetter = true;
   let scrollHandler: ((e: Event) => void) | null = null;
+
+  // Red-letter span data loaded lazily from /red-letter-spans.json
+  // Format: { [transId]: { ["BOOK:CH:V"]: [{s,e}] } }
+  let redLetterData: Record<string, Record<string, { s: number; e: number }[]>> | null = null;
+  let redLetterLoading = false;
+
+  /** Load the red-letter spans JSON once and cache it. */
+  async function loadRedLetterData(): Promise<void> {
+    if (redLetterData !== null || redLetterLoading) return;
+    redLetterLoading = true;
+    try {
+      const res = await fetch('/red-letter-spans.json');
+      if (res.ok) redLetterData = await res.json();
+    } catch {
+      // Network failure — red-letter simply won't display
+    } finally {
+      redLetterLoading = false;
+    }
+  }
+
+  /** USFM 3-letter book code lookup (handles both numeric and Roman-numeral pack variants). */
+  const BOOK_TO_USFM: Record<string, string> = {
+    Matthew:'MAT', Mark:'MRK', Luke:'LUK', John:'JHN', Acts:'ACT', Romans:'ROM',
+    'I Corinthians':'1CO', '1 Corinthians':'1CO',
+    'II Corinthians':'2CO', '2 Corinthians':'2CO',
+    Galatians:'GAL', Ephesians:'EPH', Philippians:'PHP', Colossians:'COL',
+    'I Thessalonians':'1TH', '1 Thessalonians':'1TH',
+    'II Thessalonians':'2TH', '2 Thessalonians':'2TH',
+    'I Timothy':'1TI', '1 Timothy':'1TI',
+    'II Timothy':'2TI', '2 Timothy':'2TI',
+    Titus:'TIT', Philemon:'PHM', Hebrews:'HEB', James:'JAS',
+    'I Peter':'1PE', '1 Peter':'1PE',
+    'II Peter':'2PE', '2 Peter':'2PE',
+    'I John':'1JN', '1 John':'1JN',
+    'II John':'2JN', '2 John':'2JN',
+    'III John':'3JN', '3 John':'3JN',
+    Jude:'JUD', 'Revelation of John':'REV', Revelation:'REV',
+  };
+
+  /**
+   * Return a Map from verse number → red-letter spans for the given book/chapter.
+   * Requires redLetterData to be loaded and showRedLetter to be true.
+   */
+  function getChapterRedLetterMap(
+    transId: string,
+    book: string,
+    chapter: number,
+  ): Map<number, { s: number; e: number }[]> {
+    const map = new Map<number, { s: number; e: number }[]>();
+    if (!redLetterData) return map;
+    const transSpans = redLetterData[transId.toLowerCase()];
+    if (!transSpans) return map;
+    const usfm = BOOK_TO_USFM[book];
+    if (!usfm) return map;
+    const prefix = `${usfm}:${chapter}:`;
+    for (const [key, spans] of Object.entries(transSpans)) {
+      if (key.startsWith(prefix)) {
+        const verse = parseInt(key.slice(prefix.length), 10);
+        if (!isNaN(verse)) map.set(verse, spans as { s: number; e: number }[]);
+      }
+    }
+    return map;
+  }
+
+  /**
+   * Re-render all loaded chapter verse HTML to reflect a change in showRedLetter.
+   * Avoids a full DB reload — just re-applies (or removes) span markup.
+   */
+  async function reRenderRedLetter(): Promise<void> {
+    if (showRedLetter && redLetterData === null) await loadRedLetterData();
+    chapters = chapters.map((c) => {
+      const rlMap = showRedLetter ? getChapterRedLetterMap(currentTranslation, c.book, c.chapter) : new Map();
+      return {
+        ...c,
+        verses: c.verses.map((v) => ({
+          ...v,
+          html: renderVerseHtml(v.text, rlMap.get(v.verse)),
+        })),
+      };
+    });
+  }
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Commentary anchor verse-sync
@@ -291,11 +373,16 @@
     const settings = getSettings();
     verseLayout = settings.verseLayout || "one-per-line";
     showSectionHeadings = settings.showSectionHeadings !== false; // default true
+    showRedLetter = settings.showRedLetter !== false; // default true
   }
 
   // Listen for settings updates
-  function handleSettingsUpdate() {
+  async function handleSettingsUpdate() {
+    const prevRedLetter = showRedLetter;
     loadUserSettings();
+    if (prevRedLetter !== showRedLetter) {
+      await reRenderRedLetter();
+    }
   }
 
   // Use per-window state if windowId provided, otherwise use global state
@@ -919,6 +1006,11 @@
       }
 
       const chapterHeadingMap = await headingsStore.getChapterHeadings(book, chapter);
+
+      // Load red-letter span data if needed
+      if (showRedLetter && redLetterData === null) await loadRedLetterData();
+      const rlMap = showRedLetter ? getChapterRedLetterMap(translation, book, chapter) : new Map();
+
       const processedVerses = chapterVerses.map((v) => {
         const { heading, textWithoutHeading } = extractHeading(v.text);
         const hlEntry = chapterHeadingMap.get(v.verse);
@@ -926,7 +1018,7 @@
         return {
           verse: v.verse,
           text: textWithoutHeading,
-          html: renderVerseHtml(textWithoutHeading),
+          html: renderVerseHtml(textWithoutHeading, rlMap.get(v.verse)),
           heading: finalHeading,
           headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
         };

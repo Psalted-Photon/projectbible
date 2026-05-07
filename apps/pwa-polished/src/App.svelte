@@ -219,6 +219,11 @@
     filter: invert(1) hue-rotate(180deg);
   }
 
+  /* Red-letter (Jesus' words) — theme-aware */
+  :global(.red-letter) { color: #CC0000; }
+  :global(body.dark-theme .red-letter) { color: #FF3F3F; }
+  :global(body.sepia-theme .red-letter) { color: #AC0000; }
+
   /* Hide scrollbars but keep scroll functionality */
   :global(*) {
     scrollbar-width: none; /* Firefox */

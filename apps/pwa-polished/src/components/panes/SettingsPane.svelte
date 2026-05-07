@@ -9,6 +9,7 @@
   let verseLayout: "one-per-line" | "paragraph" | "paragraph-no-verse-numbers" = "one-per-line";
   let wordWrap: boolean = true;
   let allowRotation: boolean = false;
+  let showRedLetter: boolean = true;
   let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const TIMEZONE_OPTIONS: { label: string; value: string }[] = [
@@ -42,6 +43,7 @@
     verseLayout = settings.verseLayout || "one-per-line";
     wordWrap = settings.wordWrap !== undefined ? settings.wordWrap : true;
     allowRotation = settings.allowRotation !== undefined ? settings.allowRotation : false;
+    showRedLetter = settings.showRedLetter !== false;
     timezone = settings.timezone || '';
   });
 
@@ -192,6 +194,7 @@
       verseLayout,
       wordWrap,
       allowRotation,
+      showRedLetter,
       timezone: timezone || undefined,
     });
 
@@ -279,6 +282,13 @@
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={allowRotation} />
       <span class="label-text">Allow Screen Rotation</span>
+    </label>
+  </div>
+
+  <div class="setting-group">
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={showRedLetter} on:change={saveSettings} />
+      <span class="label-text">Red Letter (Jesus&#8217; Words)</span>
     </label>
   </div>
 

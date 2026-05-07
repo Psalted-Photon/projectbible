@@ -156,10 +156,67 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
   return { html: out, noteCount: noteIndex };
 }
 
-export function renderVerseHtml(text: string): string {
+/**
+ * Build a mapping from clean-text positions (footnote markers removed) to
+ * stored-text positions.  Used to insert \x02/\x03 red-letter sentinels into
+ * stored text at the correct byte offsets.
+ *
+ * Returns an array where map[cleanPos] = storedPos.
+ * The last entry map[cleanLength] = storedLength covers the end position.
+ */
+function buildCleanToStoredMap(storedText: string): number[] {
+  const map: number[] = [];
+  let cleanPos = 0;
+  let i = 0;
+  while (i < storedText.length) {
+    const ch = storedText[i];
+    const prev = i > 0 ? storedText[i - 1] : ' ';
+    const isFootnoteStart = ch === '+' && (prev === ' ' || prev === '\n' || prev === '\t' || i === 0);
+    if (isFootnoteStart) {
+      const end = storedText.indexOf('\x01', i + 1);
+      if (end >= 0) {
+        i = end + 1; // skip footnote content entirely
+        continue;
+      }
+    }
+    map[cleanPos] = i;
+    cleanPos++;
+    i++;
+  }
+  map[cleanPos] = i; // end sentinel
+  return map;
+}
+
+export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]): string {
   const cleaned = stripHtmlTags(text);
-  const { html } = renderTextWithInlineNotes(cleaned);
-  return html;
+
+  let processed = cleaned;
+  if (spans && spans.length > 0) {
+    // Map clean-text offsets → stored-text positions so sentinels interleave
+    // correctly with footnote markers already in the stored text.
+    const map = buildCleanToStoredMap(cleaned);
+    const insertions: { pos: number; ch: string }[] = [];
+    for (const span of spans) {
+      const storedS = map[Math.min(span.s, map.length - 1)];
+      const storedE = map[Math.min(span.e, map.length - 1)];
+      if (storedS !== undefined && storedE !== undefined && storedE > storedS) {
+        insertions.push({ pos: storedE, ch: '\x03' });
+        insertions.push({ pos: storedS, ch: '\x02' });
+      }
+    }
+    // Right-to-left insertion preserves earlier offsets
+    insertions.sort((a, b) => b.pos - a.pos);
+    for (const { pos, ch } of insertions) {
+      processed = processed.slice(0, pos) + ch + processed.slice(pos);
+    }
+  }
+
+  const { html } = renderTextWithInlineNotes(processed);
+
+  // Wrap \x02…\x03 sentinels with red-letter span; clean up any orphaned sentinels
+  return html
+    .replace(/\x02([\s\S]*?)\x03/g, '<span class="red-letter">$1</span>')
+    .replace(/[\x02\x03]/g, '');
 }
 
 export function extractHeading(text: string): { heading: string | null; textWithoutHeading: string } {
