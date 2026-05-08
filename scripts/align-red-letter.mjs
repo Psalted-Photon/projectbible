@@ -355,6 +355,7 @@ function refineWithCrossVerseQuotes(transOut, getter) {
       verseTexts.set(v, stripFootnotes(stored));
     }
 
+    // quoteOpen: are we inside a \u201C...\u201D region as we enter this verse?
     let quoteOpen = false;
 
     for (let v = 1; v <= maxV + 5; v++) {
@@ -363,57 +364,55 @@ function refineWithCrossVerseQuotes(transOut, getter) {
       const key = `${book}:${ch}:${v}`;
       const isJesus = jesusVerseSet.has(v);
 
-      const firstOpen = text.indexOf('\u201C');
-      const lastClose = text.lastIndexOf('\u201D');
+      // Scan ALL \u201C/\u201D pairs in order — trust the quotes completely.
+      // This handles BSB's style of "first part," said Jesus, "continued speech..."
+      // where a close+open pair in the same verse carries the speech forward.
+      const spans = [];
+      let pos = 0;
+      let spanStart = quoteOpen ? 0 : -1;  // if entering mid-speech, verse starts red
 
-      if (!quoteOpen) {
-        if (firstOpen < 0) {
-          // No curly quotes in this verse.
-          // If USFX shows Jesus speaking ≥90% of the verse, mark the whole
-          // verse red — this translation chose not to quote this speech unit
-          // (e.g. NET treats John 3:16-21 as the evangelist's commentary).
-          if (isJesus && wjSpans[key]) {
-            const totalSpanChars = wjSpans[key].reduce((sum, sp) => sum + sp.text.trim().length, 0);
-            const webLen = (webByKey[key] || '').replace(/\s+/g, ' ').trim().length;
-            if (webLen > 0 && totalSpanChars / webLen >= 0.90) {
-              transOut[key] = [{ s: 0, e: text.length }];
-              refined++;
-            }
-          }
-          continue;
-        }
-        const closeAfterOpen = text.indexOf('\u201D', firstOpen + 1);
-        // If USFX marks Jesus speaking from verse start (usfxS===0) but the
-        // target's quote opens mid-verse, extend back to 0 — the pre-quote
-        // text is also Jesus' speech (NET sometimes quotes only a sub-clause)
-        const usfxStartsAt0 = wjSpans[key] && wjSpans[key][0].usfxS === 0;
-        const spanStart = (firstOpen > 0 && usfxStartsAt0) ? 0 : firstOpen;
-        if (closeAfterOpen >= 0) {
-          // Self-contained: opens and closes in same verse
-          if (isJesus) { transOut[key] = [{ s: spanStart, e: closeAfterOpen + 1 }]; refined++; }
-          quoteOpen = false;
-        } else {
-          // Multi-verse speech begins here
-          if (isJesus) { transOut[key] = [{ s: spanStart, e: text.length }]; refined++; }
+      while (pos <= text.length) {
+        const nextOpen  = text.indexOf('\u201C', pos);
+        const nextClose = text.indexOf('\u201D', pos);
+
+        if (!quoteOpen) {
+          if (nextOpen < 0) break;  // no more openings — done with this verse
+          // Skip a stray close that appears before the next open
+          if (nextClose >= 0 && nextClose < nextOpen) { pos = nextClose + 1; continue; }
+          // Open found
           quoteOpen = true;
-        }
-      } else {
-        // Inside an ongoing multi-verse speech
-        if (lastClose >= 0) {
-          // Speech closes in this verse
-          if (isJesus) { transOut[key] = [{ s: 0, e: lastClose + 1 }]; refined++; }
-          quoteOpen = false;
-          // A new speech may immediately open after the close
-          const newOpen = text.indexOf('\u201C', lastClose + 1);
-          if (newOpen >= 0) {
-            const newClose = text.indexOf('\u201D', newOpen + 1);
-            if (isJesus) { transOut[key] = [{ s: 0, e: newClose >= 0 ? newClose + 1 : text.length }]; }
-            quoteOpen = newClose < 0;
-          }
+          spanStart = nextOpen;
+          pos = nextOpen + 1;
         } else {
-          // No close quote — entire verse is within the ongoing speech
-          if (isJesus) { transOut[key] = [{ s: 0, e: text.length }]; refined++; }
-          // quoteOpen stays true
+          // Inside a quoted region
+          if (nextClose < 0) {
+            // No close in this verse — speech continues into next verse
+            spans.push({ s: spanStart, e: text.length });
+            break;  // quoteOpen stays true
+          }
+          // Close found — record this span
+          spans.push({ s: spanStart, e: nextClose + 1 });
+          quoteOpen = false;
+          spanStart = -1;
+          pos = nextClose + 1;
+          // Loop continues — may find another \u201C after "said Jesus," etc.
+        }
+      }
+
+      if (spans.length > 0 && isJesus) {
+        transOut[key] = spans;
+        refined++;
+      }
+
+      // No-quote fallback: verse has no quotes at all (neither open nor mid-speech),
+      // but USFX says Jesus speaks ≥90% of the equivalent WEB verse.
+      // Handles translations that render Jesus's speech as narrator prose (e.g. NET John 3:16-21).
+      if (spans.length === 0 && !quoteOpen && isJesus && wjSpans[key]) {
+        const totalSpanChars = wjSpans[key].reduce((sum, sp) => sum + sp.text.trim().length, 0);
+        const webLen = (webByKey[key] || '').replace(/\s+/g, ' ').trim().length;
+        if (webLen > 0 && totalSpanChars / webLen >= 0.90) {
+          transOut[key] = [{ s: 0, e: text.length }];
+          refined++;
         }
       }
     }
