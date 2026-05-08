@@ -217,8 +217,8 @@ function alignSpan(spanText, webVerseText, targetText) {
     if (spanWords.length > 0 && tgtWordList.length > 0) {
       const matched = spanWords.filter(w => tgtWordList.some(t => t.w === w)).length;
       const overlap = matched / spanWords.length;
-      // Span must cover ≥40% of target verse words and have ≥55% word overlap
-      if (overlap >= 0.55 && spanWords.length >= tgtWordList.length * 0.40) {
+      // Span must cover ≥40% of target verse words and have ≥42% word overlap
+      if (overlap >= 0.42 && spanWords.length >= tgtWordList.length * 0.40) {
         let startPos = -1;
         for (const t of tgtWordList) {
           if (spanWordSet.has(t.w)) { startPos = t.s; break; }
@@ -238,6 +238,62 @@ function alignSpan(spanText, webVerseText, targetText) {
           if (targetText.length - endPos <= 10) endPos = targetText.length;
           return { s: startPos, e: endPos };
         }
+      }
+    }
+  }
+
+  // Strategy 5: short-span word scan.
+  // Strategy 3 requires ≥4 significant words; short utterances like "Follow me",
+  // "Come", "Peace be with you" fall through. Scan for any 1-2 word match and
+  // snap to the nearest quote boundary.
+  {
+    const sigWords = (span.match(/\b[a-zA-Z]{2,}\b/g) || []).map(w => w.toLowerCase());
+    if (sigWords.length >= 1 && sigWords.length <= 5) {
+      const nTgt = normalizeForSearch(targetText);
+      const nSp = normalizeForSearch(span);
+      // Try matching the first sig word in the target, then extend to the last
+      const wordRe5 = /\b[a-zA-Z]{2,}\b/g;
+      const tgtWords5 = [];
+      let wm5;
+      while ((wm5 = wordRe5.exec(nTgt)) !== null) {
+        tgtWords5.push({ w: wm5[0], s: wm5.index, e: wm5.index + wm5[0].length });
+      }
+      const first = sigWords[0];
+      const last = sigWords[sigWords.length - 1];
+      let startPos = -1, endPos = -1;
+      for (const t of tgtWords5) { if (t.w === first) { startPos = t.s; break; } }
+      for (let wi = tgtWords5.length - 1; wi >= 0; wi--) {
+        if (tgtWords5[wi].w === last && tgtWords5[wi].s >= startPos) { endPos = tgtWords5[wi].e; break; }
+      }
+      if (startPos >= 0 && endPos >= startPos) {
+        // Only accept if match is plausibly short relative to the verse
+        if (endPos - startPos <= span.length * 3 + 20) {
+          while (endPos < targetText.length && /[.!?,;:"'\u201D\u2019]/.test(targetText[endPos])) endPos++;
+          if (startPos <= 20) startPos = 0;
+          return { s: startPos, e: endPos };
+        }
+      }
+    }
+  }
+
+  // Strategy 6: whole-verse propagation via target quote regions.
+  // When the USFX span covers ≥75% of the WEB verse text (Jesus speaks nearly
+  // the whole verse), the equivalent target verse must also be nearly all Jesus.
+  // Trust the target's own quote marks to find the speech region; if the target
+  // has no quotes, the whole verse is Jesus' speech.
+  {
+    const webLen = webVerseText.replace(/\s+/g, ' ').trim().length;
+    const spanLen = span.length;
+    if (webLen > 0 && spanLen / webLen >= 0.75) {
+      const tgtQuotes6 = getQuotedRegions(targetText);
+      if (tgtQuotes6.length > 0) {
+        // Union of all quote regions
+        const s6 = tgtQuotes6[0].s;
+        const e6 = tgtQuotes6[tgtQuotes6.length - 1].e;
+        return { s: s6, e: e6 };
+      } else {
+        // No quotes — whole verse is Jesus' speech
+        return { s: 0, e: targetText.length };
       }
     }
   }
