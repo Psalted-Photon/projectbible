@@ -31,6 +31,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..');
 
 const WJ_SPANS_PATH = join(repoRoot, 'data', 'processed', 'wj-spans-web.json');
+const KJV_WJ_SPANS_PATH = join(repoRoot, 'data', 'processed', 'wj-spans-kjv.json');
 const WEB_JSON_PATH = join(repoRoot, 'data-sources', 'WEB.json');
 const KJV_JSON_PATH = join(repoRoot, 'data-sources', 'KJV.json');
 const PACKS_DIR = join(repoRoot, 'packs');
@@ -451,6 +452,11 @@ if (!existsSync(WJ_SPANS_PATH)) { console.error('❌ Run extract-wj-spans.mjs fi
 const wjSpans = JSON.parse(readFileSync(WJ_SPANS_PATH, 'utf8'));
 console.log(`   ${Object.keys(wjSpans).length} verses with <wj> spans`);
 
+console.log('📖 Loading wj-spans-kjv.json...');
+if (!existsSync(KJV_WJ_SPANS_PATH)) { console.error('❌ Run extract-wj-spans-kjv.mjs first.'); process.exit(1); }
+const kjvWjSpans = JSON.parse(readFileSync(KJV_WJ_SPANS_PATH, 'utf8'));
+console.log(`   ${Object.keys(kjvWjSpans).length} verses with KJV <wj> spans`);
+
 // ── Verse text getters ────────────────────────────────────────────────────────
 
 function makeVerseGetter(transId, packFile) {
@@ -488,16 +494,18 @@ for (const { id, getter } of translations) {
   const transOut = {};
   let aligned = 0, skipped = 0;
 
-  for (const [key, spanDefs] of Object.entries(wjSpans)) {
+  const sourceSpans = (id === 'kjv') ? kjvWjSpans : wjSpans;
+  for (const [key, spanDefs] of Object.entries(sourceSpans)) {
     const webText = webByKey[key];
-    if (!webText) continue;
+    if (id !== 'kjv' && !webText) continue;
     const storedText = getter(key);
     if (!storedText) continue;
     const cleanText = (id === 'web' || id === 'kjv') ? storedText : stripFootnotes(storedText);
+    const refText = (id === 'kjv') ? cleanText : webText;
 
     const results = [];
     for (const spanDef of spanDefs) {
-      const r = snapToQuotes(alignSpan(spanDef.text, webText, cleanText), cleanText);
+      const r = snapToQuotes(alignSpan(spanDef.text, refText, cleanText), cleanText);
       if (r && r.e > r.s) { results.push(r); aligned++; } else skipped++;
     }
 
@@ -520,8 +528,9 @@ for (const { id, getter } of translations) {
   }
 
   output[id] = transOut;
-  const pct = ((Object.keys(transOut).length / Object.keys(wjSpans).length) * 100).toFixed(1);
-  console.log(`   Covered: ${Object.keys(transOut).length}/${Object.keys(wjSpans).length} (${pct}%)`);
+  const totalSource = Object.keys(sourceSpans).length;
+  const pct = ((Object.keys(transOut).length / totalSource) * 100).toFixed(1);
+  console.log(`   Covered: ${Object.keys(transOut).length}/${totalSource} (${pct}%)`);  
   console.log(`   Aligned: ${aligned}, skipped: ${skipped}`);
 }
 
