@@ -3391,7 +3391,7 @@
   }
 
   .verse {
-    margin-bottom: 4.4rem;
+    margin-bottom: 0;
     position: relative;
     font-size: var(--base-font-size, 18px);
     line-height: var(--line-spacing, 1.8);
