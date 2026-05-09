@@ -32,6 +32,7 @@ const repoRoot = join(__dirname, '..');
 
 const WJ_SPANS_PATH = join(repoRoot, 'data', 'processed', 'wj-spans-web.json');
 const KJV_WJ_SPANS_PATH = join(repoRoot, 'data', 'processed', 'wj-spans-kjv.json');
+const BSB_WJ_SPANS_PATH = join(repoRoot, 'data', 'processed', 'wj-spans-bsb.json');
 const WEB_JSON_PATH = join(repoRoot, 'data-sources', 'WEB.json');
 const KJV_JSON_PATH = join(repoRoot, 'data-sources', 'KJVPCE.json');
 const PACKS_DIR = join(repoRoot, 'packs');
@@ -365,6 +366,11 @@ function refineWithCrossVerseQuotes(transOut, getter) {
       const key = `${book}:${ch}:${v}`;
       const isJesus = jesusVerseSet.has(v);
 
+      // Capture quote state at verse entry (before scanning) so we know if
+      // this verse is a cross-verse continuation (quoteOpenAtStart=true) vs
+      // a fresh verse that may have multiple speakers (quoteOpenAtStart=false).
+      const quoteOpenAtStart = quoteOpen;
+
       // Scan ALL \u201C/\u201D pairs in order — trust the quotes completely.
       // This handles BSB's style of "first part," said Jesus, "continued speech..."
       // where a close+open pair in the same verse carries the speech forward.
@@ -401,8 +407,14 @@ function refineWithCrossVerseQuotes(transOut, getter) {
       }
 
       if (spans.length > 0 && isJesus) {
-        transOut[key] = spans;
-        refined++;
+        // Only override if there was already an open quote entering this verse
+        // (cross-verse continuation) OR if we have no alignment yet.
+        // This prevents multi-speaker verses (e.g. NET Luke 23:3 where Pilate
+        // asks and Jesus replies) from having Pilate's question turned red.
+        if (quoteOpenAtStart || !transOut[key]) {
+          transOut[key] = spans;
+          refined++;
+        }
       }
 
       // No-quote fallback: verse has no quotes at all (neither open nor mid-speech),
@@ -457,6 +469,11 @@ if (!existsSync(KJV_WJ_SPANS_PATH)) { console.error('❌ Run extract-wj-spans-kj
 const kjvWjSpans = JSON.parse(readFileSync(KJV_WJ_SPANS_PATH, 'utf8'));
 console.log(`   ${Object.keys(kjvWjSpans).length} verses with KJV <wj> spans`);
 
+console.log('📖 Loading wj-spans-bsb.json...');
+if (!existsSync(BSB_WJ_SPANS_PATH)) { console.error('❌ Run extract-wj-spans-bsb.mjs first.'); process.exit(1); }
+const bsbWjSpans = JSON.parse(readFileSync(BSB_WJ_SPANS_PATH, 'utf8'));
+console.log(`   ${Object.keys(bsbWjSpans).length} verses with BSB \\wj spans`);
+
 // ── Verse text getters ────────────────────────────────────────────────────────
 
 function makeVerseGetter(transId, packFile) {
@@ -494,7 +511,7 @@ for (const { id, getter } of translations) {
   const transOut = {};
   let aligned = 0, skipped = 0;
 
-  const sourceSpans = (id === 'kjv') ? kjvWjSpans : wjSpans;
+  const sourceSpans = (id === 'kjv') ? kjvWjSpans : (id === 'bsb') ? bsbWjSpans : wjSpans;
   for (const [key, spanDefs] of Object.entries(sourceSpans)) {
     const webText = webByKey[key];
     if (id !== 'kjv' && !webText) continue;
@@ -503,7 +520,7 @@ for (const { id, getter } of translations) {
     const cleanText = (id === 'web' || id === 'kjv')
       ? storedText.replace(/^¶\s*/, '')
       : stripFootnotes(storedText);
-    const refText = (id === 'kjv') ? cleanText : webText;
+    const refText = (id === 'web' || id === 'kjv' || id === 'bsb') ? cleanText : webText;
 
     const results = [];
     for (const spanDef of spanDefs) {
@@ -523,9 +540,10 @@ for (const { id, getter } of translations) {
     }
   }
 
-  // For translations with curly quotes, do a cross-verse quote-tracking pass.
-  // This is the final authority — the opening and closing " are ground truth.
-  if (id === 'bsb' || id === 'net') {
+  // For NET, do a cross-verse quote-tracking pass to catch multi-verse speeches.
+  // BSB now uses its own native \wj spans (wj-spans-bsb.json) which already
+  // correctly identify only Jesus's speech — no cross-verse override needed.
+  if (id === 'net') {
     refineWithCrossVerseQuotes(transOut, getter);
   }
 
