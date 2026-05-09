@@ -85,6 +85,11 @@ function stripFootnotes(text) {
   return out;
 }
 
+/** Strip HTML tags (e.g. <b>...</b> in NET sqlite text). */
+function stripHtml(text) {
+  return text.replace(/<[^>]+>/g, '');
+}
+
 /** Length-preserving quote normalisation (curly → straight). */
 function normalizeQuotes(text) {
   return text
@@ -354,7 +359,7 @@ function refineWithCrossVerseQuotes(transOut, getter) {
     for (let v = 1; v <= maxV + 5; v++) {
       const stored = getter(`${book}:${ch}:${v}`);
       if (!stored) continue;
-      verseTexts.set(v, stripFootnotes(stored));
+      verseTexts.set(v, stripHtml(stripFootnotes(stored)));
     }
 
     // quoteOpen: are we inside a \u201C...\u201D region as we enter this verse?
@@ -407,13 +412,27 @@ function refineWithCrossVerseQuotes(transOut, getter) {
       }
 
       if (spans.length > 0 && isJesus) {
-        // Only override if there was already an open quote entering this verse
-        // (cross-verse continuation) OR if we have no alignment yet.
-        // This prevents multi-speaker verses (e.g. NET Luke 23:3 where Pilate
-        // asks and Jesus replies) from having Pilate's question turned red.
-        if (quoteOpenAtStart || !transOut[key]) {
+        // Override rules (prevent multi-speaker verses being over-highlighted):
+        // 1. Always override when entering mid-speech (cross-verse continuation).
+        // 2. Always override when no alignment exists yet.
+        // 3. Also override when quote-scan result is strictly WITHIN the existing
+        //    span (narrower) — this corrects over-wide initial alignments like
+        //    NET Luke 23:46 where the initial pass overshoots by 7 chars.
+        //    We do NOT override when scan result is wider (that was the Luke 23:3
+        //    multi-speaker bug where Pilate's question got highlighted).
+        const existing = transOut[key];
+        if (quoteOpenAtStart || !existing) {
           transOut[key] = spans;
           refined++;
+        } else {
+          const eS = existing.reduce((a, sp) => Math.min(a, sp.s), Infinity);
+          const eE = existing.reduce((a, sp) => Math.max(a, sp.e), -Infinity);
+          const sS = spans.reduce((a, sp) => Math.min(a, sp.s), Infinity);
+          const sE = spans.reduce((a, sp) => Math.max(a, sp.e), -Infinity);
+          if (sS >= eS && sE <= eE) {
+            transOut[key] = spans;
+            refined++;
+          }
         }
       }
 
@@ -518,8 +537,8 @@ for (const { id, getter } of translations) {
     const storedText = getter(key);
     if (!storedText) continue;
     const cleanText = (id === 'web' || id === 'kjv')
-      ? storedText.replace(/^¶\s*/, '')
-      : stripFootnotes(storedText);
+      ? stripHtml(storedText.replace(/^¶\s*/, ''))
+      : stripHtml(stripFootnotes(storedText));
     const refText = (id === 'web' || id === 'kjv' || id === 'bsb') ? cleanText : webText;
 
     const results = [];
