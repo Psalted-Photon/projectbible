@@ -33,7 +33,7 @@ const repoRoot = join(__dirname, '..');
 const WJ_SPANS_PATH = join(repoRoot, 'data', 'processed', 'wj-spans-web.json');
 const KJV_WJ_SPANS_PATH = join(repoRoot, 'data', 'processed', 'wj-spans-kjv.json');
 const WEB_JSON_PATH = join(repoRoot, 'data-sources', 'WEB.json');
-const KJV_JSON_PATH = join(repoRoot, 'data-sources', 'KJV.json');
+const KJV_JSON_PATH = join(repoRoot, 'data-sources', 'KJVPCE.json');
 const PACKS_DIR = join(repoRoot, 'packs');
 const OUT_PATH = join(repoRoot, 'apps', 'pwa-polished', 'public', 'red-letter-spans.json');
 
@@ -500,7 +500,9 @@ for (const { id, getter } of translations) {
     if (id !== 'kjv' && !webText) continue;
     const storedText = getter(key);
     if (!storedText) continue;
-    const cleanText = (id === 'web' || id === 'kjv') ? storedText : stripFootnotes(storedText);
+    const cleanText = (id === 'web' || id === 'kjv')
+      ? storedText.replace(/^¶\s*/, '')
+      : stripFootnotes(storedText);
     const refText = (id === 'kjv') ? cleanText : webText;
 
     const results = [];
@@ -544,7 +546,9 @@ for (const key of verifyKeys) {
     if (!getter) continue;
     const spans = output[id]?.[key];
     const stored = getter(key) || '';
-    const clean = (id === 'web' || id === 'kjv') ? stored : stripFootnotes(stored);
+    const clean = (id === 'web' || id === 'kjv')
+      ? stored.replace(/^¶\s*/, '')
+      : stripFootnotes(stored);
     if (!spans) { console.log(`    ${id}: (no alignment)`); continue; }
     for (const { s, e } of spans) {
       const ex = clean.slice(s, e);

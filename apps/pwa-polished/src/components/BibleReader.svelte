@@ -1015,12 +1015,15 @@
         const { heading, textWithoutHeading } = extractHeading(v.text);
         const hlEntry = chapterHeadingMap.get(v.verse);
         const finalHeading = heading || v.heading || hlEntry?.heading || null;
+        const paraStart = textWithoutHeading.startsWith('¶');
+        const cleanText = paraStart ? textWithoutHeading.replace(/^¶\s*/, '') : textWithoutHeading;
         return {
           verse: v.verse,
-          text: textWithoutHeading,
-          html: renderVerseHtml(textWithoutHeading, rlMap.get(v.verse)),
+          text: cleanText,
+          html: renderVerseHtml(cleanText, rlMap.get(v.verse)),
           heading: finalHeading,
           headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
+          paraStart,
         };
       });
 
@@ -1710,12 +1713,15 @@
           const { heading, textWithoutHeading } = extractHeading(v.text);
           const hlEntry = nextHeadingMap.get(v.verse);
           const finalHeading = heading || v.heading || hlEntry?.heading || null;
+          const paraStart = textWithoutHeading.startsWith('¶');
+          const cleanText = paraStart ? textWithoutHeading.replace(/^¶\s*/, '') : textWithoutHeading;
           return {
             verse: v.verse,
-            text: textWithoutHeading,
-            html: renderVerseHtml(textWithoutHeading, rlMap.get(v.verse)),
+            text: cleanText,
+            html: renderVerseHtml(cleanText, rlMap.get(v.verse)),
             heading: finalHeading,
             headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
+            paraStart,
           };
         });
 
@@ -1817,12 +1823,15 @@
           const { heading, textWithoutHeading } = extractHeading(v.text);
           const hlEntry = prevHeadingMap.get(v.verse);
           const finalHeading = heading || v.heading || hlEntry?.heading || null;
+          const paraStart = textWithoutHeading.startsWith('¶');
+          const cleanText = paraStart ? textWithoutHeading.replace(/^¶\s*/, '') : textWithoutHeading;
           return {
             verse: v.verse,
-            text: textWithoutHeading,
-            html: renderVerseHtml(textWithoutHeading, rlMap.get(v.verse)),
+            text: cleanText,
+            html: renderVerseHtml(cleanText, rlMap.get(v.verse)),
             heading: finalHeading,
             headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
+            paraStart,
           };
         });
 
@@ -3183,12 +3192,12 @@
             class:paragraph-layout={verseLayout === "paragraph"}
             class:nonumber-layout={verseLayout === "paragraph-no-verse-numbers"}
           >
-            {#each chapterData.verses as { verse, text, html, heading, headingLevel }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
+            {#each chapterData.verses as { verse, text, html, heading, headingLevel, paraStart }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
               {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
               {#if heading && showSectionHeadings}
                 <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
               {/if}
-              <div class="verse" data-verse={verse}>
+              <div class="verse" class:para-start={paraStart} data-verse={verse}>
                 <span class="verse-number">{verse}</span>
                 {#if showCommentaries && commentaryByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
                   {#each [...new Set(commentaryByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!.map((e) => e.author))] as author}
@@ -3671,6 +3680,11 @@
     margin-bottom: 0;
   }
 
+  .verses.paragraph-layout .verse.para-start {
+    display: block;
+    margin-top: 1em;
+  }
+
   .verses.paragraph-layout .verse-number {
     vertical-align: baseline;
     font-size: calc(var(--base-font-size, 18px) * 0.5);
@@ -3681,6 +3695,11 @@
   .verses.nonumber-layout .verse {
     display: inline;
     margin-bottom: 0;
+  }
+
+  .verses.nonumber-layout .verse.para-start {
+    display: block;
+    margin-top: 1em;
   }
 
   .verses.nonumber-layout .verse-number {
@@ -3697,6 +3716,10 @@
 
   .verses.nonumber-layout .verse-text::after {
     content: "\00a0\00a0";
+  }
+
+  .verse.para-start {
+    margin-top: 1.2em;
   }
 
   /* Increase font size for mobile devices */

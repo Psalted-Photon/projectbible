@@ -133,7 +133,7 @@ let currentWjStart = -1;
 function saveVerseSpans() {
   // Close any still-open wj span at verse end
   if (inWj && currentWjStart >= 0 && verseText.length > currentWjStart) {
-    const spanText = verseText.slice(currentWjStart).trim().replace(/\s+/g, ' ');
+    const spanText = verseText.slice(currentWjStart).trim().replace(/\s+/g, ' ').replace(/^¶\s*/, '');
     if (spanText.length > 0) {
       verseSpans.push({ text: spanText, usfxS: currentWjStart, usfxE: verseText.length });
     }
@@ -179,7 +179,7 @@ for (const token of tokenize(xml)) {
       if (inVerse && footnoteDepth === 0) {
         // Close any existing open span (shouldn't happen but be safe)
         if (inWj && currentWjStart >= 0 && verseText.length > currentWjStart) {
-          const spanText = verseText.slice(currentWjStart).trim().replace(/\s+/g, ' ');
+          const spanText = verseText.slice(currentWjStart).trim().replace(/\s+/g, ' ').replace(/^¶\s*/, '');
           if (spanText.length > 0) {
             verseSpans.push({ text: spanText, usfxS: currentWjStart, usfxE: verseText.length });
           }
@@ -190,7 +190,7 @@ for (const token of tokenize(xml)) {
     } else if (token.name === 'f' || token.name === 'fe' || token.name === 'x') {
       // Footnote / cross-ref — if wj was open across a footnote, close and re-open after
       if (inWj && footnoteDepth === 0 && currentWjStart >= 0 && verseText.length > currentWjStart) {
-        const spanText = verseText.slice(currentWjStart).trim().replace(/\s+/g, ' ');
+        const spanText = verseText.slice(currentWjStart).trim().replace(/\s+/g, ' ').replace(/^¶\s*/, '');
         if (spanText.length > 0) {
           verseSpans.push({ text: spanText, usfxS: currentWjStart, usfxE: verseText.length });
         }
@@ -204,7 +204,7 @@ for (const token of tokenize(xml)) {
   } else if (token.type === 'close') {
     if (token.name === 'wj') {
       if (inWj && currentWjStart >= 0 && verseText.length > currentWjStart) {
-        const spanText = verseText.slice(currentWjStart).trim().replace(/\s+/g, ' ');
+        const spanText = verseText.slice(currentWjStart).trim().replace(/\s+/g, ' ').replace(/^¶\s*/, '');
         if (spanText.length > 0) {
           verseSpans.push({ text: spanText, usfxS: currentWjStart, usfxE: verseText.length });
         }
