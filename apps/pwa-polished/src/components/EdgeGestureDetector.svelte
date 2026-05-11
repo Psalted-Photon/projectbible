@@ -19,6 +19,15 @@
   let mouseY = 0;
   let usingTouch = false; // Track if we're using touch to ignore mouse events
 
+  // Task 1: Pending edge — direction detection before committing a drag
+  let pendingEdge: WindowEdge | null = null;
+  let pendingStartX = 0;
+  let pendingStartY = 0;
+
+  // Task 2: Bottom long-press to arm
+  let bottomArmTimer: ReturnType<typeof setTimeout> | null = null;
+  let isBottomArmed = false;
+
   $: atLimit = $windowStore.length >= 6;
   $: bumperClass = atLimit ? 'at-limit' : 'normal';
 
@@ -64,19 +73,29 @@
     const x = touch.clientX;
     const y = touch.clientY;
 
-    // Detect edge zones (all 4 edges)
+    // Detect edge zones — queue as pending, commit only after direction is known
     if (y < EDGE_ZONE_WIDTH) {
-      edgePosition = "top";
-      startDrag(x, y);
+      pendingEdge = "top";
+      pendingStartX = x;
+      pendingStartY = y;
     } else if (x < EDGE_ZONE_WIDTH) {
-      edgePosition = "left";
-      startDrag(x, y);
+      pendingEdge = "left";
+      pendingStartX = x;
+      pendingStartY = y;
     } else if (x > window.innerWidth - EDGE_ZONE_WIDTH) {
-      edgePosition = "right";
-      startDrag(x, y);
+      pendingEdge = "right";
+      pendingStartX = x;
+      pendingStartY = y;
     } else if (y > window.innerHeight - EDGE_ZONE_WIDTH) {
-      edgePosition = "bottom";
-      startDrag(x, y);
+      // Bottom: long-press to arm before committing
+      pendingStartX = x;
+      pendingStartY = y;
+      bottomArmTimer = setTimeout(() => {
+        bottomArmTimer = null;
+        isBottomArmed = true;
+        pendingEdge = "bottom";
+        console.log('✅ Bottom bumper armed');
+      }, 400);
     }
   }
 
@@ -143,11 +162,51 @@
   }
 
   function handleTouchMove(e: TouchEvent) {
+    const touch = e.touches[0];
+    const x = touch.clientX;
+    const y = touch.clientY;
+
+    // Task 2: cancel bottom arm timer if finger moves too much before it fires
+    if (bottomArmTimer !== null) {
+      const dx = Math.abs(x - pendingStartX);
+      const dy = Math.abs(y - pendingStartY);
+      if (dx > 15 || dy > 15) {
+        clearTimeout(bottomArmTimer);
+        bottomArmTimer = null;
+        pendingStartX = 0;
+        pendingStartY = 0;
+        console.log('❌ Bottom arm cancelled - quick flick');
+      }
+      return; // bottom not armed yet, nothing else to do
+    }
+
+    // Task 1: direction detection — commit only once vertical intent is clear
+    if (pendingEdge !== null && !isDragging) {
+      const dx = Math.abs(x - pendingStartX);
+      const dy = Math.abs(y - pendingStartY);
+      if (Math.max(dx, dy) >= 10) {
+        if (dx > dy) {
+          // Horizontal intent → cancel, let browser scroll naturally
+          pendingEdge = null;
+          console.log('↔ Horizontal swipe - bumper cancelled');
+        } else {
+          // Vertical intent → commit drag
+          edgePosition = pendingEdge;
+          pendingEdge = null;
+          startDrag(pendingStartX, pendingStartY);
+          currentX = x;
+          currentY = y;
+          e.preventDefault();
+          console.log('↕ Vertical swipe - bumper committed:', edgePosition);
+        }
+      }
+      return;
+    }
+
     if (!isDragging) return;
 
-    const touch = e.touches[0];
-    currentX = touch.clientX;
-    currentY = touch.clientY;
+    currentX = x;
+    currentY = y;
 
     // Prevent default scrolling while dragging
     e.preventDefault();
@@ -168,8 +227,20 @@
 
   function handleTouchEnd() {
     console.log('🟢 TOUCH END called:', { isDragging, edgePosition, usingTouch });
-    if (!isDragging || !edgePosition) return;
-    
+
+    // Clean up any pending/armed state from Task 1 & 2
+    if (bottomArmTimer !== null) {
+      clearTimeout(bottomArmTimer);
+      bottomArmTimer = null;
+    }
+    isBottomArmed = false;
+    pendingEdge = null;
+
+    if (!isDragging || !edgePosition) {
+      if (usingTouch) setTimeout(() => { usingTouch = false; }, 100);
+      return;
+    }
+
     // Prevent duplicate execution from mouse events
     if (!usingTouch) {
       console.log('⛔ TOUCH END blocked - usingTouch is false');
@@ -328,7 +399,7 @@
 <div class="bumper bumper-top {bumperClass}" class:hovered={hoveredEdge === 'top'}></div>
 <div class="bumper bumper-left {bumperClass}" class:hovered={hoveredEdge === 'left'} class:pending-close={closingEdge === 'left'}></div>
 <div class="bumper bumper-right {bumperClass}" class:hovered={hoveredEdge === 'right'} class:pending-close={closingEdge === 'right'}></div>
-<div class="bumper bumper-bottom {bumperClass}" class:hovered={hoveredEdge === 'bottom'} class:pending-close={closingEdge === 'bottom'}></div>
+<div class="bumper bumper-bottom {bumperClass}" class:hovered={hoveredEdge === 'bottom'} class:pending-close={closingEdge === 'bottom'} class:armed={isBottomArmed}></div>
 
 <!-- Visual feedback during drag - preview panel -->
 {#if isDragging && edgePosition}
@@ -391,6 +462,18 @@
     right: 0;
     bottom: 0;
     height: 4px;
+  }
+
+  .bumper-bottom.armed {
+    background: rgba(102, 126, 234, 0.7);
+    height: 6px;
+    animation: arm-pulse 0.25s ease-out;
+  }
+
+  @keyframes arm-pulse {
+    0%   { background: rgba(80, 80, 80, 0.3); height: 4px; }
+    60%  { background: rgba(102, 126, 234, 0.9); height: 7px; }
+    100% { background: rgba(102, 126, 234, 0.7); height: 6px; }
   }
 
   .drag-preview {
