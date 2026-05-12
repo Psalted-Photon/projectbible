@@ -5,8 +5,9 @@
 
   $: closingEdge = $pendingCloseEdge;
 
-  const EDGE_ZONE_WIDTH = 40; // pixels (doubled for easier phone grab)
+  const EDGE_ZONE_WIDTH = 40; // pixels
   const OPEN_THRESHOLD = 0.05; // 5% of screen width/height
+  const BOTTOM_DEAD_HALF = 20; // half of 40px center dead zone for Android home gesture
 
   let isDragging = false;
   let startX = 0;
@@ -19,15 +20,13 @@
   let mouseY = 0;
   let usingTouch = false; // Track if we're using touch to ignore mouse events
 
-  // Task 1: Pending edge — direction detection before committing a drag
+  // Pending edge — direction detection before committing a drag
   let pendingEdge: WindowEdge | null = null;
   let pendingStartX = 0;
   let pendingStartY = 0;
 
-  // Task 2: Bottom long-press to arm
-  let bottomArmTimer: ReturnType<typeof setTimeout> | null = null;
-  let isBottomArmed = false;
-  let touchStartedInBottomZone = false; // locks reader scroll for any touch in bottom zone
+  // Locks reader scroll for any touch starting in the bottom zone
+  let touchInBottomZone = false;
 
   $: atLimit = $windowStore.length >= 6;
   $: bumperClass = atLimit ? 'at-limit' : 'normal';
@@ -88,17 +87,15 @@
       pendingStartX = x;
       pendingStartY = y;
     } else if (y > window.innerHeight - EDGE_ZONE_WIDTH) {
-      // Bottom: lock scroll immediately + long-press to arm before committing
-      touchStartedInBottomZone = true;
-      pendingStartX = x;
-      pendingStartY = y;
-      bottomArmTimer = setTimeout(() => {
-        bottomArmTimer = null;
-        isBottomArmed = true;
+      // Bottom zone: lock reader scroll. Only arm bumper outside the center dead zone.
+      touchInBottomZone = true;
+      const centerX = window.innerWidth / 2;
+      if (x < centerX - BOTTOM_DEAD_HALF || x > centerX + BOTTOM_DEAD_HALF) {
         pendingEdge = "bottom";
-        if (navigator.vibrate) navigator.vibrate(40);
-        console.log('✅ Bottom bumper armed');
-      }, 250);
+        pendingStartX = x;
+        pendingStartY = y;
+      }
+      // else: center dead zone — Android home gesture lane, no window
     }
   }
 
@@ -131,8 +128,11 @@
       edgePosition = "right";
       startDrag(x, y);
     } else if (y > window.innerHeight - EDGE_ZONE_WIDTH) {
-      edgePosition = "bottom";
-      startDrag(x, y);
+      const centerX = window.innerWidth / 2;
+      if (x < centerX - BOTTOM_DEAD_HALF || x > centerX + BOTTOM_DEAD_HALF) {
+        edgePosition = "bottom";
+        startDrag(x, y);
+      }
     }
   }
 
@@ -170,25 +170,11 @@
     const y = touch.clientY;
 
     // Freeze reader scroll for any touch that started in the bottom zone
-    if (touchStartedInBottomZone) {
+    if (touchInBottomZone) {
       e.preventDefault();
     }
 
-    // Task 2: cancel bottom arm timer if finger moves too much before it fires
-    if (bottomArmTimer !== null) {
-      const dx = Math.abs(x - pendingStartX);
-      const dy = Math.abs(y - pendingStartY);
-      if (dx > 15 || dy > 15) {
-        clearTimeout(bottomArmTimer);
-        bottomArmTimer = null;
-        pendingStartX = 0;
-        pendingStartY = 0;
-        console.log('❌ Bottom arm cancelled - quick flick');
-      }
-      return; // bottom not armed yet, nothing else to do
-    }
-
-    // Task 1: direction detection — commit only once vertical intent is clear
+    // Direction detection — commit only once vertical intent is clear
     if (pendingEdge !== null && !isDragging) {
       const dx = Math.abs(x - pendingStartX);
       const dy = Math.abs(y - pendingStartY);
@@ -236,14 +222,9 @@
   function handleTouchEnd() {
     console.log('🟢 TOUCH END called:', { isDragging, edgePosition, usingTouch });
 
-    // Clean up any pending/armed state from Task 1 & 2
-    if (bottomArmTimer !== null) {
-      clearTimeout(bottomArmTimer);
-      bottomArmTimer = null;
-    }
-    isBottomArmed = false;
+    // Clean up pending state
     pendingEdge = null;
-    touchStartedInBottomZone = false;
+    touchInBottomZone = false;
 
     if (!isDragging || !edgePosition) {
       if (usingTouch) setTimeout(() => { usingTouch = false; }, 100);
@@ -408,10 +389,7 @@
 <div class="bumper bumper-top {bumperClass}" class:hovered={hoveredEdge === 'top'}></div>
 <div class="bumper bumper-left {bumperClass}" class:hovered={hoveredEdge === 'left'} class:pending-close={closingEdge === 'left'}></div>
 <div class="bumper bumper-right {bumperClass}" class:hovered={hoveredEdge === 'right'} class:pending-close={closingEdge === 'right'}></div>
-<div class="bumper bumper-bottom {bumperClass}" class:hovered={hoveredEdge === 'bottom'} class:pending-close={closingEdge === 'bottom'} class:armed={isBottomArmed}></div>
-
-<!-- Bottom touch shield: blocks text selection in the bumper grab zone -->
-<div class="bottom-touch-shield"></div>
+<div class="bumper bumper-bottom {bumperClass}" class:hovered={hoveredEdge === 'bottom'} class:pending-close={closingEdge === 'bottom'}></div>
 
 <!-- Visual feedback during drag - preview panel -->
 {#if isDragging && edgePosition}
@@ -474,31 +452,9 @@
     right: 0;
     bottom: 0;
     height: 4px;
-  }
-
-  .bumper-bottom.armed {
-    background: rgba(102, 126, 234, 0.9);
-    height: 10px;
-    animation: arm-pulse 0.2s ease-out;
-  }
-
-  @keyframes arm-pulse {
-    0%   { background: rgba(80, 80, 80, 0.3); height: 4px; }
-    50%  { background: rgba(102, 126, 234, 1.0); height: 13px; }
-    100% { background: rgba(102, 126, 234, 0.9); height: 10px; }
-  }
-
-  .bottom-touch-shield {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 40px;
-    pointer-events: auto;
+    -webkit-touch-callout: none;
     user-select: none;
     -webkit-user-select: none;
-    z-index: 9997;
-    background: transparent;
   }
 
   .drag-preview {
