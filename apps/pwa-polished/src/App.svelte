@@ -63,7 +63,9 @@
 
     const handleVisibility = () => {
       if (document.hidden) return;
-      // SyncService handles reconnection automatically
+      // Re-sync when the user switches back to this tab so progress written
+      // on another device (mobile) is pulled into IndexedDB immediately.
+      void syncService.forceSync();
     };
 
     document.addEventListener("visibilitychange", handleVisibility);

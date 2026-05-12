@@ -161,10 +161,32 @@ export async function applyRemoteReadingProgress(rows: any[]): Promise<void> {
   }
 
   console.log(`[SyncedReading] Applied ${rows.length} reading_progress rows`);
+  bumpReadingProgressVersion();
+}
+
+// ─── Realtime handler for reading_progress ───────────────────────────
+//
+// When another device writes a progress row, Supabase fires a Realtime
+// INSERT/UPDATE event. We apply it directly to IndexedDB so the modal
+// updates without requiring a manual refresh or second tab-switch.
+
+async function handleRealtimeProgressChange(change: any): Promise<void> {
+  if (change.eventType === 'DELETE') return; // nothing to apply
+  const row = change.new;
+  if (!row?.id) return;
+  try {
+    await applyRemoteReadingProgress([row]);
+    // bumpReadingProgressVersion is already called inside applyRemoteReadingProgress
+  } catch (err) {
+    console.error('[SyncedReading] Realtime progress apply error:', err);
+  }
 }
 
 // ─── Self-register with SyncService ──────────────────────────────────
 
 import { syncService } from '../lib/sync/SyncService';
+import { realtimeService } from '../lib/sync/RealtimeService';
+import { bumpReadingProgressVersion } from '../stores/readingProgressVersionStore';
 syncService.registerApplyFn('reading_plans', applyRemoteReadingPlans);
 syncService.registerApplyFn('reading_progress', applyRemoteReadingProgress);
+realtimeService.onTableChange('reading_progress', handleRealtimeProgressChange);

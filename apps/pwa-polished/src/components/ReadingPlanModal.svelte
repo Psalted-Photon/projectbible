@@ -18,6 +18,7 @@
   import { syncService, type SyncState } from '../lib/sync';
   import { syncQueue } from '../lib/sync/SyncQueueService';
   import { userProfileStore } from '../stores/userProfileStore';
+  import { readingProgressVersion } from '../stores/readingProgressVersionStore';
   import CalendarView from './CalendarView.svelte';
   import harmonyData from '../data/robertson-harmony.json';
   
@@ -125,6 +126,12 @@
     loadActivePlan();
     // Also refresh progress from IndexedDB in case a background sync ran
     // while the modal was closed (covers the common open-on-phone scenario).
+    loadProgressForPlan();
+  }
+
+  // Reload progress whenever a Realtime event or pull from Supabase writes
+  // new reading_progress rows — works whether the modal is open or closed.
+  $: if ($readingProgressVersion > 0) {
     loadProgressForPlan();
   }
 
