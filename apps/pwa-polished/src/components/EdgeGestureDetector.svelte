@@ -25,8 +25,7 @@
   let pendingStartX = 0;
   let pendingStartY = 0;
 
-  // Locks reader scroll for any touch starting in the bottom zone
-  let touchInBottomZone = false;
+
 
   $: atLimit = $windowStore.length >= 6;
   $: bumperClass = atLimit ? 'at-limit' : 'normal';
@@ -87,8 +86,7 @@
       pendingStartX = x;
       pendingStartY = y;
     } else if (y > window.innerHeight - EDGE_ZONE_WIDTH) {
-      // Bottom zone: lock reader scroll. Only arm bumper outside the center dead zone.
-      touchInBottomZone = true;
+      // Bottom zone: only arm bumper outside the center dead zone (Android home gesture lane).
       const centerX = window.innerWidth / 2;
       if (x < centerX - BOTTOM_DEAD_HALF || x > centerX + BOTTOM_DEAD_HALF) {
         pendingEdge = "bottom";
@@ -169,11 +167,6 @@
     const x = touch.clientX;
     const y = touch.clientY;
 
-    // Freeze reader scroll for any touch that started in the bottom zone
-    if (touchInBottomZone) {
-      e.preventDefault();
-    }
-
     // Direction detection — commit only once vertical intent is clear
     if (pendingEdge !== null && !isDragging) {
       const dx = Math.abs(x - pendingStartX);
@@ -224,7 +217,6 @@
 
     // Clean up pending state
     pendingEdge = null;
-    touchInBottomZone = false;
 
     if (!isDragging || !edgePosition) {
       if (usingTouch) setTimeout(() => { usingTouch = false; }, 100);
