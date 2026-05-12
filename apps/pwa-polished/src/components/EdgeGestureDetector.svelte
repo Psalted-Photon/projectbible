@@ -27,6 +27,7 @@
   // Task 2: Bottom long-press to arm
   let bottomArmTimer: ReturnType<typeof setTimeout> | null = null;
   let isBottomArmed = false;
+  let touchStartedInBottomZone = false; // locks reader scroll for any touch in bottom zone
 
   $: atLimit = $windowStore.length >= 6;
   $: bumperClass = atLimit ? 'at-limit' : 'normal';
@@ -87,15 +88,17 @@
       pendingStartX = x;
       pendingStartY = y;
     } else if (y > window.innerHeight - EDGE_ZONE_WIDTH) {
-      // Bottom: long-press to arm before committing
+      // Bottom: lock scroll immediately + long-press to arm before committing
+      touchStartedInBottomZone = true;
       pendingStartX = x;
       pendingStartY = y;
       bottomArmTimer = setTimeout(() => {
         bottomArmTimer = null;
         isBottomArmed = true;
         pendingEdge = "bottom";
+        if (navigator.vibrate) navigator.vibrate(40);
         console.log('✅ Bottom bumper armed');
-      }, 400);
+      }, 250);
     }
   }
 
@@ -166,6 +169,11 @@
     const x = touch.clientX;
     const y = touch.clientY;
 
+    // Freeze reader scroll for any touch that started in the bottom zone
+    if (touchStartedInBottomZone) {
+      e.preventDefault();
+    }
+
     // Task 2: cancel bottom arm timer if finger moves too much before it fires
     if (bottomArmTimer !== null) {
       const dx = Math.abs(x - pendingStartX);
@@ -235,6 +243,7 @@
     }
     isBottomArmed = false;
     pendingEdge = null;
+    touchStartedInBottomZone = false;
 
     if (!isDragging || !edgePosition) {
       if (usingTouch) setTimeout(() => { usingTouch = false; }, 100);
@@ -401,6 +410,9 @@
 <div class="bumper bumper-right {bumperClass}" class:hovered={hoveredEdge === 'right'} class:pending-close={closingEdge === 'right'}></div>
 <div class="bumper bumper-bottom {bumperClass}" class:hovered={hoveredEdge === 'bottom'} class:pending-close={closingEdge === 'bottom'} class:armed={isBottomArmed}></div>
 
+<!-- Bottom touch shield: blocks text selection in the bumper grab zone -->
+<div class="bottom-touch-shield"></div>
+
 <!-- Visual feedback during drag - preview panel -->
 {#if isDragging && edgePosition}
   <div 
@@ -465,15 +477,28 @@
   }
 
   .bumper-bottom.armed {
-    background: rgba(102, 126, 234, 0.7);
-    height: 6px;
-    animation: arm-pulse 0.25s ease-out;
+    background: rgba(102, 126, 234, 0.9);
+    height: 10px;
+    animation: arm-pulse 0.2s ease-out;
   }
 
   @keyframes arm-pulse {
     0%   { background: rgba(80, 80, 80, 0.3); height: 4px; }
-    60%  { background: rgba(102, 126, 234, 0.9); height: 7px; }
-    100% { background: rgba(102, 126, 234, 0.7); height: 6px; }
+    50%  { background: rgba(102, 126, 234, 1.0); height: 13px; }
+    100% { background: rgba(102, 126, 234, 0.9); height: 10px; }
+  }
+
+  .bottom-touch-shield {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
+    z-index: 9997;
+    background: transparent;
   }
 
   .drag-preview {
