@@ -381,6 +381,10 @@
       const entries = await readingProgressStore.getProgressForPlan(currentPlanId);
       dayProgressMap = new Map(entries.map((entry) => [entry.dayNumber, entry]));
       lastLoadedPlanId = currentPlanId;
+      // Svelte doesn't track dayProgressMap through getDayProgress() calls in the
+      // template (opaque function). Re-assigning currentReadingPlan forces a
+      // re-render so progress-dependent expressions pick up the updated map.
+      currentReadingPlan = currentReadingPlan;
     } catch (error) {
       console.error('Error loading reading progress:', error);
     }
