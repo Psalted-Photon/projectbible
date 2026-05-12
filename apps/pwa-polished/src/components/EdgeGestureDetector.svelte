@@ -25,7 +25,8 @@
   let pendingStartX = 0;
   let pendingStartY = 0;
 
-
+  // Locks reader scroll for any touch starting in the bottom zone
+  let touchInBottomZone = false;
 
   $: atLimit = $windowStore.length >= 6;
   $: bumperClass = atLimit ? 'at-limit' : 'normal';
@@ -86,7 +87,8 @@
       pendingStartX = x;
       pendingStartY = y;
     } else if (y > window.innerHeight - EDGE_ZONE_WIDTH) {
-      // Bottom zone: only arm bumper outside the center dead zone (Android home gesture lane).
+      // Bottom zone: lock reader scroll. Only arm bumper outside the center dead zone.
+      touchInBottomZone = true;
       const centerX = window.innerWidth / 2;
       if (x < centerX - BOTTOM_DEAD_HALF || x > centerX + BOTTOM_DEAD_HALF) {
         pendingEdge = "bottom";
@@ -167,24 +169,31 @@
     const x = touch.clientX;
     const y = touch.clientY;
 
-    // Direction detection — commit only once vertical intent is clear
+    // Freeze reader scroll for any touch that started in the bottom zone
+    if (touchInBottomZone) {
+      e.preventDefault();
+    }
+
+    // Direction detection — commit when movement matches the edge's axis
     if (pendingEdge !== null && !isDragging) {
       const dx = Math.abs(x - pendingStartX);
       const dy = Math.abs(y - pendingStartY);
       if (Math.max(dx, dy) >= 10) {
-        if (dx > dy) {
-          // Horizontal intent → cancel, let browser scroll naturally
-          pendingEdge = null;
-          console.log('↔ Horizontal swipe - bumper cancelled');
-        } else {
-          // Vertical intent → commit drag
+        const isHorizontalEdge = pendingEdge === 'left' || pendingEdge === 'right';
+        const correctAxis = isHorizontalEdge ? dx > dy : dy > dx;
+        if (correctAxis) {
+          // Matches edge direction → commit drag
           edgePosition = pendingEdge;
           pendingEdge = null;
           startDrag(pendingStartX, pendingStartY);
           currentX = x;
           currentY = y;
           e.preventDefault();
-          console.log('↕ Vertical swipe - bumper committed:', edgePosition);
+          console.log('✅ Bumper committed:', edgePosition);
+        } else {
+          // Wrong axis → cancel, let browser handle naturally
+          pendingEdge = null;
+          console.log('❌ Wrong axis - bumper cancelled');
         }
       }
       return;
@@ -217,6 +226,7 @@
 
     // Clean up pending state
     pendingEdge = null;
+    touchInBottomZone = false;
 
     if (!isDragging || !edgePosition) {
       if (usingTouch) setTimeout(() => { usingTouch = false; }, 100);
