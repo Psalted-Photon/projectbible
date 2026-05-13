@@ -64,8 +64,10 @@
     const handleVisibility = () => {
       if (document.hidden) return;
       // Re-sync when the user switches back to this tab so progress written
-      // on another device (mobile) is pulled into IndexedDB immediately.
-      void syncService.forceSync();
+      // on another device is pulled into IndexedDB. Throttled to at most
+      // once every 30 s and guarded by the forceSync mutex so it can never
+      // pile up or leave the status stuck on "Syncing..."
+      void syncService.forceSync(30_000);
     };
 
     document.addEventListener("visibilitychange", handleVisibility);

@@ -31,7 +31,9 @@ class SyncService {
   
   private listeners: Set<StateListener> = new Set();
   private initialized = false;
-  private signingIn = false; // mutex — prevents double-call from onAuthStateChange + getUser()
+  private signingIn = false;    // mutex — prevents double-call from onAuthStateChange + getUser()
+  private forceSyncing = false; // mutex — prevents overlapping forceSync / visibility calls
+  private lastForceSyncAt = 0;  // epoch ms — used to throttle rapid re-triggers
   private authUnsubscribe: (() => void) | null = null;
   private queueUnsubscribe: (() => void) | null = null;
   private syncStores: SyncStore[] = [];
@@ -102,12 +104,17 @@ class SyncService {
   /**
    * Force a sync (manual refresh)
    */
-  async forceSync(): Promise<void> {
+  async forceSync(throttleMs = 0): Promise<void> {
     if (!navigator.onLine) {
       this.updateState({ error: 'Cannot sync while offline' });
       return;
     }
-    
+    // Mutex: skip if already running
+    if (this.forceSyncing) return;
+    // Throttle: skip if called again within throttleMs of last completion
+    if (throttleMs > 0 && Date.now() - this.lastForceSyncAt < throttleMs) return;
+
+    this.forceSyncing = true;
     this.updateState({ status: 'syncing', error: null });
     
     try {
@@ -122,7 +129,8 @@ class SyncService {
       
       // Then pull remote changes
       await this.pullRemoteData();
-      
+
+      this.lastForceSyncAt = Date.now();
       this.updateState({ 
         status: 'idle', 
         lastSyncedAt: new Date(),
@@ -133,6 +141,8 @@ class SyncService {
         status: 'error', 
         error: err.message 
       });
+    } finally {
+      this.forceSyncing = false;
     }
   }
   
