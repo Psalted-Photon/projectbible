@@ -114,6 +114,20 @@ class SyncQueueService {
           item.status = 'pending';
           item.attempts = 0;
           item.lastError = undefined;
+          // Fix legacy reading_progress items that stored raw epoch-ms numbers
+          // in TIMESTAMPTZ columns — convert them to ISO strings so Postgres
+          // accepts them instead of throwing "date/time field value out of range".
+          if (item.payload?.table === 'reading_progress' && item.payload?.data) {
+            const d = item.payload.data;
+            const msToIso = (v: any): string | null =>
+              v != null && typeof v === 'number' && v > 0
+                ? new Date(v).toISOString()
+                : (typeof v === 'string' && v.length > 0 ? v : null);
+            if (typeof d.created_at === 'number') d.created_at = msToIso(d.created_at) ?? new Date().toISOString();
+            if (typeof d.completed_at === 'number') d.completed_at = msToIso(d.completed_at);
+            if (typeof d.started_reading_at === 'number') d.started_reading_at = msToIso(d.started_reading_at);
+            item.payload.data = d;
+          }
           cursor.update(item);
           cursor.continue();
         } else {
