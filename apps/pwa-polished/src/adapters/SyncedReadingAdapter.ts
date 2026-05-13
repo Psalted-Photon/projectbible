@@ -126,6 +126,12 @@ export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
 export async function applyRemoteReadingProgress(rows: any[]): Promise<void> {
   if (!rows || rows.length === 0) return;
 
+  // Log a compact summary so we can see which plans/days/completion came in
+  const incomingSummary = rows.map(r => `day${r.day_number}(done=${r.completed})`).join(', ');
+  console.log(`[SyncedReading] ← PULL ${rows.length} rows | plan=${rows[0]?.plan_id} | ${incomingSummary}`);
+
+  // Build all entries first, then batch-upsert in one call to avoid race conditions
+  const entries: any[] = [];
   for (const row of rows) {
     try {
       const chaptersRead = typeof row.chapters_read === 'string'
@@ -143,8 +149,7 @@ export async function applyRemoteReadingProgress(rows: any[]): Promise<void> {
       const toMs = (v: any): number | undefined =>
         v == null ? undefined : typeof v === 'number' ? v : new Date(v).getTime();
 
-      // Write directly to IndexedDB (bypasses the read-progress write queue)
-      await readingProgressStore.upsertEntries([{
+      entries.push({
         id: row.id,
         planId: row.plan_id,
         dayNumber: row.day_number,
@@ -154,13 +159,17 @@ export async function applyRemoteReadingProgress(rows: any[]): Promise<void> {
         startedReadingAt: toMs(row.started_reading_at),
         chaptersRead,
         catchUpAdjustment,
-      }]);
+      });
     } catch (err) {
-      console.error('[SyncedReading] Failed to apply progress row:', row.id, err);
+      console.error('[SyncedReading] Failed to parse progress row:', row.id, err);
     }
   }
 
-  console.log(`[SyncedReading] Applied ${rows.length} reading_progress rows`);
+  if (entries.length > 0) {
+    await readingProgressStore.upsertEntries(entries);
+  }
+
+  console.log(`[SyncedReading] Applied ${entries.length} reading_progress rows`);
   bumpReadingProgressVersion();
 }
 
@@ -174,6 +183,7 @@ async function handleRealtimeProgressChange(change: any): Promise<void> {
   if (change.eventType === 'DELETE') return; // nothing to apply
   const row = change.new;
   if (!row?.id) return;
+  console.log(`[SyncedReading] ← REALTIME ${change.eventType} | plan=${row.plan_id} day=${row.day_number} completed=${row.completed} id=${row.id}`);
   try {
     await applyRemoteReadingProgress([row]);
     // bumpReadingProgressVersion is already called inside applyRemoteReadingProgress

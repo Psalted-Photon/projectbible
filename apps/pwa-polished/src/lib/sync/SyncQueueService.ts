@@ -60,6 +60,7 @@ class SyncQueueService {
       // Items enqueued while a previous batch is in-flight are handled here
       // instead of being silently dropped until the next external trigger.
       let batch = await this.getPendingItems();
+      console.log(`[SyncQueue] processQueue start: ${batch.length} pending items`);
       while (batch.length > 0) {
         for (const item of batch) {
           const ok = await this.processItem(item);
@@ -68,6 +69,7 @@ class SyncQueueService {
         }
         batch = await this.getPendingItems();
       }
+      console.log(`[SyncQueue] processQueue done: ${success} succeeded, ${failed} failed`);
       
       this.notifyListeners();
     } finally {
@@ -182,7 +184,10 @@ class SyncQueueService {
       
       // Success - delete from queue
       await writeTransaction('sync_queue', (store) => store.delete(item.id));
-      console.log(`[SyncQueue] ✓ ${op.type} ${op.table} ${op.id}`);
+      const dataPreview = op.table === 'reading_progress'
+        ? ` day=${op.data?.day_number} completed=${op.data?.completed}`
+        : '';
+      console.log(`[SyncQueue] ✓ ${op.type} ${op.table} ${op.id}${dataPreview}`);
       return true;
       
     } catch (error: any) {
