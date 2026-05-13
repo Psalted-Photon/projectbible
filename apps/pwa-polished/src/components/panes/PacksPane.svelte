@@ -6,6 +6,7 @@
     getDatabaseStats,
   } from "../../adapters/db-manager";
   import { importPackFromSQLite } from "../../adapters/pack-import";
+  import { installAudioPackToOPFS } from "../../adapters/audio";
   import { loadPackOnDemand } from "../../lib/progressive-init";
   import { USE_BUNDLED_PACKS } from "../../config";
 
@@ -165,7 +166,17 @@
     installProgress = `Preparing ${pack.name}...`;
 
     try {
-      if (USE_BUNDLED) {
+      // Audio packs (1+ GB) must be streamed directly to OPFS — never loaded into memory
+      const isAudioPack = pack.id.startsWith('bsb-audio');
+
+      if (isAudioPack) {
+        await installAudioPackToOPFS(pack.url, pack.id, (loaded, total) => {
+          const loadedMB = (loaded / (1024 * 1024)).toFixed(0);
+          const totalMB = total > 0 ? (total / (1024 * 1024)).toFixed(0) : '?';
+          installProgress = `Downloading ${pack.name} (${loadedMB} MB / ${totalMB} MB)…`;
+        });
+      } else if (USE_BUNDLED) {
+      } else if (USE_BUNDLED) {
         installProgress = `Loading ${pack.name} from local files...`;
 
         console.log("Pack object:", pack);

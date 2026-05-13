@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 25; // Migration 25: add modern_places store for GeoNames world places
+const DB_VERSION = 26; // Migration 26: add audio_cache store for cached chapter audio blobs
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -640,6 +640,11 @@ export function openDB(): Promise<IDBDatabase> {
         audioStore.createIndex('translationId', 'translationId', { unique: false });
         audioStore.createIndex('book', 'book', { unique: false });
         audioStore.createIndex('translation_book_chapter', ['translationId', 'book', 'chapter'], { unique: false });
+      }
+
+      // Audio cache store — stores extracted chapter audio blobs for instant replay
+      if (!db.objectStoreNames.contains('audio_cache')) {
+        db.createObjectStore('audio_cache', { keyPath: 'id' });
       }
       
       // Reading plan days store

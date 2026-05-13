@@ -8,6 +8,21 @@ import { batchWriteTransaction, writeTransaction, openDB } from './db.js';
 export async function importPackFromSQLite(file: File): Promise<void> {
   console.log(`Importing pack from ${file.name}...`);
 
+  // Audio packs contain 1-2 GB of binary blobs — loading them into sql.js
+  // would crash the browser.  Detect by filename and redirect to the
+  // OPFS-based streaming installer before anything is loaded into memory.
+  const AUDIO_PACK_IDS = ['bsb-audio-pt1', 'bsb-audio-pt2'];
+  const packIdFromFilename = file.name.replace(/\.sqlite$/i, '');
+  if (AUDIO_PACK_IDS.includes(packIdFromFilename)) {
+    console.log(`Detected audio pack "${packIdFromFilename}" — using OPFS streaming installer`);
+    const { installAudioPackFromFile } = await import('./audio.js');
+    await installAudioPackFromFile(file, packIdFromFilename, (loaded, total) => {
+      const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+      if (pct % 10 === 0) console.log(`  Audio pack OPFS write: ${pct}%`);
+    });
+    return;
+  }
+
   // Dynamically import sql.js
   const sqlJsModule = await import('sql.js');
   console.log('sql.js module:', sqlJsModule);
@@ -1682,37 +1697,23 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       
       console.log(`✅ Study tools pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'audio') {
-      // Import audio pack metadata
-      console.log('Importing audio pack...');
-      
-      const audioRows = db.exec('SELECT book, chapter, file_path, format FROM audio_chapters');
-      
-      if (!audioRows.length || !audioRows[0].values.length) {
-        console.warn('No audio chapters found in audio pack');
-        return;
-      }
-      
-      const audioChapters = audioRows[0].values.map(([book, chapter, filePath, format]) => ({
-        id: `${packInfo.translationId}:${book}:${chapter}`,
-        translationId: packInfo.translationId!,
-        book: book as string,
-        chapter: chapter as number,
-        filePath: filePath as string,
-        format: format as string
-      }));
-      
-      console.log(`Importing ${audioChapters.length} audio chapters...`);
-      
-      // Batch insert audio metadata
-      const CHUNK_SIZE = 500;
-      for (let i = 0; i < audioChapters.length; i += CHUNK_SIZE) {
-        const chunk = audioChapters.slice(i, i + CHUNK_SIZE);
-        await batchWriteTransaction('audio_chapters', (store) => {
-          chunk.forEach(audio => store.put(audio));
+      // Audio packs are handled via the streaming OPFS installer (audio.ts).
+      // When a File is passed here (e.g. drag-and-drop), we write it to OPFS
+      // and index the metadata — the same end result as installAudioPackToOPFS.
+      console.log(`Audio pack detected (${packInfo.id}). Writing to OPFS for streaming access...`);
+
+      try {
+        const { installAudioPackFromFile } = await import('./audio.js');
+        await installAudioPackFromFile(file, packInfo.id, (loaded, total) => {
+          const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+          if (pct % 10 === 0) console.log(`  Audio pack write: ${pct}%`);
         });
+        console.log(`✅ Audio pack ${packInfo.id} installed to OPFS`);
+      } catch (audioErr) {
+        console.error('Audio pack OPFS install failed:', audioErr);
+        throw audioErr;
       }
-      
-      console.log(`✅ Audio pack ${packInfo.id} imported: ${audioChapters.length} chapters`);
+      return; // skip the generic sql.js processing below
     }
 
   } finally {
@@ -1721,11 +1722,25 @@ export async function importPackFromSQLite(file: File): Promise<void> {
 }
 
 /**
- * Import a pack from a URL
+ * Import a pack from a URL.
+ * Audio packs are streamed directly to OPFS to avoid loading 1-2 GB into memory.
  */
 export async function importPackFromUrl(url: string): Promise<void> {
   console.log(`Fetching pack from ${url}...`);
-  
+
+  // Detect audio packs by URL before downloading anything
+  const AUDIO_PACK_IDS = ['bsb-audio-pt1', 'bsb-audio-pt2'];
+  const urlFilename = url.split('/').pop()?.replace(/\.sqlite$/i, '') ?? '';
+  if (AUDIO_PACK_IDS.includes(urlFilename)) {
+    console.log(`Detected audio pack URL "${urlFilename}" — streaming to OPFS`);
+    const { installAudioPackToOPFS } = await import('./audio.js');
+    await installAudioPackToOPFS(url, urlFilename, (loaded, total) => {
+      const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+      if (pct % 10 === 0) console.log(`  Audio pack download: ${pct}%`);
+    });
+    return;
+  }
+
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch pack: ${response.statusText}`);

@@ -11,6 +11,7 @@
   import { IndexedDBUserDataStore } from "../adapters/UserDataStore";
   import { subscribeToHighlightRemoteChanges } from "../adapters/SyncedHighlightAdapter";
   import { applyChapterHighlights } from "../lib/highlightRenderer";
+  import AudioPlayer from "./AudioPlayer.svelte";
   import { syncQueue } from "../lib/sync/SyncQueueService";
   import type { UserHighlight, UserWordHighlight, HighlightStyle } from "@projectbible/core";
   import {
@@ -3186,6 +3187,7 @@
         <div class="chapter-section" data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
           <div class="chapter-header">
             <h1>{chapterData.book} {chapterData.chapter}</h1>
+            <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} />
           </div>
           <div
             class="verses {translationFontClass}"
@@ -3373,6 +3375,11 @@
     padding-top: 2rem;
     border-top: 2px solid #444;
     text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
   }
 
   .chapter-section:first-child .chapter-header {
