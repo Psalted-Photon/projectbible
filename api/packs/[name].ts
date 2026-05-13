@@ -22,41 +22,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
 
+    // Use redirect:manual so we can pass the CDN URL directly to the browser.
+    // objects.githubusercontent.com has Access-Control-Allow-Origin: * so the
+    // browser can fetch it without timing out through a Vercel function.
     const gh = await fetch(githubUrl, {
-      redirect: "follow",
+      redirect: "manual",
       headers
     });
+
+    // GitHub returns a 302 → objects.githubusercontent.com (CDN with CORS headers)
+    if (gh.status >= 300 && gh.status < 400) {
+      const location = gh.headers.get('location');
+      if (location) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.redirect(302, location);
+        return;
+      }
+    }
 
     if (!gh.ok || !gh.body) {
       res.status(gh.status).send(`GitHub fetch failed: ${gh.statusText}`);
       return;
     }
 
-    // CORS + streaming headers
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    
-    // Force JSON content type for manifest, otherwise use octet-stream
+    // Fallback: stream directly if GitHub didn't redirect (shouldn't normally happen)
+    res.setHeader('Access-Control-Allow-Origin', '*');
     if (name === 'manifest.json') {
-      res.setHeader("Content-Type", "application/json");
-      // Don't cache manifest - allow updates
-      res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     } else {
-      res.setHeader("Content-Type", "application/octet-stream");
-      // Do not cache at HTTP level — app-level IndexedDB handles caching
-      res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     }
 
-    // Stream GitHub → Vercel → Browser
     const reader = gh.body.getReader();
-
     res.status(200);
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       res.write(value);
     }
-
     res.end();
   } catch (err: any) {
     res.status(500).send(`Proxy error: ${err.message}`);
