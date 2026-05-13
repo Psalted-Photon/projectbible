@@ -72,3 +72,9 @@ Live site: **projectbible.vercel.app** — every git push triggers a Vercel depl
 Double-check current values before reporting them. Read the file first — do not guess or estimate sizes, colors, or settings.
 
 **Never state a number, limit, or external fact as if you know it when you don't.** If you are not certain, say "I don't know" or "I'm not sure — you should verify this." Giving a confident wrong answer wastes the user's time and money. Uncertainty is always preferable to a fabricated fact.
+
+## Before Starting Any Task
+
+1. **Read these instructions first.** Do not begin implementation without checking whether the answer is already here.
+2. **Follow existing architecture.** If the instructions describe how something works (e.g. packs come from GitHub Releases `v1.0.0`), apply that same pattern to new work — do not invent an alternative.
+3. **Do not question established patterns** without first reading the instructions to confirm they don't already answer the question.
