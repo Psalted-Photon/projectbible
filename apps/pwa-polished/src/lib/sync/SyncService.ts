@@ -34,6 +34,7 @@ class SyncService {
   private signingIn = false;    // mutex — prevents double-call from onAuthStateChange + getUser()
   private forceSyncing = false; // mutex — prevents overlapping forceSync / visibility calls
   private lastForceSyncAt = 0;  // epoch ms — used to throttle rapid re-triggers
+  private lastSignInSyncAt = 0; // epoch ms — throttles repeated onSignIn pulls (token refreshes)
   private authUnsubscribe: (() => void) | null = null;
   private queueUnsubscribe: (() => void) | null = null;
   private syncStores: SyncStore[] = [];
@@ -137,10 +138,12 @@ class SyncService {
         error: null 
       });
     } catch (err: any) {
-      this.updateState({ 
-        status: 'error', 
-        error: err.message 
-      });
+      if (err?.name === 'AbortError') {
+        console.debug('[SyncService] forceSync aborted (transient), ignoring');
+        this.updateState({ status: 'idle', error: null });
+      } else {
+        this.updateState({ status: 'error', error: err.message });
+      }
     } finally {
       this.forceSyncing = false;
     }
@@ -173,6 +176,10 @@ class SyncService {
     this.signingIn = true;
     console.log('[SyncService] User signed in:', userId.slice(0, 8) + '...');
     
+    // Supabase fires SIGNED_IN on every token refresh (triggered by tab visibility
+    // changes). Throttle the expensive pull to at most once per 60 seconds.
+    const skipPull = Date.now() - this.lastSignInSyncAt < 60_000;
+
     this.updateState({ status: 'syncing' });
     
     try {
@@ -180,7 +187,7 @@ class SyncService {
       // the correct payload format after an app update.
       await syncQueue.resetFailed();
 
-      // Connect to Realtime
+      // Connect to Realtime (idempotent — already connected calls are no-ops)
       await realtimeService.connect(userId);
       
       // Initialize store Realtime subscriptions (registers handlers on the live channel)
@@ -188,20 +195,29 @@ class SyncService {
         await store.initialize();
       }
       
-      // Pull initial data
-      await this.pullRemoteData();
+      // Pull initial data — skip if we just did this within the last 60s
+      if (!skipPull) {
+        await this.pullRemoteData();
+      } else {
+        console.debug('[SyncService] Skipping pull — synced recently');
+      }
 
+      this.lastSignInSyncAt = Date.now();
       this.updateState({ 
         status: 'idle', 
         lastSyncedAt: new Date(),
         error: null 
       });
     } catch (err: any) {
-      console.error('[SyncService] Sign-in sync error:', err);
-      this.updateState({ 
-        status: 'error', 
-        error: err.message 
-      });
+      // AbortError is thrown by Supabase when a token-refresh interrupts an in-flight
+      // auth request (e.g. visibility change). It's transient — don't surface to the user.
+      if (err?.name === 'AbortError') {
+        console.debug('[SyncService] Sign-in pull aborted (transient), ignoring');
+        this.updateState({ status: 'idle', error: null });
+      } else {
+        console.error('[SyncService] Sign-in sync error:', err);
+        this.updateState({ status: 'error', error: err.message });
+      }
     } finally {
       // Always flush pending writes — even if pulling failed
       if (navigator.onLine) {

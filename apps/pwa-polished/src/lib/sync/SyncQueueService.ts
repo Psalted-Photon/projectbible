@@ -171,7 +171,16 @@ class SyncQueueService {
   }
   
   private async processItem(item: DBSyncQueueItem): Promise<boolean> {
-    const { data: { user } } = await supabase.auth.getUser();
+    let user: any;
+    try {
+      const { data } = await supabase.auth.getUser();
+      user = data.user;
+    } catch (err: any) {
+      // Supabase aborts auth requests when the tab visibility changes.
+      // Treat as transient — leave item 'pending' for the next retry.
+      if (err?.name === 'AbortError') return false;
+      throw err;
+    }
     if (!user) {
       console.warn('[SyncQueue] No authenticated user, skipping');
       return false;
