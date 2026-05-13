@@ -118,7 +118,7 @@
       description: "Genesis - Psalms",
       size: "1.76 GB",
       icon: "🎵",
-      url: `${BASE_URL}/bsb-audio-pt1.sqlite`,
+      url: "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/bsb-audio-pt1.sqlite",
     },
     {
       id: "bsb-audio-pt2",
@@ -126,7 +126,7 @@
       description: "Proverbs - Revelation",
       size: "1.65 GB",
       icon: "🎵",
-      url: `${BASE_URL}/bsb-audio-pt2.sqlite`,
+      url: "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/bsb-audio-pt2.sqlite",
     },
   ];
 
@@ -175,7 +175,6 @@
           const totalMB = total > 0 ? (total / (1024 * 1024)).toFixed(0) : '?';
           installProgress = `Downloading ${pack.name} (${loadedMB} MB / ${totalMB} MB)…`;
         });
-      } else if (USE_BUNDLED) {
       } else if (USE_BUNDLED) {
         installProgress = `Loading ${pack.name} from local files...`;
 
