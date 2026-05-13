@@ -180,7 +180,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         skipWaiting: true,
-        clientsClaim: true
+        clientsClaim: true,
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024 // 4 MB (covers wa-sqlite-async.wasm at 2.28 MB)
       },
       manifest: {
         name: 'ProjectBible',
