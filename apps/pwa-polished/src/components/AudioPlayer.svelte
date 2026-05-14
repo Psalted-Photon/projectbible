@@ -1,6 +1,10 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { get } from 'svelte/store';
   import { getChapterAudio, isAudioAvailable } from '../adapters/audio.js';
+  import { continuousPlay, autoplayNext } from '../stores/audioStore.js';
+
+  const dispatch = createEventDispatcher<{ nextchapter: { book: string; chapter: number } }>();
 
   export let book: string;
   export let chapter: number;
@@ -13,6 +17,14 @@
   let duration = 0;
   let blobUrl: string | null = null;
   let errorMsg = '';
+
+  // Auto-play if previous chapter ended in continuous mode
+  onMount(() => {
+    if (get(autoplayNext)) {
+      autoplayNext.set(false);
+      togglePlay();
+    }
+  });
 
   // Clean up on component destroy
   onDestroy(() => {
@@ -67,7 +79,15 @@
       audio = new Audio(blobUrl);
       audio.ontimeupdate = () => { currentTime = audio!.currentTime; };
       audio.onloadedmetadata = () => { duration = audio!.duration; };
-      audio.onended = () => { state = 'idle'; currentTime = 0; };
+      audio.onended = () => {
+        if (get(continuousPlay)) {
+          autoplayNext.set(true);
+          dispatch('nextchapter', { book, chapter });
+        } else {
+          state = 'idle';
+          currentTime = 0;
+        }
+      };
       audio.onerror = () => { state = 'error'; errorMsg = 'Audio playback failed.'; };
 
       await audio.play();
@@ -131,6 +151,13 @@
       <span class="audio-time">{formatTime(duration)}</span>
       <button class="audio-btn stop-btn" on:click={stop} title="Stop">■</button>
     {/if}
+    <button
+      class="audio-btn continuous-btn"
+      class:continuous-active={$continuousPlay}
+      on:click={() => continuousPlay.update(v => !v)}
+      title={$continuousPlay ? 'Auto-advance: on (click to turn off)' : 'Auto-advance to next chapter'}
+      aria-label="Toggle continuous play"
+    >↻</button>
   {/if}
 </div>
 
@@ -192,6 +219,16 @@
 
   .audio-error {
     color: #e06c75;
+  }
+
+  .continuous-btn {
+    font-size: 0.85rem;
+    opacity: 0.5;
+  }
+
+  .continuous-active {
+    color: #7ab8f5;
+    opacity: 1;
   }
 
   @media (max-width: 480px) {

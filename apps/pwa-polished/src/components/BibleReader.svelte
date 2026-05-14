@@ -504,6 +504,22 @@
     }
   }
 
+  function handleAudioNextChapter(event: CustomEvent<{ book: string; chapter: number }>) {
+    const { book, chapter } = event.detail;
+    let nextBook = book;
+    let nextChapter = chapter + 1;
+    const bookInfo = BIBLE_BOOKS.find(b => b.name === book);
+    if (bookInfo && nextChapter > bookInfo.chapters) {
+      const idx = BIBLE_BOOKS.findIndex(b => b.name === book);
+      nextBook = idx < BIBLE_BOOKS.length - 1 ? BIBLE_BOOKS[idx + 1].name : BIBLE_BOOKS[0].name;
+      nextChapter = 1;
+    }
+    if (nextBook !== book) {
+      navigationStore.setBook(nextBook);
+    }
+    navigationStore.setChapter(nextChapter);
+  }
+
   async function handleStandardDayComplete(ctx: any) {
     await readingProgressStore.markDayComplete(ctx.planId, ctx.dayNumber, ctx.todayChapters);
     readingSessionStore.clearSession();
@@ -3187,7 +3203,7 @@
         <div class="chapter-section" data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
           <div class="chapter-header">
             <h1>{chapterData.book} {chapterData.chapter}</h1>
-            <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} />
+            <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
           </div>
           <div
             class="verses {translationFontClass}"
