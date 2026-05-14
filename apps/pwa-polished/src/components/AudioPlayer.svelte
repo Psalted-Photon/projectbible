@@ -33,6 +33,10 @@
 
   function _cleanup() {
     if (audio) {
+      audio.onerror = null;
+      audio.ontimeupdate = null;
+      audio.onloadedmetadata = null;
+      audio.onended = null;
       audio.pause();
       audio.src = '';
       audio = null;
@@ -232,8 +236,26 @@
   }
 
   @media (max-width: 480px) {
+    .audio-player {
+      height: 40px;
+      gap: 8px;
+    }
+    .audio-btn {
+      font-size: 1.4rem;
+      padding: 4px 10px;
+    }
+    .play-btn {
+      font-size: 1.4rem;
+    }
+    .continuous-btn {
+      font-size: 1.4rem;
+    }
+    .audio-time {
+      font-size: 0.85rem;
+    }
     .audio-seek {
-      width: 80px;
+      width: 100px;
+      height: 6px;
     }
   }
 </style>
