@@ -22,43 +22,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
 
-    // Use redirect:manual so we can pass the CDN URL directly to the browser.
-    // objects.githubusercontent.com has Access-Control-Allow-Origin: * so the
-    // browser can fetch it without timing out through a Vercel function.
-    const gh = await fetch(githubUrl, {
-      redirect: "manual",
-      headers
-    });
+    // For large binary packs: use redirect:manual, then pass the CDN URL to the
+    // browser via a 302. objects.githubusercontent.com has CORS headers so the
+    // browser can download directly without timing out through Vercel.
+    // For manifest.json: stream it normally (small file, needs correct Content-Type).
+    const isLargePack = typeof name === 'string' && name.endsWith('.sqlite');
 
-    // GitHub returns a 302 → objects.githubusercontent.com (CDN with CORS headers)
-    if (gh.status >= 300 && gh.status < 400) {
-      const location = gh.headers.get('location');
-      if (location) {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.redirect(302, location);
+    if (isLargePack) {
+      const gh = await fetch(githubUrl, { redirect: "manual", headers });
+
+      if (gh.status >= 300 && gh.status < 400) {
+        const location = gh.headers.get('location');
+        if (location) {
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Location', location);
+          res.status(302).end();
+          return;
+        }
+      }
+      // If GitHub served directly (no redirect), fall through to stream below
+      if (!gh.ok || !gh.body) {
+        res.status(gh.status ?? 502).send(`GitHub fetch failed: ${gh.statusText}`);
         return;
       }
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      res.status(200);
+      const reader = gh.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+      }
+      res.end();
+      return;
     }
+
+    // manifest.json and other small files: follow redirects and stream
+    const gh = await fetch(githubUrl, { redirect: "follow", headers });
 
     if (!gh.ok || !gh.body) {
       res.status(gh.status).send(`GitHub fetch failed: ${gh.statusText}`);
       return;
     }
 
-    // Fallback: stream directly if GitHub didn't redirect (shouldn't normally happen)
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    if (name === 'manifest.json') {
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    } else {
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    }
-
-    const reader = gh.body.getReader();
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Content-Type", name === "manifest.json" ? "application/json" : "application/octet-stream");
+    res.setHeader("Cache-Control", "no-cache, must-revalidate");
     res.status(200);
+
+    const reader2 = gh.body.getReader();
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await reader2.read();
       if (done) break;
       res.write(value);
     }
