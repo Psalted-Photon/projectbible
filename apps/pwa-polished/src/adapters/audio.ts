@@ -91,45 +91,20 @@ export async function installAudioPackToOPFS(
   const writable = await fileHandle.createWritable();
   console.log(`[AudioPack] OPFS file handle created — starting fetch...`);
 
-  const GITHUB_DIRECT = `https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/${packId}.sqlite`;
-
   let response: Response;
   const t0 = Date.now();
   try {
     response = await fetch(url);
-    console.log(`[AudioPack] Proxy fetch resolved in ${Date.now() - t0}ms`);
+    console.log(`[AudioPack] fetch() resolved in ${Date.now() - t0}ms ✅`);
   } catch (err: any) {
-    const elapsed = Date.now() - t0;
-    console.error(`[AudioPack] ❌ Proxy fetch threw after ${elapsed}ms`);
-    console.error(`[AudioPack]   Error name   : ${err?.name}`);
-    console.error(`[AudioPack]   Error message: ${err?.message}`);
-    console.error(`[AudioPack]   Requested URL: ${url}`);
-
-    // ── Fallback: try direct GitHub URL to test whether CDN has CORS headers ──
-    console.log(`[AudioPack] ⚠️  Falling back to direct GitHub URL: ${GITHUB_DIRECT}`);
-    const t1 = Date.now();
-    try {
-      response = await fetch(GITHUB_DIRECT);
-      console.log(`[AudioPack] ✅ Direct GitHub fetch resolved in ${Date.now() - t1}ms`);
-      console.log(`[AudioPack]   response.status : ${response.status} ${response.statusText}`);
-      console.log(`[AudioPack]   response.url    : ${response.url}`);
-      console.log(`[AudioPack]   ACAO header     : ${response.headers.get('access-control-allow-origin') ?? '(not sent)'}`);
-      console.log(`[AudioPack]   Content-Length  : ${response.headers.get('content-length') ?? '(not sent)'}`);
-    } catch (err2: any) {
-      console.error(`[AudioPack] ❌ Direct GitHub fetch ALSO threw after ${Date.now() - t1}ms`);
-      console.error(`[AudioPack]   Error: ${err2?.name}: ${err2?.message}`);
-      console.error(`[AudioPack] ── Both proxy and direct URL failed ── need alternative hosting ──`);
-      await writable.close();
-      throw err2;
-    }
+    console.error(`[AudioPack] ❌ fetch() threw after ${Date.now() - t0}ms: ${err?.name}: ${err?.message}`);
+    await writable.close();
+    throw err;
   }
 
-  console.log(`[AudioPack] fetch() resolved ✅`);
   console.log(`[AudioPack]   response.status : ${response.status} ${response.statusText}`);
   console.log(`[AudioPack]   response.url    : ${response.url}`);
   console.log(`[AudioPack]   Content-Length  : ${response.headers.get('content-length') ?? '(not sent)'}`);
-  console.log(`[AudioPack]   Content-Type    : ${response.headers.get('content-type') ?? '(not sent)'}`);
-  console.log(`[AudioPack]   ACAO header     : ${response.headers.get('access-control-allow-origin') ?? '(not sent)'}`);
 
   if (!response.ok) {
     await writable.close();
