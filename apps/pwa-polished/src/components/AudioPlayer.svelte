@@ -150,14 +150,14 @@
       />
       <span class="audio-time">{formatTime(duration)}</span>
       <button class="audio-btn stop-btn" on:click={stop} title="Stop">■</button>
+      <button
+        class="audio-btn continuous-btn"
+        class:continuous-active={$continuousPlay}
+        on:click={() => continuousPlay.update(v => !v)}
+        title={$continuousPlay ? 'Auto-advance: on (click to turn off)' : 'Auto-advance to next chapter'}
+        aria-label="Toggle continuous play"
+      >↠</button>
     {/if}
-    <button
-      class="audio-btn continuous-btn"
-      class:continuous-active={$continuousPlay}
-      on:click={() => continuousPlay.update(v => !v)}
-      title={$continuousPlay ? 'Auto-advance: on (click to turn off)' : 'Auto-advance to next chapter'}
-      aria-label="Toggle continuous play"
-    >↻</button>
   {/if}
 </div>
 

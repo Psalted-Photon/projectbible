@@ -3392,9 +3392,10 @@
     border-top: 2px solid #444;
     text-align: center;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 6px;
     flex-wrap: wrap;
   }
 
