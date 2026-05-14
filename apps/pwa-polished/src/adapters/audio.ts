@@ -25,18 +25,33 @@ let _sqlite3: any = null;
 async function getSQLite(): Promise<any> {
   if (_sqlite3) return _sqlite3;
 
-  const [{ default: SQLiteESMFactory }, { OPFSAnyContextVFS }, { Factory }] =
-    await Promise.all([
-      import('@journeyapps/wa-sqlite/dist/wa-sqlite-async.mjs'),
-      import('@journeyapps/wa-sqlite/src/examples/OPFSAnyContextVFS.js'),
-      import('@journeyapps/wa-sqlite'),
-    ]);
+  console.log('[AudioPack] Loading wa-sqlite WASM...');
+  let SQLiteESMFactory: any, OPFSAnyContextVFS: any, Factory: any;
+  try {
+    ([{ default: SQLiteESMFactory }, { OPFSAnyContextVFS }, { Factory }] =
+      await Promise.all([
+        import('@journeyapps/wa-sqlite/dist/wa-sqlite-async.mjs'),
+        import('@journeyapps/wa-sqlite/src/examples/OPFSAnyContextVFS.js'),
+        import('@journeyapps/wa-sqlite'),
+      ]));
+  } catch (err) {
+    console.error('[AudioPack] ❌ Failed to import wa-sqlite modules:', err);
+    throw err;
+  }
 
+  console.log('[AudioPack] wa-sqlite modules loaded — initialising WASM...');
   const module = await SQLiteESMFactory();
   _sqlite3 = Factory(module);
+  console.log('[AudioPack] wa-sqlite Factory ready — registering OPFSAnyContextVFS...');
 
-  const vfs = await OPFSAnyContextVFS.create('pb-audio', module);
-  _sqlite3.vfs_register(vfs, false);
+  try {
+    const vfs = await OPFSAnyContextVFS.create('pb-audio', module);
+    _sqlite3.vfs_register(vfs, false);
+    console.log('[AudioPack] VFS registered OK ✅');
+  } catch (err) {
+    console.error('[AudioPack] ❌ VFS registration failed:', err);
+    throw err;
+  }
 
   return _sqlite3;
 }
@@ -67,16 +82,45 @@ export async function installAudioPackToOPFS(
   packId: string,
   onProgress?: (loaded: number, total: number) => void
 ): Promise<void> {
+  console.log(`[AudioPack] installAudioPackToOPFS called`);
+  console.log(`[AudioPack] Pack ID : ${packId}`);
+  console.log(`[AudioPack] Fetch URL: ${url}`);
+
   const dir = await getOPFSDir();
   const fileHandle = await dir.getFileHandle(`${packId}.sqlite`, { create: true });
   const writable = await fileHandle.createWritable();
+  console.log(`[AudioPack] OPFS file handle created — starting fetch...`);
 
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to fetch audio pack: ${response.statusText}`);
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (err: any) {
+    console.error(`[AudioPack] ❌ fetch() threw an error`);
+    console.error(`[AudioPack]   Error name   : ${err?.name}`);
+    console.error(`[AudioPack]   Error message: ${err?.message}`);
+    console.error(`[AudioPack]   Requested URL: ${url}`);
+    console.error(`[AudioPack]   Full error   :`, err);
+    await writable.close();
+    throw err;
+  }
+
+  console.log(`[AudioPack] fetch() resolved ✅`);
+  console.log(`[AudioPack]   response.status : ${response.status} ${response.statusText}`);
+  console.log(`[AudioPack]   response.url    : ${response.url}`);
+  console.log(`[AudioPack]   Content-Length  : ${response.headers.get('content-length') ?? '(not sent)'}`);
+  console.log(`[AudioPack]   Content-Type    : ${response.headers.get('content-type') ?? '(not sent)'}`);
+  console.log(`[AudioPack]   ACAO header     : ${response.headers.get('access-control-allow-origin') ?? '(not sent)'}`);
+
+  if (!response.ok) {
+    await writable.close();
+    throw new Error(`Failed to fetch audio pack: ${response.status} ${response.statusText}`);
+  }
 
   const total = parseInt(response.headers.get('content-length') ?? '0', 10);
   let loaded = 0;
+  let lastLoggedMB = 0;
   const reader = response.body!.getReader();
+  console.log(`[AudioPack] Starting OPFS stream write (total: ${total > 0 ? (total / 1024 / 1024).toFixed(0) + ' MB' : 'unknown'})...`);
 
   try {
     while (true) {
@@ -85,11 +129,17 @@ export async function installAudioPackToOPFS(
       await writable.write(value);
       loaded += value.length;
       onProgress?.(loaded, total);
+      const loadedMB = Math.floor(loaded / 1024 / 1024);
+      if (loadedMB >= lastLoggedMB + 50) {
+        console.log(`[AudioPack]   ...written ${loadedMB} MB so far`);
+        lastLoggedMB = loadedMB;
+      }
     }
   } finally {
     await writable.close();
   }
 
+  console.log(`[AudioPack] OPFS write complete — ${(loaded / 1024 / 1024).toFixed(1)} MB written`);
   await _indexPackMetadata(packId);
 }
 
@@ -126,11 +176,28 @@ export async function installAudioPackFromFile(
 }
 
 async function _indexPackMetadata(packId: string): Promise<void> {
-  const sqlite3 = await getSQLite();
+  console.log(`[AudioPack] _indexPackMetadata starting for "${packId}"`);
+  let sqlite3: any;
+  try {
+    sqlite3 = await getSQLite();
+  } catch (err) {
+    console.error(`[AudioPack] ❌ getSQLite() failed during indexing:`, err);
+    throw err;
+  }
+
   const { SQLITE_OPEN_READONLY, SQLITE_ROW } = await import('@journeyapps/wa-sqlite');
   const opfsPath = opfsPathForPack(packId);
+  console.log(`[AudioPack] Opening OPFS SQLite at: ${opfsPath}`);
 
-  const db = await sqlite3.open_v2(opfsPath, SQLITE_OPEN_READONLY, 'pb-audio');
+  let db: any;
+  try {
+    db = await sqlite3.open_v2(opfsPath, SQLITE_OPEN_READONLY, 'pb-audio');
+    console.log(`[AudioPack] SQLite db opened OK ✅`);
+  } catch (err) {
+    console.error(`[AudioPack] ❌ sqlite3.open_v2() failed:`, err);
+    throw err;
+  }
+
   try {
     // Read pack metadata
     const meta: Record<string, string> = {};
@@ -139,6 +206,7 @@ async function _indexPackMetadata(packId: string): Promise<void> {
         meta[sqlite3.column_text(stmt, 0)] = sqlite3.column_text(stmt, 1);
       }
     }
+    console.log(`[AudioPack] Metadata rows:`, meta);
 
     // Read chapter list (no blobs — just identifiers)
     const chapters: Array<{
@@ -177,6 +245,12 @@ async function _indexPackMetadata(packId: string): Promise<void> {
       })
     );
 
+    console.log(`[AudioPack] Chapter rows found: ${chapters.length}`);
+    if (chapters.length > 0) {
+      console.log(`[AudioPack] First chapter: ${chapters[0].book} ${chapters[0].chapter} (${chapters[0].format})`);
+      console.log(`[AudioPack] Last chapter : ${chapters[chapters.length - 1].book} ${chapters[chapters.length - 1].chapter}`);
+    }
+
     // Persist chapter index
     const CHUNK = 500;
     for (let i = 0; i < chapters.length; i += CHUNK) {
@@ -186,7 +260,10 @@ async function _indexPackMetadata(packId: string): Promise<void> {
       });
     }
 
-    console.log(`✅ Audio pack ${packId} indexed: ${chapters.length} chapters`);
+    console.log(`[AudioPack] ✅ Pack "${packId}" fully indexed — ${chapters.length} chapters written to IndexedDB`);
+  } catch (err) {
+    console.error(`[AudioPack] ❌ Error during metadata indexing:`, err);
+    throw err;
   } finally {
     await sqlite3.close(db);
   }
