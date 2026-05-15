@@ -21,6 +21,22 @@
   import { paneStore } from "../stores/paneStore";
   import { userProfileStore } from "../stores/userProfileStore";
   import { COMMENTARY_AUTHORS } from "../lib/annotationConfig";
+  import {
+    ArrowLeft,
+    CaretDown,
+    CaretUp,
+    CaretRight,
+    ArrowsSplit,
+    ChatText,
+    Anchor,
+    MagnifyingGlass,
+    Funnel,
+    CalendarCheck,
+    Gear,
+    User,
+    X,
+    SpinnerGap,
+  } from "phosphor-svelte";
 
   export let windowId: string | undefined = undefined;
   export const visible: boolean = true;
@@ -41,6 +57,7 @@
   let displayedResultCount = 0;
   let showingAll = false;
   let showPowerSearchModal = false;
+  let searchExpanded = false;
 
   // Refs for dropdown positioning
   let translationButtonRef: HTMLElement;
@@ -68,6 +85,7 @@
   // Listen for external search triggers
   $: if ($triggerSearch > 0) {
     searchQuery = $searchQueryStore;
+    searchExpanded = true;
     performSearch();
   }
 
@@ -306,11 +324,10 @@
   function closeDropdowns(event: MouseEvent) {
     const target = event.target as HTMLElement;
     if (
-      !target.closest(".nav-dropdown") &&
+      !target.closest(".nav-pill") &&
       !target.closest(".dropdown-menu") &&
-      !target.closest(".search-container") &&
-      !target.closest(".search-results-dropdown") &&
-      !target.closest(".nav-checkbox")
+      !target.closest(".pill-search-area") &&
+      !target.closest(".search-results-dropdown")
     ) {
       translationDropdownOpen = false;
       referenceDropdownOpen = false;
@@ -337,6 +354,9 @@
       performSearch();
     } else if (event.key === "Escape") {
       showResults = false;
+      if (!searchQuery.trim()) {
+        searchExpanded = false;
+      }
     }
   }
 
@@ -481,6 +501,14 @@
     searchQuery = "";
     searchResults = [];
     showResults = false;
+    searchExpanded = false;
+  }
+
+  async function expandSearch() {
+    searchExpanded = true;
+    await tick();
+    const input = searchContainerRef?.querySelector('.search-input') as HTMLInputElement;
+    input?.focus();
   }
 
   function handleSearchFocus() {
@@ -493,7 +521,10 @@
   function handleSearchBlur() {
     blurTimeout = window.setTimeout(() => {
       searchFocused = false;
-    }, 100);
+      if (!searchQuery.trim() && !showResults) {
+        searchExpanded = false;
+      }
+    }, 150);
   }
 
   function openSettings() {
@@ -549,225 +580,218 @@
 
   onMount(() => {
     document.addEventListener("click", closeDropdowns);
-
-    // Update dropdown positions on scroll
-    const navContent = document.querySelector(".nav-content");
-    if (navContent) {
-      navContent.addEventListener("scroll", updateDropdownPositions);
-    }
   });
 
   onDestroy(() => {
     document.removeEventListener("click", closeDropdowns);
-
-    const navContent = document.querySelector(".nav-content");
-    if (navContent) {
-      navContent.removeEventListener("scroll", updateDropdownPositions);
-    }
   });
 </script>
 
 <div class="navigation-bar" {style}>
   <div class="nav-content">
-    {#if $canGoBack}
-      <button
-        class="nav-back-button"
-        on:click={() => navigationStore.goBack()}
-        title="Back"
-        aria-label="Back"
-      >
-        ←
-      </button>
-    {/if}
-    <!-- Translation Dropdown -->
-    <div class="nav-dropdown translation-dropdown-trigger">
-      <button
-        bind:this={translationButtonRef}
-        class="nav-button"
-        on:click={toggleTranslationDropdown}
-        class:active={translationDropdownOpen}
-      >
-        <span class="nav-label">Translation:</span>
-        <span class="nav-value">{currentTranslation}</span>
-        <span class="nav-arrow">{translationDropdownOpen ? "▲" : "▼"}</span>
-      </button>
+
+    <!-- ── Pill 1: Navigation ─────────────────────────────── -->
+    <div class="nav-pill nav-pill-nav">
+      {#if $canGoBack}
+        <button
+          class="pill-btn"
+          on:click={() => navigationStore.goBack()}
+          title="Back"
+          aria-label="Back"
+        >
+          <ArrowLeft size={16} weight="regular" />
+        </button>
+        <div class="pill-divider"></div>
+      {/if}
+
+      <!-- Translation -->
+      <div class="nav-dropdown translation-dropdown-trigger">
+        <button
+          bind:this={translationButtonRef}
+          class="pill-btn pill-btn-text"
+          on:click={toggleTranslationDropdown}
+          class:active={translationDropdownOpen}
+        >
+          <span class="pill-label">{currentTranslation}</span>
+          {#if translationDropdownOpen}
+            <CaretUp size={10} weight="bold" />
+          {:else}
+            <CaretDown size={10} weight="bold" />
+          {/if}
+        </button>
+      </div>
+
+      <div class="pill-divider"></div>
+
+      <!-- Reference (book + chapter) -->
+      <div class="nav-dropdown reference-dropdown-trigger category-{currentBookCategory}">
+        <button
+          bind:this={referenceButtonRef}
+          class="pill-btn pill-btn-text pill-btn-reference"
+          on:click={toggleReferenceDropdown}
+          class:active={referenceDropdownOpen}
+        >
+          <span class="pill-label">{currentReference}</span>
+          {#if referenceDropdownOpen}
+            <CaretUp size={10} weight="bold" />
+          {:else}
+            <CaretDown size={10} weight="bold" />
+          {/if}
+        </button>
+      </div>
     </div>
 
-    <!-- References + Commentaries + Update — single unified control -->
-    <div class="nav-checkbox">
-      <label title="Show TSK cross-reference markers on verse keywords">
+    <!-- ── Pill 2: Study Controls ─────────────────────────── -->
+    <div class="nav-pill nav-pill-study">
+      <label
+        class="pill-btn pill-toggle"
+        title="Show TSK cross-reference markers on verse keywords"
+      >
         <input
           type="checkbox"
           checked={$navigationStore.showReferences ?? false}
           on:change={(e) => navigationStore.setShowReferences(e.currentTarget.checked)}
         />
-        References
+        <ArrowsSplit size={15} weight="regular" />
+        <span class="pill-label">Refs</span>
       </label>
+
+      <div class="pill-divider"></div>
+
       <button
         bind:this={commButtonRef}
-        class="comm-toggle-btn nav-checkbox-anno"
+        class="pill-btn pill-btn-text"
         class:active={commDropdownOpen}
         class:has-selection={($navigationStore.selectedCommentaryAuthors?.length ?? 0) > 0}
         on:click={toggleCommDropdown}
         title="Filter commentary authors"
       >
-        Commentaries
+        <ChatText size={15} weight="regular" />
+        <span class="pill-label">Comm</span>
         {#if ($navigationStore.selectedCommentaryAuthors?.length ?? 0) > 0}
           <span class="comm-count">{$navigationStore.selectedCommentaryAuthors?.length}</span>
         {/if}
-        <span class="nav-arrow">{commDropdownOpen ? "▲" : "▼"}</span>
-      </button>
-    </div>
-
-    <!-- Reading Plan Button -->
-    <button
-      class="reading-plan-button"
-      on:click={() => readingPlanModalStore.open()}
-      title="Open reading plan"
-    >
-      <span class="emoji">📖</span> Reading Plan
-    </button>
-
-    <!-- Reference Dropdown (Tree Structure) -->
-    <div class="nav-dropdown reference-dropdown-trigger category-{currentBookCategory}">
-      <button
-        bind:this={referenceButtonRef}
-        class="nav-button"
-        on:click={toggleReferenceDropdown}
-        class:active={referenceDropdownOpen}
-      >
-        <span class="nav-value">{currentReference}</span>
-        <span class="nav-arrow">{referenceDropdownOpen ? "▲" : "▼"}</span>
-      </button>
-    </div>
-
-    <!-- Commentary Anchor Sync Button -->
-    <button
-      class="anchor-sync-btn"
-      class:anchored={($navigationStore.commentaryAnchored ?? false) && !commentaryDrifted}
-      class:drifted={commentaryDrifted}
-      on:click={handleAnchorClick}
-      title={commentaryDrifted
-        ? 'Commentary drifted — click to re-sync'
-        : ($navigationStore.commentaryAnchored ?? false)
-          ? 'Commentary synced — click to unlock'
-          : 'Sync commentary to Bible position'}
-      aria-label="Commentary anchor sync"
-    >⚓</button>
-
-    <!-- Search Bar -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      bind:this={searchContainerRef}
-      class="search-container"
-      on:click|stopPropagation
-      on:keydown|stopPropagation
-      role="search"
-    >
-      <div class="search-input-wrapper" class:focused={searchFocused}>
-        <span class="search-icon emoji">🔍</span>
-        <input
-          type="text"
-          class="search-input"
-          placeholder="Search verses, places, Strong's..."
-          bind:value={searchQuery}
-          on:input={handleSearchInput}
-          on:keydown={handleSearchKeydown}
-          on:focus={handleSearchFocus}
-          on:blur={handleSearchBlur}
-        />
-        {#if isSearching}
-          <span class="search-spinner emoji">⏳</span>
-        {:else if searchQuery}
-          <button
-            class="clear-search"
-            on:mousedown|preventDefault={clearSearch}
-            title="Clear search"
-          >
-            ✕
-          </button>
+        {#if commDropdownOpen}
+          <CaretUp size={10} weight="bold" />
+        {:else}
+          <CaretDown size={10} weight="bold" />
         {/if}
-        <button
-          class="search-button inline-search"
-          on:click={() => performSearch()}
-          disabled={!searchQuery.trim()}
-        >
-          Search
-        </button>
-      </div>
+      </button>
+
+      <div class="pill-divider"></div>
+
+      <button
+        class="pill-btn pill-anchor"
+        class:anchored={($navigationStore.commentaryAnchored ?? false) && !commentaryDrifted}
+        class:drifted={commentaryDrifted}
+        on:click={handleAnchorClick}
+        title={commentaryDrifted
+          ? 'Commentary drifted — click to re-sync'
+          : ($navigationStore.commentaryAnchored ?? false)
+            ? 'Commentary synced — click to unlock'
+            : 'Sync commentary to Bible position'}
+        aria-label="Commentary anchor sync"
+      >
+        <Anchor size={15} weight="regular" />
+      </button>
     </div>
 
-    <!-- Search Buttons -->
-    <button
-      class="power-search-button"
-      on:click={() => (showPowerSearchModal = true)}
-      title="Advanced search with regex, proximity, and biblical filters"
-    >
-      <span class="emoji">⚡</span> Power
-    </button>
-
-    <!-- Settings Button -->
-    <button
-      class="settings-button"
-      on:click={openSettings}
-      title="Settings"
-      aria-label="Open settings"
-    >
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
+    <!-- ── Pill 3: Tools ──────────────────────────────────── -->
+    <div class="nav-pill nav-pill-tools">
+      <!-- Search (icon at rest → expands on click) -->
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div
+        bind:this={searchContainerRef}
+        class="pill-search-area"
+        on:click|stopPropagation
+        on:keydown|stopPropagation
+        role="search"
       >
-        <path
-          d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <path
-          d="M19.4 15C19.2669 15.3016 19.2272 15.6362 19.286 15.9606C19.3448 16.285 19.4995 16.5843 19.73 16.82L19.79 16.88C19.976 17.0657 20.1235 17.2863 20.2241 17.5291C20.3248 17.7719 20.3766 18.0322 20.3766 18.295C20.3766 18.5578 20.3248 18.8181 20.2241 19.0609C20.1235 19.3037 19.976 19.5243 19.79 19.71C19.6043 19.896 19.3837 20.0435 19.1409 20.1441C18.8981 20.2448 18.6378 20.2966 18.375 20.2966C18.1122 20.2966 17.8519 20.2448 17.6091 20.1441C17.3663 20.0435 17.1457 19.896 16.96 19.71L16.9 19.65C16.6643 19.4195 16.365 19.2648 16.0406 19.206C15.7162 19.1472 15.3816 19.1869 15.08 19.32C14.7842 19.4468 14.532 19.6572 14.3543 19.9255C14.1766 20.1938 14.0813 20.5082 14.08 20.83V21C14.08 21.5304 13.8693 22.0391 13.4942 22.4142C13.1191 22.7893 12.6104 23 12.08 23C11.5496 23 11.0409 22.7893 10.6658 22.4142C10.2907 22.0391 10.08 21.5304 10.08 21V20.91C10.0723 20.579 9.96512 20.258 9.77251 19.9887C9.5799 19.7194 9.31074 19.5143 9 19.4C8.69838 19.2669 8.36381 19.2272 8.03941 19.286C7.71502 19.3448 7.41568 19.4995 7.18 19.73L7.12 19.79C6.93425 19.976 6.71368 20.1235 6.47088 20.2241C6.22808 20.3248 5.96783 20.3766 5.705 20.3766C5.44217 20.3766 5.18192 20.3248 4.93912 20.2241C4.69632 20.1235 4.47575 19.976 4.29 19.79C4.10405 19.6043 3.95653 19.3837 3.85588 19.1409C3.75523 18.8981 3.70343 18.6378 3.70343 18.375C3.70343 18.1122 3.75523 17.8519 3.85588 17.6091C3.95653 17.3663 4.10405 17.1457 4.29 16.96L4.35 16.9C4.58054 16.6643 4.73519 16.365 4.794 16.0406C4.85282 15.7162 4.81312 15.3816 4.68 15.08C4.55324 14.7842 4.34276 14.532 4.07447 14.3543C3.80618 14.1766 3.49179 14.0813 3.17 14.08H3C2.46957 14.08 1.96086 13.8693 1.58579 13.4942C1.21071 13.1191 1 12.6104 1 12.08C1 11.5496 1.21071 11.0409 1.58579 10.6658C1.96086 10.2907 2.46957 10.08 3 10.08H3.09C3.42099 10.0723 3.742 9.96512 4.0113 9.77251C4.28059 9.5799 4.48572 9.31074 4.6 9C4.73312 8.69838 4.77282 8.36381 4.714 8.03941C4.65519 7.71502 4.50054 7.41568 4.27 7.18L4.21 7.12C4.02405 6.93425 3.87653 6.71368 3.77588 6.47088C3.67523 6.22808 3.62343 5.96783 3.62343 5.705C3.62343 5.44217 3.67523 5.18192 3.77588 4.93912C3.87653 4.69632 4.02405 4.47575 4.21 4.29C4.39575 4.10405 4.61632 3.95653 4.85912 3.85588C5.10192 3.75523 5.36217 3.70343 5.625 3.70343C5.88783 3.70343 6.14808 3.75523 6.39088 3.85588C6.63368 3.95653 6.85425 4.10405 7.04 4.29L7.1 4.35C7.33568 4.58054 7.63502 4.73519 7.95941 4.794C8.28381 4.85282 8.61838 4.81312 8.92 4.68H9C9.29577 4.55324 9.54802 4.34276 9.72569 4.07447C9.90337 3.80618 9.99872 3.49179 10 3.17V3C10 2.46957 10.2107 1.96086 10.5858 1.58579C10.9609 1.21071 11.4696 1 12 1C12.5304 1 13.0391 1.21071 13.4142 1.58579C13.7893 1.96086 14 2.46957 14 3V3.09C14.0013 3.41179 14.0966 3.72618 14.2743 3.99447C14.452 4.26276 14.7042 4.47324 15 4.6C15.3016 4.73312 15.6362 4.77282 15.9606 4.714C16.285 4.65519 16.5843 4.50054 16.82 4.27L16.88 4.21C17.0657 4.02405 17.2863 3.87653 17.5291 3.77588C17.7719 3.67523 18.0322 3.62343 18.295 3.62343C18.5578 3.62343 18.8181 3.67523 19.0609 3.77588C19.3037 3.87653 19.5243 4.02405 19.71 4.21C19.896 4.39575 20.0435 4.61632 20.1441 4.85912C20.2448 5.10192 20.2966 5.36217 20.2966 5.625C20.2966 5.88783 20.2448 6.14808 20.1441 6.39088C20.0435 6.63368 19.896 6.85425 19.71 7.04L19.65 7.1C19.4195 7.33568 19.2648 7.63502 19.206 7.95941C19.1472 8.28381 19.1869 8.61838 19.32 8.92V9C19.4468 9.29577 19.6572 9.54802 19.9255 9.72569C20.1938 9.90337 20.5082 9.99872 20.83 10H21C21.5304 10 22.0391 10.2107 22.4142 10.5858C22.7893 10.9609 23 11.4696 23 12C23 12.5304 22.7893 13.0391 22.4142 13.4142C22.0391 13.7893 21.5304 14 21 14H20.91C20.5882 14.0013 20.2738 14.0966 20.0055 14.2743C19.7372 14.452 19.5268 14.7042 19.4 15Z"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-    </button>
+        <button
+          class="pill-btn pill-search-icon-btn"
+          on:click={expandSearch}
+          title="Search"
+          aria-label="Search"
+        >
+          <MagnifyingGlass size={16} weight="regular" />
+        </button>
+        <div class="pill-search-expander" class:expanded={searchExpanded}>
+          <div class="search-input-inner" class:focused={searchFocused}>
+            <input
+              type="text"
+              class="search-input"
+              placeholder="Search verses, places, Strong's..."
+              bind:value={searchQuery}
+              on:input={handleSearchInput}
+              on:keydown={handleSearchKeydown}
+              on:focus={handleSearchFocus}
+              on:blur={handleSearchBlur}
+            />
+            {#if isSearching}
+              <div class="search-spinner-wrap">
+                <SpinnerGap size={14} weight="regular" />
+              </div>
+            {:else if searchQuery}
+              <button
+                class="clear-search"
+                on:mousedown|preventDefault={clearSearch}
+                title="Clear search"
+              >
+                <X size={12} weight="bold" />
+              </button>
+            {/if}
+          </div>
+        </div>
+      </div>
 
-    <!-- Profile Button -->
-    <button
-      class="profile-button"
-      class:signed-in={isSignedIn}
-      on:click={() => profileModalStore.open()}
-      title="Profile"
-      aria-label="Open profile"
-    >
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
+      <div class="pill-divider"></div>
+
+      <!-- Power Search -->
+      <button
+        class="pill-btn"
+        on:click={() => (showPowerSearchModal = true)}
+        title="Power search — regex, proximity, biblical filters"
+        aria-label="Power search"
       >
-        <path
-          d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <path
-          d="M4 20C4 16.6863 7.58172 14 12 14C16.4183 14 20 16.6863 20 20"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-    </button>
+        <Funnel size={16} weight="regular" />
+      </button>
+
+      <div class="pill-divider"></div>
+
+      <!-- Reading Plan -->
+      <button
+        class="pill-btn"
+        on:click={() => readingPlanModalStore.open()}
+        title="Reading plan"
+        aria-label="Reading plan"
+      >
+        <CalendarCheck size={16} weight="regular" />
+      </button>
+
+      <div class="pill-divider"></div>
+
+      <!-- Settings -->
+      <button
+        class="pill-btn"
+        on:click={openSettings}
+        title="Settings"
+        aria-label="Open settings"
+      >
+        <Gear size={16} weight="regular" />
+      </button>
+
+      <!-- Profile -->
+      <button
+        class="pill-btn pill-profile"
+        class:signed-in={isSignedIn}
+        on:click={() => profileModalStore.open()}
+        title="Profile"
+        aria-label="Open profile"
+      >
+        <User size={16} weight="regular" />
+      </button>
+    </div>
+
   </div>
 
   {#if showResults}
@@ -794,7 +818,7 @@
               on:click={() => toggleTranslation(translationId)}
             >
               <span class="expand-icon">
-                {expandedTranslations.has(translationId) ? "▼" : "▶"}
+                {#if expandedTranslations.has(translationId)}<CaretDown size={10} weight="bold" />{:else}<CaretRight size={10} weight="bold" />{/if}
               </span>
               <span class="translation-name">{translationId}</span>
               <span class="result-count">({results.length})</span>
@@ -856,7 +880,7 @@
             on:click={(e) => toggleBook(book.name, e)}
           >
             <span class="expand-icon">
-              {expandedBooks.has(book.name) ? "▼" : "▶"}
+              {#if expandedBooks.has(book.name)}<CaretDown size={10} weight="bold" />{:else}<CaretRight size={10} weight="bold" />{/if}
             </span>
             <span class="book-name">{book.name}</span>
           </button>
@@ -906,154 +930,245 @@
 
 <style>
   .navigation-bar {
-    background: #2a2a2a;
-    border-bottom: 1px solid #3a3a3a;
+    background: #252525;
+    border-bottom: 1px solid #323232;
     position: sticky;
     top: 0;
     z-index: 1000;
-    min-height: 68px;
-    --nav-item-height: 33px;
-    --nav-item-inline-pad: calc((var(--nav-item-height) - 14px) / 2);
     box-sizing: border-box;
-    overflow: visible; /* Allow dropdowns to escape */
+    overflow: visible;
   }
 
   .nav-content {
     display: flex;
-    gap: 12px;
-    padding: 12px 20px;
-    touch-action: manipulation; /* Allow fast taps */
-    flex-wrap: nowrap; /* Prevent wrapping on all screen sizes */
-    overflow-x: auto; /* Enable horizontal scrolling */
-    overflow-y: visible;
-    align-items: flex-start;
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE and Edge */
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    overflow: visible;
+    min-height: 58px;
+    flex-wrap: nowrap;
   }
 
-  .nav-content::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
+  /* ── Pill containers ───────────────────────────────────── */
+  .nav-pill {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: #1c1c1c;
+    border: 1px solid #353535;
+    border-radius: 8px;
+    padding: 3px;
+    height: 38px;
+    flex-shrink: 0;
   }
 
-  .nav-back-button {
-    flex: 0 0 auto;
-    width: var(--nav-item-height);
-    height: var(--nav-item-height);
+  .nav-pill-study {
+    margin-left: auto;
+  }
+
+  .nav-pill-tools {
+    margin-left: 6px;
+  }
+
+  .pill-divider {
+    width: 1px;
+    height: 16px;
+    background: #353535;
+    margin: 0 1px;
+    flex-shrink: 0;
+  }
+
+  /* ── Pill buttons ──────────────────────────────────────── */
+  .pill-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #ffb74d 0%, #f57c00 100%);
-    border: 1px solid #ffb74d;
-    border-radius: 6px;
-    color: #1a1a1a;
+    gap: 5px;
+    height: 32px;
+    padding: 0 9px;
+    min-width: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: #888;
     cursor: pointer;
-    font-size: 16px;
-    transition: all 0.2s;
+    font-size: 13px;
+    font-family: inherit;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s;
     touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(255, 183, 77, 0.2);
+    flex-shrink: 0;
   }
 
-  .nav-back-button:hover {
-    background: linear-gradient(135deg, #ffca66 0%, #fb8c00 100%);
-    border-color: #ffca66;
-    color: #1a1a1a;
+  .pill-btn:hover {
+    background: #252525;
+    color: #ccc;
+  }
+
+  .pill-btn.active {
+    background: #252525;
+    color: #fff;
+  }
+
+  .pill-btn-text {
+    padding: 0 10px;
+  }
+
+  .pill-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: inherit;
+    white-space: nowrap;
+  }
+
+  /* References toggle */
+  .pill-toggle {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .pill-toggle input[type="checkbox"] {
+    display: none;
+  }
+
+  .pill-toggle:has(input:checked) {
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 5px;
+  }
+
+  /* Anchor states */
+  .pill-anchor {
+    color: #4a4a4a;
+  }
+
+  .pill-anchor.anchored {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.08);
+  }
+
+  .pill-anchor.drifted {
+    color: #fb923c;
+    background: rgba(251, 146, 60, 0.08);
+    animation: anchor-drift 2s ease-in-out infinite;
+  }
+
+  @keyframes anchor-drift {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  /* Reference button category colors (text tint only) */
+  .nav-dropdown.reference-dropdown-trigger.category-pentateuch .pill-btn-reference { color: #a67c52; }
+  .nav-dropdown.reference-dropdown-trigger.category-historical .pill-btn-reference { color: #6496c8; }
+  .nav-dropdown.reference-dropdown-trigger.category-wisdom .pill-btn-reference { color: #daa520; }
+  .nav-dropdown.reference-dropdown-trigger.category-major-prophets .pill-btn-reference { color: #b44fe0; }
+  .nav-dropdown.reference-dropdown-trigger.category-minor-prophets .pill-btn-reference { color: #ff8c00; }
+  .nav-dropdown.reference-dropdown-trigger.category-gospels .pill-btn-reference { color: #4eab77; }
+  .nav-dropdown.reference-dropdown-trigger.category-acts .pill-btn-reference { color: #ff6030; }
+  .nav-dropdown.reference-dropdown-trigger.category-pauline .pill-btn-reference { color: #dc5070; }
+  .nav-dropdown.reference-dropdown-trigger.category-general .pill-btn-reference { color: #d2691e; }
+  .nav-dropdown.reference-dropdown-trigger.category-revelation .pill-btn-reference { color: #6080e0; }
+
+  /* Profile signed-in indicator */
+  .pill-profile.signed-in {
+    color: #4ade80;
+  }
+
+  /* Search expand */
+  .pill-search-area {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .pill-search-icon-btn {
+    min-width: 32px;
+    padding: 0 8px;
+  }
+
+  .pill-search-expander {
+    width: 0;
+    overflow: hidden;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+  }
+
+  .pill-search-expander.expanded {
+    width: 230px;
+  }
+
+  .search-input-inner {
+    display: flex;
+    align-items: center;
+    height: 26px;
+    background: #141414;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    margin-left: 4px;
+    width: 222px;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+  }
+
+  .search-input-inner.focused {
+    border-color: #667eea;
+  }
+
+  .search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e0e0e0;
+    font-size: 13px;
+    padding: 0 8px;
+    min-width: 0;
+    font-family: inherit;
+  }
+
+  .search-input::placeholder {
+    color: #555;
+  }
+
+  .clear-search {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 0 6px;
+    flex-shrink: 0;
+    height: 100%;
+    transition: color 0.15s;
+  }
+
+  .clear-search:hover {
+    color: #ccc;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  .search-spinner-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    color: #4caf50;
+    flex-shrink: 0;
+    animation: spin 1s linear infinite;
   }
 
   .nav-dropdown {
     position: relative;
-    flex: 1;
-    max-width: 280px;
-    align-self: flex-start;
-  }
-
-  .nav-dropdown.reference-dropdown-trigger {
-    flex: 0 0 auto;
-    width: auto;
-    max-width: none;
-  }
-
-  .nav-dropdown.translation-dropdown-trigger {
-    flex: 0 0 auto;
-    width: auto;
-    max-width: none;
-  }
-
-  .nav-checkbox {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 14px;
-    height: var(--nav-item-height);
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    color: #e0e0e0;
-    font-size: 14px;
-    white-space: nowrap;
-    box-sizing: border-box;
-  }
-
-  .nav-checkbox label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    margin: 0;
-  }
-
-  .nav-checkbox-anno {
-    border-left: 1px solid #3a3a3a;
-    padding-left: 8px;
-  }
-
-  .nav-checkbox input[type="checkbox"] {
-    cursor: pointer;
-  }
-
-  .update-btn {
-    height: 20px;
-    padding: 0 10px;
-    background: #667eea;
-    border: 1px solid #667eea;
-    border-radius: 4px;
-    color: white;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 500;
-    transition: background 0.2s;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.4);
-  }
-
-  .update-btn:hover {
-    background: #5568d3;
-    border-color: #5568d3;
   }
 
   /* Comm dropdown */
-  .comm-toggle-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: transparent;
-    border: none;
-    border-left: 1px solid #3a3a3a;
-    padding: 0 0 0 8px;
-    color: #e0e0e0;
-    cursor: pointer;
-    font-size: 14px;
-    white-space: nowrap;
-    height: 100%;
-  }
-
-  .comm-toggle-btn.active,
-  .comm-toggle-btn:hover {
-    color: #fff;
-  }
-
-  .comm-toggle-btn.has-selection {
-    color: #a78bfa;
-  }
 
   .comm-count {
     display: inline-flex;
@@ -1115,113 +1230,7 @@
     text-overflow: ellipsis;
   }
 
-  .nav-button {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 14px;
-    height: var(--nav-item-height);
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    color: #e0e0e0;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-size: 14px;
-    box-sizing: border-box;
-    touch-action: manipulation; /* Allow fast taps */
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
-  }
 
-  .nav-dropdown.reference-dropdown-trigger .nav-button {
-    width: auto;
-    padding: 0 var(--nav-item-inline-pad);
-    white-space: nowrap;
-  }
-
-  .nav-dropdown.reference-dropdown-trigger .nav-value {
-    white-space: nowrap;
-  }
-
-  /* Category colors for reference button */
-  .nav-dropdown.reference-dropdown-trigger.category-pentateuch .nav-button {
-    background: linear-gradient(135deg, #3d2a1a 0%, #2d1f12 100%);
-    border-color: #8b5c2e;
-  }
-  .nav-dropdown.reference-dropdown-trigger.category-historical .nav-button {
-    background: linear-gradient(135deg, #2d4a5e 0%, #1d3a4e 100%);
-    border-color: #4682b4;
-  }
-  .nav-dropdown.reference-dropdown-trigger.category-wisdom .nav-button {
-    background: linear-gradient(135deg, #5d4a1a 0%, #4d3a0a 100%);
-    border-color: #daa520;
-  }
-  .nav-dropdown.reference-dropdown-trigger.category-major-prophets .nav-button {
-    background: linear-gradient(135deg, #3d0056 0%, #2d0046 100%);
-    border-color: #9400d3;
-  }
-  .nav-dropdown.reference-dropdown-trigger.category-minor-prophets .nav-button {
-    background: linear-gradient(135deg, #5d3800 0%, #4d2800 100%);
-    border-color: #ff8c00;
-  }
-  .nav-dropdown.reference-dropdown-trigger.category-gospels .nav-button {
-    background: linear-gradient(135deg, #1d4a2f 0%, #0d3a1f 100%);
-    border-color: #2e8b57;
-  }
-  .nav-dropdown.reference-dropdown-trigger.category-acts .nav-button {
-    background: linear-gradient(135deg, #5d1f00 0%, #4d1500 100%);
-    border-color: #ff4500;
-  }
-  .nav-dropdown.reference-dropdown-trigger.category-pauline .nav-button {
-    background: linear-gradient(135deg, #4d0a1a 0%, #3d0010 100%);
-    border-color: #dc143c;
-  }
-  .nav-dropdown.reference-dropdown-trigger.category-general .nav-button {
-    background: linear-gradient(135deg, #4d2a10 0%, #3d1a00 100%);
-    border-color: #d2691e;
-  }
-  .nav-dropdown.reference-dropdown-trigger.category-revelation .nav-button {
-    background: linear-gradient(135deg, #1a2f5d 0%, #0a1f4d 100%);
-    border-color: #4169e1;
-  }
-
-  .nav-dropdown.translation-dropdown-trigger .nav-button {
-    width: auto;
-    padding: 0 var(--nav-item-inline-pad);
-    white-space: nowrap;
-  }
-
-  .nav-dropdown.translation-dropdown-trigger .nav-label,
-  .nav-dropdown.translation-dropdown-trigger .nav-value {
-    white-space: nowrap;
-  }
-
-  .nav-button:hover {
-    background: #252525;
-    border-color: #4a4a4a;
-  }
-
-  .nav-button.active {
-    background: #252525;
-    border-color: #667eea;
-  }
-
-  .nav-label {
-    color: #888;
-    font-size: 12px;
-  }
-
-  .nav-value {
-    flex: 1;
-    text-align: left;
-    font-weight: 500;
-  }
-
-  .nav-arrow {
-    color: #667eea;
-    font-size: 10px;
-  }
 
   .dropdown-menu {
     position: absolute;
@@ -1725,229 +1734,7 @@
     background: #5a5a5a;
   }
 
-  /* Search Bar Styles */
-  .search-container {
-    flex-shrink: 0;
-    max-width: 400px;
-    min-width: 200px;
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: var(--nav-item-height);
-  }
 
-  .search-input-wrapper {
-    position: relative;
-    display: flex;
-    align-items: center;
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    transition: all 0.2s;
-    box-sizing: border-box;
-  }
-
-  .search-input-wrapper.focused {
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
-  }
-
-  .search-icon {
-    padding: 0 12px;
-    color: #888;
-    font-size: 14px;
-    pointer-events: none;
-  }
-
-  .search-input {
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    padding: 0 12px 0 0;
-    background: transparent;
-    border: none;
-    color: #e0e0e0;
-    font-size: 14px;
-    outline: none;
-  }
-
-  .search-input::placeholder {
-    color: #666;
-  }
-
-  .clear-search {
-    padding: 0 12px;
-    background: transparent;
-    border: none;
-    color: #888;
-    cursor: pointer;
-    font-size: 16px;
-    transition: color 0.2s;
-    touch-action: manipulation;
-  }
-
-  .clear-search:hover {
-    color: #e0e0e0;
-  }
-
-  .search-button {
-    flex-shrink: 0;
-    height: var(--nav-item-height);
-    padding: 0 20px;
-    background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
-    border: 1px solid #4caf50;
-    border-radius: 6px;
-    color: white;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    white-space: nowrap;
-    transition: background 0.2s;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(76, 175, 80, 0.4);
-  }
-
-  .search-button:hover:not(:disabled) {
-    background: linear-gradient(135deg, #5bc75f 0%, #388e3c 100%);
-  }
-
-  .search-button:disabled {
-    background: #4a4a4a;
-    border-color: #4a4a4a;
-    color: #888;
-    cursor: not-allowed;
-  }
-
-  .inline-search {
-    height: 20px;
-    padding: 0 10px;
-    font-size: 14px;
-    font-weight: 500;
-    margin: 0 6px 0 4px;
-    box-shadow: none;
-  }
-
-  .power-search-button {
-    flex-shrink: 0;
-    height: var(--nav-item-height);
-    padding: 0 20px;
-    background: linear-gradient(135deg, #7e57c2 0%, #512da8 100%);
-    border: 1px solid #7e57c2;
-    border-radius: 6px;
-    color: white;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    white-space: nowrap;
-    transition: all 0.2s;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(126, 87, 194, 0.4);
-    box-shadow: 0 2px 8px rgba(126, 87, 194, 0.3);
-  }
-
-  .power-search-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(126, 87, 194, 0.4);
-  }
-
-  .reading-plan-button {
-    flex-shrink: 0;
-    height: var(--nav-item-height);
-    padding: 0 16px;
-    background: linear-gradient(135deg, #42a5f5 0%, #1565c0 100%);
-    border: 1px solid #42a5f5;
-    border-radius: 6px;
-    color: white;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1;
-    box-sizing: border-box;
-    white-space: nowrap;
-    transition: all 0.2s;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(66, 165, 245, 0.4);
-    box-shadow: 0 2px 8px rgba(66, 165, 245, 0.3);
-  }
-
-  .reading-plan-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(66, 165, 245, 0.4);
-  }
-
-  /* Commentary anchor sync button — 3 states: off (grey) / anchored (green) / drifted (amber) */
-  .anchor-sync-btn {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 33px;
-    height: var(--nav-item-height);
-    padding: 0;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    color: #555;
-    cursor: pointer;
-    font-size: 14px;
-    transition: color 0.2s, border-color 0.2s, background 0.2s;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
-  }
-
-  .anchor-sync-btn:hover {
-    background: #252525;
-    border-color: #4a4a4a;
-    color: #888;
-  }
-
-  .anchor-sync-btn.anchored {
-    color: #4ade80;
-    border-color: #22c55e;
-    background: #0a1f0f;
-  }
-
-  .anchor-sync-btn.anchored:hover {
-    background: #0f2a1a;
-    border-color: #4ade80;
-  }
-
-  .anchor-sync-btn.drifted {
-    color: #fb923c;
-    border-color: #f97316;
-    background: #1a0f00;
-    animation: anchor-drift 2s ease-in-out infinite;
-  }
-
-  .anchor-sync-btn.drifted:hover {
-    background: #2a1a00;
-    border-color: #fb923c;
-  }
-
-  @keyframes anchor-drift {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-  }
-
-  .search-spinner {
-    padding: 0 12px;
-    color: #4caf50;
-    font-size: 16px;
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
 
   .search-results-dropdown {
     position: fixed;
@@ -2098,260 +1885,41 @@
     background: #5a5a5a;
   }
 
-  .settings-button {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--nav-item-height);
-    height: var(--nav-item-height);
-    padding: 0;
-    background: linear-gradient(135deg, #ffb74d 0%, #f57c00 100%);
-    border: 1px solid #ffb74d;
-    border-radius: 6px;
-    color: #1a1a1a;
-    cursor: pointer;
-    transition: all 0.2s;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(255, 183, 77, 0.2);
-  }
 
-  .settings-button:hover {
-    background: linear-gradient(135deg, #ffca66 0%, #fb8c00 100%);
-    border-color: #ffca66;
-    color: #1a1a1a;
-  }
 
-  .settings-button svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .profile-button {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--nav-item-height);
-    height: var(--nav-item-height);
-    padding: 0;
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    color: #e0e0e0;
-    cursor: pointer;
-    transition: all 0.2s;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
-  }
-
-  .profile-button:hover {
-    background: #343434;
-    border-color: #5a5a5a;
-    color: #f0f0f0;
-  }
-
-  .profile-button.signed-in {
-    background: linear-gradient(135deg, #66bb6a 0%, #2e7d32 100%);
-    border-color: #66bb6a;
-    color: #0f1f0f;
-  }
-
-  .profile-button.signed-in:hover {
-    background: linear-gradient(135deg, #7ad07f 0%, #388e3c 100%);
-    border-color: #7ad07f;
-    color: #0f1f0f;
-  }
-
-  .profile-button svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  /* Mobile responsive styles */
-  @media (max-width: 768px) {
-    .navigation-bar {
-      min-height: 60px; /* Increased from 56px */
-    }
-
+  /* Mobile — pills stack or shrink on small screens */
+  @media (max-width: 600px) {
     .nav-content {
-      gap: 10px; /* Increased from 6px */
-      padding: 10px 12px; /* Increased from 8px 10px */
-      -webkit-overflow-scrolling: touch;
-      align-items: flex-start;
+      padding: 8px 10px;
+      gap: 6px;
     }
 
-    .nav-dropdown {
-      flex-shrink: 0;
-      min-width: 130px; /* Increased from 120px */
-      max-width: 150px; /* Increased from 140px */
-      position: relative; /* Keep relative for absolute children */
+    .nav-pill-study {
+      margin-left: 0;
+    }
+
+    .nav-pill-tools {
+      margin-left: 0;
+    }
+
+    .pill-search-expander.expanded {
+      width: 150px;
+    }
+
+    .search-input-inner {
+      width: 142px;
+    }
+
+    .pill-label {
+      display: none;
     }
 
     .dropdown-menu {
-      /* Keep absolute positioning so dropdowns scroll with content */
-      min-width: 200px;
-      max-width: 90vw;
-      z-index: 10001; /* Ensure dropdowns appear above all content on mobile */
+      max-width: 92vw;
     }
 
     .search-results-dropdown {
-      /* Keep absolute positioning so search results scroll with content */
-      min-width: 250px;
-      max-width: 90vw;
-      z-index: 10002; /* Ensure search results appear above dropdowns on mobile */
-    }
-
-    .nav-checkbox {
-      flex-shrink: 0;
-      font-size: 13px; /* Increased from 12px */
-      padding: 8px 10px; /* Increased from 6px 8px */
-      white-space: nowrap;
-      min-width: fit-content;
-    }
-
-    .nav-checkbox label {
-      font-size: 12px; /* Increased from 11px */
-      white-space: nowrap;
-    }
-
-    .update-btn {
-      padding: 4px 10px; /* Increased from 3px 8px */
-      font-size: 11px; /* Increased from 10px */
-      white-space: nowrap;
-    }
-
-    .nav-button {
-      font-size: 13px; /* Increased from 12px */
-      padding: 8px 10px; /* Increased from 6px 8px */
-    }
-
-    .nav-label {
-      font-size: 11px; /* Increased from 10px */
-    }
-
-    .nav-value {
-      font-size: 13px; /* Increased from 12px */
-    }
-
-    .search-container {
-      flex-shrink: 0;
-      min-width: 200px; /* Increased from 180px */
-      max-width: 280px; /* Increased from 250px */
-    }
-
-    .search-input {
-      font-size: 13px; /* Increased from 12px */
-      padding: 8px 10px 8px 0;
-    }
-
-    .search-icon {
-      padding: 0 10px; /* Increased from 8px */
-      font-size: 13px; /* Increased from 12px */
-    }
-
-    .search-button {
-      padding: 8px 14px; /* Increased from 8px 12px */
-      font-size: 13px; /* Increased from 12px */
-    }
-
-    .power-search-button {
-      padding: 8px 12px; /* Increased from 8px 10px */
-      font-size: 13px; /* Increased from 12px */
-      white-space: nowrap;
-    }
-
-    .reading-plan-button {
-      padding: 8px 12px;
-      font-size: 13px;
-      white-space: nowrap;
-    }
-
-    .settings-button {
-      width: 44px; /* Increased from 40px - same as desktop */
-      height: 44px; /* Increased from 40px */
-      flex-shrink: 0;
-    }
-
-    .settings-button svg {
-      width: 22px; /* Make icon more visible */
-      height: 22px;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .navigation-bar {
-      min-height: 56px; /* Increased from 52px */
-    }
-
-    .nav-content {
-      gap: 8px; /* Increased from 4px */
-      padding: 8px 10px; /* Increased from 6px 8px */
-    }
-
-    .nav-dropdown {
-      min-width: 110px; /* Increased from 100px */
-      max-width: 120px; /* Increased from 110px */
-      font-size: 12px; /* Increased from 11px */
-    }
-
-    .nav-button {
-      font-size: 12px; /* Increased from 11px */
-      padding: 7px 8px; /* Increased from 6px */
-    }
-
-    .nav-checkbox {
-      padding: 6px 8px; /* Increased from 5px 6px */
-      font-size: 12px; /* Increased from 11px */
-    }
-
-    .nav-checkbox label {
-      font-size: 11px; /* Increased from 10px */
-    }
-
-    .update-btn {
-      padding: 3px 8px; /* Increased from 2px 6px */
-      font-size: 11px; /* Increased from 10px */
-    }
-
-    .search-container {
-      min-width: 160px; /* Increased from 140px */
-      max-width: 200px; /* Increased from 180px */
-    }
-
-    .search-input {
-      font-size: 12px; /* Increased from 11px */
-      padding: 7px 8px 7px 0; /* Increased from 6px 8px 6px 0 */
-    }
-
-    .search-icon {
-      padding: 0 8px; /* Increased from 6px */
-      font-size: 12px; /* Increased from 11px */
-    }
-
-    .search-button {
-      padding: 7px 12px; /* Increased from 6px 10px */
-      font-size: 12px; /* Increased from 11px */
-    }
-
-    .power-search-button {
-      padding: 7px 10px; /* Increased from 6px 8px */
-      font-size: 12px; /* Increased from 11px */
-    }
-
-    .reading-plan-button {
-      padding: 7px 10px;
-      font-size: 12px;
-    }
-
-    .settings-button {
-      width: 44px; /* Increased from 36px - make it prominent! */
-      height: 44px; /* Increased from 36px */
-    }
-
-    .settings-button svg {
-      width: 20px; /* Increased from 16px */
-      height: 20px; /* Increased from 16px */
+      max-width: 92vw;
     }
   }
 </style>
