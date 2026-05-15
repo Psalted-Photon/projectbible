@@ -26,12 +26,12 @@
     CaretDown,
     CaretUp,
     CaretRight,
-    ArrowsSplit,
+    Graph,
     ChatText,
     Anchor,
     MagnifyingGlass,
-    Funnel,
-    CalendarCheck,
+    Microscope,
+    BookOpenText,
     Gear,
     User,
     X,
@@ -599,7 +599,7 @@
           title="Back"
           aria-label="Back"
         >
-          <ArrowLeft size={16} weight="regular" />
+          <ArrowLeft size={16} weight="duotone" />
         </button>
         <div class="pill-divider"></div>
       {/if}
@@ -652,7 +652,7 @@
           checked={$navigationStore.showReferences ?? false}
           on:change={(e) => navigationStore.setShowReferences(e.currentTarget.checked)}
         />
-        <ArrowsSplit size={15} weight="regular" />
+        <Graph size={15} weight="duotone" />
         <span class="pill-label">Refs</span>
       </label>
 
@@ -666,7 +666,7 @@
         on:click={toggleCommDropdown}
         title="Filter commentary authors"
       >
-        <ChatText size={15} weight="regular" />
+        <ChatText size={15} weight="duotone" />
         <span class="pill-label">Comm</span>
         {#if ($navigationStore.selectedCommentaryAuthors?.length ?? 0) > 0}
           <span class="comm-count">{$navigationStore.selectedCommentaryAuthors?.length}</span>
@@ -692,7 +692,7 @@
             : 'Sync commentary to Bible position'}
         aria-label="Commentary anchor sync"
       >
-        <Anchor size={15} weight="regular" />
+        <Anchor size={15} weight="duotone" />
       </button>
     </div>
 
@@ -713,7 +713,7 @@
           title="Search"
           aria-label="Search"
         >
-          <MagnifyingGlass size={16} weight="regular" />
+          <MagnifyingGlass size={16} weight="duotone" />
         </button>
         <div class="pill-search-expander" class:expanded={searchExpanded}>
           <div class="search-input-inner" class:focused={searchFocused}>
@@ -729,7 +729,7 @@
             />
             {#if isSearching}
               <div class="search-spinner-wrap">
-                <SpinnerGap size={14} weight="regular" />
+                <SpinnerGap size={14} weight="duotone" />
               </div>
             {:else if searchQuery}
               <button
@@ -737,7 +737,7 @@
                 on:mousedown|preventDefault={clearSearch}
                 title="Clear search"
               >
-                <X size={12} weight="bold" />
+                <X size={12} weight="duotone" />
               </button>
             {/if}
           </div>
@@ -746,14 +746,14 @@
 
       <div class="pill-divider"></div>
 
-      <!-- Power Search -->
+      <!-- Advanced Search -->
       <button
         class="pill-btn"
         on:click={() => (showPowerSearchModal = true)}
-        title="Power search — regex, proximity, biblical filters"
-        aria-label="Power search"
+        title="Advanced search — regex, proximity, biblical filters"
+        aria-label="Advanced search"
       >
-        <Funnel size={16} weight="regular" />
+        <Microscope size={16} weight="duotone" />
       </button>
 
       <div class="pill-divider"></div>
@@ -765,7 +765,7 @@
         title="Reading plan"
         aria-label="Reading plan"
       >
-        <CalendarCheck size={16} weight="regular" />
+        <BookOpenText size={16} weight="duotone" />
       </button>
 
       <div class="pill-divider"></div>
@@ -777,7 +777,7 @@
         title="Settings"
         aria-label="Open settings"
       >
-        <Gear size={16} weight="regular" />
+        <Gear size={16} weight="duotone" />
       </button>
 
       <!-- Profile -->
@@ -788,7 +788,7 @@
         title="Profile"
         aria-label="Open profile"
       >
-        <User size={16} weight="regular" />
+        <User size={16} weight="duotone" />
       </button>
     </div>
 
@@ -1892,6 +1892,12 @@
     .nav-content {
       padding: 8px 10px;
       gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .nav-content::-webkit-scrollbar {
+      display: none;
     }
 
     .nav-pill-study {
