@@ -1107,6 +1107,7 @@
       chapters = [];
     } finally {
       loading = false;
+      if (chapters.length > 0) checkViewportFill();
     }
   }
 
@@ -1626,9 +1627,22 @@
     }
   }
 
+  // On large screens the entire chapter may fit in the viewport with no scrollbar,
+  // so scroll events never fire and loadNextChapter is never triggered.
+  // After a chapter loads (or after a next-chapter is appended), call this to
+  // proactively fill the viewport by loading additional chapters as needed.
+  async function checkViewportFill() {
+    if (!readerElement) return;
+    await tick();
+    if (readerElement.scrollHeight <= readerElement.clientHeight + 200) {
+      loadNextChapter();
+    }
+  }
+
   async function loadNextChapter() {
     if (isLoadingNextChapter || chapters.length === 0) return;
     isLoadingNextChapter = true;
+    let didAddChapter = false;
 
     try {
       const lastChapter = chapters[chapters.length - 1];
@@ -1748,11 +1762,13 @@
           { book: nextBook, chapter: nextChapter, verses: processedVerses },
         ];
         await loadAnnotations(nextBook, nextChapter, false);
+        didAddChapter = true;
       }
     } catch (err) {
       console.error("Error loading next chapter:", err);
     } finally {
       isLoadingNextChapter = false;
+      if (didAddChapter) checkViewportFill();
     }
   }
 
