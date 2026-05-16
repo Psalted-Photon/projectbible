@@ -1916,10 +1916,6 @@
       width: 142px;
     }
 
-    .pill-label {
-      display: none;
-    }
-
     .dropdown-menu {
       max-width: 92vw;
     }
