@@ -13,6 +13,7 @@
   import { syncService, type SyncState, type SyncStatus } from '../lib/sync';
   import { fetchUserSettings, upsertUserSettings } from '../lib/supabase/userSettings';
   import { localDateStr } from '../stores/clockStore';
+  import SavedVersesPanel from './SavedVersesPanel.svelte';
 
   let isOpen = false;
   $: isOpen = $profileModalStore;
@@ -535,7 +536,7 @@
               <button class="primary-btn" on:click={openReadingPlan}>Open Full Reading Plan</button>
             </div>
           {:else if currentTab === 'notes'}
-            <div class="placeholder">Coming soon - Save verses and add notes while reading.</div>
+            <SavedVersesPanel on:close={close} />
           {:else if currentTab === 'journal'}
             <div class="placeholder">Coming soon - Daily reflections and study notes.</div>
           {:else}
