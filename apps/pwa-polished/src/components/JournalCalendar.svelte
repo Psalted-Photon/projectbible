@@ -25,7 +25,9 @@
       const startStr = localDateStr(new Date(year, month, 1));
       const endStr   = localDateStr(new Date(year, month + 1, 0)); // last day of month
       const entries  = await syncedJournalStore.getEntries(startStr, endStr);
-      entryMap = new Map(entries.map(e => [e.date, e]));
+      // Only mark days blue if they have actual text content (not empty/deleted entries)
+      const withText = entries.filter(e => stripHtml(e.text ?? '').trim().length > 0);
+      entryMap = new Map(withText.map(e => [e.date, e]));
     } catch (e) {
       console.error('JournalCalendar: error loading entries', e);
       entryMap = new Map();
