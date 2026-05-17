@@ -50,10 +50,10 @@
     return bookOrder.get(book) ?? 999;
   }
 
-  // ─── sorting ────────────────────────────────────────────────────────────────
-  function sortVerses(list: SavedVerse[]): SavedVerse[] {
+  // ─── sorting — sortOrder is a direct param so Svelte re-runs on every change ─
+  function sortVerses(list: SavedVerse[], order: SortOrder): SavedVerse[] {
     return [...list].sort((a, b) => {
-      if (sortOrder === 'recent') {
+      if (order === 'recent') {
         return b.createdAt.getTime() - a.createdAt.getTime();
       }
       const bi = bookIndex(a.book) - bookIndex(b.book);
@@ -63,9 +63,9 @@
     });
   }
 
-  function sortNotes(list: SavedNote[]): SavedNote[] {
+  function sortNotes(list: SavedNote[], order: SortOrder): SavedNote[] {
     return [...list].sort((a, b) => {
-      if (sortOrder === 'recent') {
+      if (order === 'recent') {
         return b.createdAt.getTime() - a.createdAt.getTime();
       }
       const bi = bookIndex(a.book) - bookIndex(b.book);
@@ -75,8 +75,8 @@
     });
   }
 
-  $: sortedVerses = sortVerses(savedVerses);
-  $: sortedNotes = sortNotes(savedNotes);
+  $: sortedVerses = sortVerses(savedVerses, sortOrder);
+  $: sortedNotes = sortNotes(savedNotes, sortOrder);
 
   // ─── data loading ────────────────────────────────────────────────────────────
   async function loadSavedVerses() {
@@ -159,6 +159,10 @@
     return `${book} ${chapter}:${verse}`;
   }
 
+  function formatDate(d: Date): string {
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
   function toggleSort() {
     sortOrder = sortOrder === 'recent' ? 'bible' : 'recent';
   }
@@ -188,7 +192,12 @@
       <ul class="svp-list">
         {#each sortedVerses as item (item.book + item.chapter + item.verse)}
           <li class="svp-item" on:click={() => navigateTo(item.book, item.chapter, item.verse)}>
-            <span class="svp-ref">{formatRef(item.book, item.chapter, item.verse)}</span>
+            <div class="svp-item-header">
+              <span class="svp-ref">{formatRef(item.book, item.chapter, item.verse)}</span>
+              {#if sortOrder === 'recent'}
+                <span class="svp-date">{formatDate(item.createdAt)}</span>
+              {/if}
+            </div>
             {#if item.text}
               <span class="svp-text">{item.text}</span>
             {:else}
@@ -210,7 +219,12 @@
       <ul class="svp-list">
         {#each sortedNotes as item (item.id)}
           <li class="svp-item" on:click={() => navigateTo(item.book, item.chapter, item.verse)}>
-            <span class="svp-ref">{formatRef(item.book, item.chapter, item.verse)}</span>
+            <div class="svp-item-header">
+              <span class="svp-ref">{formatRef(item.book, item.chapter, item.verse)}</span>
+              {#if sortOrder === 'recent'}
+                <span class="svp-date">{formatDate(item.createdAt)}</span>
+              {/if}
+            </div>
           </li>
         {/each}
       </ul>
@@ -303,6 +317,13 @@
     border-color: #3a3a3a;
   }
 
+  .svp-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+
   .svp-ref {
     font-size: 13px;
     font-weight: 600;
@@ -322,5 +343,12 @@
   .svp-text--missing {
     color: #555;
     font-style: italic;
+  }
+
+  .svp-date {
+    font-size: 11px;
+    color: #666;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 </style>
