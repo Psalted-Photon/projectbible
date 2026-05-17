@@ -178,7 +178,7 @@
       Notes
     </button>
     <button class="svp-sort" on:click={toggleSort} title="Toggle sort order">
-      {sortOrder === 'recent' ? '↓ Recent' : '↑ Bible Order'}
+      {sortOrder === 'recent' ? 'Recent' : 'Bible Order'}
     </button>
   </div>
 
