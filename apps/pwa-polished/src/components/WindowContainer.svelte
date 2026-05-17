@@ -48,7 +48,7 @@
           <p>Coming soon...</p>
         </div>
       {:else if panel.contentType === 'journal'}
-        <JournalWriter windowId={panel.id} />
+        <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>
@@ -75,7 +75,7 @@
           <p>Coming soon...</p>
         </div>
       {:else if panel.contentType === 'journal'}
-        <JournalWriter windowId={panel.id} />
+        <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>
@@ -104,7 +104,7 @@
           <p>Coming soon...</p>
         </div>
       {:else if panel.contentType === 'journal'}
-        <JournalWriter windowId={panel.id} />
+        <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>
@@ -133,7 +133,7 @@
           <p>Coming soon...</p>
         </div>
       {:else if panel.contentType === 'journal'}
-        <JournalWriter windowId={panel.id} />
+        <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>

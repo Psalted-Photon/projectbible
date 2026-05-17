@@ -7,9 +7,10 @@
   import type { JournalEntry } from '@projectbible/core';
   
   export let windowId: string | undefined = undefined;
+  export let initialDate: string | undefined = undefined;
   
   let editorRef: any;
-  let currentDate = localDateStr(new Date()); // YYYY-MM-DD in local timezone
+  let currentDate = initialDate ?? localDateStr(new Date()); // YYYY-MM-DD in local timezone
   let currentEntry: JournalEntry | null = null;
   let title = '';
   let text = '';
