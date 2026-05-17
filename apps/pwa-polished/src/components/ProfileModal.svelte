@@ -14,6 +14,7 @@
   import { fetchUserSettings, upsertUserSettings } from '../lib/supabase/userSettings';
   import { localDateStr } from '../stores/clockStore';
   import SavedVersesPanel from './SavedVersesPanel.svelte';
+  import JournalCalendar from './JournalCalendar.svelte';
 
   let isOpen = false;
   $: isOpen = $profileModalStore;
@@ -538,7 +539,7 @@
           {:else if currentTab === 'notes'}
             <SavedVersesPanel on:close={close} />
           {:else if currentTab === 'journal'}
-            <div class="placeholder">Coming soon - Daily reflections and study notes.</div>
+            <JournalCalendar on:close={close} />
           {:else}
             <div class="settings-tab">
               <div class="setting-group">
