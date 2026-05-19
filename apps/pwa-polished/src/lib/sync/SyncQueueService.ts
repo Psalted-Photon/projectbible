@@ -220,13 +220,33 @@ class SyncQueueService {
   private async executeOperation(op: SyncOperation, userId: string): Promise<void> {
     switch (op.type) {
       case 'INSERT': {
-        // No explicit onConflict — PostgREST resolves conflicts via the table's primary key.
-        // Using onConflict: 'id,user_id' requires a named unique index separate from the PK
-        // which not all tables have, causing "no unique constraint" errors.
-        const { error } = await supabase
-          .from(op.table)
-          .upsert({ ...op.data, user_id: userId });
-        if (error) throw error;
+        if (op.table === 'reading_progress') {
+          // Use server-side merge RPC so chapters_read is union-merged rather
+          // than overwritten. No progress is ever lost when two devices sync
+          // at different times — the Postgres function handles the merge atomically.
+          const { error } = await supabase.rpc('upsert_reading_progress', {
+            p_id:                  op.data.id,
+            p_user_id:             userId,
+            p_plan_id:             op.data.plan_id,
+            p_day_number:          op.data.day_number,
+            p_completed:           op.data.completed,
+            p_created_at:          op.data.created_at,
+            p_completed_at:        op.data.completed_at ?? null,
+            p_started_reading_at:  op.data.started_reading_at ?? null,
+            p_chapters_read:       op.data.chapters_read,
+            p_catch_up_adjustment: op.data.catch_up_adjustment ?? null,
+            p_updated_at:          op.data.updated_at,
+          });
+          if (error) throw error;
+        } else {
+          // No explicit onConflict — PostgREST resolves conflicts via the table's primary key.
+          // Using onConflict: 'id,user_id' requires a named unique index separate from the PK
+          // which not all tables have, causing "no unique constraint" errors.
+          const { error } = await supabase
+            .from(op.table)
+            .upsert({ ...op.data, user_id: userId });
+          if (error) throw error;
+        }
         break;
       }
       
