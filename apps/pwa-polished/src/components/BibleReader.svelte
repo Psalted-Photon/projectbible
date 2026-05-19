@@ -267,6 +267,7 @@
   let annotationPanelTab: "references" | "commentary" = "references";
   let annotationPanelTsk: TskEntry[] = [];
   let annotationPanelCommentary: CommentaryEntry[] = [];
+  let annotationPanelTargetAuthor = '';
 
   // Reopen annotation panel after back-navigation from a "Go →" link
   let _reopenAnnotationVerse: number | null = null;
@@ -1267,11 +1268,12 @@
     return '';
   }
 
-  function openAnnotationPanel(verse: number, tab: "references" | "commentary", book = currentBook, chapter = currentChapter) {
+  function openAnnotationPanel(verse: number, tab: "references" | "commentary", book = currentBook, chapter = currentChapter, targetAuthor = '') {
     annotationPanelVerse = verse;
     annotationPanelBook = book;
     annotationPanelChapter = chapter;
     annotationPanelTab = tab;
+    annotationPanelTargetAuthor = targetAuthor;
     annotationPanelTsk = tskByVerse.get(annotationKey(book, chapter, verse)) ?? [];
     annotationPanelCommentary = commentaryByVerse.get(annotationKey(book, chapter, verse)) ?? [];
     annotationPanelOpen = true;
@@ -3180,6 +3182,7 @@
   tskEntries={annotationPanelTsk}
   commentaryEntries={annotationPanelCommentary}
   initialTab={annotationPanelTab}
+  targetAuthor={annotationPanelTargetAuthor}
   on:close={() => (annotationPanelOpen = false)}
   on:navigateTo={handleAnnotationNavigateTo}
 />
@@ -3241,8 +3244,8 @@
                       title={author}
                       role="button"
                       tabindex="0"
-                      on:click|stopPropagation={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter)}
-                      on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter)}
+                      on:click|stopPropagation={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter, author)}
+                      on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter, author)}
                     >{getAuthorInitials(author)}</span>
                   {/each}
                 {/if}

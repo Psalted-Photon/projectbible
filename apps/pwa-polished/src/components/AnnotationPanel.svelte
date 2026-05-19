@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, tick } from "svelte";
   import { get } from "svelte/store";
   import type { CommentaryEntry } from "../adapters/CommentaryStore";
   import type { TskEntry } from "../adapters/TskReferenceStore";
@@ -16,6 +16,8 @@
   export let tskEntries: TskEntry[] = [];
   export let commentaryEntries: CommentaryEntry[] = [];
   export let initialTab: "references" | "commentary" = "references";
+  // Which commentary author to scroll to when the panel opens ('' = scroll to top only)
+  export let targetAuthor: string = '';
 
   // ——— Internal display state (list mode) ———
   let displayBook = book;
@@ -50,12 +52,24 @@
 
   let panelLoading = false;
   let lastPropsKey = '';
+  let lastTargetAuthor = '';
+
+  /** Scrolls the panel body to the top, then (if an author is given) into that author's section. */
+  function scrollToTarget(author: string) {
+    if (!viewBodyEl) return;
+    viewBodyEl.scrollTop = 0;
+    if (!author) return;
+    const id = authorToId(author);
+    const el = viewBodyEl.querySelector(`#${id}`) as HTMLElement | null;
+    el?.scrollIntoView({ block: 'start' });
+  }
 
   // Sync display state from props whenever the source verse changes or panel re-opens.
   $: {
     const key = open ? `${book}:${chapter}:${verse}` : '';
     if (open && key !== lastPropsKey) {
       lastPropsKey = key;
+      lastTargetAuthor = targetAuthor; // capture so secondary block doesn't double-fire
       panelHistory = [];
       panelMode = 'list';
       pillPreview = null;
@@ -64,12 +78,21 @@
       displayVerse = verse;
       displayTskEntries = tskEntries;
       displayCommentaryEntries = commentaryEntries;
+      // Bug 1: always reset scroll; Bug 2: jump to clicked author if provided
+      tick().then(() => scrollToTarget(targetAuthor));
     } else if (!open && lastPropsKey !== '') {
       lastPropsKey = '';
+      lastTargetAuthor = '';
       panelHistory = [];
       panelMode = 'list';
       pillPreview = null;
     }
+  }
+
+  // Secondary reactive: same verse but a different author icon was clicked
+  $: if (open && panelMode === 'list' && targetAuthor !== lastTargetAuthor) {
+    lastTargetAuthor = targetAuthor;
+    tick().then(() => scrollToTarget(targetAuthor));
   }
 
   // Auto-scroll highlighted verse into view after verseView renders.
@@ -177,6 +200,11 @@
       map.get(key)!.push(...entry.references);
     }
     return order.map((k) => ({ keyword: k, refs: map.get(k ?? "") ?? [] }));
+  }
+
+  /** Converts an author name to a DOM-safe id, e.g. "King Comments" → "cg-king-comments" */
+  function authorToId(author: string): string {
+    return 'cg-' + author.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
 
   // Group commentary entries by author
@@ -312,7 +340,7 @@
           <p class="empty-msg">No commentary for this verse.<br/><span class="hint">Import the <em>commentaries.sqlite</em> pack to enable them.</span></p>
         {:else}
           {#each commentaryByAuthor as group}
-            <div class="commentary-group">
+            <div class="commentary-group" id={authorToId(group.author)}>
               <div
                 class="commentary-author-header"
                 style="border-left: 4px solid {getAuthorColor(group.author)}"
