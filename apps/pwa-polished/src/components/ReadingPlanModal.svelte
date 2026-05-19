@@ -122,11 +122,19 @@
 
   // Re-read localStorage every time the modal opens so that plans synced
   // in the background (after onMount ran) are picked up immediately.
+  // Also trigger a sync so that the latest Supabase data is pulled —
+  // this is the key step that makes a second device see up-to-date progress.
   $: if (isOpen) {
     loadActivePlan();
-    // Also refresh progress from IndexedDB in case a background sync ran
-    // while the modal was closed (covers the common open-on-phone scenario).
+    // Load local progress immediately so the UI isn't blank while sync runs.
     loadProgressForPlan();
+    // Then kick off a sync in the background (throttled to once per 30s).
+    // This pushes any queued writes to Supabase AND pulls the latest progress
+    // down, which will trigger loadProgressForPlan() again via the sync
+    // subscriber once the pull completes.
+    if (isSignedIn) {
+      syncService.forceSync(30_000);
+    }
   }
 
   // Reload progress whenever a Realtime event or pull from Supabase writes
