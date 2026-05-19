@@ -23,6 +23,8 @@ const BOOK_PATTERN = [
   'Ruth|Esther|Joel|Amos|Jonah|Micah|Nahum|Luke|Acts|James|Jude',
   // Numbered abbreviations: 1Sa, 2Ki, 1Co, etc.
   '[123](?:Sam?|Kgs?|Ki|Chr?(?:on)?|Cor?|Thess?|Tim?|Pet?|J(?:oh?n?|n))',
+  // Common 2-3 char abbreviations missing from patterns above
+  'Rth|Luc|Jdg|Mt|Mk|Mr|Lk|Jn|Ru|Dt',
   // Standard abbreviations (3+ chars)
   'Gen|Exo?d?|Lev|Nu(?:m)?|De(?:ut?)?|Jos(?:h)?|Jud?g?|Neh|Es(?:th?)?|Psa?|Pro?v?|Eccl?',
   'Isa|Jer|Lam|Eze?k?|Da(?:n)?|Hos|Joe?l?|Amo?s?|Oba?d?|Jon(?:ah)?|Mic|Na(?:h)?|Ha(?:b)?',
@@ -30,8 +32,9 @@ const BOOK_PATTERN = [
   'Ga(?:l)?|Ep(?:h)?|Ph(?:il?p?|p)|Co(?:l)?|He(?:b)?|Ja(?:s)?|Ti(?:t)?|Phm|Ph(?:ile)?|Re(?:v)?',
 ].join('|');
 
-// Chapter + optional verse + optional range  (e.g. 3, 3:4, 3:4-7, 3:4-5:2)
-const CV_PATTERN = '\\d+(?::\\d+(?:[\\-\u2013]\\d+(?::\\d+)?)?)?';
+// Chapter + optional verse + optional range  (e.g. 3, 3:4, 3:4a, 3:4-7, 3:4-5:2)
+// [ab]? after verse allows half-verse suffixes like "2a" or "2b" without breaking the match
+const CV_PATTERN = '\\d+(?::\\d+[ab]?(?:[\\-\u2013]\\d+(?::\\d+)?)?)?';
 
 // Full ref pattern: book name/abbrev + whitespace + chapter[:verse[-range]]
 const PROSE_REF_RE = new RegExp(
@@ -41,6 +44,11 @@ const PROSE_REF_RE = new RegExp(
 
 // Bare verse reference: "v. 3", "ver. 3", "ver 3", "verse 3" (case-insensitive)
 const BARE_VERSE_RE = /\b(v(?:erse|er)?\.?)\s+(\d+)\b/gi;
+
+// Section header words that King Comments concatenates directly to body text
+// e.g. "IntroductionThe book of..." → "INTRODUCTION\n\nThe book of..."
+const KNOWN_HEADER_RE =
+  /\b(Introduction|Background|Conclusion|Outline|Summary|Application|Interpretation|Analysis|Purpose|Theme|Context|Overview|Exposition|Notes?)([A-Z])/g;
 
 /** Escape HTML attribute value characters. */
 function escAttr(s: string): string {
@@ -67,6 +75,13 @@ function processTextSegment(
   // Reset stateful global regexes before each use
   PROSE_REF_RE.lastIndex = 0;
   BARE_VERSE_RE.lastIndex = 0;
+  KNOWN_HEADER_RE.lastIndex = 0;
+
+  // Pre-process: separate section headers from immediately-following body text
+  // e.g. "IntroductionThe book of..." → "INTRODUCTION<br><br>The book of..."
+  text = text.replace(KNOWN_HEADER_RE, (_, header: string, nextChar: string) =>
+    `${header.toUpperCase()}<br><br>${nextChar}`,
+  );
 
   // Step 1: linkify book + chapter[:verse] refs
   let out = text.replace(PROSE_REF_RE, (match) => {

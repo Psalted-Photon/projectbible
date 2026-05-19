@@ -239,9 +239,14 @@ export function parseRefString(
 
   const extracted = extractBook(trimmed);
   if (extracted) {
-    const cv = parseChapterVerse(extracted.rest, contextChapter);
-    if (!cv) return null;
-    return { book: extracted.book, chapter: cv.chapter, verse: cv.verse };
+    const rest = extracted.rest;
+    // "5:18" or "5:18-20" → chapter 5, verse 18 (chapter explicitly stated)
+    const full = rest.match(/^(\d+):(\d+)/);
+    if (full) return { book: extracted.book, chapter: parseInt(full[1]), verse: parseInt(full[2]) };
+    // "5" bare number with explicit book → chapter 5, verse 1 (not verse 5 of current chapter)
+    const bare = rest.match(/^(\d+)/);
+    if (bare) return { book: extracted.book, chapter: parseInt(bare[1]), verse: 1 };
+    return null;
   }
 
   // No book prefix → relative to contextBook
