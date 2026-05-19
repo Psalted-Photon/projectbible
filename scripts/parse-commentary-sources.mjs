@@ -276,7 +276,17 @@ function extractText(node) {
     //   "text <hi>word</hi> more text <reference>Matt 1:1</reference> end"
     if (node.$$ && node.$$.length > 0) {
       return node.$$.map(child => {
-        if (child['#name'] === '__text__') return child._  || '';
+        if (child['#name'] === '__text__') return child._ || '';
+        // OSIS paragraph milestone start tag → paragraph break
+        // Only fire on sID (start) to emit one break per paragraph, not one per boundary tag
+        if (child['#name'] === 'div' && child.$?.type === 'x-p' && child.$?.sID) return '\n\n';
+        // OSIS line break element
+        if (child['#name'] === 'lb') return '\n';
+        // Section titles → uppercase on their own line
+        if (child['#name'] === 'title') {
+          const t = extractText(child).trim();
+          return t ? '\n\n' + t.toUpperCase() + '\n\n' : '';
+        }
         return extractText(child);
       }).join('');
     }
@@ -440,7 +450,9 @@ function cleanText(text) {
     .replace(/\(\s*;?\s*cf\.?\s*\)/g, '') // Remove empty citation parens like (cf. ) or (; )
     .replace(/\(\s*\)/g, '')  // Remove any remaining empty parens ()
     .replace(/\(\s*;\s*\)/g, '') // Remove (;) variants
-    .replace(/\s+/g, ' ')     // Normalize whitespace
+    .replace(/[^\S\n]+/g, ' ')  // Normalize horizontal whitespace (preserve newlines)
+    .replace(/ *\n */g, '\n')   // Strip spaces immediately around newlines
+    .replace(/\n{3,}/g, '\n\n') // Collapse 3+ consecutive newlines to max 2
     .trim();
 }
 

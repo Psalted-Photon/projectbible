@@ -59,17 +59,17 @@
                       "type":  "study",
                       "name":  "Multi-Author Commentaries",
                       "description":  "Verse-by-verse Bible commentaries from multiple sources",
-                      "version":  "1.1.0",
+                      "version":  "1.2.0",
                       "schemaVersion":  "1.0",
                       "minAppVersion":  "1.0.0",
-                      "size":  196091904,
-                      "sizeMB":  187.01,
-                      "sha256":  "328b243bb453830c052a1a9a5581545a506bb01433b5c93163c3400a87199499",
+                      "size":  209862656,
+                      "sizeMB":  200.14,
+                      "sha256":  "0a76adb3863443ff095818e123cb629cc569ed3821fb7ff788cc851836ebf214",
                       "dependencies":  [
 
                                        ],
                       "downloadUrl":  "/api/packs/commentaries.sqlite",
-                      "createdAt":  "2026-04-03T17:13:06.141Z"
+                      "createdAt":  "2026-05-18T00:00:00.000Z"
                   },
                   {
                       "id":  "dictionary-en",

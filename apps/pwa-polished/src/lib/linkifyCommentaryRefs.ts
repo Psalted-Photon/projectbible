@@ -96,6 +96,11 @@ function processTextSegment(
     return target ? wrapRef(match) : match;
   });
 
+  // Step 3: convert stored paragraph breaks (\n\n) and line breaks (\n) to HTML.
+  // These come from the pack data where OSIS paragraph markers were preserved.
+  out = out.replace(/\n\n+/g, '<br><br>');
+  out = out.replace(/\n/g, '<br>');
+
   return out;
 }
 
