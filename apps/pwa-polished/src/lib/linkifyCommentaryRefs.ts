@@ -36,9 +36,12 @@ const BOOK_PATTERN = [
 // [ab]? after verse allows half-verse suffixes like "2a" or "2b" without breaking the match
 const CV_PATTERN = '\\d+(?::\\d+[ab]?(?:[\\-\u2013]\\d+(?::\\d+)?)?)?';
 
-// Full ref pattern: book name/abbrev + whitespace + chapter[:verse[-range]]
+// Full ref pattern: book name/abbrev + whitespace + chapter[:verse[-range]].
+// Also captures a trailing continuation tail of bare verse numbers separated
+// by semicolons or commas — e.g. "Matt 5:6-8; 10; 17" or "Rom 8:1, 5, 28".
+// Group 1 = book, Group 2 = first cv, Group 3 = continuation tail (may be empty).
 const PROSE_REF_RE = new RegExp(
-  `\\b(${BOOK_PATTERN})\\s+(${CV_PATTERN})\\b`,
+  `\\b(${BOOK_PATTERN})\\s+(${CV_PATTERN})((?:\\s*[;,]\\s*\\d+[ab]?)*)`,
   'g',
 );
 
@@ -83,10 +86,28 @@ function processTextSegment(
     `${header.toUpperCase()}<br><br>${nextChar}`,
   );
 
-  // Step 1: linkify book + chapter[:verse] refs
-  let out = text.replace(PROSE_REF_RE, (match) => {
-    const target = parseRefString(match.trim(), contextBook, contextChapter);
-    return target ? wrapRef(match) : match;
+  // Step 1: linkify book + chapter[:verse] refs, plus any continuation verses
+  // separated by semicolons/commas (e.g. "Matt 5:6-8; 10; 17").
+  let out = text.replace(PROSE_REF_RE, (match, _book, _cv, tail: string) => {
+    // mainText is everything before the continuation tail
+    const mainText = tail ? match.slice(0, match.length - tail.length) : match;
+    const target = parseRefString(mainText.trim(), contextBook, contextChapter);
+    if (!target) return match;
+
+    let result = wrapRef(mainText);
+
+    // Link each bare number in the tail as a verse in the same book+chapter
+    if (tail) {
+      result += tail.replace(/([;,]\s*)(\d+[ab]?)/g, (_, sep, num) => {
+        const contRef = `${target.book} ${target.chapter}:${num}`;
+        return (
+          sep +
+          `<span class="commentary-ref" data-ref="${escAttr(contRef)}" tabindex="0" role="link">${num}</span>`
+        );
+      });
+    }
+
+    return result;
   });
 
   // Step 2: linkify bare verse refs (v. N / verse N)
