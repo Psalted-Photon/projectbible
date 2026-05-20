@@ -38,12 +38,12 @@
     {#if morphologyData}
       <!-- Original language morphology -->
       <button class="action-btn" on:click={() => handleAction('dissect')}>
-        Dissect
+        Define
       </button>
     {:else}
       <!-- English word definition -->
       <button class="action-btn" on:click={() => handleAction('dissect')}>
-        Dissect
+        Define
       </button>
     {/if}
     
