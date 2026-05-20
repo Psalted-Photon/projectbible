@@ -133,6 +133,9 @@
     // down, which will trigger loadProgressForPlan() again via the sync
     // subscriber once the pull completes.
     if (isSignedIn) {
+      // Re-push all local plan rows so Supabase always has them (restores deleted
+      // rows and propagates plans created on other devices).
+      syncActivePlansToSupabase();
       syncService.forceSync(30_000);
     }
   }
@@ -388,6 +391,46 @@
         data,
       },
     });
+  }
+
+  /**
+   * Re-upsert every active plan row to Supabase.
+   * Called on modal open so that plans deleted from Supabase are automatically
+   * restored, and plans created on the phone appear on the PC (and vice-versa).
+   */
+  async function syncActivePlansToSupabase(): Promise<void> {
+    if (!isSignedIn || activePlans.length === 0) return;
+    for (const entry of activePlans) {
+      if (!entry.id || !entry.plan) continue;
+      try {
+        const cfg = entry.plan.config;
+        // Plan IDs are "plan_<epoch-ms>" — use that as the canonical creation time.
+        const createdMs = parseInt(entry.id.replace('plan_', ''), 10) || Date.now();
+        await syncQueue.enqueue({
+          type: 'INSERT',
+          table: 'reading_plans',
+          id: entry.id,
+          data: {
+            id: entry.id,
+            name: cfg.name || `${entry.plan.totalDays}-day reading plan`,
+            config: JSON.stringify({
+              ...cfg,
+              // Ensure Date objects are serialised as ISO strings
+              startDate: cfg.startDate instanceof Date ? cfg.startDate.toISOString() : cfg.startDate,
+              endDate:   cfg.endDate   instanceof Date ? cfg.endDate.toISOString()   : cfg.endDate,
+            }),
+            current_day_number: 1,
+            status: 'active',
+            activated_at: createdMs,                     // BIGINT column — epoch ms
+            started_at:   createdMs,                     // BIGINT column — epoch ms
+            created_at:   new Date(createdMs).toISOString(), // TIMESTAMPTZ
+            updated_at:   new Date().toISOString(),          // TIMESTAMPTZ
+          },
+        });
+      } catch (err) {
+        console.warn('[ReadingPlan] Failed to queue plan re-sync:', entry.id, err);
+      }
+    }
   }
 
   async function loadProgressForPlan() {
