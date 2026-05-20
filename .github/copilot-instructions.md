@@ -78,3 +78,23 @@ Double-check current values before reporting them. Read the file first — do no
 1. **Read these instructions first.** Do not begin implementation without checking whether the answer is already here.
 2. **Follow existing architecture.** If the instructions describe how something works (e.g. packs come from GitHub Releases `v1.0.0`), apply that same pattern to new work — do not invent an alternative.
 3. **Do not question established patterns** without first reading the instructions to confirm they don't already answer the question.
+
+## Known Bugs & Tasks
+
+Active issues to be aware of. When working on related features, check this list first.
+
+1. **Scroll in Bible reader when commentary popup is open** — reader scroll gets blocked or hijacked when the commentary popup is visible.
+2. **Tablet mode screen rotation** — layout breaks or doesn't adapt correctly when rotating between portrait and landscape on tablets.
+3. **Commentary dropdown too wide** — the commentary selection dropdown overflows or is wider than expected.
+4. **Custom user-defined background and font colors** — users cannot yet set their own background and text colors; needs a settings UI and CSS variable wiring.
+5. **Mobile Bible ref dropdown fitment** — the reference picker dropdown doesn't fit/display correctly on small mobile screens.
+6. **Back button for commentary nav** — no back button to return to a previous commentary entry during navigation.
+7. **Word highlight doesn't highlight unless verse is selected first, then back to word in toast** — the word highlight flow is broken; requires an extra selection step to activate.
+8. **Change "Dissect" to "Define"** — rename the "Dissect" label/button to "Define" throughout the UI.
+9. **Search results clickable area closes results if clicked in wrong place (far left)** — dead zone on the far left of search result rows accidentally dismisses the results panel.
+10. **Collapsible search results by book and chapter** — search results should be groupable/collapsible under book and chapter headings.
+11. **Paragraph symbol showing in search results** — e.g. searching "mountain" produces Num 13:17 with raw HTML (paragraph symbol `¶`) rendering as text instead of being stripped.
+12. **Icons coloring** — icon colors are incorrect or inconsistent and need to be fixed.
+13. **Ref dropdown — too many open at once** — multiple reference dropdowns can be open simultaneously; only one should be open at a time.
+14. **Matthew Henry commentaries** — add Matt Henry commentary data as a pack.
+15. **Simplify Manage Packs — tiered system** — replace the current list of ~20 individual packs with a tiered one-click install: **Basic**, **Study**, and **Full**, plus an optional **Audio** add-on toggle. Each tier downloads all the packs it includes automatically so users don't have to select them individually.
