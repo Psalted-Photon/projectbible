@@ -152,6 +152,7 @@
   }
 
   $: if (currentReadingPlan && currentPlanId && currentPlanId !== lastLoadedPlanId) {
+    dayProgressMap = new Map(); // clear stale data immediately before async reload
     loadProgressForPlan();
     loadCatchUpDays();
   }
