@@ -538,8 +538,8 @@
     if (progress?.completed) {
       return dayStr > todayStr ? 'ahead' : 'completed';
     }
+    if (day.dayNumber === firstIncompleteDayNumber) return 'current';
     if (dayStr < todayStr) return 'overdue';
-    if (dayStr === todayStr) return 'current';
     return 'unread';
   }
 
@@ -1263,8 +1263,12 @@
   
   function getTodayReading() {
     if (!currentReadingPlan) return null;
+    // Show first incomplete day so reading stays sequential
+    const firstIncomplete = currentReadingPlan.days.find(day => !getDayProgress(day.dayNumber)?.completed);
+    if (firstIncomplete) return firstIncomplete;
+    // Fallback: calendar day when all days are complete
     const todayStr = localDateStr(new Date());
-    return currentReadingPlan.days.find(day => localDateStr(new Date(day.date)) === todayStr);
+    return currentReadingPlan.days.find(day => localDateStr(new Date(day.date)) === todayStr) ?? null;
   }
   
   function navigateToChapter(book: string, chapter: number, chapters: Array<{ book: string; chapter: number }> = [{ book, chapter }]) {
@@ -1279,7 +1283,14 @@
     isOpen = false;
   }
   
-  $: todayReading = currentReadingPlan ? getTodayReading() : null;
+  // Track firstIncompleteDayNumber reactively so getDayStatus() highlights the right day
+  $: firstIncompleteDayNumber = (() => {
+    void dayProgressMap; // explicit reactive dependency
+    if (!currentReadingPlan) return null;
+    return currentReadingPlan.days.find(d => !getDayProgress(d.dayNumber)?.completed)?.dayNumber ?? null;
+  })();
+
+  $: todayReading = (void dayProgressMap, currentReadingPlan ? getTodayReading() : null);
 
   function getNextReadingDay() {
     if (!currentReadingPlan) return null;
