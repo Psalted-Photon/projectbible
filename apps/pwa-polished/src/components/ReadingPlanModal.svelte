@@ -1264,11 +1264,13 @@
   
   function getTodayReading() {
     if (!currentReadingPlan) return null;
-    // Show first incomplete day so reading stays sequential
-    const firstIncomplete = currentReadingPlan.days.find(day => !getDayProgress(day.dayNumber)?.completed);
-    if (firstIncomplete) return firstIncomplete;
-    // Fallback: calendar day when all days are complete
     const todayStr = localDateStr(new Date());
+    // Show the first incomplete day that is due (past or today) — keeps user on track, never skips to future
+    const firstOverdueIncomplete = currentReadingPlan.days.find(day =>
+      localDateStr(new Date(day.date)) <= todayStr && !getDayProgress(day.dayNumber)?.completed
+    );
+    if (firstOverdueIncomplete) return firstOverdueIncomplete;
+    // All past/today days are complete — show today so the user sees the green "complete" state
     return currentReadingPlan.days.find(day => localDateStr(new Date(day.date)) === todayStr) ?? null;
   }
   
@@ -1285,10 +1287,14 @@
   }
   
   // Track firstIncompleteDayNumber reactively so getDayStatus() highlights the right day
+  // Only consider days that are due (past or today) — never highlight a future day as current
   $: firstIncompleteDayNumber = (() => {
     void dayProgressMap; // explicit reactive dependency
     if (!currentReadingPlan) return null;
-    return currentReadingPlan.days.find(d => !getDayProgress(d.dayNumber)?.completed)?.dayNumber ?? null;
+    const todayStr = localDateStr(new Date());
+    return currentReadingPlan.days.find(d =>
+      localDateStr(new Date(d.date)) <= todayStr && !getDayProgress(d.dayNumber)?.completed
+    )?.dayNumber ?? null;
   })();
 
   $: todayReading = (void dayProgressMap, currentReadingPlan ? getTodayReading() : null);
