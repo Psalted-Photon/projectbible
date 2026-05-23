@@ -10,6 +10,7 @@
   import { searchService, type SearchCategory } from "../lib/services/searchService";
   import { navigationStore } from "../stores/navigationStore";
   import { get } from "svelte/store";
+  import { BIBLE_BOOKS } from "../lib/bibleData";
   import { englishLexicalService } from "../../../../packages/core/src/search/englishLexicalService";
   import HelpModal from "./HelpModal.svelte";
 
@@ -34,6 +35,32 @@
     showMode: 'limited' | 'medium' | 'all'; // 100, 1000, or unlimited
   }
   let translationGroups: TranslationGroup[] = [];
+
+  // Book-level collapse state for power search results
+  let expandedPowerSearchBooks = new Set<string>();
+  const psBookOrderMap = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
+
+  function groupByBook(results: SearchResult[]): Array<{bookName: string, results: SearchResult[]}> {
+    const byBook: Record<string, SearchResult[]> = {};
+    results.forEach((result) => {
+      const book = result.data?.book || 'Unknown';
+      if (!byBook[book]) byBook[book] = [];
+      byBook[book].push(result);
+    });
+    return Object.entries(byBook)
+      .sort(([a], [b]) => (psBookOrderMap.get(a) ?? 999) - (psBookOrderMap.get(b) ?? 999))
+      .map(([bookName, results]) => ({ bookName, results }));
+  }
+
+  function togglePowerSearchBook(key: string) {
+    const newExpanded = new Set(expandedPowerSearchBooks);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    expandedPowerSearchBooks = newExpanded;
+  }
   
   interface SearchResult {
     type: 'verse' | 'place' | 'strongs' | 'morphology' | 'cross-reference';
@@ -207,6 +234,7 @@
     previewResults = [];
     searchResults = [];
     translationGroups = [];
+    expandedPowerSearchBooks = new Set();
     totalResultCount = 0;
     displayedResultCount = 0;
   }
@@ -522,16 +550,29 @@
 
               <div class="results-list">
                 {#if translationGroups.length === 1}
-                  <!-- Single translation: show flat list -->
-                  {#each translationGroups[0].results.slice(0, translationGroups[0].displayedCount) as result}
-                    <button class="result-item" on:click={() => handleResultClick(result)}>
-                      <div class="result-title">{result.title}</div>
-                      {#if result.subtitle}
-                        <div class="result-text">{@html highlightSnippet(result.subtitle)}</div>
+                  <!-- Single translation: show by book -->
+                  {#each groupByBook(translationGroups[0].results.slice(0, translationGroups[0].displayedCount)) as {bookName, results: bookResults}}
+                    <div class="ps-book-group">
+                      <button class="ps-book-header" on:click={() => togglePowerSearchBook(`single::${bookName}`)}>                        
+                        <span class="ps-book-caret">{expandedPowerSearchBooks.has(`single::${bookName}`) ? '▼' : '▶'}</span>
+                        <span class="ps-book-name">{bookName}</span>
+                        <span class="ps-book-count">({bookResults.length})</span>
+                      </button>
+                      {#if expandedPowerSearchBooks.has(`single::${bookName}`)}
+                        <div class="ps-book-results">
+                          {#each bookResults as result}
+                            <button class="result-item" on:click={() => handleResultClick(result)}>
+                              <div class="result-title">{result.title}</div>
+                              {#if result.subtitle}
+                                <div class="result-text">{@html highlightSnippet(result.subtitle)}</div>
+                              {/if}
+                            </button>
+                          {/each}
+                        </div>
                       {/if}
-                    </button>
+                    </div>
                   {/each}
-                  
+
                   {#if translationGroups[0].displayedCount < translationGroups[0].totalCount}
                     <div class="load-more-container">
                       <button class="load-more-btn" on:click={() => loadMoreInTranslation(0)}>
@@ -564,15 +605,28 @@
                       
                       {#if group.expanded}
                         <div class="translation-results">
-                          {#each group.results.slice(0, group.displayedCount) as result}
-                            <button class="result-item" on:click={() => handleResultClick(result)}>
-                              <div class="result-title">{result.title}</div>
-                              {#if result.subtitle}
-                                <div class="result-text">{@html highlightSnippet(result.subtitle)}</div>
+                          {#each groupByBook(group.results.slice(0, group.displayedCount)) as {bookName, results: bookResults}}
+                            <div class="ps-book-group">
+                              <button class="ps-book-header" on:click={() => togglePowerSearchBook(`${group.translationId}::${bookName}`)}>                        
+                                <span class="ps-book-caret">{expandedPowerSearchBooks.has(`${group.translationId}::${bookName}`) ? '▼' : '▶'}</span>
+                                <span class="ps-book-name">{bookName}</span>
+                                <span class="ps-book-count">({bookResults.length})</span>
+                              </button>
+                              {#if expandedPowerSearchBooks.has(`${group.translationId}::${bookName}`)}
+                                <div class="ps-book-results">
+                                  {#each bookResults as result}
+                                    <button class="result-item" on:click={() => handleResultClick(result)}>
+                                      <div class="result-title">{result.title}</div>
+                                      {#if result.subtitle}
+                                        <div class="result-text">{@html highlightSnippet(result.subtitle)}</div>
+                                      {/if}
+                                    </button>
+                                  {/each}
+                                </div>
                               {/if}
-                            </button>
+                            </div>
                           {/each}
-                          
+
                           {#if group.displayedCount < group.totalCount}
                             <div class="load-more-container">
                               <button class="load-more-btn" on:click={() => loadMoreInTranslation(index)}>
@@ -1268,6 +1322,53 @@
 
   .translation-results {
     padding: 12px;
+    background: #141414;
+  }
+
+  .ps-book-group {
+    margin-bottom: 4px;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .ps-book-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    background: #1e1e2a;
+    border: none;
+    cursor: pointer;
+    color: #c8c8c8;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    transition: background 0.15s;
+  }
+
+  .ps-book-header:hover {
+    background: #28283a;
+  }
+
+  .ps-book-caret {
+    color: #667eea;
+    font-size: 10px;
+    min-width: 12px;
+  }
+
+  .ps-book-name {
+    flex: 1;
+    color: #a0b4f0;
+  }
+
+  .ps-book-count {
+    color: #888;
+    font-size: 12px;
+  }
+
+  .ps-book-results {
     background: #141414;
   }
 

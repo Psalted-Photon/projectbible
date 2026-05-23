@@ -46,6 +46,7 @@
   let referenceDropdownOpen = false;
   let commDropdownOpen = false;
   let expandedBooks = new Set<string>();
+  let expandedSearchBooks = new Set<string>();
   let searchQuery = "";
   let searchFocused = false;
   let blurTimeout: number | undefined;
@@ -480,15 +481,15 @@
     expandedTranslations = newExpanded;
   }
 
-  function toggleBook(translationId: string, bookName: string) {
+  function toggleSearchBook(translationId: string, bookName: string) {
     const key = `${translationId}::${bookName}`;
-    const newExpanded = new Set(expandedBooks);
+    const newExpanded = new Set(expandedSearchBooks);
     if (newExpanded.has(key)) {
       newExpanded.delete(key);
     } else {
       newExpanded.add(key);
     }
-    expandedBooks = newExpanded;
+    expandedSearchBooks = newExpanded;
   }
 
   // Group results by translation
@@ -858,16 +859,16 @@
                   <div class="book-group">
                     <button
                       class="book-header"
-                      class:expanded={expandedBooks.has(`${translationId}::${bookName}`)}
-                      on:click={() => toggleBook(translationId, bookName)}
+                      class:expanded={expandedSearchBooks.has(`${translationId}::${bookName}`)}
+                      on:click={() => toggleSearchBook(translationId, bookName)}
                     >
                       <span class="expand-icon">
-                        {#if expandedBooks.has(`${translationId}::${bookName}`)}<CaretDown size={9} weight="bold" />{:else}<CaretRight size={9} weight="bold" />{/if}
+                        {#if expandedSearchBooks.has(`${translationId}::${bookName}`)}<CaretDown size={9} weight="bold" />{:else}<CaretRight size={9} weight="bold" />{/if}
                       </span>
                       <span class="book-name">{bookName}</span>
                       <span class="result-count">({bookResults.length})</span>
                     </button>
-                    {#if expandedBooks.has(`${translationId}::${bookName}`)}
+                    {#if expandedSearchBooks.has(`${translationId}::${bookName}`)}
                       <div class="book-results">
                         {#each bookResults as result}
                           <button
