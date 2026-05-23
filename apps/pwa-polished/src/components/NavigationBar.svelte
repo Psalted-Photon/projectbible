@@ -480,6 +480,17 @@
     expandedTranslations = newExpanded;
   }
 
+  function toggleBook(translationId: string, bookName: string) {
+    const key = `${translationId}::${bookName}`;
+    const newExpanded = new Set(expandedBooks);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    expandedBooks = newExpanded;
+  }
+
   // Group results by translation
   $: resultsByTranslation = searchResults.reduce(
     (acc, category) => {
@@ -495,6 +506,23 @@
       return acc;
     },
     {} as Record<string, any[]>,
+  );
+
+  // Group results by translation then by book (canonical order)
+  const bookOrderMap = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
+  $: resultsByTranslationAndBook = Object.fromEntries(
+    Object.entries(resultsByTranslation).map(([translationId, results]) => {
+      const byBook: Record<string, any[]> = {};
+      results.forEach((result) => {
+        const book = result.data.book || "Unknown";
+        if (!byBook[book]) byBook[book] = [];
+        byBook[book].push(result);
+      });
+      const sortedEntries = Object.entries(byBook).sort(([a], [b]) => {
+        return (bookOrderMap.get(a) ?? 999) - (bookOrderMap.get(b) ?? 999);
+      });
+      return [translationId, sortedEntries];
+    })
   );
 
   function clearSearch() {
@@ -826,18 +854,37 @@
 
             {#if expandedTranslations.has(translationId)}
               <div class="translation-results">
-                {#each results as result}
-                  <button
-                    class="search-result-item"
-                    on:click={() => handleResultClick(result)}
-                  >
-                    <div class="result-title">{result.title}</div>
-                    {#if result.subtitle}
-                      <div class="result-subtitle">
-                        {@html highlightText(result.subtitle, searchQuery)}
+                {#each resultsByTranslationAndBook[translationId] as [bookName, bookResults]}
+                  <div class="book-group">
+                    <button
+                      class="book-header"
+                      class:expanded={expandedBooks.has(`${translationId}::${bookName}`)}
+                      on:click={() => toggleBook(translationId, bookName)}
+                    >
+                      <span class="expand-icon">
+                        {#if expandedBooks.has(`${translationId}::${bookName}`)}<CaretDown size={9} weight="bold" />{:else}<CaretRight size={9} weight="bold" />{/if}
+                      </span>
+                      <span class="book-name">{bookName}</span>
+                      <span class="result-count">({bookResults.length})</span>
+                    </button>
+                    {#if expandedBooks.has(`${translationId}::${bookName}`)}
+                      <div class="book-results">
+                        {#each bookResults as result}
+                          <button
+                            class="search-result-item"
+                            on:click={() => handleResultClick(result)}
+                          >
+                            <div class="result-title">{result.title}</div>
+                            {#if result.subtitle}
+                              <div class="result-subtitle">
+                                {@html highlightText(result.subtitle, searchQuery)}
+                              </div>
+                            {/if}
+                          </button>
+                        {/each}
                       </div>
                     {/if}
-                  </button>
+                  </div>
                 {/each}
               </div>
             {/if}
@@ -1791,6 +1838,45 @@
   }
 
   .translation-results {
+    background: #222;
+  }
+
+  .book-group {
+    border-bottom: 1px solid #2a2a2a;
+  }
+
+  .book-group:last-child {
+    border-bottom: none;
+  }
+
+  .book-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px 9px 28px;
+    background: #1e1e1e;
+    border: none;
+    color: #c8c8c8;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 13px;
+    font-weight: 500;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.15);
+  }
+
+  .book-header:hover {
+    background: #272727;
+  }
+
+  .book-name {
+    flex: 1;
+    color: #a0b4f0;
+  }
+
+  .book-results {
     background: #222;
   }
 
