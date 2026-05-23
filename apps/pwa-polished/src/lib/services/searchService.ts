@@ -1,4 +1,5 @@
 import { IndexedDBSearchIndex } from '../../adapters/SearchIndex';
+import { normalizeBookName } from '../bibleData';
 
 export interface SearchResult {
   type: 'verse' | 'place' | 'strongs' | 'morphology' | 'cross-reference';
@@ -74,11 +75,11 @@ export class UnifiedSearchService {
       // Convert to our SearchResult format
       const results = dbResults.slice(0, resultLimit).map((result, index) => ({
         type: 'verse' as const,
-        title: `${result.book} ${result.chapter}:${result.verse}`,
+        title: `${normalizeBookName(result.book)} ${result.chapter}:${result.verse}`,
         subtitle: result.snippet || result.text,
-        reference: `${result.book} ${result.chapter}:${result.verse}`,
+        reference: `${normalizeBookName(result.book)} ${result.chapter}:${result.verse}`,
         data: { 
-          book: result.book, 
+          book: normalizeBookName(result.book), 
           chapter: result.chapter, 
           verse: result.verse,
           translation: result.translation

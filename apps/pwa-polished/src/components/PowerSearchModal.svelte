@@ -10,7 +10,7 @@
   import { searchService, type SearchCategory } from "../lib/services/searchService";
   import { navigationStore } from "../stores/navigationStore";
   import { get } from "svelte/store";
-  import { BIBLE_BOOKS } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData";
   import { englishLexicalService } from "../../../../packages/core/src/search/englishLexicalService";
   import HelpModal from "./HelpModal.svelte";
 
@@ -43,7 +43,7 @@
   function groupByBook(results: SearchResult[]): Array<{bookName: string, results: SearchResult[]}> {
     const byBook: Record<string, SearchResult[]> = {};
     results.forEach((result) => {
-      const book = result.data?.book || 'Unknown';
+      const book = normalizeBookName(result.data?.book || 'Unknown');
       if (!byBook[book]) byBook[book] = [];
       byBook[book].push(result);
     });

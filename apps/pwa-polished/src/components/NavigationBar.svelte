@@ -5,7 +5,7 @@
     canGoBack,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { BIBLE_BOOKS } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import {
     searchService,
@@ -515,7 +515,7 @@
     Object.entries(resultsByTranslation).map(([translationId, results]) => {
       const byBook: Record<string, any[]> = {};
       results.forEach((result) => {
-        const book = result.data.book || "Unknown";
+        const book = normalizeBookName(result.data.book || "Unknown");
         if (!byBook[book]) byBook[book] = [];
         byBook[book].push(result);
       });

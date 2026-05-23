@@ -89,6 +89,37 @@ export const BIBLE_BOOKS: BookInfo[] = [
   { name: 'Revelation', chapters: 22, testament: 'NT', category: 'revelation' }
 ];
 
+/** Maps DB book name variants → canonical BIBLE_BOOKS name */
+export const BOOK_NAME_ALIASES: Record<string, string> = {
+  // Roman-numeral OT variants
+  'I Samuel': '1 Samuel',
+  'II Samuel': '2 Samuel',
+  'I Kings': '1 Kings',
+  'II Kings': '2 Kings',
+  'I Chronicles': '1 Chronicles',
+  'II Chronicles': '2 Chronicles',
+  // Roman-numeral NT variants
+  'I Corinthians': '1 Corinthians',
+  'II Corinthians': '2 Corinthians',
+  'I Thessalonians': '1 Thessalonians',
+  'II Thessalonians': '2 Thessalonians',
+  'I Timothy': '1 Timothy',
+  'II Timothy': '2 Timothy',
+  'I Peter': '1 Peter',
+  'II Peter': '2 Peter',
+  'I John': '1 John',
+  'II John': '2 John',
+  'III John': '3 John',
+  // Other common variants
+  'Revelation of John': 'Revelation',
+  'Song of Songs': 'Song of Solomon',
+};
+
+/** Normalize a DB book name to its canonical BIBLE_BOOKS name */
+export function normalizeBookName(book: string): string {
+  return BOOK_NAME_ALIASES[book] ?? book;
+}
+
 export function getBookChapters(bookName: string): number {
   const book = BIBLE_BOOKS.find(b => b.name === bookName);
   return book?.chapters || 1;
