@@ -129,7 +129,7 @@ const BOOK_MAP: Record<string, string> = {
   // Titus
   tit: 'Titus',
   // Philemon
-  phm: 'Philemon', phile: 'Philemon',
+  phm: 'Philemon', phlm: 'Philemon', phile: 'Philemon',
   // Hebrews
   heb: 'Hebrews', he: 'Hebrews',
   // James

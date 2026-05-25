@@ -29,7 +29,7 @@ const BOOK_PATTERN = [
   'Gen|Exo?d?|Lev|Nu(?:m)?|De(?:ut?)?|Jos(?:h)?|Jud?g?|Neh|Es(?:th?)?|Psa?|Pro?v?|Eccl?',
   'Isa|Jer|Lam|Eze?k?|Da(?:n)?|Hos|Joe?l?|Amo?s?|Oba?d?|Jon(?:ah)?|Mic|Na(?:h)?|Ha(?:b)?',
   'Ze(?:ph?)?|Ha(?:g)?|Ze(?:ch?)?|Mal|Matt?|Ma(?:rk?)?|Lu(?:ke?)?|Joh?n?|Act?s?|Ro(?:m)?',
-  'Ga(?:l)?|Ep(?:h)?|Ph(?:il?p?|p)|Co(?:l)?|He(?:b)?|Ja(?:s)?|Ti(?:t)?|Phm|Ph(?:ile)?|Re(?:v)?',
+  'Ga(?:l)?|Ep(?:h)?|Ph(?:il?p?|p)|Co(?:l)?|He(?:b)?|Ja(?:s)?|Ti(?:t)?|Phlm?|Ph(?:ile)?|Re(?:v)?',
 ].join('|');
 
 // Chapter + optional verse + optional range  (e.g. 3, 3:4, 3:4a, 3:4-7, 3:4-5:2)
@@ -41,7 +41,7 @@ const CV_PATTERN = '\\d+(?::\\d+[ab]?(?:[\\-\u2013]\\d+(?::\\d+)?)?)?';
 // by semicolons or commas — e.g. "Matt 5:6-8; 10; 17" or "Rom 8:1, 5, 28".
 // Group 1 = book, Group 2 = first cv, Group 3 = continuation tail (may be empty).
 const PROSE_REF_RE = new RegExp(
-  `\\b(${BOOK_PATTERN})\\s+(${CV_PATTERN})((?:\\s*[;,]\\s*\\d+[ab]?)*)`,
+  `\\b(${BOOK_PATTERN})\\s+(${CV_PATTERN})((?:\\s*[;,]\\s*\\d+[ab]?(?![A-Za-z]))*)`,
   'g',
 );
 
