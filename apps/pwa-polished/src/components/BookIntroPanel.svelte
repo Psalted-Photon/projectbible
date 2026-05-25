@@ -1,13 +1,28 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
+  import { get } from "svelte/store";
   import bookIntroductions from "../data/book-introductions.json";
+  import { IndexedDBTextStore } from "../adapters/TextStore";
+  import { parseRefString } from "../lib/parseRefString";
+  import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
+  import { navigationStore } from "../stores/navigationStore";
 
   export let open = false;
   export let book = "";
 
-  const dispatch = createEventDispatcher<{ close: void }>();
+  const dispatch = createEventDispatcher<{
+    close: void;
+    navigateTo: { book: string; chapter: number; verse: number };
+  }>();
+
+  const textStore = new IndexedDBTextStore();
+
+  type PillPreview = { book: string; chapter: number; verse: number; text: string } | null;
+  let pillPreview: PillPreview = null;
+  let panelLoading = false;
 
   function close() {
+    pillPreview = null;
     dispatch("close");
   }
 
@@ -16,6 +31,46 @@
   }
 
   $: introHtml = (bookIntroductions as Record<string, string>)[book] ?? "";
+  $: processedHtml = open && book ? linkifyCommentaryRefs(introHtml, book, 1) : introHtml;
+  $: if (!open) pillPreview = null;
+
+  async function handleRefClick(ref: string) {
+    const target = parseRefString(ref, book, 1);
+    if (!target) return;
+    panelLoading = true;
+    const translation = get(navigationStore).translation;
+    const verses = await textStore.getChapter(translation, target.book, target.chapter);
+    const targetVerse = verses.find((v: any) => v.verse === target.verse);
+    pillPreview = {
+      book: target.book,
+      chapter: target.chapter,
+      verse: target.verse,
+      text: targetVerse?.text ?? "",
+    };
+    panelLoading = false;
+  }
+
+  function handleCommentaryBodyClick(e: MouseEvent | KeyboardEvent) {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains("commentary-ref")) return;
+    if (e instanceof KeyboardEvent && e.key !== "Enter" && e.key !== " ") return;
+    const ref = target.dataset.ref;
+    if (ref) handleRefClick(ref);
+  }
+
+  function dismissPill() {
+    pillPreview = null;
+  }
+
+  function goToVerse() {
+    if (!pillPreview) return;
+    dispatch("navigateTo", {
+      book: pillPreview.book,
+      chapter: pillPreview.chapter,
+      verse: pillPreview.verse,
+    });
+    close();
+  }
 </script>
 
 <!-- Backdrop -->
@@ -41,13 +96,44 @@
   <div class="intro-body">
     {#if introHtml}
       <!-- svelte-ignore a11y-no-static-element-interactions -->
-      <div class="intro-content">
-        {@html introHtml}
+      <div
+        class="intro-content"
+        on:click={handleCommentaryBodyClick}
+        on:keydown={handleCommentaryBodyClick}
+      >
+        {@html processedHtml}
       </div>
     {:else}
       <p class="empty-msg">No introduction available for {book}.</p>
     {/if}
   </div>
+
+  <!-- Loading spinner -->
+  {#if panelLoading}
+    <div class="intro-loading">Loading…</div>
+  {/if}
+
+  <!-- Verse pill popup -->
+  {#if pillPreview !== null}
+    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+    <div class="pill-overlay" on:click={dismissPill}>
+      <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+      <div class="pill-card" on:click|stopPropagation>
+        <div class="pill-ref-label">{pillPreview.book} {pillPreview.chapter}:{pillPreview.verse}</div>
+        <div class="pill-verse-text">
+          {#if pillPreview.text}
+            {pillPreview.text}
+          {:else}
+            <span class="hint">Verse text not available.</span>
+          {/if}
+        </div>
+        <div class="pill-actions">
+          <button class="pill-go-btn" on:click={goToVerse}>Go to verse →</button>
+          <button class="pill-dismiss-btn" on:click={dismissPill}>✕</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -192,5 +278,113 @@
     font-size: 0.95rem;
     text-align: center;
     margin-top: 3rem;
+  }
+
+  /* Loading indicator */
+  .intro-loading {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #aaa;
+    font-size: 0.8rem;
+    padding: 6px 14px;
+    border-radius: 20px;
+    pointer-events: none;
+  }
+
+  /* Verse pill popup */
+  .pill-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(1px);
+    z-index: 10;
+    display: flex;
+    align-items: flex-end;
+    padding: 12px 16px;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .pill-card {
+    background: #2a2a2a;
+    border-radius: 10px;
+    padding: 12px 14px;
+    width: 100%;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
+  }
+
+  .pill-ref-label {
+    font-size: 11px;
+    color: #888;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    margin-bottom: 6px;
+  }
+
+  .pill-verse-text {
+    font-size: 15px;
+    color: #e8e8e8;
+    line-height: 1.65;
+  }
+
+  .hint {
+    color: #666;
+    font-style: italic;
+  }
+
+  .pill-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+  }
+
+  .pill-go-btn {
+    background: #3a5a9a;
+    color: #e8eeff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .pill-go-btn:hover {
+    background: #4a6ab0;
+  }
+
+  .pill-dismiss-btn {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: color 0.15s;
+  }
+
+  .pill-dismiss-btn:hover {
+    color: #aaa;
+  }
+
+  /* Inline verse ref links (injected by linkifyCommentaryRefs) */
+  :global(.commentary-ref) {
+    color: #8ab4f8;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+
+  :global(.commentary-ref:hover) {
+    color: #c0d8ff;
+    text-decoration-style: solid;
+    background: rgba(138, 180, 248, 0.1);
   }
 </style>

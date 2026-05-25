@@ -3188,6 +3188,7 @@
   open={bookIntroPanelOpen}
   book={bookIntroPanelBook}
   on:close={() => (bookIntroPanelOpen = false)}
+  on:navigateTo={handleAnnotationNavigateTo}
 />
 
 <AnnotationPanel
