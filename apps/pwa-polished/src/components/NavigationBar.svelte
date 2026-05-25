@@ -36,7 +36,9 @@
     User,
     X,
     SpinnerGap,
+    Sun,
   } from "phosphor-svelte";
+  import { openDailyGreeting } from "../stores/dailyGreetingStore";
 
   export let windowId: string | undefined = undefined;
   export const visible: boolean = true;
@@ -795,6 +797,18 @@
         aria-label="Reading plan"
       >
         <BookOpenText size={16} weight="duotone" />
+      </button>
+
+      <div class="pill-divider"></div>
+
+      <!-- Daily Greeting -->
+      <button
+        class="pill-btn"
+        on:click={openDailyGreeting}
+        title="Daily greeting & verse of the day"
+        aria-label="Daily greeting"
+      >
+        <Sun size={16} weight="duotone" />
       </button>
 
       <div class="pill-divider"></div>

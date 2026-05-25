@@ -2,6 +2,7 @@
   import BibleReader from "./components/BibleReader.svelte";
   import LexicalModal from "./components/LexicalModal.svelte";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
+  import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
   import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
   import PaneContainer from "./components/PaneContainer.svelte";
@@ -10,7 +11,7 @@
   import { currentDownload, showProgressModal } from "./lib/pack-triggers";
   import { onMount } from "svelte";
   import { syncService } from "./lib/sync";
-  import { readingPlanModalStore } from "./stores/readingPlanModalStore";  import { localDateStr } from './stores/clockStore';  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
+  import { readingPlanModalStore } from "./stores/readingPlanModalStore";  import { localDateStr } from './stores/clockStore';  import { todayStore } from './stores/clockStore';  import { checkAndShowDailyGreeting } from './stores/dailyGreetingStore';  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
   import "./adapters/SyncedHighlightAdapter"; // registers verse/word highlight pull handlers
   import { getSettings } from "./adapters/settings";
 
@@ -113,12 +114,19 @@
     
     document.addEventListener('keydown', handleGlobalKeydown);
 
+    // Show daily greeting on first open of each new day
+    setTimeout(() => checkAndShowDailyGreeting(), 800);
+
+    // Also trigger when the date rolls over at midnight while the app is open
+    const unsubscribeToday = todayStore.subscribe(() => checkAndShowDailyGreeting());
+
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       document.removeEventListener('keydown', handleGlobalKeydown);
       window.removeEventListener('settingsUpdated', applyOrientationLock);
       screen.orientation?.removeEventListener('change', handleOrientationChange);
       unsubscribeReadingPlan();
+      unsubscribeToday();
     };
   });
 
@@ -185,6 +193,9 @@
 
     <!-- Shared Profile Modal -->
     <ProfileModal />
+
+    <!-- Daily Greeting & Verse of the Day -->
+    <DailyGreetingModal />
   {/if}
 </div>
 
