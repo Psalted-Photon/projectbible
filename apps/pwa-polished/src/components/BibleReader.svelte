@@ -282,6 +282,8 @@
   // Reopen annotation panel after back-navigation from a "Go →" link
   let _reopenAnnotationVerse: number | null = null;
   let _reopenAnnotationTab: 'references' | 'commentary' = 'commentary';
+  // Reopen book intro panel after back-navigation from an intro ref link
+  let _reopenBookIntroPanel = false;
 
   function handleAnnotationNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
@@ -298,10 +300,25 @@
   function handleAnnotationReturn() {
     const ctx = $annotationReturnStore;
     if (!ctx) return;
-    _reopenAnnotationVerse = ctx.verse;
-    _reopenAnnotationTab = ctx.tab;
     annotationReturnStore.set(null);
-    navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
+    if (_reopenBookIntroPanel) {
+      // Back from intro panel navigation — navigate back and reopen intro panel
+      bookIntroPanelBook = ctx.book;
+      navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
+      // _reopenBookIntroPanel stays true; consumed by loadChapter / reactive block
+    } else {
+      _reopenAnnotationVerse = ctx.verse;
+      _reopenAnnotationTab = ctx.tab;
+      navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
+    }
+  }
+
+  function handleBookIntroNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
+    const { book, chapter, verse } = e.detail;
+    _reopenBookIntroPanel = true;
+    bookIntroPanelOpen = false;
+    annotationReturnStore.set({ book: bookIntroPanelBook, chapter: 1, verse: 1, tab: 'references' });
+    navigationStore.navigateTo(currentTranslation, book, chapter, verse);
   }
 
   // Annotation toggles (reactive from store)
@@ -589,6 +606,9 @@
         // Chapter already in DOM (e.g. already appended by infinite scroll) — open panel directly
         openAnnotationPanel(_reopenAnnotationVerse, _reopenAnnotationTab, currentBook, currentChapter);
         _reopenAnnotationVerse = null;
+      } else if (_reopenBookIntroPanel) {
+        bookIntroPanelOpen = true;
+        _reopenBookIntroPanel = false;
       }
     }
   }
@@ -1086,6 +1106,9 @@
       if (_reopenAnnotationVerse !== null) {
         openAnnotationPanel(_reopenAnnotationVerse, _reopenAnnotationTab, book, chapter);
         _reopenAnnotationVerse = null;
+      } else if (_reopenBookIntroPanel) {
+        bookIntroPanelOpen = true;
+        _reopenBookIntroPanel = false;
       }
 
       // Load and apply persisted highlights
@@ -3188,7 +3211,7 @@
   open={bookIntroPanelOpen}
   book={bookIntroPanelBook}
   on:close={() => (bookIntroPanelOpen = false)}
-  on:navigateTo={handleAnnotationNavigateTo}
+  on:navigateTo={handleBookIntroNavigateTo}
 />
 
 <AnnotationPanel
