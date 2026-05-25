@@ -12,6 +12,7 @@
   import { subscribeToHighlightRemoteChanges } from "../adapters/SyncedHighlightAdapter";
   import { applyChapterHighlights } from "../lib/highlightRenderer";
   import AudioPlayer from "./AudioPlayer.svelte";
+  import BookIntroPanel from "./BookIntroPanel.svelte";
   import { syncQueue } from "../lib/sync/SyncQueueService";
   import type { UserHighlight, UserWordHighlight, HighlightStyle } from "@projectbible/core";
   import {
@@ -257,6 +258,15 @@
 
   function annotationKey(book: string, chapter: number, verse: number): string {
     return `${book}:${chapter}:${verse}`;
+  }
+
+  // Book intro panel state
+  let bookIntroPanelOpen = false;
+  let bookIntroPanelBook = "";
+
+  function openBookIntroPanel(book: string) {
+    bookIntroPanelBook = book;
+    bookIntroPanelOpen = true;
   }
 
   // Annotation panel state
@@ -3174,6 +3184,12 @@
   />
 {/if}
 
+<BookIntroPanel
+  open={bookIntroPanelOpen}
+  book={bookIntroPanelBook}
+  on:close={() => (bookIntroPanelOpen = false)}
+/>
+
 <AnnotationPanel
   bind:open={annotationPanelOpen}
   book={annotationPanelBook}
@@ -3222,6 +3238,13 @@
         <div class="chapter-section" data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
           <div class="chapter-header">
             <h1>{chapterData.book} {chapterData.chapter}</h1>
+            {#if chapterData.chapter === 1}
+              <button
+                class="book-intro-btn"
+                on:click={() => openBookIntroPanel(chapterData.book)}
+                title="Introduction to {chapterData.book}"
+              >📖 Introduction</button>
+            {/if}
             <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
           </div>
           <div
@@ -3427,6 +3450,27 @@
     font-size: 1.5rem;
     font-weight: 600;
     color: #f0f0f0;
+  }
+
+  .book-intro-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #b8c8e8;
+    font-size: 0.82rem;
+    padding: 5px 13px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    letter-spacing: 0.02em;
+  }
+
+  .book-intro-btn:hover {
+    background: rgba(100, 160, 255, 0.18);
+    border-color: rgba(100, 160, 255, 0.4);
+    color: #d0e4ff;
   }
 
   .verses {
