@@ -805,8 +805,8 @@
       <button
         class="pill-btn"
         on:click={openDailyGreeting}
-        title="Daily greeting & verse of the day"
-        aria-label="Daily greeting"
+        title="Verse of the day"
+        aria-label="Verse of the day"
       >
         <Sun size={16} weight="duotone" />
       </button>
