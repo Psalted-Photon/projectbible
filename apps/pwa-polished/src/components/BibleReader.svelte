@@ -282,7 +282,9 @@
   // Reopen annotation panel after back-navigation from a "Go →" link
   let _reopenAnnotationVerse: number | null = null;
   let _reopenAnnotationTab: 'references' | 'commentary' = 'commentary';
-  // Reopen book intro panel after back-navigation from an intro ref link
+  // Set at navigate time to remember the navigation came from the intro panel (no auto-reopen)
+  let _navigatedFromIntro = false;
+  // Set only when user presses Back after intro navigation; consumed by loadChapter / reactive block
   let _reopenBookIntroPanel = false;
 
   function handleAnnotationNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
@@ -300,12 +302,14 @@
   function handleAnnotationReturn() {
     const ctx = $annotationReturnStore;
     if (!ctx) return;
+    const fromIntro = _navigatedFromIntro;
+    _navigatedFromIntro = false;
     annotationReturnStore.set(null);
-    if (_reopenBookIntroPanel) {
-      // Back from intro panel navigation — navigate back and reopen intro panel
+    if (fromIntro) {
+      // User pressed Back after navigating from intro panel — reopen intro panel after load
       bookIntroPanelBook = ctx.book;
+      _reopenBookIntroPanel = true;
       navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
-      // _reopenBookIntroPanel stays true; consumed by loadChapter / reactive block
     } else {
       _reopenAnnotationVerse = ctx.verse;
       _reopenAnnotationTab = ctx.tab;
@@ -315,7 +319,7 @@
 
   function handleBookIntroNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
-    _reopenBookIntroPanel = true;
+    _navigatedFromIntro = true;  // remember origin; panel only reopens when Back is pressed
     bookIntroPanelOpen = false;
     annotationReturnStore.set({ book: bookIntroPanelBook, chapter: 1, verse: 1, tab: 'references' });
     navigationStore.navigateTo(currentTranslation, book, chapter, verse);
