@@ -37,6 +37,15 @@ function normalizeBookName(book: string): string[] {
   }
   
   // Return all possible variants
+  // Common alternate spellings / singular-vs-plural aliases
+  const bookAliases: Record<string, string> = {
+    'PSALM': 'Psalms',
+    'SONG OF SONGS': 'Song of Solomon',
+    'SONG OF SONG': 'Song of Solomon',
+    'SONGS OF SOLOMON': 'Song of Solomon',
+    'REVELATION OF JOHN': 'Revelation',
+  };
+
   const variants = [book]; // Always include original
   
   if (numericToRoman[bookUpper]) {
@@ -45,6 +54,10 @@ function normalizeBookName(book: string): string[] {
   
   if (romanToNumeric[bookUpper]) {
     variants.push(romanToNumeric[bookUpper]);
+  }
+
+  if (bookAliases[bookUpper]) {
+    variants.push(bookAliases[bookUpper]);
   }
   
   return variants;
