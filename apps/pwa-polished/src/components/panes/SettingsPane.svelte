@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { applyTheme, getSettings, updateSettings } from "../../adapters/settings";
   import { paneStore } from "../../stores/paneStore";
+  import { Gear } from 'phosphor-svelte';
 
   let theme: "light" | "dark" | "auto" | "sepia" = "dark";
   let fontSize = 18;
@@ -226,7 +227,7 @@
 </script>
 
 <div class="settings-pane">
-  <h2><span class="emoji">⚙️</span> Display Settings</h2>
+  <h2><span class="header-icon"><Gear size={20} weight="duotone" /></span> Settings</h2>
 
   <div class="setting-group">
     <label>
@@ -363,6 +364,18 @@
     margin-bottom: 2rem;
     color: #f0f0f0;
     font-weight: 600;
+  }
+
+  .header-icon {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+
+  .header-icon svg {
+    color: #78350f;
+    filter: drop-shadow(0 0 4px #d97706);
   }
 
   .setting-group {

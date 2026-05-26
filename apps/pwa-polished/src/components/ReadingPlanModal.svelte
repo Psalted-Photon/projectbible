@@ -21,6 +21,7 @@
   import { readingProgressVersion } from '../stores/readingProgressVersionStore';
   import CalendarView from './CalendarView.svelte';
   import harmonyData from '../data/robertson-harmony.json';
+  import { BookOpenText } from 'phosphor-svelte';
   
   export let isOpen = false;
   
@@ -1323,7 +1324,7 @@
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div class="modal-content" on:click|stopPropagation>
       <div class="modal-header">
-        <h2><span class="emoji">📖</span> {userName ? `${userName}'s Reading Plan` : 'Reading Plan'}</h2>
+        <h2><span class="header-icon"><BookOpenText size={20} weight="duotone" /></span> {userName ? `${userName}'s Reading Plan` : 'Reading Plan'}</h2>
         <button class="close-btn" on:click={close}>&times;</button>
       </div>
       
@@ -1961,6 +1962,18 @@
     margin: 0;
     font-size: 24px;
     color: #e0e0e0;
+  }
+
+  .modal-header .header-icon {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin-right: 2px;
+  }
+
+  .modal-header .header-icon svg {
+    color: #166534;
+    filter: drop-shadow(0 0 4px #4ade80);
   }
   
   .close-btn {

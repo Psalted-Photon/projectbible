@@ -13,6 +13,7 @@
   import { BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData";
   import { englishLexicalService } from "../../../../packages/core/src/search/englishLexicalService";
   import HelpModal from "./HelpModal.svelte";
+  import { Microscope } from 'phosphor-svelte';
 
   export let show = false;
 
@@ -295,7 +296,7 @@
     <div class="modal-container" on:click|stopPropagation>
       <!-- Header -->
       <div class="modal-header">
-        <h2><span class="emoji">⚡</span> Power Search</h2>
+        <h2><span class="header-icon"><Microscope size={20} weight="duotone" /></span> Power Search</h2>
         <button class="close-button" on:click={closeModal} title="Close">✕</button>
       </div>
 
@@ -716,6 +717,18 @@
     color: #667eea;
     font-size: 24px;
     font-weight: 700;
+  }
+
+  .modal-header .header-icon {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin-right: 2px;
+  }
+
+  .modal-header .header-icon svg {
+    color: #4338ca;
+    filter: drop-shadow(0 0 5px #818cf8);
   }
 
   .close-button {

@@ -15,6 +15,7 @@
   import { localDateStr } from '../stores/clockStore';
   import SavedVersesPanel from './SavedVersesPanel.svelte';
   import JournalCalendar from './JournalCalendar.svelte';
+  import { User } from 'phosphor-svelte';
 
   let isOpen = false;
   $: isOpen = $profileModalStore;
@@ -427,7 +428,7 @@
             {#if profileName}
               {profileName.slice(0, 1).toUpperCase()}
             {:else}
-              <span class="emoji">👤</span>
+              <User size={22} weight="duotone" />
             {/if}
           </div>
           <div class="profile-details">
@@ -705,6 +706,11 @@
     justify-content: center;
     font-weight: 600;
     font-size: 18px;
+  }
+
+  .profile-icon svg {
+    color: #0f766e;
+    filter: drop-shadow(0 0 4px #2dd4bf);
   }
 
   .profile-details h2 {
