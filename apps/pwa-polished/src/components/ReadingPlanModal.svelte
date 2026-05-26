@@ -1969,9 +1969,6 @@
     align-items: center;
     vertical-align: middle;
     margin-right: 2px;
-  }
-
-  .modal-header .header-icon svg {
     color: #166534;
     filter: drop-shadow(0 0 4px #4ade80);
   }

@@ -1135,21 +1135,21 @@
   .nav-dropdown.reference-dropdown-trigger.category-revelation .pill-btn-reference { color: #6080e0; }
 
   /* Profile signed-in indicator */
-  .pill-profile.signed-in svg {
+  .pill-profile.signed-in :global(svg) {
     color: #4ade80;
     filter: drop-shadow(0 0 4px #4ade80);
   }
 
   /* ── Navbar icon 2-tone colors ──────────────────────────────────── */
-  .pill-refs svg                    { color: #1e40af; filter: drop-shadow(0 0 4px #60a5fa); }
-  .pill-refs:has(input:checked) svg { color: #667eea; filter: drop-shadow(0 0 5px #a5b4fc); }
-  .pill-comm svg                    { color: #6d28d9; filter: drop-shadow(0 0 4px #a78bfa); }
-  .pill-search-icon-btn svg         { color: #0369a1; filter: drop-shadow(0 0 4px #38bdf8); }
-  .pill-powersearch svg             { color: #4338ca; filter: drop-shadow(0 0 5px #818cf8); }
-  .pill-readingplan svg             { color: #166534; filter: drop-shadow(0 0 4px #4ade80); }
-  .pill-votd svg                    { color: #ea580c; filter: drop-shadow(0 0 5px #fbbf24); }
-  .pill-settings svg                { color: #78350f; filter: drop-shadow(0 0 4px #d97706); }
-  .pill-profile svg                 { color: #0f766e; filter: drop-shadow(0 0 4px #2dd4bf); }
+  .pill-refs :global(svg)                     { color: #1e40af; filter: drop-shadow(0 0 4px #60a5fa); }
+  .pill-refs:has(input:checked) :global(svg)  { color: #667eea; filter: drop-shadow(0 0 5px #a5b4fc); }
+  .pill-comm :global(svg)                     { color: #6d28d9; filter: drop-shadow(0 0 4px #a78bfa); }
+  .pill-search-icon-btn :global(svg)          { color: #0369a1; filter: drop-shadow(0 0 4px #38bdf8); }
+  .pill-powersearch :global(svg)              { color: #4338ca; filter: drop-shadow(0 0 5px #818cf8); }
+  .pill-readingplan :global(svg)              { color: #166534; filter: drop-shadow(0 0 4px #4ade80); }
+  .pill-votd :global(svg)                     { color: #ea580c; filter: drop-shadow(0 0 5px #fbbf24); }
+  .pill-settings :global(svg)                 { color: #78350f; filter: drop-shadow(0 0 4px #d97706); }
+  .pill-profile :global(svg)                  { color: #0f766e; filter: drop-shadow(0 0 4px #2dd4bf); }
 
   /* Search expand */
   .pill-search-area {

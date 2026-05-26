@@ -428,7 +428,7 @@
             {#if profileName}
               {profileName.slice(0, 1).toUpperCase()}
             {:else}
-              <User size={22} weight="duotone" />
+              <span class="profile-user-icon"><User size={22} weight="duotone" /></span>
             {/if}
           </div>
           <div class="profile-details">
@@ -709,6 +709,13 @@
   }
 
   .profile-icon svg {
+    color: #0f766e;
+    filter: drop-shadow(0 0 4px #2dd4bf);
+  }
+
+  .profile-user-icon {
+    display: inline-flex;
+    align-items: center;
     color: #0f766e;
     filter: drop-shadow(0 0 4px #2dd4bf);
   }

@@ -371,9 +371,6 @@
     align-items: center;
     vertical-align: middle;
     margin-right: 4px;
-  }
-
-  .header-icon svg {
     color: #78350f;
     filter: drop-shadow(0 0 4px #d97706);
   }

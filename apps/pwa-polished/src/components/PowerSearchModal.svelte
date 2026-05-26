@@ -724,9 +724,6 @@
     align-items: center;
     vertical-align: middle;
     margin-right: 2px;
-  }
-
-  .modal-header .header-icon svg {
     color: #4338ca;
     filter: drop-shadow(0 0 5px #818cf8);
   }
