@@ -31,7 +31,7 @@ export const BIBLE_BOOKS: BookInfo[] = [
   { name: 'Esther', chapters: 10, testament: 'OT', category: 'historical' },
   // Wisdom Books
   { name: 'Job', chapters: 42, testament: 'OT', category: 'wisdom' },
-  { name: 'Psalms', chapters: 150, testament: 'OT', category: 'wisdom' },
+  { name: 'Psalm', chapters: 150, testament: 'OT', category: 'wisdom' },
   { name: 'Proverbs', chapters: 31, testament: 'OT', category: 'wisdom' },
   { name: 'Ecclesiastes', chapters: 12, testament: 'OT', category: 'wisdom' },
   { name: 'Song of Solomon', chapters: 8, testament: 'OT', category: 'wisdom' },
@@ -113,6 +113,7 @@ export const BOOK_NAME_ALIASES: Record<string, string> = {
   // Other common variants
   'Revelation of John': 'Revelation',
   'Song of Songs': 'Song of Solomon',
+  'Psalms': 'Psalm',
 };
 
 /** Normalize a DB book name to its canonical BIBLE_BOOKS name */
