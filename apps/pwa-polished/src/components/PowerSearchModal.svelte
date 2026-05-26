@@ -723,9 +723,11 @@
     display: inline-flex;
     align-items: center;
     vertical-align: middle;
-    margin-right: 2px;
-    color: #4338ca;
-    filter: drop-shadow(0 0 5px #818cf8);
+    margin-right: 6px;
+    color: #7f1d1d;
+    border: 1.5px solid #22d3ee;
+    border-radius: 5px;
+    padding: 2px;
   }
 
   .close-button {

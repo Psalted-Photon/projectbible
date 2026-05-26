@@ -154,8 +154,10 @@
   }
 
   .dg-icon {
-    color: #ea580c;
-    filter: drop-shadow(0 0 5px #fbbf24);
+    color: #c2410c;
+    border: 1.5px solid #fde047;
+    border-radius: 5px;
+    padding: 2px;
     display: flex;
     align-items: center;
     flex-shrink: 0;

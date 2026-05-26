@@ -717,7 +717,9 @@
     display: inline-flex;
     align-items: center;
     color: #0f766e;
-    filter: drop-shadow(0 0 4px #2dd4bf);
+    border: 1.5px solid #2dd4bf;
+    border-radius: 5px;
+    padding: 2px;
   }
 
   .profile-details h2 {

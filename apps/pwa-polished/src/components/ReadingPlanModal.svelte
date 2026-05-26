@@ -1968,9 +1968,11 @@
     display: inline-flex;
     align-items: center;
     vertical-align: middle;
-    margin-right: 2px;
-    color: #166534;
-    filter: drop-shadow(0 0 4px #4ade80);
+    margin-right: 6px;
+    color: #14532d;
+    border: 1.5px solid #e879f9;
+    border-radius: 5px;
+    padding: 2px;
   }
   
   .close-btn {

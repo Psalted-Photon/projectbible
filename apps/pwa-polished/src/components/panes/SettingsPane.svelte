@@ -370,9 +370,11 @@
     display: inline-flex;
     align-items: center;
     vertical-align: middle;
-    margin-right: 4px;
-    color: #78350f;
-    filter: drop-shadow(0 0 4px #d97706);
+    margin-right: 6px;
+    color: #431407;
+    border: 1.5px solid #7dd3fc;
+    border-radius: 5px;
+    padding: 2px;
   }
 
   .setting-group {

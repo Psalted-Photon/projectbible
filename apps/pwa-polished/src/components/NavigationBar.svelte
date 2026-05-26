@@ -685,7 +685,7 @@
           checked={$navigationStore.showReferences ?? false}
           on:change={(e) => navigationStore.setShowReferences(e.currentTarget.checked)}
         />
-        <Graph size={15} weight="duotone" />
+        <span class="icon-badge icon-badge-refs"><Graph size={15} weight="duotone" /></span>
         <span class="pill-label">Refs</span>
       </label>
 
@@ -699,7 +699,7 @@
         on:click={toggleCommDropdown}
         title="Filter commentary authors"
       >
-        <ChatText size={15} weight="duotone" />
+        <span class="icon-badge icon-badge-comm"><ChatText size={15} weight="duotone" /></span>
         <span class="pill-label">Comm</span>
         {#if ($navigationStore.selectedCommentaryAuthors?.length ?? 0) > 0}
           <span class="comm-count">{$navigationStore.selectedCommentaryAuthors?.length}</span>
@@ -746,7 +746,7 @@
           title="Search"
           aria-label="Search"
         >
-          <MagnifyingGlass size={16} weight="duotone" />
+          <span class="icon-badge icon-badge-search"><MagnifyingGlass size={16} weight="duotone" /></span>
         </button>
         <div class="pill-search-expander" class:expanded={searchExpanded}>
           <div class="search-input-inner" class:focused={searchFocused}>
@@ -786,7 +786,7 @@
         title="Advanced search — regex, proximity, biblical filters"
         aria-label="Advanced search"
       >
-        <Microscope size={16} weight="duotone" />
+        <span class="icon-badge icon-badge-powersearch"><Microscope size={16} weight="duotone" /></span>
       </button>
 
       <div class="pill-divider"></div>
@@ -798,7 +798,7 @@
         title="Reading plan"
         aria-label="Reading plan"
       >
-        <BookOpenText size={16} weight="duotone" />
+        <span class="icon-badge icon-badge-readingplan"><BookOpenText size={16} weight="duotone" /></span>
       </button>
 
       <div class="pill-divider"></div>
@@ -810,7 +810,7 @@
         title="Verse of the day"
         aria-label="Verse of the day"
       >
-        <Sun size={16} weight="duotone" />
+        <span class="icon-badge icon-badge-votd"><Sun size={16} weight="duotone" /></span>
       </button>
 
       <div class="pill-divider"></div>
@@ -822,7 +822,7 @@
         title="Settings"
         aria-label="Open settings"
       >
-        <Gear size={16} weight="duotone" />
+        <span class="icon-badge icon-badge-settings"><Gear size={16} weight="duotone" /></span>
       </button>
 
       <!-- Profile -->
@@ -833,7 +833,7 @@
         title="Profile"
         aria-label="Open profile"
       >
-        <User size={16} weight="duotone" />
+        <span class="icon-badge icon-badge-profile"><User size={16} weight="duotone" /></span>
       </button>
     </div>
 
@@ -1134,22 +1134,25 @@
   .nav-dropdown.reference-dropdown-trigger.category-general .pill-btn-reference { color: #d2691e; }
   .nav-dropdown.reference-dropdown-trigger.category-revelation .pill-btn-reference { color: #6080e0; }
 
-  /* Profile signed-in indicator */
-  .pill-profile.signed-in :global(svg) {
-    color: #4ade80;
-    filter: drop-shadow(0 0 4px #4ade80);
+  /* ── Icon badges (fill + contrasting border) ─────────────────────── */
+  .icon-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 5px;
+    padding: 2px;
+    border: 1.5px solid;
+    line-height: 0;
   }
-
-  /* ── Navbar icon 2-tone colors ──────────────────────────────────── */
-  .pill-refs :global(svg)                     { color: #1e40af; filter: drop-shadow(0 0 4px #60a5fa); }
-  .pill-refs:has(input:checked) :global(svg)  { color: #667eea; filter: drop-shadow(0 0 5px #a5b4fc); }
-  .pill-comm :global(svg)                     { color: #6d28d9; filter: drop-shadow(0 0 4px #a78bfa); }
-  .pill-search-icon-btn :global(svg)          { color: #0369a1; filter: drop-shadow(0 0 4px #38bdf8); }
-  .pill-powersearch :global(svg)              { color: #4338ca; filter: drop-shadow(0 0 5px #818cf8); }
-  .pill-readingplan :global(svg)              { color: #166534; filter: drop-shadow(0 0 4px #4ade80); }
-  .pill-votd :global(svg)                     { color: #ea580c; filter: drop-shadow(0 0 5px #fbbf24); }
-  .pill-settings :global(svg)                 { color: #78350f; filter: drop-shadow(0 0 4px #d97706); }
-  .pill-profile :global(svg)                  { color: #0f766e; filter: drop-shadow(0 0 4px #2dd4bf); }
+  .icon-badge-refs        { color: #1e3a8a; border-color: #fbbf24; }
+  .icon-badge-comm        { color: #6b21a8; border-color: #a3e635; }
+  .icon-badge-search      { color: #134e4a; border-color: #fb7185; }
+  .icon-badge-powersearch { color: #7f1d1d; border-color: #22d3ee; }
+  .icon-badge-readingplan { color: #14532d; border-color: #e879f9; }
+  .icon-badge-votd        { color: #c2410c; border-color: #fde047; }
+  .icon-badge-settings    { color: #431407; border-color: #7dd3fc; }
+  .icon-badge-profile     { color: #0f766e; border-color: #2dd4bf; }
+  .pill-refs:has(input:checked) .icon-badge-refs { color: #1d4ed8; border-color: #a5b4fc; }
+  .pill-profile.signed-in .icon-badge-profile    { color: #166534; border-color: #4ade80; }
 
   /* Search expand */
   .pill-search-area {
