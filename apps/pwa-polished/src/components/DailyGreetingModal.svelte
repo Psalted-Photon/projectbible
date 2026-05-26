@@ -76,11 +76,14 @@
       <!-- Header -->
       <div class="dg-header">
         <span class="dg-icon"><Sun size={18} weight="duotone" /></span>
-        <span class="dg-date-label">
-          {#if todayStr}
-            {new Date(todayStr + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-          {/if}
-        </span>
+        <div class="dg-header-text">
+          <span class="dg-title">Verse of the Day</span>
+          <span class="dg-date-label">
+            {#if todayStr}
+              {new Date(todayStr + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+            {/if}
+          </span>
+        </div>
         <button class="dg-close" on:click={close} aria-label="Close">
           <X size={16} weight="bold" />
         </button>
@@ -157,13 +160,26 @@
     flex-shrink: 0;
   }
 
-  .dg-date-label {
+  .dg-header-text {
     flex: 1;
-    font-size: 0.78rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .dg-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.92);
+    letter-spacing: 0.01em;
+  }
+
+  .dg-date-label {
+    font-size: 0.72rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.45);
+    color: rgba(255, 255, 255, 0.4);
   }
 
   .dg-close {
