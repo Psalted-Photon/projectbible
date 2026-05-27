@@ -1970,7 +1970,7 @@
     vertical-align: middle;
     margin-right: 6px;
     color: white;
-    background: radial-gradient(circle, #c4b5fd 0%, #c4b5fd 25%, #431407 100%);
+    background: radial-gradient(circle, #60a5fa 0%, #60a5fa 20%, #431407 100%);
     border-radius: 6px;
     padding: 4px;
   }

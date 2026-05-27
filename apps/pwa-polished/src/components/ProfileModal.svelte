@@ -717,7 +717,7 @@
     display: inline-flex;
     align-items: center;
     color: white;
-    background: radial-gradient(circle, #d1d5db 0%, #d1d5db 25%, #431407 100%);
+    background: radial-gradient(circle, #d1d5db 0%, #d1d5db 20%, #431407 100%);
     border-radius: 6px;
     padding: 4px;
   }

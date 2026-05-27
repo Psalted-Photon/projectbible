@@ -725,7 +725,7 @@
     vertical-align: middle;
     margin-right: 6px;
     color: white;
-    background: radial-gradient(circle, #f97316 0%, #f97316 25%, #431407 100%);
+    background: radial-gradient(circle, #f97316 0%, #f97316 20%, #431407 100%);
     border-radius: 6px;
     padding: 4px;
   }

@@ -155,7 +155,7 @@
 
   .dg-icon {
     color: white;
-    background: radial-gradient(circle, #fde047 0%, #fde047 25%, #431407 100%);
+    background: radial-gradient(circle, #fde047 0%, #fde047 20%, #431407 100%);
     border-radius: 6px;
     padding: 4px;
     display: flex;
