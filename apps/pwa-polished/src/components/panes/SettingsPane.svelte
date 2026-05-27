@@ -387,7 +387,7 @@
     line-height: 0;
   }
   :global(.header-icon > svg) {
-    filter: drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407);
+    filter: drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407);
   }
 
   .setting-group {

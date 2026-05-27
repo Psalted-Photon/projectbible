@@ -1155,7 +1155,7 @@
     line-height: 0;
   }
   :global(.icon-badge > svg) {
-    filter: drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407);
+    filter: drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407);
   }
   .icon-badge-refs        { background: radial-gradient(circle, #a78bfa 0%, #a78bfa 20%, #431407 100%); }
   .icon-badge-comm        { background: radial-gradient(circle, #a3e635 0%, #a3e635 20%, #431407 100%); }
