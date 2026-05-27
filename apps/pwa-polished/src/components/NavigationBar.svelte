@@ -672,10 +672,9 @@
           {/if}
         </button>
       </div>
-    </div>
 
-    <!-- ── Pill 2: Study Controls ─────────────────────────── -->
-    <div class="nav-pill nav-pill-study">
+      <div class="pill-divider"></div>
+
       <label
         class="pill-btn pill-toggle pill-refs"
         title="Show TSK cross-reference markers on verse keywords"
@@ -686,7 +685,6 @@
           on:change={(e) => navigationStore.setShowReferences(e.currentTarget.checked)}
         />
         <span class="icon-badge icon-badge-refs"><Graph size={15} weight="bold" /><span class="icon-overlay"><Graph size={15} weight="thin" /></span></span>
-        <span class="pill-label">Refs</span>
       </label>
 
       <div class="pill-divider"></div>
@@ -700,7 +698,6 @@
         title="Filter commentary authors"
       >
         <span class="icon-badge icon-badge-comm"><ChatText size={15} weight="bold" /><span class="icon-overlay"><ChatText size={15} weight="thin" /></span></span>
-        <span class="pill-label">Comm</span>
         {#if ($navigationStore.selectedCommentaryAuthors?.length ?? 0) > 0}
           <span class="comm-count">{$navigationStore.selectedCommentaryAuthors?.length}</span>
         {/if}
@@ -729,7 +726,7 @@
       </button>
     </div>
 
-    <!-- ── Pill 3: Tools ──────────────────────────────────── -->
+    <!-- ── Pill 2: Tools ──────────────────────────────────── -->
     <div class="nav-pill nav-pill-tools">
       <!-- Search (icon at rest → expands on click) -->
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1026,12 +1023,8 @@
     flex-shrink: 0;
   }
 
-  .nav-pill-study {
-    margin-left: auto;
-  }
-
   .nav-pill-tools {
-    margin-left: 6px;
+    margin-left: auto;
   }
 
   .pill-divider {
@@ -2022,10 +2015,6 @@
 
     .nav-content::-webkit-scrollbar {
       display: none;
-    }
-
-    .nav-pill-study {
-      margin-left: 0;
     }
 
     .nav-pill-tools {
