@@ -20,7 +20,7 @@ const BOOK_PATTERN = [
   'Ephesians|Galatians|Habakkuk|Zephaniah|Zechariah|Nehemiah|Proverbs',
   'Genesis|Exodus|Leviticus|Numbers|Joshua|Judges|Psalms?|Isaiah|Jeremiah|Ezekiel|Hebrews',
   'Matthew|Obadiah|Haggai|Malachi|Romans|Hosea|Daniel',
-  'Ruth|Esther|Joel|Amos|Jonah|Micah|Nahum|Luke|Acts|James|Jude',
+  'Ruth|Esther|Job|Joel|Amos|Jonah|Micah|Nahum|Luke|Acts|James|Jude',
   // Numbered abbreviations: 1Sa, 2Ki, 1Co, etc.
   '[123](?:Sam?|Kgs?|Ki|Chr?(?:on)?|Cor?|Thess?|Tim?|Pet?|J(?:oh?n?|n))',
   // Common 2-3 char abbreviations missing from patterns above
@@ -29,7 +29,7 @@ const BOOK_PATTERN = [
   'Gen|Exo?d?|Lev|Nu(?:m)?|De(?:ut?)?|Jos(?:h)?|Jud?g?|Neh|Es(?:th?)?|Psa?|Pro?v?|Eccl?',
   'Isa|Jer|Lam|Eze?k?|Da(?:n)?|Hos|Joe?l?|Amo?s?|Oba?d?|Jon(?:ah)?|Mic|Na(?:h)?|Ha(?:b)?',
   'Ze(?:ph?)?|Ha(?:g)?|Ze(?:ch?)?|Mal|Matt?|Ma(?:rk?)?|Lu(?:ke?)?|Joh?n?|Act?s?|Ro(?:m)?',
-  'Ga(?:l)?|Ep(?:h)?|Ph(?:il?p?|p)|Co(?:l)?|He(?:b)?|Ja(?:s)?|Ti(?:t)?|Phlm?|Ph(?:ile)?|Re(?:v)?',
+  'Ga(?:l)?|Ep(?:h)?|Ph(?:il?p?|p)|Co(?:l)?|He(?:b)?|Ja(?:s)?|Ti(?:t)?|Phlm?|Ph(?:ile)?|Re(?:v)?|Jb',
 ].join('|');
 
 // Chapter + optional verse + optional range  (e.g. 3, 3:4, 3:4a, 3:4-7, 3:4-5:2)
