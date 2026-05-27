@@ -1270,7 +1270,7 @@
     min-width: 18px;
     height: 18px;
     padding: 0 4px;
-    background: #667eea;
+    background: radial-gradient(circle, #667eea 0%, #667eea 20%, #431407 100%);
     border-radius: 9px;
     font-size: 11px;
     font-weight: 600;
