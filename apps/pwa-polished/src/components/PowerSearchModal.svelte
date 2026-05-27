@@ -296,7 +296,7 @@
     <div class="modal-container" on:click|stopPropagation>
       <!-- Header -->
       <div class="modal-header">
-        <h2><span class="header-icon"><Microscope size={20} weight="bold" /></span> Power Search</h2>
+        <h2><span class="header-icon"><Microscope size={20} weight="bold" /><span class="icon-overlay"><Microscope size={20} weight="thin" /></span></span> Power Search</h2>
         <button class="close-button" on:click={closeModal} title="Close">✕</button>
       </div>
 
@@ -728,6 +728,16 @@
     background: radial-gradient(circle, #f97316 0%, #f97316 20%, #431407 100%);
     border-radius: 6px;
     padding: 4px;
+    position: relative;
+  }
+  .icon-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #431407;
+    line-height: 0;
   }
 
   .close-button {

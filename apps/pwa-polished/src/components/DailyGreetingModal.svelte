@@ -75,7 +75,7 @@
     <div class="dg-card" on:click|stopPropagation role="dialog" aria-modal="true" aria-label="Daily greeting">
       <!-- Header -->
       <div class="dg-header">
-        <span class="dg-icon"><Sun size={18} weight="bold" /></span>
+        <span class="dg-icon"><Sun size={18} weight="bold" /><span class="icon-overlay"><Sun size={18} weight="thin" /></span></span>
         <div class="dg-header-text">
           <span class="dg-title">Verse of the Day</span>
           <span class="dg-date-label">
@@ -161,6 +161,16 @@
     display: flex;
     align-items: center;
     flex-shrink: 0;
+    position: relative;
+  }
+  .icon-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #431407;
+    line-height: 0;
   }
 
   .dg-header-text {

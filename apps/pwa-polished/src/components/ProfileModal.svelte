@@ -428,7 +428,7 @@
             {#if profileName}
               {profileName.slice(0, 1).toUpperCase()}
             {:else}
-              <span class="profile-user-icon"><User size={22} weight="bold" /></span>
+              <span class="profile-user-icon"><User size={22} weight="bold" /><span class="icon-overlay"><User size={22} weight="thin" /></span></span>
             {/if}
           </div>
           <div class="profile-details">
@@ -720,6 +720,16 @@
     background: radial-gradient(circle, #d1d5db 0%, #d1d5db 20%, #431407 100%);
     border-radius: 6px;
     padding: 4px;
+    position: relative;
+  }
+  .icon-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #431407;
+    line-height: 0;
   }
 
   .profile-details h2 {

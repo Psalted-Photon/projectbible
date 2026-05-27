@@ -685,7 +685,7 @@
           checked={$navigationStore.showReferences ?? false}
           on:change={(e) => navigationStore.setShowReferences(e.currentTarget.checked)}
         />
-        <span class="icon-badge icon-badge-refs"><Graph size={15} weight="bold" /></span>
+        <span class="icon-badge icon-badge-refs"><Graph size={15} weight="bold" /><span class="icon-overlay"><Graph size={15} weight="thin" /></span></span>
         <span class="pill-label">Refs</span>
       </label>
 
@@ -699,7 +699,7 @@
         on:click={toggleCommDropdown}
         title="Filter commentary authors"
       >
-        <span class="icon-badge icon-badge-comm"><ChatText size={15} weight="bold" /></span>
+        <span class="icon-badge icon-badge-comm"><ChatText size={15} weight="bold" /><span class="icon-overlay"><ChatText size={15} weight="thin" /></span></span>
         <span class="pill-label">Comm</span>
         {#if ($navigationStore.selectedCommentaryAuthors?.length ?? 0) > 0}
           <span class="comm-count">{$navigationStore.selectedCommentaryAuthors?.length}</span>
@@ -746,7 +746,7 @@
           title="Search"
           aria-label="Search"
         >
-          <span class="icon-badge icon-badge-search"><MagnifyingGlass size={16} weight="bold" /></span>
+          <span class="icon-badge icon-badge-search"><MagnifyingGlass size={16} weight="bold" /><span class="icon-overlay"><MagnifyingGlass size={16} weight="thin" /></span></span>
         </button>
         <div class="pill-search-expander" class:expanded={searchExpanded}>
           <div class="search-input-inner" class:focused={searchFocused}>
@@ -786,7 +786,7 @@
         title="Advanced search — regex, proximity, biblical filters"
         aria-label="Advanced search"
       >
-        <span class="icon-badge icon-badge-powersearch"><Microscope size={16} weight="bold" /></span>
+        <span class="icon-badge icon-badge-powersearch"><Microscope size={16} weight="bold" /><span class="icon-overlay"><Microscope size={16} weight="thin" /></span></span>
       </button>
 
       <div class="pill-divider"></div>
@@ -798,7 +798,7 @@
         title="Reading plan"
         aria-label="Reading plan"
       >
-        <span class="icon-badge icon-badge-readingplan"><BookOpenText size={16} weight="bold" /></span>
+        <span class="icon-badge icon-badge-readingplan"><BookOpenText size={16} weight="bold" /><span class="icon-overlay"><BookOpenText size={16} weight="thin" /></span></span>
       </button>
 
       <div class="pill-divider"></div>
@@ -810,7 +810,7 @@
         title="Verse of the day"
         aria-label="Verse of the day"
       >
-        <span class="icon-badge icon-badge-votd"><Sun size={16} weight="bold" /></span>
+        <span class="icon-badge icon-badge-votd"><Sun size={16} weight="bold" /><span class="icon-overlay"><Sun size={16} weight="thin" /></span></span>
       </button>
 
       <div class="pill-divider"></div>
@@ -822,7 +822,7 @@
         title="Settings"
         aria-label="Open settings"
       >
-        <span class="icon-badge icon-badge-settings"><Gear size={16} weight="bold" /></span>
+        <span class="icon-badge icon-badge-settings"><Gear size={16} weight="bold" /><span class="icon-overlay"><Gear size={16} weight="thin" /></span></span>
       </button>
 
       <!-- Profile -->
@@ -833,7 +833,7 @@
         title="Profile"
         aria-label="Open profile"
       >
-        <span class="icon-badge icon-badge-profile"><User size={16} weight="bold" /></span>
+        <span class="icon-badge icon-badge-profile"><User size={16} weight="bold" /><span class="icon-overlay"><User size={16} weight="thin" /></span></span>
       </button>
     </div>
 
@@ -1143,6 +1143,16 @@
     padding: 4px;
     line-height: 0;
     color: white;
+    position: relative;
+  }
+  .icon-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #431407;
+    line-height: 0;
   }
   .icon-badge-refs        { background: radial-gradient(circle, #a78bfa 0%, #a78bfa 20%, #431407 100%); }
   .icon-badge-comm        { background: radial-gradient(circle, #a3e635 0%, #a3e635 20%, #431407 100%); }

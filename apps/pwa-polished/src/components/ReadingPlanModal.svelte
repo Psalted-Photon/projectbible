@@ -1324,7 +1324,7 @@
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div class="modal-content" on:click|stopPropagation>
       <div class="modal-header">
-        <h2><span class="header-icon"><BookOpenText size={20} weight="bold" /></span> {userName ? `${userName}'s Reading Plan` : 'Reading Plan'}</h2>
+        <h2><span class="header-icon"><BookOpenText size={20} weight="bold" /><span class="icon-overlay"><BookOpenText size={20} weight="thin" /></span></span> {userName ? `${userName}'s Reading Plan` : 'Reading Plan'}</h2>
         <button class="close-btn" on:click={close}>&times;</button>
       </div>
       
@@ -1973,6 +1973,16 @@
     background: radial-gradient(circle, #60a5fa 0%, #60a5fa 20%, #431407 100%);
     border-radius: 6px;
     padding: 4px;
+    position: relative;
+  }
+  .icon-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #431407;
+    line-height: 0;
   }
   
   .close-btn {

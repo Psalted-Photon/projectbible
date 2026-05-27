@@ -227,7 +227,7 @@
 </script>
 
 <div class="settings-pane">
-  <h2><span class="header-icon"><Gear size={20} weight="bold" /></span> Settings</h2>
+  <h2><span class="header-icon"><Gear size={20} weight="bold" /><span class="icon-overlay"><Gear size={20} weight="thin" /></span></span> Settings</h2>
 
   <div class="setting-group">
     <label>
@@ -375,6 +375,16 @@
     background: radial-gradient(circle, #7dd3fc 0%, #7dd3fc 20%, #431407 100%);
     border-radius: 6px;
     padding: 4px;
+    position: relative;
+  }
+  .icon-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #431407;
+    line-height: 0;
   }
 
   .setting-group {
