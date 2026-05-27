@@ -1144,16 +1144,16 @@
     line-height: 0;
     color: white;
   }
-  .icon-badge-refs        { background: radial-gradient(circle, #fbbf24 0%, #1e3a8a 100%); }
-  .icon-badge-comm        { background: radial-gradient(circle, #a3e635 0%, #6b21a8 100%); }
-  .icon-badge-search      { background: radial-gradient(circle, #fb7185 0%, #134e4a 100%); }
-  .icon-badge-powersearch { background: radial-gradient(circle, #67e8f9 0%, #7f1d1d 100%); }
-  .icon-badge-readingplan { background: radial-gradient(circle, #e879f9 0%, #14532d 100%); }
-  .icon-badge-votd        { background: radial-gradient(circle, #fde047 0%, #c2410c 100%); }
-  .icon-badge-settings    { background: radial-gradient(circle, #7dd3fc 0%, #431407 100%); }
-  .icon-badge-profile     { background: radial-gradient(circle, #2dd4bf 0%, #0f766e 100%); }
-  .pill-refs:has(input:checked) .icon-badge-refs { background: radial-gradient(circle, #fde68a 0%, #1d4ed8 100%); }
-  .pill-profile.signed-in .icon-badge-profile    { background: radial-gradient(circle, #4ade80 0%, #14532d 100%); }
+  .icon-badge-refs        { background: radial-gradient(circle, #fbbf24 0%, #fbbf24 25%, #431407 100%); }
+  .icon-badge-comm        { background: radial-gradient(circle, #a3e635 0%, #a3e635 25%, #431407 100%); }
+  .icon-badge-search      { background: radial-gradient(circle, #fb7185 0%, #fb7185 25%, #431407 100%); }
+  .icon-badge-powersearch { background: radial-gradient(circle, #f97316 0%, #f97316 25%, #431407 100%); }
+  .icon-badge-readingplan { background: radial-gradient(circle, #c4b5fd 0%, #c4b5fd 25%, #431407 100%); }
+  .icon-badge-votd        { background: radial-gradient(circle, #fde047 0%, #fde047 25%, #431407 100%); }
+  .icon-badge-settings    { background: radial-gradient(circle, #7dd3fc 0%, #7dd3fc 25%, #431407 100%); }
+  .icon-badge-profile     { background: radial-gradient(circle, #d1d5db 0%, #d1d5db 25%, #431407 100%); }
+  .pill-refs:has(input:checked) .icon-badge-refs { background: radial-gradient(circle, #fde68a 0%, #fde68a 25%, #431407 100%); }
+  .pill-profile.signed-in .icon-badge-profile    { background: radial-gradient(circle, #86efac 0%, #86efac 25%, #431407 100%); }
 
   /* Search expand */
   .pill-search-area {

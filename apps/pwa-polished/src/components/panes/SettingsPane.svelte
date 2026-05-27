@@ -372,7 +372,7 @@
     vertical-align: middle;
     margin-right: 6px;
     color: white;
-    background: radial-gradient(circle, #7dd3fc 0%, #431407 100%);
+    background: radial-gradient(circle, #7dd3fc 0%, #7dd3fc 25%, #431407 100%);
     border-radius: 6px;
     padding: 4px;
   }
