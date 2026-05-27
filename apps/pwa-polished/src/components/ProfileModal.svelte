@@ -731,6 +731,9 @@
     color: white;
     line-height: 0;
   }
+  :global(.profile-user-icon > svg) {
+    filter: drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407);
+  }
 
   .profile-details h2 {
     margin: 0;
