@@ -227,7 +227,7 @@
 </script>
 
 <div class="settings-pane">
-  <h2><span class="header-icon"><Gear size={20} weight="duotone" /></span> Settings</h2>
+  <h2><span class="header-icon"><Gear size={20} weight="bold" /></span> Settings</h2>
 
   <div class="setting-group">
     <label>
@@ -371,10 +371,10 @@
     align-items: center;
     vertical-align: middle;
     margin-right: 6px;
-    color: #431407;
-    border: 1.5px solid #7dd3fc;
-    border-radius: 5px;
-    padding: 2px;
+    color: white;
+    background: radial-gradient(circle, #7dd3fc 0%, #431407 100%);
+    border-radius: 6px;
+    padding: 4px;
   }
 
   .setting-group {

@@ -75,7 +75,7 @@
     <div class="dg-card" on:click|stopPropagation role="dialog" aria-modal="true" aria-label="Daily greeting">
       <!-- Header -->
       <div class="dg-header">
-        <span class="dg-icon"><Sun size={18} weight="duotone" /></span>
+        <span class="dg-icon"><Sun size={18} weight="bold" /></span>
         <div class="dg-header-text">
           <span class="dg-title">Verse of the Day</span>
           <span class="dg-date-label">
@@ -154,10 +154,10 @@
   }
 
   .dg-icon {
-    color: #c2410c;
-    border: 1.5px solid #fde047;
-    border-radius: 5px;
-    padding: 2px;
+    color: white;
+    background: radial-gradient(circle, #fde047 0%, #c2410c 100%);
+    border-radius: 6px;
+    padding: 4px;
     display: flex;
     align-items: center;
     flex-shrink: 0;

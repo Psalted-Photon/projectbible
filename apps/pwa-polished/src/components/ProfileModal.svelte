@@ -428,7 +428,7 @@
             {#if profileName}
               {profileName.slice(0, 1).toUpperCase()}
             {:else}
-              <span class="profile-user-icon"><User size={22} weight="duotone" /></span>
+              <span class="profile-user-icon"><User size={22} weight="bold" /></span>
             {/if}
           </div>
           <div class="profile-details">
@@ -716,10 +716,10 @@
   .profile-user-icon {
     display: inline-flex;
     align-items: center;
-    color: #0f766e;
-    border: 1.5px solid #2dd4bf;
-    border-radius: 5px;
-    padding: 2px;
+    color: white;
+    background: radial-gradient(circle, #2dd4bf 0%, #0f766e 100%);
+    border-radius: 6px;
+    padding: 4px;
   }
 
   .profile-details h2 {
