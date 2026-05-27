@@ -1134,7 +1134,7 @@
   .nav-dropdown.reference-dropdown-trigger.category-general .pill-btn-reference { color: #d2691e; }
   .nav-dropdown.reference-dropdown-trigger.category-revelation .pill-btn-reference { color: #6080e0; }
 
-  /* ── Icon badges (white bold icon on radial gradient splash) ───────── */
+  /* ── Icon badges (brown bold icon on radial gradient splash) ───────── */
   .icon-badge {
     display: inline-flex;
     align-items: center;
@@ -1142,16 +1142,16 @@
     border-radius: 6px;
     padding: 4px;
     line-height: 0;
-    color: white;
+    color: #431407;
     position: relative;
   }
   .icon-overlay {
     position: absolute;
-    inset: 0;
+    top: 0; right: 0; bottom: 0; left: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #431407;
+    color: white;
     line-height: 0;
   }
   .icon-badge-refs        { background: radial-gradient(circle, #a78bfa 0%, #a78bfa 20%, #431407 100%); }

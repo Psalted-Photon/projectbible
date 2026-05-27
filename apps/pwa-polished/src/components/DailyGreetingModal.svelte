@@ -154,7 +154,7 @@
   }
 
   .dg-icon {
-    color: white;
+    color: #431407;
     background: radial-gradient(circle, #fde047 0%, #fde047 20%, #431407 100%);
     border-radius: 6px;
     padding: 4px;
@@ -165,11 +165,11 @@
   }
   .icon-overlay {
     position: absolute;
-    inset: 0;
+    top: 0; right: 0; bottom: 0; left: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #431407;
+    color: white;
     line-height: 0;
   }
 
