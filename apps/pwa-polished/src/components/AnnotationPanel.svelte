@@ -347,7 +347,7 @@
               >
                 <span
                   class="author-badge"
-                  style="background:{getAuthorColor(group.author)}"
+                  style="background:radial-gradient(circle, {getAuthorColor(group.author)} 0%, {getAuthorColor(group.author)} 20%, #431407 100%)"
                   title={group.author}
                 >{getAuthorInitials(group.author)}</span>
                 <span class="author-name">{group.author}</span>

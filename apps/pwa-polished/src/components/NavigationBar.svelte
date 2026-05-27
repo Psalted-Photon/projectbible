@@ -980,7 +980,7 @@
             checked={($navigationStore.selectedCommentaryAuthors ?? []).includes(key)}
             on:change={() => toggleCommAuthor(key)}
           />
-          <span class="comm-author-swatch" style="background:{cfg.color}">{cfg.initials}</span>
+          <span class="comm-author-swatch" style="background:radial-gradient(circle, {cfg.color} 0%, {cfg.color} 20%, #431407 100%)">{cfg.initials}</span>
           <span class="comm-author-name">{cfg.fullName}</span>
         </label>
       {/each}

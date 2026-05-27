@@ -3291,7 +3291,7 @@
                   {#each [...new Set(commentaryByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!.map((e) => e.author))] as author}
                     <span
                       class="anno-icon"
-                      style="background:{getAuthorColor(author)}"
+                      style="background:radial-gradient(circle, {getAuthorColor(author)} 0%, {getAuthorColor(author)} 20%, #431407 100%)"
                       title={author}
                       role="button"
                       tabindex="0"
