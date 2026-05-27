@@ -725,7 +725,7 @@
             : 'Sync commentary to Bible position'}
         aria-label="Commentary anchor sync"
       >
-        <Anchor size={15} weight="duotone" />
+        <span class="icon-badge icon-badge-anchor"><Anchor size={15} weight="bold" /><span class="icon-overlay"><Anchor size={15} weight="thin" /></span></span>
       </button>
     </div>
 
@@ -1102,18 +1102,10 @@
   }
 
   /* Anchor states */
-  .pill-anchor {
-    color: #4a4a4a;
-  }
-
-  .pill-anchor.anchored {
-    color: #4ade80;
-    background: rgba(74, 222, 128, 0.08);
-  }
-
-  .pill-anchor.drifted {
-    color: #fb923c;
-    background: rgba(251, 146, 60, 0.08);
+  .icon-badge-anchor { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #431407 100%); }
+  .pill-anchor.anchored .icon-badge-anchor { background: radial-gradient(circle, #2dd4bf 0%, #2dd4bf 20%, #431407 100%); }
+  .pill-anchor.drifted .icon-badge-anchor {
+    background: radial-gradient(circle, #fde047 0%, #fde047 20%, #431407 100%);
     animation: anchor-drift 2s ease-in-out infinite;
   }
 
@@ -1157,7 +1149,7 @@
   :global(.icon-badge > svg) {
     filter: drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407);
   }
-  .icon-badge-refs        { background: radial-gradient(circle, #a78bfa 0%, #a78bfa 20%, #431407 100%); }
+  .icon-badge-refs        { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #431407 100%); }
   .icon-badge-comm        { background: radial-gradient(circle, #a3e635 0%, #a3e635 20%, #431407 100%); }
   .icon-badge-search      { background: radial-gradient(circle, #fb7185 0%, #fb7185 20%, #431407 100%); }
   .icon-badge-powersearch { background: radial-gradient(circle, #f97316 0%, #f97316 20%, #431407 100%); }
@@ -1165,7 +1157,7 @@
   .icon-badge-votd        { background: radial-gradient(circle, #fde047 0%, #fde047 20%, #431407 100%); }
   .icon-badge-settings    { background: radial-gradient(circle, #7dd3fc 0%, #7dd3fc 20%, #431407 100%); }
   .icon-badge-profile     { background: radial-gradient(circle, #d1d5db 0%, #d1d5db 20%, #431407 100%); }
-  .pill-refs:has(input:checked) .icon-badge-refs { background: radial-gradient(circle, #c4b5fd 0%, #c4b5fd 20%, #431407 100%); }
+  .pill-refs:has(input:checked) .icon-badge-refs { background: radial-gradient(circle, #a78bfa 0%, #a78bfa 20%, #431407 100%); }
   .pill-profile.signed-in .icon-badge-profile    { background: radial-gradient(circle, #86efac 0%, #86efac 20%, #431407 100%); }
 
   /* Search expand */
