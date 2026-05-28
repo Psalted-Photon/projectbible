@@ -1111,8 +1111,8 @@
   .nav-dropdown.reference-dropdown-trigger.category-pentateuch .pill-btn-reference { color: #a67c52; }
   .nav-dropdown.reference-dropdown-trigger.category-historical .pill-btn-reference { color: #6496c8; }
   .nav-dropdown.reference-dropdown-trigger.category-wisdom .pill-btn-reference { color: #daa520; }
-  .nav-dropdown.reference-dropdown-trigger.category-major-prophets .pill-btn-reference { color: #b44fe0; }
-  .nav-dropdown.reference-dropdown-trigger.category-minor-prophets .pill-btn-reference { color: #ff8c00; }
+  .nav-dropdown.reference-dropdown-trigger.category-major-prophets .pill-btn-reference { color: #5c1e99; }
+  .nav-dropdown.reference-dropdown-trigger.category-minor-prophets .pill-btn-reference { color: #693799; }
   .nav-dropdown.reference-dropdown-trigger.category-gospels .pill-btn-reference { color: #fc345c; }
   .nav-dropdown.reference-dropdown-trigger.category-acts .pill-btn-reference { color: #ff6030; }
   .nav-dropdown.reference-dropdown-trigger.category-pauline .pill-btn-reference { color: #6048cc; }
@@ -1408,15 +1408,15 @@
   .category-wisdom .chapters-container { background: #431407; }
 
   /* Major Prophets — purple */
-  .category-major-prophets .book-button { background: radial-gradient(circle, #b420f3 0%, #b420f3 20%, #431407 100%); border: 1px solid #431407; color: white; }
-  .category-major-prophets .book-button:hover { background: radial-gradient(circle, #b420f3 0%, #b420f3 35%, #431407 100%); }
-  .category-major-prophets .book-button.current { background: radial-gradient(circle, #b420f3 0%, #b420f3 50%, #431407 100%); font-weight: 500; }
+  .category-major-prophets .book-button { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 20%, #431407 100%); border: 1px solid #431407; color: white; }
+  .category-major-prophets .book-button:hover { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 35%, #431407 100%); }
+  .category-major-prophets .book-button.current { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 50%, #431407 100%); font-weight: 500; }
   .category-major-prophets .chapters-container { background: #431407; }
 
   /* Minor Prophets — orange */
-  .category-minor-prophets .book-button { background: radial-gradient(circle, #ffa520 0%, #ffa520 20%, #431407 100%); border: 1px solid #431407; color: white; }
-  .category-minor-prophets .book-button:hover { background: radial-gradient(circle, #ffa520 0%, #ffa520 35%, #431407 100%); }
-  .category-minor-prophets .book-button.current { background: radial-gradient(circle, #ffa520 0%, #ffa520 50%, #431407 100%); font-weight: 500; }
+  .category-minor-prophets .book-button { background: radial-gradient(circle, #693799 0%, #693799 20%, #431407 100%); border: 1px solid #431407; color: white; }
+  .category-minor-prophets .book-button:hover { background: radial-gradient(circle, #693799 0%, #693799 35%, #431407 100%); }
+  .category-minor-prophets .book-button.current { background: radial-gradient(circle, #693799 0%, #693799 50%, #431407 100%); font-weight: 500; }
   .category-minor-prophets .chapters-container { background: #431407; }
 
   /* Gospels — green */
@@ -1538,13 +1538,13 @@
   .category-wisdom .chapter-button:hover { background: radial-gradient(circle, #f0c040 0%, #f0c040 35%, #431407 100%); border-color: #431407; }
   .category-wisdom .chapter-button.selected { background: radial-gradient(circle, #f0c040 0%, #f0c040 20%, #431407 100%); border-color: #431407; color: white; font-weight: 600; }
 
-  .category-major-prophets .chapter-button { background: radial-gradient(circle, #b420f3 0%, #b420f3 20%, #431407 100%); border-color: #431407; color: white; }
-  .category-major-prophets .chapter-button:hover { background: radial-gradient(circle, #b420f3 0%, #b420f3 35%, #431407 100%); border-color: #431407; }
-  .category-major-prophets .chapter-button.selected { background: radial-gradient(circle, #b420f3 0%, #b420f3 20%, #431407 100%); border-color: #431407; color: white; font-weight: 600; }
+  .category-major-prophets .chapter-button { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 20%, #431407 100%); border-color: #431407; color: white; }
+  .category-major-prophets .chapter-button:hover { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 35%, #431407 100%); border-color: #431407; }
+  .category-major-prophets .chapter-button.selected { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 20%, #431407 100%); border-color: #431407; color: white; font-weight: 600; }
 
-  .category-minor-prophets .chapter-button { background: radial-gradient(circle, #ffa520 0%, #ffa520 20%, #431407 100%); border-color: #431407; color: white; }
-  .category-minor-prophets .chapter-button:hover { background: radial-gradient(circle, #ffa520 0%, #ffa520 35%, #431407 100%); border-color: #431407; }
-  .category-minor-prophets .chapter-button.selected { background: radial-gradient(circle, #ffa520 0%, #ffa520 20%, #431407 100%); border-color: #431407; color: white; font-weight: 600; }
+  .category-minor-prophets .chapter-button { background: radial-gradient(circle, #693799 0%, #693799 20%, #431407 100%); border-color: #431407; color: white; }
+  .category-minor-prophets .chapter-button:hover { background: radial-gradient(circle, #693799 0%, #693799 35%, #431407 100%); border-color: #431407; }
+  .category-minor-prophets .chapter-button.selected { background: radial-gradient(circle, #693799 0%, #693799 20%, #431407 100%); border-color: #431407; color: white; font-weight: 600; }
 
   .category-gospels .chapter-button { background: radial-gradient(circle, #fc345c 0%, #fc345c 20%, #431407 100%); border-color: #431407; color: white; }
   .category-gospels .chapter-button:hover { background: radial-gradient(circle, #fc345c 0%, #fc345c 35%, #431407 100%); border-color: #431407; }
