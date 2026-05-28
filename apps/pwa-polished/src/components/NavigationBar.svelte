@@ -662,7 +662,6 @@
           bind:this={referenceButtonRef}
           class="pill-btn pill-btn-text pill-btn-reference"
           on:click={toggleReferenceDropdown}
-          class:active={referenceDropdownOpen}
         >
           <span class="pill-label">{currentReference}</span>
           {#if referenceDropdownOpen}
@@ -1055,12 +1054,6 @@
     transition: background 0.15s, color 0.15s;
     touch-action: manipulation;
     flex-shrink: 0;
-    -webkit-tap-highlight-color: transparent;
-    outline: none;
-  }
-
-  .pill-btn:focus-visible {
-    outline: none;
   }
 
   .pill-btn:hover {
