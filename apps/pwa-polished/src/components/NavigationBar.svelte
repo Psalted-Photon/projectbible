@@ -1472,6 +1472,7 @@
     font-size: 10px;
     width: 12px;
     display: inline-block;
+    pointer-events: none;
   }
 
   .book-name {
