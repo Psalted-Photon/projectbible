@@ -397,6 +397,7 @@
     inset: 0;
     background: transparent;
     z-index: 299;
+    pointer-events: none;
   }
 
   .annotation-panel {
