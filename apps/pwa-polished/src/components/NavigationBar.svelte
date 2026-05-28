@@ -1393,61 +1393,61 @@
   .category-pentateuch .book-button { background: radial-gradient(circle, #a67c52 0%, #a67c52 20%, #431407 100%); border: 1px solid #431407; color: white; }
   .category-pentateuch .book-button:hover { background: radial-gradient(circle, #a67c52 0%, #a67c52 35%, #431407 100%); }
   .category-pentateuch .book-button.current { background: radial-gradient(circle, #a67c52 0%, #a67c52 50%, #431407 100%); font-weight: 500; }
-  .category-pentateuch .chapters-container { background: radial-gradient(circle at top left, #a67c52 0%, #431407 25%); border: 1px solid #431407; }
+  .category-pentateuch .chapters-container { background: #431407; }
 
   /* Historical — blue */
   .category-historical .book-button { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 20%, #431407 100%); border: 1px solid #431407; color: white; }
   .category-historical .book-button:hover { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 35%, #431407 100%); }
   .category-historical .book-button.current { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 50%, #431407 100%); font-weight: 500; }
-  .category-historical .chapters-container { background: radial-gradient(circle at top left, #6ca0dc 0%, #431407 25%); border: 1px solid #431407; }
+  .category-historical .chapters-container { background: #431407; }
 
   /* Wisdom — gold */
   .category-wisdom .book-button { background: radial-gradient(circle, #f0c040 0%, #f0c040 20%, #431407 100%); border: 1px solid #431407; color: white; }
   .category-wisdom .book-button:hover { background: radial-gradient(circle, #f0c040 0%, #f0c040 35%, #431407 100%); }
   .category-wisdom .book-button.current { background: radial-gradient(circle, #f0c040 0%, #f0c040 50%, #431407 100%); font-weight: 500; }
-  .category-wisdom .chapters-container { background: radial-gradient(circle at top left, #f0c040 0%, #431407 25%); border: 1px solid #431407; }
+  .category-wisdom .chapters-container { background: #431407; }
 
   /* Major Prophets — purple */
   .category-major-prophets .book-button { background: radial-gradient(circle, #b420f3 0%, #b420f3 20%, #431407 100%); border: 1px solid #431407; color: white; }
   .category-major-prophets .book-button:hover { background: radial-gradient(circle, #b420f3 0%, #b420f3 35%, #431407 100%); }
   .category-major-prophets .book-button.current { background: radial-gradient(circle, #b420f3 0%, #b420f3 50%, #431407 100%); font-weight: 500; }
-  .category-major-prophets .chapters-container { background: radial-gradient(circle at top left, #b420f3 0%, #431407 25%); border: 1px solid #431407; }
+  .category-major-prophets .chapters-container { background: #431407; }
 
   /* Minor Prophets — orange */
   .category-minor-prophets .book-button { background: radial-gradient(circle, #ffa520 0%, #ffa520 20%, #431407 100%); border: 1px solid #431407; color: white; }
   .category-minor-prophets .book-button:hover { background: radial-gradient(circle, #ffa520 0%, #ffa520 35%, #431407 100%); }
   .category-minor-prophets .book-button.current { background: radial-gradient(circle, #ffa520 0%, #ffa520 50%, #431407 100%); font-weight: 500; }
-  .category-minor-prophets .chapters-container { background: radial-gradient(circle at top left, #ffa520 0%, #431407 25%); border: 1px solid #431407; }
+  .category-minor-prophets .chapters-container { background: #431407; }
 
   /* Gospels — green */
   .category-gospels .book-button { background: radial-gradient(circle, #4eab77 0%, #4eab77 20%, #431407 100%); border: 1px solid #431407; color: white; }
   .category-gospels .book-button:hover { background: radial-gradient(circle, #4eab77 0%, #4eab77 35%, #431407 100%); }
   .category-gospels .book-button.current { background: radial-gradient(circle, #4eab77 0%, #4eab77 50%, #431407 100%); font-weight: 500; }
-  .category-gospels .chapters-container { background: radial-gradient(circle at top left, #4eab77 0%, #431407 25%); border: 1px solid #431407; }
+  .category-gospels .chapters-container { background: #431407; }
 
   /* Acts — red-orange */
   .category-acts .book-button { background: radial-gradient(circle, #ff6520 0%, #ff6520 20%, #431407 100%); border: 1px solid #431407; color: white; }
   .category-acts .book-button:hover { background: radial-gradient(circle, #ff6520 0%, #ff6520 35%, #431407 100%); }
   .category-acts .book-button.current { background: radial-gradient(circle, #ff6520 0%, #ff6520 50%, #431407 100%); font-weight: 500; }
-  .category-acts .chapters-container { background: radial-gradient(circle at top left, #ff6520 0%, #431407 25%); border: 1px solid #431407; }
+  .category-acts .chapters-container { background: #431407; }
 
   /* Pauline — crimson */
   .category-pauline .book-button { background: radial-gradient(circle, #fc345c 0%, #fc345c 20%, #431407 100%); border: 1px solid #431407; color: white; }
   .category-pauline .book-button:hover { background: radial-gradient(circle, #fc345c 0%, #fc345c 35%, #431407 100%); }
   .category-pauline .book-button.current { background: radial-gradient(circle, #fc345c 0%, #fc345c 50%, #431407 100%); font-weight: 500; }
-  .category-pauline .chapters-container { background: radial-gradient(circle at top left, #fc345c 0%, #431407 25%); border: 1px solid #431407; }
+  .category-pauline .chapters-container { background: #431407; }
 
   /* General — warm orange */
   .category-general .book-button { background: radial-gradient(circle, #f2893e 0%, #f2893e 20%, #431407 100%); border: 1px solid #431407; color: white; }
   .category-general .book-button:hover { background: radial-gradient(circle, #f2893e 0%, #f2893e 35%, #431407 100%); }
   .category-general .book-button.current { background: radial-gradient(circle, #f2893e 0%, #f2893e 50%, #431407 100%); font-weight: 500; }
-  .category-general .chapters-container { background: radial-gradient(circle at top left, #f2893e 0%, #431407 25%); border: 1px solid #431407; }
+  .category-general .chapters-container { background: #431407; }
 
   /* Revelation — royal blue */
   .category-revelation .book-button { background: radial-gradient(circle, #6189f1 0%, #6189f1 20%, #431407 100%); border: 1px solid #431407; color: white; }
   .category-revelation .book-button:hover { background: radial-gradient(circle, #6189f1 0%, #6189f1 35%, #431407 100%); }
   .category-revelation .book-button.current { background: radial-gradient(circle, #6189f1 0%, #6189f1 50%, #431407 100%); font-weight: 500; }
-  .category-revelation .chapters-container { background: radial-gradient(circle at top left, #6189f1 0%, #431407 25%); border: 1px solid #431407; }
+  .category-revelation .chapters-container { background: #431407; }
 
   .book-button {
     width: 100%;
@@ -1489,9 +1489,9 @@
   .chapters-container {
     display: grid;
     grid-template-columns: repeat(var(--chapter-columns, 7), 40px);
-    gap: 6px;
-    padding: 12px 14px 12px 34px;
-    background: #1a1a1a;
+    gap: 4px;
+    padding: 6px;
+    background: #431407;
     width: fit-content;
   }
 
