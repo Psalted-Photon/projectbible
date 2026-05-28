@@ -1500,7 +1500,7 @@
     text-align: center;
     touch-action: manipulation;
     -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
-    box-shadow: inset 0 0 0 1000px rgba(0,0,0,0.65);
+    box-shadow: inset 0 0 0 1000px rgba(0,0,0,0.5);
   }
 
   .chapter-button:hover {
