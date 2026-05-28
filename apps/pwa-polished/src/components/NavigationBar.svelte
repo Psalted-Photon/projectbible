@@ -1101,8 +1101,6 @@
 
   .pill-toggle:has(input:checked) {
     color: #667eea;
-    background: rgba(102, 126, 234, 0.1);
-    border-radius: 5px;
   }
 
   /* Anchor states */
