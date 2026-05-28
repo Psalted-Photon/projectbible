@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import {
     navigationStore,
     availableTranslations,
@@ -644,6 +644,7 @@
           class="pill-btn pill-btn-text"
           on:click={toggleTranslationDropdown}
           class:active={translationDropdownOpen}
+          title="Translations"
         >
           <span class="pill-label">{currentTranslation}</span>
           {#if translationDropdownOpen}
@@ -662,6 +663,7 @@
           bind:this={referenceButtonRef}
           class="pill-btn pill-btn-text pill-btn-reference"
           on:click={toggleReferenceDropdown}
+          title="Bible Navigation"
         >
           <span class="pill-label">{currentReference}</span>
           {#if referenceDropdownOpen}
@@ -725,6 +727,7 @@
       </button>
     </div>
 
+    <div class="nav-spacer"></div>
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 2: Tools Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-tools">
       <!-- Search (icon at rest Ã¢â€ â€™ expands on click) -->
@@ -1004,9 +1007,19 @@
     align-items: center;
     gap: 8px;
     padding: 10px 16px;
-    overflow: visible;
+    overflow-x: auto;
+    scrollbar-width: none;
     min-height: 58px;
     flex-wrap: nowrap;
+  }
+
+  .nav-content::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-spacer {
+    flex: 1;
+    min-width: 27px;
   }
 
   /* Ã¢â€â‚¬Ã¢â€â‚¬ Pill containers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
@@ -1023,7 +1036,6 @@
   }
 
   .nav-pill-tools {
-    margin-left: auto;
   }
 
   .pill-divider {
@@ -1773,16 +1785,6 @@
     .nav-content {
       padding: 8px 10px;
       gap: 6px;
-      overflow-x: auto;
-      scrollbar-width: none;
-    }
-
-    .nav-content::-webkit-scrollbar {
-      display: none;
-    }
-
-    .nav-pill-tools {
-      margin-left: 0;
     }
 
     .pill-search-expander.expanded {
