@@ -68,7 +68,7 @@
   let commButtonRef: HTMLElement;
   let searchContainerRef: HTMLElement;
 
-  // Whether the dropdown has been positioned — controls visibility (hidden until JS places it)
+  // Whether the dropdown has been positioned â€” controls visibility (hidden until JS places it)
   let translationDropdownPositioned = false;
   let referenceDropdownPositioned = false;
   let commDropdownPositioned = false;
@@ -117,7 +117,7 @@
     event.stopPropagation();
     const anchored = $navigationStore.commentaryAnchored ?? false;
     if (!anchored) {
-      // OFF → ON/Synced: enable anchor, clear per-window pins so windows fall back to global nav
+      // OFF â†’ ON/Synced: enable anchor, clear per-window pins so windows fall back to global nav
       navigationStore.setCommentaryAnchored(true);
       for (const w of $windowStore) {
         if (w.contentType === 'commentaries') {
@@ -125,14 +125,14 @@
         }
       }
     } else if (commentaryDrifted) {
-      // ON/Drifted → ON/Synced: re-sync, anchor stays ON
+      // ON/Drifted â†’ ON/Synced: re-sync, anchor stays ON
       for (const w of $windowStore) {
         if (w.contentType === 'commentaries') {
           windowStore.updateContentState(w.id, { book: undefined, chapter: undefined, highlightedVerse: undefined });
         }
       }
     } else {
-      // ON/Synced → OFF: freeze commentary windows at current position
+      // ON/Synced â†’ OFF: freeze commentary windows at current position
       navigationStore.setCommentaryAnchored(false);
       for (const w of $windowStore) {
         if (w.contentType === 'commentaries') {
@@ -585,7 +585,7 @@
         const rect = referenceButtonRef.getBoundingClientRect();
         dropdown.style.left = `${rect.left - leftOffset}px`;
         dropdown.style.top = `${rect.bottom + 4}px`;
-        // No width override — reference dropdown uses CSS fit-content based on chapter grid
+        // No width override â€” reference dropdown uses CSS fit-content based on chapter grid
       }
     }
     if (commDropdownOpen && commDropdownPositioned) {
@@ -623,7 +623,7 @@
 <div class="navigation-bar" {style}>
   <div class="nav-content">
 
-    <!-- ── Pill 1: Navigation ─────────────────────────────── -->
+    <!-- â”€â”€ Pill 1: Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="nav-pill nav-pill-nav">
       {#if $canGoBack}
         <button
@@ -716,9 +716,9 @@
         class:drifted={commentaryDrifted}
         on:click={handleAnchorClick}
         title={commentaryDrifted
-          ? 'Commentary drifted — click to re-sync'
+          ? 'Commentary drifted â€” click to re-sync'
           : ($navigationStore.commentaryAnchored ?? false)
-            ? 'Commentary synced — click to unlock'
+            ? 'Commentary synced â€” click to unlock'
             : 'Sync commentary to Bible position'}
         aria-label="Commentary anchor sync"
       >
@@ -726,9 +726,9 @@
       </button>
     </div>
 
-    <!-- ── Pill 2: Tools ──────────────────────────────────── -->
+    <!-- â”€â”€ Pill 2: Tools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="nav-pill nav-pill-tools">
-      <!-- Search (icon at rest → expands on click) -->
+      <!-- Search (icon at rest â†’ expands on click) -->
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <div
         bind:this={searchContainerRef}
@@ -780,7 +780,7 @@
       <button
         class="pill-btn pill-powersearch"
         on:click={() => (showPowerSearchModal = true)}
-        title="Advanced search — regex, proximity, biblical filters"
+        title="Advanced search â€” regex, proximity, biblical filters"
         aria-label="Advanced search"
       >
         <span class="icon-badge icon-badge-powersearch"><Microscope size={18} weight="bold" /><span class="icon-overlay"><Microscope size={18} weight="thin" /></span></span>
@@ -1010,7 +1010,7 @@
     flex-wrap: nowrap;
   }
 
-  /* ── Pill containers ───────────────────────────────────── */
+  /* â”€â”€ Pill containers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   .nav-pill {
     display: flex;
     align-items: center;
@@ -1035,7 +1035,7 @@
     flex-shrink: 0;
   }
 
-  /* ── Pill buttons ──────────────────────────────────────── */
+  /* â”€â”€ Pill buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   .pill-btn {
     display: flex;
     align-items: center;
@@ -1119,7 +1119,7 @@
   .nav-dropdown.reference-dropdown-trigger.category-general .pill-btn-reference { color: #d2691e; }
   .nav-dropdown.reference-dropdown-trigger.category-revelation .pill-btn-reference { color: #61f1ff; }
 
-  /* ── Icon badges (brown bold icon on radial gradient splash) ───────── */
+  /* â”€â”€ Icon badges (brown bold icon on radial gradient splash) â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   .icon-badge {
     display: inline-flex;
     align-items: center;
@@ -1327,7 +1327,7 @@
   /* Dropdowns outside nav-content use fixed positioning.
      Start invisible so there's no flash at left:0/top:0 before JS places them.
      The .positioned class is added after JS sets left/top.
-     right:auto cancels the right:0 inherited from .dropdown-menu — without it, fit-content
+     right:auto cancels the right:0 inherited from .dropdown-menu â€” without it, fit-content
      is constrained to (viewport_width - left), which is too narrow on small screens. */
   .translation-dropdown,
   .reference-dropdown {
@@ -1388,54 +1388,54 @@
     margin-top: 2px;
   }
 
-  /* Category Colors — Radial Gradient Theme */
-  /* Pentateuch — amber */
-  .category-pentateuch .book-button { background: radial-gradient(circle, #a67c52 0%, #a67c52 20%, #000000 100%); border: 1px solid #000000; color: white; }
+  /* Category Colors â€” Radial Gradient Theme */
+  /* Pentateuch â€” amber */
+  .category-pentateuch .book-button { background: radial-gradient(circle, #a67c52 0%, #a67c52 20%, #000000 100%); border: 1px solid #000000; color: #e2e2e2; }
   .category-pentateuch .book-button:hover { background: radial-gradient(circle, #a67c52 0%, #a67c52 35%, #000000 100%); }
   .category-pentateuch .book-button.current { background: radial-gradient(circle, #a67c52 0%, #a67c52 50%, #000000 100%); font-weight: 500; }
 
-  /* Historical — blue */
-  .category-historical .book-button { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 20%, #000000 100%); border: 1px solid #000000; color: white; }
+  /* Historical â€” blue */
+  .category-historical .book-button { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 20%, #000000 100%); border: 1px solid #000000; color: #e2e2e2; }
   .category-historical .book-button:hover { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 35%, #000000 100%); }
   .category-historical .book-button.current { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 50%, #000000 100%); font-weight: 500; }
 
-  /* Wisdom — gold */
-  .category-wisdom .book-button { background: radial-gradient(circle, #f0c040 0%, #f0c040 20%, #000000 100%); border: 1px solid #000000; color: white; }
+  /* Wisdom â€” gold */
+  .category-wisdom .book-button { background: radial-gradient(circle, #f0c040 0%, #f0c040 20%, #000000 100%); border: 1px solid #000000; color: #e2e2e2; }
   .category-wisdom .book-button:hover { background: radial-gradient(circle, #f0c040 0%, #f0c040 35%, #000000 100%); }
   .category-wisdom .book-button.current { background: radial-gradient(circle, #f0c040 0%, #f0c040 50%, #000000 100%); font-weight: 500; }
 
-  /* Major Prophets — purple */
-  .category-major-prophets .book-button { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 20%, #000000 100%); border: 1px solid #000000; color: white; }
+  /* Major Prophets â€” purple */
+  .category-major-prophets .book-button { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 20%, #000000 100%); border: 1px solid #000000; color: #e2e2e2; }
   .category-major-prophets .book-button:hover { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 35%, #000000 100%); }
   .category-major-prophets .book-button.current { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 50%, #000000 100%); font-weight: 500; }
 
-  /* Minor Prophets — orange */
-  .category-minor-prophets .book-button { background: radial-gradient(circle, #a45be9 0%, #a45be9 20%, #000000 100%); border: 1px solid #000000; color: white; }
+  /* Minor Prophets â€” orange */
+  .category-minor-prophets .book-button { background: radial-gradient(circle, #a45be9 0%, #a45be9 20%, #000000 100%); border: 1px solid #000000; color: #e2e2e2; }
   .category-minor-prophets .book-button:hover { background: radial-gradient(circle, #a45be9 0%, #a45be9 35%, #000000 100%); }
   .category-minor-prophets .book-button.current { background: radial-gradient(circle, #a45be9 0%, #a45be9 50%, #000000 100%); font-weight: 500; }
 
-  /* Gospels — green */
-  .category-gospels .book-button { background: radial-gradient(circle, #fc345c 0%, #fc345c 20%, #000000 100%); border: 1px solid #000000; color: white; }
+  /* Gospels â€” green */
+  .category-gospels .book-button { background: radial-gradient(circle, #fc345c 0%, #fc345c 20%, #000000 100%); border: 1px solid #000000; color: #e2e2e2; }
   .category-gospels .book-button:hover { background: radial-gradient(circle, #fc345c 0%, #fc345c 35%, #000000 100%); }
   .category-gospels .book-button.current { background: radial-gradient(circle, #fc345c 0%, #fc345c 50%, #000000 100%); font-weight: 500; }
 
-  /* Acts — red-orange */
-  .category-acts .book-button { background: radial-gradient(circle, #ff6520 0%, #ff6520 20%, #000000 100%); border: 1px solid #000000; color: white; }
+  /* Acts â€” red-orange */
+  .category-acts .book-button { background: radial-gradient(circle, #ff6520 0%, #ff6520 20%, #000000 100%); border: 1px solid #000000; color: #e2e2e2; }
   .category-acts .book-button:hover { background: radial-gradient(circle, #ff6520 0%, #ff6520 35%, #000000 100%); }
   .category-acts .book-button.current { background: radial-gradient(circle, #ff6520 0%, #ff6520 50%, #000000 100%); font-weight: 500; }
 
-  /* Pauline — crimson */
-  .category-pauline .book-button { background: radial-gradient(circle, #6048cc 0%, #6048cc 20%, #000000 100%); border: 1px solid #000000; color: white; }
+  /* Pauline â€” crimson */
+  .category-pauline .book-button { background: radial-gradient(circle, #6048cc 0%, #6048cc 20%, #000000 100%); border: 1px solid #000000; color: #e2e2e2; }
   .category-pauline .book-button:hover { background: radial-gradient(circle, #6048cc 0%, #6048cc 35%, #000000 100%); }
   .category-pauline .book-button.current { background: radial-gradient(circle, #6048cc 0%, #6048cc 50%, #000000 100%); font-weight: 500; }
 
-  /* General — warm orange */
-  .category-general .book-button { background: radial-gradient(circle, #f2893e 0%, #f2893e 20%, #000000 100%); border: 1px solid #000000; color: white; }
+  /* General â€” warm orange */
+  .category-general .book-button { background: radial-gradient(circle, #f2893e 0%, #f2893e 20%, #000000 100%); border: 1px solid #000000; color: #e2e2e2; }
   .category-general .book-button:hover { background: radial-gradient(circle, #f2893e 0%, #f2893e 35%, #000000 100%); }
   .category-general .book-button.current { background: radial-gradient(circle, #f2893e 0%, #f2893e 50%, #000000 100%); font-weight: 500; }
 
-  /* Revelation — royal blue */
-  .category-revelation .book-button { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 20%, #000000 100%); border: 1px solid #000000; color: white; }
+  /* Revelation â€” royal blue */
+  .category-revelation .book-button { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 20%, #000000 100%); border: 1px solid #000000; color: #e2e2e2; }
   .category-revelation .book-button:hover { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 35%, #000000 100%); }
   .category-revelation .book-button.current { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 50%, #000000 100%); font-weight: 500; }
 
@@ -1447,7 +1447,7 @@
     padding: 12px 14px;
     background: transparent;
     border: none;
-    color: white;
+    color: #e2e2e2;
     text-align: left;
     cursor: pointer;
     transition: background 0.15s, box-shadow 0.15s;
@@ -1468,7 +1468,7 @@
   }
 
   .expand-icon {
-    color: white;
+    color: #e2e2e2;
     font-size: 10px;
     width: 12px;
     display: inline-block;
@@ -1493,7 +1493,7 @@
     background: #2a2a2a;
     border: 1px solid #3a3a3a;
     border-radius: 4px;
-    color: white;
+    color: #e2e2e2;
     cursor: pointer;
     transition: all 0.15s;
     font-size: 15px;
@@ -1512,51 +1512,51 @@
   .chapter-button.selected {
     background: #667eea;
     border-color: #667eea;
-    color: white;
+    color: #e2e2e2;
     font-weight: 600;
     box-shadow: none;
   }
 
   /* Category-specific chapter buttons */
-  .category-pentateuch .chapter-button { background: radial-gradient(circle, #a67c52 0%, #a67c52 20%, #000000 100%); border-color: #000000; color: white; }
+  .category-pentateuch .chapter-button { background: radial-gradient(circle, #a67c52 0%, #a67c52 20%, #000000 100%); border-color: #000000; color: #e2e2e2; }
   .category-pentateuch .chapter-button:hover { background: radial-gradient(circle, #a67c52 0%, #a67c52 35%, #000000 100%); border-color: #000000; }
-  .category-pentateuch .chapter-button.selected { background: radial-gradient(circle, #a67c52 0%, #a67c52 20%, #000000 100%); border-color: #000000; color: white; font-weight: 600; }
+  .category-pentateuch .chapter-button.selected { background: radial-gradient(circle, #a67c52 0%, #a67c52 20%, #000000 100%); border-color: #000000; color: #e2e2e2; font-weight: 600; }
 
-  .category-historical .chapter-button { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 20%, #000000 100%); border-color: #000000; color: white; }
+  .category-historical .chapter-button { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 20%, #000000 100%); border-color: #000000; color: #e2e2e2; }
   .category-historical .chapter-button:hover { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 35%, #000000 100%); border-color: #000000; }
-  .category-historical .chapter-button.selected { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 20%, #000000 100%); border-color: #000000; color: white; font-weight: 600; }
+  .category-historical .chapter-button.selected { background: radial-gradient(circle, #6ca0dc 0%, #6ca0dc 20%, #000000 100%); border-color: #000000; color: #e2e2e2; font-weight: 600; }
 
-  .category-wisdom .chapter-button { background: radial-gradient(circle, #f0c040 0%, #f0c040 20%, #000000 100%); border-color: #000000; color: white; }
+  .category-wisdom .chapter-button { background: radial-gradient(circle, #f0c040 0%, #f0c040 20%, #000000 100%); border-color: #000000; color: #e2e2e2; }
   .category-wisdom .chapter-button:hover { background: radial-gradient(circle, #f0c040 0%, #f0c040 35%, #000000 100%); border-color: #000000; }
-  .category-wisdom .chapter-button.selected { background: radial-gradient(circle, #f0c040 0%, #f0c040 20%, #000000 100%); border-color: #000000; color: white; font-weight: 600; }
+  .category-wisdom .chapter-button.selected { background: radial-gradient(circle, #f0c040 0%, #f0c040 20%, #000000 100%); border-color: #000000; color: #e2e2e2; font-weight: 600; }
 
-  .category-major-prophets .chapter-button { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 20%, #000000 100%); border-color: #000000; color: white; }
+  .category-major-prophets .chapter-button { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 20%, #000000 100%); border-color: #000000; color: #e2e2e2; }
   .category-major-prophets .chapter-button:hover { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 35%, #000000 100%); border-color: #000000; }
-  .category-major-prophets .chapter-button.selected { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 20%, #000000 100%); border-color: #000000; color: white; font-weight: 600; }
+  .category-major-prophets .chapter-button.selected { background: radial-gradient(circle, #5c1e99 0%, #5c1e99 20%, #000000 100%); border-color: #000000; color: #e2e2e2; font-weight: 600; }
 
-  .category-minor-prophets .chapter-button { background: radial-gradient(circle, #a45be9 0%, #a45be9 20%, #000000 100%); border-color: #000000; color: white; }
+  .category-minor-prophets .chapter-button { background: radial-gradient(circle, #a45be9 0%, #a45be9 20%, #000000 100%); border-color: #000000; color: #e2e2e2; }
   .category-minor-prophets .chapter-button:hover { background: radial-gradient(circle, #a45be9 0%, #a45be9 35%, #000000 100%); border-color: #000000; }
-  .category-minor-prophets .chapter-button.selected { background: radial-gradient(circle, #a45be9 0%, #a45be9 20%, #000000 100%); border-color: #000000; color: white; font-weight: 600; }
+  .category-minor-prophets .chapter-button.selected { background: radial-gradient(circle, #a45be9 0%, #a45be9 20%, #000000 100%); border-color: #000000; color: #e2e2e2; font-weight: 600; }
 
-  .category-gospels .chapter-button { background: radial-gradient(circle, #fc345c 0%, #fc345c 20%, #000000 100%); border-color: #000000; color: white; }
+  .category-gospels .chapter-button { background: radial-gradient(circle, #fc345c 0%, #fc345c 20%, #000000 100%); border-color: #000000; color: #e2e2e2; }
   .category-gospels .chapter-button:hover { background: radial-gradient(circle, #fc345c 0%, #fc345c 35%, #000000 100%); border-color: #000000; }
-  .category-gospels .chapter-button.selected { background: radial-gradient(circle, #fc345c 0%, #fc345c 20%, #000000 100%); border-color: #000000; color: white; font-weight: 600; }
+  .category-gospels .chapter-button.selected { background: radial-gradient(circle, #fc345c 0%, #fc345c 20%, #000000 100%); border-color: #000000; color: #e2e2e2; font-weight: 600; }
 
-  .category-acts .chapter-button { background: radial-gradient(circle, #ff6520 0%, #ff6520 20%, #000000 100%); border-color: #000000; color: white; }
+  .category-acts .chapter-button { background: radial-gradient(circle, #ff6520 0%, #ff6520 20%, #000000 100%); border-color: #000000; color: #e2e2e2; }
   .category-acts .chapter-button:hover { background: radial-gradient(circle, #ff6520 0%, #ff6520 35%, #000000 100%); border-color: #000000; }
-  .category-acts .chapter-button.selected { background: radial-gradient(circle, #ff6520 0%, #ff6520 20%, #000000 100%); border-color: #000000; color: white; font-weight: 600; }
+  .category-acts .chapter-button.selected { background: radial-gradient(circle, #ff6520 0%, #ff6520 20%, #000000 100%); border-color: #000000; color: #e2e2e2; font-weight: 600; }
 
-  .category-pauline .chapter-button { background: radial-gradient(circle, #6048cc 0%, #6048cc 20%, #000000 100%); border-color: #000000; color: white; }
+  .category-pauline .chapter-button { background: radial-gradient(circle, #6048cc 0%, #6048cc 20%, #000000 100%); border-color: #000000; color: #e2e2e2; }
   .category-pauline .chapter-button:hover { background: radial-gradient(circle, #6048cc 0%, #6048cc 35%, #000000 100%); border-color: #000000; }
-  .category-pauline .chapter-button.selected { background: radial-gradient(circle, #6048cc 0%, #6048cc 20%, #000000 100%); border-color: #000000; color: white; font-weight: 600; }
+  .category-pauline .chapter-button.selected { background: radial-gradient(circle, #6048cc 0%, #6048cc 20%, #000000 100%); border-color: #000000; color: #e2e2e2; font-weight: 600; }
 
-  .category-general .chapter-button { background: radial-gradient(circle, #f2893e 0%, #f2893e 20%, #000000 100%); border-color: #000000; color: white; }
+  .category-general .chapter-button { background: radial-gradient(circle, #f2893e 0%, #f2893e 20%, #000000 100%); border-color: #000000; color: #e2e2e2; }
   .category-general .chapter-button:hover { background: radial-gradient(circle, #f2893e 0%, #f2893e 35%, #000000 100%); border-color: #000000; }
-  .category-general .chapter-button.selected { background: radial-gradient(circle, #f2893e 0%, #f2893e 20%, #000000 100%); border-color: #000000; color: white; font-weight: 600; }
+  .category-general .chapter-button.selected { background: radial-gradient(circle, #f2893e 0%, #f2893e 20%, #000000 100%); border-color: #000000; color: #e2e2e2; font-weight: 600; }
 
-  .category-revelation .chapter-button { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 20%, #000000 100%); border-color: #000000; color: white; }
+  .category-revelation .chapter-button { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 20%, #000000 100%); border-color: #000000; color: #e2e2e2; }
   .category-revelation .chapter-button:hover { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 35%, #000000 100%); border-color: #000000; }
-  .category-revelation .chapter-button.selected { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 20%, #000000 100%); border-color: #000000; color: white; font-weight: 600; }
+  .category-revelation .chapter-button.selected { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 20%, #000000 100%); border-color: #000000; color: #e2e2e2; font-weight: 600; }
 
   /* Scrollbar styling */
   .dropdown-menu::-webkit-scrollbar {
@@ -1768,7 +1768,7 @@
 
 
 
-  /* Mobile — pills stack or shrink on small screens */
+  /* Mobile â€” pills stack or shrink on small screens */
   @media (max-width: 600px) {
     .nav-content {
       padding: 8px 10px;
