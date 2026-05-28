@@ -26,7 +26,12 @@
       if (allowRotation) {
         screen.orientation.unlock();
       } else {
-        await (screen.orientation as any).lock('portrait');
+        // Try portrait-primary first (more explicit), fall back to portrait
+        try {
+          await (screen.orientation as any).lock('portrait-primary');
+        } catch {
+          await (screen.orientation as any).lock('portrait');
+        }
       }
     } catch {
       // Desktop browsers don't support orientation lock — ignore silently
@@ -41,6 +46,15 @@
     setTimeout(() => {
       root.style.opacity = '1';
     }, 350);
+    // Re-enforce lock if rotation is disabled (tablet can release lock on rotate)
+    void applyOrientationLock();
+  }
+
+  function handleVisibilityResume() {
+    // Re-enforce orientation lock when app becomes visible again (tab/app switch)
+    if (!document.hidden) {
+      void applyOrientationLock();
+    }
   }
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -72,6 +86,9 @@
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
+
+    // Re-enforce orientation lock on visibility resume (handles tablet app-switching)
+    document.addEventListener("visibilitychange", handleVisibilityResume);
     
     // Apply orientation lock based on saved setting
     void applyOrientationLock();
