@@ -1450,10 +1450,11 @@
     color: white;
     text-align: left;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background 0.15s, box-shadow 0.15s;
     font-size: 18px;
     touch-action: manipulation;
     -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+    box-shadow: inset 0 0 0 1000px rgba(0,0,0,0.4);
   }
 
   .book-button:hover {
@@ -1463,6 +1464,7 @@
   .book-button.current {
     background: rgba(102, 126, 234, 0.2);
     font-weight: 500;
+    box-shadow: none;
   }
 
   .expand-icon {
