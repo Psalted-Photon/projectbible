@@ -1117,7 +1117,7 @@
   .nav-dropdown.reference-dropdown-trigger.category-acts .pill-btn-reference { color: #ff6030; }
   .nav-dropdown.reference-dropdown-trigger.category-pauline .pill-btn-reference { color: #6048cc; }
   .nav-dropdown.reference-dropdown-trigger.category-general .pill-btn-reference { color: #d2691e; }
-  .nav-dropdown.reference-dropdown-trigger.category-revelation .pill-btn-reference { color: #6080e0; }
+  .nav-dropdown.reference-dropdown-trigger.category-revelation .pill-btn-reference { color: #61f1ff; }
 
   /* ── Icon badges (brown bold icon on radial gradient splash) ───────── */
   .icon-badge {
@@ -1435,9 +1435,9 @@
   .category-general .book-button.current { background: radial-gradient(circle, #f2893e 0%, #f2893e 50%, #431407 100%); font-weight: 500; }
 
   /* Revelation — royal blue */
-  .category-revelation .book-button { background: radial-gradient(circle, #6189f1 0%, #6189f1 20%, #431407 100%); border: 1px solid #431407; color: white; }
-  .category-revelation .book-button:hover { background: radial-gradient(circle, #6189f1 0%, #6189f1 35%, #431407 100%); }
-  .category-revelation .book-button.current { background: radial-gradient(circle, #6189f1 0%, #6189f1 50%, #431407 100%); font-weight: 500; }
+  .category-revelation .book-button { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 20%, #431407 100%); border: 1px solid #431407; color: white; }
+  .category-revelation .book-button:hover { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 35%, #431407 100%); }
+  .category-revelation .book-button.current { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 50%, #431407 100%); font-weight: 500; }
 
   .book-button {
     width: 100%;
@@ -1552,9 +1552,9 @@
   .category-general .chapter-button:hover { background: radial-gradient(circle, #f2893e 0%, #f2893e 35%, #431407 100%); border-color: #431407; }
   .category-general .chapter-button.selected { background: radial-gradient(circle, #f2893e 0%, #f2893e 20%, #431407 100%); border-color: #431407; color: white; font-weight: 600; }
 
-  .category-revelation .chapter-button { background: radial-gradient(circle, #6189f1 0%, #6189f1 20%, #431407 100%); border-color: #431407; color: white; }
-  .category-revelation .chapter-button:hover { background: radial-gradient(circle, #6189f1 0%, #6189f1 35%, #431407 100%); border-color: #431407; }
-  .category-revelation .chapter-button.selected { background: radial-gradient(circle, #6189f1 0%, #6189f1 20%, #431407 100%); border-color: #431407; color: white; font-weight: 600; }
+  .category-revelation .chapter-button { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 20%, #431407 100%); border-color: #431407; color: white; }
+  .category-revelation .chapter-button:hover { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 35%, #431407 100%); border-color: #431407; }
+  .category-revelation .chapter-button.selected { background: radial-gradient(circle, #61f1ff 0%, #61f1ff 20%, #431407 100%); border-color: #431407; color: white; font-weight: 600; }
 
   /* Scrollbar styling */
   .dropdown-menu::-webkit-scrollbar {
