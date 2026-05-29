@@ -84,16 +84,20 @@
     selected = { type: 'underline', color, underlineStyle: style };
   }
 
+  $: activeType = selected.type;
+  $: activeColor = selected.color;
+  $: activeUnderlineStyle = selected.underlineStyle;
+
   function isActiveMarker(color: string) {
-    return selected.type === 'background' && selected.color === color;
+    return activeType === 'background' && activeColor === color;
   }
 
   function isActiveTextColor(color: string) {
-    return selected.type === 'text-color' && selected.color === color;
+    return activeType === 'text-color' && activeColor === color;
   }
 
   function isActiveUnderline(style: string, color: string) {
-    return selected.type === 'underline' && selected.underlineStyle === style && selected.color === color;
+    return activeType === 'underline' && activeUnderlineStyle === style && activeColor === color;
   }
 
   function handleSave() {

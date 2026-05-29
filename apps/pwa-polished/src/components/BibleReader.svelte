@@ -2230,6 +2230,7 @@
 
     if (wordBounds) {
       selectedText = text.substring(wordBounds.start, wordBounds.end).trim();
+      selectedVerseNumber = verseNumInt;
 
       if (!selectedText) return;
 
