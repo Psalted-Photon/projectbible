@@ -19,41 +19,68 @@
   let showReadingPlanModal = false;
 
   // ── Orientation lock ──────────────────────────────────────────────────────
+  // "Scratch mark" approach: record screen.orientation.angle at lock time,
+  // then counter-rotate the UI by the difference on every change.
+  // Works on tablets where screen.orientation.lock() is silently ignored.
+  let lockedAngle: number | null = null;
+  let cssRotation: number = 0; // 0 | 90 | 180 | 270
+
+  function updateOrientationTransform() {
+    if (lockedAngle === null || typeof screen === 'undefined' || !screen.orientation) {
+      cssRotation = 0;
+      return;
+    }
+    cssRotation = (screen.orientation.angle - lockedAngle + 360) % 360;
+  }
+
+  async function reEnforceJsLock() {
+    if (typeof screen === 'undefined' || !screen.orientation) return;
+    const { allowRotation } = getSettings();
+    if (!allowRotation) {
+      try {
+        await (screen.orientation as any).lock('portrait-primary');
+      } catch {
+        try {
+          await (screen.orientation as any).lock('portrait');
+        } catch { /* tablet — CSS rotation handles it */ }
+      }
+    }
+  }
+
   async function applyOrientationLock() {
     if (typeof screen === 'undefined' || !screen.orientation) return;
     const { allowRotation } = getSettings();
-    try {
-      if (allowRotation) {
-        screen.orientation.unlock();
-      } else {
-        // Try portrait-primary first (more explicit), fall back to portrait
-        try {
-          await (screen.orientation as any).lock('portrait-primary');
-        } catch {
-          await (screen.orientation as any).lock('portrait');
-        }
-      }
-    } catch {
-      // Desktop browsers don't support orientation lock — ignore silently
+    if (allowRotation) {
+      screen.orientation.unlock();
+      lockedAngle = null;
+      cssRotation = 0;
+    } else {
+      // Scratch the mark: capture the current angle as the locked orientation
+      lockedAngle = screen.orientation.angle;
+      cssRotation = 0; // currently at the locked position — no transform needed
+      await reEnforceJsLock();
     }
   }
 
   function handleOrientationChange() {
     const root = document.querySelector('.app-root') as HTMLElement | null;
-    if (!root) return;
-    root.style.transition = 'opacity 0.25s ease';
-    root.style.opacity = '0';
-    setTimeout(() => {
-      root.style.opacity = '1';
-    }, 350);
-    // Re-enforce lock if rotation is disabled (tablet can release lock on rotate)
-    void applyOrientationLock();
+    if (root) {
+      root.style.transition = 'opacity 0.25s ease';
+      root.style.opacity = '0';
+      setTimeout(() => { root.style.opacity = '1'; }, 350);
+    }
+    // Recompute how far we've drifted from the scratch mark
+    updateOrientationTransform();
+    // Re-attempt JS lock (phones may release it on rotate)
+    void reEnforceJsLock();
   }
 
   function handleVisibilityResume() {
-    // Re-enforce orientation lock when app becomes visible again (tab/app switch)
     if (!document.hidden) {
-      void applyOrientationLock();
+      // Recompute CSS rotation — device may have rotated while backgrounded
+      updateOrientationTransform();
+      // Re-attempt JS lock
+      void reEnforceJsLock();
     }
   }
   // ─────────────────────────────────────────────────────────────────────────
@@ -187,7 +214,10 @@
   }
 </script>
 
-<div class="app-root">
+<div class="app-root"
+  class:rotate-90={cssRotation === 90}
+  class:rotate-180={cssRotation === 180}
+  class:rotate-270={cssRotation === 270}>
   {#if !appReady}
     <div
       style="display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-size: 20px;"
@@ -285,6 +315,32 @@
     display: flex;
     flex-direction: row;
     background: #1a1a1a;
+  }
+
+  /* CSS orientation lock — fallback for tablets where screen.orientation.lock() is ignored.
+     Each class counter-rotates the UI by the delta from the locked angle. */
+  .app-root.rotate-90 {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vh;
+    height: 100vw;
+    transform-origin: top left;
+    transform: rotate(-90deg) translateX(-100%);
+  }
+
+  .app-root.rotate-180 {
+    transform: rotate(180deg);
+  }
+
+  .app-root.rotate-270 {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vh;
+    height: 100vw;
+    transform-origin: top left;
+    transform: rotate(90deg) translateY(100%);
   }
 
   .main-content {
