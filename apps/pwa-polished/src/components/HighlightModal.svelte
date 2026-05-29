@@ -161,7 +161,6 @@
             aria-label="{label} marker"
             aria-pressed={isActiveMarker(value)}
           >
-            {#if isActiveMarker(value)}<span class="hl-check">✓</span>{/if}
           </button>
         {/each}
       </div>
@@ -176,7 +175,6 @@
             aria-label="{label} marker"
             aria-pressed={isActiveMarker(value)}
           >
-            {#if isActiveMarker(value)}<span class="hl-check hl-check-bold">✓</span>{/if}
           </button>
         {/each}
       </div>
@@ -197,7 +195,6 @@
             aria-pressed={isActiveTextColor(value)}
           >
             <span class="hl-swatch-text-preview" style="color: {value}">Aa</span>
-            {#if isActiveTextColor(value)}<span class="hl-check hl-check-text">✓</span>{/if}
           </button>
         {/each}
       </div>
@@ -222,7 +219,6 @@
                   aria-pressed={isActiveUnderline(style, value)}
                 >
                   <span class="hl-underline-preview" style="text-decoration: underline {style} {value}; text-underline-offset: 2px;">Aa</span>
-                  {#if isActiveUnderline(style, value)}<span class="hl-check">✓</span>{/if}
                 </button>
               {/each}
             </div>
