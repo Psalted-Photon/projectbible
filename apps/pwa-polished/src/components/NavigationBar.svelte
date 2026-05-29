@@ -280,15 +280,8 @@
   }
 
   function toggleBook(bookName: string, event?: MouseEvent) {
-    const newExpanded = new Set(expandedBooks);
-    const isExpanding = !newExpanded.has(bookName);
-    
-    if (newExpanded.has(bookName)) {
-      newExpanded.delete(bookName);
-    } else {
-      newExpanded.add(bookName);
-    }
-    expandedBooks = newExpanded;
+    const isExpanding = !expandedBooks.has(bookName);
+    expandedBooks = isExpanding ? new Set([bookName]) : new Set();
     
     // Auto-scroll to show the expanded book at the top of visible area
     if (isExpanding && event) {

@@ -114,12 +114,9 @@
   }
 
   function toggleBook(bookName: string, event: MouseEvent) {
-    const newExpanded = new Set(expandedBooks);
-    if (newExpanded.has(bookName)) {
-      newExpanded.delete(bookName);
-    } else {
-      newExpanded.add(bookName);
-      
+    const isExpanding = !expandedBooks.has(bookName);
+    expandedBooks = isExpanding ? new Set([bookName]) : new Set();
+    if (isExpanding) {
       // Scroll to position this book at top when expanding
       requestAnimationFrame(() => {
         const dropdown = document.querySelector('.commentary-reference-dropdown') as HTMLElement;
@@ -136,7 +133,6 @@
         }
       });
     }
-    expandedBooks = newExpanded;
   }
 
   function selectChapter(bookName: string, chapter: number) {
