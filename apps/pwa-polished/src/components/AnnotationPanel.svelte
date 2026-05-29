@@ -121,6 +121,7 @@
   async function handleRefClick(ref: string) {
     const target = parseRefString(ref, displayBook, displayChapter);
     if (!target) return;
+    const savedScrollTop = viewBodyEl?.scrollTop ?? 0;
     panelLoading = true;
     const translation = get(navigationStore).translation;
     const verses = await textStore.getChapter(translation, target.book, target.chapter);
@@ -133,6 +134,8 @@
       allVerses: verses,
     };
     panelLoading = false;
+    await tick();
+    if (viewBodyEl) viewBodyEl.scrollTop = savedScrollTop;
   }
 
   function handlePillClick() {
