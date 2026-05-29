@@ -158,6 +158,13 @@
     
     document.addEventListener('keydown', handleGlobalKeydown);
 
+    // Silent auto-check for updates on app open
+    if (getSettings().autoCheckUpdates !== false && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg) reg.update().catch(() => { /* silent */ });
+      }).catch(() => { /* silent */ });
+    }
+
     // Show daily greeting on first open of each new day
     setTimeout(() => checkAndShowDailyGreeting(), 800);
 

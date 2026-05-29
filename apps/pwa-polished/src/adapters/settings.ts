@@ -29,6 +29,7 @@ export interface UserSettings {
   showSectionHeadings?: boolean; // Show pericope/section headings between verses (default true)
   showRedLetter?: boolean; // Show Jesus' words in red (default true)
   allowRotation?: boolean; // Allow screen to rotate to landscape (default false = portrait locked)
+  autoCheckUpdates?: boolean; // Automatically check for updates on app open (default true)
 
   // Clock / timezone
   // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected

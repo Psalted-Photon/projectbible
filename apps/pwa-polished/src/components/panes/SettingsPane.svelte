@@ -34,6 +34,7 @@
   let savedMessage = false;
   let clearing = false;
   let checkingUpdate = false;
+  let autoCheckUpdates: boolean = true;
 
   // Load settings on mount
   onMount(() => {
@@ -46,6 +47,7 @@
     allowRotation = settings.allowRotation !== undefined ? settings.allowRotation : false;
     showRedLetter = settings.showRedLetter !== false;
     timezone = settings.timezone || '';
+    autoCheckUpdates = settings.autoCheckUpdates !== false; // default true
   });
 
   function deleteIndexedDbDatabase(name: string): Promise<void> {
@@ -197,6 +199,7 @@
       allowRotation,
       showRedLetter,
       timezone: timezone || undefined,
+      autoCheckUpdates,
     });
 
     // Apply settings immediately
@@ -338,6 +341,14 @@
       <span class="icon emoji">🔄</span>
       <span class="text">{checkingUpdate ? 'Checking...' : 'Check for Updates'}</span>
     </button>
+    <label class="auto-check-toggle">
+      <input
+        type="checkbox"
+        bind:checked={autoCheckUpdates}
+        on:change={saveSettings}
+      />
+      <span class="toggle-label">Auto-check on open</span>
+    </label>
     <button 
       class="clear-cache-button" 
       on:click={clearCacheAndReload}
@@ -643,6 +654,27 @@
   .check-update-button .text {
     flex: 1;
     text-align: left;
+  }
+
+  .auto-check-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    color: #b0b0b0;
+    font-size: 0.9rem;
+  }
+
+  .auto-check-toggle input[type="checkbox"] {
+    width: 1.1rem;
+    height: 1.1rem;
+    cursor: pointer;
+    accent-color: #0288d1;
+  }
+
+  .toggle-label {
+    user-select: none;
   }
 
   .clear-cache-button {
