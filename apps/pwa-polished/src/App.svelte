@@ -214,7 +214,7 @@
   }
 </script>
 
-<div class="app-root" class:letterbox={isLandscapeLocked}>
+<div class="app-root">
   {#if !appReady}
     <div
       style="display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-size: 20px;"
@@ -248,7 +248,6 @@
     margin: 0;
     padding: 0;
     overflow: hidden;
-    background: #000; /* letterbox bars when app is portrait-locked on landscape */
   }
 
   :global(body.light-theme) {
@@ -313,19 +312,6 @@
     display: flex;
     flex-direction: row;
     background: #1a1a1a;
-  }
-
-  /* Letterbox: device is landscape but rotation is locked.
-     Constrain to portrait proportions centered on screen.
-     No transforms — touch, scroll, modals, all fixed children work normally. */
-  .app-root.letterbox {
-    position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: auto;
-    height: 100vh;
-    aspect-ratio: 9 / 16;
   }
 
   .main-content {
