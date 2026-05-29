@@ -284,7 +284,7 @@
 
   <div class="setting-group">
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={allowRotation} />
+      <input type="checkbox" bind:checked={allowRotation} on:change={saveSettings} />
       <span class="label-text">Allow Screen Rotation</span>
     </label>
   </div>

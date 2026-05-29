@@ -44,7 +44,7 @@
       root.style.opacity = '0';
       setTimeout(() => { root.style.opacity = '1'; }, 350);
     }
-    void applyOrientationLock();
+    // Do NOT re-apply lock here — it fights the OS on tablet and confuses mobile
   }
 
   function handleVisibilityResume() {
