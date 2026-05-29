@@ -214,10 +214,7 @@
   }
 </script>
 
-<div class="app-root"
-  class:rotate-90={cssRotation === 90}
-  class:rotate-180={cssRotation === 180}
-  class:rotate-270={cssRotation === 270}>
+<div class="app-root" class:letterbox={isLandscapeLocked}>
   {#if !appReady}
     <div
       style="display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-size: 20px;"
@@ -251,6 +248,7 @@
     margin: 0;
     padding: 0;
     overflow: hidden;
+    background: #000; /* letterbox bars when app is portrait-locked on landscape */
   }
 
   :global(body.light-theme) {
@@ -317,30 +315,17 @@
     background: #1a1a1a;
   }
 
-  /* CSS orientation lock — fallback for tablets where screen.orientation.lock() is ignored.
-     Each class counter-rotates the UI by the delta from the locked angle. */
-  .app-root.rotate-90 {
+  /* Letterbox: device is landscape but rotation is locked.
+     Constrain to portrait proportions centered on screen.
+     No transforms — touch, scroll, modals, all fixed children work normally. */
+  .app-root.letterbox {
     position: fixed;
     top: 0;
-    left: 0;
-    width: 100vh;
-    height: 100vw;
-    transform-origin: top left;
-    transform: rotate(-90deg) translateX(-100%);
-  }
-
-  .app-root.rotate-180 {
-    transform: rotate(180deg);
-  }
-
-  .app-root.rotate-270 {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vh;
-    height: 100vw;
-    transform-origin: top left;
-    transform: rotate(90deg) translateY(100%);
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    height: 100vh;
+    aspect-ratio: 9 / 16;
   }
 
   .main-content {
