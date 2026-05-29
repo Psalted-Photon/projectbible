@@ -1192,7 +1192,7 @@
   }
 
   .search-input-inner.focused {
-    border-color: #667eea;
+    border-color: #fb7185;
   }
 
   .search-input {

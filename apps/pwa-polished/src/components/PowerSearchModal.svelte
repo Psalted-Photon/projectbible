@@ -693,14 +693,14 @@
 
   .modal-container {
     background: #1a1a1a;
-    border: 2px solid #667eea;
+    border: 2px solid #f97316;
     border-radius: 12px;
     width: 100%;
     max-width: 1400px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 60px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 20px 60px rgba(249, 115, 22, 0.3);
   }
 
   .modal-header {
@@ -708,13 +708,13 @@
     justify-content: space-between;
     align-items: center;
     padding: 20px 24px;
-    border-bottom: 2px solid #667eea;
+    border-bottom: 2px solid #f97316;
     background: linear-gradient(135deg, #1a1a1a 0%, #2a2a3a 100%);
   }
 
   .modal-header h2 {
     margin: 0;
-    color: #667eea;
+    color: #f97316;
     font-size: 24px;
     font-weight: 700;
   }
@@ -796,7 +796,7 @@
 
   .presets-section {
     background: linear-gradient(135deg, #1a1a2a 0%, #2a2a3a 100%);
-    border-color: #667eea;
+    border-color: #f97316;
   }
 
   .presets-grid {
@@ -821,9 +821,9 @@
 
   .preset-button:hover {
     background: #2a2a2a;
-    border-color: #667eea;
+    border-color: #f97316;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
   }
 
   .preset-icon {
@@ -839,7 +839,7 @@
 
   .presets-section {
     background: linear-gradient(135deg, #1a1a2a 0%, #2a2a3a 100%);
-    border-color: #667eea;
+    border-color: #f97316;
   }
 
   .presets-grid {
@@ -864,9 +864,9 @@
 
   .preset-button:hover {
     background: #2a2a2a;
-    border-color: #667eea;
+    border-color: #f97316;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
   }
 
   .preset-icon {
@@ -882,7 +882,7 @@
 
   .control-section h3 {
     margin: 0 0 12px 0;
-    color: #667eea;
+    color: #f97316;
     font-size: 16px;
     font-weight: 600;
     display: flex;
@@ -894,7 +894,7 @@
     background: #3a3a3a;
     border: 1px solid #4a4a4a;
     border-radius: 50%;
-    color: #667eea;
+    color: #f97316;
     width: 20px;
     height: 20px;
     font-size: 12px;
@@ -908,7 +908,7 @@
   }
 
   .help-btn:hover {
-    background: #667eea;
+    background: #f97316;
     color: white;
     transform: scale(1.1);
   }
@@ -917,7 +917,7 @@
     background: none;
     border: 1px solid #4a4a4a;
     border-radius: 50%;
-    color: #667eea;
+    color: #f97316;
     width: 16px;
     height: 16px;
     font-size: 10px;
@@ -932,9 +932,9 @@
   }
 
   .help-btn-inline:hover {
-    background: #667eea;
+    background: #f97316;
     color: white;
-    border-color: #667eea;
+    border-color: #f97316;
   }
 
   .control-group {
@@ -975,8 +975,8 @@
   .control-group input[type="text"]:focus,
   .control-group select:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    border-color: #f97316;
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
   }
 
   .checkbox-group {
@@ -1010,7 +1010,7 @@
 
   .input-with-button button {
     padding: 10px 16px;
-    background: #667eea;
+    background: #f97316;
     border: none;
     border-radius: 6px;
     color: white;
@@ -1122,7 +1122,7 @@
     -webkit-appearance: none;
     width: 18px;
     height: 18px;
-    background: #667eea;
+    background: #f97316;
     border-radius: 50%;
     cursor: pointer;
   }
@@ -1130,7 +1130,7 @@
   .proximity-slider::-moz-range-thumb {
     width: 18px;
     height: 18px;
-    background: #667eea;
+    background: #f97316;
     border-radius: 50%;
     cursor: pointer;
     border: none;
@@ -1155,14 +1155,14 @@
   }
 
   .btn-primary {
-    background: #667eea;
+    background: #f97316;
     color: white;
   }
 
   .btn-primary:hover:not(:disabled) {
     background: #7e8ff0;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
   }
 
   .btn-primary:disabled {
@@ -1192,7 +1192,7 @@
   .toggle-pattern {
     background: none;
     border: none;
-    color: #667eea;
+    color: #f97316;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
@@ -1265,7 +1265,7 @@
 
   .results-header h3 {
     margin: 0;
-    color: #667eea;
+    color: #f97316;
     font-size: 18px;
   }
 
@@ -1277,7 +1277,7 @@
   .load-all-link {
     background: none;
     border: none;
-    color: #667eea;
+    color: #f97316;
     text-decoration: underline;
     cursor: pointer;
     font-size: inherit;
@@ -1322,7 +1322,7 @@
   }
 
   .expand-icon {
-    color: #667eea;
+    color: #f97316;
     font-size: 12px;
     min-width: 16px;
   }
@@ -1330,7 +1330,7 @@
   .translation-name {
     flex: 1;
     text-align: left;
-    color: #667eea;
+    color: #f97316;
     font-weight: 700;
     letter-spacing: 0.5px;
   }
@@ -1378,7 +1378,7 @@
   }
 
   .ps-book-caret {
-    color: #667eea;
+    color: #f97316;
     font-size: 10px;
     min-width: 12px;
   }
@@ -1403,7 +1403,7 @@
   }
 
   .load-more-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #f97316 0%, #764ba2 100%);
     color: white;
     border: none;
     padding: 10px 20px;
@@ -1416,7 +1416,7 @@
 
   .load-more-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
   }
 
   .result-category {
@@ -1447,7 +1447,7 @@
 
   .result-item:hover {
     background: #2a2a2a;
-    border-color: #667eea;
+    border-color: #f97316;
   }
 
   .result-title {
