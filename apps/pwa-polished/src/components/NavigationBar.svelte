@@ -162,6 +162,11 @@
       return;
     }
 
+    referenceDropdownOpen = false;
+    referenceDropdownPositioned = false;
+    translationDropdownOpen = false;
+    translationDropdownPositioned = false;
+
     commDropdownOpen = true;
     await tick();
 
@@ -169,10 +174,13 @@
       const dropdown = document.querySelector('.comm-dropdown') as HTMLElement;
       if (dropdown && commButtonRef) {
         const mainContent = document.querySelector('.main-content') as HTMLElement;
-        const leftOffset = mainContent?.getBoundingClientRect().left || 0;
+        const mainContentRect = mainContent?.getBoundingClientRect();
+        const leftOffset = mainContentRect?.left || 0;
+        const rightBound = mainContentRect?.right ?? window.innerWidth;
         const rect = commButtonRef.getBoundingClientRect();
         const naturalLeft = rect.left - leftOffset;
-        const clampedLeft = Math.max(4, Math.min(naturalLeft, window.innerWidth - dropdown.offsetWidth - 4));
+        // Clamp so the dropdown stays within the visible main-content area (panel-aware)
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, rightBound - dropdown.offsetWidth - 4));
         dropdown.style.left = `${clampedLeft}px`;
         dropdown.style.top = `${rect.bottom + 4}px`;
         commDropdownPositioned = true;
@@ -192,6 +200,8 @@
 
     referenceDropdownOpen = false;
     referenceDropdownPositioned = false;
+    commDropdownOpen = false;
+    commDropdownPositioned = false;
 
     // Scroll nav instantly so button position is correct before we measure
     scrollToShowButton(translationButtonRef);
@@ -227,6 +237,8 @@
 
     translationDropdownOpen = false;
     translationDropdownPositioned = false;
+    commDropdownOpen = false;
+    commDropdownPositioned = false;
 
     if (currentBook && !expandedBooks.has(currentBook)) {
       expandedBooks = new Set([currentBook]);
@@ -586,8 +598,12 @@
     if (commDropdownOpen && commDropdownPositioned) {
       const dropdown = document.querySelector('.comm-dropdown') as HTMLElement;
       if (dropdown && commButtonRef) {
+        const mainContentRect = mainContent?.getBoundingClientRect();
+        const rightBound = mainContentRect?.right ?? window.innerWidth;
         const rect = commButtonRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left - leftOffset}px`;
+        const naturalLeft = rect.left - leftOffset;
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, rightBound - dropdown.offsetWidth - 4));
+        dropdown.style.left = `${clampedLeft}px`;
         dropdown.style.top = `${rect.bottom + 4}px`;
       }
     }
