@@ -326,7 +326,9 @@
   }
 
   // Annotation toggles (reactive from store)
-  $: showReferences = $navigationStore.showReferences ?? false;
+  $: showReferences = (windowId
+    ? (windowState?.contentState?.showReferences ?? $navigationStore.showReferences)
+    : $navigationStore.showReferences) ?? false;
   $: selectedCommentaryAuthors = $navigationStore.selectedCommentaryAuthors ?? [];
   $: showCommentaries = selectedCommentaryAuthors.length > 0;
 

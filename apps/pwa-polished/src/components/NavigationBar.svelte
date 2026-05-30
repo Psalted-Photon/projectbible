@@ -63,6 +63,7 @@
   let searchExpanded = false;
 
   // Refs for dropdown positioning
+  let navElement: HTMLElement;
   let translationButtonRef: HTMLElement;
   let referenceButtonRef: HTMLElement;
   let commButtonRef: HTMLElement;
@@ -105,6 +106,9 @@
     windowState?.contentState?.chapter ?? $navigationStore.chapter;
   $: currentReference = `${currentBook} ${currentChapter}`;
   $: isSignedIn = $userProfileStore.isSignedIn;
+  $: currentShowReferences = windowId
+    ? (windowState?.contentState?.showReferences ?? $navigationStore.showReferences ?? false)
+    : ($navigationStore.showReferences ?? false);
   $: currentBookCategory = BIBLE_BOOKS.find(b => b.name === currentBook)?.category || '';
 
   // Anchor sync: true when anchor is ON but a commentary window has drifted from global nav
@@ -173,16 +177,12 @@
     requestAnimationFrame(() => {
       const dropdown = document.querySelector('.comm-dropdown') as HTMLElement;
       if (dropdown && commButtonRef) {
-        const mainContent = document.querySelector('.main-content') as HTMLElement;
-        const mainContentRect = mainContent?.getBoundingClientRect();
-        const leftOffset = mainContentRect?.left || 0;
-        const rightBound = mainContentRect?.right ?? window.innerWidth;
+        const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth };
         const rect = commButtonRef.getBoundingClientRect();
-        const naturalLeft = rect.left - leftOffset;
-        // Clamp so the dropdown stays within the visible main-content area (panel-aware)
-        const clampedLeft = Math.max(4, Math.min(naturalLeft, rightBound - dropdown.offsetWidth - 4));
+        const naturalLeft = rect.left - navRect.left;
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, (navElement?.offsetWidth ?? window.innerWidth) - dropdown.offsetWidth - 4));
         dropdown.style.left = `${clampedLeft}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
         commDropdownPositioned = true;
       }
     });
@@ -211,14 +211,12 @@
     requestAnimationFrame(() => {
       const dropdown = document.querySelector('.translation-dropdown') as HTMLElement;
       if (dropdown && translationButtonRef) {
-        const mainContent = document.querySelector('.main-content') as HTMLElement;
-        const leftOffset = mainContent?.getBoundingClientRect().left || 0;
+        const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth };
         const rect = translationButtonRef.getBoundingClientRect();
-        const naturalLeft = rect.left - leftOffset;
-        // Clamp so the dropdown doesn't overflow the right edge of the viewport
-        const clampedLeft = Math.max(4, Math.min(naturalLeft, window.innerWidth - dropdown.offsetWidth - 4));
+        const naturalLeft = rect.left - navRect.left;
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, (navElement?.offsetWidth ?? window.innerWidth) - dropdown.offsetWidth - 4));
         dropdown.style.left = `${clampedLeft}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
         dropdown.style.width = `${Math.max(rect.width, 200)}px`;
         translationDropdownPositioned = true; // reveal now that it's placed
       }
@@ -256,14 +254,12 @@
         // firing during the async tick (e.g. triggered by the nav-scroll macrotask).
         // Without this, offsetWidth reads the stale 250px override instead of fit-content.
         dropdown.style.removeProperty('width');
-        const mainContent = document.querySelector('.main-content') as HTMLElement;
-        const leftOffset = mainContent?.getBoundingClientRect().left || 0;
+        const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth };
         const rect = referenceButtonRef.getBoundingClientRect();
-        const naturalLeft = rect.left - leftOffset;
-        // Clamp so the dropdown doesn't overflow the right edge of the viewport
-        const clampedLeft = Math.max(4, Math.min(naturalLeft, window.innerWidth - dropdown.offsetWidth - 4));
+        const naturalLeft = rect.left - navRect.left;
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, (navElement?.offsetWidth ?? window.innerWidth) - dropdown.offsetWidth - 4));
         dropdown.style.left = `${clampedLeft}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
         referenceDropdownPositioned = true; // reveal now that it's placed
 
         // Scroll the list to the current book
@@ -570,17 +566,17 @@
   }
 
   function updateDropdownPositions() {
-    const mainContent = document.querySelector('.main-content') as HTMLElement;
-    const leftOffset = mainContent?.getBoundingClientRect().left || 0;
-    
+    const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth };
+    const navWidth = navElement?.offsetWidth ?? window.innerWidth;
+
     if (translationDropdownOpen) {
       const dropdown = document.querySelector(
         ".translation-dropdown",
       ) as HTMLElement;
       if (dropdown && translationButtonRef) {
         const rect = translationButtonRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left - leftOffset}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.left = `${rect.left - navRect.left}px`;
+        dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
         dropdown.style.width = `${Math.max(rect.width, 200)}px`;
       }
     }
@@ -590,21 +586,18 @@
       ) as HTMLElement;
       if (dropdown && referenceButtonRef) {
         const rect = referenceButtonRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left - leftOffset}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
-        // No width override Ã¢â‚¬â€ reference dropdown uses CSS fit-content based on chapter grid
+        dropdown.style.left = `${rect.left - navRect.left}px`;
+        dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
       }
     }
     if (commDropdownOpen && commDropdownPositioned) {
       const dropdown = document.querySelector('.comm-dropdown') as HTMLElement;
       if (dropdown && commButtonRef) {
-        const mainContentRect = mainContent?.getBoundingClientRect();
-        const rightBound = mainContentRect?.right ?? window.innerWidth;
         const rect = commButtonRef.getBoundingClientRect();
-        const naturalLeft = rect.left - leftOffset;
-        const clampedLeft = Math.max(4, Math.min(naturalLeft, rightBound - dropdown.offsetWidth - 4));
+        const naturalLeft = rect.left - navRect.left;
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, navWidth - dropdown.offsetWidth - 4));
         dropdown.style.left = `${clampedLeft}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
       }
     }
     if (showResults) {
@@ -613,8 +606,8 @@
       ) as HTMLElement;
       if (dropdown && searchContainerRef) {
         const rect = searchContainerRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left - leftOffset}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.left = `${rect.left - navRect.left}px`;
+        dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
         dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
       }
     }
@@ -631,7 +624,7 @@
   });
 </script>
 
-<div class="navigation-bar" {style}>
+<div class="navigation-bar" {style} bind:this={navElement}>
   <div class="nav-content">
 
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 1: Navigation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
@@ -693,8 +686,14 @@
       >
         <input
           type="checkbox"
-          checked={$navigationStore.showReferences ?? false}
-          on:change={(e) => navigationStore.setShowReferences(e.currentTarget.checked)}
+          checked={currentShowReferences}
+          on:change={(e) => {
+            if (windowId) {
+              windowStore.updateContentState(windowId, { showReferences: e.currentTarget.checked });
+            } else {
+              navigationStore.setShowReferences(e.currentTarget.checked);
+            }
+          }}
         />
         <span class="icon-badge icon-badge-refs"><Graph size={18} weight="bold" /><span class="icon-overlay"><Graph size={18} weight="thin" /></span></span>
       </label>
