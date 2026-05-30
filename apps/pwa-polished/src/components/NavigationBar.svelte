@@ -76,7 +76,7 @@
 
   // Scroll nav-content instantly so the button is visible before we measure its position
   function scrollToShowButton(buttonRef: HTMLElement): void {
-    const navContent = document.querySelector('.nav-content') as HTMLElement;
+    const navContent = (navElement?.querySelector('.nav-content') ?? document.querySelector('.nav-content')) as HTMLElement;
     if (!navContent || !buttonRef) return;
     const navContentRect = navContent.getBoundingClientRect();
     const buttonRect = buttonRef.getBoundingClientRect();
@@ -116,7 +116,7 @@
     ? (windowState?.contentState?.selectedCommentaryAuthors ?? [])
     : ($navigationStore.selectedCommentaryAuthors ?? []);
   $: currentShowReferences = windowId
-    ? (windowState?.contentState?.showReferences ?? $navigationStore.showReferences ?? false)
+    ? (windowState?.contentState?.showReferences ?? false)
     : ($navigationStore.showReferences ?? false);
   $: currentBookCategory = BIBLE_BOOKS.find(b => b.name === currentBook)?.category || '';
 

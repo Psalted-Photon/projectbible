@@ -458,7 +458,7 @@
     ? (windowState?.contentState?.translation ?? 'WEB')
     : $navigationStore.translation;
   $: translationFontClass = getTranslationFontClass(currentTranslation);
-  $: isChronologicalMode = $navigationStore.isChronologicalMode ?? false;
+  $: isChronologicalMode = windowId ? false : ($navigationStore.isChronologicalMode ?? false);
   $: highlightVerse = windowId
     ? (windowState?.contentState?.highlightedVerse ?? null)
     : ($navigationStore.highlightedVerse ?? null);
@@ -470,7 +470,9 @@
   // on the target chapter (navKey doesn't change so loadChapter won't fire).
   let _lastRpTargetKey: string | null = null;
   $: {
-    const rpTarget = $navigationStore.readingPlanActiveTarget;
+    // Window panes are isolated — reading plan state is main-reader-only
+    if (windowId) { _lastRpTargetKey = null; }
+    const rpTarget = windowId ? null : $navigationStore.readingPlanActiveTarget;
     const newKey = rpTarget ? `${rpTarget.book}-${rpTarget.chapter}-${rpTarget.verse ?? 'null'}` : null;
     if (
       newKey !== null &&
@@ -3014,8 +3016,11 @@
         const captured = { ...topEntry };
         anchorSyncDebounce = setTimeout(() => {
           // Always update navbar position — this is what keeps the navbar and
-          // commentary in sync as the user scrolls through multiple chapters
-          navigationStore.setScrollPosition(captured.book, captured.chapter);
+          // commentary in sync as the user scrolls through multiple chapters.
+          // Window panes must NOT write back to global nav — they are isolated.
+          if (!windowId) {
+            navigationStore.setScrollPosition(captured.book, captured.chapter);
+          }
 
           if (!(get(navigationStore).commentaryAnchored ?? false)) return;
           lastAnchorVerse = captured.verse;
