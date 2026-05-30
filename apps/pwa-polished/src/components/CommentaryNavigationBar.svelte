@@ -83,7 +83,7 @@
           const rect = referenceButtonRef.getBoundingClientRect();
           dropdown.style.left = `${rect.left}px`;
           dropdown.style.top = `${rect.bottom + 4}px`;
-          dropdown.style.width = `${Math.max(rect.width, 250)}px`;
+          dropdown.style.removeProperty('width');
           
           // Scroll to current book
           if (currentBook) {
@@ -182,7 +182,7 @@
         const rect = referenceButtonRef.getBoundingClientRect();
         dropdown.style.left = `${rect.left}px`;
         dropdown.style.top = `${rect.bottom + 4}px`;
-        dropdown.style.width = `${Math.max(rect.width, 250)}px`;
+        dropdown.style.removeProperty('width');
       }
     }
   }
@@ -484,6 +484,8 @@
   /* Tree Menu */
   .tree-menu {
     padding: 0;
+    width: fit-content;
+    max-width: 90vw;
   }
 
   .book-item {
