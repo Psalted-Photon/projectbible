@@ -396,7 +396,7 @@ async function parseOSISCommentary(filePath, commentaryId) {
           verse_end: verseEnd,
           author: metadata.author,
           title: metadata.title,
-          text: cleanText(text),
+          text: metadata.author === 'Matthew Henry' ? formatMHCText(cleanText(text)) : cleanText(text),
           source: metadata.source,
           year: metadata.year
         });
@@ -454,6 +454,43 @@ function cleanText(text) {
     .replace(/ *\n */g, '\n')   // Strip spaces immediately around newlines
     .replace(/\n{3,}/g, '\n\n') // Collapse 3+ consecutive newlines to max 2
     .trim();
+}
+
+/**
+ * Post-process Matthew Henry text to restore paragraph and section structure.
+ * The MHC OSIS source has no paragraph or title markup, so structure must be
+ * inferred from the inline text conventions MHC uses consistently:
+ *   - Section headers like "The Creation. (b. c. 4004.)" at start of entry
+ *   - Major sections labeled with Roman numerals: I., II., III., etc.
+ *   - Sub-points labeled with Arabic numerals: 1., 2., 3., etc.
+ */
+function formatMHCText(text) {
+  // 1. Isolate a leading section title (e.g. "The Creation. ( b. c. 4004.)")
+  //    Pattern: a title-case phrase followed by an optional date in parens, before the first verse number or Roman numeral
+  text = text.replace(
+    /^([A-Z][^.]{0,60}?\.(?:\s*\([^)]{0,30}\))?)\s+(?=[A-Z0-9])/,
+    (_, title) => title.trim() + '\n\n'
+  );
+
+  // 2. Insert blank line before standalone Roman numeral section headers.
+  //    Matches: a space or newline + Roman numeral (I–XLVIII) followed by a period + space + capital letter
+  //    Uses a word-boundary-like check: preceded by end of sentence punctuation or newline
+  text = text.replace(
+    /([.!?\u2019]\s+)(I{1,3}V?|VI{0,3}|XI{0,3}|X{1,3}|IV|IX|XL|L)\.(?=\s+[A-Z])/g,
+    (_, before, numeral) => before + '\n\n' + numeral + '.'
+  );
+
+  // 3. Insert newline before Arabic-numbered sub-points (1., 2., 3. ...)
+  //    Only when the number is preceded by punctuation/space and followed by a capital letter or "("
+  text = text.replace(
+    /([.!?]\s+)(\d{1,2})\.(?=\s+[A-Z(])/g,
+    (_, before, num) => before + '\n' + num + '.'
+  );
+
+  // 4. Collapse any triple+ newlines introduced
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  return text;
 }
 
 /**
