@@ -16,6 +16,7 @@ export interface WindowState {
     chapter?: number;
     highlightedVerse?: number;
     showReferences?: boolean;
+    selectedCommentaryAuthors?: string[];
     // For Commentary windows
     author?: string;
     // For Map windows

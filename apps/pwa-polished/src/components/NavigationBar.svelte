@@ -99,13 +99,22 @@
     : null;
   // Minimal mode: window panes show only translation, ref, ref-toggle, and comm
   $: isMinimal = !!windowId;
-  $: currentTranslation =
-    windowState?.contentState?.translation ?? $navigationStore.translation;
-  $: currentBook = windowState?.contentState?.book ?? $navigationStore.book;
-  $: currentChapter =
-    windowState?.contentState?.chapter ?? $navigationStore.chapter;
+  // When windowId is set: use per-window contentState; never fall back to global nav
+  $: currentTranslation = windowId
+    ? (windowState?.contentState?.translation ?? 'WEB')
+    : $navigationStore.translation;
+  $: currentBook = windowId
+    ? (windowState?.contentState?.book ?? 'Genesis')
+    : $navigationStore.book;
+  $: currentChapter = windowId
+    ? (windowState?.contentState?.chapter ?? 1)
+    : $navigationStore.chapter;
   $: currentReference = `${currentBook} ${currentChapter}`;
   $: isSignedIn = $userProfileStore.isSignedIn;
+  // Per-window commentary authors
+  $: currentCommAuthors = windowId
+    ? (windowState?.contentState?.selectedCommentaryAuthors ?? [])
+    : ($navigationStore.selectedCommentaryAuthors ?? []);
   $: currentShowReferences = windowId
     ? (windowState?.contentState?.showReferences ?? $navigationStore.showReferences ?? false)
     : ($navigationStore.showReferences ?? false);
@@ -149,11 +158,19 @@
   }
 
   function toggleCommAuthor(author: string) {
-    const current = $navigationStore.selectedCommentaryAuthors ?? [];
-    const next = current.includes(author)
-      ? current.filter(a => a !== author)
-      : [...current, author];
-    navigationStore.setSelectedCommentaryAuthors(next);
+    if (windowId) {
+      const current = windowState?.contentState?.selectedCommentaryAuthors ?? [];
+      const next = current.includes(author)
+        ? current.filter((a: string) => a !== author)
+        : [...current, author];
+      windowStore.updateContentState(windowId, { selectedCommentaryAuthors: next });
+    } else {
+      const current = $navigationStore.selectedCommentaryAuthors ?? [];
+      const next = current.includes(author)
+        ? current.filter((a: string) => a !== author)
+        : [...current, author];
+      navigationStore.setSelectedCommentaryAuthors(next);
+    }
   }
 
   async function toggleCommDropdown(event: MouseEvent) {
@@ -704,13 +721,13 @@
         bind:this={commButtonRef}
         class="pill-btn pill-btn-text pill-comm"
         class:active={commDropdownOpen}
-        class:has-selection={($navigationStore.selectedCommentaryAuthors?.length ?? 0) > 0}
+        class:has-selection={currentCommAuthors.length > 0}
         on:click={toggleCommDropdown}
         title="Filter commentary authors"
       >
         <span class="icon-badge icon-badge-comm"><ChatText size={18} weight="bold" /><span class="icon-overlay"><ChatText size={18} weight="thin" /></span></span>
-        {#if ($navigationStore.selectedCommentaryAuthors?.length ?? 0) > 0}
-          <span class="comm-count">{$navigationStore.selectedCommentaryAuthors?.length}</span>
+        {#if currentCommAuthors.length > 0}
+          <span class="comm-count">{currentCommAuthors.length}</span>
         {/if}
         {#if commDropdownOpen}
           <CaretUp size={10} weight="bold" />
@@ -990,7 +1007,7 @@
         <label class="comm-author-row">
           <input
             type="checkbox"
-            checked={($navigationStore.selectedCommentaryAuthors ?? []).includes(key)}
+            checked={currentCommAuthors.includes(key)}
             on:change={() => toggleCommAuthor(key)}
           />
           <span class="comm-author-swatch" style="background:radial-gradient(circle, {cfg.color} 0%, {cfg.color} 20%, #000000 100%)">{cfg.initials}</span>

@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { onMount, tick } from "svelte";
   import { get } from "svelte/store";
   import NavigationBar from "./NavigationBar.svelte";
@@ -282,6 +282,8 @@
   // Reopen annotation panel after back-navigation from a "Go →" link
   let _reopenAnnotationVerse: number | null = null;
   let _reopenAnnotationTab: 'references' | 'commentary' = 'commentary';
+  // Local scroll target for window panes (replaces global navigationStore.scrollTargetVerse)
+  let _windowScrollTarget: number | null = null;
   // Set at navigate time to remember the navigation came from the intro panel (no auto-reopen)
   let _navigatedFromIntro = false;
   // Set only when user presses Back after intro navigation; consumed by loadChapter / reactive block
@@ -296,7 +298,12 @@
       tab: annotationPanelTab,
     });
     annotationPanelOpen = false;
-    navigationStore.navigateTo(currentTranslation, book, chapter, verse);
+    if (windowId) {
+      _windowScrollTarget = verse;
+      windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
+    } else {
+      navigationStore.navigateTo(currentTranslation, book, chapter, verse);
+    }
   }
 
   function handleAnnotationReturn() {
@@ -309,11 +316,20 @@
       // User pressed Back after navigating from intro panel — reopen intro panel after load
       bookIntroPanelBook = ctx.book;
       _reopenBookIntroPanel = true;
-      navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
+      if (windowId) {
+        _windowScrollTarget = ctx.verse;
+        windowStore.updateContentState(windowId, { book: ctx.book, chapter: ctx.chapter, highlightedVerse: null });
+      } else {
+        navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
+      }
     } else {
       _reopenAnnotationVerse = ctx.verse;
       _reopenAnnotationTab = ctx.tab;
-      navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
+      if (windowId) {
+        windowStore.updateContentState(windowId, { book: ctx.book, chapter: ctx.chapter, highlightedVerse: null });
+      } else {
+        navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
+      }
     }
   }
 
@@ -322,14 +338,21 @@
     _navigatedFromIntro = true;  // remember origin; panel only reopens when Back is pressed
     bookIntroPanelOpen = false;
     annotationReturnStore.set({ book: bookIntroPanelBook, chapter: 1, verse: 1, tab: 'references' });
-    navigationStore.navigateTo(currentTranslation, book, chapter, verse);
+    if (windowId) {
+      _windowScrollTarget = verse;
+      windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
+    } else {
+      navigationStore.navigateTo(currentTranslation, book, chapter, verse);
+    }
   }
 
   // Annotation toggles (reactive from store)
   $: showReferences = (windowId
     ? (windowState?.contentState?.showReferences ?? $navigationStore.showReferences)
     : $navigationStore.showReferences) ?? false;
-  $: selectedCommentaryAuthors = $navigationStore.selectedCommentaryAuthors ?? [];
+  $: selectedCommentaryAuthors = windowId
+    ? (windowState?.contentState?.selectedCommentaryAuthors ?? [])
+    : ($navigationStore.selectedCommentaryAuthors ?? []);
   $: showCommentaries = selectedCommentaryAuthors.length > 0;
 
   // All commentary entries for the current chapter (cached; re-filtered when authors change)
@@ -424,17 +447,21 @@
   $: windowState = windowId
     ? $windowStore.find((w) => w.id === windowId)
     : null;
-  $: currentBook = windowState?.contentState?.book ?? $navigationStore.book;
-  $: currentChapter =
-    windowState?.contentState?.chapter ?? $navigationStore.chapter;
-  $: currentTranslation =
-    windowState?.contentState?.translation ?? $navigationStore.translation;
+  // When windowId is set: use per-window contentState; never fall back to global nav
+  $: currentBook = windowId
+    ? (windowState?.contentState?.book ?? 'Genesis')
+    : $navigationStore.book;
+  $: currentChapter = windowId
+    ? (windowState?.contentState?.chapter ?? 1)
+    : $navigationStore.chapter;
+  $: currentTranslation = windowId
+    ? (windowState?.contentState?.translation ?? 'WEB')
+    : $navigationStore.translation;
   $: translationFontClass = getTranslationFontClass(currentTranslation);
   $: isChronologicalMode = $navigationStore.isChronologicalMode ?? false;
-  $: highlightVerse =
-    windowState?.contentState?.highlightedVerse ??
-    $navigationStore.highlightedVerse ??
-    null;
+  $: highlightVerse = windowId
+    ? (windowState?.contentState?.highlightedVerse ?? null)
+    : ($navigationStore.highlightedVerse ?? null);
 
   // ---------------------------------------------------------------------------
   // Harmony reading session
@@ -601,11 +628,13 @@
             `📚 Translation changed from ${prevTranslation} to ${currentTranslation}, verifying book exists...`,
           );
           // Capture scroll target before any async work clears it
-          const scrollVerse = $navigationStore.scrollTargetVerse ?? null;
+          const scrollVerse = windowId ? (_windowScrollTarget ?? null) : ($navigationStore.scrollTargetVerse ?? null);
+          _windowScrollTarget = null;
           // Verify the book exists in new translation, fallback if not
           verifyAndLoadChapter(currentTranslation, currentBook, currentChapter, scrollVerse);
         } else {
-          const scrollVerse = $navigationStore.scrollTargetVerse ?? null;
+          const scrollVerse = windowId ? (_windowScrollTarget ?? null) : ($navigationStore.scrollTargetVerse ?? null);
+          _windowScrollTarget = null;
           loadChapter(currentTranslation, currentBook, currentChapter, true, scrollVerse);
         }
       } else if (_reopenAnnotationVerse !== null) {
@@ -670,8 +699,13 @@
       ) as HTMLElement | null;
       if (el) scrollToVerseEl(el);
     } else {
-      // Different chapter — navigateTo sets scrollTargetVerse; loadChapter picks it up.
-      navigationStore.navigateTo(currentTranslation, book, chapter, verse);
+      // Different chapter — update window or global nav; loadChapter will pick up scroll target.
+      if (windowId) {
+        _windowScrollTarget = verse;
+        windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
+      } else {
+        navigationStore.navigateTo(currentTranslation, book, chapter, verse);
+      }
     }
   }
 
@@ -1416,8 +1450,12 @@
 
       console.log(`📍 Falling back to ${fallbackBook} ${fallbackChapter} (Genesis probe: ${genesisVerses?.length ?? 0} verses)`);
 
-      // Update navigation store to reflect the fallback
-      navigationStore.navigateTo(translation, fallbackBook, fallbackChapter);
+      // Update navigation to reflect the fallback
+      if (windowId) {
+        windowStore.updateContentState(windowId, { book: fallbackBook, chapter: fallbackChapter, highlightedVerse: null });
+      } else {
+        navigationStore.navigateTo(translation, fallbackBook, fallbackChapter);
+      }
     } else {
       // Book exists, load normally
       loadChapter(translation, book, chapter, true, scrollToVerse);
