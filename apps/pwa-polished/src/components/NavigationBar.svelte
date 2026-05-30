@@ -96,6 +96,8 @@
   $: windowState = windowId
     ? $windowStore.find((w) => w.id === windowId)
     : null;
+  // Minimal mode: window panes show only translation, ref, ref-toggle, and comm
+  $: isMinimal = !!windowId;
   $: currentTranslation =
     windowState?.contentState?.translation ?? $navigationStore.translation;
   $: currentBook = windowState?.contentState?.book ?? $navigationStore.book;
@@ -702,6 +704,7 @@
         {/if}
       </button>
 
+      {#if !isMinimal}
       <div class="pill-divider"></div>
 
       <button
@@ -718,8 +721,10 @@
       >
         <span class="icon-badge icon-badge-anchor"><Anchor size={18} weight="bold" /><span class="icon-overlay"><Anchor size={18} weight="thin" /></span></span>
       </button>
+      {/if}
     </div>
 
+    {#if !isMinimal}
     <div class="nav-spacer"></div>
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 2: Tools Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-tools">
@@ -828,6 +833,7 @@
         <span class="icon-badge icon-badge-profile"><User size={18} weight="bold" /><span class="icon-overlay"><User size={18} weight="thin" /></span></span>
       </button>
     </div>
+    {/if}
 
   </div>
 
