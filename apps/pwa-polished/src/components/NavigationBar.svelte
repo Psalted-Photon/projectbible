@@ -1266,6 +1266,7 @@
 
   .comm-dropdown {
     min-width: 240px;
+    width: fit-content;
     padding: 8px 0;
   }
 
@@ -1306,8 +1307,6 @@
   .comm-author-name {
     flex: 1;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
 
@@ -1332,7 +1331,8 @@
      right:auto cancels the right:0 inherited from .dropdown-menu Ã¢â‚¬â€ without it, fit-content
      is constrained to (viewport_width - left), which is too narrow on small screens. */
   .translation-dropdown,
-  .reference-dropdown {
+  .reference-dropdown,
+  .comm-dropdown {
     position: fixed;
     left: 0;
     top: 0;
@@ -1341,7 +1341,8 @@
   }
 
   .translation-dropdown.positioned,
-  .reference-dropdown.positioned {
+  .reference-dropdown.positioned,
+  .comm-dropdown.positioned {
     visibility: visible;
   }
 
