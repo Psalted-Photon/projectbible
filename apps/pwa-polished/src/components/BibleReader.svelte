@@ -3277,20 +3277,12 @@
   on:navigateTo={handleAnnotationNavigateTo}
 />
 
-{#if $annotationReturnStore !== null}
-  <button
-    class="annotation-return-btn"
-    on:click={handleAnnotationReturn}
-    aria-label="Return to previous verse and reopen commentary"
-  >
-    ← {$annotationReturnStore.book} {$annotationReturnStore.chapter}:{$annotationReturnStore.verse}
-  </button>
-{/if}
-
 <div class="bible-reader" bind:this={readerElement}>
   <NavigationBar
     {windowId}
     style="transform: translateY({navBarOffset}px); transition: none;"
+    annotationReturn={$annotationReturnStore}
+    onAnnotationReturn={handleAnnotationReturn}
   />
 
   <div class="text-container">
@@ -3445,31 +3437,6 @@
 
 
 <style>
-  /* ——— Floating annotation back button ——— */
-  .annotation-return-btn {
-    position: fixed;
-    bottom: 24px;
-    right: 16px;
-    z-index: 10;
-    background: #2a2a2a;
-    color: #8ab4f8;
-    border: 1px solid #3a3a3a;
-    border-radius: 20px;
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
-    transition: background 0.15s, color 0.15s;
-    white-space: nowrap;
-  }
-
-  .annotation-return-btn:hover {
-    background: #333;
-    color: #c0d8ff;
-    border-color: #667eea;
-  }
-
   .bible-reader {
     width: 100%;
     height: 100%;

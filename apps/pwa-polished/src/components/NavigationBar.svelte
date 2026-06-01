@@ -43,6 +43,8 @@
   export let windowId: string | undefined = undefined;
   export const visible: boolean = true;
   export let style: string = "";
+  export let annotationReturn: { book: string; chapter: number; verse: number } | null = null;
+  export let onAnnotationReturn: (() => void) | null = null;
 
   let translationDropdownOpen = false;
   let referenceDropdownOpen = false;
@@ -757,7 +759,13 @@
     </div>
 
     {#if !isMinimal}
-    <div class="nav-spacer"></div>
+    <div class="nav-spacer">
+      {#if annotationReturn}
+        <button class="annotation-return-pill" on:click={onAnnotationReturn}>
+          ← {annotationReturn.book} {annotationReturn.chapter}:{annotationReturn.verse}
+        </button>
+      {/if}
+    </div>
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 2: Tools Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-tools">
       <!-- Search (icon at rest Ã¢â€ â€™ expands on click) -->
@@ -1051,6 +1059,31 @@
   .nav-spacer {
     flex: 1;
     min-width: 27px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: 4px;
+  }
+
+  .annotation-return-pill {
+    background: #1c1c1c;
+    color: #8ab4f8;
+    border: 1px solid #353535;
+    border-radius: 8px;
+    padding: 0 12px;
+    height: 38px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .annotation-return-pill:hover {
+    background: #252525;
+    color: #c0d8ff;
+    border-color: #667eea;
   }
 
   /* Ã¢â€â‚¬Ã¢â€â‚¬ Pill containers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
