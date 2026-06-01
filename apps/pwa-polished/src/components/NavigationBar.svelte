@@ -44,7 +44,8 @@
   export const visible: boolean = true;
   export let style: string = "";
   export let annotationReturn: { book: string; chapter: number; verse: number } | null = null;
-  export let onAnnotationReturn: (() => void) | null = null;
+  export let backButtonWidth: number = 0;
+  export let onNavScroll: ((x: number) => void) | null = null;
 
   let translationDropdownOpen = false;
   let referenceDropdownOpen = false;
@@ -644,7 +645,7 @@
 </script>
 
 <div class="navigation-bar" {style} bind:this={navElement}>
-  <div class="nav-content">
+  <div class="nav-content" on:scroll={(e) => onNavScroll?.((e.currentTarget as HTMLElement).scrollLeft)}>
 
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 1: Navigation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-nav">
@@ -759,13 +760,7 @@
     </div>
 
     {#if !isMinimal}
-    <div class="nav-spacer">
-      {#if annotationReturn}
-        <button class="annotation-return-pill" on:click={onAnnotationReturn}>
-          ← {annotationReturn.book} {annotationReturn.chapter}:{annotationReturn.verse}
-        </button>
-      {/if}
-    </div>
+    <div class="nav-spacer" style={annotationReturn ? `min-width: ${backButtonWidth + 36}px` : 'min-width: 27px'}></div>
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 2: Tools Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-tools">
       <!-- Search (icon at rest Ã¢â€ â€™ expands on click) -->
@@ -1059,31 +1054,7 @@
   .nav-spacer {
     flex: 1;
     min-width: 27px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    padding-left: 4px;
-  }
-
-  .annotation-return-pill {
-    background: #1c1c1c;
-    color: #8ab4f8;
-    border: 1px solid #353535;
-    border-radius: 8px;
-    padding: 0 12px;
-    height: 38px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition: background 0.15s, color 0.15s;
-  }
-
-  .annotation-return-pill:hover {
-    background: #252525;
-    color: #c0d8ff;
-    border-color: #667eea;
+    transition: min-width 0.15s ease;
   }
 
   /* Ã¢â€â‚¬Ã¢â€â‚¬ Pill containers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */

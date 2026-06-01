@@ -135,6 +135,28 @@
   let lastScrollTop = 0;
   let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
+  let navScrollX = 0; // Track navbar horizontal scroll position
+  let backBtnWidth = 0; // Measured width of fixed back button
+
+  // Category → mascot color map (matches NavigationBar.svelte book dropdown colors)
+  const CATEGORY_COLORS: Record<string, string> = {
+    'pentateuch':     '#a67c52',
+    'historical':     '#6ca0dc',
+    'wisdom':         '#f0c040',
+    'major-prophets': '#5c1e99',
+    'minor-prophets': '#a45be9',
+    'gospels':        '#fc345c',
+    'acts':           '#ff6520',
+    'pauline':        '#6048cc',
+    'general':        '#f2893e',
+    'revelation':     '#61f1ff',
+  };
+
+  function getBookColor(bookName: string): string {
+    const book = BIBLE_BOOKS.find(b => b.name === bookName);
+    return book ? (CATEGORY_COLORS[book.category] ?? '#8ab4f8') : '#8ab4f8';
+  }
+
   let verseLayout: "one-per-line" | "paragraph" | "paragraph-no-verse-numbers" = "one-per-line";
   let showSectionHeadings = true;
   let showRedLetter = true;
@@ -3277,12 +3299,32 @@
   on:navigateTo={handleAnnotationNavigateTo}
 />
 
+{#if $annotationReturnStore !== null}
+  {@const bookColor = getBookColor($annotationReturnStore.book)}
+  {@const navVisible = navBarOffset > -68}
+  <button
+    bind:clientWidth={backBtnWidth}
+    class="annotation-return-fixed"
+    style="
+      left: calc(50% - {navVisible ? navScrollX : 0}px);
+      transition: {navVisible ? 'none' : 'left 0.2s ease'};
+      border-color: {bookColor};
+      color: {bookColor};
+    "
+    on:click={handleAnnotationReturn}
+    aria-label="Return to previous verse"
+  >
+    ← Back to {$annotationReturnStore.book} {$annotationReturnStore.chapter}:{$annotationReturnStore.verse}
+  </button>
+{/if}
+
 <div class="bible-reader" bind:this={readerElement}>
   <NavigationBar
     {windowId}
     style="transform: translateY({navBarOffset}px); transition: none;"
     annotationReturn={$annotationReturnStore}
-    onAnnotationReturn={handleAnnotationReturn}
+    backButtonWidth={backBtnWidth}
+    onNavScroll={(x) => { navScrollX = x; }}
   />
 
   <div class="text-container">
@@ -3437,6 +3479,25 @@
 
 
 <style>
+  /* ——— Fixed annotation back button ——— */
+  .annotation-return-fixed {
+    position: fixed;
+    top: 10px;
+    transform: translateX(-50%);
+    z-index: 1000;
+    background: #1c1c1c;
+    border: 1px solid;
+    border-radius: 8px;
+    padding: 0 12px;
+    height: 38px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  }
+
   .bible-reader {
     width: 100%;
     height: 100%;
