@@ -3299,24 +3299,6 @@
   on:navigateTo={handleAnnotationNavigateTo}
 />
 
-{#if $annotationReturnStore !== null}
-  {@const bookColor = getBookColor($annotationReturnStore.book)}
-  {@const navVisible = navBarOffset > -68}
-  <button
-    bind:clientWidth={backBtnWidth}
-    class="annotation-return-fixed"
-    style="
-      left: calc(50% - {navVisible ? navScrollX : 0}px);
-      transition: {navVisible ? 'none' : 'left 0.2s ease'};
-      border-color: {bookColor};
-      color: {bookColor};
-    "
-    on:click={handleAnnotationReturn}
-    aria-label="Return to previous verse"
-  >
-    ← Back to {$annotationReturnStore.book} {$annotationReturnStore.chapter}:{$annotationReturnStore.verse}
-  </button>
-{/if}
 
 <div class="bible-reader" bind:this={readerElement}>
   <NavigationBar
@@ -3476,6 +3458,24 @@
   </div>
 {/if}
 
+{#if $annotationReturnStore !== null}
+  {@const bookColor = getBookColor($annotationReturnStore.book)}
+  {@const navVisible = navBarOffset > -68}
+  <button
+    bind:clientWidth={backBtnWidth}
+    class="annotation-return-fixed"
+    style="
+      left: calc(50% - {navVisible ? navScrollX : 0}px);
+      transition: {navVisible ? 'none' : 'left 0.2s ease'};
+      border-color: {bookColor};
+      color: {bookColor};
+    "
+    on:click={handleAnnotationReturn}
+    aria-label="Return to previous verse"
+  >
+    ← Back to {$annotationReturnStore.book} {$annotationReturnStore.chapter}:{$annotationReturnStore.verse}
+  </button>
+{/if}
 
 
 <style>
