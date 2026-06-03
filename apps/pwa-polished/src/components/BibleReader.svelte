@@ -330,8 +330,8 @@
   // Reset paneOpened whenever a new annotation return is set
   $: if ($annotationReturnStore !== null) paneOpened = false;
 
-  // Derive navbar display offset — fully hide navbar when back button is active
-  $: displayNavOffset = $annotationReturnStore !== null ? -100 : navBarOffset;
+  // Derive navbar display offset — fully hide navbar when back button is active (main reader only)
+  $: displayNavOffset = (!windowId && $annotationReturnStore !== null) ? -100 : navBarOffset;
 
   function handleAnnotationReturn() {
     const ctx = $annotationReturnStore;
@@ -3308,7 +3308,7 @@
 <div class="bible-reader" bind:this={readerElement}>
   <NavigationBar
     {windowId}
-    style="transform: translateY({displayNavOffset}px); transition: transform 0.25s ease;"
+    style="transform: translateY({windowId ? navBarOffset : displayNavOffset}px); transition: transform 0.25s ease;"
   />
 
   <div class="text-container">
@@ -3460,7 +3460,7 @@
   </div>
 {/if}
 
-{#if $annotationReturnStore !== null}
+{#if !windowId && $annotationReturnStore !== null}
   {@const bookColor = getBookColor($annotationReturnStore.book)}
   <div class="annotation-return-bar">
     <button
@@ -3476,11 +3476,9 @@
         class="annotation-return-fixed"
         style="border-color: {bookColor}; color: {bookColor};"
         on:click={() => {
-          const ctx = $annotationReturnStore;
-          if (!ctx) return;
           const edge = window.innerWidth > window.innerHeight ? 'right' : 'bottom';
           const id = windowStore.createWindow(edge, 50);
-          if (id) windowStore.setWindowContent(id, 'bible', { book: ctx.book, chapter: ctx.chapter, highlightedVerse: ctx.verse });
+          if (id) windowStore.setWindowContent(id, 'bible', { translation: currentTranslation, book: currentBook, chapter: currentChapter, highlightedVerse: highlightVerse });
           paneOpened = true;
         }}
         aria-label="Open in split view"
