@@ -1,6 +1,9 @@
 import { openDB } from './db.js';
 import type { DBTskReference } from './db.js';
 
+// Maps canonical app book names to the names stored in IndexedDB packs
+const PACK_BOOK_ALIASES: Record<string, string> = { 'Psalm': 'Psalms' };
+
 /** Strip HTML/parser artifacts (e.g. 'br />', '*margins') from a reference string. */
 function isCleanRef(ref: string): boolean {
   return ref.length > 0 && !ref.startsWith('*') && !/^(br|p|div|span|img|h[1-6]|ul|ol|li|script|style)[>\s/]/i.test(ref);
@@ -34,11 +37,12 @@ export class IndexedDBTskReferenceStore {
   async getVerseReferences(book: string, chapter: number, verse: number): Promise<TskEntry[]> {
     try {
       const db = await openDB();
+      const packBook = PACK_BOOK_ALIASES[book] ?? book;
       return new Promise((resolve, reject) => {
         const tx = db.transaction('tsk_references', 'readonly');
         const store = tx.objectStore('tsk_references');
         const index = store.index('verse');
-        const range = IDBKeyRange.only([book, chapter, verse]);
+        const range = IDBKeyRange.only([packBook, chapter, verse]);
         const request = index.getAll(range);
         request.onsuccess = () => {
           const rows = request.result as DBTskReference[];
@@ -65,11 +69,12 @@ export class IndexedDBTskReferenceStore {
   async getChapterReferences(book: string, chapter: number): Promise<Map<number, TskEntry[]>> {
     try {
       const db = await openDB();
+      const packBook = PACK_BOOK_ALIASES[book] ?? book;
       return new Promise((resolve, reject) => {
         const tx = db.transaction('tsk_references', 'readonly');
         const store = tx.objectStore('tsk_references');
         const index = store.index('book_chapter');
-        const range = IDBKeyRange.only([book, chapter]);
+        const range = IDBKeyRange.only([packBook, chapter]);
         const request = index.getAll(range);
         request.onsuccess = () => {
           const rows = request.result as DBTskReference[];

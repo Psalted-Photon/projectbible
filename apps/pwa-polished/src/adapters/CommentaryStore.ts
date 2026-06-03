@@ -2,6 +2,9 @@ import type { BCV } from '@projectbible/core';
 import { readTransaction } from './db.js';
 import type { DBCommentaryEntry } from './db.js';
 
+// Maps canonical app book names to the names stored in IndexedDB packs
+const PACK_BOOK_ALIASES: Record<string, string> = { 'Psalm': 'Psalms' };
+
 export interface CommentaryEntry {
   book: string;
   chapter: number;
@@ -37,14 +40,15 @@ export class IndexedDBCommentaryStore {
         const index = store.index('verse');
         
         // Query by book, chapter, verse
-        const range = IDBKeyRange.only([reference.book, reference.chapter, reference.verse]);
+        const packBook = PACK_BOOK_ALIASES[reference.book] ?? reference.book;
+        const range = IDBKeyRange.only([packBook, reference.chapter, reference.verse]);
         const request = index.getAll(range);
         
         request.onsuccess = () => {
           let entries = request.result as DBCommentaryEntry[];
           
           // Also get chapter-level commentary (verse_start = 0)
-          const chapterRange = IDBKeyRange.only([reference.book, reference.chapter, 0]);
+          const chapterRange = IDBKeyRange.only([packBook, reference.chapter, 0]);
           const chapterRequest = index.getAll(chapterRange);
           
           chapterRequest.onsuccess = () => {
@@ -98,8 +102,8 @@ export class IndexedDBCommentaryStore {
         const transaction = db.transaction('commentary_entries', 'readonly');
         const store = transaction.objectStore('commentary_entries');
         const index = store.index('book_chapter');
-        
-        const range = IDBKeyRange.only([book, chapter]);
+        const packBook = PACK_BOOK_ALIASES[book] ?? book;
+        const range = IDBKeyRange.only([packBook, chapter]);
         const request = index.getAll(range);
         
         request.onsuccess = () => {
@@ -230,8 +234,8 @@ export class IndexedDBCommentaryStore {
         const transaction = db.transaction('commentary_entries', 'readonly');
         const store = transaction.objectStore('commentary_entries');
         const index = store.index('book_chapter');
-        
-        const range = IDBKeyRange.only([book, chapter]);
+        const packBook = PACK_BOOK_ALIASES[book] ?? book;
+        const range = IDBKeyRange.only([packBook, chapter]);
         const request = index.getAll(range);
         
         request.onsuccess = () => {

@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { getBookChapters } from '../lib/bibleData';
+import { getBookChapters, normalizeBookName } from '../lib/bibleData';
 
 export interface NavigationState {
   translation: string;
@@ -69,7 +69,7 @@ function createNavigationStore() {
     },
     setBook: (book: string) => {
       update(state => {
-        const next = { ...state, book, chapter: 1, highlightedVerse: null };
+        const next = { ...state, book: normalizeBookName(book), chapter: 1, highlightedVerse: null };
         persistState(next);
         return next;
       });
@@ -116,7 +116,7 @@ function createNavigationStore() {
       scrollTargetVerse: number | null = null,
     ) => {
       update(state => {
-        const next = { ...state, translation, book, chapter, highlightedVerse: null, scrollTargetVerse };
+        const next = { ...state, translation, book: normalizeBookName(book), chapter, highlightedVerse: null, scrollTargetVerse };
         persistState(next);
         return next;
       });
