@@ -16,6 +16,7 @@
   import { profileModalStore } from '../stores/profileModalStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
   import { syncService, type SyncState } from '../lib/sync';
+  import { normalizeBookName } from '../lib/bibleData';
   import { syncQueue } from '../lib/sync/SyncQueueService';
   import { userProfileStore } from '../stores/userProfileStore';
   import { readingProgressVersion } from '../stores/readingProgressVersionStore';
@@ -1516,7 +1517,7 @@
                     </div>
                     <div class="plan-manager-actions">
                       {#if nextCh}
-                        <button class="pm-chapter-link" on:click={() => { selectPlanTab(entry.id); navigateToChapter(nextCh.book, nextCh.chapter); }}>{nextCh.book} {nextCh.chapter} →</button>
+                        <button class="pm-chapter-link" on:click={() => { selectPlanTab(entry.id); navigateToChapter(nextCh.book, nextCh.chapter); }}>{normalizeBookName(nextCh.book)} {nextCh.chapter} →</button>
                       {/if}
                       {#if planRenamingId !== entry.id}
                         <button class="pm-rename-btn" on:click={() => { planRenamingId = entry.id; planRenameValue = getPlanDisplayName(entry.plan.config); planDeleteConfirmId = null; }}>Rename</button>
@@ -1573,7 +1574,7 @@
                             <button
                               class="chapter-link"
                               on:click={() => handleChapterClick(todayReading, chapter)}
-                            >{chapter.book} {chapter.chapter}</button>
+                            >{normalizeBookName(chapter.book)} {chapter.chapter}</button>
                           </label>
                         {/each}
                       {/if}
@@ -1770,7 +1771,7 @@
                                 class="chapter-link"
                                 on:click={() => handleChapterClick(day, chapter)}
                               >
-                                {chapter.book} {chapter.chapter}
+                                {normalizeBookName(chapter.book)} {chapter.chapter}
                               </button>
                             </label>
                             {#if i < day.chapters.length - 1}
@@ -1817,7 +1818,7 @@
                           <div class="catchup-item">
                             <strong>Day {suggestion.dayNumber}:</strong>
                             {#each suggestion.addedChapters as chapter, i}
-                              <span>{chapter.book} {chapter.chapter}</span>{#if i < suggestion.addedChapters.length - 1}, {/if}
+                              <span>{normalizeBookName(chapter.book)} {chapter.chapter}</span>{#if i < suggestion.addedChapters.length - 1}, {/if}
                             {/each}
                           </div>
                         {/each}
@@ -1836,7 +1837,7 @@
                           <div class="catchup-item">
                             <strong>Catch-up Day {day.dayNumber}:</strong>
                             {#each day.chapters as chapter, i}
-                              <span>{chapter.book} {chapter.chapter}</span>{#if i < day.chapters.length - 1}, {/if}
+                              <span>{normalizeBookName(chapter.book)} {chapter.chapter}</span>{#if i < day.chapters.length - 1}, {/if}
                             {/each}
                           </div>
                         {/each}
@@ -1853,7 +1854,7 @@
                           <div class="catchup-item">
                             <strong>Catch-up Day {day.dayNumber}:</strong>
                             {#each day.chapters as chapter, i}
-                              <span>{chapter.book} {chapter.chapter}</span>{#if i < day.chapters.length - 1}, {/if}
+                              <span>{normalizeBookName(chapter.book)} {chapter.chapter}</span>{#if i < day.chapters.length - 1}, {/if}
                             {/each}
                           </div>
                         {/each}

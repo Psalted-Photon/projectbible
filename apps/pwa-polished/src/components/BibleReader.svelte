@@ -24,7 +24,7 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
-  import { BIBLE_BOOKS } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData";
   import { getSettings } from "../adapters/settings";
   import { readTransaction } from "../adapters/db";
   import type { DBMorphology } from "../adapters/db";
@@ -400,7 +400,7 @@
     const map = new Map<string, CommentaryEntry[]>();
     for (const e of allCommentaryEntries) {
       if (selectedCommentaryAuthors.length === 0 || !selectedCommentaryAuthors.includes(e.author)) continue;
-      const k = annotationKey(e.book, e.chapter, e.verseStart);
+      const k = annotationKey(normalizeBookName(e.book), e.chapter, e.verseStart);
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(e);
     }
