@@ -135,8 +135,7 @@
   let lastScrollTop = 0;
   let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
-  let navScrollX = 0; // Track navbar horizontal scroll position
-  let backBtnWidth = 0; // Measured width of fixed back button
+  let paneOpened = false; // True after "Open Split View" is tapped
 
   // Category → mascot color map (matches NavigationBar.svelte book dropdown colors)
   const CATEGORY_COLORS: Record<string, string> = {
@@ -327,6 +326,12 @@
       navigationStore.navigateTo(currentTranslation, book, chapter, verse);
     }
   }
+
+  // Reset paneOpened whenever a new annotation return is set
+  $: if ($annotationReturnStore !== null) paneOpened = false;
+
+  // Derive navbar display offset — fully hide navbar when back button is active
+  $: displayNavOffset = $annotationReturnStore !== null ? -100 : navBarOffset;
 
   function handleAnnotationReturn() {
     const ctx = $annotationReturnStore;
@@ -3303,10 +3308,7 @@
 <div class="bible-reader" bind:this={readerElement}>
   <NavigationBar
     {windowId}
-    style="transform: translateY({navBarOffset}px); transition: none;"
-    annotationReturn={$annotationReturnStore}
-    backButtonWidth={backBtnWidth}
-    onNavScroll={(x) => { navScrollX = x; }}
+    style="transform: translateY({displayNavOffset}px); transition: transform 0.25s ease;"
   />
 
   <div class="text-container">
@@ -3460,31 +3462,50 @@
 
 {#if $annotationReturnStore !== null}
   {@const bookColor = getBookColor($annotationReturnStore.book)}
-  {@const navVisible = navBarOffset > -68}
-  <button
-    bind:clientWidth={backBtnWidth}
-    class="annotation-return-fixed"
-    style="
-      left: calc(50% - {navVisible ? navScrollX : 0}px);
-      transition: {navVisible ? 'none' : 'left 0.2s ease'};
-      border-color: {bookColor};
-      color: {bookColor};
-    "
-    on:click={handleAnnotationReturn}
-    aria-label="Return to previous verse"
-  >
-    ← Back to {$annotationReturnStore.book} {$annotationReturnStore.chapter}:{$annotationReturnStore.verse}
-  </button>
+  <div class="annotation-return-bar">
+    <button
+      class="annotation-return-fixed"
+      style="border-color: {bookColor}; color: {bookColor};"
+      on:click={handleAnnotationReturn}
+      aria-label="Return to previous verse"
+    >
+      ← Back to {$annotationReturnStore.book} {$annotationReturnStore.chapter}:{$annotationReturnStore.verse}
+    </button>
+    {#if !paneOpened}
+      <button
+        class="annotation-return-fixed"
+        style="border-color: {bookColor}; color: {bookColor};"
+        on:click={() => {
+          const ctx = $annotationReturnStore;
+          if (!ctx) return;
+          const edge = window.innerWidth > window.innerHeight ? 'right' : 'bottom';
+          const id = windowStore.createWindow(edge, 50);
+          if (id) windowStore.setWindowContent(id, 'bible', { book: ctx.book, chapter: ctx.chapter, highlightedVerse: ctx.verse });
+          paneOpened = true;
+        }}
+        aria-label="Open in split view"
+      >
+        Open Split View
+      </button>
+    {/if}
+  </div>
 {/if}
 
 
 <style>
-  /* ——— Fixed annotation back button ——— */
-  .annotation-return-fixed {
+  /* ——— Fixed annotation back button bar ——— */
+  .annotation-return-bar {
     position: fixed;
     top: 10px;
+    left: 50%;
     transform: translateX(-50%);
-    z-index: 1000;
+    z-index: 1001;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .annotation-return-fixed {
     background: #1c1c1c;
     border: 1px solid;
     border-radius: 8px;

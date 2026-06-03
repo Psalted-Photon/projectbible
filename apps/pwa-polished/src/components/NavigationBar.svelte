@@ -43,9 +43,6 @@
   export let windowId: string | undefined = undefined;
   export const visible: boolean = true;
   export let style: string = "";
-  export let annotationReturn: { book: string; chapter: number; verse: number } | null = null;
-  export let backButtonWidth: number = 0;
-  export let onNavScroll: ((x: number) => void) | null = null;
 
   let translationDropdownOpen = false;
   let referenceDropdownOpen = false;
@@ -645,7 +642,7 @@
 </script>
 
 <div class="navigation-bar" {style} bind:this={navElement}>
-  <div class="nav-content" on:scroll={(e) => onNavScroll?.((e.currentTarget as HTMLElement).scrollLeft)}>
+  <div class="nav-content">
 
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 1: Navigation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-nav">
@@ -760,7 +757,7 @@
     </div>
 
     {#if !isMinimal}
-    <div class="nav-spacer" style={annotationReturn ? `min-width: ${backButtonWidth + 36}px` : 'min-width: 27px'}></div>
+    <div class="nav-spacer" style="min-width: 27px"></div>
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 2: Tools Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-tools">
       <!-- Search (icon at rest Ã¢â€ â€™ expands on click) -->
