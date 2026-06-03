@@ -136,6 +136,11 @@
   let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
   let paneOpened = false; // True after "Open Split View" is tapped
+  let readerClientWidth = 0;
+  let readerLeft = 0;
+  $: if (readerElement && ($windowStore, readerClientWidth)) {
+    requestAnimationFrame(() => { readerLeft = readerElement?.getBoundingClientRect().left ?? 0; });
+  }
 
   // Category → mascot color map (matches NavigationBar.svelte book dropdown colors)
   const CATEGORY_COLORS: Record<string, string> = {
@@ -3305,7 +3310,7 @@
 />
 
 
-<div class="bible-reader" bind:this={readerElement}>
+<div class="bible-reader" bind:this={readerElement} bind:clientWidth={readerClientWidth}>
   <NavigationBar
     {windowId}
     style="transform: translateY({windowId ? navBarOffset : displayNavOffset}px); transition: transform 0.25s ease;"
@@ -3462,7 +3467,7 @@
 
 {#if !windowId && $annotationReturnStore !== null}
   {@const bookColor = getBookColor($annotationReturnStore.book)}
-  <div class="annotation-return-bar">
+  <div class="annotation-return-bar" style="left: {readerLeft + readerClientWidth / 2}px;">
     <button
       class="annotation-return-fixed"
       style="border-color: {bookColor}; color: {bookColor};"
