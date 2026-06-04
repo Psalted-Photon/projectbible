@@ -364,7 +364,7 @@
                   class="entry-text"
                   on:click={handleCommentaryBodyClick}
                   on:keydown={handleCommentaryBodyClick}
-                >{@html linkifyCommentaryRefs(entry.text, entry.book, entry.chapter)}</div>
+                >{@html linkifyCommentaryRefs(entry.text, entry.book, entry.chapter, entry.author)}</div>
               {/each}
             </div>
           {/each}

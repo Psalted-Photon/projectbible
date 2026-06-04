@@ -53,6 +53,15 @@ const BARE_VERSE_RE = /\b(v(?:erse|er)?\.?)\s+(\d+)\b/gi;
 const KNOWN_HEADER_RE =
   /\b(Introduction|Background|Conclusion|Outline|Summary|Application|Interpretation|Analysis|Purpose|Theme|Context|Overview|Exposition|Notes?)([A-Z])/g;
 
+// Spurgeon (Treasury of David) section headers embedded inline in prose.
+// Matches a sentence-ending punctuation followed by the header keyword.
+// e.g. "...sermon. DIVISION. This Psalm..." → break + bold header + break
+const SPURGEON_HEADER_RE =
+  /([.!?"\u201d])\s+((?:OVERVIEW\s+TITLE|TITLE|DIVISION[S]?|EXPOSITION|ORDER|SUBJECT|NOTES?|APPLICATION)\.?)\s+/g;
+
+// Spurgeon "Verse N." pattern — marks the start of per-verse commentary
+const SPURGEON_VERSE_RE = /\bVerse\s+(\d+)\./g;
+
 /** Escape HTML attribute value characters. */
 function escAttr(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
@@ -74,11 +83,28 @@ function processTextSegment(
   text: string,
   contextBook: string,
   contextChapter: number,
+  author?: string,
 ): string {
   // Reset stateful global regexes before each use
   PROSE_REF_RE.lastIndex = 0;
   BARE_VERSE_RE.lastIndex = 0;
   KNOWN_HEADER_RE.lastIndex = 0;
+
+  // Spurgeon (Treasury of David): inject paragraph breaks + bold headers before
+  // section labels and verse markers, which are buried inline with no whitespace.
+  if (author === 'Charles Spurgeon') {
+    SPURGEON_HEADER_RE.lastIndex = 0;
+    SPURGEON_VERSE_RE.lastIndex = 0;
+    text = text.replace(
+      SPURGEON_HEADER_RE,
+      (_: string, punct: string, header: string) =>
+        `${punct}<br><br><strong>${header.trim()}</strong><br><br>`,
+    );
+    text = text.replace(
+      SPURGEON_VERSE_RE,
+      (_: string, num: string) => `<br><br><strong>Verse ${num}.</strong> `,
+    );
+  }
 
   // Pre-process: separate section headers from immediately-following body text
   // e.g. "IntroductionThe book of..." → "INTRODUCTION<br><br>The book of..."
@@ -132,11 +158,13 @@ function processTextSegment(
  * @param html           Raw HTML string from a CommentaryEntry
  * @param contextBook    Canonical book name (e.g. "Romans") for relative refs
  * @param contextChapter Chapter number for verse-only refs (e.g. 8)
+ * @param author         Optional author name — used to apply author-specific formatting
  */
 export function linkifyCommentaryRefs(
   html: string,
   contextBook: string,
   contextChapter: number,
+  author?: string,
 ): string {
   if (!html || !contextBook) return html;
 
@@ -149,7 +177,7 @@ export function linkifyCommentaryRefs(
       // Leave HTML tags untouched
       if (part.startsWith('<')) return part;
       // Process text segments
-      return processTextSegment(part, contextBook, contextChapter);
+      return processTextSegment(part, contextBook, contextChapter, author);
     })
     .join('');
 }
