@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import LexicalEditor from '../lib/components/LexicalEditor.svelte';
-  import { IndexedDBUserDataStore } from '../adapters/UserDataStore';
+  import { syncedUserDataStore } from '../adapters/SyncedUserDataStore';
 
   export let book: string;
   export let chapter: number;
@@ -14,7 +14,7 @@
   export let height: number = 240;
 
   const dispatch = createEventDispatcher();
-  const userDataStore = new IndexedDBUserDataStore();
+  const userDataStore = syncedUserDataStore;
 
   // Position & size (mutable local state)
   let left = x;
