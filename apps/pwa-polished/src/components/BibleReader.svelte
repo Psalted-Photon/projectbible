@@ -3305,6 +3305,8 @@
   commentaryEntries={annotationPanelCommentary}
   initialTab={annotationPanelTab}
   targetAuthor={annotationPanelTargetAuthor}
+  panelLeft={readerLeft}
+  panelWidth={readerClientWidth}
   on:close={() => (annotationPanelOpen = false)}
   on:navigateTo={handleAnnotationNavigateTo}
 />
