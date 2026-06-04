@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
   import { navigationStore } from '../stores/navigationStore';
-  import { IndexedDBUserDataStore } from '../adapters/UserDataStore';
+  import { syncedUserDataStore } from '../adapters/SyncedUserDataStore';
   import { IndexedDBTextStore } from '../lib/adapters';
   import { BIBLE_BOOKS } from '@projectbible/core';
   import type { UserHighlight, UserWordHighlight, UserNote } from '@projectbible/core';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
-  const userDataStore = new IndexedDBUserDataStore();
+  const userDataStore = syncedUserDataStore;
   const textStore = new IndexedDBTextStore();
 
   // ─── sub-tab state ──────────────────────────────────────────────────────────
