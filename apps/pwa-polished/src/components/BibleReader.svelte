@@ -272,8 +272,8 @@
   let notePopupW = 320;
   let notePopupH = 240;
 
-  // Verse notes map (verse number → note id) for the current chapter
-  let verseNotesMap = new Map<number, string>();
+  // Verse notes map (book|chapter|verse → note id) for all loaded chapters
+  let verseNotesMap = new Map<string, string>();
 
   // Annotation store instances
   const commentaryStore = new IndexedDBCommentaryStore();
@@ -1294,13 +1294,12 @@
   async function loadVerseNotes(book: string, chapter: number) {
     try {
       const notes = await userDataStore.getNotes();
-      const map = new Map<number, string>();
       for (const note of notes) {
         if (note.reference.book === book && note.reference.chapter === chapter && note.text?.trim()) {
-          map.set(note.reference.verse, note.id);
+          verseNotesMap.set(annotationKey(note.reference.book, note.reference.chapter, note.reference.verse), note.id);
         }
       }
-      verseNotesMap = map;
+      verseNotesMap = verseNotesMap; // trigger Svelte reactivity
     } catch (err) {
       console.warn("[Notes] load error:", err);
     }
@@ -1348,18 +1347,14 @@
 
   function handleNoteSaved(e: CustomEvent<{ book: string; chapter: number; verse: number; noteId: string }>) {
     const { book, chapter, verse, noteId } = e.detail;
-    if (book === currentBook && chapter === currentChapter) {
-      verseNotesMap.set(verse, noteId);
-      verseNotesMap = verseNotesMap; // trigger Svelte reactivity
-    }
+    verseNotesMap.set(annotationKey(book, chapter, verse), noteId);
+    verseNotesMap = verseNotesMap; // trigger Svelte reactivity
   }
 
   function handleNoteDeleted(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
-    if (book === currentBook && chapter === currentChapter) {
-      verseNotesMap.delete(verse);
-      verseNotesMap = verseNotesMap; // trigger Svelte reactivity
-    }
+    verseNotesMap.delete(annotationKey(book, chapter, verse));
+    verseNotesMap = verseNotesMap; // trigger Svelte reactivity
   }
 
   function getTranslationFontClass(id: string): string {
@@ -3397,7 +3392,7 @@
                 <span class="verse-text"
                   >{@html html || renderVerseHtml(text)}</span
                 >
-                {#if verseNotesMap.has(verse) && $userProfileStore.isSignedIn}
+                {#if verseNotesMap.has(annotationKey(chapterData.book, chapterData.chapter, verse)) && $userProfileStore.isSignedIn}
                   <span
                     class="verse-note-icon"
                     role="button"
