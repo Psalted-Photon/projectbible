@@ -1225,6 +1225,8 @@
 
   async function applyReadingPlanHighlight(): Promise<void> {
     await tick();
+    // Wait for browser layout to settle before measuring offsetLeft
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     const target = $navigationStore.readingPlanActiveTarget;
     if (!readerElement) return;
     clearReadingPlanHighlight();
