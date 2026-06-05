@@ -50,7 +50,7 @@
     return 'Custom Plan';
   }
 
-  function computeAllPlanContexts(book: string, chapter: number): any[] {
+  function computeAllPlanContexts(book: string, chapter: number, _session?: any): any[] {
     try {
       const session = get(readingSessionStore);
       if (!session) return []; // No active reading session → no plan UI
@@ -513,8 +513,7 @@
       rpTarget!.book === currentBook &&
       rpTarget!.chapter === currentChapter &&
       chapters.length > 0 &&
-      chapters[0]?.book === rpTarget!.book &&
-      chapters[0]?.chapter === rpTarget!.chapter
+      chapters.some(c => c.book === rpTarget!.book && c.chapter === rpTarget!.chapter)
     ) {
       const scrollVerse = $navigationStore.scrollTargetVerse;
       _lastRpTargetKey = newKey;
@@ -3342,7 +3341,7 @@
       <div class="no-content">No verses found for this chapter.</div>
     {:else}
       {#each chapters as chapterData (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}`)}
-        {@const chPlanCtxs = computeAllPlanContexts(chapterData.book, chapterData.chapter)}
+        {@const chPlanCtxs = computeAllPlanContexts(chapterData.book, chapterData.chapter, $readingSessionStore)}
         {@const chHarmCtxs = chPlanCtxs.filter((c) => c.type === 'harmony')}
         {@const chStdCtxs = chPlanCtxs.filter((c) => c.type === 'standard')}
         <div class="chapter-section" data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
