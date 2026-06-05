@@ -4115,42 +4115,50 @@
   /* Floating drag handles for text selection */
   :global(.drag-handle-float) {
     position: absolute;
-    width: 3px;
-    background: #667eea;
-    border-radius: 2px;
+    width: 32px;
+    background: transparent;
+    border-radius: 0;
     cursor: ew-resize;
     z-index: 100;
-    opacity: 0.8;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     touch-action: none;
     pointer-events: auto;
     overflow: visible;
   }
 
   :global(.drag-handle-float)::before {
+    content: none;
+  }
+
+  /* The visible blue bar lives in ::after, centered in the 32px hit zone */
+  :global(.drag-handle-float)::after {
     content: '';
     position: absolute;
-    top: -8px;
-    bottom: -8px;
-    left: -14px;
-    right: -14px;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3px;
+    background: #667eea;
+    border-radius: 2px;
+    opacity: 0.8;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 
   :global(.drag-handle-float.left) {
-    margin-left: -3px;
+    margin-left: -16px;
   }
 
   :global(.drag-handle-float.right) {
-    margin-left: 0px;
+    margin-left: -16px;
   }
 
-  :global(.drag-handle-float:hover) {
+  :global(.drag-handle-float:hover)::after {
     background: #5568d3;
     opacity: 1;
     width: 4px;
   }
 
-  :global(.drag-handle-float:active) {
+  :global(.drag-handle-float:active)::after {
     background: #4456c0;
     width: 4px;
   }

@@ -31,8 +31,25 @@ export function subscribeToUserDataRemoteChanges(fn: () => void): () => void {
  * Called by SyncService on initial pull
  */
 export async function applyRemoteNotes(rows: any[]): Promise<void> {
-  if (!rows || rows.length === 0) return;
   const db = await openDB();
+
+  // Delete any local notes that no longer exist in Supabase (e.g. deleted on another device)
+  const remoteIds = new Set((rows ?? []).map((r: any) => r.id));
+  const allLocal = await new Promise<DBUserNote[]>((resolve) => {
+    const tx = db.transaction('user_notes', 'readonly');
+    const req = tx.objectStore('user_notes').getAll();
+    req.onsuccess = () => resolve(req.result as DBUserNote[]);
+    req.onerror = () => resolve([]);
+  });
+  for (const local of allLocal) {
+    if (!remoteIds.has(local.id)) {
+      await writeTransaction('user_notes', (store) => store.delete(local.id));
+    }
+  }
+
+  if (!rows || rows.length === 0) return;
+
+  // Upsert remote rows
   for (const row of rows) {
     const local = await new Promise<DBUserNote | undefined>((resolve) => {
       const tx = db.transaction('user_notes', 'readonly');
