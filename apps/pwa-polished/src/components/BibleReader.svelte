@@ -10,6 +10,7 @@
   import HighlightModal from "./HighlightModal.svelte";
   import { IndexedDBUserDataStore } from "../adapters/UserDataStore";
   import { subscribeToHighlightRemoteChanges } from "../adapters/SyncedHighlightAdapter";
+  import { subscribeToUserDataRemoteChanges } from "../adapters/SyncedUserDataStore";
   import { applyChapterHighlights } from "../lib/highlightRenderer";
   import AudioPlayer from "./AudioPlayer.svelte";
   import BookIntroPanel from "./BookIntroPanel.svelte";
@@ -3143,6 +3144,16 @@
       }
     });
 
+    // Reload note icons when a remote change arrives (cross-device sync)
+    const unsubscribeNoteChanges = subscribeToUserDataRemoteChanges(() => {
+      const visible = detectVisibleChapter();
+      if (visible) {
+        loadVerseNotes(visible.book, visible.chapter);
+      } else if (chapters.length > 0) {
+        loadVerseNotes(chapters[0].book, chapters[0].chapter);
+      }
+    });
+
     return () => {
       window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
@@ -3155,6 +3166,7 @@
       document.removeEventListener("click", handleClickOutside);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsubscribeHighlightChanges();
+      unsubscribeNoteChanges();
       stopScrollDetection();
       if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
       if (longPressTimer) clearTimeout(longPressTimer);
@@ -3385,7 +3397,7 @@
                 <span class="verse-text"
                   >{@html html || renderVerseHtml(text)}</span
                 >
-                {#if verseNotesMap.has(verse)}
+                {#if verseNotesMap.has(verse) && $userProfileStore.isSignedIn}
                   <span
                     class="verse-note-icon"
                     role="button"
