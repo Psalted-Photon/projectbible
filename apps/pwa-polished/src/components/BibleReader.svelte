@@ -2560,6 +2560,10 @@
     document.removeEventListener("touchmove", handleDragTouch, true);
     document.removeEventListener("mouseup", stopDrag, true);
     document.removeEventListener("touchend", stopDrag, true);
+    // Re-assert word mode so a drag can't silently flip the selection type
+    if (selectionRange) {
+      selectionMode = 'word';
+    }
   }
 
   function startDragTouch(e: TouchEvent, edge: "left" | "right") {
@@ -4126,10 +4130,10 @@
   :global(.drag-handle-float)::before {
     content: '';
     position: absolute;
-    top: 0;
-    bottom: 0;
-    left: -1.5px;
-    right: -1.5px;
+    top: -8px;
+    bottom: -8px;
+    left: -14px;
+    right: -14px;
   }
 
   :global(.drag-handle-float.left) {
