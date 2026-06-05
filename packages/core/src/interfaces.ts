@@ -193,7 +193,7 @@ export interface UserNote {
 
 export type HighlightType = 'background' | 'text-color' | 'underline';
 
-export type UnderlineStyle = 'solid' | 'dashed' | 'wavy';
+export type UnderlineStyle = 'solid' | 'dashed' | 'wavy' | 'boxed';
 
 export interface HighlightStyle {
   type: HighlightType;

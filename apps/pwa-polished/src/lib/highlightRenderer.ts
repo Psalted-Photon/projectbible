@@ -116,8 +116,16 @@ export function applyHighlightToElement(
     case 'underline': {
       const textSpan = el.querySelector<HTMLElement>('.verse-text');
       if (textSpan) {
-        textSpan.style.textDecoration = `underline ${style.underlineStyle ?? 'solid'} ${style.color}`;
-        textSpan.style.textUnderlineOffset = '3px';
+        if (style.underlineStyle === 'boxed') {
+          textSpan.style.setProperty('outline', `2px solid ${style.color}`);
+          textSpan.style.setProperty('outline-offset', '1px');
+          textSpan.style.setProperty('border-radius', '2px');
+          textSpan.style.setProperty('-webkit-box-decoration-break', 'clone');
+          textSpan.style.setProperty('box-decoration-break', 'clone');
+        } else {
+          textSpan.style.textDecoration = `underline ${style.underlineStyle ?? 'solid'} ${style.color}`;
+          textSpan.style.textUnderlineOffset = '3px';
+        }
         textSpan.classList.add('hl-text-underlined');
       }
       break;
@@ -142,6 +150,9 @@ export function applyWordHighlightToSpan(
   span.style.removeProperty('--hl-text-color');
   span.style.removeProperty('text-decoration');
   span.style.removeProperty('text-underline-offset');
+  span.style.removeProperty('outline');
+  span.style.removeProperty('outline-offset');
+  span.style.removeProperty('border-radius');
   span.querySelector(`.${SVG_CLASS}`)?.remove();
 
   switch (style.type) {
@@ -155,8 +166,16 @@ export function applyWordHighlightToSpan(
       break;
     }
     case 'underline': {
-      span.style.textDecoration = `underline ${style.underlineStyle ?? 'solid'} ${style.color}`;
-      span.style.textUnderlineOffset = '3px';
+      if (style.underlineStyle === 'boxed') {
+        span.style.setProperty('outline', `2px solid ${style.color}`);
+        span.style.setProperty('outline-offset', '1px');
+        span.style.setProperty('border-radius', '2px');
+        span.style.setProperty('-webkit-box-decoration-break', 'clone');
+        span.style.setProperty('box-decoration-break', 'clone');
+      } else {
+        span.style.textDecoration = `underline ${style.underlineStyle ?? 'solid'} ${style.color}`;
+        span.style.textUnderlineOffset = '3px';
+      }
       break;
     }
   }
@@ -203,6 +222,9 @@ export function removeHighlightFromElement(el: HTMLElement): void {
     textSpan.style.removeProperty('--hl-text-color');
     textSpan.style.removeProperty('text-decoration');
     textSpan.style.removeProperty('text-underline-offset');
+    textSpan.style.removeProperty('outline');
+    textSpan.style.removeProperty('outline-offset');
+    textSpan.style.removeProperty('border-radius');
     textSpan.classList.remove('hl-text-colored', 'hl-text-underlined');
   }
 

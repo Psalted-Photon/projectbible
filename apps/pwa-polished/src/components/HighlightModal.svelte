@@ -15,56 +15,29 @@
 
   // ── Palette definitions ────────────────────────────────────────────────────
 
-  const MARKER_COLORS = [
-    { value: '#fef08a', label: 'Yellow' },
-    { value: '#bbf7d0', label: 'Green' },
-    { value: '#fbcfe8', label: 'Pink' },
-    { value: '#fed7aa', label: 'Orange' },
-    { value: '#a5f3fc', label: 'Aqua' },
-    { value: '#ddd6fe', label: 'Purple' },
-    { value: '#fecaca', label: 'Red' },
-    { value: '#bfdbfe', label: 'Blue' },
-  ] as const;
-
-  const BOLD_MARKER_COLORS = [
-    { value: '#ca8a04', label: 'Dark Gold' },
-    { value: '#15803d', label: 'Forest Green' },
-    { value: '#c2410c', label: 'Rust Orange' },
-    { value: '#0891b2', label: 'Dark Cyan' },
-    { value: '#6d28d9', label: 'Deep Violet' },
-    { value: '#b91c1c', label: 'Deep Red' },
-    { value: '#1d4ed8', label: 'Navy Blue' },
-    { value: '#0f766e', label: 'Deep Teal' },
-  ] as const;
-
-  const TEXT_COLORS = [
-    { value: '#eab308', label: 'Gold' },
-    { value: '#f97316', label: 'Coral' },
-    { value: '#22c55e', label: 'Mint' },
-    { value: '#38bdf8', label: 'Sky' },
-    { value: '#a78bfa', label: 'Lavender' },
-    { value: '#f43f5e', label: 'Crimson' },
+  const PALETTE = [
+    { value: '#ffff32', label: 'Yellow' },
+    { value: '#3aff32', label: 'Green' },
+    { value: '#ff9c32', label: 'Orange' },
+    { value: '#ff3232', label: 'Red' },
+    { value: '#ff48ec', label: 'Pink' },
+    { value: '#ba32ff', label: 'Purple' },
+    { value: '#3273ff', label: 'Blue' },
   ] as const;
 
   const UNDERLINE_STYLES = [
     { style: 'solid'  as const, label: 'Solid' },
     { style: 'dashed' as const, label: 'Dashed' },
     { style: 'wavy'   as const, label: 'Wavy' },
+    { style: 'boxed'  as const, label: 'Boxed' },
   ];
-
-  const UNDERLINE_COLORS = [
-    { value: '#eab308', label: 'Gold' },
-    { value: '#f97316', label: 'Coral' },
-    { value: '#38bdf8', label: 'Sky' },
-    { value: '#f43f5e', label: 'Crimson' },
-  ] as const;
 
   // ── Selection state ────────────────────────────────────────────────────────
 
   // Determine active type/color/underlineStyle from an existing highlight
   function initFromExisting(hl: UserHighlight | UserWordHighlight | null): HighlightStyle {
     if (hl) return { ...hl.style };
-    return { type: 'background', color: MARKER_COLORS[0].value };
+    return { type: 'background', color: PALETTE[0].value };
   }
 
   let selected: HighlightStyle = initFromExisting(existingHighlight);
@@ -80,7 +53,7 @@
     selected = { type: 'text-color', color };
   }
 
-  function selectUnderline(style: 'solid' | 'dashed' | 'wavy', color: string) {
+  function selectUnderline(style: 'solid' | 'dashed' | 'wavy' | 'boxed', color: string) {
     selected = { type: 'underline', color, underlineStyle: style };
   }
 
@@ -151,21 +124,7 @@
     <div class="hl-section">
       <div class="hl-section-label">Marker</div>
       <div class="hl-swatches">
-        {#each MARKER_COLORS as { value, label }}
-          <button
-            class="hl-swatch hl-swatch-marker"
-            class:hl-swatch-active={isActiveMarker(value)}
-            style="--swatch-color: {value}"
-            title={label}
-            on:click={() => selectMarker(value)}
-            aria-label="{label} marker"
-            aria-pressed={isActiveMarker(value)}
-          >
-          </button>
-        {/each}
-      </div>
-      <div class="hl-swatches" style="margin-top: 8px">
-        {#each BOLD_MARKER_COLORS as { value, label }}
+        {#each PALETTE as { value, label }}
           <button
             class="hl-swatch hl-swatch-marker"
             class:hl-swatch-active={isActiveMarker(value)}
@@ -184,7 +143,7 @@
     <div class="hl-section">
       <div class="hl-section-label">Text Color</div>
       <div class="hl-swatches">
-        {#each TEXT_COLORS as { value, label }}
+        {#each PALETTE as { value, label }}
           <button
             class="hl-swatch hl-swatch-text"
             class:hl-swatch-active={isActiveTextColor(value)}
@@ -208,7 +167,7 @@
           <div class="hl-underline-row">
             <span class="hl-underline-label">{label}</span>
             <div class="hl-swatches hl-swatches-underline">
-              {#each UNDERLINE_COLORS as { value, label: colorLabel }}
+              {#each PALETTE as { value, label: colorLabel }}
                 <button
                   class="hl-swatch hl-swatch-underline"
                   class:hl-swatch-active={isActiveUnderline(style, value)}
@@ -218,7 +177,11 @@
                   aria-label="{label} {colorLabel} underline"
                   aria-pressed={isActiveUnderline(style, value)}
                 >
-                  <span class="hl-underline-preview" style="text-decoration: underline {style} {value}; text-underline-offset: 2px;">Aa</span>
+                  {#if style === 'boxed'}
+                    <span class="hl-box-preview" style="outline: 2px solid {value}; outline-offset: 1px; border-radius: 2px;">Aa</span>
+                  {:else}
+                    <span class="hl-underline-preview" style="text-decoration: underline {style} {value}; text-underline-offset: 2px;">Aa</span>
+                  {/if}
                 </button>
               {/each}
             </div>
@@ -389,6 +352,7 @@
   }
 
   .hl-underline-preview { pointer-events: none; }
+  .hl-box-preview { pointer-events: none; padding: 0 1px; }
 
   .hl-check {
     position: absolute;
