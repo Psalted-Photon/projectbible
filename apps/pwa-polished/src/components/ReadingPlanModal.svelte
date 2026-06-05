@@ -1279,8 +1279,7 @@
   function navigateToChapter(book: string, chapter: number, chapters: Array<{ book: string; chapter: number }> = [{ book, chapter }]) {
     const consecutiveDay = isConsecutiveDay(chapters);
     navigationStore.setReadingPlanActiveTarget(book, chapter, null, consecutiveDay);
-    navigationStore.setBook(book);
-    navigationStore.setChapter(chapter);
+    navigationStore.navigateTo(get(navigationStore).translation, book, chapter);
     isOpen = false;
   }
   

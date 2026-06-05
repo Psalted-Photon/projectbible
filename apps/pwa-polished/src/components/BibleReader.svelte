@@ -584,8 +584,7 @@
     );
     if (ctx.nextChapter) {
       navigationStore.setReadingPlanActiveTarget(ctx.nextChapter.book, ctx.nextChapter.chapter, null, false);
-      navigationStore.setBook(ctx.nextChapter.book);
-      navigationStore.setChapter(ctx.nextChapter.chapter);
+      navigationStore.navigateTo(currentTranslation, ctx.nextChapter.book, ctx.nextChapter.chapter);
       navBarOffset = -68;
     }
   }
@@ -593,8 +592,7 @@
   function handleContinueOnly(ctx: any) {
     if (ctx.nextChapter) {
       navigationStore.setReadingPlanActiveTarget(ctx.nextChapter.book, ctx.nextChapter.chapter, null, false);
-      navigationStore.setBook(ctx.nextChapter.book);
-      navigationStore.setChapter(ctx.nextChapter.chapter);
+      navigationStore.navigateTo(currentTranslation, ctx.nextChapter.book, ctx.nextChapter.chapter);
       navBarOffset = -68;
     }
   }
