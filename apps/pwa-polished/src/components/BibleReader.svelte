@@ -62,8 +62,7 @@
       if (!planEntry) return [];
 
       const plan = planEntry.plan;
-      const todayStr = localDateStr(new Date());
-      const todayDay = plan.days?.find((d: any) => localDateStr(new Date(d.date)) === todayStr);
+      const todayDay = plan.days?.find((d: any) => d.dayNumber === session.dayNumber);
       if (!todayDay) return [];
 
       const results: any[] = [];
@@ -75,7 +74,7 @@
         const p = allPassages[sessionIdx];
         if (!p) return [];
         // Buttons appear at the passage's end chapter
-        if (p.book !== book || p.endChapter !== chapter) return [];
+        if (normalizeBookName(p.book) !== book || p.endChapter !== chapter) return [];
         results.push({
           type: 'harmony',
           planId: session.planId,
@@ -90,7 +89,7 @@
         });
       } else {
         const todayChapters: Array<{ book: string; chapter: number }> = todayDay.chapters ?? [];
-        const chapIdx = todayChapters.findIndex((c: any) => c.book === book && c.chapter === chapter);
+        const chapIdx = todayChapters.findIndex((c: any) => normalizeBookName(c.book) === book && c.chapter === chapter);
         if (chapIdx < 0) return [];
         const nextCh = chapIdx < todayChapters.length - 1 ? todayChapters[chapIdx + 1] : null;
         results.push({

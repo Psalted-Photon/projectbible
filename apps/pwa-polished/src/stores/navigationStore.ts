@@ -125,7 +125,7 @@ function createNavigationStore() {
       update(state => ({ ...state, scrollTargetVerse: null }));
     },
     setReadingPlanActiveTarget: (book: string, chapter: number, verse: number | null, consecutiveDay: boolean) => {
-      update(state => ({ ...state, readingPlanActiveTarget: { book, chapter, verse, consecutiveDay } }));
+      update(state => ({ ...state, readingPlanActiveTarget: { book: normalizeBookName(book), chapter, verse, consecutiveDay } }));
     },
     clearReadingPlanActiveTarget: () => {
       update(state => ({ ...state, readingPlanActiveTarget: null }));
