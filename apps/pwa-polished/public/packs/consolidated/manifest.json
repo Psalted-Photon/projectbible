@@ -64,6 +64,21 @@
       "createdAt": "2026-05-30T00:00:00.000Z"
     },
     {
+      "id": "spurgeon-expositions",
+      "type": "commentary",
+      "name": "Spurgeon's Verse Expositions",
+      "description": "Charles Spurgeon's verse-by-verse expositions drawn from his sermons, covering the full Bible (Genesis–Revelation). 16,289 entries.",
+      "version": "1.0.0",
+      "schemaVersion": "1.0",
+      "minAppVersion": "1.0.0",
+      "size": 12275712,
+      "sizeMB": 11.71,
+      "sha256": "64d5ee5735785ce0a6bacb0b675fed449944f7d937da028b5e9d0ea212d40b08",
+      "dependencies": [],
+      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/spurgeon-expositions.sqlite",
+      "createdAt": "2026-06-06T00:00:00.000Z"
+    },
+    {
       "id": "dictionary-en",
       "type": "dictionary",
       "name": "English Dictionary Pack",
