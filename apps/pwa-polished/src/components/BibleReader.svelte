@@ -523,6 +523,7 @@
           navigationStore.clearScrollTarget();
         }
         await applyReadingPlanHighlight();
+        await applyReadingPlanEndHighlight();
       });
     }
     if (newKey === null) _lastRpTargetKey = null;
@@ -574,6 +575,7 @@
     readingSessionStore.clearSession();
     navigationStore.clearReadingPlanActiveTarget();
     clearReadingPlanHighlight();
+    clearReadingPlanEndHighlight();
     dayCompleteMessage = ctx.planName;
   }
 
@@ -617,6 +619,7 @@
     readingSessionStore.clearSession();
     navigationStore.clearReadingPlanActiveTarget();
     clearReadingPlanHighlight();
+    clearReadingPlanEndHighlight();
   }
 
   // DEBUG: Log when reactive values change
@@ -1204,6 +1207,7 @@
         if (rpTarget && rpTarget.book === book && rpTarget.chapter === chapter) {
           _lastRpTargetKey = `${rpTarget.book}-${rpTarget.chapter}-${rpTarget.verse ?? 'null'}`;
           await applyReadingPlanHighlight();
+          await applyReadingPlanEndHighlight();
         }
       }
     } catch (err: unknown) {
@@ -1214,6 +1218,57 @@
       loading = false;
       if (chapters.length > 0) checkViewportFill();
     }
+  }
+
+  function clearReadingPlanEndHighlight(): void {
+    readerElement?.querySelectorAll('.rp-verse-end-highlight').forEach(el => {
+      el.classList.remove('rp-verse-end-highlight');
+      (el as HTMLElement).style.removeProperty('--rp-hl-right');
+    });
+  }
+
+  async function applyReadingPlanEndHighlight(): Promise<void> {
+    await tick();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    const session = get(readingSessionStore);
+    if (!session || !readerElement) return;
+    clearReadingPlanEndHighlight();
+    // Find today's last chapter from plan data
+    const raw = localStorage.getItem(STORAGE_ACTIVE_PLANS);
+    if (!raw) return;
+    const activePlans: Array<{ id: string; plan: any }> = JSON.parse(raw);
+    const planEntry = activePlans.find(p => p.id === session.planId);
+    if (!planEntry) return;
+    const dayData = planEntry.plan.days?.find((d: any) => d.dayNumber === session.dayNumber);
+    if (!dayData) return;
+    let lastBook: string;
+    let lastChapter: number;
+    if (planEntry.plan.config?.ordering === 'harmony') {
+      const allPassages = (dayData.harmonySections ?? []).flatMap((s: any) => s.passages);
+      const last = allPassages[allPassages.length - 1];
+      if (!last) return;
+      lastBook = normalizeBookName(last.book);
+      lastChapter = last.endChapter;
+    } else {
+      const todayChapters: Array<{ book: string; chapter: number }> = dayData.chapters ?? [];
+      if (!todayChapters.length) return;
+      const last = todayChapters[todayChapters.length - 1];
+      lastBook = normalizeBookName(last.book);
+      lastChapter = last.chapter;
+    }
+    // Only apply if that chapter is currently in the DOM
+    const section = readerElement.querySelector<HTMLElement>(
+      `[data-chapter-section][data-book="${lastBook}"][data-chapter="${lastChapter}"]`
+    );
+    if (!section) return;
+    // Last .verse in that chapter section
+    const allVerses = section.querySelectorAll<HTMLElement>('.verse');
+    const verseEl = allVerses[allVerses.length - 1] ?? null;
+    if (!verseEl) return;
+    const textEl = verseEl.querySelector('.verse-text') as HTMLElement | null;
+    const rightOffset = textEl ? textEl.offsetLeft : 32;
+    verseEl.style.setProperty('--rp-hl-right', `${rightOffset}px`);
+    verseEl.classList.add('rp-verse-end-highlight');
   }
 
   function clearReadingPlanHighlight(): void {
@@ -4095,6 +4150,16 @@
     isolation: isolate;
     background: linear-gradient(to right, rgba(34, 197, 94, 0.40), transparent);
     background-position: var(--rp-hl-left, 2em) center;
+    background-size: 30ch calc(1em + 7px);
+    background-repeat: no-repeat;
+    border-radius: 3px;
+  }
+
+  /* End-of-reading bookmark — brown, gradient reversed (right-to-left) */
+  :global(.rp-verse-end-highlight) {
+    isolation: isolate;
+    background: linear-gradient(to left, rgba(139, 90, 43, 0.40), transparent);
+    background-position: right center;
     background-size: 30ch calc(1em + 7px);
     background-repeat: no-repeat;
     border-radius: 3px;
