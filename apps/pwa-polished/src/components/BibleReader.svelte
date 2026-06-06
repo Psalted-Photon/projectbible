@@ -1207,8 +1207,9 @@
         if (rpTarget && rpTarget.book === book && rpTarget.chapter === chapter) {
           _lastRpTargetKey = `${rpTarget.book}-${rpTarget.chapter}-${rpTarget.verse ?? 'null'}`;
           await applyReadingPlanHighlight();
-          await applyReadingPlanEndHighlight();
         }
+        // Always attempt end highlight — end chapter may differ from start chapter
+        await applyReadingPlanEndHighlight();
       }
     } catch (err: unknown) {
       console.error("Error loading chapter:", err);
@@ -1924,6 +1925,7 @@
           { book: nextBook, chapter: nextChapter, verses: processedVerses },
         ];
         await loadAnnotations(nextBook, nextChapter, false);
+        await applyReadingPlanEndHighlight();
         didAddChapter = true;
       }
     } catch (err) {
