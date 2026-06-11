@@ -18,8 +18,6 @@
   export let initialTab: "references" | "commentary" = "references";
   // Which commentary author to scroll to when the panel opens ('' = scroll to top only)
   export let targetAuthor: string = '';
-  export let panelLeft: number = 0;
-  export let panelWidth: number = 0;
 
   // ——— Internal display state (list mode) ———
   let displayBook = book;
@@ -250,7 +248,7 @@
   <div class="panel-backdrop" on:click={handleBackdropClick}></div>
 {/if}
 
-<div class="annotation-panel" class:open style={panelWidth ? `left: ${panelLeft}px; right: auto; width: ${panelWidth}px;` : ''}>
+<div class="annotation-panel" class:open>
   <!-- Header -->
   <div class="panel-header">
     {#if panelHistory.length > 0}

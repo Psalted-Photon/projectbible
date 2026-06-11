@@ -314,6 +314,8 @@
   let _navigatedFromIntro = false;
   // Set only when user presses Back after intro navigation; consumed by loadChapter / reactive block
   let _reopenBookIntroPanel = false;
+  // Verse to highlight after navigating from a commentary popup verse link
+  let _commNavHighlightVerse: number | null = null;
 
   function handleAnnotationNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
@@ -324,6 +326,7 @@
       tab: annotationPanelTab,
     });
     annotationPanelOpen = false;
+    _commNavHighlightVerse = verse;
     if (windowId) {
       _windowScrollTarget = verse;
       windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
@@ -339,6 +342,7 @@
   $: displayNavOffset = (!windowId && $annotationReturnStore !== null) ? -100 : navBarOffset;
 
   function handleAnnotationReturn() {
+    _commNavHighlightVerse = null;
     const ctx = $annotationReturnStore;
     if (!ctx) return;
     const fromIntro = _navigatedFromIntro;
@@ -1210,6 +1214,9 @@
         }
         // Always attempt end highlight — end chapter may differ from start chapter
         await applyReadingPlanEndHighlight();
+        if (_commNavHighlightVerse != null) {
+          await applyCommNavHighlight();
+        }
       }
     } catch (err: unknown) {
       console.error("Error loading chapter:", err);
@@ -1297,6 +1304,29 @@
     const leftOffset = textEl ? textEl.offsetLeft : 32;
     verseEl.style.setProperty('--rp-hl-left', `${leftOffset}px`);
     verseEl.classList.add('rp-verse-highlight');
+  }
+
+  function clearCommNavHighlight(): void {
+    readerElement?.querySelectorAll('.comm-nav-verse-highlight').forEach(el => {
+      el.classList.remove('comm-nav-verse-highlight');
+      (el as HTMLElement).style.removeProperty('--rp-hl-left');
+    });
+  }
+
+  async function applyCommNavHighlight(): Promise<void> {
+    await tick();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    if (!readerElement || _commNavHighlightVerse == null) return;
+    clearCommNavHighlight();
+    const verseEl = readerElement.querySelector(
+      `.verse[data-verse="${_commNavHighlightVerse}"]`
+    ) as HTMLElement | null;
+    if (!verseEl) return;
+    const textEl = verseEl.querySelector('.verse-text') as HTMLElement | null;
+    const leftOffset = textEl ? textEl.offsetLeft : 32;
+    verseEl.style.setProperty('--rp-hl-left', `${leftOffset}px`);
+    verseEl.classList.add('comm-nav-verse-highlight');
+    _commNavHighlightVerse = null;
   }
 
   async function loadAndApplyHighlights(book: string, chapter: number) {
@@ -4151,6 +4181,16 @@
   :global(.rp-verse-highlight) {
     isolation: isolate;
     background: linear-gradient(to right, rgba(34, 197, 94, 0.40), transparent);
+    background-position: var(--rp-hl-left, 2em) center;
+    background-size: 30ch calc(1em + 7px);
+    background-repeat: no-repeat;
+    border-radius: 3px;
+  }
+
+  /* Commentary-link navigation highlight — gold/yellow, same gradient style as rp-verse-highlight */
+  :global(.comm-nav-verse-highlight) {
+    isolation: isolate;
+    background: linear-gradient(to right, rgba(255, 215, 0, 0.45), transparent);
     background-position: var(--rp-hl-left, 2em) center;
     background-size: 30ch calc(1em + 7px);
     background-repeat: no-repeat;
