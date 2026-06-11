@@ -52,6 +52,14 @@ async function initApp() {
   console.log('🚀 Starting app initialization...');
   console.log('Environment:', import.meta.env.DEV ? 'DEV' : 'PROD');
   console.log('Features:', FEATURES);
+
+  // Request persistent storage so the browser won't evict IndexedDB/OPFS under pressure.
+  // Without this, mobile OSes can silently delete all pack data overnight.
+  if (navigator.storage?.persist) {
+    navigator.storage.persist().then(granted =>
+      console.log('[Storage] Persistent storage granted:', granted)
+    );
+  }
   
   // In dev mode, skip bootstrap loading and mount immediately
   if (import.meta.env.DEV) {

@@ -282,6 +282,33 @@ export async function listInstalledPacks(): Promise<Array<{ id: string; type: st
   });
 }
 
+/**
+ * Returns true if the audio pack has chapter index entries in IndexedDB.
+ * False means the OPFS file may still exist but the index was evicted —
+ * the pack should be offered a Re-index rather than a full re-download.
+ */
+export async function audioPackHasChapters(packId: string): Promise<boolean> {
+  const db = await openDB();
+
+  const packRecord = await new Promise<{ translationId?: string } | undefined>((resolve, reject) => {
+    const tx = db.transaction('packs', 'readonly');
+    const req = tx.objectStore('packs').get(packId);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+  if (!packRecord?.translationId) return false;
+
+  const chapter = await new Promise<unknown>((resolve, reject) => {
+    const tx = db.transaction('audio_chapters', 'readonly');
+    const req = tx.objectStore('audio_chapters').index('translationId').get(packRecord.translationId!);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+  return !!chapter;
+}
+
 // ===== Helper functions =====
 
 function countRecords(db: IDBDatabase, storeName: string): Promise<number> {

@@ -264,6 +264,16 @@ async function _indexPackMetadata(packId: string): Promise<void> {
   }
 }
 
+/**
+ * Re-indexes an already-installed audio pack from its existing OPFS file.
+ * Use when the IndexedDB audio_chapters index was lost (e.g. browser eviction)
+ * but the OPFS SQLite file is still intact. Much faster than re-downloading.
+ * Throws if the OPFS file is missing — caller should fall back to full install.
+ */
+export async function reindexAudioPack(packId: string): Promise<void> {
+  await _indexPackMetadata(packId);
+}
+
 // ─── playback ────────────────────────────────────────────────────────────────
 
 /**

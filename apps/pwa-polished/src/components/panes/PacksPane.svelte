@@ -4,9 +4,10 @@
     listInstalledPacks,
     removePack,
     getDatabaseStats,
+    audioPackHasChapters,
   } from "../../adapters/db-manager";
   import { importPackFromSQLite } from "../../adapters/pack-import";
-  import { installAudioPackToOPFS } from "../../adapters/audio";
+  import { installAudioPackToOPFS, reindexAudioPack } from "../../adapters/audio";
   import { loadPackOnDemand } from "../../lib/progressive-init";
   import { USE_BUNDLED_PACKS } from "../../config";
 
@@ -22,6 +23,7 @@
   }
 
   let installedPacks: PackInfo[] = [];
+  let packsNeedingReindex = new Set<string>();
   let isLoading = true;
   let dbStats = {
     totalSize: "0 MB",
@@ -235,6 +237,18 @@
     try {
       installedPacks = await listInstalledPacks();
       console.log("Loaded packs:", installedPacks);
+
+      // Check each installed audio pack for a stale index (pack record exists
+      // but audio_chapters were evicted). Flag these for Re-index instead of
+      // forcing a full re-download.
+      const reindexSet = new Set<string>();
+      for (const pack of installedPacks) {
+        if (pack.type === 'audio') {
+          const hasChapters = await audioPackHasChapters(pack.id);
+          if (!hasChapters) reindexSet.add(pack.id);
+        }
+      }
+      packsNeedingReindex = reindexSet;
     } catch (error) {
       console.error("Error loading packs:", error);
       alert(`Failed to load packs: ${error}`);
@@ -275,6 +289,23 @@
     } catch (error) {
       console.error("Error removing pack:", error);
       alert(`Failed to remove pack: ${error}`);
+    }
+  }
+
+  async function handleReindexPack(packId: string) {
+    isInstalling = true;
+    installProgress = `Re-indexing ${packId}…`;
+    try {
+      await reindexAudioPack(packId);
+      await loadPacks();
+      await loadStats();
+      window.dispatchEvent(new CustomEvent("packsUpdated"));
+    } catch (error) {
+      console.error(`Error re-indexing ${packId}:`, error);
+      alert(`Re-index failed — the audio file may be missing. Try reinstalling the pack.\n\n${error}`);
+    } finally {
+      isInstalling = false;
+      installProgress = "";
     }
   }
 
@@ -423,7 +454,7 @@
     {:else}
       <div class="pack-list">
         {#each installedPacks as pack (pack.id)}
-          <div class="pack-item">
+          <div class="pack-item" class:needs-reindex={packsNeedingReindex.has(pack.id)}>
             <div class="pack-icon"><span class="emoji">{getPackTypeIcon(pack.type)}</span></div>
             <div class="pack-info">
               <div class="pack-name">{pack.id}</div>
@@ -433,8 +464,22 @@
                 <span class="pack-version">v{pack.version}</span>
                 <span class="pack-separator">•</span>
                 <span class="pack-size">{formatBytes(pack.size)}</span>
+                {#if packsNeedingReindex.has(pack.id)}
+                  <span class="pack-separator">•</span>
+                  <span class="reindex-warning">index missing</span>
+                {/if}
               </div>
             </div>
+            {#if packsNeedingReindex.has(pack.id)}
+              <button
+                class="reindex-btn"
+                on:click={() => handleReindexPack(pack.id)}
+                disabled={isInstalling}
+                title="Re-index audio chapters (no re-download needed)"
+              >
+                Re-index
+              </button>
+            {/if}
             <button
               class="remove-btn"
               on:click={() => handleRemovePack(pack.id)}
@@ -934,6 +979,41 @@
     color: #ffa500 !important;
     font-weight: 500;
     margin-top: 1rem !important;
+  }
+
+  .pack-item.needs-reindex {
+    border-color: rgba(255, 165, 0, 0.4);
+    background: rgba(255, 165, 0, 0.05);
+  }
+
+  .reindex-warning {
+    color: #ffa500;
+    font-weight: 500;
+    font-size: 0.8rem;
+  }
+
+  .reindex-btn {
+    padding: 0.4rem 0.85rem;
+    background: rgba(255, 165, 0, 0.15);
+    border: 1px solid rgba(255, 165, 0, 0.5);
+    color: #ffa500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+    font-weight: 600;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .reindex-btn:hover:not(:disabled) {
+    background: rgba(255, 165, 0, 0.25);
+    border-color: rgba(255, 165, 0, 0.7);
+  }
+
+  .reindex-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   @media (max-width: 768px) {
