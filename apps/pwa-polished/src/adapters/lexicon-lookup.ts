@@ -33,6 +33,7 @@ export interface EnglishWordEntry {
   grammar?: any;
   modern: Definition[];
   historic: Definition[];
+  wordset: Definition[];
 }
 
 export interface LexiconEntry {
@@ -358,7 +359,8 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
       synonyms: [],
       antonyms: [],
       modern: [],
-      historic: []
+      historic: [],
+      wordset: []
     };
     
     // Look up synonyms from thesaurus using index
@@ -500,8 +502,36 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
     });
     
     entry.historic = historicDefs;
-    
-    console.log('✅ Returning complete entry with', entry.synonyms.length, 'synonyms,', entry.modern.length, 'modern defs,', entry.historic.length, 'historic defs');
+
+    // Look up Wordset fallback definitions — only when modern and historic are both empty
+    if (modernDefs.length === 0 && historicDefs.length === 0 && definitionWordId) {
+      console.log('🔍 No modern/historic defs found, checking Wordset fallback for word_id:', definitionWordId);
+      const wordsetDefs = await new Promise<Definition[]>((resolve) => {
+        if (!db.objectStoreNames.contains('english_definitions_wordset')) {
+          resolve([]);
+          return;
+        }
+
+        const tx = db.transaction('english_definitions_wordset', 'readonly');
+        const store = tx.objectStore('english_definitions_wordset');
+        const index = store.index('word_id');
+        const request = index.getAll(definitionWordId);
+
+        request.onsuccess = () => {
+          const results = (request.result || []) as Definition[];
+          results.sort((a, b) => a.definition_order - b.definition_order);
+          console.log(`✅ Found ${results.length} Wordset fallback definitions`);
+          resolve(results);
+        };
+        request.onerror = () => {
+          console.log('❌ Wordset fallback lookup failed');
+          resolve([]);
+        };
+      });
+      entry.wordset = wordsetDefs;
+    }
+
+    console.log('✅ Returning complete entry with', entry.synonyms.length, 'synonyms,', entry.modern.length, 'modern defs,', entry.historic.length, 'historic defs,', entry.wordset.length, 'wordset defs');
     
     // Cache the result
     dictionaryCache.set(normalizedWord, entry);

@@ -76,12 +76,12 @@
                       "type":  "dictionary",
                       "name":  "English Dictionary Pack",
                       "description":  "English dictionary definitions and word data",
-                      "version":  "1.0.0",
+                      "version":  "1.1.0",
                       "schemaVersion":  "1",
                       "minAppVersion":  "1.0.0",
-                      "size":  45166592,
-                      "sizeMB":  43.07,
-                      "sha256":  "79af2f18165465c644067bf3ab79964cec77cc252c30bbb6084abc445406fa2f",
+                      "size":  46514176,
+                      "sizeMB":  44.36,
+                      "sha256":  "b3a66e8477bef8445aa7636ae885d771ef9d22c14603248aa5a967262a9ed9f5",
                       "dependencies":  [
 
                                        ],

@@ -61,7 +61,7 @@
 
   $: effectiveLexicalEntries = localLexicalEntries ?? lexicalEntries;
   $: hasOfflineDefinitions = Boolean(
-    effectiveLexicalEntries?.modern?.length || effectiveLexicalEntries?.historic?.length,
+    effectiveLexicalEntries?.modern?.length || effectiveLexicalEntries?.historic?.length || effectiveLexicalEntries?.wordset?.length,
   );
 
   let isDictionaryInstalled = false;
@@ -738,7 +738,7 @@
                   {/each}
                 {/if}
 
-                {#if effectiveLexicalEntries && (effectiveLexicalEntries.modern?.length > 0 || effectiveLexicalEntries.historic?.length > 0)}
+                {#if effectiveLexicalEntries && (effectiveLexicalEntries.modern?.length > 0 || effectiveLexicalEntries.historic?.length > 0 || effectiveLexicalEntries.wordset?.length > 0)}
                   <!-- Offline Dictionary Definitions from Dictionary Pack -->
                   <div class="definitions-grid">
                     <!-- Modern Definitions (Wiktionary) -->
@@ -827,6 +827,33 @@
                       </p>
                     {/if}
                     </div>
+
+                    <!-- Wordset Fallback Definitions -->
+                    {#if effectiveLexicalEntries.wordset && effectiveLexicalEntries.wordset.length > 0}
+                    <div class="info-section">
+                      <h3 style="color: #2e7d32; display: flex; align-items: center; gap: 8px;">
+                        <span class="emoji">📗</span> Wordset Dictionary
+                        <span style="font-size: 12px; color: #666; font-weight: normal;">fallback</span>
+                      </h3>
+                      {#each effectiveLexicalEntries.wordset as def}
+                        <div class="wordset-def" style="margin-bottom: 12px; border-left: 3px solid #a5d6a7; padding-left: 12px;">
+                          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                            {#if def.pos}
+                              <span class="pos-pill" style="background: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 12px; font-size: 11px; text-transform: capitalize;">
+                                {def.pos}
+                              </span>
+                            {/if}
+                          </div>
+                          <p class="definition-text" style="margin: 4px 0;">{def.definition}</p>
+                          {#if def.example}
+                            <p class="example-text" style="margin: 4px 0; color: #666; font-style: italic; font-size: 14px;">
+                              "{def.example}"
+                            </p>
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                    {/if}
                   </div>
                 {/if}
 

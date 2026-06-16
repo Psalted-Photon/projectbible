@@ -23,10 +23,12 @@ const defaultWiktionary = fs.existsSync('wiktionary-modern-clean.ndjson')
 const WIKTIONARY_NDJSON = process.argv[2] || defaultWiktionary;
 const GCIDE_NDJSON = process.argv[3] || 'gcide-historic.ndjson';
 const OUTPUT_DB = process.argv[4] || path.join(__dirname, '../../packs/consolidated/dictionary-en.sqlite');
+const WORDSET_NDJSON = 'wordset.ndjson';
 
 console.log('📖 Building English Dictionary Pack\n');
 console.log(`   Wiktionary: ${WIKTIONARY_NDJSON}`);
 console.log(`   GCIDE: ${GCIDE_NDJSON}`);
+console.log(`   Wordset: ${WORDSET_NDJSON} (fallback)`);
 console.log(`   Output: ${OUTPUT_DB}\n`);
 
 if (!fs.existsSync(WIKTIONARY_NDJSON) || !fs.existsSync(GCIDE_NDJSON)) {
@@ -103,6 +105,21 @@ db.exec(`
   
   CREATE INDEX IF NOT EXISTS idx_historic_word_id ON english_definitions_historic(word_id);
   CREATE INDEX IF NOT EXISTS idx_historic_order ON english_definitions_historic(word_id, definition_order);
+
+  CREATE TABLE IF NOT EXISTS english_definitions_wordset (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    word_id INTEGER NOT NULL,
+    pos TEXT,
+    sense_number TEXT,
+    definition_order INTEGER NOT NULL,
+    definition TEXT NOT NULL,
+    example TEXT,
+    source TEXT DEFAULT 'wordset',
+    source_url TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_wordset_word_id ON english_definitions_wordset(word_id);
+  CREATE INDEX IF NOT EXISTS idx_wordset_order ON english_definitions_wordset(word_id, definition_order);
 `);
 
 console.log('✅ Schema ready\n');
@@ -325,6 +342,92 @@ async function importHistoric() {
 }
 
 /**
+ * Import Wordset fallback definitions
+ */
+async function importWordset() {
+  if (!fs.existsSync(WORDSET_NDJSON)) {
+    console.log('⚠️  wordset.ndjson not found, skipping Wordset import.\n');
+    return;
+  }
+
+  console.log('📗 Importing Wordset fallback definitions...');
+
+  db.exec('DELETE FROM english_definitions_wordset');
+
+  const insert = db.prepare(`
+    INSERT INTO english_definitions_wordset
+    (word_id, pos, sense_number, definition_order, definition, example, source, source_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const fileStream = fs.createReadStream(WORDSET_NDJSON);
+  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+  const insertBatch = db.transaction((rows) => {
+    for (const row of rows) {
+      insert.run(
+        row.word_id,
+        row.pos,
+        row.sense_number,
+        row.definition_order,
+        row.definition_text,
+        row.example,
+        row.source,
+        row.source_url
+      );
+    }
+  });
+
+  let batch = [];
+  let count = 0;
+  let skipped = 0;
+
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+
+    try {
+      const row = JSON.parse(line);
+      const wordId = wordMapping.get(row.word.toLowerCase());
+
+      if (!wordId) {
+        skipped++;
+        continue;
+      }
+
+      batch.push({
+        word_id: wordId,
+        pos: row.pos || null,
+        sense_number: row.sense_number || null,
+        definition_order: row.definition_order,
+        definition_text: row.definition_text,
+        example: row.example || null,
+        source: row.source || 'wordset',
+        source_url: row.source_url || null
+      });
+
+      if (batch.length >= 5000) {
+        insertBatch(batch);
+        count += batch.length;
+        batch = [];
+      }
+    } catch (err) {
+      console.warn(`   Warning: Could not parse line: ${line.substring(0, 50)}...`);
+    }
+  }
+
+  if (batch.length > 0) {
+    insertBatch(batch);
+    count += batch.length;
+  }
+
+  console.log(`   ✅ Inserted ${count.toLocaleString()} Wordset definitions`);
+  if (skipped > 0) {
+    console.log(`   ⚠️  Skipped ${skipped.toLocaleString()} rows (no word_id mapping)`);
+  }
+  console.log();
+}
+
+/**
  * Insert pack metadata
  */
 function insertMetadata() {
@@ -337,11 +440,12 @@ function insertMetadata() {
     language: 'en',
     version: '1.0.0',
     schemaVersion: '13',
-    description: 'Modern Wiktionary + Webster 1913 definitions',
+    description: 'Modern Wiktionary + Webster 1913 definitions + Wordset fallback',
     build_date: new Date().toISOString(),
     sources: JSON.stringify([
       { name: 'Wiktionary', url: 'https://en.wiktionary.org/', license: 'CC BY-SA 3.0' },
-      { name: 'GCIDE/Webster 1913', license: 'Public Domain' }
+      { name: 'GCIDE/Webster 1913', license: 'Public Domain' },
+      { name: 'Wordset', url: 'https://github.com/wordset/wordset-dictionary', license: 'MIT' }
     ])
   };
   
@@ -415,13 +519,33 @@ function runIntegrityChecks() {
   } else {
     console.log('   ✅ No orphaned historic definitions');
   }
-  
+
+  const nullWordset = db.prepare("SELECT COUNT(*) as count FROM english_definitions_wordset WHERE definition IS NULL OR definition = ''").get();
+  const orphanedWordset = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM english_definitions_wordset
+    WHERE word_id NOT IN (SELECT word_id FROM word_mapping)
+  `).get();
+
+  if (nullWordset.count > 0) {
+    console.warn(`   ⚠️  Found ${nullWordset.count} null Wordset definitions`);
+  } else {
+    console.log('   ✅ No null Wordset definitions');
+  }
+
+  if (orphanedWordset.count > 0) {
+    console.warn(`   ⚠️  Found ${orphanedWordset.count} orphaned Wordset definitions`);
+  } else {
+    console.log('   ✅ No orphaned Wordset definitions');
+  }
+
   console.log();
 }
 
 // Main build flow
 await importModern();
 await importHistoric();
+await importWordset();
 insertMetadata();
 runIntegrityChecks();
 
@@ -434,6 +558,7 @@ console.log('   ✅ Optimized\n');
 const stats = {
   modern: db.prepare('SELECT COUNT(*) as count FROM english_definitions_modern').get(),
   historic: db.prepare('SELECT COUNT(*) as count FROM english_definitions_historic').get(),
+  wordset: db.prepare('SELECT COUNT(*) as count FROM english_definitions_wordset').get(),
   words: db.prepare('SELECT COUNT(*) as count FROM word_mapping').get()
 };
 
@@ -445,7 +570,8 @@ console.log('📊 Final Statistics:');
 console.log(`   Words: ${stats.words.count.toLocaleString()}`);
 console.log(`   Modern Definitions: ${stats.modern.count.toLocaleString()}`);
 console.log(`   Historic Definitions: ${stats.historic.count.toLocaleString()}`);
-console.log(`   Total Definitions: ${(stats.modern.count + stats.historic.count).toLocaleString()}`);
+console.log(`   Wordset Fallback Definitions: ${stats.wordset.count.toLocaleString()}`);
+console.log(`   Total Definitions: ${(stats.modern.count + stats.historic.count + stats.wordset.count).toLocaleString()}`);
 console.log(`   File Size: ${sizeMB} MB`);
 console.log(`   Location: ${OUTPUT_DB}\n`);
 

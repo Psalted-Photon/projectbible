@@ -28,10 +28,12 @@ const GCIDE_NDJSON = process.argv[3] || 'gcide-historic.ndjson';
 const OUTPUT_DB = process.argv[4] || path.join(__dirname, '../../packs/consolidated/dictionary-en.sqlite');
 const MAPPING_OUT = process.argv[5] || path.join(__dirname, '../../data-manifests/word-mapping.ndjson');
 const MAPPING_REVERSE_OUT = process.argv[6] || path.join(__dirname, '../../data-manifests/word-mapping-reverse.ndjson');
+const WORDSET_NDJSON = 'wordset.ndjson';
 
 console.log('📚 Seeding English Words & Mapping\n');
 console.log(`   Wiktionary: ${WIKTIONARY_NDJSON}`);
 console.log(`   GCIDE: ${GCIDE_NDJSON}`);
+console.log(`   Wordset: ${WORDSET_NDJSON}`);
 console.log(`   Output: ${OUTPUT_DB}\n`);
 console.log(`   Mapping: ${MAPPING_OUT}`);
 console.log(`   Reverse: ${MAPPING_REVERSE_OUT}\n`);
@@ -108,9 +110,18 @@ async function seedWordMapping() {
   console.log('📚 Step 2: Extract lemmas from GCIDE...');
   const gcideLemmas = await extractLemmas(GCIDE_NDJSON);
   console.log(`   ✅ Found ${gcideLemmas.size.toLocaleString()} unique GCIDE lemmas\n`);
-  
+
+  let wordsetLemmas = new Set();
+  if (fs.existsSync(WORDSET_NDJSON)) {
+    console.log('📗 Step 2b: Extract lemmas from Wordset...');
+    wordsetLemmas = await extractLemmas(WORDSET_NDJSON);
+    console.log(`   ✅ Found ${wordsetLemmas.size.toLocaleString()} unique Wordset lemmas\n`);
+  } else {
+    console.log(`   ℹ️  Wordset NDJSON not found (${WORDSET_NDJSON}), skipping\n`);
+  }
+
   console.log('🔗 Step 3: Merge and deduplicate...');
-  const allLemmas = new Set([...wiktionaryLemmas, ...gcideLemmas]);
+  const allLemmas = new Set([...wiktionaryLemmas, ...gcideLemmas, ...wordsetLemmas]);
   console.log(`   ✅ Total unique lemmas: ${allLemmas.size.toLocaleString()}\n`);
   
   console.log('💾 Step 4: Insert into word_mapping...');
