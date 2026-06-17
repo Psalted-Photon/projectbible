@@ -79,9 +79,9 @@
                       "version":  "1.1.0",
                       "schemaVersion":  "1",
                       "minAppVersion":  "1.0.0",
-                      "size":  46514176,
-                      "sizeMB":  44.36,
-                      "sha256":  "b3a66e8477bef8445aa7636ae885d771ef9d22c14603248aa5a967262a9ed9f5",
+                      "size":  46624768,
+                      "sizeMB":  44.46,
+                      "sha256":  "a8aa4d1219edce01592a73554f9688884dc38d335bc6928d6e895b7b419f756e",
                       "dependencies":  [
 
                                        ],

@@ -1317,6 +1317,40 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         }
       }
       
+      // Import Wordset fallback definitions
+      if (tableNames.includes('english_definitions_wordset')) {
+        console.log('Importing Wordset fallback definitions...');
+        const rows = db.exec(`
+          SELECT id, word_id, pos, sense_number, definition_order, definition,
+                 example, source, source_url
+          FROM english_definitions_wordset
+        `);
+
+        if (rows.length && rows[0].values.length) {
+          const data = rows[0].values.map(([id, wordId, pos, senseNum, defOrder, def, ex, src, url]) => ({
+            id: id as number,
+            word_id: wordId as number,
+            pos: pos as string | null,
+            sense_number: senseNum as string | null,
+            definition_order: defOrder as number,
+            definition: def as string,
+            example: ex as string | null,
+            source: (src as string) || 'wordset',
+            source_url: url as string | null
+          }));
+
+          const WORDSET_CHUNK = 1000;
+          for (let i = 0; i < data.length; i += WORDSET_CHUNK) {
+            const chunk = data.slice(i, i + WORDSET_CHUNK);
+            await batchWriteTransaction('english_definitions_wordset', (store) => {
+              chunk.forEach(entry => store.put(entry));
+            });
+            console.log(`Imported ${Math.min(i + WORDSET_CHUNK, data.length).toLocaleString()}/${data.length.toLocaleString()} Wordset definitions`);
+          }
+          console.log(`✅ Wordset definitions imported: ${data.length.toLocaleString()} entries`);
+        }
+      }
+
       // Import word mapping (lemma → word_id)
       if (tableNames.includes('word_mapping')) {
         console.log('Importing word mapping...');

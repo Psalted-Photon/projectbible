@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 26; // Migration 26: add audio_cache store for cached chapter audio blobs
+const DB_VERSION = 27; // Migration 27: add english_definitions_wordset store for Wordset fallback
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -571,6 +571,13 @@ export function openDB(): Promise<IDBDatabase> {
         const historicStore = db.createObjectStore('english_definitions_historic', { keyPath: 'id', autoIncrement: true });
         historicStore.createIndex('word_id', 'word_id', { unique: false });
         historicStore.createIndex('word_order', ['word_id', 'definition_order'], { unique: false });
+      }
+
+      // English definitions (Wordset fallback)
+      if (!db.objectStoreNames.contains('english_definitions_wordset')) {
+        const wordsetStore = db.createObjectStore('english_definitions_wordset', { keyPath: 'id', autoIncrement: true });
+        wordsetStore.createIndex('word_id', 'word_id', { unique: false });
+        wordsetStore.createIndex('word_order', ['word_id', 'definition_order'], { unique: false });
       }
       
       // Chronological order (moved from study pack to core schema)
