@@ -189,6 +189,23 @@
                                        ],
                       "downloadUrl":  "/api/packs/section-headings.sqlite",
                       "createdAt":  "2026-04-07T00:00:00.000Z"
+                  },
+                  {
+                      "id":  "people-biblical-v1",
+                      "type":  "people",
+                      "name":  "Biblical Characters",
+                      "description":  "Every named person in the Bible: dates, places, family, name meaning, and verse appearances. License: CC BY-SA 4.0 — Theographic Bible Metadata; name meanings from Hitchcock's (public domain)",
+                      "version":  "1.0.0",
+                      "schemaVersion":  "1",
+                      "minAppVersion":  "1.0.0",
+                      "size":  4001792,
+                      "sizeMB":  3.82,
+                      "sha256":  "95b1720a0cd403c31f9ba7889d50d9a43f7894f3960628f507b3b899875e1d52",
+                      "dependencies":  [
+
+                                       ],
+                      "downloadUrl":  "/api/packs/people.sqlite",
+                      "createdAt":  "2026-06-17T00:00:00.000Z"
                   }
               ]
 }

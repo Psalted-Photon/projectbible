@@ -66,7 +66,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // stored ID always matches the canonical manifest IDs used by the UI.
       id: rawId?.replace(/\.v\d+$/, '') ?? rawId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references',
+      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -855,6 +855,109 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       } else {
         console.warn('⚠️  No modern_places table found in this pack');
       }
+    } else if (packInfo.type === 'people') {
+      // Import biblical characters pack (people + name index + verse appearances)
+      console.log('Importing people (biblical characters) pack...');
+
+      const idb = await openDB();
+
+      // People
+      const peopleRows = db.exec(`
+        SELECT person_id, name, display_title, also_called, surname, gender, status,
+               name_meaning, birth_year, death_year, min_year, max_year,
+               birth_place, death_place, member_of, father, mother, partners,
+               children, siblings, dict_text, dict_link, verse_count
+        FROM people
+      `);
+      if (peopleRows.length && peopleRows[0].values.length) {
+        const people = peopleRows[0].values.map((r) => {
+          const [person_id, name, displayTitle, alsoCalled, surname, gender, status,
+                 nameMeaning, birthYear, deathYear, minYear, maxYear,
+                 birthPlace, deathPlace, memberOf, father, mother, partners,
+                 children, siblings, dictText, dictLink, verseCount] = r;
+          return {
+            id: person_id as string,
+            name: name as string,
+            displayTitle: displayTitle as string | undefined,
+            alsoCalled: alsoCalled as string | undefined,
+            surname: surname as string | undefined,
+            gender: gender as string | undefined,
+            status: status as string | undefined,
+            nameMeaning: nameMeaning as string | undefined,
+            birthYear: birthYear as number | null,
+            deathYear: deathYear as number | null,
+            minYear: minYear as number | null,
+            maxYear: maxYear as number | null,
+            birthPlace: birthPlace as string | undefined,
+            deathPlace: deathPlace as string | undefined,
+            memberOf: memberOf as string | undefined,
+            father: father as string | undefined,
+            mother: mother as string | undefined,
+            partners: partners as string | undefined,
+            children: children as string | undefined,
+            siblings: siblings as string | undefined,
+            dictText: dictText as string | undefined,
+            dictLink: dictLink as string | undefined,
+            verseCount: verseCount as number | undefined,
+          };
+        });
+        console.log(`Importing ${people.length} people...`);
+        const CHUNK_SIZE = 500;
+        for (let i = 0; i < people.length; i += CHUNK_SIZE) {
+          const chunk = people.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('people', (store) => chunk.forEach((p) => store.put(p)));
+        }
+        console.log(`✅ Imported ${people.length} people`);
+      }
+
+      // Name index — clear first so re-imports don't duplicate (autoIncrement keys)
+      const nameRows = db.exec('SELECT name_lower, person_id FROM person_names');
+      if (nameRows.length && nameRows[0].values.length) {
+        await new Promise<void>((resolve, reject) => {
+          const tx = idb.transaction('person_names', 'readwrite');
+          tx.objectStore('person_names').clear();
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+        const names = nameRows[0].values.map(([nameLower, personId]) => ({
+          nameLower: nameLower as string,
+          personId: personId as string,
+        }));
+        console.log(`Importing ${names.length} person-name index entries...`);
+        const CHUNK_SIZE = 1000;
+        for (let i = 0; i < names.length; i += CHUNK_SIZE) {
+          const chunk = names.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('person_names', (store) => chunk.forEach((n) => store.put(n)));
+        }
+        console.log(`✅ Imported ${names.length} name index entries`);
+      }
+
+      // Verse appearances — clear first (autoIncrement keys)
+      const verseRows = db.exec('SELECT person_id, book, chapter, verse, osis FROM person_verses');
+      if (verseRows.length && verseRows[0].values.length) {
+        await new Promise<void>((resolve, reject) => {
+          const tx = idb.transaction('person_verses', 'readwrite');
+          tx.objectStore('person_verses').clear();
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+        const verses = verseRows[0].values.map(([personId, book, chapter, verse, osis]) => ({
+          personId: personId as string,
+          book: book as string,
+          chapter: chapter as number,
+          verse: verse as number,
+          osis: osis as string | undefined,
+        }));
+        console.log(`Importing ${verses.length} person-verse links...`);
+        const CHUNK_SIZE = 1000;
+        for (let i = 0; i < verses.length; i += CHUNK_SIZE) {
+          const chunk = verses.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('person_verses', (store) => chunk.forEach((v) => store.put(v)));
+        }
+        console.log(`✅ Imported ${verses.length} person-verse links`);
+      }
+
+      console.log(`✅ People pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'map') {
       // Import map/places data
       console.log('Importing map pack...');

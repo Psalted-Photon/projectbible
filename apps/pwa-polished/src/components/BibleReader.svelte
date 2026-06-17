@@ -2861,9 +2861,17 @@
         (async () => {
           try {
             console.log('🔄 Importing lexicon lookup module...');
-            const { lookupWord, lookupStrongs, lookupEnglishWord } = await import('../adapters/lexicon-lookup.js');
+            const { lookupWord, lookupStrongs, lookupEnglishWord, lookupPerson } = await import('../adapters/lexicon-lookup.js');
             console.log('✅ Module imported successfully');
-            
+
+            // Resolve the clicked word as a biblical character, disambiguating by
+            // the verse it was clicked in (handles homonyms like the six Marys).
+            const verseRefForPerson = selectedVerseNumber != null
+              ? { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber }
+              : null;
+            const characterData = await lookupPerson(text, verseRefForPerson);
+            if (characterData) console.log('👤 Character match:', characterData.person.id, 'byVerse:', characterData.matchedByVerse);
+
             // Check if this is an English translation
             const englishTranslations = ['kjv', 'web', 'bsb', 'net', 'lxx2012'];
             const isEnglish = englishTranslations.includes(currentTranslation.toLowerCase());
@@ -2893,6 +2901,7 @@
                 // Open modal with results
                 console.log('✅ Opening modal with lexical entries');
                 lexicalModalStore.open({
+                  characterData,
                   selectedText: text,
                   strongsId: undefined,
                   morphologyData: null,
@@ -2903,6 +2912,7 @@
                 console.log(`ℹ️ No lexical data found for "${text}"`);
                 console.log('💡 Make sure you have installed the "Lexical Resources Pack" (365 MB) from the Packs menu.');
                 lexicalModalStore.open({
+                  characterData,
                   selectedText: text,
                   strongsId: undefined,
                   morphologyData: null,
@@ -2919,6 +2929,7 @@
                 console.log('Found Strong\'s entry:', entry);
               }
               lexicalModalStore.open({
+                characterData,
                 selectedText: text,
                 strongsId: capturedMorphology.strongsId,
                 morphologyData: capturedMorphology,
@@ -2928,6 +2939,7 @@
             } else if (capturedMorphology) {
               // Have morphology but no Strong's ID
               lexicalModalStore.open({
+                characterData,
                 selectedText: text,
                 strongsId: undefined,
                 morphologyData: capturedMorphology,
@@ -2941,6 +2953,7 @@
               // English lexicon lookup.
               console.log(`ℹ️ No morphology found for original-language word: "${text}"`);
               lexicalModalStore.open({
+                characterData,
                 selectedText: text,
                 strongsId: undefined,
                 morphologyData: null,
@@ -2957,6 +2970,7 @@
                 console.log('💡 Make sure you have installed the "Lexical Resources Pack" from the Packs menu.');
               }
               lexicalModalStore.open({
+                characterData,
                 selectedText: text,
                 strongsId: undefined,
                 morphologyData: null,
@@ -2967,6 +2981,7 @@
           } catch (error) {
             console.error('Lexicon lookup error:', error);
             lexicalModalStore.open({
+              characterData,
               selectedText: text,
               strongsId: undefined,
               morphologyData: capturedMorphology,

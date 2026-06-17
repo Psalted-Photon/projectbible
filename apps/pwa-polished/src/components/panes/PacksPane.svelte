@@ -115,6 +115,14 @@
       url: `${BASE_URL}/section-headings.sqlite`,
     },
     {
+      id: "people-biblical-v1",
+      name: "Biblical Characters",
+      description: "Every named person: dates, places, family, name meaning, and verse appearances. Tap a name in the reader → Define. License: CC BY-SA 4.0 — Theographic + Hitchcock's (public domain)",
+      size: "3.82 MB",
+      icon: "👤",
+      url: `${BASE_URL}/people.sqlite`,
+    },
+    {
       id: "bsb-audio-pt1",
       name: "BSB Audio Part 1",
       description: "Genesis - Psalms",

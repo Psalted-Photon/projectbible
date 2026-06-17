@@ -21,6 +21,43 @@
   $: strongsId = $lexicalModalStore.strongsId;
   $: morphologyData = $lexicalModalStore.morphologyData;
   $: lexicalEntries = $lexicalModalStore.lexicalEntries;
+  $: characterData = $lexicalModalStore.characterData ?? null;
+
+  // --- Biblical character ("Character" view) ---
+  let charPersonId: string | null = null;   // when user switches between homonyms
+  let showDefinition = false;                // toggle from character -> dictionary
+  // Reset character view selection whenever a new lookup arrives
+  $: characterData, ((charPersonId = null), (showDefinition = false));
+  $: charCandidates = characterData ? [characterData.person, ...characterData.alternates] : [];
+  $: person = characterData
+    ? (charCandidates.find((p) => p.id === charPersonId) ?? characterData.person)
+    : null;
+  $: showCharacter = !!person && !showDefinition;
+
+  function formatYear(y: number | null | undefined): string {
+    if (y === null || y === undefined) return '';
+    return y < 0 ? `${-y} BC` : `${y} AD`;
+  }
+  function lifespan(p: any): string {
+    const b = formatYear(p?.birthYear), d = formatYear(p?.deathYear);
+    if (b && d) return `c. ${b} – ${d}`;
+    if (b) return `b. c. ${b}`;
+    if (d) return `d. c. ${d}`;
+    return '';
+  }
+  function relNames(arr: any[]): string {
+    return (arr || []).map((x) => x?.name).filter(Boolean).join(', ');
+  }
+  // Strip the markdown link/emphasis syntax from Easton's dictText for plain display.
+  function cleanBio(text: string | undefined): string[] {
+    if (!text) return [];
+    return text
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // [label](link) -> label
+      .replace(/[*_`]/g, '')
+      .split(/\n{2,}/)
+      .map((p) => p.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+  }
 
   let lexiconStore: IndexedDBLexiconStore;
   let strongEntry: StrongEntry | null = null;
@@ -496,7 +533,9 @@
     <div class="modal-container">
       <div class="modal-header">
         <h2>
-          {#if strongEntry}
+          {#if showCharacter && person}
+            {person.displayTitle || person.name}
+          {:else if strongEntry}
             {strongEntry.lemma}
             <span
               class="strongs-id"
@@ -528,7 +567,94 @@
       </div>
 
       <div class="modal-body">
-        {#if loading}
+        {#if person && showDefinition}
+          <button class="char-back" on:click={() => (showDefinition = false)}>
+            ← Back to {person.displayTitle || person.name}
+          </button>
+        {/if}
+        {#if showCharacter && person}
+          <!-- Biblical Character -->
+          <div class="character-view">
+            {#if person.nameMeaning}
+              <p class="char-meaning">“{person.nameMeaning}”</p>
+            {/if}
+            {#if person.alsoCalled}
+              <p class="char-aka">Also called: {person.alsoCalled}</p>
+            {/if}
+
+            <dl class="char-facts">
+              {#if lifespan(person)}
+                <dt>Lived</dt><dd>{lifespan(person)}</dd>
+              {/if}
+              {#if person.gender}
+                <dt>Gender</dt><dd>{person.gender}</dd>
+              {/if}
+              {#if person.birthPlace?.name}
+                <dt>Born</dt><dd>{person.birthPlace.name}</dd>
+              {/if}
+              {#if person.deathPlace?.name}
+                <dt>Died</dt><dd>{person.deathPlace.name}</dd>
+              {/if}
+              {#if person.memberOf && person.memberOf.length}
+                <dt>Member of</dt><dd>{person.memberOf.join(', ')}</dd>
+              {/if}
+              {#if relNames(person.father) || relNames(person.mother)}
+                <dt>Parents</dt><dd>{[relNames(person.father), relNames(person.mother)].filter(Boolean).join(', ')}</dd>
+              {/if}
+              {#if relNames(person.partners)}
+                <dt>Partner{person.partners.length > 1 ? 's' : ''}</dt><dd>{relNames(person.partners)}</dd>
+              {/if}
+              {#if relNames(person.children)}
+                <dt>Children</dt><dd>{relNames(person.children)}</dd>
+              {/if}
+              {#if relNames(person.siblings)}
+                <dt>Siblings</dt><dd>{relNames(person.siblings)}</dd>
+              {/if}
+              {#if person.verseCount}
+                <dt>Appears in</dt><dd>{person.verseCount} verse{person.verseCount === 1 ? '' : 's'}</dd>
+              {/if}
+            </dl>
+
+            {#if cleanBio(person.dictText).length}
+              <div class="char-bio">
+                {#each cleanBio(person.dictText) as para}
+                  <p>{para}</p>
+                {/each}
+              </div>
+            {/if}
+
+            {#if charCandidates.length > 1}
+              <div class="char-alternates">
+                <p class="char-alternates-label">
+                  {characterData?.matchedByVerse
+                    ? `Other people named “${selectedText}”:`
+                    : `Multiple people named “${selectedText}” — pick one:`}
+                </p>
+                <div class="char-alt-buttons">
+                  {#each charCandidates as cand}
+                    <button
+                      class="char-alt-btn"
+                      class:active={cand.id === person.id}
+                      on:click={() => (charPersonId = cand.id)}
+                    >
+                      {cand.displayTitle || cand.name}
+                      {#if cand.verseCount}<span class="char-alt-count">({cand.verseCount})</span>{/if}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            <div class="char-footer">
+              <button class="char-toggle" on:click={() => (showDefinition = true)}>
+                Show dictionary definition →
+              </button>
+              <p class="char-attribution">
+                Character data: Theographic Bible Metadata (CC BY-SA 4.0); name meaning: Hitchcock's (public domain)
+              </p>
+            </div>
+          </div>
+        {:else if loading}
           <div class="loading">
             <div class="spinner"></div>
             <p>Loading lexical data...</p>
@@ -1756,5 +1882,102 @@
       font-size: 14px;
       white-space: nowrap;
     }
+  }
+
+  /* --- Biblical character view --- */
+  .character-view {
+    padding: 4px 2px;
+  }
+  .char-meaning {
+    font-size: 16px;
+    font-style: italic;
+    color: #4a5568;
+    margin: 0 0 8px;
+  }
+  .char-aka {
+    font-size: 13px;
+    color: #718096;
+    margin: 0 0 12px;
+  }
+  .char-facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 14px;
+    margin: 0 0 16px;
+  }
+  .char-facts dt {
+    font-weight: 600;
+    color: #2d3748;
+    font-size: 13px;
+  }
+  .char-facts dd {
+    margin: 0;
+    color: #4a5568;
+    font-size: 13px;
+  }
+  .char-bio p {
+    color: #2d3748;
+    font-size: 14px;
+    line-height: 1.55;
+    margin: 0 0 10px;
+  }
+  .char-alternates {
+    margin: 14px 0 4px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+  }
+  .char-alternates-label {
+    font-size: 12px;
+    color: #718096;
+    margin: 0 0 6px;
+  }
+  .char-alt-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .char-alt-btn {
+    padding: 4px 10px;
+    border: 1px solid #cbd5e0;
+    border-radius: 14px;
+    background: #f7fafc;
+    color: #2d3748;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .char-alt-btn.active {
+    background: #667eea;
+    border-color: #667eea;
+    color: #fff;
+  }
+  .char-alt-count {
+    opacity: 0.7;
+    margin-left: 3px;
+  }
+  .char-footer {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+  }
+  .char-toggle {
+    background: none;
+    border: none;
+    color: #667eea;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .char-attribution {
+    margin: 8px 0 0;
+    font-size: 11px;
+    color: #a0aec0;
+  }
+  .char-back {
+    background: none;
+    border: none;
+    color: #667eea;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0 0 10px;
   }
 </style>

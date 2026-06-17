@@ -10,7 +10,7 @@ export interface BundledPack {
   name: string;
   filename: string;
   url: string;
-  type: 'translation' | 'lexicon' | 'maps' | 'commentary' | 'geonames';
+  type: 'translation' | 'lexicon' | 'maps' | 'commentary' | 'geonames' | 'people';
   required: boolean;
   isLexical?: boolean; // For English lexical packs (handled separately)
 }
@@ -168,6 +168,14 @@ const BUNDLED_PACKS: BundledPack[] = [
     filename: 'openbible.sqlite',
     url: '/openbible.sqlite',
     type: 'commentary',
+    required: false
+  },
+  {
+    id: 'people-biblical-v1',
+    name: 'Biblical Characters',
+    filename: 'people.sqlite',
+    url: '/people.sqlite',
+    type: 'people',
     required: false
   },
   {

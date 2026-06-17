@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 27; // Migration 27: add english_definitions_wordset store (Concise definitions)
+const DB_VERSION = 28; // Migration 28: add people/person_names/person_verses stores (biblical characters)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -29,7 +29,7 @@ export interface DBSectionHeading {
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -248,6 +248,47 @@ export interface DBPlaceNameLink {
   placeId: string; // Link to DBPlace
   language: 'hebrew' | 'greek' | 'english';
   strongsId?: string; // If the place name has a Strong's entry
+}
+
+export interface DBPerson {
+  id: string;             // personLookup slug, e.g. "moses_2108"
+  name: string;
+  displayTitle?: string;
+  alsoCalled?: string;
+  surname?: string;
+  gender?: string;
+  status?: string;
+  nameMeaning?: string;   // Hitchcock's name meaning
+  birthYear?: number | null;
+  deathYear?: number | null;
+  minYear?: number | null;
+  maxYear?: number | null;
+  birthPlace?: string;    // JSON {name,slug,lat,lon}
+  deathPlace?: string;    // JSON {name,slug,lat,lon}
+  memberOf?: string;      // JSON [groupName]
+  father?: string;        // JSON [{id,name}]
+  mother?: string;
+  partners?: string;
+  children?: string;
+  siblings?: string;
+  dictText?: string;
+  dictLink?: string;
+  verseCount?: number;
+}
+
+export interface DBPersonName {
+  id?: number;            // auto-increment
+  nameLower: string;      // lowercased name / alt-name / token
+  personId: string;
+}
+
+export interface DBPersonVerse {
+  id?: number;            // auto-increment
+  personId: string;
+  book: string;           // canonical book name
+  chapter: number;
+  verse: number;
+  osis?: string;
 }
 
 export interface DBMapTile {
@@ -773,6 +814,26 @@ export function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('section_headings')) {
         const headingsStore = db.createObjectStore('section_headings', { keyPath: 'id' });
         headingsStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
+      }
+
+      // People store (biblical characters — bio, dates, places, relationships)
+      if (!db.objectStoreNames.contains('people')) {
+        const peopleStore = db.createObjectStore('people', { keyPath: 'id' });
+        peopleStore.createIndex('name', 'name', { unique: false });
+      }
+
+      // Person name index (name / alt-name / token -> personId) for clicked-word lookup
+      if (!db.objectStoreNames.contains('person_names')) {
+        const personNamesStore = db.createObjectStore('person_names', { keyPath: 'id', autoIncrement: true });
+        personNamesStore.createIndex('nameLower', 'nameLower', { unique: false });
+        personNamesStore.createIndex('personId', 'personId', { unique: false });
+      }
+
+      // Person verse appearances (personId <-> book/chapter/verse) for verse-context disambiguation
+      if (!db.objectStoreNames.contains('person_verses')) {
+        const personVersesStore = db.createObjectStore('person_verses', { keyPath: 'id', autoIncrement: true });
+        personVersesStore.createIndex('personId', 'personId', { unique: false });
+        personVersesStore.createIndex('book_chapter_verse', ['book', 'chapter', 'verse'], { unique: false });
       }
 
       // Modern world places store (GeoNames — cities, states, countries worldwide)
