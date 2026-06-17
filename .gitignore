@@ -21,8 +21,9 @@ scripts/dictionary-parsers/*.ndjson*
 scripts/dictionary-parsers/gcide-historic.ndjson
 wiktionary-modern.ndjson
 wiktionary-modern-clean.ndjson
-packs/consolidated/*.sqlite-shm
-packs/consolidated/*.sqlite-wal
+# SQLite WAL sidecar files (transient, should never be committed)
+*.sqlite-shm
+*.sqlite-wal
 
 # BSB Audio pack - too large for GitHub (3.4GB MP3s)
 # Users can rebuild with: npm run build:bsb-audio

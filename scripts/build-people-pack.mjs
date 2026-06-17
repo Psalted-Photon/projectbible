@@ -155,7 +155,8 @@ function resolveGroups(ids) {
 
 // --- Build SQLite ---
 const db = new Database(PACK_OUTPUT);
-db.pragma('journal_mode = WAL');
+// DELETE journal mode avoids leaving -wal/-shm sidecar files next to the pack.
+db.pragma('journal_mode = DELETE');
 
 db.exec(`
   DROP TABLE IF EXISTS metadata;
