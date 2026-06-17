@@ -503,9 +503,9 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
     
     entry.historic = historicDefs;
 
-    // Look up Wordset fallback definitions — only when modern and historic are both empty
-    if (modernDefs.length === 0 && historicDefs.length === 0 && definitionWordId) {
-      console.log('🔍 No modern/historic defs found, checking Wordset fallback for word_id:', definitionWordId);
+    // Look up Concise definitions (Wordset) — shown alongside modern and historic
+    if (definitionWordId) {
+      console.log('🔍 Looking up Concise (Wordset) definitions for word_id:', definitionWordId);
       const wordsetDefs = await new Promise<Definition[]>((resolve) => {
         if (!db.objectStoreNames.contains('english_definitions_wordset')) {
           resolve([]);
@@ -520,11 +520,11 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
         request.onsuccess = () => {
           const results = (request.result || []) as Definition[];
           results.sort((a, b) => a.definition_order - b.definition_order);
-          console.log(`✅ Found ${results.length} Wordset fallback definitions`);
+          console.log(`✅ Found ${results.length} Concise (Wordset) definitions`);
           resolve(results);
         };
         request.onerror = () => {
-          console.log('❌ Wordset fallback lookup failed');
+          console.log('❌ Concise (Wordset) lookup failed');
           resolve([]);
         };
       });

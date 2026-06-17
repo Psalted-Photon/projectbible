@@ -1317,9 +1317,9 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         }
       }
       
-      // Import Wordset fallback definitions
+      // Import Concise definitions (Wordset)
       if (tableNames.includes('english_definitions_wordset')) {
-        console.log('Importing Wordset fallback definitions...');
+        console.log('Importing Concise (Wordset) definitions...');
         const rows = db.exec(`
           SELECT id, word_id, pos, sense_number, definition_order, definition,
                  example, source, source_url

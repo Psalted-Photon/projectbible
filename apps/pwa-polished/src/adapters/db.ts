@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 27; // Migration 27: add english_definitions_wordset store for Wordset fallback
+const DB_VERSION = 27; // Migration 27: add english_definitions_wordset store (Concise definitions)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -573,7 +573,7 @@ export function openDB(): Promise<IDBDatabase> {
         historicStore.createIndex('word_order', ['word_id', 'definition_order'], { unique: false });
       }
 
-      // English definitions (Wordset fallback)
+      // English definitions (Concise / Wordset)
       if (!db.objectStoreNames.contains('english_definitions_wordset')) {
         const wordsetStore = db.createObjectStore('english_definitions_wordset', { keyPath: 'id', autoIncrement: true });
         wordsetStore.createIndex('word_id', 'word_id', { unique: false });

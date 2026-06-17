@@ -828,12 +828,12 @@
                     {/if}
                     </div>
 
-                    <!-- Wordset Fallback Definitions -->
+                    <!-- Concise Definitions (Wordset) -->
                     {#if effectiveLexicalEntries.wordset && effectiveLexicalEntries.wordset.length > 0}
                     <div class="info-section">
                       <h3 style="color: #2e7d32; display: flex; align-items: center; gap: 8px;">
-                        <span class="emoji">📗</span> Wordset Dictionary
-                        <span style="font-size: 12px; color: #666; font-weight: normal;">fallback</span>
+                        <span class="emoji">📗</span> Concise Definitions
+                        <span style="font-size: 12px; color: #666; font-weight: normal;">Wordset</span>
                       </h3>
                       {#each effectiveLexicalEntries.wordset as def}
                         <div class="wordset-def" style="margin-bottom: 12px; border-left: 3px solid #a5d6a7; padding-left: 12px;">
