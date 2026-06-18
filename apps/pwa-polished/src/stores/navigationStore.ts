@@ -8,6 +8,8 @@ export interface NavigationState {
   isChronologicalMode?: boolean;
   highlightedVerse?: number | null;
   scrollTargetVerse?: number | null;
+  /** Verse to flash with a category-colored fade highlight after a link navigation. */
+  linkHighlightVerse?: number | null;
   showReferences?: boolean;
   showCommentaries?: boolean;
   selectedCommentaryAuthors?: string[];
@@ -116,13 +118,29 @@ function createNavigationStore() {
       scrollTargetVerse: number | null = null,
     ) => {
       update(state => {
-        const next = { ...state, translation, book: normalizeBookName(book), chapter, highlightedVerse: null, scrollTargetVerse };
+        const next = { ...state, translation, book: normalizeBookName(book), chapter, highlightedVerse: null, scrollTargetVerse, linkHighlightVerse: null };
+        persistState(next);
+        return next;
+      });
+    },
+    // Navigate to a specific verse and flash a category-colored fade highlight on it.
+    navigateToVerse: (
+      translation: string,
+      book: string,
+      chapter: number,
+      verse: number,
+    ) => {
+      update(state => {
+        const next = { ...state, translation, book: normalizeBookName(book), chapter, highlightedVerse: null, scrollTargetVerse: verse, linkHighlightVerse: verse };
         persistState(next);
         return next;
       });
     },
     clearScrollTarget: () => {
       update(state => ({ ...state, scrollTargetVerse: null }));
+    },
+    clearLinkHighlight: () => {
+      update(state => ({ ...state, linkHighlightVerse: null }));
     },
     setReadingPlanActiveTarget: (book: string, chapter: number, verse: number | null, consecutiveDay: boolean) => {
       update(state => ({ ...state, readingPlanActiveTarget: { book: normalizeBookName(book), chapter, verse, consecutiveDay } }));

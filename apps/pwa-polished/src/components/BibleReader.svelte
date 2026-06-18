@@ -25,7 +25,7 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
-  import { BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName, getBookColor as getCategoryColor } from "../lib/bibleData";
   import { getSettings } from "../adapters/settings";
   import { readTransaction } from "../adapters/db";
   import type { DBMorphology } from "../adapters/db";
@@ -316,6 +316,9 @@
   let _reopenBookIntroPanel = false;
   // Verse to highlight after navigating from a commentary popup verse link
   let _commNavHighlightVerse: number | null = null;
+  // Verse to highlight after navigating from a link (e.g. Character modal verse list);
+  // colored by the target book's category.
+  let _linkNavHighlightVerse: number | null = null;
 
   function handleAnnotationNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
@@ -531,6 +534,25 @@
       });
     }
     if (newKey === null) _lastRpTargetKey = null;
+  }
+
+  // Apply the link-nav category-colored highlight when already on the target chapter
+  // (same-chapter clicks don't reload, so the load-path applier above won't fire).
+  let _lastLinkHlKey: string | null = null;
+  $: {
+    const lhv = windowId ? null : $navigationStore.linkHighlightVerse;
+    const key = lhv != null ? `${currentBook}-${currentChapter}-${lhv}` : null;
+    if (key !== null && key !== _lastLinkHlKey && chapters.length > 0) {
+      _lastLinkHlKey = key;
+      _linkNavHighlightVerse = lhv;
+      tick().then(async () => {
+        const el = readerElement?.querySelector(`.verse[data-verse="${lhv}"]`) as HTMLElement | null;
+        if (el) scrollToVerseEl(el);
+        await applyLinkNavHighlight();
+        navigationStore.clearLinkHighlight();
+      });
+    }
+    if (key === null) _lastLinkHlKey = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -1217,6 +1239,11 @@
         if (_commNavHighlightVerse != null) {
           await applyCommNavHighlight();
         }
+        if (!windowId && $navigationStore.linkHighlightVerse != null) {
+          _linkNavHighlightVerse = $navigationStore.linkHighlightVerse;
+          await applyLinkNavHighlight();
+          navigationStore.clearLinkHighlight();
+        }
       }
     } catch (err: unknown) {
       console.error("Error loading chapter:", err);
@@ -1327,6 +1354,40 @@
     verseEl.style.setProperty('--rp-hl-left', `${leftOffset}px`);
     verseEl.classList.add('comm-nav-verse-highlight');
     _commNavHighlightVerse = null;
+  }
+
+  function clearLinkNavHighlight(): void {
+    readerElement?.querySelectorAll('.link-nav-verse-highlight').forEach(el => {
+      el.classList.remove('link-nav-verse-highlight');
+      (el as HTMLElement).style.removeProperty('--rp-hl-left');
+      (el as HTMLElement).style.removeProperty('--link-hl-color');
+    });
+  }
+
+  // Highlight the navigated verse with a fade gradient in the target book's category color.
+  async function applyLinkNavHighlight(): Promise<void> {
+    await tick();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    if (!readerElement || _linkNavHighlightVerse == null) return;
+    clearLinkNavHighlight();
+    const verseEl = readerElement.querySelector(
+      `.verse[data-verse="${_linkNavHighlightVerse}"]`
+    ) as HTMLElement | null;
+    if (!verseEl) return;
+    const textEl = verseEl.querySelector('.verse-text') as HTMLElement | null;
+    const leftOffset = textEl ? textEl.offsetLeft : 32;
+    verseEl.style.setProperty('--rp-hl-left', `${leftOffset}px`);
+    verseEl.style.setProperty('--link-hl-color', hexToRgba(getCategoryColor(currentBook), 0.45));
+    verseEl.classList.add('link-nav-verse-highlight');
+    _linkNavHighlightVerse = null;
+  }
+
+  function hexToRgba(hex: string, alpha: number): string {
+    const m = hex.replace('#', '');
+    const r = parseInt(m.slice(0, 2), 16);
+    const g = parseInt(m.slice(2, 4), 16);
+    const b = parseInt(m.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
   async function loadAndApplyHighlights(book: string, chapter: number) {
@@ -4206,6 +4267,16 @@
   :global(.comm-nav-verse-highlight) {
     isolation: isolate;
     background: linear-gradient(to right, rgba(255, 215, 0, 0.45), transparent);
+    background-position: var(--rp-hl-left, 2em) center;
+    background-size: 30ch calc(1em + 7px);
+    background-repeat: no-repeat;
+    border-radius: 3px;
+  }
+
+  /* Link navigation highlight (e.g. Character verse list) — color set per book category */
+  :global(.link-nav-verse-highlight) {
+    isolation: isolate;
+    background: linear-gradient(to right, var(--link-hl-color, rgba(255, 215, 0, 0.45)), transparent);
     background-position: var(--rp-hl-left, 2em) center;
     background-size: 30ch calc(1em + 7px);
     background-repeat: no-repeat;

@@ -2,7 +2,8 @@
   import { onMount } from "svelte";
   import { IndexedDBLexiconStore } from "../adapters/LexiconStore";
   import type { StrongEntry } from "@projectbible/core";
-  import { BIBLE_BOOKS } from "../lib/bibleData.js";
+  import { BIBLE_BOOKS, normalizeBookName, getBookColor } from "../lib/bibleData.js";
+  import { IndexedDBTextStore } from "../lib/adapters";
   import {
     englishLexicalService,
     type WordInfo,
@@ -65,7 +66,9 @@
   let versesLoading = false;
   let showVerseList = false;
   let expandedBooks = new Set<string>();
+  let versePreviews: Record<string, string> = {}; // "Book chapter:verse" -> verse text
   const bookOrder = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
+  const verseTextStore = new IndexedDBTextStore();
 
   // Reset the verse list whenever the displayed person changes (new lookup or alternate)
   $: person?.id, resetVerseList();
@@ -75,6 +78,7 @@
     versesLoading = false;
     personVerses = [];
     expandedBooks = new Set();
+    versePreviews = {};
   }
 
   async function toggleVerseList() {
@@ -87,22 +91,40 @@
     }
   }
 
-  function toggleBook(book: string) {
+  async function toggleBook(book: string, refs: { chapter: number; verse: number }[]) {
     const next = new Set(expandedBooks);
-    next.has(book) ? next.delete(book) : next.add(book);
+    if (next.has(book)) {
+      next.delete(book);
+      expandedBooks = next;
+      return;
+    }
+    next.add(book);
     expandedBooks = next;
+    // Lazy-load verse preview text for this book in the current translation.
+    const translation = get(navigationStore).translation;
+    const loaded = await Promise.all(
+      refs.map(async (r) => {
+        const key = `${book} ${r.chapter}:${r.verse}`;
+        if (versePreviews[key] !== undefined) return [key, versePreviews[key]] as const;
+        const text = (await verseTextStore.getVerse(translation, book, r.chapter, r.verse)) ?? '';
+        return [key, text] as const;
+      }),
+    );
+    versePreviews = { ...versePreviews, ...Object.fromEntries(loaded) };
   }
 
-  // Group verses by book in canonical order; only books with refs appear.
+  // Group verses by book (canonical name + order); only books with refs appear.
   $: versesByBook = (() => {
     const map = new Map<string, { chapter: number; verse: number }[]>();
     for (const v of personVerses) {
-      if (!map.has(v.book)) map.set(v.book, []);
-      map.get(v.book)!.push({ chapter: v.chapter, verse: v.verse });
+      const book = normalizeBookName(v.book);
+      if (!map.has(book)) map.set(book, []);
+      map.get(book)!.push({ chapter: v.chapter, verse: v.verse });
     }
     return [...map.entries()]
       .map(([book, refs]) => ({
         book,
+        color: getBookColor(book),
         refs: refs.sort((a, b) => a.chapter - b.chapter || a.verse - b.verse),
       }))
       .sort((a, b) => (bookOrder.get(a.book) ?? 999) - (bookOrder.get(b.book) ?? 999));
@@ -111,7 +133,7 @@
   function navigateToVerse(book: string, chapter: number, verse: number) {
     const current = get(navigationStore);
     navigationStore.pushHistory(current);
-    navigationStore.navigateTo(current.translation, book, chapter, verse);
+    navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     lexicalModalStore.close();
   }
 
@@ -679,11 +701,11 @@
                     <p class="char-verses-loading">Loading…</p>
                   {:else}
                     <div class="char-verses-books">
-                      {#each versesByBook as { book, refs }}
+                      {#each versesByBook as { book, refs, color }}
                         <div class="cv-book-group">
-                          <button class="cv-book-header" on:click={() => toggleBook(book)}>
-                            <span class="cv-book-caret">{expandedBooks.has(book) ? '▼' : '▶'}</span>
-                            <span class="cv-book-name">{book}</span>
+                          <button class="cv-book-header" on:click={() => toggleBook(book, refs)}>
+                            <span class="cv-book-caret" style="color:{color}">{expandedBooks.has(book) ? '▼' : '▶'}</span>
+                            <span class="cv-book-name" style="color:{color}">{book}</span>
                             <span class="cv-book-count">({refs.length})</span>
                           </button>
                           {#if expandedBooks.has(book)}
@@ -691,9 +713,13 @@
                               {#each refs as r}
                                 <button
                                   class="cv-ref"
+                                  style="border-left-color:{color}"
                                   on:click={() => navigateToVerse(book, r.chapter, r.verse)}
                                 >
-                                  {book} {r.chapter}:{r.verse}
+                                  <span class="cv-ref-label" style="color:{color}">{book} {r.chapter}:{r.verse}</span>
+                                  {#if versePreviews[`${book} ${r.chapter}:${r.verse}`]}
+                                    <span class="cv-ref-text">{versePreviews[`${book} ${r.chapter}:${r.verse}`]}</span>
+                                  {/if}
                                 </button>
                               {/each}
                             </div>
@@ -2135,22 +2161,37 @@
   }
   .cv-book-refs {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px 6px;
+    flex-direction: column;
+    gap: 4px;
     padding: 4px 4px 10px 24px;
   }
   .cv-ref {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
-    color: #cfe3b8;
-    font-size: 12px;
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 3px solid #8bc34a;
+    border-radius: 5px;
     cursor: pointer;
-    padding: 3px 8px;
-    white-space: nowrap;
+    padding: 6px 9px;
   }
   .cv-ref:hover {
-    background: rgba(139, 195, 74, 0.18);
-    border-color: #8bc34a;
+    background: rgba(255, 255, 255, 0.09);
+  }
+  .cv-ref-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .cv-ref-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: #c2c6cd;
+    font-size: 12.5px;
+    line-height: 1.4;
   }
 </style>

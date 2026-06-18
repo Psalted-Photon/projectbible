@@ -121,6 +121,29 @@ export function normalizeBookName(book: string): string {
   return BOOK_NAME_ALIASES[book] ?? book;
 }
 
+/**
+ * Category → accent color, mirroring the reference dropdown tints in NavigationBar.
+ * Single source of truth for book-category color cues (book lists, verse highlights).
+ */
+export const CATEGORY_COLORS: Record<BookInfo['category'], string> = {
+  'pentateuch': '#a67c52',
+  'historical': '#6496c8',
+  'wisdom': '#daa520',
+  'major-prophets': '#5c1e99',
+  'minor-prophets': '#a45be9',
+  'gospels': '#fc345c',
+  'acts': '#ff6030',
+  'pauline': '#6048cc',
+  'general': '#d2691e',
+  'revelation': '#61f1ff',
+};
+
+/** Accent color for a book (by name, normalized). Falls back to a neutral gray. */
+export function getBookColor(book: string): string {
+  const info = BIBLE_BOOKS.find(b => b.name === normalizeBookName(book));
+  return info ? CATEGORY_COLORS[info.category] : '#8a8f98';
+}
+
 export function getBookChapters(bookName: string): number {
   const book = BIBLE_BOOKS.find(b => b.name === bookName);
   return book?.chapters || 1;
