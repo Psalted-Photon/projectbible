@@ -7,7 +7,7 @@
     englishLexicalService,
     type WordInfo,
   } from "../../../../packages/core/src/search/englishLexicalService";
-  import { lookupEnglishWord, lookupStrongs } from "../adapters/lexicon-lookup.js";
+  import { lookupEnglishWord, lookupStrongs, getPersonVerses } from "../adapters/lexicon-lookup.js";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
@@ -57,6 +57,62 @@
       .split(/\n{2,}/)
       .map((p) => p.replace(/\s+/g, ' ').trim())
       .filter(Boolean);
+  }
+
+  // --- Collapsible verse list (mirrors Power Search book grouping) ---
+  let personVerses: { book: string; chapter: number; verse: number }[] = [];
+  let versesLoaded = false;
+  let versesLoading = false;
+  let showVerseList = false;
+  let expandedBooks = new Set<string>();
+  const bookOrder = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
+
+  // Reset the verse list whenever the displayed person changes (new lookup or alternate)
+  $: person?.id, resetVerseList();
+  function resetVerseList() {
+    showVerseList = false;
+    versesLoaded = false;
+    versesLoading = false;
+    personVerses = [];
+    expandedBooks = new Set();
+  }
+
+  async function toggleVerseList() {
+    showVerseList = !showVerseList;
+    if (showVerseList && !versesLoaded && person) {
+      versesLoading = true;
+      personVerses = await getPersonVerses(person.id);
+      versesLoaded = true;
+      versesLoading = false;
+    }
+  }
+
+  function toggleBook(book: string) {
+    const next = new Set(expandedBooks);
+    next.has(book) ? next.delete(book) : next.add(book);
+    expandedBooks = next;
+  }
+
+  // Group verses by book in canonical order; only books with refs appear.
+  $: versesByBook = (() => {
+    const map = new Map<string, { chapter: number; verse: number }[]>();
+    for (const v of personVerses) {
+      if (!map.has(v.book)) map.set(v.book, []);
+      map.get(v.book)!.push({ chapter: v.chapter, verse: v.verse });
+    }
+    return [...map.entries()]
+      .map(([book, refs]) => ({
+        book,
+        refs: refs.sort((a, b) => a.chapter - b.chapter || a.verse - b.verse),
+      }))
+      .sort((a, b) => (bookOrder.get(a.book) ?? 999) - (bookOrder.get(b.book) ?? 999));
+  })();
+
+  function navigateToVerse(book: string, chapter: number, verse: number) {
+    const current = get(navigationStore);
+    navigationStore.pushHistory(current);
+    navigationStore.navigateTo(current.translation, book, chapter, verse);
+    lexicalModalStore.close();
   }
 
   let lexiconStore: IndexedDBLexiconStore;
@@ -610,10 +666,45 @@
               {#if relNames(person.siblings)}
                 <dt>Siblings</dt><dd>{relNames(person.siblings)}</dd>
               {/if}
-              {#if person.verseCount}
-                <dt>Appears in</dt><dd>{person.verseCount} verse{person.verseCount === 1 ? '' : 's'}</dd>
-              {/if}
             </dl>
+
+            {#if person.verseCount}
+              <div class="char-verses">
+                <button class="char-verses-toggle" on:click={toggleVerseList}>
+                  <span class="char-verses-caret">{showVerseList ? '▼' : '▶'}</span>
+                  Appears in {person.verseCount} verse{person.verseCount === 1 ? '' : 's'}
+                </button>
+                {#if showVerseList}
+                  {#if versesLoading}
+                    <p class="char-verses-loading">Loading…</p>
+                  {:else}
+                    <div class="char-verses-books">
+                      {#each versesByBook as { book, refs }}
+                        <div class="cv-book-group">
+                          <button class="cv-book-header" on:click={() => toggleBook(book)}>
+                            <span class="cv-book-caret">{expandedBooks.has(book) ? '▼' : '▶'}</span>
+                            <span class="cv-book-name">{book}</span>
+                            <span class="cv-book-count">({refs.length})</span>
+                          </button>
+                          {#if expandedBooks.has(book)}
+                            <div class="cv-book-refs">
+                              {#each refs as r}
+                                <button
+                                  class="cv-ref"
+                                  on:click={() => navigateToVerse(book, r.chapter, r.verse)}
+                                >
+                                  {book} {r.chapter}:{r.verse}
+                                </button>
+                              {/each}
+                            </div>
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                {/if}
+              </div>
+            {/if}
 
             {#if cleanBio(person.dictText).length}
               <div class="char-bio">
@@ -1884,51 +1975,52 @@
     }
   }
 
-  /* --- Biblical character view --- */
+  /* --- Biblical character view (dark modal: light text on #1e1e1e) --- */
   .character-view {
     padding: 4px 2px;
   }
   .char-meaning {
     font-size: 16px;
     font-style: italic;
-    color: #4a5568;
+    color: #d8dbe0;
     margin: 0 0 8px;
   }
   .char-aka {
     font-size: 13px;
-    color: #718096;
+    color: #9aa0aa;
     margin: 0 0 12px;
   }
   .char-facts {
     display: grid;
     grid-template-columns: max-content 1fr;
-    gap: 4px 14px;
+    gap: 9px 16px;
     margin: 0 0 16px;
+    line-height: 1.5;
   }
   .char-facts dt {
     font-weight: 600;
-    color: #2d3748;
-    font-size: 13px;
+    color: #b8bdc6;
+    font-size: 14.5px;
   }
   .char-facts dd {
     margin: 0;
-    color: #4a5568;
-    font-size: 13px;
+    color: #ececf0;
+    font-size: 14.5px;
   }
   .char-bio p {
-    color: #2d3748;
+    color: #dfe2e8;
     font-size: 14px;
-    line-height: 1.55;
+    line-height: 1.6;
     margin: 0 0 10px;
   }
   .char-alternates {
     margin: 14px 0 4px;
     padding-top: 12px;
-    border-top: 1px solid #e2e8f0;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
   }
   .char-alternates-label {
     font-size: 12px;
-    color: #718096;
+    color: #9aa0aa;
     margin: 0 0 6px;
   }
   .char-alt-buttons {
@@ -1938,16 +2030,16 @@
   }
   .char-alt-btn {
     padding: 4px 10px;
-    border: 1px solid #cbd5e0;
+    border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 14px;
-    background: #f7fafc;
-    color: #2d3748;
+    background: rgba(255, 255, 255, 0.06);
+    color: #dfe2e8;
     font-size: 12px;
     cursor: pointer;
   }
   .char-alt-btn.active {
-    background: #667eea;
-    border-color: #667eea;
+    background: #4caf50;
+    border-color: #4caf50;
     color: #fff;
   }
   .char-alt-count {
@@ -1957,12 +2049,12 @@
   .char-footer {
     margin-top: 16px;
     padding-top: 12px;
-    border-top: 1px solid #e2e8f0;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
   }
   .char-toggle {
     background: none;
     border: none;
-    color: #667eea;
+    color: #8bc34a;
     font-size: 13px;
     cursor: pointer;
     padding: 0;
@@ -1970,14 +2062,95 @@
   .char-attribution {
     margin: 8px 0 0;
     font-size: 11px;
-    color: #a0aec0;
+    color: #888;
   }
   .char-back {
     background: none;
     border: none;
-    color: #667eea;
+    color: #8bc34a;
     font-size: 13px;
     cursor: pointer;
     padding: 0 0 10px;
+  }
+
+  /* Collapsible verse list (mirrors Power Search ps-book-*) */
+  .char-verses {
+    margin: 0 0 16px;
+  }
+  .char-verses-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    background: none;
+    border: none;
+    color: #ececf0;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 0;
+    text-align: left;
+  }
+  .char-verses-caret {
+    color: #8bc34a;
+    font-size: 11px;
+  }
+  .char-verses-loading {
+    color: #9aa0aa;
+    font-size: 13px;
+    margin: 6px 0 0 18px;
+  }
+  .char-verses-books {
+    margin: 6px 0 0;
+  }
+  .cv-book-group {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  .cv-book-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: none;
+    border: none;
+    color: #dfe2e8;
+    font-size: 13.5px;
+    cursor: pointer;
+    padding: 7px 4px;
+    text-align: left;
+  }
+  .cv-book-header:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .cv-book-caret {
+    color: #8bc34a;
+    font-size: 10px;
+  }
+  .cv-book-name {
+    flex: 1;
+  }
+  .cv-book-count {
+    color: #9aa0aa;
+    font-size: 12px;
+  }
+  .cv-book-refs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    padding: 4px 4px 10px 24px;
+  }
+  .cv-ref {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    color: #cfe3b8;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
+  .cv-ref:hover {
+    background: rgba(139, 195, 74, 0.18);
+    border-color: #8bc34a;
   }
 </style>
