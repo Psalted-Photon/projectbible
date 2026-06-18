@@ -536,13 +536,19 @@
     if (newKey === null) _lastRpTargetKey = null;
   }
 
-  // Apply the link-nav category-colored highlight when already on the target chapter
-  // (same-chapter clicks don't reload, so the load-path applier above won't fire).
+  // Apply the link-nav category-colored highlight (e.g. from the Character verse list).
+  // Handles both same-chapter clicks and cross-book navigation: it only fires once the
+  // loaded chapter actually matches the target, so cross-book nav applies after the new
+  // chapter renders (not prematurely on the still-loaded old chapter).
   let _lastLinkHlKey: string | null = null;
   $: {
     const lhv = windowId ? null : $navigationStore.linkHighlightVerse;
+    const onTarget =
+      lhv != null &&
+      chapters.length > 0 &&
+      chapters.some((c) => c.book === currentBook && c.chapter === currentChapter);
     const key = lhv != null ? `${currentBook}-${currentChapter}-${lhv}` : null;
-    if (key !== null && key !== _lastLinkHlKey && chapters.length > 0) {
+    if (onTarget && key !== _lastLinkHlKey) {
       _lastLinkHlKey = key;
       _linkNavHighlightVerse = lhv;
       tick().then(async () => {
@@ -1238,11 +1244,6 @@
         await applyReadingPlanEndHighlight();
         if (_commNavHighlightVerse != null) {
           await applyCommNavHighlight();
-        }
-        if (!windowId && $navigationStore.linkHighlightVerse != null) {
-          _linkNavHighlightVerse = $navigationStore.linkHighlightVerse;
-          await applyLinkNavHighlight();
-          navigationStore.clearLinkHighlight();
         }
       }
     } catch (err: unknown) {
