@@ -1,12 +1,11 @@
 <script lang="ts">
   import { dailyGreetingOpen } from '../stores/dailyGreetingStore';
-  import { getDailyGreeting } from '../lib/dailyGreeting';
   import { localDateStr } from '../stores/clockStore';
   import { navigationStore } from '../stores/navigationStore';
   import { IndexedDBTextStore } from '../lib/adapters';
   import { get } from 'svelte/store';
   import verseOfDay from '../data/verse-of-the-day.json';
-  import { Sun, X, ArrowRight } from 'phosphor-svelte';
+  import { Sun, ArrowRight } from 'phosphor-svelte';
 
   const textStore = new IndexedDBTextStore();
 
@@ -24,7 +23,6 @@
 
   // State (re-evaluated each time modal opens)
   let todayStr = '';
-  let greeting = '';
   let verseRef = '';
   let parsed: ReturnType<typeof parseRef> = null;
   let verseText = '';
@@ -34,7 +32,6 @@
   $: if ($dailyGreetingOpen) {
     todayStr = localDateStr(new Date());
     const mmdd = todayStr.slice(5); // "MM-DD"
-    greeting = getDailyGreeting(todayStr);
     verseRef = (verseOfDay as Record<string, string>)[mmdd] ?? '';
     parsed = parseRef(verseRef);
     verseText = '';
@@ -84,14 +81,6 @@
             {/if}
           </span>
         </div>
-        <button class="dg-close" on:click={close} aria-label="Close">
-          <X size={16} weight="bold" />
-        </button>
-      </div>
-
-      <!-- Greeting -->
-      <div class="dg-greeting">
-        <p>{greeting}</p>
       </div>
 
       <!-- Verse -->
@@ -196,37 +185,6 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: rgba(255, 255, 255, 0.4);
-  }
-
-  .dg-close {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: rgba(255, 255, 255, 0.35);
-    display: flex;
-    align-items: center;
-    padding: 4px;
-    border-radius: 6px;
-    transition: color 0.15s, background 0.15s;
-    flex-shrink: 0;
-  }
-  .dg-close:hover {
-    color: rgba(255, 255, 255, 0.75);
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  /* ── Greeting ────────────────────────────────────────────── */
-  .dg-greeting {
-    padding: 20px 20px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .dg-greeting p {
-    margin: 0;
-    font-size: 1.05rem;
-    line-height: 1.55;
-    color: rgba(255, 255, 255, 0.9);
-    font-weight: 400;
   }
 
   /* ── Verse block ─────────────────────────────────────────── */
