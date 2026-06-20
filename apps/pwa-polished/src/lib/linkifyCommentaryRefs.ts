@@ -30,6 +30,11 @@ const BOOK_PATTERN = [
   'Isa|Jer|Lam|Eze?k?|Da(?:n)?|Hos|Joe?l?|Amo?s?|Oba?d?|Jon(?:ah)?|Mic|Na(?:h)?|Ha(?:b)?',
   'Ze(?:ph?)?|Ha(?:g)?|Ze(?:ch?)?|Mal|Matt?|Ma(?:rk?)?|Lu(?:ke?)?|Joh?n?|Act?s?|Ro(?:m)?',
   'Ga(?:l)?|Ep(?:h)?|Ph(?:il?p?|p)|Co(?:l)?|He(?:b)?|Ja(?:s)?|Ti(?:t)?|Phlm?|Ph(?:ile)?|Re(?:v)?|Jb',
+  // Terse SWORD/JFB two-letter abbreviations not covered above (Ge=Genesis,
+  // Le=Leviticus, Jr=Jeremiah, Is=Isaiah, Ne=Nehemiah, Ezr=Ezra, Ho=Hosea,
+  // Ec=Ecclesiastes, Mi=Micah, So=Song, La=Lamentations). Listed last so longer
+  // forms like "Isa"/"Gen" still match greedily first.
+  'Ge|Le|Jr|Is|Ne|Ezr|Ho|Ec|Mi|So|La',
 ].join('|');
 
 // Chapter + optional verse + optional range  (e.g. 3, 3:4, 3:4a, 3:4-7, 3:4-5:2)

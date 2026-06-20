@@ -4,6 +4,8 @@
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { IndexedDBCommentaryStore, type CommentaryEntry } from "../adapters/CommentaryStore";
+  import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
+  import { parseRefString } from "../lib/parseRefString";
 
   export let windowId: string | undefined = undefined;
 
@@ -46,6 +48,29 @@
   $: if (windowId) {
     const checkpoints = [...new Set(entries.filter(e => e.verseStart > 0).map(e => e.verseStart))];
     windowStore.updateContentState(windowId, { checkpoints });
+  }
+
+  // Cross-reference links: linkifyCommentaryRefs wraps detected Bible references
+  // in <span class="commentary-ref" data-ref="..."> elements. Handle taps via
+  // event delegation on the body and navigate to the referenced verse.
+  function handleCommentaryBodyClick(e: MouseEvent | KeyboardEvent) {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains("commentary-ref")) return;
+    if (e instanceof KeyboardEvent && e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    const ref = target.dataset.ref;
+    if (ref) handleRefClick(ref);
+  }
+
+  function handleRefClick(ref: string) {
+    const t = parseRefString(ref, currentBook, currentChapter);
+    if (!t) return;
+    navigationStore.navigateToVerse(
+      $navigationStore.translation,
+      t.book,
+      t.chapter,
+      t.verse,
+    );
   }
 
   async function loadCommentary(book: string, chapter: number, author?: string) {
@@ -161,7 +186,12 @@
               {#if entry.title}
                 <h4 class="entry-title">{entry.title}</h4>
               {/if}
-              <div class="entry-text">{entry.text}</div>
+              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+              <div
+                class="entry-text"
+                on:click={handleCommentaryBodyClick}
+                on:keydown={handleCommentaryBodyClick}
+              >{@html linkifyCommentaryRefs(entry.text, currentBook, currentChapter, entry.author)}</div>
             </div>
           </div>
 
@@ -367,5 +397,21 @@
     .entry-text {
       font-size: 0.95rem;
     }
+  }
+
+  /* Clickable Bible cross-references injected by linkifyCommentaryRefs */
+  :global(.commentary-ref) {
+    color: #8ab4f8;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+  :global(.commentary-ref:hover) {
+    color: #c0d8ff;
+    text-decoration-style: solid;
+    background: rgba(138, 180, 248, 0.1);
   }
 </style>

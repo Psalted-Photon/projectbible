@@ -78,7 +78,13 @@ def read_bzv(bzv_path):
 
 
 def read_blocks(bzs_path, bzz_path):
-    """Decompress all blocks. Returns dict: block_index -> decompressed_text."""
+    """Decompress all blocks. Returns dict: block_index -> decompressed BYTES.
+
+    Bytes (not decoded str) because the BZV index gives byte offsets/sizes into
+    each block. Slicing must happen on bytes, then decode the slice — decoding the
+    whole block first and slicing by byte offset drifts by characters wherever
+    multi-byte UTF-8 (e.g. em-dashes) precedes the offset, cutting text mid-word.
+    """
     bzs = bzs_path.read_bytes()
     bzz = bzz_path.read_bytes()
     blocks = {}
@@ -88,13 +94,13 @@ def read_blocks(bzs_path, bzz_path):
             continue
         raw = bzz[offset:offset+comp_size]
         try:
-            text = zlib.decompress(raw).decode('utf-8', errors='replace')
+            data = zlib.decompress(raw)
         except:
             try:
-                text = zlib.decompress(raw, -15).decode('utf-8', errors='replace')
+                data = zlib.decompress(raw, -15)
             except:
-                text = ''
-        blocks[i] = text
+                data = b''
+        blocks[i] = data
     return blocks
 
 
@@ -183,11 +189,12 @@ def extract_testament_entries(books, bzv_entries, blocks, testament_name):
             groups.append((cur_verses, cur_key))
 
             for group_verses, (block_num, start, size) in groups:
-                # Get text from block
-                block_text = blocks.get(block_num, '')
-                if not block_text or size == 0:
+                # Get text from block. Slice the raw BYTES at the index's byte
+                # offset/size, THEN decode — see read_blocks for why.
+                block_bytes = blocks.get(block_num, b'')
+                if not block_bytes or size == 0:
                     continue
-                raw = block_text[start:start + size]
+                raw = block_bytes[start:start + size].decode('utf-8', errors='replace')
                 text = clean_text(raw)
                 if len(text) < 30:
                     continue

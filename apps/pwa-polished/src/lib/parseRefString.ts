@@ -65,8 +65,8 @@ const BOOK_MAP: Record<string, string> = {
   ca: 'Song of Solomon', cant: 'Song of Solomon',
   // Isaiah
   isa: 'Isaiah', is: 'Isaiah',
-  // Jeremiah
-  jer: 'Jeremiah', je: 'Jeremiah',
+  // Jeremiah  (jr = SWORD/JFB abbreviation)
+  jer: 'Jeremiah', je: 'Jeremiah', jr: 'Jeremiah',
   // Lamentations
   la: 'Lamentations', lam: 'Lamentations',
   // Ezekiel
