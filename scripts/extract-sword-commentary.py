@@ -23,6 +23,7 @@ import struct
 import zlib
 import re
 import html
+import json
 import sys
 from pathlib import Path
 
@@ -46,105 +47,25 @@ NT_BOOKS = [
     '3John', 'Jude', 'Rev',
 ]
 
-# KJV verse counts per chapter for all 66 books
-# Indexed as KJV_VERSES[book_index][chapter_index] (0-based)
-KJV_VERSES = [
-    # OT
-    [31,25,24,26,32,22,24,22,29,32,32,20,18,24,21,16,27,33,38,18,34,24,20,67,34,35,46,22,35,43,55,32,20,31,29,43,36,30,23,23,57,38,34,34,28,34,31,22,33,26],# Gen 50 ch
-    [22,25,22,31,23,30,25,32,35,29,10,51,22,31,27,36,16,27,25,26,36,31,33,18,40,37,21,43,46,38,18,35,23,35,35,38,29,31,43,38],# Exod 40
-    [17,16,17,35,19,30,38,36,24,20,47,8,59,57,33,34,16,30,24,8,12,14,44,13,39,39,20],# Lev 27
-    [54,34,51,49,31,27,89,26,23,36,35,16,33,45,41,50,13,32,22,29,35,41,30,25,18,65,23,31,40,16,54,42,56,29,34,13],# Num 36
-    [46,37,29,49,33,25,26,20,29,22,32,32,18,29,23,22,20,22,21,20,23,30,25,22,19,19,26,68,29,20,30,52,29,12],# Deut 34
-    [18,24,17,24,15,27,26,35,27,43,23,24,33,15,63,10,18,28,51,9,45,34,16,33],# Josh 24
-    [36,23,31,24,31,40,25,35,57,18,40,15,25,20,20,31,13,31,30,48,25],# Judg 21
-    [22,23,18,22],# Ruth 4
-    [28,36,21,22,12,21,17,22,27,27,15,25,23,52,35,23,58,30,24,42,15,23,29,22,44,25,12,25,11,31,13],# 1Sam 31
-    [27,32,39,12,25,23,29,18,13,19,27,31,39,33,37,23,29,33,43,26,22,51,39,25],# 2Sam 24
-    [53,46,28,34,18,38,51,66,28,29,43,33,34,31,34,34,24,46,21,43,29,53],# 1Kgs 22
-    [18,25,27,44,27,33,20,29,37,36,21,21,25,29,38,20,41,37,37,21,26,20,37,20,30],# 2Kgs 25
-    [54,55,24,43,26,81,40,40,44,14,47,40,14,17,29,43,27,17,19,8,30,19,32,31,31,32,34,21,30],# 1Chr 29
-    [17,18,17,22,14,42,22,18,31,19,23,16,22,15,19,14,19,34,11,37,20,12,21,27,28,23,9,27,36,27,21,33,25,33,27,23],# 2Chr 36
-    [11,70,13,24,17,22,28,36,15,44],# Ezra 10
-    [11,20,32,23,19,19,73,18,38,39,36,47,31],# Neh 13
-    [22,17,19,11,12,24,20],# Esth... 10 (but actually only 7 non-apocryphal)
-    [22,17,19,11,12,24,20,38,18,17],# Esth 10 <-- correction
-    [10,21,17,19,26,38,30,17,14,15,33,21,21,20,27,16,31,16,15,15,27,22,27,16,21,14,21,21,14,12,19,22,22,16,15,27,21,21,27,27,21,15,15,21,12,15,21,15,21],# Job 42
-    [6,12,8,8,12,10,17,9,20,18,7,8,6,7,5,11,15,50,14,9,13,31,6,10,22,12,14,9,11,12,24,11,22,22,28,12,40,22,13,17,13,11,5,20,28,22,35,22,20,28,22,35,27,20,17,12],# Ps 50 (incomplete)
-    None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
-]
+# KJV per-chapter verse counts are derived at runtime from the bundled KJV text
+# (data-sources/KJV.json) rather than a hand-maintained table. A wrong count in a
+# hand-typed table desyncs the sequential BZV walker and silently corrupts every
+# later verse reference, which is exactly the bug this replaced. KJV.json is real
+# verse-by-verse data, so its counts are authoritative by construction.
+def _load_kjv_verse_counts():
+    osis_order = OT_BOOKS + NT_BOOKS
+    kjv_path = PROJECT_ROOT / 'data-sources' / 'KJV.json'
+    books = json.loads(kjv_path.read_text(encoding='utf-8'))['books']
+    if len(books) != len(osis_order):
+        raise SystemExit(
+            f'KJV.json has {len(books)} books, expected {len(osis_order)} '
+            '(66, standard KJV order) — cannot derive versification')
+    return {osis: [len(ch['verses']) for ch in b['chapters']]
+            for osis, b in zip(osis_order, books)}
 
-# Use a simpler verse count lookup: we only need max_verse per book to navigate bzv
-# Complete KJV verse counts (book index, chapters)
-KJV_VERSE_COUNTS = {
-    'Gen': [31,25,24,26,32,22,24,22,29,32,32,20,18,24,21,16,27,33,38,18,34,24,20,67,34,35,46,22,35,43,55,32,20,31,29,43,36,30,23,23,57,38,34,34,28,34,31,22,33,26],
-    'Exod': [22,25,22,31,23,30,25,32,35,29,10,51,22,31,27,36,16,27,25,26,36,31,33,18,40,37,21,43,46,38,18,35,23,35,35,38,29,31,43,38],
-    'Lev': [17,16,17,35,19,30,38,36,24,20,47,8,59,57,33,34,16,30,24,8,12,14,44,13,39,39,20],
-    'Num': [54,34,51,49,31,27,89,26,23,36,35,16,33,45,41,50,13,32,22,29,35,41,30,25,18,65,23,31,40,16,54,42,56,29,34,13],
-    'Deut': [46,37,29,49,33,25,26,20,29,22,32,32,18,29,23,22,20,22,21,20,23,30,25,22,19,19,26,68,29,20,30,52,29,12],
-    'Josh': [18,24,17,24,15,27,26,35,27,43,23,24,33,15,63,10,18,28,51,9,45,34,16,33],
-    'Judg': [36,23,31,24,31,40,25,35,57,18,40,15,25,20,20,31,13,31,30,48,25],
-    'Ruth': [22,23,18,22],
-    '1Sam': [28,36,21,22,12,21,17,22,27,27,15,25,23,52,35,23,58,30,24,42,15,23,29,22,44,25,12,25,11,31,13],
-    '2Sam': [27,32,39,12,25,23,29,18,13,19,27,31,39,33,37,23,29,33,43,26,22,51,39,25],
-    '1Kgs': [53,46,28,34,18,38,51,66,28,29,43,33,34,31,34,34,24,46,21,43,29,53],
-    '2Kgs': [18,25,27,44,27,33,20,29,37,36,21,21,25,29,38,20,41,37,37,21,26,20,37,20,30],
-    '1Chr': [54,55,24,43,26,81,40,40,44,14,47,40,14,17,29,43,27,17,19,8,30,19,32,31,31,32,34,21,30],
-    '2Chr': [17,18,17,22,14,42,22,18,31,19,23,16,22,15,19,14,19,34,11,37,20,12,21,27,28,23,9,27,36,27,21,33,25,33,27,23],
-    'Ezra': [11,70,13,24,17,22,28,36,15,44],
-    'Neh': [11,20,32,23,19,19,73,18,38,39,36,47,31],
-    'Esth': [22,17,19,11,12,24,20,38,18,17],
-    'Job': [22,17,35,11,30,40,22,26,11,30,26,21,27,22,17,17,42,14,26,8,21,20,27,22,34,20,19,22,28,28,33,37,27,23,22,21,21,19,35,37,17,20,29,27,47,11,32,22,24,20,28,22,33,11,19,27,26,25,27,29,17,23,21,9,19,20,8,25,11,30],
-    'Ps': [6,12,8,8,12,10,17,9,20,18,7,8,6,7,5,11,15,50,14,9,13,31,6,10,22,12,14,9,11,12,24,11,22,22,28,12,40,22,13,17,13,11,5,20,28,22,35,22,20,28,22,35,27,20,17,12,12,8,11,11,7,8,10,9,9,10,18,26,20,18,19,14,18,16,23,20,15,16,21,11,17,20,12,8,11,10,11,14,11,12,25,19,23,11,9,13,14,9,11,29,22,14,22,14,14,7,6,19,11,20,18,19,18,20,20,18,18,21,13,25,22,26,25,16,22,14,13,14,17,12,18,9,13,9,71,13,7,19,6,20,20,19,24,19,25,16,23,22,27,12,29,22,10,11,21,22,13,14,11,12,15,36,15,14,22,9,13,31],
-    'Prov': [33,22,35,27,23,35,27,36,27,21,45,13,32,21,26,16,29,21,20,19,25,16,16,18,23,22,20,16,17,14,24,17,22,24,21,24,14,29,35,17,32,7],
-    'Eccl': [18,26,22,17,19,12,29,17,18,20,10,14],
-    'Song': [17,17,11,16,16,13,13,14],
-    'Isa': [31,22,26,6,30,13,25,22,21,34,16,6,22,32,9,14,14,7,25,6,17,25,18,23,12,21,13,29,24,33,9,20,24,21,29,2,26,16,2,19,18,26,15,14,16,16,24,25,19,26,23,11,17,6,21,20,21,10,25,26,23,18,15,26,31,9],
-    'Jer': [54,20,56,22,27,26,20,60,40,12,25,11,22,47,35,43,7,51,27,27,24,19,24,36,25,15,30,15,28,20,44,62,21,14,8,25,11,45,13,12,38,29,28,28,15,45,23,34,16,33],
-    'Lam': [22,22,66,22,22],
-    'Ezek': [28,10,27,17,17,14,27,18,11,22,25,28,23,23,8,63,24,32,14,49,32,31,49,27,17,21,36,26,21,26,18,32,33,31,15,38,28,23,29,49,26,20,27,31,25,24,23,35],
-    'Dan': [21,49,30,37,31,28,28,27,27,21,45,13],
-    'Hos': [11,23,5,19,15,11,16,14,17,15,12,14,16,9],
-    'Joel': [20,32,21],
-    'Amos': [15,16,15,13,27,14,17,14,15],
-    'Obad': [21],
-    'Jonah': [17,10,10,11],
-    'Mic': [16,13,12,13,15,16,20],
-    'Nah': [15,13,19],
-    'Hab': [17,20,19],
-    'Zeph': [18,15,20],
-    'Hag': [15,23],
-    'Zech': [21,13,10,14,11,15,14,23,17,12,17,14,9,21],
-    'Mal': [14,17,18,6],
-    # NT
-    'Matt': [25,23,17,25,48,34,29,34,38,42,30,50,58,36,39,28,27,35,30,34,46,46,39,51,46,75,66,20],
-    'Mark': [45,28,35,41,43,56,37,38,50,52,33,44,37,72,47,20],
-    'Luke': [80,52,38,44,39,49,50,56,62,42,54,59,35,35,32,31,37,43,48,47,38,71,56,53],
-    'John': [51,25,36,54,47,71,53,59,41,42,57,50,38,31,27,33,26,40,42,31,25],
-    'Acts': [26,47,26,37,42,15,60,40,43,48,30,25,52,28,41,40,34,28,41,38,40,30,35,27,27,32,44,31],
-    'Rom': [32,29,31,25,21,23,25,39,33,21,36,21,14,26,33,25],
-    '1Cor': [31,16,23,21,13,20,40,13,27,33,34,31,13,40,58,24],
-    '2Cor': [24,29,10,21,13,18,24,16,10,28,22,9,13],
-    'Gal': [24,21,29,31,26,18],
-    'Eph': [23,22,21,28,30,14],
-    'Phil': [23,27,25,18],
-    'Col': [18,26,18,28],
-    '1Thess': [28,13,10,11,9],
-    '2Thess': [15,13,19],
-    '1Tim': [19,17,19,18,20,18],
-    '2Tim': [18,26,17,22],
-    'Titus': [16,15,15],
-    'Phlm': [25],
-    'Heb': [14,18,19,16,14,20,28,13,28,39,40,29,25],
-    'Jas': [27,26,18,17,20],
-    '1Pet': [25,25,22,19,14],
-    '2Pet': [21,22,18],
-    '1John': [10,29,24,21,21],
-    '2John': [13],
-    '3John': [14],
-    'Jude': [25],
-    'Rev': [20,29,22,11,14,17,17,13,21,11,19,17,18,20,8,21,18,24,21,15,27,21],
-}
 
+# Complete KJV verse counts (osis_book -> [verses per chapter]), sourced from KJV.json
+KJV_VERSE_COUNTS = _load_kjv_verse_counts()
 
 def read_bzv(bzv_path):
     """Read all BZV entries as (block_num, start, size) triples."""
@@ -319,6 +240,18 @@ def extract_module_to_osis(module_dir, module_id, work_id, title, author, year, 
         blocks = read_blocks(bzs_path, bzz_path)
         bzv = read_bzv(bzv_path)
 
+        # Guard: the sequential walker assumes the module's versification is KJV,
+        # laid out as 2 global headers + per book(1 book-intro + per chapter(1
+        # chapter-intro + 1 entry per verse)). If the bzv length disagrees with
+        # what KJV_VERSE_COUNTS predicts, the index/verse mapping cannot be trusted.
+        expected = 2 + sum(1 + sum(1 + n for n in KJV_VERSE_COUNTS.get(b, []))
+                           for b in books)
+        if expected != len(bzv):
+            raise SystemExit(
+                f'  FATAL: {testament} bzv has {len(bzv)} entries but versification '
+                f'predicts {expected}; module is not standard KJV — aborting to '
+                'avoid corrupting verse alignment')
+
         # Skip the 2 global header entries at the start of bzv
         testament_bzv = bzv[2:]
 
@@ -327,6 +260,35 @@ def extract_module_to_osis(module_dir, module_id, work_id, title, author, year, 
 
     if not all_entries:
         print('  ERROR: No entries extracted'); return False
+
+    # Guard: cross-check assigned verses against the verse numbers embedded in the
+    # JFB/MHC text. Entries whose text begins with a bare "N." carry the true verse
+    # number; for a correct extraction it must equal the assigned verse_start. A low
+    # match rate means the walker has drifted (the original bug), so abort loudly
+    # rather than writing silently-wrong data. The bzv-length guard alone misses this
+    # because a wrong-but-same-total versification still passes it.
+    checked = matched = 0
+    mismatches = []
+    for e in all_entries:
+        m = re.match(r'^(\d+)\.\s', e['text'])
+        if not m:
+            continue
+        checked += 1
+        if int(m.group(1)) == e['verse_start']:
+            matched += 1
+        elif len(mismatches) < 10:
+            mismatches.append(
+                f"{e['book']} {e['chapter']}:{e['verse_start']} text says {m.group(1)}")
+    rate = matched / checked if checked else 1.0
+    print(f'  Alignment check: {matched}/{checked} '
+          f'({rate:.1%}) text verse numbers match assigned verse')
+    if checked >= 50 and rate < 0.90:
+        print('  Sample mismatches (assigned vs text):')
+        for s in mismatches:
+            print(f'    {s}')
+        raise SystemExit(
+            '  FATAL: commentary verse alignment is off — aborting before writing '
+            'bad data')
 
     print(f'\n  Total: {len(all_entries):,} commentary sections')
     print(f'  Writing {output_file}...')

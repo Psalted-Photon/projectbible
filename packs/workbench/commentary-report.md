@@ -1,31 +1,31 @@
 # Commentary Pack Report
 
-**Generated:** 2026-04-12T00:13:03.417Z
+**Generated:** 2026-06-20T20:26:40.488Z
 **Pack:** C:\Users\Marlowe\Desktop\ProjectBible\packs\workbench\commentaries.sqlite
-**Pack Size:** 187.01 MB (0.18 GB)
-**Total Entries:** 86,819
+**Pack Size:** 179.80 MB (0.18 GB)
+**Total Entries:** 85,713
 
 ## Testament Coverage
 
-- Old Testament: 42,543 entries
-- New Testament: 44,276 entries
+- Old Testament: 41,405 entries
+- New Testament: 44,308 entries
 
 ## Entries by Author
 
 | Author | Entries | Percentage |
 |--------|---------|------------|
-| Treasury of Scripture Knowledge | 17,748 | 20.4% |
-| Jamieson-Fausset-Brown | 16,314 | 18.8% |
-| John Calvin | 11,063 | 12.7% |
-| KingComments | 7,590 | 8.7% |
-| Albert Barnes | 7,355 | 8.5% |
-| A.T. Robertson | 7,201 | 8.3% |
-| Matthew Henry | 5,664 | 6.5% |
-| Family Bible Notes | 5,224 | 6.0% |
+| Treasury of Scripture Knowledge | 17,748 | 20.7% |
+| Jamieson-Fausset-Brown | 16,743 | 19.5% |
+| John Calvin | 11,063 | 12.9% |
+| KingComments | 7,590 | 8.9% |
+| Albert Barnes | 7,355 | 8.6% |
+| A.T. Robertson | 7,201 | 8.4% |
+| Family Bible Notes | 5,224 | 6.1% |
+| Matthew Henry | 4,249 | 5.0% |
 | E.W. Bullinger | 4,229 | 4.9% |
-| Abbott | 3,340 | 3.8% |
-| Thomas Aquinas (Catena Aurea) | 821 | 0.9% |
-| Charles Spurgeon | 270 | 0.3% |
+| Abbott | 3,340 | 3.9% |
+| Thomas Aquinas (Catena Aurea) | 821 | 1.0% |
+| Charles Spurgeon | 150 | 0.2% |
 
 ## Entries by Book (Top 20)
 
@@ -35,22 +35,22 @@
 | Acts | 5,863 |
 | Luke | 5,633 |
 | John | 5,126 |
-| Psalms | 5,060 |
-| Jeremiah | 3,649 |
-| Isaiah | 3,570 |
+| Psalms | 4,076 |
+| Isaiah | 3,611 |
+| Jeremiah | 3,606 |
 | Mark | 3,123 |
 | Genesis | 2,674 |
-| Ezekiel | 2,643 |
 | 1 Corinthians | 2,609 |
-| Romans | 2,527 |
-| Job | 2,408 |
-| Revelation | 2,051 |
-| Proverbs | 1,873 |
-| Hebrews | 1,857 |
+| Romans | 2,522 |
+| Ezekiel | 2,458 |
+| Revelation | 2,035 |
+| Proverbs | 2,024 |
 | Exodus | 1,852 |
-| Numbers | 1,643 |
-| 2 Corinthians | 1,589 |
-| Deuteronomy | 1,574 |
+| Hebrews | 1,850 |
+| Job | 1,806 |
+| 2 Corinthians | 1,603 |
+| Numbers | 1,567 |
+| Deuteronomy | 1,536 |
 
 ## Pack Metadata
 
@@ -58,7 +58,7 @@
 {
   "id": "commentaries.v1",
   "type": "commentary",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "schemaVersion": "1.0",
   "name": "Bible Commentaries Collection",
   "description": "Historical and modern Bible commentaries including Matthew Henry, JFB, Barnes, Keil & Delitzsch, and more",
