@@ -401,7 +401,7 @@
 
   /* Clickable Bible cross-references injected by linkifyCommentaryRefs */
   :global(.commentary-ref) {
-    color: #8ab4f8;
+    color: var(--ref-color, #8ab4f8);
     text-decoration: underline;
     text-decoration-style: dotted;
     text-underline-offset: 2px;
@@ -410,8 +410,8 @@
     padding: 0 1px;
   }
   :global(.commentary-ref:hover) {
-    color: #c0d8ff;
+    color: color-mix(in srgb, var(--ref-color, #8ab4f8) 70%, white);
     text-decoration-style: solid;
-    background: rgba(138, 180, 248, 0.1);
+    background: color-mix(in srgb, var(--ref-color, #8ab4f8) 12%, transparent);
   }
 </style>

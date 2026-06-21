@@ -7,6 +7,7 @@
  */
 
 import { parseRefString } from './parseRefString';
+import { getBookColor } from './bibleData';
 
 // Bible book names and abbreviations recognised in commentary prose.
 // Ordered longest-first so the alternation engine matches greedily.
@@ -75,9 +76,11 @@ function escAttr(s: string): string {
 /**
  * Wrap a validated Bible reference match in a clickable span.
  * @param raw     The raw matched text (used as display AND data-ref)
+ * @param color   Optional theme color (hex) applied as the --ref-color CSS var
  */
-function wrapRef(raw: string): string {
-  return `<span class="commentary-ref" data-ref="${escAttr(raw.trim())}" tabindex="0" role="link">${raw}</span>`;
+function wrapRef(raw: string, color?: string): string {
+  const style = color ? ` style="--ref-color:${color}"` : '';
+  return `<span class="commentary-ref"${style} data-ref="${escAttr(raw.trim())}" tabindex="0" role="link">${raw}</span>`;
 }
 
 /**
@@ -125,7 +128,8 @@ function processTextSegment(
     const target = parseRefString(mainText.trim(), contextBook, contextChapter);
     if (!target) return match;
 
-    let result = wrapRef(mainText);
+    const refColor = getBookColor(target.book);
+    let result = wrapRef(mainText, refColor);
 
     // Link each bare number in the tail as a verse in the same book+chapter
     if (tail) {
@@ -133,7 +137,7 @@ function processTextSegment(
         const contRef = `${target.book} ${target.chapter}:${num}`;
         return (
           sep +
-          `<span class="commentary-ref" data-ref="${escAttr(contRef)}" tabindex="0" role="link">${num}</span>`
+          `<span class="commentary-ref" style="--ref-color:${refColor}" data-ref="${escAttr(contRef)}" tabindex="0" role="link">${num}</span>`
         );
       });
     }
@@ -145,7 +149,7 @@ function processTextSegment(
   // These don't contain '<' so no need to avoid tags here.
   out = out.replace(BARE_VERSE_RE, (match) => {
     const target = parseRefString(match.trim(), contextBook, contextChapter);
-    return target ? wrapRef(match) : match;
+    return target ? wrapRef(match, getBookColor(target.book)) : match;
   });
 
   // Step 3: convert stored paragraph breaks (\n\n) and line breaks (\n) to HTML.
