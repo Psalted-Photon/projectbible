@@ -7,7 +7,7 @@
  */
 
 import { parseRefString } from './parseRefString';
-import { getBookColor } from './bibleData';
+import { getBookColor, getBookChapters } from './bibleData';
 
 // Bible book names and abbreviations recognised in commentary prose.
 // Ordered longest-first so the alternation engine matches greedily.
@@ -38,18 +38,30 @@ const BOOK_PATTERN = [
   'Ge|Le|Jr|Is|Ne|Ezr|Ho|Ec|Mi|So|La',
 ].join('|');
 
-// Chapter + optional verse + optional range  (e.g. 3, 3:4, 3:4a, 3:4-7, 3:4-5:2)
-// [ab]? after verse allows half-verse suffixes like "2a" or "2b" without breaking the match
-const CV_PATTERN = '\\d+(?::\\d+[ab]?(?:[\\-\u2013]\\d+(?::\\d+)?)?)?';
+// A full chapter:verse token, with optional half-verse suffix and range
+// (e.g. 3:4, 3:4a, 3:4-7, 3:4-5:2). Colon is mandatory.
+const CV_FULL = '\\d+:\\d+[ab]?(?:[\\-\u2013]\\d+(?::\\d+)?)?';
+// A lead reference following an explicit book: chapter, with optional :verse[-range].
+// The verse is optional so "Ro 14" (chapter-only) is matched.
+const CV_LEAD = '\\d+(?::\\d+[ab]?(?:[\\-\u2013]\\d+(?::\\d+)?)?)?';
+// A continuation segment after a ';' or ',' \u2014 either a full chapter:verse or a
+// bare number. The bare-number form must NOT be followed by a letter so we don't
+// swallow the leading digit of a book abbreviation (e.g. the "1" in "1Pet 2:5").
+const CONT_SEG = `(?:${CV_FULL}|\\d+[ab]?)`;
 
-// Full ref pattern: book name/abbrev + whitespace + chapter[:verse[-range]].
-// Also captures a trailing continuation tail of bare verse numbers separated
-// by semicolons or commas — e.g. "Matt 5:6-8; 10; 17" or "Rom 8:1, 5, 28".
-// Group 1 = book, Group 2 = first cv, Group 3 = continuation tail (may be empty).
+// Full ref pattern. The book prefix is OPTIONAL:
+//   • With a book: lead may be "ch" or "ch:verse" (Group 1 = book, Group 2 = cv).
+//   • Without a book: lead MUST be "ch:verse" (Group 3 = cv) — resolved against the
+//     current book. A bare lone number is never linked, to avoid false positives.
+// A trailing continuation tail (Group 4) captures further refs separated by ';'/','
+// — e.g. "Psa 89:28, 29; 110:4" or "Da 2:44; 7:13, 14".
 const PROSE_REF_RE = new RegExp(
-  `\\b(${BOOK_PATTERN})\\s+(${CV_PATTERN})((?:\\s*[;,]\\s*\\d+[ab]?(?![A-Za-z]))*)`,
+  `\\b(?:(${BOOK_PATTERN})\\s+(${CV_LEAD})|(${CV_FULL}))((?:\\s*[;,]\\s*${CONT_SEG}(?![A-Za-z]))*)`,
   'g',
 );
+
+// Matches one continuation segment (separator + ref) inside a tail.
+const CONT_SEG_RE = new RegExp(`([;,]\\s*)(${CV_FULL}|\\d+[ab]?)`, 'g');
 
 // Bare verse reference: "v. 3", "ver. 3", "ver 3", "verse 3" (case-insensitive)
 const BARE_VERSE_RE = /\b(v(?:erse|er)?\.?)\s+(\d+)\b/gi;
@@ -81,6 +93,17 @@ function escAttr(s: string): string {
 function wrapRef(raw: string, color?: string): string {
   const style = color ? ` style="--ref-color:${color}"` : '';
   return `<span class="commentary-ref"${style} data-ref="${escAttr(raw.trim())}" tabindex="0" role="link">${raw}</span>`;
+}
+
+/**
+ * Wrap a reference with an explicit, absolute data-ref ("Book chapter:verse"),
+ * while keeping the original on-screen text as the display label. Used for
+ * continuation segments where the displayed token (e.g. "110:4" or "14") differs
+ * from the full resolved reference.
+ */
+function wrapAbs(display: string, book: string, chapter: number, verse: number, color: string): string {
+  const ref = `${book} ${chapter}:${verse}`;
+  return `<span class="commentary-ref" style="--ref-color:${color}" data-ref="${escAttr(ref)}" tabindex="0" role="link">${display}</span>`;
 }
 
 /**
@@ -120,25 +143,48 @@ function processTextSegment(
     `${header.toUpperCase()}<br><br>${nextChar}`,
   );
 
-  // Step 1: linkify book + chapter[:verse] refs, plus any continuation verses
-  // separated by semicolons/commas (e.g. "Matt 5:6-8; 10; 17").
-  let out = text.replace(PROSE_REF_RE, (match, _book, _cv, tail: string) => {
-    // mainText is everything before the continuation tail
-    const mainText = tail ? match.slice(0, match.length - tail.length) : match;
-    const target = parseRefString(mainText.trim(), contextBook, contextChapter);
+  // Step 1: linkify references — an optional-book lead plus any continuation
+  // segments separated by ';'/',' (e.g. "Psa 89:28, 29; 110:4", "Ro 14; 15",
+  // book-less "10:34; 15:25"). A segment with a colon is a new chapter:verse of
+  // the same book; a bare number is a verse of the running chapter — unless the
+  // lead had no verse (e.g. "Ro 14"), in which case bare numbers are chapters.
+  let out = text.replace(PROSE_REF_RE, (match, book: string, _cvBook: string, _cvBare: string, tail: string) => {
+    // Lead text is everything before the continuation tail.
+    const leadText = tail ? match.slice(0, match.length - tail.length) : match;
+    const target = parseRefString(leadText.trim(), contextBook, contextChapter);
     if (!target) return match;
 
-    const refColor = getBookColor(target.book);
-    let result = wrapRef(mainText, refColor);
+    // For book-less leads, suppress stray "\d+:\d+" matches (e.g. ratios/times)
+    // by requiring the chapter to be valid for the current book.
+    const hasBook = !!book;
+    if (!hasBook && target.chapter > getBookChapters(target.book)) return match;
 
-    // Link each bare number in the tail as a verse in the same book+chapter
+    const refColor = getBookColor(target.book);
+    // 'verse' mode: bare continuation numbers are verses of runningChapter.
+    // 'chapter' mode: lead had no verse, so bare numbers are chapters.
+    let mode: 'verse' | 'chapter' = leadText.includes(':') ? 'verse' : 'chapter';
+    let runningChapter = target.chapter;
+
+    let result = wrapAbs(leadText, target.book, target.chapter, target.verse, refColor);
+
     if (tail) {
-      result += tail.replace(/([;,]\s*)(\d+[ab]?)/g, (_, sep, num) => {
-        const contRef = `${target.book} ${target.chapter}:${num}`;
-        return (
-          sep +
-          `<span class="commentary-ref" style="--ref-color:${refColor}" data-ref="${escAttr(contRef)}" tabindex="0" role="link">${num}</span>`
-        );
+      CONT_SEG_RE.lastIndex = 0;
+      result += tail.replace(CONT_SEG_RE, (_m, sep: string, seg: string) => {
+        const colon = seg.match(/^(\d+):(\d+)/);
+        if (colon) {
+          // New chapter:verse of the same book → switch into verse mode there.
+          runningChapter = parseInt(colon[1]);
+          mode = 'verse';
+          return sep + wrapAbs(seg, target.book, runningChapter, parseInt(colon[2]), refColor);
+        }
+        const num = parseInt(seg);
+        if (mode === 'chapter') {
+          // Bare number continuing a chapter-only list → a chapter (verse 1).
+          runningChapter = num;
+          return sep + wrapAbs(seg, target.book, num, 1, refColor);
+        }
+        // Bare number → a verse of the running chapter.
+        return sep + wrapAbs(seg, target.book, runningChapter, num, refColor);
       });
     }
 
