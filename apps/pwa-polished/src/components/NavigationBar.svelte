@@ -39,6 +39,10 @@
     Sun,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
+  import { repeatsStore } from "../stores/repeatsStore";
+  import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
+  import type { RepeatHighlightScope } from "../stores/repeatBulkStore";
+  import { REPEAT_COLORS } from "../lib/repeatColors";
 
   export let windowId: string | undefined = undefined;
   export const visible: boolean = true;
@@ -73,6 +77,12 @@
   let translationDropdownPositioned = false;
   let referenceDropdownPositioned = false;
   let commDropdownPositioned = false;
+
+  // Repeat pills dropdown state
+  let repeatDropdownWord: string | null = null; // which pill's dropdown is open
+  let repeatDropdownView: 'main' | 'scope' = 'main';
+  let repeatDropdownPositioned = false;
+  let repeatPillButtonRef: HTMLElement | null = null;
 
   // Scroll nav-content instantly so the button is visible before we measure its position
   function scrollToShowButton(buttonRef: HTMLElement): void {
@@ -350,7 +360,9 @@
       !target.closest(".nav-pill") &&
       !target.closest(".dropdown-menu") &&
       !target.closest(".pill-search-area") &&
-      !target.closest(".search-results-dropdown")
+      !target.closest(".search-results-dropdown") &&
+      !target.closest(".nav-repeat-pills") &&
+      !target.closest(".repeat-dropdown")
     ) {
       translationDropdownOpen = false;
       referenceDropdownOpen = false;
@@ -358,8 +370,69 @@
       translationDropdownPositioned = false;
       referenceDropdownPositioned = false;
       commDropdownPositioned = false;
+      closeRepeatDropdown();
       showResults = false;
     }
+  }
+
+  // ── Repeat pills ───────────────────────────────────────────────────────────
+
+  function closeRepeatDropdown() {
+    repeatDropdownWord = null;
+    repeatDropdownView = 'main';
+    repeatDropdownPositioned = false;
+    repeatPillButtonRef = null;
+  }
+
+  async function toggleRepeatPill(event: MouseEvent, word: string) {
+    event.stopPropagation();
+    if (repeatDropdownWord === word) {
+      closeRepeatDropdown();
+      return;
+    }
+    // Close other dropdowns
+    translationDropdownOpen = false;
+    referenceDropdownOpen = false;
+    commDropdownOpen = false;
+
+    repeatPillButtonRef = event.currentTarget as HTMLElement;
+    repeatDropdownView = 'main';
+    repeatDropdownWord = word;
+    await tick();
+    positionRepeatDropdown();
+  }
+
+  function positionRepeatDropdown() {
+    requestAnimationFrame(() => {
+      const dropdown = document.querySelector('.repeat-dropdown') as HTMLElement;
+      if (dropdown && repeatPillButtonRef) {
+        const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0 };
+        const rect = repeatPillButtonRef.getBoundingClientRect();
+        const naturalLeft = rect.left - navRect.left;
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, (navElement?.offsetWidth ?? window.innerWidth) - dropdown.offsetWidth - 4));
+        dropdown.style.left = `${clampedLeft}px`;
+        dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
+        repeatDropdownPositioned = true;
+      }
+    });
+  }
+
+  function deselectRepeat(word: string) {
+    repeatsStore.remove(word);
+    closeRepeatDropdown();
+  }
+
+  function selectRepeatScope(scope: RepeatHighlightScope) {
+    const group = $repeatsStore.find((g) => g.word === repeatDropdownWord);
+    if (group) {
+      repeatHighlightAllRequest.set({
+        word: group.word,
+        label: group.label,
+        scope,
+        colorIndex: group.colorIndex,
+      });
+    }
+    closeRepeatDropdown();
   }
 
   function handleSearchInput(event: Event) {
@@ -757,7 +830,28 @@
     </div>
 
     {#if !isMinimal}
-    <div class="nav-spacer" style="min-width: 27px"></div>
+    <div class="nav-spacer" style="min-width: 27px">
+      {#if $repeatsStore.length > 0}
+        <div class="nav-repeat-pills">
+          {#each $repeatsStore as group (group.word)}
+            <button
+              class="repeat-pill"
+              style="--rp-bg: {REPEAT_COLORS[group.colorIndex].pill}; --rp-fg: {REPEAT_COLORS[group.colorIndex].pillText};"
+              class:open={repeatDropdownWord === group.word}
+              on:click={(e) => toggleRepeatPill(e, group.word)}
+              title="Repeat: {group.label}"
+            >
+              <span class="repeat-pill-label">{group.label}</span>
+              {#if repeatDropdownWord === group.word}
+                <CaretUp size={9} weight="bold" />
+              {:else}
+                <CaretDown size={9} weight="bold" />
+              {/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 2: Tools Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-tools">
       <!-- Search (icon at rest Ã¢â€ â€™ expands on click) -->
@@ -1016,6 +1110,34 @@
       {/each}
     </div>
   {/if}
+
+  {#if repeatDropdownWord}
+    {@const grp = $repeatsStore.find((g) => g.word === repeatDropdownWord)}
+    {#if grp}
+      <div
+        class="dropdown-menu repeat-dropdown"
+        class:positioned={repeatDropdownPositioned}
+        style="--rp-bg: {REPEAT_COLORS[grp.colorIndex].pill}; --rp-fg: {REPEAT_COLORS[grp.colorIndex].pillText};"
+      >
+        {#if repeatDropdownView === 'main'}
+          <button class="repeat-menu-item" on:click={() => { repeatDropdownView = 'scope'; positionRepeatDropdown(); }}>
+            <span>Highlight All</span>
+            <CaretRight size={11} weight="bold" />
+          </button>
+          <button class="repeat-menu-item" on:click={() => deselectRepeat(grp.word)}>
+            Deselect All
+          </button>
+        {:else}
+          <button class="repeat-menu-item repeat-menu-back" on:click={() => { repeatDropdownView = 'main'; positionRepeatDropdown(); }}>
+            <CaretRight size={11} weight="bold" style="transform: rotate(180deg);" />
+            <span>Highlight all in…</span>
+          </button>
+          <button class="repeat-menu-item" on:click={() => selectRepeatScope('chapter')}>Current Chapter</button>
+          <button class="repeat-menu-item" on:click={() => selectRepeatScope('book')}>Entire Book</button>
+        {/if}
+      </div>
+    {/if}
+  {/if}
 </div>
 
 <!-- Power Search Modal -->
@@ -1052,6 +1174,86 @@
     flex: 1;
     min-width: 27px;
     transition: min-width 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+  }
+
+  /* ── Repeat pills ───────────────────────────────────────────────────────── */
+  .nav-repeat-pills {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: nowrap;
+  }
+
+  .repeat-pill {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    padding: 0 9px;
+    border: none;
+    border-radius: 7px;
+    background: var(--rp-bg);
+    color: var(--rp-fg);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    opacity: 0.92;
+    transition: opacity 0.15s, filter 0.15s;
+  }
+
+  .repeat-pill:hover {
+    opacity: 1;
+    filter: brightness(1.1);
+  }
+
+  .repeat-pill.open {
+    opacity: 1;
+    filter: brightness(1.15);
+  }
+
+  .repeat-pill-label {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .repeat-dropdown {
+    min-width: 170px;
+    padding: 4px;
+    overflow: hidden;
+  }
+
+  .repeat-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 9px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: #e0e0e0;
+    text-align: left;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .repeat-menu-item:hover {
+    background: #3a3a3a;
+  }
+
+  .repeat-menu-back {
+    color: #999;
+    font-weight: 600;
+    justify-content: flex-start;
   }
 
   /* Ã¢â€â‚¬Ã¢â€â‚¬ Pill containers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
@@ -1371,7 +1573,8 @@
      is constrained to (viewport_width - left), which is too narrow on small screens. */
   .translation-dropdown,
   .reference-dropdown,
-  .comm-dropdown {
+  .comm-dropdown,
+  .repeat-dropdown {
     position: fixed;
     left: 0;
     top: 0;
@@ -1381,7 +1584,8 @@
 
   .translation-dropdown.positioned,
   .reference-dropdown.positioned,
-  .comm-dropdown.positioned {
+  .comm-dropdown.positioned,
+  .repeat-dropdown.positioned {
     visibility: visible;
   }
 

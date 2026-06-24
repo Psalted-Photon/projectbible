@@ -6,9 +6,15 @@
   export let reference: BCV;
   export let existingHighlight: UserHighlight | UserWordHighlight | null = null;
   export let selectionType: 'verse' | 'word' = 'verse';
+  /** When set, the modal is in "Highlight All" bulk mode — this is the subtitle. */
+  export let bulkDescription: string | null = null;
+  /** When true (and not bulk), the clicked word is an active repeat group — show the scope toggle. */
+  export let isRepeatWord = false;
+
+  let applyToAllRepeats = false;
 
   const dispatch = createEventDispatcher<{
-    save: HighlightStyle;
+    save: { style: HighlightStyle; applyToAllRepeats: boolean };
     remove: void;
     close: void;
   }>();
@@ -75,7 +81,7 @@
 
   function handleSave() {
     if (!isLoggedIn) return;
-    dispatch('save', selected);
+    dispatch('save', { style: selected, applyToAllRepeats });
   }
 
   function handleRemove() {
@@ -109,7 +115,9 @@
 
     <div class="hl-modal-header">
       <span class="hl-modal-title">Highlight</span>
-      <span class="hl-modal-subtitle">{selectionType === 'word' ? 'Word' : 'Verse'} · {reference.book} {reference.chapter}:{reference.verse}</span>
+      <span class="hl-modal-subtitle">
+        {#if bulkDescription}{bulkDescription}{:else}{selectionType === 'word' ? 'Word' : 'Verse'} · {reference.book} {reference.chapter}:{reference.verse}{/if}
+      </span>
       <button class="hl-close-btn" on:click={handleClose} aria-label="Close">✕</button>
     </div>
 
@@ -117,6 +125,23 @@
       <div class="hl-auth-gate">
         <span class="hl-auth-icon">🔒</span>
         <span>Sign in to save highlights</span>
+      </div>
+    {/if}
+
+    {#if isRepeatWord && !bulkDescription}
+      <div class="hl-repeat-toggle" role="radiogroup" aria-label="Apply highlight to">
+        <button
+          class="hl-repeat-opt"
+          class:active={!applyToAllRepeats}
+          on:click={() => (applyToAllRepeats = false)}
+          aria-pressed={!applyToAllRepeats}
+        >This word only</button>
+        <button
+          class="hl-repeat-opt"
+          class:active={applyToAllRepeats}
+          on:click={() => (applyToAllRepeats = true)}
+          aria-pressed={applyToAllRepeats}
+        >All repeating words</button>
       </div>
     {/if}
 
@@ -279,6 +304,34 @@
   }
 
   .hl-auth-icon { font-size: 0.875rem; }
+
+  /* ── Repeat scope toggle ── */
+  .hl-repeat-toggle {
+    display: flex;
+    gap: 4px;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    padding: 3px;
+    margin-bottom: 16px;
+  }
+  .hl-repeat-opt {
+    flex: 1;
+    padding: 7px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #999;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .hl-repeat-opt:hover { color: #ccc; }
+  .hl-repeat-opt.active {
+    background: #3b82f6;
+    color: #fff;
+  }
 
   /* ── Sections ── */
   .hl-section {

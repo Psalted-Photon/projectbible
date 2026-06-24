@@ -12,6 +12,11 @@
   import { subscribeToHighlightRemoteChanges } from "../adapters/SyncedHighlightAdapter";
   import { subscribeToUserDataRemoteChanges } from "../adapters/SyncedUserDataStore";
   import { applyChapterHighlights } from "../lib/highlightRenderer";
+  import { repeatsStore, normalizeRepeatWord } from "../stores/repeatsStore";
+  import type { RepeatGroup } from "../stores/repeatsStore";
+  import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
+  import type { RepeatHighlightAllRequest } from "../stores/repeatBulkStore";
+  import { applyRepeatsToSection, applyRepeatsToAllSections, clearRepeatsInSection, findRepeatOccurrences } from "../lib/repeatRenderer";
   import AudioPlayer from "./AudioPlayer.svelte";
   import BookIntroPanel from "./BookIntroPanel.svelte";
   import { syncQueue } from "../lib/sync/SyncQueueService";
@@ -443,15 +448,17 @@
   let highlightSelectionType: 'verse' | 'word' = 'verse';
   let pendingWordStart = 0;
   let pendingWordLength = 0;
+  // Pending "Highlight All" request from a repeat pill (bulk mode for the modal)
+  let bulkRepeatRequest: RepeatHighlightAllRequest | null = null;
+  // When opening the normal Highlight modal on a word that is an active repeat
+  // group, show the "this word / all repeating words" toggle.
+  let highlightModalRepeatGroup: RepeatGroup | null = null;
   // Cached highlights for current chapter
   let chapterVerseHighlights: UserHighlight[] = [];
   let chapterWordHighlights: UserWordHighlight[] = [];
 
   // Morphology state
   let selectedMorphology: DBMorphology | null = null;
-
-  let repeatsActive = false;
-  let repeatsWord = "";
 
   // Morphology cache state
   let morphologyCache = new Map<number, DBMorphology[]>();
@@ -1143,7 +1150,8 @@
 
     loading = true;
     error = "";
-    clearRepeats(); // Clear repeats when loading a new chapter
+    // Repeats are persistent/global — loadAndApplyHighlights re-applies them
+    // after the new chapter renders; no need to clear here.
     try {
       const chapterVerses = await textStore.getChapter(
         translation,
@@ -1405,7 +1413,11 @@
         `[data-chapter-section][data-book="${book}"][data-chapter="${chapter}"]`
       );
       if (section) {
+        // Saved highlights use char offsets, so clear repeat spans first, then
+        // re-apply the repeats overlay on top.
+        clearRepeatsInSection(section);
         applyChapterHighlights(section, vHl, wHl, currentTranslation);
+        applyRepeatsToSection(section, get(repeatsStore));
       }
     } catch (err) {
       console.warn('[Highlights] load error:', err);
@@ -2644,13 +2656,13 @@
     highlightedElements.forEach((el) => {
       if (el.classList.contains("verse-highlighted")) {
         el.classList.remove("verse-highlighted");
-      } else if (!el.classList.contains("repeat-highlight")) {
+      } else if (!el.classList.contains("repeat-hl")) {
         // Don't remove repeat highlights here - they have their own clear function
         el.remove();
       }
     });
     highlightedElements = highlightedElements.filter((el) =>
-      el.classList.contains("repeat-highlight"),
+      el.classList.contains("repeat-hl"),
     );
   }
 
@@ -2801,106 +2813,95 @@
     }, 100);
   }
 
+  // Toggle a word in the persistent, global Repeats overlay. The reactive
+  // statement on $repeatsStore re-applies the in-text highlights everywhere.
   function toggleRepeats(word: string) {
-    // Normalize the word (lowercase, remove punctuation)
-    const normalizedWord = word
-      .toLowerCase()
-      .replace(/[^\w\s]/g, "")
-      .trim();
-
-    // If repeats is already active for this word, turn it off
-    if (repeatsActive && repeatsWord === normalizedWord) {
-      clearRepeats();
-      return;
-    }
-
-    // Otherwise, activate repeats for this word
-    clearRepeats(); // Clear any previous highlights
-    repeatsActive = true;
-    repeatsWord = normalizedWord;
-
-    // Find and highlight all occurrences of this word in the current chapter
-    const textContainer = readerElement?.querySelector(".text-container");
-    if (!textContainer) return;
-
-    // Get all verse text elements in the current chapter
-    const verseTexts = textContainer.querySelectorAll(".verse-text");
-
-    verseTexts.forEach((verseText) => {
-      const walker = document.createTreeWalker(
-        verseText,
-        NodeFilter.SHOW_TEXT,
-        null,
-      );
-
-      const textNodes: Text[] = [];
-      let node;
-      while ((node = walker.nextNode())) {
-        textNodes.push(node as Text);
-      }
-
-      textNodes.forEach((textNode) => {
-        const text = textNode.textContent || "";
-        const words = text.split(/(\s+)/); // Split but keep whitespace
-
-        let hasMatch = false;
-        words.forEach((w) => {
-          const normalizedW = w
-            .toLowerCase()
-            .replace(/[^\w\s]/g, "")
-            .trim();
-          if (normalizedW === normalizedWord && normalizedW.length > 0) {
-            hasMatch = true;
-          }
-        });
-
-        if (hasMatch) {
-          // Replace this text node with highlighted spans
-          const fragment = document.createDocumentFragment();
-          words.forEach((w) => {
-            const normalizedW = w
-              .toLowerCase()
-              .replace(/[^\w\s]/g, "")
-              .trim();
-            if (normalizedW === normalizedWord && normalizedW.length > 0) {
-              const span = document.createElement("span");
-              span.className = "repeat-highlight";
-              span.textContent = w;
-              fragment.appendChild(span);
-              highlightedElements.push(span);
-            } else {
-              fragment.appendChild(document.createTextNode(w));
-            }
-          });
-
-          textNode.parentNode?.replaceChild(fragment, textNode);
-        }
-      });
-    });
+    repeatsStore.toggle(word);
   }
 
-  function clearRepeats() {
-    if (!repeatsActive) return;
+  // Re-paint repeat highlights across all rendered chapter sections. Called
+  // reactively whenever the repeats store changes, and after the DOM settles.
+  async function repaintRepeats(groups: RepeatGroup[]) {
+    await tick();
+    if (!readerElement) return;
+    applyRepeatsToAllSections(readerElement, groups);
+  }
 
-    repeatsActive = false;
-    repeatsWord = "";
+  // Re-apply the global repeats overlay whenever the tracked words change or a
+  // new chapter scrolls into view (referencing chapters keeps it reactive).
+  $: if (readerElement && chapters) void repaintRepeats($repeatsStore);
 
-    // Remove repeat highlights
-    const highlights = document.querySelectorAll(".repeat-highlight");
-    highlights.forEach((highlight) => {
-      const parent = highlight.parentNode;
-      if (parent) {
-        parent.replaceChild(
-          document.createTextNode(highlight.textContent || ""),
-          highlight,
-        );
-        parent.normalize(); // Merge adjacent text nodes
+  // A repeat pill requested "Highlight All" — open the modal in bulk mode.
+  $: if ($repeatHighlightAllRequest) {
+    const req = $repeatHighlightAllRequest;
+    repeatHighlightAllRequest.set(null);
+    openBulkHighlightModal(req);
+  }
+
+  function openBulkHighlightModal(req: RepeatHighlightAllRequest) {
+    bulkRepeatRequest = req;
+    highlightModalRepeatGroup = null;
+    highlightSelectionType = 'word';
+    highlightModalExisting = null;
+    highlightModalRef = { book: currentBook, chapter: currentChapter, verse: 1 };
+    highlightModalOpen = true;
+  }
+
+  // Expand a scope into the list of (book, chapter) targets to scan.
+  function getScopeChapters(scope: 'chapter' | 'book'): { book: string; chapter: number }[] {
+    if (scope === 'chapter') return [{ book: currentBook, chapter: currentChapter }];
+    const b = BIBLE_BOOKS.find((x) => x.name === currentBook);
+    const n = b?.chapters ?? 1;
+    return Array.from({ length: n }, (_, i) => ({ book: currentBook, chapter: i + 1 }));
+  }
+
+  // Convert a repeat group into real, saved word highlights across the scope.
+  async function applyBulkRepeatHighlight(req: RepeatHighlightAllRequest, style: HighlightStyle) {
+    const targets = getScopeChapters(req.scope);
+    const tmp = document.createElement('div');
+    for (const t of targets) {
+      let verses: any[] | null = null;
+      try {
+        verses = await textStore.getChapter(currentTranslation, t.book, t.chapter);
+      } catch {
+        continue;
       }
-    });
-
-    highlightedElements = highlightedElements.filter(
-      (el) => !el.classList.contains("repeat-highlight"),
-    );
+      if (!verses) continue;
+      for (const v of verses) {
+        const { textWithoutHeading } = extractHeading(v.text);
+        const cleanText = textWithoutHeading.replace(/^¶\s*/, '');
+        tmp.innerHTML = renderVerseHtml(cleanText);
+        const rendered = tmp.textContent || '';
+        const occs = findRepeatOccurrences(rendered, req.word);
+        for (const occ of occs) {
+          const saved = await userDataStore.saveWordHighlight({
+            reference: { book: t.book, chapter: t.chapter, verse: v.verse },
+            translation: currentTranslation,
+            wordStart: occ.wordStart,
+            wordLength: occ.wordLength,
+            style,
+          });
+          await syncQueue.enqueue({
+            type: 'INSERT',
+            table: 'user_word_highlights',
+            id: saved.id,
+            data: {
+              id: saved.id, book: t.book, chapter: t.chapter, verse: v.verse,
+              translation: currentTranslation, word_start: saved.wordStart,
+              word_length: saved.wordLength, style: JSON.stringify(saved.style),
+              created_at: saved.createdAt.toISOString(),
+            },
+          });
+        }
+      }
+    }
+    // Drop the repeat group: removes the pill and scratch coloring, leaving the
+    // permanent highlights in its place.
+    repeatsStore.remove(req.word);
+    // Re-render highlights on every currently loaded chapter.
+    for (const c of chapters) {
+      await loadAndApplyHighlights(c.book, c.chapter);
+    }
   }
 
   async function handleToastAction(event: CustomEvent) {
@@ -3079,6 +3080,12 @@
         highlightModalRef = hlRef;
         highlightModalExisting = selectionMode === 'word' ? (existingW ?? existingV) : existingV;
         highlightSelectionType = selectionMode;
+        bulkRepeatRequest = null;
+        // If this word is an active repeat group, the modal shows the
+        // "this word / all repeating words" toggle.
+        highlightModalRepeatGroup = selectionMode === 'word'
+          ? (get(repeatsStore).find(g => g.word === normalizeRepeatWord(text)) ?? null)
+          : null;
         // Capture word offset synchronously now, before any DOM mutations
         pendingWordStart = 0; pendingWordLength = 0;
         if (selectionMode === 'word' && selectionRange) {
@@ -3385,10 +3392,33 @@
     reference={highlightModalRef}
     existingHighlight={highlightModalExisting}
     selectionType={highlightSelectionType}
+    bulkDescription={bulkRepeatRequest
+      ? `All “${bulkRepeatRequest.label}” · ${bulkRepeatRequest.scope === 'chapter' ? 'Current Chapter' : 'Entire Book'}`
+      : null}
+    isRepeatWord={highlightModalRepeatGroup !== null}
     on:save={async (e) => {
       if (!highlightModalRef) return;
-      const style: HighlightStyle = e.detail;
+      const { style, applyToAllRepeats } = e.detail;
       highlightModalOpen = false;
+
+      if (bulkRepeatRequest) {
+        const req = bulkRepeatRequest;
+        bulkRepeatRequest = null;
+        await applyBulkRepeatHighlight(req, style);
+        return;
+      }
+
+      // Word that is an active repeat group, with "all repeating words" chosen:
+      // apply to every occurrence in the current chapter.
+      if (applyToAllRepeats && highlightModalRepeatGroup) {
+        const grp = highlightModalRepeatGroup;
+        highlightModalRepeatGroup = null;
+        await applyBulkRepeatHighlight(
+          { word: grp.word, label: grp.label, scope: 'chapter', colorIndex: grp.colorIndex },
+          style,
+        );
+        return;
+      }
 
       if (highlightSelectionType === 'word' && pendingWordLength > 0) {
         // Remove existing word highlight for this verse+translation if any
@@ -3434,7 +3464,11 @@
       const section = readerElement?.querySelector<HTMLElement>(
         `[data-chapter-section][data-book="${highlightModalRef.book}"][data-chapter="${highlightModalRef.chapter}"]`
       );
-      if (section) applyChapterHighlights(section, chapterVerseHighlights, chapterWordHighlights, currentTranslation);
+      if (section) {
+        clearRepeatsInSection(section);
+        applyChapterHighlights(section, chapterVerseHighlights, chapterWordHighlights, currentTranslation);
+        applyRepeatsToSection(section, get(repeatsStore));
+      }
     }}
     on:remove={async () => {
       if (!highlightModalRef) return;
@@ -3455,10 +3489,14 @@
         const section = readerElement?.querySelector<HTMLElement>(
           `[data-chapter-section][data-book="${highlightModalRef.book}"][data-chapter="${highlightModalRef.chapter}"]`
         );
-        if (section) applyChapterHighlights(section, chapterVerseHighlights, chapterWordHighlights, currentTranslation);
+        if (section) {
+          clearRepeatsInSection(section);
+          applyChapterHighlights(section, chapterVerseHighlights, chapterWordHighlights, currentTranslation);
+          applyRepeatsToSection(section, get(repeatsStore));
+        }
       }
     }}
-    on:close={() => { highlightModalOpen = false; }}
+    on:close={() => { highlightModalOpen = false; bulkRepeatRequest = null; highlightModalRepeatGroup = null; }}
   />
 {/if}
 
@@ -4361,12 +4399,20 @@
   }
 
   /* Repeat highlights */
-  :global(.repeat-highlight) {
-    background: rgba(255, 193, 7, 0.35);
+  /* Repeats overlay — soft, translucent scratch highlights. No padding/margin
+     so wrapping a word never changes layout (keeps infinite-scroll height math
+     stable). Colors mirror REPEAT_COLORS in lib/repeatColors.ts. */
+  :global(.repeat-hl) {
     border-radius: 3px;
-    padding: 2px 4px;
-    margin: 0 1px;
-    box-shadow: 0 0 0 1px rgba(255, 193, 7, 0.2);
     font-weight: 500;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
   }
+  :global(.repeat-hl-0) { background: rgba(255, 193, 7, 0.30);  box-shadow: 0 0 0 1px rgba(255, 193, 7, 0.55); }
+  :global(.repeat-hl-1) { background: rgba(56, 178, 232, 0.28); box-shadow: 0 0 0 1px rgba(56, 178, 232, 0.55); }
+  :global(.repeat-hl-2) { background: rgba(52, 199, 124, 0.28); box-shadow: 0 0 0 1px rgba(52, 199, 124, 0.55); }
+  :global(.repeat-hl-3) { background: rgba(244, 114, 160, 0.28); box-shadow: 0 0 0 1px rgba(244, 114, 160, 0.55); }
+  :global(.repeat-hl-4) { background: rgba(167, 130, 240, 0.28); box-shadow: 0 0 0 1px rgba(167, 130, 240, 0.55); }
+  :global(.repeat-hl-5) { background: rgba(255, 138, 101, 0.28); box-shadow: 0 0 0 1px rgba(255, 138, 101, 0.55); }
+  :global(.repeat-hl-6) { background: rgba(45, 212, 191, 0.28);  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.55); }
 </style>
