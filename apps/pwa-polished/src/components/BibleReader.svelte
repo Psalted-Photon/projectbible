@@ -17,6 +17,10 @@
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import { applyRepeatsToSection, applyRepeatsToAllSections, clearRepeatsInSection, findRepeatOccurrences } from "../lib/repeatRenderer";
+  import { repeatCountsStore } from "../stores/repeatCountsStore";
+  import { bookRepeatHighlightsStore } from "../stores/bookRepeatHighlightsStore";
+  import type { BookRepeatRecord } from "../stores/bookRepeatHighlightsStore";
+  import { countWordsInBook } from "../lib/repeatCounts";
   import AudioPlayer from "./AudioPlayer.svelte";
   import BookIntroPanel from "./BookIntroPanel.svelte";
   import { syncQueue } from "../lib/sync/SyncQueueService";
@@ -2858,6 +2862,15 @@
   // Convert a repeat group into real, saved word highlights across the scope.
   async function applyBulkRepeatHighlight(req: RepeatHighlightAllRequest, style: HighlightStyle) {
     const targets = getScopeChapters(req.scope);
+    // Skip occurrences already highlighted for this word+translation (so
+    // re-highlighting, or chapter-then-book, doesn't create duplicates).
+    const existing = await userDataStore.getBookWordHighlights(currentBook);
+    const taken = new Set(
+      existing
+        .filter((h) => h.translation === currentTranslation)
+        .map((h) => `${h.reference.chapter}:${h.reference.verse}:${h.wordStart}`),
+    );
+    const createdIds: string[] = [];
     const tmp = document.createElement('div');
     for (const t of targets) {
       let verses: any[] | null = null;
@@ -2874,6 +2887,7 @@
         const rendered = tmp.textContent || '';
         const occs = findRepeatOccurrences(rendered, req.word);
         for (const occ of occs) {
+          if (taken.has(`${t.chapter}:${v.verse}:${occ.wordStart}`)) continue;
           const saved = await userDataStore.saveWordHighlight({
             reference: { book: t.book, chapter: t.chapter, verse: v.verse },
             translation: currentTranslation,
@@ -2881,6 +2895,7 @@
             wordLength: occ.wordLength,
             style,
           });
+          createdIds.push(saved.id);
           await syncQueue.enqueue({
             type: 'INSERT',
             table: 'user_word_highlights',
@@ -2895,10 +2910,98 @@
         }
       }
     }
-    // Drop the repeat group: removes the pill and scratch coloring, leaving the
-    // permanent highlights in its place.
+    // Record this word as permanently highlighted in the current book so its
+    // pill relocates beside the book's Introduction button.
+    bookRepeatHighlightsStore.add({
+      book: currentBook,
+      word: req.word,
+      label: req.label,
+      color: style.color,
+      highlightIds: createdIds,
+    });
+    // Drop the scratch repeat group (removes the navbar pill + soft coloring).
     repeatsStore.remove(req.word);
     // Re-render highlights on every currently loaded chapter.
+    for (const c of chapters) {
+      await loadAndApplyHighlights(c.book, c.chapter);
+    }
+  }
+
+  // ── Repeat counts + book-intro relocation ──────────────────────────────────
+
+  // Recompute occurrence counts (current book) for every tracked/permanent word.
+  async function refreshRepeatCounts(
+    book: string,
+    translation: string,
+    repeats: RepeatGroup[],
+    bookRecs: BookRepeatRecord[],
+  ) {
+    const words = new Set<string>();
+    for (const g of repeats) words.add(g.word);
+    for (const r of bookRecs) if (r.book === book) words.add(r.word);
+    if (words.size === 0 || !book || !translation) {
+      repeatCountsStore.set(new Map());
+      return;
+    }
+    const map = await countWordsInBook(translation, book, [...words]);
+    repeatCountsStore.set(map);
+  }
+
+  // Drop book-repeat records whose underlying highlights no longer exist.
+  async function reconcileBookRepeats(book: string) {
+    if (!book) return;
+    if (!get(bookRepeatHighlightsStore).some((r) => r.book === book)) return;
+    const existing = await userDataStore.getBookWordHighlights(book);
+    bookRepeatHighlightsStore.prune(book, new Set(existing.map((h) => h.id)));
+  }
+
+  // Recompute counts when the book/translation or tracked-word sets change.
+  $: void refreshRepeatCounts(currentBook, currentTranslation, $repeatsStore, $bookRepeatHighlightsStore);
+
+  // Prune stale book-repeat records when the current book changes.
+  $: if (currentBook) void reconcileBookRepeats(currentBook);
+
+  // Readable text color over a (typically light) highlight color.
+  function repeatPillTextColor(hex: string): string {
+    const h = hex.replace('#', '');
+    if (h.length < 6) return '#1a1a1a';
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.6 ? '#1a1a1a' : '#fff';
+  }
+
+  // Intro-area pill dropdown state (keyed by `${book}:${word}`)
+  let introMenuKey: string | null = null;
+  let introMenuView: 'main' | 'scope' = 'main';
+
+  function toggleIntroMenu(book: string, word: string) {
+    const key = `${book}:${word}`;
+    if (introMenuKey === key) {
+      introMenuKey = null;
+    } else {
+      introMenuKey = key;
+      introMenuView = 'main';
+    }
+  }
+
+  function introHighlightAll(rec: BookRepeatRecord, scope: 'chapter' | 'book') {
+    introMenuKey = null;
+    repeatHighlightAllRequest.set({ word: rec.word, label: rec.label, scope, colorIndex: 0 });
+  }
+
+  async function introDeselect(rec: BookRepeatRecord) {
+    introMenuKey = null;
+    for (const id of rec.highlightIds) {
+      try {
+        await userDataStore.deleteWordHighlight(id);
+        await syncQueue.enqueue({ type: 'DELETE', table: 'user_word_highlights', id });
+      } catch {
+        // ignore already-deleted
+      }
+    }
+    bookRepeatHighlightsStore.remove(rec.book, rec.word);
     for (const c of chapters) {
       await loadAndApplyHighlights(c.book, c.chapter);
     }
@@ -3159,6 +3262,8 @@
 
     // Don't close if toast was just opened
     if (justOpenedToast) return;
+
+    if (!target.closest(".intro-repeat-wrap")) introMenuKey = null;
 
     if (!target.closest(".selection-highlight") && !target.closest(".toast")) {
       showToast = false;
@@ -3479,6 +3584,8 @@
           await userDataStore.deleteWordHighlight(highlightModalExisting.id);
           await syncQueue.enqueue({ type: 'DELETE', table: 'user_word_highlights', id: highlightModalExisting.id });
           chapterWordHighlights = await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter);
+          // A relocated book-intro pill may now have lost a highlight — reconcile.
+          await reconcileBookRepeats(highlightModalRef.book);
         } else {
           await userDataStore.deleteHighlight(highlightModalExisting.id);
           await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: highlightModalExisting.id });
@@ -3549,11 +3656,42 @@
           <div class="chapter-header">
             <h1>{chapterData.book} {chapterData.chapter}</h1>
             {#if chapterData.chapter === 1}
+              <div class="intro-row">
               <button
                 class="book-intro-btn"
                 on:click={() => openBookIntroPanel(chapterData.book)}
                 title="Introduction to {chapterData.book}"
               >📖 Introduction</button>
+              {#each $bookRepeatHighlightsStore.filter((r) => r.book === chapterData.book) as rec (rec.word)}
+                <div class="intro-repeat-wrap">
+                  <button
+                    class="intro-repeat-pill"
+                    style="--irp-bg: {rec.color}; --irp-fg: {repeatPillTextColor(rec.color)};"
+                    class:open={introMenuKey === `${rec.book}:${rec.word}`}
+                    on:click|stopPropagation={() => toggleIntroMenu(rec.book, rec.word)}
+                    title="Highlighted repeat: {rec.label}"
+                  >
+                    <span class="intro-repeat-label">{rec.label}</span>
+                    {#if $repeatCountsStore.get(rec.word) !== undefined}
+                      <span class="repeat-pill-count">({$repeatCountsStore.get(rec.word)})</span>
+                    {/if}
+                    <span class="intro-repeat-caret">{introMenuKey === `${rec.book}:${rec.word}` ? '▴' : '▾'}</span>
+                  </button>
+                  {#if introMenuKey === `${rec.book}:${rec.word}`}
+                    <div class="intro-repeat-menu" on:click|stopPropagation on:keydown|stopPropagation role="menu" tabindex="-1">
+                      {#if introMenuView === 'main'}
+                        <button class="intro-repeat-item" on:click|stopPropagation={() => (introMenuView = 'scope')}>Highlight All ▸</button>
+                        <button class="intro-repeat-item" on:click|stopPropagation={() => introDeselect(rec)}>Deselect All</button>
+                      {:else}
+                        <button class="intro-repeat-item intro-repeat-back" on:click|stopPropagation={() => (introMenuView = 'main')}>‹ Highlight all in…</button>
+                        <button class="intro-repeat-item" on:click|stopPropagation={() => introHighlightAll(rec, 'chapter')}>Current Chapter</button>
+                        <button class="intro-repeat-item" on:click|stopPropagation={() => introHighlightAll(rec, 'book')}>Current Book</button>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+              </div>
             {/if}
             <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
           </div>
@@ -3811,6 +3949,71 @@
     border-color: rgba(100, 160, 255, 0.4);
     color: #d0e4ff;
   }
+
+  /* Relocated repeat pills, beside the Introduction button */
+  .intro-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .intro-repeat-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .intro-repeat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--irp-bg);
+    color: var(--irp-fg);
+    border: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: filter 0.15s;
+  }
+  .intro-repeat-pill:hover,
+  .intro-repeat-pill.open { filter: brightness(1.08); }
+
+  .intro-repeat-caret { font-size: 0.7em; opacity: 0.85; }
+  .intro-repeat-pill .repeat-pill-count { font-weight: 700; opacity: 0.85; font-variant-numeric: tabular-nums; }
+
+  .intro-repeat-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    padding: 4px;
+    min-width: 160px;
+    text-align: left;
+  }
+
+  .intro-repeat-item {
+    display: block;
+    width: 100%;
+    padding: 9px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: #e0e0e0;
+    text-align: left;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .intro-repeat-item:hover { background: #3a3a3a; }
+  .intro-repeat-back { color: #999; font-weight: 600; }
 
   .verses {
     line-height: var(--line-spacing, 1.8);

@@ -279,6 +279,10 @@ export class SyncedUserDataStore implements UserDataStore {
     return this.local.getChapterWordHighlights(book, chapter);
   }
 
+  async getBookWordHighlights(book: string): Promise<UserWordHighlight[]> {
+    return this.local.getBookWordHighlights(book);
+  }
+
   async saveWordHighlight(highlight: Omit<UserWordHighlight, 'id' | 'createdAt'>): Promise<UserWordHighlight> {
     const saved = await this.local.saveWordHighlight(highlight);
 

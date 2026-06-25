@@ -402,6 +402,7 @@ export interface UserDataStore {
   // Word highlights (translation-specific; fall back to verse-level on other translations)
   getWordHighlights(reference?: BCV, translation?: string): Promise<UserWordHighlight[]>;
   getChapterWordHighlights(book: string, chapter: number): Promise<UserWordHighlight[]>;
+  getBookWordHighlights(book: string): Promise<UserWordHighlight[]>;
   saveWordHighlight(highlight: Omit<UserWordHighlight, 'id' | 'createdAt'>): Promise<UserWordHighlight>;
   deleteWordHighlight(highlightId: string): Promise<void>;
   

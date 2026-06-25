@@ -40,6 +40,7 @@
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
   import { repeatsStore } from "../stores/repeatsStore";
+  import { repeatCountsStore } from "../stores/repeatCountsStore";
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightScope } from "../stores/repeatBulkStore";
   import { REPEAT_COLORS } from "../lib/repeatColors";
@@ -830,28 +831,31 @@
     </div>
 
     {#if !isMinimal}
-    <div class="nav-spacer" style="min-width: 27px">
-      {#if $repeatsStore.length > 0}
-        <div class="nav-repeat-pills">
-          {#each $repeatsStore as group (group.word)}
-            <button
-              class="repeat-pill"
-              style="--rp-bg: {REPEAT_COLORS[group.colorIndex].pill}; --rp-fg: {REPEAT_COLORS[group.colorIndex].pillText};"
-              class:open={repeatDropdownWord === group.word}
-              on:click={(e) => toggleRepeatPill(e, group.word)}
-              title="Repeat: {group.label}"
-            >
-              <span class="repeat-pill-label">{group.label}</span>
-              {#if repeatDropdownWord === group.word}
-                <CaretUp size={9} weight="bold" />
-              {:else}
-                <CaretDown size={9} weight="bold" />
-              {/if}
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
+    <div class="nav-spacer" style="min-width: 27px"></div>
+    {#if $repeatsStore.length > 0}
+      <div class="nav-repeat-pills">
+        {#each $repeatsStore as group (group.word)}
+          <button
+            class="repeat-pill"
+            style="--rp-bg: {REPEAT_COLORS[group.colorIndex].pill}; --rp-fg: {REPEAT_COLORS[group.colorIndex].pillText};"
+            class:open={repeatDropdownWord === group.word}
+            on:click={(e) => toggleRepeatPill(e, group.word)}
+            title="Repeat: {group.label}"
+          >
+            <span class="repeat-pill-label">{group.label}</span>
+            {#if $repeatCountsStore.get(group.word) !== undefined}
+              <span class="repeat-pill-count">({$repeatCountsStore.get(group.word)})</span>
+            {/if}
+            {#if repeatDropdownWord === group.word}
+              <CaretUp size={9} weight="bold" />
+            {:else}
+              <CaretDown size={9} weight="bold" />
+            {/if}
+          </button>
+        {/each}
+      </div>
+      <div class="nav-spacer" style="min-width: 27px"></div>
+    {/if}
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 2: Tools Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-tools">
       <!-- Search (icon at rest Ã¢â€ â€™ expands on click) -->
@@ -1120,20 +1124,20 @@
         style="--rp-bg: {REPEAT_COLORS[grp.colorIndex].pill}; --rp-fg: {REPEAT_COLORS[grp.colorIndex].pillText};"
       >
         {#if repeatDropdownView === 'main'}
-          <button class="repeat-menu-item" on:click={() => { repeatDropdownView = 'scope'; positionRepeatDropdown(); }}>
+          <button class="repeat-menu-item" on:click|stopPropagation={() => { repeatDropdownView = 'scope'; positionRepeatDropdown(); }}>
             <span>Highlight All</span>
             <CaretRight size={11} weight="bold" />
           </button>
-          <button class="repeat-menu-item" on:click={() => deselectRepeat(grp.word)}>
+          <button class="repeat-menu-item" on:click|stopPropagation={() => deselectRepeat(grp.word)}>
             Deselect All
           </button>
         {:else}
-          <button class="repeat-menu-item repeat-menu-back" on:click={() => { repeatDropdownView = 'main'; positionRepeatDropdown(); }}>
+          <button class="repeat-menu-item repeat-menu-back" on:click|stopPropagation={() => { repeatDropdownView = 'main'; positionRepeatDropdown(); }}>
             <CaretRight size={11} weight="bold" style="transform: rotate(180deg);" />
             <span>Highlight all in…</span>
           </button>
-          <button class="repeat-menu-item" on:click={() => selectRepeatScope('chapter')}>Current Chapter</button>
-          <button class="repeat-menu-item" on:click={() => selectRepeatScope('book')}>Entire Book</button>
+          <button class="repeat-menu-item" on:click|stopPropagation={() => selectRepeatScope('chapter')}>Current Chapter</button>
+          <button class="repeat-menu-item" on:click|stopPropagation={() => selectRepeatScope('book')}>Current Book</button>
         {/if}
       </div>
     {/if}
@@ -1174,10 +1178,6 @@
     flex: 1;
     min-width: 27px;
     transition: min-width 0.15s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: visible;
   }
 
   /* ── Repeat pills ───────────────────────────────────────────────────────── */
@@ -1186,6 +1186,13 @@
     align-items: center;
     gap: 5px;
     flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
+  .repeat-pill-count {
+    opacity: 0.8;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
   }
 
   .repeat-pill {

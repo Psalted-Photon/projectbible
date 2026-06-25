@@ -284,6 +284,34 @@ export class IndexedDBUserDataStore implements UserDataStore {
     }
   }
 
+  async getBookWordHighlights(book: string): Promise<UserWordHighlight[]> {
+    try {
+      const db = await import('./db.js').then(m => m.openDB());
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('user_word_highlights', 'readonly');
+        const store = transaction.objectStore('user_word_highlights');
+        const index = store.index('book_chapter_verse');
+        const range = IDBKeyRange.bound([book, 0, 0], [book, 9999, 9999]);
+        const request = index.getAll(range) as IDBRequest<DBUserWordHighlight[]>;
+        request.onsuccess = () => {
+          resolve(request.result.map(h => ({
+            id: h.id,
+            reference: { book: h.book, chapter: h.chapter, verse: h.verse },
+            translation: h.translation,
+            wordStart: h.wordStart,
+            wordLength: h.wordLength,
+            style: deserializeStyle(h.style, '#ffeb3b'),
+            createdAt: new Date(h.createdAt),
+          })));
+        };
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error('Error getting book word highlights:', error);
+      return [];
+    }
+  }
+
   async saveWordHighlight(highlight: Omit<UserWordHighlight, 'id' | 'createdAt'>): Promise<UserWordHighlight> {
     const now = Date.now();
     const id = generateId();
