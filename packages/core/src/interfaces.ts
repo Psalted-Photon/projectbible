@@ -199,6 +199,13 @@ export interface HighlightStyle {
   type: HighlightType;
   color: string;
   underlineStyle?: UnderlineStyle;
+  /**
+   * Non-visual metadata: when set, this highlight was created by a "Repeats →
+   * Highlight All" action for the given word (original casing). It rides inside
+   * the serialized style so it syncs with the highlight (no extra column), and
+   * the book-intro repeat pill is derived from highlights carrying it.
+   */
+  repeatWord?: string;
 }
 
 export interface UserHighlight {

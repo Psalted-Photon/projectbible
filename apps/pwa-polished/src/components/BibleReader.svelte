@@ -18,8 +18,6 @@
   import type { RepeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import { applyRepeatsToSection, applyRepeatsToAllSections, clearRepeatsInSection, findRepeatOccurrences } from "../lib/repeatRenderer";
   import { repeatCountsStore } from "../stores/repeatCountsStore";
-  import { bookRepeatHighlightsStore } from "../stores/bookRepeatHighlightsStore";
-  import type { BookRepeatRecord } from "../stores/bookRepeatHighlightsStore";
   import { countWordsInBook } from "../lib/repeatCounts";
   import AudioPlayer from "./AudioPlayer.svelte";
   import BookIntroPanel from "./BookIntroPanel.svelte";
@@ -1423,6 +1421,8 @@
         applyChapterHighlights(section, vHl, wHl, currentTranslation);
         applyRepeatsToSection(section, get(repeatsStore));
       }
+      // Derive book-intro pills from the (now-synced) highlights.
+      await refreshBookIntroPills();
     } catch (err) {
       console.warn('[Highlights] load error:', err);
     }
@@ -2859,9 +2859,15 @@
     return Array.from({ length: n }, (_, i) => ({ book: currentBook, chapter: i + 1 }));
   }
 
+  // A book-intro pill, derived from synced word-highlights carrying a repeatWord.
+  type IntroPill = { book: string; word: string; label: string; color: string; highlightIds: string[] };
+
   // Convert a repeat group into real, saved word highlights across the scope.
   async function applyBulkRepeatHighlight(req: RepeatHighlightAllRequest, style: HighlightStyle) {
     const targets = getScopeChapters(req.scope);
+    // Stamp each highlight with the repeat word (rides inside the synced style)
+    // so the book-intro pill can be derived from — and sync with — the highlights.
+    const stampedStyle: HighlightStyle = { ...style, repeatWord: req.label };
     // Skip occurrences already highlighted for this word+translation (so
     // re-highlighting, or chapter-then-book, doesn't create duplicates).
     const existing = await userDataStore.getBookWordHighlights(currentBook);
@@ -2870,7 +2876,6 @@
         .filter((h) => h.translation === currentTranslation)
         .map((h) => `${h.reference.chapter}:${h.reference.verse}:${h.wordStart}`),
     );
-    const createdIds: string[] = [];
     const tmp = document.createElement('div');
     for (const t of targets) {
       let verses: any[] | null = null;
@@ -2893,9 +2898,8 @@
             translation: currentTranslation,
             wordStart: occ.wordStart,
             wordLength: occ.wordLength,
-            style,
+            style: stampedStyle,
           });
-          createdIds.push(saved.id);
           await syncQueue.enqueue({
             type: 'INSERT',
             table: 'user_word_highlights',
@@ -2910,35 +2914,60 @@
         }
       }
     }
-    // Record this word as permanently highlighted in the current book so its
-    // pill relocates beside the book's Introduction button.
-    bookRepeatHighlightsStore.add({
-      book: currentBook,
-      word: req.word,
-      label: req.label,
-      color: style.color,
-      highlightIds: createdIds,
-    });
     // Drop the scratch repeat group (removes the navbar pill + soft coloring).
     repeatsStore.remove(req.word);
-    // Re-render highlights on every currently loaded chapter.
+    // Re-render highlights on every currently loaded chapter (also derives pills).
     for (const c of chapters) {
       await loadAndApplyHighlights(c.book, c.chapter);
     }
+    await refreshBookIntroPills();
   }
 
   // ── Repeat counts + book-intro relocation ──────────────────────────────────
 
-  // Recompute occurrence counts (current book) for every tracked/permanent word.
+  // Book-intro pills, derived from synced word-highlights carrying a repeatWord.
+  let introPillsByBook = new Map<string, IntroPill[]>();
+
+  // Rebuild intro pills for every distinct loaded book from saved highlights.
+  async function refreshBookIntroPills() {
+    const books = Array.from(new Set(chapters.map((c) => c.book)));
+    if (currentBook && !books.includes(currentBook)) books.push(currentBook);
+    const next = new Map<string, IntroPill[]>();
+    for (const book of books) {
+      let rows: UserWordHighlight[] = [];
+      try {
+        rows = await userDataStore.getBookWordHighlights(book);
+      } catch {
+        continue;
+      }
+      const byWord = new Map<string, IntroPill>();
+      for (const h of rows) {
+        const label = h.style?.repeatWord;
+        if (!label) continue;
+        const key = normalizeRepeatWord(label);
+        if (!key) continue;
+        const pill = byWord.get(key);
+        if (pill) {
+          pill.highlightIds.push(h.id);
+        } else {
+          byWord.set(key, { book, word: key, label, color: h.style.color, highlightIds: [h.id] });
+        }
+      }
+      if (byWord.size > 0) next.set(book, [...byWord.values()]);
+    }
+    introPillsByBook = next; // reassign for reactivity (also re-triggers counts)
+  }
+
+  // Recompute occurrence counts (current book) for scratch + permanent words.
   async function refreshRepeatCounts(
     book: string,
     translation: string,
     repeats: RepeatGroup[],
-    bookRecs: BookRepeatRecord[],
+    pillsByBook: Map<string, IntroPill[]>,
   ) {
     const words = new Set<string>();
     for (const g of repeats) words.add(g.word);
-    for (const r of bookRecs) if (r.book === book) words.add(r.word);
+    for (const p of pillsByBook.get(book) ?? []) words.add(p.word);
     if (words.size === 0 || !book || !translation) {
       repeatCountsStore.set(new Map());
       return;
@@ -2947,19 +2976,8 @@
     repeatCountsStore.set(map);
   }
 
-  // Drop book-repeat records whose underlying highlights no longer exist.
-  async function reconcileBookRepeats(book: string) {
-    if (!book) return;
-    if (!get(bookRepeatHighlightsStore).some((r) => r.book === book)) return;
-    const existing = await userDataStore.getBookWordHighlights(book);
-    bookRepeatHighlightsStore.prune(book, new Set(existing.map((h) => h.id)));
-  }
-
-  // Recompute counts when the book/translation or tracked-word sets change.
-  $: void refreshRepeatCounts(currentBook, currentTranslation, $repeatsStore, $bookRepeatHighlightsStore);
-
-  // Prune stale book-repeat records when the current book changes.
-  $: if (currentBook) void reconcileBookRepeats(currentBook);
+  // Recompute counts when book/translation, scratch words, or derived pills change.
+  $: void refreshRepeatCounts(currentBook, currentTranslation, $repeatsStore, introPillsByBook);
 
   // Readable text color over a (typically light) highlight color.
   function repeatPillTextColor(hex: string): string {
@@ -2986,12 +3004,12 @@
     }
   }
 
-  function introHighlightAll(rec: BookRepeatRecord, scope: 'chapter' | 'book') {
+  function introHighlightAll(rec: IntroPill, scope: 'chapter' | 'book') {
     introMenuKey = null;
     repeatHighlightAllRequest.set({ word: rec.word, label: rec.label, scope, colorIndex: 0 });
   }
 
-  async function introDeselect(rec: BookRepeatRecord) {
+  async function introDeselect(rec: IntroPill) {
     introMenuKey = null;
     for (const id of rec.highlightIds) {
       try {
@@ -3001,10 +3019,10 @@
         // ignore already-deleted
       }
     }
-    bookRepeatHighlightsStore.remove(rec.book, rec.word);
     for (const c of chapters) {
       await loadAndApplyHighlights(c.book, c.chapter);
     }
+    await refreshBookIntroPills();
   }
 
   async function handleToastAction(event: CustomEvent) {
@@ -3584,8 +3602,8 @@
           await userDataStore.deleteWordHighlight(highlightModalExisting.id);
           await syncQueue.enqueue({ type: 'DELETE', table: 'user_word_highlights', id: highlightModalExisting.id });
           chapterWordHighlights = await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter);
-          // A relocated book-intro pill may now have lost a highlight — reconcile.
-          await reconcileBookRepeats(highlightModalRef.book);
+          // A relocated book-intro pill may now have lost a highlight — re-derive.
+          await refreshBookIntroPills();
         } else {
           await userDataStore.deleteHighlight(highlightModalExisting.id);
           await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: highlightModalExisting.id });
@@ -3662,7 +3680,7 @@
                 on:click={() => openBookIntroPanel(chapterData.book)}
                 title="Introduction to {chapterData.book}"
               >📖 Introduction</button>
-              {#each $bookRepeatHighlightsStore.filter((r) => r.book === chapterData.book) as rec (rec.word)}
+              {#each (introPillsByBook.get(chapterData.book) ?? []) as rec (rec.word)}
                 <div class="intro-repeat-wrap">
                   <button
                     class="intro-repeat-pill"
