@@ -3717,6 +3717,7 @@
             class="verses {translationFontClass}"
             class:paragraph-layout={verseLayout === "paragraph"}
             class:nonumber-layout={verseLayout === "paragraph-no-verse-numbers"}
+            style="--verse-num-color:{getBookColor(chapterData.book)}"
           >
             {#each chapterData.verses as { verse, text, html, heading, headingLevel, paraStart }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
               {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
@@ -4048,7 +4049,7 @@
     display: inline-block;
     min-width: 0;
     font-size: calc(var(--base-font-size, 18px) * 0.5);
-    color: #888;
+    color: color-mix(in srgb, var(--verse-num-color, #888) 60%, #888);
     vertical-align: super;
     margin-right: 0.1rem;
   }
@@ -4335,7 +4336,7 @@
   .verses.paragraph-layout .verse-number {
     vertical-align: baseline;
     font-size: calc(var(--base-font-size, 18px) * 0.5);
-    color: #888;
+    color: color-mix(in srgb, var(--verse-num-color, #888) 60%, #888);
   }
 
   /* No verse numbers layout — paragraph flow, chapter number only */

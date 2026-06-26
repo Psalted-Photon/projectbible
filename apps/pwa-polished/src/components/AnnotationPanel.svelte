@@ -6,6 +6,7 @@
   import { IndexedDBTextStore } from "../adapters/TextStore";
   import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
   import { parseRefString } from "../lib/parseRefString";
+  import { getBookColor } from "../lib/bibleData";
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
   import { navigationStore } from "../stores/navigationStore";
 
@@ -328,6 +329,7 @@
                     <button
                       class="ref-link-btn"
                       class:navigable={!!refTarget}
+                      style="--ref-color:{refTarget ? getBookColor(refTarget.book) : '#8ab4f8'}"
                       on:click={() => handleRefClick(ref)}
                     >{ref}</button>
                   </li>
@@ -638,7 +640,7 @@
   .ref-link-btn {
     background: none;
     border: none;
-    color: #8ab4f8;
+    color: var(--ref-color, #8ab4f8);
     font: inherit;
     font-size: 12px;
     padding: 0;
@@ -654,7 +656,7 @@
   }
 
   .ref-link-btn.navigable:hover {
-    color: #c0d8ff;
+    color: color-mix(in srgb, var(--ref-color, #8ab4f8) 70%, white);
     text-decoration-style: solid;
   }
 
