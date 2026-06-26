@@ -5,7 +5,7 @@
     canGoBack,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName, CATEGORY_COLORS, CATEGORY_LABELS } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import {
     searchService,
@@ -1060,10 +1060,16 @@
 
   {#if referenceDropdownOpen}
     <div class="dropdown-menu tree-menu reference-dropdown" class:positioned={referenceDropdownPositioned}>
-      {#each BIBLE_BOOKS as book}
-        <div 
+      {#each BIBLE_BOOKS as book, i}
+        {#if i === 0 || BIBLE_BOOKS[i - 1].category !== book.category}
+          <div
+            class="category-header"
+            class:nt-start={book.testament === 'NT' && BIBLE_BOOKS[i - 1]?.testament === 'OT'}
+            style="color:{CATEGORY_COLORS[book.category]}"
+          >{CATEGORY_LABELS[book.category]}</div>
+        {/if}
+        <div
           class="book-item category-{book.category} testament-{book.testament}"
-          class:first-nt={book.name === 'Matthew'}
         >
           <button
             class="book-button"
@@ -1635,10 +1641,25 @@
     border-bottom: none;
   }
 
-  /* Thick border between OT and NT */
-  .book-item.first-nt {
-    border-top: 12px solid #000;
-    margin-top: 2px;
+  /* Category group label in the book dropdown */
+  .category-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 6px 8px 4px;
+    margin-top: 4px;
+    background: #2a2a2a;
+    border-bottom: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  }
+
+  /* Thicker break where the OT ends and the NT begins */
+  .category-header.nt-start {
+    border-top: 8px solid #000;
+    margin-top: 6px;
   }
 
   /* Category Colors Ã¢â‚¬â€ Radial Gradient Theme */

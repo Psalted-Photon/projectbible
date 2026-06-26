@@ -138,6 +138,20 @@ export const CATEGORY_COLORS: Record<BookInfo['category'], string> = {
   'revelation': '#61f1ff',
 };
 
+/** Human-readable display names for each book category (shown in nav grouping). */
+export const CATEGORY_LABELS: Record<BookInfo['category'], string> = {
+  'pentateuch': 'Pentateuch',
+  'historical': 'Historical',
+  'wisdom': 'Wisdom',
+  'major-prophets': 'Major Prophets',
+  'minor-prophets': 'Minor Prophets',
+  'gospels': 'Gospels',
+  'acts': 'Acts',
+  'pauline': 'Pauline Epistles',
+  'general': 'General Epistles',
+  'revelation': 'Eschaton',
+};
+
 /** Accent color for a book (by name, normalized). Falls back to a neutral gray. */
 export function getBookColor(book: string): string {
   const info = BIBLE_BOOKS.find(b => b.name === normalizeBookName(book));
