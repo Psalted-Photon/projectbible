@@ -4049,7 +4049,7 @@
     display: inline-block;
     min-width: 0;
     font-size: calc(var(--base-font-size, 18px) * 0.5);
-    color: color-mix(in srgb, var(--verse-num-color, #888) 60%, #888);
+    color: var(--verse-num-color, #888);
     vertical-align: super;
     margin-right: 0.1rem;
   }
@@ -4336,7 +4336,7 @@
   .verses.paragraph-layout .verse-number {
     vertical-align: baseline;
     font-size: calc(var(--base-font-size, 18px) * 0.5);
-    color: color-mix(in srgb, var(--verse-num-color, #888) 60%, #888);
+    color: var(--verse-num-color, #888);
   }
 
   /* No verse numbers layout — paragraph flow, chapter number only */

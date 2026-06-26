@@ -127,14 +127,14 @@ export function normalizeBookName(book: string): string {
  */
 export const CATEGORY_COLORS: Record<BookInfo['category'], string> = {
   'pentateuch': '#a67c52',
-  'historical': '#6496c8',
-  'wisdom': '#daa520',
+  'historical': '#6ca0dc',
+  'wisdom': '#f0c040',
   'major-prophets': '#5c1e99',
   'minor-prophets': '#a45be9',
   'gospels': '#fc345c',
-  'acts': '#ff6030',
+  'acts': '#ff6520',
   'pauline': '#6048cc',
-  'general': '#d2691e',
+  'general': '#f2893e',
   'revelation': '#61f1ff',
 };
 
