@@ -3946,7 +3946,7 @@
     font-size: 1.5rem;
     font-weight: 600;
     color: #f0f0f0;
-    text-shadow: -2px 2px 0 var(--title-shadow, transparent);
+    text-shadow: -1.25px 1.25px 0 var(--title-shadow, transparent);
   }
 
   .book-intro-btn {
@@ -4395,6 +4395,7 @@
     margin: 24px 0 12px 0;
     padding-top: 12px;
     border-top: 1px solid #444;
+    text-shadow: -0.25px 0.25px 0 var(--verse-num-color, transparent);
   }
 
   .section-heading--s2 {
