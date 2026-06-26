@@ -3672,7 +3672,7 @@
         {@const chStdCtxs = chPlanCtxs.filter((c) => c.type === 'standard')}
         <div class="chapter-section" data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
           <div class="chapter-header">
-            <h1>{chapterData.book} {chapterData.chapter}</h1>
+            <h1 style="--title-shadow:{getBookColor(chapterData.book)}">{chapterData.book} {chapterData.chapter}</h1>
             {#if chapterData.chapter === 1}
               <div class="intro-row">
               <button
@@ -3946,6 +3946,7 @@
     font-size: 1.5rem;
     font-weight: 600;
     color: #f0f0f0;
+    text-shadow: -2px 2px 0 var(--title-shadow, transparent);
   }
 
   .book-intro-btn {
