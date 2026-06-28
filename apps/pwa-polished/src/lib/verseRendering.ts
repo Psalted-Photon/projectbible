@@ -187,15 +187,64 @@ function buildCleanToStoredMap(storedText: string): number[] {
   return map;
 }
 
+/**
+ * Find `<b>`/`<i>` formatting regions and express them in CLEAN-text
+ * coordinates (HTML tags removed, footnote markers kept) — i.e. positions in
+ * `stripHtmlTags(text)`.  Only `<b>`/`<i>` are honored; all other tags are
+ * ignored here and stripped as before.  These ranges feed the same sentinel
+ * machinery as red-letter spans so the two coexist (e.g. NET Matthew 4:4).
+ */
+function extractFormattingSpans(text: string): { start: number; end: number; kind: 'b' | 'i' }[] {
+  const src = text ?? '';
+  const ranges: { start: number; end: number; kind: 'b' | 'i' }[] = [];
+  const stacks: { b: number[]; i: number[] } = { b: [], i: [] };
+  let cleanPos = 0;
+  let i = 0;
+  while (i < src.length) {
+    if (src[i] === '<') {
+      const close = src.indexOf('>', i);
+      if (close === -1) {
+        // No closing '>': stripHtmlTags keeps this char, so count it as text
+        cleanPos++;
+        i++;
+        continue;
+      }
+      const m = src.slice(i, close + 1).match(/^<\s*(\/?)\s*([a-zA-Z]+)/);
+      if (m) {
+        const isClose = m[1] === '/';
+        const name = m[2].toLowerCase();
+        if (name === 'b' || name === 'i') {
+          if (isClose) {
+            const startPos = stacks[name].pop();
+            if (startPos !== undefined && cleanPos > startPos) {
+              ranges.push({ start: startPos, end: cleanPos, kind: name });
+            }
+          } else {
+            stacks[name].push(cleanPos);
+          }
+        }
+      }
+      // Tags contribute nothing to clean-text length (they are stripped)
+      i = close + 1;
+      continue;
+    }
+    cleanPos++;
+    i++;
+  }
+  return ranges;
+}
+
 export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]): string {
   const cleaned = stripHtmlTags(text);
 
   let processed = cleaned;
+  const insertions: { pos: number; ch: string }[] = [];
+
+  // Red-letter spans → \x02/\x03 sentinels (offsets mapped past footnote markers)
   if (spans && spans.length > 0) {
     // Map clean-text offsets → stored-text positions so sentinels interleave
     // correctly with footnote markers already in the stored text.
     const map = buildCleanToStoredMap(cleaned);
-    const insertions: { pos: number; ch: string }[] = [];
     for (const span of spans) {
       const storedS = map[Math.min(span.s, map.length - 1)];
       const storedE = map[Math.min(span.e, map.length - 1)];
@@ -204,6 +253,17 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
         insertions.push({ pos: storedS, ch: '\x02' });
       }
     }
+  }
+
+  // Inline <b>/<i> formatting → \x04/\x05 (bold), \x06/\x07 (italic).
+  // Ranges are already in `cleaned` coordinates, so no mapping is needed.
+  for (const f of extractFormattingSpans(text)) {
+    const [open, closeCh] = f.kind === 'b' ? ['\x04', '\x05'] : ['\x06', '\x07'];
+    insertions.push({ pos: f.end, ch: closeCh });
+    insertions.push({ pos: f.start, ch: open });
+  }
+
+  if (insertions.length > 0) {
     // Right-to-left insertion preserves earlier offsets
     insertions.sort((a, b) => b.pos - a.pos);
     for (const { pos, ch } of insertions) {
@@ -213,10 +273,12 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
 
   const { html } = renderTextWithInlineNotes(processed);
 
-  // Wrap \x02…\x03 sentinels with red-letter span; clean up any orphaned sentinels
+  // Wrap sentinels; clean up any orphaned ones
   return html
     .replace(/\x02([\s\S]*?)\x03/g, '<span class="red-letter">$1</span>')
-    .replace(/[\x02\x03]/g, '');
+    .replace(/\x04([\s\S]*?)\x05/g, '<b>$1</b>')
+    .replace(/\x06([\s\S]*?)\x07/g, '<i>$1</i>')
+    .replace(/[\x02\x03\x04\x05\x06\x07]/g, '');
 }
 
 export function extractHeading(text: string): { heading: string | null; textWithoutHeading: string } {

@@ -5,6 +5,7 @@
   import { IndexedDBTextStore } from '../lib/adapters';
   import { get } from 'svelte/store';
   import verseOfDay from '../data/verse-of-the-day.json';
+  import { renderVerseHtml } from '../lib/verseRendering';
   import { Sun, ArrowRight } from 'phosphor-svelte';
 
   const textStore = new IndexedDBTextStore();
@@ -89,7 +90,7 @@
         {#if textLoading}
           <p class="dg-verse-text dg-loading">Loading…</p>
         {:else if verseText}
-          <p class="dg-verse-text">{verseText}</p>
+          <p class="dg-verse-text">{@html renderVerseHtml(verseText)}</p>
         {:else if verseRef}
           <p class="dg-verse-text dg-unavailable">Install a Bible translation to read the text here.</p>
         {/if}
