@@ -21,6 +21,7 @@
   import { countWordsInBook } from "../lib/repeatCounts";
   import AudioPlayer from "./AudioPlayer.svelte";
   import BookIntroPanel from "./BookIntroPanel.svelte";
+  import InterlinearControls from "./InterlinearControls.svelte";
   import { syncQueue } from "../lib/sync/SyncQueueService";
   import type { UserHighlight, UserWordHighlight, HighlightStyle } from "@projectbible/core";
   import {
@@ -33,7 +34,9 @@
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
   import { BIBLE_BOOKS, normalizeBookName, getBookColor as getCategoryColor } from "../lib/bibleData";
-  import { getSettings } from "../adapters/settings";
+  import { getSettings, getInterlinearSettings, updateInterlinearSettings } from "../adapters/settings";
+  import type { InterlinearSettings } from "../adapters/settings";
+  import { expandRmacCode, expandOshbCode } from "../lib/morphologyExpander";
   import { readTransaction } from "../adapters/db";
   import type { DBMorphology } from "../adapters/db";
   import { HeadingsStore } from "../adapters/HeadingsStore";
@@ -129,8 +132,10 @@
       verse: number;
       text: string;
       html?: string;
+      interlinearHtml?: string;
       heading?: string | null;
       headingLevel?: number | null;
+      paraStart?: boolean;
     }>;
   }> = [];
   let loading = true;
@@ -465,6 +470,10 @@
   // Morphology cache state
   let morphologyCache = new Map<number, DBMorphology[]>();
   let isIndexedPack = false;
+
+  // Interlinear (Greek/Hebrew) display state
+  let interlinearSettings: InterlinearSettings = getInterlinearSettings();
+  let interlinearMenuKey: string | null = null; // which chapter header's customizer popover is open
   const DEBUG_MORPHOLOGY = true; // Set to false to disable debug features
   let morphStats = {
     hits: 0,
@@ -480,6 +489,7 @@
     verseLayout = settings.verseLayout || "one-per-line";
     showSectionHeadings = settings.showSectionHeadings !== false; // default true
     showRedLetter = settings.showRedLetter !== false; // default true
+    interlinearSettings = getInterlinearSettings();
   }
 
   // Listen for settings updates
@@ -506,6 +516,9 @@
     ? (windowState?.contentState?.translation ?? 'WEB')
     : $navigationStore.translation;
   $: translationFontClass = getTranslationFontClass(currentTranslation);
+  $: isInterlinearActive =
+    interlinearSettings.enabled && isOriginalLanguage(currentTranslation);
+  $: isInterlinearRtl = isHebrewTranslation(currentTranslation);
   $: isChronologicalMode = windowId ? false : ($navigationStore.isChronologicalMode ?? false);
   $: highlightVerse = windowId
     ? (windowState?.contentState?.highlightedVerse ?? null)
@@ -902,6 +915,172 @@
     return (value || "").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
+  // ── Interlinear (Greek/Hebrew) ──────────────────────────────────────
+  function escapeInterlinearText(value: string): string {
+    return (value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function isHebrewTranslation(translationId: string): boolean {
+    const id = (translationId || "").toLowerCase();
+    return id === "wlc" || id === "hebrew-oshb" || id.includes("hebrew");
+  }
+
+  // Build the stacked per-word interlinear HTML for one verse from its
+  // morphology entries. Every layer span is always emitted; which layers are
+  // visible is decided by CSS classes on the .verses container, so toggling a
+  // layer never requires a rebuild.
+  function buildInterlinearHtml(entries: DBMorphology[] | undefined): string {
+    if (!entries || entries.length === 0) return "";
+    const sorted = [...entries].sort(
+      (a, b) =>
+        (a.word_index ?? a.wordPosition ?? 0) -
+        (b.word_index ?? b.wordPosition ?? 0),
+    );
+    let html = "";
+    sorted.forEach((m, i) => {
+      const idx = m.word_index ?? m.wordPosition ?? i;
+      const orig = m.text || m.word || "";
+      const gloss = m.gloss_en || m.gloss || "";
+      const translit = m.transliteration || "";
+      const lemma = m.lemma || "";
+      const strongs = m.strongsId || "";
+      const rawParse = m.morph_code || m.parsing || "";
+      const lang = m.language || "greek";
+      const parseText =
+        lang === "hebrew" || lang === "aramaic"
+          ? expandOshbCode(rawParse)
+          : expandRmacCode(rawParse);
+      html +=
+        `<span class="il-word" data-word-index="${idx}"` +
+        ` data-word="${escapeAttribute(orig)}"` +
+        ` data-lemma="${escapeAttribute(lemma)}"` +
+        ` data-strongs="${escapeAttribute(strongs)}"` +
+        ` data-gloss="${escapeAttribute(gloss)}"` +
+        ` data-transliteration="${escapeAttribute(translit)}"` +
+        ` data-parsing="${escapeAttribute(rawParse)}"` +
+        ` data-language="${escapeAttribute(lang)}">` +
+        `<span class="il-orig">${escapeInterlinearText(orig)}</span>` +
+        `<span class="il-gloss">${escapeInterlinearText(gloss)}</span>` +
+        `<span class="il-translit">${escapeInterlinearText(translit)}</span>` +
+        `<span class="il-lemma">${escapeInterlinearText(lemma)}</span>` +
+        `<span class="il-parse" title="${escapeAttribute(rawParse)}">${escapeInterlinearText(parseText)}</span>` +
+        `<span class="il-strongs">${escapeInterlinearText(strongs)}</span>` +
+        `</span>`;
+    });
+    return html;
+  }
+
+  // Query the morphology store for one chapter without disturbing the global
+  // morphologyCache. Used to bake interlinear HTML for appended chapters.
+  async function fetchChapterMorphology(
+    translation: string,
+    book: string,
+    chapter: number,
+  ): Promise<Map<number, DBMorphology[]>> {
+    const map = new Map<number, DBMorphology[]>();
+    try {
+      const { openDB } = await import("../adapters/db");
+      const db = await openDB();
+      const tx = db.transaction("morphology", "readonly");
+      const store = tx.objectStore("morphology");
+      const index = store.index("verse_ref");
+      const MORPH_ID_ALIAS: Record<string, string> = { SBLGNT: "sblgnt" };
+      const morphTranslation =
+        MORPH_ID_ALIAS[translation] ?? translation.toLowerCase();
+      const range = IDBKeyRange.bound(
+        [morphTranslation, book, chapter, 1],
+        [morphTranslation, book, chapter, 999],
+      );
+      const results: DBMorphology[] = await new Promise((resolve, reject) => {
+        const entries: DBMorphology[] = [];
+        const request = index.openCursor(range);
+        request.onsuccess = (e) => {
+          const cursor = (e.target as IDBRequest).result;
+          if (cursor) {
+            entries.push(cursor.value);
+            cursor.continue();
+          } else resolve(entries);
+        };
+        request.onerror = () => reject(request.error);
+      });
+      results.forEach((m) => {
+        if (!map.has(m.verse)) map.set(m.verse, []);
+        map.get(m.verse)!.push(m);
+      });
+    } catch (err) {
+      console.warn("fetchChapterMorphology failed:", err);
+    }
+    return map;
+  }
+
+  function toggleInterlinear() {
+    const enabled = !interlinearSettings.enabled;
+    interlinearSettings = { ...interlinearSettings, enabled };
+    updateInterlinearSettings({ enabled });
+  }
+
+  // Interlinear word tap: resolve morphology straight from the cache/dataset,
+  // bypassing the Intl.Segmenter reconstruction used for plain verse text.
+  function handleInterlinearWordClick(
+    ilWord: HTMLElement,
+    verseNumInt: number,
+    x: number,
+    y: number,
+  ) {
+    const idxAttr = ilWord.getAttribute("data-word-index");
+    const idx = idxAttr !== null ? parseInt(idxAttr, 10) : NaN;
+    const ds = ilWord.dataset;
+
+    let morph: DBMorphology | null =
+      morphologyCache
+        .get(verseNumInt)
+        ?.find((m) => (m.word_index ?? m.wordPosition) === idx) ?? null;
+
+    if (!morph) {
+      // Appended chapters aren't in the global cache — reconstruct from dataset.
+      morph = {
+        word_index: isNaN(idx) ? 0 : idx,
+        book: "",
+        chapter: 0,
+        verse: verseNumInt,
+        text: ds.word || "",
+        lemma: ds.lemma || "",
+        transliteration: ds.transliteration || "",
+        strongsId: ds.strongs || undefined,
+        morph_code: ds.parsing || "",
+        language: (ds.language as DBMorphology["language"]) || "greek",
+        translationId: currentTranslation,
+        gloss_en: ds.gloss || "",
+      };
+    }
+
+    selectedText = ds.word || morph.text || "";
+    selectedMorphology = morph;
+    selectedVerseNumber = verseNumInt;
+
+    // Select the original-word span for visual feedback + word-level actions.
+    selectionRange = null;
+    const origEl = ilWord.querySelector(".il-orig");
+    if (origEl) {
+      try {
+        const r = document.createRange();
+        r.selectNodeContents(origEl);
+        selectionRange = r;
+        highlightSelection(r, selectionMode);
+      } catch (err) {
+        console.error("Interlinear range creation failed:", err);
+      }
+    }
+    if (!selectionRange) {
+      const sel = window.getSelection();
+      if (sel) sel.removeAllRanges();
+    }
+    showToastAt(x, y);
+  }
+
   // Strip Hebrew cantillation marks and vowel points for text comparison
   function normalizeForComparison(text: string): string {
     // NFD decompose → strip ALL combining diacritics:
@@ -1209,6 +1388,15 @@
       // Load morphology cache if original language translation
       if (isOriginalLanguage(translation)) {
         await loadMorphologyCache(translation, book, chapter);
+        // Pre-build interlinear HTML so toggling the view is instant (no reload).
+        // Layer visibility is handled in CSS, so this is built once per load.
+        chapters = chapters.map((c) => ({
+          ...c,
+          verses: c.verses.map((v) => ({
+            ...v,
+            interlinearHtml: buildInterlinearHtml(morphologyCache.get(v.verse)),
+          })),
+        }));
       } else {
         // Clear morphology cache for non-original-language translations
         morphologyCache.clear();
@@ -2011,6 +2199,9 @@
         const nextHeadingMap = await headingsStore.getChapterHeadings(nextBook, nextChapter);
         if (showRedLetter && redLetterData === null) await loadRedLetterData();
         const rlMap = showRedLetter ? getChapterRedLetterMap(currentTranslation, nextBook, nextChapter) : new Map();
+        const nextMorph = isOriginalLanguage(currentTranslation)
+          ? await fetchChapterMorphology(currentTranslation, nextBook, nextChapter)
+          : null;
         const processedVerses = nextVerses.map((v) => {
           const { heading, textWithoutHeading } = extractHeading(v.text);
           const hlEntry = nextHeadingMap.get(v.verse);
@@ -2021,6 +2212,7 @@
             verse: v.verse,
             text: cleanText,
             html: renderVerseHtml(cleanText, rlMap.get(v.verse)),
+            interlinearHtml: nextMorph ? buildInterlinearHtml(nextMorph.get(v.verse)) : undefined,
             heading: finalHeading,
             headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
             paraStart,
@@ -2124,6 +2316,9 @@
         const prevHeadingMap = await headingsStore.getChapterHeadings(prevBook, prevChapter);
         if (showRedLetter && redLetterData === null) await loadRedLetterData();
         const rlMap = showRedLetter ? getChapterRedLetterMap(currentTranslation, prevBook, prevChapter) : new Map();
+        const prevMorph = isOriginalLanguage(currentTranslation)
+          ? await fetchChapterMorphology(currentTranslation, prevBook, prevChapter)
+          : null;
         const processedVerses = prevVerses.map((v) => {
           const { heading, textWithoutHeading } = extractHeading(v.text);
           const hlEntry = prevHeadingMap.get(v.verse);
@@ -2134,6 +2329,7 @@
             verse: v.verse,
             text: cleanText,
             html: renderVerseHtml(cleanText, rlMap.get(v.verse)),
+            interlinearHtml: prevMorph ? buildInterlinearHtml(prevMorph.get(v.verse)) : undefined,
             heading: finalHeading,
             headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
             paraStart,
@@ -2244,6 +2440,10 @@
     // corrupts caretRangeFromPoint offsets on the next click.
     clearHoverHighlight();
 
+    // Interlinear mode uses CSS :hover on .il-word; skip the text-node
+    // hover-wrap (it would corrupt the per-word structure + click offsets).
+    if (isInterlinearActive) return;
+
     // Don't hover when dragging or when toast is open
     if (isDragging || showToast) return;
 
@@ -2346,6 +2546,14 @@
       ?.querySelector(".verse-number")
       ?.textContent?.trim();
     const verseNumInt = verseNum ? parseInt(verseNum) : null;
+
+    // Interlinear mode: each word is its own .il-word span carrying
+    // data-word-index — resolve it directly and skip the segmenter path.
+    const ilWord = target.closest?.(".il-word") as HTMLElement | null;
+    if (ilWord && verseNumInt) {
+      handleInterlinearWordClick(ilWord, verseNumInt, x, y);
+      return;
+    }
 
     // Check if this is an original language translation
     if (isOriginalLanguage(currentTranslation)) {
@@ -3712,14 +3920,46 @@
               </div>
             {/if}
             <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
+            {#if isOriginalLanguage(currentTranslation)}
+              {@const ilKey = `${chapterData.book}:${chapterData.chapter}`}
+              <div class="interlinear-control">
+                <button
+                  class="interlinear-toggle"
+                  class:active={interlinearSettings.enabled}
+                  on:click={toggleInterlinear}
+                  title="Show the English equivalent under each Greek/Hebrew word"
+                >⇵ Interlinear</button>
+                <button
+                  class="interlinear-gear"
+                  class:active={interlinearMenuKey === ilKey}
+                  on:click|stopPropagation={() => (interlinearMenuKey = interlinearMenuKey === ilKey ? null : ilKey)}
+                  aria-label="Customize interlinear layers"
+                  title="Customize which layers show"
+                >▾</button>
+                {#if interlinearMenuKey === ilKey}
+                  <button class="il-popover-backdrop" on:click={() => (interlinearMenuKey = null)} aria-label="Close customizer" tabindex="-1"></button>
+                  <div class="interlinear-popover" on:click|stopPropagation on:keydown|stopPropagation role="menu" tabindex="-1">
+                    <div class="interlinear-popover-title">Interlinear layers</div>
+                    <InterlinearControls showEnableToggle={false} />
+                  </div>
+                {/if}
+              </div>
+            {/if}
           </div>
           <div
             class="verses {translationFontClass}"
             class:paragraph-layout={verseLayout === "paragraph"}
             class:nonumber-layout={verseLayout === "paragraph-no-verse-numbers"}
+            class:interlinear-active={isInterlinearActive}
+            class:il-rtl={isInterlinearActive && isInterlinearRtl}
+            class:il-show-gloss={isInterlinearActive && interlinearSettings.showGloss}
+            class:il-show-translit={isInterlinearActive && interlinearSettings.showTranslit}
+            class:il-show-lemma={isInterlinearActive && interlinearSettings.showLemma}
+            class:il-show-strongs={isInterlinearActive && interlinearSettings.showStrongs}
+            class:il-show-parse={isInterlinearActive && interlinearSettings.showParsing}
             style="--verse-num-color:{getBookColor(chapterData.book)}"
           >
-            {#each chapterData.verses as { verse, text, html, heading, headingLevel, paraStart }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
+            {#each chapterData.verses as { verse, text, html, interlinearHtml, heading, headingLevel, paraStart }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
               {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
               {#if heading && showSectionHeadings}
                 <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
@@ -3751,7 +3991,8 @@
                   >◆</span>
                 {/if}
                 <span class="verse-text"
-                  >{@html html || renderVerseHtml(text)}</span
+                  class:interlinear={isInterlinearActive && !!interlinearHtml}
+                  >{@html (isInterlinearActive && interlinearHtml) ? interlinearHtml : (html || renderVerseHtml(text))}</span
                 >
                 {#if verseNotesMap.has(annotationKey(chapterData.book, chapterData.chapter, verse)) && $userProfileStore.isSignedIn}
                   <span
@@ -3968,6 +4209,103 @@
     background: rgba(100, 160, 255, 0.18);
     border-color: rgba(100, 160, 255, 0.4);
     color: #d0e4ff;
+  }
+
+  /* Interlinear toggle + customizer button (chapter header) */
+  .interlinear-control {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .interlinear-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #b8c8e8;
+    font-size: 0.82rem;
+    padding: 5px 13px;
+    border-radius: 20px 0 0 20px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .interlinear-gear {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-left: none;
+    color: #b8c8e8;
+    font-size: 0.82rem;
+    padding: 5px 9px;
+    border-radius: 0 20px 20px 0;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .interlinear-toggle:hover,
+  .interlinear-gear:hover {
+    background: rgba(100, 160, 255, 0.18);
+    border-color: rgba(100, 160, 255, 0.4);
+    color: #d0e4ff;
+  }
+  .interlinear-toggle.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 600;
+  }
+  .interlinear-gear.active {
+    background: rgba(100, 160, 255, 0.28);
+    border-color: rgba(100, 160, 255, 0.5);
+    color: #eaf2ff;
+  }
+  .il-popover-backdrop {
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    z-index: 40;
+    cursor: default;
+  }
+  .interlinear-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 41;
+    width: min(320px, 86vw);
+    max-height: 70vh;
+    overflow-y: auto;
+    background: #232323;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    padding: 14px;
+    text-align: left;
+  }
+  .interlinear-popover-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9fb0d0;
+    margin-bottom: 10px;
+  }
+  @media (max-width: 480px) {
+    .interlinear-popover {
+      position: fixed;
+      top: auto;
+      bottom: 0;
+      left: 0;
+      transform: none;
+      width: 100vw;
+      max-height: 75vh;
+      border-radius: 16px 16px 0 0;
+    }
   }
 
   /* Relocated repeat pills, beside the Introduction button */
@@ -4321,6 +4659,80 @@
 
   :global(.morphology-word:hover) {
     background-color: rgba(100, 150, 255, 0.1);
+  }
+
+  /* ── Interlinear layered rendering ─────────────────────────────────
+     Uses its OWN fixed line-height + em-relative sizes so the stacked
+     columns never break when the user changes base font size or line
+     spacing. flex-wrap means larger fonts wrap to more rows, never overlap. */
+  :global(.verse-text.interlinear) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.2em 0.7em;
+    line-height: 1.15;
+  }
+  :global(.verses.il-rtl .verse-text.interlinear) {
+    direction: rtl;
+  }
+  :global(.verse-text.interlinear .il-word) {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    line-height: 1.15;
+    cursor: pointer;
+    padding: 0.05em 0.12em;
+    border-radius: 5px;
+    transition: background-color 0.12s ease;
+  }
+  :global(.verse-text.interlinear .il-word:hover) {
+    background: rgba(125, 211, 252, 0.14);
+  }
+  :global(.verse-text.interlinear .il-orig) {
+    font-size: 1em;
+  }
+  /* Non-original layers hidden by default; container classes opt them in. */
+  :global(.verse-text.interlinear .il-gloss),
+  :global(.verse-text.interlinear .il-translit),
+  :global(.verse-text.interlinear .il-lemma),
+  :global(.verse-text.interlinear .il-parse),
+  :global(.verse-text.interlinear .il-strongs) {
+    display: none;
+    min-height: 1.05em;
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+  :global(.verses.il-show-gloss .verse-text.interlinear .il-gloss) {
+    display: block;
+    font-size: 0.6em;
+    color: #9ec5ff;
+  }
+  :global(.verses.il-show-translit .verse-text.interlinear .il-translit) {
+    display: block;
+    font-size: 0.52em;
+    font-style: italic;
+    color: #bdbdbd;
+  }
+  :global(.verses.il-show-lemma .verse-text.interlinear .il-lemma) {
+    display: block;
+    font-size: 0.55em;
+    color: #e3cd96;
+  }
+  :global(.verses.il-show-parse .verse-text.interlinear .il-parse) {
+    display: block;
+    font-size: 0.48em;
+    color: #9aa0a6;
+  }
+  :global(.verses.il-show-strongs .verse-text.interlinear .il-strongs) {
+    display: block;
+    font-size: 0.48em;
+    color: #93c69a;
+  }
+  /* Interlinear forces per-word block layout regardless of verse layout mode. */
+  :global(.verses.interlinear-active .verse) {
+    display: block !important;
+    margin-bottom: 0.5em;
   }
 
   /* Paragraph layout mode */

@@ -6,6 +6,22 @@
 
 const SETTINGS_KEY = 'projectbible_settings';
 
+export type InterlinearPreset = 'minimal' | 'study' | 'scholar' | 'custom';
+
+/**
+ * Interlinear display preferences for original-language (Greek/Hebrew) reading.
+ * The original word is always shown; each other layer is independently toggleable.
+ */
+export interface InterlinearSettings {
+  enabled: boolean;       // master on/off (only applies when a Greek/Hebrew translation is open)
+  preset: InterlinearPreset;
+  showGloss: boolean;     // English equivalent under each word
+  showTranslit: boolean;  // transliteration / pronunciation
+  showLemma: boolean;     // dictionary (lexical) form
+  showStrongs: boolean;   // Strong's number
+  showParsing: boolean;   // morphology / part-of-speech parsing
+}
+
 export interface UserSettings {
   // Daily Driver defaults by testament + language family
   dailyDriverEnglishOT?: string; // e.g., 'kjv' or 'web'
@@ -28,6 +44,7 @@ export interface UserSettings {
   wordWrap?: boolean; // Enable/disable word wrapping (default true)
   showSectionHeadings?: boolean; // Show pericope/section headings between verses (default true)
   showRedLetter?: boolean; // Show Jesus' words in red (default true)
+  interlinear?: InterlinearSettings; // Interlinear view prefs for Greek/Hebrew (default: disabled, gloss-only)
   allowRotation?: boolean; // Allow screen to rotate to landscape (default false = portrait locked)
   autoCheckUpdates?: boolean; // Automatically check for updates on app open (default true)
 
@@ -140,6 +157,39 @@ export function getPrimaryDailyDriver(): string | undefined {
     settings.dailyDriverGreek ||
     settings.dailyDriverHebrew
   );
+}
+
+/** Layer combinations for each named interlinear preset (the gloss is always on). */
+export const INTERLINEAR_PRESETS: Record<
+  Exclude<InterlinearPreset, 'custom'>,
+  Pick<InterlinearSettings, 'showGloss' | 'showTranslit' | 'showLemma' | 'showStrongs' | 'showParsing'>
+> = {
+  minimal: { showGloss: true, showTranslit: false, showLemma: false, showStrongs: false, showParsing: false },
+  study:   { showGloss: true, showTranslit: false, showLemma: false, showStrongs: true,  showParsing: false },
+  scholar: { showGloss: true, showTranslit: true,  showLemma: true,  showStrongs: true,  showParsing: true },
+};
+
+/**
+ * Resolve interlinear settings with defaults applied (disabled, gloss-only).
+ * Safe to call when nothing has been saved yet.
+ */
+export function getInterlinearSettings(): InterlinearSettings {
+  const s = getSettings().interlinear;
+  return {
+    enabled: s?.enabled ?? false,
+    preset: s?.preset ?? 'minimal',
+    showGloss: s?.showGloss ?? true,
+    showTranslit: s?.showTranslit ?? false,
+    showLemma: s?.showLemma ?? false,
+    showStrongs: s?.showStrongs ?? false,
+    showParsing: s?.showParsing ?? false,
+  };
+}
+
+/** Persist interlinear settings (merges with existing settings object). */
+export function updateInterlinearSettings(updates: Partial<InterlinearSettings>): void {
+  const current = getInterlinearSettings();
+  updateSettings({ interlinear: { ...current, ...updates } });
 }
 
 /**

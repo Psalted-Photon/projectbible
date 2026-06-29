@@ -3,6 +3,7 @@
   import { applyTheme, getSettings, updateSettings } from "../../adapters/settings";
   import { paneStore } from "../../stores/paneStore";
   import { Gear } from 'phosphor-svelte';
+  import InterlinearControls from "../InterlinearControls.svelte";
 
   let theme: "light" | "dark" | "auto" | "sepia" = "dark";
   let fontSize = 18;
@@ -294,6 +295,16 @@
       <input type="checkbox" bind:checked={showRedLetter} on:change={saveSettings} />
       <span class="label-text">Words of Jesus in red letters</span>
     </label>
+  </div>
+
+  <div class="setting-group">
+    <span class="label-text">Interlinear (Greek &amp; Hebrew)</span>
+    <p class="section-description il-hint">
+      Show the English equivalent stacked under each original-language word. A
+      quick toggle also appears in the reader whenever a Greek or Hebrew
+      translation is open.
+    </p>
+    <InterlinearControls />
   </div>
 
   <div class="setting-group">
