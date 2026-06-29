@@ -44,6 +44,9 @@
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightScope } from "../stores/repeatBulkStore";
   import { REPEAT_COLORS } from "../lib/repeatColors";
+  import { getInterlinearSettings, updateInterlinearSettings } from "../adapters/settings";
+  import type { InterlinearSettings } from "../adapters/settings";
+  import InterlinearControls from "./InterlinearControls.svelte";
 
   export let windowId: string | undefined = undefined;
   export const visible: boolean = true;
@@ -84,6 +87,52 @@
   let repeatDropdownView: 'main' | 'scope' = 'main';
   let repeatDropdownPositioned = false;
   let repeatPillButtonRef: HTMLElement | null = null;
+
+  // ── Interlinear (Greek/Hebrew) ─────────────────────────────────────────────
+  let interlinearSettings: InterlinearSettings = getInterlinearSettings();
+  let interlinearMenuOpen = false;
+  let interlinearGearRef: HTMLElement;
+  let ilPopTop = 0;
+  let ilPopLeft = 0;
+
+  function isOriginalLanguage(translationId: string): boolean {
+    const id = (translationId || "").toLowerCase();
+    return id === "wlc" || id === "lxx" || id === "byz" || id === "tr" ||
+           id === "sblgnt" || id === "hebrew-oshb";
+  }
+
+  function toggleInterlinear() {
+    const enabled = !interlinearSettings.enabled;
+    interlinearSettings = { ...interlinearSettings, enabled };
+    updateInterlinearSettings({ enabled });
+    window.dispatchEvent(new CustomEvent("settingsUpdated"));
+  }
+
+  async function toggleInterlinearMenu(event: MouseEvent) {
+    event.stopPropagation();
+    if (interlinearMenuOpen) {
+      interlinearMenuOpen = false;
+      return;
+    }
+    interlinearMenuOpen = true;
+    await tick();
+    const rect = interlinearGearRef?.getBoundingClientRect();
+    if (rect) {
+      const width = 300;
+      ilPopLeft = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+      ilPopTop = rect.bottom + 6;
+    }
+  }
+
+  // InterlinearControls persists + dispatches settingsUpdated itself; just keep
+  // the local copy fresh so the toggle button reflects any layer changes.
+  function handleInterlinearSettingsChange() {
+    interlinearSettings = getInterlinearSettings();
+  }
+
+  function onSettingsUpdated() {
+    interlinearSettings = getInterlinearSettings();
+  }
 
   // Scroll nav-content instantly so the button is visible before we measure its position
   function scrollToShowButton(buttonRef: HTMLElement): void {
@@ -707,11 +756,13 @@
   onMount(() => {
     document.addEventListener("click", closeDropdowns);
     window.addEventListener("resize", updateDropdownPositions);
+    window.addEventListener("settingsUpdated", onSettingsUpdated);
   });
 
   onDestroy(() => {
     document.removeEventListener("click", closeDropdowns);
     window.removeEventListener("resize", updateDropdownPositions);
+    window.removeEventListener("settingsUpdated", onSettingsUpdated);
   });
 </script>
 
@@ -832,6 +883,28 @@
 
     {#if !isMinimal}
     <div class="nav-spacer" style="min-width: 27px"></div>
+    {#if isOriginalLanguage(currentTranslation)}
+      <div class="nav-interlinear">
+        <button
+          class="nav-il-toggle"
+          class:active={interlinearSettings.enabled}
+          on:click={toggleInterlinear}
+          title="Show the English equivalent under each Greek/Hebrew word"
+        >⇵ Interlinear</button>
+        <div class="il-mini-divider"></div>
+        <button
+          bind:this={interlinearGearRef}
+          class="nav-il-gear"
+          class:active={interlinearMenuOpen}
+          on:click|stopPropagation={toggleInterlinearMenu}
+          aria-label="Customize interlinear layers"
+          title="Customize which layers show"
+        >
+          {#if interlinearMenuOpen}<CaretUp size={10} weight="bold" />{:else}<CaretDown size={10} weight="bold" />{/if}
+        </button>
+      </div>
+      <div class="nav-spacer" style="min-width: 27px"></div>
+    {/if}
     {#if $repeatsStore.length > 0}
       <div class="nav-repeat-pills">
         {#each $repeatsStore as group (group.word)}
@@ -1148,6 +1221,30 @@
       </div>
     {/if}
   {/if}
+
+  {#if interlinearMenuOpen && isOriginalLanguage(currentTranslation)}
+    <button
+      class="il-popover-backdrop"
+      on:click={() => (interlinearMenuOpen = false)}
+      aria-label="Close customizer"
+      tabindex="-1"
+    ></button>
+    <div
+      class="interlinear-popover"
+      style="top:{ilPopTop}px; left:{ilPopLeft}px;"
+      on:click|stopPropagation
+      on:keydown|stopPropagation
+      role="menu"
+      tabindex="-1"
+    >
+      <div class="interlinear-popover-title">Interlinear layers</div>
+      <InterlinearControls
+        showEnableToggle={false}
+        showPreview={false}
+        on:change={handleInterlinearSettingsChange}
+      />
+    </div>
+  {/if}
 </div>
 
 <!-- Power Search Modal -->
@@ -1283,6 +1380,115 @@
   }
 
   .nav-pill-tools {
+  }
+
+  /* ── Interlinear control (between the two pills) ───────────────────── */
+  .nav-interlinear {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: #1c1c1c;
+    border: 1px solid #353535;
+    border-radius: 8px;
+    height: 38px;
+    padding: 3px;
+    flex-shrink: 0;
+  }
+  .nav-il-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: #888;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+  }
+  .nav-il-toggle:hover {
+    background: #252525;
+    color: #ccc;
+  }
+  .nav-il-toggle.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    font-weight: 600;
+  }
+  .il-mini-divider {
+    width: 1px;
+    height: 16px;
+    background: #353535;
+    flex-shrink: 0;
+  }
+  .nav-il-gear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    min-width: 28px;
+    padding: 0 6px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: #888;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .nav-il-gear:hover,
+  .nav-il-gear.active {
+    background: #252525;
+    color: #fff;
+  }
+
+  .il-popover-backdrop {
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    z-index: 10050;
+    cursor: default;
+  }
+  .interlinear-popover {
+    position: fixed;
+    z-index: 10051;
+    width: 300px;
+    max-width: 92vw;
+    max-height: 70vh;
+    overflow-y: auto;
+    background: #232323;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    padding: 14px;
+    text-align: left;
+  }
+  .interlinear-popover-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9fb0d0;
+    margin-bottom: 10px;
+  }
+  @media (max-width: 480px) {
+    .interlinear-popover {
+      left: 0 !important;
+      right: 0;
+      top: auto !important;
+      bottom: 0;
+      width: 100vw;
+      max-width: 100vw;
+      max-height: 75vh;
+      border-radius: 16px 16px 0 0;
+    }
   }
 
   .pill-divider {

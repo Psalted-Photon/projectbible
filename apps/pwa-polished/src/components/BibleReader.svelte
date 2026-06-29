@@ -21,7 +21,6 @@
   import { countWordsInBook } from "../lib/repeatCounts";
   import AudioPlayer from "./AudioPlayer.svelte";
   import BookIntroPanel from "./BookIntroPanel.svelte";
-  import InterlinearControls from "./InterlinearControls.svelte";
   import { syncQueue } from "../lib/sync/SyncQueueService";
   import type { UserHighlight, UserWordHighlight, HighlightStyle } from "@projectbible/core";
   import {
@@ -34,7 +33,7 @@
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
   import { BIBLE_BOOKS, normalizeBookName, getBookColor as getCategoryColor } from "../lib/bibleData";
-  import { getSettings, getInterlinearSettings, updateInterlinearSettings } from "../adapters/settings";
+  import { getSettings, getInterlinearSettings } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
   import { expandRmacCode, expandOshbCode } from "../lib/morphologyExpander";
   import { readTransaction } from "../adapters/db";
@@ -471,9 +470,9 @@
   let morphologyCache = new Map<number, DBMorphology[]>();
   let isIndexedPack = false;
 
-  // Interlinear (Greek/Hebrew) display state
+  // Interlinear (Greek/Hebrew) display state — toggled from the NavigationBar;
+  // this component just reads the prefs to drive rendering.
   let interlinearSettings: InterlinearSettings = getInterlinearSettings();
-  let interlinearMenuKey: string | null = null; // which chapter header's customizer popover is open
   const DEBUG_MORPHOLOGY = true; // Set to false to disable debug features
   let morphStats = {
     hits: 0,
@@ -1014,12 +1013,6 @@
       console.warn("fetchChapterMorphology failed:", err);
     }
     return map;
-  }
-
-  function toggleInterlinear() {
-    const enabled = !interlinearSettings.enabled;
-    interlinearSettings = { ...interlinearSettings, enabled };
-    updateInterlinearSettings({ enabled });
   }
 
   // Interlinear word tap: resolve morphology straight from the cache/dataset,
@@ -3920,31 +3913,6 @@
               </div>
             {/if}
             <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
-            {#if isOriginalLanguage(currentTranslation)}
-              {@const ilKey = `${chapterData.book}:${chapterData.chapter}`}
-              <div class="interlinear-control">
-                <button
-                  class="interlinear-toggle"
-                  class:active={interlinearSettings.enabled}
-                  on:click={toggleInterlinear}
-                  title="Show the English equivalent under each Greek/Hebrew word"
-                >⇵ Interlinear</button>
-                <button
-                  class="interlinear-gear"
-                  class:active={interlinearMenuKey === ilKey}
-                  on:click|stopPropagation={() => (interlinearMenuKey = interlinearMenuKey === ilKey ? null : ilKey)}
-                  aria-label="Customize interlinear layers"
-                  title="Customize which layers show"
-                >▾</button>
-                {#if interlinearMenuKey === ilKey}
-                  <button class="il-popover-backdrop" on:click={() => (interlinearMenuKey = null)} aria-label="Close customizer" tabindex="-1"></button>
-                  <div class="interlinear-popover" on:click|stopPropagation on:keydown|stopPropagation role="menu" tabindex="-1">
-                    <div class="interlinear-popover-title">Interlinear layers</div>
-                    <InterlinearControls showEnableToggle={false} />
-                  </div>
-                {/if}
-              </div>
-            {/if}
           </div>
           <div
             class="verses {translationFontClass}"
@@ -4209,103 +4177,6 @@
     background: rgba(100, 160, 255, 0.18);
     border-color: rgba(100, 160, 255, 0.4);
     color: #d0e4ff;
-  }
-
-  /* Interlinear toggle + customizer button (chapter header) */
-  .interlinear-control {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-  }
-  .interlinear-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    color: #b8c8e8;
-    font-size: 0.82rem;
-    padding: 5px 13px;
-    border-radius: 20px 0 0 20px;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-    letter-spacing: 0.02em;
-  }
-  .interlinear-gear {
-    display: inline-flex;
-    align-items: center;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-left: none;
-    color: #b8c8e8;
-    font-size: 0.82rem;
-    padding: 5px 9px;
-    border-radius: 0 20px 20px 0;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-  }
-  .interlinear-toggle:hover,
-  .interlinear-gear:hover {
-    background: rgba(100, 160, 255, 0.18);
-    border-color: rgba(100, 160, 255, 0.4);
-    color: #d0e4ff;
-  }
-  .interlinear-toggle.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-color: transparent;
-    color: #fff;
-    font-weight: 600;
-  }
-  .interlinear-gear.active {
-    background: rgba(100, 160, 255, 0.28);
-    border-color: rgba(100, 160, 255, 0.5);
-    color: #eaf2ff;
-  }
-  .il-popover-backdrop {
-    position: fixed;
-    inset: 0;
-    background: transparent;
-    border: none;
-    padding: 0;
-    margin: 0;
-    z-index: 40;
-    cursor: default;
-  }
-  .interlinear-popover {
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 41;
-    width: min(320px, 86vw);
-    max-height: 70vh;
-    overflow-y: auto;
-    background: #232323;
-    border: 1px solid #3a3a3a;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    padding: 14px;
-    text-align: left;
-  }
-  .interlinear-popover-title {
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #9fb0d0;
-    margin-bottom: 10px;
-  }
-  @media (max-width: 480px) {
-    .interlinear-popover {
-      position: fixed;
-      top: auto;
-      bottom: 0;
-      left: 0;
-      transform: none;
-      width: 100vw;
-      max-height: 75vh;
-      border-radius: 16px 16px 0 0;
-    }
   }
 
   /* Relocated repeat pills, beside the Introduction button */

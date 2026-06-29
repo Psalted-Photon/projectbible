@@ -9,8 +9,11 @@
   } from '../adapters/settings';
 
   // When true, show the master "Enable interlinear" toggle (Settings context).
-  // In the reader popover the header button already toggles enable, so it's hidden there.
+  // In the navbar popover the toggle button already controls enable, so it's hidden there.
   export let showEnableToggle = true;
+  // When true, show the live sample preview. Off in the compact navbar popover
+  // (the real reader text updates live right behind it), on in Settings.
+  export let showPreview = true;
 
   const dispatch = createEventDispatcher();
 
@@ -119,19 +122,21 @@
     {/each}
   </div>
 
-  <div class="il-preview-label">Preview</div>
-  <div class="il-preview">
-    {#each SAMPLE as w}
-      <span class="il-word">
-        <span class="il-orig">{w.orig}</span>
-        {#if s.showGloss}<span class="il-gloss">{w.gloss}</span>{/if}
-        {#if s.showTranslit}<span class="il-translit">{w.translit}</span>{/if}
-        {#if s.showLemma}<span class="il-lemma">{w.lemma}</span>{/if}
-        {#if s.showParsing}<span class="il-parse">{w.parse}</span>{/if}
-        {#if s.showStrongs}<span class="il-strongs">{w.strongs}</span>{/if}
-      </span>
-    {/each}
-  </div>
+  {#if showPreview}
+    <div class="il-preview-label">Preview</div>
+    <div class="il-preview">
+      {#each SAMPLE as w}
+        <span class="il-word">
+          <span class="il-orig">{w.orig}</span>
+          {#if s.showGloss}<span class="il-gloss">{w.gloss}</span>{/if}
+          {#if s.showTranslit}<span class="il-translit">{w.translit}</span>{/if}
+          {#if s.showLemma}<span class="il-lemma">{w.lemma}</span>{/if}
+          {#if s.showParsing}<span class="il-parse">{w.parse}</span>{/if}
+          {#if s.showStrongs}<span class="il-strongs">{w.strongs}</span>{/if}
+        </span>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style>
