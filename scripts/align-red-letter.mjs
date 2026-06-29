@@ -106,22 +106,57 @@ function normalizeForSearch(text) {
 }
 
 /**
- * Find all quoted double-quote regions (straight or curly) in text.
- * Uses alternating-open/close logic; unclosed last quote extends to end.
- * Returns [{s, e}] in original text coordinates (normalizeQuotes is length-preserving).
+ * Find all quoted regions — both double-quote AND nested single-quote — in text.
+ * Double quotes use alternating open/close (unclosed last quote extends to end).
+ * Single quotes are detected only as real quotation delimiters: an opening ' must
+ * follow whitespace/a double-quote/start AND precede a letter; the matching close '
+ * must follow a letter/punctuation AND not precede a letter — so apostrophes and
+ * possessives (don't, Jesus') are not mistaken for quotes.
+ * Returns [{s, e}] sorted by start, in original text coordinates
+ * (normalizeQuotes is length-preserving; curly → straight for both " and ').
  */
 function getQuotedRegions(text) {
   const normed = normalizeQuotes(text);
   const regions = [];
+
+  // Double-quote regions
   let inQuote = false;
   let openIdx = -1;
   for (let i = 0; i < normed.length; i++) {
     if (normed[i] === '"') {
       if (!inQuote) { openIdx = i; inQuote = true; }
-      else { regions.push({ s: openIdx, e: i + 1 }); inQuote = false; }
+      else { regions.push({ s: openIdx, e: i + 1, q: '"' }); inQuote = false; }
     }
   }
-  if (inQuote && openIdx >= 0) regions.push({ s: openIdx, e: text.length });
+  if (inQuote && openIdx >= 0) regions.push({ s: openIdx, e: text.length, q: '"' });
+
+  // Nested single-quote regions
+  let j = 0;
+  while (j < normed.length) {
+    if (normed[j] === "'") {
+      const prev = j > 0 ? normed[j - 1] : ' ';
+      const next = j + 1 < normed.length ? normed[j + 1] : ' ';
+      const isOpen = (prev === ' ' || prev === '"' || prev === '\n' || prev === '\t' || j === 0)
+        && /[A-Za-z]/.test(next);
+      if (isOpen) {
+        let closed = false;
+        for (let k = j + 1; k < normed.length; k++) {
+          if (normed[k] === "'") {
+            const p = normed[k - 1];
+            const n = k + 1 < normed.length ? normed[k + 1] : ' ';
+            if (/[A-Za-z.,;:!?]/.test(p) && !/[A-Za-z]/.test(n)) {
+              regions.push({ s: j, e: k + 1, q: "'" });
+              j = k + 1; closed = true; break;
+            }
+          }
+        }
+        if (closed) continue;
+      }
+    }
+    j++;
+  }
+
+  regions.sort((a, b) => a.s - b.s || a.e - b.e);
   return regions;
 }
 
@@ -148,27 +183,49 @@ function alignSpan(spanText, webVerseText, targetText) {
   let idx = nTarget.indexOf(nSpan);
   if (idx >= 0) return { s: idx, e: idx + nSpan.length };
 
-  // Strategy 2: quote-region word-overlap + index mapping
+  // Strategy 2: quote-region word-overlap mapping (nesting-aware).
+  // Match the span to the best-overlapping WEB region, then map it to the target
+  // region whose text best matches the span — picking the *tightest* region on a
+  // tie. This keeps "someone quotes Jesus" spans on the inner single-quote rather
+  // than ballooning to the enclosing (other-speaker) double-quote, while Jesus
+  // quoting Scripture (span ⊇ wrapper words) still maps to the whole outer quote.
   {
     const webQuotes = getQuotedRegions(webVerseText);
     const tgtQuotes = getQuotedRegions(targetText);
 
-    if (webQuotes.length > 0) {
-      // Find which WEB.json quote region best matches this USFX span
-      let bestQIdx = -1, bestOv = 0;
-      for (let qi = 0; qi < webQuotes.length; qi++) {
-        const regionText = webVerseText.slice(webQuotes[qi].s, webQuotes[qi].e);
-        const ov = wordOverlap(span, regionText);
-        if (ov > bestOv) { bestOv = ov; bestQIdx = qi; }
+    if (webQuotes.length > 0 && tgtQuotes.length > 0) {
+      let bestWebOv = 0;
+      for (const r of webQuotes) {
+        const ov = wordOverlap(span, webVerseText.slice(r.s, r.e));
+        if (ov > bestWebOv) bestWebOv = ov;
       }
 
-      if (bestQIdx >= 0 && bestOv >= 0.35 && tgtQuotes.length > 0 && bestQIdx < tgtQuotes.length) {
-        return tgtQuotes[bestQIdx];
-      }
-
-      // If 1 web quote and 1 target quote and reasonable overall overlap
-      if (webQuotes.length === 1 && tgtQuotes.length === 1 && bestQIdx === 0 && bestOv >= 0.25) {
-        return tgtQuotes[0];
+      if (bestWebOv >= 0.35 || (webQuotes.length === 1 && bestWebOv >= 0.25)) {
+        // A single-quote region is only a valid (narrowing) target when it is
+        // nested inside a double-quote — i.e. another speaker is quoting Jesus
+        // (John 5:11). A *top-level* single quote means Jesus is quoting within his
+        // own speech (Matt 11:17 "and say, 'We played...'"), so we must NOT snap to
+        // it and drop his surrounding words — let later whole-span strategies run.
+        const isNested = r => tgtQuotes.some(d => d.q === '"' && d.s < r.s && d.e > r.e);
+        let bt = null, btOv = -1;
+        for (const r of tgtQuotes) {
+          if (r.q === "'" && !isNested(r)) continue;
+          const ov = wordOverlap(span, targetText.slice(r.s, r.e));
+          const tighter = bt && Math.abs(ov - btOv) < 1e-9 && (r.e - r.s) < (bt.e - bt.s);
+          if (ov > btOv + 1e-9 || tighter) { btOv = ov; bt = r; }
+        }
+        if (bt && btOv > 0) {
+          // Guard against indirect speech: when the only match is a much-longer
+          // DOUBLE-quote (likely another speaker's words, e.g. WEB John 5:12
+          // renders Jesus's command as reported speech inside the crowd's
+          // question), require either a tight length match or strong overlap.
+          const revOv = wordOverlap(targetText.slice(bt.s, bt.e), span);
+          if (bt.q === '"' && (bt.e - bt.s) > span.length * 1.5 && btOv < 0.6 && revOv < 0.5) {
+            // fall through to later strategies / no match
+          } else {
+            return { s: bt.s, e: bt.e };
+          }
+        }
       }
       // NOTE: we deliberately do NOT fall back to whole-verse when target has no quotes
       // (would incorrectly include narrator text in translations like KJV)
@@ -294,9 +351,9 @@ function alignSpan(spanText, webVerseText, targetText) {
     if (webLen > 0 && spanLen / webLen >= 0.75) {
       const tgtQuotes6 = getQuotedRegions(targetText);
       if (tgtQuotes6.length > 0) {
-        // Union of all quote regions
-        const s6 = tgtQuotes6[0].s;
-        const e6 = tgtQuotes6[tgtQuotes6.length - 1].e;
+        // Union of all quote regions (regions may be nested, so take min/max).
+        const s6 = Math.min(...tgtQuotes6.map(r => r.s));
+        const e6 = Math.max(...tgtQuotes6.map(r => r.e));
         return { s: s6, e: e6 };
       } else {
         // No quotes — whole verse is Jesus' speech
@@ -309,23 +366,37 @@ function alignSpan(spanText, webVerseText, targetText) {
 }
 
 /**
- * Expand an aligned span to cover any quoted region it overlaps.
- * In English, speech quotes always enclose the entire utterance — so if a span
- * starts or ends inside a quote, the whole quote must be red.
- * Runs after all 4 strategies; never shrinks a span, only expands.
+ * Snap an aligned span to a quote boundary (nesting-aware).
+ * English speech quotes enclose the whole utterance, so a span that lands inside a
+ * quote should fill it — but only the *tightest* enclosing quote. When Jesus's
+ * words are nested inside another speaker's quote, this keeps the red span on the
+ * inner single-quote instead of expanding out to the other speaker's double-quote.
+ *  - If a region fully contains the span, snap to the smallest such region.
+ *  - Otherwise (partial alignment), expand to the smallest region it overlaps.
  */
 function snapToQuotes(result, targetText) {
   if (!result) return null;
   const regions = getQuotedRegions(targetText);
   if (regions.length === 0) return result;
-  let { s, e } = result;
+
+  // Smallest region that fully contains the span.
+  let inner = null;
   for (const r of regions) {
-    if (s < r.e && e > r.s) {  // span overlaps this quote region
-      s = Math.min(s, r.s);
-      e = Math.max(e, r.e);
+    if (result.s >= r.s && result.e <= r.e) {
+      if (!inner || (r.e - r.s) < (inner.e - inner.s)) inner = r;
     }
   }
-  return { s, e };
+  if (inner) return { s: inner.s, e: inner.e };
+
+  // No full containment: expand to the smallest region the span overlaps.
+  let overlap = null;
+  for (const r of regions) {
+    if (result.s < r.e && result.e > r.s) {
+      if (!overlap || (r.e - r.s) < (overlap.e - overlap.s)) overlap = r;
+    }
+  }
+  if (overlap) return { s: Math.min(result.s, overlap.s), e: Math.max(result.e, overlap.e) };
+  return result;
 }
 
 /**
