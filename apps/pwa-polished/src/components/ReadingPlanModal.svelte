@@ -1,11 +1,9 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { get } from 'svelte/store';
-  import { generateReadingPlan, BIBLE_BOOKS, type ReadingPlanConfig, type ReadingPlan, type HarmonySection, type HarmonyPassage } from '@projectbible/core';
-  import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
-  import { suggestCatchUp, getDaysAheadBehind, calculateStreak } from '../../../../packages/core/src/ReadingPlanEngine';
+  import { generateReadingPlan, BIBLE_BOOKS, VERSE_COUNTS, suggestCatchUp, getDaysAheadBehind, calculateStreak, planDayDateStr, type ReadingPlanConfig, type ReadingPlan, type HarmonySection, type HarmonyPassage } from '@projectbible/core';
   import { navigationStore } from '../stores/navigationStore';
-  import { localDateStr } from '../stores/clockStore';
+  import { localDateStr, todayStore } from '../stores/clockStore';
   import {
     readingProgressStore,
     getLatestChapterState,
@@ -150,7 +148,7 @@
 
   $: if (currentReadingPlan) {
     dayProgressMap;
-    verseStats = computeVerseStats();
+    verseStats = computeVerseStats($todayStore);
   }
 
   $: if (currentReadingPlan && currentPlanId && currentPlanId !== lastLoadedPlanId) {
@@ -263,7 +261,7 @@
     return VERSE_COUNTS[bookName]?.[chapter - 1] ?? 0;
   }
 
-  function computeVerseStats() {
+  function computeVerseStats(todayStr: string = localDateStr(new Date())) {
     if (!currentReadingPlan) {
       return { total: 0, read: 0, remaining: 0, todayRead: 0 };
     }
@@ -271,7 +269,6 @@
     let total = 0;
     let read = 0;
     let todayRead = 0;
-    const todayStr = localDateStr(new Date());
 
     currentReadingPlan.days.forEach((day) => {
       const progress = getDayProgress(day.dayNumber);
@@ -303,22 +300,21 @@
     };
   }
 
-  function getOverdueDays() {
+  function getOverdueDays(todayStr: string = localDateStr(new Date())) {
     if (!currentReadingPlan) return [];
-    const todayStr = localDateStr(new Date());
     return currentReadingPlan.days.filter((day) => {
       const progress = getDayProgress(day.dayNumber);
-      return localDateStr(new Date(day.date)) < todayStr && !progress?.completed;
+      return planDayDateStr(day.date) < todayStr && !progress?.completed;
     });
   }
 
-  function getOverdueChapters() {
-    return getOverdueDays().flatMap((day) => day.chapters);
+  function getOverdueChapters(todayStr: string = localDateStr(new Date())) {
+    return getOverdueDays(todayStr).flatMap((day) => day.chapters);
   }
 
-  function getEvenSpreadSuggestions() {
+  function getEvenSpreadSuggestions(todayStr: string = localDateStr(new Date())) {
     if (!currentReadingPlan) return [];
-    return suggestCatchUp(currentReadingPlan, getProgressEntries(), maxCatchUpPerDay);
+    return suggestCatchUp(currentReadingPlan, getProgressEntries(), maxCatchUpPerDay, todayStr);
   }
 
   function getDedicatedCatchUpDays() {
@@ -533,10 +529,9 @@
     return { checked, total };
   }
 
-  function getDayStatus(day: any): 'unread' | 'current' | 'completed' | 'ahead' | 'overdue' {
+  function getDayStatus(day: any, todayStr: string = localDateStr(new Date())): 'unread' | 'current' | 'completed' | 'ahead' | 'overdue' {
     const progress = getDayProgress(day.dayNumber);
-    const dayStr = localDateStr(new Date(day.date));
-    const todayStr = localDateStr(new Date());
+    const dayStr = planDayDateStr(day.date);
 
     if (progress?.completed) {
       return dayStr > todayStr ? 'ahead' : 'completed';
@@ -1097,9 +1092,16 @@
     }
   }
   
+  /** Parse a date-input 'YYYY-MM-DD' as LOCAL midnight. new Date('YYYY-MM-DD')
+   *  reads it as UTC midnight, which lands a day early for US timezones. */
+  function parseLocalDate(ymd: string): Date {
+    const [y, m, d] = ymd.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
   function buildCustomPlanConfig(): ReadingPlanConfig {
-    const startDate = new Date(planStartDate);
-    const endDate = new Date(planEndDate);
+    const startDate = parseLocalDate(planStartDate);
+    const endDate = parseLocalDate(planEndDate);
     
     const excludedWeekdays: number[] = [];
     dayChecks.forEach((checked, i) => {
@@ -1240,16 +1242,15 @@
     }
   }
   
-  function getTodayReading() {
+  function getTodayReading(todayStr: string = localDateStr(new Date())) {
     if (!currentReadingPlan) return null;
-    const todayStr = localDateStr(new Date());
     // Show the first incomplete day that is due (past or today) — keeps user on track, never skips to future
     const firstOverdueIncomplete = currentReadingPlan.days.find(day =>
-      localDateStr(new Date(day.date)) <= todayStr && !getDayProgress(day.dayNumber)?.completed
+      planDayDateStr(day.date) <= todayStr && !getDayProgress(day.dayNumber)?.completed
     );
     if (firstOverdueIncomplete) return firstOverdueIncomplete;
     // All past/today days are complete — show today so the user sees the green "complete" state
-    return currentReadingPlan.days.find(day => localDateStr(new Date(day.date)) === todayStr) ?? null;
+    return currentReadingPlan.days.find(day => planDayDateStr(day.date) === todayStr) ?? null;
   }
   
   function navigateToChapter(book: string, chapter: number, chapters: Array<{ book: string; chapter: number }> = [{ book, chapter }]) {
@@ -1264,23 +1265,23 @@
   }
   
   // Track firstIncompleteDayNumber reactively so getDayStatus() highlights the right day
-  // Only consider days that are due (past or today) — never highlight a future day as current
+  // Only consider days that are due (past or today) — never highlight a future day as current.
+  // Depends on $todayStore so it rolls over by itself when midnight passes.
   $: firstIncompleteDayNumber = (() => {
     void dayProgressMap; // explicit reactive dependency
     if (!currentReadingPlan) return null;
-    const todayStr = localDateStr(new Date());
+    const todayStr = $todayStore;
     return currentReadingPlan.days.find(d =>
-      localDateStr(new Date(d.date)) <= todayStr && !getDayProgress(d.dayNumber)?.completed
+      planDayDateStr(d.date) <= todayStr && !getDayProgress(d.dayNumber)?.completed
     )?.dayNumber ?? null;
   })();
 
-  $: todayReading = (void dayProgressMap, currentReadingPlan ? getTodayReading() : null);
+  $: todayReading = (void dayProgressMap, currentReadingPlan ? getTodayReading($todayStore) : null);
 
-  function getNextReadingDay() {
+  function getNextReadingDay(todayStr: string = localDateStr(new Date())) {
     if (!currentReadingPlan) return null;
-    const todayStr = localDateStr(new Date());
     return currentReadingPlan.days.find(day => {
-      return localDateStr(new Date(day.date)) > todayStr && !getDayProgress(day.dayNumber)?.completed;
+      return planDayDateStr(day.date) > todayStr && !getDayProgress(day.dayNumber)?.completed;
     }) ?? null;
   }
 
@@ -1587,7 +1588,7 @@
                     </div>
                   </div>
                 {:else}
-                  {@const nextDay = getNextReadingDay()}
+                  {@const nextDay = getNextReadingDay($todayStore)}
                   {#if nextDay}
                     <div class="welcome-subtitle no-reading-today">No reading scheduled for today. Next reading: <strong>Day {nextDay.dayNumber}</strong> on {new Date(nextDay.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}.</div>
                   {:else}
@@ -1627,8 +1628,8 @@
                   <div><strong>Verses read today:</strong> {verseStats.todayRead}</div>
                   <div><strong>Total verses read:</strong> {verseStats.read}</div>
                   <div><strong>Verses remaining:</strong> {verseStats.remaining}</div>
-                  <div><strong>Days ahead/behind:</strong> {currentReadingPlan ? getDaysAheadBehind(currentReadingPlan, getProgressEntries()) : 0}</div>
-                  <div><strong>Streak:</strong> {calculateStreak(getProgressEntries())} days</div>
+                  <div><strong>Days ahead/behind:</strong> {currentReadingPlan ? getDaysAheadBehind(currentReadingPlan, getProgressEntries(), $todayStore) : 0}</div>
+                  <div><strong>Streak:</strong> {currentReadingPlan ? calculateStreak(currentReadingPlan, getProgressEntries(), $todayStore, localDateStr) : 0} days</div>
                 </div>
                 {#if userName}
                   <div class="progress-message">Congrats {userName}, today you read {verseStats.todayRead} verses!</div>
@@ -1673,7 +1674,7 @@
                 <CalendarView
                   plan={currentReadingPlan}
                   {dayProgressMap}
-                  todayStr={localDateStr(new Date())}
+                  todayStr={$todayStore}
                   onDayClick={(dayNumber) => scrollToDayInList(dayNumber)}
                 />
               {:else if viewMode === 'list'}
@@ -1683,11 +1684,11 @@
                       class="list-day"
                       data-day-number={day.dayNumber}
                       class:today={todayReading && day.dayNumber === todayReading.dayNumber}
-                      class:status-unread={getDayStatus(day) === 'unread'}
-                      class:status-current={getDayStatus(day) === 'current'}
-                      class:status-completed={getDayStatus(day) === 'completed'}
-                      class:status-ahead={getDayStatus(day) === 'ahead'}
-                      class:status-overdue={getDayStatus(day) === 'overdue'}
+                      class:status-unread={getDayStatus(day, $todayStore) === 'unread'}
+                      class:status-current={getDayStatus(day, $todayStore) === 'current'}
+                      class:status-completed={getDayStatus(day, $todayStore) === 'completed'}
+                      class:status-ahead={getDayStatus(day, $todayStore) === 'ahead'}
+                      class:status-overdue={getDayStatus(day, $todayStore) === 'overdue'}
                       class:catchup-day={day.isCatchUp}
                     >
                       <div class="list-day-header">
@@ -1764,8 +1765,8 @@
               {:else}
                 <div class="catchup-view">
                   <div class="catchup-summary">
-                    <div><strong>Overdue days:</strong> {getOverdueDays().length}</div>
-                    <div><strong>Overdue chapters:</strong> {getOverdueChapters().length}</div>
+                    <div><strong>Overdue days:</strong> {getOverdueDays($todayStore).length}</div>
+                    <div><strong>Overdue chapters:</strong> {getOverdueChapters($todayStore).length}</div>
                     <div><strong>Max per day:</strong> {maxCatchUpPerDay}</div>
                   </div>
 
@@ -1786,10 +1787,10 @@
                   {#if catchUpMode === 'spread'}
                     <div class="catchup-preview">
                       <h4>Even spread preview</h4>
-                      {#if getEvenSpreadSuggestions().length === 0}
+                      {#if getEvenSpreadSuggestions($todayStore).length === 0}
                         <p class="muted">No catch-up needed. You are on schedule.</p>
                       {:else}
-                        {#each getEvenSpreadSuggestions() as suggestion}
+                        {#each getEvenSpreadSuggestions($todayStore) as suggestion}
                           <div class="catchup-item">
                             <strong>Day {suggestion.dayNumber}:</strong>
                             {#each suggestion.addedChapters as chapter, i}

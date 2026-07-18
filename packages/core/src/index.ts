@@ -12,6 +12,8 @@ export {
   ReadingProgressEntry,
   VerseCountResult,
   CatchUpSuggestion,
+  DateStrFn,
+  planDayDateStr,
   computeDayStatus,
   getDaysAheadBehind,
   calculateStreak,

@@ -6,7 +6,7 @@
   import { readingPlanModalStore } from '../stores/readingPlanModalStore';
   import { navigationStore, availableTranslations } from '../stores/navigationStore';
   import { readingProgressStore } from '../stores/ReadingProgressStore';
-  import { getDaysAheadBehind, calculateStreak } from '../../../../packages/core/src/ReadingPlanEngine';
+  import { getDaysAheadBehind, calculateStreak, planDayDateStr } from '@projectbible/core';
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
   import { applyTheme, getSettings, updateSettings } from '../adapters/settings';
   import { paneStore } from '../stores/paneStore';
@@ -302,8 +302,9 @@
   function getTodayReading(plan: any) {
     if (!plan) return null;
     const todayStr = localDateStr(new Date());
-    return plan.days.find((day: any) => localDateStr(new Date(day.date)) === todayStr);
+    return plan.days.find((day: any) => planDayDateStr(day.date) === todayStr);
   }
+
 
   async function loadReadingPlan() {
     try {
@@ -333,10 +334,13 @@
         ? await readingProgressStore.getProgressForPlan(currentPlanId)
         : [];
       verseStats = computeVerseStats(currentReadingPlan, progressEntries);
+      const todayStr = localDateStr(new Date());
       daysAheadBehind = currentReadingPlan
-        ? getDaysAheadBehind(currentReadingPlan, progressEntries)
+        ? getDaysAheadBehind(currentReadingPlan, progressEntries, todayStr)
         : 0;
-      streak = calculateStreak(progressEntries);
+      streak = currentReadingPlan
+        ? calculateStreak(currentReadingPlan, progressEntries, todayStr, localDateStr)
+        : 0;
     } catch (error) {
       console.error('Failed to load reading plan', error);
     }

@@ -42,66 +42,104 @@ export interface CatchUpSuggestion {
   addedChapters: Array<{ book: string; chapter: number }>;
 }
 
+/**
+ * Formats a Date (or epoch-ms) as a YYYY-MM-DD calendar string.
+ * The app injects a timezone-aware implementation (clockStore.localDateStr,
+ * which honors the user's timezone setting); this default uses device time.
+ */
+export type DateStrFn = (d: Date | number) => string;
+
+const deviceDateStr: DateStrFn = (d) => {
+  const date = typeof d === "number" ? new Date(d) : d;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const CALENDAR_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Calendar-date label of a plan day. Plain YYYY-MM-DD strings pass through
+ * untouched; Date/instant values are decoded with device-local time because
+ * plan generation anchors day dates to device-local midnight — this recovers
+ * the calendar day the generator intended, immune to timezone re-rendering.
+ */
+export function planDayDateStr(value: Date | string | number): string {
+  if (typeof value === "string") {
+    if (CALENDAR_DATE_RE.test(value)) return value;
+    return deviceDateStr(new Date(value));
+  }
+  return deviceDateStr(value);
+}
+
 export function computeDayStatus(
   day: ReadingPlanDay,
   progress: ReadingProgressEntry | undefined,
-  today: Date = new Date(),
+  todayStr: string = deviceDateStr(new Date()),
 ): DayStatus {
-  const dayDate = normalizeDate(day.date);
-  const todayDate = normalizeDate(today);
+  const dayStr = planDayDateStr(day.date);
 
   if (progress?.completed) {
-    if (dayDate.getTime() > todayDate.getTime()) {
-      return "ahead";
-    }
-    return "completed";
+    return dayStr > todayStr ? "ahead" : "completed";
   }
-
-  if (dayDate.getTime() < todayDate.getTime()) {
-    return "overdue";
-  }
-
-  if (dayDate.getTime() === todayDate.getTime()) {
-    return "current";
-  }
-
+  if (dayStr < todayStr) return "overdue";
+  if (dayStr === todayStr) return "current";
   return "unread";
 }
 
 export function getDaysAheadBehind(
   plan: ReadingPlan,
   progressEntries: ReadingProgressEntry[],
-  today: Date = new Date(),
+  todayStr: string = deviceDateStr(new Date()),
 ): number {
-  const todayDate = normalizeDate(today);
-  const scheduledCount = plan.days.filter((day) => normalizeDate(day.date) <= todayDate).length;
+  const scheduledCount = plan.days.filter((day) => planDayDateStr(day.date) <= todayStr).length;
   const completedCount = progressEntries.filter((entry) => entry.completed).length;
   return completedCount - scheduledCount;
 }
 
-export function calculateStreak(progressEntries: ReadingProgressEntry[]): number {
-  if (progressEntries.length === 0) return 0;
+/**
+ * Plan-aware strict streak.
+ *
+ * Walks the plan's SCHEDULED days backwards from today — days the plan never
+ * scheduled (rest days) cannot break the streak. A scheduled day counts only
+ * when it was completed on or before its own calendar date (reading ahead is
+ * fine; completing late fills the reading but resets the streak). Today's
+ * scheduled reading being not-yet-done doesn't break the streak — the day
+ * isn't over. Pure calendar-string comparisons: no DST/midnight-math bugs.
+ *
+ * eventDateStr converts completedAt instants to the calendar day they
+ * happened on — pass the user-timezone-aware formatter from the app.
+ */
+export function calculateStreak(
+  plan: ReadingPlan,
+  progressEntries: ReadingProgressEntry[],
+  todayStr: string = deviceDateStr(new Date()),
+  eventDateStr: DateStrFn = deviceDateStr,
+): number {
+  const byDay = new Map<number, ReadingProgressEntry>();
+  for (const entry of progressEntries) byDay.set(entry.dayNumber, entry);
 
-  const completionDates = progressEntries
-    .filter((entry) => entry.completedAt)
-    .map((entry) => normalizeDate(entry.completedAt!))
-    .map((date) => date.getTime());
+  const scheduled = plan.days
+    .map((day) => ({ day, dayStr: planDayDateStr(day.date) }))
+    .filter(({ dayStr }) => dayStr <= todayStr)
+    .sort((a, b) =>
+      a.dayStr < b.dayStr ? 1 : a.dayStr > b.dayStr ? -1 : b.day.dayNumber - a.day.dayNumber,
+    );
 
-  const uniqueDates = Array.from(new Set(completionDates)).sort((a, b) => b - a);
-  if (uniqueDates.length === 0) return 0;
-
-  let streak = 1;
-  for (let i = 1; i < uniqueDates.length; i += 1) {
-    const prev = uniqueDates[i - 1];
-    const current = uniqueDates[i];
-    const diffDays = (prev - current) / (1000 * 60 * 60 * 24);
-    if (diffDays === 1) {
+  let streak = 0;
+  for (const { day, dayStr } of scheduled) {
+    const entry = byDay.get(day.dayNumber);
+    const onTime =
+      !!entry?.completed &&
+      (entry.completedAt == null || eventDateStr(entry.completedAt) <= dayStr);
+    if (onTime) {
       streak += 1;
-    } else {
-      break;
+      continue;
     }
+    // Any of today's scheduled days may still be finished before midnight —
+    // skip without breaking. Anything older that's missing/late ends the run.
+    if (dayStr === todayStr) continue;
+    break;
   }
-
   return streak;
 }
 
@@ -109,19 +147,17 @@ export function suggestCatchUp(
   plan: ReadingPlan,
   progressEntries: ReadingProgressEntry[],
   maxPerDay: number,
-  today: Date = new Date(),
+  todayStr: string = deviceDateStr(new Date()),
 ): CatchUpSuggestion[] {
-  const todayDate = normalizeDate(today);
   const overdueDays = plan.days.filter((day) => {
-    const dayDate = normalizeDate(day.date);
     const progress = progressEntries.find((entry) => entry.dayNumber === day.dayNumber);
-    return dayDate < todayDate && !progress?.completed;
+    return planDayDateStr(day.date) < todayStr && !progress?.completed;
   });
 
   const overdueChapters = overdueDays.flatMap((day) => day.chapters);
   if (overdueChapters.length === 0) return [];
 
-  const upcomingDays = plan.days.filter((day) => normalizeDate(day.date) >= todayDate);
+  const upcomingDays = plan.days.filter((day) => planDayDateStr(day.date) >= todayStr);
   if (upcomingDays.length === 0) return [];
 
   const suggestions: CatchUpSuggestion[] = [];
@@ -250,8 +286,3 @@ function mergeChapterActions(
   };
 }
 
-function normalizeDate(value: Date | string | number): Date {
-  const date = value instanceof Date ? new Date(value) : new Date(value);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { localDateStr } from '../stores/clockStore';
+  import { planDayDateStr } from '@projectbible/core';
   import type { ReadingPlan } from '@projectbible/core';
   import type { ReadingProgressEntry } from '../stores/ReadingProgressStore';
 
@@ -15,8 +15,8 @@
     return new Date(y, m - 1, 1);
   }
 
-  const planStart = localDateStr(new Date(plan.days[0].date));
-  const planEnd   = localDateStr(new Date(plan.days[plan.days.length - 1].date));
+  const planStart = planDayDateStr(plan.days[0].date);
+  const planEnd   = planDayDateStr(plan.days[plan.days.length - 1].date);
 
   let currentMonth: Date = monthOf(
     todayStr >= planStart && todayStr <= planEnd ? todayStr : planStart
@@ -33,7 +33,7 @@
   $: planDayMap = (() => {
     const m = new Map<string, { dayNumber: number; chapters: any[] }>();
     for (const day of plan.days) {
-      m.set(localDateStr(new Date(day.date)), { dayNumber: day.dayNumber, chapters: day.chapters });
+      m.set(planDayDateStr(day.date), { dayNumber: day.dayNumber, chapters: day.chapters });
     }
     return m;
   })();
@@ -63,7 +63,7 @@
     for (let i = 0; i < 42; i++) { // 6 rows × 7 cols
       const d = new Date(year, month, dayOfMonth);
       const inCurrentMonth = d.getMonth() === month;
-      const ds = localDateStr(d);
+      const ds = planDayDateStr(d);
       const planDay = planDayMap.get(ds);
       const inPlan = ds >= planStart && ds <= planEnd;
 
