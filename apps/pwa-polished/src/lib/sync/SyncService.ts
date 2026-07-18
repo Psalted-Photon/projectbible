@@ -126,17 +126,25 @@ class SyncService {
       await syncQueue.resetFailed();
 
       // Process pending writes first
-      await syncQueue.processQueue();
-      
+      const pushResult = await syncQueue.processQueue();
+
       // Then pull remote changes
       await this.pullRemoteData();
 
       this.lastForceSyncAt = Date.now();
-      this.updateState({ 
-        status: 'idle', 
-        lastSyncedAt: new Date(),
-        error: null 
-      });
+      if (pushResult.failed > 0) {
+        // Be honest: the sync ran, but some changes did NOT reach Supabase.
+        this.updateState({
+          status: 'error',
+          error: `${pushResult.failed} change${pushResult.failed === 1 ? '' : 's'} failed to upload`,
+        });
+      } else {
+        this.updateState({
+          status: 'idle',
+          lastSyncedAt: new Date(),
+          error: null
+        });
+      }
     } catch (err: any) {
       if (err?.name === 'AbortError') {
         console.debug('[SyncService] forceSync aborted (transient), ignoring');
@@ -299,7 +307,11 @@ class SyncService {
     }
     
     console.log(`[SyncService] Pulled ${data?.length ?? 0} rows from ${table}`);
-    if (data && data.length > 0) {
+    // The empty-rows gate protects tables whose apply fns reconcile deletions
+    // (e.g. user_notes would wipe local data on an empty server). reading_progress
+    // must run even with zero remote rows so its reconciliation can push local
+    // progress up to a fresh/empty server.
+    if (data && (data.length > 0 || table === 'reading_progress')) {
       await applyFn(data);
     }
   }

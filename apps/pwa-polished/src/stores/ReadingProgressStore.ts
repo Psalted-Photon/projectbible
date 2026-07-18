@@ -55,6 +55,25 @@ export interface ReadingProgressEntry {
   harmonySections?: HarmonySectionProgress[];
 }
 
+/**
+ * Hook invoked after every local progress mutation so the sync layer can
+ * push the updated entry to Supabase. Registered by SyncedReadingAdapter.
+ * Intentionally NOT fired by upsertEntries (the remote-apply path) so
+ * pulled data is never echoed straight back to the server.
+ */
+export type ProgressSyncHook = (entry: ReadingProgressEntry) => void;
+let progressSyncHook: ProgressSyncHook | null = null;
+export function registerProgressSyncHook(fn: ProgressSyncHook): void {
+  progressSyncHook = fn;
+}
+function notifySync(entry: ReadingProgressEntry): void {
+  try {
+    progressSyncHook?.(entry);
+  } catch (err) {
+    console.error('[ReadingProgress] sync hook error:', err);
+  }
+}
+
 function buildEntryId(planId: string, dayNumber: number): string {
   return `${planId}-${dayNumber}`;
 }
@@ -298,6 +317,7 @@ export class ReadingProgressStore {
     if (!entry || entry.startedReadingAt) return;
     entry.startedReadingAt = timestamp;
     await writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));
+    notifySync(entry);
   }
 
   async setChapterAction(
@@ -326,6 +346,7 @@ export class ReadingProgressStore {
 
     const updated = recomputeCompletion(entry);
     await writeTransaction("reading_progress", (store) => store.put(this.serialize(updated)));
+    notifySync(updated);
     return updated;
   }
 
@@ -342,7 +363,11 @@ export class ReadingProgressStore {
         (item) => item.book === ch.book && item.chapter === ch.chapter,
       );
       const actions = existing?.actions ?? [];
-      actions.push({ type: "checked", timestamp: now });
+      // Only append when the chapter isn't already checked — repeated "Mark Day
+      // Complete" taps must not grow the action log with redundant entries.
+      if (!isChapterChecked({ book: ch.book, chapter: ch.chapter, actions })) {
+        actions.push({ type: "checked", timestamp: now });
+      }
       return { book: ch.book, chapter: ch.chapter, actions };
     });
 
@@ -350,11 +375,13 @@ export class ReadingProgressStore {
     entry.completedAt = now;
 
     await writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));
+    notifySync(entry);
     return entry;
   }
 
   async setCatchUpAdjustment(entry: ReadingProgressEntry): Promise<void> {
     await writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));
+    notifySync(entry);
   }
 
   /**
@@ -414,6 +441,7 @@ export class ReadingProgressStore {
 
     const updated = recomputeCompletion(entry);
     await writeTransaction("reading_progress", (store) => store.put(this.serialize(updated)));
+    notifySync(updated);
     return updated;
   }
 
@@ -446,6 +474,7 @@ export class ReadingProgressStore {
 
     const updated = recomputeCompletion(entry);
     await writeTransaction("reading_progress", (store) => store.put(this.serialize(updated)));
+    notifySync(updated);
     return updated;
   }
 
@@ -480,6 +509,7 @@ export class ReadingProgressStore {
     entry.completedAt = now;
 
     await writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));
+    notifySync(entry);
     return entry;
   }
 

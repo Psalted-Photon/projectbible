@@ -664,7 +664,6 @@
     if (updated) {
       dayProgressMap = new Map(dayProgressMap);
       dayProgressMap.set(day.dayNumber, updated);
-      await queueProgressEntry(updated);
     }
   }
 
@@ -675,7 +674,6 @@
     if (updated) {
       dayProgressMap = new Map(dayProgressMap);
       dayProgressMap.set(day.dayNumber, updated);
-      await queueProgressEntry(updated);
     }
   }
 
@@ -693,7 +691,6 @@
     );
     dayProgressMap = new Map(dayProgressMap);
     dayProgressMap.set(day.dayNumber, updated);
-    await queueProgressEntry(updated);
     if (!currentlyChecked) checkPlanCompletion(currentPlanId);
   }
 
@@ -707,46 +704,25 @@
     );
     dayProgressMap = new Map(dayProgressMap);
     dayProgressMap.set(day.dayNumber, updated);
-    await queueProgressEntry(updated);
     checkPlanCompletion(currentPlanId);
   }
 
-  /** Map a ReadingProgressEntry to Supabase reading_progress columns and enqueue. */
-  function queueProgressEntry(entry: ReadingProgressEntry): Promise<void> {
-    console.log(`[ReadingPlan] → PUSH day=${entry.dayNumber} completed=${entry.completed} chaptersRead=${entry.chaptersRead.length} id=${entry.id}`);
-    // All timestamp columns (created_at, completed_at, started_reading_at, updated_at)
-    // are TIMESTAMPTZ in Supabase — must send ISO 8601 strings, NOT raw epoch-ms.
-    // Sending a bare number like 1777460793809 makes Postgres interpret it as a year
-    // (~58000 AD) and reject with "date/time field value out of range".
-    const msToIso = (ms: number | undefined | null): string | null =>
-      ms != null && ms > 0 ? new Date(ms).toISOString() : null;
-    return syncQueue.enqueue({
-      type: 'INSERT',
-      table: 'reading_progress',
-      id: entry.id,
-      data: {
-        id: entry.id,
-        plan_id: entry.planId,
-        day_number: entry.dayNumber,
-        completed: entry.completed ? 1 : 0,
-        created_at: msToIso(entry.createdAt) ?? new Date().toISOString(),
-        completed_at: msToIso(entry.completedAt),
-        started_reading_at: msToIso(entry.startedReadingAt),
-        chapters_read: JSON.stringify(entry.chaptersRead),
-        catch_up_adjustment: entry.catchUpAdjustment
-          ? JSON.stringify(entry.catchUpAdjustment)
-          : null,
-        updated_at: new Date().toISOString(),
-      },
-    });
-  }
+  // Progress pushes now happen automatically: every readingProgressStore
+  // mutation fires the sync hook registered in SyncedReadingAdapter.
 
   async function syncNow() {
     if (!currentPlanId) return;
     try {
       syncStatus = 'Syncing...';
       await syncService.forceSync();
-      syncStatus = `Synced ${new Date().toLocaleTimeString()}`;
+      const state = syncService.getState();
+      if (state.error) {
+        syncStatus = `Sync problem: ${state.error}`;
+      } else if (state.pendingCount > 0) {
+        syncStatus = `Sync incomplete — ${state.pendingCount} waiting`;
+      } else {
+        syncStatus = `Synced ${new Date().toLocaleTimeString()}`;
+      }
     } catch (error) {
       console.error('Sync failed:', error);
       syncStatus = 'Sync failed';
@@ -1100,11 +1076,11 @@
           },
         });
 
-        // Create day 1 progress entry and queue to Supabase
+        // Create the local day 1 progress entry. It syncs automatically once
+        // real progress is marked — an empty placeholder needs no push.
         if (currentReadingPlan.days.length > 0) {
           const day1Chapters = currentReadingPlan.days[0].chapters;
-          const day1Entry = await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
-          await queueProgressEntry(day1Entry);
+          await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
         }
 
         planGenerationStatus = `✓ Plan created! ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;

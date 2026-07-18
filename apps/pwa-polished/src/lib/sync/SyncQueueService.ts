@@ -236,6 +236,7 @@ class SyncQueueService {
             p_chapters_read:       op.data.chapters_read,
             p_catch_up_adjustment: op.data.catch_up_adjustment ?? null,
             p_updated_at:          op.data.updated_at,
+            p_harmony_sections:    op.data.harmony_sections ?? null,
           });
           if (error) throw error;
         } else {

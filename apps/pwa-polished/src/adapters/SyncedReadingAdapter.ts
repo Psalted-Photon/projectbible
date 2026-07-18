@@ -10,7 +10,9 @@
  */
 
 import { generateReadingPlan } from '@projectbible/core';
-import { readingProgressStore } from '../stores/ReadingProgressStore';
+import { readingProgressStore, registerProgressSyncHook } from '../stores/ReadingProgressStore';
+import type { ReadingProgressEntry } from '../stores/ReadingProgressStore';
+import { syncQueue } from '../lib/sync/SyncQueueService';
 
 const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan'; // legacy key
 const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans'; // new multi-plan key
@@ -120,11 +122,125 @@ export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
 // ─── Reading Progress ─────────────────────────────────────────────────
 
 /**
- * Apply remote reading_progress rows to IndexedDB.
- * Called by SyncService on initial pull.
+ * Map a ReadingProgressEntry to Supabase reading_progress columns and enqueue.
+ * Single push path for ALL progress writes — reader flow and plan modal alike —
+ * wired to the store via registerProgressSyncHook below.
  */
-export async function applyRemoteReadingProgress(rows: any[]): Promise<void> {
-  if (!rows || rows.length === 0) return;
+export function queueProgressEntry(entry: ReadingProgressEntry): Promise<void> {
+  console.log(`[SyncedReading] → PUSH day=${entry.dayNumber} completed=${entry.completed} chaptersRead=${entry.chaptersRead.length} id=${entry.id}`);
+  // All timestamp columns (created_at, completed_at, started_reading_at, updated_at)
+  // are TIMESTAMPTZ in Supabase — must send ISO 8601 strings, NOT raw epoch-ms.
+  const msToIso = (ms: number | undefined | null): string | null =>
+    ms != null && ms > 0 ? new Date(ms).toISOString() : null;
+  return syncQueue.enqueue({
+    type: 'INSERT',
+    table: 'reading_progress',
+    id: entry.id,
+    data: {
+      id: entry.id,
+      plan_id: entry.planId,
+      day_number: entry.dayNumber,
+      completed: entry.completed ? 1 : 0,
+      created_at: msToIso(entry.createdAt) ?? new Date().toISOString(),
+      completed_at: msToIso(entry.completedAt),
+      started_reading_at: msToIso(entry.startedReadingAt),
+      chapters_read: JSON.stringify(entry.chaptersRead),
+      catch_up_adjustment: entry.catchUpAdjustment
+        ? JSON.stringify(entry.catchUpAdjustment)
+        : null,
+      harmony_sections: entry.harmonySections
+        ? JSON.stringify(entry.harmonySections)
+        : null,
+      updated_at: new Date().toISOString(),
+    },
+  });
+}
+
+/** Set of "book::chapter::timestamp::type" keys for every action in a remote row. */
+function remoteActionKeys(row: any): Set<string> {
+  const keys = new Set<string>();
+  try {
+    const chapters = typeof row.chapters_read === 'string'
+      ? JSON.parse(row.chapters_read)
+      : (row.chapters_read ?? []);
+    for (const ch of chapters) {
+      for (const a of ch?.actions ?? []) {
+        keys.add(`${ch.book}::${ch.chapter}::${a.timestamp}::${a.type}`);
+      }
+    }
+  } catch { /* treat unparseable as empty */ }
+  return keys;
+}
+
+/** Does this local entry hold progress the server doesn't have yet? */
+function needsPush(local: ReadingProgressEntry, remote: any | undefined): boolean {
+  if (!remote) {
+    // Only push rows that carry real progress — skip empty placeholder days.
+    const hasActions = (local.chaptersRead ?? []).some(ch => (ch.actions ?? []).length > 0);
+    return local.completed || hasActions || (local.harmonySections?.length ?? 0) > 0;
+  }
+  const remoteCompleted = remote.completed === true || remote.completed === 1;
+  if (local.completed && !remoteCompleted) return true;
+  const keys = remoteActionKeys(remote);
+  for (const ch of local.chaptersRead ?? []) {
+    for (const a of ch.actions ?? []) {
+      if (!keys.has(`${ch.book}::${ch.chapter}::${a.timestamp}::${a.type}`)) return true;
+    }
+  }
+  if ((local.harmonySections?.length ?? 0) > 0 && !remote.harmony_sections) return true;
+  return false;
+}
+
+/**
+ * Push local progress the server is missing. This is the recovery path for
+ * progress that was marked while pushes weren't happening (e.g. reader-flow
+ * marks before the sync hook existed) — safe to over-push because the
+ * upsert_reading_progress RPC union-merges server-side.
+ */
+async function reconcileLocalProgress(remoteRows: any[]): Promise<void> {
+  try {
+    const remoteById = new Map<string, any>();
+    for (const r of remoteRows ?? []) remoteById.set(r.id, r);
+
+    const planIds = new Set<string>();
+    for (const storageKey of [STORAGE_ACTIVE_PLANS, STORAGE_PLAN_HISTORY]) {
+      try {
+        const entries = JSON.parse(localStorage.getItem(storageKey) ?? '[]');
+        for (const e of entries) if (e?.id) planIds.add(e.id);
+      } catch { /* ignore corrupt storage */ }
+    }
+
+    let pushed = 0;
+    for (const planId of planIds) {
+      const locals = await readingProgressStore.getProgressForPlan(planId);
+      for (const local of locals) {
+        if (needsPush(local, remoteById.get(local.id))) {
+          void queueProgressEntry(local);
+          pushed++;
+        }
+      }
+    }
+    if (pushed > 0) {
+      console.log(`[SyncedReading] Reconcile: queued ${pushed} local progress entries the server was missing`);
+    }
+  } catch (err) {
+    console.error('[SyncedReading] Reconcile error:', err);
+  }
+}
+
+/**
+ * Apply remote reading_progress rows to IndexedDB.
+ * Called by SyncService on full pulls (fullPull=true, triggers reconciliation)
+ * and by the Realtime handler for single rows (fullPull=false).
+ */
+export async function applyRemoteReadingProgress(
+  rows: any[],
+  opts: { fullPull?: boolean } = {},
+): Promise<void> {
+  if (!rows || rows.length === 0) {
+    if (opts.fullPull) await reconcileLocalProgress([]);
+    return;
+  }
 
   // Log a compact summary so we can see which plans/days/completion came in
   const incomingSummary = rows.map(r => `day${r.day_number}(done=${r.completed})`).join(', ');
@@ -149,6 +265,12 @@ export async function applyRemoteReadingProgress(rows: any[]): Promise<void> {
       const toMs = (v: any): number | undefined =>
         v == null ? undefined : typeof v === 'number' ? v : new Date(v).getTime();
 
+      const harmonySections = row.harmony_sections
+        ? (typeof row.harmony_sections === 'string'
+            ? JSON.parse(row.harmony_sections)
+            : row.harmony_sections)
+        : undefined;
+
       entries.push({
         id: row.id,
         planId: row.plan_id,
@@ -159,6 +281,7 @@ export async function applyRemoteReadingProgress(rows: any[]): Promise<void> {
         startedReadingAt: toMs(row.started_reading_at),
         chaptersRead,
         catchUpAdjustment,
+        harmonySections,
       });
     } catch (err) {
       console.error('[SyncedReading] Failed to parse progress row:', row.id, err);
@@ -171,6 +294,11 @@ export async function applyRemoteReadingProgress(rows: any[]): Promise<void> {
 
   console.log(`[SyncedReading] Applied ${entries.length} reading_progress rows`);
   bumpReadingProgressVersion();
+
+  // On full pulls, push back anything local the server doesn't know about.
+  if (opts.fullPull) {
+    await reconcileLocalProgress(rows);
+  }
 }
 
 // ─── Realtime handler for reading_progress ───────────────────────────
@@ -198,5 +326,13 @@ import { syncService } from '../lib/sync/SyncService';
 import { realtimeService } from '../lib/sync/RealtimeService';
 import { bumpReadingProgressVersion } from '../stores/readingProgressVersionStore';
 syncService.registerApplyFn('reading_plans', applyRemoteReadingPlans);
-syncService.registerApplyFn('reading_progress', applyRemoteReadingProgress);
+syncService.registerApplyFn('reading_progress', (rows) =>
+  applyRemoteReadingProgress(rows, { fullPull: true }));
 realtimeService.onTableChange('reading_progress', handleRealtimeProgressChange);
+
+// Every local progress mutation (reader flow, plan modal, catch-up) pushes
+// through the queue automatically — no manual "Sync Now" needed.
+registerProgressSyncHook((entry) => {
+  void queueProgressEntry(entry);
+  bumpReadingProgressVersion();
+});
