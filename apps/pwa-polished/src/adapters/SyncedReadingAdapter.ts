@@ -13,7 +13,6 @@ import { generateReadingPlan } from '@projectbible/core';
 import { readingProgressStore, registerProgressSyncHook } from '../stores/ReadingProgressStore';
 import type { ReadingProgressEntry } from '../stores/ReadingProgressStore';
 import { syncQueue } from '../lib/sync/SyncQueueService';
-import { supabase } from '../lib/supabase/client';
 
 const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan'; // legacy key
 const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans'; // new multi-plan key
@@ -302,67 +301,6 @@ export async function applyRemoteReadingProgress(
   }
 }
 
-// ─── Live progress polling (near-realtime fallback) ──────────────────
-//
-// Supabase Realtime events aren't reliably delivered for this project, so
-// while the reading plan is on screen (modal open, or a reading session
-// active in the reader) we poll for changed rows every ~1.2s. Delta queries
-// against the server-stamped updated_at keep each tick tiny, and polling
-// stops entirely when nothing plan-related is visible or the tab is hidden.
-
-const POLL_INTERVAL_MS = 1200;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-let pollCursor: string = new Date(0).toISOString();
-let pollClients = 0;
-let pollInFlight = false;
-
-export function startProgressPolling(): void {
-  pollClients++;
-  if (pollTimer) return;
-  // Start slightly in the past to catch a change that landed just before opening.
-  pollCursor = new Date(Date.now() - 30_000).toISOString();
-  pollTimer = setInterval(() => { void pollTick(); }, POLL_INTERVAL_MS);
-  console.log('[SyncedReading] Progress polling started');
-}
-
-export function stopProgressPolling(): void {
-  pollClients = Math.max(0, pollClients - 1);
-  if (pollClients > 0 || !pollTimer) return;
-  clearInterval(pollTimer);
-  pollTimer = null;
-  console.log('[SyncedReading] Progress polling stopped');
-}
-
-async function pollTick(): Promise<void> {
-  if (pollInFlight) return;
-  if (typeof document !== 'undefined' && document.hidden) return;
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-  pollInFlight = true;
-  try {
-    // getSession reads the cached local session — no network round-trip.
-    const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id;
-    if (!userId) return;
-
-    const { data, error } = await supabase
-      .from('reading_progress')
-      .select('*')
-      .eq('user_id', userId)
-      .gt('updated_at', pollCursor)
-      .order('updated_at', { ascending: true })
-      .limit(200);
-
-    if (error || !data || data.length === 0) return;
-    pollCursor = data[data.length - 1].updated_at;
-    console.log(`[SyncedReading] Poll: ${data.length} changed row(s)`);
-    await applyRemoteReadingProgress(data);
-  } catch {
-    // Transient network hiccup — the next tick simply tries again.
-  } finally {
-    pollInFlight = false;
-  }
-}
-
 // ─── Realtime handler for reading_progress ───────────────────────────
 //
 // When another device writes a progress row, Supabase fires a Realtime
@@ -397,19 +335,4 @@ realtimeService.onTableChange('reading_progress', handleRealtimeProgressChange);
 registerProgressSyncHook((entry) => {
   void queueProgressEntry(entry);
   bumpReadingProgressVersion();
-});
-
-// Poll while a reading-plan session is active in the reader (the modal wires
-// its own start/stop around isOpen).
-import { readingSessionStore } from '../stores/readingSessionStore';
-let sessionPollActive = false;
-readingSessionStore.subscribe((session) => {
-  const active = session != null;
-  if (active && !sessionPollActive) {
-    sessionPollActive = true;
-    startProgressPolling();
-  } else if (!active && sessionPollActive) {
-    sessionPollActive = false;
-    stopProgressPolling();
-  }
 });

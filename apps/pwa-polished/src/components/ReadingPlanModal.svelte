@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
-  import { startProgressPolling, stopProgressPolling } from '../adapters/SyncedReadingAdapter';
+  import { onMount, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { generateReadingPlan, BIBLE_BOOKS, type ReadingPlanConfig, type ReadingPlan, type HarmonySection, type HarmonyPassage } from '@projectbible/core';
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
@@ -148,25 +147,6 @@
   $: if ($readingProgressVersion > 0) {
     loadProgressForPlan();
   }
-
-  // Near-realtime: poll for remote progress changes while the modal is on
-  // screen (~1.2s delta queries; paused automatically when the tab is hidden).
-  let modalPollActive = false;
-  $: {
-    if (isOpen && !modalPollActive) {
-      modalPollActive = true;
-      startProgressPolling();
-    } else if (!isOpen && modalPollActive) {
-      modalPollActive = false;
-      stopProgressPolling();
-    }
-  }
-  onDestroy(() => {
-    if (modalPollActive) {
-      modalPollActive = false;
-      stopProgressPolling();
-    }
-  });
 
   $: if (currentReadingPlan) {
     dayProgressMap;
