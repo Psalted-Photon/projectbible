@@ -16,6 +16,7 @@
   import { syncService, type SyncState } from '../lib/sync';
   import { normalizeBookName } from '../lib/bibleData';
   import { syncQueue } from '../lib/sync/SyncQueueService';
+  import { serializePlanData, getRemotePlanStatuses } from '../adapters/SyncedReadingAdapter';
   import { userProfileStore } from '../stores/userProfileStore';
   import { readingProgressVersion } from '../stores/readingProgressVersionStore';
   import CalendarView from './CalendarView.svelte';
@@ -133,10 +134,10 @@
     // down, which will trigger loadProgressForPlan() again via the sync
     // subscriber once the pull completes.
     if (isSignedIn) {
-      // Re-push all local plan rows so Supabase always has them (restores deleted
-      // rows and propagates plans created on other devices).
-      syncActivePlansToSupabase();
-      syncService.forceSync(30_000);
+      // Pull first, then re-push local plans: the pull refreshes which plans
+      // the server considers active, so the re-upsert can't resurrect a plan
+      // archived/deleted on another device from a stale local list.
+      syncService.forceSync(30_000).then(() => syncActivePlansToSupabase());
     }
   }
 
@@ -394,13 +395,18 @@
 
   /**
    * Re-upsert every active plan row to Supabase.
-   * Called on modal open so that plans deleted from Supabase are automatically
-   * restored, and plans created on the phone appear on the PC (and vice-versa).
+   * Called after the modal-open pull so that plans created on the phone appear
+   * on the PC (and vice-versa). Skips plans the server last reported as
+   * archived/deleted — re-uploading those would resurrect a plan the user
+   * archived on another device.
    */
   async function syncActivePlansToSupabase(): Promise<void> {
     if (!isSignedIn || activePlans.length === 0) return;
+    const remoteStatus = getRemotePlanStatuses();
     for (const entry of activePlans) {
       if (!entry.id || !entry.plan) continue;
+      const known = remoteStatus[entry.id];
+      if (known === 'archived' || known === 'completed' || known === 'deleted') continue;
       try {
         const cfg = entry.plan.config;
         // Plan IDs are "plan_<epoch-ms>" — use that as the canonical creation time.
@@ -418,6 +424,7 @@
               startDate: cfg.startDate instanceof Date ? cfg.startDate.toISOString() : cfg.startDate,
               endDate:   cfg.endDate   instanceof Date ? cfg.endDate.toISOString()   : cfg.endDate,
             }),
+            plan_data: serializePlanData(entry.plan),
             current_day_number: 1,
             status: 'active',
             activated_at: createdMs,                     // BIGINT column — epoch ms
@@ -855,12 +862,12 @@
   }
 
   function getNextChapterForPlan(plan: ReadingPlan): {book: string, chapter: number} | null {
-    const todayStr = localDateStr(new Date());
+    const todayStr = $todayStore;
     // Try today first
-    const todayDay = plan.days.find(d => localDateStr(new Date(d.date)) === todayStr);
+    const todayDay = plan.days.find(d => planDayDateStr(d.date) === todayStr);
     if (todayDay?.chapters?.length) return todayDay.chapters[0];
     // Else next upcoming day
-    const future = plan.days.find(d => localDateStr(new Date(d.date)) > todayStr);
+    const future = plan.days.find(d => planDayDateStr(d.date) > todayStr);
     if (future?.chapters?.length) return future.chapters[0];
     return null;
   }
@@ -1060,6 +1067,7 @@
             id: currentPlanId!,
             name: config.name || `${currentReadingPlan.totalDays}-day reading plan`,
             config: JSON.stringify(config),
+            plan_data: serializePlanData(currentReadingPlan),
             current_day_number: 1,
             status: 'active',
             plan_definition_hash: planHash,

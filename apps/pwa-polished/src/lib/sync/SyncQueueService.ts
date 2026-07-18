@@ -158,6 +158,21 @@ class SyncQueueService {
     });
   }
   
+  /**
+   * IDs of rows in `table` that still have un-uploaded INSERT/UPDATE ops.
+   * Pull-side reconciliation uses this so a locally-created item that hasn't
+   * reached Supabase yet is never mistaken for one deleted remotely.
+   */
+  async getPendingIdsFor(table: string): Promise<Set<string>> {
+    const items = await this.getPendingItems();
+    const ids = new Set<string>();
+    for (const item of items) {
+      const op = item.payload as SyncOperation;
+      if (op?.table === table && op.type !== 'DELETE') ids.add(op.id);
+    }
+    return ids;
+  }
+
   private async getPendingItems(): Promise<DBSyncQueueItem[]> {
     const db = await openDB();
     return new Promise((resolve, reject) => {

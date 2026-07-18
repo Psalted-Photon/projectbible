@@ -9,7 +9,7 @@
  * so ReadingPlanModal picks it up normally.
  */
 
-import { generateReadingPlan } from '@projectbible/core';
+import { generateReadingPlan, planDayDateStr } from '@projectbible/core';
 import { readingProgressStore, registerProgressSyncHook } from '../stores/ReadingProgressStore';
 import type { ReadingProgressEntry } from '../stores/ReadingProgressStore';
 import { syncQueue } from '../lib/sync/SyncQueueService';
@@ -17,6 +17,73 @@ import { syncQueue } from '../lib/sync/SyncQueueService';
 const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan'; // legacy key
 const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans'; // new multi-plan key
 const STORAGE_PLAN_HISTORY = 'projectbible_reading_plan_history';
+const STORAGE_REMOTE_PLAN_STATUS = 'projectbible_remote_plan_status';
+
+const CAL_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** 'YYYY-MM-DD' → Date at this device's local midnight. */
+function parseLocalDate(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/**
+ * Serialize a full generated plan for the reading_plans.plan_data column.
+ * Day dates become timezone-free 'YYYY-MM-DD' strings so every device
+ * restores the exact same schedule — no regeneration, no re-shuffling.
+ */
+export function serializePlanData(plan: any): string {
+  const clone = JSON.parse(JSON.stringify(plan)); // Dates → ISO strings
+  if (Array.isArray(clone?.days)) {
+    for (const d of clone.days) {
+      if (d?.date != null) d.date = planDayDateStr(d.date);
+    }
+  }
+  return JSON.stringify(clone);
+}
+
+/** Parse a plan_data payload back into a live plan object for this device. */
+function parsePlanData(planData: string): any | null {
+  try {
+    const plan = JSON.parse(planData);
+    if (!plan || !Array.isArray(plan.days) || plan.days.length === 0) return null;
+    for (const d of plan.days) {
+      if (typeof d.date === 'string' && CAL_DATE_RE.test(d.date)) {
+        d.date = parseLocalDate(d.date);
+      }
+    }
+    if (plan.config) {
+      if (typeof plan.config.startDate === 'string') plan.config.startDate = new Date(plan.config.startDate);
+      if (typeof plan.config.endDate === 'string') plan.config.endDate = new Date(plan.config.endDate);
+    }
+    return plan;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Last status the server reported per plan id, persisted so the modal's
+ * re-upsert can refuse to resurrect a plan archived/deleted on another
+ * device even before this session's first pull.
+ */
+export function getRemotePlanStatuses(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_REMOTE_PLAN_STATUS) ?? '{}');
+  } catch {
+    return {};
+  }
+}
+
+function rememberRemotePlanStatuses(rows: any[]): void {
+  try {
+    const map = getRemotePlanStatuses();
+    for (const r of rows ?? []) {
+      if (r?.id && r?.status) map[r.id] = r.status;
+    }
+    localStorage.setItem(STORAGE_REMOTE_PLAN_STATUS, JSON.stringify(map));
+  } catch { /* best-effort */ }
+}
 
 // ─── Reading Plans ────────────────────────────────────────────────────
 
@@ -27,6 +94,8 @@ const STORAGE_PLAN_HISTORY = 'projectbible_reading_plan_history';
  */
 export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
   if (!rows || rows.length === 0) return;
+
+  rememberRemotePlanStatuses(rows);
 
   // Separate active from archived/deleted
   const activeRows = rows.filter(r => r.status === 'active');
@@ -40,9 +109,12 @@ export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
   // Build a set of plan IDs the server considers active
   const remoteActiveIds = new Set(activeRows.map(r => r.id));
 
-  // Remove any local plans the server no longer has as active (deleted/archived remotely)
+  // Remove any local plans the server no longer has as active (deleted/archived
+  // remotely) — but never one whose creation is still waiting in the upload
+  // queue, or a freshly-made plan would vanish before it ever reached Supabase.
+  const pendingIds = await syncQueue.getPendingIdsFor('reading_plans');
   const before = currentPlans.length;
-  currentPlans = currentPlans.filter(e => remoteActiveIds.has(e.id));
+  currentPlans = currentPlans.filter(e => remoteActiveIds.has(e.id) || pendingIds.has(e.id));
   let changed = currentPlans.length !== before;
 
   for (const row of activeRows) {
@@ -56,16 +128,29 @@ export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
       }
       continue;
     }
-    // Plan is new locally — restore it from the server
+    // Plan is new locally — restore it from the server. Prefer the exact
+    // day-by-day schedule (plan_data); regenerating from config re-rolls any
+    // shuffle/randomization and lands checkmarks on different chapters.
     try {
-      const config = typeof row.config === 'string' ? JSON.parse(row.config) : row.config;
-      if (config.startDate && typeof config.startDate === 'string') config.startDate = new Date(config.startDate);
-      if (config.endDate && typeof config.endDate === 'string') config.endDate = new Date(config.endDate);
-      const plan = generateReadingPlan(config);
+      let plan = row.plan_data ? parsePlanData(row.plan_data) : null;
+      if (!plan) {
+        const config = typeof row.config === 'string' ? JSON.parse(row.config) : row.config;
+        if (config.startDate && typeof config.startDate === 'string') config.startDate = new Date(config.startDate);
+        if (config.endDate && typeof config.endDate === 'string') config.endDate = new Date(config.endDate);
+        plan = generateReadingPlan(config);
+        // Freeze this device's arrangement as the canonical one so every other
+        // device restores the identical schedule from now on.
+        void syncQueue.enqueue({
+          type: 'INSERT',
+          table: 'reading_plans',
+          id: row.id,
+          data: { id: row.id, plan_data: serializePlanData(plan), updated_at: new Date().toISOString() },
+        });
+      }
       if (row.name) plan.config.name = row.name;
       currentPlans.push({ id: row.id, plan });
       changed = true;
-      console.log('[SyncedReading] Restored active reading plan:', row.id);
+      console.log('[SyncedReading] Restored active reading plan:', row.id, row.plan_data ? '(exact schedule)' : '(regenerated + frozen)');
     } catch (err) {
       console.error('[SyncedReading] Failed to restore reading plan:', row.id, err);
     }
@@ -95,10 +180,13 @@ export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
     const history: any[] = [];
     for (const r of archivedRows) {
       try {
-        const cfg = typeof r.config === 'string' ? JSON.parse(r.config) : r.config;
-        if (cfg.startDate && typeof cfg.startDate === 'string') cfg.startDate = new Date(cfg.startDate);
-        if (cfg.endDate && typeof cfg.endDate === 'string') cfg.endDate = new Date(cfg.endDate);
-        const plan = generateReadingPlan(cfg);
+        let plan = r.plan_data ? parsePlanData(r.plan_data) : null;
+        if (!plan) {
+          const cfg = typeof r.config === 'string' ? JSON.parse(r.config) : r.config;
+          if (cfg.startDate && typeof cfg.startDate === 'string') cfg.startDate = new Date(cfg.startDate);
+          if (cfg.endDate && typeof cfg.endDate === 'string') cfg.endDate = new Date(cfg.endDate);
+          plan = generateReadingPlan(cfg);
+        }
         if (r.name) plan.config.name = r.name;
         history.push({
           id: r.id,
