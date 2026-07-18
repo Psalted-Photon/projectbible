@@ -119,6 +119,10 @@ class SyncService {
     this.updateState({ status: 'syncing', error: null });
     
     try {
+      // Re-check the realtime channel — forceSync runs on tab-visibility
+      // resume and back-online, the moments a woken device needs to rejoin.
+      await realtimeService.ensureConnected();
+
       // Revive any permanently-failed queue items so they get a fresh retry.
       // Items can get permanently failed after 5 rapid retries (e.g. from a
       // previous app bug). Without this, "Sync Now" finds 0 pending items and

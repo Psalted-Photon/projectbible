@@ -30,20 +30,27 @@ export function subscribeToUserDataRemoteChanges(fn: () => void): () => void {
  * Apply remote notes to local IndexedDB
  * Called by SyncService on initial pull
  */
-export async function applyRemoteNotes(rows: any[]): Promise<void> {
+export async function applyRemoteNotes(
+  rows: any[],
+  opts: { fullPull?: boolean } = {},
+): Promise<void> {
   const db = await openDB();
 
-  // Delete any local notes that no longer exist in Supabase (e.g. deleted on another device)
-  const remoteIds = new Set((rows ?? []).map((r: any) => r.id));
-  const allLocal = await new Promise<DBUserNote[]>((resolve) => {
-    const tx = db.transaction('user_notes', 'readonly');
-    const req = tx.objectStore('user_notes').getAll();
-    req.onsuccess = () => resolve(req.result as DBUserNote[]);
-    req.onerror = () => resolve([]);
-  });
-  for (const local of allLocal) {
-    if (!remoteIds.has(local.id)) {
-      await writeTransaction('user_notes', (store) => store.delete(local.id));
+  // Delete any local notes that no longer exist in Supabase (e.g. deleted on
+  // another device). FULL PULLS ONLY — a realtime event carries a single row,
+  // and running this against it would wipe every other local note.
+  if (opts.fullPull) {
+    const remoteIds = new Set((rows ?? []).map((r: any) => r.id));
+    const allLocal = await new Promise<DBUserNote[]>((resolve) => {
+      const tx = db.transaction('user_notes', 'readonly');
+      const req = tx.objectStore('user_notes').getAll();
+      req.onsuccess = () => resolve(req.result as DBUserNote[]);
+      req.onerror = () => resolve([]);
+    });
+    for (const local of allLocal) {
+      if (!remoteIds.has(local.id)) {
+        await writeTransaction('user_notes', (store) => store.delete(local.id));
+      }
     }
   }
 
@@ -415,6 +422,6 @@ export const syncedUserDataStore = new SyncedUserDataStore();
 // Self-register with SyncService so no circular imports are needed in SyncService.
 import { syncService } from '../lib/sync/SyncService';
 syncService.registerSyncStore(syncedUserDataStore);
-syncService.registerApplyFn('user_notes', applyRemoteNotes);
+syncService.registerApplyFn('user_notes', (rows) => applyRemoteNotes(rows, { fullPull: true }));
 syncService.registerApplyFn('user_highlights', applyRemoteHighlights);
 syncService.registerApplyFn('user_bookmarks', applyRemoteBookmarks);
