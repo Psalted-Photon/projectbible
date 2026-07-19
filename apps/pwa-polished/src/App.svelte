@@ -3,6 +3,7 @@
   import LexicalModal from "./components/LexicalModal.svelte";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
+  import UpdateNotice from "./components/UpdateNotice.svelte";
   import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
   import PaneContainer from "./components/PaneContainer.svelte";
@@ -127,12 +128,38 @@
     
     document.addEventListener('keydown', handleGlobalKeydown);
 
-    // Silent auto-check for updates on app open
-    if (getSettings().autoCheckUpdates !== false && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then(reg => {
-        if (reg) reg.update().catch(() => { /* silent */ });
-      }).catch(() => { /* silent */ });
+    // Auto-update on open: check for a new service worker now and whenever the
+    // app returns to the foreground (an installed PWA usually resumes rather
+    // than relaunching, so onMount alone misses most "reopens"). When a new
+    // worker takes control, reload once so the update is visible immediately;
+    // UpdateNotice shows "Running Latest Version" after that reload. The
+    // hadController guard skips the very first install, and the one-shot flag
+    // prevents reload loops.
+    let swReloaded = false;
+    const hadController =
+      'serviceWorker' in navigator && !!navigator.serviceWorker.controller;
+    const handleControllerChange = () => {
+      if (swReloaded || !hadController) return;
+      if (getSettings().autoCheckUpdates === false) return;
+      swReloaded = true;
+      sessionStorage.setItem('pb-updated', '1');
+      window.location.reload();
+    };
+    const checkForSwUpdate = () => {
+      if (getSettings().autoCheckUpdates === false) return;
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.ready
+        .then((reg) => reg.update().catch(() => { /* silent */ }))
+        .catch(() => { /* silent */ });
+    };
+    const handleVisibilityUpdateCheck = () => {
+      if (!document.hidden) checkForSwUpdate();
+    };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
     }
+    document.addEventListener('visibilitychange', handleVisibilityUpdateCheck);
+    checkForSwUpdate();
 
     // Show daily greeting on first open of each new day
     setTimeout(() => checkAndShowDailyGreeting(), 800);
@@ -142,6 +169,10 @@
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener('visibilitychange', handleVisibilityUpdateCheck);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+      }
       document.removeEventListener('keydown', handleGlobalKeydown);
       window.removeEventListener('settingsUpdated', applyOrientationLock);
       screen.orientation?.removeEventListener('change', handleOrientationChange);
@@ -216,6 +247,9 @@
 
     <!-- Daily Greeting & Verse of the Day -->
     <DailyGreetingModal />
+
+    <!-- "Running Latest Version" toast after an auto-update reload -->
+    <UpdateNotice />
   {/if}
 </div>
 
