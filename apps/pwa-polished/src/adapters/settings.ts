@@ -84,12 +84,27 @@ export function getSettings(): UserSettings {
 }
 
 /**
+ * Hook invoked after every settings write so the sync layer can push the
+ * synced subset to Supabase. Registered by lib/sync/settingsSync at startup.
+ */
+type SettingsChangeHook = () => void;
+let settingsChangeHook: SettingsChangeHook | null = null;
+export function registerSettingsChangeHook(fn: SettingsChangeHook): void {
+  settingsChangeHook = fn;
+}
+
+/**
  * Update user settings (merges with existing)
  */
 export function updateSettings(updates: Partial<UserSettings>): void {
   const current = getSettings();
   const updated = { ...current, ...updates };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+  try {
+    settingsChangeHook?.();
+  } catch (err) {
+    console.error('[Settings] change hook error:', err);
+  }
 }
 
 export function resolveTheme(theme: UserSettings['theme']): 'light' | 'dark' | 'sepia' {

@@ -11,6 +11,7 @@
 import { supabase } from '../supabase/client';
 import { syncQueue } from './SyncQueueService';
 import { realtimeService } from './RealtimeService';
+import { pullSettings } from './settingsSync';
 import type { SyncState, SyncTable } from './types';
 
 interface SyncStore {
@@ -132,8 +133,10 @@ class SyncService {
       // Process pending writes first
       const pushResult = await syncQueue.processQueue();
 
-      // Then pull remote changes
+      // Then pull remote changes (settings ride along — LWW, not part of the
+      // per-table applyFn pipeline)
       await this.pullRemoteData();
+      await pullSettings();
 
       this.lastForceSyncAt = Date.now();
       if (pushResult.failed > 0) {
@@ -210,6 +213,7 @@ class SyncService {
       // Pull initial data — skip if we just did this within the last 60s
       if (!skipPull) {
         await this.pullRemoteData();
+        await pullSettings();
       } else {
         console.debug('[SyncService] Skipping pull — synced recently');
       }

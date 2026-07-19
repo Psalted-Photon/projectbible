@@ -11,7 +11,6 @@
   import { applyTheme, getSettings, updateSettings } from '../adapters/settings';
   import { paneStore } from '../stores/paneStore';
   import { syncService, type SyncState, type SyncStatus } from '../lib/sync';
-  import { fetchUserSettings, upsertUserSettings } from '../lib/supabase/userSettings';
   import { localDateStr } from '../stores/clockStore';
   import SavedVersesPanel from './SavedVersesPanel.svelte';
   import JournalCalendar from './JournalCalendar.svelte';
@@ -95,14 +94,14 @@
     const authSubscription = supabaseAuthService.onAuthStateChange((event, session) => {
       userProfileStore.setFromSession(session);
       if (event === 'SIGNED_IN' && session?.user?.id) {
-        // SyncService handles sync automatically on sign-in
-        void loadUserSettings()
-          .then(() => loadReadingPlan())
-          .catch((error) => {
-            console.error('[ProfileModal] Error during sign-in:', error);
-          });
+        // SyncService pulls settings + data on sign-in; refresh the widget.
+        void loadReadingPlan();
       }
     });
+
+    // Settings can change under us (remote pull, SettingsPane) — re-read.
+    const handleSettingsUpdated = () => loadLocalSettings();
+    window.addEventListener('settingsUpdated', handleSettingsUpdated);
 
     loadLocalSettings();
     void loadReadingPlan();
@@ -111,6 +110,7 @@
       unsubscribeProfile();
       unsubscribeSync();
       authSubscription?.data?.subscription?.unsubscribe();
+      window.removeEventListener('settingsUpdated', handleSettingsUpdated);
     };
   });
 
@@ -131,33 +131,10 @@
     defaultNT = settings.dailyDriverEnglishNT || '';
   }
 
-  async function loadUserSettings() {
-    if (!userId) return;
-    try {
-      const row = await fetchUserSettings(userId);
-      if (row?.settings) {
-        updateSettings(row.settings);
-        loadLocalSettings();
-        applyTheme(theme);
-      }
-    } catch (error) {
-      console.error('Failed to load user settings', error);
-    }
-  }
-
-  async function syncUserSettings() {
-    if (!userId) return;
-    try {
-      await upsertUserSettings(userId, getSettings());
-    } catch (error) {
-      console.error('Failed to sync settings', error);
-    }
-  }
-
   function applyThemeSelection() {
+    // updateSettings fires the settings-sync hook — cloud push is automatic.
     updateSettings({ theme });
     applyTheme(theme);
-    void syncUserSettings();
   }
 
   function updateTranslations() {
@@ -165,7 +142,6 @@
       dailyDriverEnglishOT: defaultOT || undefined,
       dailyDriverEnglishNT: defaultNT || undefined,
     });
-    void syncUserSettings();
   }
 
   async function handleSignIn() {
