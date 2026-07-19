@@ -808,6 +808,11 @@
     }
   }
   
+  function removePlanFromHistory(planId: string) {
+    planHistory = planHistory.filter(p => p.id !== planId);
+    localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
+  }
+
   async function deleteCurrentPlan() {
     if (!selectedPlanId) return;
     if (confirm('Are you sure you want to delete this reading plan?')) {
@@ -826,6 +831,7 @@
         activePlanViewTab = '';
         localStorage.removeItem(STORAGE_ACTIVE_PLANS);
       }
+      removePlanFromHistory(deletedId);
       dayProgressMap = new Map();
       lastLoadedPlanId = null;
       if (isSignedIn) {
@@ -836,8 +842,7 @@
   
   async function deletePlanFromHistory(planId: string) {
     if (confirm('Are you sure you want to delete this plan from history?')) {
-      planHistory = planHistory.filter(p => p.id !== planId);
-      localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(planHistory));
+      removePlanFromHistory(planId);
       if (isSignedIn) {
         await syncQueue.enqueue({ type: 'DELETE', table: 'reading_plans', id: planId });
       }
@@ -964,6 +969,7 @@
       activePlanViewTab = '';
     }
     saveActivePlan();
+    removePlanFromHistory(planId);
     if (isSignedIn) {
       await syncQueue.enqueue({ type: 'DELETE', table: 'reading_plans', id: planId });
     }

@@ -205,6 +205,27 @@ export async function applyRemoteReadingPlans(rows: any[]): Promise<void> {
       localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify([...kept, ...history]));
     }
   } catch { /* history update is best-effort */ }
+
+  // ── History: prune stale in-progress shadow entries ────────────────────────
+  // Plan creation also writes a completedAt:null entry into history. If the
+  // plan was since deleted on another device the server row is gone, but this
+  // device's shadow entry survives — and the archive tab's abandoned-plan
+  // recovery would resurrect the plan from it. Drop in-progress entries the
+  // server no longer knows, unless a queued local op still owns the id.
+  try {
+    const remoteIds = new Set(rows.filter(r => r.status !== 'deleted').map(r => r.id));
+    const historyRaw = localStorage.getItem(STORAGE_PLAN_HISTORY);
+    if (historyRaw) {
+      const entries: any[] = JSON.parse(historyRaw);
+      const pruned = entries.filter(
+        (h: any) => h.completedAt !== null || remoteIds.has(h.id) || pendingIds.has(h.id)
+      );
+      if (pruned.length !== entries.length) {
+        localStorage.setItem(STORAGE_PLAN_HISTORY, JSON.stringify(pruned));
+        console.log('[SyncedReading] Pruned', entries.length - pruned.length, 'stale in-progress plan history entries');
+      }
+    }
+  } catch { /* history pruning is best-effort */ }
 }
 
 // ─── Reading Progress ─────────────────────────────────────────────────
