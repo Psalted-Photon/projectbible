@@ -70,7 +70,7 @@
         console.log("🐛 Eruda initialized");
       }
       appReady = true;
-      console.log("✅ App ready (auto-update test build)");
+      console.log("✅ App ready (auto-update test build 2)");
     };
 
     const handleVisibility = () => {
