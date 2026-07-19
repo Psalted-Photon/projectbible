@@ -1,17 +1,18 @@
 /**
  * SyncedHighlightAdapter
  *
- * Registers remote-pull apply functions for user_highlights and
- * user_word_highlights with the SyncService so that on sign-in the data
- * is fetched from Supabase and written into IndexedDB.
- *
- * Also registers a SyncStore so that Realtime events for both tables are
- * handled in real-time, giving instant cross-device highlight sync.
+ * Sole owner of user_word_highlights sync (pull apply + realtime), and home
+ * of the highlight remote-change emitter that BibleReader subscribes to for
+ * re-rendering. Verse highlights (user_highlights) are owned exclusively by
+ * SyncedUserDataStore — it bridges into notifyHighlightChange below so the
+ * reader still repaints when a remote verse highlight arrives.
  */
 
 import { syncService } from '../lib/sync';
 import { realtimeService } from '../lib/sync/RealtimeService';
-import { writeTransaction } from './db';
+import { shouldApplyRemoteChange } from '../lib/sync/conflictResolver';
+import { reconcileDeletedRows } from '../lib/sync/reconcileDeletes';
+import { openDB, writeTransaction } from './db';
 
 // ---------------------------------------------------------------------------
 // Remote-change event emitter
@@ -26,26 +27,13 @@ export function subscribeToHighlightRemoteChanges(fn: HighlightChangeListener): 
   return () => highlightChangeListeners.delete(fn);
 }
 
-function notifyHighlightChange(): void {
+export function notifyHighlightChange(): void {
   highlightChangeListeners.forEach((fn) => fn());
 }
 
 // ---------------------------------------------------------------------------
-// Shared record builders
+// Word highlights
 // ---------------------------------------------------------------------------
-
-function buildHighlightRecord(row: any) {
-  return {
-    id: row.id,
-    book: row.book,
-    chapter: row.chapter,
-    verse: row.verse,
-    color: row.color ?? '#ffeb3b',
-    // style may come as a parsed object from Supabase JSONB or a string
-    style: row.style ? (typeof row.style === 'string' ? row.style : JSON.stringify(row.style)) : undefined,
-    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-  };
-}
 
 function buildWordHighlightRecord(row: any) {
   return {
@@ -61,24 +49,30 @@ function buildWordHighlightRecord(row: any) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Bulk-pull helpers (called by SyncService.pullTable on sign-in)
-// ---------------------------------------------------------------------------
-
-async function applyRemoteHighlights(rows: any[]): Promise<void> {
-  if (!rows || rows.length === 0) return;
-  for (const row of rows) {
-    await writeTransaction('user_highlights', (store) => store.put(buildHighlightRecord(row)));
+export async function applyRemoteWordHighlights(
+  rows: any[],
+  opts: { fullPull?: boolean } = {},
+): Promise<void> {
+  if (opts.fullPull) {
+    await reconcileDeletedRows('user_word_highlights', rows);
   }
-  console.log(`[SyncedHighlight] Applied ${rows.length} verse highlight(s)`);
-}
-
-async function applyRemoteWordHighlights(rows: any[]): Promise<void> {
   if (!rows || rows.length === 0) return;
+
+  const db = await openDB();
+  let applied = 0;
   for (const row of rows) {
-    await writeTransaction('user_word_highlights', (store) => store.put(buildWordHighlightRecord(row)));
+    const local = await new Promise<any>((resolve) => {
+      const tx = db.transaction('user_word_highlights', 'readonly');
+      const req = tx.objectStore('user_word_highlights').get(row.id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(undefined);
+    });
+    if (!local || shouldApplyRemoteChange(local.createdAt, row.created_at)) {
+      await writeTransaction('user_word_highlights', (store) => store.put(buildWordHighlightRecord(row)));
+      applied++;
+    }
   }
-  console.log(`[SyncedHighlight] Applied ${rows.length} word highlight(s)`);
+  if (applied > 0) console.log(`[SyncedHighlight] Applied ${applied} word highlight(s)`);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,22 +89,11 @@ const highlightSyncStore = {
     initialized = true;
 
     unsubscribes.push(
-      realtimeService.onTableChange('user_highlights', async (change) => {
-        if (change.eventType === 'DELETE' && change.old?.id) {
-          await writeTransaction('user_highlights', (store) => store.delete(change.old!.id));
-        } else if (change.new) {
-          await writeTransaction('user_highlights', (store) => store.put(buildHighlightRecord(change.new)));
-        }
-        notifyHighlightChange();
-      })
-    );
-
-    unsubscribes.push(
       realtimeService.onTableChange('user_word_highlights', async (change) => {
         if (change.eventType === 'DELETE' && change.old?.id) {
           await writeTransaction('user_word_highlights', (store) => store.delete(change.old!.id));
         } else if (change.new) {
-          await writeTransaction('user_word_highlights', (store) => store.put(buildWordHighlightRecord(change.new)));
+          await applyRemoteWordHighlights([change.new]);
         }
         notifyHighlightChange();
       })
@@ -125,9 +108,11 @@ const highlightSyncStore = {
 };
 
 // ---------------------------------------------------------------------------
-// Register with SyncService
+// Register with SyncService — user_word_highlights ONLY. user_highlights is
+// registered by SyncedUserDataStore; double-registering here made the pull
+// winner depend on import order and applied every realtime event twice.
 // ---------------------------------------------------------------------------
 
 syncService.registerSyncStore(highlightSyncStore);
-syncService.registerApplyFn('user_highlights', applyRemoteHighlights);
-syncService.registerApplyFn('user_word_highlights', applyRemoteWordHighlights);
+syncService.registerApplyFn('user_word_highlights', (rows) =>
+  applyRemoteWordHighlights(rows, { fullPull: true }));

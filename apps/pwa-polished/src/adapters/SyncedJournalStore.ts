@@ -12,6 +12,7 @@ import { IndexedDBJournalStore } from './JournalStore';
 import { syncQueue } from '../lib/sync/SyncQueueService';
 import { realtimeService } from '../lib/sync/RealtimeService';
 import { shouldApplyRemoteChange, nowISO } from '../lib/sync/conflictResolver';
+import { reconcileDeletedRows } from '../lib/sync/reconcileDeletes';
 import { openDB, writeTransaction } from './db';
 import type { DBJournalEntry } from './db';
 
@@ -30,7 +31,15 @@ export function subscribeToJournalRemoteChanges(fn: () => void): () => void {
  * Apply remote journal entries to local IndexedDB
  * Called by SyncService on initial pull
  */
-export async function applyRemoteJournalEntries(rows: any[]): Promise<void> {
+export async function applyRemoteJournalEntries(
+  rows: any[],
+  opts: { fullPull?: boolean } = {},
+): Promise<void> {
+  // Full pulls only: remove entries deleted on another device while this one
+  // was offline (pending un-uploaded entries are protected inside).
+  if (opts.fullPull) {
+    await reconcileDeletedRows('journal_entries', rows);
+  }
   if (!rows || rows.length === 0) return;
   const db = await openDB();
   for (const row of rows) {
@@ -217,4 +226,4 @@ export const syncedJournalStore = new SyncedJournalStore();
 // Self-register with SyncService so no circular imports are needed in SyncService.
 import { syncService } from '../lib/sync/SyncService';
 syncService.registerSyncStore(syncedJournalStore);
-syncService.registerApplyFn('journal_entries', applyRemoteJournalEntries);
+syncService.registerApplyFn('journal_entries', (rows) => applyRemoteJournalEntries(rows, { fullPull: true }));

@@ -12,6 +12,8 @@ import { IndexedDBUserDataStore } from './UserDataStore';
 import { syncQueue } from '../lib/sync/SyncQueueService';
 import { realtimeService } from '../lib/sync/RealtimeService';
 import { shouldApplyRemoteChange, nowISO } from '../lib/sync/conflictResolver';
+import { reconcileDeletedRows } from '../lib/sync/reconcileDeletes';
+import { notifyHighlightChange } from './SyncedHighlightAdapter';
 import { openDB, writeTransaction } from './db';
 import type { DBUserNote, DBUserHighlight, DBUserBookmark } from './db';
 
@@ -36,22 +38,11 @@ export async function applyRemoteNotes(
 ): Promise<void> {
   const db = await openDB();
 
-  // Delete any local notes that no longer exist in Supabase (e.g. deleted on
-  // another device). FULL PULLS ONLY — a realtime event carries a single row,
-  // and running this against it would wipe every other local note.
+  // Full pulls only: remove local notes deleted on another device. The
+  // pending-op guard inside also stops the sign-in flicker where a local
+  // note not yet uploaded was deleted and then re-appeared.
   if (opts.fullPull) {
-    const remoteIds = new Set((rows ?? []).map((r: any) => r.id));
-    const allLocal = await new Promise<DBUserNote[]>((resolve) => {
-      const tx = db.transaction('user_notes', 'readonly');
-      const req = tx.objectStore('user_notes').getAll();
-      req.onsuccess = () => resolve(req.result as DBUserNote[]);
-      req.onerror = () => resolve([]);
-    });
-    for (const local of allLocal) {
-      if (!remoteIds.has(local.id)) {
-        await writeTransaction('user_notes', (store) => store.delete(local.id));
-      }
-    }
+    await reconcileDeletedRows('user_notes', rows);
   }
 
   if (!rows || rows.length === 0) return;
@@ -81,7 +72,13 @@ export async function applyRemoteNotes(
 /**
  * Apply remote highlights to local IndexedDB
  */
-export async function applyRemoteHighlights(rows: any[]): Promise<void> {
+export async function applyRemoteHighlights(
+  rows: any[],
+  opts: { fullPull?: boolean } = {},
+): Promise<void> {
+  if (opts.fullPull) {
+    await reconcileDeletedRows('user_highlights', rows);
+  }
   if (!rows || rows.length === 0) return;
   const db = await openDB();
   for (const row of rows) {
@@ -108,7 +105,13 @@ export async function applyRemoteHighlights(rows: any[]): Promise<void> {
 /**
  * Apply remote bookmarks to local IndexedDB
  */
-export async function applyRemoteBookmarks(rows: any[]): Promise<void> {
+export async function applyRemoteBookmarks(
+  rows: any[],
+  opts: { fullPull?: boolean } = {},
+): Promise<void> {
+  if (opts.fullPull) {
+    await reconcileDeletedRows('user_bookmarks', rows);
+  }
   if (!rows || rows.length === 0) return;
   const db = await openDB();
   for (const row of rows) {
@@ -159,7 +162,9 @@ export class SyncedUserDataStore implements UserDataStore {
       })
     );
     
-    // Subscribe to remote changes for highlights
+    // Subscribe to remote changes for highlights. This is the ONLY realtime
+    // handler for user_highlights — notifyHighlightChange bridges into the
+    // emitter BibleReader watches for highlight re-renders.
     this.unsubscribes.push(
       realtimeService.onTableChange('user_highlights', async (change) => {
         if (change.eventType === 'DELETE' && change.old?.id) {
@@ -167,6 +172,7 @@ export class SyncedUserDataStore implements UserDataStore {
         } else if (change.new) {
           await applyRemoteHighlights([change.new]);
         }
+        notifyHighlightChange();
         userDataChangeListeners.forEach(fn => fn());
       })
     );
@@ -369,16 +375,6 @@ export class SyncedUserDataStore implements UserDataStore {
     });
   }
   
-  // ========== READING POSITION ==========
-  
-  async saveReadingPosition(reference: BCV): Promise<void> {
-    return this.local.saveReadingPosition(reference);
-  }
-  
-  async getReadingPosition(): Promise<BCV | null> {
-    return this.local.getReadingPosition();
-  }
-  
   // ========== ADDITIONAL METHODS ==========
   
   async isBookmarked(reference: BCV): Promise<boolean> {
@@ -423,5 +419,8 @@ export const syncedUserDataStore = new SyncedUserDataStore();
 import { syncService } from '../lib/sync/SyncService';
 syncService.registerSyncStore(syncedUserDataStore);
 syncService.registerApplyFn('user_notes', (rows) => applyRemoteNotes(rows, { fullPull: true }));
-syncService.registerApplyFn('user_highlights', applyRemoteHighlights);
-syncService.registerApplyFn('user_bookmarks', applyRemoteBookmarks);
+syncService.registerApplyFn('user_highlights', async (rows) => {
+  await applyRemoteHighlights(rows, { fullPull: true });
+  notifyHighlightChange();
+});
+syncService.registerApplyFn('user_bookmarks', (rows) => applyRemoteBookmarks(rows, { fullPull: true }));
