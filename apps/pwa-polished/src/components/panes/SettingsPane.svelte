@@ -12,6 +12,7 @@
   let wordWrap: boolean = true;
   let allowRotation: boolean = false;
   let showRedLetter: boolean = true;
+  let themedTitles: boolean = true;
   let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const TIMEZONE_OPTIONS: { label: string; value: string }[] = [
@@ -47,6 +48,7 @@
     wordWrap = settings.wordWrap !== undefined ? settings.wordWrap : true;
     allowRotation = settings.allowRotation !== undefined ? settings.allowRotation : false;
     showRedLetter = settings.showRedLetter !== false;
+    themedTitles = settings.themedTitles !== false;
     timezone = settings.timezone || '';
     autoCheckUpdates = settings.autoCheckUpdates !== false; // default true
   });
@@ -199,6 +201,7 @@
       wordWrap,
       allowRotation,
       showRedLetter,
+      themedTitles,
       timezone: timezone || undefined,
       autoCheckUpdates,
     });
@@ -294,6 +297,13 @@
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={showRedLetter} on:change={saveSettings} />
       <span class="label-text">Words of Jesus in red letters</span>
+    </label>
+  </div>
+
+  <div class="setting-group">
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={themedTitles} on:change={saveSettings} />
+      <span class="label-text">Theme colors in reader titles</span>
     </label>
   </div>
 

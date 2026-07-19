@@ -175,6 +175,7 @@
   let verseLayout: "one-per-line" | "paragraph" | "paragraph-no-verse-numbers" = "one-per-line";
   let showSectionHeadings = true;
   let showRedLetter = true;
+  let themedTitles = true;
   let scrollHandler: ((e: Event) => void) | null = null;
 
   // Red-letter span data loaded lazily from /red-letter-spans.json
@@ -488,6 +489,7 @@
     verseLayout = settings.verseLayout || "one-per-line";
     showSectionHeadings = settings.showSectionHeadings !== false; // default true
     showRedLetter = settings.showRedLetter !== false; // default true
+    themedTitles = settings.themedTitles !== false; // default true
     interlinearSettings = getInterlinearSettings();
   }
 
@@ -3871,7 +3873,7 @@
         {@const chPlanCtxs = computeAllPlanContexts(chapterData.book, chapterData.chapter, $readingSessionStore)}
         {@const chHarmCtxs = chPlanCtxs.filter((c) => c.type === 'harmony')}
         {@const chStdCtxs = chPlanCtxs.filter((c) => c.type === 'standard')}
-        <div class="chapter-section" data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
+        <div class="chapter-section" class:flat-titles={!themedTitles} data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
           <div class="chapter-header">
             <h1 style="--title-shadow:{getBookColor(chapterData.book)}">{chapterData.book} {chapterData.chapter}</h1>
             {#if chapterData.chapter === 1}
@@ -4156,6 +4158,10 @@
     font-weight: 600;
     color: #f0f0f0;
     text-shadow: -1.5px 1.5px 0 var(--title-shadow, transparent);
+  }
+
+  .chapter-section.flat-titles .chapter-header h1 {
+    text-shadow: none;
   }
 
   .book-intro-btn {
@@ -4679,6 +4685,10 @@
     padding-top: 12px;
     border-top: 1px solid #444;
     text-shadow: -1px 1px 0 var(--verse-num-color, transparent);
+  }
+
+  .chapter-section.flat-titles .section-heading {
+    text-shadow: none;
   }
 
   .section-heading--s2 {

@@ -33,6 +33,7 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   'interlinear',
   'showRedLetter',
   'showSectionHeadings',
+  'themedTitles',
 ];
 
 const LAST_SYNCED_KEY = 'projectbible_settings_synced_at';

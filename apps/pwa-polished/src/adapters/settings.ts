@@ -44,6 +44,7 @@ export interface UserSettings {
   wordWrap?: boolean; // Enable/disable word wrapping (default true)
   showSectionHeadings?: boolean; // Show pericope/section headings between verses (default true)
   showRedLetter?: boolean; // Show Jesus' words in red (default true)
+  themedTitles?: boolean; // Theme-colored 3D shadow on reader titles/headings (default true)
   interlinear?: InterlinearSettings; // Interlinear view prefs for Greek/Hebrew (default: disabled, gloss-only)
   allowRotation?: boolean; // Allow screen to rotate to landscape (default false = portrait locked)
   autoCheckUpdates?: boolean; // Automatically check for updates on app open (default true)
