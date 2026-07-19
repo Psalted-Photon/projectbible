@@ -1,8 +1,10 @@
 /**
  * SyncQueueService - Manages offline write queue
- * 
- * Writes are queued to IndexedDB when made, then processed
- * when online. Failed operations are retried with exponential backoff.
+ *
+ * Writes are queued to IndexedDB when made, then processed when online.
+ * The drain runs oldest-first, coalesces every queued op for the same row
+ * into one equivalent upload, and retries failures with exponential backoff
+ * (5s doubling per attempt, capped at 15 minutes).
  */
 
 import { openDB, writeTransaction } from '../../adapters/db';
@@ -11,6 +13,8 @@ import { supabase } from '../supabase/client';
 import type { SyncOperation } from './types';
 
 const MAX_RETRIES = 5;
+const RETRY_BASE_MS = 5_000;
+const RETRY_MAX_MS = 15 * 60_000;
 
 type QueueListener = (pendingCount: number) => void;
 
@@ -44,39 +48,114 @@ class SyncQueueService {
   }
   
   /**
-   * Process all pending operations
+   * Process all pending operations: oldest-first, one coalesced upload per
+   * row, backoff-respecting. Each row is attempted at most once per call so
+   * an item that can't be delivered (no auth, transient abort) can never
+   * spin the drain loop; items enqueued mid-drain are still picked up.
    */
   async processQueue(): Promise<{ success: number; failed: number }> {
     if (this.processing || !navigator.onLine) {
       return { success: 0, failed: 0 };
     }
-    
+
     this.processing = true;
     let success = 0;
     let failed = 0;
-    
+
     try {
-      // Drain loop: keep processing until no pending items remain.
-      // Items enqueued while a previous batch is in-flight are handled here
-      // instead of being silently dropped until the next external trigger.
-      let batch = await this.getPendingItems();
-      console.log(`[SyncQueue] processQueue start: ${batch.length} pending items`);
-      while (batch.length > 0) {
-        for (const item of batch) {
-          const ok = await this.processItem(item);
+      const attemptedKeys = new Set<string>();
+      for (;;) {
+        const pending = await this.getPendingItems();
+
+        // Group every pending op by row, oldest first within each group
+        const groups = new Map<string, DBSyncQueueItem[]>();
+        for (const item of pending) {
+          const op = item.payload as SyncOperation;
+          const key = `${op.table}::${op.id}`;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key)!.push(item);
+        }
+
+        const todo = Array.from(groups.entries()).filter(([key, ops]) =>
+          !attemptedKeys.has(key) && ops.some((o) => this.isReadyForRetry(o)));
+        if (todo.length === 0) break;
+
+        for (const [key, ops] of todo) {
+          attemptedKeys.add(key);
+          ops.sort((a, b) => a.createdAt - b.createdAt);
+
+          const carrier = await this.coalesce(key, ops);
+          const ok = await this.processItem(carrier);
           if (ok) success++;
           else failed++;
         }
-        batch = await this.getPendingItems();
       }
-      console.log(`[SyncQueue] processQueue done: ${success} succeeded, ${failed} failed`);
-      
+      if (success + failed > 0) {
+        console.log(`[SyncQueue] processQueue done: ${success} succeeded, ${failed} failed`);
+      }
+
       this.notifyListeners();
     } finally {
       this.processing = false;
     }
-    
+
     return { success, failed };
+  }
+
+  /** Has this item's backoff window elapsed? Fresh items are always ready. */
+  private isReadyForRetry(item: DBSyncQueueItem): boolean {
+    if (!item.lastAttemptAt || item.attempts === 0) return true;
+    const delay = Math.min(2 ** item.attempts * RETRY_BASE_MS, RETRY_MAX_MS);
+    return Date.now() - item.lastAttemptAt >= delay;
+  }
+
+  /**
+   * Collapse all queued ops for one row into a single equivalent op carried
+   * by the newest queue item; superseded items are removed from the store.
+   *
+   * INSERTs are full-row upserts, so a later INSERT replaces an earlier one.
+   * UPDATEs carry partial columns, so they merge over what came before —
+   * folding an UPDATE into a pending INSERT keeps the full row intact (an
+   * UPDATE alone would silently no-op if the row never reached the server).
+   * A DELETE supersedes everything before it; an INSERT after a DELETE
+   * recreates the row, so the upsert alone expresses the final state.
+   */
+  private async coalesce(key: string, ops: DBSyncQueueItem[]): Promise<DBSyncQueueItem> {
+    const carrier = ops[ops.length - 1];
+    if (ops.length === 1) return carrier;
+
+    let type: SyncOperation['type'] | null = null;
+    let data: Record<string, any> | null = null;
+    for (const item of ops) {
+      const op = item.payload as SyncOperation;
+      if (op.type === 'DELETE') {
+        type = 'DELETE';
+        data = null;
+      } else if (op.type === 'INSERT') {
+        type = 'INSERT';
+        data = { ...op.data };
+      } else { // UPDATE
+        if (type === 'DELETE') continue; // row is gone — nothing to update
+        if (data) {
+          data = { ...data, ...op.data };
+        } else {
+          type = 'UPDATE';
+          data = { ...op.data };
+        }
+      }
+    }
+
+    const lastOp = carrier.payload as SyncOperation;
+    const merged: SyncOperation = { type: type!, table: lastOp.table, id: lastOp.id, data: data ?? undefined } as SyncOperation;
+
+    for (const superseded of ops.slice(0, -1)) {
+      await writeTransaction('sync_queue', (store) => store.delete(superseded.id));
+    }
+    carrier.payload = merged;
+    carrier.type = merged.type;
+    await writeTransaction('sync_queue', (store) => store.put(carrier));
+    console.log(`[SyncQueue] Coalesced ${ops.length} ops → 1 ${merged.type} for ${key}`);
+    return carrier;
   }
   
   /**
@@ -180,7 +259,10 @@ class SyncQueueService {
       const store = tx.objectStore('sync_queue');
       const index = store.index('status');
       const request = index.getAll('pending');
-      request.onsuccess = () => resolve(request.result || []);
+      // Oldest-first: the store key is a random UUID, so getAll order is
+      // effectively arbitrary — creation order is what uploads must follow.
+      request.onsuccess = () =>
+        resolve((request.result || []).sort((a: DBSyncQueueItem, b: DBSyncQueueItem) => a.createdAt - b.createdAt));
       request.onerror = () => reject(request.error);
     });
   }
