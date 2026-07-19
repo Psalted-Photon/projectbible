@@ -78,7 +78,7 @@
       id: "ancient-languages",
       name: "Ancient Languages",
       description: "Hebrew, Greek with morphology",
-      size: "67.11 MB",
+      size: "104.50 MB",
       icon: "📜",
       url: `${BASE_URL}/ancient-languages.sqlite`,
     },
@@ -164,7 +164,11 @@
       ) {
         return;
       }
-      if (pack.id === "study-tools") {
+      // Remove the old copy first so the re-download actually happens —
+      // loadPackOnDemand skips the download when the installed version matches
+      // the manifest, and pack versions stay unchanged when their data updates.
+      // Audio packs skip this: they always re-stream and overwrite in OPFS.
+      if (!pack.id.startsWith("bsb-audio")) {
         installProgress = `Removing old ${pack.name}...`;
         await removePack(pack.id);
         await loadPacks();

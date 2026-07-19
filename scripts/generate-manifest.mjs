@@ -52,7 +52,38 @@ const PACK_CONFIGS = {
     id: 'study-tools',
     type: 'study',
     name: 'Study Tools Pack',
-    description: 'Maps, places, chronological ordering, cross-references',
+    description: 'Maps, places, chronological ordering, cross-references (full TSK — all 66 books)',
+    dependencies: []
+  },
+  'tsk-references.sqlite': {
+    id: 'tsk-references',
+    type: 'study',
+    name: 'TSK References',
+    description: 'Treasury of Scripture Knowledge — 47,800+ cross-reference entries by keyword, all 66 books',
+    dependencies: []
+  },
+  // These two live in packs/ rather than packs/consolidated/
+  'geonames.sqlite': {
+    id: 'geonames-modern-places-v1',
+    type: 'geonames',
+    name: 'World Places (GeoNames)',
+    description: 'Modern world geography: cities, states, countries. 172,000+ places worldwide. License: CC BY 4.0 — geonames.org',
+    dependencies: [],
+    sourceDir: 'packs'
+  },
+  'section-headings.sqlite': {
+    id: 'section-headings',
+    type: 'headings',
+    name: 'Section Headings',
+    description: 'Pericope titles for all 66 books — works with any installed translation',
+    dependencies: [],
+    sourceDir: 'packs'
+  },
+  'people.sqlite': {
+    id: 'people-biblical-v1',
+    type: 'people',
+    name: 'Biblical Characters',
+    description: "Every named person in the Bible: dates, places, family, name meaning, and verse appearances. License: CC BY-SA 4.0 — Theographic Bible Metadata; name meanings from Hitchcock's (public domain)",
     dependencies: []
   },
   'bsb-audio-pt1.sqlite': {
@@ -128,10 +159,12 @@ const manifest = {
 };
 
 for (const [filename, config] of Object.entries(PACK_CONFIGS)) {
-  const packPath = join(PACKS_DIR, filename);
-  
+  const packPath = config.sourceDir
+    ? join(repoRoot, config.sourceDir, filename)
+    : join(PACKS_DIR, filename);
+
   if (!existsSync(packPath)) {
-    console.warn(`⚠️  Pack not found: ${filename}`);
+    console.warn(`⚠️  Pack not found: ${filename} — its manifest entry will be DROPPED, breaking its downloads!`);
     continue;
   }
   

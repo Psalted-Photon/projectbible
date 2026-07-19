@@ -974,6 +974,30 @@
     return html;
   }
 
+  // Morphology packs don't carry a per-word transliteration for every word
+  // (Hebrew has none at all), so fall back to the Strong's lexicon's
+  // dictionary-form transliteration for any word that has a Strong's id.
+  // Mutates the entries in place before interlinear HTML is baked; a missing
+  // Lexical pack just leaves the fields empty.
+  async function fillMissingTransliterations(entries: DBMorphology[]) {
+    try {
+      const missing = entries.filter((m) => !m.transliteration && m.strongsId);
+      if (missing.length === 0) return;
+      const { getStrongsTransliterations } = await import(
+        "../adapters/lexicon-lookup.js"
+      );
+      const translits = await getStrongsTransliterations(
+        missing.map((m) => m.strongsId!),
+      );
+      for (const m of missing) {
+        const translit = translits.get(m.strongsId!);
+        if (translit) m.transliteration = translit;
+      }
+    } catch (error) {
+      console.warn("Transliteration fallback unavailable:", error);
+    }
+  }
+
   // Query the morphology store for one chapter without disturbing the global
   // morphologyCache. Used to bake interlinear HTML for appended chapters.
   async function fetchChapterMorphology(
@@ -1007,6 +1031,7 @@
         };
         request.onerror = () => reject(request.error);
       });
+      await fillMissingTransliterations(results);
       results.forEach((m) => {
         if (!map.has(m.verse)) map.set(m.verse, []);
         map.get(m.verse)!.push(m);
@@ -1776,6 +1801,8 @@
         };
         request.onerror = () => reject(request.error);
       });
+
+      await fillMissingTransliterations(results);
 
       // Organize by verse number
       results.forEach((morphEntry) => {

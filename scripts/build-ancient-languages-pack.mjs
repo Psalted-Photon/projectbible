@@ -6,7 +6,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, statSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -22,6 +22,11 @@ console.log('📦 Building Ancient Languages Pack...\n');
 
 if (!existsSync(OUTPUT_DIR)) {
   mkdirSync(OUTPUT_DIR, { recursive: true });
+}
+
+// Always build from scratch — the schema CREATEs fail against a previous build.
+if (existsSync(OUTPUT_FILE)) {
+  rmSync(OUTPUT_FILE);
 }
 
 const output = new Database(OUTPUT_FILE);
@@ -65,6 +70,7 @@ output.exec(`
     strongs TEXT,
     morph_code TEXT,
     gloss_en TEXT,
+    transliteration TEXT,
     PRIMARY KEY (translation_id, book, chapter, verse, word_order)
   );
   
@@ -241,8 +247,8 @@ if (existsSync(ogntPath)) {
 
   const insertWord = output.prepare(`
     INSERT OR IGNORE INTO words
-      (translation_id, book, chapter, verse, word_order, text, lemma, strongs, morph_code, gloss_en)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (translation_id, book, chapter, verse, word_order, text, lemma, strongs, morph_code, gloss_en, transliteration)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   // OpenGNT strongs values have stray 〔〕 bracket characters — strip them.
@@ -254,8 +260,8 @@ if (existsSync(ogntPath)) {
       const strongs = cleanStrongs(r.strongs);
       const gloss   = cleanGloss(r.gloss_en);
       // Store under 'byz' — also store under 'tr' so both translations benefit
-      insertWord.run('byz', r.book, r.chapter, r.verse, r.word_order, r.text, r.lemma, strongs, r.morph_code, gloss);
-      insertWord.run('tr',  r.book, r.chapter, r.verse, r.word_order, r.text, r.lemma, strongs, r.morph_code, gloss);
+      insertWord.run('byz', r.book, r.chapter, r.verse, r.word_order, r.text, r.lemma, strongs, r.morph_code, gloss, r.transliteration);
+      insertWord.run('tr',  r.book, r.chapter, r.verse, r.word_order, r.text, r.lemma, strongs, r.morph_code, gloss, r.transliteration);
     }
   });
   copyMorph(morphRows);

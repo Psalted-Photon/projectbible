@@ -208,6 +208,32 @@ export async function lookupStrongs(strongsId: string): Promise<LexiconEntry | n
   }
 }
 
+// Memo cache for Strong's-id → transliteration lookups. null = looked up, not found.
+const translitCache = new Map<string, string | null>();
+
+/**
+ * Batch-resolve transliterations for a set of Strong's ids (e.g. "G976", "H0430").
+ * Returns a map containing only the ids that resolved to a non-empty transliteration.
+ * Results are memoized for the session, so repeat chapters cost nothing.
+ */
+export async function getStrongsTransliterations(ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)].filter((id) => id && !translitCache.has(id));
+
+  await Promise.all(
+    unique.map(async (id) => {
+      const entry = await lookupStrongs(id);
+      translitCache.set(id, entry?.transliteration || null);
+    }),
+  );
+
+  const result = new Map<string, string>();
+  for (const id of new Set(ids)) {
+    const translit = translitCache.get(id);
+    if (translit) result.set(id, translit);
+  }
+  return result;
+}
+
 /**
  * Look up a lemma in lexicon_entries
  */

@@ -1179,13 +1179,19 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // Import morphology data
       if (tableNames.includes('morphology')) {
         console.log('Importing morphology data...');
-        const rows = db.exec(`
-          SELECT translation_id, book, chapter, verse, word_order, word, lemma, strongs_id, morph_code
-          FROM morphology
-        `);
-        
+        const morphTableInfo = db.exec('PRAGMA table_info(morphology)');
+        const morphColumns = morphTableInfo.length > 0 && morphTableInfo[0].values
+          ? morphTableInfo[0].values.map(row => row[1] as string)
+          : [];
+        const morphHasTranslit = morphColumns.includes('transliteration');
+
+        let morphSelect = 'SELECT translation_id, book, chapter, verse, word_order, word, lemma, strongs_id, morph_code';
+        if (morphHasTranslit) morphSelect += ', transliteration';
+        morphSelect += ' FROM morphology';
+        const rows = db.exec(morphSelect);
+
         if (rows.length && rows[0].values.length) {
-          const data = rows[0].values.map(([trans, book, ch, v, order, word, lemma, strongs, morph]) => ({
+          const data = rows[0].values.map(([trans, book, ch, v, order, word, lemma, strongs, morph, translit]) => ({
             id: `${trans}:${book}:${ch}:${v}:${order}`,
             translationId: trans as string,
             book: book as string,
@@ -1195,7 +1201,8 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             text: word as string,
             lemma: lemma as string | null,
             strongsId: strongs as string | null,
-            morph_code: morph as string | null
+            morph_code: morph as string | null,
+            transliteration: morphHasTranslit ? translit as string | undefined : undefined
           }));
           
           for (let i = 0; i < data.length; i += CHUNK_SIZE) {
