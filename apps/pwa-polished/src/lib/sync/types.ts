@@ -11,15 +11,14 @@ export interface SyncOperation {
   data?: Record<string, any>;
 }
 
-export type SyncTable = 
+export type SyncTable =
   | 'user_notes'
   | 'user_highlights'
   | 'user_word_highlights'
   | 'user_bookmarks'
   | 'journal_entries'
   | 'reading_plans'
-  | 'reading_progress'
-  | 'reading_history';
+  | 'reading_progress';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
 

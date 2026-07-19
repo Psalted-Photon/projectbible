@@ -67,6 +67,7 @@
   let streak = 0;
 
   let showDeleteConfirm = false;
+  let showFinalDeleteConfirm = false;
   let deleteConfirmText = '';
   let deleteError = '';
   let deleteMessage = '';
@@ -252,21 +253,38 @@
     }
   }
 
-  async function handleDeleteAccount() {
+  function handleDeleteAccount() {
+    // First confirmation passed (typed DELETE) — show the final warning.
     deleteError = '';
     deleteMessage = '';
     if (deleteConfirmText !== 'DELETE') {
       deleteError = 'Type DELETE to confirm.';
       return;
     }
+    showFinalDeleteConfirm = true;
+  }
+
+  function cancelDeleteAccount() {
+    showDeleteConfirm = false;
+    showFinalDeleteConfirm = false;
+    deleteConfirmText = '';
+    deleteError = '';
+  }
+
+  async function handleFinalDeleteAccount() {
+    deleteError = '';
+    deleteMessage = '';
     try {
       await supabaseAuthService.deleteAccount();
+      await supabaseAuthService.signOut();
       deleteMessage = 'Account deleted.';
       deleteConfirmText = '';
       showDeleteConfirm = false;
+      showFinalDeleteConfirm = false;
     } catch (error) {
       console.error(error);
       deleteError = 'Account deletion failed.';
+      showFinalDeleteConfirm = false;
     }
   }
 
@@ -616,11 +634,20 @@
                 <button class="danger-btn" on:click={() => (showDeleteConfirm = !showDeleteConfirm)}>
                   Delete Account
                 </button>
-                {#if showDeleteConfirm}
+                {#if showDeleteConfirm && !showFinalDeleteConfirm}
                   <div class="delete-confirm">
                     <p>Type DELETE to confirm account deletion.</p>
                     <input class="auth-input" type="text" bind:value={deleteConfirmText} />
                     <button class="danger-btn" on:click={handleDeleteAccount}>Confirm Delete</button>
+                    <button class="secondary-btn" on:click={cancelDeleteAccount}>Cancel</button>
+                  </div>
+                {/if}
+                {#if showFinalDeleteConfirm}
+                  <div class="delete-confirm delete-final">
+                    <p class="delete-final-warning">ARE YOU SURE YOU WANT TO DELETE YOUR ACCOUNT?</p>
+                    <p>This permanently erases your account and every synced note, highlight, journal entry, and reading plan. This cannot be undone.</p>
+                    <button class="danger-btn" on:click={handleFinalDeleteAccount}>Yes — permanently delete my account</button>
+                    <button class="secondary-btn" on:click={cancelDeleteAccount}>Cancel</button>
                   </div>
                 {/if}
                 {#if deleteError}
@@ -967,6 +994,19 @@
     flex-direction: column;
     gap: 8px;
     margin-top: 8px;
+  }
+
+  .delete-final {
+    border: 1px solid #b91c1c;
+    border-radius: 8px;
+    padding: 12px;
+    background: rgba(185, 28, 28, 0.08);
+  }
+
+  .delete-final-warning {
+    color: #f87171;
+    font-weight: 700;
+    letter-spacing: 0.02em;
   }
 
   .placeholder {

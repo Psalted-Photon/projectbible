@@ -9,6 +9,8 @@ import { supabase } from '../supabase/client';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import type { SyncTable, RemoteChange } from './types';
 
+// reading_history is deliberately absent: the feature has no callers in the
+// app (nothing records or displays it), so subscribing was dead wiring.
 const SYNC_TABLES: SyncTable[] = [
   'user_notes',
   'user_highlights',
@@ -16,8 +18,7 @@ const SYNC_TABLES: SyncTable[] = [
   'user_bookmarks',
   'journal_entries',
   'reading_plans',
-  'reading_progress',
-  'reading_history'
+  'reading_progress'
 ];
 
 type ChangeHandler = (change: RemoteChange) => void;

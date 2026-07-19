@@ -1,166 +1,77 @@
-# Supabase Realtime Sync Setup
+# Sync Architecture
 
-## What's Implemented
+How ProjectBible keeps user data in sync across devices via Supabase.
+(Rewritten July 2026 after the sync overhaul; the previous version of this
+doc described a half-built system left over from the PowerSync removal.)
 
-Replaced PowerSync with a simpler sync solution using:
-- **Supabase REST API** for writes (online)
-- **Supabase Realtime** for receiving changes from other devices
-- **IndexedDB sync_queue** for offline write buffering
-- **Last-write-wins** conflict resolution using `updated_at` timestamps
+## The shape of it
 
-This works on **Supabase free tier** — no PowerSync or paid add-ons required.
+Local-first, three legs:
 
----
+1. **Local write** — every user action writes IndexedDB (or localStorage for
+   plan definitions/settings) immediately. The UI never waits on the network.
+2. **Push** — the same action enqueues an upload into the IndexedDB
+   `sync_queue`, drained by `SyncQueueService`: oldest-first, one coalesced
+   op per row, exponential backoff on failures (5s doubling, 15min cap).
+   Most tables use plain PostgREST upsert/update/delete; `reading_progress`
+   goes through the `upsert_reading_progress` RPC which union-merges
+   chapter checkmarks server-side so two devices can never erase each
+   other's progress.
+3. **Pull** — full per-table pull on sign-in and on `forceSync` (which also
+   runs on tab-visibility resume, throttled 30s). Supabase Realtime
+   subscriptions (`RealtimeService`, per-user channel, self-healing with
+   reconnect backoff) deliver live deltas as a bonus path.
 
-## Architecture
+## Who owns what
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Svelte Components                             │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   Synced Store (SyncedUserDataStore/SyncedJournalStore)│
-│  - Writes to IndexedDB immediately (optimistic UI)                   │
-│  - Queues writes for Supabase upload                                 │
-│  - Subscribes to Realtime for remote changes                         │
-└──────────┬───────────────────┬───────────────────┬──────────────────┘
-           │                   │                   │
-           ▼                   ▼                   ▼
-┌──────────────────┐  ┌─────────────────┐  ┌────────────────────────┐
-│   IndexedDB      │  │   SyncQueue     │  │  Supabase Realtime     │
-│  (Local Data)    │  │  (Pending Ops)  │  │  (Cross-Device Sync)   │
-└──────────────────┘  └────────┬────────┘  └───────────┬────────────┘
-                               │                       │
-                               ▼                       │
-                      ┌─────────────────┐              │
-                      │   SyncService   │◄─────────────┘
-                      │  - Process queue│
-                      │  - Handle online│
-                      │  - Conflict res │
-                      └────────┬────────┘
-                               │
-                               ▼
-                      ┌─────────────────┐
-                      │  Supabase REST  │
-                      │  (Cloud DB)     │
-                      └─────────────────┘
-```
+| Data | Local store | Table | Sync owner |
+|---|---|---|---|
+| Notes | IndexedDB `user_notes` | `user_notes` | `SyncedUserDataStore` |
+| Verse highlights | IndexedDB `user_highlights` | `user_highlights` | `SyncedUserDataStore` (sole owner) |
+| Word highlights | IndexedDB `user_word_highlights` | `user_word_highlights` | `SyncedHighlightAdapter` (sole owner) |
+| Bookmarks | IndexedDB `user_bookmarks` | `user_bookmarks` | `SyncedUserDataStore` |
+| Journal | IndexedDB `journal_entries` | `journal_entries` | `SyncedJournalStore` |
+| Plan definitions | localStorage (full generated schedule) | `reading_plans` (`plan_data` = exact day-by-day schedule) | `SyncedReadingAdapter` |
+| Plan progress | IndexedDB `reading_progress` | `reading_progress` (RPC union merge) | `SyncedReadingAdapter` via `registerProgressSyncHook` — **every** `ReadingProgressStore` mutation pushes automatically |
+| Settings (synced subset) | localStorage `projectbible_settings` | `user_settings` JSONB | `lib/sync/settingsSync` — theme, timezone, translations, interlinear, red-letter, headings; font size/spacing/layout stay per-device |
 
----
+Exactly one apply-fn and one realtime handler per table. Full pulls run
+deletion reconciliation (`lib/sync/reconcileDeletes`): local rows absent
+from the remote snapshot are removed, except rows whose upload is still
+queued. Realtime single-row events never reconcile (a lesson learned —
+doing so once wiped local notes).
 
-## Files Created
+Not synced by design: last-read position, window layout, repeats overlay,
+per-device display settings. `reading_history` exists as a table but the
+feature has no callers in the app — nothing records or syncs it.
 
-| File | Purpose |
-|------|---------|
-| `src/lib/sync/types.ts` | TypeScript types for sync operations |
-| `src/lib/sync/conflictResolver.ts` | Last-write-wins conflict handling |
-| `src/lib/sync/SyncQueueService.ts` | Manages offline queue (enqueue, process, retry) |
-| `src/lib/sync/RealtimeService.ts` | Supabase Realtime subscriptions |
-| `src/lib/sync/SyncService.ts` | Orchestrates queue + realtime + online state |
-| `src/lib/sync/index.ts` | Module exports |
-| `src/adapters/SyncedUserDataStore.ts` | Synced version of notes/highlights/bookmarks |
-| `src/adapters/SyncedJournalStore.ts` | Synced version of journal entries |
+## Conflict rules
 
----
+- Chapter checkmarks: union-merged (client `upsertEntries` + server RPC).
+  Progress marked anywhere survives everywhere; unchecks propagate via
+  latest-action-per-chapter.
+- Notes/journal: last-write-wins on `updated_at`. Journal also resolves
+  same-date collisions between different ids.
+- Highlights/bookmarks: last-write-wins on `created_at`.
+- Settings: whole-blob LWW on `updated_at`, synced keys only; a fresh
+  install never overwrites account settings with an empty blob.
+- All day math (today, overdue, streak) uses the user's timezone setting
+  via `clockStore.localDateStr` / `todayStore`; plan-day labels are
+  timezone-free `YYYY-MM-DD` strings in `plan_data`.
 
-## Setup Steps
+## Database
 
-### 1. Run Supabase Migrations (Already Done)
+Schema = `supabase/migrations/001` … `006`, applied through the dashboard
+SQL editor (the repo has only the anon key; there is no CLI pipeline).
+Realtime broadcasting requires tables to be in the `supabase_realtime`
+publication — currently all synced tables are members. `supabase/legacy/`
+holds superseded files kept for reference; never run them.
 
-The tables already exist in Supabase:
-- `user_notes`
-- `user_highlights`
-- `user_bookmarks`
-- `journal_entries`
-- `reading_plans`
-- `reading_progress`
-- `reading_history`
+Server functions: `upsert_reading_progress` (004) and `delete_account`
+(006, called by the twice-confirmed Delete Account button).
 
-### 2. Enable Supabase Realtime
+## Deploying
 
-In the Supabase dashboard:
-1. Go to **Database → Tables**
-2. For each user data table, click the table name
-3. Look for **Realtime** toggle and enable it
-4. Repeat for all 7 user data tables
-
-Alternatively, run this SQL in the SQL Editor:
-```sql
-ALTER PUBLICATION supabase_realtime ADD TABLE user_notes;
-ALTER PUBLICATION supabase_realtime ADD TABLE user_highlights;
-ALTER PUBLICATION supabase_realtime ADD TABLE user_bookmarks;
-ALTER PUBLICATION supabase_realtime ADD TABLE journal_entries;
-ALTER PUBLICATION supabase_realtime ADD TABLE reading_plans;
-ALTER PUBLICATION supabase_realtime ADD TABLE reading_progress;
-ALTER PUBLICATION supabase_realtime ADD TABLE reading_history;
-```
-
-### 3. Test
-
-1. Run the app: `npm run dev` in `apps/pwa-polished`
-2. Sign in with your account
-3. Create a note or journal entry
-4. Open another browser/device and sign in with the same account
-5. Verify the data appears within a few seconds
-
----
-
-## How It Works
-
-### Writing Data
-
-1. User creates a note/highlight/bookmark/journal entry
-2. `SyncedUserDataStore` or `SyncedJournalStore` saves to IndexedDB immediately (fast, optimistic)
-3. The write is queued via `SyncQueueService.enqueue()`
-4. If online, the queue is processed immediately — data is sent to Supabase via REST API
-5. If offline, writes stay in the queue until the app goes online
-
-### Receiving Data
-
-1. On sign-in, `SyncService` connects to Supabase Realtime
-2. It subscribes to `postgres_changes` for all user data tables, filtered by `user_id`
-3. When another device creates/updates/deletes data, the change is broadcast
-4. `RealtimeService` receives the change and calls the appropriate handler
-5. The handler uses `shouldApplyRemoteChange()` for conflict resolution
-6. If remote is newer, the local IndexedDB is updated
-
-### Conflict Resolution
-
-Simple **last-write-wins** based on `updated_at` timestamps:
-- When a remote change arrives, compare `local.updatedAt` vs `remote.updated_at`
-- If remote is newer, overwrite local
-- If local is newer (rare race condition), keep local
-
----
-
-## What Syncs Now
-
-| Data Type | Syncs? | Notes |
-|-----------|--------|-------|
-| Notes | ✅ Yes | Via SyncedUserDataStore |
-| Highlights | ✅ Yes | Via SyncedUserDataStore |
-| Bookmarks | ✅ Yes | Via SyncedUserDataStore |
-| Journal | ✅ Yes | Via SyncedJournalStore |
-| Reading Plans | ❌ Not yet | Tables ready, stores need migration |
-| Reading Progress | ❌ Not yet | Tables ready, stores need migration |
-| Reading History | ❌ Not yet | Tables ready, stores need migration |
-
----
-
-## Limitations
-
-1. **Requires online** for initial sync — data only syncs when you're connected
-2. **No merge conflicts** — last write wins, which may lose data in rare race conditions
-3. **Reading plans still local** — need to migrate ReadingProgressStore and PlanMetadataStore in Phase 2
-
----
-
-## Deleted (PowerSync)
-
-The following PowerSync code was removed because it requires Supabase Pro + IPv4 add-on ($29+/month):
-- `src/lib/powersync/` directory
-- `src/services/PowerSyncService.ts`
-- `src/adapters/PowerSyncUserDataStore.ts`
-- `src/adapters/PowerSyncJournalStore.ts`
+Push to `main` → Vercel builds the PWA. Installed apps cache aggressively:
+fully close and reopen (twice if needed) on every device before judging a
+deploy — a stale build is indistinguishable from a broken one.
