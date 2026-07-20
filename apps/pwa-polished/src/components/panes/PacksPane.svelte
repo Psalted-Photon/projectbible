@@ -11,11 +11,15 @@
   import { loadPackOnDemand } from "../../lib/progressive-init";
   import { USE_BUNDLED_PACKS } from "../../config";
   import {
-    TTS_VOICES,
     isTtsSupported,
     storedVoices,
     downloadVoice,
     removeVoice,
+    getAllVoices,
+    getVoiceInfo,
+    installVoiceFromFiles,
+    voiceIsDownloadable,
+    type TtsVoiceInfo,
   } from "../../adapters/tts";
 
   console.log("DEV:", import.meta.env.DEV);
@@ -43,9 +47,12 @@
   let installProgress = "";
   let fileInputElement: HTMLInputElement;
   let installedVoices: string[] = [];
+  let voiceList: TtsVoiceInfo[] = [];
+  let voiceFileInput: HTMLInputElement;
 
   async function refreshVoices() {
     if (!isTtsSupported()) return;
+    voiceList = getAllVoices();
     try {
       installedVoices = await storedVoices();
     } catch (err) {
@@ -54,7 +61,7 @@
   }
 
   async function installTtsVoice(voiceId: string) {
-    const voice = TTS_VOICES.find((v) => v.id === voiceId);
+    const voice = getVoiceInfo(voiceId);
     if (!voice || isInstalling) return;
     isInstalling = true;
     installProgress = `Preparing ${voice.label}...`;
@@ -77,9 +84,13 @@
   }
 
   async function removeTtsVoice(voiceId: string) {
-    const voice = TTS_VOICES.find((v) => v.id === voiceId);
+    const voice = getVoiceInfo(voiceId);
     if (!voice) return;
-    if (!confirm(`Remove the "${voice.label}" voice? You can re-download it any time (~${voice.approxSizeMB} MB).`)) {
+    const canRedownload = voiceIsDownloadable(voice);
+    const note = canRedownload
+      ? `You can re-download it any time (~${voice.approxSizeMB} MB).`
+      : `This is a custom voice — removing it deletes it from this device permanently.`;
+    if (!confirm(`Remove the "${voice.label}" voice? ${note}`)) {
       return;
     }
     try {
@@ -88,6 +99,42 @@
     } catch (err: any) {
       console.error("[Packs] Voice removal failed:", err);
       alert(`Could not remove voice: ${err?.message ?? err}`);
+    }
+  }
+
+  function triggerVoiceFilePicker() {
+    voiceFileInput?.click();
+  }
+
+  async function handleVoiceFiles(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = ""; // allow re-picking the same files
+    if (files.length === 0) return;
+
+    const model = files.find((f) => f.name.toLowerCase().endsWith(".onnx"));
+    const config = files.find((f) => f.name.toLowerCase().endsWith(".json"));
+    if (!model || !config) {
+      alert(
+        "Please select BOTH files for the voice: the model (.onnx) and its settings (.onnx.json)."
+      );
+      return;
+    }
+
+    isInstalling = true;
+    installProgress = `Installing ${model.name}...`;
+    try {
+      const id = await installVoiceFromFiles(model, config);
+      installProgress = "Voice installed!";
+      await refreshVoices();
+      setTimeout(() => (installProgress = ""), 2500);
+      console.log(`[Packs] Installed custom voice: ${id}`);
+    } catch (err: any) {
+      console.error("[Packs] Custom voice install failed:", err);
+      installProgress = `Voice install failed: ${err?.message ?? err}`;
+      setTimeout(() => (installProgress = ""), 6000);
+    } finally {
+      isInstalling = false;
     }
   }
 
@@ -605,16 +652,24 @@
       </p>
 
       <div class="pack-grid">
-        {#each TTS_VOICES as voice}
+        {#each voiceList as voice}
           {@const isVoiceInstalled = installedVoices.includes(voice.id)}
+          {@const canDownload = voiceIsDownloadable(voice)}
           <button
             class="pack-card"
             class:installed={isVoiceInstalled}
-            on:click={() => (isVoiceInstalled ? removeTtsVoice(voice.id) : installTtsVoice(voice.id))}
-            disabled={isInstalling}
-            title={isVoiceInstalled ? "Installed — click to remove" : `Download ${voice.label}`}
+            on:click={() =>
+              isVoiceInstalled || !canDownload
+                ? removeTtsVoice(voice.id)
+                : installTtsVoice(voice.id)}
+            disabled={isInstalling || (!isVoiceInstalled && !canDownload)}
+            title={isVoiceInstalled
+              ? "Installed — click to remove"
+              : canDownload
+                ? `Download ${voice.label}`
+                : `${voice.label} (custom)`}
           >
-            <div class="pack-card-icon"><span class="emoji">🗣</span></div>
+            <div class="pack-card-icon"><span class="emoji">{voice.custom ? "🎙" : "🗣"}</span></div>
             <div class="pack-card-content">
               <div class="pack-card-name">
                 {voice.label}
@@ -623,13 +678,33 @@
               <div class="pack-card-description">
                 {voice.quality === "standard"
                   ? "Natural quality, best for daily listening"
-                  : "Smaller and faster on older phones"}
+                  : voice.quality === "compact"
+                    ? "Smaller and faster on older phones"
+                    : "Your custom voice"}
               </div>
               <div class="pack-card-size">~{voice.approxSizeMB} MB</div>
             </div>
           </button>
         {/each}
       </div>
+
+      <div class="actions voice-actions">
+        <button class="primary-btn" on:click={triggerVoiceFilePicker} disabled={isInstalling}>
+          <span class="emoji">🎙</span> Install voice from file
+        </button>
+      </div>
+      <p class="section-description voice-hint">
+        Pick a voice's model (.onnx) and settings (.onnx.json) together to add a
+        custom or cloned voice.
+      </p>
+      <input
+        type="file"
+        accept=".onnx,.json,application/json"
+        multiple
+        bind:this={voiceFileInput}
+        on:change={handleVoiceFiles}
+        style="display:none"
+      />
     </div>
   {/if}
 

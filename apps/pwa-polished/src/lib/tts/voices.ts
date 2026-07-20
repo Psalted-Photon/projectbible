@@ -9,12 +9,19 @@
 export interface TtsVoiceInfo {
   id: string;
   label: string;
-  quality: 'standard' | 'compact';
+  quality: 'standard' | 'compact' | 'custom';
   approxSizeMB: number;
-  path: string; // repo-relative path to the .onnx file
+
+  /** Built-in voices: path under the rhasspy/piper-voices HF repo. */
+  path?: string;
+  /** Hosted custom voices: full URLs to the .onnx and its .json config. */
+  modelUrl?: string;
+  configUrl?: string;
+  /** True for user-added voices (from a file or a hosted URL). */
+  custom?: boolean;
 }
 
-/** Voices offered by the app. A cloned voice later is just another entry. */
+/** Built-in voices shipped with the app. A cloned voice is added at runtime. */
 export const TTS_VOICES: TtsVoiceInfo[] = [
   {
     id: 'en_US-lessac-medium',
@@ -32,8 +39,35 @@ export const TTS_VOICES: TtsVoiceInfo[] = [
   },
 ];
 
+const HF_VOICE_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main';
+
+/**
+ * Where a voice's model + config can be downloaded from, or null when the
+ * voice can only arrive via local file install (no remote source).
+ */
+export function resolveVoiceSource(
+  info: TtsVoiceInfo
+): { modelUrl: string; configUrl: string } | null {
+  if (info.modelUrl && info.configUrl) {
+    return { modelUrl: info.modelUrl, configUrl: info.configUrl };
+  }
+  if (info.path) {
+    return { modelUrl: `${HF_VOICE_BASE}/${info.path}`, configUrl: `${HF_VOICE_BASE}/${info.path}.json` };
+  }
+  return null;
+}
+
+/** OPFS filenames are keyed by voice id (stable across built-in and custom). */
+export function voiceModelName(voiceId: string): string {
+  return `${voiceId}.onnx`;
+}
+export function voiceConfigName(voiceId: string): string {
+  return `${voiceId}.onnx.json`;
+}
+
 export type TtsProgress = { loaded: number; total: number };
 export type TtsProgressCallback = (progress: TtsProgress) => void;
+export type TtsSource = { modelUrl: string; configUrl: string };
 
 export class TtsError extends Error {
   constructor(

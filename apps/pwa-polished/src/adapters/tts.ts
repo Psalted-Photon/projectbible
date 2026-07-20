@@ -8,12 +8,73 @@
  *    started, so every verse/chapter reuses this one element)
  */
 
-import { TTS_VOICES, type TtsVoiceInfo, type TtsProgress } from '../lib/tts/voices.js';
+import {
+  TTS_VOICES,
+  resolveVoiceSource,
+  type TtsVoiceInfo,
+  type TtsProgress,
+  type TtsSource,
+} from '../lib/tts/voices.js';
 
 export { TTS_VOICES };
 export type { TtsVoiceInfo, TtsProgress };
 
 export const DEFAULT_TTS_VOICE = 'en_US-lessac-medium';
+
+// ─── custom voice registry (localStorage) ───────────────────────────────────
+// User-added voices (from a local file or a hosted URL). Persisted separately
+// from the built-in catalog so they survive reloads and appear everywhere the
+// built-in voices do.
+
+const CUSTOM_VOICES_KEY = 'projectbible_tts_custom_voices';
+
+export function getCustomVoices(): TtsVoiceInfo[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_VOICES_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomVoices(list: TtsVoiceInfo[]): void {
+  localStorage.setItem(CUSTOM_VOICES_KEY, JSON.stringify(list));
+}
+
+export function registerCustomVoice(info: TtsVoiceInfo): void {
+  const list = getCustomVoices().filter((v) => v.id !== info.id);
+  list.push({ ...info, custom: true });
+  saveCustomVoices(list);
+}
+
+function unregisterCustomVoice(id: string): void {
+  saveCustomVoices(getCustomVoices().filter((v) => v.id !== id));
+}
+
+/** Built-in voices plus any user-added ones. */
+export function getAllVoices(): TtsVoiceInfo[] {
+  return [...TTS_VOICES, ...getCustomVoices()];
+}
+
+export function getVoiceInfo(id: string): TtsVoiceInfo | undefined {
+  return getAllVoices().find((v) => v.id === id);
+}
+
+/** True when a voice has a remote source (built-in or hosted) it can (re)download from. */
+export function voiceIsDownloadable(info: TtsVoiceInfo): boolean {
+  return resolveVoiceSource(info) !== null;
+}
+
+/** Turn "My Voice.onnx" into a safe, stable voice id. */
+export function voiceIdFromFilename(filename: string): string {
+  return filename
+    .replace(/\.onnx$/i, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase() || `voice-${Date.now()}`;
+}
 
 type Pending = {
   resolve: (value: any) => void;
@@ -73,7 +134,7 @@ function getWorker(): Worker {
 function call<T>(
   action: string,
   payload?: Record<string, unknown>,
-  opts?: { onProgress?: (p: TtsProgress) => void; timeoutMs?: number }
+  opts?: { onProgress?: (p: TtsProgress) => void; timeoutMs?: number; transfer?: Transferable[] }
 ): Promise<T> {
   const id = nextId++;
   return new Promise<T>((resolve, reject) => {
@@ -85,7 +146,7 @@ function call<T>(
       }, opts.timeoutMs);
     }
     pending.set(id, entry);
-    getWorker().postMessage({ id, action, payload });
+    getWorker().postMessage({ id, action, payload }, opts?.transfer ?? []);
   });
 }
 
@@ -103,11 +164,36 @@ export function downloadVoice(
   voiceId: string,
   onProgress?: (p: TtsProgress) => void
 ): Promise<void> {
-  return call<void>('download', { voiceId }, { onProgress });
+  const info = getVoiceInfo(voiceId);
+  const source: TtsSource | undefined = info ? resolveVoiceSource(info) ?? undefined : undefined;
+  return call<void>('download', { voiceId, source }, { onProgress });
 }
 
-export function removeVoice(voiceId: string): Promise<void> {
-  return call<void>('remove', { voiceId });
+export async function removeVoice(voiceId: string): Promise<void> {
+  await call<void>('remove', { voiceId });
+  unregisterCustomVoice(voiceId);
+}
+
+/**
+ * Install a cloned/custom voice from a picked .onnx model + .json config.
+ * Registers it so it shows up alongside the built-in voices. Returns the id.
+ */
+export async function installVoiceFromFiles(
+  modelFile: File,
+  configFile: File,
+  meta?: { label?: string }
+): Promise<string> {
+  const id = voiceIdFromFilename(modelFile.name);
+  const [model, config] = await Promise.all([modelFile.arrayBuffer(), configFile.arrayBuffer()]);
+  await call<void>('installData', { voiceId: id, model, config }, { transfer: [model, config] });
+  registerCustomVoice({
+    id,
+    label: meta?.label?.trim() || modelFile.name.replace(/\.onnx$/i, ''),
+    quality: 'custom',
+    approxSizeMB: Math.max(1, Math.round(modelFile.size / 1024 / 1024)),
+    custom: true,
+  });
+  return id;
 }
 
 /** Synthesize one piece of text; resolves to a playable WAV blob. */

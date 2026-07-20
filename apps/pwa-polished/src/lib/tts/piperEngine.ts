@@ -16,51 +16,48 @@
 
 import * as ort from 'onnxruntime-web';
 import { createPiperPhonemize } from './vendor/piper-phonemize.js';
-import { TTS_VOICES, TtsError, type TtsVoiceInfo, type TtsProgressCallback } from './voices.js';
+import {
+  TTS_VOICES,
+  TtsError,
+  resolveVoiceSource,
+  voiceModelName,
+  voiceConfigName,
+  type TtsProgressCallback,
+  type TtsSource,
+} from './voices.js';
 
 const ASSET_BASE = '/tts';
-const VOICE_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main';
 const OPFS_DIR = 'piper';
 
-function voiceInfo(voiceId: string): TtsVoiceInfo {
-  const info = TTS_VOICES.find((v) => v.id === voiceId);
-  if (!info) throw new TtsError('UNKNOWN_VOICE', `Unknown TTS voice: ${voiceId}`);
-  return info;
-}
-
-// ─── OPFS storage (layout-compatible with vits-web) ─────────────────────────
+// ─── OPFS storage (layout-compatible with vits-web; keyed by voice id) ──────
 
 async function opfsDir(): Promise<FileSystemDirectoryHandle> {
   const root = await navigator.storage.getDirectory();
   return root.getDirectoryHandle(OPFS_DIR, { create: true });
 }
 
-function opfsName(url: string): string {
-  return url.split('/').at(-1)!;
-}
-
-async function opfsRead(url: string): Promise<File | undefined> {
+async function opfsRead(name: string): Promise<File | undefined> {
   try {
     const dir = await opfsDir();
-    const handle = await dir.getFileHandle(opfsName(url));
+    const handle = await dir.getFileHandle(name);
     return await handle.getFile();
   } catch {
     return undefined;
   }
 }
 
-async function opfsWrite(url: string, blob: Blob): Promise<void> {
+async function opfsWrite(name: string, data: Blob | ArrayBuffer): Promise<void> {
   const dir = await opfsDir();
-  const handle = await dir.getFileHandle(opfsName(url), { create: true });
+  const handle = await dir.getFileHandle(name, { create: true });
   const writable = await handle.createWritable();
-  await writable.write(blob);
+  await writable.write(data);
   await writable.close();
 }
 
-async function opfsRemove(url: string): Promise<void> {
+async function opfsRemove(name: string): Promise<void> {
   try {
     const dir = await opfsDir();
-    await dir.removeEntry(opfsName(url));
+    await dir.removeEntry(name);
   } catch {
     // already gone
   }
@@ -87,40 +84,68 @@ async function fetchWithProgress(url: string, onProgress?: TtsProgressCallback):
 
 // ─── voice management ───────────────────────────────────────────────────────
 
-function voiceUrls(voiceId: string): { model: string; config: string } {
-  const info = voiceInfo(voiceId);
-  return {
-    model: `${VOICE_BASE}/${info.path}`,
-    config: `${VOICE_BASE}/${info.path}.json`,
-  };
+/**
+ * Resolve the download source for a voice. The main thread passes `source`
+ * for custom voices (from its localStorage catalog); built-ins fall back to
+ * the static catalog so the dev hook and internal callers work source-free.
+ */
+function downloadSource(voiceId: string, source?: TtsSource): TtsSource {
+  if (source) return source;
+  const info = TTS_VOICES.find((v) => v.id === voiceId);
+  const resolved = info ? resolveVoiceSource(info) : null;
+  if (!resolved) throw new TtsError('UNKNOWN_VOICE', `No download source for voice: ${voiceId}`);
+  return resolved;
 }
 
-export async function downloadVoice(voiceId: string, onProgress?: TtsProgressCallback): Promise<void> {
-  const { model, config } = voiceUrls(voiceId);
+export async function downloadVoice(
+  voiceId: string,
+  source?: TtsSource,
+  onProgress?: TtsProgressCallback
+): Promise<void> {
+  const { modelUrl, configUrl } = downloadSource(voiceId, source);
   // Config first (tiny), then the model with progress reporting.
-  const configBlob = await fetchWithProgress(config);
-  await opfsWrite(config, configBlob);
-  const modelBlob = await fetchWithProgress(model, onProgress);
-  await opfsWrite(model, modelBlob);
+  const configBlob = await fetchWithProgress(configUrl);
+  await opfsWrite(voiceConfigName(voiceId), configBlob);
+  const modelBlob = await fetchWithProgress(modelUrl, onProgress);
+  await opfsWrite(voiceModelName(voiceId), modelBlob);
 }
 
-export async function removeVoice(voiceId: string): Promise<void> {
-  const { model, config } = voiceUrls(voiceId);
-  await opfsRemove(model);
-  await opfsRemove(config);
+/**
+ * Install a voice from raw bytes (an .onnx model + its .json config), e.g.
+ * a user's cloned voice picked from local disk. Buffers arrive transferred
+ * across the worker boundary — no copy.
+ */
+export async function installVoiceData(
+  voiceId: string,
+  model: ArrayBuffer,
+  config: ArrayBuffer
+): Promise<void> {
+  // Validate the config is parseable before committing the model.
+  const parsed = JSON.parse(new TextDecoder().decode(config));
+  if (!parsed?.audio?.sample_rate || !parsed?.espeak?.voice) {
+    throw new TtsError('SYNTH_FAILED', 'Config JSON is missing audio.sample_rate or espeak.voice');
+  }
+  await opfsWrite(voiceConfigName(voiceId), config);
+  await opfsWrite(voiceModelName(voiceId), model);
   sessions.delete(voiceId);
   configs.delete(voiceId);
 }
 
+export async function removeVoice(voiceId: string): Promise<void> {
+  await opfsRemove(voiceModelName(voiceId));
+  await opfsRemove(voiceConfigName(voiceId));
+  sessions.delete(voiceId);
+  configs.delete(voiceId);
+}
+
+/** All voice ids with a model file in OPFS (built-in and custom alike). */
 export async function storedVoices(): Promise<string[]> {
-  const known = new Set(TTS_VOICES.map((v) => v.id));
   const found: string[] = [];
   try {
     const dir = await opfsDir();
     for await (const name of (dir as any).keys()) {
-      if (typeof name === 'string' && name.endsWith('.onnx')) {
-        const id = name.slice(0, -'.onnx'.length);
-        if (known.has(id)) found.push(id);
+      if (typeof name === 'string' && name.endsWith('.onnx') && !name.endsWith('.onnx.json')) {
+        found.push(name.slice(0, -'.onnx'.length));
       }
     }
   } catch {
@@ -130,8 +155,7 @@ export async function storedVoices(): Promise<string[]> {
 }
 
 export async function isVoiceInstalled(voiceId: string): Promise<boolean> {
-  const { model } = voiceUrls(voiceId);
-  return !!(await opfsRead(model));
+  return !!(await opfsRead(voiceModelName(voiceId)));
 }
 
 // ─── synthesis (cached config + session) ────────────────────────────────────
@@ -159,8 +183,7 @@ function configureOrt(): void {
 async function getConfig(voiceId: string): Promise<VoiceConfig> {
   const cached = configs.get(voiceId);
   if (cached) return cached;
-  const { config } = voiceUrls(voiceId);
-  const file = await opfsRead(config);
+  const file = await opfsRead(voiceConfigName(voiceId));
   if (!file) throw new TtsError('VOICE_NOT_INSTALLED', `Voice ${voiceId} is not installed`);
   const parsed = JSON.parse(await file.text()) as VoiceConfig;
   configs.set(voiceId, parsed);
@@ -171,8 +194,7 @@ async function getSession(voiceId: string): Promise<ort.InferenceSession> {
   const cached = sessions.get(voiceId);
   if (cached) return cached;
   configureOrt();
-  const { model } = voiceUrls(voiceId);
-  const file = await opfsRead(model);
+  const file = await opfsRead(voiceModelName(voiceId));
   if (!file) throw new TtsError('VOICE_NOT_INSTALLED', `Voice ${voiceId} is not installed`);
   const session = await ort.InferenceSession.create(await file.arrayBuffer());
   sessions.set(voiceId, session);

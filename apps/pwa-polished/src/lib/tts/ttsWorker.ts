@@ -10,17 +10,24 @@
 
 import {
   downloadVoice,
+  installVoiceData,
   removeVoice,
   storedVoices,
   isVoiceInstalled,
   synthesize,
 } from './piperEngine.js';
-import { TtsError } from './voices.js';
+import { TtsError, type TtsSource } from './voices.js';
 
 interface TtsRequest {
   id: number;
-  action: 'download' | 'remove' | 'stored' | 'installed' | 'synthesize';
-  payload?: { voiceId?: string; text?: string };
+  action: 'download' | 'installData' | 'remove' | 'stored' | 'installed' | 'synthesize';
+  payload?: {
+    voiceId?: string;
+    text?: string;
+    source?: TtsSource;
+    model?: ArrayBuffer;
+    config?: ArrayBuffer;
+  };
 }
 
 self.onmessage = async (event: MessageEvent<TtsRequest>) => {
@@ -28,9 +35,14 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
   try {
     switch (action) {
       case 'download': {
-        await downloadVoice(payload!.voiceId!, (progress) => {
+        await downloadVoice(payload!.voiceId!, payload!.source, (progress) => {
           self.postMessage({ id, progress });
         });
+        self.postMessage({ id, ok: true, result: null });
+        break;
+      }
+      case 'installData': {
+        await installVoiceData(payload!.voiceId!, payload!.model!, payload!.config!);
         self.postMessage({ id, ok: true, result: null });
         break;
       }

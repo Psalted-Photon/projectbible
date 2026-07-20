@@ -1,0 +1,16 @@
+# Voice-factory working files — large/binary/personal, never committed.
+.venv/
+__pycache__/
+
+# Your reference recording and everything derived from it
+reference.wav
+reference.mp3
+reference.m4a
+corpus.txt
+dataset/
+dataset.zip
+verses/
+
+# Trained voice outputs (install these in the app; don't commit them here)
+*.onnx
+*.onnx.json

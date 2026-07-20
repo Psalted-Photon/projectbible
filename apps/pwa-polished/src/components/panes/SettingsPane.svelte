@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { applyTheme, getSettings, updateSettings, getTtsSettings } from "../../adapters/settings";
-  import { TTS_VOICES } from "../../adapters/tts";
+  import { getAllVoices, type TtsVoiceInfo } from "../../adapters/tts";
   import { paneStore } from "../../stores/paneStore";
   import { Gear } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
@@ -41,9 +41,11 @@
   let ttsVoice: string = 'en_US-lessac-medium';
   let ttsRate: number = 1.0;
   let ttsReadHeadings: boolean = false;
+  let ttsVoices: TtsVoiceInfo[] = getAllVoices();
 
   // Load settings on mount
   onMount(() => {
+    ttsVoices = getAllVoices();
     const settings = getSettings();
     theme = settings.theme || "dark";
     fontSize = settings.fontSize || 18;
@@ -335,7 +337,7 @@
     <label>
       <span class="label-text">Voice</span>
       <select bind:value={ttsVoice} on:change={saveSettings}>
-        {#each TTS_VOICES as v}
+        {#each ttsVoices as v}
           <option value={v.id}>{v.label} — ~{v.approxSizeMB} MB</option>
         {/each}
       </select>

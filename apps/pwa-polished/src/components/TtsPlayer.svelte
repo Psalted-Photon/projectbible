@@ -12,7 +12,7 @@
     synthesizeSpeech,
     getSharedTtsAudio,
     unlockTtsAudio,
-    TTS_VOICES,
+    getVoiceInfo,
   } from '../adapters/tts.js';
 
   const dispatch = createEventDispatcher<{ nextchapter: { book: string; chapter: number } }>();
@@ -39,7 +39,7 @@
   // Settings are re-read on every play so changes apply without a reload
   let ttsSettings = getTtsSettings();
   $: voiceId = ttsSettings.voiceId;
-  $: voiceSizeMB = TTS_VOICES.find((v) => v.id === voiceId)?.approxSizeMB ?? 64;
+  $: voiceSizeMB = getVoiceInfo(voiceId)?.approxSizeMB ?? 64;
 
   // The shared audio element plays for whichever TtsPlayer instance spoke
   // last (multiple chapters can be mounted at once). Handlers check ownership

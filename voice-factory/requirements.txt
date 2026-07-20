@@ -1,0 +1,20 @@
+# Python packages for the voice-factory PC scripts (Phase C).
+# Python 3.10 or 3.11 recommended. Install into a venv (see README Phase B).
+#
+# Chatterbox = the zero-shot voice cloner that manufactures the practice audio.
+# faster-whisper = listens back to each clip to catch garbled ones.
+# The rest are audio/util helpers used by the scripts.
+
+chatterbox-tts>=0.1.1
+faster-whisper>=1.0.0
+soundfile>=0.12.1
+librosa>=0.10.0
+numpy>=1.24
+tqdm>=4.66
+
+# Notes:
+# - Chatterbox pulls in torch. On this CPU-only Beelink that's fine (slow but
+#   works). If pip installs a CUDA build you don't need, a CPU torch wheel is
+#   smaller:  pip install torch --index-url https://download.pytorch.org/whl/cpu
+# - If chatterbox-tts fails to resolve, install from source per its GitHub
+#   README (resemble-ai/chatterbox); the scripts only use its public TTS API.
