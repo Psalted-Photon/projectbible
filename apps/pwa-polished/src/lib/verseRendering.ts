@@ -39,6 +39,58 @@ function isCrossReference(noteText: string): boolean {
   return /\b\d+:\d+\b/.test(trimmed);
 }
 
+/**
+ * Given the position just after a "+" note marker (with whitespace and any
+ * chapter:verse marker already skipped), find where the note's content ends.
+ * Shared by the HTML renderer and the read-aloud text extractor so the two
+ * can never disagree about note boundaries.
+ */
+function findNoteEnd(source: string, j: number): number {
+  let hasRefToken = false;
+  let noteEnd = source.length;
+
+  for (let k = j; k < source.length; k++) {
+    // Unambiguous sentinel inserted by pack builder
+    if (source.charCodeAt(k) === 1) {
+      noteEnd = k;
+      break;
+    }
+
+    if (!hasRefToken && /\b\d+:\d+\b/.test(source.slice(j, k + 1))) {
+      hasRefToken = true;
+    }
+
+    if (source[k] === '.' && k + 2 < source.length && source[k + 1] === ' ' && /[a-z]/.test(source[k + 2])) {
+      const tokenStart = Math.max(
+        source.lastIndexOf(' ', k - 1) + 1,
+        source.lastIndexOf('\n', k - 1) + 1,
+        source.lastIndexOf('\t', k - 1) + 1
+      );
+      const token = source.slice(tokenStart, k).trim();
+      const abbrev = token.replace(/[^A-Za-z]/g, '');
+      const nonTerminalAbbrevs = new Set(['Gr', 'Gk', 'Heb', 'Aram', 'Lat', 'Syr', 'LXX', 'Vg']);
+      if (nonTerminalAbbrevs.has(abbrev)) {
+        continue;
+      }
+
+      noteEnd = k + 1;
+      break;
+    }
+
+    if (hasRefToken && source[k] === ' ' && k + 1 < source.length && /[a-z]/.test(source[k + 1])) {
+      noteEnd = k;
+      break;
+    }
+
+    if (k > j && source[k] === '+' && (source[k - 1] === ' ' || source[k - 1] === '\n' || source[k - 1] === '\t')) {
+      noteEnd = k;
+      break;
+    }
+  }
+
+  return noteEnd;
+}
+
 function renderTextWithInlineNotes(text: string): { html: string; noteCount: number } {
   const source = text ?? '';
   let out = '';
@@ -87,47 +139,7 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
     }
 
     const noteStart = j;
-    let hasRefToken = false;
-    let noteEnd = source.length;
-
-    for (let k = j; k < source.length; k++) {
-      // Unambiguous sentinel inserted by pack builder
-      if (source.charCodeAt(k) === 1) {
-        noteEnd = k;
-        break;
-      }
-
-      if (!hasRefToken && /\b\d+:\d+\b/.test(source.slice(j, k + 1))) {
-        hasRefToken = true;
-      }
-
-      if (source[k] === '.' && k + 2 < source.length && source[k + 1] === ' ' && /[a-z]/.test(source[k + 2])) {
-        const tokenStart = Math.max(
-          source.lastIndexOf(' ', k - 1) + 1,
-          source.lastIndexOf('\n', k - 1) + 1,
-          source.lastIndexOf('\t', k - 1) + 1
-        );
-        const token = source.slice(tokenStart, k).trim();
-        const abbrev = token.replace(/[^A-Za-z]/g, '');
-        const nonTerminalAbbrevs = new Set(['Gr', 'Gk', 'Heb', 'Aram', 'Lat', 'Syr', 'LXX', 'Vg']);
-        if (nonTerminalAbbrevs.has(abbrev)) {
-          continue;
-        }
-
-        noteEnd = k + 1;
-        break;
-      }
-
-      if (hasRefToken && source[k] === ' ' && k + 1 < source.length && /[a-z]/.test(source[k + 1])) {
-        noteEnd = k;
-        break;
-      }
-
-      if (k > j && source[k] === '+' && (source[k - 1] === ' ' || source[k - 1] === '\n' || source[k - 1] === '\t')) {
-        noteEnd = k;
-        break;
-      }
-    }
+    const noteEnd = findNoteEnd(source, j);
 
     const rawNote = source.slice(noteStart, noteEnd).trim();
     if (rawNote.length > 0) {
@@ -295,6 +307,72 @@ export function extractHeading(text: string): { heading: string | null; textWith
   }
   
   return { heading: null, textWithoutHeading: source };
+}
+
+/**
+ * Plain speakable text for a verse — what read-aloud (TTS) should say.
+ * Walks the stored text exactly like renderTextWithInlineNotes (same heading
+ * skip, same note boundaries via findNoteEnd) but drops footnotes and
+ * cross-references entirely instead of rendering [n] markers.
+ */
+export function extractSpeechText(text: string): string {
+  // Tags are display-only; leading "+ Heading. " lives in the heading field
+  const { textWithoutHeading } = extractHeading(stripHtmlTags(text ?? ''));
+  const source = textWithoutHeading;
+  let out = '';
+  let i = 0;
+
+  const isPlusStart = (idx: number) => {
+    const ch = source[idx];
+    if (ch !== '+') return false;
+    const prev = idx > 0 ? source[idx - 1] : ' ';
+    return prev === ' ' || prev === '\n' || prev === '\t' || idx === 0;
+  };
+
+  while (i < source.length) {
+    const plusPos = source.indexOf('+', i);
+    if (plusPos === -1) {
+      out += source.slice(i);
+      break;
+    }
+
+    if (!isPlusStart(plusPos)) {
+      out += source.slice(i, plusPos + 1);
+      i = plusPos + 1;
+      continue;
+    }
+
+    // Emit text before the note
+    out += source.slice(i, plusPos);
+
+    // Parse the note the same way the renderer does
+    let j = plusPos + 1;
+    while (j < source.length && /\s/.test(source[j])) j++;
+
+    // Mid-verse heading ("+ Heading. Next sentence") — skip the heading,
+    // keep reading from the capital letter (renderer parity)
+    const headingMatch = source.slice(j).match(/^([^.]+)\.\s+([A-Z])/);
+    if (headingMatch && plusPos < 50) {
+      i = j + headingMatch[0].length - 2;
+      continue;
+    }
+
+    // Optional leading chapter:verse marker (e.g. 53:1)
+    const markerMatch = source.slice(j).match(/^(\d+):(\d+)\s*/);
+    if (markerMatch) {
+      j += markerMatch[0].length;
+    }
+
+    // Drop the note content entirely
+    i = findNoteEnd(source, j);
+    if (i < source.length && source.charCodeAt(i) === 1) i++;
+  }
+
+  return out
+    .replace(/\x01/g, '')
+    .replace(/¶/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export { escapeHtml };

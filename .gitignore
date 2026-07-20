@@ -43,3 +43,6 @@ apps/pwa-polished/public/packs/commentaries.sqlite
 apps/pwa-polished/public/packs/consolidated/commentaries.sqlite
 packs/consolidated/commentaries.sqlite
 packs/workbench/commentaries.sqlite
+
+# TTS runtime WASM (copied from node_modules by vite copyTtsRuntime plugin)
+apps/pwa-polished/public/tts/

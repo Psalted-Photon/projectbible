@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { applyTheme, getSettings, updateSettings } from "../../adapters/settings";
+  import { applyTheme, getSettings, updateSettings, getTtsSettings } from "../../adapters/settings";
+  import { TTS_VOICES } from "../../adapters/tts";
   import { paneStore } from "../../stores/paneStore";
   import { Gear } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
@@ -37,6 +38,9 @@
   let clearing = false;
   let checkingUpdate = false;
   let autoCheckUpdates: boolean = true;
+  let ttsVoice: string = 'en_US-lessac-medium';
+  let ttsRate: number = 1.0;
+  let ttsReadHeadings: boolean = false;
 
   // Load settings on mount
   onMount(() => {
@@ -51,6 +55,10 @@
     themedTitles = settings.themedTitles !== false;
     timezone = settings.timezone || '';
     autoCheckUpdates = settings.autoCheckUpdates !== false; // default true
+    const tts = getTtsSettings();
+    ttsVoice = tts.voiceId;
+    ttsRate = tts.rate;
+    ttsReadHeadings = tts.readHeadings;
   });
 
   function deleteIndexedDbDatabase(name: string): Promise<void> {
@@ -204,6 +212,7 @@
       themedTitles,
       timezone: timezone || undefined,
       autoCheckUpdates,
+      tts: { voiceId: ttsVoice, rate: ttsRate, readHeadings: ttsReadHeadings },
     });
 
     // Apply settings immediately
@@ -315,6 +324,30 @@
       translation is open.
     </p>
     <InterlinearControls />
+  </div>
+
+  <div class="setting-group">
+    <span class="label-text">Read Aloud (AI voice)</span>
+    <p class="section-description il-hint">
+      Reads any chapter out loud with an on-device AI voice. The voice downloads
+      once (from the reader or Manage Packs) and then works fully offline.
+    </p>
+    <label>
+      <span class="label-text">Voice</span>
+      <select bind:value={ttsVoice} on:change={saveSettings}>
+        {#each TTS_VOICES as v}
+          <option value={v.id}>{v.label} — ~{v.approxSizeMB} MB</option>
+        {/each}
+      </select>
+    </label>
+    <label>
+      <span class="label-text">Reading Speed: {ttsRate.toFixed(2)}×</span>
+      <input type="range" min="0.8" max="1.5" step="0.05" bind:value={ttsRate} on:change={saveSettings} />
+    </label>
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={ttsReadHeadings} on:change={saveSettings} />
+      <span class="label-text">Read section headings aloud</span>
+    </label>
   </div>
 
   <div class="setting-group">

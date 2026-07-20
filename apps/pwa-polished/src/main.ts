@@ -7,6 +7,7 @@ import { applyTheme, getSettings } from './adapters/settings';
 import { removePack } from './lib/progressive-init';
 import { loadPackOnDemand, getInstalledPacks } from './lib/progressive-init';
 import { FEATURES } from './config';
+import './adapters/tts'; // Read Aloud engine client (registers __tts dev hook; worker starts lazily)
 
 console.log('🔥 IMPORTS LOADED');
 

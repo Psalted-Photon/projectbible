@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@diffusionstudio/piper-wasm": "1.0.0",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@types/sql.js": "^1.4.9",
     "svelte": "^5.1.9",
@@ -17,6 +18,7 @@
     "vite-plugin-pwa": "^0.21.1"
   },
   "dependencies": {
+    "@diffusionstudio/vits-web": "1.0.3",
     "@journeyapps/wa-sqlite": "^1.5.0",
     "@lexical/history": "^0.40.0",
     "@lexical/html": "^0.40.0",
@@ -30,6 +32,7 @@
     "eruda": "^3.4.3",
     "leaflet": "^1.9.4",
     "lexical": "^0.40.0",
+    "onnxruntime-web": "1.18.0",
     "phosphor-svelte": "^3.1.0",
     "sql.js": "^1.12.0"
   }

@@ -50,6 +50,45 @@ function copyBootstrapPack() {
   };
 }
 
+// Plugin to copy the TTS runtime (onnxruntime + phonemizer WASM, ~30 MB) to /tts/.
+// These are fetched lazily on first Read Aloud use and cached by the service
+// worker's runtime route — deliberately NOT precached (see workbox config).
+function copyTtsRuntime() {
+  const nm = resolve(__dirname, '../../node_modules');
+  const files = [
+    [resolve(nm, 'onnxruntime-web/dist/ort-wasm-simd.wasm'), 'ort-wasm-simd.wasm'],
+    [resolve(nm, 'onnxruntime-web/dist/ort-wasm.wasm'), 'ort-wasm.wasm'],
+    [resolve(nm, '@diffusionstudio/piper-wasm/build/piper_phonemize.wasm'), 'piper_phonemize.wasm'],
+    [resolve(nm, '@diffusionstudio/piper-wasm/build/piper_phonemize.data'), 'piper_phonemize.data'],
+  ];
+
+  function copyTo(targetDir: string, label: string) {
+    if (!existsSync(targetDir)) {
+      mkdirSync(targetDir, { recursive: true });
+    }
+    let copied = 0;
+    for (const [src, name] of files) {
+      if (!existsSync(src)) {
+        console.warn(`⚠️  TTS runtime file missing: ${src}`);
+        continue;
+      }
+      copyFileSync(src, resolve(targetDir, name));
+      copied++;
+    }
+    if (copied > 0) console.log(`🔊 Copied ${copied} TTS runtime file(s) to ${label}`);
+  }
+
+  return {
+    name: 'copy-tts-runtime',
+    buildStart() {
+      copyTo(resolve(__dirname, 'public/tts'), 'public/tts (dev)');
+    },
+    closeBundle() {
+      copyTo(resolve(__dirname, 'dist/tts'), 'dist/tts');
+    }
+  };
+}
+
 // Plugin to copy polished packs (only in dev or when USE_BUNDLED_PACKS=true)
 function copyPolishedPacks() {
   return {
@@ -181,7 +220,22 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024 // 4 MB (covers wa-sqlite-async.wasm at 2.28 MB)
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MB (covers wa-sqlite-async.wasm at 2.28 MB)
+        // TTS runtime files (~30 MB) are cached on first Read Aloud use, not
+        // precached — users who never use TTS never pay the download. The
+        // voice model itself lives in OPFS, managed by src/lib/tts/.
+        globIgnores: ['**/tts/**'],
+        runtimeCaching: [
+          {
+            urlPattern: /\/tts\/.+\.(wasm|data)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'tts-runtime',
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 8 }
+            }
+          }
+        ]
       },
       manifest: {
         name: 'ProjectBible',
@@ -219,7 +273,8 @@ export default defineConfig({
       }
     }),
     copyBootstrapPack(), // Always bundle bootstrap (208KB)
-    copyPolishedPacks()  // Only in dev or when VITE_USE_BUNDLED_PACKS=true
+    copyPolishedPacks(), // Only in dev or when VITE_USE_BUNDLED_PACKS=true
+    copyTtsRuntime()     // Read Aloud engine WASM → /tts/ (lazy-cached)
   ],
   server: {
     port: 5174,

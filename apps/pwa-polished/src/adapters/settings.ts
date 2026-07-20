@@ -22,6 +22,16 @@ export interface InterlinearSettings {
   showParsing: boolean;   // morphology / part-of-speech parsing
 }
 
+/**
+ * Read Aloud (on-device TTS) preferences.
+ * Voice files are downloaded once and stored on-device; see src/adapters/tts.ts.
+ */
+export interface TtsSettings {
+  voiceId: string;      // installed Piper voice id (default en_US-lessac-medium)
+  rate: number;         // playback speed multiplier (0.8–1.5, default 1.0)
+  readHeadings: boolean; // speak section headings before their verse (default false)
+}
+
 export interface UserSettings {
   // Daily Driver defaults by testament + language family
   dailyDriverEnglishOT?: string; // e.g., 'kjv' or 'web'
@@ -46,6 +56,7 @@ export interface UserSettings {
   showRedLetter?: boolean; // Show Jesus' words in red (default true)
   themedTitles?: boolean; // Theme-colored 3D shadow on reader titles/headings (default true)
   interlinear?: InterlinearSettings; // Interlinear view prefs for Greek/Hebrew (default: disabled, gloss-only)
+  tts?: TtsSettings; // Read Aloud (on-device TTS) prefs
   allowRotation?: boolean; // Allow screen to rotate to landscape (default false = portrait locked)
   autoCheckUpdates?: boolean; // Automatically check for updates on app open (default true)
 
@@ -206,6 +217,25 @@ export function getInterlinearSettings(): InterlinearSettings {
 export function updateInterlinearSettings(updates: Partial<InterlinearSettings>): void {
   const current = getInterlinearSettings();
   updateSettings({ interlinear: { ...current, ...updates } });
+}
+
+/**
+ * Resolve Read Aloud settings with defaults applied.
+ * Safe to call when nothing has been saved yet.
+ */
+export function getTtsSettings(): TtsSettings {
+  const s = getSettings().tts;
+  return {
+    voiceId: s?.voiceId ?? 'en_US-lessac-medium',
+    rate: s?.rate ?? 1.0,
+    readHeadings: s?.readHeadings ?? false,
+  };
+}
+
+/** Persist Read Aloud settings (merges with existing settings object). */
+export function updateTtsSettings(updates: Partial<TtsSettings>): void {
+  const current = getTtsSettings();
+  updateSettings({ tts: { ...current, ...updates } });
 }
 
 /**

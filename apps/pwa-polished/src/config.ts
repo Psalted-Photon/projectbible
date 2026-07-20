@@ -26,7 +26,8 @@ export const FEATURES = {
   lazyPackLoading: !USE_BUNDLED_PACKS,
   persistentStorage: true,
   progressiveStartup: !USE_BUNDLED_PACKS,
-  packUpdates: !USE_BUNDLED_PACKS
+  packUpdates: !USE_BUNDLED_PACKS,
+  ttsReadAloud: true // Read Aloud with on-device AI voice (kill switch)
 };
 
 // Pack loading priority (packs loaded in this order when needed)

@@ -20,6 +20,8 @@
   import { repeatCountsStore } from "../stores/repeatCountsStore";
   import { countWordsInBook } from "../lib/repeatCounts";
   import AudioPlayer from "./AudioPlayer.svelte";
+  import TtsPlayer from "./TtsPlayer.svelte";
+  import { FEATURES } from "../config";
   import BookIntroPanel from "./BookIntroPanel.svelte";
   import { syncQueue } from "../lib/sync/SyncQueueService";
   import type { UserHighlight, UserWordHighlight, HighlightStyle } from "@projectbible/core";
@@ -3942,6 +3944,9 @@
               </div>
             {/if}
             <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
+            {#if FEATURES.ttsReadAloud && !isOriginalLanguage(currentTranslation)}
+              <TtsPlayer translation={currentTranslation} book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
+            {/if}
           </div>
           <div
             class="verses {translationFontClass}"

@@ -10,6 +10,13 @@
   import { installAudioPackToOPFS, reindexAudioPack } from "../../adapters/audio";
   import { loadPackOnDemand } from "../../lib/progressive-init";
   import { USE_BUNDLED_PACKS } from "../../config";
+  import {
+    TTS_VOICES,
+    isTtsSupported,
+    storedVoices,
+    downloadVoice,
+    removeVoice,
+  } from "../../adapters/tts";
 
   console.log("DEV:", import.meta.env.DEV);
   console.log("PROD:", import.meta.env.PROD);
@@ -35,6 +42,54 @@
   let isInstalling = false;
   let installProgress = "";
   let fileInputElement: HTMLInputElement;
+  let installedVoices: string[] = [];
+
+  async function refreshVoices() {
+    if (!isTtsSupported()) return;
+    try {
+      installedVoices = await storedVoices();
+    } catch (err) {
+      console.warn("[Packs] Could not list TTS voices:", err);
+    }
+  }
+
+  async function installTtsVoice(voiceId: string) {
+    const voice = TTS_VOICES.find((v) => v.id === voiceId);
+    if (!voice || isInstalling) return;
+    isInstalling = true;
+    installProgress = `Preparing ${voice.label}...`;
+    try {
+      await downloadVoice(voiceId, ({ loaded, total }) => {
+        const loadedMB = (loaded / 1024 / 1024).toFixed(0);
+        const totalMB = total > 0 ? (total / 1024 / 1024).toFixed(0) : "?";
+        installProgress = `Downloading ${voice.label} (${loadedMB} MB / ${totalMB} MB)…`;
+      });
+      installProgress = "Complete!";
+      await refreshVoices();
+      setTimeout(() => (installProgress = ""), 2000);
+    } catch (err: any) {
+      console.error("[Packs] Voice install failed:", err);
+      installProgress = `Voice download failed: ${err?.message ?? err}`;
+      setTimeout(() => (installProgress = ""), 6000);
+    } finally {
+      isInstalling = false;
+    }
+  }
+
+  async function removeTtsVoice(voiceId: string) {
+    const voice = TTS_VOICES.find((v) => v.id === voiceId);
+    if (!voice) return;
+    if (!confirm(`Remove the "${voice.label}" voice? You can re-download it any time (~${voice.approxSizeMB} MB).`)) {
+      return;
+    }
+    try {
+      await removeVoice(voiceId);
+      await refreshVoices();
+    } catch (err: any) {
+      console.error("[Packs] Voice removal failed:", err);
+      alert(`Could not remove voice: ${err?.message ?? err}`);
+    }
+  }
 
   // Use bundled packs in dev mode
   const USE_BUNDLED = USE_BUNDLED_PACKS;
@@ -242,6 +297,7 @@
   onMount(async () => {
     await loadPacks();
     await loadStats();
+    await refreshVoices();
   });
 
   async function loadPacks() {
@@ -538,6 +594,44 @@
       {/each}
     </div>
   </div>
+
+  <!-- Read Aloud Voices -->
+  {#if isTtsSupported()}
+    <div class="section">
+      <h3><span class="emoji">🗣</span> Voices (Read Aloud)</h3>
+      <p class="section-description">
+        AI voices for reading chapters aloud. Downloaded once, then they work
+        fully offline — start playback from the 🗣 button in any chapter.
+      </p>
+
+      <div class="pack-grid">
+        {#each TTS_VOICES as voice}
+          {@const isVoiceInstalled = installedVoices.includes(voice.id)}
+          <button
+            class="pack-card"
+            class:installed={isVoiceInstalled}
+            on:click={() => (isVoiceInstalled ? removeTtsVoice(voice.id) : installTtsVoice(voice.id))}
+            disabled={isInstalling}
+            title={isVoiceInstalled ? "Installed — click to remove" : `Download ${voice.label}`}
+          >
+            <div class="pack-card-icon"><span class="emoji">🗣</span></div>
+            <div class="pack-card-content">
+              <div class="pack-card-name">
+                {voice.label}
+                {#if isVoiceInstalled}<span class="installed-badge">✓</span>{/if}
+              </div>
+              <div class="pack-card-description">
+                {voice.quality === "standard"
+                  ? "Natural quality, best for daily listening"
+                  : "Smaller and faster on older phones"}
+              </div>
+              <div class="pack-card-size">~{voice.approxSizeMB} MB</div>
+            </div>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   <!-- Install Actions -->
   <div class="section">
