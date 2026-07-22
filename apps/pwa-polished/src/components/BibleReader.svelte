@@ -507,6 +507,7 @@
   let ttsHighlightVerse = true;
   let ttsGlowFollow = false;
   let glowCleanup: (() => void) | null = null;
+  let glowTicket = 0;
 
   function prefersReducedMotion(): boolean {
     return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -531,11 +532,18 @@
     glowOn: boolean,
     highlightOn: boolean,
   ): Promise<void> {
+    // Ticket guard: there's an await below, so a newer call can overtake this
+    // one. Without this, the newer call would find glowCleanup still null,
+    // clean up nothing, then overwrite the handle — abandoning a running glow
+    // with no way to stop it.
+    const ticket = ++glowTicket;
     glowCleanup?.();
     glowCleanup = null;
     if (!current || (!glowOn && !highlightOn)) return;
 
     await tick();
+    if (ticket !== glowTicket) return; // overtaken while waiting
+
     const verseEl = readerElement?.querySelector<HTMLElement>(
       `[data-chapter-section][data-book="${current.book}"][data-chapter="${current.chapter}"] .verse[data-verse="${current.verse}"]`,
     );
@@ -543,7 +551,9 @@
 
     followVerseIntoView(verseEl);
     if (glowOn && !prefersReducedMotion()) {
-      glowCleanup = startGlow(verseEl, getSharedTtsAudio());
+      const cleanup = startGlow(verseEl, getSharedTtsAudio());
+      if (ticket !== glowTicket) cleanup(); // overtaken during setup
+      else glowCleanup = cleanup;
     }
   }
 
@@ -4365,13 +4375,16 @@
     transition: background 0.35s ease;
   }
 
-  /* Read Aloud: soft cloud drifting along the words. Sits under the text and
-     never intercepts taps. Positioned/sized each frame by lib/ttsGlow.ts. */
-  .verse :global(.tts-glow) {
+  /* Read Aloud: soft cloud drifting along the words. Anchored to
+     .text-container rather than the verse — in paragraph layout a verse is an
+     inline box spanning several lines, which browsers do not position children
+     against reliably. Prepended in the DOM so every verse paints over it, which
+     keeps the text readable without needing z-index juggling. Positioned and
+     sized each frame by lib/ttsGlow.ts. */
+  .text-container :global(.tts-glow) {
     position: absolute;
     top: 0;
     left: 0;
-    z-index: 0;
     pointer-events: none;
     will-change: transform;
     border-radius: 50%;
@@ -4382,15 +4395,6 @@
       rgba(150, 120, 245, 0) 75%
     );
     filter: blur(7px);
-  }
-
-  /* Keep the text (and verse number) above the drifting glow so it stays
-     readable; the glow still sits above the .tts-speaking tint, so the two
-     effects layer correctly when both are switched on. */
-  .verse .verse-text,
-  .verse .verse-number {
-    position: relative;
-    z-index: 1;
   }
 
   .verse-number {

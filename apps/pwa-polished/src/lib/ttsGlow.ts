@@ -9,6 +9,15 @@
  * is almost always covering the right word somewhere in its span, and reads as
  * atmosphere rather than error.
  *
+ * Positioning: the glow lives in `.text-container`, NOT inside the verse. In
+ * paragraph layout a verse is an inline element flowing through the paragraph,
+ * and for an inline box spanning several lines the browser's reference for
+ * placing an absolutely positioned child is not the box measuring returns —
+ * so anchoring to the verse put the glow in the wrong place, drifting as the
+ * text rewrapped. `.text-container` is a block that scrolls with the content
+ * and is already the anchor the text-selection drag handles use, so the same
+ * "rect minus container rect" maths applies and layout mode stops mattering.
+ *
  * Progress is read straight off the audio element each frame, so pausing,
  * jumping and speed changes are handled for free.
  *
@@ -17,7 +26,7 @@
  */
 
 interface WordBox {
-  left: number;   // relative to the verse element
+  left: number;   // relative to the positioning container
   top: number;
   width: number;
   height: number;
@@ -25,6 +34,11 @@ interface WordBox {
 }
 
 const GLOW_CLASS = 'tts-glow';
+
+/** Piper clips carry a little silence at the head and tail, which left the
+ *  glow reading a touch behind the voice. Nudge it forward by this much.
+ *  Tune by eye — bigger runs ahead, smaller lags. */
+const LEAD_SECONDS = 0.12;
 
 /** Longer words take longer to say. Character count is a decent stand-in for
  *  duration, and the glow's width absorbs the slop. */
@@ -88,7 +102,10 @@ function measureWords(root: HTMLElement, origin: HTMLElement): WordBox[] {
  */
 export function startGlow(verseEl: HTMLElement, audio: HTMLAudioElement): () => void {
   const textEl = verseEl.querySelector<HTMLElement>('.verse-text') ?? verseEl;
-  let words = measureWords(textEl, verseEl);
+  // Anchor to the block container, never the verse (see note at top of file).
+  const container = verseEl.closest<HTMLElement>('.text-container') ?? verseEl;
+
+  let words = measureWords(textEl, container);
   if (words.length === 0) return () => {};
 
   const totalWeight = words.reduce((sum, w) => sum + w.weight, 0);
@@ -96,23 +113,32 @@ export function startGlow(verseEl: HTMLElement, audio: HTMLAudioElement): () => 
   const glow = document.createElement('div');
   glow.className = GLOW_CLASS;
   glow.setAttribute('aria-hidden', 'true');
-  verseEl.appendChild(glow);
+  // Prepended so it paints beneath the verses that follow it in the container.
+  container.insertBefore(glow, container.firstChild);
 
-  // Re-measure if the text reflows (rotation, font-size change, pane resize).
+  // Re-measure when the container reflows: a width change rewraps the text, and
+  // a height change means content above shifted the verse. Either invalidates
+  // the coordinates we captured.
   const observer = new ResizeObserver(() => {
-    words = measureWords(textEl, verseEl);
+    const fresh = measureWords(textEl, container);
+    if (fresh.length > 0) words = fresh; // ignore a measurement taken mid-teardown
   });
-  observer.observe(verseEl);
+  observer.observe(container);
 
   let frame = 0;
   const draw = () => {
+    // Self-terminate if we were ever orphaned — nothing can outlive its element.
+    if (!glow.isConnected) {
+      observer.disconnect();
+      return;
+    }
     frame = requestAnimationFrame(draw);
     if (words.length === 0) return;
 
     const duration = audio.duration;
     const progress =
       isFinite(duration) && duration > 0
-        ? Math.min(1, Math.max(0, audio.currentTime / duration))
+        ? Math.min(1, Math.max(0, (audio.currentTime + LEAD_SECONDS) / duration))
         : 0;
 
     // Walk the cumulative weights to find where we are, and how far through
