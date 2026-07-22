@@ -3,7 +3,7 @@
   import { get } from 'svelte/store';
   import { IndexedDBTextStore } from '../lib/adapters.js';
   import { extractSpeechText } from '../lib/verseRendering.js';
-  import { continuousPlay, ttsAutoplayNext } from '../stores/audioStore.js';
+  import { continuousPlay, ttsAutoplayNext, ttsCurrentVerse } from '../stores/audioStore.js';
   import { getTtsSettings } from '../adapters/settings.js';
   import {
     isTtsSupported,
@@ -152,8 +152,26 @@
 
     currentIndex = index;
     state = 'playing';
+    ttsCurrentVerse.set({ book, chapter, verse: verses[index].verse });
     // Keep one verse ahead of playback
     ensureSynth(index + 1, gen);
+  }
+
+  /**
+   * Jump to another verse in the chapter without restarting the queue.
+   * Bumping the generation cancels in-flight work for the old position;
+   * already-synthesized verses stay cached, so jumping back is instant.
+   */
+  async function jumpToVerse(index: number): Promise<void> {
+    if (index < 0 || index >= verses.length) return;
+    if (ownsAudio()) {
+      const audio = getSharedTtsAudio();
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+    }
+    const gen = ++generation;
+    await playIndex(index, gen);
   }
 
   async function startReading(): Promise<void> {
@@ -222,13 +240,17 @@
     generation++;
     blobCache.clear();
     inFlight.clear();
-    if (ownsAudio()) {
+    const wasOwner = ownsAudio();
+    if (wasOwner) {
       const audio = getSharedTtsAudio();
       audio.onended = null;
       audio.onerror = null;
       audio.pause();
       delete (audio as any).__ttsOwner;
     }
+    // Only the instance that was actually speaking clears the shared marker —
+    // other mounted chapters tearing down must not blank a live read.
+    if (wasOwner) ttsCurrentVerse.set(null);
     if (currentUrl) {
       URL.revokeObjectURL(currentUrl);
       currentUrl = null;
@@ -263,7 +285,18 @@
       </button>
 
       {#if state === 'playing' || state === 'paused'}
-        <span class="tts-progress">v. {verses[currentIndex]?.verse ?? '–'} / {verses[verseCount - 1]?.verse ?? verseCount}</span>
+        <select
+          class="tts-verse-picker"
+          bind:value={currentIndex}
+          on:change={() => jumpToVerse(currentIndex)}
+          title="Jump to a verse"
+          aria-label="Jump to a verse"
+        >
+          {#each verses as v, i}
+            <option value={i}>v. {v.verse}</option>
+          {/each}
+        </select>
+        <span class="tts-progress">/ {verses[verseCount - 1]?.verse ?? verseCount}</span>
         <button class="tts-btn" on:click={stopReading} title="Stop reading">■</button>
         <button
           class="tts-btn tts-continuous-btn"
@@ -329,6 +362,23 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Styled to read like the old text readout, but it's a real picker. */
+  .tts-verse-picker {
+    background: transparent;
+    border: 1px solid rgba(157, 122, 245, 0.35);
+    border-radius: 4px;
+    color: #b79df7;
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+    padding: 1px 4px;
+    cursor: pointer;
+    max-width: 8ch;
+  }
+
+  .tts-verse-picker:hover {
+    border-color: rgba(157, 122, 245, 0.7);
+  }
+
   .tts-spinner {
     font-size: 0.85rem;
     opacity: 0.7;
@@ -371,6 +421,10 @@
     }
     .tts-progress {
       font-size: 0.85rem;
+    }
+    .tts-verse-picker {
+      font-size: 0.85rem;
+      padding: 3px 6px;
     }
   }
 </style>

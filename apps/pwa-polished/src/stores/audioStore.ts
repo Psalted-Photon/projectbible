@@ -11,3 +11,13 @@ export const autoplayNext = writable<boolean>(false);
  *  autoplayNext because both players mount in the same chapter header and
  *  would otherwise race to consume the flag. */
 export const ttsAutoplayNext = writable<boolean>(false);
+
+/** The verse Read Aloud is currently speaking, or null when not reading.
+ *  Drives the verse highlight and the drifting glow. Playback progress is
+ *  read straight off the shared audio element, so pause/seek/speed need no
+ *  extra bookkeeping here. */
+export const ttsCurrentVerse = writable<{
+  book: string;
+  chapter: number;
+  verse: number;
+} | null>(null);

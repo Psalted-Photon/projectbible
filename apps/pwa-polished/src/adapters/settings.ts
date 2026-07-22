@@ -30,6 +30,9 @@ export interface TtsSettings {
   voiceId: string;      // installed Piper voice id (default en_US-lessac-medium)
   rate: number;         // playback speed multiplier (0.8–1.5, default 1.0)
   readHeadings: boolean; // speak section headings before their verse (default false)
+  // The two follow-along effects are independent: either, both, or neither.
+  highlightVerse: boolean; // tint the verse being read (default true)
+  glowFollow: boolean;     // soft glow drifting along the words (default false)
 }
 
 export interface UserSettings {
@@ -229,6 +232,8 @@ export function getTtsSettings(): TtsSettings {
     voiceId: s?.voiceId ?? 'en_US-lessac-medium',
     rate: s?.rate ?? 1.0,
     readHeadings: s?.readHeadings ?? false,
+    highlightVerse: s?.highlightVerse ?? true,
+    glowFollow: s?.glowFollow ?? false,
   };
 }
 

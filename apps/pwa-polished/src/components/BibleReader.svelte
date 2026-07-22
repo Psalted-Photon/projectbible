@@ -35,8 +35,11 @@
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
   import { BIBLE_BOOKS, normalizeBookName, getBookColor as getCategoryColor } from "../lib/bibleData";
-  import { getSettings, getInterlinearSettings } from "../adapters/settings";
+  import { getSettings, getInterlinearSettings, getTtsSettings } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
+  import { ttsCurrentVerse } from "../stores/audioStore";
+  import { getSharedTtsAudio } from "../adapters/tts";
+  import { startGlow } from "../lib/ttsGlow";
   import { expandRmacCode, expandOshbCode } from "../lib/morphologyExpander";
   import { readTransaction } from "../adapters/db";
   import type { DBMorphology } from "../adapters/db";
@@ -493,7 +496,58 @@
     showRedLetter = settings.showRedLetter !== false; // default true
     themedTitles = settings.themedTitles !== false; // default true
     interlinearSettings = getInterlinearSettings();
+    const tts = getTtsSettings();
+    ttsHighlightVerse = tts.highlightVerse;
+    ttsGlowFollow = tts.glowFollow;
   }
+
+  // ── Read Aloud follow-along ────────────────────────────────────────────────
+  // Two independent effects: tinting the spoken verse, and a soft glow drifting
+  // along its words. Either, both, or neither.
+  let ttsHighlightVerse = true;
+  let ttsGlowFollow = false;
+  let glowCleanup: (() => void) | null = null;
+
+  function prefersReducedMotion(): boolean {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  }
+
+  /** Nudge the spoken verse back into view, but only once it drifts out of a
+   *  comfortable band — so it never fights manual scrolling. */
+  function followVerseIntoView(verseEl: HTMLElement): void {
+    if (!readerElement) return;
+    const containerRect = readerElement.getBoundingClientRect();
+    const rect = verseEl.getBoundingClientRect();
+    const topBand = containerRect.top + containerRect.height * 0.15;
+    const bottomBand = containerRect.top + containerRect.height * 0.8;
+    if (rect.top >= topBand && rect.bottom <= bottomBand) return;
+    const target =
+      readerElement.scrollTop + (rect.top - containerRect.top) - containerRect.height * 0.35;
+    readerElement.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+  }
+
+  async function onSpokenVerseChanged(
+    current: { book: string; chapter: number; verse: number } | null,
+    glowOn: boolean,
+    highlightOn: boolean,
+  ): Promise<void> {
+    glowCleanup?.();
+    glowCleanup = null;
+    if (!current || (!glowOn && !highlightOn)) return;
+
+    await tick();
+    const verseEl = readerElement?.querySelector<HTMLElement>(
+      `[data-chapter-section][data-book="${current.book}"][data-chapter="${current.chapter}"] .verse[data-verse="${current.verse}"]`,
+    );
+    if (!verseEl) return;
+
+    followVerseIntoView(verseEl);
+    if (glowOn && !prefersReducedMotion()) {
+      glowCleanup = startGlow(verseEl, getSharedTtsAudio());
+    }
+  }
+
+  $: onSpokenVerseChanged($ttsCurrentVerse, ttsGlowFollow, ttsHighlightVerse);
 
   // Listen for settings updates
   async function handleSettingsUpdate() {
@@ -3678,6 +3732,8 @@
     });
 
     return () => {
+      glowCleanup?.();
+      glowCleanup = null;
       window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
       readerElement?.removeEventListener("mousemove", handleMouseMove);
@@ -3966,7 +4022,15 @@
               {#if heading && showSectionHeadings}
                 <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
               {/if}
-              <div class="verse" class:para-start={paraStart} data-verse={verse}>
+              <div
+                class="verse"
+                class:para-start={paraStart}
+                class:tts-speaking={ttsHighlightVerse &&
+                  $ttsCurrentVerse?.book === chapterData.book &&
+                  $ttsCurrentVerse?.chapter === chapterData.chapter &&
+                  $ttsCurrentVerse?.verse === verse}
+                data-verse={verse}
+              >
                 <span class="verse-number">{verse}</span>
                 {#if showCommentaries && commentaryByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
                   {#each [...new Set(commentaryByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!.map((e) => e.author))] as author}
@@ -4291,6 +4355,42 @@
     position: relative;
     font-size: var(--base-font-size, 18px);
     line-height: var(--line-spacing, 1.8);
+  }
+
+  /* Read Aloud: the verse currently being spoken. */
+  .verse.tts-speaking {
+    background: rgba(157, 122, 245, 0.12);
+    box-shadow: inset 3px 0 0 rgba(157, 122, 245, 0.75);
+    border-radius: 3px;
+    transition: background 0.35s ease;
+  }
+
+  /* Read Aloud: soft cloud drifting along the words. Sits under the text and
+     never intercepts taps. Positioned/sized each frame by lib/ttsGlow.ts. */
+  .verse :global(.tts-glow) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    pointer-events: none;
+    will-change: transform;
+    border-radius: 50%;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(190, 165, 255, 0.5) 0%,
+      rgba(170, 140, 250, 0.28) 45%,
+      rgba(150, 120, 245, 0) 75%
+    );
+    filter: blur(7px);
+  }
+
+  /* Keep the text (and verse number) above the drifting glow so it stays
+     readable; the glow still sits above the .tts-speaking tint, so the two
+     effects layer correctly when both are switched on. */
+  .verse .verse-text,
+  .verse .verse-number {
+    position: relative;
+    z-index: 1;
   }
 
   .verse-number {

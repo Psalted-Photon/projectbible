@@ -41,6 +41,8 @@
   let ttsVoice: string = 'en_US-lessac-medium';
   let ttsRate: number = 1.0;
   let ttsReadHeadings: boolean = false;
+  let ttsHighlightVerse: boolean = true;
+  let ttsGlowFollow: boolean = false;
   let ttsVoices: TtsVoiceInfo[] = getAllVoices();
 
   // Load settings on mount
@@ -61,6 +63,8 @@
     ttsVoice = tts.voiceId;
     ttsRate = tts.rate;
     ttsReadHeadings = tts.readHeadings;
+    ttsHighlightVerse = tts.highlightVerse;
+    ttsGlowFollow = tts.glowFollow;
   });
 
   function deleteIndexedDbDatabase(name: string): Promise<void> {
@@ -214,7 +218,13 @@
       themedTitles,
       timezone: timezone || undefined,
       autoCheckUpdates,
-      tts: { voiceId: ttsVoice, rate: ttsRate, readHeadings: ttsReadHeadings },
+      tts: {
+        voiceId: ttsVoice,
+        rate: ttsRate,
+        readHeadings: ttsReadHeadings,
+        highlightVerse: ttsHighlightVerse,
+        glowFollow: ttsGlowFollow,
+      },
     });
 
     // Apply settings immediately
@@ -349,6 +359,14 @@
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={ttsReadHeadings} on:change={saveSettings} />
       <span class="label-text">Read section headings aloud</span>
+    </label>
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={ttsHighlightVerse} on:change={saveSettings} />
+      <span class="label-text">Highlight the verse being read</span>
+    </label>
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={ttsGlowFollow} on:change={saveSettings} />
+      <span class="label-text">Soft glow drifts along the words</span>
     </label>
   </div>
 
