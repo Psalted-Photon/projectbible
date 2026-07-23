@@ -172,6 +172,11 @@ export function startGlow(verseEl: HTMLElement, audio: HTMLAudioElement): () => 
   const glow = document.createElement('div');
   glow.className = GLOW_CLASS;
   glow.setAttribute('aria-hidden', 'true');
+  // Hidden until the first frame has positioned it, so it never paints at the
+  // container's origin before the transform lands (which read as a drop onto
+  // the line at each verse start). Only opacity fades — transform still snaps.
+  glow.style.opacity = '0';
+  glow.style.transition = 'opacity 150ms ease-out';
 
   // Size is set once and never touched again — see note 1 at the top.
   let glowW = 0;
@@ -225,6 +230,7 @@ export function startGlow(verseEl: HTMLElement, audio: HTMLAudioElement): () => 
   let renderX = 0;
   let renderY = 0;
   let renderLine = -1;
+  let revealed = false;
 
   let frame = 0;
   const draw = (now: number) => {
@@ -270,6 +276,13 @@ export function startGlow(verseEl: HTMLElement, audio: HTMLAudioElement): () => 
 
     // Only the transform changes — see note 2 at the top.
     glow.style.transform = `translate3d(${renderX - glowW / 2}px, ${renderY - glowH / 2}px, 0)`;
+
+    // Reveal only now that it's correctly placed, so the first paint the user
+    // sees is already on the line — no drop-in from the container origin.
+    if (!revealed) {
+      revealed = true;
+      glow.style.opacity = '1';
+    }
   };
   frame = requestAnimationFrame(draw);
 
