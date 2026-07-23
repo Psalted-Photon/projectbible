@@ -1,14 +1,15 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { DBMorphology } from '../adapters/db';
-  
+
   export let x = 0;
   export let y = 0;
   export let selectedText = '';
   export let isPlace = false;
+  /** Clicked word resolves to a biblical character — button reads "Bio", not "Define". */
+  export let isPerson = false;
   export let mode: 'word' | 'verse' = 'word';
-  export let morphologyData: DBMorphology | null = null;
-  
+
+
   const dispatch = createEventDispatcher();
   
   function handleAction(action: string) {
@@ -35,18 +36,11 @@
   </div>
   
   <div class="actions">
-    {#if morphologyData}
-      <!-- Original language morphology -->
-      <button class="action-btn" on:click={() => handleAction('dissect')}>
-        Define
-      </button>
-    {:else}
-      <!-- English word definition -->
-      <button class="action-btn" on:click={() => handleAction('dissect')}>
-        Define
-      </button>
-    {/if}
-    
+    <!-- Same action either way; the label tells you what you'll get. -->
+    <button class="action-btn" on:click={() => handleAction('dissect')}>
+      {isPerson ? 'Bio' : 'Define'}
+    </button>
+
     <button class="action-btn" on:click={() => handleAction('search')}>
       Search
     </button>

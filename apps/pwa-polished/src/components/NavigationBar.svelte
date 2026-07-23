@@ -10,7 +10,11 @@
   import {
     searchService,
     type SearchCategory,
+    type SearchResult,
   } from "../lib/services/searchService";
+  import { buildSearchTree } from "../lib/searchTree";
+  import SearchResultsTree from "./SearchResultsTree.svelte";
+  import { lexicalModalStore } from "../stores/lexicalModalStore";
   import {
     searchQuery as searchQueryStore,
     triggerSearch,
@@ -56,14 +60,14 @@
   let referenceDropdownOpen = false;
   let commDropdownOpen = false;
   let expandedBooks = new Set<string>();
-  let expandedSearchBooks = new Set<string>();
+  /** Expand state for the whole results tree, keyed by node path. */
+  let expandedSearchNodes = new Set<string>();
   let searchQuery = "";
   let searchFocused = false;
   let blurTimeout: number | undefined;
   let searchResults: SearchCategory[] = [];
   let showResults = false;
   let isSearching = false;
-  let expandedTranslations = new Set<string>();
   let totalResultCount = 0;
   let displayedResultCount = 0;
   let showingAll = false;
@@ -516,7 +520,8 @@
     isSearching = true;
     try {
       const limit = loadAll ? -1 : 250;
-      searchResults = await searchService.search(searchQuery, limit);
+      // Explicit search, so the expensive categories (commentaries) run too.
+      searchResults = await searchService.search(searchQuery, { limit, deep: true });
 
       // Get total count
       totalResultCount = await searchService.getTotalCount(searchQuery);
@@ -526,7 +531,12 @@
         (sum, category) => sum + category.count,
         0,
       );
-      showingAll = loadAll || displayedResultCount >= totalResultCount;
+      // "Load all" only applies to Bible results — that's the count that gets capped.
+      const bibleCount = searchResults.find((c) => c.key === "bible")?.count ?? 0;
+      showingAll = loadAll || bibleCount >= totalResultCount;
+
+      // Open the Bible group by default so the common case is one click closer.
+      expandedSearchNodes = new Set(bibleCount > 0 ? ["bible"] : []);
 
       showResults = true;
 
@@ -572,31 +582,64 @@
     }
   }
 
-  function handleResultClick(result: any) {
-    // Navigate to the result
-    if (result.type === "verse" && result.data) {
-      const { book, chapter } = result.data;
-      const highlightVerse = result.data.verse ?? null;
-      if (windowId) {
-        windowStore.updateContentState(windowId, {
-          translation: currentTranslation,
-          book,
-          chapter,
-          highlightedVerse: highlightVerse,
-        });
-      } else {
-        navigationStore.navigateTo(
-          currentTranslation,
-          book,
-          chapter,
-          highlightVerse,
-        );
-      }
-      // Close search results
-      showResults = false;
-      searchQuery = "";
-      searchResults = [];
+  /** Jump the reader (or the owning window) to a book/chapter/verse. */
+  function navigateToResult(book: string, chapter: number, verse: number | null, translation?: string) {
+    const target = translation || currentTranslation;
+    if (windowId) {
+      windowStore.updateContentState(windowId, {
+        translation: target,
+        book,
+        chapter,
+        highlightedVerse: verse,
+      });
+    } else {
+      navigationStore.navigateTo(target, book, chapter, verse);
     }
+  }
+
+  async function handleResultClick(result: SearchResult) {
+    if (!result.data) return;
+
+    if (result.type === "character") {
+      // Reuse the reader's character view rather than building a second one.
+      const { lookupPerson } = await import("../adapters/lexicon-lookup.js");
+      const characterData = await lookupPerson(result.data.name);
+      if (characterData) {
+        lexicalModalStore.open({
+          characterData,
+          selectedText: result.data.name,
+          strongsId: undefined,
+          morphologyData: null,
+          lexicalEntries: null,
+        });
+      }
+    } else if (result.type === "journal") {
+      // Journal opens in a docked window, same as from the journal calendar.
+      const edge = window.innerHeight > window.innerWidth ? "bottom" : "right";
+      const journalWindowId = windowStore.createWindow(edge, 50);
+      if (journalWindowId) {
+        windowStore.setWindowContent(journalWindowId, "journal", {
+          date: result.data.date,
+        });
+      }
+    } else {
+      // Verses, Strong's hits, notes and commentary all resolve to a reference.
+      const { book, chapter } = result.data;
+      if (!book) return;
+      navigateToResult(
+        book,
+        chapter,
+        result.data.verse ?? null,
+        // Strong's hits carry their own original-language translation; the rest
+        // should open in whatever the reader is already showing.
+        result.type === "strongs" ? result.data.translation : undefined,
+      );
+    }
+
+    // Close search results
+    showResults = false;
+    searchQuery = "";
+    searchResults = [];
   }
 
   function highlightText(text: string, query: string): string {
@@ -616,60 +659,14 @@
     return highlighted;
   }
 
-  function toggleTranslation(translationId: string) {
-    const newExpanded = new Set(expandedTranslations);
-    if (newExpanded.has(translationId)) {
-      newExpanded.delete(translationId);
-    } else {
-      newExpanded.add(translationId);
-    }
-    expandedTranslations = newExpanded;
+  function toggleSearchNode(key: string) {
+    const next = new Set(expandedSearchNodes);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    expandedSearchNodes = next;
   }
 
-  function toggleSearchBook(translationId: string, bookName: string) {
-    const key = `${translationId}::${bookName}`;
-    const newExpanded = new Set(expandedSearchBooks);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-    }
-    expandedSearchBooks = newExpanded;
-  }
-
-  // Group results by translation
-  $: resultsByTranslation = searchResults.reduce(
-    (acc, category) => {
-      if (category.name === "Verses") {
-        category.results.forEach((result) => {
-          const translationId = result.data.translation || "Unknown";
-          if (!acc[translationId]) {
-            acc[translationId] = [];
-          }
-          acc[translationId].push(result);
-        });
-      }
-      return acc;
-    },
-    {} as Record<string, any[]>,
-  );
-
-  // Group results by translation then by book (canonical order)
-  const bookOrderMap = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
-  $: resultsByTranslationAndBook = Object.fromEntries(
-    Object.entries(resultsByTranslation).map(([translationId, results]) => {
-      const byBook: Record<string, any[]> = {};
-      results.forEach((result) => {
-        const book = normalizeBookName(result.data.book || "Unknown");
-        if (!byBook[book]) byBook[book] = [];
-        byBook[book].push(result);
-      });
-      const sortedEntries = Object.entries(byBook).sort(([a], [b]) => {
-        return (bookOrderMap.get(a) ?? 999) - (bookOrderMap.get(b) ?? 999);
-      });
-      return [translationId, sortedEntries];
-    })
-  );
+  $: searchTree = buildSearchTree(searchResults);
 
   function clearSearch() {
     searchQuery = "";
@@ -1055,59 +1052,14 @@
         </div>
       {/if}
 
-      {#if searchResults.length > 0 && Object.keys(resultsByTranslation).length > 0}
-        {#each Object.entries(resultsByTranslation) as [translationId, results]}
-          <div class="translation-group">
-            <button
-              class="translation-header"
-              class:expanded={expandedTranslations.has(translationId)}
-              on:click={() => toggleTranslation(translationId)}
-            >
-              <span class="expand-icon">
-                {#if expandedTranslations.has(translationId)}<CaretDown size={10} weight="bold" />{:else}<CaretRight size={10} weight="bold" />{/if}
-              </span>
-              <span class="translation-name">{translationId}</span>
-              <span class="result-count">({results.length})</span>
-            </button>
-
-            {#if expandedTranslations.has(translationId)}
-              <div class="translation-results">
-                {#each resultsByTranslationAndBook[translationId] as [bookName, bookResults]}
-                  <div class="book-group">
-                    <button
-                      class="book-header"
-                      class:expanded={expandedSearchBooks.has(`${translationId}::${bookName}`)}
-                      on:click={() => toggleSearchBook(translationId, bookName)}
-                    >
-                      <span class="expand-icon">
-                        {#if expandedSearchBooks.has(`${translationId}::${bookName}`)}<CaretDown size={9} weight="bold" />{:else}<CaretRight size={9} weight="bold" />{/if}
-                      </span>
-                      <span class="book-name">{bookName}</span>
-                      <span class="result-count">({bookResults.length})</span>
-                    </button>
-                    {#if expandedSearchBooks.has(`${translationId}::${bookName}`)}
-                      <div class="book-results">
-                        {#each bookResults as result}
-                          <button
-                            class="search-result-item"
-                            on:click={() => handleResultClick(result)}
-                          >
-                            <div class="result-title">{result.title}</div>
-                            {#if result.subtitle}
-                              <div class="result-subtitle">
-                                {@html highlightText(result.subtitle, searchQuery)}
-                              </div>
-                            {/if}
-                          </button>
-                        {/each}
-                      </div>
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {/each}
+      {#if searchTree.length > 0}
+        <SearchResultsTree
+          nodes={searchTree}
+          expanded={expandedSearchNodes}
+          query={searchQuery}
+          onToggle={toggleSearchNode}
+          onSelect={handleResultClick}
+        />
       {:else}
         <div class="no-search-results">
           No results found for "{searchQuery}"
@@ -2070,132 +2022,6 @@
     border-radius: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
     z-index: 10002; /* Higher than dropdowns */
-  }
-
-  .translation-group {
-    border-bottom: 1px solid #3a3a3a;
-  }
-
-  .translation-group:last-child {
-    border-bottom: none;
-  }
-
-  .translation-header {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 14px;
-    background: #1a1a1a;
-    border: none;
-    color: #e0e0e0;
-    text-align: left;
-    cursor: pointer;
-    transition: background 0.15s;
-    font-size: 14px;
-    font-weight: 600;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
-  }
-
-  .translation-header:hover {
-    background: #252525;
-  }
-
-  .translation-name {
-    flex: 1;
-    color: #667eea;
-  }
-
-  .result-count {
-    color: #888;
-    font-size: 12px;
-    font-weight: 500;
-  }
-
-  .translation-results {
-    background: #222;
-  }
-
-  .book-group {
-    border-bottom: 1px solid #2a2a2a;
-  }
-
-  .book-group:last-child {
-    border-bottom: none;
-  }
-
-  .book-header {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 14px 9px 28px;
-    background: #1e1e1e;
-    border: none;
-    color: #c8c8c8;
-    text-align: left;
-    cursor: pointer;
-    transition: background 0.15s;
-    font-size: 13px;
-    font-weight: 500;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.15);
-  }
-
-  .book-header:hover {
-    background: #272727;
-  }
-
-  .book-header .book-name {
-    flex: 1;
-    color: #a0b4f0;
-  }
-
-  .book-results {
-    background: #222;
-  }
-
-  .search-result-item {
-    width: 100%;
-    padding: 12px 14px;
-    background: transparent;
-    border: none;
-    color: #e0e0e0;
-    text-align: left;
-    cursor: pointer;
-    transition: background 0.15s;
-    border-bottom: 1px solid #2a2a2a;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
-  }
-
-  .search-result-item:last-child {
-    border-bottom: none;
-  }
-
-  .search-result-item:hover {
-    background: #3a3a3a;
-  }
-
-  .result-title {
-    font-weight: 600;
-    margin-bottom: 4px;
-    font-size: 14px;
-  }
-
-  .result-subtitle {
-    font-size: 13px;
-    color: #aaa;
-    line-height: 1.4;
-  }
-
-  .result-subtitle :global(mark) {
-    background: #667eea;
-    color: #fff;
-    padding: 2px 4px;
-    border-radius: 3px;
-    font-weight: 600;
   }
 
   .no-search-results {

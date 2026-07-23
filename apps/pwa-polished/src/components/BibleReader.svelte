@@ -436,6 +436,10 @@
   let toastX = 0;
   let toastY = 0;
   let selectedText = "";
+  /** Clicked word resolved to a biblical character — relabels Define → Bio. */
+  let selectedIsPerson = false;
+  /** Guards against a slow person lookup landing after the next word click. */
+  let personLabelToken = 0;
   let selectionMode: "word" | "verse" = "word";
   let selectionRange: Range | null = null;
   let longPressTimer: number | null = null;
@@ -3107,6 +3111,26 @@
     showToast = true;
     justOpenedToast = true;
 
+    // Resolve "is this a character?" in the background so the Define button can
+    // relabel itself to Bio. Starts false so the toast never flashes the wrong
+    // label, and the token guard drops a stale answer if you click another word
+    // while the lookup is in flight.
+    selectedIsPerson = false;
+    const token = ++personLabelToken;
+    const word = selectedText;
+    const personRef =
+      selectedVerseNumber != null
+        ? { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber }
+        : null;
+    if (word && selectionMode === "word") {
+      import("../adapters/lexicon-lookup.js")
+        .then(({ isPersonName }) => isPersonName(word, personRef))
+        .then((found) => {
+          if (token === personLabelToken) selectedIsPerson = found;
+        })
+        .catch(() => {});
+    }
+
     // Allow clickOutside to work after a short delay
     setTimeout(() => {
       justOpenedToast = false;
@@ -3784,8 +3808,8 @@
     y={toastY}
     {selectedText}
     isPlace={false}
+    isPerson={selectedIsPerson}
     mode={selectionMode}
-    morphologyData={selectedMorphology}
     on:action={handleToastAction}
     on:modeChange={handleModeChange}
   />

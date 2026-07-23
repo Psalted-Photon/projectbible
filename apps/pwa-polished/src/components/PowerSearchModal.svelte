@@ -7,11 +7,18 @@
     generateSafeRegex, 
     createDefaultConfig 
   } from "../../../../packages/core/src/search/searchConfig";
-  import { searchService, type SearchCategory } from "../lib/services/searchService";
+  import {
+    searchService,
+    type SearchCategory,
+    type SearchResult,
+  } from "../lib/services/searchService";
   import { navigationStore } from "../stores/navigationStore";
   import { get } from "svelte/store";
-  import { BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData";
   import { englishLexicalService } from "../../../../packages/core/src/search/englishLexicalService";
+  import { buildSearchTree } from "../lib/searchTree";
+  import SearchResultsTree from "./SearchResultsTree.svelte";
+  import { lexicalModalStore } from "../stores/lexicalModalStore";
+  import { windowStore } from "../lib/stores/windowStore";
   import HelpModal from "./HelpModal.svelte";
   import { Microscope } from 'phosphor-svelte';
 
@@ -25,53 +32,19 @@
   let searchResults: SearchCategory[] = [];
   let totalResultCount = 0;
   let displayedResultCount = 0;
-  
-  // Translation tree state
-  interface TranslationGroup {
-    translationId: string;
-    results: SearchResult[];
-    displayedCount: number;
-    totalCount: number;
-    expanded: boolean;
-    showMode: 'limited' | 'medium' | 'all'; // 100, 1000, or unlimited
-  }
-  let translationGroups: TranslationGroup[] = [];
 
-  // Book-level collapse state for power search results
-  let expandedPowerSearchBooks = new Set<string>();
-  const psBookOrderMap = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
+  /** Expand state for the shared results tree, keyed by node path. */
+  let expandedResultNodes = new Set<string>();
+  $: searchTree = buildSearchTree(searchResults);
 
-  function groupByBook(results: SearchResult[]): Array<{bookName: string, results: SearchResult[]}> {
-    const byBook: Record<string, SearchResult[]> = {};
-    results.forEach((result) => {
-      const book = normalizeBookName(result.data?.book || 'Unknown');
-      if (!byBook[book]) byBook[book] = [];
-      byBook[book].push(result);
-    });
-    return Object.entries(byBook)
-      .sort(([a], [b]) => (psBookOrderMap.get(a) ?? 999) - (psBookOrderMap.get(b) ?? 999))
-      .map(([bookName, results]) => ({ bookName, results }));
+  function toggleResultNode(key: string) {
+    const next = new Set(expandedResultNodes);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    expandedResultNodes = next;
   }
 
-  function togglePowerSearchBook(key: string) {
-    const newExpanded = new Set(expandedPowerSearchBooks);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-    }
-    expandedPowerSearchBooks = newExpanded;
-  }
-  
-  interface SearchResult {
-    type: 'verse' | 'place' | 'strongs' | 'morphology' | 'cross-reference';
-    title: string;
-    subtitle?: string;
-    reference?: string;
-    data: any;
-    score: number;
-  }
-  
+
   // Help modal state
   let showHelpModal = false;
   let helpTopic = "general";
@@ -161,72 +134,21 @@
       
       const query = generateSafeRegex(config, expandedSynonyms);
       generatedQuery = query;
-      
-      // Get all results to organize by translation
-      searchResults = await searchService.search(query.regex.source, -1);
+
+      // Power Search is always an explicit search, so run the deep categories too.
+      searchResults = await searchService.search(query.regex.source, { limit: -1, deep: true });
       totalResultCount = searchResults.reduce((sum, cat) => sum + cat.count, 0);
-      
-      // Group results by translation
-      const groupMap = new Map<string, SearchResult[]>();
-      
-      for (const category of searchResults) {
-        for (const result of category.results) {
-          const translationId = result.data?.translation || 'Unknown';
-          if (!groupMap.has(translationId)) {
-            groupMap.set(translationId, []);
-          }
-          groupMap.get(translationId)!.push(result);
-        }
-      }
-      
-      // Create translation groups with caps
-      translationGroups = Array.from(groupMap.entries()).map(([translationId, results]) => ({
-        translationId,
-        results,
-        displayedCount: Math.min(results.length, 100),
-        totalCount: results.length,
-        expanded: groupMap.size === 1, // Auto-expand if only one translation
-        showMode: 'limited' as const
-      }));
-      
-      // Sort by result count (descending)
-      translationGroups.sort((a, b) => b.totalCount - a.totalCount);
-      
-      displayedResultCount = translationGroups.reduce((sum, g) => sum + g.displayedCount, 0);
+      displayedResultCount = totalResultCount;
+
+      // Open the Bible group so results are visible without a first click.
+      const hasBible = searchResults.some((c) => c.key === 'bible' && c.count > 0);
+      expandedResultNodes = new Set(hasBible ? ['bible'] : []);
     } catch (error) {
       console.error("Search error:", error);
       searchResults = [];
-      translationGroups = [];
     } finally {
       isSearching = false;
     }
-  }
-
-  function toggleTranslation(index: number) {
-    translationGroups[index].expanded = !translationGroups[index].expanded;
-    translationGroups = translationGroups; // trigger reactivity
-  }
-  
-  function loadMoreInTranslation(index: number) {
-    const group = translationGroups[index];
-    
-    if (group.showMode === 'limited') {
-      // Go from 100 to 1000
-      if (group.totalCount <= 1000) {
-        group.showMode = 'all';
-        group.displayedCount = group.totalCount;
-      } else {
-        group.showMode = 'medium';
-        group.displayedCount = 1000;
-      }
-    } else if (group.showMode === 'medium') {
-      // Go from 1000 to unlimited
-      group.showMode = 'all';
-      group.displayedCount = group.totalCount;
-    }
-    
-    translationGroups = translationGroups; // trigger reactivity
-    displayedResultCount = translationGroups.reduce((sum, g) => sum + g.displayedCount, 0);
   }
 
   function resetConfig() {
@@ -234,14 +156,41 @@
     generatedQuery = null;
     previewResults = [];
     searchResults = [];
-    translationGroups = [];
-    expandedPowerSearchBooks = new Set();
+    expandedResultNodes = new Set();
     totalResultCount = 0;
     displayedResultCount = 0;
   }
 
-  function handleResultClick(result: SearchResult) {
-    if (result.type !== "verse" || !result.data) return;
+  async function handleResultClick(result: SearchResult) {
+    if (!result.data) return;
+
+    if (result.type === "character") {
+      const { lookupPerson } = await import("../adapters/lexicon-lookup.js");
+      const characterData = await lookupPerson(result.data.name);
+      if (characterData) {
+        lexicalModalStore.open({
+          characterData,
+          selectedText: result.data.name,
+          strongsId: undefined,
+          morphologyData: null,
+          lexicalEntries: null,
+        });
+        closeModal();
+      }
+      return;
+    }
+
+    if (result.type === "journal") {
+      const edge = window.innerHeight > window.innerWidth ? "bottom" : "right";
+      const journalWindowId = windowStore.createWindow(edge, 50);
+      if (journalWindowId) {
+        windowStore.setWindowContent(journalWindowId, "journal", { date: result.data.date });
+      }
+      closeModal();
+      return;
+    }
+
+    if (!result.data.book) return;
     const current = get(navigationStore);
     navigationStore.pushHistory(current);
     const targetTranslation = result.data.translation || current.translation;
@@ -540,112 +489,23 @@
           {/if}
 
           <!-- Results Display -->
-          {#if translationGroups.length > 0}
+          {#if searchTree.length > 0}
             <div class="results-container">
               <div class="results-header">
                 <h3>Results</h3>
                 <div class="result-count">
-                  Showing {displayedResultCount.toLocaleString()} of {totalResultCount.toLocaleString()} results
+                  {totalResultCount.toLocaleString()} results
                 </div>
               </div>
 
               <div class="results-list">
-                {#if translationGroups.length === 1}
-                  <!-- Single translation: show by book -->
-                  {#each groupByBook(translationGroups[0].results.slice(0, translationGroups[0].displayedCount)) as {bookName, results: bookResults}}
-                    <div class="ps-book-group">
-                      <button class="ps-book-header" on:click={() => togglePowerSearchBook(`single::${bookName}`)}>                        
-                        <span class="ps-book-caret">{expandedPowerSearchBooks.has(`single::${bookName}`) ? '▼' : '▶'}</span>
-                        <span class="ps-book-name">{bookName}</span>
-                        <span class="ps-book-count">({bookResults.length})</span>
-                      </button>
-                      {#if expandedPowerSearchBooks.has(`single::${bookName}`)}
-                        <div class="ps-book-results">
-                          {#each bookResults as result}
-                            <button class="result-item" on:click={() => handleResultClick(result)}>
-                              <div class="result-title">{result.title}</div>
-                              {#if result.subtitle}
-                                <div class="result-text">{@html highlightSnippet(result.subtitle)}</div>
-                              {/if}
-                            </button>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
-                  {/each}
-
-                  {#if translationGroups[0].displayedCount < translationGroups[0].totalCount}
-                    <div class="load-more-container">
-                      <button class="load-more-btn" on:click={() => loadMoreInTranslation(0)}>
-                        {#if translationGroups[0].showMode === 'limited'}
-                          Showing {translationGroups[0].displayedCount}/{translationGroups[0].totalCount}
-                          — Click to load {Math.min(1000, translationGroups[0].totalCount)} results
-                        {:else if translationGroups[0].showMode === 'medium'}
-                          Showing {translationGroups[0].displayedCount}/{translationGroups[0].totalCount}
-                          — Click to load all {translationGroups[0].totalCount.toLocaleString()} results
-                        {/if}
-                      </button>
-                    </div>
-                  {/if}
-                {:else}
-                  <!-- Multiple translations: show tree view -->
-                  {#each translationGroups as group, index}
-                    <div class="translation-branch">
-                      <button 
-                        class="translation-header"
-                        on:click={() => toggleTranslation(index)}
-                      >
-                        <span class="expand-icon">{group.expanded ? '▼' : '▶'}</span>
-                        <span class="translation-name">{group.translationId}</span>
-                        <span class="translation-count">
-                          {group.displayedCount < group.totalCount 
-                            ? `${group.displayedCount}/${group.totalCount}` 
-                            : group.totalCount}
-                        </span>
-                      </button>
-                      
-                      {#if group.expanded}
-                        <div class="translation-results">
-                          {#each groupByBook(group.results.slice(0, group.displayedCount)) as {bookName, results: bookResults}}
-                            <div class="ps-book-group">
-                              <button class="ps-book-header" on:click={() => togglePowerSearchBook(`${group.translationId}::${bookName}`)}>                        
-                                <span class="ps-book-caret">{expandedPowerSearchBooks.has(`${group.translationId}::${bookName}`) ? '▼' : '▶'}</span>
-                                <span class="ps-book-name">{bookName}</span>
-                                <span class="ps-book-count">({bookResults.length})</span>
-                              </button>
-                              {#if expandedPowerSearchBooks.has(`${group.translationId}::${bookName}`)}
-                                <div class="ps-book-results">
-                                  {#each bookResults as result}
-                                    <button class="result-item" on:click={() => handleResultClick(result)}>
-                                      <div class="result-title">{result.title}</div>
-                                      {#if result.subtitle}
-                                        <div class="result-text">{@html highlightSnippet(result.subtitle)}</div>
-                                      {/if}
-                                    </button>
-                                  {/each}
-                                </div>
-                              {/if}
-                            </div>
-                          {/each}
-
-                          {#if group.displayedCount < group.totalCount}
-                            <div class="load-more-container">
-                              <button class="load-more-btn" on:click={() => loadMoreInTranslation(index)}>
-                                {#if group.showMode === 'limited'}
-                                  Showing {group.displayedCount}/{group.totalCount}
-                                  — Click to load {Math.min(1000, group.totalCount)} results
-                                {:else if group.showMode === 'medium'}
-                                  Showing {group.displayedCount}/{group.totalCount}
-                                  — Click to load all {group.totalCount.toLocaleString()} results
-                                {/if}
-                              </button>
-                            </div>
-                          {/if}
-                        </div>
-                      {/if}
-                    </div>
-                  {/each}
-                {/if}
+                <SearchResultsTree
+                  nodes={searchTree}
+                  expanded={expandedResultNodes}
+                  query={config.text}
+                  onToggle={toggleResultNode}
+                  onSelect={handleResultClick}
+                />
               </div>
             </div>
           {:else if previewResults.length > 0}
@@ -1294,130 +1154,22 @@
     overflow-y: auto;
   }
 
-  .translation-branch {
-    margin-bottom: 16px;
-    border: 1px solid #3a3a3a;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #1a1a1a;
-  }
 
-  .translation-header {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 14px 16px;
-    background: linear-gradient(135deg, #1a1a2a 0%, #2a2a3a 100%);
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: #e0e0e0;
-    font-size: 15px;
-    font-weight: 600;
-  }
 
-  .translation-header:hover {
-    background: linear-gradient(135deg, #2a2a3a 0%, #3a3a4a 100%);
-  }
 
-  .expand-icon {
-    color: #f97316;
-    font-size: 12px;
-    min-width: 16px;
-  }
 
-  .translation-name {
-    flex: 1;
-    text-align: left;
-    color: #f97316;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-  }
 
-  .translation-count {
-    color: #888;
-    font-size: 13px;
-    font-weight: 500;
-    background: #0a0a0a;
-    padding: 4px 10px;
-    border-radius: 12px;
-    border: 1px solid #3a3a3a;
-  }
 
-  .translation-results {
-    padding: 12px;
-    background: #141414;
-  }
 
-  .ps-book-group {
-    margin-bottom: 4px;
-    border: 1px solid #2a2a2a;
-    border-radius: 6px;
-    overflow: hidden;
-  }
 
-  .ps-book-header {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
-    background: #1e1e2a;
-    border: none;
-    cursor: pointer;
-    color: #c8c8c8;
-    font-size: 13px;
-    font-weight: 500;
-    text-align: left;
-    transition: background 0.15s;
-  }
 
-  .ps-book-header:hover {
-    background: #28283a;
-  }
 
-  .ps-book-caret {
-    color: #f97316;
-    font-size: 10px;
-    min-width: 12px;
-  }
 
-  .ps-book-name {
-    flex: 1;
-    color: #a0b4f0;
-  }
 
-  .ps-book-count {
-    color: #888;
-    font-size: 12px;
-  }
 
-  .ps-book-results {
-    background: #141414;
-  }
 
-  .load-more-container {
-    margin-top: 12px;
-    text-align: center;
-  }
 
-  .load-more-btn {
-    background: linear-gradient(135deg, #f97316 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-    transition: all 0.2s;
-  }
 
-  .load-more-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
-  }
 
   .result-category {
     margin-bottom: 24px;
@@ -1431,37 +1183,9 @@
     text-transform: uppercase;
   }
 
-  .result-item {
-    width: 100%;
-    text-align: left;
-    padding: 12px;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    margin-bottom: 8px;
-    cursor: pointer;
-    display: block;
-    font: inherit;
-    transition: all 0.2s;
-  }
 
-  .result-item:hover {
-    background: #2a2a2a;
-    border-color: #f97316;
-  }
 
-  .result-title {
-    font-weight: 600;
-    color: #e0e0e0;
-    margin-bottom: 4px;
-    font-size: 14px;
-  }
 
-  .result-text {
-    color: #aaa;
-    font-size: 13px;
-    line-height: 1.4;
-  }
 
   .more-results {
     color: #888;

@@ -599,6 +599,8 @@ export interface PersonLookupResult {
   person: PersonRecord;
   alternates: PersonRecord[]; // other people sharing the clicked name
   matchedByVerse: boolean;    // true when the current verse disambiguated the match
+  /** How the match was established — 'verse' is exact, 'chapter' is the widened tier. */
+  matchTier?: 'verse' | 'chapter' | 'name';
 }
 
 export interface VerseRef { book: string; chapter: number; verse: number }
@@ -666,11 +668,18 @@ export async function lookupPerson(word: string, ref?: VerseRef | null): Promise
     });
     if (!candidateIds.length) return null;
 
-    // 2. Verse-context disambiguation.
-    // When we know the verse, REQUIRE the person to actually appear in it — this
-    // is what distinguishes a clicked name from a coincidental common word (e.g.
-    // "mother") and picks the right homonym (e.g. which of the six Marys).
+    // 2. Context disambiguation, in two tiers.
+    // Tier 1 — the person appears in the exact clicked verse. Best signal: it
+    // picks the right homonym (e.g. which of the six Marys).
+    // Tier 2 — the person appears anywhere in the clicked chapter. Theographic's
+    // per-verse links are sparse (Abraham is linked in Genesis 18 at v6 and v7 but
+    // not v1-3, where the text plainly names him), so tier 1 alone silently drops
+    // real matches.
+    // Requiring at least chapter-level evidence is what still distinguishes a
+    // clicked name from a coincidental common word — "mother", "son", "father",
+    // "king", "word", "judge" and "prophet" are all real person names in the index.
     let matchedIds: string[] = [];
+    let tier: 'verse' | 'chapter' | 'name' = 'name';
     if (ref && db.objectStoreNames.contains('person_verses')) {
       const atVerse = await new Promise<Set<string>>((resolve) => {
         const tx = db.transaction('person_verses', 'readonly');
@@ -680,7 +689,23 @@ export async function lookupPerson(word: string, ref?: VerseRef | null): Promise
         request.onerror = () => resolve(new Set());
       });
       matchedIds = candidateIds.filter((id) => atVerse.has(id));
-      // No person with this name appears in the clicked verse → not a character here.
+      tier = 'verse';
+
+      if (matchedIds.length === 0) {
+        // Widen to the chapter. Candidates are few (1-5), and the personId index
+        // makes each list cheap, so this stays a handful of indexed reads.
+        const inChapter = await Promise.all(
+          candidateIds.map(async (id) => {
+            const verses = await getPersonVerses(id);
+            return verses.some((v) => v.book === ref.book && v.chapter === ref.chapter) ? id : null;
+          }),
+        );
+        matchedIds = inChapter.filter((id): id is string => id !== null);
+        tier = 'chapter';
+      }
+
+      // Nobody with this name appears anywhere in the clicked chapter → not a
+      // character here, so callers fall back to the dictionary definition.
       if (matchedIds.length === 0) return null;
     }
 
@@ -697,16 +722,68 @@ export async function lookupPerson(word: string, ref?: VerseRef | null): Promise
 
     const byProminence = (a: PersonRecord, b: PersonRecord) => (b.verseCount ?? 0) - (a.verseCount ?? 0);
 
-    const matchedByVerse = matchedIds.length > 0;
-    const primarySet = matchedByVerse ? records.filter((r) => matchedIds.includes(r.id)) : records;
+    const matchedByContext = matchedIds.length > 0;
+    const primarySet = matchedByContext ? records.filter((r) => matchedIds.includes(r.id)) : records;
     primarySet.sort(byProminence);
     const person = primarySet[0];
     const alternates = records.filter((r) => r.id !== person.id).sort(byProminence);
 
-    return { person, alternates, matchedByVerse };
+    return {
+      person,
+      alternates,
+      // Only an exact verse hit counts as verse-confirmed; a chapter-tier match
+      // narrowed the field but can't promise this is the person in this verse.
+      matchedByVerse: matchedByContext && tier === 'verse',
+      matchTier: matchedByContext ? tier : 'name',
+    };
   } catch (error) {
     console.error('Error looking up person:', error);
     return null;
+  }
+}
+
+/**
+ * Cheap "is this clicked word a biblical character?" test for the selection toast,
+ * so the button can read "Bio" instead of "Define".
+ *
+ * Applies the same two-tier gate as lookupPerson (exact verse, then chapter) but
+ * skips loading the full person records, so the label never promises a bio that
+ * the modal won't show.
+ */
+export async function isPersonName(word: string, ref?: VerseRef | null): Promise<boolean> {
+  const normalized = word.trim().toLowerCase();
+  if (!normalized) return false;
+
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains('person_names')) return false;
+
+    const candidateIds = await new Promise<string[]>((resolve) => {
+      const tx = db.transaction('person_names', 'readonly');
+      const index = tx.objectStore('person_names').index('nameLower');
+      const request = index.getAll(IDBKeyRange.only(normalized));
+      request.onsuccess = () => resolve([...new Set((request.result || []).map((r: any) => r.personId))]);
+      request.onerror = () => resolve([]);
+    });
+    if (!candidateIds.length) return false;
+    if (!ref || !db.objectStoreNames.contains('person_verses')) return true;
+
+    const atVerse = await new Promise<Set<string>>((resolve) => {
+      const tx = db.transaction('person_verses', 'readonly');
+      const index = tx.objectStore('person_verses').index('book_chapter_verse');
+      const request = index.getAll(IDBKeyRange.only([ref.book, ref.chapter, ref.verse]));
+      request.onsuccess = () => resolve(new Set((request.result || []).map((r: any) => r.personId)));
+      request.onerror = () => resolve(new Set());
+    });
+    if (candidateIds.some((id) => atVerse.has(id))) return true;
+
+    for (const id of candidateIds) {
+      const verses = await getPersonVerses(id);
+      if (verses.some((v) => v.book === ref.book && v.chapter === ref.chapter)) return true;
+    }
+    return false;
+  } catch {
+    return false;
   }
 }
 
