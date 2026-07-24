@@ -7,6 +7,7 @@
   import MapPane from "./MapPane.svelte";
   import CommentaryReader from "./CommentaryReader.svelte";
   import JournalWriter from "./JournalWriter.svelte";
+  import ArtPane from "./ArtPane.svelte";
 
   // Group windows by edge
   $: leftPanels = $windowStore.filter(w => w.edge === 'left');
@@ -49,6 +50,13 @@
         </div>
       {:else if panel.contentType === 'journal'}
         <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
+      {:else if panel.contentType === 'art'}
+        <ArtPane
+          sceneId={panel.contentState?.sceneId}
+          book={panel.contentState?.book}
+          chapter={panel.contentState?.chapter}
+          verse={panel.contentState?.verse}
+        />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>
@@ -76,6 +84,13 @@
         </div>
       {:else if panel.contentType === 'journal'}
         <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
+      {:else if panel.contentType === 'art'}
+        <ArtPane
+          sceneId={panel.contentState?.sceneId}
+          book={panel.contentState?.book}
+          chapter={panel.contentState?.chapter}
+          verse={panel.contentState?.verse}
+        />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>
@@ -105,6 +120,13 @@
         </div>
       {:else if panel.contentType === 'journal'}
         <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
+      {:else if panel.contentType === 'art'}
+        <ArtPane
+          sceneId={panel.contentState?.sceneId}
+          book={panel.contentState?.book}
+          chapter={panel.contentState?.chapter}
+          verse={panel.contentState?.verse}
+        />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>
@@ -134,6 +156,13 @@
         </div>
       {:else if panel.contentType === 'journal'}
         <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
+      {:else if panel.contentType === 'art'}
+        <ArtPane
+          sceneId={panel.contentState?.sceneId}
+          book={panel.contentState?.book}
+          chapter={panel.contentState?.chapter}
+          verse={panel.contentState?.verse}
+        />
       {:else if panel.contentType === 'wordstudy'}
         <div class="placeholder">
           <h2>Word Study</h2>

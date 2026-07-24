@@ -11,10 +11,11 @@ export type SearchCategoryKey =
   | 'journal'
   | 'saved'
   | 'characters'
+  | 'encyclopedia'
   | 'commentaries';
 
 export interface SearchResult {
-  type: 'verse' | 'strongs' | 'note' | 'journal' | 'saved' | 'character' | 'commentary';
+  type: 'verse' | 'strongs' | 'note' | 'journal' | 'saved' | 'character' | 'encyclopedia' | 'commentary';
   title: string;
   subtitle?: string;
   reference?: string;
@@ -128,12 +129,13 @@ export class UnifiedSearchService {
 
     // Every category is independent, so fetch them together rather than
     // serially — the slowest one sets the pace instead of their sum.
-    const [verses, strongs, notes, journal, characters, commentaries] = await Promise.all([
+    const [verses, strongs, notes, journal, characters, encyclopedia, commentaries] = await Promise.all([
       this.searchVerses(normalizedQuery, options.limit),
       this.searchStrongs(normalizedQuery),
       this.searchNotes(normalizedQuery),
       this.searchJournal(normalizedQuery),
       this.searchCharacters(normalizedQuery),
+      this.searchEncyclopedia(normalizedQuery, !!options.deep),
       options.deep ? this.searchCommentaries(normalizedQuery) : Promise.resolve([]),
     ]);
 
@@ -145,6 +147,7 @@ export class UnifiedSearchService {
       // Saved verses aren't built yet — the group shows 0 and lights up on its own.
       { key: 'saved', name: 'Saved Verses', count: 0, results: [], alwaysShow: true },
       { key: 'characters', name: 'Biblical Characters', count: characters.length, results: characters },
+      { key: 'encyclopedia', name: 'Encyclopedia (ISBE)', count: encyclopedia.length, results: encyclopedia },
       { key: 'commentaries', name: 'Commentaries', count: commentaries.length, results: commentaries },
     ];
 
@@ -437,6 +440,78 @@ export class UnifiedSearchService {
         }));
     } catch (error) {
       console.error('Error searching characters:', error);
+      return [];
+    }
+  }
+
+  // ── Encyclopedia (ISBE) ──────────────────────────────────────────────────
+
+  /**
+   * Type-ahead matches entry titles (prefix). A `deep` search additionally scans
+   * the full-text token index so a word discussed *inside* an article — but not in
+   * its title — still surfaces. Places rank above general entries, then by length.
+   */
+  private async searchEncyclopedia(query: string, deep: boolean): Promise<SearchResult[]> {
+    try {
+      const term = query.toLowerCase().trim();
+      if (term.length < 2) return [];
+
+      const db = await openDB();
+      if (!db.objectStoreNames.contains('isbe_entry_names')) return [];
+
+      const entryIds = new Set<number>();
+
+      // Title prefix matches
+      const nameIdx = db
+        .transaction('isbe_entry_names', 'readonly')
+        .objectStore('isbe_entry_names')
+        .index('nameLower');
+      const nameRows = await getAll<any>(
+        nameIdx,
+        IDBKeyRange.bound(term, `${term}￿`, false, false),
+      );
+      for (const r of nameRows) entryIds.add(r.entryId);
+
+      // Deep: exact-token body matches (one token only — the box is a single word here)
+      if (deep && /^[a-z0-9]{3,}$/.test(term) && db.objectStoreNames.contains('isbe_tokens')) {
+        const tokIdx = db.transaction('isbe_tokens', 'readonly').objectStore('isbe_tokens').index('token');
+        const tokRows = await getAll<any>(tokIdx, IDBKeyRange.only(term));
+        for (const r of tokRows) entryIds.add(r.entryId);
+      }
+
+      if (!entryIds.size) return [];
+      const ids = [...entryIds].slice(0, CATEGORY_LIMIT);
+
+      const entryStore = db.transaction('isbe_entries', 'readonly').objectStore('isbe_entries');
+      const entries = await Promise.all(
+        ids.map(
+          (id) =>
+            new Promise<any>((resolve) => {
+              const req = entryStore.get(id);
+              req.onsuccess = () => resolve(req.result || null);
+              req.onerror = () => resolve(null);
+            }),
+        ),
+      );
+
+      return entries
+        .filter(Boolean)
+        // Places first, then longer (richer) articles.
+        .sort((a, b) => (b.isPlace ?? 0) - (a.isPlace ?? 0) || (b.charCount ?? 0) - (a.charCount ?? 0))
+        .map((e) => ({
+          type: 'encyclopedia' as const,
+          title: e.primaryName || e.title,
+          subtitle: [
+            e.isPlace ? 'Place' : 'Encyclopedia',
+            e.lead ? String(e.lead).slice(0, 90) : '',
+          ]
+            .filter(Boolean)
+            .join('  ·  '),
+          data: { entryId: e.entryId, isPlace: !!e.isPlace, primaryName: e.primaryName || e.title },
+          score: (e.isPlace ? 1e6 : 0) + (e.charCount ?? 0),
+        }));
+    } catch (error) {
+      console.error('Error searching encyclopedia:', error);
       return [];
     }
   }

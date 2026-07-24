@@ -201,6 +201,15 @@
       url: `${BASE_URL}/study-tools.sqlite`,
     },
     {
+      id: "isbe",
+      name: "Bible Encyclopedia (ISBE)",
+      description:
+        "~9,380 scholarly articles on places, people, customs, plants and doctrine. Tap a place or term in the reader → More Info. Public Domain (ISBE 1915); place data CC BY 4.0 (OpenBible.info)",
+      size: "62.21 MB",
+      icon: "📕",
+      url: `${BASE_URL}/isbe.sqlite`,
+    },
+    {
       id: "geonames-modern-places-v1",
       name: "World Places (GeoNames)",
       description: "Search any modern place: cities, states, countries worldwide. 172,000+ places. License: CC BY 4.0 — geonames.org",

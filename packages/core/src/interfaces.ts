@@ -328,6 +328,49 @@ export interface PlaceStore {
   getPlaceAppearance(placeId: string, period: string): Promise<PlaceAppearance | null>;
 }
 
+// ── Biblical art ─────────────────────────────────────────────────────────────
+
+/** A single artwork depicting a biblical scene (public-domain painting, etc.) */
+export interface ArtWork {
+  title: string;
+  artist?: string;      // "Leonardo da Vinci"; may be "Unknown"
+  year?: string;        // free-form: "1498", "c. 1512", "1601–1602"
+  imageUrl: string;     // large/high-res image (e.g. Commons Special:FilePath?width=1600)
+  thumbUrl?: string;    // small preview; falls back to imageUrl
+  sourceUrl?: string;   // Wikimedia Commons file page (attribution / full-zoom)
+  license?: string;     // "Public domain", "CC0", ...
+  description?: string; // optional caption / context
+}
+
+/** A famous biblical moment anchored to a passage, carrying one or more artworks. */
+export interface ArtScene {
+  id: string;            // stable slug, e.g. "last-supper"
+  title: string;         // "The Last Supper"
+  // Anchor verse — matches the section-heading verse where the in-text icon appears
+  book: string;
+  chapter: number;
+  verse: number;
+  passageLabel?: string; // human-readable range, e.g. "John 13:21–30"
+  works: ArtWork[];
+}
+
+export interface ArtStore {
+  /** Get a scene (with its artworks) by id */
+  getScene(id: string): Promise<ArtScene | null>;
+
+  /** Scenes anchored exactly at this verse (icon tap → gallery) */
+  getScenesForVerse(reference: BCV): Promise<ArtScene[]>;
+
+  /** All scenes anchored within a chapter (reader marks which verses get an icon) */
+  getScenesForChapter(book: string, chapter: number): Promise<ArtScene[]>;
+
+  /** Every installed scene, for a browsable gallery (canonical order) */
+  getAllScenes(): Promise<ArtScene[]>;
+
+  /** Free-text search across scene titles, artists, and work titles */
+  searchScenes(query: string): Promise<ArtScene[]>;
+}
+
 export interface MapStore {
   /** Get base map tiles for offline viewing */
   getBaseTiles(zoom: number, bounds: BoundingBox): Promise<MapTile[]>;

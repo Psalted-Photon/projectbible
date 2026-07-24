@@ -5,6 +5,7 @@
   import { onMount, onDestroy } from "svelte";
   import { CaretDown, CaretRight, CaretUp } from "phosphor-svelte";
   import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
+  import { ENOCH_EDITIONS, isEnochAuthor, enochLabelFor, loadEnoch } from "../lib/enochBooks";
 
   export let windowId: string | undefined = undefined;
   export let visible: boolean = true;
@@ -16,6 +17,10 @@
   let referenceDropdownOpen = false;
   let expandedBooks = new Set<string>();
 
+  // Book of Enoch: chapter list for the active edition (in-mode chapter picker)
+  let enochChapters: { chapter: number; label: string }[] = [];
+  let enochLoadedFor = "";
+
   // Refs for dropdown positioning
   let authorButtonRef: HTMLElement;
   let referenceButtonRef: HTMLElement;
@@ -26,11 +31,23 @@
     : null;
   $: currentAuthor =
     windowState?.contentState?.author ?? "All Authors";
+  $: isEnoch = isEnochAuthor(currentAuthor);
+  $: displayAuthor = enochLabelFor(currentAuthor) ?? currentAuthor;
   $: currentBook = windowState?.contentState?.book ?? $navigationStore.book;
   $: currentChapter =
     windowState?.contentState?.chapter ?? $navigationStore.chapter;
-  $: currentReference = `${currentBook} ${currentChapter}`;
+  $: currentReference = isEnoch
+    ? `Enoch ${currentChapter}`
+    : `${currentBook} ${currentChapter}`;
   $: currentBookCategory = BIBLE_BOOKS.find(b => b.name === currentBook)?.category || '';
+
+  // Load the active Enoch edition's chapter list for the reference picker
+  $: if (isEnoch && currentAuthor && currentAuthor !== enochLoadedFor) {
+    enochLoadedFor = currentAuthor;
+    loadEnoch(currentAuthor).then((b) => {
+      if (b) enochChapters = b.chapters.map((c) => ({ chapter: c.chapter, label: c.label }));
+    });
+  }
 
   onMount(async () => {
     commentaryStore = new IndexedDBCommentaryStore();
@@ -104,14 +121,43 @@
 
   function selectAuthor(author: string | undefined) {
     if (windowId) {
-      windowStore.updateContentState(windowId, {
-        author,
-        highlightedVerse: null,
-      });
+      // Leaving an Enoch edition: drop the Enoch book/chapter so the reader and
+      // reference picker return to the normal Bible position.
+      const patch: Record<string, unknown> = { author, highlightedVerse: null };
+      if (isEnoch) {
+        patch.book = undefined;
+        patch.chapter = undefined;
+      }
+      windowStore.updateContentState(windowId, patch);
     }
     // For global panes without windowId, we don't persist author selection
     // Users should use windows for independent commentary instances
     authorDropdownOpen = false;
+  }
+
+  // Book of Enoch — the ONLY way to reach Enoch. Selecting an edition pins the
+  // book to "Enoch" and starts at chapter 1; the reference pill becomes an
+  // in-mode Enoch chapter picker.
+  function selectEnoch(author: string) {
+    if (windowId) {
+      windowStore.updateContentState(windowId, {
+        author,
+        book: "Enoch",
+        chapter: 1,
+        highlightedVerse: null,
+      });
+    }
+    authorDropdownOpen = false;
+  }
+
+  function selectEnochChapter(chapter: number) {
+    if (windowId) {
+      windowStore.updateContentState(windowId, {
+        chapter,
+        highlightedVerse: null,
+      });
+    }
+    referenceDropdownOpen = false;
   }
 
   function toggleBook(bookName: string, event: MouseEvent) {
@@ -218,7 +264,7 @@
         class:active={authorDropdownOpen}
       >
         <span class="nav-label">Commentary:</span>
-        <span class="nav-value">{currentAuthor}</span>
+        <span class="nav-value">{displayAuthor}</span>
         <span class="nav-arrow">{authorDropdownOpen ? "▲" : "▼"}</span>
       </button>
     </div>
@@ -259,10 +305,40 @@
           {author}
         </button>
       {/each}
+      {#if windowId}
+        <!-- Book of Enoch: the single entry point (per-window only) -->
+        <div class="dropdown-section-label">📜 Ancient Book</div>
+        {#each ENOCH_EDITIONS as ed}
+          <button
+            class="dropdown-item enoch-item"
+            class:selected={ed.author === currentAuthor}
+            on:click={() => selectEnoch(ed.author)}
+          >
+            {ed.label}
+          </button>
+        {/each}
+      {/if}
     </div>
   {/if}
 
-  {#if referenceDropdownOpen}
+  {#if referenceDropdownOpen && isEnoch}
+    <div class="dropdown-menu tree-menu commentary-reference-dropdown">
+      <div class="enoch-chapter-grid">
+        {#each enochChapters as ch}
+          <button
+            class="chapter-button"
+            class:selected={ch.chapter === currentChapter}
+            title={ch.label}
+            on:click={() => selectEnochChapter(ch.chapter)}
+          >
+            {ch.chapter}
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if referenceDropdownOpen && !isEnoch}
     <div class="dropdown-menu tree-menu commentary-reference-dropdown">
       {#each BIBLE_BOOKS as book}
         <div 
@@ -479,6 +555,36 @@
     background: rgba(102, 126, 234, 0.2);
     color: #8899ff;
     font-weight: 500;
+  }
+
+  /* Book of Enoch entries in the author dropdown */
+  .dropdown-section-label {
+    padding: 9px 14px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #b39ddb;
+    background: #161616;
+    border-top: 1px solid #2a2a2a;
+  }
+
+  .dropdown-item.enoch-item {
+    color: #cbb8ff;
+  }
+
+  .dropdown-item.enoch-item.selected {
+    background: rgba(156, 39, 176, 0.22);
+    color: #e3d3ff;
+  }
+
+  /* In-mode Enoch chapter picker */
+  .enoch-chapter-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 40px);
+    gap: 4px;
+    padding: 8px;
+    max-width: 90vw;
   }
 
   /* Tree Menu */

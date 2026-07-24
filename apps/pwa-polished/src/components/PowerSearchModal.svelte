@@ -18,6 +18,7 @@
   import { buildSearchTree } from "../lib/searchTree";
   import SearchResultsTree from "./SearchResultsTree.svelte";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
+  import { isbeModalStore } from "../stores/isbeModalStore";
   import { windowStore } from "../lib/stores/windowStore";
   import HelpModal from "./HelpModal.svelte";
   import { Microscope } from 'phosphor-svelte';
@@ -177,6 +178,17 @@
         });
         closeModal();
       }
+      return;
+    }
+
+    if (result.type === "encyclopedia") {
+      isbeModalStore.open({
+        kind: result.data.isPlace ? "place" : "entry",
+        entryId: result.data.entryId,
+        placeId: null,
+        primaryName: result.data.primaryName,
+      });
+      closeModal();
       return;
     }
 

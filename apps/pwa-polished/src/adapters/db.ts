@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 28; // Migration 28: add people/person_names/person_verses stores (biblical characters)
+const DB_VERSION = 30; // Migration 30: add art_scenes store (biblical paintings anchored to passages)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -26,10 +26,20 @@ export interface DBSectionHeading {
   level: number;   // 1 for \s1, 2 for \s2
 }
 
+export interface DBArtScene {
+  id: string;             // stable slug, e.g. "last-supper"
+  title: string;          // "The Last Supper"
+  book: string;
+  chapter: number;
+  verse: number;          // anchor verse (matches the section-heading verse)
+  passageLabel?: string;  // "John 13:21–30"
+  works: string;          // JSON-serialized ArtWork[]
+}
+
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'art';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -816,6 +826,13 @@ export function openDB(): Promise<IDBDatabase> {
         headingsStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
       }
 
+      // Biblical art scenes store (famous paintings anchored to passages, from art.sqlite pack)
+      if (!db.objectStoreNames.contains('art_scenes')) {
+        const artScenesStore = db.createObjectStore('art_scenes', { keyPath: 'id' });
+        artScenesStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
+        artScenesStore.createIndex('anchor', ['book', 'chapter', 'verse'], { unique: false });
+      }
+
       // People store (biblical characters — bio, dates, places, relationships)
       if (!db.objectStoreNames.contains('people')) {
         const peopleStore = db.createObjectStore('people', { keyPath: 'id' });
@@ -834,6 +851,45 @@ export function openDB(): Promise<IDBDatabase> {
         const personVersesStore = db.createObjectStore('person_verses', { keyPath: 'id', autoIncrement: true });
         personVersesStore.createIndex('personId', 'personId', { unique: false });
         personVersesStore.createIndex('book_chapter_verse', ['book', 'chapter', 'verse'], { unique: false });
+      }
+
+      // ISBE encyclopedia entries (title, body_html, lead, outline, char_count, is_place)
+      if (!db.objectStoreNames.contains('isbe_entries')) {
+        const isbeEntries = db.createObjectStore('isbe_entries', { keyPath: 'entryId' });
+        isbeEntries.createIndex('primaryNameLower', 'primaryNameLower', { unique: false });
+      }
+
+      // ISBE entry name index (title / alternate spelling -> entryId) for clicked-word lookup
+      if (!db.objectStoreNames.contains('isbe_entry_names')) {
+        const isbeNames = db.createObjectStore('isbe_entry_names', { keyPath: 'id', autoIncrement: true });
+        isbeNames.createIndex('nameLower', 'nameLower', { unique: false });
+        isbeNames.createIndex('entryId', 'entryId', { unique: false });
+      }
+
+      // ISBE full-text token index (token -> entryId) for deep search of article bodies
+      if (!db.objectStoreNames.contains('isbe_tokens')) {
+        const isbeTokens = db.createObjectStore('isbe_tokens', { keyPath: 'id', autoIncrement: true });
+        isbeTokens.createIndex('token', 'token', { unique: false });
+      }
+
+      // ISBE geolocated places (OpenBible-derived: coords, type, modern name, entryId)
+      if (!db.objectStoreNames.contains('isbe_places')) {
+        const isbePlaces = db.createObjectStore('isbe_places', { keyPath: 'placeId' });
+        isbePlaces.createIndex('entryId', 'entryId', { unique: false });
+      }
+
+      // ISBE place name index (spelling -> placeId, with is_phrase flag) for phrase + word lookup
+      if (!db.objectStoreNames.contains('isbe_place_names')) {
+        const isbePlaceNames = db.createObjectStore('isbe_place_names', { keyPath: 'id', autoIncrement: true });
+        isbePlaceNames.createIndex('nameLower', 'nameLower', { unique: false });
+        isbePlaceNames.createIndex('placeId', 'placeId', { unique: false });
+      }
+
+      // ISBE place verse appearances (placeId <-> book/chapter/verse) for verse-context disambiguation
+      if (!db.objectStoreNames.contains('isbe_place_verses')) {
+        const isbePlaceVerses = db.createObjectStore('isbe_place_verses', { keyPath: 'id', autoIncrement: true });
+        isbePlaceVerses.createIndex('placeId', 'placeId', { unique: false });
+        isbePlaceVerses.createIndex('book_chapter_verse', ['book', 'chapter', 'verse'], { unique: false });
       }
 
       // Modern world places store (GeoNames — cities, states, countries worldwide)

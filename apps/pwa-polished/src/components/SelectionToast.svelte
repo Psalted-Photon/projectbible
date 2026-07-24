@@ -4,9 +4,12 @@
   export let x = 0;
   export let y = 0;
   export let selectedText = '';
+  /** Clicked word resolves to an ISBE place — shows the "Map" button. */
   export let isPlace = false;
   /** Clicked word resolves to a biblical character — button reads "Bio", not "Define". */
   export let isPerson = false;
+  /** Clicked word resolves to an ISBE entry/place — button reads "More Info". */
+  export let moreInfo = false;
   export let mode: 'word' | 'verse' = 'word';
 
 
@@ -36,9 +39,10 @@
   </div>
   
   <div class="actions">
-    <!-- Same action either way; the label tells you what you'll get. -->
+    <!-- Same action either way; the label tells you what you'll get.
+         Precedence: a biblical character (Bio) outranks an ISBE entry (More Info). -->
     <button class="action-btn" on:click={() => handleAction('dissect')}>
-      {isPerson ? 'Bio' : 'Define'}
+      {isPerson ? 'Bio' : moreInfo ? 'More Info' : 'Define'}
     </button>
 
     <button class="action-btn" on:click={() => handleAction('search')}>

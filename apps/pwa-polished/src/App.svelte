@@ -1,6 +1,7 @@
 <script lang="ts">
   import BibleReader from "./components/BibleReader.svelte";
   import LexicalModal from "./components/LexicalModal.svelte";
+  import IsbeModal from "./components/IsbeModal.svelte";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
@@ -238,6 +239,9 @@
     
     <!-- Shared Lexical Modal (single instance for all Bible readers) -->
     <LexicalModal />
+
+    <!-- Shared ISBE encyclopedia / place modal -->
+    <IsbeModal />
 
     <!-- Shared Reading Plan Modal -->
     <ReadingPlanModal bind:isOpen={showReadingPlanModal} />

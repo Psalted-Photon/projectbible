@@ -808,6 +808,329 @@ export async function getPersonVerses(personId: string): Promise<VerseRef[]> {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * ISBE encyclopedia + geolocated places lookup
+ *
+ * Resolves a clicked word to either a biblical place (possibly via a multi-word
+ * phrase like "Red Sea") or a general ISBE encyclopedia entry. Powers the
+ * toast's "More Info" label and the place/entry modal. Verse context
+ * disambiguates places that share a surface name, using the same two-tier gate
+ * (exact verse, then chapter) as the people lookup above.
+ * ------------------------------------------------------------------ */
+
+export interface IsbeEntryRecord {
+  entryId: number;
+  title: string;
+  primaryName: string;
+  bodyHtml: string;
+  lead: string | null;
+  outline: { i: number; t: string }[] | null;
+  charCount: number;
+  isPlace: boolean;
+}
+
+export interface IsbePlaceRecord {
+  placeId: string;
+  primaryName: string;
+  entryId: number | null;
+  type: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  modernName: string | null;
+  precedingArticle: string | null;
+  verseCount: number;
+}
+
+/** Lightweight result for the toast + modal open (no article body). */
+export interface IsbeResolution {
+  kind: 'place' | 'entry';
+  entryId: number | null;   // ISBE article id, if any
+  placeId?: string;         // resolved place, when kind === 'place'
+  primaryName: string;      // display name
+  phrase?: string;          // the multi-word phrase that matched, if any
+  matchedByVerse?: boolean; // place confirmed by the exact clicked verse
+}
+
+/** Context captured at click time so phrase expansion can see neighbouring words. */
+export interface IsbeClickContext {
+  word: string;
+  before?: string[];  // preceding words in reading order (nearest last)
+  after?: string[];   // following words in reading order (nearest first)
+  ref?: VerseRef | null;
+}
+
+// Normalize a token/name the same way build-isbe-pack.mjs does: lowercase,
+// non-alphanumerics to spaces, collapsed. Keeps clicked spans aligned with the
+// stored place-name and entry-name indexes.
+function isbeNorm(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\([0-9]+\)\s*$/, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+async function isbePlaceIdsByName(nameLower: string, phraseOnly: boolean): Promise<string[]> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_place_names')) return [];
+  return new Promise((resolve) => {
+    const tx = db.transaction('isbe_place_names', 'readonly');
+    const idx = tx.objectStore('isbe_place_names').index('nameLower');
+    const req = idx.getAll(IDBKeyRange.only(nameLower));
+    req.onsuccess = () => {
+      const rows = (req.result || []) as any[];
+      const filtered = phraseOnly ? rows.filter((r) => r.isPhrase) : rows;
+      resolve([...new Set(filtered.map((r) => r.placeId))]);
+    };
+    req.onerror = () => resolve([]);
+  });
+}
+
+async function isbeGetPlace(placeId: string): Promise<IsbePlaceRecord | null> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_places')) return null;
+  return new Promise((resolve) => {
+    const req = db.transaction('isbe_places', 'readonly').objectStore('isbe_places').get(placeId);
+    req.onsuccess = () => resolve((req.result as IsbePlaceRecord) || null);
+    req.onerror = () => resolve(null);
+  });
+}
+
+async function isbePlaceIdsAtVerse(ref: VerseRef): Promise<Set<string>> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_place_verses')) return new Set();
+  return new Promise((resolve) => {
+    const idx = db
+      .transaction('isbe_place_verses', 'readonly')
+      .objectStore('isbe_place_verses')
+      .index('book_chapter_verse');
+    const req = idx.getAll(IDBKeyRange.only([ref.book, ref.chapter, ref.verse]));
+    req.onsuccess = () => resolve(new Set((req.result || []).map((r: any) => r.placeId)));
+    req.onerror = () => resolve(new Set());
+  });
+}
+
+async function isbePlaceInChapter(placeId: string, ref: VerseRef): Promise<boolean> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_place_verses')) return false;
+  return new Promise((resolve) => {
+    const idx = db
+      .transaction('isbe_place_verses', 'readonly')
+      .objectStore('isbe_place_verses')
+      .index('placeId');
+    const req = idx.getAll(IDBKeyRange.only(placeId));
+    req.onsuccess = () =>
+      resolve((req.result || []).some((v: any) => v.book === ref.book && v.chapter === ref.chapter));
+    req.onerror = () => resolve(false);
+  });
+}
+
+async function isbeEntryIdByName(word: string): Promise<number | null> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_entry_names')) return null;
+  const variants = [...new Set([word.trim().toLowerCase(), isbeNorm(word)])].filter(Boolean);
+  for (const v of variants) {
+    const id = await new Promise<number | null>((resolve) => {
+      const idx = db.transaction('isbe_entry_names', 'readonly').objectStore('isbe_entry_names').index('nameLower');
+      const req = idx.get(IDBKeyRange.only(v));
+      req.onsuccess = () => resolve(req.result ? (req.result as any).entryId : null);
+      req.onerror = () => resolve(null);
+    });
+    if (id != null) return id;
+  }
+  return null;
+}
+
+// Pick the best place among candidates sharing a name, gated by verse then chapter,
+// falling back to the most-referenced place. Returns the chosen place + whether the
+// exact verse confirmed it.
+async function isbeChoosePlace(
+  placeIds: string[],
+  ref: VerseRef | null,
+  requireChapter: boolean,
+): Promise<{ place: IsbePlaceRecord; matchedByVerse: boolean } | null> {
+  if (!placeIds.length) return null;
+  const places = (await Promise.all(placeIds.map(isbeGetPlace))).filter(
+    (p): p is IsbePlaceRecord => p !== null,
+  );
+  if (!places.length) return null;
+  const byRefs = (a: IsbePlaceRecord, b: IsbePlaceRecord) => (b.verseCount ?? 0) - (a.verseCount ?? 0);
+
+  if (ref) {
+    const atVerse = await isbePlaceIdsAtVerse(ref);
+    const verseHits = places.filter((p) => atVerse.has(p.placeId)).sort(byRefs);
+    if (verseHits.length) return { place: verseHits[0], matchedByVerse: true };
+
+    const chapterHits: IsbePlaceRecord[] = [];
+    for (const p of places) if (await isbePlaceInChapter(p.placeId, ref)) chapterHits.push(p);
+    if (chapterHits.length) return { place: chapterHits.sort(byRefs)[0], matchedByVerse: false };
+
+    // No verse or chapter evidence. For single common words this is too weak to
+    // claim it's the place; for an explicit multi-word phrase it's still a match.
+    if (requireChapter) return null;
+  }
+  return { place: places.sort(byRefs)[0], matchedByVerse: false };
+}
+
+/**
+ * Resolve a clicked word to an ISBE place or entry.
+ *
+ * Order: multi-word place phrase (suppresses everything else) → single-word place
+ * (verse/chapter-gated) → general encyclopedia entry (exact title). Returns null
+ * when nothing matches, so callers fall back to the dictionary definition.
+ */
+export async function resolveIsbeClick(ctx: IsbeClickContext): Promise<IsbeResolution | null> {
+  const word = (ctx.word || '').trim();
+  if (!word) return null;
+  const ref = ctx.ref || null;
+
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains('isbe_entry_names')) return null; // pack not installed
+
+    // 1. Phrase expansion. Build a small window around the click and try the
+    //    longest multi-word place name that includes the clicked word.
+    const before = (ctx.before || []).map(isbeNorm);
+    const after = (ctx.after || []).map(isbeNorm);
+    const selfNorm = isbeNorm(word);
+    const window = [...before, selfNorm, ...after];
+    const clickIdx = before.length;
+    const MAX_PHRASE = 4;
+    for (let len = Math.min(MAX_PHRASE, window.length); len >= 2; len--) {
+      for (let start = Math.max(0, clickIdx - len + 1); start + len <= window.length && start <= clickIdx; start++) {
+        const span = window.slice(start, start + len).filter(Boolean).join(' ').trim();
+        if (!span.includes(' ')) continue;
+        const ids = await isbePlaceIdsByName(span, true);
+        if (ids.length) {
+          const chosen = await isbeChoosePlace(ids, ref, false);
+          if (chosen) {
+            return {
+              kind: 'place',
+              entryId: chosen.place.entryId,
+              placeId: chosen.place.placeId,
+              primaryName: chosen.place.primaryName,
+              phrase: span,
+              matchedByVerse: chosen.matchedByVerse,
+            };
+          }
+        }
+      }
+    }
+
+    // 2. Single-word place. Require at least chapter evidence so ordinary words
+    //    ("sea", "city") don't masquerade as a place they don't belong to.
+    if (selfNorm) {
+      const ids = await isbePlaceIdsByName(selfNorm, false);
+      if (ids.length) {
+        const chosen = await isbeChoosePlace(ids, ref, true);
+        if (chosen) {
+          return {
+            kind: 'place',
+            entryId: chosen.place.entryId,
+            placeId: chosen.place.placeId,
+            primaryName: chosen.place.primaryName,
+            matchedByVerse: chosen.matchedByVerse,
+          };
+        }
+      }
+    }
+
+    // 3. General encyclopedia entry (exact title / alternate spelling).
+    const entryId = await isbeEntryIdByName(word);
+    if (entryId != null) {
+      const entry = await isbeGetEntryMeta(entryId);
+      if (entry) return { kind: 'entry', entryId, primaryName: entry.primaryName };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error resolving ISBE click:', error);
+    return null;
+  }
+}
+
+/** Cheap-ish kind check for the toast label. Returns 'place' | 'entry' | null. */
+export async function classifyIsbeClick(ctx: IsbeClickContext): Promise<'place' | 'entry' | null> {
+  const res = await resolveIsbeClick(ctx);
+  return res ? res.kind : null;
+}
+
+/** Entry metadata without the (potentially huge) body — for the toast + list rows. */
+async function isbeGetEntryMeta(entryId: number): Promise<{ primaryName: string } | null> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_entries')) return null;
+  return new Promise((resolve) => {
+    const req = db.transaction('isbe_entries', 'readonly').objectStore('isbe_entries').get(entryId);
+    req.onsuccess = () => resolve(req.result ? { primaryName: (req.result as any).primaryName } : null);
+    req.onerror = () => resolve(null);
+  });
+}
+
+/** Full ISBE entry incl. body_html — for the modal Article tab. */
+export async function getIsbeEntry(entryId: number): Promise<IsbeEntryRecord | null> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_entries')) return null;
+  return new Promise((resolve) => {
+    const req = db.transaction('isbe_entries', 'readonly').objectStore('isbe_entries').get(entryId);
+    req.onsuccess = () => {
+      const r = req.result as any;
+      if (!r) return resolve(null);
+      resolve({
+        entryId: r.entryId,
+        title: r.title,
+        primaryName: r.primaryName,
+        bodyHtml: r.bodyHtml,
+        lead: r.lead ?? null,
+        outline: r.outline ? JSON.parse(r.outline) : null,
+        charCount: r.charCount,
+        isPlace: !!r.isPlace,
+      });
+    };
+    req.onerror = () => resolve(null);
+  });
+}
+
+/** Resolve an ISBE entry by exact title/alternate spelling (for internal cross-ref links). */
+export async function getIsbeEntryByName(name: string): Promise<IsbeEntryRecord | null> {
+  const id = await isbeEntryIdByName(name);
+  return id != null ? getIsbeEntry(id) : null;
+}
+
+/** Full place record (coords, type, modern name) + its verse list — for the modal. */
+export async function getIsbePlace(placeId: string): Promise<IsbePlaceRecord | null> {
+  return isbeGetPlace(placeId);
+}
+
+/** Representative place for an ISBE entry id (for opening a place from a search hit). */
+export async function getIsbePlaceByEntryId(entryId: number): Promise<IsbePlaceRecord | null> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_places')) return null;
+  return new Promise((resolve) => {
+    const idx = db.transaction('isbe_places', 'readonly').objectStore('isbe_places').index('entryId');
+    const req = idx.getAll(IDBKeyRange.only(entryId));
+    req.onsuccess = () => {
+      const rows = (req.result || []) as IsbePlaceRecord[];
+      if (!rows.length) return resolve(null);
+      // Prefer the most-referenced place sharing this entry.
+      rows.sort((a, b) => (b.verseCount ?? 0) - (a.verseCount ?? 0));
+      resolve(rows[0]);
+    };
+    req.onerror = () => resolve(null);
+  });
+}
+
+export async function getIsbePlaceVerses(placeId: string): Promise<VerseRef[]> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_place_verses')) return [];
+  return new Promise((resolve) => {
+    const idx = db.transaction('isbe_place_verses', 'readonly').objectStore('isbe_place_verses').index('placeId');
+    const req = idx.getAll(IDBKeyRange.only(placeId));
+    req.onsuccess = () =>
+      resolve((req.result || []).map((r: any) => ({ book: r.book, chapter: r.chapter, verse: r.verse })));
+    req.onerror = () => resolve([]);
+  });
+}
+
 /**
  * Get morphology data for a specific verse
  */

@@ -32,6 +32,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { searchQuery, triggerSearch } from "../stores/searchStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
+  import { isbeModalStore } from "../stores/isbeModalStore";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
   import { BIBLE_BOOKS, normalizeBookName, getBookColor as getCategoryColor } from "../lib/bibleData";
@@ -440,6 +441,10 @@
   let selectedIsPerson = false;
   /** Guards against a slow person lookup landing after the next word click. */
   let personLabelToken = 0;
+  /** Clicked word resolved to an ISBE place/entry — relabels Define → More Info. */
+  let selectedIsbeKind: "place" | "entry" | null = null;
+  /** Neighbouring words captured at click time, for multi-word phrase expansion. */
+  let selectedContext: { before: string[]; after: string[] } | null = null;
   let selectionMode: "word" | "verse" = "word";
   let selectionRange: Range | null = null;
   let longPressTimer: number | null = null;
@@ -1148,6 +1153,7 @@
     }
 
     selectedText = ds.word || morph.text || "";
+    selectedContext = null; // interlinear original-language word: no English phrase context
     selectedMorphology = morph;
     selectedVerseNumber = verseNumInt;
 
@@ -2674,6 +2680,7 @@
       // Morphology may be null (pack not installed / not yet imported); the
       // user can still Highlight, Search, Notes, etc.
       selectedText = clickInfo.text;
+      selectedContext = null; // original-language word: no English phrase context
       selectedMorphology = morph;
       selectedVerseNumber = verseNumInt;
 
@@ -2764,6 +2771,8 @@
     if (wordBounds) {
       selectedText = text.substring(wordBounds.start, wordBounds.end).trim();
       selectedVerseNumber = verseNumInt;
+      // Capture neighbouring words so ISBE phrase expansion can rejoin "Red Sea".
+      selectedContext = wordContext(text, wordBounds.start, wordBounds.end);
 
       if (!selectedText) return;
 
@@ -2793,6 +2802,19 @@
       return range.startOffset;
     }
     return 0;
+  }
+
+  // Up to 3 words on each side of the clicked word, in reading order, for ISBE
+  // multi-word phrase detection ("Red Sea", "Abel Beth Maacah").
+  function wordContext(
+    text: string,
+    start: number,
+    end: number,
+  ): { before: string[]; after: string[] } {
+    const tokenize = (s: string) => (s.match(/[\p{L}\p{N}]+/gu) || []) as string[];
+    const before = tokenize(text.slice(0, start)).slice(-3);
+    const after = tokenize(text.slice(end)).slice(0, 3);
+    return { before, after };
   }
 
   function getWordBounds(
@@ -3116,17 +3138,30 @@
     // label, and the token guard drops a stale answer if you click another word
     // while the lookup is in flight.
     selectedIsPerson = false;
+    selectedIsbeKind = null;
     const token = ++personLabelToken;
     const word = selectedText;
+    const ctx = selectedContext;
     const personRef =
       selectedVerseNumber != null
         ? { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber }
         : null;
     if (word && selectionMode === "word") {
       import("../adapters/lexicon-lookup.js")
-        .then(({ isPersonName }) => isPersonName(word, personRef))
-        .then((found) => {
-          if (token === personLabelToken) selectedIsPerson = found;
+        .then(async ({ isPersonName, classifyIsbeClick }) => {
+          // Person outranks ISBE for the label, so resolve it first and only fall
+          // back to the ISBE ("More Info") check when it isn't a character.
+          const isPerson = await isPersonName(word, personRef);
+          if (token !== personLabelToken) return;
+          selectedIsPerson = isPerson;
+          if (isPerson) return;
+          const kind = await classifyIsbeClick({
+            word,
+            before: ctx?.before,
+            after: ctx?.after,
+            ref: personRef,
+          });
+          if (token === personLabelToken) selectedIsbeKind = kind;
         })
         .catch(() => {});
     }
@@ -3350,6 +3385,7 @@
     // Capture before any async gap — reactive var may be overwritten by a
     // subsequent word click while the dynamic import is resolving.
     const capturedMorphology = selectedMorphology;
+    const capturedContext = selectedContext;
     console.log(`Action: ${action} on "${text}"`);
 
     // TODO: Wire up actual actions
@@ -3365,7 +3401,7 @@
         (async () => {
           try {
             console.log('🔄 Importing lexicon lookup module...');
-            const { lookupWord, lookupStrongs, lookupEnglishWord, lookupPerson } = await import('../adapters/lexicon-lookup.js');
+            const { lookupWord, lookupStrongs, lookupEnglishWord, lookupPerson, resolveIsbeClick } = await import('../adapters/lexicon-lookup.js');
             console.log('✅ Module imported successfully');
 
             // Resolve the clicked word as a biblical character, disambiguating by
@@ -3375,6 +3411,29 @@
               : null;
             const characterData = await lookupPerson(text, verseRefForPerson);
             if (characterData) console.log('👤 Character match:', characterData.person.id, 'byVerse:', characterData.matchedByVerse);
+
+            // Not a character? Try ISBE. A place (possibly via a multi-word phrase
+            // like "Red Sea") or a general encyclopedia entry opens the ISBE modal,
+            // taking precedence over the plain dictionary definition.
+            if (!characterData) {
+              const isbe = await resolveIsbeClick({
+                word: text,
+                before: capturedContext?.before,
+                after: capturedContext?.after,
+                ref: verseRefForPerson,
+              });
+              if (isbe) {
+                console.log('📕 ISBE match:', isbe.kind, isbe.primaryName, isbe.phrase ? `(phrase: ${isbe.phrase})` : '');
+                isbeModalStore.open({
+                  kind: isbe.kind,
+                  entryId: isbe.entryId,
+                  placeId: isbe.placeId ?? null,
+                  primaryName: isbe.primaryName,
+                });
+                showToast = false;
+                return;
+              }
+            }
 
             // Check if this is an English translation
             const englishTranslations = ['kjv', 'web', 'bsb', 'net', 'lxx2012'];
@@ -3807,8 +3866,9 @@
     x={toastX}
     y={toastY}
     {selectedText}
-    isPlace={false}
+    isPlace={!selectedIsPerson && selectedIsbeKind === "place"}
     isPerson={selectedIsPerson}
+    moreInfo={!selectedIsPerson && selectedIsbeKind !== null}
     mode={selectionMode}
     on:action={handleToastAction}
     on:modeChange={handleModeChange}

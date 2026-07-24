@@ -7,7 +7,7 @@
 
   let searchQuery = "";
 
-  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal') {
+  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art') {
     // Set initial content state based on type
     let contentState = {};
     
@@ -90,6 +90,11 @@
     <button class="content-button wordstudy" on:click={() => handleContentSelect('wordstudy')}>
       <span class="icon emoji">📚</span>
       <span class="label">Word Study</span>
+    </button>
+
+    <button class="content-button art" on:click={() => handleContentSelect('art')}>
+      <span class="icon emoji">🖼️</span>
+      <span class="label">Art</span>
     </button>
   </div>
 

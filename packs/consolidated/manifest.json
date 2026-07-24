@@ -94,6 +94,21 @@
       "createdAt": "2026-04-25T00:13:01.091Z"
     },
     {
+      "id": "isbe",
+      "type": "isbe",
+      "name": "Bible Encyclopedia (ISBE)",
+      "description": "International Standard Bible Encyclopedia (1915) — ~9,380 scholarly articles on places, people, customs, plants and doctrine, with geolocated places and verse links. License: Public Domain (ISBE); place data CC BY 4.0 (OpenBible.info)",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 65232896,
+      "sizeMB": 62.21,
+      "sha256": "91b68f7485f6b36b8e65ee77ddff6f587d48a99bb30a2ee8b3f98a8d87c07908",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/isbe.sqlite",
+      "createdAt": "2026-07-24T00:00:00.000Z"
+    },
+    {
       "id": "lexical",
       "type": "lexicon",
       "name": "Lexical Resources Pack",

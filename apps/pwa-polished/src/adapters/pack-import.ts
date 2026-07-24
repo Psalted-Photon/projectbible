@@ -66,7 +66,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // stored ID always matches the canonical manifest IDs used by the UI.
       id: rawId?.replace(/\.v\d+$/, '') ?? rawId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people',
+      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -958,6 +958,150 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       }
 
       console.log(`✅ People pack ${packInfo.id} imported`);
+    } else if (packInfo.type === 'isbe') {
+      // Import ISBE encyclopedia + geolocated places pack.
+      // Six stores: entries, name index, token index, places, place-name index, place verses.
+      // The four index/verse stores use autoIncrement keys, so each is cleared before
+      // import to keep re-installs from duplicating rows (mirrors the people branch).
+      console.log('Importing ISBE (encyclopedia + places) pack...');
+
+      const idb = await openDB();
+
+      const clearStore = (name: string) =>
+        new Promise<void>((resolve, reject) => {
+          const tx = idb.transaction(name, 'readwrite');
+          tx.objectStore(name).clear();
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+
+      // Entries (keyPath entryId — put() overwrites, no clear needed)
+      const entryRows = db.exec(
+        'SELECT entry_id, title, primary_name, body_html, lead, outline, char_count, is_place FROM entries',
+      );
+      if (entryRows.length && entryRows[0].values.length) {
+        const entries = entryRows[0].values.map(
+          ([entryId, title, primaryName, bodyHtml, lead, outline, charCount, isPlace]) => ({
+            entryId: entryId as number,
+            title: title as string,
+            primaryName: primaryName as string,
+            primaryNameLower: ((primaryName as string) || '').toLowerCase(),
+            bodyHtml: bodyHtml as string,
+            lead: lead as string | null,
+            outline: outline as string | null,
+            charCount: charCount as number,
+            isPlace: isPlace as number,
+          }),
+        );
+        console.log(`Importing ${entries.length} ISBE entries...`);
+        const CHUNK_SIZE = 300;
+        for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+          const chunk = entries.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('isbe_entries', (store) => chunk.forEach((e) => store.put(e)));
+        }
+        console.log(`✅ Imported ${entries.length} ISBE entries`);
+      }
+
+      // Entry name index
+      const enRows = db.exec('SELECT name_lower, entry_id FROM entry_names');
+      if (enRows.length && enRows[0].values.length) {
+        await clearStore('isbe_entry_names');
+        const names = enRows[0].values.map(([nameLower, entryId]) => ({
+          nameLower: nameLower as string,
+          entryId: entryId as number,
+        }));
+        console.log(`Importing ${names.length} ISBE entry-name index entries...`);
+        const CHUNK_SIZE = 1000;
+        for (let i = 0; i < names.length; i += CHUNK_SIZE) {
+          const chunk = names.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('isbe_entry_names', (store) => chunk.forEach((n) => store.put(n)));
+        }
+        console.log(`✅ Imported ${names.length} entry-name index entries`);
+      }
+
+      // Full-text token index (large — ~860k rows)
+      const tokRows = db.exec('SELECT token, entry_id FROM entry_tokens');
+      if (tokRows.length && tokRows[0].values.length) {
+        await clearStore('isbe_tokens');
+        const toks = tokRows[0].values.map(([token, entryId]) => ({
+          token: token as string,
+          entryId: entryId as number,
+        }));
+        console.log(`Importing ${toks.length} ISBE token postings...`);
+        const CHUNK_SIZE = 2000;
+        for (let i = 0; i < toks.length; i += CHUNK_SIZE) {
+          const chunk = toks.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('isbe_tokens', (store) => chunk.forEach((t) => store.put(t)));
+        }
+        console.log(`✅ Imported ${toks.length} token postings`);
+      }
+
+      // Places (keyPath placeId)
+      const placeRows = db.exec(
+        'SELECT place_id, primary_name, entry_id, type, latitude, longitude, modern_name, preceding_article, verse_count FROM places',
+      );
+      if (placeRows.length && placeRows[0].values.length) {
+        const places = placeRows[0].values.map(
+          ([placeId, primaryName, entryId, type, latitude, longitude, modernName, precedingArticle, verseCount]) => ({
+            placeId: placeId as string,
+            primaryName: primaryName as string,
+            entryId: entryId as number | null,
+            type: type as string | null,
+            latitude: latitude as number | null,
+            longitude: longitude as number | null,
+            modernName: modernName as string | null,
+            precedingArticle: precedingArticle as string | null,
+            verseCount: verseCount as number,
+          }),
+        );
+        console.log(`Importing ${places.length} ISBE places...`);
+        const CHUNK_SIZE = 500;
+        for (let i = 0; i < places.length; i += CHUNK_SIZE) {
+          const chunk = places.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('isbe_places', (store) => chunk.forEach((p) => store.put(p)));
+        }
+        console.log(`✅ Imported ${places.length} places`);
+      }
+
+      // Place name index (with is_phrase flag)
+      const pnRows = db.exec('SELECT name_lower, place_id, is_phrase FROM place_names');
+      if (pnRows.length && pnRows[0].values.length) {
+        await clearStore('isbe_place_names');
+        const names = pnRows[0].values.map(([nameLower, placeId, isPhrase]) => ({
+          nameLower: nameLower as string,
+          placeId: placeId as string,
+          isPhrase: isPhrase as number,
+        }));
+        console.log(`Importing ${names.length} ISBE place-name index entries...`);
+        const CHUNK_SIZE = 1000;
+        for (let i = 0; i < names.length; i += CHUNK_SIZE) {
+          const chunk = names.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('isbe_place_names', (store) => chunk.forEach((n) => store.put(n)));
+        }
+        console.log(`✅ Imported ${names.length} place-name index entries`);
+      }
+
+      // Place verse appearances
+      const pvRows = db.exec('SELECT place_id, book, chapter, verse, osis FROM place_verses');
+      if (pvRows.length && pvRows[0].values.length) {
+        await clearStore('isbe_place_verses');
+        const verses = pvRows[0].values.map(([placeId, book, chapter, verse, osis]) => ({
+          placeId: placeId as string,
+          book: book as string,
+          chapter: chapter as number,
+          verse: verse as number,
+          osis: osis as string | undefined,
+        }));
+        console.log(`Importing ${verses.length} ISBE place-verse links...`);
+        const CHUNK_SIZE = 1000;
+        for (let i = 0; i < verses.length; i += CHUNK_SIZE) {
+          const chunk = verses.slice(i, i + CHUNK_SIZE);
+          await batchWriteTransaction('isbe_place_verses', (store) => chunk.forEach((v) => store.put(v)));
+        }
+        console.log(`✅ Imported ${verses.length} place-verse links`);
+      }
+
+      console.log(`✅ ISBE pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'map') {
       // Import map/places data
       console.log('Importing map pack...');

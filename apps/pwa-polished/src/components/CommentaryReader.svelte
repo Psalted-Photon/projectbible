@@ -6,6 +6,7 @@
   import { IndexedDBCommentaryStore, type CommentaryEntry } from "../adapters/CommentaryStore";
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
   import { parseRefString } from "../lib/parseRefString";
+  import { loadEnoch, isEnochAuthor, type EnochBook, type EnochChapter } from "../lib/enochBooks";
 
   export let windowId: string | undefined = undefined;
 
@@ -17,6 +18,12 @@
   let lastNavigationKey = "";
   let lastScrolledVerseKey = ''; // guard: skip scrollToVerse if same checkpoint
 
+  // Book of Enoch reading state (bundled text, bypasses the commentary store)
+  let enochBook: EnochBook | null = null;
+  let enochChapter: EnochChapter | null = null;
+  let enochLoading = false;
+  let enochLoadKey = "";
+
   // Use per-window state if windowId provided, otherwise use global state
   $: windowState = windowId
     ? $windowStore.find((w) => w.id === windowId)
@@ -25,17 +32,63 @@
   $: currentChapter =
     windowState?.contentState?.chapter ?? $navigationStore.chapter;
   $: currentAuthor = windowState?.contentState?.author;
+  $: isEnoch = isEnochAuthor(currentAuthor);
   $: highlightVerse =
     windowState?.contentState?.highlightedVerse ??
     $navigationStore.highlightedVerse ??
     null;
 
-  // Load commentary when navigation changes
+  // Load commentary when navigation changes (skipped entirely in Enoch mode)
   $: {
     const navKey = `${currentBook}-${currentChapter}-${currentAuthor ?? 'all'}`;
-    if (commentaryStore && navKey !== lastNavigationKey) {
+    if (!isEnoch && commentaryStore && navKey !== lastNavigationKey) {
       lastNavigationKey = navKey;
       loadCommentary(currentBook, currentChapter, currentAuthor);
+    }
+  }
+
+  // Load the Book of Enoch chapter when an Enoch edition is active
+  $: if (isEnoch) {
+    const key = `${currentAuthor}-${currentChapter}`;
+    if (key !== enochLoadKey) {
+      enochLoadKey = key;
+      loadEnochChapter(currentAuthor, currentChapter);
+    }
+  }
+
+  // Prev/next chapter within the active Enoch edition
+  $: enochIndex =
+    enochBook && enochChapter
+      ? enochBook.chapters.findIndex((c) => c.chapter === enochChapter!.chapter)
+      : -1;
+  $: hasPrevEnoch = enochIndex > 0;
+  $: hasNextEnoch = !!enochBook && enochIndex >= 0 && enochIndex < enochBook.chapters.length - 1;
+
+  function goEnoch(delta: number) {
+    if (!enochBook || enochIndex < 0 || !windowId) return;
+    const target = enochBook.chapters[enochIndex + delta];
+    if (target) {
+      windowStore.updateContentState(windowId, {
+        chapter: target.chapter,
+        highlightedVerse: undefined,
+      });
+    }
+  }
+
+  async function loadEnochChapter(author: string | undefined, chapterNum: number) {
+    enochLoading = true;
+    try {
+      const book = await loadEnoch(author);
+      enochBook = book;
+      enochChapter =
+        book?.chapters.find((c) => c.chapter === chapterNum) ?? book?.chapters[0] ?? null;
+      if (readerElement) readerElement.scrollTo({ top: 0, behavior: "auto" });
+    } catch (err) {
+      console.error("Error loading Book of Enoch:", err);
+      enochBook = null;
+      enochChapter = null;
+    } finally {
+      enochLoading = false;
     }
   }
 
@@ -46,7 +99,9 @@
 
   // Emit checkpoint verse numbers to BibleReader via contentState for amber highlights
   $: if (windowId) {
-    const checkpoints = [...new Set(entries.filter(e => e.verseStart > 0).map(e => e.verseStart))];
+    const checkpoints = isEnoch
+      ? []
+      : [...new Set(entries.filter(e => e.verseStart > 0).map(e => e.verseStart))];
     windowStore.updateContentState(windowId, { checkpoints });
   }
 
@@ -132,9 +187,9 @@
 
   onMount(async () => {
     commentaryStore = new IndexedDBCommentaryStore();
-    
-    // Load initial commentary
-    if (currentBook && currentChapter) {
+
+    // Load initial commentary (Enoch mode is driven by its own reactive)
+    if (!isEnoch && currentBook && currentChapter) {
       await loadCommentary(currentBook, currentChapter, currentAuthor);
     }
   });
@@ -143,6 +198,37 @@
 <div class="commentary-reader" bind:this={readerElement}>
   <CommentaryNavigationBar {windowId} />
 
+  {#if isEnoch}
+    <div class="commentary-container enoch-container">
+      {#if enochLoading && !enochChapter}
+        <div class="loading">Loading the Book of Enoch…</div>
+      {:else if enochChapter}
+        <article class="enoch-reading">
+          {#if enochBook && enochChapter.chapter === enochBook.chapters[0].chapter}
+            <div class="enoch-masthead">
+              {enochBook.title}
+              <span class="enoch-attrib">translated by {enochBook.translator}, {enochBook.year}</span>
+            </div>
+          {/if}
+          {#each enochChapter.headings as h}
+            <h2 class="enoch-section">{h}</h2>
+          {/each}
+          <h3 class="enoch-chapter-title">{enochChapter.label}</h3>
+          <p class="enoch-verses">{#each enochChapter.verses as v}<span class="enoch-verse"><sup class="enoch-vn">{v.n}</sup>{v.text} </span>{/each}</p>
+          <nav class="enoch-nav">
+            <button class="enoch-nav-btn" disabled={!hasPrevEnoch} on:click={() => goEnoch(-1)}>‹ Prev</button>
+            <span class="enoch-nav-label">{enochChapter.label}</span>
+            <button class="enoch-nav-btn" disabled={!hasNextEnoch} on:click={() => goEnoch(1)}>Next ›</button>
+          </nav>
+        </article>
+      {:else}
+        <div class="no-content">
+          <h3>Book of Enoch</h3>
+          <p>Could not load this chapter.</p>
+        </div>
+      {/if}
+    </div>
+  {:else}
   <div class="commentary-container">
     {#if loading && entries.length === 0}
       <div class="loading">Loading commentary...</div>
@@ -205,6 +291,7 @@
       </div>
     {/if}
   </div>
+  {/if}
 </div>
 
 <style>
@@ -396,6 +483,110 @@
 
     .entry-text {
       font-size: 0.95rem;
+    }
+  }
+
+  /* ---------- Book of Enoch reading view ---------- */
+  .enoch-reading {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .enoch-masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: center;
+    font-family: 'Merriweather', Georgia, serif;
+    font-size: 1.5rem;
+    color: #e8e4ff;
+    margin: 4px 0 30px;
+  }
+
+  .enoch-attrib {
+    font-size: 0.85rem;
+    color: #9a90c0;
+    font-style: italic;
+  }
+
+  .enoch-section {
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #b39ddb;
+    text-align: center;
+    margin: 22px 0 4px;
+  }
+
+  .enoch-chapter-title {
+    font-family: 'Merriweather', Georgia, serif;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #cbb8ff;
+    text-align: center;
+    margin: 8px 0 22px;
+  }
+
+  .enoch-verses {
+    line-height: 1.95;
+    color: #e6e6e6;
+    font-size: 1.06rem;
+    font-family: 'Merriweather', Georgia, serif;
+    text-align: left;
+    margin: 0;
+  }
+
+  .enoch-vn {
+    color: #7d7a95;
+    font-size: 0.62em;
+    vertical-align: super;
+    margin-left: 1px;
+    margin-right: 3px;
+    user-select: none;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  .enoch-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 40px 0 8px;
+    padding-top: 16px;
+    border-top: 1px solid #333;
+  }
+
+  .enoch-nav-btn {
+    background: #262636;
+    border: 1px solid #3a3a4a;
+    color: #cbb8ff;
+    border-radius: 6px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: background 0.15s;
+    touch-action: manipulation;
+  }
+  .enoch-nav-btn:hover:not(:disabled) {
+    background: #33334a;
+  }
+  .enoch-nav-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .enoch-nav-label {
+    color: #999;
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 768px) {
+    .enoch-verses {
+      font-size: 1rem;
+    }
+    .enoch-masthead {
+      font-size: 1.3rem;
     }
   }
 
