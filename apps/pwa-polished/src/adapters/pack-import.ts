@@ -66,7 +66,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       // stored ID always matches the canonical manifest IDs used by the UI.
       id: rawId?.replace(/\.v\d+$/, '') ?? rawId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe',
+      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -121,6 +121,41 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         });
 
         console.log(`✅ Section headings pack imported: ${entries.length} entries`);
+      }
+    } else if (packInfo.type === 'art') {
+      // Import biblical-art scenes (famous paintings anchored to passages)
+      console.log('Importing biblical art pack...');
+
+      const rows = db.exec('SELECT id, title, book, chapter, verse, passage_label, works FROM art_scenes');
+
+      if (rows.length && rows[0].values.length) {
+        const entries = rows[0].values.map(([id, title, book, chapter, verse, passageLabel, works]) => ({
+          id: id as string,
+          title: title as string,
+          book: book as string,
+          chapter: chapter as number,
+          verse: verse as number,
+          passageLabel: (passageLabel as string) ?? undefined,
+          works: (works as string) ?? '[]',
+        }));
+
+        console.log(`Importing ${entries.length} art scenes...`);
+
+        const idb = await openDB();
+        await new Promise<void>((resolve, reject) => {
+          const tx = idb.transaction('art_scenes', 'readwrite');
+          const store = tx.objectStore('art_scenes');
+          const clearReq = store.clear();
+          clearReq.onsuccess = () => {
+            for (const entry of entries) store.put(entry);
+          };
+          clearReq.onerror = () => reject(clearReq.error);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(new Error('art_scenes transaction aborted'));
+        });
+
+        console.log(`✅ Biblical art pack imported: ${entries.length} scenes`);
       }
     } else if (packInfo.type === 'cross-references') {
       // Import cross-references

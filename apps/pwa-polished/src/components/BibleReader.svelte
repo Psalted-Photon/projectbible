@@ -17,6 +17,7 @@
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import { applyRepeatsToSection, applyRepeatsToAllSections, clearRepeatsInSection, findRepeatOccurrences } from "../lib/repeatRenderer";
+  import { applyPlaceMarkersToAllSections, loadPlacePhrases } from "../lib/placeMarkerRenderer";
   import { repeatCountsStore } from "../stores/repeatCountsStore";
   import { countWordsInBook } from "../lib/repeatCounts";
   import AudioPlayer from "./AudioPlayer.svelte";
@@ -45,6 +46,8 @@
   import { readTransaction } from "../adapters/db";
   import type { DBMorphology } from "../adapters/db";
   import { HeadingsStore } from "../adapters/HeadingsStore";
+  import { IndexedDBArtStore } from "../adapters/ArtStore";
+  import type { ArtScene } from "@projectbible/core";
   import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
   import type { CommentaryEntry } from "../adapters/CommentaryStore";
   import { IndexedDBTskReferenceStore } from "../adapters/TskReferenceStore";
@@ -130,6 +133,7 @@
   let readerElement: HTMLDivElement;
   let textStore: IndexedDBTextStore;
   const headingsStore = new HeadingsStore();
+  const artStore = new IndexedDBArtStore();
   let chapters: Array<{
     book: string;
     chapter: number;
@@ -180,7 +184,12 @@
 
   let verseLayout: "one-per-line" | "paragraph" | "paragraph-no-verse-numbers" = "one-per-line";
   let showSectionHeadings = true;
+  let showArt = true;
   let showRedLetter = true;
+  /** Dotted underline under multi-word place names (opt-in, needs ISBE pack). */
+  let showPlaceMarkers = false;
+  /** Flips true once the place-name gazetteer has loaded, to re-trigger a repaint. */
+  let placePhrasesLoaded = false;
   let themedTitles = true;
   let scrollHandler: ((e: Event) => void) | null = null;
 
@@ -299,9 +308,47 @@
   // Annotation data maps (keyed by "book:chapter:verse" to support multiple chapters in infinite scroll)
   let commentaryByVerse = new Map<string, CommentaryEntry[]>();
   let tskByVerse = new Map<string, TskEntry[]>();
+  // Biblical-art scenes anchored in the currently rendered chapters, keyed "book:chapter:verse"
+  let artByVerse = new Map<string, ArtScene[]>();
 
   function annotationKey(book: string, chapter: number, verse: number): string {
     return `${book}:${chapter}:${verse}`;
+  }
+
+  // Rebuild the art-icon map for the chapters currently on screen.
+  async function rebuildArtByVerse(chs: typeof chapters, enabled: boolean) {
+    if (!enabled || !chs || chs.length === 0) {
+      if (artByVerse.size > 0) artByVerse = new Map();
+      return;
+    }
+    const map = new Map<string, ArtScene[]>();
+    for (const ch of chs) {
+      const scenes = await artStore.getScenesForChapter(ch.book, ch.chapter);
+      for (const s of scenes) {
+        const key = annotationKey(s.book, s.chapter, s.verse);
+        const arr = map.get(key) ?? [];
+        arr.push(s);
+        map.set(key, arr);
+      }
+    }
+    artByVerse = map;
+  }
+  $: rebuildArtByVerse(chapters, showArt);
+
+  // Open the Art window docked to the edge that fits the current orientation
+  // (landscape / desktop → right, portrait → bottom). The reader text reflows
+  // into the remaining space — same docking used for split view.
+  function openArtWindow(scene: ArtScene) {
+    const edge = window.innerWidth > window.innerHeight ? 'right' : 'bottom';
+    const id = windowStore.createWindow(edge, 50);
+    if (id) {
+      windowStore.setWindowContent(id, 'art', {
+        sceneId: scene.id,
+        book: scene.book,
+        chapter: scene.chapter,
+        verse: scene.verse,
+      });
+    }
   }
 
   // Book intro panel state
@@ -502,7 +549,12 @@
     const settings = getSettings();
     verseLayout = settings.verseLayout || "one-per-line";
     showSectionHeadings = settings.showSectionHeadings !== false; // default true
+    showArt = settings.showArt !== false; // default true
     showRedLetter = settings.showRedLetter !== false; // default true
+    showPlaceMarkers = settings.showPlaceMarkers === true; // default false
+    if (showPlaceMarkers && !placePhrasesLoaded) {
+      void loadPlacePhrases().then(() => { placePhrasesLoaded = true; });
+    }
     themedTitles = settings.themedTitles !== false; // default true
     interlinearSettings = getInterlinearSettings();
     const tts = getTtsSettings();
@@ -3178,17 +3230,21 @@
     repeatsStore.toggle(word);
   }
 
-  // Re-paint repeat highlights across all rendered chapter sections. Called
-  // reactively whenever the repeats store changes, and after the DOM settles.
-  async function repaintRepeats(groups: RepeatGroup[]) {
+  // Re-paint repeat highlights (and, on top, place markers) across all rendered
+  // chapter sections. Called reactively whenever the repeats store, the place-marker
+  // setting, or the rendered chapters change. Repeats are applied first; the place
+  // markers only wrap pure-text runs, so the two never nest or corrupt each other.
+  async function repaintRepeats(groups: RepeatGroup[], placeMarkers: boolean) {
     await tick();
     if (!readerElement) return;
     applyRepeatsToAllSections(readerElement, groups);
+    applyPlaceMarkersToAllSections(readerElement, placeMarkers);
   }
 
-  // Re-apply the global repeats overlay whenever the tracked words change or a
-  // new chapter scrolls into view (referencing chapters keeps it reactive).
-  $: if (readerElement && chapters) void repaintRepeats($repeatsStore);
+  // Re-apply the overlays whenever the tracked words change, the place-marker
+  // setting toggles, or a new chapter scrolls into view (referencing chapters
+  // keeps it reactive).
+  $: if (readerElement && chapters) void repaintRepeats($repeatsStore, showPlaceMarkers && placePhrasesLoaded);
 
   // A repeat pill requested "Highlight All" — open the modal in bulk mode.
   $: if ($repeatHighlightAllRequest) {
@@ -4150,6 +4206,17 @@
                     on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'references', chapterData.book, chapterData.chapter)}
                   >◆</span>
                 {/if}
+                {#if showArt && artByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
+                  {@const artScene = artByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))![0]}
+                  <span
+                    class="art-icon"
+                    title={`Art: ${artScene.title}`}
+                    role="button"
+                    tabindex="0"
+                    on:click|stopPropagation={() => openArtWindow(artScene)}
+                    on:keypress|stopPropagation={(e) => e.key === 'Enter' && openArtWindow(artScene)}
+                  >🖼️</span>
+                {/if}
                 <span class="verse-text"
                   class:interlinear={isInterlinearActive && !!interlinearHtml}
                   >{@html (isInterlinearActive && interlinearHtml) ? interlinearHtml : (html || renderVerseHtml(text))}</span
@@ -4551,6 +4618,21 @@
     user-select: none;
   }
 
+  .art-icon {
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    margin: 0 2px;
+    vertical-align: super;
+    user-select: none;
+    opacity: 0.9;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  .art-icon:hover {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+
   .verse-note-icon {
     color: #f7c948;
     font-size: 0.82em;
@@ -4756,6 +4838,13 @@
 
   :global(.morphology-word:hover) {
     background-color: rgba(100, 150, 255, 0.1);
+  }
+
+  /* Place-name marker overlay (opt-in). A faint dotted underline that flags a
+     multi-word place name as a single clickable unit. Inline decoration only —
+     it reflows naturally and survives font-size / line-spacing changes. */
+  :global(.verse-text .place-marker) {
+    border-bottom: 1px dotted color-mix(in srgb, currentColor 45%, transparent);
   }
 
   /* ── Interlinear layered rendering ─────────────────────────────────

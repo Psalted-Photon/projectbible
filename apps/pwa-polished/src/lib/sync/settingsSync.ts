@@ -33,6 +33,7 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   'interlinear',
   'showRedLetter',
   'showSectionHeadings',
+  'showArt',
   'themedTitles',
 ];
 

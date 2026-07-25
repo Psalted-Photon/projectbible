@@ -56,7 +56,9 @@ export interface UserSettings {
   verseLayout?: 'one-per-line' | 'paragraph' | 'paragraph-no-verse-numbers'; // Verse layout mode
   wordWrap?: boolean; // Enable/disable word wrapping (default true)
   showSectionHeadings?: boolean; // Show pericope/section headings between verses (default true)
+  showArt?: boolean; // Show in-text art icons on scenes that have paintings (default true)
   showRedLetter?: boolean; // Show Jesus' words in red (default true)
+  showPlaceMarkers?: boolean; // Dotted underline under multi-word place names (default false; needs ISBE pack)
   themedTitles?: boolean; // Theme-colored 3D shadow on reader titles/headings (default true)
   interlinear?: InterlinearSettings; // Interlinear view prefs for Greek/Hebrew (default: disabled, gloss-only)
   tts?: TtsSettings; // Read Aloud (on-device TTS) prefs

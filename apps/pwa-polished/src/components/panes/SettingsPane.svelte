@@ -14,6 +14,8 @@
   let allowRotation: boolean = false;
   let showRedLetter: boolean = true;
   let themedTitles: boolean = true;
+  let showArt: boolean = true;
+  let showPlaceMarkers: boolean = false;
   let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const TIMEZONE_OPTIONS: { label: string; value: string }[] = [
@@ -57,6 +59,8 @@
     allowRotation = settings.allowRotation !== undefined ? settings.allowRotation : false;
     showRedLetter = settings.showRedLetter !== false;
     themedTitles = settings.themedTitles !== false;
+    showArt = settings.showArt !== false;
+    showPlaceMarkers = settings.showPlaceMarkers === true;
     timezone = settings.timezone || '';
     autoCheckUpdates = settings.autoCheckUpdates !== false; // default true
     const tts = getTtsSettings();
@@ -216,6 +220,8 @@
       allowRotation,
       showRedLetter,
       themedTitles,
+      showArt,
+      showPlaceMarkers,
       timezone: timezone || undefined,
       autoCheckUpdates,
       tts: {
@@ -325,6 +331,20 @@
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={themedTitles} on:change={saveSettings} />
       <span class="label-text">Theme colors in reader titles</span>
+    </label>
+  </div>
+
+  <div class="setting-group">
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={showArt} on:change={saveSettings} />
+      <span class="label-text">Show art icons on Bible scenes</span>
+    </label>
+  </div>
+
+  <div class="setting-group">
+    <label class="checkbox-label">
+      <input type="checkbox" bind:checked={showPlaceMarkers} on:change={saveSettings} />
+      <span class="label-text">Underline multi-word place names (needs Encyclopedia pack)</span>
     </label>
   </div>
 
