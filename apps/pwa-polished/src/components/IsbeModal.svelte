@@ -3,6 +3,7 @@
   import { get } from "svelte/store";
   import L from "leaflet";
   import { isbeModalStore } from "../stores/isbeModalStore";
+  import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { navigationStore } from "../stores/navigationStore";
   import { getBookColor, BIBLE_BOOKS } from "../lib/bibleData.js";
   import {
@@ -11,6 +12,7 @@
     getIsbePlaceByEntryId,
     getIsbePlaceVerses,
     getIsbeEntryByName,
+    lookupEnglishWord,
     type IsbeEntryRecord,
     type IsbePlaceRecord,
     type VerseRef,
@@ -69,6 +71,47 @@
   }
 
   $: title = place?.primaryName || entry?.primaryName || state.primaryName;
+
+  // --- Dictionary bridge -------------------------------------------------
+  // Offer a jump to the plain dictionary for this term, but only when the
+  // dictionary actually has definitions for it (kept in sync as the entry loads).
+  let dictWord = "";
+  let hasDictionary = false;
+  let dictCheckedFor = "";
+
+  // "HEBREWS, EPISTLE TO THE" -> "hebrews"; "Hebrew (1)" -> "hebrew".
+  function dictTermFor(name: string): string {
+    return (name || "").split(/[;,(]/)[0].trim().split(/\s+/)[0].toLowerCase();
+  }
+
+  async function checkDictionary(name: string) {
+    const term = dictTermFor(name);
+    if (dictCheckedFor === term) return;
+    dictCheckedFor = term;
+    dictWord = term;
+    hasDictionary = false;
+    if (!term) return;
+    try {
+      const e = await lookupEnglishWord(term);
+      hasDictionary = !!(e && (e.modern?.length || e.historic?.length || e.wordset?.length));
+    } catch {
+      hasDictionary = false;
+    }
+  }
+
+  $: if (isOpen && !loading && title) checkDictionary(title);
+  $: if (!isOpen) dictCheckedFor = "";
+
+  function openDictionary() {
+    const term = dictWord;
+    close();
+    lexicalModalStore.open({
+      selectedText: term,
+      strongsId: undefined,
+      morphologyData: null,
+      lexicalEntries: null,
+    });
+  }
 
   $: hasArticle = !!entry && !!entry.bodyHtml;
   $: hasMap = !!place && place.latitude != null && place.longitude != null;
@@ -227,11 +270,16 @@
           <h2>{title}</h2>
           {#if !loading}<div class="sub">{subtitle()}</div>{/if}
         </div>
-        <button class="close-btn" on:click={close} aria-label="Close">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M18 6L6 18M6 6l12 12" stroke-width="2" stroke-linecap="round" />
-          </svg>
-        </button>
+        <div class="head-actions">
+          {#if hasDictionary}
+            <button class="bridge-btn" on:click={openDictionary}>Dictionary</button>
+          {/if}
+          <button class="close-btn" on:click={close} aria-label="Close">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M18 6L6 18M6 6l12 12" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="tabs">
@@ -355,6 +403,25 @@
     margin-top: 4px;
     font-size: 12px;
     color: var(--text-muted, #999);
+  }
+  .head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .bridge-btn {
+    background: var(--surface-2, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-color, #333);
+    color: var(--color-primary, #4a90e2);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .bridge-btn:hover {
+    border-color: var(--color-primary, #4a90e2);
   }
   .close-btn {
     background: none;

@@ -8,8 +8,15 @@
     englishLexicalService,
     type WordInfo,
   } from "../../../../packages/core/src/search/englishLexicalService";
-  import { lookupEnglishWord, lookupStrongs, getPersonVerses } from "../adapters/lexicon-lookup.js";
+  import {
+    lookupEnglishWord,
+    lookupStrongs,
+    getPersonVerses,
+    resolveIsbeClick,
+    type IsbeResolution,
+  } from "../adapters/lexicon-lookup.js";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
+  import { isbeModalStore } from "../stores/isbeModalStore";
   import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
   import { parseOsisRef } from "../lib/parseRefString";
@@ -187,6 +194,38 @@
       req.onsuccess = () => { isDictionaryInstalled = !!req.result; };
       req.onerror = () => { isDictionaryInstalled = false; };
     }).catch(() => { isDictionaryInstalled = false; });
+  }
+
+  // --- Encyclopedia bridge ------------------------------------------------
+  // Offer a jump to the ISBE encyclopedia when it has an entry for this term
+  // (plural-folded via the shared resolver). Hidden when no entry / pack absent.
+  let isbeMatch: IsbeResolution | null = null;
+  let isbeCheckedFor = "";
+  $: if (isOpen && selectedText && !strongsId && !morphologyData) checkEncyclopedia(selectedText);
+  $: if (!isOpen) isbeCheckedFor = "";
+
+  async function checkEncyclopedia(text: string) {
+    const key = text.trim().toLowerCase();
+    if (isbeCheckedFor === key) return;
+    isbeCheckedFor = key;
+    isbeMatch = null;
+    try {
+      isbeMatch = await resolveIsbeClick({ word: text });
+    } catch {
+      isbeMatch = null;
+    }
+  }
+
+  function openEncyclopedia() {
+    if (!isbeMatch) return;
+    const m = isbeMatch;
+    close();
+    isbeModalStore.open({
+      kind: m.kind,
+      entryId: m.entryId,
+      placeId: m.placeId ?? null,
+      primaryName: m.primaryName,
+    });
   }
 
   async function loadLexicalData() {
@@ -627,21 +666,26 @@
             Word Study
           {/if}
         </h2>
-        <button class="close-btn" on:click={close} aria-label="Close">
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-          >
-            <path
-              d="M18 6L6 18M6 6l12 12"
-              stroke-width="2"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
+        <div class="head-actions">
+          {#if isbeMatch && !strongEntry && !showCharacter}
+            <button class="bridge-btn" on:click={openEncyclopedia}>More Info</button>
+          {/if}
+          <button class="close-btn" on:click={close} aria-label="Close">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+            >
+              <path
+                d="M18 6L6 18M6 6l12 12"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="modal-body">
@@ -1343,6 +1387,25 @@
     border-radius: 6px;
   }
 
+  .head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .bridge-btn {
+    background: var(--surface-2, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-color, #333);
+    color: var(--color-primary, #4a90e2);
+    border-radius: 6px;
+    padding: 5px 11px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .bridge-btn:hover {
+    border-color: var(--color-primary, #4a90e2);
+  }
   .close-btn {
     background: none;
     border: none;
