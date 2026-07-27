@@ -2582,30 +2582,63 @@
     hoveredWordElement = null;
   }
 
+  /** True when (x, y) falls inside one of the hover span's line boxes. */
+  function isPointInHoveredWord(x: number, y: number): boolean {
+    if (!hoveredWordElement || !hoveredWordElement.isConnected) return false;
+    const rects = hoveredWordElement.getClientRects();
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true;
+    }
+    return false;
+  }
+
   function handleMouseMove(e: MouseEvent) {
     const target = e.target as HTMLElement;
+
+    // Interlinear mode uses CSS :hover on .il-word; skip the text-node
+    // hover-wrap (it would corrupt the per-word structure + click offsets).
+    if (isInterlinearActive) {
+      clearHoverHighlight();
+      return;
+    }
+
+    // Don't hover when dragging or when toast is open
+    if (isDragging || showToast) {
+      clearHoverHighlight();
+      return;
+    }
+
+    // Ignore special elements
+    if (
+      target.closest(".inline-note") ||
+      target.closest(".toast") ||
+      target.closest(".navigation-bar") ||
+      target.closest("button")
+    ) {
+      clearHoverHighlight();
+      return;
+    }
+
+    // Only handle if hovering over verse text. Resolve this BEFORE clearing —
+    // clearHoverHighlight() detaches the span, and a detached e.target has no
+    // ancestors, so .closest() would return null and the highlight would never
+    // be rebuilt (that alternation is what made the hover strobe).
+    const verseText = target.closest(".verse-text");
+    if (!verseText) {
+      clearHoverHighlight();
+      return;
+    }
+
+    // Still inside the word we already highlighted — leave the DOM alone.
+    // Rebuilding on every mousemove forced a reflow of the verse each event
+    // and prevented the fade-in transition from ever running.
+    if (isPointInHoveredWord(e.clientX, e.clientY)) return;
 
     // Clear any previous hover — must fully unwrap the span so the DOM text
     // nodes are merged back. Leaving orphan spans splits the text node and
     // corrupts caretRangeFromPoint offsets on the next click.
     clearHoverHighlight();
-
-    // Interlinear mode uses CSS :hover on .il-word; skip the text-node
-    // hover-wrap (it would corrupt the per-word structure + click offsets).
-    if (isInterlinearActive) return;
-
-    // Don't hover when dragging or when toast is open
-    if (isDragging || showToast) return;
-
-    // Ignore special elements
-    if (target.closest(".inline-note")) return;
-    if (target.closest(".toast")) return;
-    if (target.closest(".navigation-bar")) return;
-    if (target.closest("button")) return;
-
-    // Only handle if hovering over verse text
-    const verseText = target.closest(".verse-text");
-    if (!verseText) return;
 
     // Get the word at cursor position
     const range = document.caretRangeFromPoint(e.clientX, e.clientY);
@@ -5083,11 +5116,17 @@
   .verse-text :global(.word-hover) {
     background: rgba(102, 126, 234, 0.3);
     border-radius: 3px;
-    padding: 2px 4px;
-    margin: -2px -4px;
-    cursor: pointer;
+    /* Keep the box tight to the glyphs: vertical padding on an inline element
+       overflows the line box and bleeds into the lines above/below. */
+    padding: 0 2px;
+    margin: 0 -2px;
+    /* The span sits under the cursor once created. Without this it becomes the
+       mousemove target and the hover logic fights itself. */
+    pointer-events: none;
     transition: background 0.15s ease;
     box-shadow: 0 0 0 1px rgba(102, 126, 234, 0.4);
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
   }
 
   :global(.selection-highlight) {
