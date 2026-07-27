@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-07-19T21:24:28.412Z",
+  "createdAt": "2026-07-27T00:05:07.142Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -17,6 +17,21 @@
       "dependencies": [],
       "downloadUrl": "/api/packs/ancient-languages.sqlite",
       "createdAt": "2026-07-19T21:21:01.606Z"
+    },
+    {
+      "id": "biblical-art",
+      "type": "art",
+      "name": "Biblical Art",
+      "description": "Famous public-domain paintings tied to Bible scenes. Tap the in-text art icon to view. Images bundled for offline viewing. Source: Wikimedia Commons (public domain)",
+      "version": "2.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 87498752,
+      "sizeMB": 83.45,
+      "sha256": "db4a9b97a75ad327e9f7bb0e3a14e60d9bd7d6c3a8dac788c5985e1ca6450064",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/art.sqlite",
+      "createdAt": "2026-07-27T00:02:33.295Z"
     },
     {
       "id": "bsb-audio-pt1",
@@ -61,7 +76,7 @@
       "sha256": "1d4e1549df510e1cf8de1eae53b20d5b20e5a794883d73790fa67aaa6c42a5a5",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-07-19T21:24:31.862Z"
+      "createdAt": "2026-07-27T00:05:12.639Z"
     },
     {
       "id": "dictionary-en",
@@ -71,12 +86,12 @@
       "version": "1.0.0",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 46624768,
-      "sizeMB": 44.46,
-      "sha256": "a8aa4d1219edce01592a73554f9688884dc38d335bc6928d6e895b7b419f756e",
+      "size": 40349696,
+      "sizeMB": 38.48,
+      "sha256": "92658730a38285039b6e35e2fdc95de9f0eafcd68558fa5ba32d5899e89dad69",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-07-19T21:24:31.724Z"
+      "createdAt": "2026-07-27T00:05:12.344Z"
     },
     {
       "id": "geonames-modern-places-v1",
@@ -92,21 +107,6 @@
       "dependencies": [],
       "downloadUrl": "/api/packs/geonames.sqlite",
       "createdAt": "2026-04-25T00:13:01.091Z"
-    },
-    {
-      "id": "isbe",
-      "type": "isbe",
-      "name": "Bible Encyclopedia (ISBE)",
-      "description": "International Standard Bible Encyclopedia (1915) — ~9,380 scholarly articles on places, people, customs, plants and doctrine, with geolocated places and verse links. License: Public Domain (ISBE); place data CC BY 4.0 (OpenBible.info)",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 65216512,
-      "sizeMB": 62.19,
-      "sha256": "f053e91d31789b92cfda3629b0cea13ce8360e1e0aa758129c87e7180c00ce37",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/isbe.sqlite",
-      "createdAt": "2026-07-24T00:00:00.000Z"
     },
     {
       "id": "lexical",
@@ -136,7 +136,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-07-19T21:24:29.167Z"
+      "createdAt": "2026-07-27T00:05:08.318Z"
     },
     {
       "id": "section-headings",
@@ -151,7 +151,7 @@
       "sha256": "8871d350ab99927b16852e80abe174cd732253edae1dfe03a8ea727d8f2e2948",
       "dependencies": [],
       "downloadUrl": "/api/packs/section-headings.sqlite",
-      "createdAt": "2026-07-19T21:24:29.164Z"
+      "createdAt": "2026-07-27T00:05:08.312Z"
     },
     {
       "id": "study-tools",
@@ -196,7 +196,7 @@
       "sha256": "f4f492fd23fdb74d61d30345ca5650444b3fbc9b02a8602ccd04f26b8eb8fb46",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-07-19T21:24:29.134Z"
+      "createdAt": "2026-07-27T00:05:08.254Z"
     }
   ]
 }

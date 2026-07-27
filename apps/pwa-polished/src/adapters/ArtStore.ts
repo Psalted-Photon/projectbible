@@ -1,10 +1,13 @@
 import type { ArtStore, ArtScene, ArtWork, BCV } from '@projectbible/core';
 import { openDB } from './db';
-import type { DBArtScene } from './db';
+import type { DBArtScene, DBArtImage } from './db';
 import { BIBLE_BOOKS } from '../lib/bibleData';
 
 /** Canonical book order for sorting the browsable gallery. */
 const CANONICAL_ORDER: string[] = BIBLE_BOOKS.map((b) => b.name);
+
+/** Session cache of image id → object URL (created once, reused across renders). */
+const imageUrlCache = new Map<string, string>();
 
 /**
  * IndexedDB implementation of ArtStore.
@@ -106,6 +109,32 @@ export class IndexedDBArtStore implements ArtStore {
       });
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Resolve a bundled image id to a displayable object URL.
+   * Reads the blob from the art_images store and caches the URL for the session
+   * (so repeated renders reuse it). Returns null if the image isn't installed.
+   */
+  async getImageUrl(id: string): Promise<string | null> {
+    if (!id) return null;
+    const cached = imageUrlCache.get(id);
+    if (cached) return cached;
+    try {
+      const db = await openDB();
+      const row = await new Promise<DBArtImage | undefined>((resolve, reject) => {
+        const tx = db.transaction('art_images', 'readonly');
+        const req = tx.objectStore('art_images').get(id);
+        req.onsuccess = () => resolve(req.result as DBArtImage | undefined);
+        req.onerror = () => reject(req.error);
+      });
+      if (!row?.data) return null;
+      const url = URL.createObjectURL(new Blob([row.data], { type: row.mime || 'image/jpeg' }));
+      imageUrlCache.set(id, url);
+      return url;
+    } catch {
+      return null;
     }
   }
 

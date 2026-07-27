@@ -113,6 +113,13 @@ const PACK_CONFIGS = {
     name: 'Multi-Author Commentaries',
     description: 'Verse-by-verse Bible commentaries from multiple sources',
     dependencies: []
+  },
+  'art.sqlite': {
+    id: 'biblical-art',
+    type: 'art',
+    name: 'Biblical Art',
+    description: 'Famous public-domain paintings tied to Bible scenes. Tap the in-text art icon to view. Images bundled for offline viewing. Source: Wikimedia Commons (public domain)',
+    dependencies: []
   }
 };
 

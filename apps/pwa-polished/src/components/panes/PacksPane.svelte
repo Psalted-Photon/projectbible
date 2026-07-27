@@ -155,8 +155,8 @@
     {
       id: "dictionary-en",
       name: "English Dictionary (Modern + Historic)",
-      description: "Wiktionary + Webster 1913 offline definitions",
-      size: "38.36 MB",
+      description: "Modern + Webster 1913 offline definitions",
+      size: "38.48 MB",
       icon: "📖",
       url: `${BASE_URL}/dictionary-en.sqlite`,
     },
@@ -224,6 +224,14 @@
       size: "0.29 MB",
       icon: "📑",
       url: `${BASE_URL}/section-headings.sqlite`,
+    },
+    {
+      id: "biblical-art",
+      name: "Biblical Art",
+      description: "Famous public-domain paintings tied to Bible scenes. Tap the in-text art icon in the reader to view. Images bundled for offline. Public domain — Wikimedia Commons",
+      size: "83.4 MB",
+      icon: "🖼️",
+      url: `${BASE_URL}/art.sqlite`,
     },
     {
       id: "people-biblical-v1",

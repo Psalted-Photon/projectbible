@@ -981,62 +981,37 @@
                   {/each}
                 {/if}
 
-                {#if effectiveLexicalEntries && (effectiveLexicalEntries.modern?.length > 0 || effectiveLexicalEntries.historic?.length > 0 || effectiveLexicalEntries.wordset?.length > 0)}
-                  <!-- Offline Dictionary Definitions from Dictionary Pack -->
+                {#if effectiveLexicalEntries && (effectiveLexicalEntries.wordset?.length > 0 || effectiveLexicalEntries.historic?.length > 0)}
+                  <!-- Offline Dictionary Definitions from Dictionary Pack.
+                       "Modern" is the Concise (Wordset) dictionary — Wiktionary was
+                       removed because its example sentences were unfit for this app. -->
                   <div class="definitions-grid">
-                    <!-- Modern Definitions (Wiktionary) -->
+                    <!-- Modern Definitions (Concise / Wordset) -->
+                    {#if effectiveLexicalEntries.wordset && effectiveLexicalEntries.wordset.length > 0}
                     <div class="info-section">
-                    <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
-                      <span class="emoji">📖</span> Modern Definitions
-                      <span style="font-size: 12px; color: #666; font-weight: normal;">Wiktionary</span>
-                    </h3>
-                    {#if effectiveLexicalEntries.modern && effectiveLexicalEntries.modern.length > 0}
-                      {#each effectiveLexicalEntries.modern as def, idx}
-                        <div class="modern-def" style="margin-bottom: 16px;">
-                          <div style="display: flex; gap: 8px; align-items: start; margin-bottom: 4px;">
-                            {#if def.sense_number}
-                              <span class="sense-badge">{def.sense_number}</span>
-                            {/if}
+                      <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
+                        <span class="emoji">📖</span> Modern Definitions
+                      </h3>
+                      {#each effectiveLexicalEntries.wordset as def}
+                        <div class="modern-def" style="margin-bottom: 12px;">
+                          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
                             {#if def.pos}
                               <span class="pos-pill" style="background: #e3f2fd; color: #1976d2; padding: 2px 8px; border-radius: 12px; font-size: 11px; text-transform: capitalize;">
                                 {def.pos}
                               </span>
                             {/if}
-                            {#if def.tags}
-                              {#each def.tags.split(',') as tag}
-                                <span class="tag-chip" style="background: {tag.includes('archaic') ? '#d7ccc8' : tag.includes('slang') ? '#e1bee7' : tag.includes('formal') ? '#c5cae9' : '#e0e0e0'}; padding: 2px 6px; border-radius: 10px; font-size: 10px;">
-                                  {tag.trim()}
-                                </span>
-                              {/each}
-                            {/if}
                           </div>
-                          <p class="definition-text" style="margin: 4px 0 4px 24px;">{def.definition}</p>
+                          <p class="definition-text" style="margin: 4px 0;">{def.definition}</p>
                           {#if def.example}
-                            <p class="example-text" style="margin: 4px 0 4px 24px; color: #666; font-style: italic; font-size: 14px;">
+                            <p class="example-text" style="margin: 4px 0; color: #666; font-style: italic; font-size: 14px;">
                               "{def.example}"
                             </p>
                           {/if}
-                          {#if def.etymology && idx === 0}
-                            <details style="margin: 8px 0 0 24px; font-size: 13px; color: #555;">
-                              <summary style="cursor: pointer; user-select: none; font-weight: 500;">Etymology</summary>
-                              <p style="margin: 4px 0; padding-left: 12px;">{def.etymology}</p>
-                              {#if def.raw_etymology && def.raw_etymology !== def.etymology}
-                                <details style="margin: 4px 0; padding-left: 12px;">
-                                  <summary style="cursor: pointer; font-size: 12px; color: #777;">Show full chain</summary>
-                                  <p style="margin: 4px 0; font-size: 12px; color: #666;">{def.raw_etymology}</p>
-                                </details>
-                              {/if}
-                            </details>
-                          {/if}
                         </div>
                       {/each}
-                    {:else}
-                      <p class="definition-text" style="margin: 6px 0 0; color: #777; font-size: 13px;">
-                        No modern definitions available for this word.
-                      </p>
-                    {/if}
                     </div>
-                    
+                    {/if}
+
                     <!-- Historic Definitions (GCIDE/Webster 1913) -->
                     <div class="info-section">
                     <h3 style="color: #8d6e63; display: flex; align-items: center; gap: 8px;">
@@ -1070,33 +1045,6 @@
                       </p>
                     {/if}
                     </div>
-
-                    <!-- Concise Definitions (Wordset) -->
-                    {#if effectiveLexicalEntries.wordset && effectiveLexicalEntries.wordset.length > 0}
-                    <div class="info-section">
-                      <h3 style="color: #2e7d32; display: flex; align-items: center; gap: 8px;">
-                        <span class="emoji">📗</span> Concise Definitions
-                        <span style="font-size: 12px; color: #666; font-weight: normal;">Wordset</span>
-                      </h3>
-                      {#each effectiveLexicalEntries.wordset as def}
-                        <div class="wordset-def" style="margin-bottom: 12px; border-left: 3px solid #a5d6a7; padding-left: 12px;">
-                          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
-                            {#if def.pos}
-                              <span class="pos-pill" style="background: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 12px; font-size: 11px; text-transform: capitalize;">
-                                {def.pos}
-                              </span>
-                            {/if}
-                          </div>
-                          <p class="definition-text" style="margin: 4px 0;">{def.definition}</p>
-                          {#if def.example}
-                            <p class="example-text" style="margin: 4px 0; color: #666; font-style: italic; font-size: 14px;">
-                              "{def.example}"
-                            </p>
-                          {/if}
-                        </div>
-                      {/each}
-                    </div>
-                    {/if}
                   </div>
                 {/if}
 
@@ -1118,7 +1066,7 @@
                       </p>
                     {:else}
                       <p style="margin-top: 12px; padding: 12px; background: #e3f2fd; border-radius: 8px; font-size: 13px;">
-                        <span class="emoji">💡</span> Install the <strong>English Dictionary Pack</strong> from the Packs menu to get offline definitions from Wiktionary + Webster 1913!
+                        <span class="emoji">💡</span> Install the <strong>English Dictionary Pack</strong> from the Packs menu to get offline modern and historic (Webster 1913) definitions!
                       </p>
                     {/if}
                   </div>

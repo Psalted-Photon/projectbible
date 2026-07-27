@@ -16,7 +16,6 @@
   import { readingPlanModalStore } from "./stores/readingPlanModalStore";  import { localDateStr } from './stores/clockStore';  import { todayStore } from './stores/clockStore';  import { checkAndShowDailyGreeting } from './stores/dailyGreetingStore';  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
   import "./adapters/SyncedHighlightAdapter"; // registers verse/word highlight pull handlers
   import { getSettings } from "./adapters/settings";
-  import { ensureArtPack } from "./lib/art-init";
 
   let appReady = false;
   let showReadingPlanModal = false;
@@ -101,9 +100,6 @@
     // Initialize sync service (connects if user is already signed in)
     void syncService.init();
     void init();
-
-    // Import the bundled biblical-art pack (idempotent; no-ops once installed)
-    void ensureArtPack();
 
     const unsubscribeReadingPlan = readingPlanModalStore.subscribe((value) => {
       if (showReadingPlanModal !== value) {

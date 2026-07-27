@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 30; // Migration 30: add art_scenes store (biblical paintings anchored to passages)
+const DB_VERSION = 31; // Migration 31: add art_images store (bundled painting blobs for offline art)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -33,7 +33,13 @@ export interface DBArtScene {
   chapter: number;
   verse: number;          // anchor verse (matches the section-heading verse)
   passageLabel?: string;  // "John 13:21–30"
-  works: string;          // JSON-serialized ArtWork[]
+  works: string;          // JSON-serialized ArtWork[] (each references imageId/thumbId)
+}
+
+export interface DBArtImage {
+  id: string;         // content id referenced by ArtWork.imageId / thumbId
+  mime: string;       // e.g. "image/jpeg"
+  data: Uint8Array;   // raw image bytes (bundled in the pack for offline display)
 }
 
 export interface DBPack {
@@ -831,6 +837,11 @@ export function openDB(): Promise<IDBDatabase> {
         const artScenesStore = db.createObjectStore('art_scenes', { keyPath: 'id' });
         artScenesStore.createIndex('book_chapter', ['book', 'chapter'], { unique: false });
         artScenesStore.createIndex('anchor', ['book', 'chapter', 'verse'], { unique: false });
+      }
+
+      // Bundled art image blobs (full + thumbnail), keyed by content id
+      if (!db.objectStoreNames.contains('art_images')) {
+        db.createObjectStore('art_images', { keyPath: 'id' });
       }
 
       // People store (biblical characters — bio, dates, places, relationships)

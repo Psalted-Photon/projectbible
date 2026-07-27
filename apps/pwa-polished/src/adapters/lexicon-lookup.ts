@@ -286,6 +286,37 @@ export async function lookupLemma(lemma: string): Promise<LexiconEntry | null> {
 /**
  * Look up an English word and return detailed lexical data
  */
+/**
+ * Ordered base-form candidates for a word, most-specific first (never includes
+ * the word itself). Data-driven plural→singular folding shared by the dictionary
+ * and encyclopedia lookups so a clicked word folds the same way in both — e.g.
+ * "hebrews"→"hebrew", "cities"→"city", "wolves"→"wolf". Callers try the exact
+ * form first, then these, and keep the first that actually matches an index, so
+ * an over-eager candidate ("amorit" from "amorites") simply never resolves.
+ */
+export function singularCandidates(word: string): string[] {
+  const w = word.toLowerCase();
+  const out: string[] = [];
+  const push = (s: string) => {
+    if (s && s !== w && s.length > 2 && !out.includes(s)) out.push(s);
+  };
+  if (w.endsWith('ies')) push(w.slice(0, -3) + 'y');          // cities -> city
+  if (w.endsWith('ves')) { push(w.slice(0, -3) + 'f'); push(w.slice(0, -3) + 'fe'); } // wolves->wolf, knives->knife
+  if (w.endsWith('es')) push(w.slice(0, -2));                 // boxes -> box
+  if (w.endsWith('s') && !w.endsWith('ss')) push(w.slice(0, -1)); // hebrews -> hebrew
+  return out;
+}
+
+/** Exact lemma → dictionary word_id via the word_mapping store, or null. */
+async function wordMappingId(db: IDBDatabase, lemma: string): Promise<number | null> {
+  if (!db.objectStoreNames.contains('word_mapping')) return null;
+  return new Promise<number | null>((resolve) => {
+    const req = db.transaction('word_mapping', 'readonly').objectStore('word_mapping').get(lemma);
+    req.onsuccess = () => resolve(req.result?.word_id ?? null);
+    req.onerror = () => resolve(null);
+  });
+}
+
 export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry | null> {
   console.log('🔍 lookupEnglishWord called with:', word);
   
@@ -356,13 +387,15 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
     let dictionaryWordId: number | null = null;
     if (db.objectStoreNames.contains('word_mapping')) {
       console.log('🔍 Looking up dictionary word mapping for:', normalizedWord);
-      dictionaryWordId = await new Promise<number | null>((resolve) => {
-        const tx = db.transaction('word_mapping', 'readonly');
-        const store = tx.objectStore('word_mapping');
-        const request = store.get(normalizedWord);
-        request.onsuccess = () => resolve(request.result?.word_id ?? null);
-        request.onerror = () => resolve(null);
-      });
+      dictionaryWordId = await wordMappingId(db, normalizedWord);
+      // Proper nouns and plurals aren't lemmas in the dictionary; fold to the
+      // singular so "hebrews" shows the "hebrew" definitions instead of blank.
+      if (dictionaryWordId == null) {
+        for (const cand of singularCandidates(normalizedWord)) {
+          dictionaryWordId = await wordMappingId(db, cand);
+          if (dictionaryWordId != null) break;
+        }
+      }
     } else {
       console.log('⚠️ word_mapping store not found');
     }
@@ -377,7 +410,7 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
     }
     
     const entry: EnglishWordEntry = {
-      id: wordData?.id ?? dictionaryWordId ?? normalizedWord,
+      id: dictionaryWordId ?? wordData?.id ?? normalizedWord,
       word: wordData?.word ?? normalizedWord,
       ipa_us: wordData?.ipa_us ?? null,
       ipa_uk: wordData?.ipa_uk ?? null,
@@ -454,46 +487,22 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
     
     entry.grammar = grammar;
     
-    // Look up modern definitions (Wiktionary)
-    const definitionWordId = dictionaryWordId ?? wordData?.id ?? null;
+    // Definitions are keyed ONLY by the dictionary's own word_mapping id. The
+    // word-list id (wordData.id) lives in a different, unrelated id space, so
+    // using it here would fetch a numerically-coincident but wrong word's
+    // definitions (this is what showed "spotty" for "hebrews").
+    const definitionWordId = dictionaryWordId;
     if (!definitionWordId) {
       console.log('⚠️ No word_id available for definitions');
     }
 
-    console.log('🔍 Looking up modern definitions for word_id:', definitionWordId);
-    const modernDefs = await new Promise<Definition[]>((resolve) => {
-      // Check if dictionary pack is installed
-      if (!db.objectStoreNames.contains('english_definitions_modern')) {
-        console.log('⚠️ Dictionary pack not installed');
-        resolve([]);
-        return;
-      }
+    // Wiktionary "modern" definitions are intentionally NOT loaded — that source
+    // carried crude example sentences unfit for a Bible app. The Concise (Wordset)
+    // dictionary now fills the "Modern" slot; see entry.wordset below. `entry.modern`
+    // stays empty so any lingering Wiktionary rows in a previously-installed pack's
+    // IndexedDB store are never surfaced.
+    entry.modern = [];
 
-      if (!definitionWordId) {
-        resolve([]);
-        return;
-      }
-      
-      const tx = db.transaction('english_definitions_modern', 'readonly');
-      const store = tx.objectStore('english_definitions_modern');
-      const index = store.index('word_id');
-      const request = index.getAll(definitionWordId);
-      
-      request.onsuccess = () => {
-        const results = (request.result || []) as Definition[];
-        // Sort by definition_order to preserve source ordering
-        results.sort((a, b) => a.definition_order - b.definition_order);
-        console.log(`✅ Found ${results.length} modern definitions`);
-        resolve(results);
-      };
-      request.onerror = () => {
-        console.log('❌ Modern definitions lookup failed');
-        resolve([]);
-      };
-    });
-    
-    entry.modern = modernDefs;
-    
     // Look up historic definitions (GCIDE/Webster 1913)
     console.log('🔍 Looking up historic definitions for word_id:', definitionWordId);
     const historicDefs = await new Promise<Definition[]>((resolve) => {
@@ -928,7 +937,10 @@ async function isbePlaceInChapter(placeId: string, ref: VerseRef): Promise<boole
 async function isbeEntryIdByName(word: string): Promise<number | null> {
   const db = await openDB();
   if (!db.objectStoreNames.contains('isbe_entry_names')) return null;
-  const variants = [...new Set([word.trim().toLowerCase(), isbeNorm(word)])].filter(Boolean);
+  // Exact forms first, then plural→singular folds so "Hebrews" reaches the
+  // "HEBREW; HEBREWESS" article. The first form that actually matches wins.
+  const folded = singularCandidates(word).flatMap((c) => [c, isbeNorm(c)]);
+  const variants = [...new Set([word.trim().toLowerCase(), isbeNorm(word), ...folded])].filter(Boolean);
   for (const v of variants) {
     const id = await new Promise<number | null>((resolve) => {
       const idx = db.transaction('isbe_entry_names', 'readonly').objectStore('isbe_entry_names').index('nameLower');
@@ -1017,11 +1029,14 @@ export async function resolveIsbeClick(ctx: IsbeClickContext): Promise<IsbeResol
       }
     }
 
-    // 2. Single-word place. Require at least chapter evidence so ordinary words
-    //    ("sea", "city") don't masquerade as a place they don't belong to.
+    // 2. Single-word place. Try the exact form, then plural→singular folds.
+    //    Require at least chapter evidence so ordinary words ("sea", "city")
+    //    don't masquerade as a place they don't belong to.
     if (selfNorm) {
-      const ids = await isbePlaceIdsByName(selfNorm, false);
-      if (ids.length) {
+      const placeForms = [...new Set([selfNorm, ...singularCandidates(word).map(isbeNorm)])].filter(Boolean);
+      for (const form of placeForms) {
+        const ids = await isbePlaceIdsByName(form, false);
+        if (!ids.length) continue;
         const chosen = await isbeChoosePlace(ids, ref, true);
         if (chosen) {
           return {

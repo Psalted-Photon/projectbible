@@ -157,6 +157,39 @@ export async function importPackFromSQLite(file: File): Promise<void> {
 
         console.log(`✅ Biblical art pack imported: ${entries.length} scenes`);
       }
+
+      // Bundled image blobs (full + thumbnail) for offline display
+      try {
+        const imgRows = db.exec('SELECT id, mime, data FROM art_images');
+        if (imgRows.length && imgRows[0].values.length) {
+          const images = imgRows[0].values.map(([id, mime, data]) => ({
+            id: id as string,
+            mime: mime as string,
+            data: data as Uint8Array,
+          }));
+          console.log(`Importing ${images.length} art images...`);
+
+          const idbImg = await openDB();
+          await new Promise<void>((resolve, reject) => {
+            const tx = idbImg.transaction('art_images', 'readwrite');
+            tx.objectStore('art_images').clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(new Error('art_images clear aborted'));
+          });
+
+          const CHUNK = 20;
+          for (let i = 0; i < images.length; i += CHUNK) {
+            const chunk = images.slice(i, i + CHUNK);
+            await batchWriteTransaction('art_images', (store) => {
+              chunk.forEach((img) => store.put(img));
+            });
+          }
+          console.log(`✅ Imported ${images.length} art images`);
+        }
+      } catch (e) {
+        console.warn('Art images import skipped (no art_images table?):', e);
+      }
     } else if (packInfo.type === 'cross-references') {
       // Import cross-references
       const xrefRows = db.exec(`

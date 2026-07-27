@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ArtScene } from '@projectbible/core';
+  import type { ArtScene, ArtWork } from '@projectbible/core';
   import { IndexedDBArtStore } from '../adapters/ArtStore';
 
   // Populated from the window's contentState (see WindowContainer)
@@ -15,6 +15,22 @@
   let allScenes: ArtScene[] = [];      // browse list (only when no scene context)
   let browse = false;                  // opened with no scene → show the browsable list
   let selected: ArtScene | null = null;
+  let urls: Record<string, string> = {}; // image id → object URL (resolved from bundled blobs)
+
+  const thumbIdOf = (w: ArtWork) => w.thumbId || w.imageId;
+
+  async function resolveImages(ids: (string | undefined)[]) {
+    const need = [...new Set(ids)].filter((id): id is string => !!id && !urls[id]);
+    if (need.length === 0) return;
+    const next = { ...urls };
+    await Promise.all(
+      need.map(async (id) => {
+        const u = await artStore.getImageUrl(id);
+        if (u) next[id] = u;
+      })
+    );
+    urls = next;
+  }
 
   async function load(_a?: unknown, _b?: unknown, _c?: unknown, _d?: unknown) {
     loading = true;
@@ -37,13 +53,17 @@
     } finally {
       loading = false;
     }
+
+    if (selected) await resolveImages(selected.works.map((w) => w.imageId));
+    else if (browse) await resolveImages(allScenes.map((s) => (s.works[0] ? thumbIdOf(s.works[0]) : undefined)));
   }
 
   // Reload whenever the incoming context changes (also fires once on init)
   $: load(sceneId, book, chapter, verse);
 
-  function pick(scene: ArtScene) {
+  async function pick(scene: ArtScene) {
     selected = scene;
+    await resolveImages(scene.works.map((w) => w.imageId));
   }
 
   function backToList() {
@@ -70,16 +90,20 @@
         <div class="state">No artworks in this scene yet.</div>
       {:else}
         <div class="gallery">
-          {#each selected.works as work (work.title + (work.artist ?? ''))}
+          {#each selected.works as work (work.imageId)}
             <figure class="work">
               <a
                 class="img-link"
-                href={work.sourceUrl || work.imageUrl}
+                href={work.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Open full resolution"
+                title="Open source page (Wikimedia Commons)"
               >
-                <img src={work.imageUrl} alt={work.title} loading="lazy" />
+                {#if urls[work.imageId]}
+                  <img src={urls[work.imageId]} alt={work.title} />
+                {:else}
+                  <div class="img-placeholder"></div>
+                {/if}
               </a>
               <figcaption>
                 <span class="work-title">{work.title}</span>
@@ -114,8 +138,10 @@
         {#each allScenes as scene (scene.id)}
           <li>
             <button class="scene-btn" on:click={() => pick(scene)}>
-              {#if scene.works[0]?.thumbUrl || scene.works[0]?.imageUrl}
-                <img class="scene-thumb" src={scene.works[0].thumbUrl || scene.works[0].imageUrl} alt="" loading="lazy" />
+              {#if scene.works[0] && urls[thumbIdOf(scene.works[0])]}
+                <img class="scene-thumb" src={urls[thumbIdOf(scene.works[0])]} alt="" />
+              {:else}
+                <span class="scene-thumb placeholder"></span>
               {/if}
               <span class="scene-btn-text">
                 <span class="scene-btn-title">{scene.title}</span>
@@ -202,6 +228,12 @@
     box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
     display: block;
   }
+  .img-placeholder {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border-radius: 8px;
+    background: linear-gradient(110deg, #222 30%, #2c2c2c 50%, #222 70%);
+  }
 
   figcaption {
     display: flex;
@@ -244,6 +276,7 @@
     background: #111;
     flex-shrink: 0;
   }
+  .scene-thumb.placeholder { background: #262626; }
   .scene-btn-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .scene-btn-title { font-size: 15px; color: #efefef; }
   .scene-btn-ref { font-size: 12px; color: #b98a4b; }

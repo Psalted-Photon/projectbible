@@ -335,9 +335,9 @@ export interface ArtWork {
   title: string;
   artist?: string;      // "Leonardo da Vinci"; may be "Unknown"
   year?: string;        // free-form: "1498", "c. 1512", "1601–1602"
-  imageUrl: string;     // large/high-res image (e.g. Commons Special:FilePath?width=1600)
-  thumbUrl?: string;    // small preview; falls back to imageUrl
-  sourceUrl?: string;   // Wikimedia Commons file page (attribution / full-zoom)
+  imageId: string;      // bundled full-res image (art_images store) — resolved to a blob URL
+  thumbId?: string;     // bundled thumbnail; falls back to imageId
+  sourceUrl?: string;   // Wikimedia Commons file page (attribution / optional online full-zoom)
   license?: string;     // "Public domain", "CC0", ...
   description?: string; // optional caption / context
 }
