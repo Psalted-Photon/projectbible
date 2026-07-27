@@ -393,6 +393,7 @@
     gap: 12px;
     padding: 16px 18px 10px;
     border-bottom: 1px solid var(--border-color, #333);
+    flex-shrink: 0;
   }
   .head-text h2 {
     margin: 0;
@@ -436,10 +437,15 @@
   }
   .tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 2px;
     padding: 8px 12px 0;
     border-bottom: 1px solid var(--border-color, #333);
-    overflow-x: auto;
+    /* Must not shrink: the body's flex-basis resolves to its full content
+       height (the container has no definite height), so a tall tab — 955 verse
+       chips, a 193k-char article — makes flexbox squash every shrinkable row.
+       Wrapping instead of scrolling keeps all four tabs reachable when narrow. */
+    flex-shrink: 0;
   }
   .tabs button {
     background: none;
@@ -459,6 +465,7 @@
     padding: 16px 18px;
     overflow-y: auto;
     flex: 1;
+    min-height: 0;
   }
   .muted {
     color: var(--text-muted, #999);
@@ -567,6 +574,7 @@
   .modal-footer {
     padding: 8px 18px 12px;
     border-top: 1px solid var(--border-color, #333);
+    flex-shrink: 0;
   }
   .src {
     font-size: 10px;
