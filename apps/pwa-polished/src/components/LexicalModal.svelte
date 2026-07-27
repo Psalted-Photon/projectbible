@@ -151,6 +151,12 @@
   let error = "";
   let activeTab: "definition" | "occurrences" | "related" = "definition";
 
+  // Two different tab strips share this one variable: the Strong's view has
+  // Definition/Occurrences/Related, the English-word view only has
+  // Definition/Synonyms. Landing on the English view with "occurrences" left
+  // over from a previous Strong's lookup would render an empty body.
+  $: if (isEnglishWord && activeTab === "occurrences") activeTab = "definition";
+
   // English lexical data
   let englishWordInfo: WordInfo | null = null;
   let englishSynonyms: string[] = [];
@@ -240,6 +246,7 @@
     isEnglishWord = false;
     loadingDefinition = false;
     localLexicalEntries = null;
+    activeTab = "definition";
     occurrences = [];
     occurrencesLoaded = false;
     formsData = [];
