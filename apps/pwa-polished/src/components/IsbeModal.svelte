@@ -53,6 +53,7 @@
     place = null;
     verses = [];
     activeTab = "overview";
+    expanded = {};
 
     if (state.placeId) {
       place = await getIsbePlace(state.placeId);
@@ -239,11 +240,163 @@
     return OSIS_BOOK[code] || null;
   }
 
-  // Jump to a heading paragraph in the article (from the outline nav).
-  let articleBody: HTMLDivElement | null = null;
-  function jumpToParagraph(i: number) {
-    const p = articleBody?.querySelectorAll("p")[i];
-    if (p) p.scrollIntoView({ behavior: "smooth", block: "start" });
+  // --- Article structure -------------------------------------------------
+  // An ISBE article is a flat run of <p> elements: first the article's own
+  // table of contents (headings only, duplicated verbatim), then the body,
+  // whose sections are marked by heading paragraphs — "I. The Name." for a
+  // roman section, "1. In Cuneiform:" for its subsections. We rebuild that
+  // into a two-level tree so the article can render collapsed: the contents
+  // list and the article become the same thing, and each heading opens its own
+  // text in place rather than scrolling somewhere else.
+  type Section = { title: string; html: string; children: Section[] };
+  type ArticleTree = { preamble: string; sections: Section[] };
+
+  const P_RE = /<p\b[^>]*>([\s\S]*?)<\/p>/g;
+  // Same heading shape buildOutline uses in scripts/build-isbe-pack.mjs, minus
+  // its 120-item cap (which left Jerusalem's last three sections unreachable).
+  const HEAD_RE = /^((?:[IVXLC]+|\d+)\.)\s+(.{1,70}?)(?:[.:]|$)/;
+
+  function paraText(inner: string): string {
+    return inner
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function headingOf(text: string): { level: 1 | 2; title: string } | null {
+    // Headings occupy a paragraph of their own, so anything long is prose that
+    // merely happens to open with a number.
+    if (text.length > 100) return null;
+    const m = text.match(HEAD_RE);
+    if (!m || !/[A-Za-z]/.test(m[2]) || m[2] !== m[2].replace(/\s{2,}/g, " ")) return null;
+    return { level: /^\d/.test(m[1]) ? 2 : 1, title: `${m[1]} ${m[2].trim()}` };
+  }
+
+  // Titles differ in case and trailing punctuation between the contents block
+  // ("I. THE NAME") and the body ("I. The Name."), so compare them loosely.
+  function normTitle(t: string): string {
+    return t.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+  }
+
+  function buildArticle(bodyHtml: string): ArticleTree | null {
+    const paras = [...bodyHtml.matchAll(P_RE)].map((m) => {
+      let text = paraText(m[1]);
+      let html = m[0];
+      // Stray leading pipes are markup residue: "|| I. INTRODUCTORY".
+      if (/^\|+\s*/.test(text)) {
+        text = text.replace(/^\|+\s*/, "");
+        html = html.replace(/\|+\s*/, "");
+      }
+      // The contents block's last line can be glued to the first real heading:
+      // "LITERATURE I. The Name." Split the prefix off or section I is lost.
+      if (/^LITERATURE\s+(?:[IVXLC]+|\d+)\.\s/i.test(text)) {
+        text = text.replace(/^LITERATURE\s+/i, "");
+        html = html.replace(/LITERATURE\s+/i, "");
+      }
+      return { html, text, head: headingOf(text) };
+    });
+    if (paras.length < 8) return null;
+
+    // Does this heading's title turn up again further down? Only the contents
+    // block echoes; a body heading is the last mention of itself. That test is
+    // what keeps us from deleting real content off an article that merely opens
+    // with several headings in a row.
+    const lastAt = new Map<string, number>();
+    paras.forEach((p, i) => {
+      if (p.head) lastAt.set(normTitle(p.head.title), i);
+    });
+    const echoes = paras.map(
+      (p, i) => !!p.head && (lastAt.get(normTitle(p.head.title)) ?? i) > i,
+    );
+
+    // Walk the contents block from the article's first heading. Short
+    // non-heading lines are its annotations ("Its Divisions", "(1) The
+    // Scribes") and stay inside it; the first real paragraph of prose ends it,
+    // as does a heading with no echo — that one already belongs to the body.
+    let tocStart = -1;
+    let tocEnd = -1;
+    const first = paras.findIndex((p) => p.head);
+    if (first >= 0 && first <= 3) {
+      let last = -1;
+      let n = 0;
+      for (let i = first; i < paras.length; i++) {
+        if (paras[i].text.length > 200) break;
+        if (!paras[i].head) continue;
+        if (echoes[i]) {
+          last = i;
+          n++;
+        } else if (!echoes.slice(i + 1, i + 4).some(Boolean)) break;
+      }
+      if (n >= 8) {
+        tocStart = first;
+        tocEnd = last;
+        // A bare "LITERATURE" often tails the contents block; the real
+        // bibliography under that name sits at the far end of the article.
+        if (paras[tocEnd + 1]?.text.toUpperCase() === "LITERATURE") tocEnd++;
+      }
+    }
+    const kept =
+      tocStart < 0 ? paras : [...paras.slice(0, tocStart), ...paras.slice(tocEnd + 1)];
+
+    const preamble: string[] = [];
+    const sections: Section[] = [];
+    let cur1: Section | null = null;
+    let cur2: Section | null = null;
+    let headings = 0;
+
+    for (const p of kept) {
+      if (p.head?.level === 1) {
+        cur1 = { title: p.head.title, html: "", children: [] };
+        cur2 = null;
+        sections.push(cur1);
+        headings++;
+      } else if (p.head?.level === 2) {
+        cur2 = { title: p.head.title, html: "", children: [] };
+        // Articles with no roman level at all (most of them) flatten to a
+        // single-level accordion.
+        (cur1 ? cur1.children : sections).push(cur2);
+        headings++;
+      } else if (cur2) cur2.html += p.html;
+      else if (cur1) cur1.html += p.html;
+      else preamble.push(p.html);
+    }
+
+    if (headings < 3) return null;
+    return { preamble: preamble.join(""), sections };
+  }
+
+  $: article = entry?.bodyHtml ? buildArticle(entry.bodyHtml) : null;
+
+  // Which sections are open, keyed "0" for a top section and "0.2" for a child.
+  let expanded: Record<string, boolean> = {};
+  function toggleSection(key: string) {
+    expanded = { ...expanded, [key]: !expanded[key] };
+  }
+
+  $: sectionCount = article
+    ? article.sections.reduce((n, s) => n + 1 + s.children.length, 0)
+    : 0;
+  $: allExpanded =
+    sectionCount > 0 && Object.values(expanded).filter(Boolean).length >= sectionCount;
+
+  function toggleAll() {
+    if (allExpanded) {
+      expanded = {};
+      return;
+    }
+    const next: Record<string, boolean> = {};
+    article?.sections.forEach((s, i) => {
+      next[`${i}`] = true;
+      s.children.forEach((_, j) => {
+        next[`${i}.${j}`] = true;
+      });
+    });
+    expanded = next;
   }
 
   function close() {
@@ -316,15 +469,55 @@
             <p class="muted">No encyclopedia article for this entry.</p>
           {/if}
         {:else if activeTab === "article" && entry}
-          {#if entry.outline}
-            <div class="outline">
-              {#each entry.outline as h}
-                <button on:click={() => jumpToParagraph(h.i)}>{h.t}</button>
+          <div class="article" on:click={onArticleClick} role="presentation">
+            {#if article}
+              {#if article.preamble}
+                <div class="prose">{@html article.preamble}</div>
+              {/if}
+              <button class="expand-all" on:click={toggleAll}>
+                {allExpanded ? "Collapse all" : "Expand all"}
+              </button>
+              {#each article.sections as s, i}
+                <div class="sec">
+                  <button
+                    class="sec-head"
+                    class:open={expanded[`${i}`]}
+                    on:click={() => toggleSection(`${i}`)}
+                  >
+                    <svg class="caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                      <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span>{s.title}</span>
+                  </button>
+                  {#if expanded[`${i}`]}
+                    <div class="sec-body">
+                      {#if s.html}<div class="prose">{@html s.html}</div>{/if}
+                      {#each s.children as c, j}
+                        <div class="sec">
+                          <button
+                            class="sec-head sub"
+                            class:open={expanded[`${i}.${j}`]}
+                            on:click={() => toggleSection(`${i}.${j}`)}
+                          >
+                            <svg class="caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                              <path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <span>{c.title}</span>
+                          </button>
+                          {#if expanded[`${i}.${j}`]}
+                            <div class="sec-body">
+                              <div class="prose">{@html c.html}</div>
+                            </div>
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
               {/each}
-            </div>
-          {/if}
-          <div class="article" bind:this={articleBody} on:click={onArticleClick} role="presentation">
-            {@html entry.bodyHtml}
+            {:else}
+              {@html entry.bodyHtml}
+            {/if}
           </div>
         {:else if activeTab === "verses"}
           <div class="verses">
@@ -496,25 +689,63 @@
     padding: 0;
     font-size: 14px;
   }
-  .outline {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-bottom: 14px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border-color, #333);
-  }
-  .outline button {
-    background: var(--surface-2, rgba(255, 255, 255, 0.06));
-    border: none;
-    color: var(--text-secondary, #ccc);
-    padding: 3px 8px;
-    border-radius: 4px;
+  .expand-all {
+    background: none;
+    border: 1px solid var(--border-color, #333);
+    color: var(--text-muted, #999);
+    border-radius: 6px;
+    padding: 3px 10px;
     font-size: 11px;
     cursor: pointer;
+    margin-bottom: 6px;
   }
-  .outline button:hover {
+  .expand-all:hover {
     color: var(--color-primary, #4a90e2);
+    border-color: var(--color-primary, #4a90e2);
+  }
+  .sec-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border-color, #333);
+    color: var(--text-color, #fff);
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-align: left;
+    padding: 10px 0 8px;
+    cursor: pointer;
+  }
+  .sec-head:hover {
+    color: var(--color-primary, #4a90e2);
+  }
+  .sec-head .caret {
+    flex-shrink: 0;
+    color: var(--text-muted, #999);
+    transition: transform 0.15s ease;
+  }
+  .sec-head.open .caret {
+    transform: rotate(90deg);
+  }
+  .sec-head.sub {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary, #ccc);
+    border-bottom: none;
+    padding: 6px 0;
+  }
+  .sec-body {
+    padding: 8px 0 10px 18px;
+  }
+  .sec-head.sub + .sec-body {
+    padding: 2px 0 8px 18px;
+  }
+  .prose :global(p:last-child) {
+    margin-bottom: 0;
   }
   .article {
     line-height: 1.6;
