@@ -283,7 +283,21 @@
     return t.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
   }
 
-  function buildArticle(bodyHtml: string): ArticleTree | null {
+  // Tint each scripture link with the color of the book it points at, the same
+  // way the Verses tab colors its chips. Done as an inline style because the
+  // article is injected with {@html} and the color varies per link.
+  function colorScriptureLinks(html: string): string {
+    return html.replace(
+      /<a class="isbe-scripture" data-osis="([^".]*)[^"]*"/g,
+      (tag, code) => {
+        const book = osisBook(code);
+        return book ? `${tag} style="color:${getBookColor(book)}"` : tag;
+      },
+    );
+  }
+
+  function buildArticle(rawHtml: string): ArticleTree | null {
+    const bodyHtml = colorScriptureLinks(rawHtml);
     const paras = [...bodyHtml.matchAll(P_RE)].map((m) => {
       let text = paraText(m[1]);
       let html = m[0];
@@ -371,6 +385,9 @@
   }
 
   $: article = entry?.bodyHtml ? buildArticle(entry.bodyHtml) : null;
+  // Short articles skip the accordion and render straight through, but their
+  // scripture links still need tinting.
+  $: flatHtml = entry?.bodyHtml ? colorScriptureLinks(entry.bodyHtml) : "";
 
   // Which sections are open, keyed "0" for a top section and "0.2" for a child.
   let expanded: Record<string, boolean> = {};
@@ -516,7 +533,7 @@
                 </div>
               {/each}
             {:else}
-              {@html entry.bodyHtml}
+              {@html flatHtml}
             {/if}
           </div>
         {:else if activeTab === "verses"}
@@ -754,14 +771,19 @@
   .article :global(p) {
     margin: 0 0 12px;
   }
+  /* Scripture links carry an inline color from getBookColor; this is the
+     fallback for a reference whose OSIS book code we don't recognize, and
+     matches getBookColor's own fallback. */
   .article :global(a.isbe-scripture) {
-    color: var(--color-primary, #4a90e2);
+    color: #8a8f98;
     cursor: pointer;
     text-decoration: none;
     border-bottom: 1px dotted currentColor;
   }
+  /* Cross-references point at other encyclopedia entries, not verses, so they
+     get one fixed accent — the violet the nav bar uses for its refs pill. */
   .article :global(a.isbe-link) {
-    color: var(--color-accent, #b78be2);
+    color: #a78bfa;
     cursor: pointer;
     text-decoration: none;
     border-bottom: 1px dotted currentColor;
