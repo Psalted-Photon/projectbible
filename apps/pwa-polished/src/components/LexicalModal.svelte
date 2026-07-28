@@ -20,6 +20,7 @@
   import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
   import { parseOsisRef } from "../lib/parseRefString";
+  import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../lib/morphologyExpander";
   import { openDB } from "../adapters/db";
 
@@ -769,7 +770,7 @@
                                 >
                                   <span class="cv-ref-label" style="color:{color}">{book} {r.chapter}:{r.verse}</span>
                                   {#if versePreviews[`${book} ${r.chapter}:${r.verse}`]}
-                                    <span class="cv-ref-text">{versePreviews[`${book} ${r.chapter}:${r.verse}`]}</span>
+                                    <span class="cv-ref-text">{@html renderVersePreviewHtml(versePreviews[`${book} ${r.chapter}:${r.verse}`])}</span>
                                   {/if}
                                 </button>
                               {/each}

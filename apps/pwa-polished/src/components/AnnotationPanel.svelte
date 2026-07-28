@@ -4,6 +4,7 @@
   import type { CommentaryEntry } from "../adapters/CommentaryStore";
   import type { TskEntry } from "../adapters/TskReferenceStore";
   import { IndexedDBTextStore } from "../adapters/TextStore";
+  import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
   import { parseRefString } from "../lib/parseRefString";
   import { getBookColor } from "../lib/bibleData";
@@ -302,7 +303,7 @@
           on:click={() => { if (v.verse === viewTargetVerse) handleViewVerseClick(v); }}
         >
           <span class="view-verse-num">{v.verse}</span>
-          <span class="view-verse-text">{v.text}</span>
+          <span class="view-verse-text">{@html renderVersePreviewHtml(v.text)}</span>
         </div>
       {/each}
       {#if viewVerses.length === 0}
@@ -385,7 +386,7 @@
         <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
         <div class="pill-verse-text" on:click={handlePillClick}>
           {#if pillPreview.text}
-            {pillPreview.text}
+            {@html renderVersePreviewHtml(pillPreview.text)}
           {:else}
             <span class="hint">Verse text not available.</span>
           {/if}

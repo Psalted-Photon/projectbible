@@ -7,6 +7,7 @@
   import { CaretDown, CaretRight } from "phosphor-svelte";
   import type { SearchTreeNode } from "../lib/searchTree";
   import type { SearchResult } from "../lib/services/searchService";
+  import { renderVersePreviewHtml } from "../lib/verseRendering";
 
   export let nodes: SearchTreeNode[] = [];
   /** Shared across the whole tree so nested levels stay independent. */
@@ -37,6 +38,29 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
+  }
+
+  /** The query terms as one pattern, for the verse renderer's own marking. */
+  $: queryRe = (() => {
+    const alt = (query || "")
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.length >= 2)
+      .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|");
+    return alt ? new RegExp(`(${alt})`, "gi") : null;
+  })();
+
+  /**
+   * Verse subtitles are raw stored text — BSB footnotes, KJV pilcrows, NET
+   * <b> marking Old Testament quotations. Route them through the shared preview
+   * renderer so none of that shows and the bold survives; everything else
+   * (notes, journal, commentary, Strong's) keeps the plain escape-then-mark.
+   */
+  function subtitleHtml(result: SearchResult): string {
+    return result.type === "verse"
+      ? renderVersePreviewHtml(result.subtitle || "", { highlight: queryRe, maxLength: 150 })
+      : highlight(result.subtitle || "");
   }
 </script>
 
@@ -84,7 +108,7 @@
             >
               <div class="tree-result-title">{result.title}</div>
               {#if result.subtitle}
-                <div class="tree-result-subtitle">{@html highlight(result.subtitle)}</div>
+                <div class="tree-result-subtitle">{@html subtitleHtml(result)}</div>
               {/if}
             </button>
           {/each}

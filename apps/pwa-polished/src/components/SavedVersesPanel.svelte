@@ -3,6 +3,7 @@
   import { navigationStore } from '../stores/navigationStore';
   import { syncedUserDataStore } from '../adapters/SyncedUserDataStore';
   import { IndexedDBTextStore } from '../lib/adapters';
+  import { renderVersePreviewHtml } from '../lib/verseRendering';
   import { BIBLE_BOOKS } from '@projectbible/core';
   import type { UserHighlight, UserWordHighlight, UserNote } from '@projectbible/core';
 
@@ -199,7 +200,7 @@
               {/if}
             </div>
             {#if item.text}
-              <span class="svp-text">{item.text}</span>
+              <span class="svp-text">{@html renderVersePreviewHtml(item.text)}</span>
             {:else}
               <span class="svp-text svp-text--missing">Text unavailable</span>
             {/if}

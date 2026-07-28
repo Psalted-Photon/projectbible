@@ -8,6 +8,7 @@
   import { navigationStore } from "../stores/navigationStore";
   import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
   import { IndexedDBTextStore } from "../adapters/TextStore";
+  import { renderVersePreviewHtml } from "../lib/verseRendering";
   import {
     getIsbeEntry,
     getIsbePlace,
@@ -211,31 +212,10 @@
     return alt ? new RegExp(`(${alt})`, "gi") : null;
   })();
 
-  function escapeHtml(text: string): string {
-    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  }
-
-  // Trim a long verse to a window around the first name match, the way search
-  // snippets do. Short verses come through whole.
-  function snippet(text: string): string {
-    const MAX = 150;
-    if (text.length <= MAX) return text;
-    // search() ignores the /g flag's lastIndex, so this stays reentrant.
-    const at = highlightRe ? text.search(highlightRe) : -1;
-    if (at < 0) return text.slice(0, MAX).replace(/\s\S*$/, "") + "…";
-    let start = Math.max(0, at - 60);
-    let end = Math.min(text.length, start + MAX);
-    if (start > 0) start = text.indexOf(" ", start) + 1 || start;
-    if (end < text.length) end = text.lastIndexOf(" ", end);
-    return (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
-  }
-
-  // Escape first, then inject <mark> — same order as the search results
-  // highlighter, which is what makes the {@html} below safe.
-  function highlight(text: string): string {
-    if (!text) return "";
-    const safe = escapeHtml(text);
-    return highlightRe ? safe.replace(highlightRe, "<mark>$1</mark>") : safe;
+  // Stored verse text carries markup the reader's renderer handles and a
+  // preview row must not show raw — BSB footnotes, KJV pilcrows, NET <b>.
+  function versePreview(text: string): string {
+    return renderVersePreviewHtml(text, { highlight: highlightRe, maxLength: 150 });
   }
 
   function subtitle(): string {
@@ -682,7 +662,7 @@
                           {group.book} {r.chapter}:{r.verse}
                         </span>
                         {#if versePreviews[key]}
-                          <span class="vb-ref-text">{@html highlight(snippet(versePreviews[key]))}</span>
+                          <span class="vb-ref-text">{@html versePreview(versePreviews[key])}</span>
                         {/if}
                       </button>
                     {/each}

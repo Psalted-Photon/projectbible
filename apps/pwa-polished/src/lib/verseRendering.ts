@@ -293,6 +293,134 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
     .replace(/[\x02\x03\x04\x05\x06\x07]/g, '');
 }
 
+/**
+ * Walk stored text dropping footnotes and cross-references, keeping everything
+ * else byte-for-byte. Same heading skip and same note boundaries (findNoteEnd)
+ * as the reader's renderer, so the two can never disagree about where a note
+ * ends — it just discards notes instead of emitting [n] markers.
+ *
+ * Operates on text that may already carry \x04-\x07 formatting sentinels, so a
+ * sentinel is treated as transparent when deciding whether a '+' starts a note.
+ */
+function dropInlineNotes(source: string): string {
+  let out = '';
+  let i = 0;
+
+  const isPlusStart = (idx: number) => {
+    if (source[idx] !== '+') return false;
+    let p = idx - 1;
+    while (p >= 0 && source.charCodeAt(p) >= 2 && source.charCodeAt(p) <= 7) p--;
+    if (p < 0) return true;
+    const prev = source[p];
+    return prev === ' ' || prev === '\n' || prev === '\t';
+  };
+
+  while (i < source.length) {
+    const plusPos = source.indexOf('+', i);
+    if (plusPos === -1) {
+      out += source.slice(i);
+      break;
+    }
+    if (!isPlusStart(plusPos)) {
+      out += source.slice(i, plusPos + 1);
+      i = plusPos + 1;
+      continue;
+    }
+    out += source.slice(i, plusPos);
+
+    let j = plusPos + 1;
+    while (j < source.length && /\s/.test(source[j])) j++;
+
+    // Mid-verse heading ("+ Heading. Next sentence") — skip the heading only
+    const headingMatch = source.slice(j).match(/^([^.]+)\.\s+([A-Z])/);
+    if (headingMatch && plusPos < 50) {
+      i = j + headingMatch[0].length - 2;
+      continue;
+    }
+    const markerMatch = source.slice(j).match(/^(\d+):(\d+)\s*/);
+    if (markerMatch) j += markerMatch[0].length;
+
+    i = findNoteEnd(source, j);
+    if (i < source.length && source.charCodeAt(i) === 1) i++;
+  }
+  return out;
+}
+
+/**
+ * Verse text for a compact preview row — the ISBE and character verse lists,
+ * search-result snippets, cross-reference previews.
+ *
+ * The reader's renderVerseHtml keeps footnotes as clickable [n] markers; a
+ * two-line preview has no room for them, so they are dropped outright. What
+ * survives is <b>/<i>, which in NET marks Old Testament wording quoted in the
+ * New Testament and so carries meaning worth showing.
+ *
+ * Sentinels carry the formatting through trimming and escaping, and only become
+ * real tags at the very end. That ordering is what makes `highlight` safe: no
+ * tags exist when <mark> is applied, so a mark can never land inside one.
+ */
+export function renderVersePreviewHtml(
+  text: string,
+  opts: { highlight?: RegExp | null; maxLength?: number } = {},
+): string {
+  const src = text ?? '';
+  if (!src) return '';
+
+  // <b>/<i> positions are in stripHtmlTags coordinates, so no mapping needed.
+  let work = stripHtmlTags(src);
+  const insertions: { pos: number; ch: string }[] = [];
+  for (const f of extractFormattingSpans(src)) {
+    const [open, close] = f.kind === 'b' ? ['\x04', '\x05'] : ['\x06', '\x07'];
+    insertions.push({ pos: f.end, ch: close });
+    insertions.push({ pos: f.start, ch: open });
+  }
+  insertions.sort((a, b) => b.pos - a.pos);
+  for (const { pos, ch } of insertions) work = work.slice(0, pos) + ch + work.slice(pos);
+
+  work = dropInlineNotes(work)
+    .replace(/\x01/g, '')
+    .replace(/¶/g, '')
+    .replace(/[ \t\n]+/g, ' ')
+    .trim();
+
+  // Trim to a window around the first highlight match, the way search snippets
+  // do. Sentinels are one char each and any orphan is cleaned up below, so a
+  // cut through a formatting pair loses the bold rather than breaking markup.
+  const max = opts.maxLength ?? 0;
+  if (max > 0 && work.length > max) {
+    const at = opts.highlight ? work.search(opts.highlight) : -1;
+    if (at < 0) {
+      work = work.slice(0, max).replace(/\s\S*$/, '') + '…';
+    } else {
+      let start = Math.max(0, at - 60);
+      let end = Math.min(work.length, start + max);
+      if (start > 0) start = work.indexOf(' ', start) + 1 || start;
+      if (end < work.length) end = work.lastIndexOf(' ', end);
+      work = (start > 0 ? '…' : '') + work.slice(start, end) + (end < work.length ? '…' : '');
+    }
+  }
+
+  // Mark with sentinels as well, so escaping can't come between a name and its
+  // match — escapeHtml turns ' into &#39;, which would break a name like
+  // "Diviners' Oak" if <mark> were applied to already-escaped text.
+  if (opts.highlight) work = work.replace(opts.highlight, '\x0E$1\x0F');
+
+  return escapeHtml(work)
+    .replace(/\x0E([\s\S]*?)\x0F/g, '<mark>$1</mark>')
+    .replace(/\x04([\s\S]*?)\x05/g, '<b>$1</b>')
+    .replace(/\x06([\s\S]*?)\x07/g, '<i>$1</i>')
+    .replace(/[\x02-\x07\x0E\x0F]/g, '');
+}
+
+/** Preview text with no markup at all — for surfaces that render plain text. */
+export function cleanVersePreviewText(text: string): string {
+  return dropInlineNotes(stripHtmlTags(text ?? ''))
+    .replace(/\x01/g, '')
+    .replace(/¶/g, '')
+    .replace(/[ \t\n]+/g, ' ')
+    .trim();
+}
+
 export function extractHeading(text: string): { heading: string | null; textWithoutHeading: string } {
   const source = text ?? '';
   

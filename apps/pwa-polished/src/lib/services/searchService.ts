@@ -166,7 +166,10 @@ export class UnifiedSearchService {
       return dbResults.slice(0, resultLimit).map((result, index) => ({
         type: 'verse' as const,
         title: `${normalizeBookName(result.book)} ${result.chapter}:${result.verse}`,
-        subtitle: result.snippet || result.text,
+        // Full stored text, not result.snippet — the snippet is cut from raw
+        // text at scan time and can slice through a footnote. The tree cleans
+        // and trims it for display instead.
+        subtitle: result.text || result.snippet,
         reference: `${normalizeBookName(result.book)} ${result.chapter}:${result.verse}`,
         data: {
           book: normalizeBookName(result.book),
