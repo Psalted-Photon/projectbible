@@ -15,6 +15,9 @@
   import { buildSearchTree } from "../lib/searchTree";
   import SearchResultsTree from "./SearchResultsTree.svelte";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
+  import { isbeModalStore } from "../stores/isbeModalStore";
+  import { isbeReturnStore } from "../stores/isbeReturnStore";
+  import { get } from "svelte/store";
   import {
     searchQuery as searchQueryStore,
     triggerSearch,
@@ -582,6 +585,29 @@
     }
   }
 
+  /**
+   * Back arrow. Restores the reading position, and if the user got here by
+   * tapping a verse in the ISBE modal's verse list, brings that modal back too —
+   * same tab, same books expanded — so they can work down the list.
+   * A context left over from an earlier jump is dropped rather than honored:
+   * if they've navigated away since, reopening the modal would be a surprise.
+   */
+  function goBack() {
+    const ret = get(isbeReturnStore);
+    const here = get(navigationStore);
+    const stillThere =
+      !!ret && here.book === ret.at.book && here.chapter === ret.at.chapter;
+
+    navigationStore.goBack();
+
+    if (!stillThere) {
+      if (ret) isbeReturnStore.set(null);
+      return;
+    }
+    // Left set for the modal to consume — it restores the expanded books.
+    isbeModalStore.open(ret!.modal);
+  }
+
   /** Jump the reader (or the owning window) to a book/chapter/verse. */
   function navigateToResult(book: string, chapter: number, verse: number | null, translation?: string) {
     const target = translation || currentTranslation;
@@ -771,7 +797,7 @@
       {#if $canGoBack}
         <button
           class="pill-btn"
-          on:click={() => navigationStore.goBack()}
+          on:click={goBack}
           title="Back"
           aria-label="Back"
         >

@@ -1147,6 +1147,23 @@ export async function getIsbePlaceVerses(placeId: string): Promise<VerseRef[]> {
 }
 
 /**
+ * Every spelling a place is known by ("jerusalem", "zion", "daughter of judah").
+ * The Verses tab highlights these in the verse text, so a verse linked to
+ * Jerusalem that actually reads "out of Zion" still shows why it's on the list.
+ */
+export async function getIsbePlaceNames(placeId: string): Promise<string[]> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_place_names')) return [];
+  return new Promise((resolve) => {
+    const idx = db.transaction('isbe_place_names', 'readonly').objectStore('isbe_place_names').index('placeId');
+    const req = idx.getAll(IDBKeyRange.only(placeId));
+    req.onsuccess = () =>
+      resolve([...new Set((req.result || []).map((r: any) => r.nameLower as string).filter(Boolean))]);
+    req.onerror = () => resolve([]);
+  });
+}
+
+/**
  * Get morphology data for a specific verse
  */
 export async function getMorphology(

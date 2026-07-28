@@ -3,14 +3,17 @@
   import { get } from "svelte/store";
   import L from "leaflet";
   import { isbeModalStore } from "../stores/isbeModalStore";
+  import { isbeReturnStore } from "../stores/isbeReturnStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { navigationStore } from "../stores/navigationStore";
-  import { getBookColor, BIBLE_BOOKS } from "../lib/bibleData.js";
+  import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
+  import { IndexedDBTextStore } from "../adapters/TextStore";
   import {
     getIsbeEntry,
     getIsbePlace,
     getIsbePlaceByEntryId,
     getIsbePlaceVerses,
+    getIsbePlaceNames,
     getIsbeEntryByName,
     lookupEnglishWord,
     type IsbeEntryRecord,
@@ -32,7 +35,10 @@
   let mapEl: HTMLDivElement | null = null;
   let map: L.Map | null = null;
 
-  const bookOrder = new Map(BIBLE_BOOKS.map((b, i) => [b, i]));
+  // Keyed on the book NAME — keying on the BookInfo object silently made every
+  // lookup miss, which turned the canonical sort below into a no-op.
+  const bookOrder = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
+  const verseTextStore = new IndexedDBTextStore();
 
   // Load full data whenever a new modal target opens.
   let loadedKey = "";
@@ -52,8 +58,11 @@
     entry = null;
     place = null;
     verses = [];
+    placeNames = [];
     activeTab = "overview";
     expanded = {};
+    expandedBooks = new Set();
+    versePreviews = {};
 
     if (state.placeId) {
       place = await getIsbePlace(state.placeId);
@@ -68,7 +77,22 @@
         if (place) verses = await getIsbePlaceVerses(place.placeId);
       }
     }
+    if (place) placeNames = await getIsbePlaceNames(place.placeId);
     loading = false;
+
+    // The back arrow reopens the modal straight onto the tab you left, with the
+    // books you had open still open. The nav bar leaves the return context in
+    // place for us to consume here.
+    if (state.tab) {
+      const restore = get(isbeReturnStore);
+      isbeReturnStore.set(null);
+      if (restore) expandedBooks = new Set(restore.expandedBooks);
+      await selectTab(state.tab);
+      // versesByBook is derived from `verses`, assigned moments ago — let the
+      // reactive pass land before loadBookText reads it.
+      await tick();
+      for (const book of expandedBooks) await loadBookText(book);
+    }
   }
 
   $: title = place?.primaryName || entry?.primaryName || state.primaryName;
@@ -118,12 +142,15 @@
   $: hasMap = !!place && place.latitude != null && place.longitude != null;
   $: hasVerses = verses.length > 0;
 
-  // Verses grouped by book, in canonical order, for the Verses tab.
+  // Verses grouped by book, in canonical order, for the Verses tab. Book names
+  // are normalized first so an alias spelling from the pack joins its real
+  // group instead of forming its own with the grey fallback color.
   $: versesByBook = (() => {
     const groups = new Map<string, VerseRef[]>();
     for (const v of verses) {
-      if (!groups.has(v.book)) groups.set(v.book, []);
-      groups.get(v.book)!.push(v);
+      const book = normalizeBookName(v.book);
+      if (!groups.has(book)) groups.set(book, []);
+      groups.get(book)!.push({ ...v, book });
     }
     return [...groups.entries()]
       .map(([book, refs]) => ({
@@ -133,6 +160,83 @@
       }))
       .sort((a, b) => (bookOrder.get(a.book) ?? 999) - (bookOrder.get(b.book) ?? 999));
   })();
+
+  // --- Verses tab --------------------------------------------------------
+  // Same shape as search results: books collapse, expanding one loads its verse
+  // text, and the place's own name is highlighted so you can read down the
+  // column and see how it's used across every passage at once.
+  let placeNames: string[] = [];
+  let expandedBooks = new Set<string>();
+  let versePreviews: Record<string, string> = {}; // "Book chapter:verse" -> text
+
+  async function toggleBook(book: string) {
+    const next = new Set(expandedBooks);
+    if (next.has(book)) {
+      next.delete(book);
+      expandedBooks = next;
+      return;
+    }
+    next.add(book);
+    expandedBooks = next;
+    await loadBookText(book);
+  }
+
+  // Verse text for one book, in the reader's current translation. Books start
+  // collapsed, so a place like Jerusalem never pays for all 955 verses at once.
+  async function loadBookText(book: string) {
+    const refs = versesByBook.find((g) => g.book === book)?.refs ?? [];
+    const translation = get(navigationStore).translation;
+    const loaded = await Promise.all(
+      refs.map(async (r) => {
+        const key = `${book} ${r.chapter}:${r.verse}`;
+        if (versePreviews[key] !== undefined) return [key, versePreviews[key]] as const;
+        const text = (await verseTextStore.getVerse(translation, book, r.chapter, r.verse)) ?? "";
+        return [key, text] as const;
+      }),
+    );
+    versePreviews = { ...versePreviews, ...Object.fromEntries(loaded) };
+  }
+
+  // One pattern for every name the place goes by, longest first so "daughter of
+  // judah" wins over the bare "judah". Names are stored space-normalized
+  // ("beth shemesh") but translations punctuate them differently — Beth-shemesh
+  // in BSB/KJV, Beth Shemesh in NET/WEB, Bethshemesh in places — so a space in a
+  // stored name matches any separator, or none.
+  $: highlightRe = (() => {
+    const alt = [...placeNames]
+      .sort((a, b) => b.length - a.length)
+      .filter((n) => n.length >= 2)
+      .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ +/g, "[\\s\\-\u2010-\u2015']*"))
+      .join("|");
+    return alt ? new RegExp(`(${alt})`, "gi") : null;
+  })();
+
+  function escapeHtml(text: string): string {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // Trim a long verse to a window around the first name match, the way search
+  // snippets do. Short verses come through whole.
+  function snippet(text: string): string {
+    const MAX = 150;
+    if (text.length <= MAX) return text;
+    // search() ignores the /g flag's lastIndex, so this stays reentrant.
+    const at = highlightRe ? text.search(highlightRe) : -1;
+    if (at < 0) return text.slice(0, MAX).replace(/\s\S*$/, "") + "…";
+    let start = Math.max(0, at - 60);
+    let end = Math.min(text.length, start + MAX);
+    if (start > 0) start = text.indexOf(" ", start) + 1 || start;
+    if (end < text.length) end = text.lastIndexOf(" ", end);
+    return (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
+  }
+
+  // Escape first, then inject <mark> — same order as the search results
+  // highlighter, which is what makes the {@html} below safe.
+  function highlight(text: string): string {
+    if (!text) return "";
+    const safe = escapeHtml(text);
+    return highlightRe ? safe.replace(highlightRe, "<mark>$1</mark>") : safe;
+  }
 
   function subtitle(): string {
     const bits: string[] = [];
@@ -197,6 +301,24 @@
     navigationStore.pushHistory(current);
     navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     close();
+  }
+
+  // Jumping from the Verses tab leaves a breadcrumb so the nav back arrow can
+  // bring this modal back, on the same tab with the same books open — you can
+  // work down a long verse list one passage at a time.
+  function navigateFromVerseList(book: string, chapter: number, verse: number) {
+    isbeReturnStore.set({
+      modal: {
+        kind: state.kind,
+        entryId: state.entryId,
+        placeId: state.placeId,
+        primaryName: state.primaryName,
+        tab: "verses",
+      },
+      expandedBooks: [...expandedBooks],
+      at: { book, chapter, verse },
+    });
+    navigateToVerse(book, chapter, verse);
   }
 
   // Clicks inside the article body: scripture refs navigate, internal ISBE refs
@@ -539,19 +661,33 @@
         {:else if activeTab === "verses"}
           <div class="verses">
             {#each versesByBook as group}
-              <div class="verse-group">
-                <div class="verse-book" style="color:{group.color}">{group.book}</div>
-                <div class="verse-refs">
-                  {#each group.refs as r}
-                    <button
-                      class="verse-chip"
-                      style="border-color:{group.color}"
-                      on:click={() => navigateToVerse(r.book, r.chapter, r.verse)}
-                    >
-                      {r.chapter}:{r.verse}
-                    </button>
-                  {/each}
-                </div>
+              <div class="vb-group">
+                <button class="vb-header" on:click={() => toggleBook(group.book)}>
+                  <span class="vb-caret" style="color:{group.color}">
+                    {expandedBooks.has(group.book) ? "▼" : "▶"}
+                  </span>
+                  <span class="vb-name" style="color:{group.color}">{group.book}</span>
+                  <span class="vb-count">({group.refs.length})</span>
+                </button>
+                {#if expandedBooks.has(group.book)}
+                  <div class="vb-refs">
+                    {#each group.refs as r}
+                      {@const key = `${group.book} ${r.chapter}:${r.verse}`}
+                      <button
+                        class="vb-ref"
+                        style="border-left-color:{group.color}"
+                        on:click={() => navigateFromVerseList(group.book, r.chapter, r.verse)}
+                      >
+                        <span class="vb-ref-label" style="color:{group.color}">
+                          {group.book} {r.chapter}:{r.verse}
+                        </span>
+                        {#if versePreviews[key]}
+                          <span class="vb-ref-text">{@html highlight(snippet(versePreviews[key]))}</span>
+                        {/if}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>
@@ -788,30 +924,76 @@
     text-decoration: none;
     border-bottom: 1px dotted currentColor;
   }
-  .verse-group {
-    margin-bottom: 12px;
+  .vb-group {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
   }
-  .verse-book {
-    font-weight: 600;
-    font-size: 13px;
-    margin-bottom: 5px;
-  }
-  .verse-refs {
+  .vb-header {
     display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-  }
-  .verse-chip {
+    align-items: center;
+    gap: 8px;
+    width: 100%;
     background: none;
-    border: 1px solid;
-    border-radius: 4px;
-    color: var(--text-color, #fff);
-    padding: 2px 7px;
-    font-size: 12px;
+    border: none;
+    color: var(--text-color, #dfe2e8);
+    font-family: inherit;
+    font-size: 13.5px;
+    text-align: left;
+    padding: 7px 4px;
     cursor: pointer;
   }
-  .verse-chip:hover {
-    background: rgba(255, 255, 255, 0.08);
+  .vb-header:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .vb-caret {
+    font-size: 10px;
+  }
+  .vb-name {
+    flex: 1;
+    font-weight: 600;
+  }
+  .vb-count {
+    color: var(--text-muted, #9aa0aa);
+    font-size: 12px;
+  }
+  .vb-refs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 4px 10px 24px;
+  }
+  .vb-ref {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 3px solid;
+    border-radius: 5px;
+    padding: 6px 9px;
+    cursor: pointer;
+  }
+  .vb-ref:hover {
+    background: rgba(255, 255, 255, 0.09);
+  }
+  .vb-ref-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .vb-ref-text {
+    display: block;
+    color: #c2c6cd;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  /* Same mark styling as search results, so a verse list reads identically
+     whether you got here from search or from the encyclopedia. */
+  .vb-ref-text :global(mark) {
+    background: rgba(249, 115, 22, 0.35);
+    color: #fdba74;
+    border-radius: 2px;
+    padding: 0 1px;
   }
   .map {
     width: 100%;
