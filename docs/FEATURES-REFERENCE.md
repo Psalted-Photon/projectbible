@@ -260,6 +260,14 @@ The tab strip is `flex: none` — a tall tab (a 955-verse Verses list) otherwise
 
 `checkDictionary(title)` runs whenever the modal is open, not loading, and has a title (`:103`), linking encyclopedia entries to matching dictionary entries.
 
+### 6.5 Return-to-article
+
+`src/stores/isbeReturnStore.ts`. Set when a verse is tapped inside the ISBE modal, consumed by the nav back arrow.
+
+`IsbeReturn` carries three things: the `modal` payload to reopen (the same shape `isbeModalStore.open()` takes), `expandedBooks[]` so the Verses tab reopens with the same books expanded, and `at: {book, chapter, verse}` — the verse that was jumped to.
+
+The back arrow only restores the modal if the reader is **still sitting at `at`**. If the user navigated on from there, the context is treated as stale and the modal is not reopened.
+
 ## 7. Commentaries
 
 Files: `src/components/CommentaryReader.svelte` (608), `src/components/CommentaryNavigationBar.svelte` (799), `src/components/CommentaryModal.svelte` (456), `src/adapters/CommentaryStore.ts` (308), `src/lib/linkifyCommentaryRefs.ts` (238), `src/lib/annotationConfig.ts`.
@@ -835,7 +843,25 @@ Files: `src/components/panes/PacksPane.svelte` (1,238), `src/adapters/PackManage
 
 Entry point from Settings: "Manage Packs" button, `SettingsPane.svelte:419`.
 
-### 19.5 Related docs
+### 19.5 English lexical packs
+
+`src/components/EnglishLexicalPacksModal.svelte` (325). A dedicated loader for the English dictionary/thesaurus packs, separate from the general pack flow.
+
+Imports `englishLexicalPackLoader` from `packages/core/src/search/englishLexicalPackLoader` — note this reaches across the monorepo by relative path (`../../../../packages/core/src/...`), so it is one of the places where the app depends on `@projectbible/core` source rather than its built `dist`. Loads from `/packs/polished`, reports per-pack `LoadProgress`, and checks `arePacksLoaded()` on mount so it can show a ready state instead of re-downloading.
+
+### 19.6 Configuration
+
+`src/config.ts`. `APP_VERSION = '1.0.0'`.
+
+- `PACK_MANIFEST_URL` — `/api/packs/manifest.json` in production (proxied to GitHub Releases), `/packs/consolidated/manifest.json` in dev.
+- `USE_BUNDLED_PACKS` — true in dev, or when `VITE_USE_BUNDLED_PACKS === 'true'`.
+- `BOOTSTRAP_PACK_URL = '/bootstrap.sqlite'` — always bundled with the app.
+- `FEATURES` — `lazyPackLoading`, `progressiveStartup`, `packUpdates` (all keyed off `!USE_BUNDLED_PACKS`), `persistentStorage`, and `ttsReadAloud` (a kill switch for Read Aloud).
+- `PACK_PRIORITY` — `essential: [bootstrap]`, `high: [translations]`, `medium: [study-tools, lexical]`, `low: [ancient-languages, bsb-audio-pt1, bsb-audio-pt2]`.
+- `PACK_TRIGGERS` — which user action loads which pack: `translations` on `reader-open`, `ancient-languages` on `hebrew-greek-toggle`, `lexical` on `word-study-open`, `study-tools` on `maps-open`, both audio packs on `audio-play`.
+- `UI` — `showProgressDuringDownload`, `allowPackRemoval`, `showStorageUsage`, `promptForPersistentStorage`.
+
+### 19.7 Related docs
 
 `docs/PACK-STANDARD-V1.md`, `docs/PACK-MANAGEMENT.md`, `docs/PACK-SYSTEM-IMPLEMENTATION.md`, `docs/CONSOLIDATED-PACKS-IMPLEMENTATION.md`.
 
@@ -1016,6 +1042,67 @@ Triggered from `App.svelte`: 800 ms after mount (`:166`), and again on every `to
 ### 21.8 Debug tooling
 
 Eruda is initialized on every mount (`App.svelte:60-72`), positioned 60 px from the bottom-right corner. This is a mobile debug console and ships in the current build — worth removing or gating before a public release.
+
+---
+
+## Appendix A — Data layer
+
+Not user-facing features, but every feature above sits on these.
+
+### A.1 IndexedDB
+
+`src/adapters/db.ts` (1,053). Database `projectbible`, **schema version 31** (`:15` — migration 31 added the `art_images` store for bundled painting blobs).
+
+Object stores, grouped by what they serve:
+
+| Group | Stores |
+|---|---|
+| Packs & text | `packs`, `verses`, `art_images` |
+| User data | `user_notes`, `user_highlights`, `user_word_highlights`, `user_bookmarks`, `journal_entries` |
+| Study | `cross_references`, `strongs_entries`, `greek_strongs_entries`, `hebrew_strongs_entries`, `lexicon_entries`, `pronunciations`, `morphology`, `word_occurrences`, `tsk_references`, `commentary_entries` |
+| English lexical | `english_words`, `english_synonyms`, `thesaurus_synonyms`, `thesaurus_antonyms`, `english_grammar`, `english_definitions_modern`, `english_definitions_historic`, `english_definitions_wordset`, `word_mapping` |
+| Places & maps | `places`, `place_name_links`, `map_tiles`, `historical_layers`, `pleiades_places` |
+| Reading | `reading_history`, `reading_plans`, `reading_plan_days`, `reading_progress`, `plan_metadata`, `chronological_order` |
+| Audio | `audio_chapters`, `audio_cache` |
+| Sync | `sync_queue`, `sync_operations` |
+
+`word_mapping` is keyed on `lemma` rather than an id — it is the lookup that makes English definitions resolve off lemma rather than surface text (see [5.3](#53-english-word-lookup)).
+
+Row types are declared as `DB*` interfaces in the same file (`DBVerse`, `DBUserNote`, `DBSectionHeading`, `DBArtScene`, and so on).
+
+`src/adapters/db-manager.ts` (339) handles open/upgrade/reset; `src/adapters/index.ts` and `src/lib/adapters.ts` are the barrel exports.
+
+### A.2 Text access
+
+`IndexedDBTextStore`, `src/adapters/TextStore.ts:67` — the read path every reader surface goes through.
+
+| Method | Line |
+|---|---|
+| `getVerse(...)` | 68 |
+| `getChapter(...)` | 98 |
+| `getTranslations()` → `{id, name}[]` | 158 |
+| `getBooks(translation)` | 227 |
+| `getChapters(translation, book)` | 268 |
+| `getVerses(translation, book, chapter)` | 306 |
+
+`HeadingsStore`, `src/adapters/HeadingsStore.ts:7` — `getChapterHeadings()` `:12`, `isInstalled()` `:43`. Supplies the pericope headings described in [1.2](#12-what-appears-in-the-text).
+
+`src/adapters/SearchIndex.ts` (`IndexedDBSearchIndex`) backs the Bible category of unified search.
+
+### A.3 Caching
+
+`src/lib/lru-cache.ts` — `LRUCache<K, V>` `:8`, evicting least-recently-accessed on overflow. One shared instance is exported: `dictionaryCache = new LRUCache<string, any>(500)` `:61`.
+
+### A.4 Startup
+
+- `src/main.ts` — Svelte mount point.
+- `src/lib/bootstrap-loader.ts` — loads `bootstrap.sqlite`, the always-bundled minimum pack.
+- `src/lib/progressive-init.ts` — staged startup, gated by the `progressiveStartup` feature flag.
+- `src/adapters/pack-import.ts` (2,116) — the SQLite → IndexedDB import pipeline; the largest non-component file in the app.
+
+### A.5 Type declarations
+
+`src/sql.js.d.ts` and `src/lib/tts/vendor/piper-phonemize.d.ts` — ambient declarations for the two vendored WASM libraries. No runtime behavior.
 
 ---
 

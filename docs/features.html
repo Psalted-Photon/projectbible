@@ -1,0 +1,901 @@
+<title>ProjectBible — Feature Tree</title>
+<style>
+:root{
+  --paper:#fbfaf7; --paper-2:#f3f1ec; --paper-3:#e8e5dd;
+  --fg:#1a1a24; --fg-2:#4a4a5c; --fg-3:#7c7c8e;
+  --line:#ddd9d0; --line-2:#c9c4b8;
+  --accent:#5b3fd6; --accent-soft:#efeafd;
+  --hue:var(--accent);
+  --mono:ui-monospace,"Cascadia Mono","Cascadia Code",Consolas,"Liberation Mono",monospace;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --rail-w:250px;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#12121a; --paper-2:#191922; --paper-3:#22222d;
+    --fg:#eceaf2; --fg-2:#b4b1c2; --fg-3:#7f7c90;
+    --line:#2b2b38; --line-2:#3a3a4a;
+    --accent:#a898ff; --accent-soft:#221d3d;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#12121a; --paper-2:#191922; --paper-3:#22222d;
+  --fg:#eceaf2; --fg-2:#b4b1c2; --fg-3:#7f7c90;
+  --line:#2b2b38; --line-2:#3a3a4a;
+  --accent:#a898ff; --accent-soft:#221d3d;
+}
+:root[data-theme="light"]{
+  --paper:#fbfaf7; --paper-2:#f3f1ec; --paper-3:#e8e5dd;
+  --fg:#1a1a24; --fg-2:#4a4a5c; --fg-3:#7c7c8e;
+  --line:#ddd9d0; --line-2:#c9c4b8;
+  --accent:#5b3fd6; --accent-soft:#efeafd;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--fg);font-family:var(--sans);
+  font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── Masthead ─────────────────────────────────────────── */
+.top{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--paper) 88%,transparent);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.top-in{max-width:1500px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;gap:1px;margin-right:auto}
+.brand b{font-family:var(--serif);font-size:1.12rem;font-weight:600;letter-spacing:-.01em}
+.brand span{font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-3)}
+.filter{position:relative}
+.filter input{font:inherit;font-size:.86rem;padding:7px 12px 7px 30px;width:210px;
+  border:1px solid var(--line-2);border-radius:7px;background:var(--paper-2);color:var(--fg)}
+.filter input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.filter::before{content:"";position:absolute;left:11px;top:50%;width:11px;height:11px;
+  margin-top:-6px;border:1.6px solid var(--fg-3);border-radius:50%}
+.filter::after{content:"";position:absolute;left:20px;top:21px;width:6px;height:1.6px;
+  background:var(--fg-3);transform:rotate(45deg)}
+.seg{display:flex;background:var(--paper-3);border-radius:8px;padding:3px;gap:2px}
+.seg button{font:inherit;font-size:.8rem;font-weight:600;padding:6px 14px;border:0;border-radius:6px;
+  background:transparent;color:var(--fg-2);cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--paper);color:var(--fg);
+  box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.mini{font:inherit;font-size:.78rem;padding:6px 11px;border:1px solid var(--line-2);border-radius:7px;
+  background:transparent;color:var(--fg-2);cursor:pointer}
+.mini:hover{border-color:var(--accent);color:var(--accent)}
+.mini:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* ── Shell ────────────────────────────────────────────── */
+.shell{max-width:1500px;margin:0 auto;padding:0 24px;display:grid;
+  grid-template-columns:var(--rail-w) minmax(0,1fr);gap:44px;align-items:start}
+.rail{position:sticky;top:74px;max-height:calc(100vh - 92px);overflow-y:auto;
+  padding:26px 0 40px;display:flex;flex-direction:column;gap:1px}
+.rail-cap{font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-3);
+  padding:0 8px 9px}
+.rail-item{display:grid;grid-template-columns:9px 20px 1fr;align-items:center;gap:9px;
+  padding:5px 8px;border-radius:6px;text-decoration:none;color:var(--fg-2);font-size:.83rem;line-height:1.35}
+.rail-item:hover{background:var(--paper-2);color:var(--fg)}
+.rail-item.on{background:var(--accent-soft);color:var(--fg)}
+.rail-item.on .rail-num{color:var(--accent)}
+.rail-dot{width:8px;height:8px;border-radius:50%;background:var(--dot)}
+.rail-num{font-family:var(--mono);font-size:.72rem;color:var(--fg-3);
+  font-variant-numeric:tabular-nums;text-align:right}
+.rail-item:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+.main{padding:26px 0 100px;min-width:0}
+
+/* ── Intro ────────────────────────────────────────────── */
+.intro{border-bottom:1px solid var(--line);padding-bottom:30px;margin-bottom:12px}
+.eyebrow{font-size:.68rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);
+  font-weight:700;margin-bottom:12px}
+.intro h1{font-family:var(--serif);font-size:clamp(2rem,4.3vw,2.9rem);line-height:1.08;margin:0 0 14px;
+  letter-spacing:-.022em;font-weight:600;text-wrap:balance}
+.lede{font-family:var(--serif);font-size:1.11rem;line-height:1.6;color:var(--fg-2);max-width:62ch;margin:0}
+.stats{display:flex;gap:30px;flex-wrap:wrap;margin-top:24px}
+.stat b{display:block;font-family:var(--mono);font-size:1.35rem;font-weight:600;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat span{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3)}
+.modenote{margin-top:26px;padding:13px 16px;border-left:2.5px solid var(--accent);
+  background:var(--paper-2);border-radius:0 7px 7px 0;font-size:.87rem;color:var(--fg-2);max-width:68ch}
+
+/* ── Sections ─────────────────────────────────────────── */
+.sec[data-sec="1"]{--hue:#a67c52}.sec[data-sec="2"]{--hue:#6ca0dc}.sec[data-sec="3"]{--hue:#f0c040}.sec[data-sec="4"]{--hue:#5c1e99}.sec[data-sec="5"]{--hue:#a45be9}.sec[data-sec="6"]{--hue:#fc345c}.sec[data-sec="7"]{--hue:#ff6520}.sec[data-sec="8"]{--hue:#6048cc}.sec[data-sec="9"]{--hue:#f2893e}.sec[data-sec="10"]{--hue:#61f1ff}.sec[data-sec="11"]{--hue:#b8860b}.sec[data-sec="12"]{--hue:#2f6f8f}.sec[data-sec="13"]{--hue:#2f7d56}.sec[data-sec="14"]{--hue:#a64263}.sec[data-sec="15"]{--hue:#6c4aa6}.sec[data-sec="16"]{--hue:#b35a3a}.sec[data-sec="17"]{--hue:#2f7d78}.sec[data-sec="18"]{--hue:#3B82F6}.sec[data-sec="19"]{--hue:#16A34A}.sec[data-sec="20"]{--hue:#D97706}.sec[data-sec="21"]{--hue:#0891B2}
+.sec{border-bottom:1px solid var(--line);scroll-margin-top:80px}
+.sec-h{margin:0}
+.sec-toggle{width:100%;display:flex;align-items:center;gap:15px;padding:22px 0;
+  background:none;border:0;cursor:pointer;color:inherit;font:inherit;text-align:left}
+.sec-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.sec-num{flex:none;width:34px;height:34px;display:grid;place-items:center;border-radius:8px;
+  font-family:var(--mono);font-size:.83rem;font-weight:600;font-variant-numeric:tabular-nums;
+  background:color-mix(in srgb,var(--hue) 15%,transparent);color:var(--hue);
+  border:1px solid color-mix(in srgb,var(--hue) 32%,transparent)}
+.sec-title{font-family:var(--serif);font-size:1.42rem;font-weight:600;letter-spacing:-.016em;
+  flex:1;text-wrap:balance}
+.chev{flex:none;width:9px;height:9px;border-right:1.8px solid var(--fg-3);
+  border-bottom:1.8px solid var(--fg-3);transform:rotate(45deg);margin-right:5px;
+  transition:transform .18s ease}
+.sec-toggle[aria-expanded="false"] .chev{transform:rotate(-45deg)}
+.sec-body{padding:0 0 32px 49px;max-width:none}
+.sec-toggle[aria-expanded="false"]+.sec-body{display:none}
+
+h3{font-size:.76rem;letter-spacing:.11em;text-transform:uppercase;color:var(--hue);
+  font-weight:700;margin:30px 0 12px;scroll-margin-top:80px}
+h3:first-child{margin-top:4px}
+h4{font-size:.94rem;font-weight:650;margin:20px 0 8px;color:var(--fg)}
+p{margin:0 0 13px;max-width:68ch}
+ul,ol{margin:0 0 14px;padding-left:20px;max-width:70ch}
+li{margin-bottom:6px}
+ul.nest{margin:6px 0 4px;padding-left:19px}
+a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}
+strong{font-weight:650;color:var(--fg)}
+code{font-family:var(--mono);font-size:.845em;background:var(--paper-3);
+  padding:1.5px 5px;border-radius:4px;color:var(--fg);word-break:break-word}
+a code{color:inherit}
+
+.tw{overflow-x:auto;margin:0 0 18px;border:1px solid var(--line);border-radius:9px;background:var(--paper-2)}
+table{border-collapse:collapse;width:100%;font-size:.855rem}
+th{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line-2);white-space:nowrap;
+  font-size:.68rem;letter-spacing:.09em;text-transform:uppercase;color:var(--fg-3);font-weight:700}
+td{padding:8px 13px;border-bottom:1px solid var(--line);vertical-align:top;
+  font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+td code{background:transparent;padding:0}
+
+/* ── Mode registers ───────────────────────────────────── */
+/* User mode reads as prose; full mode tightens into reference. */
+#view-user{font-family:var(--serif);font-size:1.035rem;line-height:1.68}
+#view-user .sec-body{max-width:74ch}
+#view-user li{margin-bottom:8px}
+#view-full{font-size:.945rem;line-height:1.62}
+#view-full p,#view-full ul,#view-full ol{max-width:76ch}
+[hidden]{display:none !important}
+
+.empty{padding:60px 0;text-align:center;color:var(--fg-3);font-family:var(--sans);font-size:.9rem}
+mark{background:color-mix(in srgb,var(--accent) 26%,transparent);color:inherit;
+  padding:0 2px;border-radius:2px}
+
+.foot{border-top:1px solid var(--line);margin-top:10px;padding:26px 0 0;
+  font-size:.79rem;color:var(--fg-3);font-family:var(--sans);display:flex;gap:8px;flex-wrap:wrap}
+
+@media (max-width:940px){
+  .shell{grid-template-columns:1fr;gap:0;padding:0 18px}
+  .rail{position:static;max-height:none;flex-direction:row;flex-wrap:wrap;gap:5px;
+    padding:16px 0;border-bottom:1px solid var(--line)}
+  .rail-cap{width:100%;padding-bottom:4px}
+  .rail-item{grid-template-columns:8px auto;gap:6px;font-size:.78rem;
+    border:1px solid var(--line);padding:4px 9px}
+  .rail-label{display:none}
+  .sec-body{padding-left:0}
+  .top-in{padding:10px 18px;gap:12px}
+  .filter input{width:150px}
+  .brand span{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><b>ProjectBible</b><span>Feature Tree</span></div>
+    <div class="filter"><input id="q" type="search" placeholder="Filter features&hellip;" aria-label="Filter features"></div>
+    <div class="seg" role="group" aria-label="Detail level">
+      <button id="m-user" aria-pressed="true">Overview</button>
+      <button id="m-full" aria-pressed="false">Full reference</button>
+    </div>
+    <button class="mini" id="toggle-all">Collapse all</button>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="rail" aria-label="Feature domains">
+    <div class="rail-cap">Domains</div>
+    <a class="rail-item" href="#1-reading-the-bible" data-target="1-reading-the-bible"><span class="rail-dot" style="--dot:#a67c52"></span><span class="rail-num">1</span><span class="rail-label">Reading the Bible</span></a>
+<a class="rail-item" href="#2-getting-around" data-target="2-getting-around"><span class="rail-dot" style="--dot:#6ca0dc"></span><span class="rail-num">2</span><span class="rail-label">Getting Around</span></a>
+<a class="rail-item" href="#3-translations" data-target="3-translations"><span class="rail-dot" style="--dot:#f0c040"></span><span class="rail-num">3</span><span class="rail-label">Translations</span></a>
+<a class="rail-item" href="#4-interlinear-greek--hebrew" data-target="4-interlinear-greek--hebrew"><span class="rail-dot" style="--dot:#5c1e99"></span><span class="rail-num">4</span><span class="rail-label">Interlinear (Greek &amp; Hebrew)</span></a>
+<a class="rail-item" href="#5-word-study" data-target="5-word-study"><span class="rail-dot" style="--dot:#a45be9"></span><span class="rail-num">5</span><span class="rail-label">Word Study</span></a>
+<a class="rail-item" href="#6-bible-encyclopedia-isbe" data-target="6-bible-encyclopedia-isbe"><span class="rail-dot" style="--dot:#fc345c"></span><span class="rail-num">6</span><span class="rail-label">Bible Encyclopedia (ISBE)</span></a>
+<a class="rail-item" href="#7-commentaries" data-target="7-commentaries"><span class="rail-dot" style="--dot:#ff6520"></span><span class="rail-num">7</span><span class="rail-label">Commentaries</span></a>
+<a class="rail-item" href="#8-cross-references" data-target="8-cross-references"><span class="rail-dot" style="--dot:#6048cc"></span><span class="rail-num">8</span><span class="rail-label">Cross-References</span></a>
+<a class="rail-item" href="#9-search" data-target="9-search"><span class="rail-dot" style="--dot:#f2893e"></span><span class="rail-num">9</span><span class="rail-label">Search</span></a>
+<a class="rail-item" href="#10-highlights--notes" data-target="10-highlights--notes"><span class="rail-dot" style="--dot:#61f1ff"></span><span class="rail-num">10</span><span class="rail-label">Highlights &amp; Notes</span></a>
+<a class="rail-item" href="#11-repeated-words" data-target="11-repeated-words"><span class="rail-dot" style="--dot:#b8860b"></span><span class="rail-num">11</span><span class="rail-label">Repeated Words</span></a>
+<a class="rail-item" href="#12-journal" data-target="12-journal"><span class="rail-dot" style="--dot:#2f6f8f"></span><span class="rail-num">12</span><span class="rail-label">Journal</span></a>
+<a class="rail-item" href="#13-reading-plans--progress" data-target="13-reading-plans--progress"><span class="rail-dot" style="--dot:#2f7d56"></span><span class="rail-num">13</span><span class="rail-label">Reading Plans &amp; Progress</span></a>
+<a class="rail-item" href="#14-maps--places" data-target="14-maps--places"><span class="rail-dot" style="--dot:#a64263"></span><span class="rail-num">14</span><span class="rail-label">Maps &amp; Places</span></a>
+<a class="rail-item" href="#15-art" data-target="15-art"><span class="rail-dot" style="--dot:#6c4aa6"></span><span class="rail-num">15</span><span class="rail-label">Art</span></a>
+<a class="rail-item" href="#16-read-aloud-tts" data-target="16-read-aloud-tts"><span class="rail-dot" style="--dot:#b35a3a"></span><span class="rail-num">16</span><span class="rail-label">Read Aloud (TTS)</span></a>
+<a class="rail-item" href="#17-audio" data-target="17-audio"><span class="rail-dot" style="--dot:#2f7d78"></span><span class="rail-num">17</span><span class="rail-label">Audio</span></a>
+<a class="rail-item" href="#18-panes--windows" data-target="18-panes--windows"><span class="rail-dot" style="--dot:#3B82F6"></span><span class="rail-num">18</span><span class="rail-label">Panes &amp; Windows</span></a>
+<a class="rail-item" href="#19-content-packs" data-target="19-content-packs"><span class="rail-dot" style="--dot:#16A34A"></span><span class="rail-num">19</span><span class="rail-label">Content Packs</span></a>
+<a class="rail-item" href="#20-account--sync" data-target="20-account--sync"><span class="rail-dot" style="--dot:#D97706"></span><span class="rail-num">20</span><span class="rail-label">Account &amp; Sync</span></a>
+<a class="rail-item" href="#21-app-settings--appearance" data-target="21-app-settings--appearance"><span class="rail-dot" style="--dot:#0891B2"></span><span class="rail-num">21</span><span class="rail-label">App Settings &amp; Appearance</span></a>
+<a class="rail-item" href="#appendix-a--data-layer" data-target="appendix-a--data-layer"><span class="rail-dot" style="--dot:var(--fg-3)"></span><span class="rail-num">&#167;</span><span class="rail-label">Appendix A — Data layer</span></a>
+<a class="rail-item" href="#known-gaps" data-target="known-gaps"><span class="rail-dot" style="--dot:var(--fg-3)"></span><span class="rail-num">&#167;</span><span class="rail-label">Known gaps</span></a>
+  </nav>
+
+  <main class="main">
+    <div class="intro">
+      <div class="eyebrow">Complete feature inventory</div>
+      <h1>Every feature in ProjectBible, in one tree.</h1>
+      <p class="lede">A free, offline-first Bible study app. Twenty-one domains, from reading and word study
+        to on-device text-to-speech and cross-device sync &mdash; documented in full, both for the people
+        who use it and the people who work on it.</p>
+      <div class="stats">
+        <div class="stat"><b>21</b><span>Domains</span></div>
+        <div class="stat"><b>124</b><span>Source files</span></div>
+        <div class="stat"><b>51k</b><span>Lines of code</span></div>
+        <div class="stat"><b>14</b><span>Commentaries</span></div>
+      </div>
+      <p class="modenote"><strong>Overview</strong> describes what each feature does in plain language.
+        <strong>Full reference</strong> adds every settings key with its real default, the file each feature
+        lives in, and the reasoning behind non-obvious behavior.</p>
+    </div>
+
+    <div id="view-user"><p>Everything the app does, in plain language. Free, offline-first, and private: your reading, notes, and highlights live on your device, and syncing to an account is optional.</p>
+<section class="sec" id="1-reading-the-bible" data-sec="1"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">1</span><span class="sec-title">Reading the Bible</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<h3 id="11-the-reading-page">1.1 The reading page</h3>
+<ul><li><strong>Continuous scrolling</strong> — chapters load as you scroll, so you can read from Genesis 1 straight through without tapping "next chapter". Scrolling backwards loads the previous chapter the same way.</li><li><strong>Verse layout</strong> — three ways to see the text:<ul class="nest"><li>Each verse on its own line, the classic study layout.</li><li>Flowing paragraphs with small verse numbers, closest to a printed Bible.</li><li>Flowing paragraphs with no verse numbers at all, for distraction-free reading.</li></ul></li><li><strong>Word wrap</strong> — on by default. Turning it off lets long lines run off the side instead of wrapping, which suits poetry and interlinear rows.</li><li><strong>Your place is remembered</strong> — the app reopens to the translation, book, and chapter you were last reading, even after closing it completely.</li></ul>
+<h3 id="12-what-appears-in-the-text">1.2 What appears in the text</h3>
+<ul><li><strong>Words of Jesus in red</strong> — red-letter text, shown correctly in dark, light, and sepia themes. Can be turned off.</li><li><strong>Section headings</strong> — the small pericope titles between verses ("The Sermon on the Mount"). Can be turned off.</li><li><strong>Footnotes</strong> — small blue numbers in the text. Tap one to read the translator's note.</li><li><strong>Cross-reference markers</strong> — same small numbers, in grey rather than blue, when the note points to another passage instead of explaining wording. The app tells the two apart automatically.</li><li><strong>Bold and italic</strong> — preserved from translations that use them, including the italics some Bibles use for supplied words.</li><li><strong>Art icons</strong> — a small icon next to verses that a painting depicts. Tap it to open the artwork. Can be turned off.</li><li><strong>Place-name underlines</strong> — an optional faint dotted underline under multi-word place names like "Red Sea" or "Abel Beth Maacah", so you can see which words act as a single place when tapped. Off by default, and needs the encyclopedia pack.</li><li><strong>Themed titles</strong> — book and chapter titles carry a subtle colored shadow matching the book's category. Can be turned off.</li></ul>
+<h3 id="13-book-introductions">1.3 Book introductions</h3>
+<p>Every book opens with an introduction panel covering who wrote it, when, and what it is about. It can be opened at any time from the book title, and closing it returns you to exactly where you were reading.</p>
+<h3 id="14-book-of-enoch">1.4 Book of Enoch</h3>
+<p>Two complete English editions are included and read like any other book:</p>
+<ul><li>Robert Henry Charles, 1917</li><li>Richard Laurence, 1821</li></ul>
+</div></section>
+<section class="sec" id="2-getting-around" data-sec="2"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">2</span><span class="sec-title">Getting Around</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<h3 id="21-the-book-and-chapter-picker">2.1 The book and chapter picker</h3>
+<ul><li><strong>All 66 books, grouped and color-coded</strong> into ten categories — Pentateuch, Historical, Wisdom, Major Prophets, Minor Prophets, Gospels, Acts, Pauline Epistles, General Epistles, and Eschaton — so you can find a book by shape and color rather than by reading every name.</li><li><strong>Chapter grid</strong> — pick any chapter directly, no scrolling through a long list.</li><li><strong>Books you can't open are hidden</strong> — if the translation you're in is New Testament only, the Old Testament books don't appear.</li></ul>
+<h3 id="22-moving-between-passages">2.2 Moving between passages</h3>
+<ul><li><strong>Back button</strong> — steps back through the passages you've visited, like a browser's back button. It only appears when there's somewhere to go back to.</li><li><strong>Tap any reference to follow it</strong> — references inside cross-references, commentaries, and encyclopedia articles are all live links. The verse you land on flashes briefly in its book's category color so you can spot it immediately.</li><li><strong>Reference shorthand is understood</strong> — "Ex 20:21", "Am 5:18-20", or a bare "3:14" while you're already in a book all resolve correctly. Common abbreviations and alternate book spellings are recognised.</li><li><strong>The toolbar follows your scrolling</strong> — as you scroll into a new chapter, the book and chapter shown in the toolbar update to match, without yanking the page around.</li></ul>
+</div></section>
+<section class="sec" id="3-translations" data-sec="3"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">3</span><span class="sec-title">Translations</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<ul><li><strong>Translation picker</strong> — switch between every translation you have installed from the toolbar.</li><li><strong>Switching keeps your place</strong> — you stay on the same book and chapter. If that book doesn't exist in the translation you picked (switching to a Greek New Testament while in Genesis, say), the app moves you to the nearest book that does.</li><li><strong>Daily drivers</strong> — set a preferred translation for each combination of language and testament: English Old Testament, English New Testament, Hebrew Old Testament, Greek Old Testament, Greek New Testament, and Hebrew New Testament. Cross-references, search, and other features then open in the right translation for the passage automatically, rather than always defaulting to one.</li></ul>
+</div></section>
+<section class="sec" id="4-interlinear-greek--hebrew" data-sec="4"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">4</span><span class="sec-title">Interlinear (Greek &amp; Hebrew)</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Shows the original-language text with helper layers stacked under each word. It applies only when you have a Greek or Hebrew translation open.</p>
+<h3 id="41-turning-it-on">4.1 Turning it on</h3>
+<p>A toolbar button toggles it while you read. The same controls also live in Settings, with a live preview using John 1:1 so you can see the effect before applying it.</p>
+<h3 id="42-presets">4.2 Presets</h3>
+<ul><li><strong>Minimal</strong> — English meaning only.</li><li><strong>Study</strong> — English meaning plus Strong's number.</li><li><strong>Scholar</strong> — everything: meaning, pronunciation, dictionary form, Strong's number, and grammar.</li><li><strong>Custom</strong> — appears automatically when you change layers by hand.</li></ul>
+<h3 id="43-the-layers">4.3 The layers</h3>
+<ul><li><strong>English gloss</strong> — the English equivalent under each word. Always on; it's the point of an interlinear.</li><li><strong>Transliteration</strong> — how the word is pronounced, in English letters.</li><li><strong>Lemma</strong> — the dictionary form of the word, as you'd look it up.</li><li><strong>Strong's number</strong> — the standard reference number for the word.</li><li><strong>Parsing</strong> — the grammar: part of speech, tense, case, gender, number.</li></ul>
+</div></section>
+<section class="sec" id="5-word-study" data-sec="5"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">5</span><span class="sec-title">Word Study</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Tap any word in the text to open a full study panel for it. Works on English words and on Greek and Hebrew words.</p>
+<h3 id="51-for-greek-and-hebrew-words">5.1 For Greek and Hebrew words</h3>
+<ul><li><strong>Entry information</strong> — the word, its transliteration, its dictionary form, and its Strong's number.</li><li><strong>Short definition</strong> — the quick answer.</li><li><strong>Full definition</strong> — the complete lexicon entry.</li><li><strong>KJV usage</strong> — every way the King James Version rendered this word, which shows its range of meaning at a glance.</li><li><strong>Derivation</strong> — the root the word comes from.</li><li><strong>Inflection forms</strong> — the other forms this word takes across the text.</li><li><strong>Occurrences</strong> — every verse in the Bible using this word, so you can see how it's actually used rather than only how it's defined.</li><li><strong>Related words</strong> — synonyms and words sharing a root.</li></ul>
+<h3 id="52-for-english-words">5.2 For English words</h3>
+<ul><li><strong>Dictionary definitions</strong> — grouped by part of speech.</li><li><strong>Plurals and variants are handled</strong> — tapping "waters" finds "water"; tapping a verb form finds its base form.</li><li><strong>People are recognised</strong> — tapping a name opens that person's entry with the verses they appear in, rather than a dictionary definition of the word.</li></ul>
+<h3 id="53-grammar-in-plain-english">5.3 Grammar in plain English</h3>
+<p>Morphology codes are translated out of shorthand. Instead of <code>V-PAI-3S</code> you read "Verb, Present, Active, Indicative, Third person, Singular", and instead of <code>HNcmsa</code>, "Hebrew, Noun, common, masculine, singular, absolute". All three coding systems the packs use are covered — Greek, Hebrew/Aramaic, and the STEPBible part-of-speech format.</p>
+</div></section>
+<section class="sec" id="6-bible-encyclopedia" data-sec="6"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">6</span><span class="sec-title">Bible Encyclopedia</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Full articles from the <em>International Standard Bible Encyclopedia</em> — a complete, public-domain Bible encyclopedia, included free and available offline.</p>
+<h3 id="61-opening-an-article">6.1 Opening an article</h3>
+<p>Select a word or phrase in the text and choose <strong>More Info</strong>. The app works out whether you tapped a place, a person, or a general subject and opens the matching article.</p>
+<h3 id="62-what-an-article-shows">6.2 What an article shows</h3>
+<ul><li><strong>Overview</strong> — the summary: what kind of thing it is, its other names, and where it appears.</li><li><strong>Article</strong> — the full encyclopedia text, broken into a collapsible table of contents. Long entries stay navigable instead of becoming a wall of text, and repeated section headings are handled so the contents list stays clean.</li><li><strong>Verses</strong> — every verse mentioning the subject, grouped by book in Bible order, each one tappable.</li><li><strong>Map</strong> — for places, a pin at the location, when coordinates are known.</li></ul>
+<h3 id="63-linked-to-the-dictionary">6.3 Linked to the dictionary</h3>
+<p>Where an encyclopedia entry and a dictionary entry describe the same thing, the app connects them, so you can move between the short definition and the long article without searching again.</p>
+<h3 id="64-place-name-underlines">6.4 Place-name underlines</h3>
+<p>The encyclopedia pack also powers the optional dotted underlines described in <a href="#12-what-appears-in-the-text">1.2</a>, which mark multi-word place names so you can see what's tappable as a unit.</p>
+</div></section>
+<section class="sec" id="7-commentaries" data-sec="7"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">7</span><span class="sec-title">Commentaries</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Fourteen classic commentaries, all public domain, all offline.</p>
+<h3 id="71-the-commentators">7.1 The commentators</h3>
+<p>NET Bible Notes · Adam Clarke · John Wesley · John Calvin · KingComments · A.T. Robertson · Albert Barnes · E.W. Bullinger · Family Bible Notes · Abbott · Thomas Aquinas (Catena Aurea) · Matthew Henry · Jamieson-Fausset-Brown · Charles Spurgeon</p>
+<p>Each author has a fixed color and a two-letter badge, so once you learn that green is Clarke you can pick their notes out at a glance anywhere in the app.</p>
+<h3 id="72-reading-commentary">7.2 Reading commentary</h3>
+<ul><li><strong>Markers in the text</strong> — verses with commentary carry small colored badges, one per author.</li><li><strong>Filter by author</strong> — pick which commentators you want to see. Everyone else's markers disappear, so you're not wading through fourteen opinions when you want one.</li><li><strong>Open in its own pane</strong> — commentary can sit beside the text rather than covering it, so you can read both together.</li><li><strong>References are clickable</strong> — every Bible reference inside a commentary is a live link, including shorthand like "v. 14" that depends on the passage you're in. They're colored to match the book being referenced.</li></ul>
+<h3 id="73-anchor-sync">7.3 Anchor sync</h3>
+<p>Turn on the anchor and the commentary pane follows the verse you're reading. If you scroll the commentary somewhere else, the app notices you've drifted and stops fighting you; tap the anchor again to snap back to where you're reading.</p>
+<p>You can also drop <strong>checkpoints</strong> on verses you're working through. They show as amber marks in the Bible text so you can see which verses you've already studied in the commentary.</p>
+</div></section>
+<section class="sec" id="8-cross-references" data-sec="8"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">8</span><span class="sec-title">Cross-References</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Built on the <em>Treasury of Scripture Knowledge</em>, the classic cross-reference collection.</p>
+<ul><li><strong>Toggle markers on or off</strong> — a toolbar button shows small gold diamonds on the keywords in a verse that have cross-references.</li><li><strong>Tap a marker</strong> to see every passage connected to that word, each one a link.</li><li><strong>Shorthand is resolved for you</strong> — a reference written "3:14,15" or just "31" is understood relative to the book and chapter you're reading, and lands you in the right place.</li></ul>
+</div></section>
+<section class="sec" id="9-search" data-sec="9"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">9</span><span class="sec-title">Search</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Two ways to search, depending on how hard the question is.</p>
+<h3 id="91-quick-search">9.1 Quick search</h3>
+<p>Type in the toolbar box and results appear as you type, grouped by where they came from:</p>
+<ul><li><strong>Bible</strong> — verse text</li><li><strong>Strong's</strong> — original-language entries</li><li><strong>Notes</strong> — your own notes</li><li><strong>Journal</strong> — your journal entries</li><li><strong>Saved verses</strong></li><li><strong>Characters</strong> — people in the Bible</li><li><strong>Encyclopedia</strong> — ISBE articles</li><li><strong>Commentaries</strong></li></ul>
+<p>Typing a Strong's number straight into the box (<code>G26</code>, <code>H430</code>, <code>g0026</code>) jumps directly to that entry.</p>
+<p>Results are grouped in a tree you can collapse, and each category is capped so one huge category can't bury the rest. Commentary search is heavy, so it runs only when you press Enter rather than on every keystroke.</p>
+<h3 id="92-advanced-search">9.2 Advanced search</h3>
+<p>For precise work, with built-in help on every option:</p>
+<ul><li><strong>Match type</strong> — contains anywhere, starts with, ends with, whole word only, word begins with, word ends with.</li><li><strong>Must also contain</strong> — narrow results to verses that include another term too.</li><li><strong>Must NOT contain</strong> — exclude verses containing a term.</li><li><strong>Proximity</strong> — find words near each other, within a distance you set.</li><li><strong>Include plurals</strong> — match "waters" when you searched "water".</li><li><strong>Include synonyms</strong> — widen to related words.</li><li><strong>Case-insensitive</strong> — on or off.</li><li><strong>Show pronunciation</strong> — display transliterations alongside original-language results.</li></ul>
+<p>Every one of these has a <strong>?</strong> button explaining what it does with worked examples.</p>
+</div></section>
+<section class="sec" id="10-highlights--notes" data-sec="10"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">10</span><span class="sec-title">Highlights &amp; Notes</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<h3 id="101-highlighting">10.1 Highlighting</h3>
+<p>Select any verse or any single word and choose a style. Seven colors — yellow, green, orange, red, pink, purple, blue — in three styles:</p>
+<ul><li><strong>Marker</strong> — a highlighter-pen background. It's drawn with a hand-drawn wavy edge rather than a flat rectangle, and each verse always gets the same shape, so it looks like a real highlighter rather than a computer block. Highlights that wrap across lines get a proper swatch on each line.</li><li><strong>Text color</strong> — colors the words themselves instead of the background.</li><li><strong>Underline</strong> — solid, dashed, wavy, or boxed.</li></ul>
+<p>Verse highlights and single-word highlights are tracked separately, so you can highlight one word inside an already-highlighted verse.</p>
+<h3 id="102-notes">10.2 Notes</h3>
+<ul><li>Attach a note to any verse.</li><li>Verses with notes are marked, and tapping the mark opens the note.</li><li>Notes are searchable from the main search box.</li></ul>
+<h3 id="103-saved-verses">10.3 Saved verses</h3>
+<p>Bookmark verses you want to come back to and browse them in one list.</p>
+<h3 id="104-the-verse-toolbar">10.4 The verse toolbar</h3>
+<p>Selecting text brings up a small toolbar with everything you can do to it:</p>
+<p><strong>Dissect</strong> (word study) · <strong>Search</strong> · <strong>Map</strong> (for places) · <strong>Highlight</strong> · <strong>Save</strong> · <strong>Notes</strong> · <strong>Repeats</strong></p>
+<p>The Map button only appears when what you selected is actually a place.</p>
+</div></section>
+<section class="sec" id="11-repeated-words" data-sec="11"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">11</span><span class="sec-title">Repeated Words</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>A study tool for tracking a word through the text — the digital version of circling every occurrence of "covenant" in a paper Bible.</p>
+<ul><li><strong>Track up to seven words at once</strong>, each in its own color: Amber, Sky, Mint, Rose, Violet, Coral, Teal.</li><li><strong>Every occurrence lights up</strong> — once a word is tracked, it's softly highlighted everywhere in the Bible, not just the chapter you're on.</li><li><strong>Pills in the toolbar</strong> — each tracked word gets a colored pill. The pill and the in-text highlight always match.</li><li><strong>Counts per book</strong> — see how many times your word occurs in the book you're reading.</li><li><strong>Highlight All</strong> — turn a tracked word into permanent saved highlights in one go.</li><li><strong>Tracking survives restarts</strong> — your tracked words are still there tomorrow.</li></ul>
+<p>The repeat colors are deliberately softer and more translucent than the saved-highlight colors, so this layer reads as temporary scratch work rather than something you've committed to.</p>
+</div></section>
+<section class="sec" id="12-journal" data-sec="12"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">12</span><span class="sec-title">Journal</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<ul><li><strong>One entry per day</strong>, with a title and body.</li><li><strong>Rich text editing</strong> — formatting, not just plain text.</li><li><strong>Bible references become links</strong> — write "Romans 8:28" in an entry and it turns into a link you can tap later.</li><li><strong>Calendar view</strong> — see which days you've written on and jump to any of them.</li><li><strong>Searchable</strong> — journal entries appear in the main search results.</li><li><strong>Keyboard shortcut</strong> — press <strong>J</strong> anywhere in the app to open today's entry in a side pane.</li></ul>
+</div></section>
+<section class="sec" id="13-reading-plans--progress" data-sec="13"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">13</span><span class="sec-title">Reading Plans &amp; Progress</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<h3 id="131-ready-made-plans">13.1 Ready-made plans</h3>
+<ul><li><strong>Bible in 1 Year</strong></li><li><strong>New Testament in 90 Days</strong></li><li><strong>Gospels in 30 Days</strong></li><li><strong>Chronological Bible in 1 Year</strong> — events in the order they happened rather than book order</li><li><strong>Psalms &amp; Proverbs</strong></li><li><strong>Robertson Gospel Harmony</strong> — the four Gospels woven into a single narrative, in 30, 60, 90, or 184 days (the last being one section per day)</li></ul>
+<h3 id="132-build-your-own">13.2 Build your own</h3>
+<p>Pick the books, the number of days, and the order — canonical, chronological, or shuffled. Name it whatever you like.</p>
+<h3 id="133-running-a-plan">13.3 Running a plan</h3>
+<ul><li><strong>Run several plans at once</strong> — a year-long plan and a short study plan side by side, each tracked separately.</li><li><strong>Today's reading</strong> is surfaced for you, and if you're not caught up, the next unread day is.</li><li><strong>Tick chapters off</strong> as you read them. In Gospel Harmony plans you tick off passages rather than chapters.</li><li><strong>Jump straight to the passage</strong> from the plan.</li><li><strong>Rename, archive, or delete</strong> any plan. Deleting takes two taps, so you can't lose a year's progress by mistake.</li><li><strong>A congratulations screen</strong> when you finish.</li></ul>
+<h3 id="134-falling-behind">13.4 Falling behind</h3>
+<p>If you miss days, the plan offers to catch you up two ways:</p>
+<ul><li><strong>Even spread</strong> — the missed reading is distributed across your remaining days.</li><li><strong>Dedicated catch-up days</strong> — the missed reading is grouped into its own days.</li></ul>
+<h3 id="135-progress-and-history">13.5 Progress and history</h3>
+<ul><li><strong>Reading streak</strong> — consecutive days you've read.</li><li><strong>Total chapters read</strong> across all time.</li><li><strong>Reading history</strong> — what you read and when, kept per chapter.</li><li><strong>Calendar view</strong> of your reading days.</li><li><strong>Progress syncs across devices</strong> if you're signed in, and merges sensibly — a chapter ticked on your phone stays ticked when your tablet syncs, and vice versa.</li></ul>
+</div></section>
+<section class="sec" id="14-maps--places" data-sec="14"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">14</span><span class="sec-title">Maps &amp; Places</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<ul><li><strong>Map pane</strong> — open a map beside the text.</li><li><strong>Places in the verse you're reading</strong> can be looked up directly.</li><li><strong>Search for a place</strong> by name.</li><li><strong>Historical layers</strong> — map layers for different biblical time periods, selectable by period or by year, so you can see the world as it was rather than as it is.</li><li><strong>Places by type</strong> — cities, regions, water features, and so on.</li><li><strong>Works offline</strong> — map tiles are stored on your device, so the map works with no connection.</li><li><strong>Linked to the encyclopedia</strong> — a place on the map connects to its encyclopedia article, and a place in an article connects to the map.</li></ul>
+</div></section>
+<section class="sec" id="15-art" data-sec="15"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">15</span><span class="sec-title">Art</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<ul><li><strong>Classical paintings of Bible scenes</strong>, tied to the verses they depict.</li><li><strong>Icons in the text</strong> mark verses that have artwork. Tap to open.</li><li><strong>Art pane</strong> — browse all artwork, or everything for the chapter you're reading.</li><li><strong>Search artwork</strong> by title or subject.</li><li><strong>Opens where it fits</strong> — the art window docks to whichever screen edge suits your current orientation.</li></ul>
+</div></section>
+<section class="sec" id="16-read-aloud" data-sec="16"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">16</span><span class="sec-title">Read Aloud</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>The Bible read to you by an AI voice that runs <strong>entirely on your device</strong> — no account, no internet connection, and nothing you read is sent anywhere.</p>
+<h3 id="161-voices">16.1 Voices</h3>
+<ul><li><strong>Standard (US English)</strong> — the fuller-sounding voice, about 64 MB.</li><li><strong>Compact (US English)</strong> — about 30 MB, for tight storage.</li></ul>
+<p>Voices download once, on your say-so — the app never quietly pulls 60 MB in the background. You can also install your own voice from a file, including a cloned one.</p>
+<h3 id="162-playing">16.2 Playing</h3>
+<ul><li><strong>Read this chapter aloud</strong> from the toolbar.</li><li><strong>Pause and resume.</strong></li><li><strong>Jump to a verse</strong> and start reading from there.</li><li><strong>Speed control</strong> from 0.8× to 1.5×.</li><li><strong>Auto-advance</strong> — keep reading into the next chapter automatically, or stop at the end of this one.</li></ul>
+<h3 id="163-following-along">16.3 Following along</h3>
+<p>Two independent effects — use either, both, or neither:</p>
+<ul><li><strong>Highlight the verse being read</strong> — tints the current verse. On by default.</li><li><strong>Drifting glow</strong> — a soft cloud of light that glides along the words as they're spoken. Off by default.</li></ul>
+<p>The glow is deliberately soft and a few words wide. The speech model hands back finished audio without telling the app exactly when each word is spoken, so the pace is an estimate. A sharp highlight on the wrong word looks broken; a blurred cloud is almost always covering the right word somewhere in its span, and reads as atmosphere rather than error.</p>
+<h3 id="164-section-headings">16.4 Section headings</h3>
+<p>Optionally have section headings spoken before their verse. Off by default.</p>
+</div></section>
+<section class="sec" id="17-audio" data-sec="17"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">17</span><span class="sec-title">Audio</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Separate from Read Aloud: playback of pre-recorded chapter audio, where a pack provides it.</p>
+<ul><li>Play, pause, stop.</li><li>Seek within the chapter.</li><li>Auto-advance to the next chapter.</li></ul>
+</div></section>
+<section class="sec" id="18-panes--windows" data-sec="18"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">18</span><span class="sec-title">Panes &amp; Windows</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>The app can show several things at once — Bible text, commentary, a map, your journal — arranged how you like.</p>
+<h3 id="181-opening-a-window">18.1 Opening a window</h3>
+<p>Drag inward from any edge of the screen — top, left, right, or bottom — and a new window opens at the size you dragged to. Drag further for a bigger window.</p>
+<p>The gesture is deliberately careful about not firing by accident: it waits until it can tell which direction you're actually moving before committing, and the bottom edge leaves a gap in the middle for the Android home gesture, so you don't open a window every time you try to leave the app.</p>
+<h3 id="182-what-can-go-in-a-window">18.2 What can go in a window</h3>
+<p>Bible text · Map · Notes · Word study · Commentaries · Journal · Art</p>
+<p>Up to six windows at once. Each is resizable, and each remembers its own state — a second Bible window can sit on a different chapter from the main one.</p>
+<h3 id="183-panes">18.3 Panes</h3>
+<p>A second, simpler docking system for app-level surfaces: Settings, Map, Packs, Search, Notes, and Commentaries. These open left, right, or bottom. On a phone they open wider (75% of the screen) than on a larger display (40%), since a narrow pane on a phone is unusable.</p>
+<h3 id="184-rotation">18.4 Rotation</h3>
+<p>The app is locked to portrait by default. Allowing rotation is a setting; when the screen turns, the app fades through the change rather than snapping.</p>
+</div></section>
+<section class="sec" id="19-content-packs" data-sec="19"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">19</span><span class="sec-title">Content Packs</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Everything in the app — translations, lexicons, commentaries, the encyclopedia, maps, art, voices — comes as a <strong>pack</strong> you choose to install. Nothing is streamed; once a pack is on your device it works offline forever.</p>
+<ul><li><strong>Quick install</strong> — one tap for the common packs.</li><li><strong>Advanced install</strong> — install from a file or a URL, for packs you've made or been given.</li><li><strong>Voice packs</strong> — Read Aloud voices are managed here too.</li><li><strong>See what's installed</strong>, how big it is, and remove anything you don't want.</li><li><strong>Database statistics</strong> — how much space your content is using.</li><li><strong>Packs load when needed</strong> — the app fetches a pack the first time you use something that requires it, with a progress bar, rather than making you wait at startup.</li><li><strong>Bundled packs</strong> are extracted on first run so the app is useful immediately.</li></ul>
+</div></section>
+<section class="sec" id="20-account--sync" data-sec="20"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">20</span><span class="sec-title">Account &amp; Sync</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>An account is <strong>entirely optional</strong>. Everything works signed out; your data simply stays on that device.</p>
+<h3 id="201-account">20.1 Account</h3>
+<p>Create an account with an email and password. You can also change your name, change your password, reset a forgotten password, and delete your account outright.</p>
+<h3 id="202-what-syncs">20.2 What syncs</h3>
+<p>Signing in syncs your personal data across devices:</p>
+<ul><li>Notes</li><li>Verse highlights and word highlights</li><li>Saved verses</li><li>Journal entries</li><li>Reading plans</li><li>Reading progress</li></ul>
+<p>Plus a <strong>subset of settings</strong> that should follow you: theme, timezone, your default translations, interlinear preferences, red-letter, section headings, art icons, and themed titles.</p>
+<h3 id="203-what-deliberately-doesnt-sync">20.3 What deliberately doesn't sync</h3>
+<p>Font size, line spacing, verse layout, word wrap, screen rotation, and update checks stay on each device. A phone and a desktop rarely want the same font size.</p>
+<h3 id="204-working-offline">20.4 Working offline</h3>
+<ul><li><strong>Changes made offline are queued</strong> and uploaded when you're back online. Nothing is lost.</li><li><strong>Repeated edits to the same thing are collapsed</strong> into one upload rather than replayed one by one.</li><li><strong>Failed uploads retry</strong> with increasing delays, up to fifteen minutes apart, so a flaky connection doesn't hammer the server.</li><li><strong>Live updates</strong> — with two devices open at once, a change on one appears on the other without a refresh.</li><li><strong>Reading progress merges rather than overwrites.</strong> A chapter ticked on your phone and a different chapter ticked on your tablet both survive; neither device wins by being last.</li><li><strong>A fresh install won't wipe your account.</strong> Settings only come down when the server's copy is genuinely newer than what this device last synced, so signing in on a new phone never overwrites your real settings with an empty one.</li></ul>
+<h3 id="205-profile">20.5 Profile</h3>
+<p>Your profile has four tabs — Reading Plan, Saved Verses/Notes, Journal, and Settings — plus today's reading, ready to tap.</p>
+</div></section>
+<section class="sec" id="21-app-settings--appearance" data-sec="21"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">21</span><span class="sec-title">App Settings &amp; Appearance</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<h3 id="211-themes">21.1 Themes</h3>
+<p>Four options: <strong>Dark</strong>, <strong>Light</strong>, <strong>Sepia</strong>, and <strong>Auto</strong> (follows your system). Red-letter text is tuned separately for each theme so Jesus' words stay properly red rather than washing out.</p>
+<h3 id="212-text">21.2 Text</h3>
+<ul><li><strong>Font size</strong> — 12 to 32 pixels.</li><li><strong>Line spacing</strong> — adjustable.</li><li><strong>Verse layout</strong> and <strong>word wrap</strong> — see <a href="#11-the-reading-page">1.1</a>.</li></ul>
+<h3 id="213-display">21.3 Display</h3>
+<ul><li>Words of Jesus in red letters</li><li>Theme colors in reader titles</li><li>Art icons on Bible scenes</li><li>Place-name underlines</li><li>Allow screen rotation</li></ul>
+<h3 id="214-read-aloud-settings">21.4 Read Aloud settings</h3>
+<p>Voice, speed, read section headings aloud, highlight the verse being read, and the drifting glow. See <a href="#16-read-aloud">16</a>.</p>
+<h3 id="215-time-zone">21.5 Time zone</h3>
+<p>Set your time zone so "today" means today where you are. This drives the journal, reading plans, streaks, and the daily greeting. Defaults to your device's time zone.</p>
+<h3 id="216-updates">21.6 Updates</h3>
+<ul><li><strong>Automatic updates</strong> — the app checks for a new version on open and whenever you come back to it, then updates itself and tells you it's running the latest version. Can be turned off.</li><li><strong>Check for updates</strong> manually at any time.</li><li><strong>Clear cache</strong> — wipes cached packs, service workers, and databases. The fix if packs won't install or the app is stuck on old data.</li></ul>
+<h3 id="217-daily-greeting">21.7 Daily greeting</h3>
+<p>The first time you open the app each day you get a greeting and a <strong>Verse of the Day</strong>, tappable to go straight there. The greeting knows the church calendar — Easter, Good Friday, and other moveable feasts are worked out for the actual year, along with Thanksgiving, so they land on the right day rather than a fixed guess.</p>
+<h3 id="218-installing-as-an-app">21.8 Installing as an app</h3>
+<p>ProjectBible is a Progressive Web App. Install it from your browser and it runs like a native app — its own icon, full screen, and fully offline.</p>
+</div></section></div>
+    <div id="view-full" hidden><p>Exhaustive engineering record of every feature in <code>apps/pwa-polished</code>. Same tree as <a href="FEATURES.md" target="_blank" rel="noopener">FEATURES.md</a>, but each leaf adds the settings key, default value, shortcut or gesture, and the source file it lives in.</p>
+<p>All paths are relative to <code>apps/pwa-polished/</code>.</p>
+<section class="sec" id="1-reading-the-bible" data-sec="1"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">1</span><span class="sec-title">Reading the Bible</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Primary file: <code>src/components/BibleReader.svelte</code> (~5,280 lines — the largest component in the app; it owns the reading surface, verse rendering, selection, highlighting, and infinite scroll).</p>
+<h3 id="11-the-reading-page">1.1 The reading page</h3>
+<div class="tw"><table><thead><tr><th>Feature</th><th>Detail</th></tr></thead><tbody><tr><td>Continuous scrolling</td><td>Chapters append as you scroll in either direction. The reader holds an array of loaded chapters rather than one chapter at a time. <code>BibleReader.svelte</code></td></tr><tr><td>Scroll-driven nav sync</td><td>Updates book/chapter in the nav store as you scroll, deliberately without setting <code>scrollTargetVerse</code> — setting it would trigger an auto-scroll that fights the user. <code>navigationStore.setScrollPosition()</code>, <code>src/stores/navigationStore.ts:161</code></td></tr><tr><td>Verse layout</td><td>Setting <code>verseLayout</code>, default <code>'one-per-line'</code>. Values: <code>'one-per-line'</code>, <code>'paragraph'</code>, <code>'paragraph-no-verse-numbers'</code>. Applied as CSS classes <code>.paragraph-layout</code> / <code>.nonumber-layout</code> at <code>BibleReader.svelte:4192</code>. Read at <code>BibleReader.svelte:550</code>.</td></tr><tr><td>Word wrap</td><td>Setting <code>wordWrap</code>, default <code>true</code>. <code>src/components/panes/SettingsPane.svelte:58</code></td></tr><tr><td>Position persistence</td><td>Translation, book, chapter, and panel toggles persisted to <code>localStorage</code> under <code>projectbible_nav</code>. <code>src/stores/navigationStore.ts:49</code></td></tr><tr><td>First-launch default</td><td><code>WEB</code>, John 1. <code>src/stores/navigationStore.ts:26</code></td></tr></tbody></table></div>
+<h3 id="12-what-appears-in-the-text">1.2 What appears in the text</h3>
+<p>All text rendering runs through <code>renderVerseHtml()</code> in <code>src/lib/verseRendering.ts:249</code>.</p>
+<div class="tw"><table><thead><tr><th>Feature</th><th>Detail</th></tr></thead><tbody><tr><td>Red-letter</td><td>Setting <code>showRedLetter</code>, default <code>true</code>. Spans loaded lazily from <code>/red-letter-spans.json</code>, keyed <code>{transId: {"BOOK:CH:V": [{s,e}]}}</code>; network failure degrades silently. Rendered via <code>\x02</code>/<code>\x03</code> sentinels into <code>.red-letter</code>. Theme-specific colors — dark <code>#FF3F3F</code>, light <code>#CC0000</code>, sepia <code>#FF2020</code> — set in <code>src/App.svelte:300-309</code>, which re-applies the parent invert filter so the light/sepia theme filter doesn't bleach the red. <code>BibleReader.svelte:196</code></td></tr><tr><td>Section headings</td><td>Setting <code>showSectionHeadings</code>, default <code>true</code>. Extracted from the leading <code>+ Heading. </code> marker in stored verse text by <code>extractHeading()</code>, <code>verseRendering.ts:296</code>. Rendered at <code>BibleReader.svelte:4205</code>. <strong>No UI toggle exists</strong> — see <a href="#known-gaps">Known gaps</a>.</td></tr><tr><td>Footnotes</td><td>Stored as <code>+ note text</code> runs terminated by a <code>\x01</code> sentinel. Rendered as <code>&lt;sup class="inline-note inline-footnote"&gt;[n]&lt;/sup&gt;</code> in <code>#6699ff</code>. <code>renderTextWithInlineNotes()</code>, <code>verseRendering.ts:94</code></td></tr><tr><td>Cross-reference markers</td><td>Same mechanism, rendered grey <code>#ccc</code> with class <code>.inline-xref</code>. Classified by <code>isCrossReference()</code>, <code>verseRendering.ts:19</code> — a note counts as a cross-reference if it contains a <code>\d+:\d+</code> token and does <em>not</em> begin with a wording-note starter (<code>Or</code>, <code>Lit</code>, <code>I.e.</code>, <code>That is</code>, <code>Some manuscripts</code>, <code>Gr.</code>, <code>Gk.</code>, <code>Heb.</code>, <code>Aram.</code>, <code>Lat.</code>).</td></tr><tr><td>Note-boundary detection</td><td><code>findNoteEnd()</code>, <code>verseRendering.ts:48</code> — shared by the HTML renderer and the read-aloud text extractor so the two can never disagree about where a note ends. Treats <code>Gr</code>, <code>Gk</code>, <code>Heb</code>, <code>Aram</code>, <code>Lat</code>, <code>Syr</code>, <code>LXX</code>, <code>Vg</code> as non-terminal abbreviations so their trailing period doesn't end the note early.</td></tr><tr><td>Bold / italic</td><td><code>&lt;b&gt;</code> and <code>&lt;i&gt;</code> preserved from pack text via <code>extractFormattingSpans()</code>, <code>verseRendering.ts:209</code>, using <code>\x04</code>–<code>\x07</code> sentinels. All other HTML tags stripped. Coexists with red-letter spans (e.g. NET Matthew 4:4).</td></tr><tr><td>Art icons</td><td>Setting <code>showArt</code>, default <code>true</code>. Scene map keyed <code>"book:chapter:verse"</code>, rebuilt per rendered chapter set. <code>BibleReader.svelte:311-338</code>; see <a href="#15-art">15. Art</a>.</td></tr><tr><td>Place-name underlines</td><td>Setting <code>showPlaceMarkers</code>, default <code>false</code>. Requires the ISBE pack. Only multi-word phrases are marked (<code>is_phrase = 1</code> rows in <code>isbe_place_names</code>) — single words would be noise. <code>src/lib/placeMarkerRenderer.ts</code></td></tr><tr><td>Repeat/marker coexistence</td><td><code>placeMarkerRenderer</code> only wraps runs of pure text and skips nodes already inside a repeat or marker span. Apply order is always repeats first, then markers, so neither system can corrupt the other. <code>placeMarkerRenderer.ts:12-14</code>, <code>applyPlaceMarkersToAllSections()</code> at <code>:150</code></td></tr><tr><td>Themed titles</td><td>Setting <code>themedTitles</code>, default <code>true</code>. Category-colored 3D shadow on reader titles/headings.</td></tr><tr><td>Category mascot colors</td><td>Category → color map in <code>BibleReader.svelte:166</code>, kept in sync with the nav dropdown colors in <code>src/lib/bibleData.ts:128</code>.</td></tr></tbody></table></div>
+<h3 id="13-book-introductions">1.3 Book introductions</h3>
+<p><code>src/components/BookIntroPanel.svelte</code> (312 lines). Props <code>open</code>, <code>book</code>.</p>
+<p>Navigating away from the panel sets a flag so Back reopens it; a separate flag suppresses auto-reopen when the navigation came from the panel itself. <code>BibleReader.svelte:354-380</code>.</p>
+<h3 id="14-book-of-enoch">1.4 Book of Enoch</h3>
+<p><code>src/lib/enochBooks.ts</code>. Two editions, lazily loaded per author id:</p>
+<ul><li><code>enoch:charles</code> — "Robert Henry Charles, 1917 (Book of Enoch)"</li><li><code>enoch:laurence</code> — "Richard Laurence, 1821 (Book of Enoch)"</li></ul>
+<p>Chapters carry a printed <code>label</code> (e.g. "Chapter 72" / "Chapter LXXII") plus <code>headings[]</code>. Helpers: <code>isEnochAuthor()</code>, <code>enochLabelFor()</code>, <code>loadEnoch()</code>.</p>
+</div></section>
+<section class="sec" id="2-getting-around" data-sec="2"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">2</span><span class="sec-title">Getting Around</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Primary files: <code>src/stores/navigationStore.ts</code>, <code>src/components/NavigationBar.svelte</code> (2,101 lines), <code>src/lib/bibleData.ts</code>, <code>src/lib/parseRefString.ts</code>.</p>
+<h3 id="21-the-book-and-chapter-picker">2.1 The book and chapter picker</h3>
+<ul><li>66 books defined in <code>BIBLE_BOOKS</code>, <code>src/lib/bibleData.ts:12</code>.</li><li>Ten categories with both colors (<code>CATEGORY_COLORS</code>, <code>:128</code>) and display labels (<code>CATEGORY_LABELS</code>, <code>:142</code>): <code>pentateuch</code> <code>#a67c52</code> Pentateuch, <code>historical</code> <code>#6ca0dc</code> Historical, <code>wisdom</code> <code>#f0c040</code> Wisdom, <code>major-prophets</code> <code>#5c1e99</code> Major Prophets, <code>minor-prophets</code> <code>#a45be9</code> Minor Prophets, <code>gospels</code> <code>#fc345c</code> Gospels, <code>acts</code> <code>#ff6520</code> Acts, <code>pauline</code> <code>#6048cc</code> Pauline Epistles, <code>general</code> <code>#f2893e</code> General Epistles, <code>revelation</code> <code>#61f1ff</code> Eschaton.</li><li><code>getBookColor()</code> <code>:156</code> falls back to neutral grey for unknown books.</li><li>Chapter counts from <code>getBookChapters()</code> <code>:161</code>; the picker renders a chapter grid, <code>NavigationBar.svelte:1121</code>.</li><li>Book list filtered by translation scope via <code>getAvailableBooks()</code> <code>:225</code>.</li></ul>
+<h3 id="22-moving-between-passages">2.2 Moving between passages</h3>
+<div class="tw"><table><thead><tr><th>Feature</th><th>Detail</th></tr></thead><tbody><tr><td>Back</td><td><code>navigationStore.goBack()</code>, <code>:172</code>. History is a separate <code>navigationHistory</code> writable; <code>canGoBack</code> derived store <code>:192</code> gates the button. Toolbar button at <code>NavigationBar.svelte:774</code>. When the back button is active the navbar is fully hidden in the main reader (<code>BibleReader.svelte:409</code>).</td></tr><tr><td>Link navigation + flash</td><td><code>navigationStore.navigateToVerse()</code> <code>:127</code> sets <code>linkHighlightVerse</code>, which flashes the target verse in its book's category color, then clears via <code>clearLinkHighlight()</code> <code>:142</code>. Handles same-chapter and cross-book cases; fires only once the target chapter is in the DOM (<code>BibleReader.svelte:689</code>).</td></tr><tr><td>Plain navigation</td><td><code>navigationStore.navigateTo()</code> <code>:114</code> — sets <code>scrollTargetVerse</code> without the flash.</td></tr><tr><td>TSK reference parsing</td><td><code>parseRefString(ref, contextBook, contextChapter)</code>, <code>src/lib/parseRefString.ts:226</code>. Handles <code>"Ex 20:21"</code>, <code>"Am 5:18-20"</code> (range → first verse), <code>"3:14,15"</code>, <code>"8:22"</code>, and bare <code>"10,31"</code> relative to context.</td></tr><tr><td>OSIS reference parsing</td><td><code>parseOsisRef()</code>, <code>parseRefString.ts:262</code> — e.g. <code>"Gen.2.4"</code>, <code>"1John.4.9-1John.4.10"</code>.</td></tr><tr><td>Abbreviation table</td><td>Lower-cased KJV/TSK abbreviation → canonical book name, <code>parseRefString.ts:21</code>. Separate alias table <code>BOOK_NAME_ALIASES</code> at <code>bibleData.ts:93</code>, applied by <code>normalizeBookName()</code> <code>:120</code> on every <code>setBook</code>/<code>navigateTo</code>.</td></tr><tr><td>Reading session</td><td><code>src/stores/readingSessionStore.ts</code>. <code>src/stores/harmonyNavStore.ts</code> is a backwards-compatibility re-export only — it exports <code>readingSessionStore</code> under the old <code>harmonyNavStore</code> name.</td></tr><tr><td>Chronological mode</td><td><code>isChronologicalMode</code> flag on <code>NavigationState</code>, with <code>setChronologicalMode()</code> <code>:86</code>; persisted. <strong>No UI control found</strong> — see <a href="#known-gaps">Known gaps</a>.</td></tr></tbody></table></div>
+</div></section>
+<section class="sec" id="3-translations" data-sec="3"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">3</span><span class="sec-title">Translations</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<div class="tw"><table><thead><tr><th>Feature</th><th>Detail</th></tr></thead><tbody><tr><td>Picker</td><td><code>NavigationBar.svelte:790</code> (button), <code>:1078</code> (<code>selectTranslation</code>). Available list in <code>availableTranslations</code> writable, <code>navigationStore.ts:21</code>.</td></tr><tr><td>Translation scope</td><td><code>TRANSLATION_SCOPES</code> map, <code>bibleData.ts:174</code>; type `TranslationScope = 'full' \</td><td>'nt-only' \</td><td>'ot-only'<code>, </code>:171<code>. Resolved by </code>getTranslationScope()<code> </code>:197`.</td></tr><tr><td>Book-availability fallback</td><td><code>getFirstAvailableBook()</code>, <code>bibleData.ts:242</code>. On translation switch the reader verifies the current book exists in the new translation and falls back if not — <code>BibleReader.svelte:849</code>.</td></tr><tr><td>Daily drivers</td><td>Six settings keys: <code>dailyDriverEnglishOT</code>, <code>dailyDriverEnglishNT</code>, <code>dailyDriverHebrewOT</code>, <code>dailyDriverHebrewNT</code>, <code>dailyDriverGreekOT</code>, <code>dailyDriverGreekNT</code>. No defaults; <code>getDailyDriverFor()</code> falls back to <code>'kjv'</code>.</td></tr><tr><td>Testament resolution</td><td><code>getDailyDriverFor(book)</code>, <code>src/adapters/settings.ts:153</code>. OT books listed inline <code>:157</code>. OT preference order: Hebrew OT → Greek OT → English OT → legacy English → <code>'kjv'</code>. NT order: Greek NT → Hebrew NT → English NT → legacy English → <code>'kjv'</code>.</td></tr><tr><td>Primary driver</td><td><code>getPrimaryDailyDriver()</code>, <code>settings.ts:178</code>. Prefers an OT-capable English driver because the UI initializes at Genesis.</td></tr><tr><td>Legacy migration</td><td><code>normalizeSettings()</code>, <code>settings.ts:74</code> — migrates the older 3-field model (<code>dailyDriverEnglish</code> / <code>dailyDriverHebrew</code> / <code>dailyDriverGreek</code>) into the OT/NT model on read. English fans out to both OT and NT; Hebrew maps to OT; Greek maps to NT.</td></tr></tbody></table></div>
+</div></section>
+<section class="sec" id="4-interlinear-greek--hebrew" data-sec="4"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">4</span><span class="sec-title">Interlinear (Greek &amp; Hebrew)</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/InterlinearControls.svelte</code> (254 lines), settings in <code>src/adapters/settings.ts:15-23</code>, reader state at <code>BibleReader.svelte:535</code>.</p>
+<p><code>InterlinearControls</code> is used in two contexts, driven by two props:</p>
+<ul><li><code>showEnableToggle</code> (default <code>true</code>) — shows the master enable checkbox. Set <code>false</code> in the navbar popover, where the header button already owns <code>enabled</code>; in that case <code>persist()</code> strips <code>enabled</code> before writing so it can't clobber a fresher value. <code>InterlinearControls.svelte:49-54</code></li><li><code>showPreview</code> (default <code>true</code>) — on in Settings, off in the compact navbar popover (the live reader text behind it already shows the effect).</li></ul>
+<p>Persisting dispatches a <code>settingsUpdated</code> window event; the reader re-reads settings and re-renders on it (<code>BibleReader.svelte:623</code>).</p>
+<h3 id="41-settings-keys">4.1 Settings keys</h3>
+<p>Interface <code>InterlinearSettings</code>, <code>settings.ts:15</code>. Resolved with defaults by <code>getInterlinearSettings()</code> <code>:208</code>, written by <code>updateInterlinearSettings()</code> <code>:222</code>.</p>
+<div class="tw"><table><thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead><tbody><tr><td><code>enabled</code></td><td><code>false</code></td><td>Master on/off. Only applies when a Greek/Hebrew translation is open.</td></tr><tr><td><code>preset</code></td><td><code>'minimal'</code></td><td>`'minimal' \</td><td>'study' \</td><td>'scholar' \</td><td>'custom'`</td></tr><tr><td><code>showGloss</code></td><td><code>true</code></td><td>English equivalent. Checkbox is rendered <code>disabled</code> — always on. <code>InterlinearControls.svelte:118</code></td></tr><tr><td><code>showTranslit</code></td><td><code>false</code></td><td>Transliteration / pronunciation</td></tr><tr><td><code>showLemma</code></td><td><code>false</code></td><td>Dictionary (lexical) form</td></tr><tr><td><code>showStrongs</code></td><td><code>false</code></td><td>Strong's number</td></tr><tr><td><code>showParsing</code></td><td><code>false</code></td><td>Morphology / part-of-speech</td></tr></tbody></table></div>
+<h3 id="42-presets">4.2 Presets</h3>
+<p><code>INTERLINEAR_PRESETS</code>, <code>settings.ts:195</code>:</p>
+<div class="tw"><table><thead><tr><th>Preset</th><th>gloss</th><th>translit</th><th>lemma</th><th>strongs</th><th>parsing</th></tr></thead><tbody><tr><td>minimal</td><td>✓</td><td></td><td></td><td></td><td></td></tr><tr><td>study</td><td>✓</td><td></td><td></td><td>✓</td><td></td></tr><tr><td>scholar</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr></tbody></table></div>
+<p><code>'custom'</code> is never stored by a preset button — <code>detectPreset()</code> (<code>InterlinearControls.svelte:60</code>) compares the current layer combination against all three presets after every manual toggle and falls through to <code>'custom'</code>.</p>
+<h3 id="43-layer-styling">4.3 Layer styling</h3>
+<p>Rendered as a vertical <code>inline-flex</code> stack per word. Colors: original <code>#f0f0f0</code>, gloss <code>#cfe3ff</code>, transliteration <code>#b0b0b0</code> italic, lemma <code>#e3cd96</code>, parsing <code>#9aa0a6</code>, Strong's <code>#93c69a</code>. <code>InterlinearControls.svelte:248-253</code>.</p>
+<p>The preview block uses fixed <code>line-height: 1.15</code> and <code>font-size: 21px</code> with <code>em</code>-relative layer sizes, deliberately independent of <code>--base-font-size</code> / <code>--line-spacing</code> so it can't be distorted by the user's reading settings. <code>InterlinearControls.svelte:227-241</code>. Sample phrase is John 1:1a, <code>:23</code>.</p>
+</div></section>
+<section class="sec" id="5-word-study" data-sec="5"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">5</span><span class="sec-title">Word Study</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/LexicalModal.svelte</code> (2,215 lines), <code>src/adapters/lexicon-lookup.ts</code> (1,192 lines), <code>src/lib/morphologyExpander.ts</code> (467 lines), <code>src/adapters/LexiconStore.ts</code>, <code>src/stores/lexicalModalStore.ts</code>.</p>
+<h3 id="51-modal-structure">5.1 Modal structure</h3>
+<p>State <code>activeTab: "definition" | "occurrences" | "related"</code>, <code>LexicalModal.svelte:152</code>. Two distinct tab strips are rendered depending on whether the subject is an English word or a Strong's entry:</p>
+<ul><li><strong>English word</strong> — Definition, Related (<code>:959</code>, <code>:966</code>). No Occurrences tab.</li><li><strong>Strong's entry</strong> — Definition, Occurrences, Related (<code>:1150</code>, <code>:1157</code>, <code>:1164</code>).</li></ul>
+<p>Guard at <code>:158</code>: <code>if (isEnglishWord &amp;&amp; activeTab === "occurrences") activeTab = "definition"</code> — prevents a blank body when a leftover Occurrences tab carries into the English-word view. Tab resets to <code>"definition"</code> on open, <code>:249</code>.</p>
+<p>Lazy loads: occurrences fetched only when the Occurrences tab is first opened (<code>:544</code>), inflection forms only when the Definition tab is opened (<code>:549</code>).</p>
+<h3 id="52-strongs-entry-sections">5.2 Strong's entry sections</h3>
+<p><code>LexicalModal.svelte:1172-1290</code> — Entry Information, Short Definition, Full Definition, KJV Usage, Derivation, Inflection Forms, then the Occurrences and Related tabs.</p>
+<p>Lookup functions in <code>src/adapters/lexicon-lookup.ts</code>:</p>
+<div class="tw"><table><thead><tr><th>Function</th><th>Line</th><th>Purpose</th></tr></thead><tbody><tr><td><code>lookupStrongs(strongsId)</code></td><td>157</td><td>Single Strong's entry</td></tr><tr><td><code>lookupLemma(lemma)</code></td><td>240</td><td>Entry by dictionary form</td></tr><tr><td><code>getStrongsTransliterations(ids)</code></td><td>219</td><td>Batch transliteration map</td></tr><tr><td><code>lookupWord(word)</code></td><td>71</td><td>All entries matching a surface word</td></tr><tr><td><code>getMorphology(...)</code></td><td>1152</td><td>Parsing data for a word occurrence</td></tr></tbody></table></div>
+<h3 id="53-english-word-lookup">5.3 English word lookup</h3>
+<p><code>lookupEnglishWord(word)</code>, <code>lexicon-lookup.ts:320</code>. Returns <code>EnglishWordEntry</code> (<code>:25</code>) with definitions grouped by part of speech (<code>Definition</code>, <code>:9</code>).</p>
+<p><code>singularCandidates(word)</code>, <code>:297</code> — folds plurals to singular so "waters" resolves to "water". English definitions are keyed off <code>word_mapping</code> rather than raw surface text.</p>
+<h3 id="54-people">5.4 People</h3>
+<div class="tw"><table><thead><tr><th>Function</th><th>Line</th><th>Purpose</th></tr></thead><tbody><tr><td><code>lookupPerson(word, ref?)</code></td><td>662</td><td>Person record, disambiguated by verse reference</td></tr><tr><td><code>isPersonName(word, ref?)</code></td><td>762</td><td>Cheap boolean test used to decide the click target</td></tr><tr><td><code>getPersonVerses(personId)</code></td><td>802</td><td>Every verse the person appears in</td></tr></tbody></table></div>
+<p>Types: <code>PersonRecord</code> <code>:585</code>, <code>PersonLookupResult</code> <code>:607</code>, <code>VerseRef</code> <code>:615</code>.</p>
+<h3 id="55-morphology-expansion">5.5 Morphology expansion</h3>
+<p><code>src/lib/morphologyExpander.ts</code> — three code systems, each with its own expander, all returning the raw code unchanged when unparseable:</p>
+<div class="tw"><table><thead><tr><th>System</th><th>Function</th><th>Line</th><th>Example</th></tr></thead><tbody><tr><td>Greek RMAC (Robinson's)</td><td><code>expandRmacCode()</code></td><td>134</td><td><code>V-PAI-3S</code> → "Verb, Present, Active, Indicative, Third person, Singular"</td></tr><tr><td>Hebrew/Aramaic OSHB</td><td><code>expandOshbCode()</code></td><td>326</td><td><code>HVqp3ms</code> → "Hebrew, Verb, Qal, perfect (qatal), third person, masculine, singular". Handles compound <code>prefix/main-word</code> codes split on <code>/</code>.</td></tr><tr><td>STEPBible part-of-speech</td><td><code>expandStepBiblePOS()</code></td><td>464</td><td><code>G:N-F</code> → "Greek, Noun, Feminine"; <code>N:N-M-P</code> → "Proper name, Noun, Masculine, Person". Handles multiple values separated by <code> / </code>.</td></tr></tbody></table></div>
+<p>Morphology is displayed under a "Morphology" heading, <code>LexicalModal.svelte:853</code>. Reader-side morphology state and cache at <code>BibleReader.svelte:528-531</code>.</p>
+</div></section>
+<section class="sec" id="6-bible-encyclopedia-isbe" data-sec="6"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">6</span><span class="sec-title">Bible Encyclopedia (ISBE)</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/IsbeModal.svelte</code> (814 lines), <code>src/stores/isbeModalStore.ts</code>, ISBE functions in <code>src/adapters/lexicon-lookup.ts:830-1152</code>. Ships as a standalone <code>isbe.sqlite</code> pack.</p>
+<h3 id="61-click-resolution">6.1 Click resolution</h3>
+<div class="tw"><table><thead><tr><th>Function</th><th>Line</th><th>Purpose</th></tr></thead><tbody><tr><td><code>resolveIsbeClick(ctx)</code></td><td>994</td><td>Full resolution → <code>IsbeResolution</code></td></tr><tr><td><code>classifyIsbeClick(ctx)</code></td><td>1068</td><td>Cheap `'place' \</td><td>'entry' \</td><td>null` classification, used to decide whether to offer the action</td></tr><tr><td><code>getIsbeEntry(entryId)</code></td><td>1085</td><td>Entry by id</td></tr><tr><td><code>getIsbeEntryByName(name)</code></td><td>1109</td><td>Entry by primary name — the encyclopedia↔dictionary bridge</td></tr><tr><td><code>getIsbePlace(placeId)</code></td><td>1115</td><td>Place record</td></tr><tr><td><code>getIsbePlaceByEntryId(entryId)</code></td><td>1120</td><td>Place for an entry</td></tr><tr><td><code>getIsbePlaceVerses(placeId)</code></td><td>1137</td><td>Verses mentioning a place</td></tr></tbody></table></div>
+<p>Types: <code>IsbeEntryRecord</code> <code>:830</code>, <code>IsbePlaceRecord</code> <code>:841</code>, <code>IsbeResolution</code> <code>:854</code>, <code>IsbeClickContext</code> <code>:864</code>.</p>
+<p>Store API: <code>isbeModalStore.open(data)</code> and <code>openEntry(entryId, primaryName)</code>, <code>src/stores/isbeModalStore.ts:29-31</code>.</p>
+<h3 id="62-tabs">6.2 Tabs</h3>
+<p><code>activeTab: Tab</code>, default <code>"overview"</code>, reset on open (<code>IsbeModal.svelte:25</code>, <code>:55</code>). Rendered at <code>:456-464</code>:</p>
+<ul><li><strong>Overview</strong> (always) — type, alternate names, summary. <code>:471</code></li><li><strong>Article</strong> (when an entry exists) — <code>:488</code></li><li><strong>Verses</strong> — grouped by book in canonical order, <code>:121</code>, rendered <code>:539</code></li><li><strong>Map</strong> (when coordinates exist) — Leaflet pin bound to a popup with the title, <code>:183</code>, rendered <code>:558</code></li></ul>
+<p>Title resolution: <code>place?.primaryName || entry?.primaryName || state.primaryName</code>, <code>:74</code>. Subtitle assembled from place type via <code>subtitle()</code> <code>:137</code> and <code>titleCaseType()</code> <code>:146</code>.</p>
+<h3 id="63-article-table-of-contents">6.3 Article table of contents</h3>
+<p><code>type Section = { title: string; html: string; children: Section[] }</code>, <code>:251</code>. Two-level tree.</p>
+<ul><li><code>headingOf(text)</code> <code>:271</code> classifies a heading as level 1 or 2 — level 2 when the heading number starts with a digit.</li><li>Duplicate-heading suppression: <code>lastAt</code> map keyed by <code>normTitle()</code> records the last index each heading title appears at; only the final occurrence is treated as the real section, so a title repeated in running text doesn't pollute the contents list. <code>:319-328</code></li><li>Section chips are colored inline to match the way the Verses tab colors its chips. <code>:287</code></li></ul>
+<p>The tab strip is <code>flex: none</code> — a tall tab (a 955-verse Verses list) otherwise crushed the strip to zero height under flexbox. Noted at <code>IsbeModal.svelte:655</code>.</p>
+<h3 id="64-dictionary-bridge">6.4 Dictionary bridge</h3>
+<p><code>checkDictionary(title)</code> runs whenever the modal is open, not loading, and has a title (<code>:103</code>), linking encyclopedia entries to matching dictionary entries.</p>
+<h3 id="65-return-to-article">6.5 Return-to-article</h3>
+<p><code>src/stores/isbeReturnStore.ts</code>. Set when a verse is tapped inside the ISBE modal, consumed by the nav back arrow.</p>
+<p><code>IsbeReturn</code> carries three things: the <code>modal</code> payload to reopen (the same shape <code>isbeModalStore.open()</code> takes), <code>expandedBooks[]</code> so the Verses tab reopens with the same books expanded, and <code>at: {book, chapter, verse}</code> — the verse that was jumped to.</p>
+<p>The back arrow only restores the modal if the reader is <strong>still sitting at <code>at</code></strong>. If the user navigated on from there, the context is treated as stale and the modal is not reopened.</p>
+</div></section>
+<section class="sec" id="7-commentaries" data-sec="7"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">7</span><span class="sec-title">Commentaries</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/CommentaryReader.svelte</code> (608), <code>src/components/CommentaryNavigationBar.svelte</code> (799), <code>src/components/CommentaryModal.svelte</code> (456), <code>src/adapters/CommentaryStore.ts</code> (308), <code>src/lib/linkifyCommentaryRefs.ts</code> (238), <code>src/lib/annotationConfig.ts</code>.</p>
+<h3 id="71-author-registry">7.1 Author registry</h3>
+<p><code>COMMENTARY_AUTHORS</code>, <code>src/lib/annotationConfig.ts:12</code> — 14 authors, each with <code>color</code>, <code>initials</code>, <code>fullName</code>:</p>
+<div class="tw"><table><thead><tr><th>Key</th><th>Color</th><th>Initials</th><th>Display name</th></tr></thead><tbody><tr><td><code>NET Bible Translators</code></td><td><code>#3B82F6</code></td><td>NT</td><td>NET Bible Notes</td></tr><tr><td><code>Adam Clarke</code></td><td><code>#16A34A</code></td><td>Cl</td><td>Adam Clarke</td></tr><tr><td><code>John Wesley</code></td><td><code>#9333EA</code></td><td>We</td><td>John Wesley</td></tr><tr><td><code>John Calvin</code></td><td><code>#DC2626</code></td><td>Ca</td><td>John Calvin</td></tr><tr><td><code>KingComments</code></td><td><code>#0891B2</code></td><td>KC</td><td>KingComments</td></tr><tr><td><code>A.T. Robertson</code></td><td><code>#EA580C</code></td><td>Ro</td><td>A.T. Robertson</td></tr><tr><td><code>Albert Barnes</code></td><td><code>#DB2777</code></td><td>Ba</td><td>Albert Barnes</td></tr><tr><td><code>E.W. Bullinger</code></td><td><code>#4F46E5</code></td><td>Bu</td><td>E.W. Bullinger</td></tr><tr><td><code>Family Bible Notes</code></td><td><code>#65A30D</code></td><td>Fb</td><td>Family Bible Notes</td></tr><tr><td><code>Abbott</code></td><td><code>#475569</code></td><td>Ab</td><td>Abbott</td></tr><tr><td><code>Thomas Aquinas</code></td><td><code>#B45309</code></td><td>Aq</td><td>Thomas Aquinas (Catena Aurea)</td></tr><tr><td><code>Matthew Henry</code></td><td><code>#7C3AED</code></td><td>Mh</td><td>Matthew Henry</td></tr><tr><td><code>Jamieson-Fausset-Brown</code></td><td><code>#0F766E</code></td><td>Jf</td><td>Jamieson-Fausset-Brown</td></tr><tr><td><code>Charles Spurgeon</code></td><td><code>#92400E</code></td><td>Sp</td><td>Charles Spurgeon</td></tr></tbody></table></div>
+<p>Accessors: <code>getAuthorConfig()</code> (null for unknown), <code>getAuthorColor()</code> (falls back <code>#888888</code>), <code>getAuthorInitials()</code> (falls back to first two chars upper-cased). Unknown authors therefore degrade gracefully rather than throwing.</p>
+<h3 id="72-store-api">7.2 Store API</h3>
+<p><code>IndexedDBCommentaryStore</code>, <code>src/adapters/CommentaryStore.ts:26</code>:</p>
+<div class="tw"><table><thead><tr><th>Method</th><th>Line</th></tr></thead><tbody><tr><td><code>getCommentary(reference, author?)</code></td><td>33</td></tr><tr><td><code>getChapterCommentary(book, chapter, author?)</code></td><td>97</td></tr><tr><td><code>getAuthors()</code></td><td>144</td></tr><tr><td><code>getCoverageStats()</code></td><td>178</td></tr><tr><td><code>getAllChapterContent(book, chapter, author?)</code></td><td>229</td></tr><tr><td><code>getAvailableBooks()</code></td><td>279</td></tr></tbody></table></div>
+<p>Entries typed <code>CommentaryEntry</code>, <code>:8</code>. The reader caches all entries for the current chapter and re-filters when the selected author set changes rather than re-querying — <code>BibleReader.svelte:462-465</code>.</p>
+<h3 id="73-author-filter">7.3 Author filter</h3>
+<p>State <code>selectedCommentaryAuthors: string[]</code> on <code>NavigationState</code>, persisted. Setter <code>navigationStore.setSelectedCommentaryAuthors()</code>, <code>src/stores/navigationStore.ts:107</code> — note it also sets <code>showCommentaries</code> to <code>selectedCommentaryAuthors.length &gt; 0</code>, so clearing the filter hides the layer. Toolbar button <code>NavigationBar.svelte:848</code>.</p>
+<h3 id="74-reference-linkification">7.4 Reference linkification</h3>
+<p><code>linkifyCommentaryRefs(html, contextBook, contextChapter, author?)</code>, <code>src/lib/linkifyCommentaryRefs.ts:218</code>.</p>
+<ul><li>Only text nodes are processed; HTML tags are left completely intact (<code>:5</code>).</li><li>Matches are wrapped in <code>&lt;span class="commentary-ref"&gt;</code> with the raw text as both display and <code>data-ref</code> (<code>:89</code>).</li><li>A second wrapper (<code>:99</code>) handles continuation segments where the displayed token differs from the resolved reference — e.g. displayed "110:4" or "14" carrying an absolute <code>data-ref</code> of "Psalms 110:4".</li><li>Theme color applied via a <code>--ref-color</code> CSS custom property (<code>:91</code>).</li><li><code>author</code> is accepted so author-specific formatting quirks can be handled.</li></ul>
+<h3 id="75-anchor-sync-and-checkpoints">7.5 Anchor sync and checkpoints</h3>
+<p>State <code>commentaryAnchored</code> on <code>NavigationState</code>, persisted; setter <code>navigationStore.setCommentaryAnchored()</code> <code>:151</code>. Toolbar control <code>NavigationBar.svelte:874</code>.</p>
+<p>Logic in <code>BibleReader.svelte:875-905</code>:</p>
+<ul><li><strong>Drift detection</strong> — <code>commCheckpointDrifted</code> is true when the anchor is on <em>and</em> any open commentary window's <code>contentState.book</code>/<code>.chapter</code> differs from the nav store's. While drifted, anchor highlights are cleared rather than chased, so the app stops fighting the user.</li><li><strong>Re-sync</strong> — an edge-triggered block watches <code>prevCommDrifted &amp;&amp; !commCheckpointDrifted</code>; when drift clears, <code>lastAnchorVerse</code> is pushed to every commentary window's <code>highlightedVerse</code> so each scrolls to the current Bible verse once its entries have loaded.</li><li><strong>Checkpoints</strong> — <code>commCheckpoints</code> is the de-duplicated union of <code>contentState.checkpoints</code> across all open commentary windows. Rendered as amber highlights in the Bible text via <code>applyAnchorHighlights()</code> / <code>clearAnchorHighlights()</code>, re-evaluated whenever anchor state, drift, or the checkpoint set changes.</li></ul>
+</div></section>
+<section class="sec" id="8-cross-references" data-sec="8"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">8</span><span class="sec-title">Cross-References</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/adapters/TskReferenceStore.ts</code>, <code>src/adapters/CrossReferenceStore.ts</code>, <code>src/lib/parseRefString.ts</code>, <code>src/components/AnnotationPanel.svelte</code>.</p>
+<div class="tw"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Store</td><td><code>IndexedDBTskReferenceStore</code>, <code>TskReferenceStore.ts:33</code>. Methods: <code>getVerseReferences(book, chapter, verse)</code> <code>:37</code>, <code>getChapterReferences(book, chapter)</code> → <code>Map&lt;verseNumber, TskEntry[]&gt;</code> <code>:69</code>, <code>isInstalled()</code> <code>:104</code>. Entry type <code>TskEntry</code> <code>:20</code>.</td></tr><tr><td>Marker color</td><td><code>TSK_COLOR = '#D97706'</code> (gold) — one shared constant for all TSK diamonds, <code>src/lib/annotationConfig.ts:29</code>.</td></tr><tr><td>Toggle</td><td>Toolbar button, <code>NavigationBar.svelte:824</code>, tooltip "Show TSK cross-reference markers on verse keywords". Backed by <code>showReferences</code> on <code>NavigationState</code> (<code>navigationStore.setShowReferences()</code> <code>:93</code>), persisted.</td></tr><tr><td>Reference resolution</td><td><code>parseRefString()</code> — see <a href="#22-moving-between-passages">2.2</a> for the formats handled.</td></tr><tr><td>Display</td><td><code>AnnotationPanel.svelte</code> (789 lines), <code>references</code> tab.</td></tr></tbody></table></div>
+</div></section>
+<section class="sec" id="9-search" data-sec="9"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">9</span><span class="sec-title">Search</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/lib/services/searchService.ts</code> (579), <code>src/components/PowerSearchModal.svelte</code> (1,370), <code>src/components/UnifiedSearch.svelte</code>, <code>src/components/panes/SearchPane.svelte</code>, <code>src/components/SearchResultsTree.svelte</code>, <code>src/lib/searchTree.ts</code>, <code>src/adapters/SearchIndex.ts</code>, <code>src/stores/searchStore.ts</code>, <code>src/components/HelpModal.svelte</code>.</p>
+<h3 id="91-unified-search-service">9.1 Unified search service</h3>
+<p><code>UnifiedSearchService</code>, <code>searchService.ts:97</code> — singleton, exported as <code>searchService</code> <code>:579</code>.</p>
+<p>Eight categories (<code>SearchCategoryKey</code>, <code>:7</code>): <code>bible</code>, <code>strongs</code>, <code>notes</code>, <code>journal</code>, <code>saved</code>, <code>characters</code>, <code>encyclopedia</code>, <code>commentaries</code>. Result types (<code>SearchResult</code>, <code>:17</code>) mirror these one-to-one.</p>
+<p><code>SearchCategory</code> <code>:28</code> carries <code>alwaysShow</code> (render the group even at zero results — used by Saved Verses until that ships) and <code>truncated</code> (the count shown is what's displayed, not what exists).</p>
+<p><strong>Caps</strong> (<code>:49-51</code>) — deliberately per-category so one huge category can't bury the others:</p>
+<div class="tw"><table><thead><tr><th>Constant</th><th>Value</th></tr></thead><tbody><tr><td><code>CATEGORY_LIMIT</code></td><td>200</td></tr><tr><td><code>COMMENTARY_SCAN_LIMIT</code></td><td>400</td></tr><tr><td><code>STRONGS_VERSE_LIMIT</code></td><td>500</td></tr></tbody></table></div>
+<p><code>SearchOptions</code> <code>:39</code> — <code>limit</code> (<code>-1</code> loads everything) and <code>deep</code>. Commentary search cursors ~89k rows, so it runs only on an explicit Enter/Search press, never on type-ahead.</p>
+<p><strong>Strong's fast path</strong> — <code>STRONGS_QUERY = /^([GgHh])\s*0*(\d{1,4})$/</code> <code>:54</code> detects a Strong's number typed straight into the box. Because the morphology pack is inconsistent about zero-padding (Greek rows store <code>G976</code>, Hebrew rows store <code>H0121</code>), <code>strongsVariants()</code> <code>:64</code> tries both the bare and 4-padded spellings. This mirrors the same fallback in <code>adapters/lexicon-lookup.ts</code>.</p>
+<p><strong>Helpers</strong> — <code>stripHtml()</code> <code>:69</code>, <code>snippet(text, term, maxLength = 160)</code> <code>:80</code> which windows around the first match so long entries stay scannable.</p>
+<h3 id="92-advanced-power-search">9.2 Advanced (power) search</h3>
+<p><code>PowerSearchModal.svelte</code>. Config options:</p>
+<div class="tw"><table><thead><tr><th>Option</th><th>Control</th><th>Line</th></tr></thead><tbody><tr><td>Match type</td><td>select — <code>contains</code>, <code>startsWith</code>, <code>endsWith</code>, <code>wholeWord</code>, <code>wordStartsWith</code>, <code>wordEndsWith</code></td><td>319-324</td></tr><tr><td>Must also contain</td><td>text</td><td>337</td></tr><tr><td>Must NOT contain</td><td>text</td><td>362</td></tr><tr><td>Find words near each other</td><td>proximity</td><td>395</td></tr><tr><td><code>caseInsensitive</code></td><td>checkbox</td><td>285</td></tr><tr><td><code>includePlurals</code></td><td>checkbox</td><td>291</td></tr><tr><td><code>includeSynonyms</code></td><td>checkbox</td><td>297</td></tr><tr><td><code>showPronunciation</code></td><td>checkbox</td><td>303</td></tr></tbody></table></div>
+<p>Toolbar entry point <code>NavigationBar.svelte:982</code>, tooltip "Advanced search — regex, proximity, biblical filters".</p>
+<h3 id="93-in-app-help">9.3 In-app help</h3>
+<p><code>src/components/HelpModal.svelte</code> — <code>helpContent</code> record at <code>:5</code>, each key giving <code>{title, description, examples[]}</code>. Topics: Match Type, Must Contain / Must NOT Contain, Proximity Search, Include Plurals, Case-Insensitive Search, Pattern Complexity. This modal is power-search-specific, not a general app help system.</p>
+</div></section>
+<section class="sec" id="10-highlights--notes" data-sec="10"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">10</span><span class="sec-title">Highlights &amp; Notes</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/HighlightModal.svelte</code> (494), <code>src/lib/highlightRenderer.ts</code> (374), <code>src/components/AnnotationPanel.svelte</code> (789), <code>src/components/NotePopup.svelte</code> (431), <code>src/components/SavedVersesPanel.svelte</code> (354), <code>src/components/SelectionToast.svelte</code>, <code>src/adapters/UserDataStore.ts</code> (390).</p>
+<h3 id="101-palette-and-styles">10.1 Palette and styles</h3>
+<p><code>PALETTE</code>, <code>HighlightModal.svelte:24</code> — 7 colors: Yellow <code>#ffff32</code>, Green <code>#3aff32</code>, Orange <code>#ff9c32</code>, Red <code>#ff3232</code>, Pink <code>#ff48ec</code>, Purple <code>#ba32ff</code>, Blue <code>#3273ff</code>. Default is <code>PALETTE[0]</code> with <code>type: 'background'</code> (<code>:46</code>).</p>
+<p>Three highlight types: <code>background</code> (marker), <code>text-color</code>, <code>underline</code>.</p>
+<p><code>UNDERLINE_STYLES</code>, <code>:34</code> — <code>solid</code>, <code>dashed</code>, <code>wavy</code>, <code>boxed</code>. Boxed renders as <code>outline: 2px solid</code> with <code>outline-offset: 1px</code> rather than a text-decoration (<code>:206</code>).</p>
+<h3 id="102-rendering">10.2 Rendering</h3>
+<p><code>src/lib/highlightRenderer.ts</code>:</p>
+<ul><li><strong>Background</strong> — an SVG data URI applied as <code>background-image</code> on the inline <code>.verse-text</code> span. The SVG uses a <strong>seeded</strong> wavy filled path so the same verse always gets the same organic shape, and <code>box-decoration-break: clone</code> gives each wrapped line its own swatch. ViewBox <code>0 0 100 10</code>, rendered via <code>background-size: 100% 100%</code>. <code>:7-10</code>, <code>:44-46</code></li><li><strong>Text color</strong> — a CSS custom property on the verse-text span.</li><li><strong>Underline</strong> — CSS <code>text-decoration</code>.</li></ul>
+<p>API: <code>applyHighlightToElement()</code> <code>:96</code> (safe to call repeatedly — removes any previous overlay first), <code>applyWordHighlightToSpan()</code> <code>:139</code>.</p>
+<p><code>HighlightStyle</code> is designed to accept a future <code>animatedEffect</code> field; <code>applyHighlightToElement</code> would handle it as an additional branch without breaking callers (<code>:14</code>).</p>
+<h3 id="103-persistence">10.3 Persistence</h3>
+<p><code>IndexedDBUserDataStore</code>, <code>src/adapters/UserDataStore.ts:25</code>. Verse highlights and word highlights are separate record types, so a word can be highlighted inside an already-highlighted verse.</p>
+<div class="tw"><table><thead><tr><th>Group</th><th>Methods</th></tr></thead><tbody><tr><td>Notes</td><td><code>getNotes(reference?)</code> <code>:28</code>, <code>saveNote()</code> <code>:73</code>, <code>updateNote(id, text)</code> <code>:98</code>, <code>deleteNote(id)</code> <code>:133</code></td></tr><tr><td>Verse highlights</td><td><code>getHighlights(reference?)</code> <code>:139</code>, <code>getChapterHighlights(book, chapter)</code> <code>:169</code>, <code>saveHighlight()</code> <code>:196</code>, <code>deleteHighlight(id)</code> <code>:218</code></td></tr><tr><td>Word highlights</td><td><code>getWordHighlights(reference?, translation?)</code> <code>:224</code>, <code>getChapterWordHighlights()</code> <code>:259</code>, <code>getBookWordHighlights(book)</code> <code>:287</code>, <code>saveWordHighlight()</code> <code>:315</code>, <code>deleteWordHighlight(id)</code> <code>:333</code></td></tr><tr><td>Bookmarks</td><td><code>getBookmarks()</code> <code>:339</code>, <code>saveBookmark()</code> <code>:364</code>, <code>deleteBookmark(id)</code> <code>:387</code></td></tr></tbody></table></div>
+<p>Note that word highlights are translation-scoped (<code>getWordHighlights</code> takes a <code>translation</code>) while verse highlights are not.</p>
+<h3 id="104-annotation-panel">10.4 Annotation panel</h3>
+<p><code>AnnotationPanel.svelte</code>. Props: <code>open</code>, <code>book</code>, <code>chapter</code>, <code>verse</code>, <code>tskEntries</code>, <code>commentaryEntries</code>, <code>initialTab</code> (<code>"references" | "commentary"</code>), <code>targetAuthor</code>. Two tabs at <code>:259</code>. Keeps its own navigation stack (<code>:47</code>, <code>:151</code>, <code>:175</code>) so drilling into an entry and backing out restores the previous tab.</p>
+<p>Reopen-after-back-navigation is coordinated through <code>src/stores/annotationReturnStore.ts</code>, consumed at <code>BibleReader.svelte:373-406</code>.</p>
+<h3 id="105-selection-toast">10.5 Selection toast</h3>
+<p><code>src/components/SelectionToast.svelte</code>. Dispatches an <code>action</code> event with the selected text. Seven actions (<code>:44-70</code>): <code>dissect</code>, <code>search</code>, <code>map</code>, <code>highlight</code>, <code>save</code>, <code>notes</code>, <code>repeats</code>. The <code>map</code> button is conditional — rendered only when the selection resolves to a place (<code>:53</code>).</p>
+</div></section>
+<section class="sec" id="11-repeated-words" data-sec="11"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">11</span><span class="sec-title">Repeated Words</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/stores/repeatsStore.ts</code>, <code>src/lib/repeatColors.ts</code>, <code>src/lib/repeatRenderer.ts</code>, <code>src/lib/repeatCounts.ts</code>, <code>src/stores/repeatCountsStore.ts</code>, <code>src/stores/repeatBulkStore.ts</code>.</p>
+<h3 id="111-palette-and-cap">11.1 Palette and cap</h3>
+<p><code>REPEAT_COLORS</code>, <code>src/lib/repeatColors.ts:29</code> — exactly 7 entries, and <code>MAX_REPEAT_GROUPS = REPEAT_COLORS.length</code> <code>:39</code> makes the palette length itself the hard cap on simultaneous groups.</p>
+<div class="tw"><table><thead><tr><th>Index</th><th>Name</th><th>Pill</th><th>Pill text</th><th>In-text bg</th><th>In-text border</th></tr></thead><tbody><tr><td>0</td><td>Amber</td><td><code>#b8860b</code></td><td><code>#fff8e1</code></td><td><code>rgba(255,193,7,0.30)</code></td><td><code>rgba(255,193,7,0.55)</code></td></tr><tr><td>1</td><td>Sky</td><td><code>#2f6f8f</code></td><td><code>#e3f4fb</code></td><td><code>rgba(56,178,232,0.28)</code></td><td><code>rgba(56,178,232,0.55)</code></td></tr><tr><td>2</td><td>Mint</td><td><code>#2f7d56</code></td><td><code>#e3f7ec</code></td><td><code>rgba(52,199,124,0.28)</code></td><td><code>rgba(52,199,124,0.55)</code></td></tr><tr><td>3</td><td>Rose</td><td><code>#a64263</code></td><td><code>#fbe6ee</code></td><td><code>rgba(244,114,160,0.28)</code></td><td><code>rgba(244,114,160,0.55)</code></td></tr><tr><td>4</td><td>Violet</td><td><code>#6c4aa6</code></td><td><code>#efe8fb</code></td><td><code>rgba(167,130,240,0.28)</code></td><td><code>rgba(167,130,240,0.55)</code></td></tr><tr><td>5</td><td>Coral</td><td><code>#b35a3a</code></td><td><code>#fceae3</code></td><td><code>rgba(255,138,101,0.28)</code></td><td><code>rgba(255,138,101,0.55)</code></td></tr><tr><td>6</td><td>Teal</td><td><code>#2f7d78</code></td><td><code>#e2f6f4</code></td><td><code>rgba(45,212,191,0.28)</code></td><td><code>rgba(45,212,191,0.55)</code></td></tr></tbody></table></div>
+<p>Both the navbar pills and the in-text spans reference colors by index, so a group looks identical in both places. <code>repeatHlClass(colorIndex)</code> <code>:42</code> returns <code>repeat-hl-{i}</code>.</p>
+<p>The palette is deliberately softer and more translucent than the saved-highlight <code>PALETTE</code>, so repeats read as a scratch layer rather than a commitment (<code>repeatColors.ts:4-7</code>).</p>
+<h3 id="112-store">11.2 Store</h3>
+<p><code>repeatsStore</code>, <code>src/stores/repeatsStore.ts:128</code>. Persisted to <code>localStorage</code>, modeled on <code>navigationStore</code>, so tracking survives navigation and restarts.</p>
+<p><code>RepeatGroup</code> <code>:13</code> = <code>{ word (normalized key), label (original casing, shown on the pill), colorIndex }</code>.</p>
+<ul><li><code>normalizeRepeatWord()</code> <code>:25</code> — lowercase, punctuation stripped; mirrors the in-text match logic.</li><li><code>nextFreeColorIndex()</code> <code>:63</code> — smallest unused index in <code>[0, MAX)</code>, so removing a group frees its color for reuse.</li><li><code>add()</code> <code>:78</code> — no-op if already present or at capacity; returns the new group or <code>null</code>.</li><li><code>toggle()</code> <code>:94</code> — used by the selection toast's Repeats action.</li><li>Load path truncates to <code>MAX_REPEAT_GROUPS</code> (<code>:46</code>) and validates <code>label</code> is a string (<code>:43</code>), so a corrupted localStorage payload can't break startup.</li></ul>
+<h3 id="113-rendering">11.3 Rendering</h3>
+<p><code>src/lib/repeatRenderer.ts</code>. Wraps matches in <code>&lt;span class="repeat-hl repeat-hl-{colorIndex}"&gt;</code>.</p>
+<p>Ordering contract (<code>:9-11</code>): repeats are applied <strong>after</strong> saved highlights and cleared <strong>before</strong> saved highlights are re-applied, so the two layers can never corrupt each other. Place markers are then applied last — see <a href="#12-what-appears-in-the-text">1.2</a>.</p>
+<p>API: <code>clearRepeatsInSection()</code> <code>:20</code>, <code>applyRepeatsToSection()</code> <code>:34</code> (idempotent — clears first), <code>findRepeatOccurrences()</code> <code>:91</code>, <code>applyRepeatsToAllSections()</code> <code>:108</code>.</p>
+<p><code>findRepeatOccurrences</code> returns char offsets within the <code>.verse-text</code> <code>textContent</code>, compatible with <code>injectWordSpan</code> / <code>UserWordHighlight</code>. Each occurrence spans the whole whitespace-delimited token.</p>
+<h3 id="114-counts">11.4 Counts</h3>
+<p><code>countWordsInBook()</code>, <code>src/lib/repeatCounts.ts:64</code> → <code>Map&lt;word, count&gt;</code>. Counts against whitespace tokens of the <strong>rendered</strong> verse text using the same normalization as the highlights, so footnote markers and stored-text artifacts aren't counted. Cached per <code>translation:book</code>. Surfaced through <code>src/stores/repeatCountsStore.ts</code>.</p>
+<h3 id="115-highlight-all">11.5 Highlight All</h3>
+<p><code>src/stores/repeatBulkStore.ts</code> carries a pending bulk request from a repeat pill into <code>HighlightModal</code> in bulk mode — <code>BibleReader.svelte:519</code>. A related flag at <code>:521</code> handles opening the normal Highlight modal on a word that is also an active repeat.</p>
+</div></section>
+<section class="sec" id="12-journal" data-sec="12"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">12</span><span class="sec-title">Journal</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/JournalWriter.svelte</code> (251), <code>src/components/JournalCalendar.svelte</code> (396), <code>src/components/JournalNavigationBar.svelte</code>, <code>src/lib/components/LexicalEditor.svelte</code> (459), <code>src/adapters/JournalStore.ts</code> (215), <code>src/adapters/SyncedJournalStore.ts</code> (229).</p>
+<div class="tw"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Store</td><td><code>IndexedDBJournalStore</code>, <code>JournalStore.ts:5</code>. Methods: <code>getEntries(startDate?, endDate?)</code> <code>:8</code>, <code>getEntryByDate(date)</code> <code>:58</code>, <code>saveEntry()</code> <code>:96</code>, <code>updateEntry(id, {title?, text?, textLinkified?})</code> <code>:123</code>, <code>deleteEntry(id)</code> <code>:169</code>, <code>getDateRange()</code> → <code>{oldest, newest}</code> <code>:173</code>.</td></tr><tr><td>Entry shape</td><td>Keyed by date string. Stores both <code>text</code> and <code>textLinkified</code> — the raw body and the version with Bible references already wrapped as links, so linkification is done once on save rather than on every render.</td></tr><tr><td>Editor</td><td><code>src/lib/components/LexicalEditor.svelte</code> — rich text.</td></tr><tr><td>Calendar</td><td><code>JournalCalendar.svelte</code>; also <code>src/components/CalendarView.svelte</code> (349).</td></tr><tr><td>Keyboard shortcut</td><td><strong>J</strong> opens today's entry in a right-edge window at 50% width. Suppressed while typing in an <code>input</code>, <code>textarea</code>, or <code>contenteditable</code>, and ignored with Ctrl/Meta/Alt held. <code>src/App.svelte:111-128</code></td></tr><tr><td>Date handling</td><td>Uses <code>localDateStr()</code> from <code>src/stores/clockStore.ts</code>, which respects the <code>timezone</code> setting rather than the raw browser timezone.</td></tr><tr><td>Search</td><td>Journal is one of the eight unified-search categories; <code>searchService</code> reads it via <code>IndexedDBJournalStore</code> directly.</td></tr><tr><td>Sync</td><td><code>SyncedJournalStore.ts</code> — see <a href="#20-account--sync">20. Account &amp; Sync</a>.</td></tr></tbody></table></div>
+</div></section>
+<section class="sec" id="13-reading-plans--progress" data-sec="13"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">13</span><span class="sec-title">Reading Plans &amp; Progress</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/ReadingPlanModal.svelte</code> (3,144 — second-largest component), <code>src/stores/ReadingProgressStore.ts</code> (564), <code>src/stores/PlanMetadataStore.ts</code>, <code>src/adapters/ReadingHistoryStore.ts</code> (444), <code>src/adapters/SyncedReadingAdapter.ts</code> (447), <code>src/stores/readingPlanModalStore.ts</code>, <code>src/stores/readingProgressVersionStore.ts</code>, <code>src/components/CalendarView.svelte</code>.</p>
+<h3 id="131-preset-plans">13.1 Preset plans</h3>
+<p><code>ReadingPlanModal.svelte:1353-1363</code>:</p>
+<div class="tw"><table><thead><tr><th>Value</th><th>Label</th><th>Ordering</th></tr></thead><tbody><tr><td><code>""</code></td><td>Custom…</td><td>user-chosen</td></tr><tr><td><code>bible-1-year</code></td><td>Bible in 1 Year</td><td><code>canonical</code></td></tr><tr><td><code>nt-90-days</code></td><td>New Testament in 90 Days</td><td><code>canonical</code></td></tr><tr><td><code>gospels-30-days</code></td><td>Gospels in 30 Days</td><td><code>canonical</code></td></tr><tr><td><code>chronological-1-year</code></td><td>Chronological Bible in 1 Year</td><td><code>chronological</code></td></tr><tr><td><code>psalms-proverbs</code></td><td>Psalms &amp; Proverbs</td><td><code>canonical</code></td></tr><tr><td><code>gospel-harmony-30</code></td><td>Robertson Gospel Harmony — 30 Days</td><td><code>harmony</code></td></tr><tr><td><code>gospel-harmony-60</code></td><td>Robertson Gospel Harmony — 60 Days</td><td><code>harmony</code></td></tr><tr><td><code>gospel-harmony-90</code></td><td>Robertson Gospel Harmony — 90 Days</td><td><code>harmony</code></td></tr><tr><td><code>gospel-harmony-184</code></td><td>Robertson Gospel Harmony — 1 Section/Day (184)</td><td><code>harmony</code></td></tr></tbody></table></div>
+<p>Custom ordering options: <code>'canonical' | 'chronological' | 'shuffled'</code>, <code>:49</code>.</p>
+<p>Two plan types are stored: <code>planType: 'standard'</code> (<code>:580</code>) and <code>planType: 'harmony'</code> (<code>:651</code>). Harmony plans track <em>passages</em> rather than chapters. Display-name resolution at <code>:864-865</code>.</p>
+<h3 id="132-storage-and-migration">13.2 Storage and migration</h3>
+<ul><li>Current key: <code>projectbible_active_reading_plans</code> (<code>STORAGE_ACTIVE_PLANS</code>, <code>:39</code>) — multi-plan array.</li><li>Legacy single-plan key is migrated on load and then removed (<code>:180-191</code>).</li><li>Signed-out users fall back to <code>sessionStorage</code>; signed-in users use <code>localStorage</code> (<code>:163</code>).</li><li>Plan IDs are <code>plan_&lt;epoch-ms&gt;</code>, used as the canonical creation time (<code>:412</code>).</li><li>Phase-3 migration at <code>:230</code> moves abandoned history items (<code>completedAt === null</code>) back into <code>activePlans</code>.</li><li><code>activePlanViewTab</code> defaults to <code>'all'</code> with 2+ plans, otherwise the selected plan (<code>:200</code>).</li></ul>
+<h3 id="133-progress-store">13.3 Progress store</h3>
+<p><code>ReadingProgressStore</code>, <code>src/stores/ReadingProgressStore.ts:190</code>, exported as <code>readingProgressStore</code> <code>:551</code>.</p>
+<p>Types: <code>ChapterActionType = "checked" | "unchecked"</code> <code>:3</code>, <code>HarmonyPassageProgress</code> <code>:9</code>, <code>HarmonySectionProgress</code> <code>:20</code>, <code>ChapterAction</code> <code>:28</code>, <code>ChapterProgress</code> <code>:33</code>, <code>CatchUpAdjustment</code> <code>:39</code>, <code>ReadingProgressEntry</code> <code>:44</code>.</p>
+<div class="tw"><table><thead><tr><th>Method</th><th>Line</th></tr></thead><tbody><tr><td><code>getDayProgress(planId, dayNumber)</code></td><td>191</td></tr><tr><td><code>getProgressForPlan(planId)</code></td><td>198</td></tr><tr><td><code>upsertEntries(entries)</code></td><td>214</td></tr><tr><td><code>ensureDayProgress(...)</code></td><td>289</td></tr><tr><td><code>setStartedReadingAt(planId, day, ts)</code></td><td>315</td></tr><tr><td><code>setChapterAction(...)</code></td><td>323</td></tr><tr><td><code>markDayComplete(...)</code></td><td>353</td></tr><tr><td><code>setCatchUpAdjustment(entry)</code></td><td>382</td></tr><tr><td><code>ensureHarmonyDayProgress(...)</code></td><td>391</td></tr><tr><td><code>markPassageComplete(...)</code></td><td>417</td></tr><tr><td><code>togglePassageComplete(...)</code></td><td>451</td></tr><tr><td><code>markHarmonyDayComplete(...)</code></td><td>484</td></tr></tbody></table></div>
+<p>Also <code>getLatestChapterState()</code> <code>:553</code>.</p>
+<p><strong>Sync hook</strong> — <code>ProgressSyncHook</code> <code>:64</code>, registered via <code>registerProgressSyncHook()</code> <code>:66</code> by <code>SyncedReadingAdapter</code>. Fired after every <em>local</em> mutation. Deliberately <strong>not</strong> fired by <code>upsertEntries()</code>, which is the remote-apply path, so pulled data is never echoed straight back to the server (<code>:59-63</code>).</p>
+<p><strong>Merge semantics</strong> — designed for multi-device convergence without a server-side resolver:</p>
+<ul><li><code>chaptersRead</code> union-merge (<code>:92-94</code>): all unique chapter actions from both sides are preserved, deduplicated by <code>(timestamp, type)</code>, sorted chronologically.</li><li><code>harmonySections</code> union-merge (<code>:123-124</code>): a passage marked complete on <em>either</em> device stays complete.</li></ul>
+<h3 id="134-plan-metadata">13.4 Plan metadata</h3>
+<p><code>PlanMetadataStore</code>, <code>src/stores/PlanMetadataStore.ts:17</code>, exported <code>:103</code>. <code>PlanStatus = "active" | "completed" | "archived"</code> <code>:3</code>; <code>PlanMetadata</code> <code>:5</code>.</p>
+<h3 id="135-reading-history">13.5 Reading history</h3>
+<p><code>IndexedDBReadingHistoryStore</code>, <code>src/adapters/ReadingHistoryStore.ts:14</code>:</p>
+<div class="tw"><table><thead><tr><th>Method</th><th>Line</th></tr></thead><tbody><tr><td><code>recordReading(book, chapter, planId?)</code></td><td>21</td></tr><tr><td><code>getReadingHistory(book?, chapter?)</code></td><td>44</td></tr><tr><td><code>hasRead(book, chapter, planId?)</code></td><td>75</td></tr><tr><td><code>getReadingStreak()</code></td><td>94</td></tr><tr><td><code>getTotalChaptersRead()</code></td><td>141</td></tr><tr><td><code>startReadingPlan(name, config)</code></td><td>160</td></tr><tr><td><code>getActiveReadingPlan()</code></td><td>196</td></tr><tr><td><code>getReadingPlan(planId)</code></td><td>213</td></tr><tr><td><code>getAllReadingPlans()</code></td><td>225</td></tr><tr><td><code>completeReadingPlan(planId)</code></td><td>237</td></tr><tr><td><code>deleteReadingPlan(planId)</code></td><td>252</td></tr><tr><td><code>getDayReading(planId, dayNumber)</code></td><td>274</td></tr><tr><td><code>getAllDayReadings(planId)</code></td><td>289</td></tr><tr><td><code>completeDayReading(planId, dayNumber)</code></td><td>304</td></tr><tr><td><code>getPlanProgress(planId)</code></td><td>334</td></tr><tr><td><code>getTodaysReading()</code></td><td>352</td></tr><tr><td><code>checkAndCompletePlanDay(...)</code> (private)</td><td>383</td></tr></tbody></table></div>
+<p><code>getTodaysReading()</code> tries today first, then the next upcoming day (<code>ReadingPlanModal.svelte:871-874</code>).</p>
+<h3 id="136-catch-up">13.6 Catch-up</h3>
+<p>Two strategies, <code>ReadingPlanModal.svelte:1791-1792</code>: <code>spread</code> (Even spread) and <code>dedicated</code> (Dedicated catch-up days). Persisted as <code>CatchUpAdjustment</code> via <code>setCatchUpAdjustment()</code>.</p>
+<h3 id="137-sync-behavior-in-the-modal">13.7 Sync behavior in the modal</h3>
+<ul><li>Re-reads <code>localStorage</code> on every open, then kicks off a background sync throttled to once per 30 s (<code>:124-137</code>). Local progress is loaded first so the UI is never blank while the sync runs.</li><li>Pull happens before re-pushing local plans — the pull refreshes which plans exist (<code>:137</code>).</li><li>Reloads progress whenever a Realtime event or pull writes (<code>:144</code>).</li><li>Note <code>:450</code>: Svelte doesn't track <code>dayProgressMap</code> through <code>getDayProgress()</code> calls, so it is reassigned explicitly.</li><li>Two-step delete and inline rename state at <code>:78</code>.</li></ul>
+</div></section>
+<section class="sec" id="14-maps--places" data-sec="14"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">14</span><span class="sec-title">Maps &amp; Places</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/MapPane.svelte</code> (833), <code>src/components/panes/MapPane.svelte</code>, <code>src/adapters/MapStore.ts</code>, <code>src/adapters/PlaceStore.ts</code> (234). Uses Leaflet.</p>
+<h3 id="141-map-store">14.1 Map store</h3>
+<p><code>IndexedDBMapStore</code>, <code>MapStore.ts:4</code>:</p>
+<div class="tw"><table><thead><tr><th>Method</th><th>Line</th></tr></thead><tbody><tr><td><code>getBaseTiles(zoom, bounds)</code></td><td>5</td></tr><tr><td><code>getTile(zoom, x, y)</code></td><td>40</td></tr><tr><td><code>getHistoricalLayer(layerId)</code></td><td>62</td></tr><tr><td><code>getTimePeriods()</code></td><td>78</td></tr><tr><td><code>getLayersForPeriod(period)</code></td><td>105</td></tr><tr><td><code>getLayersForYear(year)</code></td><td>131</td></tr><tr><td><code>hasOfflineData()</code></td><td>145</td></tr></tbody></table></div>
+<p>Tiles are stored in IndexedDB, so the map works fully offline. See <code>docs/OFFLINE-MAP-TILES.md</code>.</p>
+<h3 id="142-place-store">14.2 Place store</h3>
+<p><code>IndexedDBPlaceStore</code>, <code>PlaceStore.ts:9</code>:</p>
+<div class="tw"><table><thead><tr><th>Method</th><th>Line</th></tr></thead><tbody><tr><td><code>getPlace(placeId)</code></td><td>15</td></tr><tr><td><code>getPlacesForVerse(reference)</code></td><td>30</td></tr><tr><td><code>searchPlaces(query)</code></td><td>59</td></tr><tr><td><code>getPlaceByName(name, period?)</code></td><td>108</td></tr><tr><td><code>getPlacesInBounds(bounds)</code></td><td>143</td></tr><tr><td><code>getPlacesByType(type)</code></td><td>167</td></tr><tr><td><code>getPlaceAppearance(placeId, period)</code></td><td>197</td></tr></tbody></table></div>
+<p><code>getPlaceByName</code> and <code>getPlaceAppearance</code> are period-aware — the same name can resolve to different locations in different eras.</p>
+<h3 id="143-encyclopedia-link">14.3 Encyclopedia link</h3>
+<p>The ISBE modal's Map tab renders a Leaflet pin bound to a popup with the entry title (<code>IsbeModal.svelte:183</code>), shown only when coordinates exist. See <a href="#62-tabs">6.2</a>.</p>
+</div></section>
+<section class="sec" id="15-art" data-sec="15"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">15</span><span class="sec-title">Art</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/ArtPane.svelte</code> (283), <code>src/adapters/ArtStore.ts</code>.</p>
+<p><code>IndexedDBArtStore</code>, <code>ArtStore.ts:17</code>:</p>
+<div class="tw"><table><thead><tr><th>Method</th><th>Line</th></tr></thead><tbody><tr><td><code>getScene(id)</code></td><td>19</td></tr><tr><td><code>getScenesForVerse(reference)</code></td><td>30</td></tr><tr><td><code>getScenesForChapter(book, chapter)</code></td><td>47</td></tr><tr><td><code>getAllScenes()</code></td><td>64</td></tr><tr><td><code>searchScenes(query)</code></td><td>86</td></tr><tr><td><code>getImageUrl(id)</code></td><td>120</td></tr></tbody></table></div>
+<p><code>ArtPane</code> props: <code>sceneId</code>, <code>book</code>, <code>chapter</code>, <code>verse</code> — all optional, so it can open on a specific painting or browse. Falls back to a "Biblical Art" browse view (<code>:129</code>) when no scene is selected.</p>
+<p>In-text icons: setting <code>showArt</code>, default <code>true</code>. The reader keeps a scene map keyed <code>"book:chapter:verse"</code> for the currently rendered chapters and rebuilds it as chapters come and go (<code>BibleReader.svelte:311-318</code>). <code>openArtWindow</code> docks to whichever edge fits the current orientation (<code>:338</code>).</p>
+</div></section>
+<section class="sec" id="16-read-aloud-tts" data-sec="16"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">16</span><span class="sec-title">Read Aloud (TTS)</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Fully on-device. Files: <code>src/lib/tts/piperEngine.ts</code> (276), <code>src/lib/tts/ttsWorker.ts</code>, <code>src/lib/tts/voices.ts</code>, <code>src/lib/tts/vendor/piper-phonemize.js</code> (2,878, vendored), <code>src/adapters/tts.ts</code> (287), <code>src/lib/ttsGlow.ts</code> (294), <code>src/components/TtsPlayer.svelte</code> (430).</p>
+<h3 id="161-engine">16.1 Engine</h3>
+<p><code>piperEngine.ts</code> — Piper ONNX voice via onnxruntime-web WASM plus the espeak-ng phonemizer WASM. Adapted from <code>@diffusionstudio/vits-web</code> 1.0.3 (MIT) with three deliberate changes (<code>:5-11</code>):</p>
+<ol><li>Runtime WASM assets load from same-origin <code>/tts/</code> instead of CDNs, so the feature keeps working offline (the service worker caches <code>/tts/</code>).</li><li>The ONNX session and voice config are cached between calls. The original recreated them per synthesis — far too slow for per-verse use.</li><li>Synthesis throws <code>VOICE_NOT_INSTALLED</code> rather than silently downloading ~60 MB, so the UI owns when the download happens.</li></ol>
+<p>Voice files live in OPFS under <code>/piper/</code> (same layout as vits-web). <strong>Runs inside <code>ttsWorker.ts</code> — must not be imported from the main thread</strong> (<code>:14</code>).</p>
+<p>Engine API: <code>downloadVoice()</code> <code>:100</code>, <code>installVoiceData()</code> <code>:118</code> (raw <code>.onnx</code> + <code>.json</code> bytes transferred across the worker boundary with no copy — used for user-cloned voices), <code>removeVoice()</code> <code>:134</code>.</p>
+<h3 id="162-voice-catalog">16.2 Voice catalog</h3>
+<p><code>TTS_VOICES</code>, <code>src/lib/tts/voices.ts:25</code>:</p>
+<div class="tw"><table><thead><tr><th>id</th><th>Label</th><th>Quality</th><th>Approx size</th></tr></thead><tbody><tr><td><code>en_US-lessac-medium</code></td><td>Standard (US English)</td><td><code>standard</code></td><td>64 MB</td></tr><tr><td><code>en_US-lessac-low</code></td><td>Compact (US English)</td><td><code>compact</code></td><td>30 MB</td></tr></tbody></table></div>
+<p>Remote source base: <code>https://huggingface.co/rhasspy/piper-voices/resolve/main</code> (<code>:43</code>). <code>resolveVoiceSource()</code> <code>:48</code> returns <code>null</code> for voices that can only arrive via local file install. <code>voiceModelName()</code> <code>:61</code>, <code>voiceConfigName()</code> <code>:64</code>. <code>TtsVoiceInfo.custom</code> flags user-added voices.</p>
+<h3 id="163-adapter">16.3 Adapter</h3>
+<p><code>src/adapters/tts.ts</code>. <code>DEFAULT_TTS_VOICE = 'en_US-lessac-medium'</code> <code>:22</code>.</p>
+<div class="tw"><table><thead><tr><th>Function</th><th>Line</th></tr></thead><tbody><tr><td><code>getCustomVoices()</code></td><td>31</td></tr><tr><td><code>registerCustomVoice(info)</code></td><td>46</td></tr><tr><td><code>getAllVoices()</code></td><td>57</td></tr><tr><td><code>getVoiceInfo(id)</code></td><td>61</td></tr><tr><td><code>voiceIsDownloadable(info)</code></td><td>66</td></tr><tr><td><code>voiceIdFromFilename(filename)</code></td><td>71</td></tr><tr><td><code>isTtsSupported()</code></td><td>92</td></tr><tr><td><code>storedVoices()</code></td><td>155</td></tr><tr><td><code>isVoiceInstalled(voiceId)</code></td><td>159</td></tr><tr><td><code>downloadVoice(...)</code></td><td>163</td></tr><tr><td><code>removeVoice(voiceId)</code></td><td>172</td></tr><tr><td><code>installVoiceFromFiles(...)</code></td><td>181</td></tr><tr><td><code>synthesizeSpeech(text, voiceId)</code></td><td>200</td></tr><tr><td><code>getSharedTtsAudio()</code></td><td>213</td></tr><tr><td><code>unlockTtsAudio()</code></td><td>226</td></tr></tbody></table></div>
+<p><code>unlockTtsAudio()</code> must be called from inside a user tap, before any async work — it plays a tiny silent clip to satisfy mobile autoplay policy (<code>:222-226</code>).</p>
+<p>Custom voices are catalogued in <code>localStorage</code> on the main thread; the worker receives an explicit <code>source</code> for them, while built-ins fall back to the static catalog so internal callers work source-free (<code>piperEngine.ts:88-90</code>).</p>
+<h3 id="164-settings">16.4 Settings</h3>
+<p><code>TtsSettings</code>, <code>src/adapters/settings.ts:29</code>. Resolved by <code>getTtsSettings()</code> <code>:231</code>, written by <code>updateTtsSettings()</code> <code>:243</code>.</p>
+<div class="tw"><table><thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead><tbody><tr><td><code>voiceId</code></td><td><code>'en_US-lessac-medium'</code></td><td>Installed Piper voice id</td></tr><tr><td><code>rate</code></td><td><code>1.0</code></td><td>Playback speed, range 0.8–1.5</td></tr><tr><td><code>readHeadings</code></td><td><code>false</code></td><td>Speak section headings before their verse</td></tr><tr><td><code>highlightVerse</code></td><td><code>true</code></td><td>Tint the verse being read</td></tr><tr><td><code>glowFollow</code></td><td><code>false</code></td><td>Soft glow drifting along the words</td></tr></tbody></table></div>
+<p><code>highlightVerse</code> and <code>glowFollow</code> are independent — either, both, or neither (<code>settings.ts:33</code>).</p>
+<h3 id="165-player-controls">16.5 Player controls</h3>
+<p><code>TtsPlayer.svelte</code>, props <code>translation</code>, <code>book</code>, <code>chapter</code>. Controls: play/pause (<code>:281</code>), jump to a verse (<code>:292</code>), stop (<code>:300</code>), continuous play toggle (<code>:305</code>), cancel during preparation (<code>:269</code>), dismiss (<code>:274</code>), spinner while preparing (<code>:276</code>).</p>
+<p>Speech text comes from <code>extractSpeechText()</code>, <code>src/lib/verseRendering.ts:318</code> — footnotes and cross-references are dropped entirely rather than read aloud, using the same <code>findNoteEnd()</code> boundary logic as the HTML renderer so the two can't disagree.</p>
+<h3 id="166-drifting-glow">16.6 Drifting glow</h3>
+<p><code>src/lib/ttsGlow.ts</code>. Two design decisions worth preserving:</p>
+<ul><li><strong>Why soft and wide</strong> (<code>:5-10</code>) — the standard Piper export returns finished audio and keeps its internal per-word durations to itself, so pacing is an estimate. A crisp highlight on the wrong word looks broken; a blurred cloud several words wide is almost always covering the right word somewhere in its span, and reads as atmosphere rather than error.</li><li><strong>Why it's anchored to <code>.text-container</code>, not the verse</strong> (<code>:12-18</code>) — in paragraph layout a verse is an inline element flowing through the paragraph, and for an inline box spanning several lines the browser's reference for placing an absolutely positioned child is not the box that measuring returns. Anchoring to the verse put the glow in the wrong place and made it drift as text rewrapped. <code>.text-container</code> is a block that scrolls with the content and is already the anchor the text-selection drag handles use.</li></ul>
+<p>Reader-side wiring at <code>BibleReader.svelte:566</code>, with a ticket guard at <code>:596</code> because an <code>await</code> follows and a newer call can overtake an older one.</p>
+</div></section>
+<section class="sec" id="17-audio" data-sec="17"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">17</span><span class="sec-title">Audio</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Pre-recorded chapter audio, distinct from <a href="#16-read-aloud">16. Read Aloud</a>. Files: <code>src/components/AudioPlayer.svelte</code> (261), <code>src/adapters/audio.ts</code> (379), <code>src/stores/audioStore.ts</code>.</p>
+<p><code>AudioPlayer</code> props: <code>book</code>, <code>chapter</code>. Controls: play/pause (<code>:137</code>), seek slider (<code>:153</code>), stop (<code>:156</code>), continuous-play toggle (<code>:161</code>), dismiss (<code>:130</code>), loading spinner (<code>:132</code>).</p>
+<p><code>continuousPlay</code> is a shared store used by both the audio player and the TTS player, so auto-advance behaves the same either way.</p>
+</div></section>
+<section class="sec" id="18-panes--windows" data-sec="18"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">18</span><span class="sec-title">Panes &amp; Windows</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Two independent docking systems.</p>
+<h3 id="181-windows">18.1 Windows</h3>
+<p><code>src/lib/stores/windowStore.ts</code>, <code>src/components/Window.svelte</code> (299), <code>src/components/WindowContainer.svelte</code> (254), <code>src/components/WindowContentSelector.svelte</code> (196), <code>src/components/Pane.svelte</code> (238).</p>
+<ul><li><code>WindowContentType</code> <code>:3</code> — <code>'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art'</code></li><li><code>WindowEdge</code> <code>:4</code> — <code>'top' | 'left' | 'right' | 'bottom'</code></li><li><code>MAX_WINDOWS = 6</code> <code>:30</code>; <code>createWindow()</code> returns <code>null</code> at capacity (<code>:59-62</code>)</li><li><code>setWindowContent(id, contentType, contentState?)</code> <code>:119</code> — each window carries its own <code>contentState</code>, so a second Bible window can sit on a different chapter from the main reader</li><li><code>getWindowsByEdge(edge)</code> <code>:176</code></li></ul>
+<p>Layout: <code>App.svelte:188-204</code> sums the sizes of the windows on each edge and insets the main content with <code>left</code>/<code>right</code>/<code>top</code>/<code>bottom</code> percentages, transitioned over 0.3 s.</p>
+<h3 id="182-edge-gestures">18.2 Edge gestures</h3>
+<p><code>src/components/EdgeGestureDetector.svelte</code> (497).</p>
+<div class="tw"><table><thead><tr><th>Constant</th><th>Value</th><th>Purpose</th></tr></thead><tbody><tr><td><code>EDGE_ZONE_WIDTH</code></td><td>40 px</td><td>Width of the grab zone along each edge</td></tr><tr><td><code>OPEN_THRESHOLD</code></td><td>0.05</td><td>5% of screen width/height before a window opens</td></tr><tr><td><code>BOTTOM_DEAD_HALF</code></td><td>20 px</td><td>Half of a 40 px centre dead zone on the bottom edge, left free for the Android home gesture (<code>:98</code>)</td></tr></tbody></table></div>
+<p>Two-stage commit (<code>:76</code>, <code>:177-192</code>): touching an edge sets a <strong>pending</strong> edge; the drag only commits once movement direction matches that edge's axis. This is what stops accidental opens.</p>
+<p>Touch and mouse paths are separate, with a <code>usingTouch</code> flag so mouse events are ignored during touch (<code>:22</code>). Any touch starting in the bottom zone locks reader scroll (<code>:30</code>). <code>atLimit</code> (6 windows) switches the bumper's visual class (<code>:32</code>).</p>
+<h3 id="183-panes">18.3 Panes</h3>
+<p><code>src/stores/paneStore.ts</code>. A simpler, app-level docking system.</p>
+<ul><li><code>PaneType</code> <code>:3</code> — <code>'settings' | 'map' | 'packs' | 'search' | 'notes' | 'commentaries'</code></li><li>Positions: <code>'left' | 'right' | 'bottom'</code></li><li><code>openPane(type, position)</code> <code>:21</code> — reopens an existing pane of that type rather than duplicating it</li><li>Sizing: left/right panes are 75% wide on a phone (<code>innerWidth &lt;= 480</code>) and 40% otherwise; bottom panes are 50% tall (<code>:33-36</code>)</li><li><code>zIndex</code> is assigned as <code>max(existing) + 1</code></li><li><code>closePane(id)</code> sets <code>isOpen: false</code> rather than removing the record</li><li><code>pendingCloseEdge</code> is consumed by <code>EdgeGestureDetector</code> for close animations</li></ul>
+<p>Pane components: <code>src/components/panes/SettingsPane.svelte</code> (860), <code>PacksPane.svelte</code> (1,238), <code>SearchPane.svelte</code>, <code>MapPane.svelte</code>; container <code>src/components/PaneContainer.svelte</code>.</p>
+<h3 id="184-orientation">18.4 Orientation</h3>
+<p>Setting <code>allowRotation</code>, default <code>false</code> (portrait-locked). <code>applyOrientationLock()</code>, <code>src/App.svelte:24</code> — tries <code>'portrait-primary'</code> then falls back to <code>'portrait'</code>; failures are swallowed since desktop and tablet browsers often don't support the API.</p>
+<p>Re-applied on visibility resume to handle tablet app-switching (<code>:52</code>) and whenever settings are saved (<code>:95</code>). Deliberately <strong>not</strong> re-applied on orientation change itself — doing so fought the OS on tablet and confused mobile (<code>:49</code>).</p>
+<p><code>handleOrientationChange()</code> <code>:42</code> fades <code>.app-root</code> to opacity 0 over 0.25 s and back after 350 ms, so a rotation reads as a transition rather than a snap.</p>
+</div></section>
+<section class="sec" id="19-content-packs" data-sec="19"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">19</span><span class="sec-title">Content Packs</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/panes/PacksPane.svelte</code> (1,238), <code>src/adapters/PackManager.ts</code>, <code>src/adapters/pack-import.ts</code> (2,116), <code>src/lib/pack-init.ts</code> (497), <code>src/lib/pack-triggers.ts</code>, <code>src/lib/progressive-init.ts</code>, <code>src/lib/bootstrap-loader.ts</code>, <code>src/components/ProgressModal.svelte</code>, <code>src/adapters/db-manager.ts</code> (339).</p>
+<h3 id="191-pack-manager">19.1 Pack manager</h3>
+<p><code>IndexedDBPackManager</code>, <code>src/adapters/PackManager.ts:4</code>: <code>listInstalled()</code> <code>:5</code>, <code>install(source: string | File)</code> <code>:38</code>, <code>remove(packId)</code> <code>:47</code>, <code>isInstalled(packId)</code> <code>:97</code>.</p>
+<p><code>install()</code> accepts either a URL string or a <code>File</code>, which is what makes both Quick Install and Advanced Install one code path.</p>
+<h3 id="192-first-run-initialization">19.2 First-run initialization</h3>
+<p><code>src/lib/pack-init.ts</code>. Bundled packs are extracted to IndexedDB on first run; afterwards packs load from IndexedDB.</p>
+<p><code>isInitialized()</code> <code>:262</code>, <code>initializePolishedApp()</code> <code>:273</code>, <code>getBundledPacks()</code> <code>:486</code>, <code>resetInitialization()</code> <code>:493</code> (development only). Internal helpers for opening (<code>:424</code>), reading (<code>:444</code>), and writing (<code>:458</code>) the pack IndexedDB. Type <code>BundledPack</code> <code>:8</code>.</p>
+<h3 id="193-demand-loading">19.3 Demand loading</h3>
+<p><code>src/lib/pack-triggers.ts</code> — loads packs when a user action needs them, without blocking the UI.</p>
+<ul><li>Stores: <code>currentDownload</code> (<code>DownloadProgress | null</code>) <code>:14</code>, <code>showProgressModal</code> <code>:15</code>. Both consumed by <code>ProgressModal</code> in <code>App.svelte:238</code>.</li><li><code>triggerPackLoad(...)</code> <code>:24</code>, <code>preloadPacks(packIds)</code> <code>:99</code>, <code>isPackLoaded(packId)</code> <code>:115</code>, <code>getLoadedPacks()</code> <code>:122</code>, <code>clearLoadedPacksCache()</code> <code>:129</code>.</li></ul>
+<h3 id="194-packs-pane-sections">19.4 Packs pane sections</h3>
+<p><code>PacksPane.svelte</code>: Database Statistics <code>:558</code>, Installed Packs <code>:577</code>, Quick Install <code>:630</code>, Voices (Read Aloud) <code>:665</code>, Advanced Install <code>:730</code>, About Packs <code>:784</code>.</p>
+<p>Entry point from Settings: "Manage Packs" button, <code>SettingsPane.svelte:419</code>.</p>
+<h3 id="195-english-lexical-packs">19.5 English lexical packs</h3>
+<p><code>src/components/EnglishLexicalPacksModal.svelte</code> (325). A dedicated loader for the English dictionary/thesaurus packs, separate from the general pack flow.</p>
+<p>Imports <code>englishLexicalPackLoader</code> from <code>packages/core/src/search/englishLexicalPackLoader</code> — note this reaches across the monorepo by relative path (<code>../../../../packages/core/src/...</code>), so it is one of the places where the app depends on <code>@projectbible/core</code> source rather than its built <code>dist</code>. Loads from <code>/packs/polished</code>, reports per-pack <code>LoadProgress</code>, and checks <code>arePacksLoaded()</code> on mount so it can show a ready state instead of re-downloading.</p>
+<h3 id="196-configuration">19.6 Configuration</h3>
+<p><code>src/config.ts</code>. <code>APP_VERSION = '1.0.0'</code>.</p>
+<ul><li><code>PACK_MANIFEST_URL</code> — <code>/api/packs/manifest.json</code> in production (proxied to GitHub Releases), <code>/packs/consolidated/manifest.json</code> in dev.</li><li><code>USE_BUNDLED_PACKS</code> — true in dev, or when <code>VITE_USE_BUNDLED_PACKS === 'true'</code>.</li><li><code>BOOTSTRAP_PACK_URL = '/bootstrap.sqlite'</code> — always bundled with the app.</li><li><code>FEATURES</code> — <code>lazyPackLoading</code>, <code>progressiveStartup</code>, <code>packUpdates</code> (all keyed off <code>!USE_BUNDLED_PACKS</code>), <code>persistentStorage</code>, and <code>ttsReadAloud</code> (a kill switch for Read Aloud).</li><li><code>PACK_PRIORITY</code> — <code>essential: [bootstrap]</code>, <code>high: [translations]</code>, <code>medium: [study-tools, lexical]</code>, <code>low: [ancient-languages, bsb-audio-pt1, bsb-audio-pt2]</code>.</li><li><code>PACK_TRIGGERS</code> — which user action loads which pack: <code>translations</code> on <code>reader-open</code>, <code>ancient-languages</code> on <code>hebrew-greek-toggle</code>, <code>lexical</code> on <code>word-study-open</code>, <code>study-tools</code> on <code>maps-open</code>, both audio packs on <code>audio-play</code>.</li><li><code>UI</code> — <code>showProgressDuringDownload</code>, <code>allowPackRemoval</code>, <code>showStorageUsage</code>, <code>promptForPersistentStorage</code>.</li></ul>
+<h3 id="197-related-docs">19.7 Related docs</h3>
+<p><code>docs/PACK-STANDARD-V1.md</code>, <code>docs/PACK-MANAGEMENT.md</code>, <code>docs/PACK-SYSTEM-IMPLEMENTATION.md</code>, <code>docs/CONSOLIDATED-PACKS-IMPLEMENTATION.md</code>.</p>
+</div></section>
+<section class="sec" id="20-account--sync" data-sec="20"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">20</span><span class="sec-title">Account &amp; Sync</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/services/SupabaseAuthService.ts</code>, <code>src/lib/supabase/client.ts</code>, <code>src/lib/supabase/userSettings.ts</code>, <code>src/lib/sync/</code> (<code>SyncService.ts</code> 335, <code>SyncQueueService.ts</code> 381, <code>RealtimeService.ts</code>, <code>conflictResolver.ts</code>, <code>reconcileDeletes.ts</code>, <code>settingsSync.ts</code>, <code>types.ts</code>, <code>index.ts</code>), <code>src/adapters/Synced*.ts</code>, <code>src/components/ProfileModal.svelte</code> (1,018), <code>src/stores/userProfileStore.ts</code>, <code>src/stores/profileModalStore.ts</code>.</p>
+<h3 id="201-auth">20.1 Auth</h3>
+<p><code>SupabaseAuthService</code>, <code>src/services/SupabaseAuthService.ts:4</code>, exported as <code>supabaseAuthService</code> <code>:66</code>:</p>
+<div class="tw"><table><thead><tr><th>Method</th><th>Line</th></tr></thead><tbody><tr><td><code>signUp(email, password, name)</code></td><td>5</td></tr><tr><td><code>signIn(email, password)</code></td><td>17</td></tr><tr><td><code>signOut()</code></td><td>21</td></tr><tr><td><code>resetPassword(email)</code></td><td>25</td></tr><tr><td><code>updatePassword(newPassword)</code></td><td>32</td></tr><tr><td><code>reauthenticate(email, password)</code></td><td>37</td></tr><tr><td><code>updateProfileName(name)</code></td><td>42</td></tr><tr><td><code>deleteAccount()</code></td><td>51</td></tr><tr><td><code>getSession()</code></td><td>56</td></tr></tbody></table></div>
+<h3 id="202-synced-tables">20.2 Synced tables</h3>
+<p><code>SyncTable</code>, <code>src/lib/sync/types.ts:14</code> — seven tables: <code>user_notes</code>, <code>user_highlights</code>, <code>user_word_highlights</code>, <code>user_bookmarks</code>, <code>journal_entries</code>, <code>reading_plans</code>, <code>reading_progress</code>.</p>
+<p><code>SyncOperationType</code> <code>:5</code> — <code>'INSERT' | 'UPDATE' | 'DELETE'</code>. <code>SyncStatus</code> <code>:23</code> — <code>'idle' | 'syncing' | 'error' | 'offline'</code>. <code>SyncState</code> <code>:25</code> carries <code>status</code>, <code>pendingCount</code>, <code>lastSyncedAt</code>, <code>error</code>, <code>isOnline</code>.</p>
+<h3 id="203-orchestrator">20.3 Orchestrator</h3>
+<p><code>SyncService</code>, <code>src/lib/sync/SyncService.ts</code>, exported <code>:335</code>. Responsibilities (<code>:4-8</code>): connect/disconnect Realtime on auth changes, process the queue when online, pull initial data on sign-in, expose sync state to the UI.</p>
+<p><code>init()</code> <code>:63</code>, <code>forceSync(throttleMs = 0)</code> <code>:109</code>, <code>onSignIn(userId)</code> <code>:189</code>, <code>onSignOut()</code> <code>:246</code>, <code>handleOnline</code> <code>:269</code>, <code>pullRemoteData()</code> <code>:287</code>, <code>pullTable(...)</code> <code>:302</code>.</p>
+<p><code>forceSync</code> is called on tab visibility change, throttled to once per 30 s and guarded by a mutex so it can never pile up or leave the status stuck on "Syncing…" — <code>App.svelte:77-84</code>.</p>
+<h3 id="204-offline-queue">20.4 Offline queue</h3>
+<p><code>SyncQueueService</code>, <code>src/lib/sync/SyncQueueService.ts</code>, exported as <code>syncQueue</code> <code>:381</code>. Writes queue to IndexedDB and drain when online.</p>
+<p>Drain behavior (<code>:5-7</code>): oldest-first, coalescing every queued op for the same row into one equivalent upload, with exponential backoff on failure — 5 s doubling per attempt, capped at 15 minutes.</p>
+<div class="tw"><table><thead><tr><th>Method</th><th>Line</th></tr></thead><tbody><tr><td><code>enqueue(operation)</code></td><td>28</td></tr><tr><td><code>processQueue()</code> → <code>{success, failed}</code></td><td>56</td></tr><tr><td><code>coalesce(key, ops)</code> (private)</td><td>123</td></tr><tr><td><code>getPendingCount()</code></td><td>164</td></tr><tr><td><code>resetFailed()</code></td><td>184</td></tr><tr><td><code>clear()</code></td><td>226</td></tr><tr><td><code>getPendingIdsFor(table)</code></td><td>245</td></tr><tr><td><code>getPendingItems()</code> (private)</td><td>255</td></tr><tr><td><code>processItem(item)</code> (private)</td><td>270</td></tr><tr><td><code>executeOperation(op, userId)</code> (private)</td><td>317</td></tr><tr><td><code>notifyListeners()</code> (private)</td><td>373</td></tr></tbody></table></div>
+<p><code>getPendingIdsFor(table)</code> exists so the delete-reconciliation pass can skip rows that have a local write still in flight.</p>
+<h3 id="205-realtime">20.5 Realtime</h3>
+<p><code>RealtimeService</code>, <code>src/lib/sync/RealtimeService.ts</code>, exported <code>:183</code>. Subscribes to Postgres changes on all user-data tables and notifies registered handlers. <code>connect(userId)</code> <code>:39</code>, <code>disconnect()</code> <code>:80</code>, <code>ensureConnected()</code> <code>:100</code>, <code>reconnect()</code> <code>:118</code>.</p>
+<p>Pull handlers are registered by side-effecting imports in <code>App.svelte:16-17</code>: <code>./adapters/SyncedReadingAdapter</code> (reading plan/progress) and <code>./adapters/SyncedHighlightAdapter</code> (verse/word highlights).</p>
+<h3 id="206-conflict-resolution">20.6 Conflict resolution</h3>
+<p><code>src/lib/sync/conflictResolver.ts</code> — last-write-wins on <code>updated_at</code>. <code>shouldApplyRemoteChange()</code> <code>:10</code> returns true only when remote is newer than local; <code>nowISO()</code> <code>:36</code>.</p>
+<p>Reading progress is the deliberate exception: it <strong>union-merges</strong> rather than last-write-wins, so concurrent ticks on two devices both survive. See <a href="#133-progress-store">13.3</a>.</p>
+<p><code>src/lib/sync/reconcileDeletes.ts</code> handles the case that last-write-wins can't — distinguishing "deleted remotely" from "not yet uploaded".</p>
+<h3 id="207-settings-sync">20.7 Settings sync</h3>
+<p><code>src/lib/sync/settingsSync.ts</code>.</p>
+<p><code>SYNCED_KEYS</code> <code>:28</code> — the subset that travels across devices:</p>
+<p><code>theme</code>, <code>timezone</code>, <code>dailyDriverEnglishOT</code>, <code>dailyDriverEnglishNT</code>, <code>dailyDriverHebrewOT</code>, <code>dailyDriverHebrewNT</code>, <code>dailyDriverGreekOT</code>, <code>dailyDriverGreekNT</code>, <code>interlinear</code>, <code>showRedLetter</code>, <code>showSectionHeadings</code>, <code>showArt</code>, <code>themedTitles</code></p>
+<p>Everything else stays per-device by design (<code>:4-8</code>) — font size, line spacing, verse layout, word wrap, rotation, update checks. A phone and a desktop rarely want the same font size.</p>
+<ul><li><strong>Push</strong> — debounced <code>PUSH_DEBOUNCE_MS = 2_000</code> after any settings write, registered as the settings change hook (<code>registerSettingsChangeHook()</code>, <code>src/adapters/settings.ts:109</code>); flushed when the tab hides. <code>scheduleSettingsPush()</code> <code>:53</code>.</li><li><strong>Pull</strong> — on sign-in and <code>forceSync</code>, applied only when the server row is newer than <code>projectbible_settings_synced_at</code> (<code>LAST_SYNCED_KEY</code> <code>:40</code>). Never a blind overwrite, so a fresh install can't clobber the account's settings with an empty blob (<code>:11-14</code>).</li><li><code>pickSynced()</code> <code>:43</code> omits <code>undefined</code> keys rather than writing nulls.</li></ul>
+<h3 id="208-synced-store-wrappers">20.8 Synced store wrappers</h3>
+<p><code>src/adapters/SyncedUserDataStore.ts</code> (426), <code>SyncedJournalStore.ts</code> (229), <code>SyncedReadingAdapter.ts</code> (447), <code>SyncedHighlightAdapter.ts</code>. Each wraps the plain IndexedDB store and enqueues a sync operation after local writes.</p>
+<h3 id="209-profile-modal">20.9 Profile modal</h3>
+<p><code>ProfileModal.svelte</code>. Header greets by name when set (<code>:433</code>). Four tabs (<code>:466-469</code>): Reading Plan, Saved Verses/Notes, Journal, Settings. Auth views: Log in <code>:476</code>, Create Account <code>:483</code>, Reset Password <code>:491</code>. Today's reading with tappable chapter links <code>:509-512</code>. Inline settings: Theme <code>:545</code>, Default OT Translation <code>:554</code>, Default NT Translation <code>:563</code>.</p>
+</div></section>
+<section class="sec" id="21-app-settings--appearance" data-sec="21"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">21</span><span class="sec-title">App Settings &amp; Appearance</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Files: <code>src/components/panes/SettingsPane.svelte</code> (860), <code>src/adapters/settings.ts</code>, <code>src/App.svelte</code>, <code>src/stores/clockStore.ts</code>, <code>src/lib/dailyGreeting.ts</code>, <code>src/components/DailyGreetingModal.svelte</code> (284), <code>src/components/UpdateNotice.svelte</code>.</p>
+<h3 id="211-complete-settings-table">21.1 Complete settings table</h3>
+<p>Stored in <code>localStorage</code> under <code>projectbible_settings</code> (<code>settings.ts:7</code>). Accessors <code>getSettings()</code> <code>:91</code>, <code>updateSettings()</code> <code>:116</code> (merges), <code>clearSettings()</code> <code>:251</code>.</p>
+<div class="tw"><table><thead><tr><th>Key</th><th>Type</th><th>Default</th><th>UI location</th><th>Synced</th></tr></thead><tbody><tr><td><code>theme</code></td><td>`'light' \</td><td>'dark' \</td><td>'auto' \</td><td>'sepia'`</td><td><code>'dark'</code></td><td>Settings pane, Profile</td><td>✓</td></tr><tr><td><code>fontSize</code></td><td>number</td><td><code>18</code></td><td>Settings pane, range 12–32</td><td></td></tr><tr><td><code>lineSpacing</code></td><td>number</td><td><code>1.8</code></td><td>Settings pane</td><td></td></tr><tr><td><code>verseLayout</code></td><td>`'one-per-line' \</td><td>'paragraph' \</td><td>'paragraph-no-verse-numbers'`</td><td><code>'one-per-line'</code></td><td>Settings pane</td><td></td></tr><tr><td><code>wordWrap</code></td><td>boolean</td><td><code>true</code></td><td>Settings pane</td><td></td></tr><tr><td><code>showSectionHeadings</code></td><td>boolean</td><td><code>true</code></td><td><strong>none</strong> — see <a href="#known-gaps">Known gaps</a></td><td>✓</td></tr><tr><td><code>showArt</code></td><td>boolean</td><td><code>true</code></td><td>Settings pane</td><td>✓</td></tr><tr><td><code>showRedLetter</code></td><td>boolean</td><td><code>true</code></td><td>Settings pane</td><td>✓</td></tr><tr><td><code>showPlaceMarkers</code></td><td>boolean</td><td><code>false</code></td><td>Settings pane</td><td></td></tr><tr><td><code>themedTitles</code></td><td>boolean</td><td><code>true</code></td><td>Settings pane</td><td>✓</td></tr><tr><td><code>interlinear</code></td><td><code>InterlinearSettings</code></td><td>see <a href="#41-settings-keys">4.1</a></td><td>Navbar popover + Settings pane</td><td>✓</td></tr><tr><td><code>tts</code></td><td><code>TtsSettings</code></td><td>see <a href="#164-settings">16.4</a></td><td>Settings pane</td><td></td></tr><tr><td><code>allowRotation</code></td><td>boolean</td><td><code>false</code></td><td>Settings pane</td><td></td></tr><tr><td><code>autoCheckUpdates</code></td><td>boolean</td><td><code>true</code></td><td>Settings pane</td><td></td></tr><tr><td><code>timezone</code></td><td>IANA string</td><td>browser-detected</td><td>Settings pane</td><td>✓</td></tr><tr><td><code>dailyDriver*</code> (6 keys)</td><td>string</td><td>unset → <code>'kjv'</code> fallback</td><td>Settings pane, Profile</td><td>✓</td></tr></tbody></table></div>
+<p>Legacy keys <code>dailyDriverEnglish</code> / <code>dailyDriverHebrew</code> / <code>dailyDriverGreek</code> are read and migrated by <code>normalizeSettings()</code> but never written.</p>
+<p>Note the defaults are read with three different idioms, which is why they must be read from the call site rather than the interface: <code>settings.x || fallback</code> (falsy-coercing — <code>fontSize</code>, <code>lineSpacing</code>, <code>verseLayout</code>), <code>settings.x !== false</code> (default-true — <code>showRedLetter</code>, <code>themedTitles</code>, <code>showArt</code>, <code>autoCheckUpdates</code>), and <code>settings.x === true</code> (default-false — <code>showPlaceMarkers</code>).</p>
+<h3 id="212-themes">21.2 Themes</h3>
+<p><code>resolveTheme()</code> <code>settings.ts:127</code> — <code>'auto'</code> resolves via <code>matchMedia('(prefers-color-scheme: dark)')</code>, falling back to <code>'dark'</code> when <code>matchMedia</code> is unavailable. <code>applyTheme()</code> <code>:137</code> swaps a single body class: <code>dark-theme</code>, <code>light-theme</code>, or <code>sepia-theme</code>.</p>
+<p>Light and sepia are implemented as a <strong>filter inversion</strong> on <code>.themed</code> rather than a second stylesheet — <code>filter: invert(1) hue-rotate(180deg)</code>, plus <code>sepia(0.5) saturate(0.85)</code> for sepia (<code>App.svelte:279-293</code>). Consequences handled explicitly:</p>
+<ul><li><code>.emoji</code> gets the inverse filter re-applied so emoji don't render inverted (<code>:283</code>, <code>:291</code>).</li><li><code>.red-letter</code> likewise re-applies the filter to cancel the parent's, with a more vivid starting color for sepia since it also passes through <code>sepia(0.5) saturate(0.85)</code> (<code>:295-309</code>).</li></ul>
+<p>Scrollbars are hidden globally while remaining scrollable — <code>scrollbar-width: none</code>, <code>-ms-overflow-style: none</code>, and <code>::-webkit-scrollbar { display: none }</code> (<code>:311-319</code>).</p>
+<h3 id="213-settings-pane-layout">21.3 Settings pane layout</h3>
+<p><code>SettingsPane.svelte</code>: Font Size <code>:280</code>, Line Spacing <code>:287</code>, Verse Layout <code>:300</code>, Allow Screen Rotation <code>:319</code>, Words of Jesus in red letters <code>:326</code>, Theme colors in reader titles <code>:333</code>, Show art icons on Bible scenes <code>:340</code>, Read section headings aloud <code>:381</code>, Highlight the verse being read <code>:385</code>, Soft glow drifts along the words <code>:389</code>, Time Zone <code>:395</code>, Pack Management <code>:413</code>, Cache Management <code>:426</code>.</p>
+<p>Saving dispatches a <code>settingsUpdated</code> window event, which <code>App.svelte:95</code> and <code>BibleReader.svelte:623</code> both listen for.</p>
+<h3 id="214-clock-and-timezone">21.4 Clock and timezone</h3>
+<p><code>src/stores/clockStore.ts</code> — the single source of truth for "what day is it?" across the app.</p>
+<p>Uses <code>Intl.DateTimeFormat</code> with the configured IANA timezone, so DST transitions, leap years, and offsets are handled by the platform rather than hand-rolled arithmetic (<code>:4-7</code>).</p>
+<ul><li><code>localDateStr(d)</code> <code>:23</code> → <code>YYYY-MM-DD</code>. Any "today vs stored date" comparison must use this.</li><li><code>sameLocalDay(a, b)</code> <code>:40</code></li><li><code>todayStore</code> <code>:78</code> — a readable that updates at midnight, so date-dependent UI re-renders without a reload.</li></ul>
+<h3 id="215-daily-greeting-and-verse-of-the-day">21.5 Daily greeting and Verse of the Day</h3>
+<p><code>src/lib/dailyGreeting.ts</code> — <code>getDailyGreeting(dateStr)</code> <code>:118</code>, taking a <code>YYYY-MM-DD</code> string from <code>localDateStr()</code>.</p>
+<p>Floating Christian holidays (Easter, Good Friday, and so on) and Thanksgiving are computed algorithmically per year, so they land on the correct calendar day regardless of timezone or year (<code>:5-7</code>).</p>
+<p><code>DailyGreetingModal.svelte</code> parses a verse-of-the-day reference (single verse or range), loads each verse via <code>textStore.getVerse()</code>, renders through <code>renderVerseHtml()</code>, and offers <code>goToVerse()</code> <code>:59</code> which navigates to the start verse.</p>
+<p>Triggered from <code>App.svelte</code>: 800 ms after mount (<code>:166</code>), and again on every <code>todayStore</code> change so a midnight rollover with the app open still fires it (<code>:169</code>). Logic in <code>src/stores/dailyGreetingStore.ts</code> (<code>checkAndShowDailyGreeting</code>). Toolbar entry point <code>NavigationBar.svelte:1007</code>.</p>
+<h3 id="216-auto-update">21.6 Auto-update</h3>
+<p><code>App.svelte:132-163</code>, gated on <code>autoCheckUpdates !== false</code>.</p>
+<ul><li>Checks for a new service worker on mount and on every visibility resume — an installed PWA usually resumes rather than relaunching, so <code>onMount</code> alone would miss most reopens.</li><li>On <code>controllerchange</code>, sets <code>sessionStorage['pb-updated'] = '1'</code> and reloads once.</li><li>Two guards: <code>hadController</code> skips the very first install (no controller yet), and the one-shot <code>swReloaded</code> flag prevents reload loops.</li><li>After the reload, <code>UpdateNotice.svelte</code> shows "Running Latest Version".</li><li>Manual "Check for Updates" and "Clear cache" (packs, service workers, databases) in <code>SettingsPane.svelte:426</code>.</li></ul>
+<h3 id="217-global-keyboard-shortcuts">21.7 Global keyboard shortcuts</h3>
+<p><code>App.svelte:111-128</code>. <strong>J</strong> — open today's journal entry in a right-edge window at 50%. Suppressed when the event target is an <code>input</code>, <code>textarea</code>, or <code>contenteditable</code>, and when Ctrl/Meta/Alt is held.</p>
+<h3 id="218-debug-tooling">21.8 Debug tooling</h3>
+<p>Eruda is initialized on every mount (<code>App.svelte:60-72</code>), positioned 60 px from the bottom-right corner. This is a mobile debug console and ships in the current build — worth removing or gating before a public release.</p>
+</div></section>
+<section class="sec appendix" id="appendix-a--data-layer"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">&#167;</span><span class="sec-title">Appendix A — Data layer</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Not user-facing features, but every feature above sits on these.</p>
+<h3 id="a1-indexeddb">A.1 IndexedDB</h3>
+<p><code>src/adapters/db.ts</code> (1,053). Database <code>projectbible</code>, <strong>schema version 31</strong> (<code>:15</code> — migration 31 added the <code>art_images</code> store for bundled painting blobs).</p>
+<p>Object stores, grouped by what they serve:</p>
+<div class="tw"><table><thead><tr><th>Group</th><th>Stores</th></tr></thead><tbody><tr><td>Packs &amp; text</td><td><code>packs</code>, <code>verses</code>, <code>art_images</code></td></tr><tr><td>User data</td><td><code>user_notes</code>, <code>user_highlights</code>, <code>user_word_highlights</code>, <code>user_bookmarks</code>, <code>journal_entries</code></td></tr><tr><td>Study</td><td><code>cross_references</code>, <code>strongs_entries</code>, <code>greek_strongs_entries</code>, <code>hebrew_strongs_entries</code>, <code>lexicon_entries</code>, <code>pronunciations</code>, <code>morphology</code>, <code>word_occurrences</code>, <code>tsk_references</code>, <code>commentary_entries</code></td></tr><tr><td>English lexical</td><td><code>english_words</code>, <code>english_synonyms</code>, <code>thesaurus_synonyms</code>, <code>thesaurus_antonyms</code>, <code>english_grammar</code>, <code>english_definitions_modern</code>, <code>english_definitions_historic</code>, <code>english_definitions_wordset</code>, <code>word_mapping</code></td></tr><tr><td>Places &amp; maps</td><td><code>places</code>, <code>place_name_links</code>, <code>map_tiles</code>, <code>historical_layers</code>, <code>pleiades_places</code></td></tr><tr><td>Reading</td><td><code>reading_history</code>, <code>reading_plans</code>, <code>reading_plan_days</code>, <code>reading_progress</code>, <code>plan_metadata</code>, <code>chronological_order</code></td></tr><tr><td>Audio</td><td><code>audio_chapters</code>, <code>audio_cache</code></td></tr><tr><td>Sync</td><td><code>sync_queue</code>, <code>sync_operations</code></td></tr></tbody></table></div>
+<p><code>word_mapping</code> is keyed on <code>lemma</code> rather than an id — it is the lookup that makes English definitions resolve off lemma rather than surface text (see <a href="#53-english-word-lookup">5.3</a>).</p>
+<p>Row types are declared as <code>DB*</code> interfaces in the same file (<code>DBVerse</code>, <code>DBUserNote</code>, <code>DBSectionHeading</code>, <code>DBArtScene</code>, and so on).</p>
+<p><code>src/adapters/db-manager.ts</code> (339) handles open/upgrade/reset; <code>src/adapters/index.ts</code> and <code>src/lib/adapters.ts</code> are the barrel exports.</p>
+<h3 id="a2-text-access">A.2 Text access</h3>
+<p><code>IndexedDBTextStore</code>, <code>src/adapters/TextStore.ts:67</code> — the read path every reader surface goes through.</p>
+<div class="tw"><table><thead><tr><th>Method</th><th>Line</th></tr></thead><tbody><tr><td><code>getVerse(...)</code></td><td>68</td></tr><tr><td><code>getChapter(...)</code></td><td>98</td></tr><tr><td><code>getTranslations()</code> → <code>{id, name}[]</code></td><td>158</td></tr><tr><td><code>getBooks(translation)</code></td><td>227</td></tr><tr><td><code>getChapters(translation, book)</code></td><td>268</td></tr><tr><td><code>getVerses(translation, book, chapter)</code></td><td>306</td></tr></tbody></table></div>
+<p><code>HeadingsStore</code>, <code>src/adapters/HeadingsStore.ts:7</code> — <code>getChapterHeadings()</code> <code>:12</code>, <code>isInstalled()</code> <code>:43</code>. Supplies the pericope headings described in <a href="#12-what-appears-in-the-text">1.2</a>.</p>
+<p><code>src/adapters/SearchIndex.ts</code> (<code>IndexedDBSearchIndex</code>) backs the Bible category of unified search.</p>
+<h3 id="a3-caching">A.3 Caching</h3>
+<p><code>src/lib/lru-cache.ts</code> — <code>LRUCache&lt;K, V&gt;</code> <code>:8</code>, evicting least-recently-accessed on overflow. One shared instance is exported: <code>dictionaryCache = new LRUCache&lt;string, any&gt;(500)</code> <code>:61</code>.</p>
+<h3 id="a4-startup">A.4 Startup</h3>
+<ul><li><code>src/main.ts</code> — Svelte mount point.</li><li><code>src/lib/bootstrap-loader.ts</code> — loads <code>bootstrap.sqlite</code>, the always-bundled minimum pack.</li><li><code>src/lib/progressive-init.ts</code> — staged startup, gated by the <code>progressiveStartup</code> feature flag.</li><li><code>src/adapters/pack-import.ts</code> (2,116) — the SQLite → IndexedDB import pipeline; the largest non-component file in the app.</li></ul>
+<h3 id="a5-type-declarations">A.5 Type declarations</h3>
+<p><code>src/sql.js.d.ts</code> and <code>src/lib/tts/vendor/piper-phonemize.d.ts</code> — ambient declarations for the two vendored WASM libraries. No runtime behavior.</p>
+</div></section>
+<section class="sec appendix" id="known-gaps"><h2 class="sec-h"><button class="sec-toggle" aria-expanded="true"><span class="sec-num">&#167;</span><span class="sec-title">Known gaps</span><span class="chev" aria-hidden="true"></span></button></h2><div class="sec-body">
+<p>Things found during the sweep that are wired but incomplete, or where code and comments disagree. Documented here rather than described as working features.</p>
+<div class="tw"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td><code>showSectionHeadings</code> has no UI toggle</td><td>The setting is honored by the reader (<code>BibleReader.svelte:551</code>, <code>:4205</code>) and is in the synced-settings list (<code>src/lib/sync/settingsSync.ts:35</code>), but no control exists in <code>SettingsPane.svelte</code>. It can only change via sync or a manual <code>localStorage</code> edit.</td></tr><tr><td><code>fontSize</code> / <code>lineSpacing</code> doc-comment defaults are stale</td><td><code>src/adapters/settings.ts:54-55</code> documents defaults of <code>15</code> and <code>1.5</code>. The applied defaults are <code>18</code> and <code>1.8</code> (<code>SettingsPane.svelte:10-11</code>, <code>:55-56</code>). The code is the truth; the comments are wrong.</td></tr><tr><td><code>isChronologicalMode</code> has no UI control</td><td>Flag and setter exist on the nav store (<code>navigationStore.ts:8</code>, <code>:86</code>) and are persisted, but nothing in the navbar or settings sets them.</td></tr></tbody></table></div>
+</div></section></div>
+    <div class="empty" id="empty" hidden>No features match that filter.</div>
+
+    <div class="foot"><span>ProjectBible</span><span>&middot;</span><span>Generated from
+      <code>docs/FEATURES.md</code> and <code>docs/FEATURES-REFERENCE.md</code></span></div>
+  </main>
+</div>
+
+<script>
+(function(){
+  var vUser=document.getElementById('view-user'),vFull=document.getElementById('view-full'),
+      bUser=document.getElementById('m-user'),bFull=document.getElementById('m-full'),
+      q=document.getElementById('q'),empty=document.getElementById('empty'),
+      all=document.getElementById('toggle-all'),rail=document.querySelectorAll('.rail-item');
+  var mode='user';
+
+  function view(){return mode==='user'?vUser:vFull;}
+
+  function setMode(m){
+    mode=m;
+    vUser.hidden=(m!=='user'); vFull.hidden=(m!=='full');
+    bUser.setAttribute('aria-pressed',String(m==='user'));
+    bFull.setAttribute('aria-pressed',String(m==='full'));
+    if(q.value.trim())filter();
+  }
+  bUser.addEventListener('click',function(){setMode('user');});
+  bFull.addEventListener('click',function(){setMode('full');});
+
+  // Collapse / expand
+  document.addEventListener('click',function(e){
+    var t=e.target.closest('.sec-toggle'); if(!t)return;
+    t.setAttribute('aria-expanded',t.getAttribute('aria-expanded')==='true'?'false':'true');
+  });
+
+  var collapsed=false;
+  all.addEventListener('click',function(){
+    collapsed=!collapsed;
+    view().querySelectorAll('.sec-toggle').forEach(function(t){
+      t.setAttribute('aria-expanded',String(!collapsed));
+    });
+    all.textContent=collapsed?'Expand all':'Collapse all';
+  });
+
+  // Filter
+  function clearMarks(root){
+    root.querySelectorAll('mark').forEach(function(m){
+      var p=m.parentNode; p.replaceChild(document.createTextNode(m.textContent),m); p.normalize();
+    });
+  }
+  function mark(root,term){
+    var walk=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null),nodes=[],n;
+    while((n=walk.nextNode()))if(n.nodeValue.toLowerCase().indexOf(term)>-1&&n.parentNode.nodeName!=='SCRIPT')nodes.push(n);
+    nodes.slice(0,600).forEach(function(node){
+      var v=node.nodeValue,low=v.toLowerCase(),frag=document.createDocumentFragment(),i=0,j;
+      while((j=low.indexOf(term,i))>-1){
+        if(j>i)frag.appendChild(document.createTextNode(v.slice(i,j)));
+        var m=document.createElement('mark'); m.textContent=v.slice(j,j+term.length);
+        frag.appendChild(m); i=j+term.length;
+      }
+      if(i<v.length)frag.appendChild(document.createTextNode(v.slice(i)));
+      node.parentNode.replaceChild(frag,node);
+    });
+  }
+  function filter(){
+    var term=q.value.trim().toLowerCase(),root=view();
+    clearMarks(root);
+    var secs=root.querySelectorAll('.sec'),hits=0;
+    secs.forEach(function(s){
+      var t=s.querySelector('.sec-toggle');
+      if(!term){s.hidden=false;t.setAttribute('aria-expanded','true');hits++;return;}
+      var on=s.textContent.toLowerCase().indexOf(term)>-1;
+      s.hidden=!on;
+      if(on){hits++;t.setAttribute('aria-expanded','true');mark(s.querySelector('.sec-body'),term);}
+    });
+    empty.hidden=hits>0;
+    collapsed=false; all.textContent='Collapse all';
+  }
+  var timer; q.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(filter,140);});
+
+  // Rail highlight
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(!en.isIntersecting)return;
+      var id=en.target.id;
+      rail.forEach(function(r){r.classList.toggle('on',r.dataset.target===id);});
+    });
+  },{rootMargin:'-70px 0px -75% 0px'});
+  document.querySelectorAll('#view-user .sec').forEach(function(s){obs.observe(s);});
+
+  rail.forEach(function(r){
+    r.addEventListener('click',function(){
+      var id=r.dataset.target,s=view().querySelector('#'+CSS.escape(id));
+      if(s){var t=s.querySelector('.sec-toggle');if(t)t.setAttribute('aria-expanded','true');}
+    });
+  });
+})();
+</script>
