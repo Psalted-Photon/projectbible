@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 
-export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art';
+export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe';
 export type WindowEdge = 'top' | 'left' | 'right' | 'bottom';
 
 export interface WindowState {
@@ -22,6 +22,17 @@ export interface WindowState {
     // For Map windows
     center?: [number, number];
     zoom?: number;
+    // For encyclopedia windows: which article, and where the reader was in it.
+    // Persisted with the rest, so a pinned article survives a reload intact.
+    kind?: 'place' | 'entry';
+    entryId?: number | null;
+    placeId?: string | null;
+    primaryName?: string;
+    tab?: string | null;
+    expanded?: Record<string, boolean>;
+    expandedBooks?: string[];
+    visited?: string[];
+    scrollTop?: number;
     // For other content types
     [key: string]: any;
   };
@@ -121,6 +132,25 @@ function createWindowStore() {
         const updated = wins.map(w => 
           w.id === id 
             ? { ...w, contentType, contentState: { ...w.contentState, ...contentState } }
+            : w
+        );
+        persist(updated);
+        return updated;
+      });
+    },
+
+    // Move a window to another edge, keeping its content and size. `size` is a
+    // percentage of viewport width on left/right but of height on top/bottom, so
+    // a half-width side panel becomes a half-height one — the same number means
+    // "half the screen" either way, which is what the resize handle already does.
+    setWindowEdge: (id: string, edge: WindowEdge) => {
+      const windowNumber = id.split('-')[1];
+      console.log(`🧭 WINDOW ${windowNumber} MOVED:`, { id, edge });
+
+      update(wins => {
+        const updated = wins.map(w =>
+          w.id === id
+            ? { ...w, edge }
             : w
         );
         persist(updated);
