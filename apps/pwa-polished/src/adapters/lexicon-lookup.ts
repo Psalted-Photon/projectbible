@@ -1105,6 +1105,51 @@ export async function getIsbeEntry(entryId: number): Promise<IsbeEntryRecord | n
   });
 }
 
+/**
+ * Which of these names are real ISBE articles? Used to linkify the ALL-CAPS
+ * cross-references an article writes as plain prose ("see KIDRON") — a whole
+ * article's worth of candidates in one readonly pass, rather than a query each.
+ * Maps each name that resolved to the indexed name it resolved to, so the link
+ * can carry a target the click handler is guaranteed to find again.
+ */
+export async function resolveIsbeEntryNames(names: string[]): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_entry_names')) return found;
+
+  const idx = db.transaction('isbe_entry_names', 'readonly').objectStore('isbe_entry_names').index('nameLower');
+  const exact = (v: string) =>
+    new Promise<string | null>((resolve) => {
+      const req = idx.getKey(IDBKeyRange.only(v));
+      req.onsuccess = () => resolve(req.result != null ? v : null);
+      req.onerror = () => resolve(null);
+    });
+  // Articles are titled "MAIN, QUALIFIER", so prose that points at the bare
+  // "PSALMS" is after "PSALMS, BOOK OF". The comma keeps this from wandering
+  // into merely similar names.
+  const byPrefix = (v: string) =>
+    new Promise<string | null>((resolve) => {
+      const req = idx.openKeyCursor(IDBKeyRange.bound(`${v},`, `${v},￿`));
+      req.onsuccess = () => resolve((req.result?.key as string) ?? null);
+      req.onerror = () => resolve(null);
+    });
+
+  // Every request is issued up front so they all share the one transaction.
+  await Promise.all(
+    [...new Set(names)].map(async (name) => {
+      const raw = name.trim().toLowerCase();
+      // Names are indexed twice, verbatim and punctuation-folded, so a raw miss
+      // can still land ("BETH-SHEMESH" -> "beth shemesh").
+      const norm = isbeNorm(name);
+      const tries = [exact(raw), norm && norm !== raw ? exact(norm) : null, byPrefix(raw)];
+      const results = await Promise.all(tries);
+      const hit = results.find((r) => r);
+      if (hit) found.set(name, hit);
+    }),
+  );
+  return found;
+}
+
 /** Resolve an ISBE entry by exact title/alternate spelling (for internal cross-ref links). */
 export async function getIsbeEntryByName(name: string): Promise<IsbeEntryRecord | null> {
   const id = await isbeEntryIdByName(name);

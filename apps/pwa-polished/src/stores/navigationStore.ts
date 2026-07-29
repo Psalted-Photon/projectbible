@@ -166,8 +166,18 @@ function createNavigationStore() {
         return next;
       });
     },
+    // Returns the new stack depth. Callers that want to come back to something
+    // when this exact step is undone (the ISBE modal) keep the depth as a token
+    // — comparing book/chapter instead would break as soon as the reader's
+    // scroll handler nudges the store to a neighboring chapter.
     pushHistory: (state: NavigationState) => {
-      navigationHistory.update((history) => [...history, state]);
+      let depth = 0;
+      navigationHistory.update((history) => {
+        const next = [...history, state];
+        depth = next.length;
+        return next;
+      });
+      return depth;
     },
     goBack: () => {
       let previous: NavigationState | undefined;
@@ -190,6 +200,9 @@ function createNavigationStore() {
 export const navigationStore = createNavigationStore();
 
 export const canGoBack = derived(navigationHistory, (history) => history.length > 0);
+
+/** How many steps are on the back stack — the token pushHistory hands back. */
+export const historyDepth = derived(navigationHistory, (history) => history.length);
 
 // Derived store for getting current chapter count
 export const currentBookChapters = derived(

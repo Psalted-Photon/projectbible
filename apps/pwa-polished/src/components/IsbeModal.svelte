@@ -3,7 +3,7 @@
   import { get } from "svelte/store";
   import L from "leaflet";
   import { isbeModalStore } from "../stores/isbeModalStore";
-  import { isbeReturnStore } from "../stores/isbeReturnStore";
+  import { isbeReturnStore, type IsbeReturn } from "../stores/isbeReturnStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { navigationStore } from "../stores/navigationStore";
   import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
@@ -16,6 +16,7 @@
     getIsbePlaceVerses,
     getIsbePlaceNames,
     getIsbeEntryByName,
+    resolveIsbeEntryNames,
     lookupEnglishWord,
     type IsbeEntryRecord,
     type IsbePlaceRecord,
@@ -35,6 +36,18 @@
 
   let mapEl: HTMLDivElement | null = null;
   let map: L.Map | null = null;
+
+  // The modal's own scroll container — bound so a jump can remember where you
+  // were and the back arrow can put you back on the same line.
+  let modalBodyEl: HTMLDivElement | null = null;
+  let articleEl: HTMLDivElement | null = null;
+
+  // Refs already tapped, dimmed so a long list shows what you've worked through.
+  // Cleared on a fresh open; carried across a back-arrow round trip.
+  let visitedRefs = new Set<string>();
+
+  // Entry body with prose cross-references linked (see linkifyCrossRefs).
+  let articleHtml = "";
 
   // Keyed on the book NAME — keying on the BookInfo object silently made every
   // lookup miss, which turned the canonical sort below into a no-op.
@@ -64,6 +77,8 @@
     expanded = {};
     expandedBooks = new Set();
     versePreviews = {};
+    visitedRefs = new Set();
+    articleHtml = "";
 
     if (state.placeId) {
       place = await getIsbePlace(state.placeId);
@@ -79,20 +94,32 @@
       }
     }
     if (place) placeNames = await getIsbePlaceNames(place.placeId);
+    // Cross-reference linkification hits the name index, so it has to finish
+    // before the article renders — otherwise the links would pop in late.
+    articleHtml = entry?.bodyHtml ? await linkifyCrossRefs(entry.bodyHtml) : "";
     loading = false;
 
     // The back arrow reopens the modal straight onto the tab you left, with the
-    // books you had open still open. The nav bar leaves the return context in
-    // place for us to consume here.
+    // same things open and the same scroll spot. The nav bar leaves the return
+    // context in place for us to consume here.
     if (state.tab) {
       const restore = get(isbeReturnStore);
       isbeReturnStore.set(null);
-      if (restore) expandedBooks = new Set(restore.expandedBooks);
+      if (restore) {
+        expandedBooks = new Set(restore.expandedBooks);
+        expanded = { ...restore.expandedSections };
+        visitedRefs = new Set(restore.visited);
+      }
       await selectTab(state.tab);
       // versesByBook is derived from `verses`, assigned moments ago — let the
       // reactive pass land before loadBookText reads it.
       await tick();
       for (const book of expandedBooks) await loadBookText(book);
+      // Verse previews and expanded sections both change the content height, so
+      // the offset is only meaningful once they're all on the page.
+      await tick();
+      applyVisitedMarks();
+      if (restore && modalBodyEl) modalBodyEl.scrollTop = restore.scrollTop;
     }
   }
 
@@ -276,29 +303,41 @@
     }
   }
 
-  function navigateToVerse(book: string, chapter: number, verse: number) {
+  /** Returns the back-stack depth this jump occupies, for the return crumb. */
+  function navigateToVerse(book: string, chapter: number, verse: number): number {
     const current = get(navigationStore);
-    navigationStore.pushHistory(current);
+    const depth = navigationStore.pushHistory(current);
     navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     close();
+    return depth;
   }
 
-  // Jumping from the Verses tab leaves a breadcrumb so the nav back arrow can
-  // bring this modal back, on the same tab with the same books open — you can
-  // work down a long verse list one passage at a time.
-  function navigateFromVerseList(book: string, chapter: number, verse: number) {
-    isbeReturnStore.set({
+  // Everything the back arrow needs to put this modal back the way it was.
+  // Captured before navigating, because close() wipes the store state.
+  function crumb(tab: Tab): Omit<IsbeReturn, "depth"> {
+    return {
       modal: {
         kind: state.kind,
         entryId: state.entryId,
         placeId: state.placeId,
         primaryName: state.primaryName,
-        tab: "verses",
+        tab,
       },
       expandedBooks: [...expandedBooks],
-      at: { book, chapter, verse },
-    });
-    navigateToVerse(book, chapter, verse);
+      expandedSections: { ...expanded },
+      visited: [...visitedRefs],
+      scrollTop: modalBodyEl?.scrollTop ?? 0,
+    };
+  }
+
+  // Jumping from the Verses tab leaves a breadcrumb so the nav back arrow can
+  // bring this modal back, on the same tab with the same books open and the
+  // same scroll spot — you can work down a long verse list one passage at a time.
+  function navigateFromVerseList(book: string, chapter: number, verse: number) {
+    visitedRefs = new Set(visitedRefs).add(`${book} ${chapter}:${verse}`);
+    const here = crumb("verses");
+    const depth = navigateToVerse(book, chapter, verse);
+    isbeReturnStore.set({ ...here, depth });
   }
 
   // Clicks inside the article body: scripture refs navigate, internal ISBE refs
@@ -311,7 +350,13 @@
     if (osis) {
       const [bk, ch, vs] = osis.split(".");
       const book = osisBook(bk);
-      if (book) navigateToVerse(book, parseInt(ch, 10), parseInt(vs, 10) || 1);
+      if (!book) return;
+      visitedRefs = new Set(visitedRefs).add(`osis:${osis}`);
+      a.classList.add("visited");
+      // Article scripture links get the same round trip as the verse list.
+      const here = crumb("article");
+      const depth = navigateToVerse(book, parseInt(ch, 10), parseInt(vs, 10) || 1);
+      isbeReturnStore.set({ ...here, depth });
       return;
     }
     const target = a.getAttribute("data-entry");
@@ -319,6 +364,23 @@
       const next = await getIsbeEntryByName(target);
       if (next) isbeModalStore.openEntry(next.entryId, next.primaryName);
     }
+  }
+
+  // The article is injected with {@html}, so its links can't carry a Svelte
+  // class — they're marked directly instead, and remarked after any re-render.
+  function applyVisitedMarks() {
+    if (!articleEl) return;
+    articleEl.querySelectorAll<HTMLAnchorElement>("a[data-osis]").forEach((a) => {
+      a.classList.toggle("visited", visitedRefs.has(`osis:${a.getAttribute("data-osis")}`));
+    });
+  }
+
+  // Opening a section brings fresh link elements onto the page, which need the
+  // marks applied again — they only live in the DOM.
+  $: if (activeTab === "article") {
+    void expanded;
+    void articleHtml;
+    tick().then(applyVisitedMarks);
   }
 
   // OSIS book code -> canonical name for scripture-link navigation.
@@ -396,6 +458,87 @@
         return book ? `${tag} style="color:${getBookColor(book)}"` : tag;
       },
     );
+  }
+
+  // --- Cross-reference linkification -------------------------------------
+  // The pack only links cross-references the source tagged as <ref target>;
+  // most are written as bare prose — "(see KIDRON)", "compare GEOLOGY OF
+  // PALESTINE". They're reliably ALL CAPS, but caps alone is far too loose: an
+  // article's own contents block is caps too, and NAME, CITY, GATE and WATER
+  // are all real entries, so every heading would turn into a link. Only caps
+  // introduced by "see" / "compare" / "cf." are treated as references.
+
+  // Runs of two or more caps letters, joined into a phrase across single spaces
+  // ("GEOLOGY OF PALESTINE") and inner hyphens/apostrophes ("BETH-SHEMESH").
+  const CAPS = "[A-Z]{2,}(?:['’-][A-Z]{2,})*(?: [A-Z]{2,}(?:['’-][A-Z]{2,})*)*";
+  const CAPS_RE = new RegExp(CAPS, "g");
+  // Case-folded by hand rather than with the i flag, which would defeat CAPS.
+  const INTRO = "(?:[Ss][Ee][Ee](?:\\s+[Aa][Ll][Ss][Oo])?|[Cc][Oo][Mm][Pp][Aa][Rr][Ee]|[Cc][Ff]\\.)";
+  const XREF_RE = new RegExp(`${INTRO}\\s+(${CAPS}(?:\\s*[,;]\\s*${CAPS})*)`, "g");
+
+  // Never a cross-reference, even after "see": the scholarly abbreviations ISBE
+  // leans on, and the roman numerals of a "see JERUSALEM, II, 5" style pointer.
+  const CAPS_SKIP = new Set(
+    ("AV RV RVM AVM ERV ARV ARVM KJV EV EVV LXX MT NT OT HEB GR ARAM SYR VULG TR"
+      + " WH HDB EB DB DCG ICC EGT SBOT PRE RE CE BC AD ETC IE EG CF FF THE AND OF"
+    ).split(" "),
+  );
+
+  function isCapsCandidate(s: string): boolean {
+    return !CAPS_SKIP.has(s) && !/^[IVXLCDM]+$/.test(s);
+  }
+
+  async function linkifyCrossRefs(rawHtml: string): Promise<string> {
+    // Only text outside a tag and outside an existing <a> is eligible — the
+    // pack's own links and every attribute value must be left alone.
+    const parts: { text: string; eligible: boolean }[] = [];
+    let aDepth = 0;
+    let last = 0;
+    const TAG_RE = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g;
+    for (const m of rawHtml.matchAll(TAG_RE)) {
+      parts.push({ text: rawHtml.slice(last, m.index), eligible: aDepth === 0 });
+      parts.push({ text: m[0], eligible: false });
+      if (m[1].toLowerCase() === "a") aDepth = m[0][1] === "/" ? Math.max(0, aDepth - 1) : aDepth + 1;
+      last = m.index + m[0].length;
+    }
+    parts.push({ text: rawHtml.slice(last), eligible: aDepth === 0 });
+
+    // A pointer may name several articles at once ("see ARABAH; DEAD SEA"), so
+    // each run in the list is a candidate — but only whole. Falling back to the
+    // individual words of a run that isn't an article sends you somewhere the
+    // text never pointed: "DEAD SEA" is no entry, and DEAD alone is one.
+    const candidates = new Set<string>();
+    for (const p of parts) {
+      if (!p.eligible) continue;
+      for (const m of p.text.matchAll(XREF_RE)) {
+        for (const run of m[1].match(CAPS_RE) ?? []) {
+          if (isCapsCandidate(run)) candidates.add(run);
+        }
+      }
+    }
+    if (!candidates.size) return rawHtml;
+
+    const real = await resolveIsbeEntryNames([...candidates]);
+    // An article never links to itself.
+    const own = (entry?.primaryName || state.primaryName || "").toUpperCase();
+    for (const name of real.keys()) if (own.includes(name)) real.delete(name);
+    if (!real.size) return rawHtml;
+
+    // The link carries the name that actually resolved — "PSALMS" reads as
+    // written but points at "psalms, book of".
+    const link = (run: string) =>
+      `<a class="isbe-link" data-entry="${real.get(run)}">${run}</a>`;
+    return parts
+      .map((p) =>
+        p.eligible
+          ? p.text.replace(XREF_RE, (whole, list: string) => {
+              const linked = list.replace(CAPS_RE, (run) => (real.has(run) ? link(run) : run));
+              // The list is the tail of the match; the introducer stays as written.
+              return whole.slice(0, whole.length - list.length) + linked;
+            })
+          : p.text,
+      )
+      .join("");
   }
 
   function buildArticle(rawHtml: string): ArticleTree | null {
@@ -486,10 +629,12 @@
     return { preamble: preamble.join(""), sections };
   }
 
-  $: article = entry?.bodyHtml ? buildArticle(entry.bodyHtml) : null;
+  // Built from articleHtml — the body with prose cross-references linked —
+  // rather than the raw entry, so both render paths get them.
+  $: article = articleHtml ? buildArticle(articleHtml) : null;
   // Short articles skip the accordion and render straight through, but their
   // scripture links still need tinting.
-  $: flatHtml = entry?.bodyHtml ? colorScriptureLinks(entry.bodyHtml) : "";
+  $: flatHtml = articleHtml ? colorScriptureLinks(articleHtml) : "";
 
   // Which sections are open, keyed "0" for a top section and "0.2" for a child.
   let expanded: Record<string, boolean> = {};
@@ -567,7 +712,7 @@
         {/if}
       </div>
 
-      <div class="modal-body">
+      <div class="modal-body" bind:this={modalBodyEl}>
         {#if loading}
           <div class="muted">Loading…</div>
         {:else if activeTab === "overview"}
@@ -588,7 +733,7 @@
             <p class="muted">No encyclopedia article for this entry.</p>
           {/if}
         {:else if activeTab === "article" && entry}
-          <div class="article" on:click={onArticleClick} role="presentation">
+          <div class="article" bind:this={articleEl} on:click={onArticleClick} role="presentation">
             {#if article}
               {#if article.preamble}
                 <div class="prose">{@html article.preamble}</div>
@@ -655,6 +800,7 @@
                       {@const key = `${group.book} ${r.chapter}:${r.verse}`}
                       <button
                         class="vb-ref"
+                        class:visited={visitedRefs.has(key)}
                         style="border-left-color:{group.color}"
                         on:click={() => navigateFromVerseList(group.book, r.chapter, r.verse)}
                       >
@@ -903,6 +1049,15 @@
     cursor: pointer;
     text-decoration: none;
     border-bottom: 1px dotted currentColor;
+  }
+  /* Already followed — lightened rather than recolored, so the book color a
+     scripture link carries still reads. Resets when the modal is reopened. */
+  .article :global(a.visited) {
+    opacity: 0.5;
+  }
+  .vb-ref.visited .vb-ref-label,
+  .vb-ref.visited .vb-ref-text {
+    opacity: 0.5;
   }
   .vb-group {
     border-top: 1px solid rgba(255, 255, 255, 0.07);

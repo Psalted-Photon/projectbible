@@ -3,6 +3,7 @@
     navigationStore,
     availableTranslations,
     canGoBack,
+    historyDepth,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { BIBLE_BOOKS, normalizeBookName, CATEGORY_COLORS, CATEGORY_LABELS } from "../lib/bibleData";
@@ -587,25 +588,25 @@
 
   /**
    * Back arrow. Restores the reading position, and if the user got here by
-   * tapping a verse in the ISBE modal's verse list, brings that modal back too —
-   * same tab, same books expanded — so they can work down the list.
-   * A context left over from an earlier jump is dropped rather than honored:
-   * if they've navigated away since, reopening the modal would be a surprise.
+   * tapping a reference in the ISBE modal, brings that modal back too — same
+   * tab, same sections open, same scroll spot — so they can work down the list.
+   * The breadcrumb is only honored when this press is undoing the very step
+   * that left it; if they've navigated on since, reopening would be a surprise.
    */
   function goBack() {
     const ret = get(isbeReturnStore);
-    const here = get(navigationStore);
-    const stillThere =
-      !!ret && here.book === ret.at.book && here.chapter === ret.at.chapter;
+    const undoingTheJump = !!ret && get(historyDepth) === ret.depth;
 
     navigationStore.goBack();
 
-    if (!stillThere) {
-      if (ret) isbeReturnStore.set(null);
-      return;
+    if (undoingTheJump) {
+      // Left set for the modal to consume — it restores the rest of the context.
+      isbeModalStore.open(ret!.modal);
+    } else if (ret && get(historyDepth) < ret.depth) {
+      // Past it without ever landing on it — the context can't come back.
+      // Deeper than it is fine: keep walking back and we'll reach it.
+      isbeReturnStore.set(null);
     }
-    // Left set for the modal to consume — it restores the expanded books.
-    isbeModalStore.open(ret!.modal);
   }
 
   /** Jump the reader (or the owning window) to a book/chapter/verse. */
@@ -639,6 +640,15 @@
           lexicalEntries: null,
         });
       }
+    } else if (result.type === "encyclopedia") {
+      // Encyclopedia hits carry no reference, so they'd fall through the
+      // book/chapter branch below and the tap would do nothing at all.
+      isbeModalStore.open({
+        kind: result.data.isPlace ? "place" : "entry",
+        entryId: result.data.entryId,
+        placeId: null,
+        primaryName: result.data.primaryName,
+      });
     } else if (result.type === "journal") {
       // Journal opens in a docked window, same as from the journal calendar.
       const edge = window.innerHeight > window.innerWidth ? "bottom" : "right";

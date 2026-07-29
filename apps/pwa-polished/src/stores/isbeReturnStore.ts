@@ -6,10 +6,16 @@ export interface IsbeReturn {
   modal: Omit<IsbeModalState, 'isOpen'>;
   /** Books left expanded in the Verses tab, so you land back where you were reading. */
   expandedBooks: string[];
-  /** The verse we jumped to. The back arrow only restores the modal if the
-   *  reader is still sitting here; otherwise the user navigated on and the
-   *  context is stale. */
-  at: { book: string; chapter: number; verse: number };
+  /** Article sections left open, keyed the way IsbeModal keys them ("0", "0.2"). */
+  expandedSections: Record<string, boolean>;
+  /** Refs already tapped, so they stay dimmed across the round trip. */
+  visited: string[];
+  /** Scroll offset of the modal body, restored once the content is back. */
+  scrollTop: number;
+  /** Back-stack depth at the moment of the jump. The back arrow only restores
+   *  the modal when it is undoing this exact step; if the user navigated on,
+   *  the context is stale and reopening would be a surprise. */
+  depth: number;
 }
 
 /** Set when a verse is tapped in the ISBE modal, consumed by the nav back arrow. */
