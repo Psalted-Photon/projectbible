@@ -4,7 +4,7 @@
  * Build Section Headings Pack
  *
  * Parses all 66 BSB USFM (.SFM) files and extracts \s, \s1, \s2 pericope/section
- * headings, keyed by (book, chapter, verse). Outputs packs/headings.sqlite.
+ * headings, keyed by (book, chapter, verse). Outputs packs/section-headings.sqlite.
  *
  * These headings are CC0 / public domain (Berean Standard Bible) and serve as a
  * translation-agnostic overlay — any installed translation can display them.
@@ -23,7 +23,10 @@ const repoRoot = join(__dirname, '..');
 
 const USFM_DIR = join(repoRoot, 'data-sources', 'bsb_usfm', 'bsb_usfm');
 const PACKS_DIR = join(repoRoot, 'packs');
-const OUTPUT_PATH = join(PACKS_DIR, 'headings.sqlite');
+// Must be the name the manifest and PacksPane download (`section-headings.sqlite`).
+// This script used to write `headings.sqlite`, which nothing distributed — the
+// shipped pack silently stayed three months stale.
+const OUTPUT_PATH = join(PACKS_DIR, 'section-headings.sqlite');
 
 if (!existsSync(PACKS_DIR)) mkdirSync(PACKS_DIR, { recursive: true });
 
@@ -167,7 +170,7 @@ console.log('Building section headings pack from BSB USFM...\n');
 
 if (existsSync(OUTPUT_PATH)) {
   unlinkSync(OUTPUT_PATH);
-  console.log('Removed existing headings.sqlite\n');
+  console.log('Removed existing section-headings.sqlite\n');
 }
 
 const db = new Database(OUTPUT_PATH);
@@ -227,5 +230,5 @@ for (const book of BIBLE_BOOKS) {
 
 db.close();
 
-console.log(`\n✅ headings.sqlite built: ${totalHeadings} total headings`);
+console.log(`\n✅ section-headings.sqlite built: ${totalHeadings} total headings`);
 console.log(`   Output: ${OUTPUT_PATH}`);

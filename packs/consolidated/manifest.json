@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-07-29T03:18:19.444Z",
+  "createdAt": "2026-07-29T03:26:44.634Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -76,7 +76,7 @@
       "sha256": "1d4e1549df510e1cf8de1eae53b20d5b20e5a794883d73790fa67aaa6c42a5a5",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-07-29T03:18:24.174Z"
+      "createdAt": "2026-07-29T03:26:49.125Z"
     },
     {
       "id": "dictionary-en",
@@ -91,7 +91,7 @@
       "sha256": "92658730a38285039b6e35e2fdc95de9f0eafcd68558fa5ba32d5899e89dad69",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-07-29T03:18:24.024Z"
+      "createdAt": "2026-07-29T03:26:48.986Z"
     },
     {
       "id": "geonames-modern-places-v1",
@@ -136,7 +136,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-07-29T03:18:20.339Z"
+      "createdAt": "2026-07-29T03:26:45.474Z"
     },
     {
       "id": "section-headings",
@@ -146,12 +146,12 @@
       "version": "1.0.0",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 299008,
+      "size": 303104,
       "sizeMB": 0.29,
-      "sha256": "8871d350ab99927b16852e80abe174cd732253edae1dfe03a8ea727d8f2e2948",
+      "sha256": "730855faa5fa34cc9920d4cd9d8c310181c6977d10831caeebcaed1d8bf2296d",
       "dependencies": [],
       "downloadUrl": "/api/packs/section-headings.sqlite",
-      "createdAt": "2026-07-29T03:18:20.334Z"
+      "createdAt": "2026-07-29T03:26:45.470Z"
     },
     {
       "id": "study-tools",
@@ -196,7 +196,7 @@
       "sha256": "f4f492fd23fdb74d61d30345ca5650444b3fbc9b02a8602ccd04f26b8eb8fb46",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-07-29T03:18:20.274Z"
+      "createdAt": "2026-07-29T03:26:45.438Z"
     }
   ]
 }
