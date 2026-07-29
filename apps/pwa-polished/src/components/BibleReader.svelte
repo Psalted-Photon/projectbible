@@ -35,7 +35,7 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { IndexedDBTextStore } from "../lib/adapters";
-  import { renderVerseHtml, extractHeading } from "../lib/verseRendering";
+  import { renderVerseHtml, extractHeading, verseStructure } from "../lib/verseRendering";
   import { BIBLE_BOOKS, normalizeBookName, getBookColor as getCategoryColor } from "../lib/bibleData";
   import { getSettings, getInterlinearSettings, getTtsSettings } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
@@ -145,6 +145,8 @@
       heading?: string | null;
       headingLevel?: number | null;
       paraStart?: boolean;
+      poetryLevel?: 0 | 1 | 2;
+      stanzaBreak?: boolean;
     }>;
   }> = [];
   let loading = true;
@@ -1515,6 +1517,7 @@
           heading: finalHeading,
           headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
           paraStart,
+          ...verseStructure(cleanText),
         };
       });
 
@@ -2366,6 +2369,7 @@
             heading: finalHeading,
             headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
             paraStart,
+            ...verseStructure(cleanText),
           };
         });
 
@@ -2483,6 +2487,7 @@
             heading: finalHeading,
             headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
             paraStart,
+            ...verseStructure(cleanText),
           };
         });
 
@@ -4200,7 +4205,7 @@
             class:il-show-parse={isInterlinearActive && interlinearSettings.showParsing}
             style="--verse-num-color:{getBookColor(chapterData.book)}"
           >
-            {#each chapterData.verses as { verse, text, html, interlinearHtml, heading, headingLevel, paraStart }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
+            {#each chapterData.verses as { verse, text, html, interlinearHtml, heading, headingLevel, paraStart, poetryLevel, stanzaBreak }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
               {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
               {#if heading && showSectionHeadings}
                 <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
@@ -4208,6 +4213,9 @@
               <div
                 class="verse"
                 class:para-start={paraStart}
+                class:poetry-1={poetryLevel === 1}
+                class:poetry-2={poetryLevel === 2}
+                class:stanza-break={stanzaBreak}
                 class:tts-speaking={ttsHighlightVerse &&
                   $ttsCurrentVerse?.book === chapterData.book &&
                   $ttsCurrentVerse?.chapter === chapterData.chapter &&
@@ -5002,6 +5010,47 @@
     margin-top: 1.2em;
   }
 
+  /* ── Poetry ───────────────────────────────────────────────────────────────
+     A verse that opens a poetic line is indented as a whole; breaks inside a
+     verse come through as <br> from renderVerseHtml, with .poetry-indent
+     carrying the second-level indent. The indent span holds no text, so verse
+     character offsets — highlights, TTS glow — are unaffected. */
+  .verse.poetry-1,
+  .verse.poetry-2 {
+    display: block;
+    text-indent: -1.4em;
+    padding-left: 1.4em;
+  }
+
+  .verse.poetry-2 {
+    padding-left: 3em;
+  }
+
+  .verse.stanza-break {
+    margin-top: 1em;
+  }
+
+  /* Poetry wins over paragraph flow: a poetic line is a line. */
+  .verses.paragraph-layout .verse.poetry-1,
+  .verses.paragraph-layout .verse.poetry-2,
+  .verses.nonumber-layout .verse.poetry-1,
+  .verses.nonumber-layout .verse.poetry-2 {
+    display: block;
+  }
+
+  :global(.poetry-indent) {
+    display: inline-block;
+    width: 1.6em;
+  }
+
+  /* LXX marks a plural "you" with ⌃; shown as what it means, not a stray glyph */
+  :global(.plural-marker) {
+    color: var(--verse-num-color, #888);
+    font-size: 0.65em;
+    margin-left: 1px;
+    cursor: help;
+  }
+
   /* Increase font size for mobile devices */
   @media (max-width: 768px) {
     .verse-text {
@@ -5040,6 +5089,19 @@
     margin: 14px 0 6px 0;
     padding-top: 0;
     border-top: none;
+  }
+
+  /* Acrostic stanza labels (ALEPH, BETH… in Psalm 119) — a label, not a title */
+  .section-heading--s3 {
+    font-weight: 600;
+    font-size: calc(var(--base-font-size, 18px) - 3px);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--verse-num-color, #888);
+    margin: 18px 0 4px 0;
+    padding-top: 0;
+    border-top: none;
+    text-shadow: none;
   }
 
   /* KJV — larger headings to suit the blackletter aesthetic */

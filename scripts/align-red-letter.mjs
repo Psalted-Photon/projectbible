@@ -69,13 +69,22 @@ for (const [code, names] of Object.entries(USFM_TO_BOOK_NAMES)) {
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
+/**
+ * Reduce stored text to the "clean" form the spans are measured against.
+ * Must stay identical to buildCleanToStoredMap() in the PWA's verseRendering.ts,
+ * or the red-letter offsets land in the wrong place.
+ */
 function stripFootnotes(text) {
   let out = '';
   let i = 0;
   while (i < text.length) {
     const ch = text[i];
-    const prev = i > 0 ? text[i - 1] : ' ';
-    if (ch === '+' && (prev === ' ' || prev === '\n' || prev === '\t' || i === 0)) {
+    // Poetic line / stanza markers are structure, not text
+    if (ch === '\x10' || ch === '\x11' || ch === '\x12') { i++; continue; }
+    let p = i - 1;
+    while (p >= 0 && /[\x01-\x07\x0E\x0F\x10-\x12]/.test(text[p])) p--;
+    const prev = p >= 0 ? text[p] : ' ';
+    if (ch === '+' && (prev === ' ' || prev === '\n' || prev === '\t' || p < 0)) {
       const end = text.indexOf('\x01', i + 1);
       if (end >= 0) { i = end + 1; continue; }
     }

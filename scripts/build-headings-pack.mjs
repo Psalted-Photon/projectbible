@@ -130,6 +130,16 @@ function parseUSFMHeadings(filePath, bookName) {
       continue;
     }
 
+    // Acrostic stanza labels (\qa ALEPH, BETH…) in Psalm 119. They sit above
+    // the verse they open — level 3 so the reader can style them apart from
+    // pericope titles. Without this they end up welded to the previous verse.
+    const qaMatch = line.match(/^\\qa\s+(.*)/);
+    if (qaMatch && qaMatch[1].trim()) {
+      pendingLevel = 3;
+      pendingHeading = qaMatch[1].trim();
+      continue;
+    }
+
     // Verse: \v N [optional text on same line]
     const verseMatch = line.match(/^\\v\s+(\d+)/);
     if (verseMatch) {

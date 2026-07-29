@@ -106,68 +106,248 @@ const USFM_BOOK_MAP = {
 };
 
 /**
+ * Storage sentinels shared with the BSB pack builder and the PWA renderer.
+ * See docs/FEATURES-REFERENCE.md for the full namespace.
+ */
+const NOTE_END = '\x01';    // terminates a "+ note text" run
+const STANZA = '\x10';      // stanza break (verse-initial only)
+const LINE_1 = '\x11';      // new poetic line
+const LINE_2 = '\x12';      // new poetic line, indented
+// NB: \x0B and \x0C are whitespace to JS (trim(), \s), which would silently eat
+// them. \x10-\x12 are not, so the markers survive every existing string cleanup.
+
+/** Markers whose own text is footnote content, not verse text. */
+const FOOTNOTE_INNER = new Set(['fr', 'ft', 'fq', 'fqa', 'fl', 'fk', 'fv', 'fp', 'fdc']);
+
+/** Markers whose text is supplied/emphasised wording — stored as <i> like NET. */
+const ITALIC_MARKERS = new Set(['add', 'it', 'em', 'qt']);
+
+/** Front matter and structural lines that carry no verse text. */
+const SKIP_LINE_MARKERS = new Set([
+  'id', 'ide', 'h', 'toc1', 'toc2', 'toc3', 'mt1', 'mt2', 'mt3', 'ms', 'ms1', 'mr',
+  'ip', 'is1', 'is2', 'cl', 'cp', 'rem', 'sts', 'tr', 'tc1', 'tc2', 'th1', 'th2',
+  's', 's1', 's2', 'r', 'sp', 'b'
+]);
+
+/** Poetic line markers → the sentinel that represents them. */
+function poetryLevel(marker) {
+  if (marker === 'q' || marker === 'q1' || marker === 'pi' || marker === 'pi1') return LINE_1;
+  if (marker === 'q2' || marker === 'q3' || marker === 'q4' || marker === 'qr' || marker === 'pi2') return LINE_2;
+  return null;
+}
+
+/**
+ * Read a marker name at `i` (which must point at the backslash).
+ * Returns { marker, closing, next } where `closing` is true for e.g. \add*.
+ * A leading "+" marks a nested character marker (\+add inside a footnote) and
+ * is not part of the name.
+ */
+function readMarker(src, i) {
+  let j = i + 1;
+  if (src[j] === '+') j++;
+  let marker = '';
+  while (j < src.length && /[a-zA-Z0-9]/.test(src[j])) marker += src[j++];
+  const closing = src[j] === '*';
+  if (closing) j++;
+  return { marker, closing, next: j };
+}
+
+/**
+ * Consume a footnote (\f … \f*) or cross-reference (\x … \x*) starting at the
+ * backslash, and return it as a " + text\x01" run — the same shape the BSB pack
+ * builder emits, so the reader never has to guess where a note ends.
+ */
+function readNote(src, i, endMarker) {
+  let { next: j } = readMarker(src, i);
+  while (j < src.length && src[j] === ' ') j++;
+  // Caller character (+ - ?) identifying the note; not part of the text
+  if (src[j] === '+' || src[j] === '-' || src[j] === '?') j++;
+
+  let text = '';
+  // LXX2012 writes "\ft Gr. meeting \f*place" — the space that separates the
+  // note from the verse text it interrupts lives *inside* the note. Remember it
+  // so the words don't run together once the note is lifted out.
+  let trailingSpace = false;
+  while (j < src.length) {
+    if (src[j] === '\\') {
+      const m = readMarker(src, j);
+      if (m.marker === endMarker && m.closing) {
+        trailingSpace = /\s$/.test(text);
+        j = m.next;
+        break;
+      }
+      // Inner markers (\fr \ft \xo \xt …) are structure; their text is the note
+      j = m.next;
+      if (src[j] === ' ') j++;
+      if (text && !text.endsWith(' ')) text += ' ';
+      continue;
+    }
+    text += src[j++];
+  }
+
+  text = text.replace(/\s+/g, ' ').trim();
+  return { text, next: j, trailingSpace };
+}
+
+/**
+ * Convert one line of USFM body text into stored verse text.
+ * Footnotes/cross-refs become sentinel-terminated note runs, \add/\it become
+ * <i>, and every other marker is dropped while keeping its text.
+ */
+function parseInlineText(src) {
+  let out = '';
+  let i = 0;
+
+  while (i < src.length) {
+    if (src[i] !== '\\') {
+      out += src[i++];
+      continue;
+    }
+
+    const m = readMarker(src, i);
+
+    if ((m.marker === 'f' || m.marker === 'x') && !m.closing) {
+      const note = readNote(src, i, m.marker);
+      // LXX2012 has ~2,400 footnotes that are a bare reference with no text
+      // ("\f + \fr 89:13 \f*"). There is nothing to show, so they are not notes.
+      const hasContent = note.text.replace(/^\d+:\d+\s*/, '').trim().length > 0;
+      if (note.text && hasContent) {
+        if (out && !out.endsWith(' ')) out += ' ';
+        out += `+ ${note.text}${NOTE_END}`;
+        if (note.trailingSpace && note.next < src.length && !/\s/.test(src[note.next])) out += ' ';
+      }
+      i = note.next;
+      continue;
+    }
+
+    if (ITALIC_MARKERS.has(m.marker)) {
+      out += m.closing ? '</i>' : '<i>';
+      i = m.next;
+      if (!m.closing && src[i] === ' ') i++;
+      continue;
+    }
+
+    // Published verse number (\vp 36)\vp*) — Brenton prints it, so keep the text
+    // but drop the markers. Everything else: drop the marker, keep its text.
+    i = m.next;
+    if (src[i] === ' ' && !m.closing) i++;
+  }
+
+  return out;
+}
+
+/**
+ * Collapse whitespace without disturbing the sentinels.
+ *
+ * The space that joins two poetic lines is deliberately kept next to the line
+ * marker: strip the markers and the text is exactly what a marker-less build
+ * would produce, so nothing downstream that counts characters is disturbed.
+ */
+function tidy(text) {
+  return text
+    .replace(/[ \t]+/g, ' ')
+    .replace(/<i>\s*<\/i>/g, '')
+    .trim();
+}
+
+/**
  * Parse a single USFM file
  */
 export function parseUSFMFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8');
   const lines = content.split('\n');
-  
+
   let bookId = null;
   let bookName = null;
   let currentChapter = null;
   const verses = [];
-  
-  for (let line of lines) {
-    line = line.trim();
+
+  // Structure that arrives before the verse it belongs to
+  let pendingPoetry = null;   // \q1/\q2 line opening a verse
+  let pendingStanza = false;  // \b blank line
+  let pendingTitle = null;    // \d psalm superscription
+
+  const pushVerse = (verse, text) => {
+    const finalText = tidy(text);
+    if (finalText) verses.push({ book: bookName, chapter: currentChapter, verse, text: finalText });
+  };
+
+  for (let raw of lines) {
+    const line = raw.trim();
     if (!line) continue;
-    
-    // Book ID
-    if (line.startsWith('\\id ')) {
-      bookId = line.substring(4).trim().split(/\s+/)[0];
+    if (line[0] !== '\\') {
+      // Bare continuation text belongs to the verse in progress
+      if (verses.length > 0) verses[verses.length - 1].text = tidy(verses[verses.length - 1].text + ' ' + parseInlineText(line));
+      continue;
+    }
+
+    const { marker, next } = readMarker(line, 0);
+    const rest = line.slice(next).replace(/^ /, '');
+
+    if (marker === 'id') {
+      bookId = rest.trim().split(/\s+/)[0];
       bookName = USFM_BOOK_MAP[bookId] || bookId;
       continue;
     }
-    
-    // Chapter
-    if (line.startsWith('\\c ')) {
-      currentChapter = parseInt(line.substring(3).trim());
+
+    if (marker === 'c') {
+      currentChapter = parseInt(rest.trim());
+      pendingPoetry = null;
+      pendingStanza = false;
+      pendingTitle = null;
       continue;
     }
-    
-    // Verse
-    if (line.startsWith('\\v ')) {
-      if (!bookName || currentChapter === null) {
+
+    if (marker === 'b') {
+      pendingStanza = true;
+      continue;
+    }
+
+    // Psalm superscription — Brenton prints it as an italic title above verse 1,
+    // and the pack has nowhere else to put it, so it leads that verse.
+    if (marker === 'd') {
+      const title = parseInlineText(rest).trim();
+      if (title) pendingTitle = `<i>${title}</i>`;
+      continue;
+    }
+
+    if (SKIP_LINE_MARKERS.has(marker)) continue;
+
+    const level = poetryLevel(marker);
+    if (level || marker === 'p' || marker === 'm' || marker === 'nb') {
+      const text = parseInlineText(rest).trim();
+      if (!text) {
+        // Bare \q1 before a \v — the verse itself starts this poetic line
+        if (level) pendingPoetry = level;
         continue;
       }
-      
-      const verseContent = line.substring(3).trim();
-      const spaceIndex = verseContent.indexOf(' ');
-      const verseNum = parseInt(verseContent.substring(0, spaceIndex));
-      let text = verseContent.substring(spaceIndex + 1).trim();
-      
-      // Remove footnotes (\f ... \f*)
-      text = text.replace(/\\f\s+\+[^\\]*\\f\*/g, '');
-      
-      // Remove cross-references (\x ... \x*)
-      text = text.replace(/\\x\s+\+[^\\]*\\x\*/g, '');
-      
-      // Remove other markers
-      text = text.replace(/\\[a-z]+\*?/g, '');
-      
-      // Clean up extra whitespace
-      text = text.trim().replace(/\s+/g, ' ');
-      
-      if (text) {
-        verses.push({
-          book: bookName,
-          chapter: currentChapter,
-          verse: verseNum,
-          text
-        });
+      // Continuation text (LXX-only additions in 1–2 Kings, poetic lines)
+      if (verses.length > 0) {
+        const prev = verses[verses.length - 1];
+        prev.text = tidy(prev.text + ' ' + (level || '') + text);
       }
+      continue;
+    }
+
+    if (marker === 'v') {
+      if (!bookName || currentChapter === null) continue;
+
+      const spaceIndex = rest.indexOf(' ');
+      const verseNum = parseInt(spaceIndex === -1 ? rest : rest.substring(0, spaceIndex));
+      if (!Number.isFinite(verseNum)) continue;
+
+      let text = spaceIndex === -1 ? '' : parseInlineText(rest.substring(spaceIndex + 1));
+      const lead = (pendingStanza ? STANZA : '') + (pendingPoetry || '');
+      if (pendingTitle) text = `${pendingTitle} ${text}`;
+      pendingPoetry = null;
+      pendingStanza = false;
+      pendingTitle = null;
+
+      pushVerse(verseNum, lead + text.trim());
+      continue;
     }
   }
-  
+
   return { bookName, verses };
 }
 
@@ -218,7 +398,10 @@ export async function buildPackFromUSFM(dirPath, outputPath, packMetadata = {}) 
   const parsedData = parseUSFMDirectory(dirPath);
   
   console.log(`\n💾 Building SQLite pack: ${path.basename(outputPath)}`);
-  
+
+  // Start from scratch — verses are written with INSERT OR REPLACE, so building
+  // over an existing file would keep stale rows from an interrupted run.
+  if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
   const db = new Database(outputPath);
   
   // Create schema

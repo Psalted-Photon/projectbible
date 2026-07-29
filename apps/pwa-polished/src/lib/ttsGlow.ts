@@ -84,8 +84,9 @@ function measureWords(root: HTMLElement, origin: HTMLElement): WordBox[] {
     acceptNode(node) {
       const parent = (node as Text).parentElement;
       if (!parent) return NodeFilter.FILTER_REJECT;
-      // Skip anything that isn't spoken: footnote/xref markers, interlinear layers.
-      if (parent.closest('.inline-note, .il-gloss, .il-translit, .il-lemma, .il-strongs, .il-parse')) {
+      // Skip anything that isn't spoken: footnote/xref markers, the LXX plural
+      // marker, interlinear layers.
+      if (parent.closest('.inline-note, .plural-marker, .il-gloss, .il-translit, .il-lemma, .il-strongs, .il-parse')) {
         return NodeFilter.FILTER_REJECT;
       }
       return (node.nodeValue ?? '').trim().length > 0

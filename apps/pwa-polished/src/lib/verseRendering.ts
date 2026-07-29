@@ -39,56 +39,36 @@ function isCrossReference(noteText: string): boolean {
   return /\b\d+:\d+\b/.test(trimmed);
 }
 
+/** Poetic line / stanza markers written by the pack builders. */
+const STANZA = '\x10';
+const LINE_1 = '\x11';
+const LINE_2 = '\x12';
+
 /**
  * Given the position just after a "+" note marker (with whitespace and any
  * chapter:verse marker already skipped), find where the note's content ends.
- * Shared by the HTML renderer and the read-aloud text extractor so the two
- * can never disagree about note boundaries.
+ *
+ * The pack builders terminate every note with a \x01 sentinel, so the boundary
+ * is read, never guessed. Returns -1 when there is no terminator: the caller
+ * then treats the "+" as ordinary text rather than inventing an end, which is
+ * what used to swallow scripture in packs built before the sentinel existed.
  */
 function findNoteEnd(source: string, j: number): number {
-  let hasRefToken = false;
-  let noteEnd = source.length;
+  return source.indexOf('\x01', j);
+}
 
-  for (let k = j; k < source.length; k++) {
-    // Unambiguous sentinel inserted by pack builder
-    if (source.charCodeAt(k) === 1) {
-      noteEnd = k;
-      break;
-    }
-
-    if (!hasRefToken && /\b\d+:\d+\b/.test(source.slice(j, k + 1))) {
-      hasRefToken = true;
-    }
-
-    if (source[k] === '.' && k + 2 < source.length && source[k + 1] === ' ' && /[a-z]/.test(source[k + 2])) {
-      const tokenStart = Math.max(
-        source.lastIndexOf(' ', k - 1) + 1,
-        source.lastIndexOf('\n', k - 1) + 1,
-        source.lastIndexOf('\t', k - 1) + 1
-      );
-      const token = source.slice(tokenStart, k).trim();
-      const abbrev = token.replace(/[^A-Za-z]/g, '');
-      const nonTerminalAbbrevs = new Set(['Gr', 'Gk', 'Heb', 'Aram', 'Lat', 'Syr', 'LXX', 'Vg']);
-      if (nonTerminalAbbrevs.has(abbrev)) {
-        continue;
-      }
-
-      noteEnd = k + 1;
-      break;
-    }
-
-    if (hasRefToken && source[k] === ' ' && k + 1 < source.length && /[a-z]/.test(source[k + 1])) {
-      noteEnd = k;
-      break;
-    }
-
-    if (k > j && source[k] === '+' && (source[k - 1] === ' ' || source[k - 1] === '\n' || source[k - 1] === '\t')) {
-      noteEnd = k;
-      break;
-    }
-  }
-
-  return noteEnd;
+/**
+ * A "+" opens a note only at the start of the text or after whitespace.
+ * Structural markers are transparent — a note can directly follow a poetic
+ * line marker (LXX Psalm 2:1 begins with one).
+ */
+function isNoteStart(source: string, idx: number): boolean {
+  if (source[idx] !== '+') return false;
+  let p = idx - 1;
+  while (p >= 0 && /[\x01-\x07\x0E\x0F\x10-\x12]/.test(source[p])) p--;
+  if (p < 0) return true;
+  const prev = source[p];
+  return prev === ' ' || prev === '\n' || prev === '\t';
 }
 
 function renderTextWithInlineNotes(text: string): { html: string; noteCount: number } {
@@ -97,13 +77,6 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
   let i = 0;
   let noteIndex = 0;
 
-  const isPlusStart = (idx: number) => {
-    const ch = source[idx];
-    if (ch !== '+') return false;
-    const prev = idx > 0 ? source[idx - 1] : ' ';
-    return prev === ' ' || prev === '\n' || prev === '\t' || idx === 0;
-  };
-
   while (i < source.length) {
     const plusPos = source.indexOf('+', i);
     if (plusPos === -1) {
@@ -111,7 +84,21 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
       break;
     }
 
-    if (!isPlusStart(plusPos)) {
+    if (!isNoteStart(source, plusPos)) {
+      out += escapeHtml(source.slice(i, plusPos + 1));
+      i = plusPos + 1;
+      continue;
+    }
+
+    // Parse note
+    let j = plusPos + 1;
+    while (j < source.length && /\s/.test(source[j])) j++;
+
+    const noteEnd = findNoteEnd(source, j);
+    if (noteEnd === -1) {
+      // Unterminated: this pack predates the sentinel, so there is no honest way
+      // to know where the note stops. Show it verbatim rather than guess — a
+      // guess here used to eat the rest of the verse.
       out += escapeHtml(source.slice(i, plusPos + 1));
       i = plusPos + 1;
       continue;
@@ -120,18 +107,6 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
     // Emit text before note
     out += escapeHtml(source.slice(i, plusPos));
 
-    // Parse note
-    let j = plusPos + 1;
-    while (j < source.length && /\s/.test(source[j])) j++;
-
-    // Check if this is a heading (ends with period followed by capital letter)
-    const headingMatch = source.slice(j).match(/^([^.]+)\.\s+([A-Z])/);
-    if (headingMatch && plusPos < 50) {
-      // This is a heading at start of verse - skip it (it's in v.heading field)
-      i = j + headingMatch[0].length - 2; // -2 to keep the capital letter
-      continue;
-    }
-
     // Optional leading chapter:verse marker (e.g. 53:1)
     const markerMatch = source.slice(j).match(/^(\d+):(\d+)\s*/);
     if (markerMatch) {
@@ -139,9 +114,10 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
     }
 
     const noteStart = j;
-    const noteEnd = findNoteEnd(source, j);
-
-    const rawNote = source.slice(noteStart, noteEnd).trim();
+    // Structural markers never belong in a note's tooltip or data attribute —
+    // and leaving one there would let a later marker→markup pass rewrite the
+    // inside of an attribute.
+    const rawNote = source.slice(noteStart, noteEnd).replace(/[\x10-\x13]/g, '').trim();
     if (rawNote.length > 0) {
       noteIndex++;
       const encoded = encodeURIComponent(rawNote);
@@ -156,13 +132,11 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
         `data-note="${encoded}" data-note-index="${noteIndex}" ` +
         `style="color:${noteColor}; cursor:pointer; font-size:11px; margin:0 2px;" ` +
         `title="${noteType} ${noteIndex}: ${encodedTitle}">[${noteIndex}]</sup>`;
-    } else {
-      out += escapeHtml(source.slice(plusPos, noteEnd));
     }
+    // A note with no content after its reference has nothing to show, so it is
+    // dropped outright — the same thing the preview and speech paths do.
 
-    i = noteEnd;
-    // Skip sentinel if present
-    if (i < source.length && source.charCodeAt(i) === 1) i++;
+    i = noteEnd + 1;
   }
 
   return { html: out, noteCount: noteIndex };
@@ -173,6 +147,9 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
  * stored-text positions.  Used to insert \x02/\x03 red-letter sentinels into
  * stored text at the correct byte offsets.
  *
+ * "Clean" must mean exactly what stripFootnotes() in scripts/align-red-letter.mjs
+ * means when the spans are computed, so poetic line markers are skipped here too.
+ *
  * Returns an array where map[cleanPos] = storedPos.
  * The last entry map[cleanLength] = storedLength covers the end position.
  */
@@ -182,9 +159,11 @@ function buildCleanToStoredMap(storedText: string): number[] {
   let i = 0;
   while (i < storedText.length) {
     const ch = storedText[i];
-    const prev = i > 0 ? storedText[i - 1] : ' ';
-    const isFootnoteStart = ch === '+' && (prev === ' ' || prev === '\n' || prev === '\t' || i === 0);
-    if (isFootnoteStart) {
+    if (ch === STANZA || ch === LINE_1 || ch === LINE_2) {
+      i++; // structural only — not part of the text the spans were measured on
+      continue;
+    }
+    if (isNoteStart(storedText, i)) {
       const end = storedText.indexOf('\x01', i + 1);
       if (end >= 0) {
         i = end + 1; // skip footnote content entirely
@@ -249,7 +228,10 @@ function extractFormattingSpans(text: string): { start: number; end: number; kin
 export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]): string {
   const cleaned = stripHtmlTags(text);
 
-  let processed = cleaned;
+  // ⌃ (plural "you") becomes markup at the very end. Swap it for a marker now,
+  // one character for one, so span offsets are untouched and the substitution
+  // can never land inside an attribute of a note rendered from this text.
+  let processed = cleaned.replace(/⌃/g, '\x13');
   const insertions: { pos: number; ch: string }[] = [];
 
   // Red-letter spans → \x02/\x03 sentinels (offsets mapped past footnote markers)
@@ -290,7 +272,31 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
     .replace(/\x02([\s\S]*?)\x03/g, '<span class="red-letter">$1</span>')
     .replace(/\x04([\s\S]*?)\x05/g, '<b>$1</b>')
     .replace(/\x06([\s\S]*?)\x07/g, '<i>$1</i>')
-    .replace(/[\x02\x03\x04\x05\x06\x07]/g, '');
+    .replace(/[\x02\x03\x04\x05\x06\x07]/g, '')
+    // Poetic lines. A leading marker is the verse's own indent and is applied to
+    // the verse element by verseStructure(), so only mid-verse breaks emit a
+    // <br> here. Neither adds a text character, which keeps saved highlights,
+    // TTS glow offsets and red-letter spans aligned.
+    .replace(/^[\x10\x11\x12]+/, '')
+    .replace(/\x11/g, '<br>')
+    .replace(/\x12/g, '<br><span class="poetry-indent"></span>')
+    .replace(/\x10/g, '')
+    // ⌃ marks a plural "you" in the LXX — a stray glyph mid-sentence unless it
+    // is presented as what it is.
+    .replace(/\x13/g, '<sup class="plural-marker" title="Plural &ldquo;you&rdquo;">[pl]</sup>');
+}
+
+/**
+ * Structure a verse carries in its own right, rather than inside its text:
+ * which poetic line it opens and whether a stanza break precedes it. The reader
+ * applies these to the verse element, mirroring how `¶` drives `.para-start`.
+ */
+export function verseStructure(text: string): { poetryLevel: 0 | 1 | 2; stanzaBreak: boolean } {
+  const lead = (text ?? '').match(/^[\x10\x11\x12]+/)?.[0] ?? '';
+  return {
+    poetryLevel: lead.includes(LINE_2) ? 2 : lead.includes(LINE_1) ? 1 : 0,
+    stanzaBreak: lead.includes(STANZA),
+  };
 }
 
 /**
@@ -306,42 +312,31 @@ function dropInlineNotes(source: string): string {
   let out = '';
   let i = 0;
 
-  const isPlusStart = (idx: number) => {
-    if (source[idx] !== '+') return false;
-    let p = idx - 1;
-    while (p >= 0 && source.charCodeAt(p) >= 2 && source.charCodeAt(p) <= 7) p--;
-    if (p < 0) return true;
-    const prev = source[p];
-    return prev === ' ' || prev === '\n' || prev === '\t';
-  };
-
   while (i < source.length) {
     const plusPos = source.indexOf('+', i);
     if (plusPos === -1) {
       out += source.slice(i);
       break;
     }
-    if (!isPlusStart(plusPos)) {
+    if (!isNoteStart(source, plusPos)) {
       out += source.slice(i, plusPos + 1);
       i = plusPos + 1;
       continue;
     }
-    out += source.slice(i, plusPos);
 
     let j = plusPos + 1;
     while (j < source.length && /\s/.test(source[j])) j++;
 
-    // Mid-verse heading ("+ Heading. Next sentence") — skip the heading only
-    const headingMatch = source.slice(j).match(/^([^.]+)\.\s+([A-Z])/);
-    if (headingMatch && plusPos < 50) {
-      i = j + headingMatch[0].length - 2;
+    const noteEnd = findNoteEnd(source, j);
+    if (noteEnd === -1) {
+      // No terminator — keep the text as-is rather than guessing an end
+      out += source.slice(i, plusPos + 1);
+      i = plusPos + 1;
       continue;
     }
-    const markerMatch = source.slice(j).match(/^(\d+):(\d+)\s*/);
-    if (markerMatch) j += markerMatch[0].length;
 
-    i = findNoteEnd(source, j);
-    if (i < source.length && source.charCodeAt(i) === 1) i++;
+    out += source.slice(i, plusPos);
+    i = noteEnd + 1;
   }
   return out;
 }
@@ -379,7 +374,8 @@ export function renderVersePreviewHtml(
 
   work = dropInlineNotes(work)
     .replace(/\x01/g, '')
-    .replace(/¶/g, '')
+    .replace(/[\x10\x11\x12]/g, ' ')
+    .replace(/[¶⌃]/g, '')
     .replace(/[ \t\n]+/g, ' ')
     .trim();
 
@@ -416,17 +412,28 @@ export function renderVersePreviewHtml(
 export function cleanVersePreviewText(text: string): string {
   return dropInlineNotes(stripHtmlTags(text ?? ''))
     .replace(/\x01/g, '')
-    .replace(/¶/g, '')
+    .replace(/[\x10\x11\x12]/g, ' ')
+    .replace(/[¶⌃]/g, '')
     .replace(/[ \t\n]+/g, ' ')
     .trim();
 }
 
 export function extractHeading(text: string): { heading: string | null; textWithoutHeading: string } {
   const source = text ?? '';
-  
+
+  // A leading note is a note, not a heading — LXX verses often open with one
+  // ("+ 1:9 Gr. meeting\x01 place, and let the dry land appear"), and its text
+  // can contain a period that the heading pattern would happily swallow. Only
+  // the old "+ Heading. " convention, which carries no terminator, is a heading.
+  let lead = 0;
+  while (lead < source.length && /[\s\x10\x11\x12]/.test(source[lead])) lead++;
+  if (source[lead] === '+' && source.indexOf('\x01', lead) !== -1) {
+    return { heading: null, textWithoutHeading: source };
+  }
+
   // Check if text starts with "+ Heading. "
   const headingMatch = source.match(/^\s*\+\s*([^.]+)\.\s+/);
-  
+
   if (headingMatch) {
     return {
       heading: headingMatch[1].trim(),
@@ -450,13 +457,6 @@ export function extractSpeechText(text: string): string {
   let out = '';
   let i = 0;
 
-  const isPlusStart = (idx: number) => {
-    const ch = source[idx];
-    if (ch !== '+') return false;
-    const prev = idx > 0 ? source[idx - 1] : ' ';
-    return prev === ' ' || prev === '\n' || prev === '\t' || idx === 0;
-  };
-
   while (i < source.length) {
     const plusPos = source.indexOf('+', i);
     if (plusPos === -1) {
@@ -464,41 +464,33 @@ export function extractSpeechText(text: string): string {
       break;
     }
 
-    if (!isPlusStart(plusPos)) {
+    if (!isNoteStart(source, plusPos)) {
       out += source.slice(i, plusPos + 1);
       i = plusPos + 1;
       continue;
     }
 
-    // Emit text before the note
-    out += source.slice(i, plusPos);
-
     // Parse the note the same way the renderer does
     let j = plusPos + 1;
     while (j < source.length && /\s/.test(source[j])) j++;
 
-    // Mid-verse heading ("+ Heading. Next sentence") — skip the heading,
-    // keep reading from the capital letter (renderer parity)
-    const headingMatch = source.slice(j).match(/^([^.]+)\.\s+([A-Z])/);
-    if (headingMatch && plusPos < 50) {
-      i = j + headingMatch[0].length - 2;
+    const noteEnd = findNoteEnd(source, j);
+    if (noteEnd === -1) {
+      // No terminator — speak it rather than guess where it ends
+      out += source.slice(i, plusPos + 1);
+      i = plusPos + 1;
       continue;
     }
 
-    // Optional leading chapter:verse marker (e.g. 53:1)
-    const markerMatch = source.slice(j).match(/^(\d+):(\d+)\s*/);
-    if (markerMatch) {
-      j += markerMatch[0].length;
-    }
-
-    // Drop the note content entirely
-    i = findNoteEnd(source, j);
-    if (i < source.length && source.charCodeAt(i) === 1) i++;
+    // Emit text before the note, then drop the note content entirely
+    out += source.slice(i, plusPos);
+    i = noteEnd + 1;
   }
 
   return out
     .replace(/\x01/g, '')
-    .replace(/¶/g, '')
+    .replace(/[\x10\x11\x12]/g, ' ')
+    .replace(/[¶⌃]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }

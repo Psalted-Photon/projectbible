@@ -13,7 +13,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -105,6 +105,34 @@ const BIBLE_BOOKS = [
 /**
  * Parse USFM file and extract verses with rich text (footnotes, cross-refs, headings)
  */
+/**
+ * Storage sentinels. \x01 terminates a note run; the poetry markers below are
+ * deliberately NOT \x0B/\x0C, which JavaScript treats as whitespace and would
+ * silently eat in trim()/\s. See docs/FEATURES-REFERENCE.md.
+ */
+const STANZA = '\x10';   // stanza break (verse-initial only)
+const LINE_1 = '\x11';   // new poetic line
+const LINE_2 = '\x12';   // new poetic line, indented
+
+const POETRY_LEVEL = {
+  q: LINE_1, q1: LINE_1, pi: LINE_1, pi1: LINE_1,
+  q2: LINE_2, q3: LINE_2, q4: LINE_2, qr: LINE_2, qm: LINE_2, pi2: LINE_2
+};
+
+/** Line-level markers whose text continues the verse as ordinary prose. */
+const PROSE_MARKERS = ['p', 'm', 'mi', 'nb', 'pmo', 'pm', 'pc', 'cls', 'ph1', 'li', 'li1', 'li2', 'li3'];
+
+/**
+ * Markers this builder has always separated with an unconditional space. Source
+ * lines usually end in a space already, so that produces a double space —
+ * invisible in HTML, and every shipped pack has them. Collapsing them now would
+ * shift saved highlight offsets in ~7,700 poetic verses, so the existing byte
+ * layout is preserved exactly. Markers outside this set are new here (their text
+ * used to be glued onto the previous word) and get a space only when one is
+ * actually missing.
+ */
+const LEGACY_SPACED_MARKERS = new Set(['p', 'm', 'q', 'q1', 'q2', 'q3', 'qm', 'qr', 'pmo', 'pm', 'pi', 'pi1', 'pi2']);
+
 function parseUSFM(content) {
   const verses = [];
   let currentChapter = 0;
@@ -112,7 +140,11 @@ function parseUSFM(content) {
   let verseText = '';
   let pendingHeading = '';
   let pendingCrossRef = '';
-  
+  // Structure that appears before the verse it belongs to
+  let pendingPoetry = '';
+  let pendingStanza = false;
+  let pendingTitle = '';
+
   // Process content character by character to handle inline markers
   let i = 0;
   while (i < content.length) {
@@ -127,7 +159,14 @@ function parseUSFM(content) {
         marker += content[i];
         i++;
       }
-      
+
+      // Closing form of a character marker, e.g. \it*
+      let closingMarker = false;
+      if (content[i] === '*') {
+        closingMarker = true;
+        i++;
+      }
+
       // Skip whitespace after marker
       while (i < content.length && content[i] === ' ') {
         i++;
@@ -155,6 +194,9 @@ function parseUSFM(content) {
         currentVerse = null;
         pendingHeading = '';
         pendingCrossRef = '';
+        pendingPoetry = '';
+        pendingStanza = false;
+        pendingTitle = '';
         
         // Skip to end of line
         while (i < content.length && content[i] !== '\n') i++;
@@ -210,14 +252,23 @@ function parseUSFM(content) {
         // Store heading separately (will be attached to this verse)
         const headingForVerse = pendingHeading;
         pendingHeading = '';
-        
+
         // We'll attach the heading when saving the verse
         // Mark this verse as having a heading
         if (headingForVerse) {
           // Store temporarily - we'll add it when verse completes
           verseText = `__HEADING__${headingForVerse}__HEADING_END__`;
         }
-        
+
+        // Structure that arrived ahead of this verse: stanza gap, the poetic
+        // line it opens, and any psalm superscription. The heading token stays
+        // first so processVerses() can still strip it off the front.
+        verseText += (pendingStanza ? STANZA : '') + pendingPoetry;
+        if (pendingTitle) verseText += `${pendingTitle} `;
+        pendingStanza = false;
+        pendingPoetry = '';
+        pendingTitle = '';
+
         continue;
       }
       
@@ -256,27 +307,79 @@ function parseUSFM(content) {
         continue;
       }
       
-      // Skip structural markers that carry no verse text
-      if (['b', 'id', 'h', 'toc1', 'toc2', 'mt1', 'mt2', 'ms', 'mr', 'd'].includes(marker)) {
+      // Stanza break — belongs to the verse that follows it
+      if (marker === 'b') {
+        pendingStanza = true;
         while (i < content.length && content[i] !== '\n') i++;
         continue;
       }
 
-      // Paragraph/poetry continuation markers — the rest of the line may contain verse text.
-      // Inject a space separator so words don't run together, then let the main loop read the text.
-      if (['p', 'm', 'q', 'q1', 'q2', 'q3', 'qm', 'qr', 'pmo', 'pm', 'pi', 'pi1', 'pi2'].includes(marker)) {
+      // Psalm superscription ("A Psalm of David") — printed as an italic title
+      // above verse 1, and the pack has nowhere else to put it, so it leads
+      // that verse rather than being dropped.
+      if (marker === 'd') {
+        // A bare "\d" (Zechariah 12) puts the newline right at i, so guard the
+        // not-found case explicitly — treating it as "no newline" would swallow
+        // the rest of the file as the title.
+        const lineEnd = content.indexOf('\n', i);
+        const end = lineEnd === -1 ? content.length : lineEnd;
+        const title = content.substring(i, end).trim();
+        if (title) pendingTitle = `<i>${cleanUSFMMarkup(title)}</i>`;
+        i = end;
+        continue;
+      }
+
+      // Acrostic stanza labels (ALEPH, BETH…) belong above the verse, not welded
+      // to the end of the previous one. They ship in the headings pack instead.
+      if (marker === 'qa') {
+        while (i < content.length && content[i] !== '\n') i++;
+        continue;
+      }
+
+      // Skip structural markers that carry no verse text
+      if (['id', 'h', 'toc1', 'toc2', 'toc3', 'mt1', 'mt2', 'mt3', 'ms', 'ms1', 'mr', 'sp', 'rem'].includes(marker)) {
+        while (i < content.length && content[i] !== '\n') i++;
+        continue;
+      }
+
+      // Italic character marker (supplied/emphasised wording), stored the way
+      // NET stores it so the existing <i> renderer picks it up.
+      if (marker === 'it') {
+        if (currentVerse !== null) verseText += closingMarker ? '</i>' : '<i>';
+        continue;
+      }
+
+      // Poetry and paragraph continuation markers. The rest of the line may hold
+      // verse text; a bare marker instead opens the line the next verse starts.
+      const poetry = POETRY_LEVEL[marker];
+      if (poetry || PROSE_MARKERS.includes(marker)) {
+        let k = i;
+        while (k < content.length && content[k] !== '\n' && /\s/.test(content[k])) k++;
+        const bareLine = k >= content.length || content[k] === '\n';
+
+        if (bareLine) {
+          if (poetry) pendingPoetry = poetry;
+          continue;
+        }
+        // The separating space is kept beside the marker: strip the markers and
+        // the text is byte-for-byte what this builder produced before.
         if (currentVerse !== null && verseText.trim().length > 0) {
-          verseText += ' ';
+          if (LEGACY_SPACED_MARKERS.has(marker) || !/\s$/.test(verseText)) {
+            verseText += ' ';
+          }
+          if (poetry) verseText += poetry;
         }
         continue;
       }
-      
+
       // Unknown marker - skip it
       continue;
     }
     
-    // Regular text - add to current verse if we have one
-    if (currentVerse !== null && content[i] !== '\n') {
+    // Regular text - add to current verse if we have one.
+    // The sources are CRLF; a bare \r is a line terminator, not verse text, and
+    // leaving it in makes "does this already end in whitespace?" answer wrongly.
+    if (currentVerse !== null && content[i] !== '\n' && content[i] !== '\r') {
       verseText += content[i];
     }
     
@@ -369,7 +472,10 @@ async function buildBSBPack() {
     process.exit(1);
   }
   
-  // Create database
+  // Create database. Start from scratch: rows are written with INSERT OR
+  // REPLACE, so building over a previous file would leave stale verses behind
+  // wherever a run was interrupted — a pack that is half one build, half another.
+  if (existsSync(OUTPUT_PATH)) unlinkSync(OUTPUT_PATH);
   const db = new Database(OUTPUT_PATH);
   
   try {
