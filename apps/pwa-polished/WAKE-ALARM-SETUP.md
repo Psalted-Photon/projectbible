@@ -35,9 +35,10 @@ Dashboard → Edge Functions → wake-alarm-send → Secrets. Four values:
 | `VAPID_PUBLIC_KEY` | `BOMwzIMb574wuRHg-HEtqIYRCoBBsMArY-tYSxzgJqSckWQILqP-9Mb8Y7aF-MKXixmTDzsrQLthcP8NkXKd8zA` |
 | `VAPID_PRIVATE_KEY` | *the private key — see below* |
 | `VAPID_SUBJECT` | `mailto:marlowescotts@gmail.com` |
-| `SUPABASE_SERVICE_ROLE_KEY` | usually provided automatically; add it if the function reports it missing |
 
-`SUPABASE_URL` is always provided automatically.
+Three secrets, that's all. Do **not** try to add `SUPABASE_URL` or
+`SUPABASE_SERVICE_ROLE_KEY` — Supabase reserves the `SUPABASE_` name prefix and
+will refuse to create them. Both are injected into every function automatically.
 
 The **private key** is deliberately not in this repo. It is in the scratchpad
 file `vapid-keys.txt` from the session that generated it. It must never go into

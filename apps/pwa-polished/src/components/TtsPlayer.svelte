@@ -3,7 +3,7 @@
   import { get } from 'svelte/store';
   import { IndexedDBTextStore } from '../lib/adapters.js';
   import { extractSpeechText } from '../lib/verseRendering.js';
-  import { continuousPlay, ttsAutoplayNext, ttsCurrentVerse } from '../stores/audioStore.js';
+  import { continuousPlay, ttsAutoplayNext, ttsCurrentVerse, ttsStartRequest } from '../stores/audioStore.js';
   import { getTtsSettings } from '../adapters/settings.js';
   import {
     isTtsSupported,
@@ -14,6 +14,15 @@
     unlockTtsAudio,
     getVoiceInfo,
   } from '../adapters/tts.js';
+  import {
+    sleepRemaining,
+    stopAtChapterEnd,
+    sleepStopNonce,
+    startSleepTimer,
+    setStopAtChapterEnd,
+    cancelSleepTimer,
+    remainingMinutes,
+  } from '../lib/tts/sleepTimer.js';
 
   const dispatch = createEventDispatcher<{ nextchapter: { book: string; chapter: number } }>();
 
@@ -60,7 +69,29 @@
     }
   });
 
+  // The wake alarm asks for a chapter by name rather than relying on a fresh
+  // mount, because "continue where you left off" is usually the chapter already
+  // on screen. Subscribing fires immediately with the current value, so this
+  // covers both an already-mounted player and one that has just appeared.
+  const unsubscribeStartRequest = ttsStartRequest.subscribe((request) => {
+    if (!request || request.book !== book || request.chapter !== chapter) return;
+    ttsStartRequest.set(null);
+    startReading();
+  });
+
+  // The sleep timer runs the clock; only the player can tear down its queue and
+  // caches, so it asks us to stop rather than doing it itself. Skip the value
+  // present at subscribe time — that is history, not a fresh request.
+  let lastStopNonce = get(sleepStopNonce);
+  const unsubscribeSleepStop = sleepStopNonce.subscribe((nonce) => {
+    if (nonce === lastStopNonce) return;
+    lastStopNonce = nonce;
+    if (ownsAudio()) stopReading();
+  });
+
   onDestroy(() => {
+    unsubscribeStartRequest();
+    unsubscribeSleepStop();
     stopReading();
   });
 
@@ -126,6 +157,10 @@
       if (!ownsAudio() || gen !== generation) return;
       if (index + 1 < verses.length) {
         playIndex(index + 1, gen);
+      } else if (get(stopAtChapterEnd)) {
+        // "End of chapter" beats auto-advance — that is the whole point of it.
+        cancelSleepTimer();
+        stopReading();
       } else if (get(continuousPlay)) {
         ttsAutoplayNext.set(true);
         stopReading();
@@ -155,6 +190,31 @@
     ttsCurrentVerse.set({ book, chapter, verse: verses[index].verse });
     // Keep one verse ahead of playback
     ensureSynth(index + 1, gen);
+  }
+
+  // ── sleep timer ───────────────────────────────────────────────────────────
+
+  $: sleepArmed = $sleepRemaining !== null || $stopAtChapterEnd;
+  $: sleepLabel = $stopAtChapterEnd
+    ? '⏱ chapter'
+    : $sleepRemaining !== null
+      ? `⏱ ${remainingMinutes($sleepRemaining)}m`
+      : '⏱';
+  // The select shows the armed state as its value, so it reads as a status too.
+  $: sleepChoice = sleepArmed ? 'keep' : '0';
+
+  function applySleepChoice(event: Event): void {
+    const value = (event.currentTarget as HTMLSelectElement).value;
+    if (value === 'keep') return;
+    if (value === '0') cancelSleepTimer();
+    else if (value === 'chapter') setStopAtChapterEnd();
+    else startSleepTimer(parseInt(value, 10));
+  }
+
+  /** Pressing stop is a decision to be done — it disarms the timer too. */
+  function handleUserStop(): void {
+    cancelSleepTimer();
+    stopReading();
   }
 
   /**
@@ -297,7 +357,7 @@
           {/each}
         </select>
         <span class="tts-progress">/ {verses[verseCount - 1]?.verse ?? verseCount}</span>
-        <button class="tts-btn" on:click={stopReading} title="Stop reading">■</button>
+        <button class="tts-btn" on:click={handleUserStop} title="Stop reading">■</button>
         <button
           class="tts-btn tts-continuous-btn"
           class:tts-continuous-active={$continuousPlay}
@@ -305,6 +365,25 @@
           title={$continuousPlay ? 'Auto-advance: on (click to turn off)' : 'Auto-advance to next chapter'}
           aria-label="Toggle continuous play"
         >↠</button>
+        <select
+          class="tts-sleep-picker"
+          class:tts-sleep-armed={sleepArmed}
+          bind:value={sleepChoice}
+          on:change={applySleepChoice}
+          title={sleepArmed ? 'Sleep timer running — fades out and stops' : 'Sleep timer'}
+          aria-label="Sleep timer"
+        >
+          {#if sleepArmed}
+            <option value="keep">{sleepLabel}</option>
+          {/if}
+          <option value="0">{sleepArmed ? 'Off' : '⏱'}</option>
+          <option value="10">10 min</option>
+          <option value="20">20 min</option>
+          <option value="30">30 min</option>
+          <option value="45">45 min</option>
+          <option value="60">60 min</option>
+          <option value="chapter">End of chapter</option>
+        </select>
       {/if}
     {/if}
   </div>
@@ -379,6 +458,28 @@
     border-color: rgba(157, 122, 245, 0.7);
   }
 
+  /* Same picker treatment as the verse jump, but muted until it is armed —
+     an unset timer should not compete with the playback controls. */
+  .tts-sleep-picker {
+    background: transparent;
+    border: 1px solid rgba(157, 122, 245, 0.2);
+    border-radius: 4px;
+    color: #7a7a8a;
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+    padding: 1px 4px;
+    cursor: pointer;
+    max-width: 10ch;
+  }
+  .tts-sleep-picker:hover {
+    border-color: rgba(157, 122, 245, 0.6);
+    color: #b79df7;
+  }
+  .tts-sleep-armed {
+    border-color: rgba(157, 122, 245, 0.55);
+    color: #b79df7;
+  }
+
   .tts-spinner {
     font-size: 0.85rem;
     opacity: 0.7;
@@ -423,6 +524,10 @@
       font-size: 0.85rem;
     }
     .tts-verse-picker {
+      font-size: 0.85rem;
+      padding: 3px 6px;
+    }
+    .tts-sleep-picker {
       font-size: 0.85rem;
       padding: 3px 6px;
     }

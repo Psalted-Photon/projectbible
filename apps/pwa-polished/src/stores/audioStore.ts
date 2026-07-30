@@ -12,6 +12,15 @@ export const autoplayNext = writable<boolean>(false);
  *  would otherwise race to consume the flag. */
 export const ttsAutoplayNext = writable<boolean>(false);
 
+/** Ask Read Aloud to start on a specific chapter.
+ *
+ *  Unlike ttsAutoplayNext, this addresses a chapter by name rather than relying
+ *  on a fresh mount. The wake alarm needs that: "continue where I left off"
+ *  usually resolves to the chapter already on screen, so no navigation happens
+ *  and no new player mounts. The matching TtsPlayer consumes this and clears it.
+ */
+export const ttsStartRequest = writable<{ book: string; chapter: number } | null>(null);
+
 /** The verse Read Aloud is currently speaking, or null when not reading.
  *  Drives the verse highlight and the drifting glow. Playback progress is
  *  read straight off the shared audio element, so pause/seek/speed need no

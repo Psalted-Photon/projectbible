@@ -5,6 +5,8 @@
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
+  import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
+  import { wakeAlarmStartOpen } from "./stores/wakeAlarmStore";
   import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
   import PaneContainer from "./components/PaneContainer.svelte";
@@ -166,6 +168,34 @@
     document.addEventListener('visibilitychange', handleVisibilityUpdateCheck);
     checkForSwUpdate();
 
+    // ── Wake alarm ──────────────────────────────────────────────────────────
+    // Two ways in. A cold launch arrives at ?alarm=1, the URL the service
+    // worker opened. A warm launch (app already running, notification tapped)
+    // gets no navigation at all, so the service worker messages us instead.
+    const openWakeAlarmStart = () => wakeAlarmStartOpen.set(true);
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('alarm') === '1') {
+        openWakeAlarmStart();
+        // Strip the flag so a later reload — including the auto-update reload
+        // above — does not resurrect the start screen.
+        params.delete('alarm');
+        params.delete('test');
+        const query = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+      }
+    } catch {
+      // A malformed URL must not stop the app from starting.
+    }
+
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'wake-alarm-opened') openWakeAlarmStart();
+    };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    }
+
     // Show daily greeting on first open of each new day
     setTimeout(() => checkAndShowDailyGreeting(), 800);
 
@@ -183,6 +213,7 @@
       document.removeEventListener('visibilitychange', handleVisibilityUpdateCheck);
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+        navigator.serviceWorker.removeEventListener('message', handleSwMessage);
       }
       document.removeEventListener('keydown', handleGlobalKeydown);
       window.removeEventListener('settingsUpdated', applyOrientationLock);
@@ -264,6 +295,9 @@
 
     <!-- "Running Latest Version" toast after an auto-update reload -->
     <UpdateNotice />
+
+    <!-- Wake alarm start screen — shown when opened from an alarm notification -->
+    <WakeAlarmStart />
   {/if}
 </div>
 
