@@ -217,9 +217,16 @@ export default defineConfig({
     svelte(),
     VitePWA({
       registerType: 'autoUpdate',
+      // The status-bar badge is drawn by the service worker when a wake alarm
+      // arrives, so precache it — the glob only picks up manifest icons.
+      includeAssets: ['notification-badge-96.png'],
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
+        // Wake alarm push + notification-tap handling. Workbox still generates
+        // the service worker; this is its documented slot for adding a push
+        // listener, so the caching config below is unaffected.
+        importScripts: ['/push-handler.js'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MB (covers wa-sqlite-async.wasm at 2.28 MB)
         // TTS runtime files (~30 MB) are cached on first Read Aloud use, not
         // precached — users who never use TTS never pay the download. The
@@ -239,7 +246,10 @@ export default defineConfig({
       },
       manifest: {
         name: 'ProjectBible',
-        short_name: 'Bible',
+        // Android labels notifications with short_name, so this is the name that
+        // appears above a wake alarm. Changing it only takes effect after the
+        // app is removed from the home screen and re-added.
+        short_name: 'ProjectBible',
         description: 'Immersive Bible reading experience',
         theme_color: '#1a1a1a',
         background_color: '#1a1a1a',

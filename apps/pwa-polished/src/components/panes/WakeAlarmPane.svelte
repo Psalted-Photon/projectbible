@@ -10,6 +10,12 @@
   } from "../../adapters/settings";
   import { pushAlarm } from "../../lib/alarm/alarmSync";
   import {
+    ensurePushSubscription,
+    pushSupport,
+    notificationPermission,
+    showTestNotification,
+  } from "../../lib/alarm/pushSubscription";
+  import {
     minutesUntilAlarm,
     formatCountdown,
     formatDays,
@@ -29,6 +35,11 @@
   let statusMessage = "";
   let statusKind: "ok" | "warn" | "error" | "" = "";
 
+  // Whether this browser can receive an alarm at all, and whether it has been
+  // allowed to. Both are surfaced before the user saves rather than after.
+  let blockedReason = "";
+  let permissionState: NotificationPermission | "unavailable" = "default";
+
   const timezone = getEffectiveTimezone();
 
   // Recomputed every minute so the countdown does not go stale while the pane
@@ -46,6 +57,10 @@
     source = alarm.source;
     book = alarm.book ?? "Genesis";
     chapter = alarm.chapter ?? 1;
+
+    const support = pushSupport();
+    blockedReason = support.supported ? "" : support.message;
+    permissionState = notificationPermission();
 
     tickTimer = setInterval(() => (tick = Date.now()), 60_000);
   });
@@ -79,6 +94,25 @@
   // letting it look armed.
   $: daysValid = days.length > 0;
 
+  let testing = false;
+
+  async function runTestNotification() {
+    testing = true;
+    statusMessage = "";
+    statusKind = "";
+    const result = await showTestNotification();
+    permissionState = notificationPermission();
+    testing = false;
+
+    if (result.ok) {
+      statusKind = "ok";
+      statusMessage = "Sent. Check your notification shade — that's the look.";
+    } else {
+      statusKind = result.reason === "error" ? "error" : "warn";
+      statusMessage = result.message;
+    }
+  }
+
   async function save() {
     if (enabled && !daysValid) return;
     saving = true;
@@ -98,12 +132,25 @@
     // Let the Settings pane (which can be open beside this one) refresh its summary.
     window.dispatchEvent(new CustomEvent("settingsUpdated"));
 
+    // Arming needs this device registered to receive notifications. If that
+    // fails we still mirror the schedule — it becomes deliverable the moment
+    // any device subscribes — but say plainly that nothing will ring yet.
+    let pushProblem = "";
+    if (enabled) {
+      const push = await ensurePushSubscription();
+      permissionState = notificationPermission();
+      if (!push.ok) pushProblem = push.message;
+    }
+
     const result = await pushAlarm(alarm);
     saving = false;
 
-    if (result.ok) {
+    if (pushProblem) {
+      statusKind = "warn";
+      statusMessage = pushProblem;
+    } else if (result.ok) {
       statusKind = "ok";
-      statusMessage = enabled ? "Alarm armed." : "Alarm saved and turned off.";
+      statusMessage = enabled ? "Alarm armed on this device." : "Alarm saved and turned off.";
     } else {
       statusKind = result.reason === "error" ? "error" : "warn";
       statusMessage = result.message;
@@ -126,7 +173,7 @@
   </p>
 
   <div class="requirement-box">
-    <p><strong>Two things this needs:</strong></p>
+    <p><strong>What this needs:</strong></p>
     <ul>
       <li>
         You must be signed in — the reminder is sent from your account.
@@ -134,8 +181,22 @@
           <span class="requirement-bad">You are signed out right now.</span>
         {/if}
       </li>
+      <li>
+        Permission to send you notifications. Saving an armed alarm asks for it.
+        {#if permissionState === "denied"}
+          <span class="requirement-bad">
+            Notifications are blocked — turn them back on in your browser or phone
+            settings, then save again.
+          </span>
+        {:else if permissionState === "granted"}
+          <span class="requirement-good">Allowed.</span>
+        {/if}
+      </li>
       <li>Your phone needs internet at the set time. No connection, no alarm.</li>
     </ul>
+    {#if blockedReason}
+      <p class="requirement-bad blocked-note">{blockedReason}</p>
+    {/if}
   </div>
 
   <div class="setting-group">
@@ -215,10 +276,19 @@
     <button class="save-button" on:click={save} disabled={saving || (enabled && !daysValid)}>
       {saving ? "Saving…" : "Save Alarm"}
     </button>
+    <button class="test-button" on:click={runTestNotification} disabled={testing}>
+      {testing ? "Sending…" : "Show a test notification"}
+    </button>
     {#if statusMessage}
       <span class="status status-{statusKind}">{statusMessage}</span>
     {/if}
   </div>
+
+  <p class="test-note">
+    The test only shows what the notification looks like, with the app running.
+    It does not prove the alarm can wake a sleeping phone — that's the real
+    alarm, sent from your account.
+  </p>
 
   <div class="loud-box">
     <h3>If it doesn't wake you</h3>
@@ -291,6 +361,16 @@
     display: block;
     color: #f0a0a0;
     font-weight: 600;
+  }
+  .requirement-good {
+    display: block;
+    color: #7ddc9a;
+    font-weight: 600;
+  }
+  .blocked-note {
+    margin: 0.75rem 0 0 !important;
+    padding-top: 0.6rem;
+    border-top: 1px solid rgba(240, 160, 160, 0.25);
   }
 
   .setting-group {
@@ -456,6 +536,29 @@
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
   }
   .save-button:disabled { opacity: 0.6; cursor: default; }
+
+  .test-button {
+    padding: 10px 16px;
+    background: #222;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: #bbb;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .test-button:hover:not(:disabled) {
+    border-color: #667eea;
+    color: #e0e0e0;
+  }
+  .test-button:disabled { opacity: 0.6; cursor: default; }
+
+  .test-note {
+    font-size: 0.78rem;
+    color: #777;
+    line-height: 1.5;
+    margin: -1rem 0 2rem;
+  }
 
   .status { font-size: 0.85rem; line-height: 1.4; }
   .status-ok { color: #7ddc9a; }
