@@ -91,6 +91,47 @@ export async function pullAlarmIfUnset(): Promise<void> {
   }
 }
 
+/**
+ * Ask the server to push a test alarm to this account's devices right now.
+ *
+ * This exercises the real path — Edge Function, VAPID signing, the browser
+ * vendor's push service, and the service worker — everything except waiting for
+ * the scheduled minute. The only way to know the alarm truly works.
+ */
+export async function sendTestAlarm(): Promise<AlarmPushResult> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return { ok: false, reason: 'offline', message: 'No internet — a test alarm has to come from the server.' };
+  }
+
+  try {
+    const userId = await currentUserId();
+    if (!userId) {
+      return { ok: false, reason: 'signed-out', message: 'Sign in first — the test push is sent from your account.' };
+    }
+
+    const { data, error } = await supabase.functions.invoke('wake-alarm-send', { body: {} });
+    if (error) {
+      return {
+        ok: false,
+        reason: 'error',
+        message: `The sender rejected the request: ${error.message}. Check the function is deployed and its secrets are set.`,
+      };
+    }
+
+    const sent = (data as { sent?: number } | null)?.sent ?? 0;
+    if (sent === 0) {
+      return {
+        ok: false,
+        reason: 'error',
+        message: 'The sender ran but found no device to push to. Save the alarm once on this phone to register it.',
+      };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, reason: 'error', message: err?.message ?? 'Could not reach the sender.' };
+  }
+}
+
 function getSettingsHasAlarm(): boolean {
   // getWakeAlarmSettings() always returns defaults, so ask the raw blob
   // whether this device has ever saved an alarm.

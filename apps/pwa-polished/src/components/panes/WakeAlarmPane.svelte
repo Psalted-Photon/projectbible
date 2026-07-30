@@ -8,7 +8,7 @@
     getEffectiveTimezone,
     type WakeAlarmSettings,
   } from "../../adapters/settings";
-  import { pushAlarm } from "../../lib/alarm/alarmSync";
+  import { pushAlarm, sendTestAlarm } from "../../lib/alarm/alarmSync";
   import {
     ensurePushSubscription,
     pushSupport,
@@ -95,6 +95,7 @@
   $: daysValid = days.length > 0;
 
   let testing = false;
+  let testingReal = false;
 
   async function runTestNotification() {
     testing = true;
@@ -107,6 +108,26 @@
     if (result.ok) {
       statusKind = "ok";
       statusMessage = "Sent. Check your notification shade — that's the look.";
+    } else {
+      statusKind = result.reason === "error" ? "error" : "warn";
+      statusMessage = result.message;
+    }
+  }
+
+  /**
+   * The real test: the server pushes to this account's devices. Lock the phone
+   * first — that is the behaviour worth proving.
+   */
+  async function runRealTestAlarm() {
+    testingReal = true;
+    statusMessage = "";
+    statusKind = "";
+    const result = await sendTestAlarm();
+    testingReal = false;
+
+    if (result.ok) {
+      statusKind = "ok";
+      statusMessage = "Sent from the server. It should arrive within a few seconds, even with the app closed.";
     } else {
       statusKind = result.reason === "error" ? "error" : "warn";
       statusMessage = result.message;
@@ -276,19 +297,33 @@
     <button class="save-button" on:click={save} disabled={saving || (enabled && !daysValid)}>
       {saving ? "Saving…" : "Save Alarm"}
     </button>
-    <button class="test-button" on:click={runTestNotification} disabled={testing}>
-      {testing ? "Sending…" : "Show a test notification"}
-    </button>
     {#if statusMessage}
       <span class="status status-{statusKind}">{statusMessage}</span>
     {/if}
   </div>
 
-  <p class="test-note">
-    The test only shows what the notification looks like, with the app running.
-    It does not prove the alarm can wake a sleeping phone — that's the real
-    alarm, sent from your account.
-  </p>
+  <div class="test-section">
+    <h3>Test it</h3>
+    <div class="test-row">
+      <button class="test-button" on:click={runTestNotification} disabled={testing}>
+        {testing ? "Sending…" : "Preview the look"}
+      </button>
+      <span class="test-desc">
+        Shows the notification instantly, from the app itself. Proves permission,
+        the icon and the name — nothing more.
+      </span>
+    </div>
+    <div class="test-row">
+      <button class="test-button test-button-real" on:click={runRealTestAlarm} disabled={testingReal}>
+        {testingReal ? "Asking the server…" : "Send a real test alarm"}
+      </button>
+      <span class="test-desc">
+        The whole path, from the server. <strong>Lock your phone and close the app
+        first</strong> — that's the behaviour worth proving. Arrives within a few
+        seconds.
+      </span>
+    </div>
+  </div>
 
   <div class="loud-box">
     <h3>If it doesn't wake you</h3>
@@ -553,11 +588,45 @@
   }
   .test-button:disabled { opacity: 0.6; cursor: default; }
 
-  .test-note {
+  .test-section {
+    border-top: 1px solid #333;
+    padding-top: 1.25rem;
+    margin-bottom: 2rem;
+  }
+  .test-section h3 {
+    font-size: 0.95rem;
+    color: #ccc;
+    margin: 0 0 0.9rem;
+    font-weight: 600;
+  }
+
+  .test-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+  }
+  .test-row .test-button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .test-desc {
     font-size: 0.78rem;
-    color: #777;
+    color: #888;
     line-height: 1.5;
-    margin: -1rem 0 2rem;
+  }
+  .test-desc strong { color: #bbb; }
+
+  .test-button-real {
+    border-color: #667eea;
+    color: #cdd4f7;
+  }
+
+  @media (max-width: 420px) {
+    .test-row {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
   }
 
   .status { font-size: 0.85rem; line-height: 1.4; }
