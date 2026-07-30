@@ -12,6 +12,7 @@ import { supabase } from '../supabase/client';
 import { syncQueue } from './SyncQueueService';
 import { realtimeService } from './RealtimeService';
 import { pullSettings } from './settingsSync';
+import { pullAlarmIfUnset } from '../alarm/alarmSync';
 import type { SyncState, SyncTable } from './types';
 
 interface SyncStore {
@@ -214,6 +215,8 @@ class SyncService {
       if (!skipPull) {
         await this.pullRemoteData();
         await pullSettings();
+        // Adopt the account's alarm only on a device that has never set one.
+        await pullAlarmIfUnset();
       } else {
         console.debug('[SyncService] Skipping pull — synced recently');
       }

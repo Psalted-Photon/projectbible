@@ -6,6 +6,7 @@
   import MapPane from "./panes/MapPane.svelte";
   import PacksPane from "./panes/PacksPane.svelte";
   import SearchPane from "./panes/SearchPane.svelte";
+  import WakeAlarmPane from "./panes/WakeAlarmPane.svelte";
 
 
   export let pane: PaneState;
@@ -133,6 +134,8 @@
       <PacksPane />
     {:else if pane.type === "search"}
       <SearchPane />
+    {:else if pane.type === "wakealarm"}
+      <WakeAlarmPane />
     {/if}
   </div>
 </div>

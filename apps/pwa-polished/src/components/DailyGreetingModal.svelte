@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dailyGreetingOpen } from '../stores/dailyGreetingStore';
+  import { dailyGreetingOpen, dismissDailyGreeting } from '../stores/dailyGreetingStore';
   import { localDateStr } from '../stores/clockStore';
   import { navigationStore } from '../stores/navigationStore';
   import { IndexedDBTextStore } from '../lib/adapters';
@@ -52,8 +52,9 @@
     textLoading = false;
   }
 
+  // Closing counts as reading it — marks today seen so it stays closed.
   function close() {
-    dailyGreetingOpen.set(false);
+    dismissDailyGreeting();
   }
 
   function goToVerse() {
@@ -61,7 +62,8 @@
     const current = get(navigationStore);
     // Push current location so the navbar back arrow can return here
     navigationStore.pushHistory(current);
-    navigationStore.navigateTo(current.translation, parsed.book, parsed.chapter, parsed.startVerse);
+    // navigateToVerse (not navigateTo) so the verse gets the category-colored fade highlight
+    navigationStore.navigateToVerse(current.translation, parsed.book, parsed.chapter, parsed.startVerse);
     close();
   }
 </script>

@@ -13,7 +13,7 @@
   import { currentDownload, showProgressModal } from "./lib/pack-triggers";
   import { onMount } from "svelte";
   import { syncService } from "./lib/sync";
-  import { readingPlanModalStore } from "./stores/readingPlanModalStore";  import { localDateStr } from './stores/clockStore';  import { todayStore } from './stores/clockStore';  import { checkAndShowDailyGreeting } from './stores/dailyGreetingStore';  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
+  import { readingPlanModalStore } from "./stores/readingPlanModalStore";  import { localDateStr } from './stores/clockStore';  import { todayStore } from './stores/clockStore';  import { checkAndShowDailyGreeting, dailyGreetingOpen, openDailyGreeting } from './stores/dailyGreetingStore';  import { get } from 'svelte/store';  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
   import "./adapters/SyncedHighlightAdapter"; // registers verse/word highlight pull handlers
   import { getSettings } from "./adapters/settings";
 
@@ -144,6 +144,10 @@
       if (getSettings().autoCheckUpdates === false) return;
       swReloaded = true;
       sessionStorage.setItem('pb-updated', '1');
+      // Remember an open Verse of the Day so the reload doesn't swallow it.
+      // Covers the case where today's greeting was already dismissed and then
+      // reopened from the navbar — checkAndShowDailyGreeting won't restore that.
+      if (get(dailyGreetingOpen)) sessionStorage.setItem('pb-votd-open', '1');
       window.location.reload();
     };
     const checkForSwUpdate = () => {
@@ -167,6 +171,12 @@
 
     // Also trigger when the date rolls over at midnight while the app is open
     const unsubscribeToday = todayStore.subscribe(() => checkAndShowDailyGreeting());
+
+    // Restore a Verse of the Day that was open when the auto-update reloaded us
+    if (sessionStorage.getItem('pb-votd-open')) {
+      sessionStorage.removeItem('pb-votd-open');
+      openDailyGreeting();
+    }
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);

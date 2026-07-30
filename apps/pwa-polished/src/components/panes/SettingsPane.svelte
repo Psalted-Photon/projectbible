@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { applyTheme, getSettings, updateSettings, getTtsSettings } from "../../adapters/settings";
+  import { onMount, onDestroy } from "svelte";
+  import { applyTheme, getSettings, updateSettings, getTtsSettings, getWakeAlarmSettings } from "../../adapters/settings";
+  import { formatDays, formatTime12h } from "../../lib/alarm/alarmSchedule";
   import { getAllVoices, type TtsVoiceInfo } from "../../adapters/tts";
   import { paneStore } from "../../stores/paneStore";
   import { Gear } from 'phosphor-svelte';
@@ -46,9 +47,21 @@
   let ttsHighlightVerse: boolean = true;
   let ttsGlowFollow: boolean = false;
   let ttsVoices: TtsVoiceInfo[] = getAllVoices();
+  let alarmSummary = "";
+
+  // The alarm lives in its own pane, which can be open alongside this one —
+  // refresh the summary whenever settings change rather than only on mount.
+  function refreshAlarmSummary() {
+    const alarm = getWakeAlarmSettings();
+    alarmSummary = alarm.enabled
+      ? `${formatTime12h(alarm.time)} · ${formatDays(alarm.days)}`
+      : "off";
+  }
 
   // Load settings on mount
   onMount(() => {
+    refreshAlarmSummary();
+    window.addEventListener("settingsUpdated", refreshAlarmSummary);
     ttsVoices = getAllVoices();
     const settings = getSettings();
     theme = settings.theme || "dark";
@@ -69,6 +82,10 @@
     ttsReadHeadings = tts.readHeadings;
     ttsHighlightVerse = tts.highlightVerse;
     ttsGlowFollow = tts.glowFollow;
+  });
+
+  onDestroy(() => {
+    window.removeEventListener("settingsUpdated", refreshAlarmSummary);
   });
 
   function deleteIndexedDbDatabase(name: string): Promise<void> {
@@ -250,6 +267,10 @@
     paneStore.openPane("packs", "right");
   }
 
+  function openWakeAlarmPane() {
+    paneStore.openPane("wakealarm", "right");
+  }
+
   // Apply settings on value changes (live preview)
   $: {
     fontSize;
@@ -388,6 +409,11 @@
       <input type="checkbox" bind:checked={ttsGlowFollow} on:change={saveSettings} />
       <span class="label-text">Soft glow drifts along the words</span>
     </label>
+    <button class="packs-button alarm-button" on:click={openWakeAlarmPane}>
+      <span class="icon emoji">⏰</span>
+      <span class="text">Wake Alarm{alarmSummary ? ` — ${alarmSummary}` : ""}</span>
+      <span class="arrow">→</span>
+    </button>
   </div>
 
   <div class="setting-group">
@@ -670,6 +696,16 @@
   .packs-button:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  }
+
+  /* Same affordance as Manage Packs, but sitting inside the Read Aloud group. */
+  .alarm-button {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+  }
+  .alarm-button .text {
+    text-align: left;
+    flex: 1;
   }
 
   .packs-button:active {

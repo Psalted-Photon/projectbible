@@ -9,15 +9,27 @@ export const dailyGreetingOpen = writable<boolean>(false);
 /**
  * Called on app mount (and on midnight rollover via todayStore subscription).
  * Compares today's date to the last-seen localStorage value.
- * Opens the modal if this is the first open of a new day.
+ * Opens the modal if today's greeting has not been dismissed yet.
+ *
+ * Deliberately does NOT write the marker — that happens on dismiss, so a page
+ * reload (notably the service-worker auto-update reload) brings an unread
+ * greeting back instead of silently burning it for the day.
  */
 export function checkAndShowDailyGreeting(): void {
   const today = localDateStr(new Date());
   const lastSeen = localStorage.getItem(STORAGE_KEY);
   if (lastSeen !== today) {
-    localStorage.setItem(STORAGE_KEY, today);
     dailyGreetingOpen.set(true);
   }
+}
+
+/**
+ * Closes the modal and marks today's greeting as seen, so it will not reopen
+ * on the next mount. Every user-initiated close path goes through here.
+ */
+export function dismissDailyGreeting(): void {
+  localStorage.setItem(STORAGE_KEY, localDateStr(new Date()));
+  dailyGreetingOpen.set(false);
 }
 
 /**

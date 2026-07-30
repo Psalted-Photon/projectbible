@@ -35,6 +35,21 @@ export interface TtsSettings {
   glowFollow: boolean;     // soft glow drifting along the words (default false)
 }
 
+/**
+ * Wake alarm — a push notification at a set time that offers to read a
+ * passage aloud. The schedule is mirrored to Supabase because the server is
+ * what actually fires it; see src/lib/alarm/.
+ */
+export interface WakeAlarmSettings {
+  enabled: boolean;
+  time: string;      // 'HH:MM', 24-hour, in the user's timezone
+  days: number[];    // 0=Sunday … 6=Saturday; empty means every day
+  /** What to read: pick up where you left off, a fixed chapter, or the plan's next reading. */
+  source: 'continue' | 'chapter' | 'plan';
+  book?: string;     // only when source === 'chapter'
+  chapter?: number;  // only when source === 'chapter'
+}
+
 export interface UserSettings {
   // Daily Driver defaults by testament + language family
   dailyDriverEnglishOT?: string; // e.g., 'kjv' or 'web'
@@ -62,6 +77,7 @@ export interface UserSettings {
   themedTitles?: boolean; // Theme-colored 3D shadow on reader titles/headings (default true)
   interlinear?: InterlinearSettings; // Interlinear view prefs for Greek/Hebrew (default: disabled, gloss-only)
   tts?: TtsSettings; // Read Aloud (on-device TTS) prefs
+  wakeAlarm?: WakeAlarmSettings; // Wake alarm push schedule (needs internet at the set time)
   allowRotation?: boolean; // Allow screen to rotate to landscape (default false = portrait locked)
   autoCheckUpdates?: boolean; // Automatically check for updates on app open (default true)
 
@@ -243,6 +259,36 @@ export function getTtsSettings(): TtsSettings {
 export function updateTtsSettings(updates: Partial<TtsSettings>): void {
   const current = getTtsSettings();
   updateSettings({ tts: { ...current, ...updates } });
+}
+
+/**
+ * Resolve wake alarm settings with defaults applied (off, 6:00 AM every day,
+ * continuing from wherever you last read).
+ */
+export function getWakeAlarmSettings(): WakeAlarmSettings {
+  const s = getSettings().wakeAlarm;
+  return {
+    enabled: s?.enabled ?? false,
+    time: s?.time ?? '06:00',
+    days: s?.days ?? [],
+    source: s?.source ?? 'continue',
+    book: s?.book,
+    chapter: s?.chapter,
+  };
+}
+
+/** Persist wake alarm settings (merges with existing settings object). */
+export function updateWakeAlarmSettings(updates: Partial<WakeAlarmSettings>): void {
+  const current = getWakeAlarmSettings();
+  updateSettings({ wakeAlarm: { ...current, ...updates } });
+}
+
+/**
+ * The timezone the alarm should fire in — the explicit setting when the user
+ * picked one, otherwise whatever this device reports.
+ */
+export function getEffectiveTimezone(): string {
+  return getSettings().timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
 /**
