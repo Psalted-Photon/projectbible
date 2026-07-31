@@ -49,8 +49,26 @@ build — that one is safe to publish.
 
 ## 4. Schedule it
 
-Run `supabase/migrations/009_wake_alarm_cron.sql`. **One edit first:** replace
-`<SERVICE_ROLE_KEY>` with your service_role key from Settings → API.
+Run `supabase/migrations/009_wake_alarm_cron.sql`. **One edit first:** paste your
+admin key on the one marked line.
+
+**Which key.** Settings → API Keys shows two systems side by side, and they are
+easy to mix up:
+
+| Screen | Keys | Use here? |
+|---|---|---|
+| New API keys | `sb_publishable_…` / `sb_secret_…` | **`sb_secret_…` — this one** |
+| Legacy keys | `anon` / `service_role`, both `eyJ…` | no |
+
+Supabase injects one of these into the function as `SUPABASE_SERVICE_ROLE_KEY`,
+and the sender compares the cron job's key against it character by character. On
+this project that variable holds the **`sb_secret_…`** key, so the legacy
+`service_role` JWT — despite the name — is rejected.
+
+If you are ever unsure which one a given project wants, don't guess: run
+`supabase/wake-alarm-diagnose.sql` after scheduling. A mismatch shows up as
+`401 "Not signed in"` in step 4, and the function's logs now print the length and
+first three characters of both keys so you can see which pair failed to match.
 
 This enables `pg_cron` and `pg_net` and registers a job that calls the function
 every minute. The function, not the schedule, decides what is due — it compares
@@ -67,31 +85,25 @@ The alarm pane (Settings → Read Aloud → Wake Alarm) has two buttons:
 
 ## When it doesn't work
 
-Check in this order:
+Run `supabase/wake-alarm-diagnose.sql` in the SQL Editor. It checks all of the
+below in one pass and prints a plain-English verdict for each. Nothing in it
+changes anything, and the key is masked in its output.
 
-```sql
--- Is the cron job registered and active?
-SELECT jobid, jobname, schedule, active FROM cron.job;
+The single most useful line is step 4, the server's own reply:
 
--- Are the runs succeeding? ('succeeded' = the HTTP call was made.)
-SELECT start_time, status, return_message
-FROM cron.job_run_details
-WHERE jobname = 'wake-alarm-every-minute'
-ORDER BY start_time DESC LIMIT 10;
+- `200 {"mode":"scheduled","checked":1,…}` — healthy. `checked` counts armed
+  alarms found; `fired` counts ones due this minute.
+- `200 {"checked":0}` — no alarm is switched on. Save it again in the app.
+- `401 {"error":"Not signed in"}` — the cron job's key doesn't match the one
+  Supabase gave the function. See step 4 of setup above.
+- `401 {"code":"UNAUTHORIZED_INVALID_JWT_FORMAT"}` — the `Authorization` header
+  is malformed, usually the word `Bearer` lost during a paste.
+- nothing at all — pg_net never sent anything; check the job exists.
 
--- What did the function actually reply?
-SELECT created, status_code, content
-FROM net._http_response
-ORDER BY created DESC LIMIT 10;
-
--- Is this phone registered, and did it get marked dead?
-SELECT endpoint, user_agent, expired_at FROM push_subscriptions;
-
--- Did the alarm already fire today? (last_fired_on blocks a second send.)
-SELECT user_id, enabled, time_local, days, timezone, last_fired_on FROM wake_alarms;
-```
-
-The function's own logs are under Edge Functions → wake-alarm-send → Logs.
+The function's own logs are under Edge Functions → wake-alarm-send → Logs. It now
+prints a line per alarm per sweep saying whether it was due and why, e.g.
+`skipping user …: not due, drift -83m — local 2026-07-31 05:37 vs target 07:00`.
+That is the fastest way to see what the sender believes the time is.
 
 Common causes:
 

@@ -9,10 +9,17 @@
  *
  * Two callers, distinguished by the token they present:
  *
- *   service-role key  → scheduled sweep. Checks every armed alarm.
- *   a user's JWT      → immediate test push to that user's own devices only.
- *                       Used by the "Send a real test alarm" button so the whole
- *                       path can be verified without waiting for 6am.
+ *   the admin key  → scheduled sweep. Checks every armed alarm.
+ *   a user's JWT   → immediate test push to that user's own devices only.
+ *                    Used by the "Send a real test alarm" button so the whole
+ *                    path can be verified without waiting for 6am.
+ *
+ * "The admin key" means literally whatever Supabase injects as
+ * SUPABASE_SERVICE_ROLE_KEY — compared here as a string, not decoded. On a
+ * project using the newer API keys that is the `sb_secret_…` key, not the
+ * legacy `service_role` JWT sitting next to it in the dashboard. The cron job
+ * must carry that exact value; anything else lands in the user branch below and
+ * is refused.
  *
  * Deliberately does not decide what to read. The app resolves that when it
  * opens, so a chapter finished at 11pm is reflected at 6am.
@@ -65,11 +72,18 @@ const WEEKDAY_TO_INDEX: Record<string, number> = {
   Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
 };
 
-/** The wall clock and calendar date in a given IANA timezone. */
+/**
+ * The wall clock and calendar date in a given IANA timezone.
+ *
+ * en-CA gives the ISO-shaped date we want, but it abbreviates weekdays with a
+ * trailing period — "Fri." — which matches nothing in WEEKDAY_TO_INDEX and used
+ * to silently resolve every day to Sunday. The weekday is asked for separately
+ * in en-US, which does not punctuate, and the period is stripped anyway in case
+ * a runtime disagrees.
+ */
 function localNow(timezone: string, now: Date): { weekday: number; minutes: number; date: string } {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
-    weekday: 'short',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -81,8 +95,12 @@ function localNow(timezone: string, now: Date): { weekday: number; minutes: numb
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
   const hour = parseInt(get('hour'), 10) % 24; // some engines report 24 at midnight
 
+  const weekdayName = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short' })
+    .format(now)
+    .replace(/\./g, '');
+
   return {
-    weekday: WEEKDAY_TO_INDEX[get('weekday')] ?? 0,
+    weekday: WEEKDAY_TO_INDEX[weekdayName] ?? 0,
     minutes: (Number.isNaN(hour) ? 0 : hour) * 60 + (parseInt(get('minute'), 10) || 0),
     date: `${get('year')}-${get('month')}-${get('day')}`,
   };
@@ -97,29 +115,57 @@ function parseTimeToMinutes(time: string): number | null {
   return hour * 60 + minute;
 }
 
-/** Whether this alarm should fire on this run. */
-function isDue(alarm: WakeAlarmRow, now: Date): { due: boolean; localDate: string } {
+/** Two-digit clock time, for log lines. */
+function formatMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60).toString().padStart(2, '0');
+  const m = (minutes % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+/**
+ * Whether this alarm should fire on this run.
+ *
+ * `reason` explains the verdict in the log. Without it a sweep that skips every
+ * alarm is indistinguishable from one that never ran.
+ */
+function isDue(
+  alarm: WakeAlarmRow,
+  now: Date
+): { due: boolean; localDate: string; reason: string } {
   let local: { weekday: number; minutes: number; date: string };
   try {
     local = localNow(alarm.timezone, now);
   } catch {
     // An unusable timezone must not take down the whole sweep.
     console.error(`[wake-alarm] bad timezone ${alarm.timezone} for user ${alarm.user_id}`);
-    return { due: false, localDate: '' };
+    return { due: false, localDate: '', reason: `unusable timezone ${alarm.timezone}` };
   }
 
   const target = parseTimeToMinutes(alarm.time_local);
-  if (target === null) return { due: false, localDate: local.date };
+  if (target === null) {
+    return { due: false, localDate: local.date, reason: `unreadable time "${alarm.time_local}"` };
+  }
+
+  const clock = `local ${local.date} ${formatMinutes(local.minutes)} vs target ${alarm.time_local}`;
 
   // Already fired today.
-  if (alarm.last_fired_on === local.date) return { due: false, localDate: local.date };
+  if (alarm.last_fired_on === local.date) {
+    return { due: false, localDate: local.date, reason: `already fired today — ${clock}` };
+  }
 
   // An empty day list means every day.
   const days = alarm.days ?? [];
-  if (days.length > 0 && !days.includes(local.weekday)) return { due: false, localDate: local.date };
+  if (days.length > 0 && !days.includes(local.weekday)) {
+    return {
+      due: false,
+      localDate: local.date,
+      reason: `day ${local.weekday} not in [${days.join(',')}] — ${clock}`,
+    };
+  }
 
   const drift = local.minutes - target;
-  return { due: drift >= 0 && drift <= CATCH_UP_MINUTES, localDate: local.date };
+  const due = drift >= 0 && drift <= CATCH_UP_MINUTES;
+  return { due, localDate: local.date, reason: `${due ? 'due' : 'not due'}, drift ${drift}m — ${clock}` };
 }
 
 // ── payload ─────────────────────────────────────────────────────────────────
@@ -210,23 +256,30 @@ async function runScheduledSweep(admin: SupabaseClient, now: Date) {
   let totalSent = 0;
 
   for (const alarm of alarms) {
-    const { due, localDate } = isDue(alarm, now);
-    if (!due) continue;
+    const { due, localDate, reason } = isDue(alarm, now);
+    if (!due) {
+      console.log(`[wake-alarm] skipping user ${alarm.user_id}: ${reason}`);
+      continue;
+    }
+    console.log(`[wake-alarm] user ${alarm.user_id} is ${reason}`);
 
-    // Claim the alarm before sending. If a second cron run overlaps this one,
-    // the conditional update means only one of them gets to send.
-    const { data: claimed, error: claimError } = await admin
+    // Mark the alarm fired before sending, so a slow send cannot let the next
+    // minute's sweep fire it a second time — isDue rejects any alarm whose
+    // last_fired_on already matches today's local date.
+    //
+    // The filter here is deliberately just user_id. Adding a condition on
+    // last_fired_on while also assigning it produces a query PostgREST builds
+    // wrong, and it fails with "column wake_alarms.last_fired_on does not
+    // exist" — which is what stopped every alarm from firing until 2026-07-31.
+    const { error: claimError } = await admin
       .from('wake_alarms')
       .update({ last_fired_on: localDate })
-      .eq('user_id', alarm.user_id)
-      .or(`last_fired_on.is.null,last_fired_on.neq.${localDate}`)
-      .select('user_id');
+      .eq('user_id', alarm.user_id);
 
     if (claimError) {
       console.error(`[wake-alarm] claim failed for user ${alarm.user_id}:`, claimError);
       continue;
     }
-    if (!claimed || claimed.length === 0) continue; // another run already took it
 
     try {
       const result = await sendToUser(admin, alarm.user_id, buildPayload(alarm));
@@ -234,12 +287,15 @@ async function runScheduledSweep(admin: SupabaseClient, now: Date) {
       fired.push(alarm.user_id);
       if (result.sent === 0) {
         console.warn(`[wake-alarm] user ${alarm.user_id} was due but has no live devices`);
+      } else {
+        console.log(`[wake-alarm] sent to ${result.sent} device(s) for user ${alarm.user_id}`);
       }
     } catch (err) {
       console.error(`[wake-alarm] send threw for user ${alarm.user_id}:`, err);
     }
   }
 
+  console.log(`[wake-alarm] sweep done — checked ${alarms.length}, fired ${fired.length}, sent ${totalSent}`);
   return { mode: 'scheduled', checked: alarms.length, fired: fired.length, sent: totalSent };
 }
 
@@ -282,7 +338,10 @@ Deno.serve(async (req) => {
   });
 
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
-  if (!token) return json({ error: 'Missing Authorization header' }, 401);
+  if (!token) {
+    console.error('[wake-alarm] rejected: no Authorization header');
+    return json({ error: 'Missing Authorization header' }, 401);
+  }
 
   try {
     // Scheduled sweep — only pg_cron holds this key.
@@ -293,6 +352,15 @@ Deno.serve(async (req) => {
     // Otherwise it must be a signed-in user asking to test their own alarm.
     const { data: { user }, error: userError } = await admin.auth.getUser(token);
     if (userError || !user) {
+      // Never log the tokens themselves. Their shapes are enough to tell a
+      // mis-keyed cron job from a genuinely signed-out user, and the absence of
+      // this line is what made a broken cron job look identical to a healthy
+      // one for a whole night.
+      const shape = (t: string) => `${t.length} chars starting ${t.slice(0, 3)}`;
+      console.error(
+        `[wake-alarm] rejected: token is neither the service-role key nor a signed-in user. ` +
+        `Sent ${shape(token)}; expected ${shape(serviceRoleKey!)} for the scheduled sweep.`
+      );
       return json({ error: 'Not signed in' }, 401);
     }
 

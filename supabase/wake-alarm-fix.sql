@@ -1,0 +1,28 @@
+-- =============================================================================
+-- ProjectBible: Wake Alarm — repair the timer's key
+-- =============================================================================
+-- SUPERSEDED. Use supabase/migrations/009_wake_alarm_cron.sql instead.
+--
+-- This file existed for one afternoon, to put the right key into an already
+-- scheduled cron job. Migration 009 now does exactly the same thing and does it
+-- more safely: the key goes on its own line, the word "Bearer" is written by the
+-- file rather than sitting next to the placeholder, and it refuses to schedule
+-- anything if the key is missing or contains a space.
+--
+-- Re-running 009 replaces the existing job rather than adding a second one, so
+-- it is the correct tool for repairs as well as for first-time setup.
+--
+-- Two things learned the hard way, both now documented in 009 and in
+-- apps/pwa-polished/WAKE-ALARM-SETUP.md:
+--
+--   1. The key this project needs is the new-format `sb_secret_...` one, NOT the
+--      legacy `service_role` JWT. Supabase injects the former into the function
+--      as SUPABASE_SERVICE_ROLE_KEY, and the sender compares against it exactly.
+--
+--   2. Never put a placeholder inside the same quotes as the word "Bearer".
+--      Replacing the placeholder tends to take "Bearer" with it, which produces
+--      a completely different error (UNAUTHORIZED_INVALID_JWT_FORMAT) and sends
+--      you hunting in the wrong direction.
+--
+-- To check the current state of everything, run supabase/wake-alarm-diagnose.sql.
+-- =============================================================================
