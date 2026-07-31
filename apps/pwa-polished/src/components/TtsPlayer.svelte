@@ -1,389 +1,117 @@
 <script lang="ts">
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
-  import { get } from 'svelte/store';
-  import { IndexedDBTextStore } from '../lib/adapters.js';
-  import { extractSpeechText } from '../lib/verseRendering.js';
-  import { continuousPlay, ttsAutoplayNext, ttsCurrentVerse, ttsStartRequest } from '../stores/audioStore.js';
-  import { getTtsSettings } from '../adapters/settings.js';
+  /**
+   * The Read Aloud start button, under each chapter heading.
+   *
+   * This used to be the whole player. It is now only the way in: playback itself
+   * lives in lib/tts/readingEngine, which owns the position and keeps reading
+   * across chapters whether or not any of this is on screen. Once reading
+   * starts, the operating controls appear in the navbar — you should not have to
+   * scroll back to a chapter heading to press pause.
+   *
+   * Voice download stays here, on purpose: it is the chapter you tapped that
+   * should show the prompt, not every chapter at once.
+   */
   import {
     isTtsSupported,
     isVoiceInstalled,
     downloadVoice,
-    synthesizeSpeech,
-    getSharedTtsAudio,
-    unlockTtsAudio,
     getVoiceInfo,
+    unlockTtsAudio,
   } from '../adapters/tts.js';
+  import { getTtsSettings } from '../adapters/settings.js';
   import {
-    sleepRemaining,
-    stopAtChapterEnd,
-    sleepStopNonce,
-    startSleepTimer,
-    setStopAtChapterEnd,
-    cancelSleepTimer,
-    remainingMinutes,
-  } from '../lib/tts/sleepTimer.js';
-
-  const dispatch = createEventDispatcher<{ nextchapter: { book: string; chapter: number } }>();
+    readingState,
+    readingPosition,
+    startReading,
+    togglePlayPause,
+  } from '../lib/tts/readingEngine.js';
 
   export let translation: string;
   export let book: string;
   export let chapter: number;
 
-  type PlayerState =
-    | 'idle'
-    | 'voice-needed'
-    | 'downloading'
-    | 'starting'
-    | 'playing'
-    | 'paused'
-    | 'error';
-
-  let state: PlayerState = 'idle';
+  type LocalState = 'idle' | 'voice-needed' | 'downloading' | 'error';
+  let local: LocalState = 'idle';
   let errorMsg = '';
   let downloadPct = 0;
-  let verseCount = 0;
-  let currentIndex = 0;
 
-  // Settings are re-read on every play so changes apply without a reload
-  let ttsSettings = getTtsSettings();
-  $: voiceId = ttsSettings.voiceId;
+  $: voiceId = getTtsSettings().voiceId;
   $: voiceSizeMB = getVoiceInfo(voiceId)?.approxSizeMB ?? 64;
 
-  // The shared audio element plays for whichever TtsPlayer instance spoke
-  // last (multiple chapters can be mounted at once). Handlers check ownership
-  // so a stale instance never advances another instance's playback.
-  const instanceToken = Symbol('tts-player');
-  let generation = 0;
-  let verses: { verse: number; speech: string }[] = [];
-  const blobCache = new Map<number, Blob>();
-  const inFlight = new Map<number, Promise<Blob>>();
-  let currentUrl: string | null = null;
+  // Is the engine reading *this* chapter right now? Only that chapter's button
+  // lights up, so chapter 1 never looks active while chapter 5 is being read.
+  $: isThisChapter =
+    $readingPosition?.book === book && $readingPosition?.chapter === chapter;
+  $: isLive = isThisChapter && ($readingState === 'playing' || $readingState === 'paused');
 
-  const textStore = new IndexedDBTextStore();
-
-  onMount(() => {
-    if (get(ttsAutoplayNext)) {
-      ttsAutoplayNext.set(false);
-      startReading();
-    }
-  });
-
-  // The wake alarm asks for a chapter by name rather than relying on a fresh
-  // mount, because "continue where you left off" is usually the chapter already
-  // on screen. Subscribing fires immediately with the current value, so this
-  // covers both an already-mounted player and one that has just appeared.
-  const unsubscribeStartRequest = ttsStartRequest.subscribe((request) => {
-    if (!request || request.book !== book || request.chapter !== chapter) return;
-    ttsStartRequest.set(null);
-    startReading();
-  });
-
-  // The sleep timer runs the clock; only the player can tear down its queue and
-  // caches, so it asks us to stop rather than doing it itself. Skip the value
-  // present at subscribe time — that is history, not a fresh request.
-  let lastStopNonce = get(sleepStopNonce);
-  const unsubscribeSleepStop = sleepStopNonce.subscribe((nonce) => {
-    if (nonce === lastStopNonce) return;
-    lastStopNonce = nonce;
-    if (ownsAudio()) stopReading();
-  });
-
-  onDestroy(() => {
-    unsubscribeStartRequest();
-    unsubscribeSleepStop();
-    stopReading();
-  });
-
-  function ownsAudio(): boolean {
-    return (getSharedTtsAudio() as any).__ttsOwner === instanceToken;
-  }
-
-  async function loadVerses(): Promise<boolean> {
-    const rows = await textStore.getChapter(translation, book, chapter);
-    verses = rows
-      .map((v) => {
-        let speech = extractSpeechText(v.text);
-        if (ttsSettings.readHeadings && v.heading && speech.length > 0) {
-          speech = `${v.heading.trim().replace(/\.?$/, '.')} ${speech}`;
-        }
-        return { verse: v.verse, speech };
-      })
-      .filter((v) => v.speech.length > 0);
-    verseCount = verses.length;
-    return verses.length > 0;
-  }
-
-  function ensureSynth(index: number, gen: number): Promise<Blob> | null {
-    if (gen !== generation || index >= verses.length) return null;
-    const cached = blobCache.get(index);
-    if (cached) return Promise.resolve(cached);
-    let pending = inFlight.get(index);
-    if (!pending) {
-      pending = synthesizeSpeech(verses[index].speech, voiceId).then((blob) => {
-        inFlight.delete(index);
-        if (gen === generation) blobCache.set(index, blob);
-        return blob;
-      });
-      inFlight.set(index, pending);
-    }
-    return pending;
-  }
-
-  async function playIndex(index: number, gen: number): Promise<void> {
-    if (gen !== generation) return;
-    const pending = ensureSynth(index, gen);
-    if (!pending) return;
-
-    let blob: Blob;
-    try {
-      blob = await pending;
-    } catch (e: any) {
-      if (gen !== generation) return;
-      state = 'error';
-      errorMsg = e?.message ?? 'Speech generation failed';
+  async function handleClick(): Promise<void> {
+    if (isLive) {
+      togglePlayPause();
       return;
     }
-    if (gen !== generation) return;
 
-    const audio = getSharedTtsAudio();
-    (audio as any).__ttsOwner = instanceToken;
-    if (currentUrl) URL.revokeObjectURL(currentUrl);
-    currentUrl = URL.createObjectURL(blob);
-    audio.src = currentUrl;
-    audio.playbackRate = ttsSettings.rate;
+    // Must run synchronously inside the tap, before any await: this is what
+    // unlocks the audio element on iOS so every later chapter handoff — hours
+    // later, screen off — is allowed to play without a fresh gesture.
+    unlockTtsAudio();
 
-    audio.onended = () => {
-      if (!ownsAudio() || gen !== generation) return;
-      if (index + 1 < verses.length) {
-        playIndex(index + 1, gen);
-      } else if (get(stopAtChapterEnd)) {
-        // "End of chapter" beats auto-advance — that is the whole point of it.
-        cancelSleepTimer();
-        stopReading();
-      } else if (get(continuousPlay)) {
-        ttsAutoplayNext.set(true);
-        stopReading();
-        dispatch('nextchapter', { book, chapter });
-      } else {
-        stopReading();
-      }
-    };
-    audio.onerror = () => {
-      if (!ownsAudio() || gen !== generation) return;
-      state = 'error';
-      errorMsg = 'Audio playback failed.';
-    };
-
-    try {
-      await audio.play();
-    } catch (e: any) {
-      if (gen !== generation) return;
-      state = 'error';
-      errorMsg = e?.message ?? 'Playback blocked — tap play again.';
-      return;
-    }
-    if (gen !== generation) return;
-
-    currentIndex = index;
-    state = 'playing';
-    ttsCurrentVerse.set({ book, chapter, verse: verses[index].verse });
-    // Keep one verse ahead of playback
-    ensureSynth(index + 1, gen);
-  }
-
-  // ── sleep timer ───────────────────────────────────────────────────────────
-
-  $: sleepArmed = $sleepRemaining !== null || $stopAtChapterEnd;
-  $: sleepLabel = $stopAtChapterEnd
-    ? '⏱ chapter'
-    : $sleepRemaining !== null
-      ? `⏱ ${remainingMinutes($sleepRemaining)}m`
-      : '⏱';
-  // The select shows the armed state as its value, so it reads as a status too.
-  $: sleepChoice = sleepArmed ? 'keep' : '0';
-
-  function applySleepChoice(event: Event): void {
-    const value = (event.currentTarget as HTMLSelectElement).value;
-    if (value === 'keep') return;
-    if (value === '0') cancelSleepTimer();
-    else if (value === 'chapter') setStopAtChapterEnd();
-    else startSleepTimer(parseInt(value, 10));
-  }
-
-  /** Pressing stop is a decision to be done — it disarms the timer too. */
-  function handleUserStop(): void {
-    cancelSleepTimer();
-    stopReading();
-  }
-
-  /**
-   * Jump to another verse in the chapter without restarting the queue.
-   * Bumping the generation cancels in-flight work for the old position;
-   * already-synthesized verses stay cached, so jumping back is instant.
-   */
-  async function jumpToVerse(index: number): Promise<void> {
-    if (index < 0 || index >= verses.length) return;
-    if (ownsAudio()) {
-      const audio = getSharedTtsAudio();
-      audio.onended = null;
-      audio.onerror = null;
-      audio.pause();
-    }
-    const gen = ++generation;
-    await playIndex(index, gen);
-  }
-
-  async function startReading(): Promise<void> {
-    unlockTtsAudio(); // must happen inside the tap, before any await
-    ttsSettings = getTtsSettings();
-    state = 'starting';
+    local = 'idle';
     errorMsg = '';
 
-    try {
-      if (!(await isVoiceInstalled(voiceId))) {
-        state = 'voice-needed';
-        return;
-      }
-      if (!(await loadVerses())) {
-        state = 'error';
-        errorMsg = 'No text available for this chapter.';
-        return;
-      }
-    } catch (e: any) {
-      state = 'error';
-      errorMsg = e?.message ?? 'Could not start reading.';
+    // Check before handing off, so only this chapter shows the download prompt.
+    if (!(await isVoiceInstalled(voiceId))) {
+      local = 'voice-needed';
       return;
     }
 
-    const gen = ++generation;
-    blobCache.clear();
-    await playIndex(0, gen);
+    await startReading(translation, book, chapter);
   }
 
   async function handleDownloadVoice(): Promise<void> {
-    unlockTtsAudio();
-    state = 'downloading';
+    local = 'downloading';
     downloadPct = 0;
     try {
       await downloadVoice(voiceId, (p) => {
         downloadPct = p.total > 0 ? Math.round((100 * p.loaded) / p.total) : 0;
       });
     } catch (e: any) {
-      state = 'error';
+      local = 'error';
       errorMsg = e?.message ?? 'Voice download failed.';
       return;
     }
-    await startReading();
-  }
-
-  function togglePlay(): void {
-    if (state === 'playing') {
-      if (ownsAudio()) getSharedTtsAudio().pause();
-      state = 'paused';
-      return;
-    }
-    if (state === 'paused' && ownsAudio()) {
-      getSharedTtsAudio()
-        .play()
-        .then(() => (state = 'playing'))
-        .catch(() => {
-          state = 'error';
-          errorMsg = 'Playback blocked — tap play again.';
-        });
-      return;
-    }
-    startReading();
-  }
-
-  function stopReading(): void {
-    generation++;
-    blobCache.clear();
-    inFlight.clear();
-    const wasOwner = ownsAudio();
-    if (wasOwner) {
-      const audio = getSharedTtsAudio();
-      audio.onended = null;
-      audio.onerror = null;
-      audio.pause();
-      delete (audio as any).__ttsOwner;
-    }
-    // Only the instance that was actually speaking clears the shared marker —
-    // other mounted chapters tearing down must not blank a live read.
-    if (wasOwner) ttsCurrentVerse.set(null);
-    if (currentUrl) {
-      URL.revokeObjectURL(currentUrl);
-      currentUrl = null;
-    }
-    currentIndex = 0;
-    state = 'idle';
+    local = 'idle';
+    await startReading(translation, book, chapter);
   }
 </script>
 
 {#if isTtsSupported()}
-  <div class="tts-player" class:active={state === 'playing' || state === 'paused'}>
-    {#if state === 'voice-needed'}
+  <div class="tts-player" class:active={isLive}>
+    {#if local === 'voice-needed'}
       <button class="tts-download-btn" on:click={handleDownloadVoice}>
         Download voice (~{voiceSizeMB} MB)
       </button>
-      <button class="tts-btn" on:click={() => (state = 'idle')} title="Cancel">✕</button>
-    {:else if state === 'downloading'}
+      <button class="tts-btn" on:click={() => (local = 'idle')} title="Cancel">✕</button>
+    {:else if local === 'downloading'}
       <span class="tts-tip">Downloading voice… {downloadPct}%</span>
-    {:else if state === 'error'}
+    {:else if local === 'error'}
       <span class="tts-tip tts-error">{errorMsg}</span>
-      <button class="tts-btn" on:click={stopReading} title="Dismiss">✕</button>
-    {:else if state === 'starting'}
+      <button class="tts-btn" on:click={() => (local = 'idle')} title="Dismiss">✕</button>
+    {:else if isThisChapter && $readingState === 'starting'}
       <span class="tts-spinner" title="Preparing speech…">⏳</span>
     {:else}
       <button
         class="tts-btn tts-play-btn"
-        on:click={togglePlay}
-        title={state === 'playing' ? 'Pause reading' : 'Read this chapter aloud (AI voice)'}
-        aria-label={state === 'playing' ? 'Pause reading' : 'Read aloud'}
+        class:tts-live={isLive}
+        on:click={handleClick}
+        title={isLive
+          ? ($readingState === 'playing' ? 'Pause reading' : 'Resume reading')
+          : 'Read this chapter aloud (AI voice)'}
+        aria-label={isLive ? 'Pause or resume reading' : 'Read aloud'}
       >
-        {state === 'playing' ? '⏸' : '🗣'}
+        {isLive && $readingState === 'playing' ? '⏸' : '🗣'}
       </button>
-
-      {#if state === 'playing' || state === 'paused'}
-        <select
-          class="tts-verse-picker"
-          bind:value={currentIndex}
-          on:change={() => jumpToVerse(currentIndex)}
-          title="Jump to a verse"
-          aria-label="Jump to a verse"
-        >
-          {#each verses as v, i}
-            <option value={i}>v. {v.verse}</option>
-          {/each}
-        </select>
-        <span class="tts-progress">/ {verses[verseCount - 1]?.verse ?? verseCount}</span>
-        <button class="tts-btn" on:click={handleUserStop} title="Stop reading">■</button>
-        <button
-          class="tts-btn tts-continuous-btn"
-          class:tts-continuous-active={$continuousPlay}
-          on:click={() => continuousPlay.update((v) => !v)}
-          title={$continuousPlay ? 'Auto-advance: on (click to turn off)' : 'Auto-advance to next chapter'}
-          aria-label="Toggle continuous play"
-        >↠</button>
-        <select
-          class="tts-sleep-picker"
-          class:tts-sleep-armed={sleepArmed}
-          bind:value={sleepChoice}
-          on:change={applySleepChoice}
-          title={sleepArmed ? 'Sleep timer running — fades out and stops' : 'Sleep timer'}
-          aria-label="Sleep timer"
-        >
-          {#if sleepArmed}
-            <option value="keep">{sleepLabel}</option>
-          {/if}
-          <option value="0">{sleepArmed ? 'Off' : '⏱'}</option>
-          <option value="10">10 min</option>
-          <option value="20">20 min</option>
-          <option value="30">30 min</option>
-          <option value="45">45 min</option>
-          <option value="60">60 min</option>
-          <option value="chapter">End of chapter</option>
-        </select>
+      {#if isLive}
+        <span class="tts-hint">Controls are in the bar at the top</span>
       {/if}
     {/if}
   </div>
@@ -393,96 +121,52 @@
   .tts-player {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    height: 28px;
+    gap: 10px;
+    height: 32px;
     vertical-align: middle;
   }
 
   .tts-btn {
     background: none;
     border: none;
-    cursor: pointer;
-    font-size: 1rem;
+    color: #888;
+    font-size: 1.15rem;
     line-height: 1;
     padding: 2px 6px;
-    border-radius: 4px;
-    color: #aaa;
-    transition: color 0.15s, background 0.15s;
+    cursor: pointer;
+    transition: color 0.15s, transform 0.15s;
+  }
+  .tts-btn:hover {
+    color: #b79df7;
+    transform: scale(1.08);
   }
 
   .tts-play-btn {
-    color: #9d7af5;
-    font-size: 0.9rem;
+    font-size: 1.25rem;
   }
 
-  .tts-btn:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.1);
+  /* The chapter currently being read — the only lit one. */
+  .tts-live {
+    color: #9d7af5;
+  }
+
+  .tts-hint {
+    font-size: 0.65rem;
+    color: #6a6a7a;
+    font-style: italic;
   }
 
   .tts-download-btn {
-    background: rgba(157, 122, 245, 0.15);
+    background: rgba(157, 122, 245, 0.12);
     border: 1px solid rgba(157, 122, 245, 0.4);
-    border-radius: 4px;
+    border-radius: 999px;
     color: #b79df7;
-    cursor: pointer;
     font-size: 0.7rem;
-    padding: 3px 8px;
-    transition: background 0.15s;
+    padding: 3px 10px;
+    cursor: pointer;
   }
-
   .tts-download-btn:hover {
-    background: rgba(157, 122, 245, 0.3);
-  }
-
-  .tts-progress {
-    font-size: 0.7rem;
-    color: #888;
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Styled to read like the old text readout, but it's a real picker. */
-  .tts-verse-picker {
-    background: transparent;
-    border: 1px solid rgba(157, 122, 245, 0.35);
-    border-radius: 4px;
-    color: #b79df7;
-    font-size: 0.7rem;
-    font-variant-numeric: tabular-nums;
-    padding: 1px 4px;
-    cursor: pointer;
-    max-width: 8ch;
-  }
-
-  .tts-verse-picker:hover {
-    border-color: rgba(157, 122, 245, 0.7);
-  }
-
-  /* Same picker treatment as the verse jump, but muted until it is armed —
-     an unset timer should not compete with the playback controls. */
-  .tts-sleep-picker {
-    background: transparent;
-    border: 1px solid rgba(157, 122, 245, 0.2);
-    border-radius: 4px;
-    color: #7a7a8a;
-    font-size: 0.7rem;
-    font-variant-numeric: tabular-nums;
-    padding: 1px 4px;
-    cursor: pointer;
-    max-width: 10ch;
-  }
-  .tts-sleep-picker:hover {
-    border-color: rgba(157, 122, 245, 0.6);
-    color: #b79df7;
-  }
-  .tts-sleep-armed {
-    border-color: rgba(157, 122, 245, 0.55);
-    color: #b79df7;
-  }
-
-  .tts-spinner {
-    font-size: 0.85rem;
-    opacity: 0.7;
+    background: rgba(157, 122, 245, 0.2);
   }
 
   .tts-tip {
@@ -490,46 +174,28 @@
     color: #777;
     font-style: italic;
   }
-
   .tts-error {
-    color: #e06c75;
+    color: #f0a0a0;
   }
 
-  .tts-continuous-btn {
+  .tts-spinner {
     font-size: 0.85rem;
-    opacity: 0.5;
-  }
-
-  .tts-continuous-active {
-    color: #9d7af5;
-    opacity: 1;
+    opacity: 0.7;
   }
 
   @media (max-width: 480px) {
     .tts-player {
       height: 40px;
-      gap: 8px;
     }
     .tts-btn {
       font-size: 1.4rem;
       padding: 4px 10px;
     }
     .tts-play-btn {
-      font-size: 1.4rem;
+      font-size: 1.5rem;
     }
-    .tts-continuous-btn {
-      font-size: 1.4rem;
-    }
-    .tts-progress {
-      font-size: 0.85rem;
-    }
-    .tts-verse-picker {
-      font-size: 0.85rem;
-      padding: 3px 6px;
-    }
-    .tts-sleep-picker {
-      font-size: 0.85rem;
-      padding: 3px 6px;
+    .tts-hint {
+      display: none;
     }
   }
 </style>

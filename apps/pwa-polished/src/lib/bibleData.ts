@@ -121,6 +121,49 @@ export function normalizeBookName(book: string): string {
   return BOOK_NAME_ALIASES[book] ?? book;
 }
 
+export interface ChapterRef {
+  book: string;
+  chapter: number;
+  /** True when this crossed into a different book. */
+  newBook: boolean;
+}
+
+/**
+ * The chapter that follows this one, rolling into the next book at the end of a
+ * book and wrapping Revelation → Genesis.
+ *
+ * Single source of truth: Read Aloud uses it to keep reading past the end of a
+ * chapter, and the reader uses it to navigate. If the two disagreed, playback and
+ * the page would drift apart.
+ */
+export function nextChapterOf(book: string, chapter: number): ChapterRef | null {
+  const name = normalizeBookName(book);
+  const index = BIBLE_BOOKS.findIndex((b) => b.name === name);
+  if (index === -1) return null;
+
+  if (chapter < BIBLE_BOOKS[index].chapters) {
+    return { book: name, chapter: chapter + 1, newBook: false };
+  }
+
+  const next = BIBLE_BOOKS[(index + 1) % BIBLE_BOOKS.length];
+  return { book: next.name, chapter: 1, newBook: true };
+}
+
+/**
+ * A book's name as it should be *spoken*.
+ *
+ * Leading numerals are read as words, because a voice saying "one Corinthians"
+ * is wrong — it is "First Corinthians". Everything else is spoken as written;
+ * note this app already stores Psalms as the singular "Psalm", which is what we
+ * want to hear.
+ */
+export function spokenBookName(book: string): string {
+  const name = normalizeBookName(book);
+  const ordinals: Record<string, string> = { '1': 'First', '2': 'Second', '3': 'Third' };
+  const match = /^([123])\s+(.*)$/.exec(name);
+  return match ? `${ordinals[match[1]]} ${match[2]}` : name;
+}
+
 /**
  * Category → accent color, mirroring the reference dropdown tints in NavigationBar.
  * Single source of truth for book-category color cues (book lists, verse highlights).

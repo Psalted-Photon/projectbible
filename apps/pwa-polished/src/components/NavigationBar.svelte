@@ -28,6 +28,24 @@
   import { readingPlanModalStore } from "../stores/readingPlanModalStore";
   import { paneStore } from "../stores/paneStore";
   import { userProfileStore } from "../stores/userProfileStore";
+  import { continuousPlay } from "../stores/audioStore";
+  import {
+    readingState,
+    readingPosition,
+    readingVerseList,
+    isReadingActive,
+    togglePlayPause,
+    stopReading,
+    jumpToVerse,
+  } from "../lib/tts/readingEngine";
+  import {
+    sleepRemaining,
+    stopAtChapterEnd,
+    startSleepTimer,
+    setStopAtChapterEnd,
+    cancelSleepTimer,
+    remainingMinutes,
+  } from "../lib/tts/sleepTimer";
   import { COMMENTARY_AUTHORS } from "../lib/annotationConfig";
   import {
     ArrowLeft,
@@ -797,6 +815,30 @@
     window.removeEventListener("resize", updateDropdownPositions);
     window.removeEventListener("settingsUpdated", onSettingsUpdated);
   });
+
+  // ── Read Aloud controls ────────────────────────────────────────────────────
+  // These operate the reading, not a chapter, which is why they belong up here
+  // rather than buried in whichever chapter heading happens to be on screen.
+
+  $: ttsReference = $readingPosition
+    ? `${$readingPosition.book} ${$readingPosition.chapter}`
+    : "";
+
+  $: sleepArmed = $sleepRemaining !== null || $stopAtChapterEnd;
+  $: sleepLabel = $stopAtChapterEnd
+    ? "⏱ chapter"
+    : $sleepRemaining !== null
+      ? `⏱ ${remainingMinutes($sleepRemaining)}m`
+      : "⏱";
+  $: sleepChoice = sleepArmed ? "keep" : "0";
+
+  function applySleepChoice(event: Event): void {
+    const value = (event.currentTarget as HTMLSelectElement).value;
+    if (value === "keep") return;
+    if (value === "0") cancelSleepTimer();
+    else if (value === "chapter") setStopAtChapterEnd();
+    else startSleepTimer(parseInt(value, 10));
+  }
 </script>
 
 <div class="navigation-bar" {style} bind:this={navElement}>
@@ -935,6 +977,69 @@
         >
           {#if interlinearMenuOpen}<CaretUp size={10} weight="bold" />{:else}<CaretDown size={10} weight="bold" />{/if}
         </button>
+      </div>
+      <div class="nav-spacer" style="min-width: 27px"></div>
+    {/if}
+    <!-- ── Read Aloud controls (only while reading) ───────────────────────── -->
+    {#if $isReadingActive}
+      <div class="nav-tts">
+        <button
+          class="tts-nav-btn"
+          on:click={togglePlayPause}
+          title={$readingState === 'playing' ? 'Pause reading' : 'Resume reading'}
+          aria-label={$readingState === 'playing' ? 'Pause reading' : 'Resume reading'}
+        >{$readingState === 'playing' ? '⏸' : '▶'}</button>
+
+        <span class="tts-nav-ref">{ttsReference}</span>
+
+        {#if $readingVerseList.length > 0}
+          <select
+            class="tts-nav-picker"
+            value={$readingPosition?.verse ?? $readingVerseList[0]}
+            on:change={(e) => jumpToVerse(parseInt(e.currentTarget.value, 10))}
+            title="Jump to a verse"
+            aria-label="Jump to a verse"
+          >
+            {#each $readingVerseList as verse}
+              <option value={verse}>v. {verse}</option>
+            {/each}
+          </select>
+        {/if}
+
+        <button
+          class="tts-nav-btn"
+          on:click={stopReading}
+          title="Stop reading"
+          aria-label="Stop reading"
+        >■</button>
+
+        <button
+          class="tts-nav-btn"
+          class:tts-nav-on={$continuousPlay}
+          on:click={() => continuousPlay.update((v) => !v)}
+          title={$continuousPlay ? 'Auto-advance: on (click to turn off)' : 'Auto-advance to next chapter'}
+          aria-label="Toggle auto-advance"
+        >↠</button>
+
+        <select
+          class="tts-nav-picker tts-nav-sleep"
+          class:tts-nav-on={sleepArmed}
+          bind:value={sleepChoice}
+          on:change={applySleepChoice}
+          title={sleepArmed ? 'Sleep timer running — fades out and stops' : 'Sleep timer'}
+          aria-label="Sleep timer"
+        >
+          {#if sleepArmed}
+            <option value="keep">{sleepLabel}</option>
+          {/if}
+          <option value="0">{sleepArmed ? 'Off' : '⏱'}</option>
+          <option value="10">10 min</option>
+          <option value="20">20 min</option>
+          <option value="30">30 min</option>
+          <option value="45">45 min</option>
+          <option value="60">60 min</option>
+          <option value="chapter">End of chapter</option>
+        </select>
       </div>
       <div class="nav-spacer" style="min-width: 27px"></div>
     {/if}
@@ -1269,6 +1374,72 @@
     flex: 1;
     min-width: 27px;
     transition: min-width 0.15s ease;
+  }
+
+  /* ── Read Aloud controls ────────────────────────────────────────────────── */
+  /* Its own group between the two pills, same shape as the repeat pills. The
+     nav strip scrolls sideways, so this never crushes the pills either side. */
+  .nav-tts {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    background: #1c1c1c;
+    border: 1px solid rgba(157, 122, 245, 0.45);
+    border-radius: 8px;
+    padding: 3px 6px;
+    height: 38px;
+  }
+
+  .tts-nav-btn {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 3px 6px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .tts-nav-btn:hover {
+    color: #b79df7;
+    background: rgba(157, 122, 245, 0.12);
+  }
+  .tts-nav-on {
+    color: #9d7af5;
+  }
+
+  .tts-nav-ref {
+    font-size: 0.72rem;
+    color: #b79df7;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    padding: 0 2px;
+  }
+
+  .tts-nav-picker {
+    background: transparent;
+    border: 1px solid rgba(157, 122, 245, 0.3);
+    border-radius: 4px;
+    color: #b79df7;
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+    padding: 2px 4px;
+    cursor: pointer;
+    max-width: 9ch;
+  }
+  .tts-nav-picker:hover {
+    border-color: rgba(157, 122, 245, 0.7);
+  }
+  .tts-nav-sleep {
+    color: #8a8a9a;
+    border-color: rgba(157, 122, 245, 0.18);
+  }
+  .tts-nav-sleep.tts-nav-on {
+    color: #b79df7;
+    border-color: rgba(157, 122, 245, 0.55);
   }
 
   /* ── Repeat pills ───────────────────────────────────────────────────────── */

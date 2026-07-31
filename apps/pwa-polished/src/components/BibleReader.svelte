@@ -41,6 +41,7 @@
   import type { InterlinearSettings } from "../adapters/settings";
   import { ttsCurrentVerse } from "../stores/audioStore";
   import { getSharedTtsAudio } from "../adapters/tts";
+  import { readingPosition, isReadingActive } from "../lib/tts/readingEngine";
   import { startGlow } from "../lib/ttsGlow";
   import { expandRmacCode, expandOshbCode } from "../lib/morphologyExpander";
   import { readTransaction } from "../adapters/db";
@@ -621,6 +622,37 @@
   }
 
   $: onSpokenVerseChanged($ttsCurrentVerse, ttsGlowFollow, ttsHighlightVerse);
+
+  // ── Follow Read Aloud ──────────────────────────────────────────────────────
+  // The engine leads; the page follows. When reading moves into a chapter that
+  // is not on screen, bring the page to it — but only in the main reader and
+  // only while the app is visible. Reading itself never depends on this; if the
+  // phone is pocketed there is nothing to look at and nothing to do.
+  let lastFollowedChapter = "";
+  $: if (!windowId && $readingPosition) {
+    const key = `${$readingPosition.book}-${$readingPosition.chapter}`;
+    if (key !== lastFollowedChapter) {
+      lastFollowedChapter = key;
+      followReadingPosition($readingPosition.book, $readingPosition.chapter);
+    }
+  }
+
+  function followReadingPosition(book: string, chapter: number): void {
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (currentBook === book && currentChapter === chapter) return;
+    if (normalizeBookName(book) !== normalizeBookName(currentBook)) {
+      navigationStore.setBook(book);
+    }
+    navigationStore.setChapter(chapter);
+  }
+
+  // Starting to read reveals the navbar, because that is where the controls now
+  // live — otherwise they would appear somewhere the user cannot see.
+  let wasReadingActive = false;
+  $: if ($isReadingActive !== wasReadingActive) {
+    wasReadingActive = $isReadingActive;
+    if ($isReadingActive) navBarOffset = 0;
+  }
 
   // Listen for settings updates
   async function handleSettingsUpdate() {
@@ -4189,7 +4221,7 @@
             {/if}
             <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
             {#if FEATURES.ttsReadAloud && !isOriginalLanguage(currentTranslation)}
-              <TtsPlayer translation={currentTranslation} book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
+              <TtsPlayer translation={currentTranslation} book={chapterData.book} chapter={chapterData.chapter} />
             {/if}
           </div>
           <div

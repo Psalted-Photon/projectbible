@@ -14,9 +14,10 @@
   import { fade } from "svelte/transition";
   import { navigationStore } from "../stores/navigationStore";
   import { wakeAlarmStartOpen } from "../stores/wakeAlarmStore";
-  import { continuousPlay, ttsStartRequest } from "../stores/audioStore";
+  import { continuousPlay } from "../stores/audioStore";
+  import { startReading } from "../lib/tts/readingEngine";
   import { resolveAlarmPassage, type AlarmPassage } from "../lib/alarm/resolvePassage";
-  import { unlockTtsAudio, synthesizeSpeech, isVoiceInstalled, isTtsSupported } from "../adapters/tts";
+  import { synthesizeSpeech, isVoiceInstalled, isTtsSupported } from "../adapters/tts";
   import { getTtsSettings } from "../adapters/settings";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { extractSpeechText } from "../lib/verseRendering";
@@ -89,20 +90,13 @@
   function start() {
     if (!passage) return;
 
-    // Must happen inside the tap: this is what lets later programmatic
-    // playback work on iOS. See unlockTtsAudio in adapters/tts.ts.
-    unlockTtsAudio();
-
     // Keep rolling into the next chapter rather than stopping after one.
     continuousPlay.set(true);
 
-    // Addressed by chapter, not by mount: "where you left off" is usually the
-    // chapter already on screen, so navigating may change nothing at all.
-    ttsStartRequest.set({ book: passage.book, chapter: passage.chapter });
-
-    // setBook resets the chapter to 1, so the order here matters.
-    if ($navigationStore.book !== passage.book) navigationStore.setBook(passage.book);
-    if ($navigationStore.chapter !== passage.chapter) navigationStore.setChapter(passage.chapter);
+    // Straight to the engine — it owns the position and does not care whether
+    // the chapter is on screen. Called synchronously inside the tap so the
+    // audio element is unlocked for every later chapter handoff.
+    void startReading($navigationStore.translation, passage.book, passage.chapter);
 
     close();
   }

@@ -8,6 +8,7 @@ import { removePack } from './lib/progressive-init';
 import { loadPackOnDemand, getInstalledPacks } from './lib/progressive-init';
 import { FEATURES } from './config';
 import './adapters/tts'; // Read Aloud engine client (registers __tts dev hook; worker starts lazily)
+import { initMediaSession } from './lib/tts/mediaSession';
 
 console.log('🔥 IMPORTS LOADED');
 
@@ -61,6 +62,11 @@ async function initApp() {
       console.log('[Storage] Persistent storage granted:', granted)
     );
   }
+
+  // Mirror Read Aloud onto the lock screen. Beyond showing the chapter, this is
+  // what marks the page as a media player, so the phone is far less willing to
+  // throttle it once the screen goes off.
+  initMediaSession();
   
   // In dev mode, skip bootstrap loading and mount immediately
   if (import.meta.env.DEV) {

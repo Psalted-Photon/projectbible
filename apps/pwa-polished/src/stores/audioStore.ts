@@ -7,19 +7,11 @@ export const continuousPlay = writable<boolean>(false);
  *  The next AudioPlayer that mounts will read this, clear it, and auto-play. */
 export const autoplayNext = writable<boolean>(false);
 
-/** Same one-shot handoff for the Read Aloud (TTS) player. Kept separate from
- *  autoplayNext because both players mount in the same chapter header and
- *  would otherwise race to consume the flag. */
-export const ttsAutoplayNext = writable<boolean>(false);
-
-/** Ask Read Aloud to start on a specific chapter.
- *
- *  Unlike ttsAutoplayNext, this addresses a chapter by name rather than relying
- *  on a fresh mount. The wake alarm needs that: "continue where I left off"
- *  usually resolves to the chapter already on screen, so no navigation happens
- *  and no new player mounts. The matching TtsPlayer consumes this and clears it.
- */
-export const ttsStartRequest = writable<{ book: string; chapter: number } | null>(null);
+/* Read Aloud has no equivalent one-shot flag. It used to, and that was the bug:
+ * an anonymous "play the next one" note could only be read by a brand-new
+ * player, so with continuous scrolling — where the next chapter is usually
+ * already drawn — nobody ever read it and playback stopped. Read Aloud is now
+ * driven by lib/tts/readingEngine, which owns the position outright. */
 
 /** The verse Read Aloud is currently speaking, or null when not reading.
  *  Drives the verse highlight and the drifting glow. Playback progress is
