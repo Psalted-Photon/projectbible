@@ -172,6 +172,24 @@
     navContent.scrollLeft = Math.max(0, targetScroll);
   }
 
+  /**
+   * Same nudge, but centred rather than left-aligned.
+   *
+   * Both rects come from inside the same transformed ancestor (the bar slides
+   * up and down), so their difference is unaffected by that transform — and
+   * working in scrollLeft never disturbs the page scrolling behind.
+   */
+  function scrollToCenter(el: HTMLElement): void {
+    const navContent = (navElement?.querySelector('.nav-content') ?? document.querySelector('.nav-content')) as HTMLElement;
+    if (!navContent || !el) return;
+    const navContentRect = navContent.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const offsetFromNavLeft = elRect.left - navContentRect.left;
+    const centringGap = (navContent.clientWidth - elRect.width) / 2;
+    const targetScroll = navContent.scrollLeft + offsetFromNavLeft - centringGap;
+    navContent.scrollLeft = Math.max(0, targetScroll);
+  }
+
   // Listen for external search triggers
   $: if ($triggerSearch > 0) {
     searchQuery = $searchQueryStore;
@@ -824,6 +842,26 @@
     ? `${$readingPosition.book} ${$readingPosition.chapter}`
     : "";
 
+  // Bring the controls into the middle the moment they appear, so they never
+  // have to be hunted for after pressing play. Only on the transition into
+  // reading — pausing, changing verse or advancing a chapter must not yank the
+  // bar back from wherever the user has since scrolled it.
+  let ttsControlsEl: HTMLElement | undefined;
+  let wasReadingActive = false;
+
+  $: if ($isReadingActive !== wasReadingActive) {
+    wasReadingActive = $isReadingActive;
+    if ($isReadingActive) void centerTtsControls();
+  }
+
+  async function centerTtsControls(): Promise<void> {
+    await tick(); // the controls only exist once reading is active
+    // One more frame so the bar has been laid out before anything is measured.
+    requestAnimationFrame(() => {
+      if (ttsControlsEl) scrollToCenter(ttsControlsEl);
+    });
+  }
+
   $: sleepArmed = $sleepRemaining !== null || $stopAtChapterEnd;
   $: sleepLabel = $stopAtChapterEnd
     ? "⏱ chapter"
@@ -982,7 +1020,7 @@
     {/if}
     <!-- ── Read Aloud controls (only while reading) ───────────────────────── -->
     {#if $isReadingActive}
-      <div class="nav-tts">
+      <div class="nav-tts" bind:this={ttsControlsEl}>
         <button
           class="tts-nav-btn"
           on:click={togglePlayPause}
