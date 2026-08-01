@@ -155,7 +155,6 @@ let renderCursor = 0;             // next utterance to turn into audio
 let segments: Segment[] = [];     // stitched, ready to play
 let segmentIndex = 0;             // which segment is playing
 let generation = 0;               // bumped to invalidate all in-flight work
-let filling = false;
 let translation = '';
 let voiceId = '';
 let rate = 1;
@@ -375,22 +374,41 @@ async function buildSegment(gen: number): Promise<boolean> {
   return true;
 }
 
-async function fill(gen: number): Promise<void> {
-  if (filling || gen !== generation) return;
-  filling = true;
-  try {
-    while (gen === generation) {
-      if (bufferedSecondsAhead() >= BUFFER_AHEAD_SECONDS) break;
-      if (bufferedBytes() >= BUFFER_MAX_BYTES) break;
-      if (!(await buildSegment(gen))) break;
-    }
-  } finally {
-    filling = false;
+/**
+ * Every build goes through here, one at a time.
+ *
+ * This used to be a `filling` boolean, which quietly did two incompatible jobs:
+ * a lock ("do not build twice at once") and a signal ("more audio is coming").
+ * Straight after a jump those mean opposite things — the flag says work is in
+ * flight while that work is stale and about to abandon itself — so a request to
+ * build was refused, playback saw the flag clear a moment later, concluded there
+ * was nothing left, and stopped. A queue cannot lose a request that way.
+ */
+let buildChain: Promise<unknown> = Promise.resolve();
+
+function serialize<T>(task: () => Promise<T>): Promise<T> {
+  const run = buildChain.then(task, task);
+  buildChain = run.catch(() => {});
+  return run;
+}
+
+/** Build segments until there is enough audio banked ahead. */
+async function fillLoop(gen: number): Promise<void> {
+  while (gen === generation) {
+    if (bufferedSecondsAhead() >= BUFFER_AHEAD_SECONDS) break;
+    if (bufferedBytes() >= BUFFER_MAX_BYTES) break;
+    if (!(await buildSegment(gen))) break;
   }
 }
 
 function kickFiller(): void {
-  void fill(generation);
+  const gen = generation;
+  void serialize(() => fillLoop(gen));
+}
+
+/** Build exactly one segment, waiting for any build already running. */
+function buildOne(gen: number): Promise<boolean> {
+  return serialize(() => (gen === generation ? buildSegment(gen) : Promise.resolve(false)));
 }
 
 /**
@@ -406,16 +424,19 @@ function kickFiller(): void {
  */
 async function buildHeadStart(gen: number): Promise<void> {
   const started = Date.now();
-  kickFiller();
 
   while (gen === generation) {
     let ready = 0;
     for (const segment of segments) ready += segment.seconds;
     if (ready >= HEAD_START_SECONDS) break;
     if (Date.now() - started >= HEAD_START_MAX_WAIT_MS) break;
-    if (!filling && segments.length > 0) break; // nothing more is coming
-    await new Promise((r) => setTimeout(r, 100));
+    // Build one at a time so the wall-clock cap is checked between them, and a
+    // build that yields nothing ends the wait instead of spinning.
+    if (!(await buildOne(gen))) break;
   }
+
+  // Whatever else happens, keep banking in the background.
+  kickFiller();
 }
 
 // ── playback ────────────────────────────────────────────────────────────────
@@ -431,15 +452,13 @@ async function playSegment(gen: number, seekSeconds = 0): Promise<void> {
   if (gen !== generation) return;
 
   if (segmentIndex >= segments.length) {
-    // Nothing ready. Either the next segment is still rendering, or there is
-    // genuinely nothing left — at the end of a chapter with auto-advance off,
-    // the filler produces nothing and we must finish rather than sit waiting.
-    kickFiller();
-    const started = Date.now();
+    // Nothing ready. Ask for one segment and wait for the answer, rather than
+    // watching a flag — a stale build clearing that flag is what used to make a
+    // jump look like a stop. Keep asking while segments keep arriving; give up
+    // only when a build genuinely produces nothing, which means there is nothing
+    // left to read (end of a chapter with auto-advance off, say).
     while (gen === generation && segmentIndex >= segments.length) {
-      if (!filling) break; // the filler ran and had nothing to give
-      if (Date.now() - started > 120_000) break;
-      await new Promise((r) => setTimeout(r, 120));
+      if (!(await buildOne(gen))) break;
     }
     if (gen !== generation) return;
     if (segmentIndex >= segments.length) {
@@ -663,9 +682,15 @@ export function togglePlayPause(): void {
   else if (state === 'paused') resumeReading();
 }
 
-/** Find an utterance inside the segments already built. */
+/**
+ * Find an utterance inside the segments already built.
+ *
+ * Searches from the first segment still held, not from the one playing, so
+ * jumping *backwards* into the segment kept in reserve is a seek rather than a
+ * regenerate.
+ */
 function locate(predicate: (u: Utterance) => boolean): { index: number; at: number } | null {
-  for (let i = segmentIndex; i < segments.length; i++) {
+  for (let i = 0; i < segments.length; i++) {
     for (const mark of segments[i].marks) {
       if (predicate(mark.utterance)) return { index: i, at: mark.startSeconds };
     }
