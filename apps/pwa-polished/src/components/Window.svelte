@@ -14,6 +14,7 @@
   ];
 
   function moveTo(edge: WindowEdge) {
+    if (suppressClick) return;
     if (edge === window.edge) return;
     windowStore.setWindowEdge(window.id, edge);
   }
@@ -22,6 +23,18 @@
   let dragStartPos = 0;
   let startSize = 0;
   let isInCloseZone = false;
+
+  // A press on the header that hasn't yet moved far enough to count as a drag.
+  // The header carries the dock arrows and the close button, so grabbing it can
+  // mean either thing; which one it was is only known once the pointer moves.
+  let pendingHeaderDrag = false;
+  // Set once a header press turns into a real drag, so the click that arrives
+  // on mouseup doesn't also dock or close the panel.
+  let suppressClick = false;
+
+  /** How far the pointer must travel on the resize axis before a press on the
+      header stops being a button click and becomes a resize. */
+  const DRAG_THRESHOLD_PX = 4;
 
   onMount(() => {
     const windowNumber = window.id.split('-')[1];
@@ -41,28 +54,61 @@
     });
   }
 
-  function handleResizeStart(e: MouseEvent | TouchEvent) {
+  /** The pointer coordinate on whichever axis this panel resizes along. */
+  function axisPos(e: MouseEvent | TouchEvent): number {
+    const clientPos = 'touches' in e ? e.touches[0] : e;
+    return window.edge === 'left' || window.edge === 'right'
+      ? clientPos.clientX
+      : clientPos.clientY;
+  }
+
+  /** Arm a drag from the given start coordinate, without engaging it yet. */
+  function armResize(startPos: number) {
+    dragStartPos = startPos;
+    startSize = window.size;
+  }
+
+  function engageResize() {
     isDraggingResize = true;
     windowStore.setResizing(window.id, true);
-    
+
     const windowNumber = window.id.split('-')[1];
     console.log(`🔹 WINDOW ${windowNumber} RESIZE START:`, {
       edge: window.edge,
       currentSize: `${window.size.toFixed(1)}%`
     });
-    
-    const clientPos = 'touches' in e ? e.touches[0] : e;
-    if (window.edge === 'left' || window.edge === 'right') {
-      dragStartPos = clientPos.clientX;
-    } else {
-      dragStartPos = clientPos.clientY;
-    }
-    startSize = window.size;
-    
+  }
+
+  /** The edge strip. Nothing to click inside it, so it drags immediately. */
+  function handleResizeStart(e: MouseEvent | TouchEvent) {
+    armResize(axisPos(e));
+    engageResize();
     e.preventDefault();
   }
 
+  /**
+   * The header bar. Same drag, but deferred: it only becomes a resize once the
+   * pointer has moved past the threshold, so tapping an arrow still docks.
+   *
+   * preventDefault is for mouse only. On mousedown it suppresses the text
+   * selection a drag would otherwise paint, and the click still fires after it.
+   * On touchstart it would cancel the synthesised click and kill the buttons,
+   * so scrolling is held off with `touch-action: none` in the CSS instead.
+   */
+  function handleHeaderDragStart(e: MouseEvent | TouchEvent) {
+    suppressClick = false;
+    pendingHeaderDrag = true;
+    armResize(axisPos(e));
+
+    if (!('touches' in e)) e.preventDefault();
+  }
+
   function handleResizeMove(e: MouseEvent | TouchEvent) {
+    if (pendingHeaderDrag && !isDraggingResize) {
+      if (Math.abs(axisPos(e) - dragStartPos) < DRAG_THRESHOLD_PX) return;
+      suppressClick = true;
+      engageResize();
+    }
     if (!isDraggingResize) return;
 
     const clientPos = 'touches' in e ? e.touches[0] : e;
@@ -128,8 +174,9 @@
   }
 
   function handleResizeEnd() {
+    pendingHeaderDrag = false;
     if (!isDraggingResize) return;
-    
+
     const windowNumber = window.id.split('-')[1];
     console.log(`✅ WINDOW ${windowNumber} RESIZE END:`, {
       edge: window.edge,
@@ -146,6 +193,7 @@
   }
 
   function handleCloseClick() {
+    if (suppressClick) return;
     windowStore.closeWindow(window.id);
   }
 </script>
@@ -180,15 +228,23 @@
     aria-label="Resize panel"
   ></div>
 
-  <!-- Panel header -->
-  <div class="panel-header">
+  <!-- Panel header. Doubles as the main resize grip — see the CSS below. The
+       accessible name for resizing stays on the handle above, which is the
+       same gesture; no role here, so the buttons inside keep theirs. -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="panel-header header-{window.edge}"
+    class:close-zone={isInCloseZone}
+    on:mousedown={handleHeaderDragStart}
+    on:touchstart={handleHeaderDragStart}
+  >
     <div class="edge-buttons">
       {#each EDGES as e}
         <button
           class="edge-button"
           class:current={window.edge === e.edge}
           on:click={() => moveTo(e.edge)}
-          disabled={window.edge === e.edge}
+          aria-disabled={window.edge === e.edge}
           title={e.label}
           aria-label={e.label}
         >{e.glyph}</button>
@@ -255,7 +311,12 @@
     background: rgba(102, 126, 234, 0.3);
   }
 
-  .resize-handle.close-zone {
+  /* Scoped under .panel.resizing to outrank the blue tint above it. As plain
+     `.resize-handle.close-zone` it lost on specificity to the three-class
+     selector — and since the close zone can only be entered mid-drag, that
+     meant the red never once appeared. Losing nothing by narrowing it: the
+     panel is always resizing when this class is set. */
+  .panel.resizing .resize-handle.close-zone {
     background: rgba(220, 38, 38, 0.8);
   }
 
@@ -294,18 +355,55 @@
   /* Above the resize handle. The handle runs the full length of the panel's
      inner edge at z-index 100, which puts it over this strip on left-, right-
      and bottom-docked panels — the close button there was unclickable, and the
-     edge buttons would have been too. Losing 20px of drag length at one end of
-     the handle costs nothing; the rest of the edge still resizes. */
+     edge buttons would have been too.
+
+     Which is why this bar is itself a resize grip. It was covering the part of
+     the handle nearest the buttons and leaving only the few pixels overhanging
+     outside the panel to grab; now the whole bar drags. `touch-action: none`
+     stands in for the preventDefault that touchstart can't have without
+     killing the buttons — see handleHeaderDragStart. */
   .panel-header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     padding: 0 2px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    min-height: 20px;
+    min-height: 24px;
     flex-shrink: 0;
     position: relative;
     z-index: 101;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.2s;
+  }
+
+  .header-left,
+  .header-right {
+    cursor: ew-resize;
+  }
+
+  .header-top,
+  .header-bottom {
+    cursor: ns-resize;
+  }
+
+  /* Same warning the edge handle gives, on the surface actually being dragged.
+     Releasing here closes the panel. */
+  .panel-header.close-zone {
+    background: rgba(220, 38, 38, 0.8);
+  }
+
+  /* The other half of why the warning was never seen: on light and sepia the
+     panel carries `filter: invert(1) hue-rotate(180deg)` (App.svelte), which
+     turns this red into cyan. Cancelled by re-applying the same filter, the
+     way .red-letter does. Maps and the encyclopedia never get .themed, so
+     they're excluded and keep their red directly. */
+  :global(body.light-theme) .panel.themed .panel-header.close-zone,
+  :global(body.sepia-theme) .panel.themed .panel-header.close-zone,
+  :global(body.light-theme) .panel.themed.resizing .resize-handle.close-zone,
+  :global(body.sepia-theme) .panel.themed.resizing .resize-handle.close-zone {
+    filter: invert(1) hue-rotate(180deg);
   }
 
   /* Clips rather than pushing the close button off the end when a window is
@@ -335,17 +433,21 @@
     transition: background 0.2s, color 0.2s;
   }
 
-  .edge-button:hover:not(:disabled) {
+  .edge-button:hover:not(.current) {
     background: rgba(255, 255, 255, 0.25);
     color: white;
   }
 
   /* The edge it's already on: shown filled in as a position marker rather than
-     hidden, so the four together read as "here, and where else it can go". */
+     hidden, so the four together read as "here, and where else it can go".
+     Marked aria-disabled rather than disabled — a real disabled button swallows
+     mouse events, which would leave a dead spot in the drag surface. moveTo
+     ignores it either way. Cursor comes from the header so it reads as part of
+     the grip. */
   .edge-button.current {
     color: white;
     background: rgba(255, 255, 255, 0.28);
-    cursor: default;
+    cursor: inherit;
   }
 
   .close-button {
