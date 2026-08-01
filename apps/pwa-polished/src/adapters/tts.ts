@@ -214,6 +214,15 @@ export function getSharedTtsAudio(): HTMLAudioElement {
   if (!sharedAudio) {
     sharedAudio = new Audio();
     sharedAudio.preload = 'auto';
+    // Attached to the page rather than left floating. Some phones only surface
+    // lock-screen controls for an element that is actually in the document, and
+    // a detached element is easier for the browser to treat as disposable.
+    // Hidden, not display:none — a hidden element may be skipped entirely.
+    sharedAudio.setAttribute('aria-hidden', 'true');
+    sharedAudio.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.appendChild(sharedAudio);
+    }
   }
   return sharedAudio;
 }

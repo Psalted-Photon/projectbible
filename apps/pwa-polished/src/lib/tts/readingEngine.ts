@@ -2,19 +2,23 @@
  * Read Aloud engine.
  *
  * Owns the reading position, the text, the rendered speech, and the audio
- * element — and deliberately knows nothing about what is drawn on screen.
+ * element — and deliberately knows nothing about what is drawn on screen. Read
+ * Aloud used to live inside each rendered chapter's control bar, so a chapter
+ * could only be read while it happened to be visible. Nothing here depends on
+ * components.
  *
- * That independence is the whole point. Read Aloud used to live inside each
- * rendered chapter's control bar, so a chapter could only be read if it happened
- * to be on screen, and continuing to the next chapter depended on a brand-new
- * control bar being created to notice an anonymous "play next" flag. With
- * continuous scrolling the next chapter is usually already drawn, no new bar
- * appears, and playback simply stopped. Nothing here depends on components.
+ * **Playback is continuous.** Verses are generated one at a time as before, then
+ * stitched — with their pauses as real silence — into segments of roughly a
+ * minute and a half, and the player is handed those. This matters far more than
+ * it sounds: audio is played by the browser's media engine, but *JavaScript* is
+ * what gets throttled once the screen goes off. Handing over one verse at a time
+ * meant JS had to wake every few seconds to keep going, and every new `src`
+ * unloaded the current media and rebuilt the phone's media session from scratch.
+ * Segments cut those wakeups by roughly twenty times, and let the media session
+ * live for minutes instead of seconds.
  *
- * The queue is a flat list of utterances — verses and spoken chapter
- * announcements — that runs straight across chapter boundaries. A background
- * filler renders ahead of the play position up to a high-water mark, so playback
- * survives the phone throttling generation once the screen is off.
+ * Segment length ramps up — the first is a single verse, so the time between
+ * pressing play and hearing the first word is unchanged.
  */
 
 import { get, writable, derived } from 'svelte/store';
@@ -32,22 +36,32 @@ import { continuousPlay, ttsCurrentVerse } from '../../stores/audioStore';
 // One-way dependency on purpose: the timer knows nothing about the engine, so
 // the engine listens to it. The reverse would be a circular import.
 import { stopAtChapterEnd, sleepStopNonce, cancelSleepTimer } from './sleepTimer';
+import { readWav, silencePcm, joinPcm, pcmSeconds } from './stitchAudio';
 
 // ── tuning dials ────────────────────────────────────────────────────────────
-// Rendered speech runs roughly a third of a megabyte per verse, so the buffer
-// has to stop somewhere: unbounded, Psalm 119 alone would bank tens of
-// megabytes and keep the CPU busy the whole time. Fill to HIGH, idle, then top
-// up once it drops to LOW.
 
-const BUFFER_HIGH = 20;              // utterances rendered ahead before idling
-const BUFFER_LOW = 10;               // resume filling at or below this
+/**
+ * Target seconds per segment, by how many segments have been built already.
+ * The first is deliberately a single utterance so nothing gets slower to start;
+ * length only grows once audio is already playing and nobody is waiting.
+ */
+function segmentTargetSeconds(built: number): number {
+  if (built === 0) return 0;   // 0 = stop after one utterance
+  if (built === 1) return 20;
+  return 90;
+}
+
+/** Segments kept ready beyond the one playing. Two ≈ three minutes banked. */
+const SEGMENTS_AHEAD = 2;
 const BUFFER_MAX_BYTES = 24 * 1024 * 1024;
-const KEEP_BEHIND = 4;               // keep a few played verses so jumping back is instant
 
-/** Silence around an automatic chapter announcement. */
-const GAP_BEFORE_MS = 3000;
-const GAP_MID_MS = 1000;   // between "The book of Mark" and "Chapter 1"
-const GAP_AFTER_MS = 2000;
+/** Silence around an automatic chapter announcement, in seconds. */
+const GAP_BEFORE = 3;
+const GAP_MID = 1;    // between "The book of Mark" and "Chapter 1"
+const GAP_AFTER = 2;
+
+/** Fallback pace before any real audio has been measured (seconds per character). */
+const DEFAULT_SECONDS_PER_CHAR = 0.067;
 
 export type ReadingState =
   | 'idle'
@@ -64,12 +78,26 @@ interface Utterance {
   text: string;
   book: string;
   chapter: number;
-  /** Verse number, or null for an announcement. */
   verse: number | null;
-  /** Silence to hold *before* speaking this, in ms. */
+  /** Silence to hold before speaking this, in seconds — rendered as real samples. */
   gapBefore: number;
-  blob?: Blob;
-  bytes?: number;
+  pcm?: Uint8Array;
+  seconds?: number;
+  /** Seconds from the start of its chapter, for chapter-wide progress. */
+  chapterOffset?: number;
+}
+
+interface Mark {
+  utterance: Utterance;
+  /** Where this utterance starts within its segment. */
+  startSeconds: number;
+}
+
+interface Segment {
+  blob: Blob;
+  seconds: number;
+  bytes: number;
+  marks: Mark[];
 }
 
 export interface ReadingPosition {
@@ -88,7 +116,17 @@ export const readingPosition = writable<ReadingPosition | null>(null);
 /** Verse numbers of the chapter being read, for the jump dropdown. */
 export const readingVerseList = writable<number[]>([]);
 
-/** True whenever reading is live — what the navbar controls key off. */
+/** "Verse 5 of 36" — exact, known before any audio exists. */
+export const verseCounter = writable<{ index: number; total: number } | null>(null);
+
+/**
+ * Progress through the whole chapter, in seconds. `position` is exact;
+ * `duration` is estimated from the chapter's text length and sharpened against
+ * the real pace as verses are generated — a chapter's true length cannot be
+ * known without generating all of it, which would add the latency we refuse.
+ */
+export const chapterProgress = writable<{ position: number; duration: number } | null>(null);
+
 export const isReadingActive = derived(readingState, ($s) =>
   $s === 'playing' || $s === 'paused' || $s === 'starting'
 );
@@ -97,43 +135,37 @@ export const isReadingActive = derived(readingState, ($s) =>
 
 const textStore = new IndexedDBTextStore();
 
-let queue: Utterance[] = [];
-let cursor = 0;              // index in `queue` currently playing or about to
-let generation = 0;          // bumped to invalidate all in-flight work
+let queue: Utterance[] = [];      // what to say, in order, across chapters
+let renderCursor = 0;             // next utterance to turn into audio
+let segments: Segment[] = [];     // stitched, ready to play
+let segmentIndex = 0;             // which segment is playing
+let generation = 0;               // bumped to invalidate all in-flight work
 let filling = false;
-let gapTimer: ReturnType<typeof setTimeout> | null = null;
 let translation = '';
 let voiceId = '';
 let rate = 1;
-/** Chapter most recently appended to the queue — where continuation resumes from. */
+let sampleRate = 22050;
 let tailBook = '';
 let tailChapter = 0;
+let currentUrl: string | null = null;
+/** Element events are ours, not the user's, while a segment is being swapped. */
+let swapping = false;
 
-function clearGap(): void {
-  if (gapTimer) {
-    clearTimeout(gapTimer);
-    gapTimer = null;
-  }
+/** Measured pace, for the chapter-length estimate. */
+let measuredChars = 0;
+let measuredSeconds = 0;
+/** Set by the sleep timer's "end of chapter": stop once we leave this chapter. */
+let stopAfterChapter: { book: string; chapter: number } | null = null;
+
+function secondsPerChar(): number {
+  if (measuredChars < 200) return DEFAULT_SECONDS_PER_CHAR;
+  return measuredSeconds / measuredChars;
 }
 
 function bufferedBytes(): number {
   let total = 0;
-  for (let i = cursor; i < queue.length; i++) total += queue[i].bytes ?? 0;
+  for (let i = segmentIndex; i < segments.length; i++) total += segments[i].bytes;
   return total;
-}
-
-function renderedAhead(): number {
-  let count = 0;
-  for (let i = cursor; i < queue.length; i++) if (queue[i].blob) count++;
-  return count;
-}
-
-/** Drop played utterances beyond the small look-back window. */
-function trimBehind(): void {
-  const drop = cursor - KEEP_BEHIND;
-  if (drop <= 0) return;
-  queue = queue.slice(drop);
-  cursor -= drop;
 }
 
 // ── loading text ────────────────────────────────────────────────────────────
@@ -148,21 +180,21 @@ async function loadChapterUtterances(
 
   const out: Utterance[] = [];
 
-  // Announcements only mark an automatic handoff — pressing play on a chapter
+  // Announcements mark an automatic handoff only — pressing play on a chapter
   // yourself does not announce it, since you already know where you are.
   if (announce === 'book') {
     out.push({
       kind: 'announce', text: `The book of ${spokenBookName(book)}`,
-      book, chapter, verse: null, gapBefore: GAP_BEFORE_MS,
+      book, chapter, verse: null, gapBefore: GAP_BEFORE,
     });
     out.push({
       kind: 'announce', text: `Chapter ${chapter}`,
-      book, chapter, verse: null, gapBefore: GAP_MID_MS,
+      book, chapter, verse: null, gapBefore: GAP_MID,
     });
   } else if (announce === 'chapter') {
     out.push({
       kind: 'announce', text: `${spokenBookName(book)} Chapter ${chapter}`,
-      book, chapter, verse: null, gapBefore: GAP_BEFORE_MS,
+      book, chapter, verse: null, gapBefore: GAP_BEFORE,
     });
   }
 
@@ -175,8 +207,7 @@ async function loadChapterUtterances(
     }
     out.push({
       kind: 'verse', text: speech, book, chapter, verse: row.verse,
-      // The first verse after an announcement waits out the closing silence.
-      gapBefore: first && announce !== 'none' ? GAP_AFTER_MS : 0,
+      gapBefore: first && announce !== 'none' ? GAP_AFTER : 0,
     });
     first = false;
   }
@@ -184,7 +215,7 @@ async function loadChapterUtterances(
   return out;
 }
 
-/** Append the chapter that follows the queue's tail. Returns false at the end. */
+/** Append the chapter following the queue's tail. False at the end of the road. */
 async function extendQueue(): Promise<boolean> {
   const next = nextChapterOf(tailBook, tailChapter);
   if (!next) return false;
@@ -203,192 +234,275 @@ async function extendQueue(): Promise<boolean> {
   return true;
 }
 
-// ── the background filler ───────────────────────────────────────────────────
+// ── chapter length estimate ─────────────────────────────────────────────────
+
+function estimateChapterSeconds(book: string, chapter: number): number {
+  let known = 0;
+  let unknownChars = 0;
+  let gaps = 0;
+  for (const u of queue) {
+    if (u.book !== book || u.chapter !== chapter) continue;
+    gaps += u.gapBefore;
+    if (u.seconds !== undefined) known += u.seconds;
+    else unknownChars += u.text.length;
+  }
+  return known + gaps + unknownChars * secondsPerChar();
+}
+
+/** Assign each utterance its offset from the start of its chapter. */
+function recomputeChapterOffsets(book: string, chapter: number): void {
+  let offset = 0;
+  for (const u of queue) {
+    if (u.book !== book || u.chapter !== chapter) continue;
+    offset += u.gapBefore;
+    u.chapterOffset = offset;
+    offset += u.seconds ?? u.text.length * secondsPerChar();
+  }
+}
+
+// ── rendering and stitching ─────────────────────────────────────────────────
+
+async function renderUtterance(u: Utterance, gen: number): Promise<boolean> {
+  try {
+    const blob = await synthesizeSpeech(u.text, voiceId);
+    if (gen !== generation) return false;
+    const wav = readWav(await blob.arrayBuffer());
+    if (gen !== generation) return false;
+
+    sampleRate = wav.sampleRate;
+    u.pcm = wav.pcm;
+    u.seconds = wav.seconds;
+
+    measuredChars += u.text.length;
+    measuredSeconds += wav.seconds;
+    return true;
+  } catch (err) {
+    if (gen !== generation) return false;
+    console.warn('🔊 Read Aloud could not render an utterance:', err);
+    // Drop it rather than wedging the queue on one bad verse.
+    u.pcm = new Uint8Array(0);
+    u.seconds = 0;
+    return true;
+  }
+}
 
 /**
- * Render ahead of the play position up to the high-water mark, then stop. Runs
- * while playing *and* while paused — a pause is free capacity, and banking more
- * audio then is exactly what makes resuming instant.
+ * Build one segment: render utterances and join them, with their pauses as real
+ * silence, until the target length is reached.
  */
+async function buildSegment(gen: number): Promise<boolean> {
+  const target = segmentTargetSeconds(segments.length);
+  const pieces: Uint8Array[] = [];
+  const marks: Mark[] = [];
+  let seconds = 0;
+
+  while (gen === generation) {
+    if (renderCursor >= queue.length) {
+      // Out of planned text. Continue into the next chapter, if we are going to.
+      if (get(stopAtChapterEnd) || !get(continuousPlay)) break;
+      if (!(await extendQueue())) break;
+      if (gen !== generation) return false;
+      continue;
+    }
+
+    const u = queue[renderCursor];
+    if (!u.pcm) {
+      if (!(await renderUtterance(u, gen))) return false;
+    }
+
+    // The pause before an utterance becomes part of the audio, so the player
+    // never stops between chapters — silence is just quiet audio.
+    if (u.gapBefore > 0) {
+      const gap = silencePcm(u.gapBefore, sampleRate);
+      pieces.push(gap);
+      seconds += u.gapBefore;
+    }
+
+    marks.push({ utterance: u, startSeconds: seconds });
+    if (u.pcm && u.pcm.byteLength > 0) {
+      pieces.push(u.pcm);
+      seconds += u.seconds ?? 0;
+    }
+    renderCursor++;
+
+    recomputeChapterOffsets(u.book, u.chapter);
+
+    // target 0 means "one utterance only" — the fast first segment.
+    if (seconds >= target) break;
+  }
+
+  if (marks.length === 0) return false;
+
+  segments = [
+    ...segments,
+    { blob: joinPcm(pieces, sampleRate), seconds: pcmSeconds(pieces, sampleRate), bytes: pieces.reduce((n, p) => n + p.byteLength, 0), marks },
+  ];
+
+  // The samples are now inside the segment; drop the per-utterance copies so we
+  // are not holding the same audio twice.
+  for (const mark of marks) mark.utterance.pcm = undefined;
+
+  return true;
+}
+
 async function fill(gen: number): Promise<void> {
   if (filling || gen !== generation) return;
   filling = true;
-
   try {
     while (gen === generation) {
-      if (renderedAhead() >= BUFFER_HIGH) break;
+      if (segments.length - segmentIndex > SEGMENTS_AHEAD) break;
       if (bufferedBytes() >= BUFFER_MAX_BYTES) break;
-
-      // Run out of queued text? Pull in the next chapter, but only if we are
-      // actually going to continue into it.
-      let target = queue.findIndex((u, i) => i >= cursor && !u.blob);
-      if (target === -1) {
-        if (!get(continuousPlay) || get(stopAtChapterEnd)) break;
-        if (!(await extendQueue())) break;
-        if (gen !== generation) break;
-        continue;
-      }
-
-      const utterance = queue[target];
-      try {
-        const blob = await synthesizeSpeech(utterance.text, voiceId);
-        if (gen !== generation) break;
-        utterance.blob = blob;
-        utterance.bytes = blob.size;
-      } catch (err) {
-        if (gen !== generation) break;
-        console.warn('🔊 Read Aloud could not render an utterance:', err);
-        // Drop it rather than wedging the queue on one bad verse.
-        utterance.text = '';
-        utterance.blob = new Blob([], { type: 'audio/wav' });
-        utterance.bytes = 0;
-      }
+      if (!(await buildSegment(gen))) break;
     }
   } finally {
     filling = false;
   }
 }
 
-/**
- * Nudge the background filler.
- *
- * Normally it waits until the buffer has drained to the low-water mark and then
- * refills to the high one, rather than topping up a verse at a time — fewer,
- * longer runs are kinder to the CPU. `force` is for the case where playback is
- * waiting on a specific utterance and cannot afford to wait for the watermark.
- */
-function kickFiller(force = false): void {
-  if (!force && renderedAhead() > BUFFER_LOW) return;
+function kickFiller(): void {
   void fill(generation);
 }
 
 // ── playback ────────────────────────────────────────────────────────────────
 
-async function playCursor(gen: number): Promise<void> {
+function releaseUrl(): void {
+  if (currentUrl) {
+    URL.revokeObjectURL(currentUrl);
+    currentUrl = null;
+  }
+}
+
+async function playSegment(gen: number, seekSeconds = 0): Promise<void> {
   if (gen !== generation) return;
 
-  // Past the end of what is queued: continue into the next chapter, or stop.
-  if (cursor >= queue.length) {
-    if (get(stopAtChapterEnd)) {
-      // "End of chapter" beats auto-advance — that is the whole point of it.
-      cancelSleepTimer();
-      finish();
-      return;
-    }
-    if (!get(continuousPlay)) {
-      finish();
-      return;
-    }
-    if (!(await extendQueue()) || gen !== generation) {
-      finish();
-      return;
-    }
-  }
-
-  const utterance = queue[cursor];
-  if (!utterance) {
-    finish();
-    return;
-  }
-
-  // Hold the silence before an announcement (or before the verse after one).
-  if (utterance.gapBefore > 0) {
-    await new Promise<void>((resolve) => {
-      clearGap();
-      gapTimer = setTimeout(() => {
-        gapTimer = null;
-        resolve();
-      }, utterance.gapBefore);
-    });
-    if (gen !== generation) return;
-    // Consumed — resuming after a pause should not replay the silence.
-    utterance.gapBefore = 0;
-    // Pausing during a silence has to actually hold. The timer is left to
-    // resolve rather than cancelled (cancelling would strand this promise
-    // forever); resuming picks the cursor back up from here.
-    if (get(readingState) === 'paused') return;
-  }
-
-  // Wait for this utterance to be rendered if the filler has not reached it.
-  if (!utterance.blob) {
-    kickFiller(true);
+  if (segmentIndex >= segments.length) {
+    // Nothing ready. Either the next segment is still rendering, or there is
+    // genuinely nothing left — at the end of a chapter with auto-advance off,
+    // the filler produces nothing and we must finish rather than sit waiting.
+    kickFiller();
     const started = Date.now();
-    while (!utterance.blob && gen === generation && Date.now() - started < 120_000) {
+    while (gen === generation && segmentIndex >= segments.length) {
+      if (!filling) break; // the filler ran and had nothing to give
+      if (Date.now() - started > 120_000) break;
       await new Promise((r) => setTimeout(r, 120));
     }
     if (gen !== generation) return;
-    if (!utterance.blob) {
-      readingState.set('error');
-      readingError.set('Speech generation timed out.');
+    if (segmentIndex >= segments.length) {
+      finish();
       return;
     }
   }
 
-  // An empty blob is a verse that failed to render — skip rather than stall.
-  if (utterance.blob.size === 0) {
-    cursor++;
-    void playCursor(gen);
-    return;
-  }
-
+  const segment = segments[segmentIndex];
   const audio = getSharedTtsAudio();
-  const url = URL.createObjectURL(utterance.blob);
-  audio.src = url;
+
+  swapping = true;
+  releaseUrl();
+  currentUrl = URL.createObjectURL(segment.blob);
+  audio.src = currentUrl;
   audio.playbackRate = rate;
   audio.volume = 1;
 
   audio.onended = () => {
-    URL.revokeObjectURL(url);
     if (gen !== generation) return;
-    cursor++;
-    trimBehind();
+    segmentIndex++;
+    trimPlayed();
     kickFiller();
-    void playCursor(gen);
+    void playSegment(gen);
   };
   audio.onerror = () => {
-    URL.revokeObjectURL(url);
     if (gen !== generation) return;
     readingState.set('error');
     readingError.set('Audio playback failed.');
   };
 
   try {
+    if (seekSeconds > 0) audio.currentTime = seekSeconds;
     await audio.play();
   } catch (err: any) {
+    swapping = false;
     if (gen !== generation) return;
     readingState.set('error');
     readingError.set(err?.message ?? 'Playback blocked — press play again.');
     return;
   }
+  swapping = false;
   if (gen !== generation) return;
 
   readingState.set('playing');
-  publishPosition(utterance);
+  updatePositionFromClock();
   kickFiller();
 }
 
-function publishPosition(utterance: Utterance): void {
-  readingPosition.set({
-    translation,
-    book: utterance.book,
-    chapter: utterance.chapter,
-    verse: utterance.verse,
-  });
-
-  // The reader's highlight, glow and follow-scroll all read this already, so
-  // they keep working untouched. Announcements have no verse to highlight.
-  if (utterance.verse !== null) {
-    ttsCurrentVerse.set({ book: utterance.book, chapter: utterance.chapter, verse: utterance.verse });
-  }
-
-  if (utterance.kind === 'verse') refreshVerseList(utterance.book, utterance.chapter);
+/** Drop segments already played; keep one behind so a small rewind is cheap. */
+function trimPlayed(): void {
+  const drop = segmentIndex - 1;
+  if (drop <= 0) return;
+  segments = segments.slice(drop);
+  segmentIndex -= drop;
 }
 
-function refreshVerseList(book: string, chapter: number): void {
+/**
+ * Which utterance is being spoken, worked out from the playback clock rather
+ * than from starting each verse — there is no per-verse event any more.
+ */
+function currentMark(): Mark | null {
+  const segment = segments[segmentIndex];
+  if (!segment) return null;
+  const t = getSharedTtsAudio().currentTime;
+  let found: Mark | null = null;
+  for (const mark of segment.marks) {
+    if (mark.startSeconds <= t) found = mark;
+    else break;
+  }
+  return found ?? segment.marks[0] ?? null;
+}
+
+let lastVerseKey = '';
+
+function updatePositionFromClock(): void {
+  const mark = currentMark();
+  if (!mark) return;
+  const u = mark.utterance;
+
+  // "End of chapter" beats auto-advance — stop the moment we leave it.
+  if (stopAfterChapter && (u.book !== stopAfterChapter.book || u.chapter !== stopAfterChapter.chapter)) {
+    stopAfterChapter = null;
+    cancelSleepTimer();
+    stopReading();
+    return;
+  }
+
+  const key = `${u.book}|${u.chapter}|${u.verse ?? 'a'}`;
+  if (key !== lastVerseKey) {
+    lastVerseKey = key;
+    readingPosition.set({ translation, book: u.book, chapter: u.chapter, verse: u.verse });
+    // The reader's highlight, glow and follow-scroll already read this.
+    if (u.verse !== null) {
+      ttsCurrentVerse.set({ book: u.book, chapter: u.chapter, verse: u.verse });
+    }
+    refreshChapterInfo(u.book, u.chapter, u.verse);
+  }
+
+  // Progress through the chapter: where this utterance starts, plus how far
+  // into it we are. Exact, even though the chapter total is an estimate.
+  const into = Math.max(0, getSharedTtsAudio().currentTime - mark.startSeconds);
+  const position = (u.chapterOffset ?? 0) + into;
+  chapterProgress.set({ position, duration: Math.max(position, estimateChapterSeconds(u.book, u.chapter)) });
+}
+
+function refreshChapterInfo(book: string, chapter: number, verse: number | null): void {
   const verses = queue
     .filter((u) => u.kind === 'verse' && u.book === book && u.chapter === chapter)
     .map((u) => u.verse as number);
   readingVerseList.set(verses);
+
+  if (verse === null) {
+    verseCounter.set(verses.length > 0 ? { index: 0, total: verses.length } : null);
+    return;
+  }
+  const index = verses.indexOf(verse);
+  verseCounter.set({ index: index >= 0 ? index + 1 : 0, total: verses.length });
 }
 
 function finish(): void {
@@ -401,7 +515,7 @@ function finish(): void {
 /**
  * Begin reading. Must be called from a user gesture: the audio element is
  * unlocked synchronously here so every later programmatic play is allowed,
- * including chapter handoffs hours later.
+ * including chapter handoffs hours later with the screen off.
  */
 export async function startReading(
   translationId: string,
@@ -438,13 +552,16 @@ export async function startReading(
     }
 
     queue = utterances;
-    cursor = verse === null ? 0 : Math.max(0, utterances.findIndex((u) => u.verse === verse));
+    renderCursor = verse === null ? 0 : Math.max(0, utterances.findIndex((u) => u.verse === verse));
+    segments = [];
+    segmentIndex = 0;
     tailBook = book;
     tailChapter = chapter;
-    refreshVerseList(book, chapter);
+    lastVerseKey = '';
+    recomputeChapterOffsets(book, chapter);
+    refreshChapterInfo(book, chapter, verse);
 
-    kickFiller();
-    await playCursor(gen);
+    await playSegment(gen);
   } catch (err: any) {
     if (gen !== generation) return;
     readingState.set('error');
@@ -462,20 +579,13 @@ export function pauseReading(): void {
 
 export function resumeReading(): void {
   if (get(readingState) !== 'paused') return;
-  const audio = getSharedTtsAudio();
-  // Mid-utterance: just carry on. Between utterances (a gap was interrupted):
-  // restart the cursor.
-  if (audio.src && audio.currentTime > 0 && !audio.ended) {
-    audio.play().then(
-      () => readingState.set('playing'),
-      () => {
-        readingState.set('error');
-        readingError.set('Playback blocked — press play again.');
-      }
-    );
-    return;
-  }
-  void playCursor(generation);
+  getSharedTtsAudio().play().then(
+    () => readingState.set('playing'),
+    () => {
+      readingState.set('error');
+      readingError.set('Playback blocked — press play again.');
+    }
+  );
 }
 
 export function togglePlayPause(): void {
@@ -484,56 +594,161 @@ export function togglePlayPause(): void {
   else if (state === 'paused') resumeReading();
 }
 
-/** Jump within the chapter being read. Renders the target first if needed. */
+/** Find an utterance inside the segments already built. */
+function locate(predicate: (u: Utterance) => boolean): { index: number; at: number } | null {
+  for (let i = segmentIndex; i < segments.length; i++) {
+    for (const mark of segments[i].marks) {
+      if (predicate(mark.utterance)) return { index: i, at: mark.startSeconds };
+    }
+  }
+  return null;
+}
+
+/**
+ * Move to somewhere already buffered: just a seek, no database read and no
+ * generation. That distinction is the whole point — the heavy path is exactly
+ * what stalls when the screen is off.
+ */
+function seekTo(found: { index: number; at: number }): void {
+  const gen = ++generation;
+  const audio = getSharedTtsAudio();
+
+  if (found.index === segmentIndex) {
+    audio.currentTime = found.at;
+    lastVerseKey = '';
+    updatePositionFromClock();
+    // Re-arm the handlers under the new generation.
+    audio.onended = () => {
+      if (gen !== generation) return;
+      segmentIndex++;
+      trimPlayed();
+      kickFiller();
+      void playSegment(gen);
+    };
+    kickFiller(); // bumping the generation stopped the old filler
+    if (get(readingState) === 'paused') return;
+    void audio.play();
+    return;
+  }
+
+  segmentIndex = found.index;
+  lastVerseKey = '';
+  void playSegment(gen, found.at);
+}
+
+/** Jump within the chapter being read. */
 export function jumpToVerse(verse: number): void {
-  const index = queue.findIndex((u) => u.kind === 'verse' && u.verse === verse);
+  const position = get(readingPosition);
+  if (!position) return;
+
+  const found = locate(
+    (u) => u.kind === 'verse' && u.verse === verse && u.book === position.book && u.chapter === position.chapter
+  );
+  if (found) {
+    seekTo(found);
+    return;
+  }
+
+  // Not rendered yet — re-plan from there. Same cost as starting fresh.
+  const index = queue.findIndex(
+    (u) => u.kind === 'verse' && u.verse === verse && u.book === position.book && u.chapter === position.chapter
+  );
   if (index === -1) return;
 
   const gen = ++generation;
-  clearGap();
-  const audio = getSharedTtsAudio();
-  audio.onended = null;
-  audio.onerror = null;
-  audio.pause();
-
-  cursor = index;
-  // Anything already rendered stays rendered, so jumping back is instant.
-  void fill(gen);
-  void playCursor(gen);
+  renderCursor = index;
+  segments = [];
+  segmentIndex = 0;
+  lastVerseKey = '';
+  void playSegment(gen);
 }
 
-/** Stop, and release the whole buffer — nothing should linger in memory. */
+/** Skip to the next chapter — instant when it is already buffered. */
+export function skipChapter(direction: 1 | -1): void {
+  const position = get(readingPosition);
+  if (!position) return;
+
+  if (direction === -1) {
+    // Back to the top of the current chapter, like a music player's back button.
+    const found = locate((u) => u.book === position.book && u.chapter === position.chapter);
+    if (found) seekTo(found);
+    return;
+  }
+
+  const next = nextChapterOf(position.book, position.chapter);
+  if (!next) return;
+
+  const found = locate((u) => u.book === next.book && u.chapter === next.chapter);
+  if (found) {
+    seekTo(found);
+    return;
+  }
+
+  // Not buffered — this is the slow path, and the one that stalls with the
+  // screen off. Unavoidable here, but the buffer usually makes it unnecessary.
+  void startReading(translation, next.book, next.chapter);
+}
+
+/** Stop, and release everything — nothing should linger in memory. */
 export function stopReading(): void {
   generation++;
-  clearGap();
 
+  swapping = true;
   const audio = getSharedTtsAudio();
   audio.onended = null;
   audio.onerror = null;
   audio.pause();
   audio.removeAttribute('src');
   audio.volume = 1;
+  releaseUrl();
+  swapping = false;
 
   queue = [];
-  cursor = 0;
+  segments = [];
+  renderCursor = 0;
+  segmentIndex = 0;
   tailBook = '';
   tailChapter = 0;
+  lastVerseKey = '';
+  measuredChars = 0;
+  measuredSeconds = 0;
 
   readingState.set('idle');
   readingError.set('');
   readingPosition.set(null);
   readingVerseList.set([]);
+  verseCounter.set(null);
+  chapterProgress.set(null);
   ttsCurrentVerse.set(null);
 }
 
-// ── settings changes ────────────────────────────────────────────────────────
+// ── keeping in step with the element ────────────────────────────────────────
+// The phone, a headset button or another app can pause playback without going
+// through us. Without these, the engine keeps believing it is playing and the
+// lock-screen buttons end up wrong.
 
 if (typeof window !== 'undefined') {
+  const audio = getSharedTtsAudio();
+
+  audio.addEventListener('timeupdate', () => {
+    if (get(readingState) === 'playing') updatePositionFromClock();
+  });
+
+  audio.addEventListener('pause', () => {
+    if (swapping || audio.ended) return;
+    if (get(readingState) === 'playing') readingState.set('paused');
+  });
+
+  audio.addEventListener('play', () => {
+    if (swapping) return;
+    if (get(readingState) === 'paused') readingState.set('playing');
+  });
+
   window.addEventListener('settingsUpdated', () => {
     if (get(readingState) === 'idle') return;
     const settings = getTtsSettings();
 
-    // Speed can change mid-sentence; the rendered audio is still valid.
+    // Speed can change mid-sentence; rendered audio is still valid.
     rate = settings.rate;
     getSharedTtsAudio().playbackRate = rate;
 
@@ -547,9 +762,6 @@ if (typeof window !== 'undefined') {
 }
 
 // ── sleep timer ─────────────────────────────────────────────────────────────
-// The timer runs the clock and the fade; only the engine can tear playback down
-// properly, so it asks us here. Skip the value present at subscribe time — that
-// is history, not a fresh request.
 
 let lastStopNonce = get(sleepStopNonce);
 sleepStopNonce.subscribe((nonce) => {
@@ -559,4 +771,16 @@ sleepStopNonce.subscribe((nonce) => {
     console.log('🔊 Read Aloud stopped by the sleep timer');
     stopReading();
   }
+});
+
+// "End of chapter" has to interrupt mid-segment, because a segment can span the
+// boundary. Recorded as a target and checked on the playback clock rather than
+// with a nested subscription, which would stack up each time it was armed.
+stopAtChapterEnd.subscribe((armed) => {
+  if (!armed) {
+    stopAfterChapter = null;
+    return;
+  }
+  const position = get(readingPosition);
+  stopAfterChapter = position ? { book: position.book, chapter: position.chapter } : null;
 });
