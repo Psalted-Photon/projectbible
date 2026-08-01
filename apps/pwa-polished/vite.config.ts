@@ -217,9 +217,11 @@ export default defineConfig({
     svelte(),
     VitePWA({
       registerType: 'autoUpdate',
-      // The status-bar badge is drawn by the service worker when a wake alarm
-      // arrives, so precache it — the glob only picks up manifest icons.
-      includeAssets: ['notification-badge-96.png'],
+      // Neither of these is a manifest icon, and the glob only picks those up.
+      // The badge is drawn by the service worker for a wake alarm; the gem
+      // spins while Read Aloud generates speech — which is exactly something
+      // people do offline, so it has to be cached.
+      includeAssets: ['notification-badge-96.png', 'pb-gem.png'],
       workbox: {
         skipWaiting: true,
         clientsClaim: true,

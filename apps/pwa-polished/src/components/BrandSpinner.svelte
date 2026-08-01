@@ -1,9 +1,13 @@
 <script lang="ts">
   /**
-   * The ProjectBible icon, spinning, shown while Read Aloud is generating audio.
+   * The ProjectBible gem, spinning, shown while Read Aloud is generating audio.
    *
-   * Uses the real app icon rather than a redrawn one — it is already precached
-   * as a manifest icon, so it appears instantly and works offline.
+   * `pb-gem.png` is the app icon's own artwork with the black tile behind it
+   * removed and cropped to the gem — in the original, the tile fills 182 of 192
+   * pixels and the gem only 90, so the icon as shipped spins mostly as a black
+   * square. Its internal seams are kept, not cleared, or the cross falls apart
+   * on the light and sepia themes. The image is padded to a square wide enough
+   * for the gem's diagonal, so nothing is clipped as it turns.
    *
    * Deliberately spins even when the phone's reduce-motion setting is on. That
    * setting is aimed at animation that travels across the screen; a small
@@ -16,7 +20,7 @@
 
 <img
   class="brand-spinner"
-  src="/pwa-192x192.png"
+  src="/pb-gem.png"
   alt=""
   {title}
   role="status"
@@ -30,9 +34,6 @@
     flex-shrink: 0;
     vertical-align: middle;
     animation: brand-spin 1.1s linear infinite;
-    /* Its own dark background against a dark bar; a touch of lift keeps the
-       edges from disappearing entirely. */
-    border-radius: 4px;
   }
 
   @keyframes brand-spin {
