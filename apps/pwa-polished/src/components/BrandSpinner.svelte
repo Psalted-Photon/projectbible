@@ -33,7 +33,8 @@
     display: inline-block;
     flex-shrink: 0;
     vertical-align: middle;
-    animation: brand-spin 1.1s linear infinite;
+    /* 35% slower than the original 1.1s — speed × 0.65, so 1.1 / 0.65. */
+    animation: brand-spin 1.69s linear infinite;
   }
 
   @keyframes brand-spin {
