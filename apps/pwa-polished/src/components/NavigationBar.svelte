@@ -34,10 +34,12 @@
     readingPosition,
     readingVerseList,
     isReadingActive,
+    isPreparing,
     togglePlayPause,
     stopReading,
     jumpToVerse,
   } from "../lib/tts/readingEngine";
+  import BrandSpinner from "./BrandSpinner.svelte";
   import {
     sleepRemaining,
     stopAtChapterEnd,
@@ -1021,12 +1023,18 @@
     <!-- ── Read Aloud controls (only while reading) ───────────────────────── -->
     {#if $isReadingActive}
       <div class="nav-tts" bind:this={ttsControlsEl}>
-        <button
-          class="tts-nav-btn"
-          on:click={togglePlayPause}
-          title={$readingState === 'playing' ? 'Pause reading' : 'Resume reading'}
-          aria-label={$readingState === 'playing' ? 'Pause reading' : 'Resume reading'}
-        >{$readingState === 'playing' ? '⏸' : '▶'}</button>
+        {#if $isPreparing}
+          <!-- Generating audio, not playing. Without this the button would show
+               pause while the app was busy, which reads as broken. -->
+          <span class="tts-nav-btn tts-nav-busy"><BrandSpinner size={17} /></span>
+        {:else}
+          <button
+            class="tts-nav-btn"
+            on:click={togglePlayPause}
+            title={$readingState === 'playing' ? 'Pause reading' : 'Resume reading'}
+            aria-label={$readingState === 'playing' ? 'Pause reading' : 'Resume reading'}
+          >{$readingState === 'playing' ? '⏸' : '▶'}</button>
+        {/if}
 
         <span class="tts-nav-ref">{ttsReference}</span>
 
@@ -1447,6 +1455,14 @@
   }
   .tts-nav-on {
     color: #9d7af5;
+  }
+
+  /* Same footprint as the play/pause button, so nothing shifts when it swaps in. */
+  .tts-nav-busy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
   }
 
   .tts-nav-ref {

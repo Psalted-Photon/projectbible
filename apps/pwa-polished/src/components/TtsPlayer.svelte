@@ -22,9 +22,11 @@
   import {
     readingState,
     readingPosition,
+    isPreparing,
     startReading,
     togglePlayPause,
   } from '../lib/tts/readingEngine.js';
+  import BrandSpinner from './BrandSpinner.svelte';
 
   export let translation: string;
   export let book: string;
@@ -34,6 +36,8 @@
   let local: LocalState = 'idle';
   let errorMsg = '';
   let downloadPct = 0;
+  /** Pressed, and still getting to the point where the engine takes over. */
+  let pressing = false;
 
   $: voiceId = getTtsSettings().voiceId;
   $: voiceSizeMB = getVoiceInfo(voiceId)?.approxSizeMB ?? 64;
@@ -57,14 +61,21 @@
 
     local = 'idle';
     errorMsg = '';
+    // Spin from the press itself. The engine's own "preparing" signal only
+    // begins once it has been called, and the voice check before that is an
+    // await — without this the button would sit dead for that moment.
+    pressing = true;
 
-    // Check before handing off, so only this chapter shows the download prompt.
-    if (!(await isVoiceInstalled(voiceId))) {
-      local = 'voice-needed';
-      return;
+    try {
+      // Check before handing off, so only this chapter shows the download prompt.
+      if (!(await isVoiceInstalled(voiceId))) {
+        local = 'voice-needed';
+        return;
+      }
+      await startReading(translation, book, chapter);
+    } finally {
+      pressing = false;
     }
-
-    await startReading(translation, book, chapter);
   }
 
   async function handleDownloadVoice(): Promise<void> {
@@ -92,12 +103,14 @@
       </button>
       <button class="tts-btn" on:click={() => (local = 'idle')} title="Cancel">✕</button>
     {:else if local === 'downloading'}
+      <BrandSpinner size={18} title="Downloading voice…" />
       <span class="tts-tip">Downloading voice… {downloadPct}%</span>
     {:else if local === 'error'}
       <span class="tts-tip tts-error">{errorMsg}</span>
       <button class="tts-btn" on:click={() => (local = 'idle')} title="Dismiss">✕</button>
-    {:else if isThisChapter && $readingState === 'starting'}
-      <span class="tts-spinner" title="Preparing speech…">⏳</span>
+    {:else if pressing || (isThisChapter && $isPreparing)}
+      <!-- Only this chapter spins; the rest keep their plain talking head. -->
+      <BrandSpinner size={22} />
     {:else}
       <button
         class="tts-btn tts-play-btn"
@@ -176,11 +189,6 @@
   }
   .tts-error {
     color: #f0a0a0;
-  }
-
-  .tts-spinner {
-    font-size: 0.85rem;
-    opacity: 0.7;
   }
 
   @media (max-width: 480px) {

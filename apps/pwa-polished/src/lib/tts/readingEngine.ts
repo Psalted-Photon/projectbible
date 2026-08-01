@@ -146,6 +146,22 @@ export const isReadingActive = derived(readingState, ($s) =>
   $s === 'playing' || $s === 'paused' || $s === 'starting'
 );
 
+/**
+ * True whenever the engine is generating audio rather than playing it.
+ *
+ * Starting up is only the obvious case. Playback also waits when the buffer runs
+ * dry mid-chapter, and after jumping to a verse that has not been generated yet
+ * — and in both of those the state stays "playing", so without this the controls
+ * would show a pause button while the app was busy, looking broken rather than
+ * busy.
+ */
+const waitingForAudio = writable(false);
+
+export const isPreparing = derived(
+  [readingState, waitingForAudio],
+  ([$state, $waiting]) => $state === 'starting' || $waiting
+);
+
 // ── internals ───────────────────────────────────────────────────────────────
 
 const textStore = new IndexedDBTextStore();
@@ -457,8 +473,14 @@ async function playSegment(gen: number, seekSeconds = 0): Promise<void> {
     // jump look like a stop. Keep asking while segments keep arriving; give up
     // only when a build genuinely produces nothing, which means there is nothing
     // left to read (end of a chapter with auto-advance off, say).
-    while (gen === generation && segmentIndex >= segments.length) {
-      if (!(await buildOne(gen))) break;
+    waitingForAudio.set(true);
+    try {
+      while (gen === generation && segmentIndex >= segments.length) {
+        if (!(await buildOne(gen))) break;
+      }
+    } finally {
+      // Cleared however this ends, so nothing is ever left spinning.
+      waitingForAudio.set(false);
     }
     if (gen !== generation) return;
     if (segmentIndex >= segments.length) {
@@ -786,6 +808,7 @@ export function skipChapter(direction: 1 | -1): void {
 /** Stop, and release everything — nothing should linger in memory. */
 export function stopReading(): void {
   generation++;
+  waitingForAudio.set(false);
 
   swapping = true;
   const audio = getSharedTtsAudio();
