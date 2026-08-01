@@ -210,6 +210,46 @@ export function getBookNames(): string[] {
   return BIBLE_BOOKS.map(b => b.name);
 }
 
+// Display order for the translation dropdown: English first, then ancient languages.
+// Anything not listed here sorts to the end alphabetically.
+export const TRANSLATION_ORDER = [
+  'NET',
+  'BSB',
+  'WEB',
+  'KJV',
+  'LXX2012',
+  'TR',
+  'BYZ',
+  'LXX',
+  'HEBREW-OSHB'
+];
+
+// Display labels. The keys are translation IDs and must not change — the ID is a
+// storage key (verses, morphology, highlights, saved nav state). Only the label changes.
+const TRANSLATION_LABELS: Record<string, string> = {
+  'HEBREW-OSHB': 'OSHB-HEBREW',
+  'TR': 'TR-GREEK',
+  'BYZ': 'BYZ-GREEK',
+  'LXX': 'LXX-GREEK'
+};
+
+/**
+ * Get the label to display for a translation ID (falls back to the ID itself)
+ */
+export function translationLabel(translationId: string): string {
+  if (!translationId) return translationId;
+  const upper = translationId.toUpperCase();
+  return TRANSLATION_LABELS[upper] || translationId;
+}
+
+/**
+ * Sort key for a translation ID — its position in TRANSLATION_ORDER, or the end
+ */
+export function translationSortIndex(translationId: string): number {
+  const index = TRANSLATION_ORDER.indexOf(translationId.toUpperCase());
+  return index === -1 ? TRANSLATION_ORDER.length : index;
+}
+
 // Translation scope: which testaments are available
 export type TranslationScope = 'full' | 'nt-only' | 'ot-only';
 

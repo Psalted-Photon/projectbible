@@ -212,6 +212,14 @@ export class IndexedDBTextStore implements TextStore {
             }
           }
           
+          // Apply the curated dropdown order (English first, then ancient languages).
+          // Without this the order is just IndexedDB primary-key order.
+          const { translationSortIndex } = await import('../lib/bibleData.js');
+          translationsWithVerses.sort((a, b) => {
+            const diff = translationSortIndex(a.id) - translationSortIndex(b.id);
+            return diff !== 0 ? diff : a.id.localeCompare(b.id);
+          });
+
           console.log('Final translations list:', translationsWithVerses);
           resolve(translationsWithVerses);
         };

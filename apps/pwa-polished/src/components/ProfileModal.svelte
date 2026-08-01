@@ -5,6 +5,7 @@
   import { supabaseAuthService } from '../services/SupabaseAuthService';
   import { readingPlanModalStore } from '../stores/readingPlanModalStore';
   import { navigationStore, availableTranslations } from '../stores/navigationStore';
+  import { translationLabel } from '../lib/bibleData';
   import { readingProgressStore } from '../stores/ReadingProgressStore';
   import { getDaysAheadBehind, calculateStreak, planDayDateStr } from '@projectbible/core';
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
@@ -555,7 +556,7 @@
                 <select bind:value={defaultOT}>
                   <option value="">Not set</option>
                   {#each $availableTranslations as translation}
-                    <option value={translation}>{translation}</option>
+                    <option value={translation}>{translationLabel(translation)}</option>
                   {/each}
                 </select>
               </div>
@@ -564,7 +565,7 @@
                 <select bind:value={defaultNT}>
                   <option value="">Not set</option>
                   {#each $availableTranslations as translation}
-                    <option value={translation}>{translation}</option>
+                    <option value={translation}>{translationLabel(translation)}</option>
                   {/each}
                 </select>
               </div>

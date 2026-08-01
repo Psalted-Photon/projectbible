@@ -6,7 +6,7 @@
     historyDepth,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { BIBLE_BOOKS, normalizeBookName, CATEGORY_COLORS, CATEGORY_LABELS } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import {
     searchService,
@@ -907,7 +907,7 @@
           class:active={translationDropdownOpen}
           title="Translations"
         >
-          <span class="pill-label">{currentTranslation}</span>
+          <span class="pill-label">{translationLabel(currentTranslation)}</span>
           {#if translationDropdownOpen}
             <CaretUp size={10} weight="bold" />
           {:else}
@@ -1264,7 +1264,7 @@
           class:selected={translation === currentTranslation}
           on:click={() => selectTranslation(translation)}
         >
-          {translation}
+          {translationLabel(translation)}
         </button>
       {/each}
     </div>
