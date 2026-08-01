@@ -156,10 +156,31 @@ function medianHeight(words: WordBox[]): number {
 }
 
 /**
- * Start the glow over `verseEl`, paced by `audio`. Returns a cleanup function;
- * calling it stops the animation and removes the element.
+ * Where this verse sits inside whatever the audio element is currently playing.
+ *
+ * This has to be stated explicitly now. The element used to hold exactly one
+ * verse, so "how far through the audio" and "how far through this verse" were
+ * the same number and the glow could just read `audio.duration`. Playback is now
+ * stitched into long segments holding many verses, so that reading answers a
+ * different question entirely — which is what made the glow crawl and start
+ * partway across the line.
  */
-export function startGlow(verseEl: HTMLElement, audio: HTMLAudioElement): () => void {
+export interface VerseWindow {
+  /** Seconds into the current media where this verse begins. */
+  startSeconds: number;
+  /** How long this verse takes to speak. */
+  durationSeconds: number;
+}
+
+/**
+ * Start the glow over `verseEl`, paced by `audio` within `window`. Returns a
+ * cleanup function; calling it stops the animation and removes the element.
+ */
+export function startGlow(
+  verseEl: HTMLElement,
+  audio: HTMLAudioElement,
+  verseWindow: VerseWindow
+): () => void {
   const textEl = verseEl.querySelector<HTMLElement>('.verse-text') ?? verseEl;
   // Anchor to the block container, never the verse (see note at top of file).
   const container = verseEl.closest<HTMLElement>('.text-container') ?? verseEl;
@@ -243,10 +264,14 @@ export function startGlow(verseEl: HTMLElement, audio: HTMLAudioElement): () => 
     frame = requestAnimationFrame(draw);
     if (track.length === 0) return;
 
-    const duration = audio.duration;
+    // Position within *this verse*, not within the whole segment the element is
+    // playing. Same sum as always — the verse's own start and length are simply
+    // stated now rather than assumed to be the element's.
+    const duration = verseWindow.durationSeconds;
+    const elapsed = playbackSeconds(now) - verseWindow.startSeconds + LEAD_SECONDS;
     const progress =
       isFinite(duration) && duration > 0
-        ? Math.min(1, Math.max(0, (playbackSeconds(now) + LEAD_SECONDS) / duration))
+        ? Math.min(1, Math.max(0, elapsed / duration))
         : 0;
 
     // Walk the cumulative weights to find which word we're on, and how far

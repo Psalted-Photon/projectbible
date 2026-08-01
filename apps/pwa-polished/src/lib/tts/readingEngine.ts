@@ -40,19 +40,24 @@ import { readWav, silencePcm, joinPcm, pcmSeconds } from './stitchAudio';
 
 // ── tuning dials ────────────────────────────────────────────────────────────
 
-/**
- * Target seconds per segment, by how many segments have been built already.
- * The first is deliberately a single utterance so nothing gets slower to start;
- * length only grows once audio is already playing and nobody is waiting.
- */
-function segmentTargetSeconds(built: number): number {
-  if (built === 0) return 0;   // 0 = stop after one utterance
-  if (built === 1) return 20;
-  return 90;
-}
+/** Target length of a stitched segment. Long, so JS rarely has to wake. */
+const SEGMENT_SECONDS = 90;
 
-/** Segments kept ready beyond the one playing. Two ≈ three minutes banked. */
-const SEGMENTS_AHEAD = 2;
+/**
+ * Audio banked before the first word, and the longest we will make the user wait
+ * for it — whichever comes first.
+ *
+ * Starting the instant one verse exists means the generator begins the session
+ * already behind playback and never catches up within the first chapter, which
+ * is what produced a long silence before chapter two. A head start costs a
+ * second or two once; the cushion then grows on its own, because generating runs
+ * faster than speaking.
+ */
+const HEAD_START_SECONDS = 20;
+const HEAD_START_MAX_WAIT_MS = 6000;
+
+/** Audio kept ahead of the play position — the cushion for a throttled phone. */
+const BUFFER_AHEAD_SECONDS = 150;
 const BUFFER_MAX_BYTES = 24 * 1024 * 1024;
 
 /** Silence around an automatic chapter announcement, in seconds. */
@@ -116,6 +121,16 @@ export const readingPosition = writable<ReadingPosition | null>(null);
 /** Verse numbers of the chapter being read, for the jump dropdown. */
 export const readingVerseList = writable<number[]>([]);
 
+/**
+ * Where the verse being spoken sits inside the segment currently playing.
+ *
+ * The read-along glow needs this. It paces itself off the audio clock, and when
+ * the element held exactly one verse it could simply divide by the element's own
+ * duration. Segments hold many verses, so the verse's own start and length have
+ * to be handed over or the glow crawls across the whole segment's worth of time.
+ */
+export const currentVerseWindow = writable<{ startSeconds: number; durationSeconds: number } | null>(null);
+
 /** "Verse 5 of 36" — exact, known before any audio exists. */
 export const verseCounter = writable<{ index: number; total: number } | null>(null);
 
@@ -165,6 +180,13 @@ function secondsPerChar(): number {
 function bufferedBytes(): number {
   let total = 0;
   for (let i = segmentIndex; i < segments.length; i++) total += segments[i].bytes;
+  return total;
+}
+
+/** Seconds of audio ready beyond the one being played. */
+function bufferedSecondsAhead(): number {
+  let total = 0;
+  for (let i = segmentIndex + 1; i < segments.length; i++) total += segments[i].seconds;
   return total;
 }
 
@@ -291,10 +313,16 @@ async function renderUtterance(u: Utterance, gen: number): Promise<boolean> {
  * silence, until the target length is reached.
  */
 async function buildSegment(gen: number): Promise<boolean> {
-  const target = segmentTargetSeconds(segments.length);
   const pieces: Uint8Array[] = [];
   const marks: Mark[] = [];
   let seconds = 0;
+
+  // Long segments are the goal, but never at the cost of a silence. If the
+  // player has nothing queued behind what it is playing, hand over whatever is
+  // ready instead of holding out for the full length. When the generator is
+  // behind, segments come out short and playback keeps moving; once it is ahead
+  // they grow back to full length on their own.
+  const starving = () => segments.length - segmentIndex <= 1;
 
   while (gen === generation) {
     if (renderCursor >= queue.length) {
@@ -327,8 +355,10 @@ async function buildSegment(gen: number): Promise<boolean> {
 
     recomputeChapterOffsets(u.book, u.chapter);
 
-    // target 0 means "one utterance only" — the fast first segment.
-    if (seconds >= target) break;
+    if (seconds >= SEGMENT_SECONDS) break;
+    // Playing the last thing we have: get this out now rather than making it
+    // wait for ninety seconds of audio to finish generating.
+    if (starving() && seconds > 0) break;
   }
 
   if (marks.length === 0) return false;
@@ -350,7 +380,7 @@ async function fill(gen: number): Promise<void> {
   filling = true;
   try {
     while (gen === generation) {
-      if (segments.length - segmentIndex > SEGMENTS_AHEAD) break;
+      if (bufferedSecondsAhead() >= BUFFER_AHEAD_SECONDS) break;
       if (bufferedBytes() >= BUFFER_MAX_BYTES) break;
       if (!(await buildSegment(gen))) break;
     }
@@ -361,6 +391,31 @@ async function fill(gen: number): Promise<void> {
 
 function kickFiller(): void {
   void fill(generation);
+}
+
+/**
+ * Bank a cushion before the first word.
+ *
+ * Starting the moment one verse exists leaves the generator permanently behind
+ * for the whole first chapter, which is what caused a long silence before
+ * chapter two. Waiting briefly here costs a second or two once; because
+ * generating is faster than speaking, the cushion then grows by itself.
+ *
+ * Capped in real time so a slow phone starts reading rather than appearing to
+ * hang — whichever of the two limits arrives first.
+ */
+async function buildHeadStart(gen: number): Promise<void> {
+  const started = Date.now();
+  kickFiller();
+
+  while (gen === generation) {
+    let ready = 0;
+    for (const segment of segments) ready += segment.seconds;
+    if (ready >= HEAD_START_SECONDS) break;
+    if (Date.now() - started >= HEAD_START_MAX_WAIT_MS) break;
+    if (!filling && segments.length > 0) break; // nothing more is coming
+    await new Promise((r) => setTimeout(r, 100));
+  }
 }
 
 // ── playback ────────────────────────────────────────────────────────────────
@@ -477,10 +532,21 @@ function updatePositionFromClock(): void {
   if (key !== lastVerseKey) {
     lastVerseKey = key;
     readingPosition.set({ translation, book: u.book, chapter: u.chapter, verse: u.verse });
-    // The reader's highlight, glow and follow-scroll already read this.
+
     if (u.verse !== null) {
+      // The reader's highlight, glow and follow-scroll already read this.
       ttsCurrentVerse.set({ book: u.book, chapter: u.chapter, verse: u.verse });
+      currentVerseWindow.set({
+        startSeconds: mark.startSeconds,
+        durationSeconds: u.seconds ?? 0,
+      });
+    } else {
+      // A spoken announcement — no verse is being read, so the page goes quiet
+      // rather than leaving the previous verse lit with its glow still sweeping.
+      ttsCurrentVerse.set(null);
+      currentVerseWindow.set(null);
     }
+
     refreshChapterInfo(u.book, u.chapter, u.verse);
   }
 
@@ -560,6 +626,9 @@ export async function startReading(
     lastVerseKey = '';
     recomputeChapterOffsets(book, chapter);
     refreshChapterInfo(book, chapter, verse);
+
+    await buildHeadStart(gen);
+    if (gen !== generation) return;
 
     await playSegment(gen);
   } catch (err: any) {
@@ -719,6 +788,7 @@ export function stopReading(): void {
   readingVerseList.set([]);
   verseCounter.set(null);
   chapterProgress.set(null);
+  currentVerseWindow.set(null);
   ttsCurrentVerse.set(null);
 }
 

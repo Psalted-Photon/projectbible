@@ -41,7 +41,7 @@
   import type { InterlinearSettings } from "../adapters/settings";
   import { ttsCurrentVerse } from "../stores/audioStore";
   import { getSharedTtsAudio } from "../adapters/tts";
-  import { readingPosition, isReadingActive } from "../lib/tts/readingEngine";
+  import { readingPosition, isReadingActive, currentVerseWindow } from "../lib/tts/readingEngine";
   import { startGlow } from "../lib/ttsGlow";
   import { expandRmacCode, expandOshbCode } from "../lib/morphologyExpander";
   import { readTransaction } from "../adapters/db";
@@ -615,7 +615,12 @@
 
     followVerseIntoView(verseEl);
     if (glowOn && !prefersReducedMotion()) {
-      const cleanup = startGlow(verseEl, getSharedTtsAudio());
+      // Playback is stitched into long segments, so the glow has to be told
+      // where this verse sits inside the one being played — it can no longer
+      // assume the audio element is the verse.
+      const verseWindow = get(currentVerseWindow);
+      if (!verseWindow || verseWindow.durationSeconds <= 0) return;
+      const cleanup = startGlow(verseEl, getSharedTtsAudio(), verseWindow);
       if (ticket !== glowTicket) cleanup(); // overtaken during setup
       else glowCleanup = cleanup;
     }
