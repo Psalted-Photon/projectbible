@@ -70,6 +70,44 @@ export class IndexedDBUserDataStore implements UserDataStore {
     }
   }
   
+  /**
+   * Notes for one chapter, via a key range on the compound index.
+   * Callers that only need a chapter should use this instead of getNotes(),
+   * which reads every note in the database and filters in JS.
+   */
+  async getChapterNotes(book: string, chapter: number): Promise<UserNote[]> {
+    return this.rangeNotes(IDBKeyRange.bound([book, chapter, 0], [book, chapter, 9999]), 'chapter');
+  }
+
+  /** Notes for one whole book, same index, wider range. */
+  async getBookNotes(book: string): Promise<UserNote[]> {
+    return this.rangeNotes(IDBKeyRange.bound([book, 0, 0], [book, 9999, 9999]), 'book');
+  }
+
+  private async rangeNotes(range: IDBKeyRange, label: string): Promise<UserNote[]> {
+    try {
+      const db = await import('./db.js').then(m => m.openDB());
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('user_notes', 'readonly');
+        const index = transaction.objectStore('user_notes').index('book_chapter_verse');
+        const request = index.getAll(range) as IDBRequest<DBUserNote[]>;
+        request.onsuccess = () => {
+          resolve(request.result.map(n => ({
+            id: n.id,
+            reference: { book: n.book, chapter: n.chapter, verse: n.verse },
+            text: n.text,
+            createdAt: new Date(n.createdAt),
+            updatedAt: new Date(n.updatedAt),
+          })));
+        };
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error(`Error getting ${label} notes:`, error);
+      return [];
+    }
+  }
+
   async saveNote(note: Omit<UserNote, 'id' | 'createdAt' | 'updatedAt'>): Promise<UserNote> {
     const now = Date.now();
     const id = generateId();

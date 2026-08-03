@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 31; // Migration 31: add art_images store (bundled painting blobs for offline art)
+const DB_VERSION = 32; // Migration 32: add notebooks + notebook_pages stores (Notes panel)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -124,6 +124,25 @@ export interface DBJournalEntry {
   textLinkified?: string; // Display version with Bible references linked
   createdAt: number; // Unix timestamp
   updatedAt: number; // Unix timestamp
+}
+
+/** A named folder of free-form notes. Created and renamed by the user. */
+export interface DBNotebook {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** One free-form note. Always belongs to a notebook. */
+export interface DBNotebookPage {
+  id: string;
+  notebookId: string;
+  title?: string;
+  text: string; // Raw HTML from Lexical
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface DBCrossReference {
@@ -521,6 +540,19 @@ export function openDB(): Promise<IDBDatabase> {
         journalStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
       
+      // Notebooks store (named folders for free-form notes)
+      if (!db.objectStoreNames.contains('notebooks')) {
+        const notebookStore = db.createObjectStore('notebooks', { keyPath: 'id' });
+        notebookStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+
+      // Notebook pages store (one free-form note each)
+      if (!db.objectStoreNames.contains('notebook_pages')) {
+        const pageStore = db.createObjectStore('notebook_pages', { keyPath: 'id' });
+        pageStore.createIndex('notebookId', 'notebookId', { unique: false });
+        pageStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+
       // Cross-references store
       if (!db.objectStoreNames.contains('cross_references')) {
         const crossRefStore = db.createObjectStore('cross_references', { keyPath: 'id' });

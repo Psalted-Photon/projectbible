@@ -1831,9 +1831,20 @@
 
   async function loadVerseNotes(book: string, chapter: number) {
     try {
-      const notes = await userDataStore.getNotes();
+      const notes = await userDataStore.getChapterNotes(book, chapter);
+      // Rebuild this chapter's keys rather than only adding: a note deleted on
+      // another device would otherwise leave its ✎ on the verse until reload.
+      const keep = new Set(
+        notes
+          .filter((n) => n.text?.trim())
+          .map((n) => annotationKey(n.reference.book, n.reference.chapter, n.reference.verse)),
+      );
+      const prefix = `${book}:${chapter}:`; // annotationKey without the verse
+      for (const key of [...verseNotesMap.keys()]) {
+        if (key.startsWith(prefix) && !keep.has(key)) verseNotesMap.delete(key);
+      }
       for (const note of notes) {
-        if (note.reference.book === book && note.reference.chapter === chapter && note.text?.trim()) {
+        if (note.text?.trim()) {
           verseNotesMap.set(annotationKey(note.reference.book, note.reference.chapter, note.reference.verse), note.id);
         }
       }

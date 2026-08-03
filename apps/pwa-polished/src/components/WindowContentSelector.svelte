@@ -39,6 +39,10 @@
       contentState = {
         date: localDateStr(new Date()), // Today
       };
+    } else if (contentType === 'notes') {
+      contentState = {
+        view: 'browse',
+      };
     }
 
     windowStore.setWindowContent(windowId, contentType, contentState);

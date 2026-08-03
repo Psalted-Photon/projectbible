@@ -17,6 +17,8 @@ const SYNC_TABLES: SyncTable[] = [
   'user_word_highlights',
   'user_bookmarks',
   'journal_entries',
+  'notebooks',
+  'notebook_pages',
   'reading_plans',
   'reading_progress'
 ];

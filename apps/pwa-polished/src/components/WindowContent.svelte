@@ -5,6 +5,7 @@
   import MapPane from "./MapPane.svelte";
   import CommentaryReader from "./CommentaryReader.svelte";
   import JournalWriter from "./JournalWriter.svelte";
+  import NotesPane from "./NotesPane.svelte";
   import ArtPane from "./ArtPane.svelte";
   import IsbeContent from "./IsbeContent.svelte";
 
@@ -45,10 +46,7 @@
     initialScrollTop={panel.contentState?.scrollTop ?? 0}
   />
 {:else if panel.contentType === 'notes'}
-  <div class="placeholder">
-    <h2>Notes</h2>
-    <p>Coming soon...</p>
-  </div>
+  <NotesPane windowId={panel.id} contentState={panel.contentState} />
 {:else if panel.contentType === 'wordstudy'}
   <div class="placeholder">
     <h2>Word Study</h2>

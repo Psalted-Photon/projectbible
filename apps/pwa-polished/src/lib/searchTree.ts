@@ -33,8 +33,12 @@ function groupBy<T>(items: T[], keyOf: (item: T) => string): Map<string, T[]> {
   return map;
 }
 
-/** Verses grouped into canonical book order, coloured to match the reader. */
-function bookNodes(parentKey: string, results: SearchResult[]): SearchTreeNode[] {
+/**
+ * Verses grouped into canonical book order, coloured to match the reader.
+ * Exported because the Notes panel builds the same book dropdown from stored
+ * notes rather than from a search.
+ */
+export function groupResultsByBook(parentKey: string, results: SearchResult[]): SearchTreeNode[] {
   const byBook = groupBy(results, (r) => normalizeBookName(r.data?.book || 'Unknown'));
   return [...byBook.entries()]
     .sort(([a], [b]) => (bookOrderMap.get(a) ?? 999) - (bookOrderMap.get(b) ?? 999))
@@ -66,7 +70,7 @@ export function buildSearchTree(categories: SearchCategory[]): SearchTreeNode[] 
             key: `${key}::${translationId}`,
             label: translationId.toUpperCase(),
             count: results.length,
-            children: bookNodes(`${key}::${translationId}`, results),
+            children: groupResultsByBook(`${key}::${translationId}`, results),
           }))
           .sort((a, b) => b.count - a.count);
 

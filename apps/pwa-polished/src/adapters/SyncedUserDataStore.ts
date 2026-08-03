@@ -204,6 +204,14 @@ export class SyncedUserDataStore implements UserDataStore {
   async getNotes(reference?: BCV): Promise<UserNote[]> {
     return this.local.getNotes(reference);
   }
+
+  async getChapterNotes(book: string, chapter: number): Promise<UserNote[]> {
+    return this.local.getChapterNotes(book, chapter);
+  }
+
+  async getBookNotes(book: string): Promise<UserNote[]> {
+    return this.local.getBookNotes(book);
+  }
   
   async saveNote(note: Omit<UserNote, 'id' | 'createdAt' | 'updatedAt'>): Promise<UserNote> {
     // 1. Save locally (optimistic)
