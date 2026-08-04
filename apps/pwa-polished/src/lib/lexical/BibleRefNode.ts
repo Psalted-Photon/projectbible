@@ -188,13 +188,20 @@ export class BibleRefNode extends ElementNode {
     return true;
   }
 
-  /** Typing at either end lands outside the reference, not inside it. */
+  /**
+   * While collapsed the reference is ordinary editable text, so typing at
+   * either end has to land INSIDE it — otherwise correcting "Romans 15" to
+   * "Romans 16" drops the 6 outside the link, and the re-check transform never
+   * sees the edit it is supposed to react to.
+   *
+   * While expanded the whole thing is locked, so both ends are closed.
+   */
   canInsertTextBefore(): boolean {
-    return false;
+    return !this.isExpanded();
   }
 
   canInsertTextAfter(): boolean {
-    return false;
+    return !this.isExpanded();
   }
 
   /** An emptied reference is no reference — let Lexical clean it up. */

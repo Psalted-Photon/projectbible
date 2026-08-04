@@ -169,6 +169,9 @@ const BOOK_PATTERN_NOTES = [
   // "1 Cor 13:4" — a space between the number and a short form, which people
   // write constantly but commentary data does not.
   `[123]\\s+${NUMBERED_ABBREV}\\b`,
+  // Three full names the commentary pattern never needed, because its source
+  // data only ever abbreviates them. Someone writing a note types them out.
+  'Ezra|Titus|Philemon',
   BOOK_PATTERN,
 ].join('|');
 
@@ -178,19 +181,16 @@ const REF_RE_BOOK_REQUIRED = new RegExp(
 );
 
 /**
- * Short abbreviations that are also ordinary English words or everyday
- * shorthand. Written in lowercase in the middle of a sentence these are almost
- * never a book — "the answer is 5", "I am 5 foot ten", "ps 50 bucks" — so they
- * only count when capitalised the way a book name would be. Written properly
- * ("Is 5:8", "Am 5:18", "Ps 50") they work as normal.
+ * The only abbreviations that genuinely turn up in ordinary sentences followed
+ * by a number — "the answer is 5 minutes", "I am 5 foot ten", "he 3 times
+ * refused", "so 1 more thing". Lowercase, these are prose; capitalised
+ * ("Is 5:8", "Am 5:18") they are books.
  *
- * Abbreviations that aren't words — lk, jn, mt, jr — are accepted in any case.
+ * Everything else is accepted in any case, because the cost of being strict is
+ * that the abbreviations people actually type — ps, ro, ge, ex, lk — stop
+ * working, and that is felt far more often than a stray link on "is 5".
  */
-const AMBIGUOUS_SHORT_FORMS = new Set([
-  'is', 'so', 'am', 'he', 'la', 'mi', 're', 'ex', 'ca', 'de', 'ho', 'na', 'da',
-  'ne', 'ge', 'le', 'ec', 'ob', 'ru', 'es', 'pr', 'nu', 'ac', 'jo', 'ro', 'ti',
-  'ep', 'ga', 'co', 'mr', 'ma', 'ps', 'job', 'act', 'acts', 'song', 'mark',
-]);
+const AMBIGUOUS_SHORT_FORMS = new Set(['is', 'am', 'he', 'so']);
 
 function shortFormNeedsCapital(bookToken: string): boolean {
   const bare = bookToken.replace(/^[123]\s*/, '').replace(/\.$/, '');

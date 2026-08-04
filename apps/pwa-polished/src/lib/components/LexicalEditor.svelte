@@ -152,12 +152,21 @@
         if (!el) return;
         e.preventDefault();
         const rect = el.getBoundingClientRect();
-        // Ask Lexical which node this element is, rather than stashing the key
-        // in an attribute that would then be written into saved HTML.
+
+        // Which Lexical node is this element? Must be editor.read(), not
+        // editorState.read() — the lookup needs the editor itself, and the
+        // state-only form throws. Isolated in a try because only expand and
+        // collapse need the key; navigating uses the attributes below, so a
+        // failure here costs one feature rather than the whole menu.
         let key = '';
-        editor.getEditorState().read(() => {
-          key = $getNearestNodeFromDOMNode(el)?.getKey() ?? '';
-        });
+        try {
+          editor.read(() => {
+            key = $getNearestNodeFromDOMNode(el)?.getKey() ?? '';
+          });
+        } catch (err) {
+          console.warn('[LexicalEditor] Could not resolve reference node:', err);
+        }
+
         dispatch('refClick', {
           key,
           ref: el.getAttribute('data-ref') ?? '',

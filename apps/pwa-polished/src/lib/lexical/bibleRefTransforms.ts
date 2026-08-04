@@ -15,6 +15,8 @@
 
 import {
   $createTextNode,
+  $getSelection,
+  $isRangeSelection,
   $isTextNode,
   TextNode,
   type LexicalEditor,
@@ -117,10 +119,38 @@ function refNodeTransform(node: BibleRefNode): void {
 
   // No longer a clean reference — dissolve back into plain text. Rule 1 will
   // re-link whatever part of it still qualifies.
+  //
+  // Note where the caret was sitting first. Editing "Romans 15" into
+  // "Romans 125" happens mid-word, and dropping the caret at the end of the
+  // replacement would yank the cursor away from what you were typing.
+  const caret = $caretOffsetWithin(node, text.length);
   const replacement = $createTextNode(text);
   node.insertBefore(replacement);
   node.remove();
-  replacement.select(text.length, text.length);
+  replacement.select(caret, caret);
+}
+
+/**
+ * How far into a node's text the caret currently sits, as an offset the
+ * replacement text node can reuse. Falls back to the end when the selection
+ * isn't inside this node.
+ */
+function $caretOffsetWithin(node: BibleRefNode, fallback: number): number {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return fallback;
+
+  const anchor = selection.anchor.getNode();
+  if (!$isTextNode(anchor)) return fallback;
+
+  // Sum the text before the anchor's own child, then add the offset inside it.
+  let offset = 0;
+  for (const child of node.getChildren()) {
+    if (child.getKey() === anchor.getKey()) {
+      return offset + selection.anchor.offset;
+    }
+    offset += child.getTextContent().length;
+  }
+  return fallback;
 }
 
 /**

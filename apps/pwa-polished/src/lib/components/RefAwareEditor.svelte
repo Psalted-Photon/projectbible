@@ -36,6 +36,8 @@
 
   let hit: RefHit | null = null;
   let busy = false;
+  /** Set when the verse text couldn't be fetched, so the menu can say so. */
+  let unavailable = false;
 
   export function focus() {
     editorRef?.focus();
@@ -49,32 +51,47 @@
   function handleRefClick(e: CustomEvent<RefHit>) {
     hit = e.detail;
     busy = false;
+    unavailable = false;
   }
 
   function close() {
     hit = null;
+    unavailable = false;
   }
 
   function goTo() {
     if (!hit) return;
-    const translation = get(navigationStore).translation;
-    navigationStore.navigateToVerse(translation, hit.book, hit.chapter, hit.verse);
+    const current = get(navigationStore);
+    // Record where we are first, so the nav bar's Back arrow returns here —
+    // same two-step the lexicon modal uses.
+    navigationStore.pushHistory(current);
+    navigationStore.navigateToVerse(current.translation, hit.book, hit.chapter, hit.verse);
     close();
   }
 
   async function expand() {
     if (!hit || busy) return;
     busy = true;
+    unavailable = false;
     try {
+      // Whatever the reader is on — expanding copies what you're looking at,
+      // and the text is frozen into the note once inserted.
       const translation = get(navigationStore).translation;
       const text = await textStore.getVerse(translation, hit.book, hit.chapter, hit.verse);
-      if (text) editorRef?.expandRef(hit.key, text);
-      else console.warn('[RefAwareEditor] No verse text for', hit.ref, 'in', translation);
+      if (text) {
+        editorRef?.expandRef(hit.key, text);
+        close();
+      } else {
+        // Pack not installed for this book, or no such verse in it. Say so and
+        // leave the menu open so Go to is still available.
+        console.warn('[RefAwareEditor] No verse text for', hit.ref, 'in', translation);
+        unavailable = true;
+      }
     } catch (err) {
       console.error('[RefAwareEditor] Expand failed:', err);
+      unavailable = true;
     } finally {
       busy = false;
-      close();
     }
   }
 
@@ -116,6 +133,7 @@
     expanded={hit.expanded}
     chapterOnly={hit.chapterOnly}
     {busy}
+    {unavailable}
     on:goto={goTo}
     on:expand={expand}
     on:collapse={collapse}
