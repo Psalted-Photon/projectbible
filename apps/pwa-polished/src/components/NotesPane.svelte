@@ -10,8 +10,8 @@
    * at every panel width, so a 20%-wide sliver and a 50/50 split both work.
    */
   import { onMount, onDestroy, tick } from 'svelte';
-  import { CaretDown, CaretRight } from 'phosphor-svelte';
-  import LexicalEditor from '../lib/components/LexicalEditor.svelte';
+  import { CaretDown, CaretRight, ArrowLeft, Trash } from 'phosphor-svelte';
+  import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import SearchResultsTree from './SearchResultsTree.svelte';
   import { groupResultsByBook } from '../lib/searchTree';
   import type { SearchTreeNode } from '../lib/searchTree';
@@ -26,8 +26,19 @@
 
   export let windowId: string | undefined = undefined;
   export let contentState: any = {};
+  /** Which screen edge this panel is docked to — drives the resize-grip gutter below. */
+  export let edge: 'left' | 'right' | 'top' | 'bottom' = 'right';
 
   const QUICK_NOTES = 'Quick Notes';
+
+  // Window.svelte's resize strip is 32px wide with 8px hanging outside the
+  // panel, so 24px of it sits on top of our content along the inner edge and
+  // swallows every tap. Pad that side clear, with a finger's margin beyond it.
+  // A bottom-docked panel needs nothing: its grip runs along the top, where the
+  // window's own header already covers it.
+  $: gutterL = edge === 'right' ? '32px' : '0px';
+  $: gutterR = edge === 'left' ? '32px' : '0px';
+  $: gutterB = edge === 'top' ? '32px' : '0px';
 
   type Target =
     | { kind: 'verse'; noteId: string | null; book: string; chapter: number; verse: number }
@@ -50,6 +61,7 @@
   let renamingId: string | null = null;
   let renameValue = '';
   let confirmDeleteNotebookId: string | null = null;
+  let confirmDeletePageId: string | null = null;
   let openMenuId: string | null = null;
 
   // ─── Editor state ───────────────────────────────────────────────────────────
@@ -299,6 +311,15 @@
     pagesByNotebook = pagesByNotebook;
   }
 
+  /** Delete a page straight from the list, without opening it first. */
+  async function deletePage(page: NotebookPage) {
+    confirmDeletePageId = null;
+    await syncedNotebookStore.deletePage(page.id);
+    const remaining = pagesFor(page.notebookId).filter((p) => p.id !== page.id);
+    pagesByNotebook.set(page.notebookId, remaining);
+    pagesByNotebook = pagesByNotebook;
+  }
+
   // ─── Editor ─────────────────────────────────────────────────────────────────
 
   function handleTextChange(e: CustomEvent<string>) {
@@ -432,16 +453,31 @@
     return pagesByNotebook.get(id) ?? [];
   }
 
-  /** Svelte action — actions must not return a promise, so tick() is chained. */
+  /**
+   * Focus a field the moment it appears. Must be synchronous: mobile browsers
+   * only raise the keyboard for a focus() that happens inside the tap that
+   * caused it, so deferring this to a tick or a timeout gets a caret with no
+   * keyboard behind it.
+   */
   function focusOnMount(node: HTMLInputElement) {
-    void tick().then(() => {
-      node.focus();
-      node.select();
-    });
+    node.focus();
+    node.select();
+  }
+
+  /**
+   * EdgeGestureDetector watches mousedown and touchstart on the whole window to
+   * spot edge swipes, and only excuses rich-text areas — a plain input loses
+   * focus to it mid-tap. Every input in the app that works stops these first.
+   */
+  function guardPointer(e: Event) {
+    e.stopPropagation();
   }
 </script>
 
-<div class="notes-pane">
+<div
+  class="notes-pane"
+  style="--gut-l:{gutterL}; --gut-r:{gutterR}; --gut-b:{gutterB};"
+>
   {#if !isSignedIn}
     <!-- ── Signed out ──────────────────────────────────────────────────────── -->
     <div class="auth-wall">
@@ -456,7 +492,10 @@
   {:else if view === 'editor'}
     <!-- ── Editor ──────────────────────────────────────────────────────────── -->
     <div class="editor-header">
-      <button class="icon-btn" title="Back to notes" on:click={backToBrowse}>‹</button>
+      <button class="back-btn" on:click={backToBrowse}>
+        <ArrowLeft size={14} weight="duotone" />
+        <span>Back</span>
+      </button>
 
       {#if target?.kind === 'page'}
         <input
@@ -465,6 +504,9 @@
           bind:value={editorTitle}
           on:input={handleTitleInput}
           on:blur={handleBlur}
+          on:mousedown={guardPointer}
+          on:touchstart={guardPointer}
+          on:click={guardPointer}
         />
       {:else}
         <span class="title-static">{editorTitle}</span>
@@ -496,7 +538,7 @@
     {/if}
 
     <div class="editor-body">
-      <LexicalEditor
+      <RefAwareEditor
         bind:isDirty
         value={editorText}
         placeholder="Start writing…"
@@ -551,40 +593,44 @@
             {@const key = `nb::${notebook.id}`}
             <div class="nb">
               <div class="nb-row">
-                <button class="nb-header" on:click={() => toggleNode(key)}>
-                  <span class="nb-caret">
-                    {#if expanded.has(key)}
-                      <CaretDown size={11} weight="bold" />
-                    {:else}
-                      <CaretRight size={11} weight="bold" />
-                    {/if}
-                  </span>
-                  {#if renamingId === notebook.id}
-                    <!-- svelte-ignore a11y-no-static-element-interactions -->
-                    <input
-                      class="nb-rename"
-                      bind:value={renameValue}
-                      use:focusOnMount
-                      on:click|stopPropagation
-                      on:blur={commitRename}
-                      on:keydown={(e) => {
-                        if (e.key === 'Enter') commitRename();
-                        if (e.key === 'Escape') renamingId = null;
-                      }}
-                    />
-                  {:else}
+                {#if renamingId === notebook.id}
+                  <!-- The field REPLACES the row button. Nesting an input inside
+                       a button is invalid and the browser yanks focus back to
+                       the button, which is what ate the caret. -->
+                  <input
+                    class="nb-rename"
+                    bind:value={renameValue}
+                    use:focusOnMount
+                    on:mousedown={guardPointer}
+                    on:touchstart={guardPointer}
+                    on:click={guardPointer}
+                    on:blur={commitRename}
+                    on:keydown={(e) => {
+                      if (e.key === 'Enter') commitRename();
+                      if (e.key === 'Escape') renamingId = null;
+                    }}
+                  />
+                {:else}
+                  <button class="nb-header" on:click={() => toggleNode(key)}>
+                    <span class="nb-caret">
+                      {#if expanded.has(key)}
+                        <CaretDown size={11} weight="bold" />
+                      {:else}
+                        <CaretRight size={11} weight="bold" />
+                      {/if}
+                    </span>
                     <span class="nb-label">{notebook.name}</span>
                     <span class="nb-count">({pages.length})</span>
-                  {/if}
-                </button>
+                  </button>
 
-                <button class="row-btn" title="New page" on:click={() => newPage(notebook.id)}>+</button>
-                <button
-                  class="row-btn"
-                  title="Notebook options"
-                  on:click={() => (openMenuId = openMenuId === notebook.id ? null : notebook.id)}
-                  >⋯</button
-                >
+                  <button class="row-btn" title="New page" on:click={() => newPage(notebook.id)}>+</button>
+                  <button
+                    class="row-btn"
+                    title="Notebook options"
+                    on:click={() => (openMenuId = openMenuId === notebook.id ? null : notebook.id)}
+                    >⋯</button
+                  >
+                {/if}
               </div>
 
               {#if openMenuId === notebook.id}
@@ -618,12 +664,31 @@
                     <p class="muted small indent">No pages yet.</p>
                   {/if}
                   {#each pages as page (page.id)}
-                    <button class="page-row" on:click={() => openPage(page)}>
-                      <span class="page-title">{pageLabel(page)}</span>
-                      <span class="page-sub">
-                        {preview(page.text) || 'Empty'} · {formatDate(page.updatedAt)}
-                      </span>
-                    </button>
+                    <div class="page-row-wrap">
+                      <button class="page-row" on:click={() => openPage(page)}>
+                        <span class="page-title">{pageLabel(page)}</span>
+                        <span class="page-sub">
+                          {preview(page.text) || 'Empty'} · {formatDate(page.updatedAt)}
+                        </span>
+                      </button>
+                      <button
+                        class="row-btn trash-btn"
+                        title="Delete page"
+                        aria-label="Delete page"
+                        on:click={() => (confirmDeletePageId =
+                          confirmDeletePageId === page.id ? null : page.id)}
+                      >
+                        <Trash size={14} weight="bold" />
+                      </button>
+                    </div>
+
+                    {#if confirmDeletePageId === page.id}
+                      <div class="confirm-bar">
+                        <span>Delete “{pageLabel(page)}”?</span>
+                        <button class="confirm-yes" on:click={() => deletePage(page)}>Delete</button>
+                        <button class="confirm-no" on:click={() => (confirmDeletePageId = null)}>Cancel</button>
+                      </div>
+                    {/if}
                   {/each}
                 </div>
               {/if}
@@ -636,6 +701,9 @@
               placeholder="Notebook name…"
               bind:value={newNotebookName}
               use:focusOnMount
+              on:mousedown={guardPointer}
+              on:touchstart={guardPointer}
+              on:click={guardPointer}
               on:blur={commitNewNotebook}
               on:keydown={(e) => {
                 if (e.key === 'Enter') commitNewNotebook();
@@ -700,15 +768,22 @@
   }
 
   /* ── Headers ────────────────────────────────────────────── */
+  /* The --gut-* values keep content clear of the window's resize strip, which
+     overlaps 24px of the panel along whichever edge it is docked against. */
   .browse-header,
   .editor-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 10px;
+    padding: 8px calc(10px + var(--gut-r)) 8px calc(10px + var(--gut-l));
     border-bottom: 1px solid #333;
     flex-shrink: 0;
-    min-height: 40px;
+    min-height: 44px;
+  }
+
+  .editor-body {
+    padding-left: var(--gut-l);
+    padding-right: var(--gut-r);
   }
 
   .browse-title {
@@ -739,7 +814,7 @@
     color: #bbb;
     font-size: 1.1rem;
     line-height: 1;
-    padding: 4px 8px;
+    padding: 8px 10px;
     border-radius: 4px;
     cursor: pointer;
     flex-shrink: 0;
@@ -750,14 +825,37 @@
     color: #fff;
   }
 
+  /* Matches the app's other back affordances — icon plus the word, Milonga
+     inherited from the global font. */
+  .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 0.85rem;
+    padding: 8px 8px 8px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .back-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
   .title-input {
     flex: 1;
     min-width: 0;
     background: transparent;
     border: none;
     color: #e0e0e0;
-    font-size: 0.9rem;
+    /* 16px keeps iOS from zooming the whole panel when the field takes focus. */
+    font-size: 16px;
     font-weight: 600;
+    min-height: 44px;
     padding: 4px 2px;
   }
 
@@ -800,7 +898,7 @@
   .browse-body {
     flex: 1;
     overflow-y: auto;
-    padding: 8px 6px 24px;
+    padding: 8px calc(6px + var(--gut-r)) calc(24px + var(--gut-b)) calc(6px + var(--gut-l));
   }
 
   .section + .section {
@@ -818,7 +916,17 @@
     font-weight: 600;
   }
 
+  .section-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .section-count {
+    flex-shrink: 0;
+    margin-right: auto;
     color: #888;
     font-size: 0.8em;
     font-variant-numeric: tabular-nums;
@@ -873,8 +981,11 @@
     color: #888;
   }
 
+  /* Label sizes to its text and the count sits right beside it; the leftover
+     space goes after the pair, so they stay married at any panel width. */
   .nb-label {
-    flex: 1;
+    flex: 0 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -882,6 +993,7 @@
 
   .nb-count {
     flex-shrink: 0;
+    margin-right: auto;
     color: #888;
     font-size: 0.8em;
     font-variant-numeric: tabular-nums;
@@ -895,7 +1007,9 @@
     border: 1px solid #667eea;
     border-radius: 4px;
     color: #e0e0e0;
-    font-size: 0.85rem;
+    /* 16px / 44px: iOS zooms below the first and mis-taps below the second. */
+    font-size: 16px;
+    min-height: 44px;
     padding: 5px 8px;
   }
 
@@ -910,11 +1024,16 @@
   }
 
   .row-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     border: none;
     color: #888;
     font-size: 0.95rem;
     line-height: 1;
+    min-width: 34px;
+    min-height: 38px;
     padding: 6px 7px;
     border-radius: 4px;
     cursor: pointer;
@@ -924,6 +1043,11 @@
   .row-btn:hover {
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
+  }
+
+  .trash-btn:hover {
+    background: rgba(192, 57, 43, 0.18);
+    color: #f08a7a;
   }
 
   .row-menu {
@@ -980,10 +1104,18 @@
     padding-right: 4px;
   }
 
+  .page-row-wrap {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+  }
+
   .page-row {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: 2px;
+    min-width: 0;
     padding: 7px 10px;
     background: rgba(255, 255, 255, 0.03);
     border: none;
@@ -992,7 +1124,7 @@
     color: #ddd;
     cursor: pointer;
     text-align: left;
-    width: 100%;
+    flex: 1;
   }
 
   .page-row:hover {

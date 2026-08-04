@@ -40,7 +40,6 @@ export class IndexedDBJournalStore implements JournalStore {
             date: e.date,
             title: e.title,
             text: e.text,
-            textLinkified: e.textLinkified,
             createdAt: new Date(e.createdAt),
             updatedAt: new Date(e.updatedAt)
           }));
@@ -79,7 +78,6 @@ export class IndexedDBJournalStore implements JournalStore {
             date: dbEntry.date,
             title: dbEntry.title,
             text: dbEntry.text,
-            textLinkified: dbEntry.textLinkified,
             createdAt: new Date(dbEntry.createdAt),
             updatedAt: new Date(dbEntry.updatedAt)
           });
@@ -102,25 +100,23 @@ export class IndexedDBJournalStore implements JournalStore {
       date: entry.date,
       title: entry.title,
       text: entry.text,
-      textLinkified: entry.textLinkified,
       createdAt: now,
       updatedAt: now
     };
-    
+
     await writeTransaction('journal_entries', (store) => store.put(dbEntry));
-    
+
     return {
       id,
       date: entry.date,
       title: entry.title,
       text: entry.text,
-      textLinkified: entry.textLinkified,
       createdAt: new Date(now),
       updatedAt: new Date(now)
     };
   }
-  
-  async updateEntry(id: string, updates: { title?: string; text?: string; textLinkified?: string }): Promise<void> {
+
+  async updateEntry(id: string, updates: { title?: string; text?: string }): Promise<void> {
     try {
       const db = await import('./db.js').then(m => m.openDB());
       
@@ -145,10 +141,7 @@ export class IndexedDBJournalStore implements JournalStore {
           if (updates.text !== undefined) {
             entry.text = updates.text;
           }
-          if (updates.textLinkified !== undefined) {
-            entry.textLinkified = updates.textLinkified;
-          }
-          
+
           // Always update timestamp
           entry.updatedAt = Date.now();
           

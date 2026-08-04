@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import LexicalEditor from '../lib/components/LexicalEditor.svelte';
+  import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import JournalNavigationBar from './JournalNavigationBar.svelte';
   import { syncedJournalStore, subscribeToJournalRemoteChanges } from '../adapters/SyncedJournalStore';
   import { localDateStr } from '../stores/clockStore';
@@ -17,34 +17,7 @@
   let isDirty = false;
   let isSaving = false;
   let saveTimeout: number | null = null;
-  
-  // Bible book names for reference detection
-  const BIBLE_BOOKS = [
-    'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
-    '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra', 'Nehemiah',
-    'Esther', 'Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon', 'Isaiah', 'Jeremiah',
-    'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel', 'Amos', 'Obadiah', 'Jonah', 'Micah',
-    'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi', 'Matthew', 'Mark', 'Luke',
-    'John', 'Acts', 'Romans', '1 Corinthians', '2 Corinthians', 'Galatians', 'Ephesians', 'Philippians',
-    'Colossians', '1 Thessalonians', '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus', 'Philemon',
-    'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude', 'Revelation'
-  ];
-  
-  function handleReferenceClick(event: MouseEvent) {
-    const target = event.target as HTMLElement;
-    if (target.classList.contains('bible-reference')) {
-      event.preventDefault();
-      const book = target.dataset.book;
-      const chapter = parseInt(target.dataset.chapter || '1');
-      const verse = parseInt(target.dataset.verse || '1');
-      
-      // Import navigationStore dynamically to navigate
-      import('../stores/navigationStore').then(({ navigationStore }) => {
-        navigationStore.navigateTo('WEB', book!, chapter, verse);
-      });
-    }
-  }
-  
+
   let remoteChangeUnsub: (() => void) | null = null;
   
   onMount(() => {
@@ -58,16 +31,11 @@
         loadEntry(currentDate);
       }
     });
-    
-    // Add global click handler for Bible references
-    document.addEventListener('click', handleReferenceClick);
   });
-  
+
   onDestroy(() => {
     // Unsubscribe from remote-change signal
     remoteChangeUnsub?.();
-    // Clean up click handler
-    document.removeEventListener('click', handleReferenceClick);
   });
   
   async function loadEntry(date: string) {
@@ -115,25 +83,19 @@
     isSaving = true;
     
     try {
-      // Parse and linkify Bible references
-      const linkified = linkifyReferences(text);
-      
       if (currentEntry) {
         await syncedJournalStore.updateEntry(currentEntry.id, {
           title: title.trim() || undefined,
           text,
-          textLinkified: linkified
         });
         currentEntry.title = title.trim() || undefined;
         currentEntry.text = text;
-        currentEntry.textLinkified = linkified;
         currentEntry.updatedAt = new Date();
       } else {
         const newEntry = await syncedJournalStore.saveEntry({
           date: currentDate,
           title: title.trim() || undefined,
           text,
-          textLinkified: linkified
         });
         currentEntry = newEntry;
       }
@@ -166,16 +128,6 @@
       }
       saveEntry();
     }
-  }
-  
-  function linkifyReferences(html: string): string {
-    // Create regex pattern for Bible references
-    const bookPattern = BIBLE_BOOKS.join('|');
-    const pattern = new RegExp(`\\b(${bookPattern})\\s+(\\d+):(\\d+)`, 'gi');
-    
-    return html.replace(pattern, (match, book, chapter, verse) => {
-      return `<a href="#" data-book="${book}" data-chapter="${chapter}" data-verse="${verse}" class="bible-reference">${match}</a>`;
-    });
   }
   
   function navigateDate(offset: number) {
@@ -211,7 +163,7 @@
   />
   
   <div class="editor-container">
-    <LexicalEditor
+    <RefAwareEditor
       bind:this={editorRef}
       bind:isDirty
       value={text}
@@ -237,15 +189,5 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-  }
-  
-  :global(.bible-reference) {
-    color: var(--link-color, #007aff);
-    text-decoration: underline;
-    cursor: pointer;
-  }
-  
-  :global(.bible-reference:hover) {
-    opacity: 0.8;
   }
 </style>

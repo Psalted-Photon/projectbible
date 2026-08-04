@@ -242,7 +242,6 @@ export interface JournalEntry {
   date: string; // YYYY-MM-DD format
   title?: string;
   text: string; // Raw HTML from Lexical (user's actual writing)
-  textLinkified?: string; // Display version with Bible references linked
   createdAt: Date;
   updatedAt: Date;
 }
@@ -473,7 +472,7 @@ export interface JournalStore {
   saveEntry(entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<JournalEntry>;
   
   /** Update an existing entry */
-  updateEntry(id: string, updates: { title?: string; text?: string; textLinkified?: string }): Promise<void>;
+  updateEntry(id: string, updates: { title?: string; text?: string }): Promise<void>;
   
   /** Delete a journal entry */
   deleteEntry(id: string): Promise<void>;

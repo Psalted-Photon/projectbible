@@ -20,7 +20,7 @@ export interface RefTarget {
  * KJV/TSK abbreviation → canonical book name (matching bibleData.ts).
  * Keys are lower-cased for case-insensitive lookup.
  */
-const BOOK_MAP: Record<string, string> = {
+export const BOOK_MAP: Record<string, string> = {
   // Genesis
   ge: 'Genesis', gen: 'Genesis',
   // Exodus
@@ -55,7 +55,7 @@ const BOOK_MAP: Record<string, string> = {
   // Job
   job: 'Job', jb: 'Job',
   // Psalms
-  ps: 'Psalms', psa: 'Psalms', psalm: 'Psalms', psalms: 'Psalms',
+  ps: 'Psalm', psa: 'Psalm', psalm: 'Psalm', psalms: 'Psalm',
   // Proverbs
   pr: 'Proverbs', pro: 'Proverbs', prov: 'Proverbs',
   // Ecclesiastes

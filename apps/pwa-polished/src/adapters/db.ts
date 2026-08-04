@@ -121,7 +121,6 @@ export interface DBJournalEntry {
   date: string; // YYYY-MM-DD format
   title?: string;
   text: string; // Raw HTML from Lexical
-  textLinkified?: string; // Display version with Bible references linked
   createdAt: number; // Unix timestamp
   updatedAt: number; // Unix timestamp
 }

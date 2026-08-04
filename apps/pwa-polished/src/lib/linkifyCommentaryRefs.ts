@@ -7,61 +7,13 @@
  */
 
 import { parseRefString } from './parseRefString';
-import { getBookColor, getBookChapters } from './bibleData';
+import { findRefs } from './bibleRefs';
+import { getBookColor } from './bibleData';
 
-// Bible book names and abbreviations recognised in commentary prose.
-// Ordered longest-first so the alternation engine matches greedily.
-const BOOK_PATTERN = [
-  // Multi-word full names with number prefix: "1 Samuel 3:4", "2 Kings 5:1"
-  '[123]\\s+(?:Samuel|Kings|Chronicles|Corinthians|Thessalonians|Timothy|Peter|John)',
-  // Song of Solomon / Songs
-  'Song\\s+of\\s+(?:Solomon|Songs?)',
-  // Long single-word full names (low false-positive risk)
-  'Deuteronomy|Lamentations|Ecclesiastes|Philippians|Colossians|Revelation',
-  'Ephesians|Galatians|Habakkuk|Zephaniah|Zechariah|Nehemiah|Proverbs',
-  'Genesis|Exodus|Leviticus|Numbers|Joshua|Judges|Psalms?|Isaiah|Jeremiah|Ezekiel|Hebrews',
-  'Matthew|Obadiah|Haggai|Malachi|Romans|Hosea|Daniel',
-  'Ruth|Esther|Job|Joel|Amos|Jonah|Micah|Nahum|Luke|Acts|James|Jude',
-  // Numbered abbreviations: 1Sa, 2Ki, 1Co, etc.
-  '[123](?:Sam?|Kgs?|Ki|Chr?(?:on)?|Cor?|Thess?|Tim?|Pet?|J(?:oh?n?|n))',
-  // Common 2-3 char abbreviations missing from patterns above
-  'Rth|Luc|Jdg|Mt|Mk|Mr|Lk|Jn|Ru|Dt',
-  // Standard abbreviations (3+ chars)
-  'Gen|Exo?d?|Lev|Nu(?:m)?|De(?:ut?)?|Jos(?:h)?|Jud?g?|Neh|Es(?:th?)?|Psa?|Pro?v?|Eccl?',
-  'Isa|Jer|Lam|Eze?k?|Da(?:n)?|Hos|Joe?l?|Amo?s?|Oba?d?|Jon(?:ah)?|Mic|Na(?:h)?|Ha(?:b)?',
-  'Ze(?:ph?)?|Ha(?:g)?|Ze(?:ch?)?|Mal|Matt?|Ma(?:rk?)?|Lu(?:ke?)?|Joh?n?|Act?s?|Ro(?:m)?',
-  'Ga(?:l)?|Ep(?:h)?|Ph(?:il?p?|p)|Co(?:l)?|He(?:b)?|Ja(?:s)?|Ti(?:t)?|Phlm?|Ph(?:ile)?|Re(?:v)?|Jb',
-  // Terse SWORD/JFB two-letter abbreviations not covered above (Ge=Genesis,
-  // Le=Leviticus, Jr=Jeremiah, Is=Isaiah, Ne=Nehemiah, Ezr=Ezra, Ho=Hosea,
-  // Ec=Ecclesiastes, Mi=Micah, So=Song, La=Lamentations). Listed last so longer
-  // forms like "Isa"/"Gen" still match greedily first.
-  'Ge|Le|Jr|Is|Ne|Ezr|Ho|Ec|Mi|So|La',
-].join('|');
+// NOTE: reference detection now lives in lib/bibleRefs.ts, shared with the
+// notes editor. What remains here is this file's own job: walking stored HTML
+// without touching tags, and the author-specific formatting below.
 
-// A full chapter:verse token, with optional half-verse suffix and range
-// (e.g. 3:4, 3:4a, 3:4-7, 3:4-5:2). Colon is mandatory.
-const CV_FULL = '\\d+:\\d+[ab]?(?:[\\-\u2013]\\d+(?::\\d+)?)?';
-// A lead reference following an explicit book: chapter, with optional :verse[-range].
-// The verse is optional so "Ro 14" (chapter-only) is matched.
-const CV_LEAD = '\\d+(?::\\d+[ab]?(?:[\\-\u2013]\\d+(?::\\d+)?)?)?';
-// A continuation segment after a ';' or ',' \u2014 either a full chapter:verse or a
-// bare number. The bare-number form must NOT be followed by a letter so we don't
-// swallow the leading digit of a book abbreviation (e.g. the "1" in "1Pet 2:5").
-const CONT_SEG = `(?:${CV_FULL}|\\d+[ab]?)`;
-
-// Full ref pattern. The book prefix is OPTIONAL:
-//   • With a book: lead may be "ch" or "ch:verse" (Group 1 = book, Group 2 = cv).
-//   • Without a book: lead MUST be "ch:verse" (Group 3 = cv) — resolved against the
-//     current book. A bare lone number is never linked, to avoid false positives.
-// A trailing continuation tail (Group 4) captures further refs separated by ';'/','
-// — e.g. "Psa 89:28, 29; 110:4" or "Da 2:44; 7:13, 14".
-const PROSE_REF_RE = new RegExp(
-  `\\b(?:(${BOOK_PATTERN})\\s+(${CV_LEAD})|(${CV_FULL}))((?:\\s*[;,]\\s*${CONT_SEG}(?![A-Za-z]))*)`,
-  'g',
-);
-
-// Matches one continuation segment (separator + ref) inside a tail.
-const CONT_SEG_RE = new RegExp(`([;,]\\s*)(${CV_FULL}|\\d+[ab]?)`, 'g');
 
 // Bare verse reference: "v. 3", "ver. 3", "ver 3", "verse 3" (case-insensitive)
 const BARE_VERSE_RE = /\b(v(?:erse|er)?\.?)\s+(\d+)\b/gi;
@@ -117,7 +69,6 @@ function processTextSegment(
   author?: string,
 ): string {
   // Reset stateful global regexes before each use
-  PROSE_REF_RE.lastIndex = 0;
   BARE_VERSE_RE.lastIndex = 0;
   KNOWN_HEADER_RE.lastIndex = 0;
 
@@ -143,53 +94,28 @@ function processTextSegment(
     `${header.toUpperCase()}<br><br>${nextChar}`,
   );
 
-  // Step 1: linkify references — an optional-book lead plus any continuation
-  // segments separated by ';'/',' (e.g. "Psa 89:28, 29; 110:4", "Ro 14; 15",
-  // book-less "10:34; 15:25"). A segment with a colon is a new chapter:verse of
-  // the same book; a bare number is a verse of the running chapter — unless the
-  // lead had no verse (e.g. "Ro 14"), in which case bare numbers are chapters.
-  let out = text.replace(PROSE_REF_RE, (match, book: string, _cvBook: string, _cvBare: string, tail: string) => {
-    // Lead text is everything before the continuation tail.
-    const leadText = tail ? match.slice(0, match.length - tail.length) : match;
-    const target = parseRefString(leadText.trim(), contextBook, contextChapter);
-    if (!target) return match;
-
-    // For book-less leads, suppress stray "\d+:\d+" matches (e.g. ratios/times)
-    // by requiring the chapter to be valid for the current book.
-    const hasBook = !!book;
-    if (!hasBook && target.chapter > getBookChapters(target.book)) return match;
-
-    const refColor = getBookColor(target.book);
-    // 'verse' mode: bare continuation numbers are verses of runningChapter.
-    // 'chapter' mode: lead had no verse, so bare numbers are chapters.
-    let mode: 'verse' | 'chapter' = leadText.includes(':') ? 'verse' : 'chapter';
-    let runningChapter = target.chapter;
-
-    let result = wrapAbs(leadText, target.book, target.chapter, target.verse, refColor);
-
-    if (tail) {
-      CONT_SEG_RE.lastIndex = 0;
-      result += tail.replace(CONT_SEG_RE, (_m, sep: string, seg: string) => {
-        const colon = seg.match(/^(\d+):(\d+)/);
-        if (colon) {
-          // New chapter:verse of the same book → switch into verse mode there.
-          runningChapter = parseInt(colon[1]);
-          mode = 'verse';
-          return sep + wrapAbs(seg, target.book, runningChapter, parseInt(colon[2]), refColor);
-        }
-        const num = parseInt(seg);
-        if (mode === 'chapter') {
-          // Bare number continuing a chapter-only list → a chapter (verse 1).
-          runningChapter = num;
-          return sep + wrapAbs(seg, target.book, num, 1, refColor);
-        }
-        // Bare number → a verse of the running chapter.
-        return sep + wrapAbs(seg, target.book, runningChapter, num, refColor);
-      });
-    }
-
-    return result;
+  // Step 1: linkify references. Detection lives in lib/bibleRefs so notes and
+  // commentary agree on what a reference is; 'loose' mode reproduces this
+  // file's original rules exactly — book-less leads get their chapter checked,
+  // nothing else is validated or trimmed.
+  const matches = findRefs(text, {
+    requireBook: false,
+    contextBook,
+    contextChapter,
+    strict: false,
   });
+
+  let out = '';
+  let cursor = 0;
+  for (const ref of matches) {
+    // Skip a match that overlaps one already emitted (defensive; findRefs
+    // returns them in order and non-overlapping).
+    if (ref.start < cursor) continue;
+    out += text.slice(cursor, ref.start);
+    out += wrapAbs(ref.raw, ref.book, ref.chapter, ref.verse, getBookColor(ref.book));
+    cursor = ref.end;
+  }
+  out += text.slice(cursor);
 
   // Step 2: linkify bare verse refs (v. N / verse N)
   // These don't contain '<' so no need to avoid tags here.

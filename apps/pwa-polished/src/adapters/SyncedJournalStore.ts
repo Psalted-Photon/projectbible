@@ -80,7 +80,6 @@ export async function applyRemoteJournalEntries(
           date: row.date,
           title: row.title,
           text: row.text,
-          textLinkified: dateConflict.textLinkified,
           createdAt: new Date(row.created_at).getTime(),
           updatedAt: new Date(row.updated_at).getTime(),
         }));
@@ -101,8 +100,6 @@ export async function applyRemoteJournalEntries(
         date: row.date,
         title: row.title,
         text: row.text,
-        // textLinkified is display-only, derived locally — preserve if we have it
-        textLinkified: local?.textLinkified,
         createdAt: new Date(row.created_at).getTime(),
         updatedAt: new Date(row.updated_at).getTime(),
       }));
@@ -161,8 +158,8 @@ export class SyncedJournalStore implements JournalStore {
   async saveEntry(entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<JournalEntry> {
     // 1. Save locally
     const saved = await this.local.saveEntry(entry);
-    
-    // 2. Queue for sync (don't send textLinkified - it's display-only)
+
+    // 2. Queue for sync
     await syncQueue.enqueue({
       type: 'INSERT',
       table: 'journal_entries',
@@ -182,7 +179,7 @@ export class SyncedJournalStore implements JournalStore {
   
   async updateEntry(
     id: string, 
-    updates: { title?: string; text?: string; textLinkified?: string }
+    updates: { title?: string; text?: string }
   ): Promise<void> {
     // 1. Update locally
     await this.local.updateEntry(id, updates);

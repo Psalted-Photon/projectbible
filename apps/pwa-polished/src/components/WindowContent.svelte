@@ -46,7 +46,7 @@
     initialScrollTop={panel.contentState?.scrollTop ?? 0}
   />
 {:else if panel.contentType === 'notes'}
-  <NotesPane windowId={panel.id} contentState={panel.contentState} />
+  <NotesPane windowId={panel.id} contentState={panel.contentState} edge={panel.edge} />
 {:else if panel.contentType === 'wordstudy'}
   <div class="placeholder">
     <h2>Word Study</h2>

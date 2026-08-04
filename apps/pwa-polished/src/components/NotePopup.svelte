@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
-  import LexicalEditor from '../lib/components/LexicalEditor.svelte';
+  import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import { syncedUserDataStore } from '../adapters/SyncedUserDataStore';
 
   export let book: string;
@@ -273,7 +273,7 @@
 
   <!-- Content (LexicalEditor fills this area) -->
   <div class="note-content">
-    <LexicalEditor
+    <RefAwareEditor
       bind:isDirty
       value={initialContent}
       placeholder="Write your note here..."

@@ -162,8 +162,12 @@
     color: #888;
   }
 
+  /* The label sizes to its text and the count sits right beside it, with the
+     leftover space pushed after the pair — so "Genesis (1)" reads as one unit
+     at any width instead of the count drifting off to the far edge. */
   .tree-label {
-    flex: 1;
+    flex: 0 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -171,6 +175,7 @@
 
   .tree-count {
     flex-shrink: 0;
+    margin-right: auto;
     color: #888;
     font-size: 0.8em;
     font-variant-numeric: tabular-nums;

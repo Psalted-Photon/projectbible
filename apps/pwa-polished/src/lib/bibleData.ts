@@ -202,7 +202,9 @@ export function getBookColor(book: string): string {
 }
 
 export function getBookChapters(bookName: string): number {
-  const book = BIBLE_BOOKS.find(b => b.name === bookName);
+  // Normalize first, like getBookColor above — otherwise an alias spelling
+  // (e.g. the plural "Psalms") silently answers "1 chapter".
+  const book = BIBLE_BOOKS.find(b => b.name === normalizeBookName(bookName));
   return book?.chapters || 1;
 }
 

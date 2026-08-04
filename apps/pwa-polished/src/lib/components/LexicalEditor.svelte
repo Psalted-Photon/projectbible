@@ -1,5 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  // Aliased on import: Svelte reserves the $ prefix for store subscriptions,
+  // so the Lexical naming convention can't be used as a local binding here.
+  import { BibleRefNode, $isBibleRefNode as isBibleRefNode } from '../lexical/BibleRefNode';
+  import {
+    registerBibleRefTransforms,
+    $expandRef as expandRefNode,
+    $collapseRef as collapseRefNode,
+  } from '../lexical/bibleRefTransforms';
 
   export let value: string = '';
   export let placeholder: string = 'Start writing...';
@@ -19,6 +27,25 @@
   // Stored for pointerdown re-apply (assigned in onMount)
   let lexGetSelection: any = null;
   let lexIsRangeSelection: any = null;
+  let lexGetNodeByKey: any = null;
+
+  /** Print the verse inside a reference and lock the pair. */
+  export function expandRef(key: string, verseText: string) {
+    if (!editor || !lexGetNodeByKey) return;
+    editor.update(() => {
+      const node = lexGetNodeByKey(key);
+      if (isBibleRefNode(node)) expandRefNode(node, verseText);
+    });
+  }
+
+  /** Strip the verse back off and hand the reference back to the keyboard. */
+  export function collapseRef(key: string) {
+    if (!editor || !lexGetNodeByKey) return;
+    editor.update(() => {
+      const node = lexGetNodeByKey(key);
+      if (isBibleRefNode(node)) collapseRefNode(node);
+    });
+  }
 
   // Cleanup functions — no window globals, supports multiple instances
   const cleanupFns: Array<() => void> = [];
@@ -77,7 +104,10 @@
         FORMAT_ELEMENT_COMMAND,
         UNDO_COMMAND,
         REDO_COMMAND,
+        $getNearestNodeFromDOMNode,
+        $getNodeByKey,
       } = lexicalModule;
+      lexGetNodeByKey = $getNodeByKey;
       const { $patchStyleText, $getSelectionStyleValueForProperty } = selectionModule;
       const { $generateHtmlFromNodes, $generateNodesFromDOM } = htmlModule;
       lexGetSelection = $getSelection;
@@ -87,7 +117,9 @@
 
       editor = createEditor({
         namespace: 'JournalEditor',
-        nodes: [],
+        // BibleRefNode makes a typed reference a real thing the editor knows
+        // about, so it survives editing and round-trips through save/reload.
+        nodes: [BibleRefNode],
         theme: {
           paragraph: 'editor-paragraph',
           text: {
@@ -109,8 +141,35 @@
 
       cleanupFns.push(registerRichText(editor));
       cleanupFns.push(registerHistory(editor, createEmptyHistoryState(), 300));
+      cleanupFns.push(registerBibleRefTransforms(editor));
 
       editorInput.addEventListener('blur', () => dispatch('blur'));
+
+      // Clicking a reference asks the host what to do with it, rather than
+      // acting here — the popover belongs to whoever mounted this editor.
+      editorInput.addEventListener('click', (e: MouseEvent) => {
+        const el = (e.target as HTMLElement | null)?.closest?.('.bible-ref') as HTMLElement | null;
+        if (!el) return;
+        e.preventDefault();
+        const rect = el.getBoundingClientRect();
+        // Ask Lexical which node this element is, rather than stashing the key
+        // in an attribute that would then be written into saved HTML.
+        let key = '';
+        editor.getEditorState().read(() => {
+          key = $getNearestNodeFromDOMNode(el)?.getKey() ?? '';
+        });
+        dispatch('refClick', {
+          key,
+          ref: el.getAttribute('data-ref') ?? '',
+          book: el.getAttribute('data-book') ?? '',
+          chapter: parseInt(el.getAttribute('data-chapter') ?? '1', 10),
+          verse: parseInt(el.getAttribute('data-verse') ?? '1', 10),
+          expanded: el.getAttribute('data-expanded') === 'true',
+          chapterOnly: !(el.getAttribute('data-ref') ?? '').includes(':'),
+          x: rect.left + rect.width / 2,
+          y: rect.top,
+        });
+      });
 
       // Re-apply active pending formats when user clicks a new cursor position
       editorInput.addEventListener('pointerdown', () => {
@@ -456,4 +515,32 @@
   :global(.editor-text-strikethrough) { text-decoration: line-through; }
   :global(.editor-text-superscript) { font-size: 0.75em; vertical-align: super; }
   :global(.editor-text-subscript) { font-size: 0.75em; vertical-align: sub; }
+
+  /* Bible references. --ref-color is the book's own category colour, set on the
+     element by BibleRefNode, so a gospel reads gospel-red and so on. */
+  :global(.bible-ref) {
+    color: var(--ref-color, #c0392b);
+    cursor: pointer;
+    border-bottom: 1px dotted currentColor;
+  }
+
+  :global(.bible-ref:hover) {
+    background: color-mix(in srgb, var(--ref-color, #c0392b) 14%, transparent);
+    border-radius: 3px;
+  }
+
+  /* Expanded: the verse text rides along in italic, one shade quieter. */
+  :global(.bible-ref.is-expanded) {
+    border-bottom: none;
+  }
+
+  :global(.bible-ref.is-expanded > span:last-child),
+  :global(.bible-ref.is-expanded) {
+    font-style: italic;
+  }
+
+  :global(.bible-ref.is-expanded)::selection,
+  :global(.bible-ref.is-expanded *)::selection {
+    background: color-mix(in srgb, var(--ref-color, #c0392b) 30%, transparent);
+  }
 </style>
