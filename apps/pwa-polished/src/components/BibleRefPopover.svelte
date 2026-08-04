@@ -14,8 +14,6 @@
   export let refLabel = '';
   export let book = '';
   export let expanded = false;
-  /** A chapter-only reference has no single verse to print, so it can only navigate. */
-  export let chapterOnly = false;
   export let busy = false;
   /** The verse text couldn't be fetched — say so instead of failing silently. */
   export let unavailable = false;
@@ -23,7 +21,8 @@
   const dispatch = createEventDispatcher();
 
   const WIDTH = 210;
-  const HEIGHT = 96;
+  // Two action rows, no title.
+  const HEIGHT = 84;
 
   /**
    * Move the popover to the end of <body>.
@@ -55,22 +54,18 @@
   use:portal
   style="left:{left}px; top:{top}px; width:{WIDTH}px; --ref-color:{color};"
 >
-  <div class="ref-head">{refLabel}</div>
-
   <button class="ref-action" on:click={() => dispatch('goto')}>
     Go to {refLabel}
   </button>
 
-  {#if !chapterOnly}
-    {#if expanded}
-      <button class="ref-action" on:click={() => dispatch('collapse')}>Collapse verse</button>
-    {:else if unavailable}
-      <span class="ref-note">Verse text unavailable</span>
-    {:else}
-      <button class="ref-action" disabled={busy} on:click={() => dispatch('expand')}>
-        {busy ? 'Loading verse…' : 'Expand verse here'}
-      </button>
-    {/if}
+  {#if expanded}
+    <button class="ref-action" on:click={() => dispatch('collapse')}>Collapse</button>
+  {:else if unavailable}
+    <span class="ref-note">Verse text unavailable</span>
+  {:else}
+    <button class="ref-action" disabled={busy} on:click={() => dispatch('expand')}>
+      {busy ? 'Loading verse…' : 'Expand here'}
+    </button>
   {/if}
 </div>
 
@@ -87,18 +82,6 @@
     border-left: 3px solid var(--ref-color, #c0392b);
     border-radius: 6px;
     box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
-  }
-
-  .ref-head {
-    padding: 2px 8px 5px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--ref-color, #c0392b);
-    border-bottom: 1px solid #3a3a3a;
-    margin-bottom: 3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .ref-action {

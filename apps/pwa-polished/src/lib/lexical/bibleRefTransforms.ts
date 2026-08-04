@@ -21,7 +21,7 @@ import {
   TextNode,
   type LexicalEditor,
 } from 'lexical';
-import { findRefs } from '../bibleRefs';
+import { findRefs, type RefMatch } from '../bibleRefs';
 import {
   BibleRefNode,
   $createBibleRefNode,
@@ -31,10 +31,21 @@ import {
 } from './BibleRefNode';
 
 /**
- * A reference only converts once one of these follows it. End-of-text is
- * deliberately excluded: that's the "still typing" case.
+ * Characters that genuinely end a reference: whitespace, or the punctuation
+ * that ends a sentence or closes a bracket.
+ *
+ * Deliberately absent are `:` `;` `,` and the dashes. Those all appear INSIDE
+ * references — a colon separates chapter from verse, a dash makes a range, and
+ * a comma or semicolon separates one reference in a list from the next. Treating
+ * any of them as "finished" is what made `acts 10:5` link the instant you typed
+ * the colon.
+ *
+ * End-of-text is also excluded: that's the "still typing" case.
  */
-const BOUNDARY_RE = /[\s.,;:!?)\]}"'—–-]/;
+const BOUNDARY_RE = /[\s.!?)\]}"'—]/;
+
+/** Still mid-reference: more of it could be coming. */
+const CONTINUES_RE = /[\d:–-]/;
 
 /** How an expanded verse reads: `Luke 12:1 — "In the mean time…"` */
 export function formatVerseSuffix(text: string): string {
@@ -53,20 +64,66 @@ function textNodeTransform(node: TextNode): void {
   const text = node.getTextContent();
   if (text.length < 4) return;
 
-  for (const match of findRefs(text)) {
-    const after = text[match.end];
-    if (after === undefined || !BOUNDARY_RE.test(after)) continue;
+  const matches = findRefs(text);
+  if (matches.length === 0) return;
 
-    // Split the matched span out of this text node, then swap it for a
-    // reference. Handling one match per pass is fine — the transform re-runs on
-    // what's left until the tree settles.
-    let target: TextNode;
-    if (match.start === 0) {
-      [target] = node.splitText(match.end);
-    } else {
-      [, target] = node.splitText(match.start, match.end);
+  // A list like "Psa 89:28, 29; 110:4" is several matches that belong together:
+  // only the first carries the book name, so they have to be converted in one
+  // pass. Convert one and start over and the leftover ", 29; 110:4" resolves to
+  // nothing.
+  for (const run of groupIntoRuns(text, matches)) {
+    if (!runIsFinished(text, run)) continue;
+    convertRun(node, run);
+    return;
+  }
+}
+
+/** Matches separated only by a comma or semicolon are one list. */
+function groupIntoRuns(text: string, matches: RefMatch[]): RefMatch[][] {
+  const runs: RefMatch[][] = [];
+  let current: RefMatch[] = [];
+
+  for (const match of matches) {
+    const previous = current[current.length - 1];
+    const joined = previous && /^\s*[;,]\s*$/.test(text.slice(previous.end, match.start));
+    if (joined) current.push(match);
+    else {
+      if (current.length) runs.push(current);
+      current = [match];
     }
-    if (!target) return;
+  }
+  if (current.length) runs.push(current);
+  return runs;
+}
+
+/**
+ * Is the writer done with this list?
+ *
+ * Not while the next character could extend it — a digit, a colon, a dash — and
+ * not while a trailing comma or semicolon suggests another reference is coming.
+ */
+function runIsFinished(text: string, run: RefMatch[]): boolean {
+  const rest = text.slice(run[run.length - 1].end);
+  if (rest.length === 0) return false; // still typing
+  if (CONTINUES_RE.test(rest[0])) return false;
+  if (BOUNDARY_RE.test(rest[0])) return true;
+  // A separator ends the list only once something that clearly isn't another
+  // reference follows it. "Psa 89:28, and something" is finished; "…, 29; 110"
+  // is mid-list, and firing there would strand the "110:4" still being typed.
+  return /^\s*[;,]\s*[^\d\s]/.test(rest);
+}
+
+/** Replace every reference in one list with a link, leaving the separators. */
+function convertRun(node: TextNode, run: RefMatch[]): void {
+  // Right to left, so each split leaves the earlier offsets untouched.
+  let tail: TextNode = node;
+  for (let i = run.length - 1; i >= 0; i--) {
+    const match = run[i];
+    const [head, target] = tail.splitText(match.start, match.end);
+    // splitText returns the pieces in order; with start > 0 the match is the
+    // second piece, otherwise the first.
+    const matchNode = match.start === 0 ? head : target;
+    if (!matchNode) return;
 
     const refNode = $createBibleRefNode(
       match.canonical,
@@ -77,8 +134,10 @@ function textNodeTransform(node: TextNode): void {
     );
     // The label is canonicalised here: "lk 12:1" becomes "Luke 12:1".
     refNode.append($createTextNode(match.canonical));
-    target.replace(refNode);
-    return;
+    matchNode.replace(refNode);
+
+    if (match.start === 0) return;
+    tail = head;
   }
 }
 

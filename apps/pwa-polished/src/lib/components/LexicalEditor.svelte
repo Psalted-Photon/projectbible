@@ -174,7 +174,6 @@
           chapter: parseInt(el.getAttribute('data-chapter') ?? '1', 10),
           verse: parseInt(el.getAttribute('data-verse') ?? '1', 10),
           expanded: el.getAttribute('data-expanded') === 'true',
-          chapterOnly: !(el.getAttribute('data-ref') ?? '').includes(':'),
           x: rect.left + rect.width / 2,
           y: rect.top,
         });

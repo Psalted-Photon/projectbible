@@ -29,7 +29,6 @@
     chapter: number;
     verse: number;
     expanded: boolean;
-    chapterOnly: boolean;
     x: number;
     y: number;
   };
@@ -131,7 +130,6 @@
     refLabel={hit.ref}
     book={hit.book}
     expanded={hit.expanded}
-    chapterOnly={hit.chapterOnly}
     {busy}
     {unavailable}
     on:goto={goTo}

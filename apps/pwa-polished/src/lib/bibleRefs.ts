@@ -175,8 +175,19 @@ const BOOK_PATTERN_NOTES = [
   BOOK_PATTERN,
 ].join('|');
 
+/**
+ * Between the book and the numbers: whitespace, or the abbreviation period that
+ * print uses — "Ps. 119:5", "Rom. 8:28".
+ *
+ * The period form additionally requires a chapter:verse to follow. Without that
+ * guard, "I finished the job. 5 minutes later" would light up as Job 5, because
+ * a sentence ending in a book name followed by a numeral looks identical to a
+ * reference. Requiring the colon makes the two impossible to confuse.
+ */
+const BOOK_NUMBER_GAP = '(?:\\s+|\\.\\s+(?=\\d+:))';
+
 const REF_RE_BOOK_REQUIRED = new RegExp(
-  `\\b(${NAME_PREFIX}(?:${BOOK_PATTERN_NOTES}))\\s+(${CV_LEAD})((?:\\s*[;,]\\s*${CONT_SEG}(?![A-Za-z]))*)`,
+  `\\b(${NAME_PREFIX}(?:${BOOK_PATTERN_NOTES}))${BOOK_NUMBER_GAP}(${CV_LEAD})((?:\\s*[;,]\\s*${CONT_SEG}(?![A-Za-z]))*)`,
   'gi',
 );
 
