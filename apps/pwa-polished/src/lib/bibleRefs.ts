@@ -85,6 +85,18 @@ export function isValidChapter(book: string, chapter: number): boolean {
   return chapter >= 1 && chapter <= getBookChapters(book);
 }
 
+/**
+ * The longest leading run of digits that still passes `ok`, or '' if even the
+ * first digit fails. "32" against Acts 28 (31 verses) gives "3".
+ */
+function longestValidPrefix(digits: string, ok: (n: number) => boolean): string {
+  for (let len = digits.length; len > 0; len--) {
+    const slice = digits.slice(0, len);
+    if (ok(parseInt(slice))) return slice;
+  }
+  return '';
+}
+
 export function isValidVerse(book: string, chapter: number, verse: number): boolean {
   const counts = VERSE_COUNTS[verseCountKey(book)];
   // No data for this book — don't reject on ignorance, only on knowledge.
@@ -207,8 +219,13 @@ const PARTIAL_RE = new RegExp(
 /**
  * Could this text still become a reference if the writer keeps going?
  *
- * True for "Acts", "Acts ", "Acts 5:" — a book name followed by nothing but
- * the characters references are made of. False once a real word appears.
+ * True for "Acts", "Acts ", "1 Cor " — a book name followed by nothing but the
+ * characters references are made of. False once a real word appears.
+ *
+ * Only ever asked about text that holds NO complete reference yet. That is what
+ * makes the trailing whitespace here safe: "Acts " is plainly on its way back to
+ * being a reference, whereas "Acts 5:4 " already contains a finished one, so its
+ * space ends it rather than holding it open.
  */
 export function couldBecomeRef(text: string): boolean {
   const trimmed = text.trim();
@@ -409,39 +426,46 @@ function resolveLead(
     };
   }
 
-  // Chapter out of range: keep only the book name. "Luke 75" → Luke, at 1:1.
+  // A number that has run past what the book actually has: keep the digits that
+  // are still real and leave the rest as ordinary text. Typing "acts 28:32"
+  // links "Acts 28:3" and drops the trailing "2" outside — Acts 28 stops at
+  // verse 31. Nothing is deleted; the writer sees their own mistake sitting
+  // there. The same applies to chapters, so "Luke 75" links "Luke 7".
+  const chapterOnly = !leadText.includes(':');
+
   if (!chapterOK) {
-    if (!hasBook) return null; // a book-less "99:1" is just numbers
-    const bookText =
-      numberAt === undefined ? leadText : leadText.slice(0, numberAt).replace(/\s+$/, '');
-    if (!bookText) return null;
+    if (!hasBook || numberAt === undefined) return null; // book-less "99:1" is just numbers
+    const digits = leadText.slice(numberAt).match(/^\d+/)?.[0] ?? '';
+    const keep = longestValidPrefix(digits, (n) => isValidChapter(book, n));
+    if (!keep) return null; // not even the first digit is a real chapter
+    const trimmed = leadText.slice(0, numberAt + keep.length);
     return {
       start: leadStart,
-      end: leadStart + bookText.length,
-      raw: bookText,
-      canonical: book,
+      end: leadStart + trimmed.length,
+      raw: trimmed,
+      canonical: `${book} ${parseInt(keep)}`,
       book,
-      chapter: 1,
+      chapter: parseInt(keep),
       verse: 1,
       chapterOnly: true,
     };
   }
 
-  const chapterOnly = !leadText.includes(':');
-
-  // Verse out of range: keep the book and chapter. "Luke 12:200" → Luke 12.
   if (!chapterOnly && !isValidVerse(book, target.chapter, target.verse)) {
     const colonAt = leadText.indexOf(':');
-    const trimmed = leadText.slice(0, colonAt);
+    const digits = leadText.slice(colonAt + 1).match(/^\d+/)?.[0] ?? '';
+    const keep = longestValidPrefix(digits, (n) => isValidVerse(book, target.chapter, n));
+    // Not even the first digit is a real verse — keep the chapter alone.
+    const trimmed = keep ? leadText.slice(0, colonAt + 1 + keep.length) : leadText.slice(0, colonAt);
     return {
       start: leadStart,
       end: leadStart + trimmed.length,
       raw: trimmed,
-      canonical: `${book} ${target.chapter}`,
+      canonical: keep ? `${book} ${target.chapter}:${parseInt(keep)}` : `${book} ${target.chapter}`,
       book,
       chapter: target.chapter,
-      verse: 1,
-      chapterOnly: true,
+      verse: keep ? parseInt(keep) : 1,
+      chapterOnly: !keep,
     };
   }
 

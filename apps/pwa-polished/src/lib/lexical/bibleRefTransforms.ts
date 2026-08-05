@@ -34,21 +34,36 @@ import {
 } from './BibleRefNode';
 
 /**
- * Characters that genuinely end a reference: whitespace, or the punctuation
- * that ends a sentence or closes a bracket.
+ * Still mid-reference: more of it could be coming.
  *
- * Deliberately absent are `:` `;` `,` and the dashes. Those all appear INSIDE
- * references — a colon separates chapter from verse, a dash makes a range, and
- * a comma or semicolon separates one reference in a list from the next. Treating
- * any of them as "finished" is what made `acts 10:5` link the instant you typed
- * the colon.
+ * An allowlist, and a deliberately short one. Everything else finishes a
+ * reference — a space, a letter, a period, a bracket, a newline. There is no
+ * list of terminators to keep in step, which is what makes this hard to get
+ * wrong again; treating the colon as a terminator is what once made
+ * `acts 10:5` link the moment you typed the colon.
  *
- * End-of-text is also excluded: that's the "still typing" case.
+ * Digits are absent on purpose. The detector already takes every digit that
+ * makes a real chapter or verse, so a digit left over is one it refused — the
+ * "2" in "acts 28:32", where Acts 28 stops at verse 31. Waiting for that to
+ * become valid would mean waiting forever.
  */
-const BOUNDARY_RE = /[\s.!?)\]}"'—]/;
+const CONTINUES_RE = /[:–-]/;
 
-/** Still mid-reference: more of it could be coming. */
-const CONTINUES_RE = /[\d:–-]/;
+/**
+ * What may follow a COMPLETE reference and still leave it open.
+ *
+ * An allowlist on purpose. Once the reference is finished, everything ends it —
+ * a letter, a period, a bracket, a newline, a space — except a colon, a dash, or
+ * a comma or semicolon. There is nothing to enumerate on the other side, which
+ * is what makes this hard to get wrong again.
+ *
+ * Digits are excluded for the same reason as CONTINUES_RE: a leftover digit is
+ * one the detector refused, so it belongs outside the link, not in it.
+ *
+ * A separator may be followed by whitespace ("Psa 89:28, " on its way to
+ * "…, 29"), but whitespace alone never keeps a finished reference open.
+ */
+const CONTINUES_REST = /^(?:[:–-]|[;,]\s*)*$/;
 
 /** How an expanded verse reads: `Luke 12:1 — "In the mean time…"` */
 export function formatVerseSuffix(text: string): string {
@@ -117,17 +132,24 @@ function groupIntoRuns(text: string, matches: RefMatch[]): RefMatch[][] {
  */
 function runIsFinished(text: string, run: RefMatch[]): boolean {
   const rest = text.slice(run[run.length - 1].end);
-  if (rest.length === 0) return false; // still typing
-  if (CONTINUES_RE.test(rest[0])) return false;
-  if (BOUNDARY_RE.test(rest[0])) return true;
-  // A separator ends the list only once something that clearly isn't another
-  // reference follows it. "Psa 89:28, and something" is finished; "…, 29; 110"
-  // is mid-list, and firing there would strand the "110:4" still being typed.
-  return /^\s*[;,]\s*[^\d\s]/.test(rest);
+  if (rest.length === 0) return false; // nothing after it yet — still typing
+  if (CONTINUES_RE.test(rest[0])) return false; // a colon or dash: more coming
+  // A separator with numbers behind it is a list still being written. Firing
+  // there would strand the "110:4" mid-type. A separator with nothing after it
+  // yet is the same story.
+  if (/^\s*[;,]\s*$/.test(rest)) return false;
+  if (/^\s*[;,]\s*\d/.test(rest)) return false;
+  // Everything else finishes it — including a leftover digit, which the
+  // detector already refused, so there is nothing to wait for. That is what
+  // makes "acts 28:32" link the instant you type the 2.
+  return true;
 }
 
 /** Replace every reference in one list with a link, leaving the separators. */
 function convertRun(node: TextNode, run: RefMatch[]): void {
+  // Where the writer was before we rearrange anything underneath them.
+  const caretBefore = $caretOffsetInText(node);
+
   // Right to left, so each split leaves the earlier offsets untouched.
   let tail: TextNode = node;
   let lastCreated: BibleRefNode | null = null;
@@ -156,13 +178,38 @@ function convertRun(node: TextNode, run: RefMatch[]): void {
     tail = head;
   }
 
-  // Put the cursor immediately after the link that was just made, where the
-  // writer was already typing. Left to the editor to guess, it lands in odd
-  // places — between "Acts" and "5", for instance.
-  if (!lastCreated) return;
-  const following = lastCreated.getNextSibling();
-  if ($isTextNode(following)) following.select(0, 0);
-  else lastCreated.selectNext(0, 0);
+  // Put the writer back where they were.
+  //
+  // Not "just after the link" — that only looks right when the link is the last
+  // thing on the line. With anything after it, forcing the cursor there drags
+  // you backwards over your own typing.
+  if (!lastCreated || caretBefore === null) return;
+  const lastMatch = run[run.length - 1];
+
+  if (caretBefore > lastMatch.end) {
+    // Past the end of the reference: stay that far past it. Measuring from the
+    // reference's end rather than from the start of the line keeps this right
+    // even though the label may have changed length — "lk 12:1" became
+    // "Luke 12:1" and everything after it shifted.
+    const following = lastCreated.getNextSibling();
+    if ($isTextNode(following)) {
+      const offset = Math.min(caretBefore - lastMatch.end, following.getTextContentSize());
+      following.select(offset, offset);
+    }
+    return;
+  }
+
+  // Inside the reference itself, which is where it lands when a link forms
+  // around the word you just finished. Sit at its end, ready to keep writing.
+  if (caretBefore >= lastMatch.start) lastCreated.selectEnd();
+}
+
+/** The caret's offset within one text node, or null if it isn't in it. */
+function $caretOffsetInText(node: TextNode): number | null {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return null;
+  const anchor = selection.anchor;
+  return anchor.getNode().getKey() === node.getKey() ? anchor.offset : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,21 +263,33 @@ function refNodeTransform(node: BibleRefNode): void {
     matches[0].start === 0 &&
     matches[matches.length - 1].end === text.length;
 
-  // 3. A valid reference with only reference characters trailing it — a colon
-  //    or dash mid-typing. Keep pointing at what resolves so far.
+  // 3. A complete reference with only continuing characters after it — you're
+  //    part-way through typing a verse number. Point at what resolves so far.
+  //
+  //    Once a reference is complete, EVERYTHING ends it except the characters
+  //    in CONTINUES_REST. A space ends it just as surely as a letter does; that
+  //    it didn't is why spaces used to cling to a link forever.
+  //    The leniency only lasts while you are actually in there typing. Once you
+  //    move away it has to be exactly a reference or it lets go, so a half-typed
+  //    "Acts 5:44" cannot settle as a link quietly pointing at Acts 5.
   const leading = matches[0];
-  if (!isFullRun && leading?.start === 0 && /^[\d:;,\s–-]*$/.test(text.slice(leading.end))) {
+  const hasLeading = !isFullRun && leading?.start === 0;
+  if (hasLeading && inside && CONTINUES_REST.test(text.slice(leading.end))) {
     if (leading.canonical !== node.getRef()) {
       node.setTarget(leading.canonical, leading.book, leading.chapter, leading.verse);
     }
     return;
   }
 
-  // 4. Not a reference yet, but on its way back to being one — "Acts " with the
-  //    numbers backspaced away. Hold the link together while the cursor is
-  //    still in it, with no destination until it resolves, so retyping the
-  //    numbers brings it straight back instead of stranding the edit.
-  if (!isFullRun && inside && couldBecomeRef(text)) {
+  // 4. No complete reference yet, but on its way back to being one — "Acts "
+  //    with the numbers backspaced away. Hold the link together while the
+  //    cursor is still in it, with no destination until it resolves, so
+  //    retyping the numbers brings it straight back instead of stranding the
+  //    edit.
+  //
+  //    Only when nothing has resolved yet: "Acts 5:4 " has a finished reference
+  //    in it, so the space ends it rather than holding it open.
+  if (!isFullRun && !hasLeading && inside && couldBecomeRef(text)) {
     if (node.getRef() !== '') node.clearTarget();
     return;
   }
@@ -296,15 +355,16 @@ export function registerBibleRefTransforms(editor: LexicalEditor): () => void {
   const unregisterRef = editor.registerNodeTransform(BibleRefNode, refNodeTransform);
 
   // A link only holds itself together while the cursor is inside it. Once the
-  // cursor moves away, anything still unresolved has to settle — either it is a
-  // real reference or it is plain text. Without this, "Acts " would sit there
-  // looking like half a link forever.
+  // cursor moves away, anything unsettled has to resolve — either it is exactly
+  // a reference or it becomes plain text. Without this, "Acts " would sit there
+  // looking like half a link forever, and a half-typed "Acts 5:44" would keep a
+  // link quietly pointing somewhere its text doesn't say.
   const unregisterSelection = editor.registerCommand(
     SELECTION_CHANGE_COMMAND,
     () => {
       editor.update(() => {
         for (const node of $nodesOfType(BibleRefNode)) {
-          if (node.isExpanded() || node.hasTarget()) continue;
+          if (node.isExpanded()) continue;
           if ($cursorIsInside(node)) continue;
           refNodeTransform(node);
         }
