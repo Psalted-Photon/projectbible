@@ -224,12 +224,20 @@ function refNodeTransform(node: BibleRefNode): void {
   }
 
   if (node.isExpanded()) {
-    // Locked: every child is a token, so the verse cannot be typed into or
-    // nibbled at. Enforced on each pass so a reload can't land in a soft state.
-    for (const child of children) {
-      if ($isTextNode(child) && child.getMode() !== 'token') child.setMode('token');
+    // Deleting the verse text is a way of collapsing it. Without this the node
+    // stays flagged as expanded holding only the reference — locked against
+    // typing, and offering "Collapse" for a verse that is already gone.
+    if (!$getRefVerseNode(node)) {
+      node.setExpanded(false);
+      // falls through to the collapsed handling below
+    } else {
+      // Locked: every child is a token, so the verse cannot be typed into or
+      // nibbled at. Enforced each pass so a reload can't land in a soft state.
+      for (const child of children) {
+        if ($isTextNode(child) && child.getMode() !== 'token') child.setMode('token');
+      }
+      return;
     }
-    return;
   }
 
   // Collapsed: the label is ordinary editable text.
