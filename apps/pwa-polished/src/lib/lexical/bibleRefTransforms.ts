@@ -70,6 +70,14 @@ export function formatVerseSuffix(text: string): string {
   return ` — “${text.trim()}”`;
 }
 
+/**
+ * Recognises the printed verse by the shape formatVerseSuffix gives it.
+ *
+ * Used to tell which half is left when an expanded link loses a child: the
+ * reference, or the scripture. They are treated very differently.
+ */
+const VERSE_SUFFIX_RE = /^\s*—\s*“/;
+
 // ---------------------------------------------------------------------------
 // 1. Plain text → reference
 // ---------------------------------------------------------------------------
@@ -224,20 +232,30 @@ function refNodeTransform(node: BibleRefNode): void {
   }
 
   if (node.isExpanded()) {
-    // Deleting the verse text is a way of collapsing it. Without this the node
-    // stays flagged as expanded holding only the reference — locked against
-    // typing, and offering "Collapse" for a verse that is already gone.
-    if (!$getRefVerseNode(node)) {
-      node.setExpanded(false);
-      // falls through to the collapsed handling below
-    } else {
-      // Locked: every child is a token, so the verse cannot be typed into or
-      // nibbled at. Enforced each pass so a reload can't land in a soft state.
+    if ($getRefVerseNode(node)) {
+      // Both halves present. Locked: every child is a token, so the verse
+      // cannot be typed into or nibbled at. Enforced each pass so a reload
+      // can't land in a soft state.
       for (const child of children) {
         if ($isTextNode(child) && child.getMode() !== 'token') child.setMode('token');
       }
       return;
     }
+
+    // Only one half survived a deletion. Which one decides everything.
+    if (VERSE_SUFFIX_RE.test(children[0].getTextContent())) {
+      // The reference was deleted and the scripture is what's left. It does not
+      // get to stay behind as ordinary prose — the whole point of locking it is
+      // that printed scripture is never editable. Delete the link entirely.
+      node.remove();
+      return;
+    }
+
+    // The verse was deleted, leaving the reference: that is a collapse. Without
+    // this the node stays flagged as expanded holding only the reference —
+    // locked against typing, and offering "Collapse" for a verse already gone.
+    node.setExpanded(false);
+    // falls through to the collapsed handling below
   }
 
   // Collapsed: the label is ordinary editable text.
