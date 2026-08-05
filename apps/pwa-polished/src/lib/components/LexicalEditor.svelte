@@ -149,7 +149,9 @@
       // acting here — the popover belongs to whoever mounted this editor.
       editorInput.addEventListener('click', (e: MouseEvent) => {
         const el = (e.target as HTMLElement | null)?.closest?.('.bible-ref') as HTMLElement | null;
-        if (!el) return;
+        // A pending link is mid-edit with no destination — leave the click alone
+        // so it just places the caret.
+        if (!el || el.classList.contains('is-pending')) return;
         e.preventDefault();
         const rect = el.getBoundingClientRect();
 
@@ -535,6 +537,18 @@
   :global(.bible-ref:hover) {
     background: color-mix(in srgb, var(--ref-color, #c0392b) 14%, transparent);
     border-radius: 3px;
+  }
+
+  /* Mid-edit, nothing to point at yet. Still reads as one piece, but doesn't
+     pretend to be a working link. */
+  :global(.bible-ref.is-pending) {
+    border-bottom: 1px dotted transparent;
+    cursor: text;
+    opacity: 0.75;
+  }
+
+  :global(.bible-ref.is-pending:hover) {
+    background: none;
   }
 
   /* Expanded: the verse text rides along in italic, one shade quieter. */

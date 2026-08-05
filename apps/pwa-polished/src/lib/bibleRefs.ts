@@ -192,6 +192,35 @@ const REF_RE_BOOK_REQUIRED = new RegExp(
 );
 
 /**
+ * The book name on its own, with whatever numbers are half-typed after it.
+ *
+ * Used while someone is editing an existing link. Backspacing "Acts 5:4" passes
+ * through "Acts " — not a reference, but plainly on its way to being one again.
+ * Recognising that lets the link hold together instead of falling apart at the
+ * halfway point and stranding the edit.
+ */
+const PARTIAL_RE = new RegExp(
+  `^\\s*(${NAME_PREFIX}(?:${BOOK_PATTERN_NOTES}))\\s*\\.?\\s*[\\d:;,\\s–-]*$`,
+  'i',
+);
+
+/**
+ * Could this text still become a reference if the writer keeps going?
+ *
+ * True for "Acts", "Acts ", "Acts 5:" — a book name followed by nothing but
+ * the characters references are made of. False once a real word appears.
+ */
+export function couldBecomeRef(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const m = trimmed.match(PARTIAL_RE);
+  if (!m) return false;
+  const bookToken = m[1];
+  if (shortFormNeedsCapital(bookToken)) return false;
+  return resolveBook(bookToken) !== null;
+}
+
+/**
  * The only abbreviations that genuinely turn up in ordinary sentences followed
  * by a number — "the answer is 5 minutes", "I am 5 foot ten", "he 3 times
  * refused", "so 1 more thing". Lowercase, these are prose; capitalised

@@ -110,6 +110,22 @@ export class BibleRefNode extends ElementNode {
     self.__verse = verse;
   }
 
+  /**
+   * Mid-edit and not resolving to anything — "Acts " with the numbers deleted.
+   * The link holds together so retyping brings it back, but it points nowhere,
+   * so it can never navigate to where it used to go.
+   */
+  clearTarget(): void {
+    const self = this.getWritable();
+    self.__ref = '';
+    self.__chapter = 0;
+    self.__verse = 0;
+  }
+
+  hasTarget(): boolean {
+    return this.getLatest().__ref !== '';
+  }
+
   setExpanded(expanded: boolean): void {
     this.getWritable().__expanded = expanded;
   }
@@ -131,7 +147,13 @@ export class BibleRefNode extends ElementNode {
   }
 
   private applyAttrs(el: HTMLElement): void {
-    el.className = this.__expanded ? 'bible-ref is-expanded' : 'bible-ref';
+    // `is-pending` is a link mid-edit with nothing to point at yet. It keeps the
+    // reference colour so it still reads as one piece, but drops the underline
+    // and is not clickable.
+    const classes = ['bible-ref'];
+    if (this.__expanded) classes.push('is-expanded');
+    if (this.__ref === '') classes.push('is-pending');
+    el.className = classes.join(' ');
     el.style.setProperty('--ref-color', getBookColor(this.__book));
     el.setAttribute('data-ref', this.__ref);
     el.setAttribute('data-book', this.__book);

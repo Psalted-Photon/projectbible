@@ -18,10 +18,13 @@ import {
   $getSelection,
   $isRangeSelection,
   $isTextNode,
+  $nodesOfType,
+  COMMAND_PRIORITY_LOW,
+  SELECTION_CHANGE_COMMAND,
   TextNode,
   type LexicalEditor,
 } from 'lexical';
-import { findRefs, type RefMatch } from '../bibleRefs';
+import { findRefs, couldBecomeRef, type RefMatch } from '../bibleRefs';
 import {
   BibleRefNode,
   $createBibleRefNode,
@@ -58,8 +61,18 @@ export function formatVerseSuffix(text: string): string {
 
 function textNodeTransform(node: TextNode): void {
   if (!node.isSimpleText()) return;
-  // Never re-detect inside a reference; rule 2 owns those.
-  if ($isBibleRefNode(node.getParent())) return;
+
+  // Text living inside a link: re-check the link from here.
+  //
+  // This rule is the one that reliably fires. The editor skips element-level
+  // rules when the change is only a side effect of editing text — which is
+  // exactly what typing inside a link is — so the link's own rule never ran and
+  // a link could keep pointing somewhere its text no longer said.
+  const parent = node.getParent();
+  if ($isBibleRefNode(parent)) {
+    refNodeTransform(parent);
+    return;
+  }
 
   const text = node.getTextContent();
   if (text.length < 4) return;
@@ -117,13 +130,15 @@ function runIsFinished(text: string, run: RefMatch[]): boolean {
 function convertRun(node: TextNode, run: RefMatch[]): void {
   // Right to left, so each split leaves the earlier offsets untouched.
   let tail: TextNode = node;
+  let lastCreated: BibleRefNode | null = null;
+
   for (let i = run.length - 1; i >= 0; i--) {
     const match = run[i];
     const [head, target] = tail.splitText(match.start, match.end);
     // splitText returns the pieces in order; with start > 0 the match is the
     // second piece, otherwise the first.
     const matchNode = match.start === 0 ? head : target;
-    if (!matchNode) return;
+    if (!matchNode) break;
 
     const refNode = $createBibleRefNode(
       match.canonical,
@@ -135,10 +150,19 @@ function convertRun(node: TextNode, run: RefMatch[]): void {
     // The label is canonicalised here: "lk 12:1" becomes "Luke 12:1".
     refNode.append($createTextNode(match.canonical));
     matchNode.replace(refNode);
+    if (i === run.length - 1) lastCreated = refNode;
 
-    if (match.start === 0) return;
+    if (match.start === 0) break;
     tail = head;
   }
+
+  // Put the cursor immediately after the link that was just made, where the
+  // writer was already typing. Left to the editor to guess, it lands in odd
+  // places — between "Acts" and "5", for instance.
+  if (!lastCreated) return;
+  const following = lastCreated.getNextSibling();
+  if ($isTextNode(following)) following.select(0, 0);
+  else lastCreated.selectNext(0, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -167,26 +191,78 @@ function refNodeTransform(node: BibleRefNode): void {
 
   const text = node.getTextContent();
   const matches = findRefs(text);
-  const whole = matches.find((m) => m.start === 0 && m.end === text.length);
+  const inside = $cursorIsInside(node);
 
+  // 1. Still exactly one reference — just update where it points.
+  //    "Acts 5:4" → "Acts 6:4", or "acts 5" swapped for "job 3".
+  const whole = matches.find((m) => m.start === 0 && m.end === text.length);
   if (whole) {
     if (whole.canonical !== node.getRef()) {
       node.setTarget(whole.canonical, whole.book, whole.chapter, whole.verse);
     }
+    // Tidy the spelling once the writer has moved on — never underneath a
+    // moving cursor, which is how cursors get thrown across the line.
+    if (!inside && text !== whole.canonical) {
+      const display = $getRefDisplayNode(node);
+      if (display) display.setTextContent(whole.canonical);
+    }
     return;
   }
 
-  // No longer a clean reference — dissolve back into plain text. Rule 1 will
-  // re-link whatever part of it still qualifies.
+  // 2. Grew into a list — "1cor 4:8" edited to "1cor 4:8, 9". Break the single
+  //    link apart so the run rule can rebuild it as several.
+  const isFullRun =
+    matches.length > 1 &&
+    matches[0].start === 0 &&
+    matches[matches.length - 1].end === text.length;
+
+  // 3. A valid reference with only reference characters trailing it — a colon
+  //    or dash mid-typing. Keep pointing at what resolves so far.
+  const leading = matches[0];
+  if (!isFullRun && leading?.start === 0 && /^[\d:;,\s–-]*$/.test(text.slice(leading.end))) {
+    if (leading.canonical !== node.getRef()) {
+      node.setTarget(leading.canonical, leading.book, leading.chapter, leading.verse);
+    }
+    return;
+  }
+
+  // 4. Not a reference yet, but on its way back to being one — "Acts " with the
+  //    numbers backspaced away. Hold the link together while the cursor is
+  //    still in it, with no destination until it resolves, so retyping the
+  //    numbers brings it straight back instead of stranding the edit.
+  if (!isFullRun && inside && couldBecomeRef(text)) {
+    if (node.getRef() !== '') node.clearTarget();
+    return;
+  }
+
+  // 5. Anything else — dissolve back to plain text. Rule 1 re-links whatever
+  //    part still qualifies and leaves the rest alone.
   //
-  // Note where the caret was sitting first. Editing "Romans 15" into
-  // "Romans 125" happens mid-word, and dropping the caret at the end of the
-  // replacement would yank the cursor away from what you were typing.
+  //    Note where the caret was sitting first: editing "Romans 15" into
+  //    "Romans 125" happens mid-word, and dropping the caret at the end of the
+  //    replacement would yank the cursor away from what you were typing.
   const caret = $caretOffsetWithin(node, text.length);
   const replacement = $createTextNode(text);
   node.insertBefore(replacement);
   node.remove();
   replacement.select(caret, caret);
+
+  // A list rebuilds immediately rather than waiting for a trailing space — it
+  // was already a link, so there is nothing to wait for.
+  if (isFullRun) convertRun(replacement, matches);
+}
+
+/** Is the writer's cursor currently inside this link? */
+function $cursorIsInside(node: BibleRefNode): boolean {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return false;
+  const key = node.getKey();
+  for (const point of [selection.anchor, selection.focus]) {
+    const target = point.getNode();
+    if (target.getKey() === key) return true;
+    if (target.getParents().some((p) => p.getKey() === key)) return true;
+  }
+  return false;
 }
 
 /**
@@ -218,9 +294,30 @@ function $caretOffsetWithin(node: BibleRefNode, fallback: number): number {
 export function registerBibleRefTransforms(editor: LexicalEditor): () => void {
   const unregisterText = editor.registerNodeTransform(TextNode, textNodeTransform);
   const unregisterRef = editor.registerNodeTransform(BibleRefNode, refNodeTransform);
+
+  // A link only holds itself together while the cursor is inside it. Once the
+  // cursor moves away, anything still unresolved has to settle — either it is a
+  // real reference or it is plain text. Without this, "Acts " would sit there
+  // looking like half a link forever.
+  const unregisterSelection = editor.registerCommand(
+    SELECTION_CHANGE_COMMAND,
+    () => {
+      editor.update(() => {
+        for (const node of $nodesOfType(BibleRefNode)) {
+          if (node.isExpanded() || node.hasTarget()) continue;
+          if ($cursorIsInside(node)) continue;
+          refNodeTransform(node);
+        }
+      });
+      return false; // never swallow the event
+    },
+    COMMAND_PRIORITY_LOW,
+  );
+
   return () => {
     unregisterText();
     unregisterRef();
+    unregisterSelection();
   };
 }
 
