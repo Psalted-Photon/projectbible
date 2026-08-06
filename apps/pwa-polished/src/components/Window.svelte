@@ -211,7 +211,7 @@
      page looks exactly like the modal it came out of. -->
 <div
   class="panel panel-{window.edge} panel-{window.contentType}"
-  class:themed={!['map', 'isbe', 'person'].includes(window.contentType)}
+  class:themed={!['map', 'isbe', 'person', 'naves'].includes(window.contentType)}
   style="
     {window.edge === 'left' || window.edge === 'right' ? `width: ${window.size}%` : `height: ${window.size}%`};
   "

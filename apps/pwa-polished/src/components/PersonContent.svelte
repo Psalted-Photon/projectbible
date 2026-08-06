@@ -7,6 +7,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
+  import { navesModalStore } from "../stores/navesModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import IndexList from "./library/IndexList.svelte";
   import { peopleSource } from "../lib/library/source";
@@ -16,6 +17,8 @@
     getPeopleNeighbors,
     relationId,
     resolveIsbeClick,
+    resolveNavesTopicId,
+    getNavesTopicName,
     lookupEnglishWord,
     libraryLetterOf,
     type PersonRecord,
@@ -165,6 +168,8 @@
   // people; there was never a reason for that beyond the modal having nowhere
   // to put the bio while it was gone.
   let isbeMatch: IsbeResolution | null = null;
+  let navesTopicId: number | null = null;
+  let navesName = "";
   let hasDictionary = false;
   let bridgeCheckedFor = "";
 
@@ -175,6 +180,7 @@
     if (bridgeCheckedFor === key) return;
     bridgeCheckedFor = key;
     isbeMatch = null;
+    navesTopicId = null;
     hasDictionary = false;
     try {
       isbeMatch = await resolveIsbeClick({ word: name });
@@ -182,11 +188,25 @@
       isbeMatch = null;
     }
     try {
+      const id = await resolveNavesTopicId(name);
+      if (bridgeCheckedFor !== key) return;
+      navesTopicId = id;
+      navesName = id != null ? ((await getNavesTopicName(id)) ?? name) : "";
+    } catch {
+      navesTopicId = null;
+    }
+    try {
       const e = await lookupEnglishWord(key);
       hasDictionary = !!(e && (e.modern?.length || e.historic?.length || e.wordset?.length));
     } catch {
       hasDictionary = false;
     }
+  }
+
+  function openTopical() {
+    if (navesTopicId == null) return;
+    if (!docked) onClose?.();
+    navesModalStore.open({ topicId: navesTopicId, primaryName: navesName });
   }
 
   function openEncyclopedia() {
@@ -324,6 +344,9 @@
         {#if !showContents && person}
           {#if isbeMatch}
             <button class="bridge-btn" on:click={openEncyclopedia}>Encyclopedia</button>
+          {/if}
+          {#if navesTopicId != null}
+            <button class="bridge-btn" on:click={openTopical}>Topical</button>
           {/if}
           {#if hasDictionary}
             <button class="bridge-btn" on:click={openDictionary}>Dictionary</button>

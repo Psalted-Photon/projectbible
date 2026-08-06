@@ -11,12 +11,15 @@
     lookupEnglishWord,
     lookupStrongs,
     resolveIsbeClick,
+    resolveNavesTopicId,
+    getNavesTopicName,
     type IsbeResolution,
     type PersonRecord,
   } from "../adapters/lexicon-lookup.js";
   import PersonContent from "./PersonContent.svelte";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
+  import { navesModalStore } from "../stores/navesModalStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
@@ -130,11 +133,32 @@
     if (isbeCheckedFor === key) return;
     isbeCheckedFor = key;
     isbeMatch = null;
+    navesTopicId = null;
     try {
       isbeMatch = await resolveIsbeClick({ word: text });
     } catch {
       isbeMatch = null;
     }
+    try {
+      const id = await resolveNavesTopicId(text);
+      // A slower lookup must not light up a button for the previous word.
+      if (isbeCheckedFor !== key) return;
+      navesTopicId = id;
+      navesName = id != null ? ((await getNavesTopicName(id)) ?? text) : "";
+    } catch {
+      navesTopicId = null;
+    }
+  }
+
+  // Nave's sits beside the encyclopedia in the same row, on the same terms:
+  // shown when there is a topic under this name, silent otherwise.
+  let navesTopicId: number | null = null;
+  let navesName = "";
+
+  function openTopical() {
+    if (navesTopicId == null) return;
+    close();
+    navesModalStore.open({ topicId: navesTopicId, primaryName: navesName });
   }
 
   function openEncyclopedia() {
@@ -596,6 +620,9 @@
             <button class="bridge-btn" on:click={openEncyclopedia}>
               {showCharacter ? "Encyclopedia" : "More Info"}
             </button>
+          {/if}
+          {#if navesTopicId != null && !strongEntry}
+            <button class="bridge-btn" on:click={openTopical}>Topical</button>
           {/if}
           {#if showCharacter && person}
             <button class="pop-btn" on:click={popOutPerson} title="Pin beside the reader" aria-label="Pin beside the reader">

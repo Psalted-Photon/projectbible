@@ -20,6 +20,10 @@ import {
   getPeopleForLetter,
   getPeopleInChapter,
   searchPeople,
+  getNavesLetterCounts,
+  getNavesForLetter,
+  getNavesInChapter,
+  searchNaves,
 } from '../../adapters/lexicon-lookup.js';
 
 export type { LibraryRow };
@@ -33,7 +37,7 @@ export interface LibraryFilter {
 
 /** Which source dots a row in this list can usefully show. A person list has
  *  no reason to mark every row "has a bio". */
-export type LibraryBadge = 'place' | 'bio' | 'entry' | 'dict';
+export type LibraryBadge = 'place' | 'bio' | 'entry' | 'topic' | 'dict';
 
 export interface LibrarySourceAdapter {
   key: LibrarySource;
@@ -69,7 +73,21 @@ export const isbeSource: LibrarySourceAdapter = {
     // Everything that isn't geography: people, customs, plants, coins, doctrine.
     { key: 'articles', label: 'Articles', test: (r) => !r.isPlace },
   ],
-  badges: ['place', 'bio', 'dict'],
+  badges: ['place', 'bio', 'topic', 'dict'],
+};
+
+export const navesSource: LibrarySourceAdapter = {
+  key: 'naves',
+  label: 'Topical',
+  subtitle: "Nave's Topical Bible",
+  searchPlaceholder: 'Search topics…',
+  getLetterCounts: getNavesLetterCounts,
+  getRowsForLetter: getNavesForLetter,
+  annotateBadges: annotateLibraryBadges,
+  search: searchNaves,
+  getRowsInChapter: getNavesInChapter,
+  filters: [{ key: 'all', label: 'All', test: () => true }],
+  badges: ['entry', 'bio', 'dict'],
 };
 
 export const peopleSource: LibrarySourceAdapter = {
@@ -85,5 +103,5 @@ export const peopleSource: LibrarySourceAdapter = {
   // Everyone here is a person, so there is nothing useful to filter on beyond
   // the chapter button the shell adds itself.
   filters: [{ key: 'all', label: 'All', test: () => true }],
-  badges: ['entry', 'dict'],
+  badges: ['entry', 'topic', 'dict'],
 };

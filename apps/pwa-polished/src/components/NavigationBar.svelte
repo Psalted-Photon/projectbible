@@ -17,6 +17,7 @@
   import SearchResultsTree from "./SearchResultsTree.svelte";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
+  import { navesModalStore } from "../stores/navesModalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
   import { get } from "svelte/store";
   import {
@@ -685,6 +686,12 @@
         kind: result.data.isPlace ? "place" : "entry",
         entryId: result.data.entryId,
         placeId: null,
+        primaryName: result.data.primaryName,
+      });
+    } else if (result.type === "topical") {
+      // Topics carry no reference either — same reason as the encyclopedia.
+      navesModalStore.open({
+        topicId: result.data.topicId,
         primaryName: result.data.primaryName,
       });
     } else if (result.type === "journal") {

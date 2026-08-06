@@ -20,6 +20,8 @@
     resolveIsbeEntryNames,
     lookupEnglishWord,
     getIsbeNeighbors,
+    resolveNavesTopicId,
+    getNavesTopicName,
     libraryLetterOf,
     type IsbeEntryRecord,
     type IsbePlaceRecord,
@@ -29,6 +31,7 @@
   import IndexList from "./library/IndexList.svelte";
   import { isbeSource } from "../lib/library/source";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
+  import { navesModalStore } from "../stores/navesModalStore";
 
   // The encyclopedia article itself, independent of what is holding it. Two
   // hosts: IsbeModal, a centered card over the reader; and a docked window,
@@ -136,6 +139,7 @@
     visitedRefs = new Set();
     articleHtml = "";
     dictCheckedFor = "";
+    navesCheckedFor = "";
     rememberedId = null;
     destroyMap();
 
@@ -303,6 +307,39 @@
   }
 
   $: if (!loading && title) checkDictionary(title);
+
+  // --- Topical bridge ----------------------------------------------------
+  // Where the encyclopedia explains what a thing is, Nave's says where
+  // Scripture speaks about it — offered whenever there is a topic under the
+  // same name, and silent when the Encyclotopical pack isn't installed.
+  let navesTopicId: number | null = null;
+  let navesName = "";
+  let navesCheckedFor = "";
+
+  async function checkTopical(name: string) {
+    const term = (name || "").trim().toLowerCase();
+    if (navesCheckedFor === term) return;
+    navesCheckedFor = term;
+    navesTopicId = null;
+    if (!term) return;
+    try {
+      const id = await resolveNavesTopicId(name);
+      if (navesCheckedFor !== term) return;
+      navesTopicId = id;
+      navesName = id != null ? ((await getNavesTopicName(id)) ?? name) : "";
+    } catch {
+      navesTopicId = null;
+    }
+  }
+
+  $: if (!loading && title) checkTopical(title);
+
+  function openTopical() {
+    if (navesTopicId == null) return;
+    // Docked, the article stays put — only the modal has to get out of the way.
+    if (!docked) close();
+    navesModalStore.open({ topicId: navesTopicId, primaryName: navesName });
+  }
 
   function openDictionary() {
     const term = dictWord;
@@ -903,8 +940,13 @@
       {/if}
     </div>
     <div class="head-actions">
-      {#if hasDictionary && !showContents}
-        <button class="bridge-btn" on:click={openDictionary}>Dictionary</button>
+      {#if !showContents}
+        {#if navesTopicId != null}
+          <button class="bridge-btn" on:click={openTopical}>Topical</button>
+        {/if}
+        {#if hasDictionary}
+          <button class="bridge-btn" on:click={openDictionary}>Dictionary</button>
+        {/if}
       {/if}
       {#if onPopOut}
         <button

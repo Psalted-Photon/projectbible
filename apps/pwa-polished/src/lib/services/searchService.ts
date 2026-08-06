@@ -12,10 +12,11 @@ export type SearchCategoryKey =
   | 'saved'
   | 'characters'
   | 'encyclopedia'
+  | 'topical'
   | 'commentaries';
 
 export interface SearchResult {
-  type: 'verse' | 'strongs' | 'note' | 'journal' | 'saved' | 'character' | 'encyclopedia' | 'commentary';
+  type: 'verse' | 'strongs' | 'note' | 'journal' | 'saved' | 'character' | 'encyclopedia' | 'topical' | 'commentary';
   title: string;
   subtitle?: string;
   reference?: string;
@@ -129,13 +130,14 @@ export class UnifiedSearchService {
 
     // Every category is independent, so fetch them together rather than
     // serially — the slowest one sets the pace instead of their sum.
-    const [verses, strongs, notes, journal, characters, encyclopedia, commentaries] = await Promise.all([
+    const [verses, strongs, notes, journal, characters, encyclopedia, topical, commentaries] = await Promise.all([
       this.searchVerses(normalizedQuery, options.limit),
       this.searchStrongs(normalizedQuery),
       this.searchNotes(normalizedQuery),
       this.searchJournal(normalizedQuery),
       this.searchCharacters(normalizedQuery),
       this.searchEncyclopedia(normalizedQuery, !!options.deep),
+      this.searchTopical(normalizedQuery, !!options.deep),
       options.deep ? this.searchCommentaries(normalizedQuery) : Promise.resolve([]),
     ]);
 
@@ -148,6 +150,7 @@ export class UnifiedSearchService {
       { key: 'saved', name: 'Saved Verses', count: 0, results: [], alwaysShow: true },
       { key: 'characters', name: 'Biblical Characters', count: characters.length, results: characters },
       { key: 'encyclopedia', name: 'Encyclopedia (ISBE)', count: encyclopedia.length, results: encyclopedia },
+      { key: 'topical', name: "Topical (Nave's)", count: topical.length, results: topical },
       { key: 'commentaries', name: 'Commentaries', count: commentaries.length, results: commentaries },
     ];
 
@@ -515,6 +518,73 @@ export class UnifiedSearchService {
         }));
     } catch (error) {
       console.error('Error searching encyclopedia:', error);
+      return [];
+    }
+  }
+
+  // ── Topical (Nave's) ─────────────────────────────────────────────────────
+
+  /**
+   * Type-ahead matches topic titles (prefix). A `deep` search additionally
+   * scans the token index, so a word discussed inside a topic's outline — but
+   * not in its heading — still surfaces. Ranked by how much the topic has to
+   * say, which for Nave's means how many references it gathers.
+   */
+  private async searchTopical(query: string, deep: boolean): Promise<SearchResult[]> {
+    try {
+      const term = query.toLowerCase().trim();
+      if (term.length < 2) return [];
+
+      const db = await openDB();
+      if (!db.objectStoreNames.contains('naves_names')) return [];
+
+      const topicIds = new Set<number>();
+
+      const nameIdx = db
+        .transaction('naves_names', 'readonly')
+        .objectStore('naves_names')
+        .index('nameLower');
+      const nameRows = await getAll<any>(nameIdx, IDBKeyRange.bound(term, `${term}￿`, false, false));
+      for (const r of nameRows) topicIds.add(r.topicId);
+
+      if (deep && /^[a-z0-9]{3,}$/.test(term) && db.objectStoreNames.contains('naves_tokens')) {
+        const tokIdx = db.transaction('naves_tokens', 'readonly').objectStore('naves_tokens').index('token');
+        const tokRows = await getAll<any>(tokIdx, IDBKeyRange.only(term));
+        for (const r of tokRows) topicIds.add(r.topicId);
+      }
+
+      if (!topicIds.size) return [];
+      const ids = [...topicIds].slice(0, CATEGORY_LIMIT);
+
+      const store = db.transaction('naves_topics', 'readonly').objectStore('naves_topics');
+      const topics = await Promise.all(
+        ids.map(
+          (id) =>
+            new Promise<any>((resolve) => {
+              const req = store.get(id);
+              req.onsuccess = () => resolve(req.result || null);
+              req.onerror = () => resolve(null);
+            }),
+        ),
+      );
+
+      return topics
+        .filter(Boolean)
+        .sort((a, b) => (b.refCount ?? 0) - (a.refCount ?? 0))
+        .map((t) => ({
+          type: 'topical' as const,
+          title: t.primaryName || t.title,
+          subtitle: [
+            t.refCount ? `${t.refCount} reference${t.refCount === 1 ? '' : 's'}` : 'Topic',
+            t.lead ? String(t.lead).slice(0, 90) : '',
+          ]
+            .filter(Boolean)
+            .join('  ·  '),
+          data: { topicId: t.topicId, primaryName: t.primaryName || t.title },
+          score: t.refCount ?? 0,
+        }));
+    } catch (error) {
+      console.error('Error searching topical:', error);
       return [];
     }
   }

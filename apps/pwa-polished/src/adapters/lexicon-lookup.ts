@@ -1250,6 +1250,7 @@ export interface LibraryRow {
   hasBio?: boolean;
   hasDict?: boolean;
   hasEntry?: boolean;
+  hasTopic?: boolean;
 }
 
 export const LIBRARY_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -1418,9 +1419,10 @@ export async function annotateLibraryBadges(rows: LibraryRow[], letter: string):
       req.onerror = () => resolve(new Set());
     });
 
-  const [bioNames, entryNames, dictWords] = await Promise.all([
+  const [bioNames, entryNames, topicNames, dictWords] = await Promise.all([
     namesFrom('person_names', 'nameLower', 'nameLower'),
     namesFrom('isbe_entry_names', 'nameLower', 'nameLower'),
+    namesFrom('naves_names', 'nameLower', 'nameLower'),
     dictWordsFrom(),
   ]);
 
@@ -1434,6 +1436,7 @@ export async function annotateLibraryBadges(rows: LibraryRow[], letter: string):
     const head = firstWord(row.name);
     row.hasBio = bioNames.has(row.sortKey) || bioNames.has(head);
     row.hasEntry = entryNames.has(row.sortKey) || entryNames.has(head);
+    row.hasTopic = topicNames.has(row.sortKey) || topicNames.has(head);
     row.hasDict = dictWords.has(row.sortKey) || dictWords.has(head);
   }
   return rows;
@@ -1568,6 +1571,373 @@ export async function searchIsbeEntries(query: string, limit = 60): Promise<Libr
     )
     .slice(0, limit)
     .map(({ weight: _weight, ...row }) => row);
+}
+
+/* ------------------------------------------------------------------ *
+ * Nave's Topical Bible
+ *
+ * The topical counterpart to ISBE's prose. Where the encyclopedia explains
+ * what a thing is, Nave's answers where Scripture speaks about it: an outline
+ * of points, each carrying its own references. Ships in the Encyclotopical
+ * pack alongside the encyclopedia.
+ * ------------------------------------------------------------------ */
+
+export interface NavesRef {
+  osis: string;
+  label: string;
+}
+
+/**
+ * A "See OTHER TOPIC" pointer, already resolved. About one in twelve of Nave's
+ * internal cross-references names a topic the module doesn't actually carry, so
+ * the target is looked up once when the topic loads and the UI can show the
+ * dead ones as plain text rather than a button that does nothing.
+ */
+export interface NavesLink {
+  name: string;
+  topicId: number | null;
+}
+
+/** One line of a topic's outline. Depth 0 is a top-level point, 1 a sub-point. */
+export interface NavesPoint {
+  seq: number;
+  depth: number;
+  text: string;
+  refs: NavesRef[];
+  links: NavesLink[];
+}
+
+export interface NavesTopicRecord {
+  topicId: number;
+  title: string;
+  primaryName: string;
+  lead: string | null;
+  pointCount: number;
+  refCount: number;
+  points: NavesPoint[];
+}
+
+function parseNavesJson<T>(value: unknown): T[] {
+  if (!value || typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** A whole topic: its heading plus every outline point, in document order. */
+export async function getNavesTopic(topicId: number): Promise<NavesTopicRecord | null> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('naves_topics')) return null;
+
+  const topic = await new Promise<any>((resolve) => {
+    const req = db.transaction('naves_topics', 'readonly').objectStore('naves_topics').get(topicId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => resolve(null);
+  });
+  if (!topic) return null;
+
+  const rawPoints = await new Promise<{ point: Omit<NavesPoint, 'links'>; linkNames: string[] }[]>(
+    (resolve) => {
+      if (!db.objectStoreNames.contains('naves_points')) return resolve([]);
+      const idx = db.transaction('naves_points', 'readonly').objectStore('naves_points').index('topic_seq');
+      // The compound (topicId, seq) index returns the outline already in order.
+      // A shorter array sorts before a longer one sharing its prefix, and an
+      // array sorts after any number — so this covers every seq for the topic
+      // without needing to know how many points it has.
+      const req = idx.getAll(IDBKeyRange.bound([topicId], [topicId, []]));
+      req.onsuccess = () =>
+        resolve(
+          (req.result || []).map((r: any) => ({
+            point: {
+              seq: r.seq,
+              depth: r.depth,
+              text: r.text || '',
+              refs: parseNavesJson<NavesRef>(r.refs),
+            },
+            linkNames: parseNavesJson<string>(r.links),
+          })),
+        );
+      req.onerror = () => resolve([]);
+    },
+  );
+
+  // Resolve every cross-reference once per distinct name, rather than once per
+  // line — "See PRAYER" can appear a dozen times in one topic.
+  const distinct = [...new Set(rawPoints.flatMap((p) => p.linkNames))];
+  const resolved = new Map<string, number | null>(
+    await Promise.all(
+      distinct.map(async (name) => [name, await resolveNavesTopicId(name)] as [string, number | null]),
+    ),
+  );
+
+  const points: NavesPoint[] = rawPoints.map(({ point, linkNames }) => ({
+    ...point,
+    links: linkNames.map((name) => ({ name, topicId: resolved.get(name) ?? null })),
+  }));
+
+  return {
+    topicId: topic.topicId,
+    title: topic.title,
+    primaryName: topic.primaryName || topic.title,
+    lead: topic.lead ?? null,
+    pointCount: topic.pointCount ?? points.length,
+    refCount: topic.refCount ?? 0,
+    points,
+  };
+}
+
+/** Every verse a topic cites, for its Verses tab. */
+export async function getNavesVerses(topicId: number): Promise<VerseRef[]> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('naves_verses')) return [];
+  return new Promise((resolve) => {
+    const idx = db.transaction('naves_verses', 'readonly').objectStore('naves_verses').index('topicId');
+    const req = idx.getAll(IDBKeyRange.only(topicId));
+    req.onsuccess = () =>
+      resolve((req.result || []).map((r: any) => ({ book: r.book, chapter: r.chapter, verse: r.verse })));
+    req.onerror = () => resolve([]);
+  });
+}
+
+/**
+ * Resolve a word to a topic. Used both by the cross-reference links inside a
+ * topic and by the bridge buttons on the other three works, so a name folds
+ * the same way here as it does everywhere else.
+ */
+export async function resolveNavesTopicId(word: string): Promise<number | null> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('naves_names')) return null;
+
+  const folded = singularCandidates(word).flatMap((c) => [c, isbeNorm(c)]);
+  const variants = [...new Set([word.trim().toLowerCase(), isbeNorm(word), ...folded])].filter(Boolean);
+
+  const nameIndex = () =>
+    db.transaction('naves_names', 'readonly').objectStore('naves_names').index('nameLower');
+
+  for (const v of variants) {
+    const id = await new Promise<number | null>((resolve) => {
+      const req = nameIndex().get(IDBKeyRange.only(v));
+      req.onsuccess = () => resolve(req.result ? (req.result as any).topicId : null);
+      req.onerror = () => resolve(null);
+    });
+    if (id != null) return id;
+  }
+
+  // Topics are titled "MAIN, QUALIFIER", so a link pointing at the bare
+  // "COURTS" is after "COURTS, OF LAW". The comma keeps this from wandering
+  // into merely similar names — the same fallback resolveIsbeEntryNames uses,
+  // and it recovers about a hundred of Nave's internal cross-references.
+  for (const v of variants) {
+    const id = await new Promise<number | null>((resolve) => {
+      const req = nameIndex().openCursor(IDBKeyRange.bound(`${v},`, `${v},￿`));
+      req.onsuccess = () => resolve(req.result ? (req.result.value as any).topicId : null);
+      req.onerror = () => resolve(null);
+    });
+    if (id != null) return id;
+  }
+  return null;
+}
+
+/** The display name for a topic id, without loading its outline. */
+export async function getNavesTopicName(topicId: number): Promise<string | null> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('naves_topics')) return null;
+  return new Promise((resolve) => {
+    const req = db.transaction('naves_topics', 'readonly').objectStore('naves_topics').get(topicId);
+    req.onsuccess = () => resolve(req.result ? (req.result as any).primaryName || (req.result as any).title : null);
+    req.onerror = () => resolve(null);
+  });
+}
+
+export async function getNavesLetterCounts(): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('naves_topics')) return out;
+
+  const order = [...LIBRARY_LETTERS, LIBRARY_OTHER];
+  const idx = db.transaction('naves_topics', 'readonly').objectStore('naves_topics').index('primaryNameLower');
+  const counts = await Promise.all(
+    order.map(
+      (letter) =>
+        new Promise<number>((resolve) => {
+          const req = idx.count(letterRange(letter));
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(0);
+        }),
+    ),
+  );
+  // Written in order once every count lands — see getIsbeLetterCounts.
+  order.forEach((letter, i) => {
+    if (counts[i] > 0) out[letter] = counts[i];
+  });
+  return out;
+}
+
+const navesLetterCache = new Map<string, LibraryRow[]>();
+
+export async function getNavesForLetter(letter: string): Promise<LibraryRow[]> {
+  // Handed back as-is, like the encyclopedia's: the only thing that writes to
+  // these rows is badge annotation, which is idempotent, so letting it land in
+  // the cache means revisiting a letter keeps its dots.
+  const cached = navesLetterCache.get(letter);
+  if (cached) return cached;
+
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('naves_topics')) return [];
+
+  const rows = await new Promise<LibraryRow[]>((resolve) => {
+    const idx = db.transaction('naves_topics', 'readonly').objectStore('naves_topics').index('primaryNameLower');
+    const req = idx.getAll(letterRange(letter));
+    req.onsuccess = () =>
+      resolve(
+        (req.result || []).map((r: any) => ({
+          id: r.topicId as number,
+          name: (r.primaryName || r.title || '') as string,
+          sortKey: (r.primaryNameLower || '') as string,
+          isPlace: false,
+          detail: r.refCount ? `${r.refCount} ref${r.refCount === 1 ? '' : 's'}` : undefined,
+        })),
+      );
+    req.onerror = () => resolve([]);
+  });
+
+  rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  navesLetterCache.set(letter, rows);
+  return rows;
+}
+
+export async function getNavesNeighbors(
+  sortKey: string,
+): Promise<{ prev: LibraryRow | null; next: LibraryRow | null }> {
+  const empty = { prev: null, next: null };
+  if (!sortKey) return empty;
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('naves_topics')) return empty;
+
+  const step = (direction: 'next' | 'prev') =>
+    new Promise<LibraryRow | null>((resolve) => {
+      const idx = db.transaction('naves_topics', 'readonly').objectStore('naves_topics').index('primaryNameLower');
+      const range =
+        direction === 'next'
+          ? IDBKeyRange.lowerBound(sortKey, true)
+          : IDBKeyRange.upperBound(sortKey, true);
+      const req = idx.openCursor(range, direction);
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (!cursor) return resolve(null);
+        const r = cursor.value as any;
+        resolve({
+          id: r.topicId,
+          name: r.primaryName || r.title || '',
+          sortKey: r.primaryNameLower || '',
+          isPlace: false,
+        });
+      };
+      req.onerror = () => resolve(null);
+    });
+
+  const [prev, next] = await Promise.all([step('prev'), step('next')]);
+  return { prev, next };
+}
+
+export async function searchNaves(query: string, limit = 60): Promise<LibraryRow[]> {
+  const term = query.toLowerCase().trim();
+  if (term.length < 2) return [];
+
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('naves_names')) return [];
+
+  const ids = await new Promise<number[]>((resolve) => {
+    const idx = db.transaction('naves_names', 'readonly').objectStore('naves_names').index('nameLower');
+    const req = idx.getAll(IDBKeyRange.bound(term, `${term}￿`));
+    req.onsuccess = () => resolve([...new Set((req.result || []).map((r: any) => r.topicId as number))]);
+    req.onerror = () => resolve([]);
+  });
+  if (!ids.length) return [];
+
+  const store = db.transaction('naves_topics', 'readonly').objectStore('naves_topics');
+  const rows = await Promise.all(
+    ids.slice(0, limit * 3).map(
+      (id) =>
+        new Promise<(LibraryRow & { weight: number }) | null>((resolve) => {
+          const req = store.get(id);
+          req.onsuccess = () => {
+            const r = req.result as any;
+            resolve(
+              r
+                ? {
+                    id: r.topicId,
+                    name: r.primaryName || r.title || '',
+                    sortKey: r.primaryNameLower || '',
+                    isPlace: false,
+                    detail: r.refCount ? `${r.refCount} refs` : undefined,
+                    weight: r.refCount ?? 0,
+                  }
+                : null,
+            );
+          };
+          req.onerror = () => resolve(null);
+        }),
+    ),
+  );
+
+  return rows
+    .filter((r): r is LibraryRow & { weight: number } => !!r)
+    // Exact hit first, then the topics with most to say on it.
+    .sort(
+      (a, b) =>
+        Number(b.sortKey === term) - Number(a.sortKey === term) ||
+        b.weight - a.weight ||
+        a.sortKey.localeCompare(b.sortKey),
+    )
+    .slice(0, limit)
+    .map(({ weight: _weight, ...row }) => row);
+}
+
+/** Topics citing a verse in this chapter — the "in this chapter" button. */
+export async function getNavesInChapter(book: string, chapter: number): Promise<LibraryRow[]> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('naves_verses')) return [];
+
+  const ids = await new Promise<number[]>((resolve) => {
+    const idx = db.transaction('naves_verses', 'readonly').objectStore('naves_verses').index('book_chapter_verse');
+    const req = idx.getAll(IDBKeyRange.bound([book, chapter], [book, chapter, []]));
+    req.onsuccess = () => resolve([...new Set((req.result || []).map((r: any) => r.topicId as number))]);
+    req.onerror = () => resolve([]);
+  });
+  if (!ids.length) return [];
+
+  const store = db.transaction('naves_topics', 'readonly').objectStore('naves_topics');
+  const rows = await Promise.all(
+    ids.map(
+      (id) =>
+        new Promise<LibraryRow | null>((resolve) => {
+          const req = store.get(id);
+          req.onsuccess = () => {
+            const r = req.result as any;
+            resolve(
+              r
+                ? {
+                    id: r.topicId,
+                    name: r.primaryName || r.title || '',
+                    sortKey: r.primaryNameLower || '',
+                    isPlace: false,
+                    detail: r.refCount ? `${r.refCount} refs` : undefined,
+                  }
+                : null,
+            );
+          };
+          req.onerror = () => resolve(null);
+        }),
+    ),
+  );
+
+  return rows
+    .filter((r): r is LibraryRow => !!r)
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 }
 
 /* ------------------------------------------------------------------ *

@@ -2,6 +2,7 @@
   import BibleReader from "./components/BibleReader.svelte";
   import LexicalModal from "./components/LexicalModal.svelte";
   import IsbeModal from "./components/IsbeModal.svelte";
+  import NavesModal from "./components/NavesModal.svelte";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
@@ -283,6 +284,7 @@
 
     <!-- Shared ISBE encyclopedia / place modal -->
     <IsbeModal />
+    <NavesModal />
 
     <!-- Shared Reading Plan Modal -->
     <ReadingPlanModal bind:isOpen={showReadingPlanModal} />

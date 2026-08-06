@@ -331,6 +331,7 @@
                 {#if shows("place") && row.isPlace}<span class="emoji" title="Place">📍</span>{/if}
                 {#if shows("bio") && row.hasBio}<span class="emoji" title="Has a bio">👤</span>{/if}
                 {#if shows("entry") && row.hasEntry}<span class="emoji" title="In the encyclopedia">📕</span>{/if}
+                {#if shows("topic") && row.hasTopic}<span class="emoji" title="A topic in Nave's">📚</span>{/if}
                 {#if shows("dict") && row.hasDict}<span class="emoji" title="In the dictionary">📖</span>{/if}
               </span>
             </button>
