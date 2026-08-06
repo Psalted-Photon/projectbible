@@ -1,13 +1,15 @@
 <script lang="ts">
+  import { get } from "svelte/store";
   import { windowStore } from "../lib/stores/windowStore";
   import { navigationStore } from "../stores/navigationStore";
+  import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import { localDateStr } from '../stores/clockStore';
 
   export let windowId: string;
 
   let searchQuery = "";
 
-  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art') {
+  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'isbe' | 'commentaries' | 'journal' | 'art') {
     // Set initial content state based on type
     let contentState = {};
     
@@ -43,6 +45,13 @@
       contentState = {
         view: 'browse',
       };
+    } else if (contentType === 'isbe') {
+      // Reopen on the last article read, the way a ribbon holds your place.
+      // Nothing read yet means no entry id, and the window opens on contents.
+      const last = get(libraryPrefsStore).isbe.lastRead;
+      contentState = last
+        ? { kind: 'entry', entryId: Number(last.id), placeId: null, primaryName: last.name }
+        : {};
     }
 
     windowStore.setWindowContent(windowId, contentType, contentState);
@@ -91,9 +100,9 @@
       <span class="label">Journal</span>
     </button>
     
-    <button class="content-button wordstudy" on:click={() => handleContentSelect('wordstudy')}>
+    <button class="content-button encyclopedia" on:click={() => handleContentSelect('isbe')}>
       <span class="icon emoji">📚</span>
-      <span class="label">Word Study</span>
+      <span class="label">Encyclopedia</span>
     </button>
 
     <button class="content-button art" on:click={() => handleContentSelect('art')}>

@@ -1208,6 +1208,346 @@ export async function getIsbePlaceNames(placeId: string): Promise<string[]> {
   });
 }
 
+/* ------------------------------------------------------------------ *
+ * Library browsing
+ *
+ * The lookups above all start from a word you tapped. These start from
+ * nothing: they walk the encyclopedia alphabetically so it can be read as a
+ * book — a contents list per letter, the entry either side of the one you're
+ * on, and a check of which other packs cover the same name.
+ *
+ * All of it rides on the `primaryNameLower` index, which the pack has always
+ * carried and nothing has used until now, so there is no pack change here.
+ * ------------------------------------------------------------------ */
+
+/** One row in a contents list. Slim on purpose — a letter can be 1,000 rows. */
+export interface LibraryRow {
+  id: number;
+  name: string;
+  /** The indexed lowercase name. Sorts the list and anchors prev/next. */
+  sortKey: string;
+  isPlace: boolean;
+  /** Filled in by annotateLibraryBadges, once the row is on screen. */
+  hasBio?: boolean;
+  hasDict?: boolean;
+}
+
+export const LIBRARY_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+/** Anything not filing under A–Z — numerals, and the handful of odd titles. */
+export const LIBRARY_OTHER = '#';
+
+/** The key range covering one letter, or everything before 'a' for the # bucket. */
+function letterRange(letter: string): IDBKeyRange {
+  if (letter === LIBRARY_OTHER) return IDBKeyRange.upperBound('a', true);
+  const lo = letter.toLowerCase();
+  return IDBKeyRange.bound(lo, `${lo}￿`);
+}
+
+// A letter's rows, kept once fetched. The whole encyclopedia held this way is
+// ~9,400 slim objects, so there is nothing to evict.
+const letterCache = new Map<string, LibraryRow[]>();
+
+/**
+ * How many entries file under each letter, for the rail. Counts run against the
+ * index directly, so no article body is read to draw it.
+ */
+export async function getIsbeLetterCounts(): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_entries')) return out;
+
+  const order = [...LIBRARY_LETTERS, LIBRARY_OTHER];
+  const tx = db.transaction('isbe_entries', 'readonly');
+  const idx = tx.objectStore('isbe_entries').index('primaryNameLower');
+  const counts = await Promise.all(
+    order.map(
+      (letter) =>
+        new Promise<number>((resolve) => {
+          const req = idx.count(letterRange(letter));
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(0);
+        }),
+    ),
+  );
+
+  // Written in alphabetical order once every count is in. The requests finish
+  // out of order, so assigning as they land would leave the rail's "next
+  // letter" walking the alphabet at random.
+  order.forEach((letter, i) => {
+    if (counts[i] > 0) out[letter] = counts[i];
+  });
+  return out;
+}
+
+/**
+ * Every entry filing under one letter, in alphabetical order.
+ *
+ * This pulls whole records, article bodies included — the biggest letter is
+ * about 2.7 MB, which is one quick read — and immediately keeps only the few
+ * fields a list row needs, so the bodies are collectable straight after.
+ */
+export async function getIsbeEntriesForLetter(letter: string): Promise<LibraryRow[]> {
+  const cached = letterCache.get(letter);
+  if (cached) return cached;
+
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_entries')) return [];
+
+  const rows = await new Promise<LibraryRow[]>((resolve) => {
+    const idx = db
+      .transaction('isbe_entries', 'readonly')
+      .objectStore('isbe_entries')
+      .index('primaryNameLower');
+    const req = idx.getAll(letterRange(letter));
+    req.onsuccess = () =>
+      resolve(
+        (req.result || []).map((r: any) => ({
+          id: r.entryId as number,
+          name: (r.primaryName || r.title || '') as string,
+          sortKey: (r.primaryNameLower || '') as string,
+          isPlace: !!r.isPlace,
+        })),
+      );
+    req.onerror = () => resolve([]);
+  });
+
+  // getAll follows index order already; sort defensively so a row that somehow
+  // lacks the indexed key can't land in the middle of the list.
+  rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  letterCache.set(letter, rows);
+  return rows;
+}
+
+/** Which letter a name files under, for opening the contents at the right place. */
+export function libraryLetterOf(sortKey: string): string {
+  const first = (sortKey || '').charAt(0).toUpperCase();
+  return LIBRARY_LETTERS.includes(first) ? first : LIBRARY_OTHER;
+}
+
+/**
+ * The entries either side of this one alphabetically — the footer arrows.
+ * Walks the index by key alone, so stepping to a neighbour costs one cursor
+ * hop plus one record read, not a scan.
+ */
+export async function getIsbeNeighbors(
+  sortKey: string,
+): Promise<{ prev: LibraryRow | null; next: LibraryRow | null }> {
+  const empty = { prev: null, next: null };
+  if (!sortKey) return empty;
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_entries')) return empty;
+
+  const step = (direction: 'next' | 'prev') =>
+    new Promise<LibraryRow | null>((resolve) => {
+      const store = db.transaction('isbe_entries', 'readonly').objectStore('isbe_entries');
+      const idx = store.index('primaryNameLower');
+      // Open past the current key so entries sharing a name are stepped over as
+      // one, rather than the arrow appearing to do nothing.
+      const range =
+        direction === 'next'
+          ? IDBKeyRange.lowerBound(sortKey, true)
+          : IDBKeyRange.upperBound(sortKey, true);
+      const req = idx.openCursor(range, direction);
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (!cursor) return resolve(null);
+        const r = cursor.value as any;
+        resolve({
+          id: r.entryId,
+          name: r.primaryName || r.title || '',
+          sortKey: r.primaryNameLower || '',
+          isPlace: !!r.isPlace,
+        });
+      };
+      req.onerror = () => resolve(null);
+    });
+
+  const [prev, next] = await Promise.all([step('prev'), step('next')]);
+  return { prev, next };
+}
+
+/**
+ * Mark which rows also have a person bio or a dictionary definition.
+ *
+ * Done a letter at a time rather than a row at a time: one bounded read per
+ * pack gives every name in that letter, and the rows are then matched against
+ * those sets in memory. A pack that isn't installed simply contributes nothing,
+ * which is what makes its dots disappear rather than error.
+ */
+export async function annotateLibraryBadges(rows: LibraryRow[], letter: string): Promise<LibraryRow[]> {
+  if (!rows.length) return rows;
+  const db = await openDB();
+  const range = letterRange(letter);
+
+  const bioNames = new Set<string>();
+  if (db.objectStoreNames.contains('person_names')) {
+    await new Promise<void>((resolve) => {
+      const idx = db.transaction('person_names', 'readonly').objectStore('person_names').index('nameLower');
+      const req = idx.getAll(range);
+      req.onsuccess = () => {
+        for (const r of req.result || []) bioNames.add((r as any).nameLower);
+        resolve();
+      };
+      req.onerror = () => resolve();
+    });
+  }
+
+  const dictWords = new Set<string>();
+  if (db.objectStoreNames.contains('word_mapping')) {
+    await new Promise<void>((resolve) => {
+      // Keyed on the lemma itself, so the keys alone answer this — no records read.
+      const req = db.transaction('word_mapping', 'readonly').objectStore('word_mapping').getAllKeys(range);
+      req.onsuccess = () => {
+        for (const k of req.result || []) dictWords.add(String(k));
+        resolve();
+      };
+      req.onerror = () => resolve();
+    });
+  }
+
+  // The dictionary files single words, so an article titled "Abomination, Birds
+  // Of" is tested on "abomination" — the same first-word rule the article's own
+  // Dictionary button uses.
+  const firstWord = (s: string) => s.split(/[;,(]/)[0].trim().split(/\s+/)[0].toLowerCase();
+
+  for (const row of rows) {
+    row.hasBio = bioNames.has(row.sortKey);
+    row.hasDict = dictWords.has(row.sortKey) || dictWords.has(firstWord(row.name));
+  }
+  return rows;
+}
+
+/**
+ * Contents filtered to what turns up in one chapter — the "in this chapter"
+ * button. Reads the place-verse index for the chapter, then maps those places
+ * back to their articles.
+ */
+export async function getIsbeEntriesInChapter(book: string, chapter: number): Promise<LibraryRow[]> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_place_verses') || !db.objectStoreNames.contains('isbe_places')) {
+    return [];
+  }
+
+  const placeIds = await new Promise<string[]>((resolve) => {
+    const idx = db
+      .transaction('isbe_place_verses', 'readonly')
+      .objectStore('isbe_place_verses')
+      .index('book_chapter_verse');
+    // An array sorts after any number, so this upper bound catches every verse
+    // in the chapter without needing to know how many there are.
+    const req = idx.getAll(IDBKeyRange.bound([book, chapter], [book, chapter, []]));
+    req.onsuccess = () => resolve([...new Set((req.result || []).map((r: any) => r.placeId))]);
+    req.onerror = () => resolve([]);
+  });
+  if (!placeIds.length) return [];
+
+  const placeStore = db.transaction('isbe_places', 'readonly').objectStore('isbe_places');
+  const entryIds = await Promise.all(
+    placeIds.map(
+      (id) =>
+        new Promise<number | null>((resolve) => {
+          const req = placeStore.get(id);
+          req.onsuccess = () => resolve((req.result as any)?.entryId ?? null);
+          req.onerror = () => resolve(null);
+        }),
+    ),
+  );
+
+  const wanted = [...new Set(entryIds.filter((id): id is number => id != null))];
+  if (!wanted.length) return [];
+
+  const entryStore = db.transaction('isbe_entries', 'readonly').objectStore('isbe_entries');
+  const rows = await Promise.all(
+    wanted.map(
+      (id) =>
+        new Promise<LibraryRow | null>((resolve) => {
+          const req = entryStore.get(id);
+          req.onsuccess = () => {
+            const r = req.result as any;
+            resolve(
+              r
+                ? {
+                    id: r.entryId,
+                    name: r.primaryName || r.title || '',
+                    sortKey: r.primaryNameLower || '',
+                    isPlace: !!r.isPlace,
+                  }
+                : null,
+            );
+          };
+          req.onerror = () => resolve(null);
+        }),
+    ),
+  );
+
+  return rows
+    .filter((r): r is LibraryRow => !!r)
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+}
+
+/**
+ * Title search over the encyclopedia alone, for the library's own search bar.
+ * Prefix-matched against the name index so alternate spellings find the article
+ * too, then deduped to one row per entry.
+ */
+export async function searchIsbeEntries(query: string, limit = 60): Promise<LibraryRow[]> {
+  const term = query.toLowerCase().trim();
+  if (term.length < 2) return [];
+
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('isbe_entry_names')) return [];
+
+  const ids = await new Promise<number[]>((resolve) => {
+    const idx = db
+      .transaction('isbe_entry_names', 'readonly')
+      .objectStore('isbe_entry_names')
+      .index('nameLower');
+    const req = idx.getAll(IDBKeyRange.bound(term, `${term}￿`));
+    req.onsuccess = () => resolve([...new Set((req.result || []).map((r: any) => r.entryId as number))]);
+    req.onerror = () => resolve([]);
+  });
+  if (!ids.length) return [];
+
+  const entryStore = db.transaction('isbe_entries', 'readonly').objectStore('isbe_entries');
+  const rows = await Promise.all(
+    ids.slice(0, limit * 3).map(
+      (id) =>
+        new Promise<(LibraryRow & { weight: number }) | null>((resolve) => {
+          const req = entryStore.get(id);
+          req.onsuccess = () => {
+            const r = req.result as any;
+            resolve(
+              r
+                ? {
+                    id: r.entryId,
+                    name: r.primaryName || r.title || '',
+                    sortKey: r.primaryNameLower || '',
+                    isPlace: !!r.isPlace,
+                    weight: r.charCount ?? 0,
+                  }
+                : null,
+            );
+          };
+          req.onerror = () => resolve(null);
+        }),
+    ),
+  );
+
+  return rows
+    .filter((r): r is LibraryRow & { weight: number } => !!r)
+    // An exact hit first, then the fuller articles — the same ranking the main
+    // search uses, minus its places-always-win rule, which reads oddly in a list
+    // you asked to be alphabetical elsewhere.
+    .sort(
+      (a, b) =>
+        Number(b.sortKey === term) - Number(a.sortKey === term) ||
+        b.weight - a.weight ||
+        a.sortKey.localeCompare(b.sortKey),
+    )
+    .slice(0, limit)
+    .map(({ weight: _weight, ...row }) => row);
+}
+
 /**
  * Get morphology data for a specific verse
  */

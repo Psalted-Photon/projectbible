@@ -19,10 +19,16 @@
     getIsbeEntryByName,
     resolveIsbeEntryNames,
     lookupEnglishWord,
+    getIsbeNeighbors,
+    libraryLetterOf,
     type IsbeEntryRecord,
     type IsbePlaceRecord,
     type VerseRef,
+    type LibraryRow,
   } from "../adapters/lexicon-lookup.js";
+  import IndexList from "./library/IndexList.svelte";
+  import { isbeSource } from "../lib/library/source";
+  import { libraryPrefsStore } from "../stores/libraryPrefsStore";
 
   // The encyclopedia article itself, independent of what is holding it. Two
   // hosts: IsbeModal, a centered card over the reader; and a docked window,
@@ -41,6 +47,8 @@
   export let initialExpandedBooks: string[] = [];
   export let initialVisited: string[] = [];
   export let initialScrollTop = 0;
+  /** Articles walked through to reach this one, oldest first — the back trail. */
+  export let initialTrail: TrailStop[] = [];
 
   /** Set when docked: the id of the window hosting this article. */
   export let windowId: string | null = null;
@@ -56,12 +64,25 @@
     expandedBooks: string[];
     visited: string[];
     scrollTop: number;
+    trail: TrailStop[];
   };
+
+  /** One step of the back trail: enough to reopen that article exactly. */
+  type TrailStop = { entryId: number | null; placeId: string | null; name: string };
 
   $: docked = !!windowId;
 
   type Tab = IsbeTab;
   let activeTab: Tab = "overview";
+
+  // --- Contents ----------------------------------------------------------
+  // The article and the contents list share this component: the header's ☰
+  // swaps between them, so both the popup and a pinned window can browse.
+  // Opened with nothing to show — the Encyclopedia tile does exactly that —
+  // the contents are what you land on.
+  let showContents = entryId == null && placeId == null;
+  let trail: TrailStop[] = [...initialTrail];
+  let neighbors: { prev: LibraryRow | null; next: LibraryRow | null } = { prev: null, next: null };
 
   let entry: IsbeEntryRecord | null = null;
   let place: IsbePlaceRecord | null = null;
@@ -115,6 +136,7 @@
     visitedRefs = new Set();
     articleHtml = "";
     dictCheckedFor = "";
+    rememberedId = null;
     destroyMap();
 
     if (placeId) {
@@ -169,8 +191,89 @@
       expanded,
       expandedBooks: [...expandedBooks],
       visited: [...visitedRefs],
+      trail,
     });
   }
+
+  // --- Walking the shelf -------------------------------------------------
+  // The entry either side of this one alphabetically, for the footer arrows.
+  // Recomputed whenever the article changes; the lookup is two index hops, so
+  // it can just follow the article rather than being prefetched.
+  $: {
+    const key = (entry?.primaryName || "").toLowerCase();
+    if (key) loadNeighbors(key);
+    else neighbors = { prev: null, next: null };
+  }
+
+  async function loadNeighbors(sortKey: string) {
+    const found = await getIsbeNeighbors(sortKey);
+    // Guard against a slower lookup landing after you've moved on.
+    if ((entry?.primaryName || "").toLowerCase() === sortKey) neighbors = found;
+  }
+
+  /** Remember what was opened, so the contents can offer it back later. */
+  let rememberedId: number | null = null;
+
+  function rememberRead() {
+    const id = entry?.entryId ?? place?.entryId ?? null;
+    const name = title;
+    // Once per article. The reactive pass below re-runs on any invalidation,
+    // and recents are a history of what you opened, not of how often Svelte
+    // recomputed it.
+    if (id == null || !name || id === rememberedId) return;
+    rememberedId = id;
+    libraryPrefsStore.markRead("isbe", { id, name, sortKey: name.toLowerCase() });
+  }
+
+  $: if (!loading && (entry || place)) rememberRead();
+
+  /** Open an article from the contents or an arrow — a fresh start, no trail. */
+  function jumpToEntry(id: number, name: string) {
+    trail = [];
+    showContents = false;
+    openEntryTarget(id, name);
+  }
+
+  function openFromContents(row: LibraryRow) {
+    jumpToEntry(row.id, row.name);
+  }
+
+  /** Step back to an article you came through. */
+  function popTrailTo(index: number) {
+    const stop = trail[index];
+    if (!stop) return;
+    trail = trail.slice(0, index);
+    showContents = false;
+    if (windowId) {
+      windowStore.updateContentState(windowId, {
+        kind: stop.placeId ? "place" : "entry",
+        entryId: stop.entryId,
+        placeId: stop.placeId,
+        primaryName: stop.name,
+        tab: null,
+        expanded: {},
+        expandedBooks: [],
+        visited: [],
+        trail,
+      });
+    } else if (stop.placeId) {
+      isbeModalStore.open({
+        kind: "place",
+        entryId: stop.entryId,
+        placeId: stop.placeId,
+        primaryName: stop.name,
+      });
+    } else if (stop.entryId != null) {
+      isbeModalStore.openEntry(stop.entryId, stop.name);
+    }
+  }
+
+  function toggleContents() {
+    showContents = !showContents;
+  }
+
+  /** Which letter the contents should open on — the one you're reading. */
+  $: contentsLetter = title ? libraryLetterOf(title.toLowerCase()) : null;
 
   // --- Dictionary bridge -------------------------------------------------
   // Offer a jump to the plain dictionary for this term, but only when the
@@ -412,10 +515,23 @@
         expanded: {},
         expandedBooks: [],
         visited: [],
+        trail,
       });
     } else {
       isbeModalStore.openEntry(id, name);
     }
+  }
+
+  /** Follow a cross-reference, leaving the current article on the trail so the
+   *  way back out is one tap per step rather than a fresh search. */
+  function followCrossRef(id: number, name: string) {
+    if (entry || place) {
+      trail = [
+        ...trail,
+        { entryId: entry?.entryId ?? null, placeId: place?.placeId ?? null, name: title },
+      ];
+    }
+    openEntryTarget(id, name);
   }
 
   // Clicks inside the article body: scripture refs navigate, internal ISBE refs
@@ -445,7 +561,7 @@
     const target = a.getAttribute("data-entry");
     if (target) {
       const next = await getIsbeEntryByName(target);
-      if (next) openEntryTarget(next.entryId, next.primaryName);
+      if (next) followCrossRef(next.entryId, next.primaryName);
     }
   }
 
@@ -762,18 +878,32 @@
       expandedBooks: [...expandedBooks],
       visited: [...visitedRefs],
       scrollTop: bodyEl?.scrollTop ?? 0,
+      trail,
     });
   }
 </script>
 
 <div class="isbe-content" class:docked>
   <div class="isbe-header">
+    <button
+      class="contents-btn"
+      class:on={showContents}
+      on:click={toggleContents}
+      title={showContents ? "Back to the article" : "Contents"}
+      aria-label={showContents ? "Back to the article" : "Contents"}
+    >
+      ☰
+    </button>
     <div class="head-text">
-      <h2>{title}</h2>
-      {#if !loading}<div class="sub">{subtitle()}</div>{/if}
+      <h2>{showContents ? isbeSource.label : title}</h2>
+      {#if showContents}
+        <div class="sub">International Standard Bible Encyclopedia</div>
+      {:else if !loading}
+        <div class="sub">{subtitle()}</div>
+      {/if}
     </div>
     <div class="head-actions">
-      {#if hasDictionary}
+      {#if hasDictionary && !showContents}
         <button class="bridge-btn" on:click={openDictionary}>Dictionary</button>
       {/if}
       {#if onPopOut}
@@ -800,7 +930,20 @@
     </div>
   </div>
 
-  <div class="tabs">
+  {#if showContents}
+    <IndexList source={isbeSource} onOpen={openFromContents} initialLetter={contentsLetter} />
+  {:else}
+    {#if trail.length}
+      <nav class="trail" aria-label="Back trail">
+        {#each trail as stop, i}
+          <button class="crumb" on:click={() => popTrailTo(i)}>{stop.name}</button>
+          <span class="crumb-sep">›</span>
+        {/each}
+        <span class="crumb here">{title}</span>
+      </nav>
+    {/if}
+
+    <div class="tabs">
     <button class:active={activeTab === "overview"} on:click={() => selectTab("overview")}>Overview</button>
     {#if hasArticle}
       <button class:active={activeTab === "article"} on:click={() => selectTab("article")}>Article</button>
@@ -929,9 +1072,30 @@
         {/if}
       </div>
     {/if}
-  </div>
+    </div>
+  {/if}
 
   <div class="isbe-footer">
+    {#if !showContents && (neighbors.prev || neighbors.next)}
+      <!-- The page-turn. Deliberately quiet: it's for drifting one entry over,
+           not a main way around. -->
+      <div class="turn">
+        {#if neighbors.prev}
+          {@const prev = neighbors.prev}
+          <button class="turn-btn" on:click={() => jumpToEntry(prev.id, prev.name)} title="Previous entry">
+            ← <span class="turn-name">{prev.name}</span>
+          </button>
+        {:else}
+          <span></span>
+        {/if}
+        {#if neighbors.next}
+          {@const next = neighbors.next}
+          <button class="turn-btn next" on:click={() => jumpToEntry(next.id, next.name)} title="Next entry">
+            <span class="turn-name">{next.name}</span> →
+          </button>
+        {/if}
+      </div>
+    {/if}
     <span class="src">International Standard Bible Encyclopedia (1915, public domain) · place data © OpenBible.info CC BY 4.0</span>
   </div>
 </div>
@@ -960,10 +1124,18 @@
     border-bottom: 1px solid var(--border-color, #333);
     flex-shrink: 0;
   }
+  /* Takes the slack between the ☰ and the action buttons, and is allowed to
+     shrink — a long article title must not push the close button off a narrow
+     docked window. */
+  .head-text {
+    flex: 1;
+    min-width: 0;
+  }
   .head-text h2 {
     margin: 0;
     font-size: 20px;
     line-height: 1.15;
+    overflow-wrap: anywhere;
   }
   .head-text .sub {
     margin-top: 4px;
@@ -1271,5 +1443,93 @@
   .src {
     font-size: 10px;
     color: var(--text-muted, #888);
+  }
+
+  /* Contents toggle — sits ahead of the title, so ☰ and the name read as one
+     row the way a book's running head does. */
+  .contents-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #999);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 3px 6px 3px 0;
+    flex-shrink: 0;
+  }
+  .contents-btn:hover,
+  .contents-btn.on {
+    color: var(--color-primary, #4a90e2);
+  }
+
+  /* Back trail — one row, scrolling sideways rather than wrapping, so following
+     cross-references deep never pushes the article itself down the page. */
+  .trail {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 18px 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  .trail::-webkit-scrollbar {
+    display: none;
+  }
+  .crumb {
+    background: none;
+    border: none;
+    color: var(--color-primary, #4a90e2);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 0;
+    cursor: pointer;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .crumb.here {
+    color: var(--text-muted, #999);
+    cursor: default;
+  }
+  .crumb-sep {
+    color: var(--text-muted, #666);
+    font-size: 11px;
+  }
+
+  .turn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .turn-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    color: var(--text-muted, #999);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 0;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .turn-btn:hover {
+    color: var(--color-primary, #4a90e2);
+  }
+  .turn-btn.next {
+    justify-content: flex-end;
+    text-align: right;
+  }
+  .turn-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 12ch;
   }
 </style>

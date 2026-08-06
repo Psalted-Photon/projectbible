@@ -44,6 +44,7 @@
     initialExpandedBooks={panel.contentState?.expandedBooks ?? []}
     initialVisited={panel.contentState?.visited ?? []}
     initialScrollTop={panel.contentState?.scrollTop ?? 0}
+    initialTrail={panel.contentState?.trail ?? []}
   />
 {:else if panel.contentType === 'notes'}
   <NotesPane windowId={panel.id} contentState={panel.contentState} edge={panel.edge} />

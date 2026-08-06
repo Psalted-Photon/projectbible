@@ -33,6 +33,8 @@ export interface WindowState {
     expandedBooks?: string[];
     visited?: string[];
     scrollTop?: number;
+    /** Articles walked through to get here, for the back trail. */
+    trail?: { entryId: number | null; placeId: string | null; name: string }[];
     // For other content types
     [key: string]: any;
   };

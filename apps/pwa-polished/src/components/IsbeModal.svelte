@@ -48,6 +48,7 @@
     expandedBooks: string[];
     visited: string[];
     scrollTop: number;
+    trail: { entryId: number | null; placeId: string | null; name: string }[];
   }) {
     const edge =
       globalThis.window.innerHeight > globalThis.window.innerWidth ? "bottom" : "right";
@@ -64,6 +65,7 @@
       expandedBooks: snap.expandedBooks,
       visited: snap.visited,
       scrollTop: snap.scrollTop,
+      trail: snap.trail,
     });
     isbeModalStore.close();
   }
