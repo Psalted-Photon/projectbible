@@ -331,7 +331,7 @@
         ☰
       </button>
       <div class="head-text">
-        <h2>{title}</h2>
+        <h2>{showContents ? peopleSource.label : title}</h2>
         <div class="sub">
           {#if showContents}
             {peopleSource.subtitle}
