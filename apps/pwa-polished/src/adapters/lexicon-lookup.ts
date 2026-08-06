@@ -582,6 +582,22 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
  * Biblical character (people) lookup
  * ------------------------------------------------------------------ */
 
+/**
+ * A named relative. The pack writes these as `{ name, slug }`, where the slug
+ * IS the other person's id — so a family tree is walkable. `id` is kept for
+ * callers that were written against the older shape.
+ */
+export interface PersonRelation {
+  slug?: string;
+  id?: string;
+  name: string;
+}
+
+/** The other person's id, whichever key this row happens to carry it under. */
+export function relationId(rel: PersonRelation | null | undefined): string | null {
+  return rel?.slug ?? rel?.id ?? null;
+}
+
 export interface PersonRecord {
   id: string;
   name: string;
@@ -594,11 +610,11 @@ export interface PersonRecord {
   birthPlace?: { name: string; slug?: string; lat?: number | null; lon?: number | null } | null;
   deathPlace?: { name: string; slug?: string; lat?: number | null; lon?: number | null } | null;
   memberOf?: string[];
-  father?: { id: string; name: string }[];
-  mother?: { id: string; name: string }[];
-  partners?: { id: string; name: string }[];
-  children?: { id: string; name: string }[];
-  siblings?: { id: string; name: string }[];
+  father?: PersonRelation[];
+  mother?: PersonRelation[];
+  partners?: PersonRelation[];
+  children?: PersonRelation[];
+  siblings?: PersonRelation[];
   dictText?: string;
   dictLink?: string;
   verseCount?: number;
@@ -1222,14 +1238,18 @@ export async function getIsbePlaceNames(placeId: string): Promise<string[]> {
 
 /** One row in a contents list. Slim on purpose — a letter can be 1,000 rows. */
 export interface LibraryRow {
-  id: number;
+  /** Number for encyclopedia entries, string for people ("moses_2108"). */
+  id: number | string;
   name: string;
   /** The indexed lowercase name. Sorts the list and anchors prev/next. */
   sortKey: string;
   isPlace: boolean;
+  /** A line of context under the name, where the source has one to give. */
+  detail?: string;
   /** Filled in by annotateLibraryBadges, once the row is on screen. */
   hasBio?: boolean;
   hasDict?: boolean;
+  hasEntry?: boolean;
 }
 
 export const LIBRARY_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -1379,40 +1399,42 @@ export async function annotateLibraryBadges(rows: LibraryRow[], letter: string):
   const db = await openDB();
   const range = letterRange(letter);
 
-  const bioNames = new Set<string>();
-  if (db.objectStoreNames.contains('person_names')) {
-    await new Promise<void>((resolve) => {
-      const idx = db.transaction('person_names', 'readonly').objectStore('person_names').index('nameLower');
+  /** Every name in this letter from one name index, as a set to test against. */
+  const namesFrom = (store: string, index: string, field: string) =>
+    new Promise<Set<string>>((resolve) => {
+      if (!db.objectStoreNames.contains(store)) return resolve(new Set());
+      const idx = db.transaction(store, 'readonly').objectStore(store).index(index);
       const req = idx.getAll(range);
-      req.onsuccess = () => {
-        for (const r of req.result || []) bioNames.add((r as any).nameLower);
-        resolve();
-      };
-      req.onerror = () => resolve();
+      req.onsuccess = () => resolve(new Set((req.result || []).map((r: any) => r[field])));
+      req.onerror = () => resolve(new Set());
     });
-  }
 
-  const dictWords = new Set<string>();
-  if (db.objectStoreNames.contains('word_mapping')) {
-    await new Promise<void>((resolve) => {
+  const dictWordsFrom = () =>
+    new Promise<Set<string>>((resolve) => {
+      if (!db.objectStoreNames.contains('word_mapping')) return resolve(new Set());
       // Keyed on the lemma itself, so the keys alone answer this — no records read.
       const req = db.transaction('word_mapping', 'readonly').objectStore('word_mapping').getAllKeys(range);
-      req.onsuccess = () => {
-        for (const k of req.result || []) dictWords.add(String(k));
-        resolve();
-      };
-      req.onerror = () => resolve();
+      req.onsuccess = () => resolve(new Set((req.result || []).map((k) => String(k))));
+      req.onerror = () => resolve(new Set());
     });
-  }
+
+  const [bioNames, entryNames, dictWords] = await Promise.all([
+    namesFrom('person_names', 'nameLower', 'nameLower'),
+    namesFrom('isbe_entry_names', 'nameLower', 'nameLower'),
+    dictWordsFrom(),
+  ]);
 
   // The dictionary files single words, so an article titled "Abomination, Birds
   // Of" is tested on "abomination" — the same first-word rule the article's own
-  // Dictionary button uses.
+  // Dictionary button uses. Encyclopedia titles get the same treatment, since a
+  // person named "Mary, mother of Jesus" has an article filed under "Mary".
   const firstWord = (s: string) => s.split(/[;,(]/)[0].trim().split(/\s+/)[0].toLowerCase();
 
   for (const row of rows) {
-    row.hasBio = bioNames.has(row.sortKey);
-    row.hasDict = dictWords.has(row.sortKey) || dictWords.has(firstWord(row.name));
+    const head = firstWord(row.name);
+    row.hasBio = bioNames.has(row.sortKey) || bioNames.has(head);
+    row.hasEntry = entryNames.has(row.sortKey) || entryNames.has(head);
+    row.hasDict = dictWords.has(row.sortKey) || dictWords.has(head);
   }
   return rows;
 }
@@ -1546,6 +1568,133 @@ export async function searchIsbeEntries(query: string, limit = 60): Promise<Libr
     )
     .slice(0, limit)
     .map(({ weight: _weight, ...row }) => row);
+}
+
+/* ------------------------------------------------------------------ *
+ * People browsing
+ *
+ * The bio pack is the master list of people: 3,067 names, which is small
+ * enough to hold whole. So rather than the per-letter index reads the
+ * encyclopedia needs, the roster is read once and then sliced in memory —
+ * letters, neighbours and search all come off the same sorted array.
+ * ------------------------------------------------------------------ */
+
+let peopleRoster: LibraryRow[] | null = null;
+let peopleRosterLoading: Promise<LibraryRow[]> | null = null;
+
+/** Every person, sorted by name. Read once per session. */
+async function getPeopleRoster(): Promise<LibraryRow[]> {
+  if (peopleRoster) return peopleRoster;
+  // Several callers can ask at once on first open; they share the one read.
+  if (peopleRosterLoading) return peopleRosterLoading;
+
+  peopleRosterLoading = (async () => {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains('people')) return [];
+    const rows = await new Promise<LibraryRow[]>((resolve) => {
+      const req = db.transaction('people', 'readonly').objectStore('people').getAll();
+      req.onsuccess = () =>
+        resolve(
+          (req.result || []).map((r: any) => ({
+            id: r.id as string,
+            // The title disambiguates the twelve Marys; the bare name is what
+            // files it alphabetically, so the two are kept apart.
+            name: (r.displayTitle || r.name || '') as string,
+            sortKey: ((r.name || r.displayTitle || '') as string).toLowerCase(),
+            isPlace: false,
+            detail: r.nameMeaning ? `“${r.nameMeaning}”` : undefined,
+          })),
+        );
+      req.onerror = () => resolve([]);
+    });
+    rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey) || a.name.localeCompare(b.name));
+    peopleRoster = rows;
+    return rows;
+  })();
+
+  const result = await peopleRosterLoading;
+  peopleRosterLoading = null;
+  return result;
+}
+
+export async function getPeopleLetterCounts(): Promise<Record<string, number>> {
+  const roster = await getPeopleRoster();
+  const out: Record<string, number> = {};
+  for (const letter of [...LIBRARY_LETTERS, LIBRARY_OTHER]) {
+    const n = roster.filter((r) => libraryLetterOf(r.sortKey) === letter).length;
+    if (n > 0) out[letter] = n;
+  }
+  return out;
+}
+
+export async function getPeopleForLetter(letter: string): Promise<LibraryRow[]> {
+  const roster = await getPeopleRoster();
+  // Copies, so badge annotation can't write flags back onto the shared roster.
+  return roster.filter((r) => libraryLetterOf(r.sortKey) === letter).map((r) => ({ ...r }));
+}
+
+export async function getPeopleNeighbors(
+  sortKey: string,
+  id: string,
+): Promise<{ prev: LibraryRow | null; next: LibraryRow | null }> {
+  const roster = await getPeopleRoster();
+  // Names repeat constantly here, so the id is what pins the position — going
+  // by name alone would make "next" skip every other Zechariah at once.
+  let i = roster.findIndex((r) => String(r.id) === id);
+  if (i < 0) i = roster.findIndex((r) => r.sortKey === sortKey);
+  if (i < 0) return { prev: null, next: null };
+  return { prev: roster[i - 1] ?? null, next: roster[i + 1] ?? null };
+}
+
+export async function searchPeople(query: string, limit = 60): Promise<LibraryRow[]> {
+  const term = query.toLowerCase().trim();
+  if (term.length < 2) return [];
+  const roster = await getPeopleRoster();
+  return roster
+    .filter((r) => r.sortKey.startsWith(term) || r.name.toLowerCase().includes(term))
+    // Names that start with what you typed come before ones that merely contain it.
+    .sort(
+      (a, b) =>
+        Number(b.sortKey.startsWith(term)) - Number(a.sortKey.startsWith(term)) ||
+        a.sortKey.localeCompare(b.sortKey),
+    )
+    .slice(0, limit)
+    .map((r) => ({ ...r }));
+}
+
+/** People who turn up in one chapter — the "in this chapter" button. */
+export async function getPeopleInChapter(book: string, chapter: number): Promise<LibraryRow[]> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('person_verses')) return [];
+
+  const ids = await new Promise<Set<string>>((resolve) => {
+    const idx = db
+      .transaction('person_verses', 'readonly')
+      .objectStore('person_verses')
+      .index('book_chapter_verse');
+    const req = idx.getAll(IDBKeyRange.bound([book, chapter], [book, chapter, []]));
+    req.onsuccess = () => resolve(new Set((req.result || []).map((r: any) => r.personId)));
+    req.onerror = () => resolve(new Set());
+  });
+  if (!ids.size) return [];
+
+  const roster = await getPeopleRoster();
+  return roster.filter((r) => ids.has(String(r.id))).map((r) => ({ ...r }));
+}
+
+/** One person by id — for family links and opening a row from the contents. */
+export async function getPersonById(personId: string): Promise<PersonRecord | null> {
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains('people')) return null;
+    return await new Promise<PersonRecord | null>((resolve) => {
+      const req = db.transaction('people', 'readonly').objectStore('people').get(personId);
+      req.onsuccess = () => resolve(req.result ? toPersonRecord(req.result) : null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
 }
 
 /**

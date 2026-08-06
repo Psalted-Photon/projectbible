@@ -206,12 +206,12 @@
 />
 
 <!-- `themed` is a whole-panel color inversion on the light and sepia themes.
-     Maps can't take it (the tiles invert), and neither can the encyclopedia,
-     which paints its own dark card in every theme so a pinned article looks
-     exactly like the modal it came out of. -->
+     Maps can't take it (the tiles invert), and neither can the encyclopedia or
+     a person's bio, which paint their own dark card in every theme so a pinned
+     page looks exactly like the modal it came out of. -->
 <div
   class="panel panel-{window.edge} panel-{window.contentType}"
-  class:themed={window.contentType !== 'map' && window.contentType !== 'isbe'}
+  class:themed={!['map', 'isbe', 'person'].includes(window.contentType)}
   style="
     {window.edge === 'left' || window.edge === 'right' ? `width: ${window.size}%` : `height: ${window.size}%`};
   "

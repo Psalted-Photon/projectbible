@@ -8,6 +8,7 @@
   import NotesPane from "./NotesPane.svelte";
   import ArtPane from "./ArtPane.svelte";
   import IsbeContent from "./IsbeContent.svelte";
+  import PersonContent from "./PersonContent.svelte";
 
   // What goes inside a window, for every edge. WindowContainer renders one of
   // these per docked window; keeping the list here means a new content type is
@@ -45,6 +46,11 @@
     initialVisited={panel.contentState?.visited ?? []}
     initialScrollTop={panel.contentState?.scrollTop ?? 0}
     initialTrail={panel.contentState?.trail ?? []}
+  />
+{:else if panel.contentType === 'person'}
+  <PersonContent
+    windowId={panel.id}
+    personId={panel.contentState?.personId ?? null}
   />
 {:else if panel.contentType === 'notes'}
   <NotesPane windowId={panel.id} contentState={panel.contentState} edge={panel.edge} />

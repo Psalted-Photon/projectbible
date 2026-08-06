@@ -9,7 +9,7 @@
 
   let searchQuery = "";
 
-  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'isbe' | 'commentaries' | 'journal' | 'art') {
+  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'isbe' | 'person' | 'commentaries' | 'journal' | 'art') {
     // Set initial content state based on type
     let contentState = {};
     
@@ -52,6 +52,9 @@
       contentState = last
         ? { kind: 'entry', entryId: Number(last.id), placeId: null, primaryName: last.name }
         : {};
+    } else if (contentType === 'person') {
+      const last = get(libraryPrefsStore).people.lastRead;
+      contentState = last ? { personId: String(last.id), primaryName: last.name } : {};
     }
 
     windowStore.setWindowContent(windowId, contentType, contentState);
@@ -103,6 +106,11 @@
     <button class="content-button encyclopedia" on:click={() => handleContentSelect('isbe')}>
       <span class="icon emoji">📚</span>
       <span class="label">Encyclopedia</span>
+    </button>
+
+    <button class="content-button people" on:click={() => handleContentSelect('person')}>
+      <span class="icon emoji">👤</span>
+      <span class="label">People</span>
     </button>
 
     <button class="content-button art" on:click={() => handleContentSelect('art')}>

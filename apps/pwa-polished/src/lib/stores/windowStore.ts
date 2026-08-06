@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 
-export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe';
+export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person';
 export type WindowEdge = 'top' | 'left' | 'right' | 'bottom';
 
 export interface WindowState {
@@ -35,6 +35,8 @@ export interface WindowState {
     scrollTop?: number;
     /** Articles walked through to get here, for the back trail. */
     trail?: { entryId: number | null; placeId: string | null; name: string }[];
+    /** For person windows: whose bio is pinned. */
+    personId?: string | null;
     // For other content types
     [key: string]: any;
   };

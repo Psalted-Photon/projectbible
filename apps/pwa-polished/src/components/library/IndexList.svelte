@@ -5,7 +5,7 @@
   import { navigationStore } from "../../stores/navigationStore";
   import { libraryPrefsStore, isStarred, type LibraryMark } from "../../stores/libraryPrefsStore";
   import { libraryLetterOf } from "../../adapters/lexicon-lookup.js";
-  import type { LibrarySourceAdapter, LibraryRow } from "../../lib/library/source";
+  import type { LibraryBadge, LibrarySourceAdapter, LibraryRow } from "../../lib/library/source";
 
   /**
    * The contents list — the table of contents for one reference work. Draws an
@@ -49,6 +49,8 @@
 
   $: prefs = $libraryPrefsStore[source.key];
   $: nav = $navigationStore;
+  /** Each work marks only the dots that tell you something new about its rows. */
+  $: shows = (badge: LibraryBadge) => source.badges.includes(badge);
 
   // The rows actually on screen: a search wins over the chapter filter, which
   // wins over the letter you're browsing. Chips narrow whichever it landed on.
@@ -221,18 +223,21 @@
 
   /** Reopen something from the starred/recent shelves, which hold only a mark. */
   function openMark(mark: LibraryMark) {
-    open({ id: Number(mark.id), name: mark.name, sortKey: mark.sortKey, isPlace: false });
+    open({ id: mark.id, name: mark.name, sortKey: mark.sortKey, isPlace: false });
   }
 </script>
 
 <div class="index">
   <div class="index-bar">
     <div class="chips">
-      {#each source.filters as f}
-        <button class="chip" class:on={filterKey === f.key} on:click={() => (filterKey = f.key)}>
-          {f.label}
-        </button>
-      {/each}
+      <!-- A lone "All" chip filters nothing, so it isn't drawn. -->
+      {#if source.filters.length > 1}
+        {#each source.filters as f}
+          <button class="chip" class:on={filterKey === f.key} on:click={() => (filterKey = f.key)}>
+            {f.label}
+          </button>
+        {/each}
+      {/if}
       {#if source.getRowsInChapter}
         <button
           class="chip chapter"
@@ -318,11 +323,15 @@
         {#each shownRows as row, i (row.id)}
           <div class="row-wrap" data-row={i}>
             <button class="row" on:click={() => open(row)}>
-              <span class="name">{row.name}</span>
+              <span class="label">
+                <span class="name">{row.name}</span>
+                {#if row.detail}<span class="detail">{row.detail}</span>{/if}
+              </span>
               <span class="badges">
-                {#if row.isPlace}<span class="emoji" title="Place">📍</span>{/if}
-                {#if row.hasBio}<span class="emoji" title="Has a bio">👤</span>{/if}
-                {#if row.hasDict}<span class="emoji" title="In the dictionary">📖</span>{/if}
+                {#if shows("place") && row.isPlace}<span class="emoji" title="Place">📍</span>{/if}
+                {#if shows("bio") && row.hasBio}<span class="emoji" title="Has a bio">👤</span>{/if}
+                {#if shows("entry") && row.hasEntry}<span class="emoji" title="In the encyclopedia">📕</span>{/if}
+                {#if shows("dict") && row.hasDict}<span class="emoji" title="In the dictionary">📖</span>{/if}
               </span>
             </button>
             <button
@@ -476,10 +485,26 @@
     padding: 9px 4px 9px 12px;
     cursor: pointer;
   }
+  .label {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    min-width: 0;
+  }
   .row .name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* Name meanings run long, so the detail gives up its width first and the
+     name itself stays readable. */
+  .detail {
+    font-size: 11px;
+    color: var(--text-muted, #999);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
   .shelf-row {
     padding-left: 26px;

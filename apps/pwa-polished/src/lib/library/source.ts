@@ -16,6 +16,10 @@ import {
   annotateLibraryBadges,
   getIsbeEntriesInChapter,
   searchIsbeEntries,
+  getPeopleLetterCounts,
+  getPeopleForLetter,
+  getPeopleInChapter,
+  searchPeople,
 } from '../../adapters/lexicon-lookup.js';
 
 export type { LibraryRow };
@@ -27,10 +31,16 @@ export interface LibraryFilter {
   test: (row: LibraryRow) => boolean;
 }
 
+/** Which source dots a row in this list can usefully show. A person list has
+ *  no reason to mark every row "has a bio". */
+export type LibraryBadge = 'place' | 'bio' | 'entry' | 'dict';
+
 export interface LibrarySourceAdapter {
   key: LibrarySource;
   /** Shown in the header when browsing rather than reading an entry. */
   label: string;
+  /** The line under the title while browsing — what this work actually is. */
+  subtitle: string;
   searchPlaceholder: string;
   getLetterCounts(): Promise<Record<string, number>>;
   getRowsForLetter(letter: string): Promise<LibraryRow[]>;
@@ -40,11 +50,13 @@ export interface LibrarySourceAdapter {
   /** Rows that turn up in one chapter, for the "in this chapter" button. */
   getRowsInChapter?(book: string, chapter: number): Promise<LibraryRow[]>;
   filters: LibraryFilter[];
+  badges: LibraryBadge[];
 }
 
 export const isbeSource: LibrarySourceAdapter = {
   key: 'isbe',
   label: 'Encyclopedia',
+  subtitle: 'International Standard Bible Encyclopedia',
   searchPlaceholder: 'Search the encyclopedia…',
   getLetterCounts: getIsbeLetterCounts,
   getRowsForLetter: getIsbeEntriesForLetter,
@@ -57,4 +69,21 @@ export const isbeSource: LibrarySourceAdapter = {
     // Everything that isn't geography: people, customs, plants, coins, doctrine.
     { key: 'articles', label: 'Articles', test: (r) => !r.isPlace },
   ],
+  badges: ['place', 'bio', 'dict'],
+};
+
+export const peopleSource: LibrarySourceAdapter = {
+  key: 'people',
+  label: 'People',
+  subtitle: 'Every named person in the Bible',
+  searchPlaceholder: 'Search people…',
+  getLetterCounts: getPeopleLetterCounts,
+  getRowsForLetter: getPeopleForLetter,
+  annotateBadges: annotateLibraryBadges,
+  search: searchPeople,
+  getRowsInChapter: getPeopleInChapter,
+  // Everyone here is a person, so there is nothing useful to filter on beyond
+  // the chapter button the shell adds itself.
+  filters: [{ key: 'all', label: 'All', test: () => true }],
+  badges: ['entry', 'dict'],
 };

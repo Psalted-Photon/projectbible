@@ -2,8 +2,7 @@
   import { onMount } from "svelte";
   import { IndexedDBLexiconStore } from "../adapters/LexiconStore";
   import type { StrongEntry } from "@projectbible/core";
-  import { BIBLE_BOOKS, normalizeBookName, getBookColor } from "../lib/bibleData.js";
-  import { IndexedDBTextStore } from "../lib/adapters";
+  import { BIBLE_BOOKS } from "../lib/bibleData.js";
   import {
     englishLexicalService,
     type WordInfo,
@@ -11,16 +10,17 @@
   import {
     lookupEnglishWord,
     lookupStrongs,
-    getPersonVerses,
     resolveIsbeClick,
     type IsbeResolution,
+    type PersonRecord,
   } from "../adapters/lexicon-lookup.js";
+  import PersonContent from "./PersonContent.svelte";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
+  import { windowStore } from "../lib/stores/windowStore";
   import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
   import { parseOsisRef } from "../lib/parseRefString";
-  import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../lib/morphologyExpander";
   import { openDB } from "../adapters/db";
 
@@ -33,116 +33,30 @@
   $: characterData = $lexicalModalStore.characterData ?? null;
 
   // --- Biblical character ("Character" view) ---
-  let charPersonId: string | null = null;   // when user switches between homonyms
-  let showDefinition = false;                // toggle from character -> dictionary
-  // Reset character view selection whenever a new lookup arrives
-  $: characterData, ((charPersonId = null), (showDefinition = false));
-  $: charCandidates = characterData ? [characterData.person, ...characterData.alternates] : [];
-  $: person = characterData
-    ? (charCandidates.find((p) => p.id === charPersonId) ?? characterData.person)
-    : null;
-  $: showCharacter = !!person && !showDefinition;
+  // The bio itself is PersonContent, which also runs docked in a window and in
+  // the People contents list. This modal only decides whether to show it, and
+  // tracks which person it settled on so the header can name them.
+  let showDefinition = false; // toggle from character -> dictionary
+  let person: PersonRecord | null = null;
+  // A new lookup always lands on the bio, never on whatever the last one left.
+  // PersonContent unmounts without reporting back, so the person it last named
+  // is cleared here rather than left to head a different word's card.
+  $: characterData, ((showDefinition = false), characterData || (person = null));
+  $: showCharacter = !!characterData && !showDefinition;
 
-  function formatYear(y: number | null | undefined): string {
-    if (y === null || y === undefined) return '';
-    return y < 0 ? `${-y} BC` : `${y} AD`;
-  }
-  function lifespan(p: any): string {
-    const b = formatYear(p?.birthYear), d = formatYear(p?.deathYear);
-    if (b && d) return `c. ${b} – ${d}`;
-    if (b) return `b. c. ${b}`;
-    if (d) return `d. c. ${d}`;
-    return '';
-  }
-  function relNames(arr: any[]): string {
-    return (arr || []).map((x) => x?.name).filter(Boolean).join(', ');
-  }
-  // Strip the markdown link/emphasis syntax from Easton's dictText for plain display.
-  function cleanBio(text: string | undefined): string[] {
-    if (!text) return [];
-    return text
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // [label](link) -> label
-      .replace(/[*_`]/g, '')
-      .split(/\n{2,}/)
-      .map((p) => p.replace(/\s+/g, ' ').trim())
-      .filter(Boolean);
-  }
-
-  // --- Collapsible verse list (mirrors Power Search book grouping) ---
-  let personVerses: { book: string; chapter: number; verse: number }[] = [];
-  let versesLoaded = false;
-  let versesLoading = false;
-  let showVerseList = false;
-  let expandedBooks = new Set<string>();
-  let versePreviews: Record<string, string> = {}; // "Book chapter:verse" -> verse text
-  const bookOrder = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
-  const verseTextStore = new IndexedDBTextStore();
-
-  // Reset the verse list whenever the displayed person changes (new lookup or alternate)
-  $: person?.id, resetVerseList();
-  function resetVerseList() {
-    showVerseList = false;
-    versesLoaded = false;
-    versesLoading = false;
-    personVerses = [];
-    expandedBooks = new Set();
-    versePreviews = {};
-  }
-
-  async function toggleVerseList() {
-    showVerseList = !showVerseList;
-    if (showVerseList && !versesLoaded && person) {
-      versesLoading = true;
-      personVerses = await getPersonVerses(person.id);
-      versesLoaded = true;
-      versesLoading = false;
-    }
-  }
-
-  async function toggleBook(book: string, refs: { chapter: number; verse: number }[]) {
-    const next = new Set(expandedBooks);
-    if (next.has(book)) {
-      next.delete(book);
-      expandedBooks = next;
-      return;
-    }
-    next.add(book);
-    expandedBooks = next;
-    // Lazy-load verse preview text for this book in the current translation.
-    const translation = get(navigationStore).translation;
-    const loaded = await Promise.all(
-      refs.map(async (r) => {
-        const key = `${book} ${r.chapter}:${r.verse}`;
-        if (versePreviews[key] !== undefined) return [key, versePreviews[key]] as const;
-        const text = (await verseTextStore.getVerse(translation, book, r.chapter, r.verse)) ?? '';
-        return [key, text] as const;
-      }),
-    );
-    versePreviews = { ...versePreviews, ...Object.fromEntries(loaded) };
-  }
-
-  // Group verses by book (canonical name + order); only books with refs appear.
-  $: versesByBook = (() => {
-    const map = new Map<string, { chapter: number; verse: number }[]>();
-    for (const v of personVerses) {
-      const book = normalizeBookName(v.book);
-      if (!map.has(book)) map.set(book, []);
-      map.get(book)!.push({ chapter: v.chapter, verse: v.verse });
-    }
-    return [...map.entries()]
-      .map(([book, refs]) => ({
-        book,
-        color: getBookColor(book),
-        refs: refs.sort((a, b) => a.chapter - b.chapter || a.verse - b.verse),
-      }))
-      .sort((a, b) => (bookOrder.get(a.book) ?? 999) - (bookOrder.get(b.book) ?? 999));
-  })();
-
-  function navigateToVerse(book: string, chapter: number, verse: number) {
-    const current = get(navigationStore);
-    navigationStore.pushHistory(current);
-    navigationStore.navigateToVerse(current.translation, book, chapter, verse);
-    lexicalModalStore.close();
+  /** Hand the bio to a docked window, so it can sit beside the passage.
+   *  Same edge convention as the encyclopedia's pop-out. */
+  function popOutPerson() {
+    if (!person) return;
+    const edge = window.innerHeight > window.innerWidth ? "bottom" : "right";
+    const id = windowStore.createWindow(edge, 50);
+    // At the six-window cap. Leave the modal up rather than closing onto nothing.
+    if (!id) return;
+    windowStore.setWindowContent(id, "person", {
+      personId: person.id,
+      primaryName: person.displayTitle || person.name,
+    });
+    close();
   }
 
   let lexiconStore: IndexedDBLexiconStore;
@@ -675,8 +589,22 @@
           {/if}
         </h2>
         <div class="head-actions">
-          {#if isbeMatch && !strongEntry && !showCharacter}
-            <button class="bridge-btn" on:click={openEncyclopedia}>More Info</button>
+          <!-- The encyclopedia bridge used to be switched off for people. There
+               was no reason for it beyond the bio having nowhere to go back to;
+               it can now be pinned, so the jump is safe to offer. -->
+          {#if isbeMatch && !strongEntry}
+            <button class="bridge-btn" on:click={openEncyclopedia}>
+              {showCharacter ? "Encyclopedia" : "More Info"}
+            </button>
+          {/if}
+          {#if showCharacter && person}
+            <button class="pop-btn" on:click={popOutPerson} title="Pin beside the reader" aria-label="Pin beside the reader">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8" />
+                <path d="M14 4v16" stroke-width="1.8" />
+                <path d="M6.2 9.6L8.6 12l-2.4 2.4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
           {/if}
           <button class="close-btn" on:click={close} aria-label="Close">
             <svg
@@ -702,127 +630,15 @@
             ← Back to {person.displayTitle || person.name}
           </button>
         {/if}
-        {#if showCharacter && person}
-          <!-- Biblical Character -->
-          <div class="character-view">
-            {#if person.nameMeaning}
-              <p class="char-meaning">“{person.nameMeaning}”</p>
-            {/if}
-            {#if person.alsoCalled}
-              <p class="char-aka">Also called: {person.alsoCalled}</p>
-            {/if}
-
-            <dl class="char-facts">
-              {#if lifespan(person)}
-                <dt>Lived</dt><dd>{lifespan(person)}</dd>
-              {/if}
-              {#if person.gender}
-                <dt>Gender</dt><dd>{person.gender}</dd>
-              {/if}
-              {#if person.birthPlace?.name}
-                <dt>Born</dt><dd>{person.birthPlace.name}</dd>
-              {/if}
-              {#if person.deathPlace?.name}
-                <dt>Died</dt><dd>{person.deathPlace.name}</dd>
-              {/if}
-              {#if person.memberOf && person.memberOf.length}
-                <dt>Member of</dt><dd>{person.memberOf.join(', ')}</dd>
-              {/if}
-              {#if relNames(person.father) || relNames(person.mother)}
-                <dt>Parents</dt><dd>{[relNames(person.father), relNames(person.mother)].filter(Boolean).join(', ')}</dd>
-              {/if}
-              {#if relNames(person.partners)}
-                <dt>Partner{person.partners.length > 1 ? 's' : ''}</dt><dd>{relNames(person.partners)}</dd>
-              {/if}
-              {#if relNames(person.children)}
-                <dt>Children</dt><dd>{relNames(person.children)}</dd>
-              {/if}
-              {#if relNames(person.siblings)}
-                <dt>Siblings</dt><dd>{relNames(person.siblings)}</dd>
-              {/if}
-            </dl>
-
-            {#if person.verseCount}
-              <div class="char-verses">
-                <button class="char-verses-toggle" on:click={toggleVerseList}>
-                  <span class="char-verses-caret">{showVerseList ? '▼' : '▶'}</span>
-                  Appears in {person.verseCount} verse{person.verseCount === 1 ? '' : 's'}
-                </button>
-                {#if showVerseList}
-                  {#if versesLoading}
-                    <p class="char-verses-loading">Loading…</p>
-                  {:else}
-                    <div class="char-verses-books">
-                      {#each versesByBook as { book, refs, color }}
-                        <div class="cv-book-group">
-                          <button class="cv-book-header" on:click={() => toggleBook(book, refs)}>
-                            <span class="cv-book-caret" style="color:{color}">{expandedBooks.has(book) ? '▼' : '▶'}</span>
-                            <span class="cv-book-name" style="color:{color}">{book}</span>
-                            <span class="cv-book-count">({refs.length})</span>
-                          </button>
-                          {#if expandedBooks.has(book)}
-                            <div class="cv-book-refs">
-                              {#each refs as r}
-                                <button
-                                  class="cv-ref"
-                                  style="border-left-color:{color}"
-                                  on:click={() => navigateToVerse(book, r.chapter, r.verse)}
-                                >
-                                  <span class="cv-ref-label" style="color:{color}">{book} {r.chapter}:{r.verse}</span>
-                                  {#if versePreviews[`${book} ${r.chapter}:${r.verse}`]}
-                                    <span class="cv-ref-text">{@html renderVersePreviewHtml(versePreviews[`${book} ${r.chapter}:${r.verse}`])}</span>
-                                  {/if}
-                                </button>
-                              {/each}
-                            </div>
-                          {/if}
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                {/if}
-              </div>
-            {/if}
-
-            {#if cleanBio(person.dictText).length}
-              <div class="char-bio">
-                {#each cleanBio(person.dictText) as para}
-                  <p>{para}</p>
-                {/each}
-              </div>
-            {/if}
-
-            {#if charCandidates.length > 1}
-              <div class="char-alternates">
-                <p class="char-alternates-label">
-                  {characterData?.matchedByVerse
-                    ? `Other people named “${selectedText}”:`
-                    : `Multiple people named “${selectedText}” — pick one:`}
-                </p>
-                <div class="char-alt-buttons">
-                  {#each charCandidates as cand}
-                    <button
-                      class="char-alt-btn"
-                      class:active={cand.id === person.id}
-                      on:click={() => (charPersonId = cand.id)}
-                    >
-                      {cand.displayTitle || cand.name}
-                      {#if cand.verseCount}<span class="char-alt-count">({cand.verseCount})</span>{/if}
-                    </button>
-                  {/each}
-                </div>
-              </div>
-            {/if}
-
-            <div class="char-footer">
-              <button class="char-toggle" on:click={() => (showDefinition = true)}>
-                Show dictionary definition →
-              </button>
-              <p class="char-attribution">
-                Character data: Theographic Bible Metadata (CC BY-SA 4.0); name meaning: Hitchcock's (public domain)
-              </p>
-            </div>
-          </div>
+        {#if showCharacter}
+          <PersonContent
+            lookup={characterData}
+            clickedWord={selectedText}
+            showHeader={false}
+            onClose={close}
+            onPersonChange={(p) => (person = p)}
+            onShowDefinition={() => (showDefinition = true)}
+          />
         {:else if loading}
           <div class="loading">
             <div class="spinner"></div>
@@ -1413,6 +1229,19 @@
   }
   .bridge-btn:hover {
     border-color: var(--color-primary, #4a90e2);
+  }
+  .pop-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #999);
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .pop-btn:hover {
+    color: var(--color-primary, #4a90e2);
   }
   .close-btn {
     background: none;
@@ -2021,94 +1850,6 @@
   }
 
   /* --- Biblical character view (dark modal: light text on #1e1e1e) --- */
-  .character-view {
-    padding: 4px 2px;
-  }
-  .char-meaning {
-    font-size: 16px;
-    font-style: italic;
-    color: #d8dbe0;
-    margin: 0 0 8px;
-  }
-  .char-aka {
-    font-size: 13px;
-    color: #9aa0aa;
-    margin: 0 0 12px;
-  }
-  .char-facts {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: 9px 16px;
-    margin: 0 0 16px;
-    line-height: 1.5;
-  }
-  .char-facts dt {
-    font-weight: 600;
-    color: #b8bdc6;
-    font-size: 14.5px;
-  }
-  .char-facts dd {
-    margin: 0;
-    color: #ececf0;
-    font-size: 14.5px;
-  }
-  .char-bio p {
-    color: #dfe2e8;
-    font-size: 14px;
-    line-height: 1.6;
-    margin: 0 0 10px;
-  }
-  .char-alternates {
-    margin: 14px 0 4px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-  }
-  .char-alternates-label {
-    font-size: 12px;
-    color: #9aa0aa;
-    margin: 0 0 6px;
-  }
-  .char-alt-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .char-alt-btn {
-    padding: 4px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.06);
-    color: #dfe2e8;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .char-alt-btn.active {
-    background: #4caf50;
-    border-color: #4caf50;
-    color: #fff;
-  }
-  .char-alt-count {
-    opacity: 0.7;
-    margin-left: 3px;
-  }
-  .char-footer {
-    margin-top: 16px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-  }
-  .char-toggle {
-    background: none;
-    border: none;
-    color: #8bc34a;
-    font-size: 13px;
-    cursor: pointer;
-    padding: 0;
-  }
-  .char-attribution {
-    margin: 8px 0 0;
-    font-size: 11px;
-    color: #888;
-  }
   .char-back {
     background: none;
     border: none;
@@ -2118,99 +1859,4 @@
     padding: 0 0 10px;
   }
 
-  /* Collapsible verse list (mirrors Power Search ps-book-*) */
-  .char-verses {
-    margin: 0 0 16px;
-  }
-  .char-verses-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    background: none;
-    border: none;
-    color: #ececf0;
-    font-size: 14.5px;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 4px 0;
-    text-align: left;
-  }
-  .char-verses-caret {
-    color: #8bc34a;
-    font-size: 11px;
-  }
-  .char-verses-loading {
-    color: #9aa0aa;
-    font-size: 13px;
-    margin: 6px 0 0 18px;
-  }
-  .char-verses-books {
-    margin: 6px 0 0;
-  }
-  .cv-book-group {
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
-  }
-  .cv-book-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    background: none;
-    border: none;
-    color: #dfe2e8;
-    font-size: 13.5px;
-    cursor: pointer;
-    padding: 7px 4px;
-    text-align: left;
-  }
-  .cv-book-header:hover {
-    background: rgba(255, 255, 255, 0.04);
-  }
-  .cv-book-caret {
-    color: #8bc34a;
-    font-size: 10px;
-  }
-  .cv-book-name {
-    flex: 1;
-  }
-  .cv-book-count {
-    color: #9aa0aa;
-    font-size: 12px;
-  }
-  .cv-book-refs {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 4px 4px 10px 24px;
-  }
-  .cv-ref {
-    display: block;
-    width: 100%;
-    text-align: left;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-left: 3px solid #8bc34a;
-    border-radius: 5px;
-    cursor: pointer;
-    padding: 6px 9px;
-  }
-  .cv-ref:hover {
-    background: rgba(255, 255, 255, 0.09);
-  }
-  .cv-ref-label {
-    display: block;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 2px;
-  }
-  .cv-ref-text {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    color: #c2c6cd;
-    font-size: 12.5px;
-    line-height: 1.4;
-  }
 </style>

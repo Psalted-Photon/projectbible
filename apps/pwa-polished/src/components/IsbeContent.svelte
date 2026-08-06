@@ -235,7 +235,7 @@
   }
 
   function openFromContents(row: LibraryRow) {
-    jumpToEntry(row.id, row.name);
+    jumpToEntry(Number(row.id), row.name);
   }
 
   /** Step back to an article you came through. */
@@ -897,7 +897,7 @@
     <div class="head-text">
       <h2>{showContents ? isbeSource.label : title}</h2>
       {#if showContents}
-        <div class="sub">International Standard Bible Encyclopedia</div>
+        <div class="sub">{isbeSource.subtitle}</div>
       {:else if !loading}
         <div class="sub">{subtitle()}</div>
       {/if}
