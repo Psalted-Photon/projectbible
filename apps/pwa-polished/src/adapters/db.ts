@@ -12,7 +12,7 @@
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 32; // Migration 32: add notebooks + notebook_pages stores (Notes panel)
+const DB_VERSION = 33; // Migration 33: add naves_* stores (Nave's Topical, in the Encyclotopical pack)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -45,7 +45,7 @@ export interface DBArtImage {
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'art';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -932,6 +932,39 @@ export function openDB(): Promise<IDBDatabase> {
         const isbePlaceVerses = db.createObjectStore('isbe_place_verses', { keyPath: 'id', autoIncrement: true });
         isbePlaceVerses.createIndex('placeId', 'placeId', { unique: false });
         isbePlaceVerses.createIndex('book_chapter_verse', ['book', 'chapter', 'verse'], { unique: false });
+      }
+
+      // Nave's Topical Bible topics (title, lead, point/reference counts)
+      if (!db.objectStoreNames.contains('naves_topics')) {
+        const navesTopics = db.createObjectStore('naves_topics', { keyPath: 'topicId' });
+        navesTopics.createIndex('primaryNameLower', 'primaryNameLower', { unique: false });
+      }
+
+      // Nave's topic name index (title / "also called" spelling -> topicId)
+      if (!db.objectStoreNames.contains('naves_names')) {
+        const navesNames = db.createObjectStore('naves_names', { keyPath: 'id', autoIncrement: true });
+        navesNames.createIndex('nameLower', 'nameLower', { unique: false });
+        navesNames.createIndex('topicId', 'topicId', { unique: false });
+      }
+
+      // Nave's outline points — the numbered structure of a topic. Read in
+      // document order, so the index is on (topicId, seq) rather than topicId.
+      if (!db.objectStoreNames.contains('naves_points')) {
+        const navesPoints = db.createObjectStore('naves_points', { keyPath: 'id', autoIncrement: true });
+        navesPoints.createIndex('topic_seq', ['topicId', 'seq'], { unique: false });
+      }
+
+      // Nave's verse citations, for the Verses tab and "in this chapter"
+      if (!db.objectStoreNames.contains('naves_verses')) {
+        const navesVerses = db.createObjectStore('naves_verses', { keyPath: 'id', autoIncrement: true });
+        navesVerses.createIndex('topicId', 'topicId', { unique: false });
+        navesVerses.createIndex('book_chapter_verse', ['book', 'chapter', 'verse'], { unique: false });
+      }
+
+      // Nave's full-text token index (token -> topicId) for deep search
+      if (!db.objectStoreNames.contains('naves_tokens')) {
+        const navesTokens = db.createObjectStore('naves_tokens', { keyPath: 'id', autoIncrement: true });
+        navesTokens.createIndex('token', 'token', { unique: false });
       }
 
       // Modern world places store (GeoNames — cities, states, countries worldwide)

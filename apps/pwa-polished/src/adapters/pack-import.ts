@@ -1026,7 +1026,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       }
 
       console.log(`✅ People pack ${packInfo.id} imported`);
-    } else if (packInfo.type === 'isbe') {
+    } else if (packInfo.type === 'isbe' || packInfo.type === 'encyclotopical') {
       // Import ISBE encyclopedia + geolocated places pack.
       // Six stores: entries, name index, token index, places, place-name index, place verses.
       // The four index/verse stores use autoIncrement keys, so each is cleared before
@@ -1169,7 +1169,116 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         console.log(`✅ Imported ${verses.length} place-verse links`);
       }
 
-      console.log(`✅ ISBE pack ${packInfo.id} imported`);
+      // The Encyclotopical pack is the ISBE tables above plus Nave's Topical.
+      // Splitting it this way means an older isbe pack still imports exactly as
+      // it always did, and the encyclopedia half of this one is the same rows.
+      if (packInfo.type === 'encyclotopical') {
+        console.log("Importing Nave's Topical Bible...");
+
+        // Topics (keyPath topicId — put() overwrites, no clear needed)
+        const topicRows = db.exec(
+          'SELECT topic_id, title, primary_name, lead, point_count, ref_count FROM topics',
+        );
+        if (topicRows.length && topicRows[0].values.length) {
+          const topics = topicRows[0].values.map(
+            ([topicId, title, primaryName, lead, pointCount, refCount]) => ({
+              topicId: topicId as number,
+              title: title as string,
+              primaryName: primaryName as string,
+              primaryNameLower: ((primaryName as string) || '').toLowerCase(),
+              lead: lead as string | null,
+              pointCount: pointCount as number,
+              refCount: refCount as number,
+            }),
+          );
+          console.log(`Importing ${topics.length} Nave's topics...`);
+          const CHUNK_SIZE = 500;
+          for (let i = 0; i < topics.length; i += CHUNK_SIZE) {
+            const chunk = topics.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('naves_topics', (store) => chunk.forEach((t) => store.put(t)));
+          }
+          console.log(`✅ Imported ${topics.length} topics`);
+        }
+
+        // Name index
+        const tnRows = db.exec('SELECT name_lower, topic_id FROM topic_names');
+        if (tnRows.length && tnRows[0].values.length) {
+          await clearStore('naves_names');
+          const names = tnRows[0].values.map(([nameLower, topicId]) => ({
+            nameLower: nameLower as string,
+            topicId: topicId as number,
+          }));
+          console.log(`Importing ${names.length} topic-name index entries...`);
+          const CHUNK_SIZE = 1000;
+          for (let i = 0; i < names.length; i += CHUNK_SIZE) {
+            const chunk = names.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('naves_names', (store) => chunk.forEach((n) => store.put(n)));
+          }
+          console.log(`✅ Imported ${names.length} topic-name index entries`);
+        }
+
+        // Outline points
+        const tpRows = db.exec('SELECT topic_id, seq, depth, text, refs, links FROM topic_points');
+        if (tpRows.length && tpRows[0].values.length) {
+          await clearStore('naves_points');
+          const points = tpRows[0].values.map(([topicId, seq, depth, text, refs, links]) => ({
+            topicId: topicId as number,
+            seq: seq as number,
+            depth: depth as number,
+            text: text as string,
+            // Kept as stored JSON: a point's references are read only when its
+            // topic is opened, so parsing 29,000 of them up front would be waste.
+            refs: refs as string | null,
+            links: links as string | null,
+          }));
+          console.log(`Importing ${points.length} outline points...`);
+          const CHUNK_SIZE = 1000;
+          for (let i = 0; i < points.length; i += CHUNK_SIZE) {
+            const chunk = points.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('naves_points', (store) => chunk.forEach((p) => store.put(p)));
+          }
+          console.log(`✅ Imported ${points.length} outline points`);
+        }
+
+        // Verse citations
+        const tvRows = db.exec('SELECT topic_id, book, chapter, verse, osis FROM topic_verses');
+        if (tvRows.length && tvRows[0].values.length) {
+          await clearStore('naves_verses');
+          const verses = tvRows[0].values.map(([topicId, book, chapter, verse, osis]) => ({
+            topicId: topicId as number,
+            book: book as string,
+            chapter: chapter as number,
+            verse: verse as number,
+            osis: osis as string | undefined,
+          }));
+          console.log(`Importing ${verses.length} topic-verse links...`);
+          const CHUNK_SIZE = 2000;
+          for (let i = 0; i < verses.length; i += CHUNK_SIZE) {
+            const chunk = verses.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('naves_verses', (store) => chunk.forEach((v) => store.put(v)));
+          }
+          console.log(`✅ Imported ${verses.length} topic-verse links`);
+        }
+
+        // Full-text token index
+        const ttRows = db.exec('SELECT token, topic_id FROM topic_tokens');
+        if (ttRows.length && ttRows[0].values.length) {
+          await clearStore('naves_tokens');
+          const toks = ttRows[0].values.map(([token, topicId]) => ({
+            token: token as string,
+            topicId: topicId as number,
+          }));
+          console.log(`Importing ${toks.length} topic search tokens...`);
+          const CHUNK_SIZE = 2000;
+          for (let i = 0; i < toks.length; i += CHUNK_SIZE) {
+            const chunk = toks.slice(i, i + CHUNK_SIZE);
+            await batchWriteTransaction('naves_tokens', (store) => chunk.forEach((t) => store.put(t)));
+          }
+          console.log(`✅ Imported ${toks.length} topic search tokens`);
+        }
+      }
+
+      console.log(`✅ ${packInfo.type === 'encyclotopical' ? 'Encyclotopical' : 'ISBE'} pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'map') {
       // Import map/places data
       console.log('Importing map pack...');

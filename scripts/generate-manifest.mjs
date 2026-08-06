@@ -114,6 +114,14 @@ const PACK_CONFIGS = {
     description: 'Verse-by-verse Bible commentaries from multiple sources',
     dependencies: []
   },
+  'encyclotopical.sqlite': {
+    id: 'encyclotopical',
+    type: 'encyclotopical',
+    name: 'Encyclotopical',
+    description:
+      "ISBE Encyclopedia and Nave's Topical Bible — 9,380 scholarly articles on places, people, customs and doctrine, plus 5,322 topics indexing 100,000+ scripture references. Browse both A–Z, or tap a word in the reader. Public Domain (ISBE 1915; Nave's 1900s); place data CC BY 4.0 (OpenBible.info)",
+    dependencies: []
+  },
   'art.sqlite': {
     id: 'biblical-art',
     type: 'art',

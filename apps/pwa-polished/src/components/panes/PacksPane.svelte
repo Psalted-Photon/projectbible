@@ -201,13 +201,13 @@
       url: `${BASE_URL}/study-tools.sqlite`,
     },
     {
-      id: "isbe",
-      name: "Bible Encyclopedia (ISBE)",
+      id: "encyclotopical",
+      name: "Encyclotopical",
       description:
-        "~9,380 scholarly articles on places, people, customs, plants and doctrine. Tap a place or term in the reader → More Info. Public Domain (ISBE 1915); place data CC BY 4.0 (OpenBible.info)",
-      size: "62.21 MB",
+        "ISBE Encyclopedia and Nave's Topical Bible. 9,380 scholarly articles on places, people, customs, plants and doctrine, plus 5,322 topics indexing 100,000+ scripture references. Browse both A–Z from the Encyclopedia and Topical windows, or tap a word in the reader → More Info. Public Domain (ISBE 1915; Nave's 1900s); place data CC BY 4.0 (OpenBible.info)",
+      size: "77.52 MB",
       icon: "📕",
-      url: `${BASE_URL}/isbe.sqlite`,
+      url: `${BASE_URL}/encyclotopical.sqlite`,
     },
     {
       id: "geonames-modern-places-v1",

@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-07-27T00:05:07.142Z",
+  "createdAt": "2026-08-06T02:54:15.072Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -76,7 +76,7 @@
       "sha256": "1d4e1549df510e1cf8de1eae53b20d5b20e5a794883d73790fa67aaa6c42a5a5",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-07-27T00:05:12.639Z"
+      "createdAt": "2026-08-06T02:54:20.099Z"
     },
     {
       "id": "dictionary-en",
@@ -86,12 +86,27 @@
       "version": "1.0.0",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 46624768,
-      "sizeMB": 44.46,
-      "sha256": "a8aa4d1219edce01592a73554f9688884dc38d335bc6928d6e895b7b419f756e",
+      "size": 40349696,
+      "sizeMB": 38.48,
+      "sha256": "92658730a38285039b6e35e2fdc95de9f0eafcd68558fa5ba32d5899e89dad69",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-07-27T00:05:12.344Z"
+      "createdAt": "2026-08-06T02:54:19.943Z"
+    },
+    {
+      "id": "encyclotopical",
+      "type": "encyclotopical",
+      "name": "Encyclotopical",
+      "description": "ISBE Encyclopedia and Nave's Topical Bible — 9,380 scholarly articles on places, people, customs and doctrine, plus 5,322 topics indexing 100,000+ scripture references. Browse both A–Z, or tap a word in the reader. Public Domain (ISBE 1915; Nave's 1900s); place data CC BY 4.0 (OpenBible.info)",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 81285120,
+      "sizeMB": 77.52,
+      "sha256": "d1eb2ddfb6dba19a707de3df31825621b9bd8fe12efe5bf63f43cd2a8067c7c1",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/encyclotopical.sqlite",
+      "createdAt": "2026-08-06T02:54:20.180Z"
     },
     {
       "id": "geonames-modern-places-v1",
@@ -136,7 +151,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-07-27T00:05:08.318Z"
+      "createdAt": "2026-08-06T02:54:15.943Z"
     },
     {
       "id": "section-headings",
@@ -146,12 +161,12 @@
       "version": "1.0.0",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 299008,
+      "size": 303104,
       "sizeMB": 0.29,
-      "sha256": "8871d350ab99927b16852e80abe174cd732253edae1dfe03a8ea727d8f2e2948",
+      "sha256": "730855faa5fa34cc9920d4cd9d8c310181c6977d10831caeebcaed1d8bf2296d",
       "dependencies": [],
       "downloadUrl": "/api/packs/section-headings.sqlite",
-      "createdAt": "2026-07-27T00:05:08.312Z"
+      "createdAt": "2026-08-06T02:54:15.938Z"
     },
     {
       "id": "study-tools",
@@ -176,12 +191,12 @@
       "version": "1.0.1",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 36085760,
-      "sizeMB": 34.41,
-      "sha256": "0b7ad11beb262af87a39435eb2700523b5d86cc87f12fef9cae50396fa0cf9bb",
+      "size": 36229120,
+      "sizeMB": 34.55,
+      "sha256": "6703347376bec1d3c06782f7d160dab0f358e95545d75decbe05df7084c06e32",
       "dependencies": [],
       "downloadUrl": "/api/packs/translations.sqlite",
-      "createdAt": "2026-04-03T17:11:56.191Z"
+      "createdAt": "2026-07-29T03:17:37.496Z"
     },
     {
       "id": "tsk-references",
@@ -196,7 +211,7 @@
       "sha256": "f4f492fd23fdb74d61d30345ca5650444b3fbc9b02a8602ccd04f26b8eb8fb46",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-07-27T00:05:08.254Z"
+      "createdAt": "2026-08-06T02:54:15.873Z"
     }
   ]
 }

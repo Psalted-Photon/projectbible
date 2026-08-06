@@ -44,5 +44,11 @@ apps/pwa-polished/public/packs/consolidated/commentaries.sqlite
 packs/consolidated/commentaries.sqlite
 packs/workbench/commentaries.sqlite
 
+# Encyclotopical pack — 77 MB, and the Vercel build never reads it from LFS
+# (ensure-bundled-packs fetches only five packs). It ships via the GitHub
+# release, which is where production downloads it from.
+packs/consolidated/encyclotopical.sqlite
+apps/pwa-polished/public/packs/consolidated/encyclotopical.sqlite
+
 # TTS runtime WASM (copied from node_modules by vite copyTtsRuntime plugin)
 apps/pwa-polished/public/tts/

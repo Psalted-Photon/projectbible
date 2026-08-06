@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-07-29T03:26:44.634Z",
+  "createdAt": "2026-08-06T02:54:15.072Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -76,7 +76,7 @@
       "sha256": "1d4e1549df510e1cf8de1eae53b20d5b20e5a794883d73790fa67aaa6c42a5a5",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-07-29T03:26:49.125Z"
+      "createdAt": "2026-08-06T02:54:20.099Z"
     },
     {
       "id": "dictionary-en",
@@ -91,7 +91,22 @@
       "sha256": "92658730a38285039b6e35e2fdc95de9f0eafcd68558fa5ba32d5899e89dad69",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-07-29T03:26:48.986Z"
+      "createdAt": "2026-08-06T02:54:19.943Z"
+    },
+    {
+      "id": "encyclotopical",
+      "type": "encyclotopical",
+      "name": "Encyclotopical",
+      "description": "ISBE Encyclopedia and Nave's Topical Bible — 9,380 scholarly articles on places, people, customs and doctrine, plus 5,322 topics indexing 100,000+ scripture references. Browse both A–Z, or tap a word in the reader. Public Domain (ISBE 1915; Nave's 1900s); place data CC BY 4.0 (OpenBible.info)",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 81285120,
+      "sizeMB": 77.52,
+      "sha256": "d1eb2ddfb6dba19a707de3df31825621b9bd8fe12efe5bf63f43cd2a8067c7c1",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/encyclotopical.sqlite",
+      "createdAt": "2026-08-06T02:54:20.180Z"
     },
     {
       "id": "geonames-modern-places-v1",
@@ -136,7 +151,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-07-29T03:26:45.474Z"
+      "createdAt": "2026-08-06T02:54:15.943Z"
     },
     {
       "id": "section-headings",
@@ -151,7 +166,7 @@
       "sha256": "730855faa5fa34cc9920d4cd9d8c310181c6977d10831caeebcaed1d8bf2296d",
       "dependencies": [],
       "downloadUrl": "/api/packs/section-headings.sqlite",
-      "createdAt": "2026-07-29T03:26:45.470Z"
+      "createdAt": "2026-08-06T02:54:15.938Z"
     },
     {
       "id": "study-tools",
@@ -196,7 +211,7 @@
       "sha256": "f4f492fd23fdb74d61d30345ca5650444b3fbc9b02a8602ccd04f26b8eb8fb46",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-07-29T03:26:45.438Z"
+      "createdAt": "2026-08-06T02:54:15.873Z"
     }
   ]
 }
