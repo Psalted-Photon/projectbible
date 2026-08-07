@@ -160,7 +160,7 @@ export class PackLoader {
     
     // Check if pack is already cached
     await this.initDB();
-    const cached = await this.getCachedPack(packId, pack.version);
+    const cached = await this.getCachedPack(packId, pack.version, pack.sha256);
     
     if (cached) {
       console.log(`✓ Using cached pack: ${packId}`);
@@ -203,7 +203,7 @@ export class PackLoader {
           stage: 'caching'
         });
         
-        await this.cachePack(packId, pack.version, data);
+        await this.cachePack(packId, pack.version, pack.sha256, data);
         
         this.options.onProgress({
           packId,
@@ -302,20 +302,23 @@ export class PackLoader {
   /**
    * Cache pack in IndexedDB
    */
-  private async cachePack(packId: string, version: string, data: Uint8Array): Promise<void> {
+  private async cachePack(packId: string, version: string, sha256: string, data: Uint8Array): Promise<void> {
     await this.initDB();
-    
+
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['pack_files'], 'readwrite');
       const store = transaction.objectStore('pack_files');
-      
+
       const request = store.put({
         id: packId,
         version,
+        // What the bytes actually are, so a rebuilt pack is recognised as
+        // different even when it kept its version number.
+        sha256,
         data,
         cachedAt: Date.now()
       });
-      
+
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
@@ -324,33 +327,50 @@ export class PackLoader {
   /**
    * Get cached pack
    */
-  private async getCachedPack(packId: string, version: string): Promise<Uint8Array | null> {
+  private async getCachedPack(
+    packId: string,
+    version: string,
+    sha256: string,
+  ): Promise<Uint8Array | null> {
     await this.initDB();
-    
+
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['pack_files'], 'readonly');
       const store = transaction.objectStore('pack_files');
-      
+
       const request = store.get(packId);
-      
+
       request.onsuccess = () => {
         const cached = request.result;
-        
+
         if (!cached) {
           resolve(null);
           return;
         }
-        
+
         // Check version match
         if (cached.version !== version) {
           console.log(`Cached pack ${packId} version mismatch (${cached.version} vs ${version})`);
           resolve(null);
           return;
         }
-        
+
+        // Then the checksum, which is the pack's real identity. Versions are
+        // deliberately held steady across rebuilds, so a version match alone
+        // would replay stale bytes forever and no corrected pack could ever
+        // reach the app. Blobs cached before this check carry no checksum and
+        // are treated as stale, which clears them out on the next install.
+        if (cached.sha256 !== sha256) {
+          console.log(
+            `Cached pack ${packId} is stale (${cached.sha256 ?? 'no checksum'} vs ${sha256}) — re-downloading`,
+          );
+          resolve(null);
+          return;
+        }
+
         resolve(cached.data);
       };
-      
+
       request.onerror = () => reject(request.error);
     });
   }

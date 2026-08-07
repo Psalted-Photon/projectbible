@@ -74,6 +74,17 @@ export async function clearAllData(): Promise<void> {
 /**
  * Remove a specific pack and all its data
  */
+/** The encyclopedia's six stores, and Nave's five. */
+const ISBE_STORES = [
+  'isbe_entries',
+  'isbe_entry_names',
+  'isbe_tokens',
+  'isbe_places',
+  'isbe_place_names',
+  'isbe_place_verses',
+];
+const NAVES_STORES = ['naves_topics', 'naves_names', 'naves_points', 'naves_verses', 'naves_tokens'];
+
 export async function removePack(packId: string): Promise<void> {
   const db = await openDB();
 
@@ -221,6 +232,36 @@ export async function removePack(packId: string): Promise<void> {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
+
+  } else {
+    // Reference works: every row belongs to the one pack, so the stores are
+    // simply emptied. These had no branch at all, which meant deleting the
+    // encyclopedia removed its registry row and left all of its data in place
+    // — the pack looked gone but every article still worked.
+    const STORES_BY_TYPE: Record<string, string[]> = {
+      isbe: ISBE_STORES,
+      // Encyclotopical is the ISBE tables plus Nave's, so it clears both.
+      encyclotopical: [...ISBE_STORES, ...NAVES_STORES],
+      people: ['people', 'person_names', 'person_verses'],
+      art: ['art_scenes', 'art_images'],
+      geonames: ['modern_places'],
+      headings: ['section_headings'],
+    };
+
+    // Only clear stores this database actually has — the list spans packs whose
+    // schema may predate or postdate any given install.
+    const stores = (STORES_BY_TYPE[packType] ?? []).filter(name =>
+      db.objectStoreNames.contains(name),
+    );
+
+    if (stores.length) {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(stores, 'readwrite');
+        stores.forEach(name => tx.objectStore(name).clear());
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
   }
 
   // Step 3: Delete pack metadata for main pack and all virtual sub-packs
@@ -231,6 +272,17 @@ export async function removePack(packId: string): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+
+  // Step 4: Drop the downloaded file the loader kept. Without this a deleted
+  // pack leaves its whole payload behind — 77 MB for the encyclopedia — and
+  // reinstalling replays those bytes instead of fetching anything.
+  try {
+    const { getPackLoader } = await import('../lib/progressive-init');
+    await getPackLoader().removeCachedPack(packId);
+  } catch (error) {
+    // The blob is a cache; failing to clear it must not fail the removal.
+    console.warn(`Could not clear cached file for ${packId}:`, error);
+  }
 }
 
 /**

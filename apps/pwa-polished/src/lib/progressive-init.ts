@@ -108,11 +108,20 @@ export async function loadPackOnDemand(
       try {
         const manifest = await loader.fetchManifest();
         const manifestPack = (manifest as any)?.packs?.find((p: any) => p.id === packId);
-        if (!manifestPack || installedPack.version === manifestPack.version) {
+        // Compare content, not just version. Pack versions stay put across
+        // rebuilds by design, so a version check alone reports a corrected
+        // pack as "up to date" and it can never be installed. A pack that
+        // predates contentHash has none recorded, so it re-installs once.
+        const installedHash = (installedPack as any).contentHash;
+        const sameContent = !!installedHash && installedHash === manifestPack?.sha256;
+        if (!manifestPack || (installedPack.version === manifestPack.version && sameContent)) {
           console.log(`Pack ${packId} already installed and up-to-date (${installedPack.version})`);
           return;
         }
-        console.log(`Pack ${packId} update available: ${installedPack.version} → ${manifestPack.version}`);
+        console.log(
+          `Pack ${packId} update available: ${installedPack.version} → ${manifestPack.version}`
+          + (sameContent ? '' : ' (contents changed)'),
+        );
       } catch {
         console.log(`Pack ${packId} already installed`);
         return;

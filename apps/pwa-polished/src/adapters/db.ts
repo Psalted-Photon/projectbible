@@ -53,6 +53,12 @@ export interface DBPack {
   size: number;
   installedAt: number; // Unix timestamp
   description?: string;
+  /**
+   * SHA-256 of the installed pack file. Versions are deliberately held steady
+   * across rebuilds, so this is what distinguishes a corrected pack from the
+   * copy already on the device. Absent on packs installed before it was added.
+   */
+  contentHash?: string;
 }
 
 export interface DBPackAudioChapter {

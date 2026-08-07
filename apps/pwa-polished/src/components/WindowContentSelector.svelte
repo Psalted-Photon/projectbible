@@ -4,15 +4,34 @@
   import { navigationStore } from "../stores/navigationStore";
   import { libraryPrefsStore, resumeTarget } from "../stores/libraryPrefsStore";
   import { localDateStr } from '../stores/clockStore';
+  import PanelIcon from "./icons/PanelIcon.svelte";
+  import type { PanelIconName } from "./icons/PanelIcon.svelte";
 
   export let windowId: string;
 
-  let searchQuery = "";
+  type ContentType = 'bible' | 'map' | 'notes' | 'isbe' | 'person' | 'naves' | 'commentaries' | 'journal' | 'art';
 
-  function handleContentSelect(contentType: 'bible' | 'map' | 'notes' | 'isbe' | 'person' | 'naves' | 'commentaries' | 'journal' | 'art') {
+  /**
+   * The nine tiles. Accents are borrowed from colors the app already uses — the
+   * book-category ramp in bibleData.ts and the nav bar's badge palette — so the
+   * picker reads as part of the same app rather than a new color scheme.
+   */
+  const TILES: { type: ContentType; icon: PanelIconName; label: string; accent: string }[] = [
+    { type: 'bible',        icon: 'bible',        label: 'Bible',        accent: '#a67c52' },
+    { type: 'map',          icon: 'map',          label: 'Map',          accent: '#61f1ff' },
+    { type: 'commentaries', icon: 'commentary',   label: 'Commentary',   accent: '#a3e635' },
+    { type: 'notes',        icon: 'notes',        label: 'Notes',        accent: '#fde047' },
+    { type: 'journal',      icon: 'journal',      label: 'Journal',      accent: '#f2893e' },
+    { type: 'isbe',         icon: 'encyclopedia', label: 'Encyclopedia', accent: '#4a90e2' },
+    { type: 'naves',        icon: 'topical',      label: 'Topical',      accent: '#a78bfa' },
+    { type: 'person',       icon: 'people',       label: 'People',       accent: '#2dd4bf' },
+    { type: 'art',          icon: 'art',          label: 'Art',          accent: '#fb7185' },
+  ];
+
+  function handleContentSelect(contentType: ContentType) {
     // Set initial content state based on type
     let contentState = {};
-    
+
     if (contentType === 'bible') {
       contentState = {
         translation: 'WEB',
@@ -67,164 +86,119 @@
 
     windowStore.setWindowContent(windowId, contentType, contentState);
   }
-
-  function handleSearch() {
-    // TODO: Implement unified search
-    console.log('Search for:', searchQuery);
-  }
 </script>
 
 <div class="content-selector">
-  <div class="search-bar">
-    <input 
-      type="text" 
-      placeholder="Search everything..." 
-      bind:value={searchQuery}
-      on:keydown={(e) => e.key === 'Enter' && handleSearch()}
-    />
-    <button on:click={handleSearch}><span class="emoji">🔍</span></button>
-  </div>
-
   <div class="button-grid">
-    <button class="content-button bible" on:click={() => handleContentSelect('bible')}>
-      <span class="icon emoji">📖</span>
-      <span class="label">Bible</span>
-    </button>
-    
-    <button class="content-button map" on:click={() => handleContentSelect('map')}>
-      <span class="icon emoji">🗺️</span>
-      <span class="label">Map</span>
-    </button>
-    
-    <button class="content-button commentaries" on:click={() => handleContentSelect('commentaries')}>
-      <span class="icon emoji">📜</span>
-      <span class="label">Commentary</span>
-    </button>
-    
-    <button class="content-button notes" on:click={() => handleContentSelect('notes')}>
-      <span class="icon emoji">📝</span>
-      <span class="label">Notes</span>
-    </button>
-    
-    <button class="content-button journal" on:click={() => handleContentSelect('journal')}>
-      <span class="icon emoji">✍️</span>
-      <span class="label">Journal</span>
-    </button>
-    
-    <button class="content-button encyclopedia" on:click={() => handleContentSelect('isbe')}>
-      <span class="icon emoji">📚</span>
-      <span class="label">Encyclopedia</span>
-    </button>
-
-    <button class="content-button topical" on:click={() => handleContentSelect('naves')}>
-      <span class="icon emoji">📚</span>
-      <span class="label">Topical</span>
-    </button>
-
-    <button class="content-button people" on:click={() => handleContentSelect('person')}>
-      <span class="icon emoji">👤</span>
-      <span class="label">People</span>
-    </button>
-
-    <button class="content-button art" on:click={() => handleContentSelect('art')}>
-      <span class="icon emoji">🖼️</span>
-      <span class="label">Art</span>
-    </button>
+    {#each TILES as tile (tile.type)}
+      <button
+        class="content-button {tile.type}"
+        style="--accent: {tile.accent}"
+        on:click={() => handleContentSelect(tile.type)}
+      >
+        <span class="badge"><PanelIcon name={tile.icon} /></span>
+        <span class="label">{tile.label}</span>
+      </button>
+    {/each}
   </div>
 
   <p class="instruction">Select a content type to fill this window</p>
 </div>
 
 <style>
+  /* The grid and the caption each take an auto margin on their outer edge, so
+     the pair sits centred while there is room and simply starts at the top once
+     there isn't. `justify-content: center` used to do the centring, which meant
+     an overflowing grid spilled off both ends and put the first row out of
+     reach — a panel dragged short could not scroll back up to it. */
   .content-selector {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     height: 100%;
-    padding: 40px;
-    gap: 30px;
+    padding: 16px;
+    gap: 12px;
+    box-sizing: border-box;
   }
 
-  .search-bar {
-    display: flex;
-    gap: 8px;
-    width: 100%;
-    max-width: 500px;
-  }
-
-  .search-bar input {
-    flex: 1;
-    padding: 12px 16px;
-    background: #2a2a2a;
-    border: 1px solid #444;
-    border-radius: 6px;
-    color: #e0e0e0;
-    font-size: 16px;
-  }
-
-  .search-bar input:focus {
-    outline: none;
-    border-color: #667eea;
-  }
-
-  .search-bar button {
-    padding: 12px 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    border-radius: 6px;
-    color: white;
-    font-size: 20px;
-    cursor: pointer;
-    transition: transform 0.2s;
-  }
-
-  .search-bar button:hover {
-    transform: scale(1.05);
-  }
-
+  /* auto-fill measures the panel, not the viewport, which is the only thing
+     that works here: a panel's width is an inline percentage set by the drag,
+     so no media query can see it. Narrow side panel lands on 2 columns, a wide
+     bottom panel on 5, and all nine tiles stay on screen either way. */
   .button-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
-    max-width: 500px;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 10px;
     width: 100%;
+    margin-top: auto;
   }
 
   .content-button {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 30px;
-    background: #2a2a2a;
-    border: 2px solid #444;
-    border-radius: 12px;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 12px 8px;
+    background: #232323;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
     color: #e0e0e0;
     cursor: pointer;
-    transition: all 0.2s;
-    font-size: 16px;
+    font-family: inherit;
+    font-size: 12px;
     font-weight: 500;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
   }
 
   .content-button:hover {
+    background: #2a2a2a;
     border-color: #667eea;
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
   }
 
-  .content-button .icon {
-    font-size: 48px;
+  .content-button:active {
+    transform: scale(0.96);
   }
 
-  .content-button .label {
-    font-size: 18px;
+  .content-button:focus-visible {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.25);
+  }
+
+  /* The nav bar's badge formula at tile scale. The second color stop is the
+     state: 20% resting, 35% on hover, the same ladder the chapter grid walks. */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    line-height: 0;
+    flex-shrink: 0;
+    background: radial-gradient(circle, var(--accent) 0%, var(--accent) 20%, #222 100%);
+    transition: background 0.15s;
+  }
+
+  .content-button:hover .badge {
+    background: radial-gradient(circle, var(--accent) 0%, var(--accent) 35%, #222 100%);
+  }
+
+  .label {
+    font-size: 12px;
+    line-height: 1.2;
+    text-align: center;
   }
 
   .instruction {
     color: #888;
-    font-size: 14px;
-    margin-top: 20px;
+    font-size: 11px;
+    margin: 0;
+    margin-bottom: auto;
+    text-align: center;
   }
 </style>

@@ -36,6 +36,11 @@ export async function importPackFromSQLite(file: File): Promise<void> {
 
   // Read the SQLite file
   const arrayBuffer = await file.arrayBuffer();
+  /** Content hash of the installed bytes, in the same hex form the manifest uses. */
+  const sha256Hex = async (buf: ArrayBuffer) =>
+    Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', buf)))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
   const uint8Array = new Uint8Array(arrayBuffer);
   const db = new SQL.Database(uint8Array);
 
@@ -73,7 +78,11 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       attribution: metadata.attribution,
       size: file.size,
       installedAt: Date.now(),
-      description: metadata.description
+      description: metadata.description,
+      // What was actually installed. Pack versions are held steady across
+      // rebuilds, so this is the only thing that can tell a corrected pack
+      // apart from the one already on the device.
+      contentHash: await sha256Hex(arrayBuffer)
     };
 
     if (!packInfo.id) {
