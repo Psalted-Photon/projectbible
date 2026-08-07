@@ -1,19 +1,19 @@
 <script lang="ts">
-  import { ArrowLeft, FlipHorizontal } from "phosphor-svelte";
+  import { ArrowLeft, Swap } from "phosphor-svelte";
 
   /**
    * The two controls at the head of every library window.
    *
    * Back walks out one step at a time — a crumb off the trail, then the entry,
-   * then the index — matching what the nav bar's arrow does elsewhere. Flip
-   * turns the page over between the index and the entry, in either direction.
+   * then the index — matching what the nav bar's arrow does elsewhere. Swap
+   * switches between the index and the entry, in either direction.
    *
    * These replaced a ☰, which reads as "menu" everywhere else in software and
    * was being used as a toggle.
    */
   export let canGoBack = false;
   export let canFlip = false;
-  /** True while the index is showing, which flips the icon's meaning. */
+  /** True while the index is showing, which reverses what swap means. */
   export let onIndex = false;
   export let onBack: () => void;
   export let onFlip: () => void;
@@ -32,7 +32,7 @@
       title={onIndex ? "Back to what you were reading" : "Contents"}
       aria-label={onIndex ? "Back to what you were reading" : "Contents"}
     >
-      <FlipHorizontal size={16} weight="duotone" />
+      <Swap size={16} weight="duotone" />
     </button>
   {/if}
 </div>

@@ -123,13 +123,54 @@ function decodeEntities(s) {
     .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n));
 }
 
+// A reference written as a bare verse ("31") or a chapter and verse ("4:11"),
+// i.e. one that names no book and so must inherit the book before it.
+const CONTINUATION = /^(\d+)(?::(\d+))?[a-z]?$/;
+
+/**
+ * Correct the book of a continuation reference.
+ *
+ * The source module resolves references that spell out their book almost
+ * perfectly, but mis-resolves continuations: ISBE abbreviates Judges as "Jud",
+ * which it reads as Jude. Jude has one chapter, so "Jud 18:31" overflows 17
+ * chapters into Revelation and then again through Revelation 17, landing at
+ * Rev 18:13. 254 references arrive wrong this way, 245 of them Judges.
+ *
+ * A reference whose visible text names no book cannot change book, so where
+ * the tagged book disagrees with the one before it, the previous book wins.
+ * Only that case is touched: a differing *chapter* is usually legitimate —
+ * "1Ch 6:3; 24:1" really does mean chapter 24 — so chapters are left alone.
+ */
+function fixContinuation(osis, txt, prev) {
+  if (!prev) return osis;
+  const label = txt.replace(/<[^>]+>/g, '').trim();
+  const cont = CONTINUATION.exec(label);
+  if (!cont) return osis;
+
+  const [book] = osis.split('-')[0].split('.');
+  if (book === prev.book) return osis;
+
+  // "4:11" gives its own chapter; a bare "31" continues the previous one.
+  const chapter = cont[2] ? cont[1] : prev.chapter;
+  const verse = cont[2] ?? cont[1];
+  return `${prev.book}.${chapter}.${verse}`;
+}
+
 // TEI body -> display HTML. Only <p>, <ref>, <hi>, <lb> occur in the corpus.
 function toHtml(body) {
   let h = body;
   // Scripture references: <ref osisRef="Bible:Josh.2.15">Jos 2:15</ref>
+  // Replacement runs left to right through the article, so each reference can
+  // see the one before it — which is what makes the repair above possible.
+  let prevRef = null;
   h = h.replace(
     /<ref\b[^>]*\bosisRef="Bible:([^"]+)"[^>]*>([\s\S]*?)<\/ref>/g,
-    (_, osis, txt) => `<a class="isbe-scripture" data-osis="${osis}">${txt}</a>`,
+    (_, osis, txt) => {
+      const fixed = fixContinuation(osis, txt, prevRef);
+      const [book, chapter] = fixed.split('-')[0].split('.');
+      prevRef = { book, chapter };
+      return `<a class="isbe-scripture" data-osis="${fixed}">${txt}</a>`;
+    },
   );
   // Internal cross-references: <ref target="ISBE:ALEPH">ALEPH</ref>
   h = h.replace(
