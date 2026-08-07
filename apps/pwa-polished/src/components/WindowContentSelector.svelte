@@ -125,10 +125,15 @@
   /* auto-fill measures the panel, not the viewport, which is the only thing
      that works here: a panel's width is an inline percentage set by the drag,
      so no media query can see it. Narrow side panel lands on 2 columns, a wide
-     bottom panel on 5, and all nine tiles stay on screen either way. */
+     bottom panel on 5, and all nine tiles stay on screen either way.
+
+     The min() guards the floor: a bare minmax(96px, …) keeps its 96px minimum
+     even once the panel is narrower than that, and the grid starts overflowing
+     sideways. Wrapped in min(…, 100%) the single column gives up and shrinks
+     instead, so a panel dragged down to a sliver never scrolls horizontally. */
   .button-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(96px, 100%), 1fr));
     gap: 10px;
     width: 100%;
     margin-top: auto;
