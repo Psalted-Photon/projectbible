@@ -2,7 +2,7 @@
   import { get } from "svelte/store";
   import { windowStore } from "../lib/stores/windowStore";
   import { navigationStore } from "../stores/navigationStore";
-  import { libraryPrefsStore } from "../stores/libraryPrefsStore";
+  import { libraryPrefsStore, resumeTarget } from "../stores/libraryPrefsStore";
   import { localDateStr } from '../stores/clockStore';
 
   export let windowId: string;
@@ -45,19 +45,24 @@
       contentState = {
         view: 'browse',
       };
-    } else if (contentType === 'isbe') {
-      // Reopen on the last article read, the way a ribbon holds your place.
-      // Nothing read yet means no entry id, and the window opens on contents.
-      const last = get(libraryPrefsStore).isbe.lastRead;
-      contentState = last
-        ? { kind: 'entry', entryId: Number(last.id), placeId: null, primaryName: last.name }
-        : {};
-    } else if (contentType === 'person') {
-      const last = get(libraryPrefsStore).people.lastRead;
-      contentState = last ? { personId: String(last.id), primaryName: last.name } : {};
-    } else if (contentType === 'naves') {
-      const last = get(libraryPrefsStore).naves.lastRead;
-      contentState = last ? { topicId: Number(last.id), primaryName: last.name } : {};
+    } else if (contentType === 'isbe' || contentType === 'person' || contentType === 'naves') {
+      // Land back on what you were reading only if you closed this shelf a few
+      // minutes ago — enough to undo a misfired close, not enough to hand you
+      // yesterday's lookup. Otherwise open on the contents. Either way the entry
+      // stays in Recently Viewed and one flip away.
+      const prefs = get(libraryPrefsStore);
+      if (contentType === 'isbe') {
+        const last = resumeTarget(prefs, 'isbe');
+        contentState = last
+          ? { kind: 'entry', entryId: Number(last.id), placeId: null, primaryName: last.name }
+          : {};
+      } else if (contentType === 'person') {
+        const last = resumeTarget(prefs, 'people');
+        contentState = last ? { personId: String(last.id), primaryName: last.name } : {};
+      } else {
+        const last = resumeTarget(prefs, 'naves');
+        contentState = last ? { topicId: Number(last.id), primaryName: last.name } : {};
+      }
     }
 
     windowStore.setWindowContent(windowId, contentType, contentState);

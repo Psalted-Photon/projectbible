@@ -52,6 +52,7 @@
   <PersonContent
     windowId={panel.id}
     personId={panel.contentState?.personId ?? null}
+    initialTrail={panel.contentState?.trail ?? []}
   />
 {:else if panel.contentType === 'naves'}
   <NavesContent

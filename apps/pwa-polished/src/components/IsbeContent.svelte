@@ -29,6 +29,7 @@
     type LibraryRow,
   } from "../adapters/lexicon-lookup.js";
   import IndexList from "./library/IndexList.svelte";
+  import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
   import { isbeSource } from "../lib/library/source";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import { navesModalStore } from "../stores/navesModalStore";
@@ -79,10 +80,11 @@
   let activeTab: Tab = "overview";
 
   // --- Contents ----------------------------------------------------------
-  // The article and the contents list share this component: the header's ☰
-  // swaps between them, so both the popup and a pinned window can browse.
-  // Opened with nothing to show — the Encyclopedia tile does exactly that —
-  // the contents are what you land on.
+  // The article and the contents list share this component: the header's back
+  // and flip buttons swap between them, so both the popup and a pinned window
+  // can browse. Opened with nothing to show — which the Encyclopedia tile does
+  // whenever you last closed it more than half an hour ago — the contents are
+  // what you land on.
   let showContents = entryId == null && placeId == null;
   let trail: TrailStop[] = [...initialTrail];
   let neighbors: { prev: LibraryRow | null; next: LibraryRow | null } = { prev: null, next: null };
@@ -272,12 +274,42 @@
     }
   }
 
-  function toggleContents() {
-    showContents = !showContents;
-  }
-
   /** Which letter the contents should open on — the one you're reading. */
   $: contentsLetter = title ? libraryLetterOf(title.toLowerCase()) : null;
+
+  // --- Back and flip -----------------------------------------------------
+  // Back walks out one step at a time: a crumb off the trail, then the article,
+  // then the index. Flip turns the page over between the two, either way.
+  $: canGoBack = !showContents && (trail.length > 0 || !!entry || !!place);
+  $: lastRead = $libraryPrefsStore.isbe.lastRead;
+  $: canFlip = showContents ? !!entry || !!place || !!lastRead : true;
+
+  function goBack() {
+    if (trail.length) return popTrailTo(trail.length - 1);
+    showContents = true;
+  }
+
+  /** Escape comes here before the host closes: walk out a step if there is
+   *  one, and only let it close when there isn't. True means consumed. */
+  export function handleBack(): boolean {
+    if (!canGoBack) return false;
+    goBack();
+    return true;
+  }
+
+  function flip() {
+    if (!showContents) {
+      showContents = true;
+      return;
+    }
+    // Nothing loaded this session — flip to whatever you last had open, which
+    // is what a stale window leaves on the other side of the card.
+    if (!entry && !place && lastRead) {
+      jumpToEntry(Number(lastRead.id), lastRead.name);
+      return;
+    }
+    showContents = false;
+  }
 
   // --- Dictionary bridge -------------------------------------------------
   // Offer a jump to the plain dictionary for this term, but only when the
@@ -922,15 +954,7 @@
 
 <div class="isbe-content" class:docked>
   <div class="isbe-header">
-    <button
-      class="contents-btn"
-      class:on={showContents}
-      on:click={toggleContents}
-      title={showContents ? "Back to the article" : "Contents"}
-      aria-label={showContents ? "Back to the article" : "Contents"}
-    >
-      ☰
-    </button>
+    <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
     <div class="head-text">
       <h2>{showContents ? isbeSource.label : title}</h2>
       {#if showContents}
@@ -1166,7 +1190,7 @@
     border-bottom: 1px solid var(--border-color, #333);
     flex-shrink: 0;
   }
-  /* Takes the slack between the ☰ and the action buttons, and is allowed to
+  /* Takes the slack between the nav buttons and the actions, and is allowed to
      shrink — a long article title must not push the close button off a narrow
      docked window. */
   .head-text {
@@ -1485,23 +1509,6 @@
   .src {
     font-size: 10px;
     color: var(--text-muted, #888);
-  }
-
-  /* Contents toggle — sits ahead of the title, so ☰ and the name read as one
-     row the way a book's running head does. */
-  .contents-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted, #999);
-    font-size: 16px;
-    line-height: 1;
-    cursor: pointer;
-    padding: 3px 6px 3px 0;
-    flex-shrink: 0;
-  }
-  .contents-btn:hover,
-  .contents-btn.on {
-    color: var(--color-primary, #4a90e2);
   }
 
   /* Back trail — one row, scrolling sideways rather than wrapping, so following

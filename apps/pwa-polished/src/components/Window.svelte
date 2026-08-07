@@ -196,6 +196,11 @@
     if (suppressClick) return;
     windowStore.closeWindow(window.id);
   }
+
+  // The three reference works put an alphabet rail and per-row buttons hard
+  // against the panel's inner edge — the same strip the resize grip covers.
+  // They get an inset; nothing else needs one.
+  $: isLibrary = ['isbe', 'naves', 'person'].includes(window.contentType);
 </script>
 
 <svelte:window 
@@ -254,7 +259,7 @@
   </div>
 
   <!-- Panel content -->
-  <div class="panel-content">
+  <div class="panel-content" class:library={isLibrary}>
     <slot />
   </div>
 </div>
@@ -475,5 +480,20 @@
     flex: 1;
     overflow: auto;
     background: #1a1a1a;
+  }
+
+  /* The resize grip runs the panel's full height along its inner edge at
+     z-index 100, and this content sits underneath it. The header escapes by
+     being z-index 101, but on a left- or right-docked panel the grip covers a
+     24px column of everything below — which is exactly where the alphabet rail
+     and the row buttons live. So library content is inset clear of it.
+
+     Top- and bottom-docked panels need nothing: there the grip lies along the
+     header's own band, which is already above it. */
+  .panel-right .panel-content.library {
+    padding-left: 26px;
+  }
+  .panel-left .panel-content.library {
+    padding-right: 26px;
   }
 </style>

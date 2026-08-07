@@ -45,8 +45,13 @@
     if (e.target === e.currentTarget) close();
   }
 
+  // Escape walks the topic back out before closing — see IsbeModal.
+  let content: NavesContent;
+
   function onKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape" && isOpen) close();
+    if (e.key !== "Escape" || !isOpen) return;
+    if (content?.handleBack()) return;
+    close();
   }
 </script>
 
@@ -56,6 +61,7 @@
   <div class="modal-backdrop" on:click={handleBackdropClick} role="presentation">
     <div class="modal-container">
       <NavesContent
+        bind:this={content}
         topicId={state.topicId}
         primaryName={state.primaryName}
         initialTab={state.tab ?? null}

@@ -27,7 +27,17 @@ export interface LibrarySourcePrefs {
   lastRead: LibraryMark | null;
   /** Letter the contents list was left on. */
   lastLetter: string | null;
+  /**
+   * When the window was last closed, in epoch ms. Reopening within
+   * RESUME_WINDOW_MS returns you to `lastRead`; after that you get the index.
+   * Stamped on closing rather than on opening: the point is how long ago you
+   * *left*, so a long read followed by a misfired close still resumes.
+   */
+  closedAt: number | null;
 }
+
+/** How long a closed window stays resumable. */
+export const RESUME_WINDOW_MS = 30 * 60 * 1000;
 
 export type LibraryPrefs = Record<LibrarySource, LibrarySourcePrefs>;
 
@@ -40,6 +50,7 @@ const emptySource = (): LibrarySourcePrefs => ({
   recent: [],
   lastRead: null,
   lastLetter: null,
+  closedAt: null,
 });
 
 const empty = (): LibraryPrefs => ({
@@ -73,6 +84,7 @@ function loadPersisted(): LibraryPrefs {
         recent: Array.isArray(saved.recent) ? saved.recent.filter(isMark).slice(0, MAX_RECENT) : [],
         lastRead: isMark(saved.lastRead) ? saved.lastRead : null,
         lastLetter: typeof saved.lastLetter === 'string' ? saved.lastLetter : null,
+        closedAt: typeof saved.closedAt === 'number' ? saved.closedAt : null,
       };
     }
   } catch (error) {
@@ -128,11 +140,27 @@ function createLibraryPrefsStore() {
     setLastLetter: (source: LibrarySource, letter: string) =>
       edit(source, (s) => ({ ...s, lastLetter: letter })),
 
+    /** Called when the window is closed — starts the resume countdown. */
+    markClosed: (source: LibrarySource) => edit(source, (s) => ({ ...s, closedAt: Date.now() })),
+
     clearRecent: (source: LibrarySource) => edit(source, (s) => ({ ...s, recent: [] })),
   };
 }
 
 export const libraryPrefsStore = createLibraryPrefsStore();
+
+/**
+ * The entry a freshly opened window should land on, or null for the index.
+ *
+ * Resumes only if the window was closed recently — long enough to undo a
+ * misfired close, short enough that coming back tomorrow starts clean. What
+ * you were reading is still in `recent` and behind the flip either way.
+ */
+export function resumeTarget(prefs: LibraryPrefs, source: LibrarySource): LibraryMark | null {
+  const { lastRead, closedAt } = prefs[source];
+  if (!lastRead || closedAt == null) return null;
+  return Date.now() - closedAt < RESUME_WINDOW_MS ? lastRead : null;
+}
 
 /** Is this entry starred? Cheap enough to call per row while rendering. */
 export function isStarred(prefs: LibraryPrefs, source: LibrarySource, id: number | string): boolean {

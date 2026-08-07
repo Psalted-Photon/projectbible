@@ -1,4 +1,5 @@
 import { writable, get } from 'svelte/store';
+import { libraryPrefsStore, type LibrarySource } from '../../stores/libraryPrefsStore';
 
 export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves';
 export type WindowEdge = 'top' | 'left' | 'right' | 'bottom';
@@ -33,8 +34,13 @@ export interface WindowState {
     expandedBooks?: string[];
     visited?: string[];
     scrollTop?: number;
-    /** Articles walked through to get here, for the back trail. */
-    trail?: { entryId: number | null; placeId: string | null; name: string }[];
+    /** Pages walked through to get here, for the back trail. One shape per
+     *  work: articles carry entry/place ids, topics a topicId, bios a personId. */
+    trail?: Array<
+      | { entryId: number | null; placeId: string | null; name: string }
+      | { topicId: number; name: string }
+      | { personId: string; name: string }
+    >;
     /** For person windows: whose bio is pinned. */
     personId?: string | null;
     /** For topical windows: which Nave's topic is pinned. */
@@ -46,6 +52,13 @@ export interface WindowState {
 
 const MAX_WINDOWS = 6;
 const STORAGE_KEY = 'projectbible-windows';
+
+/** The three window types that are reference works, and which shelf each is. */
+const LIBRARY_SOURCE_OF: Partial<Record<WindowContentType, LibrarySource>> = {
+  isbe: 'isbe',
+  naves: 'naves',
+  person: 'people',
+};
 
 function createWindowStore() {
   const { subscribe, set, update } = writable<WindowState[]>([]);
@@ -115,7 +128,7 @@ function createWindowStore() {
     closeWindow: (id: string) => {
       const windows = get({ subscribe });
       const closing = windows.find(w => w.id === id);
-      
+
       if (closing) {
         const windowNumber = id.split('-')[1];
         console.log(`🗑️ WINDOW ${windowNumber} CLOSED:`, {
@@ -124,6 +137,12 @@ function createWindowStore() {
           size: `${closing.size.toFixed(1)}%`,
           contentType: closing.contentType
         });
+
+        // Start the library resume countdown here rather than on open: what
+        // matters is how long ago you left. Both ways out — the × and dragging
+        // the panel into the close zone — arrive at this one function.
+        const source = LIBRARY_SOURCE_OF[closing.contentType];
+        if (source) libraryPrefsStore.markClosed(source);
       }
 
       update(wins => {

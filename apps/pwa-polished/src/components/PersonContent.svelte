@@ -10,6 +10,7 @@
   import { navesModalStore } from "../stores/navesModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import IndexList from "./library/IndexList.svelte";
+  import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
   import { peopleSource } from "../lib/library/source";
   import {
     getPersonVerses,
@@ -43,6 +44,8 @@
   export let clickedWord = "";
 
   export let windowId: string | null = null;
+  /** People walked through to reach this one, oldest first — the back trail. */
+  export let initialTrail: { personId: string; name: string }[] = [];
   export let onClose: (() => void) | null = null;
   export let onPopOut: ((snap: { personId: string; primaryName: string }) => void) | null = null;
   /** Hosts that draw their own header (the word-study modal) suppress ours. */
@@ -69,7 +72,7 @@
     : loaded;
 
   // Contents open when there is nobody to show — which is how the People tile
-  // starts — and the header's ☰ swaps between the two thereafter.
+  // starts — and the header's back and flip buttons swap between the two.
   let showContents = !lookup && !personId;
 
   // Load by id for the library path. The modal path arrives with its record.
@@ -115,17 +118,24 @@
   $: parents = [...(person?.father ?? []), ...(person?.mother ?? [])];
 
   // --- Walking the family ------------------------------------------------
-  /** Open a relative. The pack stores their id as `slug`, so the tree walks. */
+  /** One step of the back trail: enough to reopen that person. */
+  type TrailStop = { personId: string; name: string };
+  let trail: TrailStop[] = [...initialTrail];
+
+  /** Open a relative. The pack stores their id as `slug`, so the tree walks.
+   *  Leaves a crumb — a family tree is the one place you most want the way
+   *  back, and without it the back arrow would have nothing to walk. */
   function openRelation(rel: PersonRelation) {
     const id = relationId(rel);
-    if (!id) return;
+    if (!id || !person) return;
+    trail = [...trail, { personId: person.id, name: title }];
     openPerson(id, rel.name);
   }
 
   function openPerson(id: string, name: string) {
     showContents = false;
     if (windowId) {
-      windowStore.updateContentState(windowId, { personId: id, primaryName: name });
+      windowStore.updateContentState(windowId, { personId: id, primaryName: name, trail });
     } else {
       // In the modal the record is what drives the view, so swapping person
       // means swapping the record rather than re-resolving the clicked word.
@@ -134,8 +144,22 @@
     }
   }
 
+  /** Open from the contents or an arrow — a fresh start, no trail. */
+  function jumpToPerson(id: string, name: string) {
+    trail = [];
+    openPerson(id, name);
+  }
+
   function openFromContents(row: LibraryRow) {
-    openPerson(String(row.id), row.name);
+    jumpToPerson(String(row.id), row.name);
+  }
+
+  /** Step back to someone you came through. */
+  function popTrailTo(index: number) {
+    const stop = trail[index];
+    if (!stop) return;
+    trail = trail.slice(0, index);
+    openPerson(stop.personId, stop.name);
   }
 
   // --- Page turns --------------------------------------------------------
@@ -150,6 +174,31 @@
   }
 
   $: contentsLetter = person ? libraryLetterOf(person.name.toLowerCase()) : null;
+
+  // --- Back and flip -----------------------------------------------------
+  // Back walks out one step at a time: a crumb off the trail, then the bio,
+  // then the index. Flip turns the page over between the two, either way.
+  $: canGoBack = !showContents && (trail.length > 0 || !!person);
+  $: lastRead = $libraryPrefsStore.people.lastRead;
+  $: canFlip = showContents ? !!person || !!lastRead : true;
+
+  function goBack() {
+    if (trail.length) return popTrailTo(trail.length - 1);
+    showContents = true;
+  }
+
+  function flip() {
+    if (!showContents) {
+      showContents = true;
+      return;
+    }
+    // Nothing loaded this session — flip to whoever you last had open.
+    if (!person && lastRead) {
+      jumpToPerson(String(lastRead.id), lastRead.name);
+      return;
+    }
+    showContents = false;
+  }
 
   // --- Recents -----------------------------------------------------------
   let rememberedId: string | null = null;
@@ -321,15 +370,7 @@
 <div class="person-content" class:docked class:hosted={!showHeader}>
   {#if showHeader}
     <div class="person-header">
-      <button
-        class="contents-btn"
-        class:on={showContents}
-        on:click={() => (showContents = !showContents)}
-        title={showContents ? "Back to the bio" : "Contents"}
-        aria-label={showContents ? "Back to the bio" : "Contents"}
-      >
-        ☰
-      </button>
+      <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
       <div class="head-text">
         <h2>{showContents ? peopleSource.label : title}</h2>
         <div class="sub">
@@ -379,6 +420,15 @@
   {:else if !person}
     <div class="person-body"><p class="muted">No bio for this name.</p></div>
   {:else}
+    {#if trail.length}
+      <nav class="trail" aria-label="Back trail">
+        {#each trail as stop, i}
+          <button class="crumb" on:click={() => popTrailTo(i)}>{stop.name}</button>
+          <span class="crumb-sep">›</span>
+        {/each}
+        <span class="crumb here">{title}</span>
+      </nav>
+    {/if}
     <div class="person-body">
       <div class="character-view">
         {#if person.nameMeaning}
@@ -598,19 +648,41 @@
     gap: 8px;
     flex-shrink: 0;
   }
-  .contents-btn {
+  /* Back trail — one row, scrolling sideways rather than wrapping, so walking
+     a long family line never pushes the bio down the page. */
+  .trail {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 18px 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  .trail::-webkit-scrollbar {
+    display: none;
+  }
+  .crumb {
     background: none;
     border: none;
-    color: var(--text-muted, #999);
-    font-size: 16px;
-    line-height: 1;
-    cursor: pointer;
-    padding: 3px 6px 3px 0;
-    flex-shrink: 0;
-  }
-  .contents-btn:hover,
-  .contents-btn.on {
     color: var(--color-primary, #4a90e2);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 0;
+    cursor: pointer;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .crumb.here {
+    color: var(--text-muted, #999);
+    cursor: default;
+  }
+  .crumb-sep {
+    color: var(--text-muted, #666);
+    font-size: 11px;
   }
   .bridge-btn {
     background: var(--surface-2, rgba(255, 255, 255, 0.06));

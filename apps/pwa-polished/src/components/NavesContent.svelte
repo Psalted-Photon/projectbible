@@ -11,6 +11,7 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import IndexList from "./library/IndexList.svelte";
+  import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
   import { navesSource } from "../lib/library/source";
   import {
     getNavesTopic,
@@ -288,6 +289,38 @@
 
   $: contentsLetter = title ? libraryLetterOf(title.toLowerCase()) : null;
 
+  // --- Back and flip -----------------------------------------------------
+  // Back walks out one step at a time: a crumb off the trail, then the topic,
+  // then the index. Flip turns the page over between the two, either way.
+  $: canGoBack = !showContents && (trail.length > 0 || !!topic);
+  $: lastRead = $libraryPrefsStore.naves.lastRead;
+  $: canFlip = showContents ? !!topic || !!lastRead : true;
+
+  function goBack() {
+    if (trail.length) return popTrailTo(trail.length - 1);
+    showContents = true;
+  }
+
+  /** Escape comes here before the host closes — see IsbeContent.handleBack. */
+  export function handleBack(): boolean {
+    if (!canGoBack) return false;
+    goBack();
+    return true;
+  }
+
+  function flip() {
+    if (!showContents) {
+      showContents = true;
+      return;
+    }
+    // Nothing loaded this session — flip to whatever you last had open.
+    if (!topic && lastRead) {
+      jumpToTopic(Number(lastRead.id), lastRead.name);
+      return;
+    }
+    showContents = false;
+  }
+
   // --- Recents -----------------------------------------------------------
   let rememberedId: number | null = null;
   $: if (topic && topic.topicId !== rememberedId) {
@@ -369,15 +402,7 @@
 
 <div class="naves-content" class:docked>
   <div class="naves-header">
-    <button
-      class="contents-btn"
-      class:on={showContents}
-      on:click={() => (showContents = !showContents)}
-      title={showContents ? "Back to the topic" : "Contents"}
-      aria-label={showContents ? "Back to the topic" : "Contents"}
-    >
-      ☰
-    </button>
+    <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
     <div class="head-text">
       <h2>{showContents ? navesSource.label : title}</h2>
       <div class="sub">
@@ -622,20 +647,6 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
-  }
-  .contents-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted, #999);
-    font-size: 16px;
-    line-height: 1;
-    cursor: pointer;
-    padding: 3px 6px 3px 0;
-    flex-shrink: 0;
-  }
-  .contents-btn:hover,
-  .contents-btn.on {
-    color: var(--color-primary, #4a90e2);
   }
   .bridge-btn {
     background: var(--surface-2, rgba(255, 255, 255, 0.06));

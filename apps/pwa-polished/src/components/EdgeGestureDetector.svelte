@@ -28,6 +28,19 @@
   // Locks reader scroll for any touch starting in the bottom zone
   let touchInBottomZone = false;
 
+  /**
+   * Did this pointer land inside a docked window rather than on the reader
+   * behind it?
+   *
+   * A panel's own content reaches the screen edge — the library's alphabet rail
+   * sits right in the swipe lane on a left-docked panel — so a drag there is
+   * the user working that panel, not asking for another one. Same shape as the
+   * contenteditable guard below.
+   */
+  function insidePanel(target: EventTarget | null): boolean {
+    return !!(target as HTMLElement | null)?.closest?.('.panel');
+  }
+
   $: atLimit = $windowStore.length >= 6;
   $: bumperClass = atLimit ? 'at-limit' : 'normal';
 
@@ -64,6 +77,10 @@
     const target = e.target as HTMLElement;
     if (target.closest('[contenteditable="true"]')) {
       console.log('⛔ TOUCH START blocked - touching contenteditable');
+      return;
+    }
+    if (insidePanel(target)) {
+      console.log('⛔ TOUCH START blocked - inside a docked window');
       return;
     }
 
@@ -112,6 +129,10 @@
     if (target.closest('[contenteditable="true"]')) {
       console.log('⛔ MOUSE DOWN blocked - clicking in contenteditable');
       e.stopPropagation();
+      return;
+    }
+    if (insidePanel(target)) {
+      console.log('⛔ MOUSE DOWN blocked - inside a docked window');
       return;
     }
 

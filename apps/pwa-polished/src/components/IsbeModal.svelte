@@ -78,8 +78,15 @@
     if (e.target === e.currentTarget) close();
   }
 
+  // Escape walks the article back out — a crumb, then the contents — and only
+  // closes the card once there is nowhere left to go. Matches the header's
+  // back arrow rather than fighting it.
+  let content: IsbeContent;
+
   function onKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape" && isOpen) close();
+    if (e.key !== "Escape" || !isOpen) return;
+    if (content?.handleBack()) return;
+    close();
   }
 </script>
 
@@ -89,6 +96,7 @@
   <div class="modal-backdrop" on:click={handleBackdropClick} role="presentation">
     <div class="modal-container">
       <IsbeContent
+        bind:this={content}
         kind={state.kind}
         entryId={state.entryId}
         placeId={state.placeId}
