@@ -11,10 +11,11 @@
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
   import { applyTheme, getSettings, updateSettings } from '../adapters/settings';
   import { paneStore } from '../stores/paneStore';
-  import { syncService, type SyncState, type SyncStatus } from '../lib/sync';
+  import { syncService, formatSyncLabel, isSyncRunning, SYNC_SCOPE_TOOLTIP, type SyncState } from '../lib/sync';
   import { localDateStr } from '../stores/clockStore';
   import SavedVersesPanel from './SavedVersesPanel.svelte';
   import JournalCalendar from './JournalCalendar.svelte';
+  import BrandSpinner from './BrandSpinner.svelte';
   import { User } from 'phosphor-svelte';
 
   let isOpen = false;
@@ -49,8 +50,9 @@
   let defaultOT = '';
   let defaultNT = '';
 
-  let syncStatus: SyncStatus = 'idle';
-  let lastSyncedAt: Date | null = null;
+  let syncState: SyncState = syncService.getState();
+  $: syncLabel = formatSyncLabel(syncState, isSignedIn);
+  $: syncing = isSyncRunning(syncState);
 
   const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan'; // legacy key
   const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans'; // new multi-plan key
@@ -85,8 +87,7 @@
     });
 
     const unsubscribeSync = syncService.subscribe((state: SyncState) => {
-      syncStatus = state.status;
-      lastSyncedAt = state.lastSyncedAt;
+      syncState = state;
     });
 
     supabaseAuthService.getSession().then((session) => {
@@ -394,16 +395,6 @@
     profileModalStore.close();
   }
 
-  function formatSyncStatus() {
-    switch (syncStatus) {
-      case 'syncing': return 'Syncing...';
-      case 'idle': return lastSyncedAt ? `Synced ${lastSyncedAt.toLocaleTimeString()}` : 'Ready';
-      case 'error': return `Sync error`;
-      case 'offline': return 'Offline';
-      default: return isSignedIn ? 'Ready' : 'Not synced';
-    }
-  }
-
   async function handleManualSync() {
     if (!isSignedIn) return;
     try {
@@ -442,13 +433,16 @@
           </div>
         </div>
         <div class="profile-actions">
-          <div class="sync-status">
-            <span class="sync-indicator">{formatSyncStatus()}</span>
+          <div class="sync-status" title={SYNC_SCOPE_TOOLTIP}>
+            {#if syncing}
+              <BrandSpinner size={13} title="Syncing…" />
+            {/if}
+            <span class="sync-indicator" class:sync-indicator-error={syncState.status === 'error'}>{syncLabel}</span>
             {#if isSignedIn}
               <button
                 class="sync-btn"
                 on:click={handleManualSync}
-                disabled={syncStatus === 'syncing'}
+                disabled={syncing}
                 title="Sync now"
                 aria-label="Sync now"
               >
@@ -762,12 +756,16 @@
   .sync-status {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   .sync-indicator {
     font-size: 12px;
     color: #9ccc65;
+  }
+
+  .sync-indicator-error {
+    color: #ef9a9a;
   }
 
   .sync-btn {

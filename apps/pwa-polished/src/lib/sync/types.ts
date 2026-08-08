@@ -24,12 +24,19 @@ export type SyncTable =
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
 
+/** What an in-flight sync is doing, so the UI can say more than "Syncing...". */
+export type SyncActivity = 'uploading' | 'checking';
+
 export interface SyncState {
   status: SyncStatus;
   pendingCount: number;
   lastSyncedAt: Date | null;
   error: string | null;
   isOnline: boolean;
+  /** Current step of an in-flight sync; null whenever status !== 'syncing'. */
+  activity: SyncActivity | null;
+  /** Queued changes the last completed sync actually uploaded. */
+  lastUploadedCount: number;
 }
 
 export interface RemoteChange {

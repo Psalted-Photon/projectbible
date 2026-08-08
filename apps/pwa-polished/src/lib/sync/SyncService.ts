@@ -22,6 +22,36 @@ interface SyncStore {
 
 type StateListener = (state: SyncState) => void;
 
+/** A sync gave up before finishing. Distinguished so the UI can say so plainly. */
+class SyncTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SyncTimeoutError';
+  }
+}
+
+/**
+ * Reject once `ms` has elapsed, whatever the wrapped promise is doing.
+ *
+ * Every network call underneath is a bare fetch or an IndexedDB request, and
+ * either can hang without ever settling — a half-open socket on a device that
+ * just woke, or an aborted IDB transaction. A promise that never settles never
+ * runs its `finally`, which is what used to leave the mutex latched on and the
+ * status parked at 'syncing' until a page reload.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new SyncTimeoutError(`${label} timed out`)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+/** Ceiling for one whole sync pass (push + pull + settings). */
+const SYNC_TIMEOUT_MS = 25_000;
+
 class SyncService {
   private state: SyncState = {
     status: 'idle',
@@ -29,6 +59,8 @@ class SyncService {
     lastSyncedAt: null,
     error: null,
     isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    activity: null,
+    lastUploadedCount: 0,
   };
   
   private listeners: Set<StateListener> = new Set();
@@ -109,7 +141,7 @@ class SyncService {
    */
   async forceSync(throttleMs = 0): Promise<void> {
     if (!navigator.onLine) {
-      this.updateState({ error: 'Cannot sync while offline' });
+      this.updateState({ status: 'offline', activity: null, error: null });
       return;
     }
     // Mutex: skip if already running
@@ -118,51 +150,79 @@ class SyncService {
     if (throttleMs > 0 && Date.now() - this.lastForceSyncAt < throttleMs) return;
 
     this.forceSyncing = true;
-    this.updateState({ status: 'syncing', error: null });
-    
+    this.updateState({
+      status: 'syncing',
+      error: null,
+      // Uploading only if something is actually queued; otherwise this pass is
+      // purely a pull, and saying "uploading" would be a lie.
+      activity: this.state.pendingCount > 0 ? 'uploading' : 'checking',
+      lastUploadedCount: 0,
+    });
+
     try {
-      // Re-check the realtime channel — forceSync runs on tab-visibility
-      // resume and back-online, the moments a woken device needs to rejoin.
-      await realtimeService.ensureConnected();
-
-      // Revive any permanently-failed queue items so they get a fresh retry.
-      // Items can get permanently failed after 5 rapid retries (e.g. from a
-      // previous app bug). Without this, "Sync Now" finds 0 pending items and
-      // shows "Synced" while nothing was actually sent.
-      await syncQueue.resetFailed();
-
-      // Process pending writes first
-      const pushResult = await syncQueue.processQueue();
-
-      // Then pull remote changes (settings ride along — LWW, not part of the
-      // per-table applyFn pipeline)
-      await this.pullRemoteData();
-      await pullSettings();
+      const pushResult = await withTimeout(this.runSyncPass(), SYNC_TIMEOUT_MS, 'Sync');
 
       this.lastForceSyncAt = Date.now();
       if (pushResult.failed > 0) {
         // Be honest: the sync ran, but some changes did NOT reach Supabase.
         this.updateState({
           status: 'error',
+          activity: null,
           error: `${pushResult.failed} change${pushResult.failed === 1 ? '' : 's'} failed to upload`,
         });
       } else {
         this.updateState({
           status: 'idle',
+          activity: null,
           lastSyncedAt: new Date(),
+          lastUploadedCount: pushResult.success,
           error: null
         });
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') {
         console.debug('[SyncService] forceSync aborted (transient), ignoring');
-        this.updateState({ status: 'idle', error: null });
+        this.updateState({ status: 'idle', activity: null, error: null });
+      } else if (err?.name === 'SyncTimeoutError') {
+        console.warn('[SyncService] forceSync timed out after', SYNC_TIMEOUT_MS, 'ms');
+        this.updateState({
+          status: 'error',
+          activity: null,
+          error: 'Sync timed out — tap to retry',
+        });
       } else {
-        this.updateState({ status: 'error', error: err.message });
+        this.updateState({ status: 'error', activity: null, error: err.message });
       }
     } finally {
       this.forceSyncing = false;
     }
+  }
+
+  /**
+   * One push-then-pull pass. Split out of forceSync so the whole sequence can
+   * sit behind a single timeout.
+   */
+  private async runSyncPass(): Promise<{ success: number; failed: number }> {
+    // Re-check the realtime channel — forceSync runs on tab-visibility
+    // resume and back-online, the moments a woken device needs to rejoin.
+    await realtimeService.ensureConnected();
+
+    // Revive any permanently-failed queue items so they get a fresh retry.
+    // Items can get permanently failed after 5 rapid retries (e.g. from a
+    // previous app bug). Without this, "Sync Now" finds 0 pending items and
+    // shows "Synced" while nothing was actually sent.
+    await syncQueue.resetFailed();
+
+    // Process pending writes first
+    const pushResult = await syncQueue.processQueue();
+
+    // Then pull remote changes (settings ride along — LWW, not part of the
+    // per-table applyFn pipeline)
+    this.updateState({ activity: 'checking' });
+    await this.pullRemoteData();
+    await pullSettings();
+
+    return pushResult;
   }
   
   /**
@@ -196,46 +256,52 @@ class SyncService {
     // changes). Throttle the expensive pull to at most once per 60 seconds.
     const skipPull = Date.now() - this.lastSignInSyncAt < 60_000;
 
-    this.updateState({ status: 'syncing' });
-    
-    try {
-      // Reset any permanently-failed queue items so they are retried with
-      // the correct payload format after an app update.
-      await syncQueue.resetFailed();
+    this.updateState({ status: 'syncing', activity: 'checking' });
 
-      // Connect to Realtime (idempotent — already connected calls are no-ops)
-      await realtimeService.connect(userId);
-      
-      // Initialize store Realtime subscriptions (registers handlers on the live channel)
-      for (const store of this.syncStores) {
-        await store.initialize();
-      }
-      
-      // Pull initial data — skip if we just did this within the last 60s
-      if (!skipPull) {
-        await this.pullRemoteData();
-        await pullSettings();
-        // Adopt the account's alarm only on a device that has never set one.
-        await pullAlarmIfUnset();
-      } else {
-        console.debug('[SyncService] Skipping pull — synced recently');
-      }
+    try {
+      await withTimeout((async () => {
+        // Reset any permanently-failed queue items so they are retried with
+        // the correct payload format after an app update.
+        await syncQueue.resetFailed();
+
+        // Connect to Realtime (idempotent — already connected calls are no-ops)
+        await realtimeService.connect(userId);
+
+        // Initialize store Realtime subscriptions (registers handlers on the live channel)
+        for (const store of this.syncStores) {
+          await store.initialize();
+        }
+
+        // Pull initial data — skip if we just did this within the last 60s
+        if (!skipPull) {
+          await this.pullRemoteData();
+          await pullSettings();
+          // Adopt the account's alarm only on a device that has never set one.
+          await pullAlarmIfUnset();
+        } else {
+          console.debug('[SyncService] Skipping pull — synced recently');
+        }
+      })(), SYNC_TIMEOUT_MS, 'Sign-in sync');
 
       this.lastSignInSyncAt = Date.now();
-      this.updateState({ 
-        status: 'idle', 
+      this.updateState({
+        status: 'idle',
+        activity: null,
         lastSyncedAt: new Date(),
-        error: null 
+        error: null
       });
     } catch (err: any) {
       // AbortError is thrown by Supabase when a token-refresh interrupts an in-flight
       // auth request (e.g. visibility change). It's transient — don't surface to the user.
       if (err?.name === 'AbortError') {
         console.debug('[SyncService] Sign-in pull aborted (transient), ignoring');
-        this.updateState({ status: 'idle', error: null });
+        this.updateState({ status: 'idle', activity: null, error: null });
+      } else if (err?.name === 'SyncTimeoutError') {
+        console.warn('[SyncService] Sign-in sync timed out');
+        this.updateState({ status: 'error', activity: null, error: 'Sync timed out — tap to retry' });
       } else {
         console.error('[SyncService] Sign-in sync error:', err);
-        this.updateState({ status: 'error', error: err.message });
+        this.updateState({ status: 'error', activity: null, error: err.message });
       }
     } finally {
       // Always flush pending writes — even if pulling failed
@@ -261,30 +327,58 @@ class SyncService {
     // be retried on the next sign-in. Clearing them here causes progress
     // to be silently lost when the user logs out before a write reaches Supabase.
     
-    this.updateState({ 
-      status: 'idle', 
+    this.updateState({
+      status: 'idle',
       pendingCount: 0,
       lastSyncedAt: null,
-      error: null 
+      error: null,
+      activity: null,
+      lastUploadedCount: 0
     });
   }
-  
+
+  /**
+   * Coming back online. Every step is guarded and time-boxed: this handler
+   * used to have no try/catch at all, so a single throw left the status stuck
+   * on 'syncing' with nothing able to clear it.
+   */
   private handleOnline = async (): Promise<void> => {
     console.log('[SyncService] Back online');
-    this.updateState({ isOnline: true });
-    
-    // Process any queued operations
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      this.updateState({ status: 'syncing' });
-      await syncQueue.processQueue();
-      this.updateState({ status: 'idle', lastSyncedAt: new Date() });
+    this.updateState({ isOnline: true, status: 'idle', activity: null });
+
+    try {
+      const { data: { user } } = await withTimeout(
+        supabase.auth.getUser(), SYNC_TIMEOUT_MS, 'Reconnect');
+      if (!user) return;
+
+      this.updateState({
+        status: 'syncing',
+        activity: this.state.pendingCount > 0 ? 'uploading' : 'checking',
+        error: null,
+      });
+      const pushResult = await withTimeout(
+        syncQueue.processQueue(), SYNC_TIMEOUT_MS, 'Reconnect upload');
+      this.updateState({
+        status: 'idle',
+        activity: null,
+        lastSyncedAt: new Date(),
+        lastUploadedCount: pushResult.success,
+      });
+    } catch (err: any) {
+      console.warn('[SyncService] Back-online sync failed:', err);
+      this.updateState({
+        status: 'error',
+        activity: null,
+        error: err?.name === 'SyncTimeoutError'
+          ? 'Sync timed out — tap to retry'
+          : (err?.message ?? 'Sync failed — tap to retry'),
+      });
     }
   };
-  
+
   private handleOffline = (): void => {
     console.log('[SyncService] Went offline');
-    this.updateState({ isOnline: false, status: 'offline' });
+    this.updateState({ isOnline: false, status: 'offline', activity: null });
   };
   
   private async pullRemoteData(): Promise<void> {

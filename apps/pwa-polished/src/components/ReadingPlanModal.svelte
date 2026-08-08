@@ -13,13 +13,14 @@
   import { readingSessionStore } from '../stores/readingSessionStore';
   import { profileModalStore } from '../stores/profileModalStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
-  import { syncService, type SyncState } from '../lib/sync';
-  import { normalizeBookName } from '../lib/bibleData';
+  import { syncService, formatSyncLabel, isSyncRunning, SYNC_SCOPE_TOOLTIP, type SyncState } from '../lib/sync';
+  import { normalizeBookName, getBookColor, shortBookName } from '../lib/bibleData';
   import { syncQueue } from '../lib/sync/SyncQueueService';
   import { serializePlanData, getRemotePlanStatuses } from '../adapters/SyncedReadingAdapter';
   import { userProfileStore } from '../stores/userProfileStore';
   import { readingProgressVersion } from '../stores/readingProgressVersionStore';
   import CalendarView from './CalendarView.svelte';
+  import BrandSpinner from './BrandSpinner.svelte';
   import harmonyData from '../data/robertson-harmony.json';
   import { BookOpenText } from 'phosphor-svelte';
   
@@ -39,7 +40,9 @@
   const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans'; // new multi-plan key
   const STORAGE_PLAN_HISTORY = 'projectbible_reading_plan_history';
   
-  // Create plan form state
+  // Create plan form state. This component is mounted once for the whole app
+  // session and never destroyed, so these initialisers run exactly once —
+  // resetCreateForm() is what actually gives each visit a clean form.
   let planPreset = '';
   let planName = '';
   let planStartDate = localDateStr(new Date());
@@ -55,6 +58,32 @@
   let optShowOverallStats = true;
   let optShowDailyStats = true;
   let planGenerationStatus = '';
+
+  /**
+   * Put the Create Plan form back to defaults.
+   *
+   * Called every time the modal opens and after a plan is generated. Without
+   * it the last plan's name and dates sit in the form until the browser is
+   * reloaded, and the "one year out" end date drifts stale in a session that
+   * stays open past midnight.
+   */
+  function resetCreateForm() {
+    planPreset = '';
+    planName = '';
+    planStartDate = localDateStr(new Date());
+    planEndDate = localDateStr(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000));
+    dayChecks = [true, true, true, true, true, true, true];
+    selectedBooks = new Set(BIBLE_BOOKS.map(b => b.name));
+    ordering = 'canonical';
+    optDailyPsalm = false;
+    optRandomizePsalms = false;
+    optDailyProverb = false;
+    optRandomizeProverbs = false;
+    optReverseOrder = false;
+    optShowOverallStats = true;
+    optShowDailyStats = true;
+    planGenerationStatus = '';
+  }
   let planHistory: any[] = [];
   let viewMode: 'calendar' | 'list' | 'catchup' = 'calendar';
   let dayProgressMap = new Map<number, ReadingProgressEntry>();
@@ -70,8 +99,12 @@
     remaining: 0,
     todayRead: 0,
   };
-  let syncStatus = 'Not synced';
-  let syncError: string | null = null;
+  // The sync service is the ONLY writer of the sync label. This component used
+  // to also set it by hand on Sync Now, which printed a fresh timestamp for a
+  // sync that had been skipped by the service's in-flight mutex.
+  let syncState: SyncState = syncService.getState();
+  $: syncLabel = formatSyncLabel(syncState, isSignedIn);
+  $: syncing = isSyncRunning(syncState);
   let userName: string | null = null;
   let isSignedIn = false;
 
@@ -82,18 +115,18 @@
   let planDeleteConfirmId: string | null = null;
   
   // Derived book lists
-  const OT_BOOKS = BIBLE_BOOKS.filter(b => b.testament === 'OT').map(b => b.name);
-  const NT_BOOKS = BIBLE_BOOKS.filter(b => b.testament === 'NT').map(b => b.name);
+  const OT_BOOK_INFO = BIBLE_BOOKS.filter(b => b.testament === 'OT');
+  const NT_BOOK_INFO = BIBLE_BOOKS.filter(b => b.testament === 'NT');
+  const OT_BOOKS = OT_BOOK_INFO.map(b => b.name);
+  const NT_BOOKS = NT_BOOK_INFO.map(b => b.name);
   
   onMount(() => {
     loadActivePlan();
     loadPlanHistory();
     let lastKnownSyncTime: number | null = null;
     const unsubscribeSync = syncService.subscribe(async (state: SyncState) => {
-      syncError = state.error;
-      if (state.status === 'syncing') syncStatus = 'Syncing...';
-      else if (state.status === 'idle') {
-        syncStatus = state.lastSyncedAt ? `Synced ${state.lastSyncedAt.toLocaleTimeString()}` : 'Ready';
+      syncState = state;
+      if (state.status === 'idle') {
         // Reload progress from IndexedDB whenever a sync cycle completes so that
         // data pulled from Supabase (e.g. from another device) is reflected
         // immediately in both the today's blue section and the day list.
@@ -107,9 +140,6 @@
           await loadProgressForPlan();
         }
       }
-      else if (state.status === 'error') syncStatus = 'Sync error';
-      else if (state.status === 'offline') syncStatus = 'Offline';
-      else syncStatus = 'Not synced';
     });
     const unsubscribeProfile = userProfileStore.subscribe((profile) => {
       userName = profile.name;
@@ -127,6 +157,9 @@
   // this is the key step that makes a second device see up-to-date progress.
   $: if (isOpen) {
     loadActivePlan();
+    // A fresh Create Plan form on every visit — the component is never
+    // destroyed, so nothing else clears the last plan's name and dates.
+    resetCreateForm();
     // Load local progress immediately so the UI isn't blank while sync runs.
     loadProgressForPlan();
     // Then kick off a sync in the background (throttled to once per 30s).
@@ -521,6 +554,12 @@
     return Array.from(dayProgressMap.values());
   }
 
+  /** "Aug 7" — the day rows are one line, so the full 8/7/2026 doesn't fit. */
+  const shortDateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+  function shortDayDate(date: Date | string): string {
+    return shortDateFormat.format(new Date(date));
+  }
+
   function isChapterChecked(progress: ReadingProgressEntry | undefined, book: string, chapter: number): boolean {
     const state = getLatestChapterState(progress, book, chapter);
     return state === 'checked';
@@ -712,22 +751,13 @@
   // Progress pushes now happen automatically: every readingProgressStore
   // mutation fires the sync hook registered in SyncedReadingAdapter.
 
+  /** Kick off a sync. The label is driven entirely by the service subscription
+   *  above, so this never writes status text of its own. */
   async function syncNow() {
-    if (!currentPlanId) return;
     try {
-      syncStatus = 'Syncing...';
       await syncService.forceSync();
-      const state = syncService.getState();
-      if (state.error) {
-        syncStatus = `Sync problem: ${state.error}`;
-      } else if (state.pendingCount > 0) {
-        syncStatus = `Sync incomplete — ${state.pendingCount} waiting`;
-      } else {
-        syncStatus = `Synced ${new Date().toLocaleTimeString()}`;
-      }
     } catch (error) {
       console.error('Sync failed:', error);
-      syncStatus = 'Sync failed';
     }
   }
 
@@ -1099,8 +1129,11 @@
       
       setTimeout(() => {
         currentTab = 'active';
+        // Clear the form now that the plan exists, so coming back to Create
+        // Plan starts blank rather than showing the plan just made.
+        resetCreateForm();
       }, 1000);
-      
+
     } catch (error) {
       planGenerationStatus = `Error: ${error instanceof Error ? error.message : String(error)}`;
     }
@@ -1400,16 +1433,25 @@
                   <button on:click={selectOT}>OT Only</button>
                   <button on:click={selectNT}>NT Only</button>
                 </div>
-                <div class="book-grid">
-                  {#each BIBLE_BOOKS as book}
-                    <label>
-                      <input 
-                        type="checkbox" 
-                        checked={selectedBooks.has(book.name)}
-                        on:change={() => toggleBook(book.name)}
-                      />
-                      {book.name}
-                    </label>
+                <!-- Two straight top-to-bottom lists. The old auto-fill grid
+                     flowed left-to-right, so column order meant nothing and
+                     finding a book took a hunt. -->
+                <div class="book-columns">
+                  {#each [{ label: 'Old Testament', books: OT_BOOK_INFO }, { label: 'New Testament', books: NT_BOOK_INFO }] as testament}
+                    <div class="book-column">
+                      <div class="book-column-title">{testament.label}</div>
+                      {#each testament.books as book}
+                        <label class="book-row" style="--book-color: {getBookColor(book.name)}">
+                          <input
+                            type="checkbox"
+                            checked={selectedBooks.has(book.name)}
+                            on:change={() => toggleBook(book.name)}
+                          />
+                          <span class="book-dot"></span>
+                          <span class="book-row-name">{book.name}</span>
+                        </label>
+                      {/each}
+                    </div>
                   {/each}
                 </div>
                 
@@ -1651,12 +1693,14 @@
                 <div class="progress-actions">
                   <button class="export-btn" on:click={exportProgressJson}>Export JSON</button>
                   <button class="export-btn" on:click={exportProgressMarkdown}>Export Markdown</button>
-                  <button class="export-btn" on:click={syncNow}>Sync Now</button>
-                  <span class="sync-status">{syncStatus}</span>
+                  <button class="export-btn" on:click={syncNow} disabled={syncing}>Sync Now</button>
+                  <span class="sync-status" class:sync-status-error={syncState.status === 'error'} title={SYNC_SCOPE_TOOLTIP}>
+                    {#if syncing}
+                      <BrandSpinner size={13} title="Syncing…" />
+                    {/if}
+                    {syncLabel}
+                  </span>
                 </div>
-                {#if syncError}
-                  <div class="sync-error">{syncError}</div>
-                {/if}
               </div>
               
               <div class="view-toggle">
@@ -1692,66 +1736,58 @@
                   onDayClick={(dayNumber) => scrollToDayInList(dayNumber)}
                 />
               {:else if viewMode === 'list'}
+                <!-- One row per day, one line each. A 365-day plan is otherwise
+                     three stacked lines per day and an unusable amount of scroll. -->
                 <div class="list-view">
-                  {#each getDisplayedDays() as day}
+                  {#each getDisplayedDays() as day (day.isCatchUp ? `catchup-${day.dayNumber}` : day.dayNumber)}
+                    {@const status = getDayStatus(day, $todayStore)}
+                    {@const counts = day.harmonySections && day.harmonySections.length > 0
+                      ? getDayProgressCountsHarmony(day)
+                      : getDayProgressCounts(day)}
                     <div
-                      class="list-day"
+                      class="list-day status-{status}"
                       data-day-number={day.dayNumber}
                       class:today={todayReading && day.dayNumber === todayReading.dayNumber}
-                      class:status-unread={getDayStatus(day, $todayStore) === 'unread'}
-                      class:status-current={getDayStatus(day, $todayStore) === 'current'}
-                      class:status-completed={getDayStatus(day, $todayStore) === 'completed'}
-                      class:status-ahead={getDayStatus(day, $todayStore) === 'ahead'}
-                      class:status-overdue={getDayStatus(day, $todayStore) === 'overdue'}
                       class:catchup-day={day.isCatchUp}
                     >
-                      <div class="list-day-header">
-                        <strong>{day.isCatchUp ? 'Catch-up Day' : 'Day'} {day.dayNumber}</strong> - {new Date(day.date).toLocaleDateString()}
-                        {#if day.isCatchUp}
-                          <span class="catchup-badge">Catch-up</span>
-                        {/if}
-                        <span class="day-progress">
-                          {#if day.harmonySections && day.harmonySections.length > 0}
-                            {getDayProgressCountsHarmony(day).checked}/{getDayProgressCountsHarmony(day).total}
-                          {:else}
-                            {getDayProgressCounts(day).checked}/{getDayProgressCounts(day).total}
-                          {/if}
-                        </span>
-                      </div>
+                      <span class="list-day-label">
+                        <strong>{day.isCatchUp ? 'Catch-up' : 'Day'} {day.dayNumber}</strong>
+                        <span class="list-day-date">{shortDayDate(day.date)}</span>
+                      </span>
+
                       {#if day.harmonySections && day.harmonySections.length > 0}
                         {@const daySections = day.harmonySections}
-                        <!-- Harmony plan day: section + passage checklist -->
-                        <div class="list-day-harmony">
+                        <!-- Harmony plan day: passage chips, section title on hover -->
+                        <span class="list-day-chapters">
                           {#each daySections as sec}
-                            <div class="harmony-section">
-                              <div class="harmony-section-title">§{sec.section} — {sec.title}</div>
-                              {#each sec.passages as passage, pi}
-                                {@const pIdx = daySections.slice(0, daySections.indexOf(sec)).reduce((n: number, s) => n + s.passages.length, 0) + pi}
-                                <label class="harmony-passage-row">
-                                  <input
-                                    type="checkbox"
-                                    checked={isPassageChecked(day.dayNumber, sec.section, passage.label)}
-                                    on:change={() => togglePassage(day, sec.section, passage.label)}
-                                  />
-                                  <button
-                                    class="chapter-link harmony-passage-link"
-                                    on:click={() => handlePassageClick(day, passage, pIdx)}
-                                  >
-                                    {passage.label}
-                                  </button>
-                                </label>
-                              {/each}
-                            </div>
+                            {#each sec.passages as passage, pi}
+                              {@const pIdx = daySections.slice(0, daySections.indexOf(sec)).reduce((n: number, s) => n + s.passages.length, 0) + pi}
+                              <label class="chapter-chip" title="§{sec.section} — {sec.title}">
+                                <input
+                                  type="checkbox"
+                                  checked={isPassageChecked(day.dayNumber, sec.section, passage.label)}
+                                  on:change={() => togglePassage(day, sec.section, passage.label)}
+                                />
+                                <button
+                                  class="chapter-link"
+                                  on:click={() => handlePassageClick(day, passage, pIdx)}
+                                >{passage.label}</button>
+                              </label>
+                            {/each}
                           {/each}
-                        </div>
-                        <button class="mark-day-btn" on:click={() => markHarmonyDayComplete(day)}>
-                          Mark Day Complete
-                        </button>
+                        </span>
+                        <span class="day-progress">{counts.checked}/{counts.total}</span>
+                        <button
+                          class="list-day-check"
+                          title="Mark day complete"
+                          aria-label="Mark day {day.dayNumber} complete"
+                          on:click={() => markHarmonyDayComplete(day)}
+                        >✓</button>
                       {:else}
-                        <!-- Standard plan day: chapter checklist -->
-                        <div class="list-day-chapters">
-                          {#each day.chapters as chapter, i}
-                            <label class="chapter-checkbox">
+                        <!-- Standard plan day: chapter chips in their book's colour -->
+                        <span class="list-day-chapters">
+                          {#each day.chapters as chapter}
+                            <label class="chapter-chip" style="--book-color: {getBookColor(chapter.book)}">
                               <input
                                 type="checkbox"
                                 checked={isChapterChecked(getDayProgress(day.dayNumber), chapter.book, chapter.chapter)}
@@ -1759,19 +1795,19 @@
                               />
                               <button
                                 class="chapter-link"
+                                title="{normalizeBookName(chapter.book)} {chapter.chapter}"
                                 on:click={() => handleChapterClick(day, chapter)}
-                              >
-                                {normalizeBookName(chapter.book)} {chapter.chapter}
-                              </button>
+                              >{shortBookName(chapter.book)} {chapter.chapter}</button>
                             </label>
-                            {#if i < day.chapters.length - 1}
-                              <span class="chapter-separator">,</span>
-                            {/if}
                           {/each}
-                        </div>
-                        <button class="mark-day-btn" on:click={() => markDayComplete(day)}>
-                          Mark Day Complete
-                        </button>
+                        </span>
+                        <span class="day-progress">{counts.checked}/{counts.total}</span>
+                        <button
+                          class="list-day-check"
+                          title="Mark day complete"
+                          aria-label="Mark day {day.dayNumber} complete"
+                          on:click={() => markDayComplete(day)}
+                        >✓</button>
                       {/if}
                     </div>
                   {/each}
@@ -2105,11 +2141,12 @@
     border-color: #4a4a4a;
   }
   
-  .book-grid {
+  .book-columns {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 8px;
-    max-height: 300px;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 18px;
+    align-items: start;
+    max-height: 340px;
     overflow-y: auto;
     padding: 10px;
     background: #0f0f0f;
@@ -2117,17 +2154,66 @@
     border-radius: 4px;
     margin-bottom: 15px;
   }
-  
-  .book-grid label {
+
+  .book-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .book-column-title {
+    position: sticky;
+    top: -10px;
+    z-index: 1;
+    margin-bottom: 4px;
+    padding: 4px 0;
+    background: #0f0f0f;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #888;
+  }
+
+  .book-row {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     font-size: 13px;
     color: #ccc;
+    cursor: pointer;
+    min-width: 0;
   }
-  
-  .book-grid input[type="checkbox"] {
-    width: auto;
+
+  .book-row input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: var(--book-color, #4caf50);
+  }
+
+  /* Category cue, same palette as the nav dropdown and reader. */
+  .book-dot {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--book-color, #8a8f98);
+  }
+
+  .book-row-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--book-color, #ccc);
+  }
+
+  @media (max-width: 560px) {
+    .book-columns {
+      grid-template-columns: 1fr;
+    }
   }
   
   .radio-group {
@@ -2540,15 +2626,21 @@
   }
 
   .sync-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
     color: #9ccc65;
     align-self: center;
   }
 
-  .sync-error {
-    margin-top: 6px;
-    font-size: 12px;
+  .sync-status-error {
     color: #e57373;
+  }
+
+  .export-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .progress-message {
@@ -2690,31 +2782,8 @@
     margin: 0;
   }
   
-  .chapter-checkbox {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .chapter-checkbox input {
-    accent-color: #4caf50;
-    width: 14px;
-    height: 14px;
-  }
-
-  .mark-day-btn {
-    margin-top: 10px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .chapter-checkbox input {
-    accent-color: #4caf50;
-    width: 14px;
-    height: 14px;
-  }
-
+  /* Used by the welcome banner's full-size button. The list view's compact
+     equivalent is .list-day-check. */
   .mark-day-btn {
     margin-top: 10px;
     padding: 6px 10px;
@@ -2729,19 +2798,25 @@
   .mark-day-btn:hover {
     background: #2a2a2a;
   }
-  
+
   .list-view {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 3px;
   }
-  
+
   .list-day {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
     background: #2a2a2a;
     border: 1px solid #3a3a3a;
-    padding: 12px;
-    border-radius: 8px;
     border-left: 3px solid transparent;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-size: 12px;
+    line-height: 1.35;
   }
 
   .list-day.status-unread {
@@ -2782,50 +2857,97 @@
     background: #1a2e1a;
   }
   
-  .list-day-header {
-    font-weight: 600;
-    margin-bottom: 5px;
+  .list-day-label {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    white-space: nowrap;
     color: #e0e0e0;
   }
-  
-  .list-day-chapters {
-    font-size: 14px;
-    color: #aaa;
-  }
 
-  /* Harmony plan day styles */
-  .list-day-harmony {
-    font-size: 14px;
-  }
-
-  .harmony-section {
-    margin-bottom: 10px;
-  }
-
-  .harmony-section-title {
-    font-size: 12px;
+  .list-day-label strong {
     font-weight: 600;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 4px;
   }
 
-  .harmony-passage-row {
+  .list-day-date {
+    font-size: 11px;
+    color: #8a8a8a;
+  }
+
+  /* Chapters share the row. They wrap only on days too heavy to fit. */
+  .list-day-chapters {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
-    padding: 2px 0;
+    gap: 2px 10px;
+  }
+
+  .chapter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     cursor: pointer;
+  }
+
+  .chapter-chip input[type="checkbox"] {
+    width: 13px;
+    height: 13px;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: var(--book-color, #4caf50);
+  }
+
+  /* Book-category colour, same palette as the nav dropdown and reader. */
+  .chapter-chip .chapter-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 12px;
+    white-space: nowrap;
+    text-decoration: none;
+    color: var(--book-color, #3b82f6);
+  }
+
+  .chapter-chip .chapter-link:hover {
+    text-decoration: underline;
+  }
+
+  .day-progress {
+    flex: 0 0 auto;
+    margin-left: auto;
+    font-size: 11px;
+    color: #8a8a8a;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .list-day-check {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 20px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    background: transparent;
+    color: #8bc34a;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .list-day-check:hover {
+    background: #8bc34a;
+    border-color: #8bc34a;
+    color: #1a1a1a;
   }
 
   .harmony-passage-link {
     font-size: 13px;
-  }
-
-  .chapter-separator {
-    margin: 0 6px;
-    color: #555;
   }
   
   .history-item {
