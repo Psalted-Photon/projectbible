@@ -1463,25 +1463,23 @@
                 </div>
                 
                 <h3>Advanced Options</h3>
+                <!-- Sub-options are siblings of their parent label, not children:
+                     a <label> inside a <label> toggles both checkboxes at once,
+                     and it forced the parent to stack its own box onto a
+                     separate line above the text. -->
                 <div class="options-group">
-                  <label>
-                    <input type="checkbox" bind:checked={optDailyPsalm} />
-                    Add one Psalm per day
+                  <div class="option-item">
+                    <label><input type="checkbox" bind:checked={optDailyPsalm} /> Add one Psalm per day</label>
                     {#if optDailyPsalm}
-                      <div class="sub-option">
-                        <label><input type="checkbox" bind:checked={optRandomizePsalms} /> Randomize Psalms?</label>
-                      </div>
+                      <label class="sub-option"><input type="checkbox" bind:checked={optRandomizePsalms} /> Randomize Psalms?</label>
                     {/if}
-                  </label>
-                  <label>
-                    <input type="checkbox" bind:checked={optDailyProverb} />
-                    Add one Proverb per day
+                  </div>
+                  <div class="option-item">
+                    <label><input type="checkbox" bind:checked={optDailyProverb} /> Add one Proverb per day</label>
                     {#if optDailyProverb}
-                      <div class="sub-option">
-                        <label><input type="checkbox" bind:checked={optRandomizeProverbs} /> Randomize Proverbs?</label>
-                      </div>
+                      <label class="sub-option"><input type="checkbox" bind:checked={optRandomizeProverbs} /> Randomize Proverbs?</label>
                     {/if}
-                  </label>
+                  </div>
                   <label><input type="checkbox" bind:checked={optReverseOrder} /> Reverse Order</label>
                   <label><input type="checkbox" bind:checked={optShowOverallStats} /> Show Overall Statistics</label>
                   <label><input type="checkbox" bind:checked={optShowDailyStats} /> Show Daily Statistics</label>
@@ -2236,16 +2234,30 @@
     gap: 10px;
   }
   
+  /* One row per option: box and its text on the same line. */
   .options-group label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #ccc;
+  }
+
+  .options-group input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    flex-shrink: 0;
+  }
+
+  /* An option plus its revealed sub-option, stacked. */
+  .option-item {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    color: #ccc;
   }
-  
+
   .sub-option {
     margin-left: 25px;
-    margin-top: 5px;
   }
   
   .generate-btn {
