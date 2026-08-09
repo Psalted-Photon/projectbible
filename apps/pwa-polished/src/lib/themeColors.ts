@@ -42,6 +42,73 @@ export function isValidHex(hex: string): boolean {
   return hexToRgb(hex) !== null;
 }
 
+export interface Hsl {
+  /** 0–360 */
+  h: number;
+  /** 0–1 */
+  s: number;
+  /** 0–1 */
+  l: number;
+}
+
+/**
+ * HSL rather than HSV because the colour picker's spectrum box runs white at
+ * the top, through the pure hue, to black at the bottom — that vertical axis
+ * *is* lightness. A point at (x, y) in the box is hsl(x * 360, s, 1 - y), and
+ * hexToHsl is what puts the marker back in the right place when a preset or a
+ * typed hex arrives from outside.
+ */
+export function hexToHsl(hex: string): Hsl {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return { h: 0, s: 0, l: 0 };
+
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+
+  if (d === 0) return { h: 0, s: 0, l }; // grey — hue is meaningless
+
+  // Denominator flips above 50% lightness; both branches approach 0 as the
+  // colour nears pure white or black, which is why d === 0 is handled first.
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+  let h: number;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+  else if (max === g) h = ((b - r) / d + 2) * 60;
+  else h = ((r - g) / d + 4) * 60;
+
+  return { h, s, l };
+}
+
+export function hslToHex(h: number, s: number, l: number): string {
+  // Wrap hue and clamp the rest so callers can hand over raw pointer maths.
+  const hue = ((h % 360) + 360) % 360;
+  const sat = Math.max(0, Math.min(1, s));
+  const light = Math.max(0, Math.min(1, l));
+
+  const c = (1 - Math.abs(2 * light - 1)) * sat;
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = light - c / 2;
+
+  let rgb: [number, number, number];
+  if (hue < 60) rgb = [c, x, 0];
+  else if (hue < 120) rgb = [x, c, 0];
+  else if (hue < 180) rgb = [0, c, x];
+  else if (hue < 240) rgb = [0, x, c];
+  else if (hue < 300) rgb = [x, 0, c];
+  else rgb = [c, 0, x];
+
+  return rgbToHex({
+    r: (rgb[0] + m) * 255,
+    g: (rgb[1] + m) * 255,
+    b: (rgb[2] + m) * 255,
+  });
+}
+
 /** WCAG relative luminance, 0 (black) to 1 (white). */
 export function luminance(hex: string): number {
   const rgb = hexToRgb(hex);

@@ -9,7 +9,9 @@
   import { paneStore } from "../../stores/paneStore";
   import { Gear } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
-  import { READER_FONT_GROUPS, fontsInGroup, getReaderFont } from "../../lib/readerFonts";
+  import { getReaderFont } from "../../lib/readerFonts";
+  import ColorField from "../ColorField.svelte";
+  import FontField from "../FontField.svelte";
   import { contrastRatio, isLowContrast, isValidHex, redLetterFor } from "../../lib/themeColors";
 
   let theme: "light" | "dark" | "auto" | "sepia" | "custom" = "dark";
@@ -375,16 +377,7 @@
 
       <div class="cp-field">
         <span class="label-text">Typeface</span>
-        <select bind:value={customFontId}>
-          <option value="">Match translation (default)</option>
-          {#each READER_FONT_GROUPS as group}
-            <optgroup label={group}>
-              {#each fontsInGroup(group) as font}
-                <option value={font.id} style="font-family: {font.stack}">{font.label}</option>
-              {/each}
-            </optgroup>
-          {/each}
-        </select>
+        <FontField bind:value={customFontId} />
         {#if activeFont?.note}
           <p class="cp-note">{activeFont.note}</p>
         {/if}
@@ -401,15 +394,13 @@
             on:click={() => (editingTextPresets = !editingTextPresets)}
           >{editingTextPresets ? "Done" : "Edit"}</button>
         </div>
-        <div class="cp-picker">
-          <input type="color" bind:value={customTextColor} aria-label="Reader text colour" />
-          <code class="cp-hex">{customTextColor}</code>
+        <ColorField bind:value={customTextColor} label="Reader text">
           <button
             class="cp-save"
             disabled={customTextPresets.includes(customTextColor) || customTextPresets.length >= MAX_COLOR_PRESETS}
             on:click={() => savePreset("text")}
           >Save</button>
-        </div>
+        </ColorField>
         <div class="cp-presets">
           {#each customTextPresets as color, i}
             <button
@@ -437,15 +428,13 @@
             on:click={() => (editingBgPresets = !editingBgPresets)}
           >{editingBgPresets ? "Done" : "Edit"}</button>
         </div>
-        <div class="cp-picker">
-          <input type="color" bind:value={customBgColor} aria-label="Reader background colour" />
-          <code class="cp-hex">{customBgColor}</code>
+        <ColorField bind:value={customBgColor} label="Reader background">
           <button
             class="cp-save"
             disabled={customBgPresets.includes(customBgColor) || customBgPresets.length >= MAX_COLOR_PRESETS}
             on:click={() => savePreset("bg")}
           >Save</button>
-        </div>
+        </ColorField>
         <div class="cp-presets">
           {#each customBgPresets as color, i}
             <button
@@ -781,38 +770,9 @@
     margin: 0;
   }
 
-  .cp-picker {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-
-  /* The OS colour wheel. Browsers draw their own widget here, so the styling
-     is limited to sizing away the default chrome. */
-  .cp-picker input[type="color"] {
-    width: 46px;
-    height: 34px;
-    padding: 0;
-    border: 1px solid #444;
-    border-radius: 6px;
-    background: #1a1a1a;
-    cursor: pointer;
-    flex: none;
-  }
-  .cp-picker input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
-  .cp-picker input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
-  .cp-picker input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; }
-
-  .cp-hex {
-    font-size: 0.8rem;
-    color: #aaa;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    text-transform: uppercase;
-    flex: 1;
-  }
-
   .cp-save,
   .cp-edit {
+    flex: none;
     padding: 6px 12px;
     background: #2f2f2f;
     border: 1px solid #4a4a4a;
@@ -1227,6 +1187,30 @@
     .note {
       padding: 0.6rem;
       font-size: 0.8rem;
+    }
+
+    /* A side pane opens at 75% on a phone (paneStore.ts), so a 390px screen
+       leaves roughly 270px of content. Ten swatches across that would be 21px
+       each — under any sane touch target — so they wrap to two rows of five. */
+    .cp-presets {
+      grid-template-columns: repeat(5, 1fr);
+    }
+
+    /* The blanket `button` rule above would give every swatch 0.5rem of
+       padding and a bottom margin, which breaks the grid. */
+    .cp-swatch {
+      padding: 0;
+      margin-bottom: 0;
+    }
+
+    .custom-panel {
+      padding: 0.75rem;
+      gap: 1rem;
+    }
+
+    .cp-save,
+    .cp-edit {
+      margin-bottom: 0;
     }
   }
 </style>
