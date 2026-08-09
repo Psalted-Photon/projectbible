@@ -546,12 +546,12 @@
                   <option value="custom">Custom</option>
                 </select>
                 {#if theme === 'custom'}
-                  <!-- The typeface and colour wheels live in the Settings pane;
+                  <!-- The typeface and color pickers live in the Settings pane;
                        duplicating them here would mean two sources of truth. -->
                   <button
                     class="link-btn theme-custom-link"
                     on:click={() => { paneStore.openPane('settings', 'right'); close(); }}
-                  >Customise fonts and colours…</button>
+                  >Customize fonts and colors…</button>
                 {/if}
               </div>
               <div class="setting-group">

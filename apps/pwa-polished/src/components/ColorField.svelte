@@ -17,7 +17,7 @@
   import { hexToHsl, hslToHex, isValidHex } from "../lib/themeColors";
 
   export let value: string = "#ffffff";
-  export let label: string = "Colour";
+  export let label: string = "Color";
 
   const dispatch = createEventDispatcher<{ change: string }>();
 
@@ -145,7 +145,7 @@
     style="--hues: linear-gradient(to right, {hueStops})"
     role="application"
     tabindex="0"
-    aria-label="{label} spectrum. Arrow keys adjust hue and lightness. Current colour {value}."
+    aria-label="{label} spectrum. Arrow keys adjust hue and lightness. Current color {value}."
     on:pointerdown={(e) => down(e, "box")}
     on:pointermove={move}
     on:pointerup={up}

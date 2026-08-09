@@ -371,8 +371,8 @@
   {#if theme === "custom"}
     <div class="custom-panel">
       <p class="cp-intro">
-        Changes the Bible reader's typeface and colours only. Buttons, panels and
-        book colours stay as they are, and Jesus' words stay red.
+        Changes the Bible reader's typeface and colors only. Buttons, panels and
+        book colors stay as they are.
       </p>
 
       <div class="cp-field">
@@ -383,10 +383,10 @@
         {/if}
       </div>
 
-      <!-- Text colour -->
+      <!-- Text color -->
       <div class="cp-field">
         <div class="cp-head">
-          <span class="label-text">Text colour</span>
+          <span class="label-text">Text color</span>
           <button
             class="cp-edit"
             class:on={editingTextPresets}
@@ -417,10 +417,10 @@
         </div>
       </div>
 
-      <!-- Background colour -->
+      <!-- Background color -->
       <div class="cp-field">
         <div class="cp-head">
-          <span class="label-text">Background colour</span>
+          <span class="label-text">Background color</span>
           <button
             class="cp-edit"
             class:on={editingBgPresets}
