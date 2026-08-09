@@ -93,7 +93,6 @@
     { label: 'Tokyo (JST)',                 value: 'Asia/Tokyo' },
     { label: 'Sydney (AEST/AEDT)',          value: 'Australia/Sydney' },
   ];
-  let savedMessage = false;
   let clearing = false;
   let checkingUpdate = false;
   let autoCheckUpdates: boolean = true;
@@ -104,6 +103,72 @@
   let ttsGlowFollow: boolean = false;
   let ttsVoices: TtsVoiceInfo[] = getAllVoices();
   let alarmSummary = "";
+
+  // ── Instant save ────────────────────────────────────────────────────────
+  // There is no Save button: every control commits the moment you touch it,
+  // driven by the reactive block at the bottom of this script. The debounce
+  // keeps a slider drag from writing localStorage and re-rendering the reader
+  // on every tick; the Supabase push rides on its own 2s debounce inside
+  // updateSettings, so it needs nothing from us.
+  const PERSIST_DEBOUNCE_MS = 200;
+  /**
+   * Reactive blocks run once at init with the declared defaults, before
+   * onMount has loaded the real settings — persisting then would clobber
+   * them with a fresh-install blob.
+   */
+  let hydrated = false;
+  /** Last payload written, so a re-run with unchanged values stays a no-op. */
+  let lastPersisted = "";
+  let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function settingsPayload() {
+    return {
+      theme,
+      fontSize,
+      lineSpacing,
+      verseLayout,
+      wordWrap,
+      allowRotation,
+      showRedLetter,
+      themedTitles,
+      showArt,
+      showPlaceMarkers,
+      timezone: timezone || undefined,
+      autoCheckUpdates,
+      customTheme: currentCustom(),
+      tts: {
+        voiceId: ttsVoice,
+        rate: ttsRate,
+        readHeadings: ttsReadHeadings,
+        highlightVerse: ttsHighlightVerse,
+        glowFollow: ttsGlowFollow,
+      },
+    };
+  }
+
+  function persistNow() {
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+    }
+    const payload = settingsPayload();
+    const snapshot = JSON.stringify(payload);
+    if (snapshot === lastPersisted) return;
+    lastPersisted = snapshot;
+    updateSettings(payload);
+    // Tell BibleReader, the navbar and the reading engine to re-read.
+    window.dispatchEvent(new CustomEvent("settingsUpdated"));
+  }
+
+  function schedulePersist() {
+    if (persistTimer) clearTimeout(persistTimer);
+    persistTimer = setTimeout(persistNow, PERSIST_DEBOUNCE_MS);
+  }
+
+  /** A change made a moment before the app is backgrounded still lands. */
+  function flushOnHide() {
+    if (document.hidden && persistTimer) persistNow();
+  }
 
   // The alarm lives in its own pane, which can be open alongside this one —
   // refresh the summary whenever settings change rather than only on mount.
@@ -144,10 +209,19 @@
     ttsReadHeadings = tts.readHeadings;
     ttsHighlightVerse = tts.highlightVerse;
     ttsGlowFollow = tts.glowFollow;
+
+    // Everything above is now the stored state, so the first reactive pass
+    // has nothing to write. Only real edits from here on.
+    lastPersisted = JSON.stringify(settingsPayload());
+    hydrated = true;
+    document.addEventListener("visibilitychange", flushOnHide);
   });
 
   onDestroy(() => {
     window.removeEventListener("settingsUpdated", refreshAlarmSummary);
+    document.removeEventListener("visibilitychange", flushOnHide);
+    // Closing the pane a split second after the last change must not lose it.
+    if (persistTimer) persistNow();
   });
 
   function deleteIndexedDbDatabase(name: string): Promise<void> {
@@ -294,43 +368,6 @@
     }
   }
 
-  function saveSettings() {
-    updateSettings({
-      theme,
-      fontSize,
-      lineSpacing,
-      verseLayout,
-      wordWrap,
-      allowRotation,
-      showRedLetter,
-      themedTitles,
-      showArt,
-      showPlaceMarkers,
-      timezone: timezone || undefined,
-      autoCheckUpdates,
-      customTheme: currentCustom(),
-      tts: {
-        voiceId: ttsVoice,
-        rate: ttsRate,
-        readHeadings: ttsReadHeadings,
-        highlightVerse: ttsHighlightVerse,
-        glowFollow: ttsGlowFollow,
-      },
-    });
-
-    // Apply settings immediately
-    applySettings();
-
-    // Show saved message
-    savedMessage = true;
-    setTimeout(() => {
-      savedMessage = false;
-    }, 2000);
-
-    // Trigger a custom event to notify BibleReader to re-render
-    window.dispatchEvent(new CustomEvent("settingsUpdated"));
-  }
-
   function openPacksPane() {
     paneStore.openPane("packs", "right");
   }
@@ -339,16 +376,35 @@
     paneStore.openPane("wakealarm", "right");
   }
 
-  // Apply settings on value changes (live preview)
+  // Every setting in the pane, listed so Svelte re-runs this on any change:
+  // apply it to the page straight away, then write it in the background.
   $: {
+    theme;
     fontSize;
     lineSpacing;
-    theme;
+    verseLayout;
     wordWrap;
+    allowRotation;
+    showRedLetter;
+    themedTitles;
+    showArt;
+    showPlaceMarkers;
+    timezone;
+    autoCheckUpdates;
     customFontId;
     customTextColor;
     customBgColor;
-    applySettings();
+    customTextPresets;
+    customBgPresets;
+    ttsVoice;
+    ttsRate;
+    ttsReadHeadings;
+    ttsHighlightVerse;
+    ttsGlowFollow;
+    if (hydrated) {
+      applySettings();
+      schedulePersist();
+    }
   }
 </script>
 
@@ -399,7 +455,7 @@
             class="cp-save"
             disabled={customTextPresets.includes(customTextColor) || customTextPresets.length >= MAX_COLOR_PRESETS}
             on:click={() => savePreset("text")}
-          >Save</button>
+          >Add</button>
         </ColorField>
         <div class="cp-presets">
           {#each customTextPresets as color, i}
@@ -433,7 +489,7 @@
             class="cp-save"
             disabled={customBgPresets.includes(customBgColor) || customBgPresets.length >= MAX_COLOR_PRESETS}
             on:click={() => savePreset("bg")}
-          >Save</button>
+          >Add</button>
         </ColorField>
         <div class="cp-presets">
           {#each customBgPresets as color, i}
@@ -516,35 +572,35 @@
 
   <div class="setting-group">
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={allowRotation} on:change={saveSettings} />
+      <input type="checkbox" bind:checked={allowRotation} />
       <span class="label-text">Allow Screen Rotation</span>
     </label>
   </div>
 
   <div class="setting-group">
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={showRedLetter} on:change={saveSettings} />
+      <input type="checkbox" bind:checked={showRedLetter} />
       <span class="label-text">Words of Jesus in red letters</span>
     </label>
   </div>
 
   <div class="setting-group">
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={themedTitles} on:change={saveSettings} />
+      <input type="checkbox" bind:checked={themedTitles} />
       <span class="label-text">Theme colors in reader titles</span>
     </label>
   </div>
 
   <div class="setting-group">
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={showArt} on:change={saveSettings} />
+      <input type="checkbox" bind:checked={showArt} />
       <span class="label-text">Show art icons on Bible scenes</span>
     </label>
   </div>
 
   <div class="setting-group">
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={showPlaceMarkers} on:change={saveSettings} />
+      <input type="checkbox" bind:checked={showPlaceMarkers} />
       <span class="label-text">Underline multi-word place names (needs Encyclopedia pack)</span>
     </label>
   </div>
@@ -567,7 +623,7 @@
     </p>
     <label>
       <span class="label-text">Voice</span>
-      <select bind:value={ttsVoice} on:change={saveSettings}>
+      <select bind:value={ttsVoice}>
         {#each ttsVoices as v}
           <option value={v.id}>{v.label} — ~{v.approxSizeMB} MB</option>
         {/each}
@@ -575,18 +631,18 @@
     </label>
     <label>
       <span class="label-text">Reading Speed: {ttsRate.toFixed(2)}×</span>
-      <input type="range" min="0.8" max="1.5" step="0.05" bind:value={ttsRate} on:change={saveSettings} />
+      <input type="range" min="0.8" max="1.5" step="0.05" bind:value={ttsRate} />
     </label>
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={ttsReadHeadings} on:change={saveSettings} />
+      <input type="checkbox" bind:checked={ttsReadHeadings} />
       <span class="label-text">Read section headings aloud</span>
     </label>
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={ttsHighlightVerse} on:change={saveSettings} />
+      <input type="checkbox" bind:checked={ttsHighlightVerse} />
       <span class="label-text">Highlight the verse being read</span>
     </label>
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={ttsGlowFollow} on:change={saveSettings} />
+      <input type="checkbox" bind:checked={ttsGlowFollow} />
       <span class="label-text">Soft glow drifts along the words</span>
     </label>
     <button class="packs-button alarm-button" on:click={openWakeAlarmPane}>
@@ -605,13 +661,6 @@
         {/each}
       </select>
     </label>
-  </div>
-
-  <div class="button-group">
-    <button class="save-button" on:click={saveSettings}> Save Settings </button>
-    {#if savedMessage}
-      <span class="saved-indicator">✓ Saved</span>
-    {/if}
   </div>
 
   <!-- Pack Management Section -->
@@ -642,11 +691,7 @@
       <span class="text">{checkingUpdate ? 'Checking...' : 'Check for Updates'}</span>
     </button>
     <label class="auto-check-toggle">
-      <input
-        type="checkbox"
-        bind:checked={autoCheckUpdates}
-        on:change={saveSettings}
-      />
+      <input type="checkbox" bind:checked={autoCheckUpdates} />
       <span class="toggle-label">Auto-check on open</span>
     </label>
     <button 
@@ -658,10 +703,6 @@
       <span class="text">{clearing ? 'Clearing...' : 'Clear Cache & Reload'}</span>
     </button>
   </div>
-
-  <p class="note">
-    Settings are saved to your browser and will persist across sessions.
-  </p>
 </div>
 
 <style>
@@ -910,42 +951,6 @@
     transform: scale(1.1);
   }
 
-  .button-group {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-top: 2rem;
-    margin-bottom: 2rem;
-  }
-
-  .save-button {
-    padding: 12px 24px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-  }
-
-  .save-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-  }
-
-  .save-button:active {
-    transform: translateY(0);
-  }
-
-  .saved-indicator {
-    color: #4caf50;
-    font-weight: 600;
-    font-size: 0.95rem;
-  }
-
   .pack-management-section {
     margin-top: 2.5rem;
     margin-bottom: 2rem;
@@ -1143,17 +1148,6 @@
     text-align: left;
   }
 
-  .note {
-    margin-top: 1rem;
-    padding: 1rem;
-    background: rgba(102, 126, 234, 0.1);
-    border-left: 3px solid #667eea;
-    border-radius: 4px;
-    color: #aaa;
-    font-size: 0.85rem;
-    line-height: 1.5;
-  }
-
   /* ── Phone portrait (≤480px) ── */
   @media (max-width: 480px) {
     .settings-pane {
@@ -1182,11 +1176,6 @@
       padding: 0.5rem;
       margin-bottom: 0.6rem;
       font-size: 0.85rem;
-    }
-
-    .note {
-      padding: 0.6rem;
-      font-size: 0.8rem;
     }
 
     /* A side pane opens at 75% on a phone (paneStore.ts), so a 390px screen
