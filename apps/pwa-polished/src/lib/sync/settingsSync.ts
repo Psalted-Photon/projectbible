@@ -26,6 +26,10 @@ import {
 
 const SYNCED_KEYS: (keyof UserSettings)[] = [
   'theme',
+  // The Custom theme's typeface and colour presets follow the account — the
+  // font *id* travels, not the file, and every device ships every face. An id
+  // an older deploy doesn't recognise falls back to the per-translation font.
+  'customTheme',
   'timezone',
   'dailyDriverEnglishOT', 'dailyDriverEnglishNT',
   'dailyDriverHebrewOT', 'dailyDriverHebrewNT',

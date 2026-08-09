@@ -4,6 +4,9 @@
  * Stores user preferences in localStorage
  */
 
+import { getReaderFont } from '../lib/readerFonts';
+import { dimTowardsBg, redLetterFor } from '../lib/themeColors';
+
 const SETTINGS_KEY = 'projectbible_settings';
 
 export type InterlinearPreset = 'minimal' | 'study' | 'scholar' | 'custom';
@@ -50,6 +53,38 @@ export interface WakeAlarmSettings {
   chapter?: number;  // only when source === 'chapter'
 }
 
+/**
+ * Custom theme — free choice of reader typeface, text colour and background.
+ *
+ * Only the Bible reader's text area is affected; app chrome, buttons, book
+ * category colours and highlight colours are deliberately untouched. Red
+ * letter still overrides the text colour when it is switched on.
+ *
+ * Both preset lists are capped at 10 by the UI. They are separate lists on
+ * purpose — the colours that make good text are rarely the ones that make
+ * good backgrounds.
+ */
+export interface CustomThemeSettings {
+  /** Font id from lib/readerFonts.ts. '' means keep the per-translation font. */
+  fontId: string;
+  textColor: string;      // hex
+  bgColor: string;        // hex
+  textPresets: string[];  // saved swatches, max 10
+  bgPresets: string[];    // saved swatches, max 10
+}
+
+/** Matches the dark theme, so switching to Custom changes nothing until edited. */
+export const DEFAULT_CUSTOM_THEME: CustomThemeSettings = {
+  fontId: '',
+  textColor: '#e0e0e0',
+  bgColor: '#1a1a1a',
+  textPresets: [],
+  bgPresets: [],
+};
+
+/** How many swatches each preset row holds. */
+export const MAX_COLOR_PRESETS = 10;
+
 export interface UserSettings {
   // Daily Driver defaults by testament + language family
   dailyDriverEnglishOT?: string; // e.g., 'kjv' or 'web'
@@ -65,7 +100,8 @@ export interface UserSettings {
   dailyDriverGreek?: string;
   
   // Display settings
-  theme?: 'light' | 'dark' | 'auto' | 'sepia';
+  theme?: 'light' | 'dark' | 'auto' | 'sepia' | 'custom';
+  customTheme?: CustomThemeSettings; // Reader font + colours, only used when theme === 'custom'
   fontSize?: number; // Base font size in pixels (default 15)
   lineSpacing?: number; // Line height multiplier (default 1.5)
   verseLayout?: 'one-per-line' | 'paragraph' | 'paragraph-no-verse-numbers'; // Verse layout mode
@@ -140,7 +176,7 @@ export function updateSettings(updates: Partial<UserSettings>): void {
   }
 }
 
-export function resolveTheme(theme: UserSettings['theme']): 'light' | 'dark' | 'sepia' {
+export function resolveTheme(theme: UserSettings['theme']): 'light' | 'dark' | 'sepia' | 'custom' {
   if (theme === 'auto') {
     if (typeof window !== 'undefined' && window.matchMedia) {
       return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -150,16 +186,92 @@ export function resolveTheme(theme: UserSettings['theme']): 'light' | 'dark' | '
   return theme || 'dark';
 }
 
+/**
+ * Resolve custom theme settings with defaults applied.
+ * Safe to call when nothing has been saved yet.
+ */
+export function getCustomThemeSettings(): CustomThemeSettings {
+  const s = getSettings().customTheme;
+  return {
+    fontId: s?.fontId ?? DEFAULT_CUSTOM_THEME.fontId,
+    textColor: s?.textColor || DEFAULT_CUSTOM_THEME.textColor,
+    bgColor: s?.bgColor || DEFAULT_CUSTOM_THEME.bgColor,
+    textPresets: s?.textPresets ?? [],
+    bgPresets: s?.bgPresets ?? [],
+  };
+}
+
+/** Persist custom theme settings (merges with existing settings object). */
+export function updateCustomThemeSettings(updates: Partial<CustomThemeSettings>): void {
+  const current = getCustomThemeSettings();
+  updateSettings({ customTheme: { ...current, ...updates } });
+}
+
+/**
+ * Push the custom theme onto :root as CSS variables, or clear them.
+ *
+ * Exported so the settings pane can live-preview without saving first. Every
+ * variable is read with a fallback in the reader's CSS, so clearing them
+ * returns the reader to its original hardcoded values exactly — that is what
+ * keeps Dark, Light and Sepia byte-identical to how they looked before this
+ * feature existed.
+ */
+export function applyCustomThemeVars(custom: CustomThemeSettings | null): void {
+  const root = document.documentElement.style;
+  const VARS = [
+    '--reader-font', '--reader-font-scale', '--reader-lead-scale',
+    '--reader-bg', '--reader-text', '--reader-text-dim', '--reader-text-dimmer',
+    '--reader-rule', '--reader-red',
+  ];
+
+  if (!custom) {
+    for (const v of VARS) root.removeProperty(v);
+    document.body.classList.remove('custom-font');
+    return;
+  }
+
+  const font = getReaderFont(custom.fontId);
+  // body.custom-font gates the typeface rules in BibleReader. It is only set
+  // when a face is actually chosen — "match translation" (and an unknown id
+  // arriving from a newer deploy) must leave the per-translation fonts alone,
+  // and those rules would otherwise win on specificity and flatten them.
+  document.body.classList.toggle('custom-font', !!font);
+  if (font) {
+    root.setProperty('--reader-font', font.stack);
+    root.setProperty('--reader-font-scale', String(font.scale));
+    root.setProperty('--reader-lead-scale', String(font.lead));
+  } else {
+    root.removeProperty('--reader-font');
+    root.setProperty('--reader-font-scale', '1');
+    root.setProperty('--reader-lead-scale', '1');
+  }
+
+  const { textColor: text, bgColor: bg } = custom;
+  root.setProperty('--reader-bg', bg);
+  root.setProperty('--reader-text', text);
+  root.setProperty('--reader-text-dim', dimTowardsBg(text, bg, 0.18));
+  root.setProperty('--reader-text-dimmer', dimTowardsBg(text, bg, 0.38));
+  // Divider rules under chapter titles and section headings. Hardcoded #444 is
+  // near-invisible on the dark theme but reads as a heavy black line on a pale
+  // custom background, so it has to be derived too — mostly background, with
+  // just enough text mixed in to register.
+  root.setProperty('--reader-rule', dimTowardsBg(text, bg, 0.72));
+  root.setProperty('--reader-red', redLetterFor(bg));
+}
+
 export function applyTheme(theme: UserSettings['theme']): void {
   const resolved = resolveTheme(theme);
-  document.body.classList.remove('dark-theme', 'light-theme', 'sepia-theme');
+  document.body.classList.remove('dark-theme', 'light-theme', 'sepia-theme', 'custom-theme');
   if (resolved === 'dark') {
     document.body.classList.add('dark-theme');
   } else if (resolved === 'sepia') {
     document.body.classList.add('sepia-theme');
+  } else if (resolved === 'custom') {
+    document.body.classList.add('custom-theme');
   } else {
     document.body.classList.add('light-theme');
   }
+  applyCustomThemeVars(resolved === 'custom' ? getCustomThemeSettings() : null);
 }
 
 /**

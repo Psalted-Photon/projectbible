@@ -221,7 +221,14 @@ export default defineConfig({
       // The badge is drawn by the service worker for a wake alarm; the gem
       // spins while Read Aloud generates speech — which is exactly something
       // people do offline, so it has to be cached.
-      includeAssets: ['notification-badge-96.png', 'pb-gem.png'],
+      // The two KJV faces are needed on first paint, so they get precached.
+      // The Custom-theme picker fonts do NOT — see the runtimeCaching rule.
+      includeAssets: [
+        'notification-badge-96.png',
+        'pb-gem.png',
+        'fonts/berry-rotunda.woff2',
+        'fonts/teutonic4.woff2'
+      ],
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
@@ -242,6 +249,19 @@ export default defineConfig({
               cacheName: 'tts-runtime',
               cacheableResponse: { statuses: [0, 200] },
               expiration: { maxEntries: 8 }
+            }
+          },
+          // Custom-theme reader fonts (~743 KB across 22 files). Cached the
+          // first time a font is actually rendered rather than precached, so
+          // someone who never opens the Custom theme never downloads any of
+          // them. maxEntries covers every face plus the two KJV ones.
+          {
+            urlPattern: /\/fonts\/.+\.woff2$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'reader-fonts',
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 32 }
             }
           }
         ]

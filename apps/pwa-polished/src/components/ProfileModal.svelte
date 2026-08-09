@@ -46,7 +46,7 @@
   let isSignedIn = false;
   let passwordsMatch = false;
 
-  let theme: 'light' | 'dark' | 'auto' | 'sepia' = 'dark';
+  let theme: 'light' | 'dark' | 'auto' | 'sepia' | 'custom' = 'dark';
   let defaultOT = '';
   let defaultNT = '';
 
@@ -543,7 +543,16 @@
                   <option value="sepia">Sepia</option>
                   <option value="light">Light</option>
                   <option value="dark">Dark</option>
+                  <option value="custom">Custom</option>
                 </select>
+                {#if theme === 'custom'}
+                  <!-- The typeface and colour wheels live in the Settings pane;
+                       duplicating them here would mean two sources of truth. -->
+                  <button
+                    class="link-btn theme-custom-link"
+                    on:click={() => { paneStore.openPane('settings', 'right'); close(); }}
+                  >Customise fonts and colours…</button>
+                {/if}
               </div>
               <div class="setting-group">
                 <p class="setting-label">Default OT Translation</p>
@@ -887,6 +896,11 @@
     color: #9ccc65;
     text-align: left;
     padding: 0;
+  }
+
+  .theme-custom-link {
+    margin-top: 8px;
+    font-size: 12px;
   }
 
   .auth-message {

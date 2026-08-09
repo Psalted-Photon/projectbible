@@ -353,6 +353,13 @@
     filter: invert(1) hue-rotate(180deg);
     color: #FF2020;
   }
+  /* Custom theme applies no filter to .themed at all, so the colour renders
+     directly. --reader-red is derived from the chosen background's luminance
+     (see lib/themeColors.ts) and always wins over the user's text colour —
+     red letter is the one thing the Custom theme does not hand over. */
+  :global(body.custom-theme .red-letter) {
+    color: var(--reader-red, #FF3F3F);
+  }
 
   /* Hide scrollbars but keep scroll functionality */
   :global(*) {

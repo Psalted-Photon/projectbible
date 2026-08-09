@@ -93,6 +93,171 @@
       font-style: normal;
       font-display: swap;
     }
+
+    /* ── Custom theme reader fonts ────────────────────────────────────────
+       Self-hosted so they work offline; latin subset only. All OFL or Apache
+       licensed — see src/lib/readerFonts.ts for the picker table and the
+       per-font size/line-height multipliers.
+
+       Faces declaring a weight RANGE (e.g. `400 700`) are variable fonts:
+       one file covers the whole range and the browser interpolates. Do not
+       split those into two @font-face rules — Google serves the identical
+       file for each weight, so that would ship the same bytes twice and stop
+       interpolation from working. */
+    @font-face {
+      font-family: 'Bitter';
+      src: url('/fonts/bitter.woff2') format('woff2');
+      font-weight: 400 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'CormorantGaramond';
+      src: url('/fonts/cormorant-garamond.woff2') format('woff2');
+      font-weight: 400 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Marcellus';
+      src: url('/fonts/marcellus-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'IMFellEnglish';
+      src: url('/fonts/im-fell-english-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'GrenzeGotisch';
+      src: url('/fonts/grenze-gotisch.woff2') format('woff2');
+      font-weight: 400 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Comfortaa';
+      src: url('/fonts/comfortaa.woff2') format('woff2');
+      font-weight: 400 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Fredoka';
+      src: url('/fonts/fredoka.woff2') format('woff2');
+      font-weight: 400 600;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Caveat';
+      src: url('/fonts/caveat.woff2') format('woff2');
+      font-weight: 400 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'PatrickHand';
+      src: url('/fonts/patrick-hand-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'GloriaHallelujah';
+      src: url('/fonts/gloria-hallelujah-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'SpecialElite';
+      src: url('/fonts/special-elite-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Bangers';
+      src: url('/fonts/bangers-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Chewy';
+      src: url('/fonts/chewy-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Sniglet';
+      src: url('/fonts/sniglet-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Sniglet';
+      src: url('/fonts/sniglet-800.woff2') format('woff2');
+      font-weight: 800;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'TitanOne';
+      src: url('/fonts/titan-one-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'ShantellSans';
+      src: url('/fonts/shantell-sans.woff2') format('woff2');
+      font-weight: 400 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Handlee';
+      src: url('/fonts/handlee-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Tangerine';
+      src: url('/fonts/tangerine-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Tangerine';
+      src: url('/fonts/tangerine-700.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'GreatVibes';
+      src: url('/fonts/great-vibes-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'RockSalt';
+      src: url('/fonts/rock-salt-400.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
   </style>
 </head>
 <body>

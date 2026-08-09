@@ -1917,6 +1917,11 @@
     if (t.includes('greek')) return 'translation-font-greek';
     const isLxx = t.includes('lxx') || t.includes('septuagint');
     if (isLxx && !looksEnglish) return 'translation-font-greek';
+    // Hebrew source texts. This class carries no styling — it exists so the
+    // Custom theme's latin-only typeface never lands on Hebrew script.
+    if (!looksEnglish && (t === 'wlc' || t === 'bhs' || t.includes('hebrew') || t.includes('masoretic'))) {
+      return 'translation-font-hebrew';
+    }
     return '';
   }
 
@@ -4456,8 +4461,10 @@
     overflow-y: auto;
     overflow-x: hidden;
     overflow-anchor: none; /* Disable browser scroll anchoring — we manually correct scrollTop on prepend */
-    background: #1a1a1a;
-    color: #e0e0e0;
+    /* The Custom theme sets --reader-* on :root; every other theme leaves them
+       unset and falls through to the original literals unchanged. */
+    background: var(--reader-bg, #1a1a1a);
+    color: var(--reader-text, #e0e0e0);
     display: flex;
     flex-direction: column;
   }
@@ -4484,7 +4491,7 @@
   .chapter-header {
     margin: 3rem 0 2rem 0;
     padding-top: 2rem;
-    border-top: 2px solid #444;
+    border-top: 2px solid var(--reader-rule, #444);
     text-align: center;
     display: flex;
     flex-direction: column;
@@ -4502,7 +4509,7 @@
   .chapter-header h1 {
     font-size: 1.5rem;
     font-weight: 600;
-    color: #f0f0f0;
+    color: var(--reader-text, #f0f0f0);
     text-shadow: -1.5px 1.5px 0 var(--title-shadow, transparent);
   }
 
@@ -4596,15 +4603,19 @@
   .intro-repeat-item:hover { background: #3a3a3a; }
   .intro-repeat-back { color: #999; font-weight: 600; }
 
+  /* --reader-font-scale / --reader-lead-scale are the Custom theme's per-font
+     normalisation (see lib/readerFonts.ts). They MULTIPLY the user's font-size
+     and line-spacing sliders rather than replacing them, and default to 1, so
+     every other theme is unaffected. */
   .verses {
-    line-height: var(--line-spacing, 1.8);
+    line-height: calc(var(--line-spacing, 1.8) * var(--reader-lead-scale, 1));
   }
 
   .verse {
     margin-bottom: 0;
     position: relative;
-    font-size: var(--base-font-size, 18px);
-    line-height: var(--line-spacing, 1.8);
+    font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1));
+    line-height: calc(var(--line-spacing, 1.8) * var(--reader-lead-scale, 1));
   }
 
   /* Read Aloud: the verse currently being spoken. */
@@ -4640,15 +4651,15 @@
   .verse-number {
     display: inline-block;
     min-width: 0;
-    font-size: calc(var(--base-font-size, 18px) * 0.5);
+    font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) * 0.5);
     color: var(--verse-num-color, #888);
     vertical-align: super;
     margin-right: 0.1rem;
   }
 
   .verse-text {
-    font-size: var(--base-font-size, 1.125rem);
-    line-height: var(--line-spacing, 1.8);
+    font-size: calc(var(--base-font-size, 1.125rem) * var(--reader-font-scale, 1));
+    line-height: calc(var(--line-spacing, 1.8) * var(--reader-lead-scale, 1));
     cursor: text;
   }
 
@@ -4678,6 +4689,26 @@
   }
   .verses.translation-font-greek .section-heading {
     font-family: 'Cinzel Decorative', Georgia, serif;
+  }
+
+  /* ── Custom theme typeface ───────────────────────────────────────────
+     Gated on body.custom-font, which is only set when the user has actually
+     picked a face. Without that gate this rule would still match on "match
+     translation" and its higher specificity would flatten the per-translation
+     fonts above back to inherit.
+
+     Greek and Hebrew source texts are excluded: every picker font is a latin
+     subset, so applying one to WLC or SBLGNT would render the chapter as
+     tofu. translation-font-hebrew exists purely to carry that exclusion — it
+     deliberately has no styling of its own, so tagging Hebrew texts with it
+     changes nothing about how they render today. */
+  :global(body.custom-font) .verses:not(.translation-font-greek):not(.translation-font-hebrew) .verse-text,
+  :global(body.custom-font) .verses:not(.translation-font-greek):not(.translation-font-hebrew) .section-heading {
+    font-family: var(--reader-font);
+  }
+
+  :global(body.custom-font) .chapter-header h1 {
+    font-family: var(--reader-font);
   }
 
   .anno-icon {
@@ -4967,6 +4998,14 @@
   :global(.verse-text.interlinear .il-orig) {
     font-size: 1em;
   }
+  /* Defensive: interlinear only opens on Greek/Hebrew texts, which the Custom
+     typeface rule already excludes — but a source-text pack whose id doesn't
+     match getTranslationFontClass would slip through and render the original
+     words as tofu. Scoped to body.custom-font so it cannot affect any other
+     theme. */
+  :global(body.custom-font .verse-text.interlinear .il-orig) {
+    font-family: 'EB Garamond', Georgia, serif;
+  }
   /* Non-original layers hidden by default; container classes opt them in. */
   :global(.verse-text.interlinear .il-gloss),
   :global(.verse-text.interlinear .il-translit),
@@ -5023,7 +5062,7 @@
 
   .verses.paragraph-layout .verse-number {
     vertical-align: baseline;
-    font-size: calc(var(--base-font-size, 18px) * 0.5);
+    font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) * 0.5);
     color: var(--verse-num-color, #888);
   }
 
@@ -5102,8 +5141,8 @@
   /* Increase font size for mobile devices */
   @media (max-width: 768px) {
     .verse-text {
-      font-size: var(--base-font-size, 1.4rem);
-      line-height: var(--line-spacing, 2);
+      font-size: calc(var(--base-font-size, 1.4rem) * var(--reader-font-scale, 1));
+      line-height: calc(var(--line-spacing, 2) * var(--reader-lead-scale, 1));
     }
 
     .chapter-header h1 {
@@ -5111,18 +5150,18 @@
     }
 
     .verse-number {
-      font-size: calc(var(--base-font-size, 18px) * 0.5);
+      font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) * 0.5);
     }
   }
 
   /* Remove verse-level hover - we'll handle word-level in JS */
   .section-heading {
     font-weight: 600;
-    font-size: calc(var(--base-font-size, 18px) + 3px);
-    color: #d0d0d0;
+    font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) + 3px);
+    color: var(--reader-text-dim, #d0d0d0);
     margin: 24px 0 12px 0;
     padding-top: 12px;
-    border-top: 1px solid #444;
+    border-top: 1px solid var(--reader-rule, #444);
     text-shadow: -1px 1px 0 var(--verse-num-color, transparent);
   }
 
@@ -5132,8 +5171,8 @@
 
   .section-heading--s2 {
     font-weight: 500;
-    font-size: calc(var(--base-font-size, 18px) + 1px);
-    color: #a8a8a8;
+    font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) + 1px);
+    color: var(--reader-text-dimmer, #a8a8a8);
     margin: 14px 0 6px 0;
     padding-top: 0;
     border-top: none;
@@ -5142,7 +5181,7 @@
   /* Acrostic stanza labels (ALEPH, BETH… in Psalm 119) — a label, not a title */
   .section-heading--s3 {
     font-weight: 600;
-    font-size: calc(var(--base-font-size, 18px) - 3px);
+    font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) - 3px);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--verse-num-color, #888);
@@ -5154,19 +5193,19 @@
 
   /* KJV — larger headings to suit the blackletter aesthetic */
   .verses.translation-font-kjv .section-heading {
-    font-size: calc(var(--base-font-size, 18px) + 7px);
+    font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) + 7px);
   }
 
   .verses.translation-font-kjv .section-heading--s2 {
-    font-size: calc(var(--base-font-size, 18px) + 5px);
+    font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) + 5px);
   }
 
   @media (max-width: 768px) {
     .section-heading {
-      font-size: calc(var(--base-font-size, 18px) + 3px);
+      font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) + 3px);
     }
     .section-heading--s2 {
-      font-size: calc(var(--base-font-size, 18px) + 1px);
+      font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) + 1px);
     }
   }
 
