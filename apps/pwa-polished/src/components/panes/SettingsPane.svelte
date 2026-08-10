@@ -7,8 +7,10 @@
   import { formatDays, formatTime12h } from "../../lib/alarm/alarmSchedule";
   import { getAllVoices, type TtsVoiceInfo } from "../../adapters/tts";
   import { paneStore } from "../../stores/paneStore";
-  import { Gear } from 'phosphor-svelte';
+  import { Gear, Palette, BookOpenText, SpeakerHigh, Globe, Package } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
+  import SettingsSection from "../SettingsSection.svelte";
+  import { getInterlinearSettings } from "../../adapters/settings";
   import { getReaderFont } from "../../lib/readerFonts";
   import ColorField from "../ColorField.svelte";
   import FontField from "../FontField.svelte";
@@ -170,19 +172,60 @@
     if (document.hidden && persistTimer) persistNow();
   }
 
+  // ── Section collapse ────────────────────────────────────────────────────
+  // Everything starts closed, so the pane opens as a short contents page.
+  // Sections are independent — opening one never closes another.
+  let openSections = {
+    appearance: false,
+    reader: false,
+    interlinear: false,
+    readAloud: false,
+    general: false,
+    storage: false,
+  };
+
+  // Closed headers carry a summary of what is set inside, so the common
+  // question ("what's my font size again?") is answered without a tap.
+  const THEME_LABELS: Record<string, string> = {
+    auto: "Auto", sepia: "Sepia", light: "Light", dark: "Dark", custom: "Custom",
+  };
+  const LAYOUT_LABELS: Record<string, string> = {
+    "one-per-line": "Verse per line",
+    paragraph: "Paragraph",
+    "paragraph-no-verse-numbers": "Paragraph (NoNum)",
+  };
+
+  $: appearanceSummary = `${THEME_LABELS[theme] ?? theme} · ${fontSize}px`;
+  $: readerSummary = `${LAYOUT_LABELS[verseLayout] ?? verseLayout}${showRedLetter ? " · Red letters" : ""}`;
+  $: readAloudSummary =
+    `${ttsVoices.find((v) => v.id === ttsVoice)?.label ?? ttsVoice} · ${ttsRate.toFixed(2)}×`;
+  $: generalSummary =
+    `${TIMEZONE_OPTIONS.find((o) => o.value === timezone)?.label.replace(/ \(.*\)$/, "") ?? timezone}` +
+    ` · Rotation ${allowRotation ? "on" : "off"}`;
+  $: storageSummary = `Packs · Cache · Updates${autoCheckUpdates ? "" : " (manual)"}`;
+
+  // Interlinear owns its own storage (InterlinearControls persists directly),
+  // so its summary is read back rather than derived from a local variable.
+  let interlinearSummary = "";
+
   // The alarm lives in its own pane, which can be open alongside this one —
-  // refresh the summary whenever settings change rather than only on mount.
-  function refreshAlarmSummary() {
+  // refresh whenever settings change rather than only on mount. Interlinear
+  // rides along for the same reason: the reader has its own quick toggle.
+  function refreshExternalSummaries() {
     const alarm = getWakeAlarmSettings();
     alarmSummary = alarm.enabled
       ? `${formatTime12h(alarm.time)} · ${formatDays(alarm.days)}`
       : "off";
+
+    const il = getInterlinearSettings();
+    const preset = il.preset === "custom" ? "Custom" : il.preset.charAt(0).toUpperCase() + il.preset.slice(1);
+    interlinearSummary = il.enabled ? `${preset} · on` : "off";
   }
 
   // Load settings on mount
   onMount(() => {
-    refreshAlarmSummary();
-    window.addEventListener("settingsUpdated", refreshAlarmSummary);
+    refreshExternalSummaries();
+    window.addEventListener("settingsUpdated", refreshExternalSummaries);
     ttsVoices = getAllVoices();
     const settings = getSettings();
     theme = settings.theme || "dark";
@@ -218,7 +261,7 @@
   });
 
   onDestroy(() => {
-    window.removeEventListener("settingsUpdated", refreshAlarmSummary);
+    window.removeEventListener("settingsUpdated", refreshExternalSummaries);
     document.removeEventListener("visibilitychange", flushOnHide);
     // Closing the pane a split second after the last change must not lose it.
     if (persistTimer) persistNow();
@@ -411,298 +454,323 @@
 <div class="settings-pane">
   <h2><span class="header-icon"><Gear size={20} weight="bold" /><span class="icon-overlay"><Gear size={20} weight="thin" /></span></span> Settings</h2>
 
-  <div class="setting-group">
-    <label>
-      <span class="label-text">Theme</span>
-      <select bind:value={theme}>
-        <option value="auto">Auto</option>
-        <option value="sepia">Sepia</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-        <option value="custom">Custom</option>
-      </select>
-    </label>
-  </div>
+  <SettingsSection title="Appearance" summary={appearanceSummary} bind:open={openSections.appearance}>
+    <span slot="icon"><Palette size={16} weight="bold" /></span>
 
-  {#if theme === "custom"}
-    <div class="custom-panel">
-      <p class="cp-intro">
-        Changes the Bible reader's typeface and colors only. Buttons, panels and
-        book colors stay as they are.
-      </p>
-
-      <div class="cp-field">
-        <span class="label-text">Typeface</span>
-        <FontField bind:value={customFontId} />
-        {#if activeFont?.note}
-          <p class="cp-note">{activeFont.note}</p>
-        {/if}
-      </div>
-
-      <!-- Text color -->
-      <div class="cp-field">
-        <div class="cp-head">
-          <span class="label-text">Text color</span>
-          <button
-            class="cp-edit"
-            class:on={editingTextPresets}
-            disabled={customTextPresets.length === 0}
-            on:click={() => (editingTextPresets = !editingTextPresets)}
-          >{editingTextPresets ? "Done" : "Edit"}</button>
-        </div>
-        <ColorField bind:value={customTextColor} label="Reader text">
-          <button
-            class="cp-save"
-            disabled={customTextPresets.includes(customTextColor) || customTextPresets.length >= MAX_COLOR_PRESETS}
-            on:click={() => savePreset("text")}
-          >Add</button>
-        </ColorField>
-        <div class="cp-presets">
-          {#each customTextPresets as color, i}
-            <button
-              class="cp-swatch"
-              class:removing={editingTextPresets}
-              style="background: {color}"
-              title={color}
-              on:click={() => (editingTextPresets ? removePreset("text", i) : usePreset("text", color))}
-            >{#if editingTextPresets}<span class="cp-x">×</span>{/if}</button>
-          {/each}
-          {#each textSlotsFree as _}
-            <span class="cp-swatch empty"></span>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Background color -->
-      <div class="cp-field">
-        <div class="cp-head">
-          <span class="label-text">Background color</span>
-          <button
-            class="cp-edit"
-            class:on={editingBgPresets}
-            disabled={customBgPresets.length === 0}
-            on:click={() => (editingBgPresets = !editingBgPresets)}
-          >{editingBgPresets ? "Done" : "Edit"}</button>
-        </div>
-        <ColorField bind:value={customBgColor} label="Reader background">
-          <button
-            class="cp-save"
-            disabled={customBgPresets.includes(customBgColor) || customBgPresets.length >= MAX_COLOR_PRESETS}
-            on:click={() => savePreset("bg")}
-          >Add</button>
-        </ColorField>
-        <div class="cp-presets">
-          {#each customBgPresets as color, i}
-            <button
-              class="cp-swatch"
-              class:removing={editingBgPresets}
-              style="background: {color}"
-              title={color}
-              on:click={() => (editingBgPresets ? removePreset("bg", i) : usePreset("bg", color))}
-            >{#if editingBgPresets}<span class="cp-x">×</span>{/if}</button>
-          {/each}
-          {#each bgSlotsFree as _}
-            <span class="cp-swatch empty"></span>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Live preview -->
-      <div class="cp-field">
-        <span class="label-text">Preview</span>
-        <div
-          class="cp-preview"
-          style="background: {customBgColor};
-                 color: {customTextColor};
-                 font-family: {activeFont ? activeFont.stack : 'inherit'};
-                 font-size: calc({fontSize}px * {activeFont ? activeFont.scale : 1});
-                 line-height: calc({lineSpacing} * {activeFont ? activeFont.lead : 1})"
-        >
-          <span class="cp-vnum">16</span>For God so loved the world, that he gave his only
-          begotten Son, <span style="color: {redLetterFor(customBgColor)}">that whosoever
-          believeth in him should not perish, but have everlasting life.</span>
-        </div>
-        {#if customLowContrast}
-          <p class="cp-warn">
-            Low contrast ({customContrast.toFixed(1)}:1) — this may be hard to read.
-            Saving anyway is fine.
-          </p>
-        {/if}
-      </div>
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Theme</span>
+        <select bind:value={theme}>
+          <option value="auto">Auto</option>
+          <option value="sepia">Sepia</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
     </div>
-  {/if}
 
-  <div class="setting-group">
-    <label>
-      <span class="label-text">Font Size: {fontSize}px</span>
-      <input type="range" min="12" max="32" bind:value={fontSize} />
-    </label>
-  </div>
+    {#if theme === "custom"}
+      <div class="custom-panel">
+        <p class="cp-intro">
+          Changes the Bible reader's typeface and colors only. Buttons, panels and
+          book colors stay as they are.
+        </p>
 
-  <div class="setting-group">
-    <label>
-      <span class="label-text">Line Spacing: {lineSpacing.toFixed(1)}</span>
-      <input
-        type="range"
-        min="0.1"
-        max="2.5"
-        step="0.1"
-        bind:value={lineSpacing}
-      />
-    </label>
-  </div>
+        <div class="cp-field">
+          <span class="label-text">Typeface</span>
+          <FontField bind:value={customFontId} />
+          {#if activeFont?.note}
+            <p class="cp-note">{activeFont.note}</p>
+          {/if}
+        </div>
 
-  <div class="setting-group">
-    <label>
-      <span class="label-text">Verse Layout</span>
-      <select bind:value={verseLayout}>
-        <option value="one-per-line">Each verse on new line</option>
-        <option value="paragraph">Paragraph (flow like book)</option>
-        <option value="paragraph-no-verse-numbers">Paragraph (NoNum)</option>
-      </select>
-    </label>
-  </div>
+        <!-- Text color -->
+        <div class="cp-field">
+          <div class="cp-head">
+            <span class="label-text">Text color</span>
+            <button
+              class="cp-edit"
+              class:on={editingTextPresets}
+              disabled={customTextPresets.length === 0}
+              on:click={() => (editingTextPresets = !editingTextPresets)}
+            >{editingTextPresets ? "Done" : "Edit"}</button>
+          </div>
+          <ColorField bind:value={customTextColor} label="Reader text">
+            <button
+              class="cp-save"
+              disabled={customTextPresets.includes(customTextColor) || customTextPresets.length >= MAX_COLOR_PRESETS}
+              on:click={() => savePreset("text")}
+            >Add</button>
+          </ColorField>
+          <div class="cp-presets">
+            {#each customTextPresets as color, i}
+              <button
+                class="cp-swatch"
+                class:removing={editingTextPresets}
+                style="background: {color}"
+                title={color}
+                on:click={() => (editingTextPresets ? removePreset("text", i) : usePreset("text", color))}
+              >{#if editingTextPresets}<span class="cp-x">×</span>{/if}</button>
+            {/each}
+            {#each textSlotsFree as _}
+              <span class="cp-swatch empty"></span>
+            {/each}
+          </div>
+        </div>
 
-  <div class="setting-group">
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={wordWrap} />
-      <span class="label-text">Word Wrap (wrap long lines)</span>
-    </label>
-  </div>
+        <!-- Background color -->
+        <div class="cp-field">
+          <div class="cp-head">
+            <span class="label-text">Background color</span>
+            <button
+              class="cp-edit"
+              class:on={editingBgPresets}
+              disabled={customBgPresets.length === 0}
+              on:click={() => (editingBgPresets = !editingBgPresets)}
+            >{editingBgPresets ? "Done" : "Edit"}</button>
+          </div>
+          <ColorField bind:value={customBgColor} label="Reader background">
+            <button
+              class="cp-save"
+              disabled={customBgPresets.includes(customBgColor) || customBgPresets.length >= MAX_COLOR_PRESETS}
+              on:click={() => savePreset("bg")}
+            >Add</button>
+          </ColorField>
+          <div class="cp-presets">
+            {#each customBgPresets as color, i}
+              <button
+                class="cp-swatch"
+                class:removing={editingBgPresets}
+                style="background: {color}"
+                title={color}
+                on:click={() => (editingBgPresets ? removePreset("bg", i) : usePreset("bg", color))}
+              >{#if editingBgPresets}<span class="cp-x">×</span>{/if}</button>
+            {/each}
+            {#each bgSlotsFree as _}
+              <span class="cp-swatch empty"></span>
+            {/each}
+          </div>
+        </div>
 
-  <div class="setting-group">
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={allowRotation} />
-      <span class="label-text">Allow Screen Rotation</span>
-    </label>
-  </div>
+        <!-- Live preview -->
+        <div class="cp-field">
+          <span class="label-text">Preview</span>
+          <div
+            class="cp-preview"
+            style="background: {customBgColor};
+                   color: {customTextColor};
+                   font-family: {activeFont ? activeFont.stack : 'inherit'};
+                   font-size: calc({fontSize}px * {activeFont ? activeFont.scale : 1});
+                   line-height: calc({lineSpacing} * {activeFont ? activeFont.lead : 1})"
+          >
+            <span class="cp-vnum">16</span>For God so loved the world, that he gave his only
+            begotten Son, <span style="color: {redLetterFor(customBgColor)}">that whosoever
+            believeth in him should not perish, but have everlasting life.</span>
+          </div>
+          {#if customLowContrast}
+            <p class="cp-warn">
+              Low contrast ({customContrast.toFixed(1)}:1) — this may be hard to read.
+              Saving anyway is fine.
+            </p>
+          {/if}
+        </div>
+      </div>
+    {/if}
 
-  <div class="setting-group">
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={showRedLetter} />
-      <span class="label-text">Words of Jesus in red letters</span>
-    </label>
-  </div>
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Font Size: {fontSize}px</span>
+        <input type="range" min="12" max="32" bind:value={fontSize} />
+      </label>
+    </div>
 
-  <div class="setting-group">
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={themedTitles} />
-      <span class="label-text">Theme colors in reader titles</span>
-    </label>
-  </div>
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Line Spacing: {lineSpacing.toFixed(1)}</span>
+        <input
+          type="range"
+          min="0.1"
+          max="2.5"
+          step="0.1"
+          bind:value={lineSpacing}
+        />
+      </label>
+    </div>
 
-  <div class="setting-group">
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={showArt} />
-      <span class="label-text">Show art icons on Bible scenes</span>
-    </label>
-  </div>
+  </SettingsSection>
 
-  <div class="setting-group">
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={showPlaceMarkers} />
-      <span class="label-text">Underline multi-word place names (needs Encyclopedia pack)</span>
-    </label>
-  </div>
+  <SettingsSection title="Reader" summary={readerSummary} bind:open={openSections.reader}>
+    <span slot="icon"><BookOpenText size={16} weight="bold" /></span>
 
-  <div class="setting-group">
-    <span class="label-text">Interlinear (Greek &amp; Hebrew)</span>
-    <p class="section-description il-hint">
-      Show the English equivalent stacked under each original-language word. A
-      quick toggle also appears in the reader whenever a Greek or Hebrew
-      translation is open.
-    </p>
-    <InterlinearControls />
-  </div>
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Verse Layout</span>
+        <select bind:value={verseLayout}>
+          <option value="one-per-line">Each verse on new line</option>
+          <option value="paragraph">Paragraph (flow like book)</option>
+          <option value="paragraph-no-verse-numbers">Paragraph (NoNum)</option>
+        </select>
+      </label>
+    </div>
 
-  <div class="setting-group">
-    <span class="label-text">Read Aloud (AI voice)</span>
-    <p class="section-description il-hint">
-      Reads any chapter out loud with an on-device AI voice. The voice downloads
-      once (from the reader or Manage Packs) and then works fully offline.
-    </p>
-    <label>
-      <span class="label-text">Voice</span>
-      <select bind:value={ttsVoice}>
-        {#each ttsVoices as v}
-          <option value={v.id}>{v.label} — ~{v.approxSizeMB} MB</option>
-        {/each}
-      </select>
-    </label>
-    <label>
-      <span class="label-text">Reading Speed: {ttsRate.toFixed(2)}×</span>
-      <input type="range" min="0.8" max="1.5" step="0.05" bind:value={ttsRate} />
-    </label>
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={ttsReadHeadings} />
-      <span class="label-text">Read section headings aloud</span>
-    </label>
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={ttsHighlightVerse} />
-      <span class="label-text">Highlight the verse being read</span>
-    </label>
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={ttsGlowFollow} />
-      <span class="label-text">Soft glow drifts along the words</span>
-    </label>
-    <button class="packs-button alarm-button" on:click={openWakeAlarmPane}>
-      <span class="icon emoji">⏰</span>
-      <span class="text">Wake Alarm{alarmSummary ? ` — ${alarmSummary}` : ""}</span>
-      <span class="arrow">→</span>
-    </button>
-  </div>
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={wordWrap} />
+        <span class="label-text">Word Wrap (wrap long lines)</span>
+      </label>
+    </div>
 
-  <div class="setting-group">
-    <label>
-      <span class="label-text">Time Zone</span>
-      <select bind:value={timezone}>
-        {#each TIMEZONE_OPTIONS as opt}
-          <option value={opt.value}>{opt.label}</option>
-        {/each}
-      </select>
-    </label>
-  </div>
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={showRedLetter} />
+        <span class="label-text">Words of Jesus in red letters</span>
+      </label>
+    </div>
 
-  <!-- Pack Management Section -->
-  <div class="pack-management-section">
-    <h3><span class="emoji">📦</span> Pack Management</h3>
-    <p class="section-description">
-      Manage installed Bible translations, lexicons, maps, and other resources.
-    </p>
-    <button class="packs-button" on:click={openPacksPane}>
-      <span class="icon emoji">📦</span>
-      <span class="text">Manage Packs</span>
-      <span class="arrow">→</span>
-    </button>
-  </div>
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={themedTitles} />
+        <span class="label-text">Theme colors in reader titles</span>
+      </label>
+    </div>
 
-  <!-- Cache Management Section -->
-  <div class="cache-management-section">
-    <h3><span class="emoji">🔄</span> Cache Management</h3>
-    <p class="section-description">
-      Clear all cached data including packs, service workers, and databases. Use this if packs aren't installing or the app is stuck with old data.
-    </p>
-    <button
-      class="check-update-button"
-      on:click={checkForUpdates}
-      disabled={checkingUpdate || clearing}
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={showArt} />
+        <span class="label-text">Show art icons on Bible scenes</span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={showPlaceMarkers} />
+        <span class="label-text">Underline multi-word place names (needs Encyclopedia pack)</span>
+      </label>
+    </div>
+
+    <SettingsSection
+      title="Interlinear (Greek &amp; Hebrew)"
+      summary={interlinearSummary}
+      bind:open={openSections.interlinear}
+      sub
     >
-      <span class="icon emoji">🔄</span>
-      <span class="text">{checkingUpdate ? 'Checking...' : 'Check for Updates'}</span>
-    </button>
-    <label class="auto-check-toggle">
-      <input type="checkbox" bind:checked={autoCheckUpdates} />
-      <span class="toggle-label">Auto-check on open</span>
-    </label>
-    <button 
-      class="clear-cache-button" 
-      on:click={clearCacheAndReload}
-      disabled={clearing || checkingUpdate}
-    >
-      <span class="icon emoji">🗑️</span>
-      <span class="text">{clearing ? 'Clearing...' : 'Clear Cache & Reload'}</span>
-    </button>
-  </div>
+      <p class="section-description il-hint">
+        Show the English equivalent stacked under each original-language word. A
+        quick toggle also appears in the reader whenever a Greek or Hebrew
+        translation is open.
+      </p>
+      <InterlinearControls />
+    </SettingsSection>
+  </SettingsSection>
+
+  <SettingsSection title="Read Aloud (AI voice)" summary={readAloudSummary} bind:open={openSections.readAloud}>
+    <span slot="icon"><SpeakerHigh size={16} weight="bold" /></span>
+
+    <div class="setting-group">
+      <p class="section-description il-hint">
+        Reads any chapter out loud with an on-device AI voice. The voice downloads
+        once (from the reader or Manage Packs) and then works fully offline.
+      </p>
+      <label>
+        <span class="label-text">Voice</span>
+        <select bind:value={ttsVoice}>
+          {#each ttsVoices as v}
+            <option value={v.id}>{v.label} — ~{v.approxSizeMB} MB</option>
+          {/each}
+        </select>
+      </label>
+      <label>
+        <span class="label-text">Reading Speed: {ttsRate.toFixed(2)}×</span>
+        <input type="range" min="0.8" max="1.5" step="0.05" bind:value={ttsRate} />
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={ttsReadHeadings} />
+        <span class="label-text">Read section headings aloud</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={ttsHighlightVerse} />
+        <span class="label-text">Highlight the verse being read</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={ttsGlowFollow} />
+        <span class="label-text">Soft glow drifts along the words</span>
+      </label>
+      <button class="packs-button alarm-button" on:click={openWakeAlarmPane}>
+        <span class="icon emoji">⏰</span>
+        <span class="text">Wake Alarm{alarmSummary ? ` — ${alarmSummary}` : ""}</span>
+        <span class="arrow">→</span>
+      </button>
+    </div>
+
+  </SettingsSection>
+
+  <SettingsSection title="General" summary={generalSummary} bind:open={openSections.general}>
+    <span slot="icon"><Globe size={16} weight="bold" /></span>
+
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Time Zone</span>
+        <select bind:value={timezone}>
+          {#each TIMEZONE_OPTIONS as opt}
+            <option value={opt.value}>{opt.label}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={allowRotation} />
+        <span class="label-text">Allow Screen Rotation</span>
+      </label>
+    </div>
+  </SettingsSection>
+
+  <SettingsSection title="Storage &amp; Updates" summary={storageSummary} bind:open={openSections.storage}>
+    <span slot="icon"><Package size={16} weight="bold" /></span>
+
+    <!-- Pack Management -->
+    <div class="sub-block">
+      <h3>Pack Management</h3>
+      <p class="section-description">
+        Manage installed Bible translations, lexicons, maps, and other resources.
+      </p>
+      <button class="packs-button" on:click={openPacksPane}>
+        <span class="icon emoji">📦</span>
+        <span class="text">Manage Packs</span>
+        <span class="arrow">→</span>
+      </button>
+    </div>
+
+    <!-- Cache Management -->
+    <div class="sub-block divided">
+      <h3>Cache Management</h3>
+      <p class="section-description">
+        Clear all cached data including packs, service workers, and databases. Use this if packs aren't installing or the app is stuck with old data.
+      </p>
+      <button
+        class="check-update-button"
+        on:click={checkForUpdates}
+        disabled={checkingUpdate || clearing}
+      >
+        <span class="icon emoji">🔄</span>
+        <span class="text">{checkingUpdate ? 'Checking...' : 'Check for Updates'}</span>
+      </button>
+      <label class="auto-check-toggle">
+        <input type="checkbox" bind:checked={autoCheckUpdates} />
+        <span class="toggle-label">Auto-check on open</span>
+      </label>
+      <button 
+        class="clear-cache-button" 
+        on:click={clearCacheAndReload}
+        disabled={clearing || checkingUpdate}
+      >
+        <span class="icon emoji">🗑️</span>
+        <span class="text">{clearing ? 'Clearing...' : 'Clear Cache & Reload'}</span>
+      </button>
+    </div>
+  </SettingsSection>
 </div>
 
 <style>
@@ -713,7 +781,7 @@
 
   h2 {
     font-size: 1.5rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1.25rem;
     color: #f0f0f0;
     font-weight: 600;
   }
@@ -742,8 +810,14 @@
     filter: drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407);
   }
 
+  /* Tighter than it used to be: an expanded section should not itself be a
+     scroll marathon. */
   .setting-group {
-    margin-bottom: 2rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .setting-group:last-child {
+    margin-bottom: 0;
   }
 
   .setting-group label {
@@ -951,23 +1025,19 @@
     transform: scale(1.1);
   }
 
-  .pack-management-section {
-    margin-top: 2.5rem;
-    margin-bottom: 2rem;
-    padding: 1.5rem;
-    background: linear-gradient(
-      135deg,
-      rgba(102, 126, 234, 0.05),
-      rgba(118, 75, 162, 0.05)
-    );
-    border: 1px solid rgba(102, 126, 234, 0.2);
-    border-radius: 8px;
+  .sub-block h3 {
+    margin: 0 0 0.4rem 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #ccc;
   }
 
-  .pack-management-section h3 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.1rem;
-    color: #f0f0f0;
+  /* Two related concerns inside one section (packs, then cache), split by a
+     hairline rather than by two competing coloured cards. */
+  .sub-block.divided {
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid #333;
   }
 
   .section-description {
@@ -1025,25 +1095,6 @@
   .packs-button .arrow {
     font-size: 1.2rem;
     opacity: 0.7;
-  }
-
-  .cache-management-section {
-    margin-top: 1.5rem;
-    margin-bottom: 2rem;
-    padding: 1.5rem;
-    background: linear-gradient(
-      135deg,
-      rgba(244, 67, 54, 0.05),
-      rgba(233, 30, 99, 0.05)
-    );
-    border: 1px solid rgba(244, 67, 54, 0.2);
-    border-radius: 8px;
-  }
-
-  .cache-management-section h3 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.1rem;
-    color: #f0f0f0;
   }
 
   .check-update-button {
