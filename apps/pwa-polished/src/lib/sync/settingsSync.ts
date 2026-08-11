@@ -1,7 +1,7 @@
 /**
  * Settings sync — the "follows you" subset of settings.
  *
- * SYNCED_KEYS travel across devices (theme, timezone, translations,
+ * SYNCED_KEYS travel across devices (themes, timezone, translations,
  * interlinear, red-letter, section headings). Display/ergonomic settings
  * (font size, line spacing, verse layout, word wrap, rotation, update
  * checks) stay per-device — a phone and a desktop rarely want the same
@@ -30,6 +30,11 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   // font *id* travels, not the file, and every device ships every face. An id
   // an older deploy doesn't recognise falls back to the per-translation font.
   'customTheme',
+  // The Notes and Journal writing themes travel the same way and for the same
+  // reason. Whether their toolbars are slid away does NOT — that is ergonomic,
+  // like font size, so notesBarHidden/journalBarHidden stay per-device.
+  'notesTheme',
+  'journalTheme',
   'timezone',
   'dailyDriverEnglishOT', 'dailyDriverEnglishNT',
   'dailyDriverHebrewOT', 'dailyDriverHebrewNT',

@@ -85,6 +85,40 @@ export const DEFAULT_CUSTOM_THEME: CustomThemeSettings = {
 /** How many swatches each preset row holds. */
 export const MAX_COLOR_PRESETS = 10;
 
+/**
+ * Notes / Journal writing-surface theme.
+ *
+ * Separate from the reader's CustomThemeSettings on purpose: these are two
+ * more independent themes, so Notes can be blue-on-green while the Journal is
+ * red-on-yellow and the reader is something else again.
+ *
+ * 'default' keeps the surface exactly as it shipped — the editor's CSS already
+ * has a fallback for every variable, so the default mode sets nothing at all
+ * rather than re-stating the same values and risking a drift.
+ *
+ * Colour swatches are deliberately NOT stored here. Both surfaces share the
+ * reader's textPresets/bgPresets lists, so a colour saved in one place is
+ * available in all three.
+ */
+export interface EditorThemeSettings {
+  mode: 'default' | 'custom';
+  /** Font id from lib/readerFonts.ts. '' means the surface's default face. */
+  fontId: string;
+  textColor: string; // hex
+  bgColor: string;   // hex
+}
+
+/** Matches the editor's built-in look, so switching to Custom changes nothing until edited. */
+export const DEFAULT_EDITOR_THEME: EditorThemeSettings = {
+  mode: 'default',
+  fontId: '',
+  textColor: '#222222',
+  bgColor: '#ffffff',
+};
+
+/** Which writing surface a theme belongs to. Sticky notes ride on 'notes'. */
+export type EditorSurface = 'notes' | 'journal';
+
 export interface UserSettings {
   // Daily Driver defaults by testament + language family
   dailyDriverEnglishOT?: string; // e.g., 'kjv' or 'web'
@@ -102,6 +136,13 @@ export interface UserSettings {
   // Display settings
   theme?: 'light' | 'dark' | 'auto' | 'sepia' | 'custom';
   customTheme?: CustomThemeSettings; // Reader font + colours, only used when theme === 'custom'
+  notesTheme?: EditorThemeSettings;   // Notes writing surface (sticky notes follow it)
+  journalTheme?: EditorThemeSettings; // Journal writing surface
+  // Whether each surface's formatting toolbar is slid up out of the way.
+  // Per-device on purpose (not in SYNCED_KEYS) — an ergonomic choice like font
+  // size, and a phone and a desktop rarely want the same answer.
+  notesBarHidden?: boolean;   // shared by the Notes pane and verse sticky notes
+  journalBarHidden?: boolean;
   fontSize?: number; // Base font size in pixels (default 15)
   lineSpacing?: number; // Line height multiplier (default 1.5)
   verseLayout?: 'one-per-line' | 'paragraph' | 'paragraph-no-verse-numbers'; // Verse layout mode
@@ -205,6 +246,48 @@ export function getCustomThemeSettings(): CustomThemeSettings {
 export function updateCustomThemeSettings(updates: Partial<CustomThemeSettings>): void {
   const current = getCustomThemeSettings();
   updateSettings({ customTheme: { ...current, ...updates } });
+}
+
+/** Which settings key holds each surface's theme. */
+const EDITOR_THEME_KEY: Record<EditorSurface, 'notesTheme' | 'journalTheme'> = {
+  notes: 'notesTheme',
+  journal: 'journalTheme',
+};
+
+/**
+ * Resolve a writing surface's theme with defaults applied.
+ * Safe to call when nothing has been saved yet.
+ */
+export function getEditorTheme(surface: EditorSurface): EditorThemeSettings {
+  const s = getSettings()[EDITOR_THEME_KEY[surface]];
+  return {
+    mode: s?.mode === 'custom' ? 'custom' : 'default',
+    fontId: s?.fontId ?? DEFAULT_EDITOR_THEME.fontId,
+    textColor: s?.textColor || DEFAULT_EDITOR_THEME.textColor,
+    bgColor: s?.bgColor || DEFAULT_EDITOR_THEME.bgColor,
+  };
+}
+
+/** Persist a writing surface's theme (merges with what is already stored). */
+export function updateEditorTheme(surface: EditorSurface, updates: Partial<EditorThemeSettings>): void {
+  const current = getEditorTheme(surface);
+  updateSettings({ [EDITOR_THEME_KEY[surface]]: { ...current, ...updates } });
+}
+
+/** Which settings key holds each surface's toolbar-hidden flag. */
+const EDITOR_BAR_KEY: Record<EditorSurface, 'notesBarHidden' | 'journalBarHidden'> = {
+  notes: 'notesBarHidden',
+  journal: 'journalBarHidden',
+};
+
+/** Is this surface's formatting toolbar currently slid away? Defaults to showing. */
+export function getEditorBarHidden(surface: EditorSurface): boolean {
+  return getSettings()[EDITOR_BAR_KEY[surface]] ?? false;
+}
+
+/** Remember whether this surface's toolbar is slid away. */
+export function setEditorBarHidden(surface: EditorSurface, hidden: boolean): void {
+  updateSettings({ [EDITOR_BAR_KEY[surface]]: hidden });
 }
 
 /**

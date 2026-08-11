@@ -2,6 +2,8 @@
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import { syncedUserDataStore } from '../adapters/SyncedUserDataStore';
+  import { getEditorTheme } from '../adapters/settings';
+  import { editorThemeVars } from '../lib/editorTheme';
 
   export let book: string;
   export let chapter: number;
@@ -45,7 +47,27 @@
   $: label = `${book} ${chapter}:${verse}`;
   $: posKey = `verse-note-pos-${book}-${chapter}-${verse}`;
 
+  /**
+   * A sticky note is a child of the Notes window and wears whatever it is
+   * wearing. The editor inside handles its own theming from the same source;
+   * this copy exists so the header bar and frame follow along too, instead of
+   * leaving a blue lip on top of someone's black-and-amber note.
+   *
+   * On the default theme this is the empty string, so the baby-blue values in
+   * the stylesheet below stay in charge.
+   */
+  let noteTheme = editorThemeVars(getEditorTheme('notes'));
+
+  function refreshNoteTheme() {
+    noteTheme = editorThemeVars(getEditorTheme('notes'));
+  }
+
   onMount(async () => {
+    // Retheme when the Notes pane changes its look, or a sync pull brings a
+    // newer one down from another device.
+    window.addEventListener('editorSurfaceUpdated', refreshNoteTheme);
+    window.addEventListener('settingsUpdated', refreshNoteTheme);
+
     // Reset dirty flag after LexicalEditor initial content load settles
     await tick();
     setTimeout(() => { isDirty = false; }, 150);
@@ -54,6 +76,8 @@
   onDestroy(() => {
     if (saveTimeout) clearTimeout(saveTimeout);
     removeWindowListeners();
+    window.removeEventListener('editorSurfaceUpdated', refreshNoteTheme);
+    window.removeEventListener('settingsUpdated', refreshNoteTheme);
   });
 
   // ---- Auto-save logic ----
@@ -195,7 +219,7 @@
 <div
   class="note-popup"
   class:interacting={interactMode !== null}
-  style="left:{left}px; top:{top}px; width:{w}px; height:{h}px;"
+  style="left:{left}px; top:{top}px; width:{w}px; height:{h}px; {noteTheme}"
 >
   <!-- Edge resize strips (8px, inside the border) -->
   <div
@@ -275,6 +299,8 @@
   <div class="note-content">
     <RefAwareEditor
       bind:isDirty
+      surface="notes"
+      surfaceLabel="Notes"
       value={initialContent}
       placeholder="Write your note here..."
       on:change={handleChange}
@@ -361,15 +387,19 @@
     color: #e74c3c;
   }
 
-  /* ── Header bar ─────────────────────────────────────────── */
+  /* ── Header bar ─────────────────────────────────────────────
+     Reads from the same variables the editor does, so a custom Notes theme
+     carries the header with it instead of leaving a blue lip on top. The
+     fallbacks are the sticky note's own pale blue, which is what shows on the
+     default theme. */
   .note-header {
     display: flex;
     align-items: center;
     gap: 6px;
     /* left: clears corner handle; right: clears close button */
     padding: 4px 32px 4px 24px;
-    background: #b8d4f0;
-    border-bottom: 1px solid #9bbfe0;
+    background: var(--toolbar-bg, #d1e3f5);
+    border-bottom: 1px solid var(--border-color, #bed5eb);
     flex-shrink: 0;
     min-height: 28px;
     border-radius: 4px 4px 0 0;
@@ -378,7 +408,7 @@
   .note-label {
     font-size: 11px;
     font-weight: 600;
-    color: #2c5282;
+    color: var(--text-color, #2c5282);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -387,13 +417,13 @@
 
   .save-status {
     font-size: 12px;
-    color: #4a6fa5;
+    color: var(--placeholder-color, #4a6fa5);
     flex-shrink: 0;
   }
 
   .save-status.dirty {
     font-size: 18px;
-    color: #4a90d9;
+    color: var(--accent-color, #4a90d9);
     animation: pulse 2s ease-in-out infinite;
   }
 
@@ -409,14 +439,17 @@
     display: flex;
     flex-direction: column;
     border-radius: 0 0 4px 4px;
-    /* Baby sky-blue with horizontal ruling lines */
-    background-color: #d6eaf8;
-    /* CSS custom-property overrides consumed by LexicalEditor */
+    /* Pale sky-blue — barely tinted, so it reads as paper rather than as a
+       blue box, while still being obviously a sticky note. */
+    background-color: #e4f1fa;
+    /* CSS custom-property defaults consumed by LexicalEditor. A custom Notes
+       theme sets the same variables inline on the editor itself, which is a
+       closer ancestor, so these are only what the default theme looks like. */
     --background-color: transparent;
-    --toolbar-bg: #c2daf0;
-    --border-color: #9bbfe0;
-    --button-bg: #d6eaf8;
-    --button-hover-bg: #b8d4f0;
+    --toolbar-bg: #d7e7f5;
+    --border-color: #bed5eb;
+    --button-bg: #e4f1fa;
+    --button-hover-bg: #d1e3f5;
     --text-color: #1a3a5c;
     --placeholder-color: #5b8db8;
     --accent-color: #4a90d9;

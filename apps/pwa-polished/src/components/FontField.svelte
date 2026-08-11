@@ -14,6 +14,12 @@
   import { READER_FONT_GROUPS, fontsInGroup } from "../lib/readerFonts";
 
   export let value: string = "";
+  /**
+   * What the first row calls "no face chosen". The reader keeps the
+   * per-translation font, so it reads "Match translation"; the writing
+   * surfaces just fall back to their own face, so they say "Default".
+   */
+  export let defaultLabel: string = "Match translation";
 
   const dispatch = createEventDispatcher<{ change: string }>();
 
@@ -54,7 +60,7 @@
     aria-selected={value === ""}
     on:click={() => pick("")}
   >
-    Match translation
+    {defaultLabel}
     <span class="ff-hint">default</span>
   </button>
 

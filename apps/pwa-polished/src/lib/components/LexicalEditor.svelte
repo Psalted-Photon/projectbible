@@ -8,12 +8,114 @@
     $expandRef as expandRefNode,
     $collapseRef as collapseRefNode,
   } from '../lexical/bibleRefTransforms';
+  import { CaretUp, Palette } from 'phosphor-svelte';
+  import EditorThemePanel from './EditorThemePanel.svelte';
+  import { editorThemeVars } from '../editorTheme';
+  import {
+    getEditorTheme, updateEditorTheme, getEditorBarHidden, setEditorBarHidden,
+    DEFAULT_EDITOR_THEME, type EditorSurface, type EditorThemeSettings,
+  } from '../../adapters/settings';
 
   export let value: string = '';
   export let placeholder: string = 'Start writing...';
   export let isDirty: boolean = false;
+  /**
+   * Which writing surface this editor is. Drives the personal theme and the
+   * slide-away toolbar; leaving it unset gives the plain editor exactly as it
+   * was before either existed.
+   *
+   * Verse sticky notes pass 'notes' on purpose — they are a child of the Notes
+   * window and wear whatever it is wearing.
+   */
+  export let surface: EditorSurface | null = null;
+  /** Human name for the surface, used in the theme panel's heading. */
+  export let surfaceLabel: string = '';
 
   const dispatch = createEventDispatcher();
+
+  // ── Personal theme + slide-away toolbar ───────────────────────────────────
+
+  /**
+   * Broadcast so sibling editors on the same surface keep in step — changing
+   * the Notes theme in the pane has to reach any open sticky note, and hiding
+   * the toolbar in one should hide it in the other.
+   */
+  const SURFACE_EVENT = 'editorSurfaceUpdated';
+
+  let theme: EditorThemeSettings = surface ? getEditorTheme(surface) : { ...DEFAULT_EDITOR_THEME };
+  let barHidden = surface ? getEditorBarHidden(surface) : false;
+  let themeOpen = false;
+
+  /** Nothing is set at all for the default theme, so it stays exactly as shipped. */
+  $: themeStyle = surface ? editorThemeVars(theme) : '';
+
+  let toolbarEl: HTMLDivElement;
+  /** Measured toolbar height — it wraps to two rows on a narrow phone, so a
+      guessed number would leave the slide short or overshooting. */
+  let barH = 0;
+  /** Suppresses the transition until the first real measurement has landed,
+      so the toolbar doesn't animate open on mount. */
+  let animate = false;
+  let barObserver: ResizeObserver | null = null;
+
+  function measureBar() {
+    if (toolbarEl) barH = toolbarEl.offsetHeight;
+  }
+
+  function toggleBar() {
+    if (!surface) return;
+    barHidden = !barHidden;
+    // A picker floating over a canvas you just cleared makes no sense.
+    if (barHidden) themeOpen = false;
+    setEditorBarHidden(surface, barHidden);
+    announceSurface();
+  }
+
+  function announceSurface() {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(SURFACE_EVENT, { detail: surface }));
+  }
+
+  // Persist theme edits. Debounced because a colour drag fires continuously,
+  // and localStorage plus the Supabase push don't need every tick of it.
+  const THEME_PERSIST_MS = 200;
+  let themeHydrated = false;
+  let lastPersisted = surface ? JSON.stringify(theme) : '';
+  let themeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function flushTheme() {
+    if (themeTimer) { clearTimeout(themeTimer); themeTimer = null; }
+    if (!surface) return;
+    const json = JSON.stringify(theme);
+    if (json === lastPersisted) return;
+    lastPersisted = json;
+    updateEditorTheme(surface, theme);
+    announceSurface();
+  }
+
+  function scheduleThemePersist() {
+    if (themeTimer) clearTimeout(themeTimer);
+    themeTimer = setTimeout(() => { themeTimer = null; flushTheme(); }, THEME_PERSIST_MS);
+  }
+
+  $: if (surface && themeHydrated) { theme; scheduleThemePersist(); }
+
+  /**
+   * Re-read after a sibling editor changed this surface, or after a sync pull
+   * applied newer settings from another device.
+   */
+  function refreshFromStorage(e: Event) {
+    if (!surface) return;
+    if (e.type === SURFACE_EVENT && (e as CustomEvent).detail !== surface) return;
+    const next = getEditorTheme(surface);
+    const json = JSON.stringify(next);
+    if (json !== lastPersisted) {
+      // Adopt it as already-persisted so the reactive block doesn't echo it back.
+      lastPersisted = json;
+      theme = next;
+    }
+    barHidden = getEditorBarHidden(surface);
+  }
 
   let editorInput: HTMLDivElement;
   let editor: any;
@@ -79,6 +181,21 @@
   function stopProp(e: MouseEvent) { e.stopPropagation(); }
 
   onMount(async () => {
+    // Measure before anything awaits, so the toolbar is at its real height on
+    // the first paint rather than snapping open a tick later.
+    measureBar();
+    if (typeof ResizeObserver !== 'undefined' && toolbarEl) {
+      barObserver = new ResizeObserver(measureBar);
+      barObserver.observe(toolbarEl);
+    }
+    requestAnimationFrame(() => { animate = true; });
+    themeHydrated = true;
+
+    if (surface) {
+      window.addEventListener(SURFACE_EVENT, refreshFromStorage);
+      window.addEventListener('settingsUpdated', refreshFromStorage);
+    }
+
     try {
       const [
         lexicalModule,
@@ -252,6 +369,13 @@
   onDestroy(() => {
     cleanupFns.forEach(fn => { try { fn(); } catch {} });
     try { editor?.setRootElement(null); } catch {}
+    barObserver?.disconnect();
+    if (typeof window !== 'undefined') {
+      window.removeEventListener(SURFACE_EVENT, refreshFromStorage);
+      window.removeEventListener('settingsUpdated', refreshFromStorage);
+    }
+    // A theme edited right up to the moment the pane closed still counts.
+    flushTheme();
   });
 
   // --- Toolbar action helpers ---
@@ -288,123 +412,177 @@
   }
 </script>
 
-<div class="lexical-editor">
-  <div class="toolbar">
-    <!-- Undo / Redo -->
-    <button on:mousedown|preventDefault on:click={undo} title="Undo (Ctrl+Z)" aria-label="Undo" type="button">↩</button>
-    <button on:mousedown|preventDefault on:click={redo} title="Redo (Ctrl+Y)" aria-label="Redo" type="button">↪</button>
+<div class="lexical-editor" style={themeStyle}>
+  <!-- The wrapper is what actually slides: it clips to a measured height so
+       the toolbar can wrap to two rows and still land exactly. `inert` keeps
+       the hidden buttons out of the tab order while they are clipped away. -->
+  <div
+    class="toolbar-wrap"
+    class:animated={animate}
+    style={surface ? `height: ${barHidden ? 0 : barH}px` : ''}
+    inert={barHidden || undefined}
+  >
+    <div class="toolbar" bind:this={toolbarEl}>
+      <!-- Undo / Redo -->
+      <button on:mousedown|preventDefault on:click={undo} title="Undo (Ctrl+Z)" aria-label="Undo" type="button">↩</button>
+      <button on:mousedown|preventDefault on:click={redo} title="Redo (Ctrl+Y)" aria-label="Redo" type="button">↪</button>
 
-    <span class="sep"></span>
+      <span class="sep"></span>
 
-    <!-- Inline formats -->
-    <button
-      on:mousedown|preventDefault
-      on:click={() => fmt('bold')}
-      title="Bold (Ctrl+B)"
-      aria-label="Bold"
-      type="button"
-      class:active={activeFormats.has('bold')}
-    ><strong>B</strong></button>
-    <button
-      on:mousedown|preventDefault
-      on:click={() => fmt('italic')}
-      title="Italic (Ctrl+I)"
-      aria-label="Italic"
-      type="button"
-      class:active={activeFormats.has('italic')}
-    ><em>I</em></button>
-    <button
-      on:mousedown|preventDefault
-      on:click={() => fmt('underline')}
-      title="Underline (Ctrl+U)"
-      aria-label="Underline"
-      type="button"
-      class:active={activeFormats.has('underline')}
-    ><u>U</u></button>
-    <button
-      on:mousedown|preventDefault
-      on:click={() => fmt('strikethrough')}
-      title="Strikethrough"
-      aria-label="Strikethrough"
-      type="button"
-      class:active={activeFormats.has('strikethrough')}
-    ><s>S</s></button>
-    <button
-      on:mousedown|preventDefault
-      on:click={() => fmt('superscript')}
-      title="Superscript"
-      aria-label="Superscript"
-      type="button"
-      class:active={activeFormats.has('superscript')}
-    >x<sup>2</sup></button>
-    <button
-      on:mousedown|preventDefault
-      on:click={() => fmt('subscript')}
-      title="Subscript"
-      aria-label="Subscript"
-      type="button"
-      class:active={activeFormats.has('subscript')}
-    >x<sub>2</sub></button>
+      <!-- Inline formats -->
+      <button
+        on:mousedown|preventDefault
+        on:click={() => fmt('bold')}
+        title="Bold (Ctrl+B)"
+        aria-label="Bold"
+        type="button"
+        class:active={activeFormats.has('bold')}
+      ><strong>B</strong></button>
+      <button
+        on:mousedown|preventDefault
+        on:click={() => fmt('italic')}
+        title="Italic (Ctrl+I)"
+        aria-label="Italic"
+        type="button"
+        class:active={activeFormats.has('italic')}
+      ><em>I</em></button>
+      <button
+        on:mousedown|preventDefault
+        on:click={() => fmt('underline')}
+        title="Underline (Ctrl+U)"
+        aria-label="Underline"
+        type="button"
+        class:active={activeFormats.has('underline')}
+      ><u>U</u></button>
+      <button
+        on:mousedown|preventDefault
+        on:click={() => fmt('strikethrough')}
+        title="Strikethrough"
+        aria-label="Strikethrough"
+        type="button"
+        class:active={activeFormats.has('strikethrough')}
+      ><s>S</s></button>
+      <button
+        on:mousedown|preventDefault
+        on:click={() => fmt('superscript')}
+        title="Superscript"
+        aria-label="Superscript"
+        type="button"
+        class:active={activeFormats.has('superscript')}
+      >x<sup>2</sup></button>
+      <button
+        on:mousedown|preventDefault
+        on:click={() => fmt('subscript')}
+        title="Subscript"
+        aria-label="Subscript"
+        type="button"
+        class:active={activeFormats.has('subscript')}
+      >x<sub>2</sub></button>
 
-    <span class="sep"></span>
+      <span class="sep"></span>
 
-    <!-- Alignment -->
-    <button on:mousedown|preventDefault on:click={() => alignBlock('left')} title="Align left" aria-label="Align left" type="button" class:active={activeAlign === 'left'}>
-      <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect x="0" y="0" width="14" height="2" rx="1" fill="currentColor"/>
-        <rect x="0" y="5" width="9" height="2" rx="1" fill="currentColor"/>
-        <rect x="0" y="10" width="11" height="2" rx="1" fill="currentColor"/>
-      </svg>
-    </button>
-    <button on:mousedown|preventDefault on:click={() => alignBlock('center')} title="Align center" aria-label="Align center" type="button" class:active={activeAlign === 'center'}>
-      <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect x="0" y="0" width="14" height="2" rx="1" fill="currentColor"/>
-        <rect x="2.5" y="5" width="9" height="2" rx="1" fill="currentColor"/>
-        <rect x="1.5" y="10" width="11" height="2" rx="1" fill="currentColor"/>
-      </svg>
-    </button>
-    <button on:mousedown|preventDefault on:click={() => alignBlock('right')} title="Align right" aria-label="Align right" type="button" class:active={activeAlign === 'right'}>
-      <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect x="0" y="0" width="14" height="2" rx="1" fill="currentColor"/>
-        <rect x="5" y="5" width="9" height="2" rx="1" fill="currentColor"/>
-        <rect x="3" y="10" width="11" height="2" rx="1" fill="currentColor"/>
-      </svg>
-    </button>
+      <!-- Alignment -->
+      <button on:mousedown|preventDefault on:click={() => alignBlock('left')} title="Align left" aria-label="Align left" type="button" class:active={activeAlign === 'left'}>
+        <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="0" y="0" width="14" height="2" rx="1" fill="currentColor"/>
+          <rect x="0" y="5" width="9" height="2" rx="1" fill="currentColor"/>
+          <rect x="0" y="10" width="11" height="2" rx="1" fill="currentColor"/>
+        </svg>
+      </button>
+      <button on:mousedown|preventDefault on:click={() => alignBlock('center')} title="Align center" aria-label="Align center" type="button" class:active={activeAlign === 'center'}>
+        <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="0" y="0" width="14" height="2" rx="1" fill="currentColor"/>
+          <rect x="2.5" y="5" width="9" height="2" rx="1" fill="currentColor"/>
+          <rect x="1.5" y="10" width="11" height="2" rx="1" fill="currentColor"/>
+        </svg>
+      </button>
+      <button on:mousedown|preventDefault on:click={() => alignBlock('right')} title="Align right" aria-label="Align right" type="button" class:active={activeAlign === 'right'}>
+        <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="0" y="0" width="14" height="2" rx="1" fill="currentColor"/>
+          <rect x="5" y="5" width="9" height="2" rx="1" fill="currentColor"/>
+          <rect x="3" y="10" width="11" height="2" rx="1" fill="currentColor"/>
+        </svg>
+      </button>
 
-    <span class="sep"></span>
+      <span class="sep"></span>
 
-    <!-- Font size -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <select
-      class="toolbar-select"
-      value={fontSize}
-      on:change={(e) => setFontSize((e.target as HTMLSelectElement).value)}
-      on:mousedown={stopProp}
-      title="Font size"
-      aria-label="Font size"
-    >
-      {#each ['10','12','14','16','18','20','24','28','32'] as sz}
-        <option value={sz}>{sz}</option>
-      {/each}
-    </select>
+      <!-- Font size -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <select
+        class="toolbar-select"
+        value={fontSize}
+        on:change={(e) => setFontSize((e.target as HTMLSelectElement).value)}
+        on:mousedown={stopProp}
+        title="Font size"
+        aria-label="Font size"
+      >
+        {#each ['10','12','14','16','18','20','24','28','32'] as sz}
+          <option value={sz}>{sz}</option>
+        {/each}
+      </select>
 
-    {#if isDirty}
-      <span class="dirty-indicator" title="Unsaved changes">●</span>
-    {/if}
+      <!-- Colors and typeface ride along with the rest of the text options. -->
+      {#if surface}
+        <button
+          on:mousedown|preventDefault
+          on:click={() => (themeOpen = !themeOpen)}
+          title="Colors and typeface"
+          aria-label="Colors and typeface"
+          aria-expanded={themeOpen}
+          type="button"
+          class:active={themeOpen}
+        ><Palette size={14} weight="bold" /></button>
+      {/if}
+
+      {#if isDirty}
+        <span class="dirty-indicator" title="Unsaved changes">●</span>
+      {/if}
+    </div>
   </div>
 
-  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-  <div
-    class="editor-content"
-    on:mousedown={stopProp}
-    on:mouseup={stopProp}
-    on:click={stopProp}
-  >
+  <!-- The bumper stays put while the toolbar slides behind it — the pill is
+       the only handle, so it must never be the thing that disappears. -->
+  {#if surface}
+    <div class="bumper">
+      <button
+        class="bumper-pill"
+        class:animated={animate}
+        type="button"
+        on:mousedown|preventDefault|stopPropagation
+        on:click={toggleBar}
+        aria-expanded={!barHidden}
+        title={barHidden ? 'Show formatting' : 'Hide formatting'}
+        aria-label={barHidden ? 'Show formatting toolbar' : 'Hide formatting toolbar'}
+      >
+        <span class="bumper-caret" class:flipped={barHidden}>
+          <CaretUp size={11} weight="bold" />
+        </span>
+      </button>
+    </div>
+  {/if}
+
+  <div class="editor-area">
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
     <div
-      bind:this={editorInput}
-      class="editor-input"
-      contenteditable="true"
-    ></div>
+      class="editor-content"
+      on:mousedown={stopProp}
+      on:mouseup={stopProp}
+      on:click={stopProp}
+    >
+      <div
+        bind:this={editorInput}
+        class="editor-input"
+        contenteditable="true"
+      ></div>
+    </div>
+
+    {#if surface && themeOpen}
+      <EditorThemePanel
+        bind:theme
+        surfaceLabel={surfaceLabel || surface}
+        on:close={() => (themeOpen = false)}
+      />
+    {/if}
   </div>
 </div>
 
@@ -414,6 +592,85 @@
     flex-direction: column;
     height: 100%;
     background: var(--background-color, #fff);
+
+    /* A stone door rolling aside, not a menu snapping shut. Roughly three
+       times a normal UI slide: gentle to start, carries through the middle,
+       and settles rather than stopping dead. */
+    --slide-ms: 750ms;
+    --slide-ease: cubic-bezier(0.5, 0.02, 0.2, 1);
+  }
+
+  /* Clips the toolbar to a measured height so it can slide away. Height is set
+     inline; the transition only switches on after the first measurement, which
+     is what stops it animating open on mount. */
+  .toolbar-wrap {
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .toolbar-wrap.animated {
+    transition: height var(--slide-ms) var(--slide-ease);
+  }
+
+  /* ── Bumper ──────────────────────────────────────────────────────────────
+     A thin lip below the toolbar with one pill in the middle. It never moves,
+     so there is always something to grab once the toolbar is gone. */
+  .bumper {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 14px;
+    background: var(--toolbar-bg, #f5f5f5);
+    border-bottom: 1px solid var(--border-color, #ddd);
+  }
+
+  .bumper-pill {
+    /* Visually a small lozenge, but the negative margins give it a full-height
+       hit area — 14px of bumper is not a touch target. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 26px;
+    margin: -6px 0;
+    padding: 0;
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 13px;
+    background: var(--button-bg, #fff);
+    color: var(--text-color, #222);
+    opacity: 0.65;
+    cursor: pointer;
+    transition: opacity 0.15s, background 0.15s;
+  }
+  .bumper-pill:hover {
+    opacity: 1;
+    background: var(--button-hover-bg, #e8e8e8);
+  }
+  .bumper-pill:focus-visible {
+    outline: 2px solid var(--accent-color, #007aff);
+    outline-offset: 2px;
+    opacity: 1;
+  }
+
+  /* Rotates over the same stretch as the slide, so the pill and the wall read
+     as one movement rather than an icon swap at the end. */
+  .bumper-caret {
+    display: flex;
+  }
+  .bumper-pill.animated .bumper-caret {
+    transition: transform var(--slide-ms) var(--slide-ease);
+  }
+  .bumper-caret.flipped {
+    transform: rotate(180deg);
+  }
+
+  /* Anything this slow is worse than nothing for someone who asked for less
+     motion — snap instead. */
+  @media (prefers-reduced-motion: reduce) {
+    .toolbar-wrap.animated,
+    .bumper-pill.animated .bumper-caret {
+      transition-duration: 0.01ms;
+    }
   }
 
   .toolbar {
@@ -487,6 +744,17 @@
     50% { opacity: 0.5; }
   }
 
+  /* Positioning context for the theme panel. It has to sit outside
+     .editor-content, whose own scrolling would carry an inset overlay up and
+     down the page with the text. */
+  .editor-area {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
   .editor-content {
     flex: 1;
     overflow-y: auto;
@@ -498,7 +766,9 @@
     min-height: 100%;
     font-family: var(--font-family, 'Milonga', cursive);
     font-size: var(--font-size, 16px);
-    line-height: 1.6;
+    /* A variable so a chosen face can carry its own leading — Rock Salt and
+       Gloria Hallelujah crowd themselves at 1.6. Unset for every other case. */
+    line-height: var(--editor-lead, 1.6);
     color: var(--text-color, #222);
     outline: none;
   }

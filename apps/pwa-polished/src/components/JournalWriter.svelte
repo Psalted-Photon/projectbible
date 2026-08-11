@@ -166,6 +166,8 @@
     <RefAwareEditor
       bind:this={editorRef}
       bind:isDirty
+      surface="journal"
+      surfaceLabel="Journal"
       value={text}
       placeholder="What's on your heart today? (Tip: Type Bible references like 'John 3:16' and they'll become clickable links!)"
       on:change={handleTextChange}

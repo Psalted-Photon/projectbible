@@ -540,6 +540,8 @@
     <div class="editor-body">
       <RefAwareEditor
         bind:isDirty
+        surface="notes"
+        surfaceLabel="Notes"
         value={editorText}
         placeholder="Start writing…"
         on:change={handleTextChange}

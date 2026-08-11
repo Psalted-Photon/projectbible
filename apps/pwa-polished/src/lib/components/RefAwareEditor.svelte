@@ -13,10 +13,14 @@
   import BibleRefPopover from '../../components/BibleRefPopover.svelte';
   import { navigationStore } from '../../stores/navigationStore';
   import { IndexedDBTextStore } from '../../adapters/TextStore';
+  import type { EditorSurface } from '../../adapters/settings';
 
   export let value: string = '';
   export let placeholder: string = 'Start writing…';
   export let isDirty: boolean = false;
+  /** Which writing surface this is — see LexicalEditor. */
+  export let surface: EditorSurface | null = null;
+  export let surfaceLabel: string = '';
 
   const textStore = new IndexedDBTextStore();
 
@@ -118,6 +122,8 @@
   bind:isDirty
   {value}
   {placeholder}
+  {surface}
+  {surfaceLabel}
   on:change
   on:blur
   on:refClick={handleRefClick}
