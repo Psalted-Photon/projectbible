@@ -85,8 +85,8 @@
      list here (rather than flowing one list into CSS columns) keeps each column
      reading straight top-to-bottom, so a book is where you expect it. */
   const REFERENCE_COLUMNS = [
-    { testament: "ot", books: BIBLE_BOOKS.filter((b) => b.testament === "OT") },
-    { testament: "nt", books: BIBLE_BOOKS.filter((b) => b.testament === "NT") },
+    { testament: "ot", label: "Old Testament", books: BIBLE_BOOKS.filter((b) => b.testament === "OT") },
+    { testament: "nt", label: "New Testament", books: BIBLE_BOOKS.filter((b) => b.testament === "NT") },
   ];
 
   let translationDropdownOpen = false;
@@ -1289,6 +1289,10 @@
     <div class="dropdown-menu tree-menu reference-dropdown" class:positioned={referenceDropdownPositioned}>
       {#each REFERENCE_COLUMNS as column}
         <div class="book-column book-column-{column.testament}">
+          <div class="book-column-title">{column.label}</div>
+          <!-- The books sit in their own box so the NT column can spread its
+               spare height between them without pushing the title away. -->
+          <div class="book-column-body">
           {#each column.books as book, i}
             {#if i === 0 || column.books[i - 1].category !== book.category}
               <div
@@ -1330,6 +1334,7 @@
               {/if}
             </div>
           {/each}
+          </div>
         </div>
       {/each}
     </div>
@@ -2061,13 +2066,43 @@
     min-width: 0;
   }
 
-  /* NT has 27 books to OT's 39. Spreading the leftover height between its rows
-     keeps both columns starting and ending level instead of leaving a long gap
-     hanging off the bottom of one side. The black shows through those gaps. */
   .book-column-nt {
-    justify-content: space-between;
     border-left: 1px solid #3a3a3a;
     background: #000;
+  }
+
+  /* Fixed height so the category headers below can stick just under it. */
+  .book-column-title {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    flex: 0 0 auto;
+    height: 26px;
+    line-height: 26px;
+    padding: 0 10px;
+    background: #1a1a1a;
+    border-bottom: 1px solid #3a3a3a;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: #cfcfcf;
+    white-space: nowrap;
+  }
+
+  .book-column-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* NT has 27 books to OT's 39. Spreading the leftover height between its rows
+     keeps both columns starting and ending level instead of leaving a long gap
+     hanging off the bottom of one side. The black shows through those gaps.
+     space-between puts no gap before the first row or after the last, so the
+     column stays flush top and bottom. */
+  .book-column-nt .book-column-body {
+    justify-content: space-between;
   }
 
   .dropdown-item {
@@ -2107,7 +2142,7 @@
   /* Category group label in the book dropdown */
   .category-header {
     position: sticky;
-    top: 0;
+    top: 26px; /* clears the sticky column title */
     z-index: 1;
     font-size: 0.62rem;
     font-weight: 700;
@@ -2117,6 +2152,12 @@
     margin-top: 4px;
     background: #2a2a2a;
     border-bottom: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  }
+
+  /* Its top margin would otherwise show as a sliver of the column background
+     right under the title - black in the NT column, which reads as a gap. */
+  .book-column-body > .category-header:first-child {
+    margin-top: 0;
   }
 
   /* The OT/NT break is the column split itself now; the thick black divider only
@@ -2425,10 +2466,13 @@
     }
 
     .book-column-nt {
-      justify-content: normal;
       background: none;
       border-left: none;
       border-top: 8px solid #000; /* the OT/NT break, back where the split was */
+    }
+
+    .book-column-nt .book-column-body {
+      justify-content: normal;
     }
 
     .chapters-container,

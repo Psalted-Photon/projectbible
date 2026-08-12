@@ -14,8 +14,8 @@
   /* Matches the main navbar: the reference dropdown is two side-by-side columns,
      OT then NT, each reading straight top-to-bottom. */
   const REFERENCE_COLUMNS = [
-    { testament: "ot", books: BIBLE_BOOKS.filter((b) => b.testament === "OT") },
-    { testament: "nt", books: BIBLE_BOOKS.filter((b) => b.testament === "NT") },
+    { testament: "ot", label: "Old Testament", books: BIBLE_BOOKS.filter((b) => b.testament === "OT") },
+    { testament: "nt", label: "New Testament", books: BIBLE_BOOKS.filter((b) => b.testament === "NT") },
   ];
 
   let commentaryStore: IndexedDBCommentaryStore;
@@ -351,6 +351,10 @@
     <div class="dropdown-menu tree-menu book-tree commentary-reference-dropdown">
       {#each REFERENCE_COLUMNS as column}
         <div class="book-column book-column-{column.testament}">
+          <div class="book-column-title">{column.label}</div>
+          <!-- The books sit in their own box so the NT column can spread its
+               spare height between them without pushing the title away. -->
+          <div class="book-column-body">
           {#each column.books as book}
             <div
               class="book-item category-{book.category} testament-{book.testament}"
@@ -386,6 +390,7 @@
               {/if}
             </div>
           {/each}
+          </div>
         </div>
       {/each}
     </div>
@@ -626,12 +631,41 @@
     min-width: 0;
   }
 
-  /* NT has 27 books to OT's 39. Spreading the leftover height between its rows
-     keeps both columns starting and ending level. The black shows through. */
   .book-column-nt {
-    justify-content: space-between;
     border-left: 1px solid #2a2a2a;
     background: #000;
+  }
+
+  .book-column-title {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    flex: 0 0 auto;
+    height: 26px;
+    line-height: 26px;
+    padding: 0 10px;
+    background: #1a1a1a;
+    border-bottom: 1px solid #3a3a3a;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: #cfcfcf;
+    white-space: nowrap;
+  }
+
+  .book-column-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* NT has 27 books to OT's 39. Spreading the leftover height between its rows
+     keeps both columns starting and ending level. The black shows through those
+     gaps; space-between adds none before the first row or after the last, so the
+     column stays flush top and bottom. */
+  .book-column-nt .book-column-body {
+    justify-content: space-between;
   }
 
   .book-item {
@@ -856,10 +890,13 @@
     }
 
     .book-column-nt {
-      justify-content: normal;
       background: none;
       border-left: none;
       border-top: 12px solid #000; /* the OT/NT break, back where the split was */
+    }
+
+    .book-column-nt .book-column-body {
+      justify-content: normal;
     }
 
     .chapters-container,
