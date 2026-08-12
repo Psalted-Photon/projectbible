@@ -12,6 +12,22 @@
   import { subscribeToHighlightRemoteChanges } from "../adapters/SyncedHighlightAdapter";
   import { subscribeToUserDataRemoteChanges } from "../adapters/SyncedUserDataStore";
   import { applyChapterHighlights } from "../lib/highlightRenderer";
+  import {
+    resolveWordAt,
+    comparePos,
+    sameSection,
+    selectionSegments,
+    segmentsText,
+    segmentsWordCount,
+    paintSelection,
+    clearPaintedSelection,
+    segmentsToDomRange,
+    charRangeToDomRange,
+    posFromRange,
+    getWordBounds,
+    wordContextAround,
+  } from "../lib/wordSelection";
+  import type { WordPos, Segment } from "../lib/wordSelection";
   import { repeatsStore, normalizeRepeatWord } from "../stores/repeatsStore";
   import type { RepeatGroup } from "../stores/repeatsStore";
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
@@ -497,7 +513,52 @@
   let selectedContext: { before: string[]; after: string[] } | null = null;
   let selectionMode: "word" | "verse" = "word";
   let selectionRange: Range | null = null;
-  let longPressTimer: number | null = null;
+
+  // --- Whole-word drag selection ---------------------------------------
+  // The selection's source of truth is a pair of words: the one the gesture
+  // started on and the one it currently reaches. Everything else (the painted
+  // spans, the toast text, the saved highlights) is derived from these two.
+  // Character offsets are used rather than live Ranges because painting the
+  // selection splits text nodes, which would invalidate a Range.
+  let selAnchor: WordPos | null = null;
+  let selFocus: WordPos | null = null;
+  let selectedSegments: Segment[] = [];
+  let selectedWordCount = 0;
+  /** True from pointer-down on a word until release — suppresses native selection. */
+  let dragSelecting = false;
+  /** Set once a gesture has committed to selecting rather than scrolling. */
+  let dragArmed = false;
+  /** Next tap extends the selection instead of replacing it (the Extend chip). */
+  let extendArmed = false;
+
+  const ARM_PX = 8;          // finger travel before a touch gesture picks a lane
+  const MOUSE_ARM_PX = 3;    // mouse has no scroll to protect, so it commits sooner
+  const HOLD_MS = 300;       // holding still also starts a selection
+  const AUTOSCROLL_EDGE = 60;
+  const AUTOSCROLL_PX = 8;
+
+  interface WordDrag {
+    pointerId: number;
+    pointerType: string;
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastY: number;
+    holdTimer: number | null;
+  }
+  let wordDrag: WordDrag | null = null;
+  let dragFrame: number | null = null;
+  let autoScrollFrame: number | null = null;
+
+  /**
+   * Counts pointer gestures so handleClickOutside can tell "the click that
+   * belongs to the tap which just opened this toast" from a genuine click
+   * elsewhere. The old 100ms timer was enough only because the native text
+   * selection suppressed the click; now that we paint our own selection, the
+   * click always fires and the timer would be a race.
+   */
+  let pointerSeq = 0;
+  let toastPointerSeq = -1;
   let searchHighlightedElement: HTMLElement | null = null;
   let dayCompleteMessage: string | null = null;
   let highlightedElements: HTMLElement[] = [];
@@ -505,9 +566,7 @@
   let dragEdge: "left" | "right" | null = null;
   let hoveredWordElement: HTMLElement | null = null;
   let justOpenedToast = false;
-  let touchStartPos: { x: number; y: number } | null = null;
-  let hasMoved = false;
-  
+
   // Track selected verse number for commentary
   let selectedVerseNumber: number | null = null;
 
@@ -517,8 +576,12 @@
   let highlightModalRef: { book: string; chapter: number; verse: number } | null = null;
   let highlightModalExisting: UserHighlight | UserWordHighlight | null = null;
   let highlightSelectionType: 'verse' | 'word' = 'verse';
-  let pendingWordStart = 0;
-  let pendingWordLength = 0;
+  /**
+   * Character runs captured when Highlight is tapped, one per verse the
+   * selection touches. Captured synchronously before the modal opens, because
+   * opening it tears down the painted spans the offsets were measured against.
+   */
+  let pendingWordSpans: { verse: number; wordStart: number; wordLength: number }[] = [];
   // Pending "Highlight All" request from a repeat pill (bulk mode for the modal)
   let bulkRepeatRequest: RepeatHighlightAllRequest | null = null;
   // When opening the normal Highlight modal on a word that is an active repeat
@@ -2262,18 +2325,27 @@
 
       lastScrollTop = scrollTop;
 
-      // Load previous chapter when near the top.
-      // scrollDelta <= 0: ignore downward synthetic events from our own scrollTop correction.
-      // !loading: ignore scroll events that fire during a navigation reset (loadChapter sets loading=true).
-      if (scrollTop <= 200 && scrollDelta <= 0 && !isLoadingPrevChapter && !loading) {
-        loadPreviousChapter();
+      // Never grow the document mid-drag. Prepending a chapter corrects
+      // scrollTop by the height added, which would yank the text out from
+      // under the finger and leave the selection tracking the wrong words.
+      if (!dragArmed) {
+        // Load previous chapter when near the top.
+        // scrollDelta <= 0: ignore downward synthetic events from our own scrollTop correction.
+        // !loading: ignore scroll events that fire during a navigation reset (loadChapter sets loading=true).
+        if (scrollTop <= 200 && scrollDelta <= 0 && !isLoadingPrevChapter && !loading) {
+          loadPreviousChapter();
+        }
+
+        // Check for loading next chapter.
+        // !loading: same guard — don't auto-load adjacent chapter mid-navigation.
+        if (scrollPosition >= scrollHeight - 200 && !isLoadingNextChapter && !loading) {
+          loadNextChapter();
+        }
       }
 
-      // Check for loading next chapter.
-      // !loading: same guard — don't auto-load adjacent chapter mid-navigation.
-      if (scrollPosition >= scrollHeight - 200 && !isLoadingNextChapter && !loading) {
-        loadNextChapter();
-      }
+      // The toast is position:fixed, so a scroll would leave it pointing at
+      // nothing. Keep it over its selection, or drop it once that scrolls away.
+      if (showToast) repositionToastToSelection();
 
       // Save scroll position after user stops scrolling (debounced)
       if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
@@ -2572,60 +2644,339 @@
     }
   }
 
-  // Text selection handlers
-  function handleTextInteraction(e: MouseEvent | TouchEvent) {
-    const target = e.target as HTMLElement;
+  // ---------------------------------------------------------------------
+  // Whole-word drag selection
+  // ---------------------------------------------------------------------
 
-    // Ignore if clicking on note, navigation bar, or any button/dropdown
-    if (target.closest(".inline-note")) return;
-    if (target.closest(".navigation-bar")) return;
-    if (target.closest("button")) return;
-    if (target.closest(".nav-dropdown")) return;
-    if (target.closest(".toast")) return;
-
-    // Start long press timer for touch
-    if (e.type === "touchstart") {
-      // DO NOT preventDefault here - allow native scrolling
-      const touch = (e as TouchEvent).touches[0];
-      touchStartPos = { x: touch.clientX, y: touch.clientY };
-      hasMoved = false;
-
-      longPressTimer = window.setTimeout(() => {
-        // Only trigger selection if user hasn't moved (scrolled)
-        if (!hasMoved && touchStartPos) {
-          handleTextSelection(touchStartPos.x, touchStartPos.y, target);
-        }
-      }, 500); // Reduced from 900ms to 500ms for better UX
+  /** A short tick so whole-word snapping is felt, not just seen. Android only. */
+  function haptic(ms: number) {
+    try {
+      navigator.vibrate?.(ms);
+    } catch {
+      /* iOS Safari has no vibrate — silently skip */
     }
   }
 
-  function handleTouchMove(e: TouchEvent) {
-    // Track if user is scrolling
-    if (touchStartPos && !hasMoved) {
-      const touch = e.touches[0];
-      const deltaX = Math.abs(touch.clientX - touchStartPos.x);
-      const deltaY = Math.abs(touch.clientY - touchStartPos.y);
+  /** Elements where a press means something other than "select this word". */
+  function isSelectionExempt(target: HTMLElement | null): boolean {
+    if (!target) return true;
+    return !!(
+      target.closest(".inline-note") ||
+      target.closest(".navigation-bar") ||
+      target.closest("button") ||
+      target.closest(".nav-dropdown") ||
+      target.closest(".toast") ||
+      target.closest(".drag-handle-float") ||
+      target.closest("[contenteditable='true']")
+    );
+  }
 
-      // If moved more than 10px, consider it scrolling
-      if (deltaX > 10 || deltaY > 10) {
-        hasMoved = true;
-        // Cancel long press timer since user is scrolling
-        if (longPressTimer) {
-          clearTimeout(longPressTimer);
-          longPressTimer = null;
-        }
+  /** Recompute the derived selection state from the anchor/focus pair. */
+  function refreshSelectionFromPair() {
+    if (!selAnchor || !selFocus) {
+      selectedSegments = [];
+      selectedWordCount = 0;
+      return;
+    }
+    selectedSegments = selectionSegments(selAnchor, selFocus);
+    selectedText = segmentsText(selectedSegments);
+    selectedWordCount = segmentsWordCount(selectedSegments);
+    selectedVerseNumber = selectedSegments[0]?.verse ?? selectedVerseNumber;
+    paintSelection(selectedSegments, readerElement);
+    selectionRange = segmentsToDomRange(selectedSegments);
+  }
+
+  function cancelWordDrag() {
+    if (wordDrag?.holdTimer) clearTimeout(wordDrag.holdTimer);
+    if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+    dragFrame = null;
+    wordDrag = null;
+    dragArmed = false;
+    dragSelecting = false;
+    stopAutoScroll();
+  }
+
+  function handlePointerDown(e: PointerEvent) {
+    // Secondary mouse buttons keep their normal meaning.
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+
+    const target = e.target as HTMLElement;
+    if (isSelectionExempt(target)) return;
+    if (!target.closest(".verse-text")) return;
+
+    pointerSeq++;
+
+    // The Extend chip turns the next tap into "stretch to here" — no drag
+    // needed. Shift-click is the desktop equivalent and needs no chip.
+    if ((extendArmed || e.shiftKey) && selAnchor) {
+      e.preventDefault();
+      const pos = resolveWordAt(e.clientX, e.clientY, {
+        interlinear: isInterlinearActive,
+      });
+      if (pos && sameSection(selAnchor, pos)) {
+        extendArmed = false;
+        selFocus = pos;
+        refreshSelectionFromPair();
+        haptic(15);
+        finishWordSelection(e.clientX, e.clientY);
+      }
+      return;
+    }
+
+    // Toast goes away the instant a new gesture starts, and stays away
+    // through the drag — it reappears on release, over the finished phrase.
+    showToast = false;
+    clearHighlights();
+    clearPaintedSelection(readerElement);
+    clearHoverHighlight();
+    selectedSegments = [];
+    selectedWordCount = 0;
+
+    // Suppress the OS text-selection UI (magnifier, callout, blue handles)
+    // for the whole gesture. Must be set now, not on arming, because iOS
+    // decides to show the callout well before our 300ms hold elapses.
+    dragSelecting = true;
+    dragArmed = false;
+
+    // Stop the browser starting its own letter-by-letter selection drag.
+    if (e.pointerType === "mouse") e.preventDefault();
+
+    wordDrag = {
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      holdTimer: null,
+    };
+
+    // Holding still also starts a selection. That is the escape hatch for a
+    // phrase that begins at the end of a line and continues on the next one,
+    // where the first movement is downward and would otherwise scroll.
+    if (e.pointerType !== "mouse") {
+      wordDrag.holdTimer = window.setTimeout(() => {
+        if (wordDrag && !dragArmed) armWordDrag();
+      }, HOLD_MS);
+    }
+  }
+
+  /** Commit the gesture to selecting. From here on, direction stops mattering. */
+  function armWordDrag() {
+    if (!wordDrag) return;
+
+    const pos = resolveWordAt(wordDrag.startX, wordDrag.startY, {
+      interlinear: isInterlinearActive,
+    });
+    if (!pos) {
+      cancelWordDrag();
+      return;
+    }
+
+    dragArmed = true;
+    if (wordDrag.holdTimer) {
+      clearTimeout(wordDrag.holdTimer);
+      wordDrag.holdTimer = null;
+    }
+
+    selAnchor = pos;
+    selFocus = pos;
+    selectionMode = "word";
+    refreshSelectionFromPair();
+    haptic(15);
+
+    try {
+      readerElement?.setPointerCapture(wordDrag.pointerId);
+    } catch {
+      /* capture is a nicety — the document-level fallbacks still work */
+    }
+  }
+
+  function handlePointerMove(e: PointerEvent) {
+    if (!wordDrag || e.pointerId !== wordDrag.pointerId) return;
+
+    wordDrag.lastX = e.clientX;
+    wordDrag.lastY = e.clientY;
+
+    if (!dragArmed) {
+      const dx = Math.abs(e.clientX - wordDrag.startX);
+      const dy = Math.abs(e.clientY - wordDrag.startY);
+
+      if (wordDrag.pointerType === "mouse") {
+        if (Math.max(dx, dy) > MOUSE_ARM_PX) armWordDrag();
+        return;
+      }
+
+      if (Math.max(dx, dy) <= ARM_PX) return;
+      // Sideways means the finger is tracing a phrase; up or down means it is
+      // scrolling the page. This is the one moment where direction decides.
+      if (dx > dy) armWordDrag();
+      else cancelWordDrag();
+      return;
+    }
+
+    if (dragFrame === null) {
+      dragFrame = requestAnimationFrame(() => {
+        dragFrame = null;
+        updateDragFocus();
+      });
+    }
+  }
+
+  /** Move the far end of the selection to whatever word is under the pointer. */
+  function updateDragFocus() {
+    if (!wordDrag || !dragArmed || !selAnchor) return;
+
+    const pos = resolveWordAt(wordDrag.lastX, wordDrag.lastY, {
+      interlinear: isInterlinearActive,
+    });
+
+    // A null hit (finger over a footnote marker, a margin, or chrome) simply
+    // leaves the selection where it was rather than collapsing it.
+    if (pos && sameSection(selAnchor, pos)) {
+      const changed =
+        !selFocus || selFocus.verse !== pos.verse || selFocus.start !== pos.start;
+      if (changed) {
+        selFocus = pos;
+        refreshSelectionFromPair();
+        haptic(8);
       }
     }
+
+    maybeAutoScroll();
   }
 
-  function handleTouchEnd(_e: TouchEvent) {
-    // Cancel long press if finger lifted before timer fires
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
+  function handlePointerUp(e: PointerEvent) {
+    if (!wordDrag || e.pointerId !== wordDrag.pointerId) return;
+
+    const { startX, startY, pointerId } = wordDrag;
+    const armed = dragArmed;
+    const releaseX = e.clientX;
+    const releaseY = e.clientY;
+
+    if (wordDrag.holdTimer) clearTimeout(wordDrag.holdTimer);
+    if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+    dragFrame = null;
+    stopAutoScroll();
+    try {
+      readerElement?.releasePointerCapture(pointerId);
+    } catch {
+      /* already released */
     }
-    touchStartPos = null;
-    hasMoved = false;
+    wordDrag = null;
+    dragArmed = false;
+    dragSelecting = false;
+
+    if (!armed) {
+      // Never committed to a drag: this was a plain tap. Same path as before,
+      // except the toast now appears on release instead of after a 500ms hold.
+      selectWordAtPoint(startX, startY);
+      return;
+    }
+
+    finishWordSelection(releaseX, releaseY);
+  }
+
+  function handlePointerCancel(e: PointerEvent) {
+    if (!wordDrag || e.pointerId !== wordDrag.pointerId) return;
+    // The browser took the gesture over to scroll the page.
+    cancelWordDrag();
+    clearPaintedSelection(readerElement);
+    selectedSegments = [];
+    selectedWordCount = 0;
+  }
+
+  /**
+   * Block the page from scrolling once the gesture belongs to us. touch-action
+   * on .verse is pan-y, so a gesture that armed on sideways movement (or on a
+   * still hold) has not started scrolling yet, and preventDefault still holds.
+   */
+  function handleTouchMoveBlock(e: TouchEvent) {
+    if (dragArmed) e.preventDefault();
+  }
+
+  /** Single-word tap: hand off to the existing rich lookup path unchanged. */
+  function selectWordAtPoint(x: number, y: number) {
+    clearHoverHighlight();
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    if (!el || !el.closest(".verse-text")) return;
+    handleTextSelection(x, y, el);
+  }
+
+  /**
+   * Release with a committed selection. One word behaves exactly like a tap so
+   * Define/Bio/More Info keep working; a phrase takes the multi-word path and
+   * skips the single-term lookups entirely.
+   */
+  function finishWordSelection(x: number, y: number) {
+    if (!selAnchor || !selFocus || selectedSegments.length === 0) return;
+
+    if (selectedWordCount <= 1) {
+      // Re-enter through the normal single-word path, aimed at the middle of
+      // the anchor word so the result does not depend on where the finger
+      // stopped (which may have drifted into a gap).
+      clearPaintedSelection(readerElement);
+      const r = charRangeToDomRange(
+        selAnchor.textEl,
+        selAnchor.start,
+        selAnchor.end - selAnchor.start,
+      );
+      const rect = r?.getBoundingClientRect();
+      if (rect && rect.width > 0) {
+        selectWordAtPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      } else {
+        selectWordAtPoint(x, y);
+      }
+      return;
+    }
+
+    // Multi-word: the single-term lookups do not apply, so bump the token to
+    // void any in-flight person/ISBE request and clear their labels.
+    personLabelToken++;
+    selectedIsPerson = false;
+    selectedIsbeKind = null;
+    selectedContext = null;
+    selectionMode = "word";
+
+    refreshSelectionFromPair();
+    addSelectionHandles();
+    showToastAt(x, y, { lookup: false });
+  }
+
+  // --- Auto-scroll while dragging near the top/bottom of the reader -------
+
+  /** How far to nudge the reader this frame: negative up, positive down, 0 idle. */
+  function autoScrollDelta(): number {
+    if (!readerElement || !wordDrag || !dragArmed) return 0;
+    const rect = readerElement.getBoundingClientRect();
+    if (wordDrag.lastY - rect.top < AUTOSCROLL_EDGE) return -AUTOSCROLL_PX;
+    if (rect.bottom - wordDrag.lastY < AUTOSCROLL_EDGE) return AUTOSCROLL_PX;
+    return 0;
+  }
+
+  function maybeAutoScroll() {
+    if (autoScrollDelta() === 0) {
+      stopAutoScroll();
+      return;
+    }
+    if (autoScrollFrame !== null) return;
+
+    // Re-read the delta every frame rather than closing over it, so lifting
+    // the finger away from the edge stops the creep instead of re-arming it.
+    const step = () => {
+      autoScrollFrame = null;
+      const delta = autoScrollDelta();
+      if (delta === 0 || !readerElement) return;
+      readerElement.scrollTop += delta;
+      autoScrollFrame = requestAnimationFrame(step);
+      updateDragFocus();
+    };
+    autoScrollFrame = requestAnimationFrame(step);
+  }
+
+  function stopAutoScroll() {
+    if (autoScrollFrame !== null) cancelAnimationFrame(autoScrollFrame);
+    autoScrollFrame = null;
   }
 
   /** Fully unwrap the hover span from the DOM and null the reference. */
@@ -2661,8 +3012,10 @@
       return;
     }
 
-    // Don't hover when dragging or when toast is open
-    if (isDragging || showToast) {
+    // Don't hover when dragging or when toast is open. dragSelecting covers the
+    // word-drag gesture: the hover wrapper splits text nodes, which would
+    // corrupt the caret offsets the drag reads on every frame.
+    if (isDragging || showToast || dragSelecting) {
       clearHoverHighlight();
       return;
     }
@@ -2741,41 +3094,10 @@
     }
   }
 
-  function handleTextClick(e: MouseEvent) {
-    const target = e.target as HTMLElement;
-
-    // Ignore if clicking on note
-    if (target.closest(".inline-note")) return;
-
-    // Ignore if clicking on toast or drag handles
-    if (target.closest(".toast") || target.closest(".drag-handle")) return;
-
-    // Only handle if clicking inside verse text
-    if (!target.closest(".verse-text")) return;
-
-    // Clear hover highlight before selecting (unwrap the span)
-    if (hoveredWordElement) {
-      const parent = hoveredWordElement.parentNode;
-      while (hoveredWordElement.firstChild) {
-        parent?.insertBefore(hoveredWordElement.firstChild, hoveredWordElement);
-      }
-      parent?.removeChild(hoveredWordElement);
-      hoveredWordElement = null;
-
-      // Normalize the parent to merge adjacent text nodes
-      parent?.normalize();
-    }
-
-    // After unwrapping, get the element at the click position
-    const elementAtPoint = document.elementFromPoint(
-      e.clientX,
-      e.clientY,
-    ) as HTMLElement;
-
-    // Handle click - mouse clicks work immediately
-    handleTextSelection(e.clientX, e.clientY, elementAtPoint || target);
-  }
-
+  // The old click handler lived here. Taps now arrive via handlePointerUp,
+  // which routes an uncommitted press to selectWordAtPoint — that unwraps the
+  // hover span and re-resolves the element before calling in here, exactly as
+  // the click path used to.
   function handleTextSelection(x: number, y: number, target: HTMLElement) {
     // Find the verse text container
     const verseText = target.closest(".verse-text");
@@ -2947,45 +3269,73 @@
     return 0;
   }
 
-  // Up to 3 words on each side of the clicked word, in reading order, for ISBE
-  // multi-word phrase detection ("Red Sea", "Abel Beth Maacah").
-  function wordContext(
-    text: string,
-    start: number,
-    end: number,
-  ): { before: string[]; after: string[] } {
-    const tokenize = (s: string) => (s.match(/[\p{L}\p{N}]+/gu) || []) as string[];
-    const before = tokenize(text.slice(0, start)).slice(-3);
-    const after = tokenize(text.slice(end)).slice(0, 3);
-    return { before, after };
-  }
+  // wordContext / getWordBounds now live in lib/wordSelection.ts so the drag
+  // engine and the click paths agree on where a word starts and ends.
+  const wordContext = wordContextAround;
 
-  function getWordBounds(
-    text: string,
-    offset: number,
-  ): { start: number; end: number } | null {
-    // Find word boundaries — use Unicode-aware test so Greek and Hebrew
-    // characters (and combining marks) are treated as word characters.
-    const isWordChar = (ch: string) => /[\p{L}\p{M}\p{N}]/u.test(ch);
+  /**
+   * Position the two fine-tune bumpers at the ends of the current selection.
+   * Split out of highlightSelection so the drag engine can call it directly
+   * after painting a multi-verse phrase.
+   */
+  function addSelectionHandles() {
+    const range = selectionRange;
+    if (!range) return;
 
-    let start = offset;
-    let end = offset;
+    // Handles are appended to .text-container (position:relative), so all
+    // offsets must be relative to that element's bounding rect — not the
+    // scrollable .bible-reader which sits above the NavBar.
+    const rects = range.getClientRects();
+    const textContainer = readerElement?.querySelector(".text-container");
+    if (rects.length === 0 || !textContainer) return;
 
-    // Expand left
-    while (start > 0 && isWordChar(text[start - 1])) {
-      start--;
-    }
+    const firstRect = rects[0];
+    const lastRect = rects[rects.length - 1];
+    const containerRect = textContainer.getBoundingClientRect();
 
-    // Expand right
-    while (end < text.length && isWordChar(text[end])) {
-      end++;
-    }
+    // For RTL text (Hebrew), the visual "left" handle is the reading-end
+    // of the word and the visual "right" handle is the reading-start.
+    // Swap the drag-edge assignments so dragging toward reading-start
+    // always extends the selection backward and vice-versa.
+    const isRTL =
+      getComputedStyle(textContainer as Element).direction === "rtl" ||
+      currentTranslation === "hebrew-oshb" ||
+      currentTranslation === "wlc";
 
-    if (start < end) {
-      return { start, end };
-    }
+    const startEdge = isRTL ? ("right" as const) : ("left" as const);
+    const endEdge = isRTL ? ("left" as const) : ("right" as const);
 
-    return null;
+    // Left handle at start of selection
+    const leftHandle = document.createElement("div");
+    leftHandle.className = "drag-handle-float left";
+    leftHandle.style.position = "absolute";
+    leftHandle.style.left = `${firstRect.left - containerRect.left}px`;
+    leftHandle.style.top = `${firstRect.top - containerRect.top + textContainer.scrollTop}px`;
+    leftHandle.style.height = `${firstRect.height}px`;
+    leftHandle.addEventListener("mousedown", (e) => startDrag(e, startEdge));
+    leftHandle.addEventListener(
+      "touchstart",
+      (e) => startDragTouch(e, startEdge),
+      { passive: false },
+    );
+
+    // Right handle at end of selection
+    const rightHandle = document.createElement("div");
+    rightHandle.className = "drag-handle-float right";
+    rightHandle.style.position = "absolute";
+    rightHandle.style.left = `${lastRect.right - containerRect.left}px`;
+    rightHandle.style.top = `${lastRect.top - containerRect.top + textContainer.scrollTop}px`;
+    rightHandle.style.height = `${lastRect.height}px`;
+    rightHandle.addEventListener("mousedown", (e) => startDrag(e, endEdge));
+    rightHandle.addEventListener(
+      "touchstart",
+      (e) => startDragTouch(e, endEdge),
+      { passive: false },
+    );
+
+    textContainer.appendChild(leftHandle);
+    textContainer.appendChild(rightHandle);
+    highlightedElements.push(leftHandle, rightHandle);
   }
 
   function highlightSelection(range: Range, mode: "word" | "verse") {
@@ -2993,68 +3343,26 @@
     clearHighlights();
 
     if (mode === "word") {
-      // Use browser's native selection for highlighting (non-invasive)
-      const selection = window.getSelection();
-      if (selection) {
-        selection.removeAllRanges();
-        selection.addRange(range.cloneRange());
+      // Adopt the range into the anchor/focus model, then paint it with our
+      // own spans. The browser's native selection is deliberately not used:
+      // on a phone it summons the OS magnifier and copy callout, which fight
+      // the drag, and it cannot express a whole-word-snapped range anyway.
+      const pos = posFromRange(range);
+      if (pos) {
+        selAnchor = pos;
+        selFocus = pos;
+        refreshSelectionFromPair();
+      } else {
+        // Range didn't resolve to a place we can paint. Drop the pair rather
+        // than leaving a stale one behind, and fall back to a single-word
+        // toast so Define doesn't vanish on a word we simply couldn't map.
+        selAnchor = null;
+        selFocus = null;
+        selectedSegments = [];
+        selectedWordCount = 1;
+        selectionRange = range;
       }
-
-      // Create floating drag handles positioned absolutely
-      const rects = range.getClientRects();
-      // Handles are appended to .text-container (position:relative), so all
-      // offsets must be relative to that element's bounding rect — not the
-      // scrollable .bible-reader which sits above the NavBar.
-      const textContainer = readerElement?.querySelector(".text-container");
-      if (rects.length > 0 && textContainer) {
-        const firstRect = rects[0];
-        const lastRect = rects[rects.length - 1];
-        const containerRect = textContainer.getBoundingClientRect();
-
-        // For RTL text (Hebrew), the visual "left" handle is the reading-end
-        // of the word and the visual "right" handle is the reading-start.
-        // Swap the drag-edge assignments so dragging toward reading-start
-        // always extends the selection backward and vice-versa.
-        const isRTL =
-          getComputedStyle(textContainer as Element).direction === "rtl" ||
-          currentTranslation === "hebrew-oshb" ||
-          currentTranslation === "wlc";
-
-        const startEdge = isRTL ? ("right" as const) : ("left" as const);
-        const endEdge = isRTL ? ("left" as const) : ("right" as const);
-
-        // Left handle at start of selection
-        const leftHandle = document.createElement("div");
-        leftHandle.className = "drag-handle-float left";
-        leftHandle.style.position = "absolute";
-        leftHandle.style.left = `${firstRect.left - containerRect.left}px`;
-        leftHandle.style.top = `${firstRect.top - containerRect.top + textContainer.scrollTop}px`;
-        leftHandle.style.height = `${firstRect.height}px`;
-        leftHandle.addEventListener("mousedown", (e) => startDrag(e, startEdge));
-        leftHandle.addEventListener(
-          "touchstart",
-          (e) => startDragTouch(e, startEdge),
-          { passive: false },
-        );
-
-        // Right handle at end of selection
-        const rightHandle = document.createElement("div");
-        rightHandle.className = "drag-handle-float right";
-        rightHandle.style.position = "absolute";
-        rightHandle.style.left = `${lastRect.right - containerRect.left}px`;
-        rightHandle.style.top = `${lastRect.top - containerRect.top + textContainer.scrollTop}px`;
-        rightHandle.style.height = `${lastRect.height}px`;
-        rightHandle.addEventListener("mousedown", (e) => startDrag(e, endEdge));
-        rightHandle.addEventListener(
-          "touchstart",
-          (e) => startDragTouch(e, endEdge),
-          { passive: false },
-        );
-
-        textContainer.appendChild(leftHandle);
-        textContainer.appendChild(rightHandle);
-        highlightedElements.push(leftHandle, rightHandle);
-      }
+      addSelectionHandles();
     } else {
       // Highlight the entire verse
       const verseEl = range.startContainer.parentElement?.closest(".verse");
@@ -3121,6 +3429,11 @@
       selection.removeAllRanges();
     }
 
+    // Unwrap the painted word-selection spans. The anchor/focus pair is left
+    // alone — highlightSelection clears before it repaints, and the Extend
+    // chip still needs the anchor after the visual selection is torn down.
+    clearPaintedSelection(readerElement);
+
     // Remove any DOM elements we added
     highlightedElements.forEach((el) => {
       if (el.classList.contains("verse-highlighted")) {
@@ -3146,39 +3459,34 @@
     document.addEventListener("mouseup", stopDrag, true);
   }
 
+  /**
+   * Move one end of the selection to the whole word under (x, y).
+   *
+   * The bumpers used to nudge a raw character offset, which is why widening a
+   * selection felt like steering a cursor. They now move the anchor/focus pair,
+   * so every step lands on a word boundary. "left" moves whichever end reads
+   * first, "right" whichever reads last, regardless of which one is the anchor.
+   */
+  function moveSelectionEdge(x: number, y: number) {
+    if (!dragEdge || !selAnchor || !selFocus) return;
+
+    const pos = resolveWordAt(x, y, { interlinear: isInterlinearActive });
+    if (!pos || !sameSection(selAnchor, pos)) return;
+
+    const anchorIsFirst = comparePos(selAnchor, selFocus) <= 0;
+    const movingAnchor = dragEdge === "left" ? anchorIsFirst : !anchorIsFirst;
+
+    if (movingAnchor) selAnchor = pos;
+    else selFocus = pos;
+
+    clearHighlights();
+    refreshSelectionFromPair();
+    addSelectionHandles();
+  }
+
   function handleDrag(e: MouseEvent) {
-    if (!isDragging || !dragEdge || !selectionRange) return;
-
-    // Get the position of the mouse
-    const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-    if (!range) return;
-
-    try {
-      const newRange = selectionRange.cloneRange();
-
-      if (dragEdge === "left") {
-        // Expand/contract from the left
-        if (range.startContainer.nodeType === Node.TEXT_NODE) {
-          newRange.setStart(range.startContainer, range.startOffset);
-        }
-      } else {
-        // Expand/contract from the right
-        if (range.startContainer.nodeType === Node.TEXT_NODE) {
-          newRange.setEnd(range.startContainer, range.startOffset);
-        }
-      }
-
-      // Update selected text
-      selectedText = newRange.toString().trim();
-
-      if (selectedText) {
-        // Clear and re-highlight
-        selectionRange = newRange;
-        highlightSelection(newRange, selectionMode);
-      }
-    } catch (err) {
-      console.error("Error during drag:", err);
-    }
+    if (!isDragging || !dragEdge) return;
+    moveSelectionEdge(e.clientX, e.clientY);
   }
 
   function stopDrag() {
@@ -3198,11 +3506,8 @@
     e.preventDefault();
     e.stopPropagation();
 
-    // Cancel any long press
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
+    // Cancel any word drag that armed before the finger reached the bumper
+    cancelWordDrag();
 
     isDragging = true;
     dragEdge = edge;
@@ -3216,44 +3521,43 @@
   }
 
   function handleDragTouch(e: TouchEvent) {
-    if (!isDragging || !dragEdge || !selectionRange) return;
+    if (!isDragging || !dragEdge) return;
     e.preventDefault();
 
     const touch = e.touches[0];
     if (!touch) return;
-
-    // Get the position of the touch
-    const range = document.caretRangeFromPoint(touch.clientX, touch.clientY);
-    if (!range) return;
-
-    try {
-      const newRange = selectionRange.cloneRange();
-
-      if (dragEdge === "left") {
-        // Expand/contract from the left
-        if (range.startContainer.nodeType === Node.TEXT_NODE) {
-          newRange.setStart(range.startContainer, range.startOffset);
-        }
-      } else {
-        // Expand/contract from the right
-        if (range.startContainer.nodeType === Node.TEXT_NODE) {
-          newRange.setEnd(range.startContainer, range.startOffset);
-        }
-      }
-
-      // Update the selection text
-      selectedText = newRange.toString().trim();
-
-      if (selectedText) {
-        selectionRange = newRange;
-        highlightSelection(newRange, selectionMode);
-      }
-    } catch (err) {
-      console.error("Error during touch drag:", err);
-    }
+    moveSelectionEdge(touch.clientX, touch.clientY);
   }
 
-  function showToastAt(x: number, y: number) {
+  /**
+   * Re-anchor the open toast over the top of its selection after a scroll.
+   * Hides it once the selection leaves the viewport — the selection itself and
+   * the armed Extend chip both survive, so scroll-then-tap still works.
+   */
+  function repositionToastToSelection() {
+    if (!readerElement) return;
+    const rects = selectionRange?.getClientRects();
+    if (!rects || rects.length === 0) return;
+
+    const first = rects[0];
+    const bounds = readerElement.getBoundingClientRect();
+    if (first.bottom < bounds.top || first.top > bounds.bottom) {
+      showToast = false;
+      return;
+    }
+
+    const toastHeight = 90;
+    const toastWidth = 200;
+    toastX = Math.min(
+      Math.max(first.left + first.width / 2 - toastWidth / 2, 10),
+      window.innerWidth - toastWidth - 10,
+    );
+    toastY = Math.max(first.top - toastHeight - 15, 10);
+    if (toastY < 70) toastY = first.bottom + 30;
+  }
+
+  function showToastAt(x: number, y: number, opts: { lookup?: boolean } = {}) {
+    const { lookup = true } = opts;
     // Clear any hover highlight — full unwrap required (see clearHoverHighlight)
     clearHoverHighlight();
 
@@ -3275,6 +3579,7 @@
 
     showToast = true;
     justOpenedToast = true;
+    toastPointerSeq = pointerSeq;
 
     // Resolve "is this a character?" in the background so the Define button can
     // relabel itself to Bio. Starts false so the toast never flashes the wrong
@@ -3289,7 +3594,9 @@
       selectedVerseNumber != null
         ? { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber }
         : null;
-    if (word && selectionMode === "word") {
+    // A phrase has no single term to look up, so the caller turns this off and
+    // the toast drops Define/Bio/More Info instead of guessing.
+    if (lookup && word && selectionMode === "word") {
       import("../adapters/lexicon-lookup.js")
         .then(async ({ isPersonName, classifyIsbeClick }) => {
           // Person outranks ISBE for the label, so resolve it first and only fall
@@ -3714,14 +4021,31 @@
       case "highlight": {
         if (selectedVerseNumber === null) break;
         const hlRef = { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber };
+        // Capture the selection's character runs now, synchronously, before the
+        // modal opens and the painted spans are torn down. One run per verse,
+        // so a phrase that crosses a verse boundary saves as several records.
+        pendingWordSpans =
+          selectionMode === 'word'
+            ? selectedSegments.map(s => ({
+                verse: s.verse,
+                wordStart: s.start,
+                wordLength: s.length,
+              }))
+            : [];
         // Find existing highlight for this verse
         const existingV = chapterVerseHighlights.find(
           h => h.reference.verse === selectedVerseNumber
         ) ?? null;
+        // Only a highlight that actually overlaps the selection counts as the
+        // one being edited. Two separate phrases can live in the same verse.
         const existingW = selectionMode === 'word'
-          ? chapterWordHighlights.find(
-              h => h.reference.verse === selectedVerseNumber &&
-                   h.translation === currentTranslation
+          ? chapterWordHighlights.find(h =>
+              h.translation === currentTranslation &&
+              pendingWordSpans.some(p =>
+                p.verse === h.reference.verse &&
+                p.wordStart < h.wordStart + h.wordLength &&
+                h.wordStart < p.wordStart + p.wordLength
+              )
             ) ?? null
           : null;
         highlightModalRef = hlRef;
@@ -3733,28 +4057,6 @@
         highlightModalRepeatGroup = selectionMode === 'word'
           ? (get(repeatsStore).find(g => g.word === normalizeRepeatWord(text)) ?? null)
           : null;
-        // Capture word offset synchronously now, before any DOM mutations
-        pendingWordStart = 0; pendingWordLength = 0;
-        if (selectionMode === 'word' && selectionRange) {
-          const wSpan = readerElement?.querySelector<HTMLElement>(
-            `[data-verse="${selectedVerseNumber}"] .verse-text`
-          );
-          if (wSpan) {
-            const sr = selectionRange;
-            let cur = 0, found = false;
-            const sn = sr.startContainer, en = sr.endContainer;
-            const walkW = (n: Node): void => {
-              if (n.nodeType === Node.TEXT_NODE) {
-                const t = n as Text;
-                if (t === sn) { pendingWordStart = cur + sr.startOffset; found = true; }
-                if (t === en) pendingWordLength = (cur + sr.endOffset) - pendingWordStart;
-                cur += t.length;
-              } else n.childNodes.forEach(walkW);
-            };
-            walkW(wSpan);
-            if (!found) { pendingWordStart = 0; pendingWordLength = 0; }
-          }
-        }
         highlightModalOpen = true;
         showToast = false;
         break;
@@ -3782,17 +4084,35 @@
       case "repeats":
         toggleRepeats(text);
         break;
+      case "extend":
+        // Arm the next tap to stretch the selection instead of replacing it.
+        // Everything stays on screen — the toast, the painted words, the anchor
+        // — so you can even scroll away before tapping the far end.
+        extendArmed = !extendArmed;
+        return;
     }
 
     // Close toast after action
     if (action !== "dissect") {
       showToast = false;
     }
+    extendArmed = false;
     clearHighlights();
   }
 
   function handleModeChange(event: CustomEvent) {
     selectionMode = event.detail;
+
+    // Going back to Word: repaint from the anchor/focus pair, not from the
+    // Range. A phrase spanning verses has no single Range that survives the
+    // round trip, and re-deriving from the pair keeps it whole.
+    if (selectionMode === "word" && selAnchor && selFocus) {
+      clearHighlights();
+      refreshSelectionFromPair();
+      addSelectionHandles();
+      return;
+    }
+
     if (selectionRange) {
       highlightSelection(selectionRange, selectionMode);
     }
@@ -3806,11 +4126,14 @@
 
     // Don't close if toast was just opened
     if (justOpenedToast) return;
+    // Don't close on the click that trails the very gesture which opened it.
+    if (showToast && pointerSeq === toastPointerSeq) return;
 
     if (!target.closest(".intro-repeat-wrap")) introMenuKey = null;
 
     if (!target.closest(".selection-highlight") && !target.closest(".toast")) {
       showToast = false;
+      extendArmed = false;
       clearHighlights();
     }
   }
@@ -3936,13 +4259,20 @@
 
     readerElement?.addEventListener("click", handleNoteClick, true);
 
-    // Add text selection listeners
+    // Text selection. Pointer events cover finger, pen and mouse in one path;
+    // the extra non-passive touchmove exists only to stop the page scrolling
+    // once a drag has committed to selecting.
     readerElement?.addEventListener("mousemove", handleMouseMove);
-    readerElement?.addEventListener("click", handleTextClick);
-    readerElement?.addEventListener("touchstart", handleTextInteraction);
-    readerElement?.addEventListener("touchmove", handleTouchMove);
-    readerElement?.addEventListener("touchend", handleTouchEnd);
-    readerElement?.addEventListener("touchcancel", handleTouchEnd);
+    readerElement?.addEventListener("pointerdown", handlePointerDown);
+    // move/up/cancel live on window, not the reader: a press that is released
+    // outside the reader (or off the edge of the screen) must still end the
+    // gesture, or user-select:none would stay stuck on the text.
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+    readerElement?.addEventListener("touchmove", handleTouchMoveBlock, {
+      passive: false,
+    });
     document.addEventListener("click", handleClickOutside);
 
     // Save position when tab is hidden (phone lock, tab switch, close)
@@ -3977,18 +4307,18 @@
       window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
       readerElement?.removeEventListener("mousemove", handleMouseMove);
-      readerElement?.removeEventListener("click", handleTextClick);
-      readerElement?.removeEventListener("touchstart", handleTextInteraction);
-      readerElement?.removeEventListener("touchmove", handleTouchMove);
-      readerElement?.removeEventListener("touchend", handleTouchEnd);
-      readerElement?.removeEventListener("touchcancel", handleTouchEnd);
+      readerElement?.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      readerElement?.removeEventListener("touchmove", handleTouchMoveBlock);
       document.removeEventListener("click", handleClickOutside);
+      cancelWordDrag();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsubscribeHighlightChanges();
       unsubscribeNoteChanges();
       stopScrollDetection();
       if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
-      if (longPressTimer) clearTimeout(longPressTimer);
       if (anchorSyncDebounce) clearTimeout(anchorSyncDebounce);
       if (verseObserver) { verseObserver.disconnect(); verseObserver = null; }
 
@@ -4017,6 +4347,8 @@
     isPerson={selectedIsPerson}
     moreInfo={!selectedIsPerson && selectedIsbeKind !== null}
     mode={selectionMode}
+    wordCount={selectedWordCount}
+    {extendArmed}
     on:action={handleToastAction}
     on:modeChange={handleModeChange}
   />
@@ -4072,29 +4404,39 @@
         return;
       }
 
-      if (highlightSelectionType === 'word' && pendingWordLength > 0) {
-        // Remove existing word highlight for this verse+translation if any
-        const prev = chapterWordHighlights.find(
-          h => h.reference.verse === highlightModalRef!.verse && h.translation === currentTranslation
+      if (highlightSelectionType === 'word' && pendingWordSpans.length > 0) {
+        // Character runs were captured at toast-action time, before the painted
+        // spans came down. A phrase spanning verses saves one record per verse.
+        const spans = pendingWordSpans;
+
+        // Replace only what this selection actually covers, so an unrelated
+        // phrase elsewhere in the same verse survives.
+        const overlapping = chapterWordHighlights.filter(h =>
+          h.translation === currentTranslation &&
+          spans.some(p =>
+            p.verse === h.reference.verse &&
+            p.wordStart < h.wordStart + h.wordLength &&
+            h.wordStart < p.wordStart + p.wordLength
+          )
         );
-        if (prev) {
+        for (const prev of overlapping) {
           await userDataStore.deleteWordHighlight(prev.id);
           await syncQueue.enqueue({ type: 'DELETE', table: 'user_word_highlights', id: prev.id });
         }
-        // Word offset was captured synchronously at toast action time (before DOM mutations)
-        const wordStart = pendingWordStart;
-        const wordLength = pendingWordLength;
-        const saved = await userDataStore.saveWordHighlight({
-          reference: highlightModalRef,
-          translation: currentTranslation,
-          wordStart, wordLength, style,
-        });
-        await syncQueue.enqueue({ type: 'INSERT', table: 'user_word_highlights', id: saved.id, data: {
-          id: saved.id, book: saved.reference.book, chapter: saved.reference.chapter,
-          verse: saved.reference.verse, translation: saved.translation,
-          word_start: saved.wordStart, word_length: saved.wordLength,
-          style: JSON.stringify(saved.style), created_at: saved.createdAt.toISOString(),
-        }});
+
+        for (const span of spans) {
+          const saved = await userDataStore.saveWordHighlight({
+            reference: { book: highlightModalRef.book, chapter: highlightModalRef.chapter, verse: span.verse },
+            translation: currentTranslation,
+            wordStart: span.wordStart, wordLength: span.wordLength, style,
+          });
+          await syncQueue.enqueue({ type: 'INSERT', table: 'user_word_highlights', id: saved.id, data: {
+            id: saved.id, book: saved.reference.book, chapter: saved.reference.chapter,
+            verse: saved.reference.verse, translation: saved.translation,
+            word_start: saved.wordStart, word_length: saved.wordLength,
+            style: JSON.stringify(saved.style), created_at: saved.createdAt.toISOString(),
+          }});
+        }
         chapterWordHighlights = await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter);
       } else {
         // Verse-level
@@ -4128,8 +4470,22 @@
       if (highlightModalExisting) {
         const isWord = 'wordStart' in highlightModalExisting;
         if (isWord) {
-          await userDataStore.deleteWordHighlight(highlightModalExisting.id);
-          await syncQueue.enqueue({ type: 'DELETE', table: 'user_word_highlights', id: highlightModalExisting.id });
+          // Remove every record the selection covers, so a phrase that saved as
+          // several per-verse rows comes off in one go rather than one row at a time.
+          const targets = pendingWordSpans.length > 0
+            ? chapterWordHighlights.filter(h =>
+                h.translation === currentTranslation &&
+                pendingWordSpans.some(p =>
+                  p.verse === h.reference.verse &&
+                  p.wordStart < h.wordStart + h.wordLength &&
+                  h.wordStart < p.wordStart + p.wordLength
+                )
+              )
+            : [highlightModalExisting as UserWordHighlight];
+          for (const t of targets) {
+            await userDataStore.deleteWordHighlight(t.id);
+            await syncQueue.enqueue({ type: 'DELETE', table: 'user_word_highlights', id: t.id });
+          }
           chapterWordHighlights = await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter);
           // A relocated book-intro pill may now have lost a highlight — re-derive.
           await refreshBookIntroPills();
@@ -4177,7 +4533,13 @@
 />
 
 
-<div class="bible-reader" bind:this={readerElement} bind:clientWidth={readerClientWidth}>
+<div
+  class="bible-reader"
+  class:drag-selecting={dragSelecting}
+  class:edge-dragging={isDragging}
+  bind:this={readerElement}
+  bind:clientWidth={readerClientWidth}
+>
   <NavigationBar
     {windowId}
     style="transform: translateY({windowId ? navBarOffset : displayNavOffset}px); transition: transform 0.25s ease;"
@@ -4616,6 +4978,13 @@
     position: relative;
     font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1));
     line-height: calc(var(--line-spacing, 1.8) * var(--reader-lead-scale, 1));
+    /* Vertical panning stays with the browser so the page still scrolls under
+       a finger; sideways is ours, which is what lets a drag start selecting
+       words without the first frames being eaten by a scroll. Once a drag
+       commits, handleTouchMoveBlock preventDefaults and vertical stops too.
+       This lives on .verse, not .verse-text: touch-action is ignored on
+       non-replaced inline elements, and .verse-text is a <span>. */
+    touch-action: pan-y;
   }
 
   /* Read Aloud: the verse currently being spoken. */
@@ -4661,6 +5030,23 @@
     font-size: calc(var(--base-font-size, 1.125rem) * var(--reader-font-scale, 1));
     line-height: calc(var(--line-spacing, 1.8) * var(--reader-lead-scale, 1));
     cursor: text;
+  }
+
+  /* While a bumper is being dragged it sits directly under the finger, so
+     hit-testing for the word beneath would return the bumper instead of text.
+     The drag itself is driven by document-level listeners, so dropping pointer
+     events here costs nothing. */
+  .bible-reader.edge-dragging :global(.drag-handle-float) {
+    pointer-events: none;
+  }
+
+  /* From pointer-down on a word until release: no OS magnifier, no callout
+     menu, no blue letter handles competing with the word selection. */
+  .bible-reader.drag-selecting,
+  .bible-reader.drag-selecting .verse-text {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
 
   /* ── Translation-specific fonts ─────────────────────────────────────── */
@@ -5410,6 +5796,17 @@
   /* Custom selection styling */
   .text-container ::selection {
     background: rgba(102, 126, 234, 0.3);
+  }
+
+  /* Painted whole-word selection. Replaces the browser's native selection so a
+     selection can snap to word boundaries and span verses. No padding or
+     margin: wrapping a word must never change layout, or the infinite-scroll
+     height math drifts (same rule the repeats overlay follows). */
+  :global(.sel-word-span) {
+    background: rgba(102, 126, 234, 0.32);
+    border-radius: 2px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
   }
 
   /* Repeat highlights */

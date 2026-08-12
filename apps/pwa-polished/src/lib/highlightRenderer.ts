@@ -96,9 +96,15 @@ const WORD_WRAP_CLASS = 'hl-word-span';
 export function applyHighlightToElement(
   el: HTMLElement,
   style: HighlightStyle,
-  seed: string
+  seed: string,
+  /**
+   * Skip the pre-clean. Callers that already swept the verse must pass true —
+   * otherwise this would unwrap the word spans a sibling highlight in the same
+   * verse just injected, which is reachable now that a verse can hold several.
+   */
+  skipClean = false
 ): void {
-  removeHighlightFromElement(el);
+  if (!skipClean) removeHighlightFromElement(el);
 
   switch (style.type) {
     case 'background': {
@@ -229,13 +235,17 @@ export function removeHighlightFromElement(el: HTMLElement): void {
   }
 
   // Remove any injected word spans
-  el.querySelectorAll<HTMLElement>(`.${WORD_WRAP_CLASS}`).forEach(span => {
+  const wrapped = el.querySelectorAll<HTMLElement>(`.${WORD_WRAP_CLASS}`);
+  wrapped.forEach(span => {
     const parent = span.parentNode;
     if (parent) {
       while (span.firstChild) parent.insertBefore(span.firstChild, span);
       parent.removeChild(span);
     }
   });
+  // Merge the text nodes that wrapping split apart. Without this, every
+  // apply/remove cycle leaves the verse more fragmented than it found it.
+  if (wrapped.length > 0) el.normalize();
 }
 
 // ---------------------------------------------------------------------------
@@ -243,71 +253,91 @@ export function removeHighlightFromElement(el: HTMLElement): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Given the plain text of a verse, inject a <span> wrapper at the given
- * character offset inside the .verse-text element so we can apply word-level
- * styles. Returns the injected span or null if the range cannot be located.
- *
- * Note: This uses a simple text-node walk which is safe because verse text
- * has minimal inline markup (mainly footnote superscripts injected by
- * renderVerseHtml — those live in separate elements and don't overlap user
- * text positions).
+ * Collect every text node under `root`, paired with its cumulative character
+ * offset from the start of `root`'s textContent.
  */
-export function injectWordSpan(
-  verseTextEl: HTMLElement,
-  wordStart: number,
-  wordLength: number
-): HTMLSpanElement | null {
-  // Collect all text nodes, tracking cumulative character offset
-  const textNodes: { node: Text; start: number }[] = [];
+export function collectTextNodes(root: Node): { node: Text; start: number }[] {
+  const out: { node: Text; start: number }[] = [];
   let cursor = 0;
 
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
       const tn = node as Text;
-      textNodes.push({ node: tn, start: cursor });
+      out.push({ node: tn, start: cursor });
       cursor += tn.length;
     } else {
       node.childNodes.forEach(walk);
     }
   };
-  walk(verseTextEl);
+  walk(root);
 
-  // Find the text nodes that the range spans
-  const endOffset = wordStart + wordLength;
-  const span = document.createElement('span');
-  span.className = WORD_WRAP_CLASS;
+  return out;
+}
 
-  // Range API approach: more robust across node boundaries
-  const range = document.createRange();
-  let startSet = false;
+/**
+ * Wrap the character range [start, start + length) inside `root` in one or more
+ * <span class={className}> wrappers, and return them in document order.
+ *
+ * A single surroundContents() cannot be used here: it throws whenever the range
+ * crosses an element boundary. A one-word range rarely does, but a multi-word
+ * phrase routinely runs through footnote superscripts, red-letter spans, <b>/<i>
+ * and poetry <br> breaks. So the range is split at every text node it touches
+ * and each piece is wrapped independently — inline markup in between is simply
+ * left alone (a footnote marker inside a highlighted phrase stays unhighlighted,
+ * which is what you want anyway).
+ *
+ * Returns an empty array if the range could not be located at all.
+ */
+export function wrapCharRange(
+  root: HTMLElement,
+  start: number,
+  length: number,
+  className: string
+): HTMLSpanElement[] {
+  if (length <= 0) return [];
 
-  for (const { node, start } of textNodes) {
-    const nodeEnd = start + node.length;
+  const end = start + length;
+  // Snapshot the node list before mutating: splitText() only ever splits the
+  // node it is called on, so the offsets of the other collected nodes stay valid.
+  const textNodes = collectTextNodes(root);
+  const spans: HTMLSpanElement[] = [];
 
-    if (!startSet && start <= wordStart && wordStart < nodeEnd) {
-      range.setStart(node, wordStart - start);
-      startSet = true;
-    }
+  for (const { node, start: nodeStart } of textNodes) {
+    const nodeEnd = nodeStart + node.length;
+    if (nodeEnd <= start || nodeStart >= end) continue;
 
-    if (startSet && start < endOffset && endOffset <= nodeEnd) {
-      range.setEnd(node, endOffset - start);
-      break;
-    }
+    const localStart = Math.max(0, start - nodeStart);
+    const localEnd = Math.min(node.length, end - nodeStart);
+    if (localEnd <= localStart) continue;
 
-    if (startSet && nodeEnd <= endOffset && endOffset > nodeEnd) {
-      // end is in a later node — continue scanning
-    }
+    // Trim the node down to exactly the slice we want, then wrap what is left.
+    let target: Text = node;
+    if (localStart > 0) target = target.splitText(localStart);
+    if (target.length > localEnd - localStart) target.splitText(localEnd - localStart);
+
+    const parent = target.parentNode;
+    if (!parent) continue;
+
+    const span = document.createElement('span');
+    span.className = className;
+    parent.insertBefore(span, target);
+    span.appendChild(target);
+    spans.push(span);
   }
 
-  if (!startSet) return null;
+  return spans;
+}
 
-  try {
-    range.surroundContents(span);
-    return span;
-  } catch {
-    // Range crosses element boundaries — fall back to no injection
-    return null;
-  }
+/**
+ * Inject highlight word-span wrappers over a character range inside a
+ * .verse-text element. Returns every span created, in document order.
+ */
+export function injectWordSpans(
+  verseTextEl: HTMLElement,
+  wordStart: number,
+  wordLength: number
+): HTMLSpanElement[] {
+  return wrapCharRange(verseTextEl, wordStart, wordLength, WORD_WRAP_CLASS);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,20 +385,24 @@ export function applyChapterHighlights(
     const seed = `word-${whl.reference.book}-${whl.reference.chapter}-${whl.reference.verse}-${whl.wordStart}`;
 
     if (whl.translation === currentTranslation) {
-      // Precise word-level: inject a span and style it
+      // Precise word-level: inject span(s) and style each one. A phrase that
+      // runs through inline markup produces several spans; each is styled with
+      // the same seed so the pieces read as one continuous stroke.
       const textSpan = el.querySelector<HTMLElement>('.verse-text');
       if (textSpan) {
-        const wordSpan = injectWordSpan(textSpan, whl.wordStart, whl.wordLength);
-        if (wordSpan) {
-          applyWordHighlightToSpan(wordSpan, whl.style, seed);
+        const wordSpans = injectWordSpans(textSpan, whl.wordStart, whl.wordLength);
+        if (wordSpans.length > 0) {
+          for (const wordSpan of wordSpans) {
+            applyWordHighlightToSpan(wordSpan, whl.style, seed);
+          }
         } else {
-          // Injection failed — fall back to verse-level
-          applyHighlightToElement(el, whl.style, seed);
+          // Offsets no longer resolve (text changed under us) — fall back to verse-level
+          applyHighlightToElement(el, whl.style, seed, true);
         }
       }
     } else {
       // Different translation — degrade to verse-level highlight
-      applyHighlightToElement(el, whl.style, seed);
+      applyHighlightToElement(el, whl.style, seed, true);
     }
   }
 }

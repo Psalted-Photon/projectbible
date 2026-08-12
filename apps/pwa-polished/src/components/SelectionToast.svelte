@@ -11,10 +11,18 @@
   /** Clicked word resolves to an ISBE entry/place — button reads "More Info". */
   export let moreInfo = false;
   export let mode: 'word' | 'verse' = 'word';
+  /** How many words the selection covers. Drives which buttons make sense. */
+  export let wordCount = 1;
+  /** True while the next tap is armed to stretch the selection. */
+  export let extendArmed = false;
 
 
   const dispatch = createEventDispatcher();
-  
+
+  // Define/Bio/More Info and Repeats look up a single term, so they only appear
+  // for a one-word selection. Search, Highlight, Save and Notes work on a phrase.
+  $: singleWord = mode === 'verse' || wordCount <= 1;
+
   function handleAction(action: string) {
     dispatch('action', { action, text: selectedText });
   }
@@ -39,37 +47,53 @@
   </div>
   
   <div class="actions">
-    <!-- Same action either way; the label tells you what you'll get.
-         Precedence: a biblical character (Bio) outranks an ISBE entry (More Info). -->
-    <button class="action-btn" on:click={() => handleAction('dissect')}>
-      {isPerson ? 'Bio' : moreInfo ? 'More Info' : 'Define'}
-    </button>
+    {#if singleWord}
+      <!-- Same action either way; the label tells you what you'll get.
+           Precedence: a biblical character (Bio) outranks an ISBE entry (More Info). -->
+      <button class="action-btn" on:click={() => handleAction('dissect')}>
+        {isPerson ? 'Bio' : moreInfo ? 'More Info' : 'Define'}
+      </button>
+    {/if}
 
     <button class="action-btn" on:click={() => handleAction('search')}>
       Search
     </button>
-    
+
     {#if isPlace}
       <button class="action-btn" on:click={() => handleAction('map')}>
         Map
       </button>
     {/if}
-    
+
     <button class="action-btn" on:click={() => handleAction('highlight')}>
       Highlight
     </button>
-    
+
     <button class="action-btn" on:click={() => handleAction('save')}>
       Save
     </button>
-    
+
     <button class="action-btn" on:click={() => handleAction('notes')}>
       Notes
     </button>
-    
-    <button class="action-btn" on:click={() => handleAction('repeats')}>
-      Repeats
-    </button>
+
+    {#if singleWord}
+      <button class="action-btn" on:click={() => handleAction('repeats')}>
+        Repeats
+      </button>
+    {/if}
+
+    <!-- Two-tap alternative to dragging: arm, then tap the far word. Reaches
+         phrases that wrap off-screen and needs no steady hand. -->
+    {#if mode === 'word'}
+      <button
+        class="action-btn"
+        class:armed={extendArmed}
+        on:click={() => handleAction('extend')}
+      >
+        {extendArmed ? 'Tap a word…' : 'Extend'}
+      </button>
+    {/if}
   </div>
 </div>
 
@@ -141,5 +165,10 @@
   
   .action-btn:active {
     transform: scale(0.98);
+  }
+
+  .action-btn.armed {
+    background: #667eea;
+    color: #fff;
   }
 </style>

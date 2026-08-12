@@ -41,6 +41,18 @@
     return !!(target as HTMLElement | null)?.closest?.('.panel');
   }
 
+  /**
+   * Did this pointer land on verse text?
+   *
+   * On a phone the text column runs close to the screen edge, so the first and
+   * last words of a line sit inside the swipe lane. Dragging from one of those
+   * to select a phrase must not open a docked window instead. Only actual text
+   * is exempt — the margin beside it still opens windows as before.
+   */
+  function onVerseText(target: EventTarget | null): boolean {
+    return !!(target as HTMLElement | null)?.closest?.('.verse-text');
+  }
+
   $: atLimit = $windowStore.length >= 6;
   $: bumperClass = atLimit ? 'at-limit' : 'normal';
 
@@ -81,6 +93,10 @@
     }
     if (insidePanel(target)) {
       console.log('⛔ TOUCH START blocked - inside a docked window');
+      return;
+    }
+    if (onVerseText(target)) {
+      console.log('⛔ TOUCH START blocked - on verse text (word selection)');
       return;
     }
 
@@ -133,6 +149,10 @@
     }
     if (insidePanel(target)) {
       console.log('⛔ MOUSE DOWN blocked - inside a docked window');
+      return;
+    }
+    if (onVerseText(target)) {
+      console.log('⛔ MOUSE DOWN blocked - on verse text (word selection)');
       return;
     }
 

@@ -11,6 +11,13 @@
   export let visible: boolean = true;
   export let style: string = "";
 
+  /* Matches the main navbar: the reference dropdown is two side-by-side columns,
+     OT then NT, each reading straight top-to-bottom. */
+  const REFERENCE_COLUMNS = [
+    { testament: "ot", books: BIBLE_BOOKS.filter((b) => b.testament === "OT") },
+    { testament: "nt", books: BIBLE_BOOKS.filter((b) => b.testament === "NT") },
+  ];
+
   let commentaryStore: IndexedDBCommentaryStore;
   let authors: string[] = [];
   let authorDropdownOpen = false;
@@ -339,41 +346,46 @@
   {/if}
 
   {#if referenceDropdownOpen && !isEnoch}
-    <div class="dropdown-menu tree-menu commentary-reference-dropdown">
-      {#each BIBLE_BOOKS as book}
-        <div 
-          class="book-item category-{book.category} testament-{book.testament}"
-          class:first-nt={book.name === 'Matthew'}
-        >
-          <button
-            class="book-button"
-            class:expanded={expandedBooks.has(book.name)}
-            class:current={book.name === currentBook}
-            on:click={(e) => toggleBook(book.name, e)}
-          >
-            <span class="expand-icon">
-              {#if expandedBooks.has(book.name)}<CaretDown size={10} weight="bold" />{:else}<CaretRight size={10} weight="bold" />{/if}
-            </span>
-            <span class="book-name">{book.name}</span>
-          </button>
-
-          {#if expandedBooks.has(book.name)}
-            <div 
-              class="chapters-container"
-              style="--chapter-columns: {Math.min(book.chapters, 7)}"
+    <!-- book-tree carries the two-column layout; .tree-menu is shared with the
+         Enoch picker above, which must stay a single block. -->
+    <div class="dropdown-menu tree-menu book-tree commentary-reference-dropdown">
+      {#each REFERENCE_COLUMNS as column}
+        <div class="book-column book-column-{column.testament}">
+          {#each column.books as book}
+            <div
+              class="book-item category-{book.category} testament-{book.testament}"
             >
-              {#each Array.from({ length: book.chapters }, (_, i) => i + 1) as chapter}
-                <button
-                  class="chapter-button"
-                  class:selected={book.name === currentBook &&
-                    chapter === currentChapter}
-                  on:click={() => selectChapter(book.name, chapter)}
+              <button
+                class="book-button"
+                class:expanded={expandedBooks.has(book.name)}
+                class:current={book.name === currentBook}
+                on:click={(e) => toggleBook(book.name, e)}
+              >
+                <span class="expand-icon">
+                  {#if expandedBooks.has(book.name)}<CaretDown size={10} weight="bold" />{:else}<CaretRight size={10} weight="bold" />{/if}
+                </span>
+                <span class="book-name">{book.name}</span>
+              </button>
+
+              {#if expandedBooks.has(book.name)}
+                <div
+                  class="chapters-container"
+                  style="--chapter-columns: {Math.min(book.chapters, 7)}"
                 >
-                  {chapter}
-                </button>
-              {/each}
+                  {#each Array.from({ length: book.chapters }, (_, i) => i + 1) as chapter}
+                    <button
+                      class="chapter-button"
+                      class:selected={book.name === currentBook &&
+                        chapter === currentChapter}
+                      on:click={() => selectChapter(book.name, chapter)}
+                    >
+                      {chapter}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
             </div>
-          {/if}
+          {/each}
         </div>
       {/each}
     </div>
@@ -592,20 +604,43 @@
     padding: 0;
     width: fit-content;
     max-width: 90vw;
+    /* Tracks the viewport so landscape phones (~390px tall) don't get a dropdown
+       that runs off the bottom of the screen. */
+    max-height: min(400px, 85vh);
+  }
+
+  /* Old Testament left, New Testament right. Two equal fr tracks inside a
+     fit-content box make both columns as wide as the widest book name - the
+     expanded chapter overlay leans on that, since it spans 200% of one column. */
+  .book-tree {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  .book-column {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* NT has 27 books to OT's 39. Spreading the leftover height between its rows
+     keeps both columns starting and ending level. The black shows through. */
+  .book-column-nt {
+    justify-content: space-between;
+    border-left: 1px solid #2a2a2a;
+    background: #000;
   }
 
   .book-item {
+    position: relative; /* anchors the expanded chapter overlay */
     border-bottom: 1px solid #2a2a2a;
   }
 
   .book-item:last-child {
     border-bottom: none;
-  }
-
-  /* NT Separator */
-  .book-item.first-nt {
-    border-top: 12px solid #000;
-    margin-top: 2px;
   }
 
   /* Category Colors — Radial Gradient Theme */
@@ -700,13 +735,28 @@
     font-weight: 700;
   }
 
+  /* Opens as an overlay across both columns instead of pushing the list down, so
+     the OT and NT columns stay level while a book is open. Double the width fits
+     roughly 14 chapters per row, which halves the height of long books. */
   .chapters-container {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 5;
+    width: calc(200% + 1px); /* +1px covers the NT column's left border */
     display: grid;
-    grid-template-columns: repeat(var(--chapter-columns, 7), 40px);
+    grid-template-columns: repeat(auto-fill, 40px);
+    justify-content: center;
     gap: 4px;
     padding: 6px;
     background: #1c1c1c;
-    width: fit-content;
+    border: 1px solid #3a3a3a;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6);
+  }
+
+  /* A book in the right-hand column opens leftward to cover both columns. */
+  .book-column-nt .chapters-container {
+    left: calc(-100% - 1px);
   }
 
   .chapter-button {
@@ -795,5 +845,31 @@
 
   .dropdown-menu::-webkit-scrollbar-thumb:hover {
     background: #5a5a5a;
+  }
+
+  /* Two columns need ~420px and a portrait phone only offers ~350px, so upright
+     phones fall back to the single top-to-bottom list. The same phone turned
+     sideways is 670px+ wide, so landscape keeps the columns. */
+  @media (max-width: 600px) and (orientation: portrait) {
+    .book-tree {
+      display: block;
+    }
+
+    .book-column-nt {
+      justify-content: normal;
+      background: none;
+      border-left: none;
+      border-top: 12px solid #000; /* the OT/NT break, back where the split was */
+    }
+
+    .chapters-container,
+    .book-column-nt .chapters-container {
+      position: static;
+      width: fit-content;
+      grid-template-columns: repeat(var(--chapter-columns, 7), 40px);
+      justify-content: start;
+      border: none;
+      box-shadow: none;
+    }
   }
 </style>
