@@ -559,6 +559,18 @@
    */
   let pointerSeq = 0;
   let toastPointerSeq = -1;
+
+  /**
+   * Set when a gesture began while the toast was up and landed in the reader
+   * text. That gesture does nothing but dismiss — the trailing click is
+   * swallowed too, so no word selects and no footnote or note icon opens.
+   */
+  let swallowGesture = false;
+
+  /** Bumper press tracking, so a tap on one dismisses but a drag still adjusts. */
+  let edgeDragOrigin: { x: number; y: number } | null = null;
+  let edgeDragMoved = false;
+  const EDGE_TAP_SLOP = 6;
   let searchHighlightedElement: HTMLElement | null = null;
   let dayCompleteMessage: string | null = null;
   let highlightedElements: HTMLElement[] = [];
@@ -2696,6 +2708,61 @@
     stopAutoScroll();
   }
 
+  /**
+   * Owns toast dismissal, for every gesture anywhere in the app.
+   *
+   * Runs on document in the capture phase so it sees a press before any other
+   * handler and can stop the event reaching them. The rule it enforces: once a
+   * toast is showing you either use it or dismiss it — nothing new gets
+   * highlighted, and a fresh selection takes a second, deliberate tap.
+   */
+  function handleToastGuard(e: PointerEvent) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+
+    // Count every gesture, not just ones that land on verse text. The
+    // "don't close the toast we just opened" check depends on this advancing.
+    pointerSeq++;
+
+    // Clear here rather than trusting the click to arrive: a swallowed gesture
+    // that turns into a scroll never produces one, and a flag left standing
+    // would eat the next real click.
+    swallowGesture = false;
+
+    if (!showToast) return;
+
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+
+    // The toast's own buttons are the other half of "use it or dismiss it".
+    if (target.closest(".toast")) return;
+
+    // A bumper press is undecided at this point: a drag adjusts the selection,
+    // a tap dismisses. stopDrag settles it on release.
+    if (target.closest(".drag-handle-float")) return;
+
+    // Extend and Shift-click exist to make the next tap stretch the selection.
+    if (extendArmed || e.shiftKey) return;
+
+    dismissSelection();
+
+    // Inside the reader's text, dismissing is the whole of it. .text-container
+    // is the boundary: .bible-reader holds only the nav bar and that container,
+    // so nav-bar taps fall outside and keep working in a single tap.
+    // No preventDefault — a scroll begun in the text must still scroll.
+    if (target.closest(".text-container")) {
+      swallowGesture = true;
+      e.stopPropagation();
+    }
+  }
+
+  /** Eat the click trailing a swallowed gesture, before anything can act on it. */
+  function handleToastGuardClick(e: MouseEvent) {
+    if (!swallowGesture) return;
+    swallowGesture = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }
+
   function handlePointerDown(e: PointerEvent) {
     // Secondary mouse buttons keep their normal meaning.
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -2703,8 +2770,6 @@
     const target = e.target as HTMLElement;
     if (isSelectionExempt(target)) return;
     if (!target.closest(".verse-text")) return;
-
-    pointerSeq++;
 
     // The Extend chip turns the next tap into "stretch to here" — no drag
     // needed. Shift-click is the desktop equivalent and needs no chip.
@@ -3448,11 +3513,31 @@
     );
   }
 
+  /**
+   * Put the toast away and take the selection with it.
+   *
+   * Unlike clearHighlights, this also drops the anchor/focus pair. Once the
+   * user has dismissed, there is no selection left to extend — leaving the pair
+   * behind would let a later Shift-click stretch from a word that is no longer
+   * on screen.
+   */
+  function dismissSelection() {
+    showToast = false;
+    extendArmed = false;
+    selAnchor = null;
+    selFocus = null;
+    selectedSegments = [];
+    selectedWordCount = 0;
+    clearHighlights();
+  }
+
   function startDrag(e: MouseEvent, edge: "left" | "right") {
     e.preventDefault();
     e.stopPropagation();
     isDragging = true;
     dragEdge = edge;
+    edgeDragOrigin = { x: e.clientX, y: e.clientY };
+    edgeDragMoved = false;
 
     // Prevent toast from closing during drag
     document.addEventListener("mousemove", handleDrag, true);
@@ -3484,18 +3569,42 @@
     addSelectionHandles();
   }
 
+  /** Did this bumper press travel far enough to count as a drag rather than a tap? */
+  function trackEdgeDrag(x: number, y: number): boolean {
+    if (!edgeDragOrigin) return true;
+    if (!edgeDragMoved) {
+      const dx = Math.abs(x - edgeDragOrigin.x);
+      const dy = Math.abs(y - edgeDragOrigin.y);
+      if (Math.max(dx, dy) > EDGE_TAP_SLOP) edgeDragMoved = true;
+    }
+    return edgeDragMoved;
+  }
+
   function handleDrag(e: MouseEvent) {
     if (!isDragging || !dragEdge) return;
+    if (!trackEdgeDrag(e.clientX, e.clientY)) return;
     moveSelectionEdge(e.clientX, e.clientY);
   }
 
   function stopDrag() {
+    const wasTap = !edgeDragMoved;
     isDragging = false;
     dragEdge = null;
+    edgeDragOrigin = null;
+    edgeDragMoved = false;
     document.removeEventListener("mousemove", handleDrag, true);
     document.removeEventListener("touchmove", handleDragTouch, true);
     document.removeEventListener("mouseup", stopDrag, true);
     document.removeEventListener("touchend", stopDrag, true);
+
+    // A press on a bumper that never travelled is a tap, and a tap anywhere
+    // outside the toast means "put this away". Without this the two bumpers
+    // are dead zones sitting right where a thumb naturally lands.
+    if (wasTap) {
+      dismissSelection();
+      return;
+    }
+
     // Re-assert word mode so a drag can't silently flip the selection type
     if (selectionRange) {
       selectionMode = 'word';
@@ -3511,6 +3620,9 @@
 
     isDragging = true;
     dragEdge = edge;
+    const t0 = e.touches[0];
+    edgeDragOrigin = t0 ? { x: t0.clientX, y: t0.clientY } : null;
+    edgeDragMoved = false;
 
     // Prevent toast from closing during drag
     document.addEventListener("touchmove", handleDragTouch, {
@@ -3526,6 +3638,7 @@
 
     const touch = e.touches[0];
     if (!touch) return;
+    if (!trackEdgeDrag(touch.clientX, touch.clientY)) return;
     moveSelectionEdge(touch.clientX, touch.clientY);
   }
 
@@ -4131,10 +4244,12 @@
 
     if (!target.closest(".intro-repeat-wrap")) introMenuKey = null;
 
+    // Dismissal proper is handleToastGuard's job now — it fires on pointer-down
+    // rather than on click, so by the time we get here the toast is normally
+    // already gone. This stays as the backstop for clicks with no pointer
+    // sequence behind them (keyboard activation, synthetic clicks).
     if (!target.closest(".selection-highlight") && !target.closest(".toast")) {
-      showToast = false;
-      extendArmed = false;
-      clearHighlights();
+      dismissSelection();
     }
   }
 
@@ -4262,6 +4377,12 @@
     // Text selection. Pointer events cover finger, pen and mouse in one path;
     // the extra non-passive touchmove exists only to stop the page scrolling
     // once a drag has committed to selecting.
+    // Dismissal runs on document in the capture phase so it sees every press
+    // first — including presses on chrome the reader's own handler ignores —
+    // and can stop the event before anything selects or opens.
+    document.addEventListener("pointerdown", handleToastGuard, true);
+    document.addEventListener("click", handleToastGuardClick, true);
+
     readerElement?.addEventListener("mousemove", handleMouseMove);
     readerElement?.addEventListener("pointerdown", handlePointerDown);
     // move/up/cancel live on window, not the reader: a press that is released
@@ -4307,6 +4428,8 @@
       window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
       readerElement?.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("pointerdown", handleToastGuard, true);
+      document.removeEventListener("click", handleToastGuardClick, true);
       readerElement?.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
