@@ -38,11 +38,13 @@
   /** True while the next tap is armed to stretch the selection. */
   export let extendArmed = false;
   /**
-   * Carried for parity with SelectionToast. The radial menu derives its own size
-   * so the caller places it synchronously and this is already true on open —
-   * which matters, because a hidden first frame would eat the opening sweep.
+   * Accepted for parity with SelectionToast, and deliberately unused. That
+   * component hides itself for a frame while the caller measures it; the ring
+   * derives its own size and is placed synchronously, so it has nothing to wait
+   * for — and a hidden first frame would swallow the start of the sweep.
    */
   export let placed = true;
+  void placed;
 
   let rootEl: HTMLElement;
 
@@ -174,18 +176,26 @@
 -->
 <div
   class="toast radial"
-  class:measuring={!placed}
   bind:this={rootEl}
   style="left: {cx - outer}px; top: {cy - outer}px; width: {outer * 2}px; height: {outer * 2}px; --badge: {BADGE}px;"
 >
+  <!--
+    |global on both directives is load-bearing, not decoration. Svelte 5 made
+    transitions local by default, and a local transition only plays when the
+    block it sits in is itself what changed. This {#each} is created along with
+    the whole component, by BibleReader's {#if showToast} — so without |global
+    the runtime skips the intro (the each block has no EFFECT_RAN yet) and drops
+    the outro (pause_children collects nothing), and the ring just appears and
+    vanishes. Removing these two modifiers silently kills the animation.
+  -->
   {#each shown as item, i (item.id)}
     <button
       class="seat"
       class:mode-seat={item.kind === 'mode'}
       class:active={item.kind === 'mode' && item.id === mode}
       style="--dx: {seats[i]?.dx ?? 0}px; --dy: {seats[i]?.dy ?? 0}px; --accent: {item.accent ?? '#3a3a3a'};"
-      in:seatIn={{ i }}
-      out:seatOut={{ i }}
+      in:seatIn|global={{ i }}
+      out:seatOut|global={{ i }}
       on:click={() => activate(item)}
     >
       {#if item.icon}
@@ -207,11 +217,6 @@
     z-index: 10000;
     /* The ring is mostly hole. Only the buttons may take a press. */
     pointer-events: none;
-  }
-
-  /* visibility, not display: we still need a real layout box to measure. */
-  .toast.measuring {
-    visibility: hidden;
   }
 
   .seat {
