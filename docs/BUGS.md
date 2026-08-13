@@ -26,6 +26,20 @@ The tab row is `components/WorkTabs.svelte`. Its class is deliberately **not**
 `.tabs button`, which would capture it. Over the A–Z index the tabs switch index
 rather than subject; Dictionary greys out there, having no index of its own.
 
+The index badges (📍 👤 📕 📚 📖) navigate too, added 2026-08-13.
+`annotateLibraryBadges` keeps the id beside each flag it sets — the ids were always
+in the records it reads, they were just being discarded — so a tap goes straight
+there and can't disagree with the dot that invited it. Two rules to preserve if you
+touch this: match on the full name first and `headWord` second, the same order and
+the same two keys the badge itself was decided on; and the 📍 pin marks a
+*geographic entry*, not a mappable one, since plenty of places have no coordinates —
+it opens the Map tab only when there is a point, and the overview otherwise.
+
+Only one lookup card is open at a time. The tabs close the one they leave, and
+`IndexList.soloCard` does the same before a badge opens anything — two open cards
+would also put two Escape handlers on the same key. Docked windows aren't stores, so
+they survive both.
+
 Quick map of the four, since they're spread across more files than you'd expect:
 
 | Popup | Shell | Content | Store |

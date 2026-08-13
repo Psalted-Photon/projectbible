@@ -1251,6 +1251,17 @@ export interface LibraryRow {
   hasDict?: boolean;
   hasEntry?: boolean;
   hasTopic?: boolean;
+  /**
+   * What each badge points at, alongside the flag that draws it — so tapping a
+   * badge navigates straight there instead of resolving the name again and
+   * possibly landing somewhere else. Named `badgeEntryId` rather than `entryId`
+   * because for an encyclopedia row that would collide with the row's own `id`.
+   */
+  bioId?: string;
+  badgeEntryId?: number;
+  topicId?: number;
+  /** The word the dictionary filed this under — the full name or its head. */
+  dictTerm?: string;
 }
 
 export const LIBRARY_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -1416,14 +1427,32 @@ export async function annotateLibraryBadges(rows: LibraryRow[], letter: string):
   const db = await openDB();
   const range = letterRange(letter);
 
-  /** Every name in this letter from one name index, as a set to test against. */
-  const namesFrom = (store: string, index: string, field: string) =>
-    new Promise<Set<string>>((resolve) => {
-      if (!db.objectStoreNames.contains(store)) return resolve(new Set());
-      const idx = db.transaction(store, 'readonly').objectStore(store).index(index);
+  /**
+   * Every name in this letter from one name index, mapped to the id it belongs
+   * to.
+   *
+   * The ids sit in the very same records the names come from, so keeping them
+   * costs nothing extra — and it is what lets a badge click navigate straight
+   * there rather than resolving the name a second time.
+   *
+   * First one wins where a name repeats, which is the same entry the list shows
+   * first for that name.
+   */
+  const namesFrom = (store: string, idField: string) =>
+    new Promise<Map<string, string | number>>((resolve) => {
+      if (!db.objectStoreNames.contains(store)) return resolve(new Map());
+      const idx = db.transaction(store, 'readonly').objectStore(store).index('nameLower');
       const req = idx.getAll(range);
-      req.onsuccess = () => resolve(new Set((req.result || []).map((r: any) => r[field])));
-      req.onerror = () => resolve(new Set());
+      req.onsuccess = () => {
+        const found = new Map<string, string | number>();
+        for (const r of (req.result || []) as any[]) {
+          if (r?.nameLower != null && r[idField] != null && !found.has(r.nameLower)) {
+            found.set(r.nameLower, r[idField]);
+          }
+        }
+        resolve(found);
+      };
+      req.onerror = () => resolve(new Map());
     });
 
   const dictWordsFrom = () =>
@@ -1436,18 +1465,35 @@ export async function annotateLibraryBadges(rows: LibraryRow[], letter: string):
     });
 
   const [bioNames, entryNames, topicNames, dictWords] = await Promise.all([
-    namesFrom('person_names', 'nameLower', 'nameLower'),
-    namesFrom('isbe_entry_names', 'nameLower', 'nameLower'),
-    namesFrom('naves_names', 'nameLower', 'nameLower'),
+    namesFrom('person_names', 'personId'),
+    namesFrom('isbe_entry_names', 'entryId'),
+    namesFrom('naves_names', 'topicId'),
     dictWordsFrom(),
   ]);
 
   for (const row of rows) {
+    // The full name first, then the word it files under — an article titled
+    // "Abomination, Birds Of" is matched on "abomination". A click has to
+    // resolve on the same two, in the same order, or it dead-ends.
     const head = headWord(row.name);
-    row.hasBio = bioNames.has(row.sortKey) || bioNames.has(head);
-    row.hasEntry = entryNames.has(row.sortKey) || entryNames.has(head);
-    row.hasTopic = topicNames.has(row.sortKey) || topicNames.has(head);
-    row.hasDict = dictWords.has(row.sortKey) || dictWords.has(head);
+    const bio = bioNames.get(row.sortKey) ?? bioNames.get(head);
+    const entry = entryNames.get(row.sortKey) ?? entryNames.get(head);
+    const topic = topicNames.get(row.sortKey) ?? topicNames.get(head);
+    const dictTerm = dictWords.has(row.sortKey)
+      ? row.sortKey
+      : dictWords.has(head)
+        ? head
+        : undefined;
+
+    row.hasBio = bio !== undefined;
+    row.hasEntry = entry !== undefined;
+    row.hasTopic = topic !== undefined;
+    row.hasDict = dictTerm !== undefined;
+
+    row.bioId = bio === undefined ? undefined : String(bio);
+    row.badgeEntryId = entry === undefined ? undefined : Number(entry);
+    row.topicId = topic === undefined ? undefined : Number(topic);
+    row.dictTerm = dictTerm;
   }
   return rows;
 }

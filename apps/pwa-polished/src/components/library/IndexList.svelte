@@ -4,8 +4,12 @@
   import RefSearchBar from "./RefSearchBar.svelte";
   import { navigationStore } from "../../stores/navigationStore";
   import { libraryPrefsStore, isStarred, type LibraryMark } from "../../stores/libraryPrefsStore";
-  import { libraryLetterOf } from "../../adapters/lexicon-lookup.js";
+  import { libraryLetterOf, getIsbePlaceByEntryId } from "../../adapters/lexicon-lookup.js";
   import type { LibraryBadge, LibrarySourceAdapter, LibraryRow } from "../../lib/library/source";
+  import { isbeModalStore } from "../../stores/isbeModalStore";
+  import { navesModalStore } from "../../stores/navesModalStore";
+  import { personModalStore } from "../../stores/personModalStore";
+  import { lexicalModalStore } from "../../stores/lexicalModalStore";
 
   /**
    * The contents list — the table of contents for one reference work. Draws an
@@ -252,6 +256,74 @@
   function openMark(mark: LibraryMark) {
     open({ id: mark.id, name: mark.name, sortKey: mark.sortKey, isPlace: false });
   }
+
+  /**
+   * Tapping a badge goes to that work rather than opening the row.
+   *
+   * The ids come from annotateLibraryBadges, which keeps them alongside the
+   * flags it sets — so this navigates straight there and can't disagree with
+   * the dot that invited the tap.
+   */
+  /**
+   * Only one lookup card is meant to be open at a time — the work tabs close
+   * the one they leave. Two at once would also put two Escape handlers on the
+   * same key. A docked window isn't a store, so it survives this untouched,
+   * which is the same asymmetry the tabs have.
+   */
+  function soloCard(keep: "isbe" | "naves" | "person" | "lexical") {
+    if (keep !== "isbe") isbeModalStore.close();
+    if (keep !== "naves") navesModalStore.close();
+    if (keep !== "person") personModalStore.close();
+    if (keep !== "lexical") lexicalModalStore.close();
+  }
+
+  async function openBadge(e: MouseEvent, row: LibraryRow, badge: LibraryBadge) {
+    e.stopPropagation();
+
+    if (badge === "bio" && row.bioId) {
+      soloCard("person");
+      personModalStore.open({ personId: row.bioId, primaryName: row.name, clickedWord: row.name });
+      return;
+    }
+    if (badge === "topic" && row.topicId != null) {
+      soloCard("naves");
+      navesModalStore.open({ topicId: row.topicId, primaryName: row.name });
+      return;
+    }
+    if (badge === "dict" && row.dictTerm) {
+      soloCard("lexical");
+      lexicalModalStore.open({
+        selectedText: row.dictTerm,
+        strongsId: undefined,
+        morphologyData: null,
+        lexicalEntries: null,
+      });
+      return;
+    }
+    if (badge === "entry" && row.badgeEntryId != null) {
+      soloCard("isbe");
+      isbeModalStore.open({ kind: "entry", entryId: row.badgeEntryId, placeId: null, primaryName: row.name });
+      return;
+    }
+    if (badge === "place") {
+      // The pin marks a geographic entry, which is not the same as having a
+      // point to put on a map — plenty of places were never given coordinates.
+      // Open the article's Map tab only when there is one, otherwise land on
+      // the overview rather than on an empty map.
+      const entryId = row.badgeEntryId ?? (source.key === "isbe" ? Number(row.id) : null);
+      if (entryId == null || Number.isNaN(entryId)) return;
+      const place = await getIsbePlaceByEntryId(entryId);
+      const mappable = !!place && place.latitude != null && place.longitude != null;
+      soloCard("isbe");
+      isbeModalStore.open({
+        kind: mappable ? "place" : "entry",
+        entryId,
+        placeId: mappable ? place!.placeId : null,
+        primaryName: row.name,
+        tab: mappable ? "map" : null,
+      });
+    }
+  }
 </script>
 
 <div class="index">
@@ -354,14 +426,26 @@
                 <span class="name">{row.name}</span>
                 {#if row.detail}<span class="detail">{row.detail}</span>{/if}
               </span>
-              <span class="badges">
-                {#if shows("place") && row.isPlace}<span class="emoji" title="Place">📍</span>{/if}
-                {#if shows("bio") && row.hasBio}<span class="emoji" title="Has a bio">👤</span>{/if}
-                {#if shows("entry") && row.hasEntry}<span class="emoji" title="In the encyclopedia">📕</span>{/if}
-                {#if shows("topic") && row.hasTopic}<span class="emoji" title="A topic in Nave's">📚</span>{/if}
-                {#if shows("dict") && row.hasDict}<span class="emoji" title="In the dictionary">📖</span>{/if}
-              </span>
             </button>
+            <!-- A sibling of the row rather than inside it: these are buttons,
+                 and a button inside a button is invalid and would fire both. -->
+            <span class="badges">
+              {#if shows("place") && row.isPlace}
+                <button class="emoji" title="Show on the map" aria-label="Show {row.name} on the map" on:click={(e) => openBadge(e, row, "place")}>📍</button>
+              {/if}
+              {#if shows("bio") && row.hasBio}
+                <button class="emoji" title="Read the bio" aria-label="Bio of {row.name}" on:click={(e) => openBadge(e, row, "bio")}>👤</button>
+              {/if}
+              {#if shows("entry") && row.hasEntry}
+                <button class="emoji" title="Read the encyclopedia article" aria-label="Encyclopedia article on {row.name}" on:click={(e) => openBadge(e, row, "entry")}>📕</button>
+              {/if}
+              {#if shows("topic") && row.hasTopic}
+                <button class="emoji" title="Open the topic in Nave's" aria-label="Nave's topic {row.name}" on:click={(e) => openBadge(e, row, "topic")}>📚</button>
+              {/if}
+              {#if shows("dict") && row.hasDict}
+                <button class="emoji" title="Look it up in the dictionary" aria-label="Dictionary entry for {row.name}" on:click={(e) => openBadge(e, row, "dict")}>📖</button>
+              {/if}
+            </span>
             <button
               class="star"
               class:on={isStarred($libraryPrefsStore, source.key, row.id)}
@@ -552,10 +636,28 @@
 
   .badges {
     display: flex;
-    gap: 3px;
+    align-items: center;
+    gap: 1px;
     flex-shrink: 0;
+  }
+  /* Each dot is its own button now, so tapping one goes to that work instead of
+     opening the row. Padded out to something a thumb can hit without making the
+     glyph itself any bigger. */
+  .emoji {
+    background: none;
+    border: none;
+    padding: 4px 3px;
     font-size: 10px;
+    line-height: 1;
     opacity: 0.75;
+    cursor: pointer;
+    transition:
+      opacity 0.12s,
+      transform 0.12s;
+  }
+  .emoji:hover {
+    opacity: 1;
+    transform: scale(1.3);
   }
 
   .star {
