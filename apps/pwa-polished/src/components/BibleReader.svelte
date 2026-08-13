@@ -560,13 +560,6 @@
   let pointerSeq = 0;
   let toastPointerSeq = -1;
 
-  /**
-   * Set when a gesture began while the toast was up and landed in the reader
-   * text. That gesture does nothing but dismiss — the trailing click is
-   * swallowed too, so no word selects and no footnote or note icon opens.
-   */
-  let swallowGesture = false;
-
   /** Bumper press tracking, so a tap on one dismisses but a drag still adjusts. */
   let edgeDragOrigin: { x: number; y: number } | null = null;
   let edgeDragMoved = false;
@@ -2723,11 +2716,6 @@
     // "don't close the toast we just opened" check depends on this advancing.
     pointerSeq++;
 
-    // Clear here rather than trusting the click to arrive: a swallowed gesture
-    // that turns into a scroll never produces one, and a flag left standing
-    // would eat the next real click.
-    swallowGesture = false;
-
     if (!showToast) return;
 
     const target = e.target as HTMLElement | null;
@@ -2743,24 +2731,24 @@
     // Extend and Shift-click exist to make the next tap stretch the selection.
     if (extendArmed || e.shiftKey) return;
 
+    // Presses on the text itself never reach here — the scrim covers them and
+    // handles its own dismissal. What is left is everything outside the reader
+    // text: the nav bar, other windows, blank chrome. Those dismiss the toast
+    // and are then left alone, so their buttons still act in a single tap.
     dismissSelection();
-
-    // Inside the reader's text, dismissing is the whole of it. .text-container
-    // is the boundary: .bible-reader holds only the nav bar and that container,
-    // so nav-bar taps fall outside and keep working in a single tap.
-    // No preventDefault — a scroll begun in the text must still scroll.
-    if (target.closest(".text-container")) {
-      swallowGesture = true;
-      e.stopPropagation();
-    }
+    // A hover wrapper left over from a mouse must not outlive the toast.
+    clearHoverHighlight();
   }
 
-  /** Eat the click trailing a swallowed gesture, before anything can act on it. */
-  function handleToastGuardClick(e: MouseEvent) {
-    if (!swallowGesture) return;
-    swallowGesture = false;
-    e.stopPropagation();
-    e.preventDefault();
+  /**
+   * Press on the invisible layer covering the text: dismiss, and nothing else.
+   *
+   * Deliberately no preventDefault — a finger drag that starts here has to keep
+   * scrolling the reader, which it does by chaining to the scrollable ancestor.
+   */
+  function handleScrimPress() {
+    dismissSelection();
+    clearHoverHighlight();
   }
 
   function handlePointerDown(e: PointerEvent) {
@@ -3067,8 +3055,15 @@
     return false;
   }
 
-  function handleMouseMove(e: MouseEvent) {
+  function handleMouseMove(e: PointerEvent) {
     const target = e.target as HTMLElement;
+
+    // A finger has nothing to hover with — it is either on the glass or off it,
+    // so previewing "the word you are about to tap" is meaningless. A mouse,
+    // trackpad or stylus can genuinely float above a word, and those keep it.
+    // Listening on pointermove rather than mousemove is what makes the pointer
+    // type visible here; mousemove alone cannot tell a finger from a mouse.
+    if (e.pointerType === "touch") return;
 
     // Interlinear mode uses CSS :hover on .il-word; skip the text-node
     // hover-wrap (it would corrupt the per-word structure + click offsets).
@@ -4381,9 +4376,8 @@
     // first — including presses on chrome the reader's own handler ignores —
     // and can stop the event before anything selects or opens.
     document.addEventListener("pointerdown", handleToastGuard, true);
-    document.addEventListener("click", handleToastGuardClick, true);
 
-    readerElement?.addEventListener("mousemove", handleMouseMove);
+    readerElement?.addEventListener("pointermove", handleMouseMove);
     readerElement?.addEventListener("pointerdown", handlePointerDown);
     // move/up/cancel live on window, not the reader: a press that is released
     // outside the reader (or off the edge of the screen) must still end the
@@ -4427,9 +4421,8 @@
       glowCleanup = null;
       window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
-      readerElement?.removeEventListener("mousemove", handleMouseMove);
+      readerElement?.removeEventListener("pointermove", handleMouseMove);
       document.removeEventListener("pointerdown", handleToastGuard, true);
-      document.removeEventListener("click", handleToastGuardClick, true);
       readerElement?.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
@@ -4866,6 +4859,29 @@
         </div>
       {/each}
     {/if}
+
+    <!--
+      Invisible layer over the text while the toast is up.
+
+      A tap here targets this div, not the word beneath it, so nothing in the
+      reader can react to it — not the hover wrapper, and not elementFromPoint
+      or caretRangeFromPoint, which both return this instead of a word. That is
+      the whole reason it exists: the previous approach chased individual
+      events, and a tap on a phone fires several (it emits compatibility mouse
+      events on top of the pointer ones), so one always slipped through.
+
+      Sits below the bumpers at z-index 100 so those stay grabbable, and inside
+      .text-container so the nav bar beside it keeps working in a single tap.
+      No preventDefault in the handler and no touch-action here: a finger drag
+      must still scroll the reader by chaining to it.
+    -->
+    {#if showToast}
+      <div
+        class="toast-scrim"
+        class:pass-through={extendArmed}
+        on:pointerdown={handleScrimPress}
+      ></div>
+    {/if}
   </div>
 </div>
 
@@ -4963,6 +4979,21 @@
     box-sizing: border-box;
     position: relative;
     z-index: 1;
+  }
+
+  /* Invisible shield over the text while the toast is up. Covers the full
+     scroll height of .text-container, so it works wherever you are scrolled.
+     Below .drag-handle-float (z-index 100) so the bumpers stay grabbable. */
+  .toast-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+  }
+
+  /* Extend arms the next tap to stretch the selection, so that one tap has to
+     reach the word underneath. */
+  .toast-scrim.pass-through {
+    pointer-events: none;
   }
 
   .chapter-section {
