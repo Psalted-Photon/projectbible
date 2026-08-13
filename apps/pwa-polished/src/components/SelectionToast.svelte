@@ -15,7 +15,24 @@
   export let wordCount = 1;
   /** True while the next tap is armed to stretch the selection. */
   export let extendArmed = false;
+  /**
+   * False for the first frame after opening, while the caller measures us and
+   * works out where we go. Kept laid out but invisible so the measurement is
+   * real and there is no jump from a guessed position to the final one.
+   */
+  export let placed = false;
 
+  let rootEl: HTMLElement;
+
+  /**
+   * Our on-screen size, for the caller's placement maths. The button grid
+   * changes shape with the selection — Define/Bio/More Info, Map, Repeats and
+   * Extend all come and go, and none of the buttons wrap — so both width and
+   * height vary and neither can be assumed.
+   */
+  export function rect(): DOMRect | null {
+    return rootEl?.getBoundingClientRect() ?? null;
+  }
 
   const dispatch = createEventDispatcher();
 
@@ -28,7 +45,12 @@
   }
 </script>
 
-<div class="toast" style="left: {x}px; top: {y}px;">
+<div
+  class="toast"
+  class:measuring={!placed}
+  bind:this={rootEl}
+  style="left: {x}px; top: {y}px;"
+>
   <div class="mode-toggle">
     <button 
       class="toggle-btn"
@@ -108,7 +130,13 @@
     min-width: 200px;
     backdrop-filter: blur(10px);
   }
-  
+
+  /* visibility, not display: we still need a real layout box to measure. */
+  .toast.measuring {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
   .mode-toggle {
     display: flex;
     gap: 2px;

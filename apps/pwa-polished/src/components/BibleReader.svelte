@@ -502,6 +502,12 @@
   let showToast = false;
   let toastX = 0;
   let toastY = 0;
+  /** The toast component, for measuring it before deciding where it goes. */
+  let toastComp: SelectionToast | null = null;
+  /** False until placeToast has measured and positioned it — see SelectionToast. */
+  let toastPlaced = false;
+  /** The lines the toast must keep clear of. Kept so a scroll can re-place it. */
+  let toastAnchor: ToastAnchor | null = null;
   let selectedText = "";
   /** Clicked word resolved to a biblical character — relabels Define → Bio. */
   let selectedIsPerson = false;
@@ -3527,6 +3533,25 @@
   }
 
   function startDrag(e: MouseEvent, edge: "left" | "right") {
+    // Only the primary button adjusts an edge, same rule as handleToastGuard.
+    if (e.button !== 0) return;
+
+    // Drop the phantom press that a tap leaves behind.
+    //
+    // A tap builds its bumpers synchronously, during pointerup — so by the time
+    // the browser replays that same tap as compatibility mouse events, there are
+    // two 32px hit strips sitting on the word's edges that did not exist when the
+    // finger went down. On a word narrower than the strips (of, the, and, God)
+    // they cover it entirely, the replayed mousedown lands on one, and the
+    // matching mouseup reaches stopDrag as a tap — which dismisses the selection
+    // milliseconds after it appeared.
+    //
+    // Replays carry no pointerdown, so pointerSeq still points at the gesture
+    // that opened the toast. A real press, finger or mouse, always fires a
+    // pointerdown first and handleToastGuard counts it, so a genuine bumper tap
+    // still dismisses and a genuine bumper drag still widens the selection.
+    if (showToast && pointerSeq === toastPointerSeq) return;
+
     e.preventDefault();
     e.stopPropagation();
     isDragging = true;
@@ -3638,30 +3663,163 @@
   }
 
   /**
-   * Re-anchor the open toast over the top of its selection after a scroll.
+   * The lines the toast has to stay off: the top of the selection's first line
+   * and the bottom of its last, each with its own centre so the toast sits over
+   * whichever end it ends up beside.
+   */
+  interface ToastAnchor {
+    top: number;
+    bottom: number;
+    topCenterX: number;
+    bottomCenterX: number;
+  }
+
+  /** Gap between the toast and the selection, and between it and the screen edge. */
+  const TOAST_GAP = 10;
+  const TOAST_MARGIN = 8;
+
+  /**
+   * Where the current selection sits on screen.
+   *
+   * Zero-area rects are dropped: a range over freshly split text nodes can
+   * report one, and it would otherwise drag the anchor to the top-left corner
+   * and make the toast look like it had come loose from the word.
+   *
+   * The fallback point is used when the click resolved a word but not a
+   * paintable range (highlightSelection's null-pos branch) — the toast then
+   * clears a notional line around the finger rather than sitting under it.
+   */
+  function selectionAnchor(fallbackX?: number, fallbackY?: number): ToastAnchor | null {
+    const rects = selectionRange ? Array.from(selectionRange.getClientRects()) : [];
+    const solid = rects.filter((r) => r.width > 0 && r.height > 0);
+
+    if (solid.length > 0) {
+      let first = solid[0];
+      let last = solid[0];
+      for (const r of solid) {
+        if (r.top < first.top) first = r;
+        if (r.bottom > last.bottom) last = r;
+      }
+      return {
+        top: first.top,
+        bottom: last.bottom,
+        topCenterX: first.left + first.width / 2,
+        bottomCenterX: last.left + last.width / 2,
+      };
+    }
+
+    if (fallbackX === undefined || fallbackY === undefined) return null;
+    return {
+      top: fallbackY - 12,
+      bottom: fallbackY + 12,
+      topCenterX: fallbackX,
+      bottomCenterX: fallbackX,
+    };
+  }
+
+  /**
+   * The toast's last measured size, reused by the scroll path so following a
+   * selection down the page costs no extra layout work.
+   */
+  let toastSize = { w: 200, h: 120 };
+
+  /**
+   * Measure the rendered toast rather than assuming a size. The button grid
+   * grows and shrinks with the selection and the buttons don't wrap, so the old
+   * fixed guess ran short and left the toast sitting back over its own word.
+   */
+  async function measureToast() {
+    await tick();
+    // On the opening call the component mounts inside this same flush, so give
+    // the binding one more turn to land rather than falling back to a guess.
+    let r = toastComp?.rect();
+    if (!r) {
+      await tick();
+      r = toastComp?.rect();
+    }
+    if (r && r.width > 0 && r.height > 0) toastSize = { w: r.width, h: r.height };
+  }
+
+  /**
+   * Put the toast beside the selection, never on top of it. Above the first line
+   * is preferred; below the last line is the fallback; only when neither side
+   * can hold it does it clamp to the roomier side.
+   */
+  function positionToast(anchor: ToastAnchor) {
+    const { w, h } = toastSize;
+
+    // Top limit is the reader's own top edge, so the toast never rides up over
+    // the navigation bar; bottom limit is the screen.
+    const safeTop = Math.max(
+      TOAST_MARGIN,
+      readerElement?.getBoundingClientRect().top ?? TOAST_MARGIN,
+    );
+    const safeBottom = window.innerHeight - TOAST_MARGIN;
+
+    const above = anchor.top - TOAST_GAP - h;
+    const below = anchor.bottom + TOAST_GAP;
+
+    let y: number;
+    let centerX: number;
+    if (above >= safeTop) {
+      y = above;
+      centerX = anchor.topCenterX;
+    } else if (below + h <= safeBottom) {
+      y = below;
+      centerX = anchor.bottomCenterX;
+    } else if (anchor.top - safeTop >= safeBottom - anchor.bottom) {
+      y = Math.max(safeTop, above);
+      centerX = anchor.topCenterX;
+    } else {
+      y = Math.min(safeBottom - h, below);
+      centerX = anchor.bottomCenterX;
+    }
+
+    toastX = Math.min(
+      Math.max(centerX - w / 2, TOAST_MARGIN),
+      Math.max(TOAST_MARGIN, window.innerWidth - w - TOAST_MARGIN),
+    );
+    toastY = y;
+    toastPlaced = true;
+  }
+
+  /** Measure, then place. Used when the toast opens or its contents change. */
+  async function placeToast(anchor: ToastAnchor) {
+    await measureToast();
+    if (!showToast) return;
+    positionToast(anchor);
+  }
+
+  /**
+   * Re-measure and re-place the toast where it already is. Its contents change
+   * after it opens — the Bio / More Info labels resolve asynchronously, Map
+   * appears, the Word/Verse toggle rewrites the whole grid — and any of those
+   * can make it wider or taller than it was when it was first positioned.
+   */
+  function replaceToastInPlace() {
+    if (showToast && toastAnchor) void placeToast(toastAnchor);
+  }
+
+  /**
+   * Re-anchor the open toast over its selection after a scroll.
    * Hides it once the selection leaves the viewport — the selection itself and
    * the armed Extend chip both survive, so scroll-then-tap still works.
    */
   function repositionToastToSelection() {
     if (!readerElement) return;
-    const rects = selectionRange?.getClientRects();
-    if (!rects || rects.length === 0) return;
+    const anchor = selectionAnchor();
+    if (!anchor) return;
 
-    const first = rects[0];
     const bounds = readerElement.getBoundingClientRect();
-    if (first.bottom < bounds.top || first.top > bounds.bottom) {
+    if (anchor.bottom < bounds.top || anchor.top > bounds.bottom) {
       showToast = false;
       return;
     }
 
-    const toastHeight = 90;
-    const toastWidth = 200;
-    toastX = Math.min(
-      Math.max(first.left + first.width / 2 - toastWidth / 2, 10),
-      window.innerWidth - toastWidth - 10,
-    );
-    toastY = Math.max(first.top - toastHeight - 15, 10);
-    if (toastY < 70) toastY = first.bottom + 30;
+    // Its contents haven't changed, only where it has to sit, so reuse the size
+    // measured when it opened rather than reflowing it on every scroll event.
+    toastAnchor = anchor;
+    positionToast(anchor);
   }
 
   function showToastAt(x: number, y: number, opts: { lookup?: boolean } = {}) {
@@ -3669,25 +3827,17 @@
     // Clear any hover highlight — full unwrap required (see clearHoverHighlight)
     clearHoverHighlight();
 
-    // Position toast above the selection to avoid covering the word
-    const toastHeight = 90; // Smaller toast now
-    const toastWidth = 200;
-
-    // Position above and centered on click
-    toastX = Math.min(
-      Math.max(x - toastWidth / 2, 10),
-      window.innerWidth - toastWidth - 10,
-    );
-    toastY = Math.max(y - toastHeight - 15, 10); // 15px above selection (5px higher)
-
-    // If too close to top, position below instead
-    if (toastY < 70) {
-      toastY = y + 30;
-    }
+    // Measure off the selection's own line boxes, not the finger: the toast has
+    // to clear the word you tapped, and on a phrase that wraps it has to clear
+    // every line of it.
+    toastAnchor = selectionAnchor(x, y);
+    toastPlaced = false;
 
     showToast = true;
     justOpenedToast = true;
     toastPointerSeq = pointerSeq;
+
+    if (toastAnchor) void placeToast(toastAnchor);
 
     // Resolve "is this a character?" in the background so the Define button can
     // relabel itself to Bio. Starts false so the toast never flashes the wrong
@@ -3712,14 +3862,19 @@
           const isPerson = await isPersonName(word, personRef);
           if (token !== personLabelToken) return;
           selectedIsPerson = isPerson;
-          if (isPerson) return;
+          if (isPerson) {
+            replaceToastInPlace();
+            return;
+          }
           const kind = await classifyIsbeClick({
             word,
             before: ctx?.before,
             after: ctx?.after,
             ref: personRef,
           });
-          if (token === personLabelToken) selectedIsbeKind = kind;
+          if (token !== personLabelToken) return;
+          selectedIsbeKind = kind;
+          if (kind) replaceToastInPlace();
         })
         .catch(() => {});
     }
@@ -4197,6 +4352,8 @@
         // Everything stays on screen — the toast, the painted words, the anchor
         // — so you can even scroll away before tapping the far end.
         extendArmed = !extendArmed;
+        // "Extend" ↔ "Tap a word…" is a wider button, so the toast changes size.
+        replaceToastInPlace();
         return;
     }
 
@@ -4218,12 +4375,12 @@
       clearHighlights();
       refreshSelectionFromPair();
       addSelectionHandles();
-      return;
-    }
-
-    if (selectionRange) {
+    } else if (selectionRange) {
       highlightSelection(selectionRange, selectionMode);
     }
+
+    // The toggle swaps which buttons the grid holds, so the toast changes size.
+    replaceToastInPlace();
   }
 
   function handleClickOutside(e: MouseEvent) {
@@ -4456,6 +4613,8 @@
 
 {#if showToast}
   <SelectionToast
+    bind:this={toastComp}
+    placed={toastPlaced}
     x={toastX}
     y={toastY}
     {selectedText}
