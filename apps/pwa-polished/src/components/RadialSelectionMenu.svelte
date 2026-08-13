@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import { backOut, cubicOut } from 'svelte/easing';
   import BookOpenText from 'phosphor-svelte/lib/BookOpenText';
   import MapPin from 'phosphor-svelte/lib/MapPin';
@@ -16,6 +16,7 @@
     seatAngles,
     seatOffset,
     radialItems,
+    type RadialItem,
   } from '../lib/radialMenu';
 
   /** Viewport centre of the ring — the middle of the tapped word. */
@@ -63,26 +64,62 @@
     extend: ArrowsOutLineHorizontal,
   };
 
-  $: items = radialItems({ mode, wordCount, isPlace, isPerson, moreInfo, extendArmed });
-  $: radius = ringRadius(lineHeight, items.length);
-  $: outer = outerRadius(lineHeight, items.length);
-  $: seats = seatAngles(items.length).map((a) => seatOffset(a, radius));
-
   // The sweep runs in list order, which seatAngles already returns as one
   // continuous counter-clockwise path from the right gap round to the right gap.
-  const STAGGER = 20;
-  const POP_MS = 160;
+  const STAGGER = 50;
+  const POP_MS = 190;
 
   const reduceMotion =
     typeof window !== 'undefined' &&
     (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
 
+  // --- What the ring is showing -------------------------------------------
+  //
+  // The person/ISBE lookups resolve within milliseconds of opening, and adding
+  // the Map button shifts every seat after it round the arc — mid-entrance.
+  // So a change that moves seats waits for the sweep to finish; a change that
+  // only rewrites labels (Define → Bio → Info) is adopted straight away,
+  // because nothing has to move for it.
+  $: live = radialItems({ mode, wordCount, isPlace, isPerson, moreInfo, extendArmed });
+
+  let shown: RadialItem[] = [];
+  let settled = reduceMotion;
+
+  // `live !== shown` matters: radialItems returns a fresh array each time, and
+  // without it this statement would re-trigger on its own assignment forever.
+  $: if (shown.length === 0 || settled || live.length === shown.length) {
+    if (live !== shown) shown = live;
+  }
+
+  $: radius = ringRadius(lineHeight, shown.length);
+  $: outer = outerRadius(lineHeight, shown.length);
+  $: seats = seatAngles(shown.length).map((a) => seatOffset(a, radius));
+
+  onMount(() => {
+    if (settled) return;
+    const timer = setTimeout(
+      () => { settled = true; },
+      (shown.length - 1) * STAGGER + POP_MS,
+    );
+    return () => clearTimeout(timer);
+  });
+
   /**
    * A button arriving at its seat: thrown outward from two-thirds of the way in,
    * scaling up as it lands. Written as a transition rather than a CSS animation
    * so the reverse sweep actually plays when the menu is removed.
+   *
+   * The offsets are baked in as literal pixels rather than read from the --dx /
+   * --dy custom properties the static transform uses. Svelte 5 feeds this string
+   * straight to element.animate(), and a keyframe value the engine cannot parse
+   * is dropped in silence — var() inside a script-supplied keyframe is not
+   * reliably substituted, and losing `transform` leaves a button fading in where
+   * it lands instead of flying to it. Svelte's own `fly` resolves to px for the
+   * same reason.
    */
   function pop(
+    dx: number,
+    dy: number,
     delay: number,
     duration: number,
     { inert = false }: { inert?: boolean } = {},
@@ -101,22 +138,27 @@
         const reach = 0.65 + 0.35 * t;
         return (
           `transform: translate(-50%, -50%)` +
-          ` translate(calc(var(--dx) * ${reach}), calc(var(--dy) * ${reach}))` +
-          ` scale(${0.3 + 0.7 * t});` +
-          `opacity: ${Math.min(1, t)};${dead}`
+          ` translate(${(dx * reach).toFixed(2)}px, ${(dy * reach).toFixed(2)}px)` +
+          ` scale(${(0.3 + 0.7 * t).toFixed(3)});` +
+          `opacity: ${Math.min(1, t).toFixed(3)};${dead}`
         );
       },
     };
   }
 
   const seatIn = (_n: Element, { i }: { i: number }) =>
-    pop(reduceMotion ? 0 : i * STAGGER, POP_MS);
+    pop(seats[i]?.dx ?? 0, seats[i]?.dy ?? 0, reduceMotion ? 0 : i * STAGGER, POP_MS);
 
-  // Closing runs the same path in reverse, and quicker.
+  // Closing runs the same path in reverse, and quicker — a dismissed ring has to
+  // be gone before the next one has finished arriving.
   const seatOut = (_n: Element, { i }: { i: number }) =>
-    pop(reduceMotion ? 0 : (items.length - 1 - i) * (STAGGER * 0.5), POP_MS * 0.75, {
-      inert: true,
-    });
+    pop(
+      seats[i]?.dx ?? 0,
+      seats[i]?.dy ?? 0,
+      reduceMotion ? 0 : (shown.length - 1 - i) * (STAGGER * 0.5),
+      POP_MS * 0.55,
+      { inert: true },
+    );
 
   function activate(item: { kind: string; id: string }) {
     if (item.kind === 'mode') dispatch('modeChange', item.id);
@@ -136,7 +178,7 @@
   bind:this={rootEl}
   style="left: {cx - outer}px; top: {cy - outer}px; width: {outer * 2}px; height: {outer * 2}px; --badge: {BADGE}px;"
 >
-  {#each items as item, i (item.id)}
+  {#each shown as item, i (item.id)}
     <button
       class="seat"
       class:mode-seat={item.kind === 'mode'}
@@ -196,11 +238,15 @@
     color: #e0e0e0;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+  }
 
-    /* When a button resolves in late — Map, once the place lookup lands — every
-       seat shifts round the arc. Glide rather than jump. Harmless during the
-       opening sweep, which runs as a keyframe animation, not a transition. */
-    transition: transform 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+  /* When a button resolves in late — Map, once the place lookup lands — every
+     seat shifts round the arc. Glide rather than jump.
+     Safe to leave on during the entrance: that runs as a Web Animation, and an
+     animation outranks a transition on the same property, so the two never
+     fight. The seats only move after the sweep has settled in any case. */
+  .seat {
+    transition: transform 0.14s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .seat:active {
