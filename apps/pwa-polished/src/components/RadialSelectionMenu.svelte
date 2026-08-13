@@ -68,8 +68,13 @@
 
   // The sweep runs in list order, which seatAngles already returns as one
   // continuous counter-clockwise path from the right gap round to the right gap.
-  const STAGGER = 50;
-  const POP_MS = 190;
+  //
+  // What makes the sweep readable is the ratio, not the total: POP_MS ~4.5x
+  // STAGGER keeps five of seven buttons in flight at the peak. Shrink STAGGER on
+  // its own and the overlap climbs until every button moves at once, which reads
+  // as a single pop rather than a sweep — so move the two together.
+  const STAGGER = 35;
+  const POP_MS = 160;
 
   const reduceMotion =
     typeof window !== 'undefined' &&
