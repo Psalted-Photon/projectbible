@@ -548,6 +548,39 @@
     }
   }
 
+  /** "greek" -> "Greek". Same title-casing IsbeContent does for place types. */
+  function titleCase(t: string): string {
+    return t.replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  function plural(n: number, word: string): string {
+    return `${n} ${word}${n === 1 ? "" : "s"}`;
+  }
+
+  /**
+   * The grey line under the title. Encyclopedia and Topical both read as
+   * "what it is  ·  how many", and this mirrors them so the three headers sit
+   * at the same height. Each part is guarded, so a lexicon row missing its
+   * transliteration drops that piece instead of leaving a stray separator.
+   * Branches match the title's own branches in the header markup.
+   */
+  $: headerSubtitle = ((): string => {
+    const bits: string[] = [];
+    if (showCharacter && person) {
+      if (person.verseCount) bits.push(plural(person.verseCount, "verse"));
+    } else if (strongEntry) {
+      bits.push(titleCase(strongEntry.language));
+      if (strongEntry.transliteration) bits.push(strongEntry.transliteration);
+      if (strongEntry.partOfSpeech) bits.push(strongEntry.partOfSpeech);
+    } else if (isEnglishWord && englishWordInfo) {
+      bits.push("Dictionary");
+      if (englishPOS.length) bits.push(englishPOS.join(", "));
+    } else if (searchResults.length) {
+      bits.push(plural(searchResults.length, "result"));
+    }
+    return bits.join("  ·  ");
+  })();
+
   /**
    * Convert SWORD/Thayer markup to safe HTML for {@html} rendering.
    * Handles: <b>, <i>, <BR />, <ref='...'>, __ numbered items.
@@ -595,23 +628,28 @@
   >
     <div class="modal-container">
       <div class="modal-header">
-        <h2>
-          {#if showCharacter && person}
-            {person.displayTitle || person.name}
-          {:else if strongEntry}
-            {strongEntry.lemma}
-            <span
-              class="strongs-id"
-              style="color: {getLanguageColor(strongEntry.language)}"
-            >
-              {strongEntry.id}
-            </span>
-          {:else if selectedText}
-            Lexical Study: {selectedText}
-          {:else}
-            Word Study
+        <div class="head-text">
+          <h2>
+            {#if showCharacter && person}
+              {person.displayTitle || person.name}
+            {:else if strongEntry}
+              {strongEntry.lemma}
+              <span
+                class="strongs-id"
+                style="color: {getLanguageColor(strongEntry.language)}"
+              >
+                {strongEntry.id}
+              </span>
+            {:else if selectedText}
+              Lexical Study: {selectedText}
+            {:else}
+              Word Study
+            {/if}
+          </h2>
+          {#if headerSubtitle}
+            <div class="sub">{headerSubtitle}</div>
           {/if}
-        </h2>
+        </div>
         <div class="head-actions">
           <!-- The encyclopedia bridge used to be switched off for people. There
                was no reason for it beyond the bio having nowhere to go back to;
@@ -1165,18 +1203,20 @@
 {/if}
 
 <style>
+  /* Backdrop, card and header are deliberately identical to IsbeModal and
+     NavesModal — the three cards are siblings in the same lookup flow and you
+     can bridge straight from one to another, so any drift between them reads
+     as a glitch. Change all three together. */
   .modal-backdrop {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.75);
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 10000;
-    padding: 20px;
+    padding: 16px;
+    backdrop-filter: blur(3px);
     animation: fadeIn 0.2s ease-out;
   }
 
@@ -1191,13 +1231,14 @@
 
   .modal-container {
     background: var(--background-color, #1e1e1e);
-    border-radius: 12px;
-    max-width: 800px;
-    width: 100%;
-    max-height: 90vh;
+    color: var(--text-color, #fff);
+    border-radius: 10px;
+    width: min(720px, 100%);
+    max-height: min(86vh, 900px);
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
     animation: slideUp 0.3s ease-out;
   }
 
@@ -1214,26 +1255,43 @@
 
   .modal-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    padding: 24px;
+    gap: 12px;
+    padding: 16px 18px 10px;
     border-bottom: 1px solid var(--border-color, #333);
+    flex-shrink: 0;
+  }
+
+  /* Takes the slack and is allowed to shrink, so a long lemma can never push
+     the bridge pills or the close button off a narrow card. */
+  .head-text {
+    flex: 1;
+    min-width: 0;
   }
 
   .modal-header h2 {
     margin: 0;
-    font-size: 24px;
-    font-weight: 600;
+    font-size: 20px;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
     color: var(--text-color, #fff);
-    display: flex;
-    align-items: center;
-    gap: 12px;
   }
 
+  .head-text .sub {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-muted, #999);
+  }
+
+  /* The h2 is normal inline flow now (it used to be its own flex row), so the
+     badge needs its own gap rather than inheriting one. */
   .strongs-id {
-    font-size: 18px;
+    display: inline-block;
+    margin-left: 10px;
+    font-size: 15px;
     font-weight: 500;
-    padding: 4px 12px;
+    padding: 2px 9px;
     background: rgba(76, 175, 80, 0.1);
     border-radius: 6px;
   }
@@ -1249,8 +1307,9 @@
     border: 1px solid var(--border-color, #333);
     color: var(--color-primary, #4a90e2);
     border-radius: 6px;
-    padding: 5px 11px;
-    font-size: 13px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-family: inherit;
     cursor: pointer;
     white-space: nowrap;
   }
@@ -1273,21 +1332,21 @@
   .close-btn {
     background: none;
     border: none;
-    color: var(--text-color, #fff);
+    color: var(--text-muted, #999);
     cursor: pointer;
-    padding: 8px;
-    border-radius: 6px;
-    transition: background-color 0.2s;
+    padding: 2px;
+    flex-shrink: 0;
   }
 
   .close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-color, #fff);
   }
 
   .modal-body {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    padding: 24px;
+    padding: 16px 18px;
   }
 
   .loading {
@@ -1393,23 +1452,27 @@
     color: #aaa;
   }
 
+  /* Mirrors the Encyclopedia/Topical tab strip. Those wrap rather than scroll
+     when narrow, which keeps every tab reachable on a phone. */
   .tabs {
     display: flex;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 2px;
     border-bottom: 1px solid var(--border-color, #333);
-    margin-bottom: 24px;
+    margin-bottom: 14px;
+    flex-shrink: 0;
   }
 
   .tab {
     background: none;
     border: none;
-    color: #888;
-    padding: 12px 24px;
-    cursor: pointer;
-    font-size: 16px;
-    font-weight: 500;
     border-bottom: 2px solid transparent;
-    transition: all 0.2s;
+    color: var(--text-muted, #999);
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    white-space: nowrap;
   }
 
   .tab:hover {
@@ -1417,8 +1480,8 @@
   }
 
   .tab.active {
-    color: #4caf50;
-    border-bottom-color: #4caf50;
+    color: var(--color-primary, #4a90e2);
+    border-bottom-color: var(--color-primary, #4a90e2);
   }
 
   .tab-content {
@@ -1852,27 +1915,13 @@
     background: rgba(255, 255, 255, 0.3);
   }
 
-  /* Responsive adjustments */
+  /* Responsive adjustments. The card itself is no longer overridden here — it
+     uses the same min(720px, 100%) / min(86vh, 900px) sizing as Encyclopedia and
+     Topical at every width, and the tab strip wraps instead of scrolling. */
   @media (max-width: 768px) {
-    .modal-container {
-      max-width: 100%;
-      max-height: 100vh;
-      border-radius: 0;
-    }
-
     .info-section dl {
       grid-template-columns: 120px 1fr;
       gap: 8px 12px;
-    }
-
-    .tabs {
-      overflow-x: auto;
-    }
-
-    .tab {
-      padding: 12px 16px;
-      font-size: 14px;
-      white-space: nowrap;
     }
   }
 

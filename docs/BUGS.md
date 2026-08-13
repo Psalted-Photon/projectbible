@@ -1,0 +1,386 @@
+# Known Bugs
+
+Running list of bugs found while using the app. Each entry has what's wrong, where
+the code lives, and what's actually causing it — so any item can be picked up cold.
+
+All paths are relative to `apps/pwa-polished/src/` unless stated otherwise.
+Line numbers were verified 2026-08-13 and will drift as the files change.
+
+---
+
+## Popups (Dictionary / Encyclopedia / Topical / Bio)
+
+Quick map of the four, since they're spread across more files than you'd expect:
+
+| Popup | Shell | Content | Store |
+|---|---|---|---|
+| Dictionary | `LexicalModal.svelte` | (self-contained) | `stores/lexicalModalStore.ts` |
+| Encyclopedia | `IsbeModal.svelte` | `IsbeContent.svelte` | `stores/isbeModalStore.ts` |
+| Topical | `NavesModal.svelte` | `NavesContent.svelte` | `stores/navesModalStore.ts` |
+| Bio | *inside* `LexicalModal.svelte` (`:661`) | `PersonContent.svelte` | via `lexicalModalStore` |
+
+All four mount globally in `App.svelte:283-287`. Tap dispatch is
+`BibleReader.svelte:4280-4424` (person → ISBE → English lexicon → Strong's).
+
+---
+
+### [x] 1. Dictionary has a different look than Encyclopedia and Topical; Bio also looks slightly different
+
+**Fixed 2026-08-13.**
+
+Dictionary was the odd one out of the four, so it was changed to match Encyclopedia
+and Topical rather than the other way round. What you'd notice:
+
+- The title is smaller and sits in the same place, with the same spacing around it.
+- There's now a small grey line under the title, like the other three have. It reads
+  `Greek · agapē · noun` for a Strong's entry, `Dictionary · noun, verb` for an
+  English word, the verse count for a bio, and the result count for a search.
+- The card is the same width as the other two, with the same rounded corners, and
+  the background behind it is blurred the same way.
+- The tabs are smaller. They wrap onto a second row when there's no space instead of
+  scrolling sideways, and the selected tab is the app's blue instead of a green that
+  appeared nowhere else.
+- The category pills and the close button are the same size as the other two.
+
+Bio needed no changes of its own — it borrows Dictionary's frame, so it picked all of
+this up automatically.
+
+Encyclopedia and Topical each got two small changes, so the matching went both ways:
+their pills and tabs had been falling back to the browser's default font instead of
+Milonga, and they now slide up when opening the way Dictionary always has.
+
+Still open for these headers: bug #2 below. All three now share the same header
+markup, so fixing #2 will fix all of them at once.
+
+#### Exact values changed
+
+`LexicalModal.svelte` — `h2` wrapped in a `.head-text` div (`flex:1; min-width:0`)
+with a `.sub` line beneath it fed by the new `headerSubtitle` reactive; header to
+`align-items:flex-start`, `padding:16px 18px 10px`, `gap:12px`; `h2` to 20px with
+`line-height:1.15` and `overflow-wrap:anywhere`, no longer `display:flex`;
+`.strongs-id` given its own `margin-left` in place of the flex gap it had been
+relying on, and sized down to suit; card to `min(720px,100%)` / `min(86vh,900px)` /
+`radius:10px` / `overflow:hidden`; backdrop to `rgba(0,0,0,.6)` + `blur(3px)` +
+`padding:16px`; body padding to `16px 18px`; `.bridge-btn` to `4px 10px` / 12px;
+`.close-btn` to the plain muted-with-hover treatment; tab strip to 13px / `8px 12px`
+/ wrapping / accent `var(--color-primary)` in place of the hardcoded `#4caf50`;
+mobile card and tab overrides dropped, since the card now sizes identically at every
+width.
+
+`IsbeContent.svelte` — added `font-family: inherit` to `.bridge-btn` and
+`.tabs button`, the only two rules across the four files that lacked it.
+
+`IsbeModal.svelte` and `NavesModal.svelte` — added the `fadeIn` / `slideUp`
+keyframes and animations that `LexicalModal` already had.
+
+`PersonContent.svelte` — untouched. It already zeroes its own padding under
+`.person-content.hosted`, so it inherits the corrected `.modal-body` padding.
+
+#### Original diagnosis
+
+There were two different header architectures in play.
+
+**Pattern A** — Encyclopedia / Topical / Bio share it:
+`IsbeContent.svelte:956-997`, `NavesContent.svelte:404-443`, `PersonContent.svelte:372-413`.
+Title sits in a `.head-text` wrapper (`flex:1; min-width:0`), `h2` is 20px with
+`overflow-wrap:anywhere`, header padding `16px 18px 10px`, `align-items:flex-start`,
+plus a `.sub` subtitle line.
+
+**Pattern B** — Dictionary only: `LexicalModal.svelte:597-652`, CSS at `:1215-1259`.
+Differs on every one of those points:
+
+- no `.head-text` wrapper, so the `h2` is a raw flex item with default
+  `min-width:auto` — it can't shrink below its longest word
+- no `overflow-wrap:anywhere`
+- `align-items:center` instead of `flex-start`
+- `font-size:24px` and `padding:24px`, vs 20px and `16px 18px 10px`
+- the `h2` is itself `display:flex`, which is why the Strong's ID badge sits inline
+- no `.sub` subtitle line at all
+
+The card shells differ too. Dictionary is `max-width:800px`, `border-radius:12px`,
+with `slideUp`/`fadeIn` animations and **no** backdrop blur
+(`LexicalModal.svelte:1168-1202`). Encyclopedia and Topical are matched at
+`min(720px,100%)`, `border-radius:10px`, `backdrop-filter:blur(3px)`, no animation
+(`IsbeModal.svelte:117-138`, `NavesModal.svelte:76-97`). Dictionary also has a
+mobile full-bleed breakpoint (`:1856-1877`) the other two lack.
+
+**Why Bio is slightly off:** it's Pattern A content rendered inside the Pattern B
+shell — hosted in `LexicalModal.svelte:661` with `showHeader={false}`.
+
+**Also:** `.bridge-btn` (the category pills) is copy-pasted into all four files.
+`NavesContent` and `PersonContent` set `font-family: inherit`; `IsbeContent` and
+`LexicalModal` **don't**, so Encyclopedia's and Dictionary's pills render in the
+browser's default button font instead of Milonga. LexicalModal's are also a size
+bigger (`padding:5px 11px; font-size:13px` vs `4px 10px; 12px`).
+
+---
+
+### [ ] 2. Long titles render vertically instead of left-to-right
+
+Encyclopedia and Topical put the entry title on the same flex row as the
+Encyclopedia/Topical/Dictionary pills.
+
+`.head-text` is `flex:1; min-width:0` while `.head-actions` is `flex-shrink:0`
+(`IsbeContent.svelte:1184-1229`, mirrored in `NavesContent.svelte:621-664` and
+`PersonContent.svelte:621-700`). The pills therefore always win the width contest,
+and the title is squeezed into whatever's left — with `overflow-wrap:anywhere` it
+wraps down its own narrow column, one word (sometimes one letter) per line.
+`align-items:flex-start` keeps the pills pinned top-right while the title stacks
+beneath them.
+
+Wanted: title reads left-to-right. Fix direction — give the title its own full-width
+row above the pills.
+
+---
+
+### [ ] 3. Encyclopedia Verses tab is there sometimes, missing other times
+
+Not a regression — the tab is data-gated and always has been.
+
+- Encyclopedia: `IsbeContent.svelte:390` sets `hasVerses = verses.length > 0`;
+  the tab at `:1017` is inside `{#if hasVerses}`. Article and Map tabs are gated
+  the same way (`:388-390`).
+- Topical: same gate at `NavesContent.svelte:116`, tab at `:460`.
+- Bio: **no Verses tab at all** — uses an inline collapsible disclosure instead
+  ("Appears in N verses"), `PersonContent.svelte:493-535`.
+- Dictionary: no Verses tab; its tab lists are hardcoded and always render
+  regardless of data (`LexicalModal.svelte:800-815` and `:991-1013`).
+
+So the entries where the tab vanishes are ones where the verse query returned zero
+rows. **The real question is a data one, not a UI one:** are ISBE entries that
+should have verses coming back empty?
+
+Design intent to preserve when fixing: Topical, Encyclopedia and Bio each own their
+own verse list. There is no master list to be shared between them. Maybe it is working correctly already.
+
+---
+
+### [ ] 4. Topical outline verse pills are all green, ignoring app theme colors
+
+`NavesContent.svelte:831-853` — `.ref-chip` hardcodes `color: #8bc34a` (and the
+hover state hardcodes the same green). The rule immediately after it re-tints
+`.link-chip` (cross-topic links) blue, but `.ref-chip` keeps the green
+unconditionally, so every scripture pill in the outline is the same color no matter
+which book it points at.
+
+Pills are rendered in three places in the outline: `NavesContent.svelte:487-498`,
+`:506-517`, `:529-540`.
+
+**The right mechanism already exists and is already used one tab over.**
+`getBookColor()` / `CATEGORY_COLORS` live in `lib/bibleData.ts:207-238`, and the
+Verses tab of this very same component already colors by book —
+`NavesContent.svelte:172-186`, applied inline at `:551`, `:554`, `:563`, `:566`.
+Each `.ref-chip` carries `r.osis`, so the same call works per-chip.
+
+**Wider cause worth knowing before touching modal colors:**
+`--color-primary`, `--background-color`, `--text-color`, `--border-color` and
+friends are **never defined at `:root`** — zero matches across `src/` and
+`index.html`. Every `var(--color-primary, #4a90e2)` in these four files silently
+resolves to its fallback, so the popups are permanently `#4a90e2` on `#1e1e1e`.
+
+The only real design tokens are the `--reader-*` set written in
+`adapters/settings.ts:329-346` (`--reader-bg`, `--reader-text`, `--reader-rule`,
+`--reader-red`, …), derived by `lib/themeColors.ts`. None of the four popups read
+them.
+
+On top of that, the popups render outside `.main-content.themed`
+(`App.svelte:275-287`), and light/sepia are implemented as
+`filter: invert(1) hue-rotate(180deg)` on `.themed` (`App.svelte:325-339`) — so the
+popups **stay dark in every theme**. `Window.svelte:213-219` makes this explicit
+for the docked variants by excluding `map`/`isbe`/`person`/`naves`.
+
+Same hardcoded-green leak elsewhere, if doing a sweep:
+`PersonContent.svelte:817, 879, 904, 936, 958`; `NavesContent.svelte:908`; and
+`#4caf50` / `#8bc34a` throughout `LexicalModal.svelte` (`:1306, 1372, 1420-1421,
+1444, 1476, 1494, 1549, 1556, 1571, 1711, 1726, 1738, 1753, 1809, 1883`).
+
+---
+
+## Navigation
+
+### [ ] 5. Encyclopedia flip-over lands on letter "N", not on "Noah"
+
+Repro: tap Noah in the text → Bio → Encyclopedia pill → Noah's ISBE entry → tap the
+upper-left flip toggle. The index opens at letter N, and you still have to scroll a
+long list to find Noah.
+
+Wanted: scroll to the Noah row itself, so you can see where it sits in the index.
+
+- Flip button: `library/LibraryNavButtons.svelte:28-37` (Back arrow + Swap icon)
+- Handler: `IsbeContent.svelte:300-312` (`flip()`), wired at `:957`
+- Letter derived at `:278` — `contentsLetter = libraryLetterOf(title.toLowerCase())`
+- Passed as `initialLetter` at `:999-1000`, consumed only in
+  `library/IndexList.svelte:63-67` (`onMount`). An `onMount`-only prop is fine here
+  because the `{#if}` destroys and recreates `IndexList` on every flip.
+
+**The behavior we want already exists — it's just unreachable.** `jumpTo(prefix)` at
+`IndexList.svelte:190-205` is the typeahead handler ("type N-o-a to jump"), and it
+already does exactly the right sequence: select the letter, `await tick()`, bump
+`visibleCount` until the target row is rendered, then
+`scrollIntoView({block:"center"})`. It isn't exported and no host does `bind:this`.
+
+Two ways in:
+
+- **(a)** add an `initialRowKey` prop (the entry's `sortKey`, i.e.
+  `title.toLowerCase()`) consumed in `onMount` right after `selectLetter`, passed
+  from `IsbeContent:1000` next to `initialLetter` — both derive from the same
+  `title`, so they stay consistent for free
+- **(b)** `export function jumpTo` + `bind:this`. Precedent for an exported method
+  in this file already exists: `IsbeContent.svelte:294` exports `handleBack`
+
+Gotchas:
+
+- `selectLetter` hard-resets `listEl.scrollTop = 0` (`IndexList.svelte:83-86`), so
+  any jump has to run *after* it resolves
+- `.section-head` is `position:sticky; top:0` (`:421-431`) — `block:"start"` would
+  tuck the row under it; `block:"center"` is correct
+- `handleScroll` (`:106-127`) treats downward scroll near the bottom as "load
+  another chunk / roll into the next letter", and a programmatic `scrollIntoView`
+  registers as downward
+- `selectLetter` fires an async `annotateBadges` pass that reassigns `rows`
+  afterward (`:89-93`), so the list re-renders post-jump
+- the starred/recent shelves render above `.section-head`, so absolute offsets are
+  unreliable — `scrollIntoView` on the row element is the right primitive
+- rows carry `data-row={i}` (`:324`) where `i` is the index within `shownRows`, not
+  a stable entry id; `row.id` is the keyed-each key but is never written to the DOM
+
+Same flip pattern in `NavesContent.svelte:311-322` and `PersonContent.svelte:190-201`
+— fix all three.
+
+---
+
+### [ ] 6. Ring menu stays in Verse scope after you use it once
+
+Repro: tap a word → ring appears, word highlighted. Tap Verse → whole verse selects.
+Tap away, tap a new word → it selects the whole verse again, because Verse was last
+used. Wanted: always default back to Word. Verse should be an explicit choice every
+time — the common case is wanting info on the word you just tapped.
+
+State: `BibleReader.svelte:533` — `let selectionMode: "word" | "verse" = "word"`.
+Plain component-local `let`; not a store, not persisted, doesn't survive reload —
+but sticky for the entire reading session, which is what you're seeing.
+
+Currently reset in only three places, none of which a plain tap hits:
+
+- `:2857` `armWordDrag()` — only once a gesture commits to a drag (3px mouse / 8px
+  finger / 300ms hold)
+- `:3012` `finishWordSelection()` — only the multi-word branch
+- `:3644` `stopDrag()` — only after a bumper-handle drag that moved
+
+Set by the user at `:4523` (`handleModeChange`).
+
+**Root cause:** a plain tap never calls `armWordDrag()`. `handlePointerDown`
+(`:2774-2835`) clears everything else about the previous selection at `:2799-2806`
+— toast, highlights, painted selection, segments, counts — but leaves
+`selectionMode` alone. `dismissSelection()` (`:3539-3547`) has the same omission.
+`handleTextSelection:3332` then reads the stale `"verse"` and
+`highlightSelection:3446` takes the else-branch and paints the whole verse.
+
+Two side effects of the same staleness, worth fixing in the same pass:
+
+- `showToastAt:4011` — `if (lookup && word && selectionMode === "word")`, so while
+  stuck in verse mode the person/ISBE lookup never fires and Define never relabels
+  to **Bio** / **Info**
+- `handleToastAction` branches on it at `:4445, 4458, 4469, 4470, 4474`, so a Mark
+  from a stuck-verse tap saves as a **verse** highlight with `pendingWordSpans = []`
+
+Best fix site: `handlePointerDown`, alongside the existing clears at `:2801-2806`.
+Every new gesture — tap or drag, mouse or finger — passes through it, and the
+`extendArmed`/shiftKey early return at `:2784-2797` bails *before* that block, so
+Extend still correctly preserves the current selection. Worth adding to
+`dismissSelection()` too.
+
+The stale value is read at three sites for the different text modes: `:1347`
+(interlinear), `:3261` (Greek/Hebrew), `:3332` (English).
+
+`SelectionToast.svelte` (the classic non-ring variant) shares the same
+`mode`/`modeChange` contract and therefore the same bug. The ring itself
+(`RadialSelectionMenu.svelte`) holds no state — it's pure presentation, `mode` prop
+at `:35`, dispatches `modeChange` at `:171`.
+
+---
+
+## Search
+
+### [ ] 7. Navbar search spinner should use the ProjectBible icon
+
+The navbar search uses its own spinning-dots animation instead of the brand spinner
+used everywhere else, and at a different speed.
+
+Current: `NavigationBar.svelte:1162-1165` renders phosphor `SpinnerGap`
+(imported `:67`). CSS `.search-spinner-wrap` at `:1928-1941` puts
+`animation: spin 1s linear infinite` on the **wrapper div**, not the icon.
+
+Reuse instead: `BrandSpinner.svelte` — class `.brand-spinner`, keyframes
+`brand-spin`, `animation: brand-spin 1.69s linear infinite` (`:37`; the comment at
+`:36` notes it's deliberately 35% slower than the original 1.1s). Props are
+`size` (default 20) and `title` (doubles as `aria-label`). Asset is `/pb-gem.png`,
+precached in `vite.config.ts:228`.
+
+`NavigationBar.svelte` **already imports BrandSpinner** at `:43` and uses it at
+`:1044` for the TTS nav button, so this is markup-only.
+
+**Gotcha:** remove the `animation` from `.search-spinner-wrap` or the icon will
+double-rotate — BrandSpinner animates itself.
+
+Other existing usages, for sizing reference: `TtsPlayer.svelte:29, 106, 113`,
+`ReadingPlanModal.svelte:23, 1697`, `ProfileModal.svelte:18, 438` — all pass a small
+explicit `size`.
+
+The same dots pattern is duplicated in `library/RefSearchBar.svelte:3, 83, 189-200`
+— worth changing at the same time.
+
+---
+
+### [ ] 8. Clicking the `>` / `v` arrows dismisses the search results
+
+In the navbar search results you can only expand/collapse by clicking the words.
+Clicking the chevron closes the whole results panel and you have to search again.
+
+There is **no separate chevron button** — the caret, label and count are all inside
+one `.tree-header` button with one handler
+(`SearchResultsTree.svelte:69-87`). So the click handler is identical for both
+paths. The only difference is what `event.target` ends up being.
+
+**Root cause:** the caret sits inside an `{#if}` (`SearchResultsTree.svelte:77-81`)
+that swaps `CaretDown` ↔ `CaretRight`. Sequence on a chevron click:
+
+1. the button handler fires → `onToggle(key)` → `toggleSearchNode`
+   (`NavigationBar.svelte:751-756`) reassigns `expandedSearchNodes`
+2. Svelte flushes in a **microtask** — after the button's listener returns, but
+   before the document-level listener runs
+3. the `{#if}` tears down the old caret, so the clicked `<path>`/`<svg>` is
+   **removed from the document**
+4. `closeDropdowns` (`NavigationBar.svelte:462-481`, registered on `document` at
+   `:842-852`) then runs against a detached target.
+   `target.closest(".search-results-dropdown")` returns `null`, all six guards
+   pass, and `showResults = false`
+
+Clicking the words works because `.tree-label` (`:83`) and `.tree-count` (`:86`) are
+outside the `{#if}` and the `{#each}` is keyed (`:67`) — those nodes survive the
+re-render, so `closest()` still resolves and the guard short-circuits. Clicking the
+padding of `.tree-caret` outside the SVG box works for the same reason.
+
+Contributing factor: the results panel renders as a sibling outside `.nav-pill`
+(`NavigationBar.svelte:1242-1271`), and the `on:click|stopPropagation` at `:1138`
+covers only `.pill-search-area` (the input), not the dropdown. So every click in
+the panel bubbles to `document`, and survival depends entirely on that
+`closest()` check.
+
+Secondary effect — why it looks like the entire bar collapses: `handleSearchBlur`
+(`:781-788`) runs a 150ms timer that re-reads `showResults`; by the time it fires,
+`showResults` is already false, so the field also collapses back to its icon. Not
+the cause, but part of the symptom.
+
+Three independent fixes, any one of which breaks the chain:
+
+- `pointer-events: none` on `.tree-caret svg` (or `.tree-caret`) — cleanest, no
+  logic change, `event.target` becomes the persistent button
+- `on:click|stopPropagation` at `SearchResultsTree.svelte:74`
+- make `closeDropdowns` resilient to detached targets: early-return on
+  `!target.isConnected`, or use `event.composedPath()` (captured at dispatch time,
+  so it still contains the panel)
+
+`PowerSearchModal.svelte` reuses the same `SearchResultsTree` (`:19, 524-528`) but
+is immune — its `.modal-container` has `on:click|stopPropagation` (`:267`) and
+there's no document-level close handler.

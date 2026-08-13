@@ -1221,6 +1221,7 @@
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 12px;
+    font-family: inherit;
     cursor: pointer;
     white-space: nowrap;
   }
@@ -1270,6 +1271,7 @@
     color: var(--text-muted, #999);
     padding: 8px 12px;
     font-size: 13px;
+    font-family: inherit;
     cursor: pointer;
     white-space: nowrap;
   }

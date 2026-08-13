@@ -124,6 +124,7 @@
     z-index: 10001;
     padding: 16px;
     backdrop-filter: blur(3px);
+    animation: fadeIn 0.2s ease-out;
   }
   /* The card's own background and text color come from IsbeContent, which has
      to paint them in a docked window too. */
@@ -135,5 +136,26 @@
     flex-direction: column;
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
     overflow: hidden;
+    animation: slideUp 0.3s ease-out;
+  }
+  /* Same open motion as LexicalModal and NavesModal — the three lookup cards
+     bridge to each other, so they have to arrive the same way. */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes slideUp {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
 </style>
