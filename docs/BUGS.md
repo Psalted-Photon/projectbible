@@ -198,13 +198,58 @@ Same hardcoded-green leak elsewhere, if doing a sweep:
 
 ## Navigation
 
-### [ ] 5. Encyclopedia flip-over lands on letter "N", not on "Noah"
+### [x] 5. Encyclopedia flip-over lands on letter "N", not on "Noah"
+
+**Fixed 2026-08-13.**
+
+Flipping to the index now scrolls straight to the entry you were reading and keeps
+that row marked — a blue bar down its left edge and a faint tint — for as long as the
+index is open. Same in Encyclopedia, Topical and Bio.
+
+The row is found by its id, not its name. That matters more than it sounds: the
+encyclopedia holds two Noah entries, `NOAH (1)` and `NOAH (2)`, and the pack builder
+strips the number when it files them, so both sit in the index under the plain name
+`Noah`. 166 names collide like that, covering 342 of the 9,380 entries. Matching by
+name would have quietly landed on the first one every time — including for Noah, the
+entry this bug was reported against.
+
+If the row can't be found, you land at the top of the letter exactly as before, so
+nothing got worse in the cases this doesn't cover.
+
+Note the two Noah rows still *look* identical in the list; only the marker tells them
+apart. Giving duplicates a visible disambiguator was considered and deliberately left
+alone.
+
+#### Exact values changed
+
+`library/IndexList.svelte` — new `initialRowId` prop beside `initialLetter`,
+consumed at the end of `onMount` after `selectLetter` resolves and a `tick()` lets
+`filteredRows` settle. The tail of the existing private `jumpTo` — grow
+`visibleCount`, tick, `scrollIntoView({block:"center"})` — was pulled out into a
+shared `revealRow(i)` helper that both `jumpTo` and the new landing path call. A
+`isCurrentRow` reactive compares `String(row.id)` against `String(initialRowId)`,
+driving `class:is-current` on `.row-wrap`, styled with an inset box-shadow rather
+than a left border so marking a row doesn't nudge its text sideways.
+
+`IsbeContent.svelte` — passes `initialRowId={contentsRowId}`, where `contentsRowId`
+is `entry?.entryId ?? place?.entryId ?? entryId`; the prop alone is null when the
+article was opened by place. `contentsLetter` now derives from `entry?.primaryName`
+falling back to `title`, because a place-opened article titles itself with
+OpenBible's spelling while its index row is filed under the encyclopedia name — the
+old version could open a letter that didn't contain its own row.
+
+`NavesContent.svelte` — `contentsRowId` is `topic?.topicId ?? topicId`.
+
+`PersonContent.svelte` — `contentsRowId` is `person?.id`, read off `person` rather
+than the `personId` prop because the modal path may have picked a homonym. People
+ids are strings, which is why the comparison stringifies both sides.
+
+#### Original diagnosis
 
 Repro: tap Noah in the text → Bio → Encyclopedia pill → Noah's ISBE entry → tap the
 upper-left flip toggle. The index opens at letter N, and you still have to scroll a
-long list to find Noah.
-
-Wanted: scroll to the Noah row itself, so you can see where it sits in the index.
+long list to find Noah. Wanted: scroll to the Noah row itself, so you can see where
+it sits in the index.
 
 - Flip button: `library/LibraryNavButtons.svelte:28-37` (Back arrow + Swap icon)
 - Handler: `IsbeContent.svelte:300-312` (`flip()`), wired at `:957`
@@ -302,10 +347,29 @@ at `:35`, dispatches `modeChange` at `:171`.
 
 ## Search
 
-### [ ] 7. Navbar search spinner should use the ProjectBible icon
+### [x] 7. Navbar search spinner should use the ProjectBible icon
 
-The navbar search uses its own spinning-dots animation instead of the brand spinner
-used everywhere else, and at a different speed.
+**Fixed 2026-08-13.**
+
+Both search boxes — the one in the navbar and the reference search used by the
+library windows — now spin the ProjectBible gem while they work, at the same speed as
+the Read Aloud spinner, instead of the old dots.
+
+#### Exact values changed
+
+`NavigationBar.svelte` — the phosphor `SpinnerGap` in the search box swapped for
+`BrandSpinner size={14} title="Searching…"`; the title is passed explicitly because
+BrandSpinner's default reads "Preparing speech…" and doubles as the screen-reader
+label. `SpinnerGap` dropped from the phosphor import, this being its only use.
+`.search-spinner-wrap` lost its `animation` line (the wrapper used to spin *itself*,
+which would have turned the gem twice over) and its `color` line (it tinted the old
+icon and does nothing to an image). The `@keyframes spin` block went with it, having
+no other user in the file.
+
+`library/RefSearchBar.svelte` — identical change at `size={13}`, plus a new
+`BrandSpinner` import.
+
+#### Original diagnosis
 
 Current: `NavigationBar.svelte:1162-1165` renders phosphor `SpinnerGap`
 (imported `:67`). CSS `.search-spinner-wrap` at `:1928-1941` puts

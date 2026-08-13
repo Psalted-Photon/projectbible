@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import { MagnifyingGlass, X, SpinnerGap } from "phosphor-svelte";
+  import { MagnifyingGlass, X } from "phosphor-svelte";
+  import BrandSpinner from "../BrandSpinner.svelte";
 
   /**
    * The navbar's collapsing search, scoped to one reference work. Styling is
@@ -80,7 +81,7 @@
         on:blur={() => (focused = false)}
       />
       {#if searching}
-        <div class="search-spinner-wrap"><SpinnerGap size={13} weight="duotone" /></div>
+        <div class="search-spinner-wrap"><BrandSpinner size={13} title="Searching…" /></div>
       {:else if query}
         <button class="clear-search" on:mousedown|preventDefault={clear} title="Clear search">
           <X size={11} weight="duotone" />
@@ -186,17 +187,13 @@
     color: #ccc;
   }
 
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-  }
+  /* BrandSpinner turns itself, so this only positions it — a rotation here
+     would spin the gem twice over. */
   .search-spinner-wrap {
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0 6px;
-    color: #4caf50;
     flex-shrink: 0;
-    animation: spin 1s linear infinite;
   }
 </style>

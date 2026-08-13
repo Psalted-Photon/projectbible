@@ -289,6 +289,9 @@
 
   $: contentsLetter = title ? libraryLetterOf(title.toLowerCase()) : null;
 
+  /** Which row to land on and keep marked — by id, since names can repeat. */
+  $: contentsRowId = topic?.topicId ?? topicId;
+
   // --- Back and flip -----------------------------------------------------
   // Back walks out one step at a time: a crumb off the trail, then the topic,
   // then the index. Flip turns the page over between the two, either way.
@@ -443,7 +446,12 @@
   </div>
 
   {#if showContents}
-    <IndexList source={navesSource} onOpen={openFromContents} initialLetter={contentsLetter} />
+    <IndexList
+      source={navesSource}
+      onOpen={openFromContents}
+      initialLetter={contentsLetter}
+      initialRowId={contentsRowId}
+    />
   {:else}
     {#if trail.length}
       <nav class="trail" aria-label="Back trail">

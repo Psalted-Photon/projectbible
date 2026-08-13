@@ -64,7 +64,6 @@
     Gear,
     User,
     X,
-    SpinnerGap,
     Sun,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
@@ -1161,7 +1160,7 @@
             />
             {#if isSearching}
               <div class="search-spinner-wrap">
-                <SpinnerGap size={14} weight="duotone" />
+                <BrandSpinner size={14} title="Searching…" />
               </div>
             {:else if searchQuery}
               <button
@@ -1925,19 +1924,14 @@
     color: #ccc;
   }
 
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-  }
-
+  /* BrandSpinner turns itself, so this only positions it — a rotation here
+     would spin the gem twice over. */
   .search-spinner-wrap {
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0 6px;
-    color: #4caf50;
     flex-shrink: 0;
-    animation: spin 1s linear infinite;
   }
 
   .nav-dropdown {

@@ -274,8 +274,18 @@
     }
   }
 
-  /** Which letter the contents should open on — the one you're reading. */
-  $: contentsLetter = title ? libraryLetterOf(title.toLowerCase()) : null;
+  /** Which letter the contents should open on — the one you're reading. Keyed
+   *  off the encyclopedia name rather than `title`, because a place-opened
+   *  article titles itself with OpenBible's spelling while its contents row is
+   *  filed under the entry name; going by title could open a letter that
+   *  doesn't hold the row. Same reasoning as loadNeighbors above. */
+  $: contentsLetter = (() => {
+    const name = entry?.primaryName || title;
+    return name ? libraryLetterOf(name.toLowerCase()) : null;
+  })();
+
+  /** Which row to land on and keep marked — by id, since names repeat. */
+  $: contentsRowId = entry?.entryId ?? place?.entryId ?? entryId;
 
   // --- Back and flip -----------------------------------------------------
   // Back walks out one step at a time: a crumb off the trail, then the article,
@@ -997,7 +1007,12 @@
   </div>
 
   {#if showContents}
-    <IndexList source={isbeSource} onOpen={openFromContents} initialLetter={contentsLetter} />
+    <IndexList
+      source={isbeSource}
+      onOpen={openFromContents}
+      initialLetter={contentsLetter}
+      initialRowId={contentsRowId}
+    />
   {:else}
     {#if trail.length}
       <nav class="trail" aria-label="Back trail">

@@ -175,6 +175,11 @@
 
   $: contentsLetter = person ? libraryLetterOf(person.name.toLowerCase()) : null;
 
+  /** Which row to land on and keep marked. People ids are strings, and the
+   *  displayed person isn't always the personId prop — a homonym may have been
+   *  picked — so this reads off `person`, not the prop. */
+  $: contentsRowId = person?.id ?? null;
+
   // --- Back and flip -----------------------------------------------------
   // Back walks out one step at a time: a crumb off the trail, then the bio,
   // then the index. Flip turns the page over between the two, either way.
@@ -414,7 +419,12 @@
   {/if}
 
   {#if showContents}
-    <IndexList source={peopleSource} onOpen={openFromContents} initialLetter={contentsLetter} />
+    <IndexList
+      source={peopleSource}
+      onOpen={openFromContents}
+      initialLetter={contentsLetter}
+      initialRowId={contentsRowId}
+    />
   {:else if loading}
     <div class="person-body"><p class="muted">Loading…</p></div>
   {:else if !person}

@@ -19,6 +19,13 @@
   export let onOpen: (row: LibraryRow) => void;
   /** Letter to open on — where you left off, or the letter of the current entry. */
   export let initialLetter: string | null = null;
+  /**
+   * The row to land on, by id. A name can't identify a row — the encyclopedia
+   * files "NOAH (1)" and "NOAH (2)" both under the name "Noah", and 166 names
+   * collide that way — so the id is what pins the position. The row also stays
+   * marked while the contents are open, so you can see where you came from.
+   */
+  export let initialRowId: string | number | null = null;
 
   const CHUNK = 150;
   /** How long a burst of typing stays one search term. */
@@ -51,6 +58,10 @@
   $: nav = $navigationStore;
   /** Each work marks only the dots that tell you something new about its rows. */
   $: shows = (badge: LibraryBadge) => source.badges.includes(badge);
+  /** The row you flipped in from. Ids are numbers here and strings for people,
+   *  so both sides are stringified before comparing. */
+  $: isCurrentRow = (row: LibraryRow) =>
+    initialRowId != null && String(row.id) === String(initialRowId);
 
   // The rows actually on screen: a search wins over the chapter filter, which
   // wins over the letter you're browsing. Chips narrow whichever it landed on.
@@ -64,6 +75,15 @@
     letterCounts = await source.getLetterCounts();
     const first = Object.keys(letterCounts)[0] ?? "A";
     await selectLetter(initialLetter || prefs.lastLetter || first, false);
+    if (initialRowId != null) {
+      // filteredRows is derived, so it only settles on the next flush — same
+      // reason jumpTo ticks after changing letter.
+      await tick();
+      const i = filteredRows.findIndex((r) => String(r.id) === String(initialRowId));
+      // Not found — a letter that doesn't hold it, or nothing open — leaves you
+      // at the top of the list, which is where you used to arrive anyway.
+      if (i >= 0) await revealRow(i);
+    }
   });
 
   async function selectLetter(next: string, remember = true) {
@@ -187,6 +207,18 @@
     jumpTo(typeahead);
   }
 
+  /** Scroll row `i` of the current list into view, paging it in first if it
+   *  hasn't been rendered yet. Shared by the typeahead and by the landing jump
+   *  when the contents open on the entry you were reading. */
+  async function revealRow(i: number) {
+    // Make sure the row is rendered before trying to scroll it into view.
+    if (i >= visibleCount) {
+      visibleCount = Math.ceil((i + 1) / CHUNK) * CHUNK;
+      await tick();
+    }
+    listEl?.querySelector(`[data-row="${i}"]`)?.scrollIntoView({ block: "center" });
+  }
+
   async function jumpTo(prefix: string) {
     const target = libraryLetterOf(prefix);
     if (browsing && target !== letter) {
@@ -196,12 +228,7 @@
     }
     const i = filteredRows.findIndex((r) => r.sortKey.startsWith(prefix));
     if (i < 0) return;
-    // Make sure the row is rendered before trying to scroll it into view.
-    if (i >= visibleCount) {
-      visibleCount = Math.ceil((i + 1) / CHUNK) * CHUNK;
-      await tick();
-    }
-    listEl?.querySelector(`[data-row="${i}"]`)?.scrollIntoView({ block: "center" });
+    await revealRow(i);
   }
 
   // --- Rows --------------------------------------------------------------
@@ -321,7 +348,7 @@
         </div>
       {:else}
         {#each shownRows as row, i (row.id)}
-          <div class="row-wrap" data-row={i}>
+          <div class="row-wrap" class:is-current={isCurrentRow(row)} data-row={i}>
             <button class="row" on:click={() => open(row)}>
               <span class="label">
                 <span class="name">{row.name}</span>
@@ -465,6 +492,12 @@
     display: flex;
     align-items: stretch;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
+  /* The entry you flipped in from. An inset shadow rather than a left border,
+     so marking a row doesn't nudge its text sideways. */
+  .row-wrap.is-current {
+    background: rgba(74, 144, 226, 0.1);
+    box-shadow: inset 3px 0 0 var(--color-primary, #4a90e2);
   }
   .row-wrap:hover {
     background: var(--surface-2, rgba(255, 255, 255, 0.06));
