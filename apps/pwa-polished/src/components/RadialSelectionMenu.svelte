@@ -73,8 +73,8 @@
   // STAGGER keeps five of seven buttons in flight at the peak. Shrink STAGGER on
   // its own and the overlap climbs until every button moves at once, which reads
   // as a single pop rather than a sweep — so move the two together.
-  const STAGGER = 35;
-  const POP_MS = 160;
+  const STAGGER = 30;
+  const POP_MS = 140;
 
   const reduceMotion =
     typeof window !== 'undefined' &&
