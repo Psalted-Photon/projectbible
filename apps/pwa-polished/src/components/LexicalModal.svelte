@@ -10,13 +10,13 @@
   import {
     lookupEnglishWord,
     lookupStrongs,
-    resolveIsbeClick,
-    resolveNavesTopicId,
-    getNavesTopicName,
-    type IsbeResolution,
+    resolveWorks,
+    type WorksResolution,
     type PersonRecord,
   } from "../adapters/lexicon-lookup.js";
   import PersonContent from "./PersonContent.svelte";
+  import WorkTabs, { type WorkKey } from "./WorkTabs.svelte";
+  import { personModalStore } from "../stores/personModalStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { navesModalStore } from "../stores/navesModalStore";
@@ -121,39 +121,34 @@
   }
 
   // --- Encyclopedia bridge ------------------------------------------------
-  // Offer a jump to the ISBE encyclopedia when it has an entry for this term
-  // (plural-folded via the shared resolver). Hidden when no entry / pack absent.
-  let isbeMatch: IsbeResolution | null = null;
-  let isbeCheckedFor = "";
-  $: if (isOpen && selectedText && !strongsId && !morphologyData) checkEncyclopedia(selectedText);
-  $: if (!isOpen) isbeCheckedFor = "";
+  // What the other three works have for this term. One resolver answers all of
+  // them at once and hands back ids rather than booleans, so a control that
+  // lights up is guaranteed to open something. Plural-folded by the shared
+  // resolvers underneath; silent when a pack isn't installed.
+  let works: WorksResolution | null = null;
+  let worksCheckedFor = "";
+  $: if (isOpen && selectedText && !strongsId && !morphologyData) checkWorks(selectedText);
+  $: if (!isOpen) worksCheckedFor = "";
 
-  async function checkEncyclopedia(text: string) {
+  async function checkWorks(text: string) {
     const key = text.trim().toLowerCase();
-    if (isbeCheckedFor === key) return;
-    isbeCheckedFor = key;
-    isbeMatch = null;
-    navesTopicId = null;
+    if (worksCheckedFor === key) return;
+    worksCheckedFor = key;
+    works = null;
+    if (!key) return;
     try {
-      isbeMatch = await resolveIsbeClick({ word: text });
-    } catch {
-      isbeMatch = null;
-    }
-    try {
-      const id = await resolveNavesTopicId(text);
+      const found = await resolveWorks(text);
       // A slower lookup must not light up a button for the previous word.
-      if (isbeCheckedFor !== key) return;
-      navesTopicId = id;
-      navesName = id != null ? ((await getNavesTopicName(id)) ?? text) : "";
+      if (worksCheckedFor !== key) return;
+      works = found;
     } catch {
-      navesTopicId = null;
+      works = null;
     }
   }
 
-  // Nave's sits beside the encyclopedia in the same row, on the same terms:
-  // shown when there is a topic under this name, silent otherwise.
-  let navesTopicId: number | null = null;
-  let navesName = "";
+  $: isbeMatch = works?.entry ?? null;
+  $: navesTopicId = works?.topic?.id ?? null;
+  $: navesName = works?.topic?.name ?? "";
 
   function openTopical() {
     if (navesTopicId == null) return;
@@ -171,6 +166,37 @@
       placeId: m.placeId ?? null,
       primaryName: m.primaryName,
     });
+  }
+
+  /**
+   * The work tabs. This card holds two of the four itself — a word study and,
+   * when a clicked name resolved to someone, their bio — so switching between
+   * Dictionary and People is a flip in place rather than a second card.
+   */
+  function selectWork(work: WorkKey) {
+    if (work === "encyclopedia") return openEncyclopedia();
+    if (work === "topical") return openTopical();
+    if (work === "dictionary") {
+      // Showing a bio: the definition is one flip away inside this same card.
+      if (showCharacter) showDefinition = true;
+      return;
+    }
+    if (work === "people") {
+      // Came in as a word study but the word is a person — flip to the bio if
+      // this card was handed one, otherwise open the bio card properly.
+      if (characterData) {
+        showDefinition = false;
+        return;
+      }
+      const found = works?.person;
+      if (!found) return;
+      close();
+      personModalStore.open({
+        lookup: found,
+        primaryName: found.person.displayTitle || found.person.name,
+        clickedWord: selectedText,
+      });
+    }
   }
 
   async function loadLexicalData() {
@@ -627,6 +653,11 @@
     role="presentation"
   >
     <div class="modal-container">
+      <WorkTabs
+        {works}
+        current={showCharacter ? "people" : "dictionary"}
+        onSelect={selectWork}
+      />
       <div class="modal-header">
         <div class="head-text">
           <h2>
@@ -641,7 +672,10 @@
                 {strongEntry.id}
               </span>
             {:else if selectedText}
-              Lexical Study: {selectedText}
+              <!-- The word itself is the title, as it is in the other three
+                   cards. Title-cased because bridging in from them forces the
+                   term lowercase, so it would otherwise read "noah". -->
+              {titleCase(selectedText)}
             {:else}
               Word Study
             {/if}
@@ -651,17 +685,6 @@
           {/if}
         </div>
         <div class="head-actions">
-          <!-- The encyclopedia bridge used to be switched off for people. There
-               was no reason for it beyond the bio having nowhere to go back to;
-               it can now be pinned, so the jump is safe to offer. -->
-          {#if isbeMatch && !strongEntry}
-            <button class="bridge-btn" on:click={openEncyclopedia}>
-              {showCharacter ? "Encyclopedia" : "More Info"}
-            </button>
-          {/if}
-          {#if navesTopicId != null && !strongEntry}
-            <button class="bridge-btn" on:click={openTopical}>Topical</button>
-          {/if}
           {#if showCharacter && person}
             <button class="pop-btn" on:click={popOutPerson} title="Pin beside the reader" aria-label="Pin beside the reader">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -1301,20 +1324,6 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
-  }
-  .bridge-btn {
-    background: var(--surface-2, rgba(255, 255, 255, 0.06));
-    border: 1px solid var(--border-color, #333);
-    color: var(--color-primary, #4a90e2);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 12px;
-    font-family: inherit;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .bridge-btn:hover {
-    border-color: var(--color-primary, #4a90e2);
   }
   .pop-btn {
     background: none;

@@ -11,21 +11,19 @@
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
+  import WorkTabs, { type WorkKey } from "./WorkTabs.svelte";
   import { peopleSource } from "../lib/library/source";
   import {
     getPersonVerses,
     getPersonById,
     getPeopleNeighbors,
     relationId,
-    resolveIsbeClick,
-    resolveNavesTopicId,
-    getNavesTopicName,
-    lookupEnglishWord,
+    resolveWorks,
     libraryLetterOf,
     type PersonRecord,
     type PersonLookupResult,
     type PersonRelation,
-    type IsbeResolution,
+    type WorksResolution,
     type LibraryRow,
   } from "../adapters/lexicon-lookup.js";
 
@@ -192,6 +190,15 @@
     showContents = true;
   }
 
+  /** Escape walks out one step, and reports whether it had anywhere to go — the
+   *  modal shell closes the card only once this returns false. Same contract as
+   *  IsbeContent and NavesContent. */
+  export function handleBack(): boolean {
+    if (!canGoBack) return false;
+    goBack();
+    return true;
+  }
+
   function flip() {
     if (!showContents) {
       showContents = true;
@@ -221,41 +228,36 @@
   // exists for this name. The encyclopedia one used to be suppressed for
   // people; there was never a reason for that beyond the modal having nowhere
   // to put the bio while it was gone.
-  let isbeMatch: IsbeResolution | null = null;
-  let navesTopicId: number | null = null;
-  let navesName = "";
-  let hasDictionary = false;
-  let bridgeCheckedFor = "";
+  // One resolver answers all of them at once and hands back ids rather than
+  // booleans, so a control that lights up is guaranteed to open something.
+  let works: WorksResolution | null = null;
+  let worksCheckedFor = "";
 
-  $: if (person) checkBridges(person.name);
+  $: if (person) checkWorks(person.name);
 
-  async function checkBridges(name: string) {
+  async function checkWorks(name: string) {
     const key = name.trim().toLowerCase();
-    if (bridgeCheckedFor === key) return;
-    bridgeCheckedFor = key;
-    isbeMatch = null;
-    navesTopicId = null;
-    hasDictionary = false;
+    if (worksCheckedFor === key) return;
+    worksCheckedFor = key;
+    works = null;
+    if (!key) return;
     try {
-      isbeMatch = await resolveIsbeClick({ word: name });
+      const found = await resolveWorks(name);
+      // Guard a slower lookup landing after you've moved on.
+      if (worksCheckedFor !== key) return;
+      works = found;
     } catch {
-      isbeMatch = null;
-    }
-    try {
-      const id = await resolveNavesTopicId(name);
-      if (bridgeCheckedFor !== key) return;
-      navesTopicId = id;
-      navesName = id != null ? ((await getNavesTopicName(id)) ?? name) : "";
-    } catch {
-      navesTopicId = null;
-    }
-    try {
-      const e = await lookupEnglishWord(key);
-      hasDictionary = !!(e && (e.modern?.length || e.historic?.length || e.wordset?.length));
-    } catch {
-      hasDictionary = false;
+      works = null;
     }
   }
+
+  // This used to ask the dictionary for the whole name — "mary, mother of
+  // jesus" — where the other works ask for the first word only, so the button
+  // was quietly missing for anyone with a compound name.
+  $: dictWord = works?.dict ? (works.term ?? "") : "";
+  $: isbeMatch = works?.entry ?? null;
+  $: navesTopicId = works?.topic?.id ?? null;
+  $: navesName = works?.topic?.name ?? "";
 
   function openTopical() {
     if (navesTopicId == null) return;
@@ -277,9 +279,30 @@
     });
   }
 
+  /**
+   * The work tabs. Over the index these move you between indexes rather than
+   * between views of a subject, since there is no subject.
+   *
+   * Dictionary is special here: hosted inside the word-study card there is a
+   * definition view a flip away, which beats opening a second card on top.
+   */
+  function selectWork(work: WorkKey) {
+    if (showContents) {
+      if (!docked) onClose?.();
+      if (work === "encyclopedia") isbeModalStore.open({ kind: "entry", entryId: null, placeId: null, primaryName: "" });
+      else if (work === "topical") navesModalStore.open({ topicId: null, primaryName: "" });
+      return;
+    }
+    if (work === "dictionary") {
+      if (onShowDefinition) onShowDefinition();
+      else openDictionary();
+    } else if (work === "topical") openTopical();
+    else if (work === "encyclopedia") openEncyclopedia();
+  }
+
   function openDictionary() {
-    if (!person) return;
-    const term = person.name.trim().toLowerCase();
+    const term = dictWord;
+    if (!term) return;
     if (!docked) onClose?.();
     lexicalModalStore.open({
       selectedText: term,
@@ -374,6 +397,8 @@
 
 <div class="person-content" class:docked class:hosted={!showHeader}>
   {#if showHeader}
+    <!-- Hosted inside the word-study card, that card draws the tabs instead. -->
+    <WorkTabs {works} current="people" onIndex={showContents} onSelect={selectWork} />
     <div class="person-header">
       <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
       <div class="head-text">
@@ -388,15 +413,6 @@
       </div>
       <div class="head-actions">
         {#if !showContents && person}
-          {#if isbeMatch}
-            <button class="bridge-btn" on:click={openEncyclopedia}>Encyclopedia</button>
-          {/if}
-          {#if navesTopicId != null}
-            <button class="bridge-btn" on:click={openTopical}>Topical</button>
-          {/if}
-          {#if hasDictionary}
-            <button class="bridge-btn" on:click={openDictionary}>Dictionary</button>
-          {/if}
           {#if onPopOut}
             <button class="pop-btn" on:click={popOut} title="Pin beside the reader" aria-label="Pin beside the reader">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -693,20 +709,6 @@
   .crumb-sep {
     color: var(--text-muted, #666);
     font-size: 11px;
-  }
-  .bridge-btn {
-    background: var(--surface-2, rgba(255, 255, 255, 0.06));
-    border: 1px solid var(--border-color, #333);
-    color: var(--color-primary, #4a90e2);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    white-space: nowrap;
-    font-family: inherit;
-  }
-  .bridge-btn:hover {
-    border-color: var(--color-primary, #4a90e2);
   }
   .pop-btn,
   .close-btn {

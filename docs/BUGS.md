@@ -8,7 +8,23 @@ Line numbers were verified 2026-08-13 and will drift as the files change.
 
 ---
 
-## Popups (Dictionary / Encyclopedia / Topical / Bio)
+## The four works
+
+The four lookup cards are one system, reached from each other by the tab row across
+the top of every card. Order is fixed — Dictionary, Topical, Encyclopedia, People —
+and a tab greys out when that work has nothing for the subject.
+
+Availability and opening both come from one place: `resolveWorks(name, ref?)` in
+`adapters/lexicon-lookup.ts`, which asks all four at once and returns the **ids**, not
+booleans, so a lit tab is guaranteed to open something. It uses `headWord` for the
+dictionary (which files single words) and the full name for the rest, and hands back
+the term it used so open handlers can't drift from what lit the tab up. Before this
+there were eight separate checkers with four different term rules between them.
+
+The tab row is `components/WorkTabs.svelte`. Its class is deliberately **not**
+`.tabs`: `IsbeContent` and `NavesContent` style their section tabs as an unqualified
+`.tabs button`, which would capture it. Over the A–Z index the tabs switch index
+rather than subject; Dictionary greys out there, having no index of its own.
 
 Quick map of the four, since they're spread across more files than you'd expect:
 
@@ -17,7 +33,13 @@ Quick map of the four, since they're spread across more files than you'd expect:
 | Dictionary | `LexicalModal.svelte` | (self-contained) | `stores/lexicalModalStore.ts` |
 | Encyclopedia | `IsbeModal.svelte` | `IsbeContent.svelte` | `stores/isbeModalStore.ts` |
 | Topical | `NavesModal.svelte` | `NavesContent.svelte` | `stores/navesModalStore.ts` |
-| Bio | *inside* `LexicalModal.svelte` (`:661`) | `PersonContent.svelte` | via `lexicalModalStore` |
+| People | `PersonModal.svelte` | `PersonContent.svelte` | `stores/personModalStore.ts` |
+
+People got its own store and shell on 2026-08-13. Until then a bio could only reach
+the screen riding `lexicalModalStore.characterData` — as a word study of a word that
+happened to be a person — which is why nothing could navigate *to* one. It still
+renders inside the Dictionary card when a tapped name resolves to someone, where
+Dictionary and People are a flip apart rather than two cards.
 
 All four mount globally in `App.svelte:283-287`. Tap dispatch is
 `BibleReader.svelte:4280-4424` (person → ISBE → English lexicon → Strong's).
@@ -51,6 +73,14 @@ Milonga, and they now slide up when opening the way Dictionary always has.
 
 Still open for these headers: bug #2 below. All three now share the same header
 markup, so fixing #2 will fix all of them at once.
+
+**Follow-up, 2026-08-13.** Using the matched cards showed the problem went past
+styling — they didn't behave like one system. The bridge pills changed depending on
+which card you were in, the Dictionary title read "Lexical Study: love" with the word
+lowercase and tacked on the end, and People wasn't somewhere you could navigate to at
+all. Replaced with four fixed tabs across the top of every card — Dictionary, Topical,
+Encyclopedia, People — always the same four in the same order, greyed when that work
+has nothing for the subject. See "The four works" below.
 
 #### Exact values changed
 

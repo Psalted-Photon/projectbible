@@ -1388,6 +1388,22 @@ export async function getIsbeNeighbors(
 }
 
 /**
+ * The single word a compound name files under.
+ *
+ * The dictionary files single words, so an article titled "Abomination, Birds
+ * Of" is looked up on "abomination". Encyclopedia titles get the same
+ * treatment, since a person named "Mary, mother of Jesus" has an article filed
+ * under "Mary".
+ *
+ * Exported because availability and the thing that opens have to agree on it —
+ * a badge or tab derived from one rule and a click handler derived from another
+ * is how you get an entry that lights up and then opens nothing.
+ */
+export function headWord(s: string): string {
+  return (s || '').split(/[;,(]/)[0].trim().split(/\s+/)[0].toLowerCase();
+}
+
+/**
  * Mark which rows also have a person bio or a dictionary definition.
  *
  * Done a letter at a time rather than a row at a time: one bounded read per
@@ -1426,14 +1442,8 @@ export async function annotateLibraryBadges(rows: LibraryRow[], letter: string):
     dictWordsFrom(),
   ]);
 
-  // The dictionary files single words, so an article titled "Abomination, Birds
-  // Of" is tested on "abomination" — the same first-word rule the article's own
-  // Dictionary button uses. Encyclopedia titles get the same treatment, since a
-  // person named "Mary, mother of Jesus" has an article filed under "Mary".
-  const firstWord = (s: string) => s.split(/[;,(]/)[0].trim().split(/\s+/)[0].toLowerCase();
-
   for (const row of rows) {
-    const head = firstWord(row.name);
+    const head = headWord(row.name);
     row.hasBio = bioNames.has(row.sortKey) || bioNames.has(head);
     row.hasEntry = entryNames.has(row.sortKey) || entryNames.has(head);
     row.hasTopic = topicNames.has(row.sortKey) || topicNames.has(head);
@@ -2110,4 +2120,86 @@ export async function getMorphology(
     console.error('Error getting morphology:', error);
     return [];
   }
+}
+
+// --- The four works, resolved together -----------------------------------
+
+/**
+ * What each of the four works has for one subject, with the ids needed to open
+ * them — not just booleans.
+ *
+ * This exists because availability used to be worked out three times per
+ * component, with four different rules for deriving the term, and the answer
+ * was thrown away: the header knew a topic existed but not its id, so opening
+ * re-resolved from scratch and could land somewhere else. Returning the
+ * resolutions means whatever lights a tab is exactly what that tab opens.
+ */
+export interface WorksResolution {
+  /** The term the dictionary was looked up on — reuse it when opening. */
+  term: string;
+  /** Dictionary has an entry for `term`. */
+  dict: boolean;
+  /** Nave's topic, ready to open. */
+  topic: { id: number; name: string } | null;
+  /** Encyclopedia article or place, ready to open. */
+  entry: IsbeResolution | null;
+  /** Person bio, ready to open. */
+  person: PersonLookupResult | null;
+}
+
+const EMPTY_WORKS: WorksResolution = {
+  term: '',
+  dict: false,
+  topic: null,
+  entry: null,
+  person: null,
+};
+
+/**
+ * Resolve a subject across all four works at once.
+ *
+ * Encyclopedia, Topical and People are asked with the full name, because their
+ * own resolvers already fold plurals and multi-word phrases. Only the
+ * dictionary is narrowed to `headWord`, since it files single words. A pack
+ * that isn't installed contributes null rather than throwing, so the tabs
+ * simply grey out.
+ *
+ * `ref` is the verse the subject was clicked in, where there is one — it lets
+ * the person and place lookups disambiguate homonyms.
+ */
+export async function resolveWorks(
+  name: string,
+  ref?: VerseRef | null,
+): Promise<WorksResolution> {
+  const subject = (name || '').trim();
+  if (!subject) return { ...EMPTY_WORKS };
+
+  const term = headWord(subject);
+
+  const [entryRes, topicRes, dictRes, personRes] = await Promise.allSettled([
+    resolveIsbeClick({ word: subject, ref: ref ?? null }),
+    resolveNavesTopicId(subject),
+    lookupEnglishWord(term),
+    lookupPerson(subject, ref ?? null),
+  ]);
+
+  const entry = entryRes.status === 'fulfilled' ? entryRes.value : null;
+  const topicId = topicRes.status === 'fulfilled' ? topicRes.value : null;
+  const english = dictRes.status === 'fulfilled' ? dictRes.value : null;
+  const person = personRes.status === 'fulfilled' ? personRes.value : null;
+
+  let topic: { id: number; name: string } | null = null;
+  if (topicId != null) {
+    topic = { id: topicId, name: (await getNavesTopicName(topicId)) ?? subject };
+  }
+
+  return {
+    term,
+    // An entry row can exist with no definitions attached to it, which would
+    // open an empty card — so this asks whether there is anything to read.
+    dict: !!(english && (english.modern?.length || english.historic?.length || english.wordset?.length)),
+    topic,
+    entry,
+    person,
+  };
 }

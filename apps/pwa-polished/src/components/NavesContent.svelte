@@ -9,22 +9,23 @@
   import { navesModalStore } from "../stores/navesModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
+  import { personModalStore } from "../stores/personModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
+  import WorkTabs, { type WorkKey } from "./WorkTabs.svelte";
   import { navesSource } from "../lib/library/source";
   import {
     getNavesTopic,
     getNavesVerses,
     getNavesNeighbors,
     getNavesTopicName,
-    resolveIsbeClick,
-    lookupEnglishWord,
+    resolveWorks,
     libraryLetterOf,
     type NavesTopicRecord,
     type NavesPoint,
     type NavesLink,
-    type IsbeResolution,
+    type WorksResolution,
     type VerseRef,
     type LibraryRow,
   } from "../adapters/lexicon-lookup.js";
@@ -335,34 +336,35 @@
     });
   }
 
-  // --- Bridges -----------------------------------------------------------
-  let isbeMatch: IsbeResolution | null = null;
-  let hasDictionary = false;
-  let bridgeCheckedFor = "";
+  // --- The other three works ---------------------------------------------
+  // One resolver answers all of them at once and hands back ids rather than
+  // booleans, so a control that lights up is guaranteed to open something.
+  let works: WorksResolution | null = null;
+  let worksCheckedFor = "";
 
-  $: if (topic) checkBridges(topic.primaryName);
+  $: if (topic) checkWorks(topic.primaryName);
 
-  async function checkBridges(name: string) {
+  async function checkWorks(name: string) {
     const key = name.trim().toLowerCase();
-    if (bridgeCheckedFor === key) return;
-    bridgeCheckedFor = key;
-    isbeMatch = null;
-    hasDictionary = false;
+    if (worksCheckedFor === key) return;
+    worksCheckedFor = key;
+    works = null;
+    if (!key) return;
     try {
-      isbeMatch = await resolveIsbeClick({ word: name });
+      const found = await resolveWorks(name);
+      // Guard a slower lookup landing after you've moved on.
+      if (worksCheckedFor !== key) return;
+      works = found;
     } catch {
-      isbeMatch = null;
-    }
-    try {
-      // The dictionary files single words, so a topic titled "Abomination,
-      // Birds Of" is looked up on its first word.
-      const term = key.split(/[;,(]/)[0].trim().split(/\s+/)[0];
-      const e = await lookupEnglishWord(term);
-      hasDictionary = !!(e && (e.modern?.length || e.historic?.length || e.wordset?.length));
-    } catch {
-      hasDictionary = false;
+      works = null;
     }
   }
+
+  // The dictionary files single words, so a topic titled "Abomination, Birds
+  // Of" is looked up on its first word — resolveWorks hands back the term it
+  // actually used so opening matches what lit the control up.
+  $: dictWord = works?.dict ? (works.term ?? "") : "";
+  $: isbeMatch = works?.entry ?? null;
 
   function openEncyclopedia() {
     if (!isbeMatch) return;
@@ -378,8 +380,8 @@
   }
 
   function openDictionary() {
-    if (!topic) return;
-    const term = topic.primaryName.split(/[;,(]/)[0].trim().split(/\s+/)[0].toLowerCase();
+    const term = dictWord;
+    if (!term) return;
     if (!docked) onClose?.();
     lexicalModalStore.open({
       selectedText: term,
@@ -387,6 +389,33 @@
       morphologyData: null,
       lexicalEntries: null,
     });
+  }
+
+  function openPeople() {
+    const found = works?.person;
+    if (!found) return;
+    if (!docked) onClose?.();
+    personModalStore.open({
+      lookup: found,
+      primaryName: found.person.displayTitle || found.person.name,
+      clickedWord: title,
+    });
+  }
+
+  /**
+   * The work tabs. Over the index these move you between indexes rather than
+   * between views of a subject, since there is no subject.
+   */
+  function selectWork(work: WorkKey) {
+    if (showContents) {
+      if (!docked) onClose?.();
+      if (work === "encyclopedia") isbeModalStore.open({ kind: "entry", entryId: null, placeId: null, primaryName: "" });
+      else if (work === "people") personModalStore.open({});
+      return;
+    }
+    if (work === "dictionary") openDictionary();
+    else if (work === "encyclopedia") openEncyclopedia();
+    else if (work === "people") openPeople();
   }
 
   function popOut() {
@@ -404,6 +433,7 @@
 </script>
 
 <div class="naves-content" class:docked>
+  <WorkTabs {works} current="topical" onIndex={showContents} onSelect={selectWork} />
   <div class="naves-header">
     <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
     <div class="head-text">
@@ -419,12 +449,6 @@
     </div>
     <div class="head-actions">
       {#if !showContents && topic}
-        {#if isbeMatch}
-          <button class="bridge-btn" on:click={openEncyclopedia}>Encyclopedia</button>
-        {/if}
-        {#if hasDictionary}
-          <button class="bridge-btn" on:click={openDictionary}>Dictionary</button>
-        {/if}
         {#if onPopOut}
           <button class="pop-btn" on:click={popOut} title="Pin beside the reader" aria-label="Pin beside the reader">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -655,20 +679,6 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
-  }
-  .bridge-btn {
-    background: var(--surface-2, rgba(255, 255, 255, 0.06));
-    border: 1px solid var(--border-color, #333);
-    color: var(--color-primary, #4a90e2);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    white-space: nowrap;
-    font-family: inherit;
-  }
-  .bridge-btn:hover {
-    border-color: var(--color-primary, #4a90e2);
   }
   .pop-btn,
   .close-btn {

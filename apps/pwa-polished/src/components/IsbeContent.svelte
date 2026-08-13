@@ -18,21 +18,22 @@
     getIsbePlaceNames,
     getIsbeEntryByName,
     resolveIsbeEntryNames,
-    lookupEnglishWord,
     getIsbeNeighbors,
-    resolveNavesTopicId,
-    getNavesTopicName,
+    resolveWorks,
     libraryLetterOf,
     type IsbeEntryRecord,
     type IsbePlaceRecord,
     type VerseRef,
     type LibraryRow,
+    type WorksResolution,
   } from "../adapters/lexicon-lookup.js";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
+  import WorkTabs, { type WorkKey } from "./WorkTabs.svelte";
   import { isbeSource } from "../lib/library/source";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import { navesModalStore } from "../stores/navesModalStore";
+  import { personModalStore } from "../stores/personModalStore";
 
   // The encyclopedia article itself, independent of what is holding it. Two
   // hosts: IsbeModal, a centered card over the reader; and a docked window,
@@ -140,8 +141,7 @@
     versePreviews = {};
     visitedRefs = new Set();
     articleHtml = "";
-    dictCheckedFor = "";
-    navesCheckedFor = "";
+    worksCheckedFor = "";
     rememberedId = null;
     destroyMap();
 
@@ -322,59 +322,38 @@
   }
 
   // --- Dictionary bridge -------------------------------------------------
-  // Offer a jump to the plain dictionary for this term, but only when the
-  // dictionary actually has definitions for it (kept in sync as the entry loads).
-  let dictWord = "";
-  let hasDictionary = false;
-  let dictCheckedFor = "";
-
-  // "HEBREWS, EPISTLE TO THE" -> "hebrews"; "Hebrew (1)" -> "hebrew".
-  function dictTermFor(name: string): string {
-    return (name || "").split(/[;,(]/)[0].trim().split(/\s+/)[0].toLowerCase();
-  }
-
-  async function checkDictionary(name: string) {
-    const term = dictTermFor(name);
-    if (dictCheckedFor === term) return;
-    dictCheckedFor = term;
-    dictWord = term;
-    hasDictionary = false;
-    if (!term) return;
-    try {
-      const e = await lookupEnglishWord(term);
-      hasDictionary = !!(e && (e.modern?.length || e.historic?.length || e.wordset?.length));
-    } catch {
-      hasDictionary = false;
-    }
-  }
-
-  $: if (!loading && title) checkDictionary(title);
-
-  // --- Topical bridge ----------------------------------------------------
+  // --- The other three works ---------------------------------------------
+  // One resolver answers all of them at once and hands back ids rather than
+  // booleans, so a control that lights up is guaranteed to open something.
   // Where the encyclopedia explains what a thing is, Nave's says where
-  // Scripture speaks about it — offered whenever there is a topic under the
-  // same name, and silent when the Encyclotopical pack isn't installed.
-  let navesTopicId: number | null = null;
-  let navesName = "";
-  let navesCheckedFor = "";
+  // Scripture speaks about it; the dictionary gives the plain sense of the
+  // word. A pack that isn't installed simply contributes nothing.
+  let works: WorksResolution | null = null;
+  let worksCheckedFor = "";
 
-  async function checkTopical(name: string) {
-    const term = (name || "").trim().toLowerCase();
-    if (navesCheckedFor === term) return;
-    navesCheckedFor = term;
-    navesTopicId = null;
-    if (!term) return;
+  async function checkWorks(name: string) {
+    const key = name.trim().toLowerCase();
+    if (worksCheckedFor === key) return;
+    worksCheckedFor = key;
+    works = null;
+    if (!key) return;
     try {
-      const id = await resolveNavesTopicId(name);
-      if (navesCheckedFor !== term) return;
-      navesTopicId = id;
-      navesName = id != null ? ((await getNavesTopicName(id)) ?? name) : "";
+      const found = await resolveWorks(name);
+      // Guard a slower lookup landing after you've moved on.
+      if (worksCheckedFor !== key) return;
+      works = found;
     } catch {
-      navesTopicId = null;
+      works = null;
     }
   }
 
-  $: if (!loading && title) checkTopical(title);
+  $: if (!loading && title) checkWorks(title);
+
+  // "HEBREWS, EPISTLE TO THE" -> "hebrews" — the dictionary files single words,
+  // and resolveWorks hands back the term it actually used so opening matches.
+  $: dictWord = works?.dict ? (works.term ?? "") : "";
+  $: navesTopicId = works?.topic?.id ?? null;
+  $: navesName = works?.topic?.name ?? "";
 
   function openTopical() {
     if (navesTopicId == null) return;
@@ -385,6 +364,7 @@
 
   function openDictionary() {
     const term = dictWord;
+    if (!term) return;
     // Docked, the article stays put — only the modal has to get out of the way.
     if (!docked) close();
     lexicalModalStore.open({
@@ -393,6 +373,34 @@
       morphologyData: null,
       lexicalEntries: null,
     });
+  }
+
+  function openPeople() {
+    const found = works?.person;
+    if (!found) return;
+    if (!docked) close();
+    personModalStore.open({
+      lookup: found,
+      primaryName: found.person.displayTitle || found.person.name,
+      clickedWord: title,
+    });
+  }
+
+  /**
+   * The work tabs. Over the index these move you between indexes rather than
+   * between views of a subject, since there is no subject — so each sibling
+   * opens with nothing loaded, which is how they land on their own contents.
+   */
+  function selectWork(work: WorkKey) {
+    if (showContents) {
+      if (!docked) close();
+      if (work === "topical") navesModalStore.open({ topicId: null, primaryName: "" });
+      else if (work === "people") personModalStore.open({});
+      return;
+    }
+    if (work === "dictionary") openDictionary();
+    else if (work === "topical") openTopical();
+    else if (work === "people") openPeople();
   }
 
   $: hasArticle = !!entry && !!entry.bodyHtml;
@@ -963,6 +971,7 @@
 </script>
 
 <div class="isbe-content" class:docked>
+  <WorkTabs {works} current="encyclopedia" onIndex={showContents} onSelect={selectWork} />
   <div class="isbe-header">
     <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
     <div class="head-text">
@@ -974,14 +983,6 @@
       {/if}
     </div>
     <div class="head-actions">
-      {#if !showContents}
-        {#if navesTopicId != null}
-          <button class="bridge-btn" on:click={openTopical}>Topical</button>
-        {/if}
-        {#if hasDictionary}
-          <button class="bridge-btn" on:click={openDictionary}>Dictionary</button>
-        {/if}
-      {/if}
       {#if onPopOut}
         <button
           class="pop-btn"
@@ -1228,20 +1229,6 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
-  }
-  .bridge-btn {
-    background: var(--surface-2, rgba(255, 255, 255, 0.06));
-    border: 1px solid var(--border-color, #333);
-    color: var(--color-primary, #4a90e2);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 12px;
-    font-family: inherit;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .bridge-btn:hover {
-    border-color: var(--color-primary, #4a90e2);
   }
   .pop-btn {
     background: none;

@@ -3,6 +3,7 @@
   import LexicalModal from "./components/LexicalModal.svelte";
   import IsbeModal from "./components/IsbeModal.svelte";
   import NavesModal from "./components/NavesModal.svelte";
+  import PersonModal from "./components/PersonModal.svelte";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
@@ -285,6 +286,7 @@
     <!-- Shared ISBE encyclopedia / place modal -->
     <IsbeModal />
     <NavesModal />
+    <PersonModal />
 
     <!-- Shared Reading Plan Modal -->
     <ReadingPlanModal bind:isOpen={showReadingPlanModal} />
