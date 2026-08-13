@@ -3,6 +3,12 @@
   import { get } from "svelte/store";
   import NavigationBar from "./NavigationBar.svelte";
   import SelectionToast from "./SelectionToast.svelte";
+  import RadialSelectionMenu from "./RadialSelectionMenu.svelte";
+  import {
+    outerRadius as radialOuterRadius,
+    radialItemCount,
+    type RadialItemOpts,
+  } from "../lib/radialMenu";
   import NotePopup from "./NotePopup.svelte";
   import { userProfileStore } from "../stores/userProfileStore";
   import { profileModalStore } from "../stores/profileModalStore";
@@ -508,6 +514,13 @@
   let toastPlaced = false;
   /** The lines the toast must keep clear of. Kept so a scroll can re-place it. */
   let toastAnchor: ToastAnchor | null = null;
+  /** Which selection menu the user picked. See settings.selectionMenu. */
+  let selectionMenu: "classic" | "radial" = "radial";
+  /** Is *this* opening a ring? Fixed at open time so it can't change mid-use. */
+  let radialActive = false;
+  let radialCX = 0;
+  let radialCY = 0;
+  let radialLine = 32;
   let selectedText = "";
   /** Clicked word resolved to a biblical character — relabels Define → Bio. */
   let selectedIsPerson = false;
@@ -629,6 +642,7 @@
     showArt = settings.showArt !== false; // default true
     showRedLetter = settings.showRedLetter !== false; // default true
     showPlaceMarkers = settings.showPlaceMarkers === true; // default false
+    selectionMenu = settings.selectionMenu === "classic" ? "classic" : "radial";
     if (showPlaceMarkers && !placePhrasesLoaded) {
       void loadPlacePhrases().then(() => { placePhrasesLoaded = true; });
     }
@@ -3672,6 +3686,11 @@
     bottom: number;
     topCenterX: number;
     bottomCenterX: number;
+    /** Centre of the first line — where the radial menu's hole goes. */
+    centerX: number;
+    centerY: number;
+    /** The first line's box height. Sizes the radial menu's gaps. */
+    lineHeight: number;
   }
 
   /** Gap between the toast and the selection, and between it and the screen edge. */
@@ -3705,16 +3724,35 @@
         bottom: last.bottom,
         topCenterX: first.left + first.width / 2,
         bottomCenterX: last.left + last.width / 2,
+        centerX: first.left + first.width / 2,
+        centerY: first.top + first.height / 2,
+        lineHeight: Math.max(first.height, cssLineHeight()),
       };
     }
 
     if (fallbackX === undefined || fallbackY === undefined) return null;
+    const line = Math.max(24, cssLineHeight());
     return {
-      top: fallbackY - 12,
-      bottom: fallbackY + 12,
+      top: fallbackY - line / 2,
+      bottom: fallbackY + line / 2,
       topCenterX: fallbackX,
       bottomCenterX: fallbackX,
+      centerX: fallbackX,
+      centerY: fallbackY,
+      lineHeight: line,
     };
+  }
+
+  /**
+   * The reader's line box in px. A selection rect only spans the glyphs, not the
+   * leading around them, so the radial menu asks for the real line height —
+   * that is what makes its gaps open and close with the font-size slider.
+   */
+  function cssLineHeight(): number {
+    const el = readerElement?.querySelector<HTMLElement>(".verse-text");
+    if (!el) return 0;
+    const lh = parseFloat(getComputedStyle(el).lineHeight);
+    return Number.isFinite(lh) ? lh : 0;
   }
 
   /**
@@ -3746,6 +3784,11 @@
    * can hold it does it clamp to the roomier side.
    */
   function positionToast(anchor: ToastAnchor) {
+    if (radialActive) {
+      positionRadial(anchor);
+      return;
+    }
+
     const { w, h } = toastSize;
 
     // Top limit is the reader's own top edge, so the toast never rides up over
@@ -3783,8 +3826,97 @@
     toastPlaced = true;
   }
 
+  // --- Radial menu placement ---------------------------------------------
+
+  /** The inputs that decide which buttons the ring shows, and so how many. */
+  function radialOpts(): RadialItemOpts {
+    return {
+      mode: selectionMode,
+      wordCount: selectedWordCount,
+      isPlace: !selectedIsPerson && selectedIsbeKind === "place",
+      isPerson: selectedIsPerson,
+      moreInfo: !selectedIsPerson && selectedIsbeKind !== null,
+      extendArmed,
+    };
+  }
+
+  function radialOuter(anchor: ToastAnchor): number {
+    return radialOuterRadius(anchor.lineHeight, radialItemCount(radialOpts()));
+  }
+
+  /** Is there room for the ring at all? The reader can be a narrow docked pane. */
+  function radialFits(anchor: ToastAnchor): boolean {
+    if (!readerElement) return false;
+    const b = readerElement.getBoundingClientRect();
+    const need = radialOuter(anchor) * 2 + TOAST_MARGIN * 2;
+    return b.width >= need && b.height >= need;
+  }
+
+  /**
+   * Centre the ring on the word.
+   *
+   * Horizontally it slides to fit — that costs nothing, because the two gaps run
+   * along the word's own line, so a word pushed off-centre simply sits in the
+   * left or right opening and stays readable. Clamped against the reader, not
+   * the window: the reader can be one pane of several.
+   *
+   * Vertically there is no clamp at all. Moving the ring off the word's line
+   * would put an arc over the word, which is the one thing it exists to avoid —
+   * showToastAt nudges the page instead, before we ever get here.
+   */
+  function positionRadial(anchor: ToastAnchor) {
+    const outer = radialOuter(anchor);
+    const b = readerElement?.getBoundingClientRect();
+    const left = (b?.left ?? 0) + TOAST_MARGIN;
+    const right = (b?.right ?? window.innerWidth) - TOAST_MARGIN;
+
+    radialLine = anchor.lineHeight;
+    radialCX =
+      right - left >= outer * 2
+        ? Math.min(Math.max(anchor.centerX, left + outer), right - outer)
+        : (left + right) / 2;
+    radialCY = anchor.centerY;
+    toastPlaced = true;
+  }
+
+  /**
+   * Scroll the reader just enough that a full ring fits above and below the word,
+   * and report how far the content moved so the caller can place against where
+   * the word is about to be. Text starts about 80px from the top of the screen
+   * and the ring wants ~125px, so the first line or two of a screen need a nudge
+   * of around 50px. Returns 0 when there is already room, or when the scroller
+   * has nothing left to give.
+   */
+  function nudgeRingIntoView(anchor: ToastAnchor): number {
+    if (!readerElement) return 0;
+
+    const outer = radialOuter(anchor);
+    const b = readerElement.getBoundingClientRect();
+    const short = b.top + TOAST_MARGIN - (anchor.centerY - outer);
+    const over = anchor.centerY + outer - (b.bottom - TOAST_MARGIN);
+
+    let shift = short > 0 ? short : over > 0 ? -over : 0;
+    if (shift === 0) return 0;
+
+    // Scrolling up moves the content down. Take only what the scroller has.
+    const room =
+      shift > 0
+        ? readerElement.scrollTop
+        : readerElement.scrollHeight - readerElement.clientHeight - readerElement.scrollTop;
+    shift = Math.sign(shift) * Math.min(Math.abs(shift), Math.max(0, room));
+    if (shift === 0) return 0;
+
+    readerElement.scrollBy({ top: -shift, behavior: "smooth" });
+    return shift;
+  }
+
   /** Measure, then place. Used when the toast opens or its contents change. */
   async function placeToast(anchor: ToastAnchor) {
+    // The ring derives its own size, so there is nothing to measure.
+    if (radialActive) {
+      positionToast(anchor);
+      return;
+    }
     await measureToast();
     if (!showToast) return;
     positionToast(anchor);
@@ -3833,6 +3965,30 @@
     toastAnchor = selectionAnchor(x, y);
     toastPlaced = false;
 
+    // Clear the previous word's labels up front. The lookups below refill them,
+    // but the ring counts its buttons from these to size itself, and it must not
+    // do that against the word you tapped a moment ago.
+    selectedIsPerson = false;
+    selectedIsbeKind = null;
+
+    // Decided once per opening and held for the life of the menu, so a label
+    // resolving later can't swap the whole UI out from under a finger.
+    radialActive = selectionMenu === "radial" && !!toastAnchor && radialFits(toastAnchor);
+
+    if (radialActive && toastAnchor) {
+      // Make room first, then place against where the word is about to be — the
+      // scroll is smooth, and waiting for it would open the ring half off-screen.
+      const shift = nudgeRingIntoView(toastAnchor);
+      if (shift !== 0) {
+        toastAnchor = {
+          ...toastAnchor,
+          top: toastAnchor.top + shift,
+          bottom: toastAnchor.bottom + shift,
+          centerY: toastAnchor.centerY + shift,
+        };
+      }
+    }
+
     showToast = true;
     justOpenedToast = true;
     toastPointerSeq = pointerSeq;
@@ -3840,11 +3996,9 @@
     if (toastAnchor) void placeToast(toastAnchor);
 
     // Resolve "is this a character?" in the background so the Define button can
-    // relabel itself to Bio. Starts false so the toast never flashes the wrong
-    // label, and the token guard drops a stale answer if you click another word
-    // while the lookup is in flight.
-    selectedIsPerson = false;
-    selectedIsbeKind = null;
+    // relabel itself to Bio. Both flags were cleared above, so the menu never
+    // flashes the wrong label, and the token guard drops a stale answer if you
+    // click another word while the lookup is in flight.
     const token = ++personLabelToken;
     const word = selectedText;
     const ctx = selectedContext;
@@ -4612,21 +4766,39 @@
 </script>
 
 {#if showToast}
-  <SelectionToast
-    bind:this={toastComp}
-    placed={toastPlaced}
-    x={toastX}
-    y={toastY}
-    {selectedText}
-    isPlace={!selectedIsPerson && selectedIsbeKind === "place"}
-    isPerson={selectedIsPerson}
-    moreInfo={!selectedIsPerson && selectedIsbeKind !== null}
-    mode={selectionMode}
-    wordCount={selectedWordCount}
-    {extendArmed}
-    on:action={handleToastAction}
-    on:modeChange={handleModeChange}
-  />
+  {#if radialActive}
+    <RadialSelectionMenu
+      cx={radialCX}
+      cy={radialCY}
+      lineHeight={radialLine}
+      placed={toastPlaced}
+      {selectedText}
+      isPlace={!selectedIsPerson && selectedIsbeKind === "place"}
+      isPerson={selectedIsPerson}
+      moreInfo={!selectedIsPerson && selectedIsbeKind !== null}
+      mode={selectionMode}
+      wordCount={selectedWordCount}
+      {extendArmed}
+      on:action={handleToastAction}
+      on:modeChange={handleModeChange}
+    />
+  {:else}
+    <SelectionToast
+      bind:this={toastComp}
+      placed={toastPlaced}
+      x={toastX}
+      y={toastY}
+      {selectedText}
+      isPlace={!selectedIsPerson && selectedIsbeKind === "place"}
+      isPerson={selectedIsPerson}
+      moreInfo={!selectedIsPerson && selectedIsbeKind !== null}
+      mode={selectionMode}
+      wordCount={selectedWordCount}
+      {extendArmed}
+      on:action={handleToastAction}
+      on:modeChange={handleModeChange}
+    />
+  {/if}
 {/if}
 
 {#if notePopupOpen}

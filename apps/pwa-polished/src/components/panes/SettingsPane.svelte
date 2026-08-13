@@ -75,6 +75,7 @@
   let themedTitles: boolean = true;
   let showArt: boolean = true;
   let showPlaceMarkers: boolean = false;
+  let selectionMenu: 'classic' | 'radial' = 'radial';
   let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const TIMEZONE_OPTIONS: { label: string; value: string }[] = [
@@ -135,6 +136,7 @@
       themedTitles,
       showArt,
       showPlaceMarkers,
+      selectionMenu,
       timezone: timezone || undefined,
       autoCheckUpdates,
       customTheme: currentCustom(),
@@ -238,6 +240,7 @@
     themedTitles = settings.themedTitles !== false;
     showArt = settings.showArt !== false;
     showPlaceMarkers = settings.showPlaceMarkers === true;
+    selectionMenu = settings.selectionMenu === 'classic' ? 'classic' : 'radial';
     timezone = settings.timezone || '';
     autoCheckUpdates = settings.autoCheckUpdates !== false; // default true
     const custom = getCustomThemeSettings();
@@ -432,6 +435,7 @@
     themedTitles;
     showArt;
     showPlaceMarkers;
+    selectionMenu;
     timezone;
     autoCheckUpdates;
     customFontId;
@@ -646,6 +650,16 @@
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={showPlaceMarkers} />
         <span class="label-text">Underline multi-word place names (needs Encyclopedia pack)</span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Menu when you tap a word</span>
+        <select bind:value={selectionMenu}>
+          <option value="radial">Ring around the word</option>
+          <option value="classic">Classic popup</option>
+        </select>
       </label>
     </div>
 
