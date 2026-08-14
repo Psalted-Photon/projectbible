@@ -646,6 +646,9 @@
 
   .person-header {
     display: flex;
+    /* Wraps so a narrow pane drops the title onto its own line rather than
+       crushing it into a column of single letters — see IsbeContent. */
+    flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
@@ -654,14 +657,16 @@
     flex-shrink: 0;
   }
   .head-text {
-    flex: 1;
+    flex: 1 1 180px;
     min-width: 0;
   }
   .head-text h2 {
     margin: 0;
     font-size: 20px;
     line-height: 1.15;
-    overflow-wrap: anywhere;
+    /* Only split a word that genuinely cannot fit; `anywhere` broke mid-word as
+       soon as the column got tight, stacking long names one letter per line. */
+    overflow-wrap: break-word;
   }
   .head-text .sub {
     margin-top: 4px;

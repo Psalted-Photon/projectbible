@@ -159,7 +159,33 @@ bigger (`padding:5px 11px; font-size:13px` vs `4px 10px; 12px`).
 
 ---
 
-### [ ] 2. Long titles render vertically instead of left-to-right
+### [x] 2. Long titles render vertically instead of left-to-right
+
+**Fixed 2026-08-13**, in two parts.
+
+Most of it went with the pills. They were what squeezed the title, and removing them
+for the work tabs gave the title column about 556px in a 720px card — enough that
+even the longest name in the encyclopedia, "Stranger And Sojourner (In The Apocrypha
+And The New Testament)" at 63 characters, wraps between words and reads left to
+right.
+
+What remained was docked windows, which can be dragged to 10% of the viewport —
+about 140px of content, which left the title column at *negative* width. Two
+changes, in all four cards:
+
+`overflow-wrap` went from `anywhere` to `break-word`. That was the direct cause of
+letter-by-letter stacking: `anywhere` splits mid-word the moment a column gets
+tight, whereas `break-word` only splits a word that genuinely cannot fit. The
+longest single word anywhere in the encyclopedia is "Anthropomorphism" at 16
+characters, so in practice words are no longer split at all.
+
+The header rows gained `flex-wrap: wrap`, and `.head-text` went from `flex: 1` to
+`flex: 1 1 180px`. The basis makes the header wrap *before* the title is squeezed
+below a readable width, so in a narrow pane the title drops to its own line instead
+of being crushed. A pane at its 10% minimum is still tight by nature — that's a
+140px column, not a layout bug.
+
+<sub>Original diagnosis follows.</sub>
 
 Encyclopedia and Topical put the entry title on the same flex row as the
 Encyclopedia/Topical/Dictionary pills.

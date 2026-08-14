@@ -1278,6 +1278,9 @@
 
   .modal-header {
     display: flex;
+    /* Wraps so a very narrow phone drops the title onto its own line rather
+       than crushing it — see IsbeContent. */
+    flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
@@ -1289,7 +1292,7 @@
   /* Takes the slack and is allowed to shrink, so a long lemma can never push
      the bridge pills or the close button off a narrow card. */
   .head-text {
-    flex: 1;
+    flex: 1 1 180px;
     min-width: 0;
   }
 
@@ -1297,7 +1300,9 @@
     margin: 0;
     font-size: 20px;
     line-height: 1.15;
-    overflow-wrap: anywhere;
+    /* Only split a word that genuinely cannot fit; `anywhere` broke mid-word as
+       soon as the column got tight, stacking long words one letter per line. */
+    overflow-wrap: break-word;
     color: var(--text-color, #fff);
   }
 

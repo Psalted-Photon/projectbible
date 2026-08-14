@@ -1199,6 +1199,10 @@
   }
   .isbe-header {
     display: flex;
+    /* Wraps so that a pane too narrow to hold the controls and a readable title
+       side by side drops the title onto its own line, rather than crushing it
+       into a column of single letters. */
+    flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
@@ -1209,15 +1213,22 @@
   /* Takes the slack between the nav buttons and the actions, and is allowed to
      shrink — a long article title must not push the close button off a narrow
      docked window. */
+  /* A basis rather than 0, so the header wraps before the title is squeezed
+     narrower than this. It still shrinks below it once wrapped. */
   .head-text {
-    flex: 1;
+    flex: 1 1 180px;
     min-width: 0;
   }
   .head-text h2 {
     margin: 0;
     font-size: 20px;
     line-height: 1.15;
-    overflow-wrap: anywhere;
+    /* break-word, not anywhere: only split a word that genuinely cannot fit.
+       The longest single word in the encyclopedia is "Anthropomorphism" at 16
+       characters, so in practice titles now wrap between words and read left to
+       right. `anywhere` used to break mid-word the moment the column got tight,
+       which is what stacked long names one letter per line. */
+    overflow-wrap: break-word;
   }
   .head-text .sub {
     margin-top: 4px;
