@@ -466,7 +466,28 @@ The same dots pattern is duplicated in `library/RefSearchBar.svelte:3, 83, 189-2
 
 ---
 
-### [ ] 8. Clicking the `>` / `v` arrows dismisses the search results
+### [x] 8. Clicking the `>` / `v` arrows dismisses the search results
+
+**Fixed 2026-08-13.** Clicking the arrow now expands and collapses the group, and the
+results panel stays open.
+
+Two changes, at different layers, because the instance and the class of bug are
+different problems:
+
+`SearchResultsTree.svelte` — `pointer-events: none` on `.tree-caret`. A click on the
+arrow now reports the enclosing button as its target rather than an icon that is about
+to be destroyed, so the click-outside check can still resolve where it landed. It also
+makes the arrow part of the same hit area as the label, instead of a separate thing
+you can miss. Done here rather than with `stopPropagation` on the header because the
+component has three consumers — `NavigationBar`, `NotesPane` and `PowerSearchModal` —
+and only one of them had the bug.
+
+`NavigationBar.svelte` — `closeDropdowns` now bails out when the click target is no
+longer connected to the document. A detached node reports no ancestors, so every
+"is this inside?" check passes and the panel closes itself. Anything inside a dropdown
+that re-renders on click would have hit this; the guard covers the next one too.
+
+#### Original diagnosis
 
 In the navbar search results you can only expand/collapse by clicking the words.
 Clicking the chevron closes the whole results panel and you have to search again.
@@ -518,3 +539,34 @@ Three independent fixes, any one of which breaks the chain:
 `PowerSearchModal.svelte` reuses the same `SearchResultsTree` (`:19, 524-528`) but
 is immune — its `.modal-container` has `on:click|stopPropagation` (`:267`) and
 there's no document-level close handler.
+
+---
+
+### [ ] 9. The search box inside Encyclopedia / Topical / Bio won't hold focus
+
+Reported 2026-08-13. Clicking the magnifier in a library index opens the search box,
+but it doesn't stay focused long enough to type into.
+
+That box is `library/RefSearchBar.svelte`, used by `library/IndexList.svelte` — the
+same component in all three works, which matches the symptom appearing in all three.
+
+**Not yet reproduced from reading the code.** Ruled out so far, so nobody re-treads it:
+
+- Nothing steals focus. The only two `.focus()` calls anywhere near the library are
+  RefSearchBar's own, in `expand()` and `clear()`.
+- The input isn't being destroyed and recreated. It sits outside any `{#if}`; the
+  `{#if searching}` block beside it only swaps the spinner for the clear button, and
+  is a sibling, not an ancestor.
+- Not the contents list's type-to-jump. That's bound to `.rows`, not to the window,
+  and `RefSearchBar.handleKeydown` calls `stopPropagation` precisely so the list
+  behind it can't also see the keystrokes.
+- Not the modals' Escape handling. They listen on `window`, but the same
+  `stopPropagation` stops keystrokes reaching them.
+
+Worth capturing next time it happens, since it would narrow this quickly:
+
+- does the box collapse back to its icon, or stay open but lose the caret?
+- does it need a query long enough to run a search (2+ characters), or does it happen
+  before typing anything?
+- does it happen in a docked window as well as in the centred card?
+- does it happen on the very first open, or only after a previous search?

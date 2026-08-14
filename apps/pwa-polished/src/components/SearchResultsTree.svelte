@@ -160,6 +160,13 @@
     align-items: center;
     flex-shrink: 0;
     color: #888;
+    /* Transparent to clicks on purpose. Toggling swaps CaretDown for CaretRight,
+       so the icon you clicked is destroyed in the flush that follows — and a
+       detached node has no ancestors, which made the navbar's click-outside
+       handler read the click as landing outside the results panel and close it.
+       Reporting the enclosing button as the target keeps it resolvable, and
+       makes the arrow part of the same hit area as the label. */
+    pointer-events: none;
   }
 
   /* The label sizes to its text and the count sits right beside it, with the

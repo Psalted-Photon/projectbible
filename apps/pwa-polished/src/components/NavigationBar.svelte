@@ -460,6 +460,11 @@
 
   function closeDropdowns(event: MouseEvent) {
     const target = event.target as HTMLElement;
+    // Something inside a dropdown that re-renders on click destroys the element
+    // you clicked before this runs, and a detached node reports no ancestors —
+    // so every check below would pass and close the very panel the click landed
+    // in. It can't be asked where it was, so leave the dropdowns alone.
+    if (!target?.isConnected) return;
     if (
       !target.closest(".nav-pill") &&
       !target.closest(".dropdown-menu") &&
