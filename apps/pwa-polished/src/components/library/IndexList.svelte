@@ -5,6 +5,7 @@
   import { navigationStore } from "../../stores/navigationStore";
   import { libraryPrefsStore, isStarred, type LibraryMark } from "../../stores/libraryPrefsStore";
   import { libraryLetterOf, getIsbePlaceByEntryId } from "../../adapters/lexicon-lookup.js";
+  import { isTextEntry } from "../../lib/isTextEntry";
   import type { LibraryBadge, LibrarySourceAdapter, LibraryRow } from "../../lib/library/source";
   import { isbeModalStore } from "../../stores/isbeModalStore";
   import { navesModalStore } from "../../stores/navesModalStore";
@@ -202,6 +203,11 @@
   // browser and app shortcuts still work.
   function handleKeydown(e: KeyboardEvent) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Letters typed into a field are text, not list navigation. The search box
+    // stops these before they get here, but not every field that might sit
+    // inside the list will remember to, and preventDefault below would silently
+    // eat the keystroke.
+    if (isTextEntry(e.target)) return;
     if (e.key.length !== 1 || !/[a-z0-9]/i.test(e.key)) return;
     e.preventDefault();
 

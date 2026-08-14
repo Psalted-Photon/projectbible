@@ -18,6 +18,7 @@
   import { subscribeToHighlightRemoteChanges } from "../adapters/SyncedHighlightAdapter";
   import { subscribeToUserDataRemoteChanges } from "../adapters/SyncedUserDataStore";
   import { applyChapterHighlights } from "../lib/highlightRenderer";
+  import { isTextEntry } from "../lib/isTextEntry";
   import {
     resolveWordAt,
     comparePos,
@@ -2741,6 +2742,11 @@
     const target = e.target as HTMLElement | null;
     if (!target) return;
 
+    // Anywhere the user types. Dismissing runs clearHighlights, which clears
+    // the document selection — that takes the caret with it just as the tap
+    // that focused the field lands.
+    if (isTextEntry(target)) return;
+
     // The toast's own buttons are the other half of "use it or dismiss it".
     if (target.closest(".toast")) return;
 
@@ -4539,6 +4545,11 @@
 
   function handleClickOutside(e: MouseEvent) {
     const target = e.target as HTMLElement;
+
+    // Anywhere the user types — see handleToastGuard. This runs on every click
+    // in the app, so without it clicking into any text field anywhere clears
+    // the document selection and the caret goes with it.
+    if (isTextEntry(target)) return;
 
     // Don't close if dragging
     if (isDragging) return;

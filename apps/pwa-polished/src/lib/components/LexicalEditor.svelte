@@ -11,6 +11,7 @@
   import { CaretUp, Palette } from 'phosphor-svelte';
   import EditorThemePanel from './EditorThemePanel.svelte';
   import { editorThemeVars } from '../editorTheme';
+  import { isTextEntry } from '../isTextEntry';
   import {
     getEditorTheme, updateEditorTheme, getEditorBarHidden, setEditorBarHidden,
     DEFAULT_EDITOR_THEME, type EditorSurface, type EditorThemeSettings,
@@ -172,7 +173,15 @@
         );
         const root = editor.getRootElement();
         if (root && document.activeElement !== root) {
-          setTimeout(() => editor.focus(), 50);
+          setTimeout(() => {
+            // Re-check on the way in, not just on the way out. Loading content
+            // is often the same moment a title or search field is being clicked
+            // — 50ms later the user is mid-word, and grabbing focus here takes
+            // the caret out from under them.
+            const active = document.activeElement;
+            if (active && active !== root && isTextEntry(active)) return;
+            editor.focus();
+          }, 50);
         }
       }
     );

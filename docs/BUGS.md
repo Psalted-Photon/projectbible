@@ -203,7 +203,30 @@ row above the pills.
 
 ---
 
-### [ ] 3. Encyclopedia Verses tab is there sometimes, missing other times
+### [~] 3. Encyclopedia Verses tab is there sometimes, missing other times
+
+**Closed by decision 2026-08-13 — not a bug, nothing broken.** Investigated, then
+dropped: the tab is correctly data-gated and entries without verses genuinely have
+none to show.
+
+**Only places have verses.** The ISBE pack has exactly one verse table,
+`place_verses`. Of 9,380 entries, 958 are places and get a tab; the other 8,422 have
+no verse data at all. "Euphrates River · 44 verses" is a place, which is why it has a
+list.
+
+If it's ever wanted as a *feature*: 6,917 entries cite scripture inside the article
+text, already marked up by the pack builder as
+`<a class="isbe-scripture" data-osis="Exod.6.20">` — 6,049 of them non-place entries.
+Harvesting those would take coverage from 958 entries to about 6,917, and would be the
+encyclopedia's own citations rather than anything borrowed from Topical or Bio.
+Topical already works exactly this way: `naves_verses` isn't separate data, it's the
+OSIS refs cited in Nave's outline points, expanded at pack build time. Doing it at
+read time from the already-loaded article HTML would need no pack rebuild and no
+release swap. The citation data is clean — two shapes only (`Book.Chapter.Verse` and a
+same-chapter range), exactly the 66 canonical book codes, median 4 refs per entry, and
+ranges should stay expanded rather than listed whole (largest is `Ps.119.1-176`).
+
+#### Original diagnosis
 
 Not a regression — the tab is data-gated and always has been.
 
@@ -542,7 +565,62 @@ there's no document-level close handler.
 
 ---
 
-### [ ] 9. The search box inside Encyclopedia / Topical / Bio won't hold focus
+### [x] 9. The search box inside Encyclopedia / Topical / Bio won't hold focus
+
+**Fixed 2026-08-13**, and the whole class of it with it.
+
+This was never really about that one search box. The report that cracked it was
+"every time you add a new place to type we hit this snag" — and the codebase already
+said so, in a comment on `NotesPane.svelte`:
+
+> EdgeGestureDetector watches mousedown and touchstart on the whole window to spot
+> edge swipes, and only excuses rich-text areas — a plain input loses focus to it
+> mid-tap. **Every input in the app that works stops these first.**
+
+That's the bug in one sentence. Several handlers listen on `window` or `document` for
+every press and keystroke in the app, and each excused rich text but not ordinary
+fields. So every new input arrived broken and only worked once someone bolted a
+`stopPropagation` shield onto it by hand — `NotesPane`, `JournalNavigationBar` and
+`MapPane` all carry one. Nothing reminded you, so it recurred every time.
+
+**The fix inverts that.** `lib/isTextEntry.ts` is one shared test —
+`closest('input, textarea, select, [contenteditable="true"]')` — and the global
+handlers now excuse text entry themselves. A new field works the moment it is added.
+
+Four handlers were taking focus or eating keystrokes, none of them checking:
+
+- `EdgeGestureDetector.svelte` — mousedown/mousemove/mouseup and touchstart/move/end
+  on `window`, mounted permanently. It excused `[contenteditable="true"]`, `.panel`
+  and `.verse-text` but no plain field. Its touchmove listener is `{passive:false}`
+  and calls `preventDefault()`, which on a phone cancels the tap→focus→keyboard
+  sequence outright. All four handlers now test `isTextEntry` first.
+- `BibleReader.handleClickOutside` — a document click handler that runs on *every*
+  click and calls `dismissSelection()` → `clearHighlights()` →
+  `getSelection().removeAllRanges()`. That clears the caret just as the tap that
+  focused the field lands. Now returns early for text entry.
+- `BibleReader.handleToastGuard` — document `pointerdown` in the **capture** phase, so
+  the earliest handler in the app on any press; same `removeAllRanges()` path whenever
+  a selection toast happens to be up. That hidden state is what made this feel
+  intermittent. Same guard.
+- `LexicalEditor.setContent` — `setTimeout(() => editor.focus(), 50)` whose only check
+  ran *before* the timeout. Any note or journal load yanked focus 50ms later, which is
+  the "I got one or two characters in" symptom. It now re-checks on the way in.
+
+Plus `IndexList`'s type-to-jump, which `preventDefault()`s every bare letter. The
+search box shielded itself from it already; it now checks centrally too.
+
+**Why it looked intermittent.** `.index-bar` is `justify-content: space-between`, so
+the search bar is pinned to the card's right edge. With a 16px backdrop pad and a
+`min(720px, 100%)` card, on a phone the magnifier sits roughly 26–50px from the right
+of the screen — inside the detector's 40px lane. On a wide desktop the centred card is
+nowhere near an edge. Docked left or right, it is always in the lane.
+
+The existing per-field `stopPropagation` shields in `NotesPane`, `JournalNavigationBar`
+and `MapPane` are now belt-and-braces. They were left in place because they're
+harmless, but **new fields should not copy them** — that's the cargo cult this fix
+exists to end.
+
+#### Original diagnosis
 
 Reported 2026-08-13. Clicking the magnifier in a library index opens the search box,
 but it doesn't stay focused long enough to type into.
@@ -570,3 +648,31 @@ Worth capturing next time it happens, since it would narrow this quickly:
   before typing anything?
 - does it happen in a docked window as well as in the centred card?
 - does it happen on the very first open, or only after a previous search?
+
+---
+
+### [ ] 10. `navigationStore` notifies every subscriber even when nothing changed
+
+Found 2026-08-13 while tracking down #9. Not user-visible; pure wasted work.
+
+`stores/navigationStore.ts` — `setScrollPosition` tries to suppress a pointless
+notification by returning the *same* state object when book and chapter are unchanged:
+
+```
+setScrollPosition: (book, chapter) => {
+  update(state => {
+    if (state.book === book && state.chapter === chapter) return state;
+```
+
+That doesn't work. Svelte's `safe_not_equal` treats any object as changed, identical or
+not, so **every subscriber is notified anyway**.
+
+`BibleReader` calls this from its `IntersectionObserver` on a 150ms debounce, so while
+the reader is scrolling — TTS auto-scroll included — everything subscribed to
+`$navigationStore` re-renders roughly seven times a second. `IndexList` alone
+re-renders its chapter chip and section head that often whenever the reader moves
+behind it, and there are a couple of dozen other subscribers.
+
+Fix direction: either compare before calling `update` and skip the write entirely, or
+give the store a custom equality check. Worth confirming the same pattern isn't
+repeated in the other stores while in there.

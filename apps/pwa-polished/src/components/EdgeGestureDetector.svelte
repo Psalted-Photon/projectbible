@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { windowStore, type WindowEdge } from "../lib/stores/windowStore";
   import { pendingCloseEdge } from "../stores/paneStore";
+  import { isTextEntry } from "../lib/isTextEntry";
 
   $: closingEdge = $pendingCloseEdge;
 
@@ -35,7 +36,7 @@
    * A panel's own content reaches the screen edge — the library's alphabet rail
    * sits right in the swipe lane on a left-docked panel — so a drag there is
    * the user working that panel, not asking for another one. Same shape as the
-   * contenteditable guard below.
+   * text-entry guard below.
    */
   function insidePanel(target: EventTarget | null): boolean {
     return !!(target as HTMLElement | null)?.closest?.('.panel');
@@ -85,10 +86,13 @@
   function handleTouchStart(e: TouchEvent) {
     if (atLimit) return; // Don't allow new windows at limit
 
-    // Don't interfere with contenteditable elements (e.g., journal editor)
+    // Anywhere the user types is off limits — a search box pinned to the right
+    // of a card sits inside the swipe lane on a phone, and arming a gesture on
+    // it costs the tap its focus. Covers contenteditable too, so the journal
+    // editor is excused by the same test.
     const target = e.target as HTMLElement;
-    if (target.closest('[contenteditable="true"]')) {
-      console.log('⛔ TOUCH START blocked - touching contenteditable');
+    if (isTextEntry(target)) {
+      console.log('⛔ TOUCH START blocked - touching a text field');
       return;
     }
     if (insidePanel(target)) {
@@ -140,10 +144,10 @@
       return; // Ignore mouse events when touch is active
     }
 
-    // Don't interfere with contenteditable elements (e.g., journal editor)
+    // Anywhere the user types is off limits — see handleTouchStart.
     const target = e.target as HTMLElement;
-    if (target.closest('[contenteditable="true"]')) {
-      console.log('⛔ MOUSE DOWN blocked - clicking in contenteditable');
+    if (isTextEntry(target)) {
+      console.log('⛔ MOUSE DOWN blocked - clicking in a text field');
       e.stopPropagation();
       return;
     }
@@ -252,9 +256,9 @@
   function handleMouseMove(e: MouseEvent) {
     if (!isDragging) return;
     
-    // Don't interfere with contenteditable elements
+    // Don't interfere with anywhere the user types
     const target = e.target as HTMLElement;
-    if (target.closest('[contenteditable="true"]')) {
+    if (isTextEntry(target)) {
       return;
     }
 
@@ -341,10 +345,10 @@
   function handleMouseUp(e: MouseEvent) {
     console.log('🔵 MOUSE UP called:', { isDragging, edgePosition, usingTouch });
     
-    // Don't interfere with contenteditable elements (e.g., journal editor)
+    // Don't interfere with anywhere the user types
     const target = e.target as HTMLElement;
-    if (target.closest('[contenteditable="true"]')) {
-      console.log('⛔ MOUSE UP blocked - clicking in contenteditable');
+    if (isTextEntry(target)) {
+      console.log('⛔ MOUSE UP blocked - clicking in a text field');
       e.stopPropagation();
       return;
     }
