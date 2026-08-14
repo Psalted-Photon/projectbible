@@ -233,6 +233,15 @@
     navigateToVerse(target.book, target.chapter, target.verse ?? 1);
   }
 
+  /**
+   * The colour of the book a chip points at — the same palette the Verses tab
+   * and the nav bar's reference dropdown use. A ref we can't read falls through
+   * to getBookColor's own neutral grey.
+   */
+  function refColor(osis: string): string {
+    return getBookColor(parseOsisRef(osis)?.book ?? "");
+  }
+
   function openTopic(id: number, name: string) {
     showContents = false;
     if (windowId) {
@@ -518,7 +527,7 @@
               {#if section.point.refs.length || section.point.links.length}
                 <div class="chips indent">
                   {#each section.point.refs as r}
-                    <button class="ref-chip" on:click={() => openRef(r.osis)}>{r.label}</button>
+                    <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
                   {/each}
                   {#each section.point.links as l}
                     {#if l.topicId != null}
@@ -537,7 +546,7 @@
                       {#if child.refs.length || child.links.length}
                         <div class="chips">
                           {#each child.refs as r}
-                            <button class="ref-chip" on:click={() => openRef(r.osis)}>{r.label}</button>
+                            <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
                           {/each}
                           {#each child.links as l}
                             {#if l.topicId != null}
@@ -560,7 +569,7 @@
                 {#if section.point.refs.length || section.point.links.length}
                   <div class="chips">
                     {#each section.point.refs as r}
-                      <button class="ref-chip" on:click={() => openRef(r.osis)}>{r.label}</button>
+                      <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
                     {/each}
                     {#each section.point.links as l}
                       {#if l.topicId != null}
@@ -856,16 +865,21 @@
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 4px;
-    color: #8bc34a;
+    /* Scripture chips carry an inline colour for the book they point at, the
+       same way the Verses tab colours its rows. This is only the fallback for a
+       ref whose book we couldn't read, and matches getBookColor's own. */
+    color: #8a8f98;
     font-family: inherit;
     font-size: 11.5px;
     padding: 2px 7px;
     cursor: pointer;
     white-space: nowrap;
   }
+  /* Follows whichever book colour the chip is wearing. */
   .ref-chip:hover {
-    background: rgba(139, 195, 74, 0.15);
-    border-color: #8bc34a;
+    background: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, currentColor 15%, transparent);
+    border-color: currentColor;
   }
   .link-chip {
     color: var(--color-primary, #4a90e2);

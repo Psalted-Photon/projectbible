@@ -248,7 +248,19 @@ own verse list. There is no master list to be shared between them. Maybe it is w
 
 ---
 
-### [ ] 4. Topical outline verse pills are all green, ignoring app theme colors
+### [x] 4. Topical outline verse pills are all green, ignoring app theme colors
+
+**Fixed 2026-08-13.** The scripture links on the Topical outline tab are now coloured
+by book, using the same colours the Verses tab and the nav bar's reference dropdown
+already use. Hovering one highlights it in that book's colour too.
+
+Links that point at another topic rather than a verse are unchanged — they aren't
+scripture, and they were already the right colour.
+
+The chips already carried the reference they point at, so the book was there to read;
+nothing new had to be looked up.
+
+#### Original diagnosis
 
 `NavesContent.svelte:831-853` — `.ref-chip` hardcodes `color: #8bc34a` (and the
 hover state hardcodes the same green). The rule immediately after it re-tints
