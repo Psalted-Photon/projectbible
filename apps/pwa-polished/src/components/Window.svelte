@@ -200,7 +200,7 @@
   // The three reference works put an alphabet rail and per-row buttons hard
   // against the panel's inner edge — the same strip the resize grip covers.
   // They get an inset; nothing else needs one.
-  $: isLibrary = ['isbe', 'naves', 'person'].includes(window.contentType);
+  $: isLibrary = ['isbe', 'naves', 'person', 'wordstudy'].includes(window.contentType);
 </script>
 
 <svelte:window 
@@ -216,7 +216,7 @@
      page looks exactly like the modal it came out of. -->
 <div
   class="panel panel-{window.edge} panel-{window.contentType}"
-  class:themed={!['map', 'isbe', 'person', 'naves'].includes(window.contentType)}
+  class:themed={!['map', 'isbe', 'person', 'naves', 'wordstudy'].includes(window.contentType)}
   style="
     {window.edge === 'left' || window.edge === 'right' ? `width: ${window.size}%` : `height: ${window.size}%`};
   "

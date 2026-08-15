@@ -4,7 +4,6 @@
   import L from "leaflet";
   import { isbeModalStore, type IsbeTab } from "../stores/isbeModalStore";
   import { isbeReturnStore, type IsbeReturn } from "../stores/isbeReturnStore";
-  import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
@@ -29,11 +28,10 @@
   } from "../adapters/lexicon-lookup.js";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
-  import WorkTabs, { type WorkKey } from "./WorkTabs.svelte";
+  import WorkTabs from "./WorkTabs.svelte";
+  import { openWorkSubject, openWorkIndex, type WorkKey } from "../lib/openWork";
   import { isbeSource } from "../lib/library/source";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
-  import { navesModalStore } from "../stores/navesModalStore";
-  import { personModalStore } from "../stores/personModalStore";
 
   // The encyclopedia article itself, independent of what is holding it. Two
   // hosts: IsbeModal, a centered card over the reader; and a docked window,
@@ -61,6 +59,9 @@
   export let onClose: (() => void) | null = null;
   /** Modal only — hands the live view up so the window opens where you left off. */
   export let onPopOut: ((snap: PopOutSnapshot) => void) | null = null;
+  /** Reports the view on the way out, so switching tabs and coming back lands
+   *  where you left rather than at the top. */
+  export let onSnapshot: ((snap: PopOutSnapshot) => void) | null = null;
 
   type PopOutSnapshot = {
     primaryName: string;
@@ -127,7 +128,23 @@
     }
   }
 
-  onDestroy(destroyMap);
+  onDestroy(() => {
+    destroyMap();
+    onSnapshot?.(viewSnapshot());
+  });
+
+  /** Everything needed to put this article back exactly as it is now. */
+  function viewSnapshot(): PopOutSnapshot {
+    return {
+      primaryName: title,
+      tab: activeTab,
+      expanded,
+      expandedBooks: [...expandedBooks],
+      visited: [...visitedRefs],
+      scrollTop: bodyEl?.scrollTop ?? 0,
+      trail,
+    };
+  }
 
   async function loadData() {
     loading = true;
@@ -351,56 +368,20 @@
 
   // "HEBREWS, EPISTLE TO THE" -> "hebrews" — the dictionary files single words,
   // and resolveWorks hands back the term it actually used so opening matches.
-  $: dictWord = works?.dict ? (works.term ?? "") : "";
-  $: navesTopicId = works?.topic?.id ?? null;
-  $: navesName = works?.topic?.name ?? "";
-
-  function openTopical() {
-    if (navesTopicId == null) return;
-    // Docked, the article stays put — only the modal has to get out of the way.
-    if (!docked) close();
-    navesModalStore.open({ topicId: navesTopicId, primaryName: navesName });
-  }
-
-  function openDictionary() {
-    const term = dictWord;
-    if (!term) return;
-    // Docked, the article stays put — only the modal has to get out of the way.
-    if (!docked) close();
-    lexicalModalStore.open({
-      selectedText: term,
-      strongsId: undefined,
-      morphologyData: null,
-      lexicalEntries: null,
-    });
-  }
-
-  function openPeople() {
-    const found = works?.person;
-    if (!found) return;
-    if (!docked) close();
-    personModalStore.open({
-      lookup: found,
-      primaryName: found.person.displayTitle || found.person.name,
-      clickedWord: title,
-    });
-  }
 
   /**
-   * The work tabs. Over the index these move you between indexes rather than
-   * between views of a subject, since there is no subject — so each sibling
-   * opens with nothing loaded, which is how they land on their own contents.
+   * The work tabs. Docked, this swaps what the window is showing and the window
+   * stays put; otherwise it opens that work's card. Over the index there is no
+   * subject to carry across, so the sibling opens on its own contents instead.
    */
   function selectWork(work: WorkKey) {
-    if (showContents) {
-      if (!docked) close();
-      if (work === "topical") navesModalStore.open({ topicId: null, primaryName: "" });
-      else if (work === "people") personModalStore.open({});
-      return;
-    }
-    if (work === "dictionary") openDictionary();
-    else if (work === "topical") openTopical();
-    else if (work === "people") openPeople();
+    const opened = showContents
+      ? openWorkIndex(work, windowId)
+      : openWorkSubject(work, works, title, windowId);
+    // Nothing there — leave what's on screen alone rather than closing onto it.
+    if (!opened) return;
+    // Nothing closes: a window changed in place, and the card keeps the same
+    // frame with a different work inside it. That is what makes these tabs.
   }
 
   $: hasArticle = !!entry && !!entry.bodyHtml;
@@ -958,20 +939,12 @@
   }
 
   function popOut() {
-    onPopOut?.({
-      primaryName: title,
-      tab: activeTab,
-      expanded,
-      expandedBooks: [...expandedBooks],
-      visited: [...visitedRefs],
-      scrollTop: bodyEl?.scrollTop ?? 0,
-      trail,
-    });
+    onPopOut?.(viewSnapshot());
   }
 </script>
 
 <div class="isbe-content" class:docked>
-  <WorkTabs {works} current="encyclopedia" onIndex={showContents} onSelect={selectWork} />
+  <WorkTabs {works} current="encyclopedia" onIndex={showContents} inWindow={docked} onSelect={selectWork} />
   <div class="isbe-header">
     <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
     <div class="head-text">

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { IndexedDBLexiconStore } from "../adapters/LexiconStore";
   import type { StrongEntry } from "@projectbible/core";
   import { BIBLE_BOOKS } from "../lib/bibleData.js";
@@ -12,14 +12,9 @@
     lookupStrongs,
     resolveWorks,
     type WorksResolution,
-    type PersonRecord,
   } from "../adapters/lexicon-lookup.js";
-  import PersonContent from "./PersonContent.svelte";
-  import WorkTabs, { type WorkKey } from "./WorkTabs.svelte";
-  import { personModalStore } from "../stores/personModalStore";
-  import { lexicalModalStore } from "../stores/lexicalModalStore";
-  import { isbeModalStore } from "../stores/isbeModalStore";
-  import { navesModalStore } from "../stores/navesModalStore";
+  import WorkTabs from "./WorkTabs.svelte";
+  import { openWorkSubject, type WorkKey } from "../lib/openWork";
   import { windowStore } from "../lib/stores/windowStore";
   import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
@@ -27,37 +22,47 @@
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../lib/morphologyExpander";
   import { openDB } from "../adapters/db";
 
-  // Subscribe to store instead of using props
-  $: isOpen = $lexicalModalStore.isOpen;
-  $: selectedText = $lexicalModalStore.selectedText;
-  $: strongsId = $lexicalModalStore.strongsId;
-  $: morphologyData = $lexicalModalStore.morphologyData;
-  $: lexicalEntries = $lexicalModalStore.lexicalEntries;
-  $: characterData = $lexicalModalStore.characterData ?? null;
+  /**
+   * The word study itself, independent of what is holding it. Two hosts: the
+   * lookup card, and a docked window pinned beside the reader — the same
+   * arrangement the encyclopedia, topical and bio views already use. `windowId`
+   * is what tells the two apart.
+   */
+  export let selectedText = "";
+  export let strongsId: string | undefined = undefined;
+  export let morphologyData: any = null;
+  export let lexicalEntries: any = null;
+  /** Set when docked: the id of the window hosting this word study. */
+  export let windowId: string | null = null;
+  /** The host's own close. Docked, Window.svelte supplies the ×. */
+  export let onClose: (() => void) | null = null;
+  /** Which sub-tab was open and how far down, restored when you come back. */
+  export let initialTab: "definition" | "occurrences" | "related" | null = null;
+  export let initialScrollTop = 0;
+  /** Reports the view on the way out, so switching tabs and coming back lands
+   *  where you left rather than at the top. */
+  export let onSnapshot: ((snap: { tab: string; scrollTop: number }) => void) | null = null;
 
-  // --- Biblical character ("Character" view) ---
-  // The bio itself is PersonContent, which also runs docked in a window and in
-  // the People contents list. This modal only decides whether to show it, and
-  // tracks which person it settled on so the header can name them.
-  let showDefinition = false; // toggle from character -> dictionary
-  let person: PersonRecord | null = null;
-  // A new lookup always lands on the bio, never on whatever the last one left.
-  // PersonContent unmounts without reporting back, so the person it last named
-  // is cleared here rather than left to head a different word's card.
-  $: characterData, ((showDefinition = false), characterData || (person = null));
-  $: showCharacter = !!characterData && !showDefinition;
+  $: docked = !!windowId;
 
-  /** Hand the bio to a docked window, so it can sit beside the passage.
-   *  Same edge convention as the encyclopedia's pop-out. */
-  function popOutPerson() {
-    if (!person) return;
+  // A clicked name that resolves to someone opens on the People tab, which is
+  // its own view in the same card — this one is only ever the word study now.
+
+  /** Hand what's on screen to a docked window, so it can sit beside the
+   *  passage. Same edge convention as the encyclopedia's pop-out — and it pins
+   *  whichever of the two views you're looking at. */
+  function popOut() {
     const edge = window.innerHeight > window.innerWidth ? "bottom" : "right";
     const id = windowStore.createWindow(edge, 50);
-    // At the six-window cap. Leave the modal up rather than closing onto nothing.
+    // At the six-window cap. Leave the card up rather than closing onto nothing.
     if (!id) return;
-    windowStore.setWindowContent(id, "person", {
-      personId: person.id,
-      primaryName: person.displayTitle || person.name,
+    // Only the term and the Strong's number go into the window: the rest is
+    // re-resolved on mount anyway, and window state is written to storage on
+    // every change — no place for a morphology blob.
+    windowStore.setWindowContent(id, "wordstudy", {
+      selectedText,
+      strongsId: strongsId ?? null,
+      primaryName: selectedText,
     });
     close();
   }
@@ -67,7 +72,10 @@
   let searchResults: StrongEntry[] = [];
   let loading = false;
   let error = "";
-  let activeTab: "definition" | "occurrences" | "related" = "definition";
+  let activeTab: "definition" | "occurrences" | "related" = initialTab ?? "definition";
+  let bodyEl: HTMLDivElement | null = null;
+
+  onDestroy(() => onSnapshot?.({ tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0 }));
 
   // Two different tab strips share this one variable: the Strong's view has
   // Definition/Occurrences/Related, the English-word view only has
@@ -97,12 +105,24 @@
   let formsLoading = false;
   let formsLoaded = false;
 
-  onMount(() => {
+  onMount(async () => {
     lexiconStore = new IndexedDBLexiconStore();
+    if (initialScrollTop) {
+      // Only meaningful once the body has something in it to scroll.
+      await tick();
+      if (bodyEl) bodyEl.scrollTop = initialScrollTop;
+    }
   });
 
-  $: if (isOpen && lexiconStore) {
-    loadLexicalData();
+  // Reload whenever the subject changes. Mounted fresh per open today; keyed so
+  // it also re-reads when the host swaps the word underneath it.
+  let loadedKey = "";
+  $: if (lexiconStore) {
+    const key = `${selectedText}|${strongsId ?? ""}`;
+    if (key !== loadedKey) {
+      loadedKey = key;
+      loadLexicalData();
+    }
   }
 
   $: effectiveLexicalEntries = localLexicalEntries ?? lexicalEntries;
@@ -111,14 +131,14 @@
   );
 
   let isDictionaryInstalled = false;
-  $: if (isOpen) {
+  onMount(() => {
     openDB().then((db) => {
       const tx = db.transaction('packs', 'readonly');
       const req = tx.objectStore('packs').get('dictionary-en');
       req.onsuccess = () => { isDictionaryInstalled = !!req.result; };
       req.onerror = () => { isDictionaryInstalled = false; };
     }).catch(() => { isDictionaryInstalled = false; });
-  }
+  });
 
   // --- Encyclopedia bridge ------------------------------------------------
   // What the other three works have for this term. One resolver answers all of
@@ -127,8 +147,7 @@
   // resolvers underneath; silent when a pack isn't installed.
   let works: WorksResolution | null = null;
   let worksCheckedFor = "";
-  $: if (isOpen && selectedText && !strongsId && !morphologyData) checkWorks(selectedText);
-  $: if (!isOpen) worksCheckedFor = "";
+  $: if (selectedText && !strongsId && !morphologyData) checkWorks(selectedText);
 
   async function checkWorks(text: string) {
     const key = text.trim().toLowerCase();
@@ -146,57 +165,18 @@
     }
   }
 
-  $: isbeMatch = works?.entry ?? null;
-  $: navesTopicId = works?.topic?.id ?? null;
-  $: navesName = works?.topic?.name ?? "";
-
-  function openTopical() {
-    if (navesTopicId == null) return;
-    close();
-    navesModalStore.open({ topicId: navesTopicId, primaryName: navesName });
-  }
-
-  function openEncyclopedia() {
-    if (!isbeMatch) return;
-    const m = isbeMatch;
-    close();
-    isbeModalStore.open({
-      kind: m.kind,
-      entryId: m.entryId,
-      placeId: m.placeId ?? null,
-      primaryName: m.primaryName,
-    });
-  }
 
   /**
    * The work tabs. This card holds two of the four itself — a word study and,
    * when a clicked name resolved to someone, their bio — so switching between
-   * Dictionary and People is a flip in place rather than a second card.
+   * Dictionary and People is a flip in place rather than a second card. Step 3
+   * folds that into the shared card and this special case goes away.
+   *
+   * This card is never docked, so there is no window branch here.
    */
   function selectWork(work: WorkKey) {
-    if (work === "encyclopedia") return openEncyclopedia();
-    if (work === "topical") return openTopical();
-    if (work === "dictionary") {
-      // Showing a bio: the definition is one flip away inside this same card.
-      if (showCharacter) showDefinition = true;
-      return;
-    }
-    if (work === "people") {
-      // Came in as a word study but the word is a person — flip to the bio if
-      // this card was handed one, otherwise open the bio card properly.
-      if (characterData) {
-        showDefinition = false;
-        return;
-      }
-      const found = works?.person;
-      if (!found) return;
-      close();
-      personModalStore.open({
-        lookup: found,
-        primaryName: found.person.displayTitle || found.person.name,
-        clickedWord: selectedText,
-      });
-    }
+    // Nothing closes: the card keeps its frame and swaps the work inside it.
+    openWorkSubject(work, works, selectedText, windowId);
   }
 
   async function loadLexicalData() {
@@ -407,16 +387,10 @@
   }
 
   function close() {
-    lexicalModalStore.close();
     strongEntry = null;
     searchResults = [];
     error = "";
-  }
-
-  function handleBackdropClick(event: MouseEvent) {
-    if (event.target === event.currentTarget) {
-      close();
-    }
+    onClose?.();
   }
 
   async function loadOccurrences(id: string) {
@@ -478,7 +452,8 @@
     const nav = get(navigationStore);
     navigationStore.pushHistory({ ...nav });
     navigationStore.navigateTo(occ.translationId || 'byz', occ.book, occ.chapter, occ.verse);
-    close();
+    // Docked, the study stays put beside the passage you just jumped to.
+    if (!docked) close();
   }
 
   async function loadStrongsEntry(strongsNum: string) {
@@ -592,9 +567,7 @@
    */
   $: headerSubtitle = ((): string => {
     const bits: string[] = [];
-    if (showCharacter && person) {
-      if (person.verseCount) bits.push(plural(person.verseCount, "verse"));
-    } else if (strongEntry) {
+    if (strongEntry) {
       bits.push(titleCase(strongEntry.language));
       if (strongEntry.transliteration) bits.push(strongEntry.transliteration);
       if (strongEntry.partOfSpeech) bits.push(strongEntry.partOfSpeech);
@@ -642,607 +615,590 @@
     const current = get(navigationStore);
     navigationStore.pushHistory(current);
     navigationStore.navigateTo(current.translation, parsed.book, parsed.chapter, parsed.verse);
-    lexicalModalStore.close();
+    // Docked, the study stays put — reading the passage beside it is the whole
+    // point of pinning it. Only a card has to get out of the way.
+    if (!docked) close();
   }
 </script>
 
-{#if isOpen}
-  <div
-    class="modal-backdrop"
-    on:click={handleBackdropClick}
-    role="presentation"
-  >
-    <div class="modal-container">
-      <WorkTabs
-        {works}
-        current={showCharacter ? "people" : "dictionary"}
-        onSelect={selectWork}
-      />
-      <div class="modal-header">
-        <div class="head-text">
-          <h2>
-            {#if showCharacter && person}
-              {person.displayTitle || person.name}
-            {:else if strongEntry}
-              {strongEntry.lemma}
-              <span
-                class="strongs-id"
-                style="color: {getLanguageColor(strongEntry.language)}"
-              >
-                {strongEntry.id}
-              </span>
-            {:else if selectedText}
-              <!-- The word itself is the title, as it is in the other three
-                   cards. Title-cased because bridging in from them forces the
-                   term lowercase, so it would otherwise read "noah". -->
-              {titleCase(selectedText)}
-            {:else}
-              Word Study
+<div class="lexical-content" class:docked>
+  <WorkTabs
+    {works}
+    current="dictionary"
+    inWindow={docked}
+    onSelect={selectWork}
+  />
+  <div class="modal-header">
+    <div class="head-text">
+      <h2>
+        {#if strongEntry}
+          {strongEntry.lemma}
+          <span
+            class="strongs-id"
+            style="color: {getLanguageColor(strongEntry.language)}"
+          >
+            {strongEntry.id}
+          </span>
+        {:else if selectedText}
+          <!-- The word itself is the title, as it is in the other three
+               cards. Title-cased because bridging in from them forces the
+               term lowercase, so it would otherwise read "noah". -->
+          {titleCase(selectedText)}
+        {:else}
+          Word Study
+        {/if}
+      </h2>
+      {#if headerSubtitle}
+        <div class="sub">{headerSubtitle}</div>
+      {/if}
+    </div>
+    <div class="head-actions">
+      <!-- Docked already: Window.svelte supplies the chrome, so neither of
+           these belongs here. -->
+      {#if !docked}
+        <button class="pop-btn" on:click={popOut} title="Pin beside the reader" aria-label="Pin beside the reader">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8" />
+            <path d="M14 4v16" stroke-width="1.8" />
+            <path d="M6.2 9.6L8.6 12l-2.4 2.4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+      {/if}
+      {#if !docked}
+        <button class="close-btn" on:click={close} aria-label="Close">
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+          >
+            <path
+              d="M18 6L6 18M6 6l12 12"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+      {/if}
+    </div>
+  </div>
+
+  <div class="modal-body" bind:this={bodyEl}>
+    {#if loading}
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Loading lexical data...</p>
+      </div>
+    {:else if error}
+      <div class="error">
+        <svg
+          width="48"
+          height="48"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+        >
+          <circle cx="12" cy="12" r="10" stroke-width="2" />
+          <path
+            d="M12 8v4M12 16h.01"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+        </svg>
+        <p>{error}</p>
+        <p class="hint">Lexical packs may not be fully installed yet.</p>
+      </div>
+    {:else if morphologyData && !strongEntry}
+      <!-- Original Language Morphology Display -->
+      <div class="morphology-view">
+        <div class="info-section">
+          <h3>Morphology</h3>
+          <dl>
+            <dt>Word:</dt>
+            <dd class="morph-text" dir={morphologyData.language === 'hebrew' ? 'rtl' : 'ltr'}>
+              {morphologyData.text}
+            </dd>
+
+            {#if morphologyData.lemma}
+              <dt>Lemma:</dt>
+              <dd class="morph-lemma" dir={morphologyData.language === 'hebrew' ? 'rtl' : 'ltr'}>
+                {#if morphologyData.lemma && !/^\d+$/.test(morphologyData.lemma) && !/^[a-z]\/\d/.test(morphologyData.lemma)}
+                  {morphologyData.lemma}
+                {:else}
+                  {morphologyData.text}
+                  <span class="hint-text">(lemma data unavailable)</span>
+                {/if}
+              </dd>
             {/if}
-          </h2>
-          {#if headerSubtitle}
-            <div class="sub">{headerSubtitle}</div>
-          {/if}
+
+            {#if morphologyData.transliteration}
+              <dt>Transliteration:</dt>
+              <dd>{morphologyData.transliteration}</dd>
+            {:else}
+              <dt>Transliteration:</dt>
+              <dd class="missing-data">Not available in legacy pack</dd>
+            {/if}
+
+            {#if morphologyData.strongsId}
+              <dt>Strong's:</dt>
+              <dd>
+                <button 
+                  class="strongs-link" 
+                  style="color: {getLanguageColor(morphologyData.language)}"
+                  on:click={() => loadStrongsEntry(morphologyData!.strongsId!)}
+                >
+                  {morphologyData.strongsId}
+                </button>
+              </dd>
+            {/if}
+
+            {#if (morphologyData as any).gloss_en || (morphologyData as any).gloss}
+              <dt>English Gloss:</dt>
+              <dd class="gloss">{(morphologyData as any).gloss_en ?? (morphologyData as any).gloss}</dd>
+            {/if}
+
+            {#if (morphologyData as any).morph_code || (morphologyData as any).parsing}
+              {@const _rawCode = (morphologyData as any).morph_code ?? (morphologyData as any).parsing}
+              {@const _expanded = (morphologyData.language === 'hebrew' || morphologyData.language === 'aramaic')
+                ? expandOshbCode(_rawCode)
+                : expandRmacCode(_rawCode)}
+              <dt>Parsing:</dt>
+              <dd class="parsing">
+                {_expanded || _rawCode}
+                {#if _expanded && _expanded !== _rawCode}
+                  <span class="code-raw">({_rawCode})</span>
+                {/if}
+              </dd>
+            {/if}
+
+            <dt>Language:</dt>
+            <dd>
+              <span style="color: {getLanguageColor(morphologyData.language)}">
+                {morphologyData.language.charAt(0).toUpperCase() + morphologyData.language.slice(1)}
+              </span>
+            </dd>
+          </dl>
         </div>
-        <div class="head-actions">
-          {#if showCharacter && person}
-            <button class="pop-btn" on:click={popOutPerson} title="Pin beside the reader" aria-label="Pin beside the reader">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8" />
-                <path d="M14 4v16" stroke-width="1.8" />
-                <path d="M6.2 9.6L8.6 12l-2.4 2.4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
-          {/if}
-          <button class="close-btn" on:click={close} aria-label="Close">
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
+
+        {#if morphologyData.strongsId}
+          <div class="hint-section">
+            <p class="hint">
+              <span class="emoji">💡</span> Click Strong's number above to view full lexicon entry
+            </p>
+          </div>
+        {/if}
+      </div>
+    {:else if searchResults.length > 0}
+      <div class="search-results">
+        <p class="results-header">Found {searchResults.length} entries:</p>
+        <div class="results-list">
+          {#each searchResults as result}
+            <button
+              class="result-item"
+              on:click={() => selectEntry(result)}
             >
-              <path
-                d="M18 6L6 18M6 6l12 12"
-                stroke-width="2"
-                stroke-linecap="round"
-              />
-            </svg>
-          </button>
+              <div class="result-lemma">
+                {result.lemma}
+                <span
+                  class="result-id"
+                  style="color: {getLanguageColor(result.language)}"
+                >
+                  {result.id}
+                </span>
+              </div>
+              <div class="result-definition">
+                {result.shortDefinition || result.definition.slice(0, 100)}
+              </div>
+            </button>
+          {/each}
         </div>
       </div>
+    {:else if isEnglishWord && englishWordInfo}
+      <!-- English Word Information -->
+      <div class="tabs">
+        <button
+          class="tab"
+          class:active={activeTab === "definition"}
+          on:click={() => (activeTab = "definition")}
+        >
+          Definition
+        </button>
+        <button
+          class="tab"
+          class:active={activeTab === "related"}
+          on:click={() => (activeTab = "related")}
+        >
+          Synonyms ({englishSynonyms.length})
+        </button>
+      </div>
 
-      <div class="modal-body">
-        {#if person && showDefinition}
-          <button class="char-back" on:click={() => (showDefinition = false)}>
-            ← Back to {person.displayTitle || person.name}
-          </button>
-        {/if}
-        {#if showCharacter}
-          <PersonContent
-            lookup={characterData}
-            clickedWord={selectedText}
-            showHeader={false}
-            onClose={close}
-            onPersonChange={(p) => (person = p)}
-            onShowDefinition={() => (showDefinition = true)}
-          />
-        {:else if loading}
-          <div class="loading">
-            <div class="spinner"></div>
-            <p>Loading lexical data...</p>
-          </div>
-        {:else if error}
-          <div class="error">
-            <svg
-              width="48"
-              height="48"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-            >
-              <circle cx="12" cy="12" r="10" stroke-width="2" />
-              <path
-                d="M12 8v4M12 16h.01"
-                stroke-width="2"
-                stroke-linecap="round"
-              />
-            </svg>
-            <p>{error}</p>
-            <p class="hint">Lexical packs may not be fully installed yet.</p>
-          </div>
-        {:else if morphologyData && !strongEntry}
-          <!-- Original Language Morphology Display -->
-          <div class="morphology-view">
+      <div class="tab-content">
+        {#if activeTab === "definition"}
+          <div class="definition-view">
             <div class="info-section">
-              <h3>Morphology</h3>
+              <h3>Word Information</h3>
               <dl>
                 <dt>Word:</dt>
-                <dd class="morph-text" dir={morphologyData.language === 'hebrew' ? 'rtl' : 'ltr'}>
-                  {morphologyData.text}
-                </dd>
+                <dd class="lemma-text">{englishWordInfo.word}</dd>
 
-                {#if morphologyData.lemma}
-                  <dt>Lemma:</dt>
-                  <dd class="morph-lemma" dir={morphologyData.language === 'hebrew' ? 'rtl' : 'ltr'}>
-                    {#if morphologyData.lemma && !/^\d+$/.test(morphologyData.lemma) && !/^[a-z]\/\d/.test(morphologyData.lemma)}
-                      {morphologyData.lemma}
-                    {:else}
-                      {morphologyData.text}
-                      <span class="hint-text">(lemma data unavailable)</span>
-                    {/if}
+                {#if englishPOS.length > 0}
+                  <dt>Part of Speech:</dt>
+                  <dd style="text-transform: capitalize;">
+                    {englishPOS.join(", ")}
                   </dd>
                 {/if}
 
-                {#if morphologyData.transliteration}
-                  <dt>Transliteration:</dt>
-                  <dd>{morphologyData.transliteration}</dd>
-                {:else}
-                  <dt>Transliteration:</dt>
-                  <dd class="missing-data">Not available in legacy pack</dd>
+                {#if englishWordInfo.ipa_us}
+                  <dt>Pronunciation:</dt>
+                  <dd class="ipa-text">{englishWordInfo.ipa_us}</dd>
                 {/if}
-
-                {#if morphologyData.strongsId}
-                  <dt>Strong's:</dt>
-                  <dd>
-                    <button 
-                      class="strongs-link" 
-                      style="color: {getLanguageColor(morphologyData.language)}"
-                      on:click={() => loadStrongsEntry(morphologyData!.strongsId!)}
-                    >
-                      {morphologyData.strongsId}
-                    </button>
-                  </dd>
-                {/if}
-
-                {#if (morphologyData as any).gloss_en || (morphologyData as any).gloss}
-                  <dt>English Gloss:</dt>
-                  <dd class="gloss">{(morphologyData as any).gloss_en ?? (morphologyData as any).gloss}</dd>
-                {/if}
-
-                {#if (morphologyData as any).morph_code || (morphologyData as any).parsing}
-                  {@const _rawCode = (morphologyData as any).morph_code ?? (morphologyData as any).parsing}
-                  {@const _expanded = (morphologyData.language === 'hebrew' || morphologyData.language === 'aramaic')
-                    ? expandOshbCode(_rawCode)
-                    : expandRmacCode(_rawCode)}
-                  <dt>Parsing:</dt>
-                  <dd class="parsing">
-                    {_expanded || _rawCode}
-                    {#if _expanded && _expanded !== _rawCode}
-                      <span class="code-raw">({_rawCode})</span>
-                    {/if}
-                  </dd>
-                {/if}
-
-                <dt>Language:</dt>
-                <dd>
-                  <span style="color: {getLanguageColor(morphologyData.language)}">
-                    {morphologyData.language.charAt(0).toUpperCase() + morphologyData.language.slice(1)}
-                  </span>
-                </dd>
               </dl>
             </div>
 
-            {#if morphologyData.strongsId}
-              <div class="hint-section">
-                <p class="hint">
-                  <span class="emoji">💡</span> Click Strong's number above to view full lexicon entry
-                </p>
+            {#if loadingDefinition}
+              <div class="info-section">
+                <div class="loading-inline">
+                  <div class="spinner-small"></div>
+                  <span>Loading definition...</span>
+                </div>
               </div>
             {/if}
-          </div>
-        {:else if searchResults.length > 0}
-          <div class="search-results">
-            <p class="results-header">Found {searchResults.length} entries:</p>
-            <div class="results-list">
-              {#each searchResults as result}
-                <button
-                  class="result-item"
-                  on:click={() => selectEntry(result)}
-                >
-                  <div class="result-lemma">
-                    {result.lemma}
-                    <span
-                      class="result-id"
-                      style="color: {getLanguageColor(result.language)}"
-                    >
-                      {result.id}
-                    </span>
-                  </div>
-                  <div class="result-definition">
-                    {result.shortDefinition || result.definition.slice(0, 100)}
-                  </div>
-                </button>
-              {/each}
-            </div>
-          </div>
-        {:else if isEnglishWord && englishWordInfo}
-          <!-- English Word Information -->
-          <div class="tabs">
-            <button
-              class="tab"
-              class:active={activeTab === "definition"}
-              on:click={() => (activeTab = "definition")}
-            >
-              Definition
-            </button>
-            <button
-              class="tab"
-              class:active={activeTab === "related"}
-              on:click={() => (activeTab = "related")}
-            >
-              Synonyms ({englishSynonyms.length})
-            </button>
-          </div>
 
-          <div class="tab-content">
-            {#if activeTab === "definition"}
-              <div class="definition-view">
-                <div class="info-section">
-                  <h3>Word Information</h3>
-                  <dl>
-                    <dt>Word:</dt>
-                    <dd class="lemma-text">{englishWordInfo.word}</dd>
-
-                    {#if englishPOS.length > 0}
-                      <dt>Part of Speech:</dt>
-                      <dd style="text-transform: capitalize;">
-                        {englishPOS.join(", ")}
-                      </dd>
-                    {/if}
-
-                    {#if englishWordInfo.ipa_us}
-                      <dt>Pronunciation:</dt>
-                      <dd class="ipa-text">{englishWordInfo.ipa_us}</dd>
-                    {/if}
-                  </dl>
-                </div>
-
-                {#if loadingDefinition}
+            {#if englishDefinitions.length > 0}
+              {#each englishDefinitions as entry}
+                {#each entry.meanings || [] as meaning}
                   <div class="info-section">
-                    <div class="loading-inline">
-                      <div class="spinner-small"></div>
-                      <span>Loading definition...</span>
-                    </div>
-                  </div>
-                {/if}
-
-                {#if englishDefinitions.length > 0}
-                  {#each englishDefinitions as entry}
-                    {#each entry.meanings || [] as meaning}
-                      <div class="info-section">
-                        <h3 style="text-transform: capitalize;">
-                          {meaning.partOfSpeech}
-                        </h3>
-                        <ol class="definition-list">
-                          {#each meaning.definitions || [] as def}
-                            <li>
-                              <p class="definition-text">{def.definition}</p>
-                              {#if def.example}
-                                <p class="example-text">
-                                  "<em>{def.example}</em>"
-                                </p>
-                              {/if}
-                              {#if def.synonyms && def.synonyms.length > 0}
-                                <p class="inline-synonyms">
-                                  <strong>Similar:</strong>
-                                  {def.synonyms.slice(0, 5).join(", ")}
-                                </p>
-                              {/if}
-                            </li>
-                          {/each}
-                        </ol>
-                      </div>
-                    {/each}
-                  {/each}
-                {/if}
-
-                {#if effectiveLexicalEntries && (effectiveLexicalEntries.wordset?.length > 0 || effectiveLexicalEntries.historic?.length > 0)}
-                  <!-- Offline Dictionary Definitions from Dictionary Pack.
-                       "Modern" is the Concise (Wordset) dictionary — Wiktionary was
-                       removed because its example sentences were unfit for this app. -->
-                  <div class="definitions-grid">
-                    <!-- Modern Definitions (Concise / Wordset) -->
-                    {#if effectiveLexicalEntries.wordset && effectiveLexicalEntries.wordset.length > 0}
-                    <div class="info-section">
-                      <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
-                        <span class="emoji">📖</span> Modern Definitions
-                      </h3>
-                      {#each effectiveLexicalEntries.wordset as def}
-                        <div class="modern-def" style="margin-bottom: 12px;">
-                          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
-                            {#if def.pos}
-                              <span class="pos-pill" style="background: #e3f2fd; color: #1976d2; padding: 2px 8px; border-radius: 12px; font-size: 11px; text-transform: capitalize;">
-                                {def.pos}
-                              </span>
-                            {/if}
-                          </div>
-                          <p class="definition-text" style="margin: 4px 0;">{def.definition}</p>
-                          {#if def.example}
-                            <p class="example-text" style="margin: 4px 0; color: #666; font-style: italic; font-size: 14px;">
-                              "{def.example}"
-                            </p>
-                          {/if}
-                        </div>
-                      {/each}
-                    </div>
-                    {/if}
-
-                    <!-- Historic Definitions (GCIDE/Webster 1913) -->
-                    <div class="info-section">
-                    <h3 style="color: #8d6e63; display: flex; align-items: center; gap: 8px;">
-                      <span class="emoji">📜</span> Historic Definitions
-                      <span style="font-size: 12px; color: #666; font-weight: normal;">Webster 1913</span>
+                    <h3 style="text-transform: capitalize;">
+                      {meaning.partOfSpeech}
                     </h3>
-                    {#if effectiveLexicalEntries.historic && effectiveLexicalEntries.historic.length > 0}
-                      {#each effectiveLexicalEntries.historic as def}
-                        <div class="historic-def" style="margin-bottom: 12px; border-left: 3px solid #d7ccc8; padding-left: 12px;">
-                          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
-                            {#if def.sense_number}
-                              <span class="sense-badge" style="background: #d7ccc8; color: #5d4037;">{def.sense_number}</span>
-                            {/if}
-                            {#if def.pos}
-                              <span class="pos-pill" style="background: #efebe9; color: #5d4037; padding: 2px 8px; border-radius: 12px; font-size: 11px; text-transform: capitalize;">
-                                {def.pos}
-                              </span>
-                            {/if}
-                          </div>
-                          <p class="definition-text" style="margin: 4px 0;">{def.definition}</p>
+                    <ol class="definition-list">
+                      {#each meaning.definitions || [] as def}
+                        <li>
+                          <p class="definition-text">{def.definition}</p>
                           {#if def.example}
-                            <p class="example-text" style="margin: 4px 0; color: #666; font-style: italic; font-size: 14px;">
-                              "{def.example}"
+                            <p class="example-text">
+                              "<em>{def.example}</em>"
                             </p>
                           {/if}
-                        </div>
+                          {#if def.synonyms && def.synonyms.length > 0}
+                            <p class="inline-synonyms">
+                              <strong>Similar:</strong>
+                              {def.synonyms.slice(0, 5).join(", ")}
+                            </p>
+                          {/if}
+                        </li>
                       {/each}
-                    {:else}
-                      <p class="definition-text" style="margin: 6px 0 0; color: #777; font-size: 13px;">
-                        No historic definitions available for this word.
-                      </p>
-                    {/if}
-                    </div>
+                    </ol>
                   </div>
-                {/if}
+                {/each}
+              {/each}
+            {/if}
 
-                {#if !loadingDefinition && englishDefinitions.length === 0 && !hasOfflineDefinitions}
-                  <!-- No offline definitions available -->
-                  <div class="info-section">
-                    <h3>About This Word</h3>
-                    <p class="full-def">
-                      This is an English word from the Bible translation.
-                      {#if englishSynonyms.length > 0}
-                        See the Synonyms tab for {englishSynonyms.length} related words.
-                      {:else}
-                        For deeper study, look up the original Greek or Hebrew word from an interlinear Bible.
+            {#if effectiveLexicalEntries && (effectiveLexicalEntries.wordset?.length > 0 || effectiveLexicalEntries.historic?.length > 0)}
+              <!-- Offline Dictionary Definitions from Dictionary Pack.
+                   "Modern" is the Concise (Wordset) dictionary — Wiktionary was
+                   removed because its example sentences were unfit for this app. -->
+              <div class="definitions-grid">
+                <!-- Modern Definitions (Concise / Wordset) -->
+                {#if effectiveLexicalEntries.wordset && effectiveLexicalEntries.wordset.length > 0}
+                <div class="info-section">
+                  <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
+                    <span class="emoji">📖</span> Modern Definitions
+                  </h3>
+                  {#each effectiveLexicalEntries.wordset as def}
+                    <div class="modern-def" style="margin-bottom: 12px;">
+                      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                        {#if def.pos}
+                          <span class="pos-pill" style="background: #e3f2fd; color: #1976d2; padding: 2px 8px; border-radius: 12px; font-size: 11px; text-transform: capitalize;">
+                            {def.pos}
+                          </span>
+                        {/if}
+                      </div>
+                      <p class="definition-text" style="margin: 4px 0;">{def.definition}</p>
+                      {#if def.example}
+                        <p class="example-text" style="margin: 4px 0; color: #666; font-style: italic; font-size: 14px;">
+                          "{def.example}"
+                        </p>
                       {/if}
-                    </p>
-                    {#if isDictionaryInstalled}
-                      <p style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px; color: #555;">
-                        No definition found for this word in the installed dictionary.
-                      </p>
-                    {:else}
-                      <p style="margin-top: 12px; padding: 12px; background: #e3f2fd; border-radius: 8px; font-size: 13px;">
-                        <span class="emoji">💡</span> Install the <strong>English Dictionary Pack</strong> from the Packs menu to get offline modern and historic (Webster 1913) definitions!
-                      </p>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
-            {:else if activeTab === "related"}
-              <div class="related-view">
-                {#if englishSynonyms.length > 0}
-                  <div class="synonyms-section">
-                    <h3>Synonyms</h3>
-                    <div class="synonym-grid">
-                      {#each englishSynonyms as synonym}
-                        <span class="synonym-tag">{synonym}</span>
-                      {/each}
                     </div>
-                  </div>
-                {:else}
-                  <p class="coming-soon">No synonyms available for this word</p>
+                  {/each}
+                </div>
                 {/if}
+
+                <!-- Historic Definitions (GCIDE/Webster 1913) -->
+                <div class="info-section">
+                <h3 style="color: #8d6e63; display: flex; align-items: center; gap: 8px;">
+                  <span class="emoji">📜</span> Historic Definitions
+                  <span style="font-size: 12px; color: #666; font-weight: normal;">Webster 1913</span>
+                </h3>
+                {#if effectiveLexicalEntries.historic && effectiveLexicalEntries.historic.length > 0}
+                  {#each effectiveLexicalEntries.historic as def}
+                    <div class="historic-def" style="margin-bottom: 12px; border-left: 3px solid #d7ccc8; padding-left: 12px;">
+                      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                        {#if def.sense_number}
+                          <span class="sense-badge" style="background: #d7ccc8; color: #5d4037;">{def.sense_number}</span>
+                        {/if}
+                        {#if def.pos}
+                          <span class="pos-pill" style="background: #efebe9; color: #5d4037; padding: 2px 8px; border-radius: 12px; font-size: 11px; text-transform: capitalize;">
+                            {def.pos}
+                          </span>
+                        {/if}
+                      </div>
+                      <p class="definition-text" style="margin: 4px 0;">{def.definition}</p>
+                      {#if def.example}
+                        <p class="example-text" style="margin: 4px 0; color: #666; font-style: italic; font-size: 14px;">
+                          "{def.example}"
+                        </p>
+                      {/if}
+                    </div>
+                  {/each}
+                {:else}
+                  <p class="definition-text" style="margin: 6px 0 0; color: #777; font-size: 13px;">
+                    No historic definitions available for this word.
+                  </p>
+                {/if}
+                </div>
               </div>
             {/if}
-          </div>
-        {:else if strongEntry}
-          {#if morphologyData}
-            <button class="back-btn" on:click={() => (strongEntry = null)}>← Back to Morphology</button>
-          {/if}
-          <div class="tabs">
-            <button
-              class="tab"
-              class:active={activeTab === "definition"}
-              on:click={() => (activeTab = "definition")}
-            >
-              Definition
-            </button>
-            <button
-              class="tab"
-              class:active={activeTab === "occurrences"}
-              on:click={() => (activeTab = "occurrences")}
-            >
-              Occurrences
-            </button>
-            <button
-              class="tab"
-              class:active={activeTab === "related"}
-              on:click={() => (activeTab = "related")}
-            >
-              Related
-            </button>
-          </div>
 
-          <div class="tab-content">
-            {#if activeTab === "definition"}
-              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-              <div class="definition-view" on:click={handleDefinitionClick}>
-                <div class="info-section">
-                  <h3>Entry Information</h3>
-                  <dl>
-                    <dt>Strong's ID:</dt>
-                    <dd style="color: {getLanguageColor(strongEntry.language)}">
-                      {strongEntry.id}
-                    </dd>
-
-                    <dt>Lemma:</dt>
-                    <dd class="lemma-text">{strongEntry.lemma}</dd>
-
-                    {#if strongEntry.transliteration}
-                      <dt>Transliteration:</dt>
-                      <dd>{strongEntry.transliteration}</dd>
-                    {/if}
-
-                    {#if strongEntry.pronunciation?.phonetic}
-                      <dt>Pronunciation:</dt>
-                      <dd class="phonetic">{strongEntry.pronunciation.phonetic}</dd>
-                    {/if}
-
-                    <dt>Language:</dt>
-                    <dd
-                      style="color: {getLanguageColor(
-                        strongEntry.language,
-                      )}; text-transform: capitalize;"
-                    >
-                      {strongEntry.language}
-                    </dd>
-
-                    {#if strongEntry.partOfSpeech}
-                      <dt>Part of Speech:</dt>
-                      <dd>
-                        {expandStepBiblePOS(strongEntry.partOfSpeech)}
-                        <span class="code-raw">({strongEntry.partOfSpeech})</span>
-                      </dd>
-                    {/if}
-
-                    {#if strongEntry.occurrences}
-                      <dt>Occurrences:</dt>
-                      <dd>{strongEntry.occurrences}× in the Bible</dd>
-                    {/if}
-                  </dl>
-                </div>
-
-                {#if strongEntry.shortDefinition}
-                  <div class="info-section">
-                    <h3>Short Definition</h3>
-                    <p class="short-def">{strongEntry.shortDefinition}</p>
-                  </div>
-                {/if}
-
-                <div class="info-section">
-                  <h3>Full Definition</h3>
-                  <p class="full-def">{@html renderStrongsMarkup(strongEntry.definition)}</p>
-                </div>
-
-                {#if strongEntry.kjvUsage}
-                  <div class="info-section">
-                    <h3>KJV Usage</h3>
-                    <p class="usage">{@html renderStrongsMarkup(strongEntry.kjvUsage)}</p>
-                  </div>
-                {/if}
-
-                {#if strongEntry.derivation}
-                  <div class="info-section">
-                    <h3>Derivation</h3>
-                    <p class="derivation">{@html renderStrongsMarkup(strongEntry.derivation)}</p>
-                  </div>
-                {/if}
-
-                {#if formsData.length > 0}
-                  <div class="info-section">
-                    <h3>Inflection Forms</h3>
-                    <table class="forms-table">
-                      <thead>
-                        <tr><th>Form</th><th>Parsing</th><th>×</th></tr>
-                      </thead>
-                      <tbody>
-                        {#each formsData as f}
-                          <tr>
-                            <td class="form-text">{f.form}</td>
-                            <td class="form-parse">{strongEntry?.language === 'hebrew' || strongEntry?.language === 'aramaic' ? expandOshbCode(f.morphCode) : expandRmacCode(f.morphCode)}</td>
-                            <td class="form-count">{f.count}</td>
-                          </tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  </div>
-                {:else if formsLoading}
-                  <div class="info-section">
-                    <h3>Inflection Forms</h3>
-                    <p class="hint">Loading…</p>
-                  </div>
-                {/if}
-              </div>
-            {:else if activeTab === "occurrences"}
-              <div class="occurrences-view">
-                {#if occurrencesLoading}
-                  <p class="hint">Loading occurrences…</p>
-                {:else if occurrences.length === 0 && occurrencesLoaded}
-                  <p class="coming-soon">No occurrences found in imported data.</p>
-                {:else if occurrences.length > 0}
-                  <p class="occ-count">{occurrences.length} occurrence{occurrences.length === 1 ? '' : 's'}</p>
-                  <div class="occ-list">
-                    {#each occurrences as occ}
-                      <button class="occ-ref" on:click={() => handleOccurrenceClick(occ)}>
-                        {occ.book} {occ.chapter}:{occ.verse}
-                      </button>
-                    {/each}
-                  </div>
-                {:else}
-                  <p class="hint">Loading…</p>
-                {/if}
-              </div>
-            {:else if activeTab === "related"}
-              <div class="related-view">
-                <p class="coming-soon">Related words coming soon...</p>
-                <p class="hint">
-                  This will show synonyms, antonyms, and related concepts
+            {#if !loadingDefinition && englishDefinitions.length === 0 && !hasOfflineDefinitions}
+              <!-- No offline definitions available -->
+              <div class="info-section">
+                <h3>About This Word</h3>
+                <p class="full-def">
+                  This is an English word from the Bible translation.
+                  {#if englishSynonyms.length > 0}
+                    See the Synonyms tab for {englishSynonyms.length} related words.
+                  {:else}
+                    For deeper study, look up the original Greek or Hebrew word from an interlinear Bible.
+                  {/if}
                 </p>
+                {#if isDictionaryInstalled}
+                  <p style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px; color: #555;">
+                    No definition found for this word in the installed dictionary.
+                  </p>
+                {:else}
+                  <p style="margin-top: 12px; padding: 12px; background: #e3f2fd; border-radius: 8px; font-size: 13px;">
+                    <span class="emoji">💡</span> Install the <strong>English Dictionary Pack</strong> from the Packs menu to get offline modern and historic (Webster 1913) definitions!
+                  </p>
+                {/if}
               </div>
             {/if}
           </div>
-        {:else}
-          <div class="empty-state">
-            <svg
-              width="64"
-              height="64"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-            >
-              <path
-                d="M12 6.5v10M7 11.5h10"
-                stroke-width="1.5"
-                stroke-linecap="round"
-              />
-              <circle cx="12" cy="12" r="10" stroke-width="1.5" />
-            </svg>
-            <p>No lexical data to display</p>
+        {:else if activeTab === "related"}
+          <div class="related-view">
+            {#if englishSynonyms.length > 0}
+              <div class="synonyms-section">
+                <h3>Synonyms</h3>
+                <div class="synonym-grid">
+                  {#each englishSynonyms as synonym}
+                    <span class="synonym-tag">{synonym}</span>
+                  {/each}
+                </div>
+              </div>
+            {:else}
+              <p class="coming-soon">No synonyms available for this word</p>
+            {/if}
           </div>
         {/if}
       </div>
-    </div>
+    {:else if strongEntry}
+      {#if morphologyData}
+        <button class="back-btn" on:click={() => (strongEntry = null)}>← Back to Morphology</button>
+      {/if}
+      <div class="tabs">
+        <button
+          class="tab"
+          class:active={activeTab === "definition"}
+          on:click={() => (activeTab = "definition")}
+        >
+          Definition
+        </button>
+        <button
+          class="tab"
+          class:active={activeTab === "occurrences"}
+          on:click={() => (activeTab = "occurrences")}
+        >
+          Occurrences
+        </button>
+        <button
+          class="tab"
+          class:active={activeTab === "related"}
+          on:click={() => (activeTab = "related")}
+        >
+          Related
+        </button>
+      </div>
+
+      <div class="tab-content">
+        {#if activeTab === "definition"}
+          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+          <div class="definition-view" on:click={handleDefinitionClick}>
+            <div class="info-section">
+              <h3>Entry Information</h3>
+              <dl>
+                <dt>Strong's ID:</dt>
+                <dd style="color: {getLanguageColor(strongEntry.language)}">
+                  {strongEntry.id}
+                </dd>
+
+                <dt>Lemma:</dt>
+                <dd class="lemma-text">{strongEntry.lemma}</dd>
+
+                {#if strongEntry.transliteration}
+                  <dt>Transliteration:</dt>
+                  <dd>{strongEntry.transliteration}</dd>
+                {/if}
+
+                {#if strongEntry.pronunciation?.phonetic}
+                  <dt>Pronunciation:</dt>
+                  <dd class="phonetic">{strongEntry.pronunciation.phonetic}</dd>
+                {/if}
+
+                <dt>Language:</dt>
+                <dd
+                  style="color: {getLanguageColor(
+                    strongEntry.language,
+                  )}; text-transform: capitalize;"
+                >
+                  {strongEntry.language}
+                </dd>
+
+                {#if strongEntry.partOfSpeech}
+                  <dt>Part of Speech:</dt>
+                  <dd>
+                    {expandStepBiblePOS(strongEntry.partOfSpeech)}
+                    <span class="code-raw">({strongEntry.partOfSpeech})</span>
+                  </dd>
+                {/if}
+
+                {#if strongEntry.occurrences}
+                  <dt>Occurrences:</dt>
+                  <dd>{strongEntry.occurrences}× in the Bible</dd>
+                {/if}
+              </dl>
+            </div>
+
+            {#if strongEntry.shortDefinition}
+              <div class="info-section">
+                <h3>Short Definition</h3>
+                <p class="short-def">{strongEntry.shortDefinition}</p>
+              </div>
+            {/if}
+
+            <div class="info-section">
+              <h3>Full Definition</h3>
+              <p class="full-def">{@html renderStrongsMarkup(strongEntry.definition)}</p>
+            </div>
+
+            {#if strongEntry.kjvUsage}
+              <div class="info-section">
+                <h3>KJV Usage</h3>
+                <p class="usage">{@html renderStrongsMarkup(strongEntry.kjvUsage)}</p>
+              </div>
+            {/if}
+
+            {#if strongEntry.derivation}
+              <div class="info-section">
+                <h3>Derivation</h3>
+                <p class="derivation">{@html renderStrongsMarkup(strongEntry.derivation)}</p>
+              </div>
+            {/if}
+
+            {#if formsData.length > 0}
+              <div class="info-section">
+                <h3>Inflection Forms</h3>
+                <table class="forms-table">
+                  <thead>
+                    <tr><th>Form</th><th>Parsing</th><th>×</th></tr>
+                  </thead>
+                  <tbody>
+                    {#each formsData as f}
+                      <tr>
+                        <td class="form-text">{f.form}</td>
+                        <td class="form-parse">{strongEntry?.language === 'hebrew' || strongEntry?.language === 'aramaic' ? expandOshbCode(f.morphCode) : expandRmacCode(f.morphCode)}</td>
+                        <td class="form-count">{f.count}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {:else if formsLoading}
+              <div class="info-section">
+                <h3>Inflection Forms</h3>
+                <p class="hint">Loading…</p>
+              </div>
+            {/if}
+          </div>
+        {:else if activeTab === "occurrences"}
+          <div class="occurrences-view">
+            {#if occurrencesLoading}
+              <p class="hint">Loading occurrences…</p>
+            {:else if occurrences.length === 0 && occurrencesLoaded}
+              <p class="coming-soon">No occurrences found in imported data.</p>
+            {:else if occurrences.length > 0}
+              <p class="occ-count">{occurrences.length} occurrence{occurrences.length === 1 ? '' : 's'}</p>
+              <div class="occ-list">
+                {#each occurrences as occ}
+                  <button class="occ-ref" on:click={() => handleOccurrenceClick(occ)}>
+                    {occ.book} {occ.chapter}:{occ.verse}
+                  </button>
+                {/each}
+              </div>
+            {:else}
+              <p class="hint">Loading…</p>
+            {/if}
+          </div>
+        {:else if activeTab === "related"}
+          <div class="related-view">
+            <p class="coming-soon">Related words coming soon...</p>
+            <p class="hint">
+              This will show synonyms, antonyms, and related concepts
+            </p>
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <div class="empty-state">
+        <svg
+          width="64"
+          height="64"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+        >
+          <path
+            d="M12 6.5v10M7 11.5h10"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <circle cx="12" cy="12" r="10" stroke-width="1.5" />
+        </svg>
+        <p>No lexical data to display</p>
+      </div>
+    {/if}
   </div>
-{/if}
+</div>
 
 <style>
-  /* Backdrop, card and header are deliberately identical to IsbeModal and
-     NavesModal — the three cards are siblings in the same lookup flow and you
-     can bridge straight from one to another, so any drift between them reads
-     as a glitch. Change all three together. */
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+  /* flex:1 fills the card (a flex column); height:100% fills a docked window's
+     panel-content (which isn't one). Both are set so the same component fills
+     either host — same arrangement as IsbeContent. */
+  .lexical-content {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-    padding: 16px;
-    backdrop-filter: blur(3px);
-    animation: fadeIn 0.2s ease-out;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    background: var(--background-color, #1e1e1e);
+    color: var(--text-color, #fff);
+  }
+  .lexical-content.docked {
+    height: 100%;
   }
 
+  /* .tab-content animates with this, and the card that used to own it now
+     lives in LexicalModal. */
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -1252,29 +1208,6 @@
     }
   }
 
-  .modal-container {
-    background: var(--background-color, #1e1e1e);
-    color: var(--text-color, #fff);
-    border-radius: 10px;
-    width: min(720px, 100%);
-    max-height: min(86vh, 900px);
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
-    animation: slideUp 0.3s ease-out;
-  }
-
-  @keyframes slideUp {
-    from {
-      transform: translateY(20px);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
 
   .modal-header {
     display: flex;
@@ -1937,16 +1870,6 @@
       grid-template-columns: 120px 1fr;
       gap: 8px 12px;
     }
-  }
-
-  /* --- Biblical character view (dark modal: light text on #1e1e1e) --- */
-  .char-back {
-    background: none;
-    border: none;
-    color: #8bc34a;
-    font-size: 13px;
-    cursor: pointer;
-    padding: 0 0 10px;
   }
 
 </style>

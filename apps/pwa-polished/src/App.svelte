@@ -1,9 +1,6 @@
 <script lang="ts">
   import BibleReader from "./components/BibleReader.svelte";
-  import LexicalModal from "./components/LexicalModal.svelte";
-  import IsbeModal from "./components/IsbeModal.svelte";
-  import NavesModal from "./components/NavesModal.svelte";
-  import PersonModal from "./components/PersonModal.svelte";
+  import LookupModal from "./components/LookupModal.svelte";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
@@ -280,13 +277,9 @@
     <PaneContainer />
     <ProgressModal progress={$currentDownload} visible={$showProgressModal} />
     
-    <!-- Shared Lexical Modal (single instance for all Bible readers) -->
-    <LexicalModal />
-
-    <!-- Shared ISBE encyclopedia / place modal -->
-    <IsbeModal />
-    <NavesModal />
-    <PersonModal />
+    <!-- The one lookup card: dictionary, topical, encyclopedia and bios all
+         live in it, and the tabs across its top switch between them. -->
+    <LookupModal />
 
     <!-- Shared Reading Plan Modal -->
     <ReadingPlanModal bind:isOpen={showReadingPlanModal} />

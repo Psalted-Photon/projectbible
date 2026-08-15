@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { lookupStore } from './lookupStore';
 
 /**
  * Drives the ISBE encyclopedia / place modal. Opened with a lightweight
@@ -30,13 +31,24 @@ const empty: IsbeModalState = {
 function createIsbeModalStore() {
   const { subscribe, set } = writable<IsbeModalState>({ ...empty });
 
+  // There is one lookup card holding all four works; lookupStore says which of
+  // them is on top. Opening a work sets its own state here and brings it to the
+  // front, which is what lets the tabs switch without the card going away.
   return {
     subscribe,
-    open: (data: Omit<IsbeModalState, 'isOpen'>) => set({ ...data, isOpen: true }),
+    open: (data: Omit<IsbeModalState, 'isOpen'>) => {
+      set({ ...data, isOpen: true });
+      lookupStore.show('encyclopedia');
+    },
     /** Open by ISBE entry id (used by internal cross-reference links). */
-    openEntry: (entryId: number, primaryName: string) =>
-      set({ ...empty, kind: 'entry', entryId, primaryName, isOpen: true }),
-    close: () => set({ ...empty }),
+    openEntry: (entryId: number, primaryName: string) => {
+      set({ ...empty, kind: 'entry', entryId, primaryName, isOpen: true });
+      lookupStore.show('encyclopedia');
+    },
+    close: () => {
+      set({ ...empty });
+      lookupStore.close();
+    },
   };
 }
 

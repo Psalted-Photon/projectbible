@@ -10,6 +10,7 @@
   import IsbeContent from "./IsbeContent.svelte";
   import PersonContent from "./PersonContent.svelte";
   import NavesContent from "./NavesContent.svelte";
+  import LexicalContent from "./LexicalContent.svelte";
 
   // What goes inside a window, for every edge. WindowContainer renders one of
   // these per docked window; keeping the list here means a new content type is
@@ -68,31 +69,9 @@
 {:else if panel.contentType === 'notes'}
   <NotesPane windowId={panel.id} contentState={panel.contentState} edge={panel.edge} />
 {:else if panel.contentType === 'wordstudy'}
-  <div class="placeholder">
-    <h2>Word Study</h2>
-    <p>Coming soon...</p>
-  </div>
+  <LexicalContent
+    windowId={panel.id}
+    selectedText={panel.contentState?.selectedText ?? ''}
+    strongsId={panel.contentState?.strongsId ?? undefined}
+  />
 {/if}
-
-<style>
-  .placeholder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: #888;
-    padding: 40px;
-    text-align: center;
-  }
-
-  .placeholder h2 {
-    font-size: 32px;
-    margin-bottom: 16px;
-    color: #e0e0e0;
-  }
-
-  .placeholder p {
-    font-size: 18px;
-  }
-</style>

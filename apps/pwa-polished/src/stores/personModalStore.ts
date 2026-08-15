@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { lookupStore } from './lookupStore';
 import type { PersonLookupResult } from '../adapters/lexicon-lookup';
 
 /**
@@ -35,11 +36,17 @@ const empty: PersonModalState = {
 function createPersonModalStore() {
   const { subscribe, set } = writable<PersonModalState>({ ...empty });
 
+  // One card holds all four works; lookupStore says which is on top.
   return {
     subscribe,
-    open: (data: Partial<Omit<PersonModalState, 'isOpen'>>) =>
-      set({ ...empty, ...data, isOpen: true }),
-    close: () => set({ ...empty }),
+    open: (data: Partial<Omit<PersonModalState, 'isOpen'>>) => {
+      set({ ...empty, ...data, isOpen: true });
+      lookupStore.show('people');
+    },
+    close: () => {
+      set({ ...empty });
+      lookupStore.close();
+    },
   };
 }
 

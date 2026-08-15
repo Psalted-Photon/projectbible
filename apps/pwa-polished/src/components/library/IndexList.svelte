@@ -270,34 +270,18 @@
    * flags it sets — so this navigates straight there and can't disagree with
    * the dot that invited the tap.
    */
-  /**
-   * Only one lookup card is meant to be open at a time — the work tabs close
-   * the one they leave. Two at once would also put two Escape handlers on the
-   * same key. A docked window isn't a store, so it survives this untouched,
-   * which is the same asymmetry the tabs have.
-   */
-  function soloCard(keep: "isbe" | "naves" | "person" | "lexical") {
-    if (keep !== "isbe") isbeModalStore.close();
-    if (keep !== "naves") navesModalStore.close();
-    if (keep !== "person") personModalStore.close();
-    if (keep !== "lexical") lexicalModalStore.close();
-  }
-
   async function openBadge(e: MouseEvent, row: LibraryRow, badge: LibraryBadge) {
     e.stopPropagation();
 
     if (badge === "bio" && row.bioId) {
-      soloCard("person");
       personModalStore.open({ personId: row.bioId, primaryName: row.name, clickedWord: row.name });
       return;
     }
     if (badge === "topic" && row.topicId != null) {
-      soloCard("naves");
       navesModalStore.open({ topicId: row.topicId, primaryName: row.name });
       return;
     }
     if (badge === "dict" && row.dictTerm) {
-      soloCard("lexical");
       lexicalModalStore.open({
         selectedText: row.dictTerm,
         strongsId: undefined,
@@ -307,7 +291,6 @@
       return;
     }
     if (badge === "entry" && row.badgeEntryId != null) {
-      soloCard("isbe");
       isbeModalStore.open({ kind: "entry", entryId: row.badgeEntryId, placeId: null, primaryName: row.name });
       return;
     }
@@ -320,7 +303,6 @@
       if (entryId == null || Number.isNaN(entryId)) return;
       const place = await getIsbePlaceByEntryId(entryId);
       const mappable = !!place && place.latitude != null && place.longitude != null;
-      soloCard("isbe");
       isbeModalStore.open({
         kind: mappable ? "place" : "entry",
         entryId,

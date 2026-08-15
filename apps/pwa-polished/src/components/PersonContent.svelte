@@ -1,17 +1,17 @@
 <script lang="ts">
+  import { onMount, onDestroy, tick } from "svelte";
   import { get } from "svelte/store";
   import { BIBLE_BOOKS, normalizeBookName, getBookColor } from "../lib/bibleData.js";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { lexicalModalStore } from "../stores/lexicalModalStore";
-  import { isbeModalStore } from "../stores/isbeModalStore";
   import { navesModalStore } from "../stores/navesModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
-  import WorkTabs, { type WorkKey } from "./WorkTabs.svelte";
+  import WorkTabs from "./WorkTabs.svelte";
+  import { openWorkSubject, openWorkIndex, type WorkKey } from "../lib/openWork";
   import { peopleSource } from "../lib/library/source";
   import {
     getPersonVerses,
@@ -46,15 +46,26 @@
   export let initialTrail: { personId: string; name: string }[] = [];
   export let onClose: (() => void) | null = null;
   export let onPopOut: ((snap: { personId: string; primaryName: string }) => void) | null = null;
+  /** How far down the bio was, restored when you come back to this tab. */
+  export let initialScrollTop = 0;
+  /** Reports the view on the way out. */
+  export let onSnapshot: ((snap: { scrollTop: number }) => void) | null = null;
   /** Hosts that draw their own header (the word-study modal) suppress ours. */
   export let showHeader = true;
   /** Lets a host with its own title bar follow which homonym is showing. */
   export let onPersonChange: ((p: PersonRecord | null) => void) | null = null;
-  /** Set by the word-study modal, which can show the definition in place —
-   *  better than the header's Dictionary button, which opens a second card. */
-  export let onShowDefinition: (() => void) | null = null;
 
   $: docked = !!windowId;
+
+  let bodyEl: HTMLDivElement | null = null;
+
+  onMount(async () => {
+    if (!initialScrollTop) return;
+    await tick();
+    if (bodyEl) bodyEl.scrollTop = initialScrollTop;
+  });
+
+  onDestroy(() => onSnapshot?.({ scrollTop: bodyEl?.scrollTop ?? 0 }));
 
   let loaded: PersonRecord | null = null;
   let loading = false;
@@ -254,62 +265,21 @@
   // This used to ask the dictionary for the whole name — "mary, mother of
   // jesus" — where the other works ask for the first word only, so the button
   // was quietly missing for anyone with a compound name.
-  $: dictWord = works?.dict ? (works.term ?? "") : "";
-  $: isbeMatch = works?.entry ?? null;
-  $: navesTopicId = works?.topic?.id ?? null;
-  $: navesName = works?.topic?.name ?? "";
-
-  function openTopical() {
-    if (navesTopicId == null) return;
-    if (!docked) onClose?.();
-    navesModalStore.open({ topicId: navesTopicId, primaryName: navesName });
-  }
-
-  function openEncyclopedia() {
-    if (!isbeMatch) return;
-    const m = isbeMatch;
-    // Docked, the bio stays put and the article opens beside it. In the modal
-    // there is only one card, so this one has to give way.
-    if (!docked) onClose?.();
-    isbeModalStore.open({
-      kind: m.kind,
-      entryId: m.entryId,
-      placeId: m.placeId ?? null,
-      primaryName: m.primaryName,
-    });
-  }
 
   /**
-   * The work tabs. Over the index these move you between indexes rather than
-   * between views of a subject, since there is no subject.
+   * The work tabs. Docked, this swaps what the window is showing and the window
+   * stays put; otherwise it opens that work's card. Over the index there is no
+   * subject to carry across, so the sibling opens on its own contents instead.
    *
-   * Dictionary is special here: hosted inside the word-study card there is a
-   * definition view a flip away, which beats opening a second card on top.
    */
   function selectWork(work: WorkKey) {
-    if (showContents) {
-      if (!docked) onClose?.();
-      if (work === "encyclopedia") isbeModalStore.open({ kind: "entry", entryId: null, placeId: null, primaryName: "" });
-      else if (work === "topical") navesModalStore.open({ topicId: null, primaryName: "" });
-      return;
-    }
-    if (work === "dictionary") {
-      if (onShowDefinition) onShowDefinition();
-      else openDictionary();
-    } else if (work === "topical") openTopical();
-    else if (work === "encyclopedia") openEncyclopedia();
-  }
-
-  function openDictionary() {
-    const term = dictWord;
-    if (!term) return;
-    if (!docked) onClose?.();
-    lexicalModalStore.open({
-      selectedText: term,
-      strongsId: undefined,
-      morphologyData: null,
-      lexicalEntries: null,
-    });
+    const opened = showContents
+      ? openWorkIndex(work, windowId)
+      : openWorkSubject(work, works, title, windowId);
+    // Nothing there — leave what's on screen alone rather than closing onto it.
+    if (!opened) return;
+    // Nothing closes: a window changed in place, and the card keeps the same
+    // frame with a different work inside it. That is what makes these tabs.
   }
 
   // --- Verse list --------------------------------------------------------
@@ -398,7 +368,7 @@
 <div class="person-content" class:docked class:hosted={!showHeader}>
   {#if showHeader}
     <!-- Hosted inside the word-study card, that card draws the tabs instead. -->
-    <WorkTabs {works} current="people" onIndex={showContents} onSelect={selectWork} />
+    <WorkTabs {works} current="people" onIndex={showContents} inWindow={docked} onSelect={selectWork} />
     <div class="person-header">
       <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
       <div class="head-text">
@@ -455,7 +425,7 @@
         <span class="crumb here">{title}</span>
       </nav>
     {/if}
-    <div class="person-body">
+    <div class="person-body" bind:this={bodyEl}>
       <div class="character-view">
         {#if person.nameMeaning}
           <p class="char-meaning">“{person.nameMeaning}”</p>
@@ -568,13 +538,6 @@
           </div>
         {/if}
 
-        {#if onShowDefinition}
-          <div class="char-footer">
-            <button class="char-toggle" on:click={() => onShowDefinition?.()}>
-              Show dictionary definition →
-            </button>
-          </div>
-        {/if}
 
         {#if candidates.length > 1}
           <div class="char-alternates">
@@ -884,20 +847,6 @@
     margin: 0;
     font-size: 11px;
     color: #888;
-  }
-  .char-footer {
-    margin-top: 16px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-  }
-  .char-toggle {
-    background: none;
-    border: none;
-    color: #8bc34a;
-    font-size: 13px;
-    cursor: pointer;
-    padding: 0;
-    font-family: inherit;
   }
   .char-verses {
     margin: 0 0 16px;

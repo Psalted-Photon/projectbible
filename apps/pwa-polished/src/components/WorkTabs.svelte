@@ -1,9 +1,6 @@
-<script context="module" lang="ts">
-  export type WorkKey = "dictionary" | "topical" | "encyclopedia" | "people";
-</script>
-
 <script lang="ts">
   import type { WorksResolution } from "../adapters/lexicon-lookup";
+  import { worksInWindow, type WorkKey } from "../lib/openWork";
 
   /**
    * The four reference works, across the top of every lookup card.
@@ -23,6 +20,8 @@
   /** True while the A–Z index is showing, where tabs switch index rather than
    *  subject — there is no subject to cross-reference. */
   export let onIndex = false;
+  /** Set when this card is a docked window, which not every work can be. */
+  export let inWindow = false;
   export let onSelect: (work: WorkKey) => void;
 
   const TABS: { key: WorkKey; label: string }[] = [
@@ -32,10 +31,12 @@
     { key: "people", label: "People" },
   ];
 
-  function isAvailable(key: WorkKey, w: WorksResolution | null, idx: boolean): boolean {
+  function isAvailable(key: WorkKey, w: WorksResolution | null, idx: boolean, win: boolean): boolean {
     // The one you're on is always live: you are demonstrably looking at it,
     // whether or not the resolver has answered yet.
     if (key === current) return true;
+    // A pinned window can only hold works that have a window form.
+    if (win && !worksInWindow(key)) return false;
     // Browsing an index, the tabs move you between indexes. Every work has one
     // except the dictionary, which has no A–Z list to show.
     if (idx) return key !== "dictionary";
@@ -51,22 +52,32 @@
     }
   }
 
+  /** Why a tab is greyed, so hovering it says something useful. */
+  function reason(key: WorkKey, win: boolean): string {
+    if (win && !worksInWindow(key)) return `${label(key)} can't be pinned into a window yet`;
+    return `Nothing in ${label(key)} for this`;
+  }
+
+  function label(key: WorkKey): string {
+    return TABS.find((t) => t.key === key)?.label ?? key;
+  }
+
   function pick(key: WorkKey) {
-    if (key === current || !isAvailable(key, works, onIndex)) return;
+    if (key === current || !isAvailable(key, works, onIndex, inWindow)) return;
     onSelect(key);
   }
 </script>
 
 <div class="work-tabs" role="tablist" aria-label="Reference works">
   {#each TABS as tab (tab.key)}
-    {@const live = isAvailable(tab.key, works, onIndex)}
+    {@const live = isAvailable(tab.key, works, onIndex, inWindow)}
     <button
       class="work-tab"
       class:active={tab.key === current}
       disabled={!live}
       role="tab"
       aria-selected={tab.key === current}
-      title={live ? tab.label : `Nothing in ${tab.label} for this`}
+      title={live ? tab.label : reason(tab.key, inWindow)}
       on:click={() => pick(tab.key)}
     >
       {tab.label}
