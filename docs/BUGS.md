@@ -687,7 +687,19 @@ Worth capturing next time it happens, since it would narrow this quickly:
 
 ---
 
-### [ ] 10. `navigationStore` notifies every subscriber even when nothing changed
+### [x] 10. `navigationStore` notifies every subscriber even when nothing changed
+
+**Fixed 2026-08-15.** The check now runs *before* the write rather than inside it.
+
+Returning the same object from `update` never suppressed anything — Svelte's change
+test treats any object as changed, identical or not — so the guard did nothing at
+all. Since this fires on the reader's scroll debounce, every subscriber was woken
+several times a second the whole time the reader was moving, and the same state was
+written back to storage each time.
+
+Checked the other stores while in there: nothing else uses this pattern.
+
+#### Original diagnosis
 
 Found 2026-08-13 while tracking down #9. Not user-visible; pure wasted work.
 

@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { getBookChapters, normalizeBookName } from '../lib/bibleData';
 
 export interface NavigationState {
@@ -158,9 +158,17 @@ function createNavigationStore() {
     // Lightweight nav update driven by BibleReader scroll — updates book/chapter in
     // the store (so navbar and commentary follow) without setting scrollTargetVerse
     // (which would cause BibleReader to auto-scroll, fighting the user).
+    //
+    // The check has to happen before `update` runs, not inside it. Returning the
+    // same object from `update` does not suppress the notification: Svelte's
+    // change test treats any object as changed, identical or not. This fires on
+    // a scroll debounce, so left inside it woke every subscriber several times a
+    // second the whole time the reader was moving — and wrote the same state
+    // back to storage each time — even though nothing had changed.
     setScrollPosition: (book: string, chapter: number) => {
+      const current = get({ subscribe });
+      if (current.book === book && current.chapter === chapter) return;
       update(state => {
-        if (state.book === book && state.chapter === chapter) return state;
         const next = { ...state, book, chapter };
         persistState(next);
         return next;
