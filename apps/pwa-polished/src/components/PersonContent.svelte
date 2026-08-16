@@ -146,6 +146,20 @@
   /** Parents come from two fields but read as one row. */
   $: parents = [...(person?.father ?? []), ...(person?.mother ?? [])];
 
+  /**
+   * The other names this person goes by.
+   *
+   * The pack packs them "Lord,Son,Lamb" with no spaces, and a line breaks at
+   * whitespace — so Christ's twenty-nine titles were one unbreakable word that
+   * ran off the side of the card with a scrollbar under it rather than wrapping.
+   * The spaces are what let it wrap. Split the way the pack builder splits them,
+   * so an alias with a space of its own — "Holy Ghost" — stays one name.
+   */
+  $: alsoCalled = (person?.alsoCalled ?? "")
+    .split(/[,;]/)
+    .map((n) => n.trim())
+    .filter(Boolean);
+
   // --- Walking the family ------------------------------------------------
   /** One step of the back trail: enough to reopen that person. */
   type TrailStop = { personId: string; name: string };
@@ -494,8 +508,8 @@
         {#if person.nameMeaning}
           <p class="char-meaning">“{person.nameMeaning}”</p>
         {/if}
-        {#if person.alsoCalled}
-          <p class="char-aka">Also called: {person.alsoCalled}</p>
+        {#if alsoCalled.length}
+          <p class="char-aka">Also called: {alsoCalled.join(", ")}</p>
         {/if}
 
         <dl class="char-facts">
@@ -831,6 +845,9 @@
     font-size: 13px;
     color: #9aa0aa;
     margin: 0 0 12px;
+    /* Backstop for a single alias longer than the card: break it rather than
+       push the bio sideways. The list itself wraps on its own spaces. */
+    overflow-wrap: break-word;
   }
   .char-facts {
     display: grid;
