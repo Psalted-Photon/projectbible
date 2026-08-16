@@ -489,11 +489,15 @@
 
   async function selectTab(t: Tab) {
     activeTab = t;
+    await tick();
+    // Each tab is its own view, so it starts at the top. Carrying the last
+    // tab's offset across leaves the short tabs part-scrolled off the top —
+    // Map most of all, since it is barely taller than the map itself. That is
+    // what made its corner button come back clipped, or seem to vanish, by an
+    // amount that depended on how far down the previous tab you happened to be.
+    if (bodyEl) bodyEl.scrollTop = 0;
     persistView();
-    if (t === "map" && hasMap) {
-      await tick();
-      renderMap();
-    }
+    if (t === "map" && hasMap) renderMap();
   }
 
   function renderMap() {
