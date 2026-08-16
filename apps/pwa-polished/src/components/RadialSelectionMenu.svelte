@@ -273,22 +273,23 @@
   /* The scope toggle: a word rather than an icon, so it is set apart from the
      actions — but it still has to read as something you can take. It carries no
      "current" state, because its label is where you'd be going rather than where
-     you are. It used to share the dim grey the unselected half of the old
-     Word/Verse pair wore, which on its own just reads as a switched-off button.
-     Indigo is the same accent armed Extend uses for a live choice. */
+     you are.
+
+     The colour lives in the word, not behind it. A tinted fill was see-through
+     enough to read the verse through, and a coloured disc with an outline was
+     the only thing on the ring whose whole circle was visible — which made the
+     smallest button look like the biggest. Keeping the same near-solid dark
+     circle its neighbours wear leaves the coloured word as the thing you see,
+     the way their coloured icon is. Indigo is the accent armed Extend uses. */
   .mode-seat {
     width: calc(var(--badge) - 6px);
     height: calc(var(--badge) - 6px);
-    background: rgba(102, 126, 234, 0.22);
-    border: 1px solid #667eea;
-    font-size: 11px;
     font-weight: 600;
-    color: #cdd5f8;
+    color: #8fa3f5;
   }
 
   .mode-seat:hover {
-    background: rgba(102, 126, 234, 0.38);
-    color: #fff;
+    color: #b9c4fa;
   }
 
   /* The app's icon-badge idiom: a bold glyph in black with a thin white copy

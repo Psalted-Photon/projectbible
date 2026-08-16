@@ -140,15 +140,17 @@
     border-bottom: 1px solid #333;
   }
   
-  /* Coloured because it is a choice you can take, not a state. It used to share
-     the dim grey the unselected half of the old Word/Verse pair wore, which on
-     its own reads as a switched-off button. Matches the ring's toggle. */
+  /* The colour lives in the word, not behind it — same as the ring's toggle.
+     It sits on the actions' own background so it reads as one of them rather
+     than a block of colour, and the tint alone says it is a live choice. It
+     used to share the dim grey the unselected half of the old Word/Verse pair
+     wore, which on its own reads as a switched-off button. */
   .toggle-btn {
     flex: 1;
     padding: 3px 6px;
-    background: rgba(102, 126, 234, 0.22);
-    color: #cdd5f8;
-    border: 1px solid #667eea;
+    background: #333;
+    color: #8fa3f5;
+    border: none;
     border-radius: 2px;
     font-size: 11px;
     font-weight: 600;
@@ -158,8 +160,8 @@
   }
   
   .toggle-btn:hover {
-    background: rgba(102, 126, 234, 0.38);
-    color: #fff;
+    background: #444;
+    color: #b9c4fa;
   }
   
   .actions {
