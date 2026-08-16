@@ -399,7 +399,31 @@ Same flip pattern in `NavesContent.svelte:311-322` and `PersonContent.svelte:190
 
 ---
 
-### [ ] 6. Ring menu stays in Verse scope after you use it once
+### [x] 6. Ring menu stays in Verse scope after you use it once
+
+**Fixed 2026-08-15.** The scope now returns to Word at the start of every new tap,
+and again when a selection is dismissed. Verse is a choice about the selection you
+have, not a mode left switched on.
+
+Previously only a committed drag reset it, and a plain tap never goes down that path
+— so one use of Verse made every later tap select a whole verse for the rest of the
+session. Extend and shift-click return before the reset, so they still grow the
+selection you already have rather than starting over.
+
+Two side effects went with it: while stuck on Verse the reader skipped the person and
+encyclopedia lookup, so Define never relabelled to Bio or Info; and Mark saved a
+whole-verse highlight where a word one was meant, which then wouldn't line up with
+word highlights made elsewhere.
+
+**Also, same pass: the Word/Verse pair became one toggle.** On a fresh tap the word
+is already highlighted in front of you, so a button announcing it earned nothing. The
+single button is labelled with what you'd be switching *to* — "Verse" on a word,
+"Word" once the verse is selected. It never shows an active state, because its label
+is where you'd be going rather than where you are. Done in both the ring and the
+plain toast so the two stay consistent; the ring re-spaces itself around the freed
+seat, since the seat geometry only spreads however many buttons it's given.
+
+#### Original diagnosis
 
 Repro: tap a word → ring appears, word highlighted. Tap Verse → whole verse selects.
 Tap away, tap a new word → it selects the whole verse again, because Verse was last

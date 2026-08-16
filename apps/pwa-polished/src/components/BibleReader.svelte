@@ -2810,6 +2810,12 @@
     clearHoverHighlight();
     selectedSegments = [];
     selectedWordCount = 0;
+    // Back to the word every time. Verse is a deliberate choice about the
+    // selection you have, not a mode you leave switched on — most taps are
+    // about the word you just tapped. Only a committed drag used to reset it,
+    // so a plain tap kept selecting whole verses for the rest of the session.
+    // Extend and shift-click return above this, so they still grow what's there.
+    selectionMode = "word";
 
     // Suppress the OS text-selection UI (magnifier, callout, blue handles)
     // for the whole gesture. Must be set now, not on arming, because iOS
@@ -3549,6 +3555,9 @@
     selFocus = null;
     selectedSegments = [];
     selectedWordCount = 0;
+    // Nothing selected means nothing to be in verse mode about — so the next
+    // tap starts on the word whichever way you got here.
+    selectionMode = "word";
     clearHighlights();
   }
 

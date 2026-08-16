@@ -100,9 +100,9 @@ export function seatOffset(angleDeg: number, radius: number): { dx: number; dy: 
 // ---------------------------------------------------------------------------
 
 export interface RadialItem {
-  /** 'mode' is the Word/Verse pair, styled apart from the actions. */
+  /** 'mode' is the scope toggle, styled apart from the actions. */
   kind: 'mode' | 'action';
-  /** Dispatched as-is: 'word'/'verse' for modes, the action name otherwise. */
+  /** Dispatched as-is: 'word'/'verse' for the toggle, the action name otherwise. */
   id: string;
   label: string;
   /** Key into the component's icon map. Modes have none — they show their label. */
@@ -123,10 +123,9 @@ export interface RadialItemOpts {
 /**
  * The buttons, in sweep order, ready to be paired with seatAngles().
  *
- * Word leads and Verse trails so the two of them land on the seats flanking the
- * right-hand gap. Search and Save are deliberately absent — Search is a nav-bar
- * button already, and Save was never implemented. The classic toast still has
- * both.
+ * The scope toggle trails, on the seat beside the right-hand gap. Search and
+ * Save are deliberately absent — Search is a nav-bar button already, and Save
+ * was never implemented. The classic toast still has both.
  *
  * Accents avoid stacking blues on top of each other: Notes owns the sticky
  * note's own baby blue, so Highlight takes the yellow it vacated, Define takes
@@ -168,10 +167,15 @@ export function radialItems(o: RadialItemOpts): RadialItem[] {
     });
   }
 
+  // One seat, not two. On a fresh tap the word is already highlighted in front
+  // of you, so a button announcing that earns nothing — what's worth a seat is
+  // the way out of it. The label is what you'd be switching *to*, so it reads
+  // "Verse" on a word and "Word" once the verse is selected.
   return [
-    { kind: 'mode', id: 'word', label: 'Word' },
     ...actions,
-    { kind: 'mode', id: 'verse', label: 'Verse' },
+    o.mode === 'word'
+      ? { kind: 'mode', id: 'verse', label: 'Verse' }
+      : { kind: 'mode', id: 'word', label: 'Word' },
   ];
 }
 

@@ -51,20 +51,15 @@
   bind:this={rootEl}
   style="left: {x}px; top: {y}px;"
 >
+  <!-- One button, not two. The word you tapped is already highlighted in front
+       of you, so a button saying so earns nothing — what's worth the space is
+       the way out of it. The label is what you'd be switching *to*. -->
   <div class="mode-toggle">
-    <button 
+    <button
       class="toggle-btn"
-      class:active={mode === 'word'}
-      on:click={() => dispatch('modeChange', 'word')}
+      on:click={() => dispatch('modeChange', mode === 'word' ? 'verse' : 'word')}
     >
-      Word
-    </button>
-    <button 
-      class="toggle-btn"
-      class:active={mode === 'verse'}
-      on:click={() => dispatch('modeChange', 'verse')}
-    >
-      Verse
+      {mode === 'word' ? 'Verse' : 'Word'}
     </button>
   </div>
   
@@ -160,11 +155,6 @@
   
   .toggle-btn:hover {
     background: #2a2a2a;
-  }
-  
-  .toggle-btn.active {
-    background: #667eea;
-    color: white;
   }
   
   .actions {

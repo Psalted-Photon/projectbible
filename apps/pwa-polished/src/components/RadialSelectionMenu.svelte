@@ -197,7 +197,6 @@
     <button
       class="seat"
       class:mode-seat={item.kind === 'mode'}
-      class:active={item.kind === 'mode' && item.id === mode}
       style="--dx: {seats[i]?.dx ?? 0}px; --dy: {seats[i]?.dy ?? 0}px; --accent: {item.accent ?? '#3a3a3a'};"
       in:seatIn|global={{ i }}
       out:seatOut|global={{ i }}
@@ -263,8 +262,9 @@
     transform: translate(-50%, -50%) translate(var(--dx), var(--dy)) scale(0.94);
   }
 
-  /* The Word/Verse pair reads as a mode switch, not another action: no splash,
-     no icon, and it lights up when it is the mode you are already in. */
+  /* The scope toggle reads as a switch rather than another action: no splash,
+     no icon. It never lights up — its label is where you'd be going, not where
+     you are, so there is no "current" state for it to show. */
   .mode-seat {
     width: calc(var(--badge) - 6px);
     height: calc(var(--badge) - 6px);
@@ -272,12 +272,6 @@
     border: 1px solid #3a3a3a;
     font-size: 11px;
     color: #888;
-  }
-
-  .mode-seat.active {
-    background: #667eea;
-    border-color: #667eea;
-    color: #fff;
   }
 
   /* The app's icon-badge idiom: a bold glyph in black with a thin white copy
