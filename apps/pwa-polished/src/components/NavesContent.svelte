@@ -12,7 +12,7 @@
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
   import WorkTabs from "./WorkTabs.svelte";
-  import { openWorkSubject, openWorkIndex, type WorkKey } from "../lib/openWork";
+  import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../lib/openWork";
   import { navesSource } from "../lib/library/source";
   import {
     getNavesTopic,
@@ -361,6 +361,14 @@
     worksCheckedFor = key;
     works = null;
     if (!key) return;
+    // Arrived here from another tab? Inherit the resolution we were opened from
+    // rather than deriving a new one from the topic's name, which cannot tell
+    // three men called Herod apart and so returns the wrong one to People.
+    const inherited = topic ? carriedWorks("topical", String(topic.topicId)) : null;
+    if (inherited) {
+      works = inherited;
+      return;
+    }
     try {
       const found = await resolveWorks(name);
       // Guard a slower lookup landing after you've moved on.

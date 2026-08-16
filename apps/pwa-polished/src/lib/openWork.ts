@@ -99,6 +99,53 @@ function subjectState(work: WorkKey, works: WorksResolution | null): Record<stri
   }
 }
 
+// --- The subject the tabs are carrying ------------------------------------
+
+/**
+ * The resolution the last tab switch opened from.
+ *
+ * Each work used to work out its own subject from the title it was handed, and
+ * a title is not a subject: "Herod" answers for three men, and asked by name
+ * with no verse to go on the resolver returns whichever of them is mentioned
+ * most. So leaving the bio for another tab and coming back landed on Herod
+ * Antipas instead of the Herod you opened. Holding the resolution here means
+ * the tabs carry the subject rather than re-deriving it at every hop.
+ *
+ * Lives for as long as the card does; `clearCarriedWorks` drops it.
+ */
+let carried: WorksResolution | null = null;
+
+/** How a work names what it is showing. Ids only — a name is exactly what
+ *  cannot tell two people called Mary apart. */
+function carriedKey(work: WorkKey, w: WorksResolution): string | null {
+  switch (work) {
+    case 'encyclopedia':
+      return w.entry ? `${w.entry.placeId ?? ''}|${w.entry.entryId ?? ''}` : null;
+    case 'topical':
+      return w.topic ? String(w.topic.id) : null;
+    case 'people':
+      return w.person ? w.person.person.id : null;
+    case 'dictionary':
+      return w.term || null;
+  }
+}
+
+/**
+ * The carried resolution, but only if it is the one this view was opened from.
+ *
+ * `key` is what the caller is showing, in the same shape `carriedKey` produces.
+ * Navigate on within a work — follow a link, walk to a relative — and the ids
+ * stop agreeing, so the caller resolves afresh, which is what it should do.
+ */
+export function carriedWorks(work: WorkKey, key: string | null): WorksResolution | null {
+  if (!carried || !key) return null;
+  return carriedKey(work, carried) === key ? carried : null;
+}
+
+export function clearCarriedWorks(): void {
+  carried = null;
+}
+
 /**
  * Show `work` for the subject currently resolved in `works`.
  *
@@ -113,6 +160,10 @@ export function openWorkSubject(
 ): boolean {
   const state = subjectState(work, works);
   if (!state) return false;
+
+  // Hand the subject to whatever opens next, so it inherits the resolution
+  // rather than deriving a fresh one from the name.
+  carried = works;
 
   if (windowId) {
     if (!worksInWindow(work)) return false;
@@ -162,6 +213,9 @@ export function openWorkSubject(
  * are already browsing an index, where there is no subject to carry across.
  */
 export function openWorkIndex(work: WorkKey, windowId: string | null): boolean {
+  // An A–Z list has no subject, so there is nothing left to carry.
+  carried = null;
+
   if (windowId) {
     if (!worksInWindow(work)) return false;
     windowStore.setWindowContent(windowId, WINDOW_TYPE[work], { ...BLANK });

@@ -7,11 +7,12 @@
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { navesModalStore } from "../stores/navesModalStore";
+  import { personModalStore } from "../stores/personModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
   import WorkTabs from "./WorkTabs.svelte";
-  import { openWorkSubject, openWorkIndex, type WorkKey } from "../lib/openWork";
+  import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../lib/openWork";
   import { peopleSource } from "../lib/library/source";
   import {
     getPersonVerses,
@@ -43,13 +44,19 @@
 
   export let windowId: string | null = null;
   /** People walked through to reach this one, oldest first — the back trail. */
-  export let initialTrail: { personId: string; name: string }[] = [];
+  export let initialTrail: TrailStop[] = [];
   export let onClose: (() => void) | null = null;
   export let onPopOut: ((snap: { personId: string; primaryName: string }) => void) | null = null;
   /** How far down the bio was, restored when you come back to this tab. */
   export let initialScrollTop = 0;
+  /** Whose bio that offset was taken on. An offset belongs to the page it was
+   *  measured on, so a different person starts at the top rather than partway
+   *  down a bio of a different length. */
+  export let initialScrollFor: string | null = null;
   /** Reports the view on the way out. */
-  export let onSnapshot: ((snap: { scrollTop: number }) => void) | null = null;
+  export let onSnapshot:
+    | ((snap: { personId: string | null; trail: TrailStop[]; scrollTop: number }) => void)
+    | null = null;
   /** Hosts that draw their own header (the word-study modal) suppress ours. */
   export let showHeader = true;
   /** Lets a host with its own title bar follow which homonym is showing. */
@@ -61,11 +68,24 @@
 
   onMount(async () => {
     if (!initialScrollTop) return;
+    // Only where it was measured. Restoring one bio's offset onto another's is
+    // how you land halfway down a stranger.
+    if (initialScrollFor && initialScrollFor !== (lookup?.person.id ?? personId)) return;
     await tick();
     if (bodyEl) bodyEl.scrollTop = initialScrollTop;
   });
 
-  onDestroy(() => onSnapshot?.({ scrollTop: bodyEl?.scrollTop ?? 0 }));
+  // Which person, how you got to them, and how far down — enough to put the tab
+  // back as it was. The other three works have always reported their trail;
+  // People reported only the offset, so walking a family tree and stepping over
+  // to another tab lost both the relative and the way back.
+  onDestroy(() =>
+    onSnapshot?.({
+      personId: person?.id ?? null,
+      trail,
+      scrollTop: bodyEl?.scrollTop ?? 0,
+    }),
+  );
 
   let loaded: PersonRecord | null = null;
   let loading = false;
@@ -146,10 +166,11 @@
     if (windowId) {
       windowStore.updateContentState(windowId, { personId: id, primaryName: name, trail });
     } else {
-      // In the modal the record is what drives the view, so swapping person
-      // means swapping the record rather than re-resolving the clicked word.
-      lookup = null;
-      personId = id;
+      // Tell the store, the way Topical tells its own. Setting the props here
+      // and stopping was enough to redraw, but a tab switch unmounts this and
+      // the store would still be holding whoever you started from — so the
+      // relative you had walked to was simply lost on the way back.
+      personModalStore.open({ personId: id, primaryName: name, clickedWord });
     }
   }
 
@@ -244,22 +265,65 @@
   let works: WorksResolution | null = null;
   let worksCheckedFor = "";
 
-  $: if (person) checkWorks(person.name);
+  $: if (person) checkWorks(person);
 
-  async function checkWorks(name: string) {
-    const key = name.trim().toLowerCase();
+  async function checkWorks(p: PersonRecord) {
+    // Keyed on the id rather than the name: six people are called Mary and
+    // twenty-six Zechariah, so a name would treat two different people as the
+    // same subject and skip the re-check, leaving the previous one's works.
+    const key = p.id;
     if (worksCheckedFor === key) return;
     worksCheckedFor = key;
     works = null;
-    if (!key) return;
+    // Arrived here from another tab? Inherit the resolution we were opened from
+    // rather than deriving a new one from a name that cannot tell Herods apart.
+    const inherited = carriedWorks("people", p.id);
+    if (inherited) {
+      works = inherited;
+      return;
+    }
+    if (!p.name.trim()) return;
     try {
-      const found = await resolveWorks(name);
+      const found = await resolveWorks(p.name);
       // Guard a slower lookup landing after you've moved on.
       if (worksCheckedFor !== key) return;
-      works = found;
+      works = pinPerson(found, p);
     } catch {
       works = null;
     }
+  }
+
+  /** True when the person on screen was settled by something better than their
+   *  name — the verse it was clicked in, a homonym you picked, or a relative
+   *  you walked to. Only a bare name match leaves it genuinely open. */
+  $: personIsSettled = lookup ? lookup.matchedByVerse || chosenId !== null : true;
+
+  /**
+   * Say *which* Herod this is.
+   *
+   * resolveWorks asks by name, and a name is not a person: "Herod" answers for
+   * three men, and with no verse to go on the resolver hands back whichever of
+   * them is mentioned most. The bio on screen was settled by better evidence
+   * than that, so the resolution the tabs carry is corrected to name him and
+   * the rest become his alternates. Without this, tabbing to another work and
+   * back re-resolves the bare name and returns a different man.
+   */
+  function pinPerson(found: WorksResolution, p: PersonRecord): WorksResolution {
+    const byName = found.person ? [found.person.person, ...found.person.alternates] : [];
+    const seen = new Set([p.id]);
+    const alternates = [...byName, ...candidates].filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+    return {
+      ...found,
+      // matchedByVerse is read for one thing — whether the homonym chips say
+      // "other people named Herod" or "pick one" — and settled is the question
+      // it is really asking. matchTier is left off rather than invented: no
+      // tier was run here, we were told who this is.
+      person: { person: p, alternates, matchedByVerse: personIsSettled },
+    };
   }
 
   // This used to ask the dictionary for the whole name — "mary, mother of

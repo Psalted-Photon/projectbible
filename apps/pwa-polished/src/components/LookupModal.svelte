@@ -12,6 +12,7 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
   import { windowStore } from "../lib/stores/windowStore";
+  import { clearCarriedWorks } from "../lib/openWork";
 
   /**
    * The one lookup card.
@@ -78,6 +79,8 @@
   function close() {
     closing = true;
     saved = {};
+    // The subject the tabs were carrying goes with them.
+    clearCarriedWorks();
     // Take the card down and drop every work's state with it, so reopening
     // later starts clean rather than on whatever was last on screen.
     isbeModalStore.close();
@@ -208,7 +211,9 @@
           lookup={person.lookup}
           personId={person.personId}
           clickedWord={person.clickedWord}
+          initialTrail={saved.people?.trail ?? []}
           initialScrollTop={saved.people?.scrollTop ?? 0}
+          initialScrollFor={saved.people?.personId ?? null}
           onSnapshot={(snap) => remember("people", snap)}
           onClose={close}
           onPopOut={popOutPerson}

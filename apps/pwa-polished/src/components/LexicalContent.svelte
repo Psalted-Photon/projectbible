@@ -14,7 +14,7 @@
     type WorksResolution,
   } from "../adapters/lexicon-lookup.js";
   import WorkTabs from "./WorkTabs.svelte";
-  import { openWorkSubject, type WorkKey } from "../lib/openWork";
+  import { openWorkSubject, carriedWorks, type WorkKey } from "../lib/openWork";
   import { windowStore } from "../lib/stores/windowStore";
   import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
@@ -155,6 +155,14 @@
     worksCheckedFor = key;
     works = null;
     if (!key) return;
+    // Arrived here from another tab? Inherit the resolution we were opened from
+    // rather than deriving a new one from the word, which cannot tell three men
+    // called Herod apart and so returns the wrong one to People.
+    const inherited = carriedWorks("dictionary", key);
+    if (inherited) {
+      works = inherited;
+      return;
+    }
     try {
       const found = await resolveWorks(text);
       // A slower lookup must not light up a button for the previous word.
