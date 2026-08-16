@@ -54,6 +54,7 @@
     availableTranslations,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
+  import { openMapWindow } from "../lib/openMapWindow";
   import { searchQuery, triggerSearch } from "../stores/searchStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
@@ -527,8 +528,17 @@
   let selectedIsPerson = false;
   /** Guards against a slow person lookup landing after the next word click. */
   let personLabelToken = 0;
+  /** Located places tied to the clicked character. Empty means no Map seat. */
+  let selectedPersonPlaces: { name: string; latitude: number; longitude: number; modernName?: string | null; placeType?: string | null }[] = [];
   /** Clicked word resolved to an ISBE place/entry — relabels Define → More Info. */
   let selectedIsbeKind: "place" | "entry" | null = null;
+  /**
+   * Is there somewhere to put on a map? A place is its own location; a character
+   * is the places their story touches, and gets no seat when there are none.
+   */
+  $: selectionHasMap = selectedIsPerson
+    ? selectedPersonPlaces.length > 0
+    : selectedIsbeKind === "place";
   /** Neighbouring words captured at click time, for multi-word phrase expansion. */
   let selectedContext: { before: string[]; after: string[] } | null = null;
   let selectionMode: "word" | "verse" = "word";
@@ -3019,6 +3029,7 @@
     // void any in-flight person/ISBE request and clear their labels.
     personLabelToken++;
     selectedIsPerson = false;
+    selectedPersonPlaces = [];
     selectedIsbeKind = null;
     selectedContext = null;
     selectionMode = "word";
@@ -3848,7 +3859,7 @@
     return {
       mode: selectionMode,
       wordCount: selectedWordCount,
-      isPlace: !selectedIsPerson && selectedIsbeKind === "place",
+      isPlace: selectionHasMap,
       isPerson: selectedIsPerson,
       moreInfo: !selectedIsPerson && selectedIsbeKind !== null,
       extendArmed,
@@ -3984,6 +3995,7 @@
     // but the ring counts its buttons from these to size itself, and it must not
     // do that against the word you tapped a moment ago.
     selectedIsPerson = false;
+    selectedPersonPlaces = [];
     selectedIsbeKind = null;
 
     // Decided once per opening and held for the life of the menu, so a label
@@ -4025,13 +4037,19 @@
     // the toast drops Define/Bio/More Info instead of guessing.
     if (lookup && word && selectionMode === "word") {
       import("../adapters/lexicon-lookup.js")
-        .then(async ({ isPersonName, classifyIsbeClick }) => {
+        .then(async ({ resolveClickedPersonId, getPersonPlaces, classifyIsbeClick }) => {
           // Person outranks ISBE for the label, so resolve it first and only fall
           // back to the ISBE ("More Info") check when it isn't a character.
-          const isPerson = await isPersonName(word, personRef);
+          const personId = await resolveClickedPersonId(word, personRef);
           if (token !== personLabelToken) return;
-          selectedIsPerson = isPerson;
-          if (isPerson) {
+          selectedIsPerson = personId !== null;
+          if (personId !== null) {
+            // A character keeps the Bio label, but can still earn a Map seat:
+            // the places their story touches are worth seeing laid out. Only
+            // when there are some — an unplaced minor name gets Bio alone.
+            const places = await getPersonPlaces(personId);
+            if (token !== personLabelToken) return;
+            selectedPersonPlaces = places;
             replaceToastInPlace();
             return;
           }
@@ -4447,9 +4465,44 @@
         searchQuery.set(text);
         triggerSearch.update((n) => n + 1);
         break;
-      case "map":
-        alert(`Show on map: ${text}\n\n(Map integration coming soon)`);
+      case "map": {
+        // A character goes straight to the map window: their places are several
+        // and scattered, which is the one thing the Encyclopedia's single-marker
+        // Map tab cannot show. A place opens that tab, where the article sits a
+        // tap away, and the tab's own button carries it on to the window.
+        if (selectedIsPerson && selectedPersonPlaces.length) {
+          // Left open if the six-window cap turned us down, so the tap visibly
+          // did nothing rather than quietly dismissing the menu for nothing.
+          if (openMapWindow(text, selectedPersonPlaces)) showToast = false;
+          break;
+        }
+        const mapPersonRef = selectedVerseNumber != null
+          ? { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber }
+          : null;
+        (async () => {
+          try {
+            const { resolveIsbeClick } = await import('../adapters/lexicon-lookup.js');
+            const isbe = await resolveIsbeClick({
+              word: text,
+              before: capturedContext?.before,
+              after: capturedContext?.after,
+              ref: mapPersonRef,
+            });
+            if (!isbe || isbe.kind !== 'place') return;
+            isbeModalStore.open({
+              kind: 'place',
+              entryId: isbe.entryId,
+              placeId: isbe.placeId ?? null,
+              primaryName: isbe.primaryName,
+              tab: 'map',
+            });
+          } catch (error) {
+            console.error('Error opening map for selection:', error);
+          }
+        })();
+        showToast = false;
         break;
+      }
       case "highlight": {
         if (selectedVerseNumber === null) break;
         const hlRef = { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber };
@@ -4677,6 +4730,15 @@
       await loadChronologicalPack();
     })();
 
+    // Open the ISBE indexes now rather than on the first tapped word. The ring
+    // sizes itself the moment it opens and will not grow a seat afterwards, so
+    // whether Map appears at all came down to whether this lookup had ever been
+    // run before — the first place you tapped in a session lost that race, and
+    // every one after it won.
+    import("../adapters/lexicon-lookup.js")
+      .then(({ warmIsbeLookup }) => warmIsbeLookup())
+      .catch(() => {});
+
     // Handle footnote/cross-ref clicks
     const handleNoteClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
@@ -4793,7 +4855,7 @@
       lineHeight={radialLine}
       placed={toastPlaced}
       {selectedText}
-      isPlace={!selectedIsPerson && selectedIsbeKind === "place"}
+      isPlace={selectionHasMap}
       isPerson={selectedIsPerson}
       moreInfo={!selectedIsPerson && selectedIsbeKind !== null}
       mode={selectionMode}
@@ -4809,7 +4871,7 @@
       x={toastX}
       y={toastY}
       {selectedText}
-      isPlace={!selectedIsPerson && selectedIsbeKind === "place"}
+      isPlace={selectionHasMap}
       isPerson={selectedIsPerson}
       moreInfo={!selectedIsPerson && selectedIsbeKind !== null}
       mode={selectionMode}

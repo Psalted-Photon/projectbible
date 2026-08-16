@@ -4,9 +4,15 @@
   import type { PlaceInfo } from '@projectbible/core';
   import { openDB } from '../adapters/db';
   import { IndexedDBPlaceStore } from '../adapters/PlaceStore';
-  
+  import { windowStore, type MapTarget } from '../lib/stores/windowStore';
+
   export let windowId: string | undefined = undefined;
-  
+
+  /** Jerusalem, and far enough out to see the whole land. Where the map opens
+   *  when nobody has said otherwise. */
+  const HOME: [number, number] = [31.7683, 35.2137];
+  const HOME_ZOOM = 7;
+
   let mapContainer: HTMLDivElement;
   let searchContainer: HTMLDivElement;
   let map: L.Map | null = null;
@@ -41,18 +47,39 @@
   };
 
   const placeStore = new IndexedDBPlaceStore();
-  
-  $: void windowId;
-  
+  let resizeObserver: ResizeObserver | null = null;
+  /** The last handoff acted on, so a store write for pan/zoom doesn't re-fly. */
+  let appliedTargetSeq = -1;
+
+  // Where this window last was, and what it was last sent to. Both live in the
+  // window's own contentState, so a pinned map comes back to the same view
+  // after a reload the way every other window does.
+  $: windowState = windowId ? $windowStore.find((w) => w.id === windowId) : undefined;
+  $: target = windowState?.contentState?.target as MapTarget | undefined;
+
+  // A handoff can arrive long after mount, because the reader reuses an open map
+  // window rather than stacking a second one. Watching the seat here is what
+  // makes the second and third handoff work as well as the first.
+  $: if (map && target && target.seq !== appliedTargetSeq) applyTarget(target);
+
   onMount(async () => {
     try {
       // Initialize Leaflet map
+      const saved = windowState?.contentState;
       map = L.map(mapContainer, {
-        center: [31.7683, 35.2137], // Jerusalem
-        zoom: 7,
+        center: saved?.center ?? HOME,
+        zoom: saved?.zoom ?? HOME_ZOOM,
         zoomControl: true
       });
-      
+
+      // A docked window is resized by dragging its edge, and Leaflet only
+      // recomputes its tile grid when told to. Without this the map goes grey
+      // down one side the first time the reader widens the pane.
+      resizeObserver = new ResizeObserver(() => map?.invalidateSize());
+      resizeObserver.observe(mapContainer);
+
+      map.on('moveend zoomend', persistView);
+
       // Add Esri base layers (matching workbench)
       setupBaseLayers();
       
@@ -93,12 +120,64 @@
   });
   
   onDestroy(() => {
+    resizeObserver?.disconnect();
+    resizeObserver = null;
     if (map) {
       map.remove();
       map = null;
     }
     db = null;
   });
+
+  /** Remember where the reader left the map, so a reload returns to it. */
+  function persistView() {
+    if (!map || !windowId) return;
+    const c = map.getCenter();
+    windowStore.updateContentState(windowId, { center: [c.lat, c.lng], zoom: map.getZoom() });
+  }
+
+  /**
+   * Act on a handoff from the reader: drop the markers it sent and move to them.
+   *
+   * One marker is a place, and gets the same close-in treatment a search result
+   * does. Several is a person — their places are scattered across the map, so
+   * the useful view is all of them at once rather than a guess at which matters.
+   */
+  function applyTarget(t: MapTarget) {
+    appliedTargetSeq = t.seq;
+    const pins = (t.markers || []).filter((m) => m.latitude != null && m.longitude != null);
+    if (!map || !pins.length) return;
+
+    ensurePlaceMarkers();
+    if (!placeMarkers) return;
+    placeMarkers.clearLayers();
+
+    const markers = pins.map((p) => {
+      const marker = L.marker([p.latitude, p.longitude]).addTo(placeMarkers!);
+      const details: string[] = [];
+      if (p.modernName) details.push(`<div>${p.modernName}</div>`);
+      if (p.placeType) details.push(`<div><em>${p.placeType}</em></div>`);
+      marker.bindPopup(`
+      <div style="min-width: 180px;">
+        <strong>${p.name}</strong>
+        ${details.join('')}
+      </div>
+    `);
+      return marker;
+    });
+
+    if (pins.length === 1) {
+      map.flyTo([pins[0].latitude, pins[0].longitude], 11, { animate: true, duration: 1.2 });
+      markers[0].openPopup();
+    } else {
+      map.flyToBounds(L.latLngBounds(pins.map((p) => [p.latitude, p.longitude] as [number, number])), {
+        padding: [40, 40],
+        maxZoom: 11,
+        animate: true,
+        duration: 1.2,
+      });
+    }
+  }
   
   async function loadHistoricalLayers() {
     try {

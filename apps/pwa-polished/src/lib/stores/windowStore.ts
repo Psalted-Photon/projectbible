@@ -4,6 +4,28 @@ import { libraryPrefsStore, type LibrarySource } from '../../stores/libraryPrefs
 export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves';
 export type WindowEdge = 'top' | 'left' | 'right' | 'bottom';
 
+/** One pin handed to the map window. */
+export interface MapMarker {
+  name: string;
+  latitude: number;
+  longitude: number;
+  modernName?: string | null;
+  placeType?: string | null;
+}
+
+/**
+ * A place (or a person's places) handed from the reader to the map window.
+ *
+ * `seq` is what makes a repeat handoff work: there is only ever one map window,
+ * so sending it somewhere it has already been — or somewhere new while it is
+ * already open — has to be distinguishable from the store writing back a pan.
+ */
+export interface MapTarget {
+  seq: number;
+  label: string;
+  markers: MapMarker[];
+}
+
 export interface WindowState {
   id: string;
   contentType: WindowContentType;
@@ -23,6 +45,8 @@ export interface WindowState {
     // For Map windows
     center?: [number, number];
     zoom?: number;
+    /** Where the reader last sent this map. See MapTarget. */
+    target?: MapTarget;
     // For encyclopedia windows: which article, and where the reader was in it.
     // Persisted with the rest, so a pinned article survives a reload intact.
     kind?: 'place' | 'entry';

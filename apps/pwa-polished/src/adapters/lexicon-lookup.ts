@@ -776,12 +776,26 @@ export async function lookupPerson(word: string, ref?: VerseRef | null): Promise
  * the modal won't show.
  */
 export async function isPersonName(word: string, ref?: VerseRef | null): Promise<boolean> {
+  return (await resolveClickedPersonId(word, ref)) !== null;
+}
+
+/**
+ * The same test, but handing back which character it landed on.
+ *
+ * The toast only ever needed a yes/no, but the ring's Map seat has to go on to
+ * ask where that person's story happens, and re-running the disambiguation to
+ * find out would be doing the work twice.
+ */
+export async function resolveClickedPersonId(
+  word: string,
+  ref?: VerseRef | null,
+): Promise<string | null> {
   const normalized = word.trim().toLowerCase();
-  if (!normalized) return false;
+  if (!normalized) return null;
 
   try {
     const db = await openDB();
-    if (!db.objectStoreNames.contains('person_names')) return false;
+    if (!db.objectStoreNames.contains('person_names')) return null;
 
     const candidateIds = await new Promise<string[]>((resolve) => {
       const tx = db.transaction('person_names', 'readonly');
@@ -790,8 +804,8 @@ export async function isPersonName(word: string, ref?: VerseRef | null): Promise
       request.onsuccess = () => resolve([...new Set((request.result || []).map((r: any) => r.personId))]);
       request.onerror = () => resolve([]);
     });
-    if (!candidateIds.length) return false;
-    if (!ref || !db.objectStoreNames.contains('person_verses')) return true;
+    if (!candidateIds.length) return null;
+    if (!ref || !db.objectStoreNames.contains('person_verses')) return candidateIds[0];
 
     const atVerse = await new Promise<Set<string>>((resolve) => {
       const tx = db.transaction('person_verses', 'readonly');
@@ -800,15 +814,16 @@ export async function isPersonName(word: string, ref?: VerseRef | null): Promise
       request.onsuccess = () => resolve(new Set((request.result || []).map((r: any) => r.personId)));
       request.onerror = () => resolve(new Set());
     });
-    if (candidateIds.some((id) => atVerse.has(id))) return true;
+    const hit = candidateIds.find((id) => atVerse.has(id));
+    if (hit) return hit;
 
     for (const id of candidateIds) {
       const verses = await getPersonVerses(id);
-      if (verses.some((v) => v.book === ref.book && v.chapter === ref.chapter)) return true;
+      if (verses.some((v) => v.book === ref.book && v.chapter === ref.chapter)) return id;
     }
-    return false;
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -895,7 +910,9 @@ function isbeNorm(s: string): string {
     .trim();
 }
 
-async function isbePlaceIdsByName(nameLower: string, phraseOnly: boolean): Promise<string[]> {
+/** Every place carrying this exact name, phrases included. Phrase-only lookups
+ *  go through the in-memory index above instead. */
+async function isbePlaceIdsByName(nameLower: string): Promise<string[]> {
   const db = await openDB();
   if (!db.objectStoreNames.contains('isbe_place_names')) return [];
   return new Promise((resolve) => {
@@ -904,11 +921,207 @@ async function isbePlaceIdsByName(nameLower: string, phraseOnly: boolean): Promi
     const req = idx.getAll(IDBKeyRange.only(nameLower));
     req.onsuccess = () => {
       const rows = (req.result || []) as any[];
-      const filtered = phraseOnly ? rows.filter((r) => r.isPhrase) : rows;
-      resolve([...new Set(filtered.map((r) => r.placeId))]);
+      resolve([...new Set(rows.map((r) => r.placeId))]);
     };
     req.onerror = () => resolve([]);
   });
+}
+
+/**
+ * The multi-word place names, held in memory after the first read.
+ *
+ * The phrase pass in resolveIsbeClick tries up to nine spans around the clicked
+ * word, and each one used to be its own IndexedDB round-trip. On the first tap
+ * of a session those run against a cold database, and the answer can land after
+ * the radial menu has already sized itself — at which point the menu will not
+ * take a new seat, so Map silently goes missing until something else warms the
+ * indexes. The whole phrase index is about a thousand rows, so it is cheaper to
+ * hold all of it than to keep asking.
+ */
+let isbePhraseIndex: Map<string, string[]> | null = null;
+let isbePhraseLoad: Promise<void> | null = null;
+
+async function loadIsbePhraseIndex(): Promise<void> {
+  if (isbePhraseIndex) return;
+  if (isbePhraseLoad) return isbePhraseLoad;
+  isbePhraseLoad = (async () => {
+    const index = new Map<string, string[]>();
+    try {
+      const db = await openDB();
+      if (db.objectStoreNames.contains('isbe_place_names')) {
+        const rows = await new Promise<any[]>((resolve) => {
+          const req = db
+            .transaction('isbe_place_names', 'readonly')
+            .objectStore('isbe_place_names')
+            .getAll();
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => resolve([]);
+        });
+        for (const r of rows) {
+          if (!r.isPhrase || typeof r.nameLower !== 'string') continue;
+          const ids = index.get(r.nameLower);
+          if (ids) {
+            if (!ids.includes(r.placeId)) ids.push(r.placeId);
+          } else {
+            index.set(r.nameLower, [r.placeId]);
+          }
+        }
+      }
+    } catch {
+      // Pack not installed. An empty index simply skips the phrase pass.
+    }
+    isbePhraseIndex = index;
+  })();
+  return isbePhraseLoad;
+}
+
+/**
+ * Every located place, keyed by the verse it appears in.
+ *
+ * Built once and kept, for the same reason as the phrase index: working out
+ * which places a person's story touches means asking about every verse they
+ * appear in, and someone like David appears in hundreds. As one query each that
+ * is unusable; the whole table is about nine thousand rows, so it is cheaper to
+ * hold it and intersect in memory.
+ */
+let isbeVersePlaces: Map<string, string[]> | null = null;
+let isbePlacesById: Map<string, IsbePlaceRecord> | null = null;
+let isbeVersePlacesLoad: Promise<void> | null = null;
+
+const verseKey = (book: string, chapter: number, verse: number) => `${book}|${chapter}|${verse}`;
+
+/** Pull a whole store into memory. Both of these are small enough to hold. */
+async function getAllRows(db: IDBDatabase, storeName: string): Promise<any[]> {
+  if (!db.objectStoreNames.contains(storeName)) return [];
+  return new Promise((resolve) => {
+    const req = db.transaction(storeName, 'readonly').objectStore(storeName).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => resolve([]);
+  });
+}
+
+async function loadIsbeVersePlaces(): Promise<void> {
+  if (isbeVersePlaces && isbePlacesById) return;
+  if (isbeVersePlacesLoad) return isbeVersePlacesLoad;
+  isbeVersePlacesLoad = (async () => {
+    const index = new Map<string, string[]>();
+    const byId = new Map<string, IsbePlaceRecord>();
+    try {
+      const db = await openDB();
+      for (const r of await getAllRows(db, 'isbe_place_verses')) {
+        const key = verseKey(r.book, r.chapter, r.verse);
+        const ids = index.get(key);
+        if (ids) {
+          if (!ids.includes(r.placeId)) ids.push(r.placeId);
+        } else {
+          index.set(key, [r.placeId]);
+        }
+      }
+      // The gazetteer itself, so resolving a person's places costs no further
+      // round-trips once we know which ids they touch.
+      for (const p of await getAllRows(db, 'isbe_places')) byId.set(p.placeId, p as IsbePlaceRecord);
+    } catch {
+      // Pack not installed.
+    }
+    isbeVersePlaces = index;
+    isbePlacesById = byId;
+  })();
+  return isbeVersePlacesLoad;
+}
+
+/** Pins past this stop telling you anything about the person. */
+const MAX_PERSON_PLACES = 24;
+
+/** A located place tied to a person, ready to pin on the map. */
+export interface PersonPlace {
+  name: string;
+  latitude: number;
+  longitude: number;
+  modernName?: string | null;
+  placeType?: string | null;
+}
+
+/**
+ * The places a person's story touches, for the map.
+ *
+ * Their birth and death places are the most precise answer but the people pack
+ * only carries them for a few dozen of three thousand, so the body of the
+ * result is the places named in the verses they appear in. That is a looser
+ * claim — a place sharing a verse is not necessarily somewhere they went — but
+ * it is the connection the text itself makes, and it is what makes the map
+ * worth opening for more than the famous few.
+ */
+export async function getPersonPlaces(personId: string): Promise<PersonPlace[]> {
+  const out: PersonPlace[] = [];
+  const seen = new Set<string>();
+  const add = (p: PersonPlace) => {
+    const key = `${p.latitude.toFixed(4)},${p.longitude.toFixed(4)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(p);
+  };
+
+  try {
+    const person = await getPersonById(personId);
+    for (const anchor of [person?.birthPlace, person?.deathPlace]) {
+      if (anchor && anchor.lat != null && anchor.lon != null) {
+        add({ name: anchor.name, latitude: anchor.lat, longitude: anchor.lon });
+      }
+    }
+
+    await loadIsbeVersePlaces();
+    if (isbeVersePlaces?.size) {
+      const verses = await getPersonVerses(personId);
+      const placeIds = new Set<string>();
+      for (const v of verses) {
+        for (const id of isbeVersePlaces.get(verseKey(v.book, v.chapter, v.verse)) ?? []) {
+          placeIds.add(id);
+        }
+      }
+      const places = [...placeIds]
+        .map((id) => isbePlacesById?.get(id))
+        .filter((p): p is IsbePlaceRecord => !!p);
+      // Most-referenced first, so the cap keeps the places that matter. Someone
+      // like David touches far more than a map can say anything with; past a
+      // couple of dozen pins the picture stops being about them at all.
+      places.sort((a, b) => (b.verseCount ?? 0) - (a.verseCount ?? 0));
+      for (const p of places) {
+        if (out.length >= MAX_PERSON_PLACES) break;
+        if (p.latitude == null || p.longitude == null) continue;
+        add({
+          name: p.primaryName,
+          latitude: p.latitude,
+          longitude: p.longitude,
+          modernName: p.modernName,
+          placeType: p.type,
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error collecting places for person:', error);
+  }
+
+  return out;
+}
+
+/**
+ * Open the ISBE indexes before the first word is tapped.
+ *
+ * Called from the reader on mount. The radial menu only grows a Map seat if the
+ * lookup answers while it is still drawing, so the first tap of a session must
+ * not be the one that pays for opening the database.
+ */
+export async function warmIsbeLookup(): Promise<void> {
+  try {
+    await openDB();
+    // Both indexes, because both feed the Map seat: the phrase index for a
+    // clicked place, the verse/place tables for a clicked character. Leaving
+    // either cold just moves the same missing-seat problem to the first tap of
+    // that kind.
+    await Promise.all([loadIsbePhraseIndex(), loadIsbeVersePlaces()]);
+  } catch {
+    // Nothing to warm — the click path degrades on its own.
+  }
 }
 
 async function isbeGetPlace(placeId: string): Promise<IsbePlaceRecord | null> {
@@ -1015,9 +1228,12 @@ export async function resolveIsbeClick(ctx: IsbeClickContext): Promise<IsbeResol
   try {
     const db = await openDB();
     if (!db.objectStoreNames.contains('isbe_entry_names')) return null; // pack not installed
+    await loadIsbePhraseIndex();
 
     // 1. Phrase expansion. Build a small window around the click and try the
-    //    longest multi-word place name that includes the clicked word.
+    //    longest multi-word place name that includes the clicked word. The
+    //    candidate spans are tested against the in-memory index, so this whole
+    //    pass costs no database round-trips unless one of them actually hits.
     const before = (ctx.before || []).map(isbeNorm);
     const after = (ctx.after || []).map(isbeNorm);
     const selfNorm = isbeNorm(word);
@@ -1028,7 +1244,7 @@ export async function resolveIsbeClick(ctx: IsbeClickContext): Promise<IsbeResol
       for (let start = Math.max(0, clickIdx - len + 1); start + len <= window.length && start <= clickIdx; start++) {
         const span = window.slice(start, start + len).filter(Boolean).join(' ').trim();
         if (!span.includes(' ')) continue;
-        const ids = await isbePlaceIdsByName(span, true);
+        const ids = isbePhraseIndex?.get(span) ?? [];
         if (ids.length) {
           const chosen = await isbeChoosePlace(ids, ref, false);
           if (chosen) {
@@ -1051,7 +1267,7 @@ export async function resolveIsbeClick(ctx: IsbeClickContext): Promise<IsbeResol
     if (selfNorm) {
       const placeForms = [...new Set([selfNorm, ...singularCandidates(word).map(isbeNorm)])].filter(Boolean);
       for (const form of placeForms) {
-        const ids = await isbePlaceIdsByName(form, false);
+        const ids = await isbePlaceIdsByName(form);
         if (!ids.length) continue;
         const chosen = await isbeChoosePlace(ids, ref, true);
         if (chosen) {
@@ -1070,7 +1286,26 @@ export async function resolveIsbeClick(ctx: IsbeClickContext): Promise<IsbeResol
     const entryId = await isbeEntryIdByName(word);
     if (entryId != null) {
       const entry = await isbeGetEntryMeta(entryId);
-      if (entry) return { kind: 'entry', entryId, primaryName: entry.primaryName };
+      if (entry) {
+        // A place article that step 2 turned down for want of verse coverage is
+        // still a place — OpenBible's verse index is thinner than the gazetteer,
+        // and the article itself already knows. Take it back as a place when it
+        // has somewhere to put on the map, so the ring offers Map rather than
+        // the weaker Info for the same word.
+        if (entry.isPlace) {
+          const place = await getIsbePlaceByEntryId(entryId);
+          if (place && place.latitude != null && place.longitude != null) {
+            return {
+              kind: 'place',
+              entryId,
+              placeId: place.placeId,
+              primaryName: place.primaryName,
+              matchedByVerse: false,
+            };
+          }
+        }
+        return { kind: 'entry', entryId, primaryName: entry.primaryName };
+      }
     }
 
     return null;
@@ -1087,12 +1322,19 @@ export async function classifyIsbeClick(ctx: IsbeClickContext): Promise<'place' 
 }
 
 /** Entry metadata without the (potentially huge) body — for the toast + list rows. */
-async function isbeGetEntryMeta(entryId: number): Promise<{ primaryName: string } | null> {
+async function isbeGetEntryMeta(
+  entryId: number,
+): Promise<{ primaryName: string; isPlace: boolean } | null> {
   const db = await openDB();
   if (!db.objectStoreNames.contains('isbe_entries')) return null;
   return new Promise((resolve) => {
     const req = db.transaction('isbe_entries', 'readonly').objectStore('isbe_entries').get(entryId);
-    req.onsuccess = () => resolve(req.result ? { primaryName: (req.result as any).primaryName } : null);
+    req.onsuccess = () =>
+      resolve(
+        req.result
+          ? { primaryName: (req.result as any).primaryName, isPlace: !!(req.result as any).isPlace }
+          : null,
+      );
     req.onerror = () => resolve(null);
   });
 }

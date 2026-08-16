@@ -6,6 +6,7 @@
   import { isbeReturnStore, type IsbeReturn } from "../stores/isbeReturnStore";
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
+  import { openMapWindow } from "../lib/openMapWindow";
   import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
   import { IndexedDBTextStore } from "../adapters/TextStore";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
@@ -949,6 +950,35 @@
   function popOut() {
     onPopOut?.(viewSnapshot());
   }
+
+  /**
+   * Hand this place to the map window.
+   *
+   * Not the same move as popOut above: that scoots this article into a docked
+   * window unchanged, whereas this swaps surfaces entirely. The map tab here is
+   * one marker and nothing else; the map window has the layer control, the
+   * historical overlays and the place search, which is the whole reason to go
+   * there. So the article does not travel — the place does.
+   *
+   * The centre card gets out of the way once the map has somewhere to appear.
+   * A docked article stays where the reader put it, and the map opens alongside.
+   */
+  function openInMapWindow() {
+    if (!place || place.latitude == null || place.longitude == null) return;
+    const name = place.primaryName || title;
+    const opened = openMapWindow(name, [
+      {
+        name,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        modernName: place.modernName,
+        placeType: place.type,
+      },
+    ]);
+    // Turned down at the six-window cap. Leave the card up rather than closing
+    // it onto nothing.
+    if (opened && !docked) close();
+  }
 </script>
 
 <div class="isbe-content" class:docked>
@@ -1127,6 +1157,18 @@
     {:else if activeTab === "map" && hasMap}
       <div class="map-tab">
         <div class="map" bind:this={mapEl}></div>
+        <button
+          class="map-pop"
+          on:click={openInMapWindow}
+          title="Open in the map window"
+          aria-label="Open in the map window"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8" />
+            <path d="M14 4v16" stroke-width="1.8" />
+            <path d="M6.2 9.6L8.6 12l-2.4 2.4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
         {#if place}
           <div class="map-meta">
             {place.latitude?.toFixed(5)}, {place.longitude?.toFixed(5)}
@@ -1475,6 +1517,27 @@
   .map-tab {
     display: flex;
     flex-direction: column;
+    position: relative;
+  }
+  /* Over the tiles, top right. Leaflet's own zoom control sits top left, so the
+     two don't collide, and z-index clears Leaflet's control panes at 800. */
+  .map-pop {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px;
+    border: 1px solid var(--border-color, #333);
+    border-radius: 6px;
+    background: var(--background-color, #1e1e1e);
+    color: var(--text-muted, #999);
+    cursor: pointer;
+  }
+  .map-pop:hover {
+    color: var(--color-primary, #4a90e2);
   }
   .docked .map-tab {
     height: 100%;
