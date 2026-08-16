@@ -423,6 +423,32 @@ is where you'd be going rather than where you are. Done in both the ring and the
 plain toast so the two stay consistent; the ring re-spaces itself around the freed
 seat, since the seat geometry only spreads however many buttons it's given.
 
+**Regression from that toggle change, fixed the same day.** Moving the toggle to the
+ring's trailing seat made the *last* seat removable for the first time, which exposed
+a latent fault in the closing sweep.
+
+Each departing seat staggers out on a delay worked out from the ring's **new** length
+against that seat's **old** index. A seat leaving from beyond the end of the new ring
+therefore produced a **negative** delay. Svelte implements a transition delay as an
+animation whose *duration* is the delay, and `element.animate` rejects a negative
+duration outright — so the throw escaped mid-flush and left the scheduler unable to
+queue any further effect. The whole app stopped redrawing until reload.
+
+That single throw produced three separate-looking symptoms: the label never changed
+(removing the old seat is what failed, and it sits on identical coordinates to its
+replacement, covering it); Mark appeared to only delete the highlight (clearing a
+highlight is direct DOM work so it still ran, while opening the modal and closing the
+ring both needed a render); and the ring couldn't be dismissed (also a render).
+
+Unreachable before, because the trailing seat was always Verse and Verse was never
+removed. Fixed by clamping the delay at zero — which is also the *correct* value,
+since the highest-index seat should leave first in a reverse sweep. A stray **Extend**
+button stranded at the bottom of the ring was the visible tell.
+
+Separately, the toggle had been left wearing the dim grey that used to mean "not the
+mode you're in", which alone reads as a switched-off button. It now uses the same
+indigo an armed Extend uses for a live choice, in both the ring and the plain toast.
+
 #### Original diagnosis
 
 Repro: tap a word → ring appears, word highlighted. Tap Verse → whole verse selects.

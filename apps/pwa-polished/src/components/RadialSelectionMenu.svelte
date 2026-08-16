@@ -158,11 +158,19 @@
 
   // Closing runs the same path in reverse, and quicker — a dismissed ring has to
   // be gone before the next one has finished arriving.
+  //
+  // The delay is clamped because it is worked out from the *new* length against
+  // the departing seat's *old* index, so a seat leaving from beyond the end of
+  // the new ring produces a negative one. A negative duration is rejected by
+  // element.animate outright, and that throw escapes mid-flush and leaves the
+  // scheduler unable to queue anything further — the whole app stops redrawing
+  // until a reload. It was unreachable while the trailing seat was always Verse,
+  // which never left; the scope toggle can leave, so now it isn't.
   const seatOut = (_n: Element, { i }: { i: number }) =>
     pop(
       seats[i]?.dx ?? 0,
       seats[i]?.dy ?? 0,
-      reduceMotion ? 0 : (shown.length - 1 - i) * (STAGGER * 0.5),
+      reduceMotion ? 0 : Math.max(0, (shown.length - 1 - i) * (STAGGER * 0.5)),
       POP_MS * 0.55,
       { inert: true },
     );
@@ -262,16 +270,25 @@
     transform: translate(-50%, -50%) translate(var(--dx), var(--dy)) scale(0.94);
   }
 
-  /* The scope toggle reads as a switch rather than another action: no splash,
-     no icon. It never lights up — its label is where you'd be going, not where
-     you are, so there is no "current" state for it to show. */
+  /* The scope toggle: a word rather than an icon, so it is set apart from the
+     actions — but it still has to read as something you can take. It carries no
+     "current" state, because its label is where you'd be going rather than where
+     you are. It used to share the dim grey the unselected half of the old
+     Word/Verse pair wore, which on its own just reads as a switched-off button.
+     Indigo is the same accent armed Extend uses for a live choice. */
   .mode-seat {
     width: calc(var(--badge) - 6px);
     height: calc(var(--badge) - 6px);
-    background: rgba(26, 26, 26, 0.96);
-    border: 1px solid #3a3a3a;
+    background: rgba(102, 126, 234, 0.22);
+    border: 1px solid #667eea;
     font-size: 11px;
-    color: #888;
+    font-weight: 600;
+    color: #cdd5f8;
+  }
+
+  .mode-seat:hover {
+    background: rgba(102, 126, 234, 0.38);
+    color: #fff;
   }
 
   /* The app's icon-badge idiom: a bold glyph in black with a thin white copy
