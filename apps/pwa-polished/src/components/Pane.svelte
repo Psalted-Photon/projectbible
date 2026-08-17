@@ -15,6 +15,10 @@
   let resizeStartPos = 0;
   let resizeStartSize = 0;
 
+  // Set by the settings pane while its Appearance section is open, so the
+  // reader behind shows its real colours and typeface as they are edited.
+  let clearBackdrop = false;
+
   function handleClose() {
     paneStore.closePane(pane.id);
   }
@@ -92,6 +96,7 @@
 <!-- Backdrop -->
 <div
   class="backdrop"
+  class:clear={clearBackdrop}
   role="none"
   style="z-index: {pane.zIndex + 99};"
   on:click={handleBackdropClick}
@@ -127,7 +132,7 @@
   <!-- Pane content -->
   <div class="pane-content">
     {#if pane.type === "settings"}
-      <SettingsPane />
+      <SettingsPane bind:clearBackdrop />
     {:else if pane.type === "map"}
       <MapPane />
     {:else if pane.type === "packs"}
@@ -149,6 +154,13 @@
     bottom: 0;
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
+    transition: background 0.25s ease, backdrop-filter 0.25s ease;
+  }
+
+  /* Still catches clicks — the reader is visible, not interactive. */
+  .backdrop.clear {
+    background: transparent;
+    backdrop-filter: none;
   }
 
   .pane {

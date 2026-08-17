@@ -16,6 +16,13 @@
   import FontField from "../FontField.svelte";
   import { contrastRatio, isLowContrast, isValidHex, redLetterFor } from "../../lib/themeColors";
 
+  /**
+   * Appearance changes land on the reader live, so the pane asks its shell to
+   * drop the dim + blur while that section is open — you can't judge a colour
+   * you can't see. Bound by Pane.svelte; every other section keeps the blur.
+   */
+  export let clearBackdrop = false;
+
   let theme: "light" | "dark" | "auto" | "sepia" | "custom" = "dark";
 
   // ── Custom theme ────────────────────────────────────────────────────────
@@ -185,6 +192,8 @@
     general: false,
     storage: false,
   };
+
+  $: clearBackdrop = openSections.appearance;
 
   // Closed headers carry a summary of what is set inside, so the common
   // question ("what's my font size again?") is answered without a tap.
