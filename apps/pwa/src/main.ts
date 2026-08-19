@@ -206,7 +206,7 @@ const NT_BOOKS = BIBLE_BOOKS_INFO.filter(b => b.testament === 'NT').map(b => b.n
 // Simple test UI
 root.innerHTML = `
   <div class="main-container" style="max-width: 800px; margin: 40px auto; padding: 20px; font-family: system-ui;">
-    <h1 class="main-title" style="border-bottom: 3px solid #2c5f8d; padding-bottom: 10px;">ProjectBible PWA - Adapter Test</h1>
+    <h1 class="main-title" style="border-bottom: 3px solid #2c5f8d; padding-bottom: 10px;">Hexapla PWA - Adapter Test</h1>
     
     <section class="content-section" style="margin: 30px 0; padding: 20px; border-radius: 8px;">
       <h2>Read Verse</h2>

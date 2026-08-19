@@ -181,7 +181,7 @@ function buildPayload(alarm: Pick<WakeAlarmRow, 'source' | 'book' | 'chapter'>):
   }
 
   return {
-    title: 'ProjectBible',
+    title: 'Hexapla',
     body,
     url: '/?alarm=1',
     tag: 'projectbible-wake-alarm',

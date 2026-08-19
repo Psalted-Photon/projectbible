@@ -193,7 +193,7 @@ const rail = ref.sections.map((s, idx) => {
 
 const hueVars = HUES.map((h, i) => `.sec[data-sec="${i + 1}"]{--hue:${h}}`).join('');
 
-const html = `<title>ProjectBible — Feature Tree</title>
+const html = `<title>Hexapla — Feature Tree</title>
 <style>
 :root{
   --paper:#fbfaf7; --paper-2:#f3f1ec; --paper-3:#e8e5dd;
@@ -366,7 +366,7 @@ mark{background:color-mix(in srgb,var(--accent) 26%,transparent);color:inherit;
 
 <header class="top">
   <div class="top-in">
-    <div class="brand"><b>ProjectBible</b><span>Feature Tree</span></div>
+    <div class="brand"><b>Hexapla</b><span>Feature Tree</span></div>
     <div class="filter"><input id="q" type="search" placeholder="Filter features&hellip;" aria-label="Filter features"></div>
     <div class="seg" role="group" aria-label="Detail level">
       <button id="m-user" aria-pressed="true">Overview</button>
@@ -385,7 +385,7 @@ mark{background:color-mix(in srgb,var(--accent) 26%,transparent);color:inherit;
   <main class="main">
     <div class="intro">
       <div class="eyebrow">Complete feature inventory</div>
-      <h1>Every feature in ProjectBible, in one tree.</h1>
+      <h1>Every feature in Hexapla, in one tree.</h1>
       <p class="lede">A free, offline-first Bible study app. Twenty-one domains, from reading and word study
         to on-device text-to-speech and cross-device sync &mdash; documented in full, both for the people
         who use it and the people who work on it.</p>
@@ -404,7 +404,7 @@ mark{background:color-mix(in srgb,var(--accent) 26%,transparent);color:inherit;
     <div id="view-full" hidden>${ref.html}</div>
     <div class="empty" id="empty" hidden>No features match that filter.</div>
 
-    <div class="foot"><span>ProjectBible</span><span>&middot;</span><span>Generated from
+    <div class="foot"><span>Hexapla</span><span>&middot;</span><span>Generated from
       <code>docs/FEATURES.md</code> and <code>docs/FEATURES-REFERENCE.md</code></span></div>
   </main>
 </div>

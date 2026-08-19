@@ -25,6 +25,11 @@ Everything the app does, in plain language. Free, offline-first, and private: yo
 19. [Content Packs](#19-content-packs)
 20. [Account & Sync](#20-account--sync)
 21. [App Settings & Appearance](#21-app-settings--appearance)
+22. [Wake Alarm](#22-wake-alarm)
+23. [The Study Library](#23-the-study-library)
+24. [Nave's Topical Bible](#24-naves-topical-bible)
+25. [People](#25-people)
+26. [Notes & Notebooks](#26-notes--notebooks)
 
 ---
 
@@ -146,11 +151,15 @@ Select a word or phrase in the text and choose **More Info**. The app works out 
 - **Verses** — every verse mentioning the subject, grouped by book in Bible order, each one tappable.
 - **Map** — for places, a pin at the location, when coordinates are known.
 
-### 6.3 Linked to the dictionary
+### 6.3 Browsing it like a book
 
-Where an encyclopedia entry and a dictionary entry describe the same thing, the app connects them, so you can move between the short definition and the long article without searching again.
+You don't have to tap a word to get in. The encyclopedia has its own A–Z contents you can read through, with page turns, its own search, and entries you can star — see [23](#23-the-study-library).
 
-### 6.4 Place-name underlines
+### 6.4 Linked to the other works
+
+Where an encyclopedia entry and a dictionary entry describe the same thing, the app connects them, so you can move between the short definition and the long article without searching again. The same goes for the topical index and the people entries — all four are one tap apart.
+
+### 6.5 Place-name underlines
 
 The encyclopedia pack also powers the optional dotted underlines described in [1.2](#12-what-appears-in-the-text), which mark multi-word place names so you can see what's tappable as a unit.
 
@@ -243,13 +252,26 @@ Verse highlights and single-word highlights are tracked separately, so you can h
 
 Bookmark verses you want to come back to and browse them in one list.
 
-### 10.4 The verse toolbar
+### 10.4 Selecting words
 
-Selecting text brings up a small toolbar with everything you can do to it:
+- **Tap a word** to select it.
+- **Drag across words** to select a phrase.
+- **Tap again to extend** a selection you've already made.
+
+Selection snaps to whole words, so you never end up with half of one.
+
+### 10.5 The selection menu
+
+Selecting text brings up everything you can do to it:
 
 **Dissect** (word study) · **Search** · **Map** (for places) · **Highlight** · **Save** · **Notes** · **Repeats**
 
-The Map button only appears when what you selected is actually a place.
+The Map button only appears when what you selected is actually a place, and it opens the real map.
+
+Two styles, switchable in Settings:
+
+- **Ring** (default) — the options arc around the tapped word rather than sitting over it. There are deliberate gaps at the left and right, lined up with the line of text, so **the sentence you're reading stays readable straight through the menu**. Near the edge of the screen the word simply ends up in one of those gaps instead of the middle, and is still perfectly visible. The buttons sweep in one at a time.
+- **Popup** — the older menu above or below the word, positioned so it never covers what you tapped.
 
 ## 11. Repeated Words
 
@@ -348,8 +370,23 @@ Voices download once, on your say-so — the app never quietly pulls 60 MB in th
 - **Jump to a verse** and start reading from there.
 - **Speed control** from 0.8× to 1.5×.
 - **Auto-advance** — keep reading into the next chapter automatically, or stop at the end of this one.
+- **Keeps reading past the chapter you started in.** Reading is no longer tied to the chapter on screen: it carries on when you scroll away, close the panel, or lock the phone, and announces each new book and chapter as it reaches it.
+- **Controls follow you.** Once reading starts, play and pause sit in the toolbar wherever you are in the app.
+- **The app icon spins** while the voice is being generated, so you can tell the difference between thinking and stopped.
 
-### 16.3 Following along
+### 16.3 On the lock screen
+
+The reading appears on your lock screen like any other audio: what's being read, which verse of how many, and working play, pause and skip buttons.
+
+This is also what makes listening with the phone in your pocket work at all. A phone slows down web pages it thinks are idle, and a page registered as a media player is treated as one that should keep running.
+
+### 16.4 Sleep timer
+
+Set a timer and the reading fades out and stops — after a number of minutes, or at the end of the current chapter.
+
+**It never navigates.** Where you fell asleep is where you wake up, so the next morning you carry on from the right place rather than from wherever the audio happened to stop.
+
+### 16.5 Following along
 
 Two independent effects — use either, both, or neither:
 
@@ -358,7 +395,7 @@ Two independent effects — use either, both, or neither:
 
 The glow is deliberately soft and a few words wide. The speech model hands back finished audio without telling the app exactly when each word is spoken, so the pace is an estimate. A sharp highlight on the wrong word looks broken; a blurred cloud is almost always covering the right word somewhere in its span, and reads as atmosphere rather than error.
 
-### 16.4 Section headings
+### 16.6 Section headings
 
 Optionally have section headings spoken before their verse. Off by default.
 
@@ -382,9 +419,11 @@ The gesture is deliberately careful about not firing by accident: it waits until
 
 ### 18.2 What can go in a window
 
-Bible text · Map · Notes · Word study · Commentaries · Journal · Art
+Bible text · Map · Notes · Word study · Commentaries · Journal · Art · Encyclopedia · Topical · People
 
 Up to six windows at once. Each is resizable, and each remembers its own state — a second Bible window can sit on a different chapter from the main one.
+
+The whole header bar is the resize grip, so there's no thin edge to hunt for. Windows open beside the text on a wide screen and beneath it on a phone, decided by which way there's room to spare rather than by screen size, so a portrait tablet behaves like a portrait phone.
 
 ### 18.3 Panes
 
@@ -419,13 +458,16 @@ Create an account with an email and password. You can also change your name, cha
 Signing in syncs your personal data across devices:
 
 - Notes
+- Notebooks and their pages
 - Verse highlights and word highlights
 - Saved verses
 - Journal entries
 - Reading plans
 - Reading progress
 
-Plus a **subset of settings** that should follow you: theme, timezone, your default translations, interlinear preferences, red-letter, section headings, art icons, and themed titles.
+Plus a **subset of settings** that should follow you: theme, your custom theme and the Notes and Journal themes, timezone, your default translations, interlinear preferences, red-letter, section headings, art icons, and themed titles.
+
+Your wake alarm is stored with your account too — it has to be, since the alarm is sent from there.
 
 ### 20.3 What deliberately doesn't sync
 
@@ -446,42 +488,141 @@ Your profile has four tabs — Reading Plan, Saved Verses/Notes, Journal, and Se
 
 ## 21. App Settings & Appearance
 
+Settings are grouped into five sections you can fold away — Appearance, Reader, Read Aloud, General, and Storage & Updates. Each shows a one-line summary of its own contents while closed, so you can find what you're after without opening all five.
+
+**There's no Save button.** Every change takes effect the moment you make it.
+
 ### 21.1 Themes
 
-Four options: **Dark**, **Light**, **Sepia**, and **Auto** (follows your system). Red-letter text is tuned separately for each theme so Jesus' words stay properly red rather than washing out.
+Five options: **Dark**, **Light**, **Sepia**, **Auto** (follows your system), and **Custom**. Red-letter text is tuned separately for each theme so Jesus' words stay properly red rather than washing out.
 
-### 21.2 Text
+### 21.2 Custom theme
+
+Choose your own reading typeface, text color, and background color.
+
+- **Twenty typefaces**, from clean serifs to handwriting.
+- **Any two colors** you like, for text and background, with a live preview.
+- **Save your favorites** — up to ten text colors and ten background colors, kept as swatches.
+
+Only the Bible text changes. Buttons, book colors, and your highlight colors stay as they are, so the app stays familiar and your highlights keep meaning what they meant.
+
+Switching typeface won't make the text jump. Each face is sized and spaced to match the others, so a change of font is a change of font and not an accidental change of size — and your font-size and line-spacing sliders keep working exactly as before.
+
+### 21.3 Notes and Journal themes
+
+The Notes and Journal writing surfaces get their own themes, separately from each other and from the reader. Notes can be one color scheme while the Journal is another. Color swatches are shared between all three, so a color you save in one place is available everywhere.
+
+The formatting toolbar slides out of the way when you want the space.
+
+### 21.4 Text
 
 - **Font size** — 12 to 32 pixels.
 - **Line spacing** — adjustable.
 - **Verse layout** and **word wrap** — see [1.1](#11-the-reading-page).
 
-### 21.3 Display
+### 21.5 Display
 
 - Words of Jesus in red letters
 - Theme colors in reader titles
 - Art icons on Bible scenes
 - Place-name underlines
+- Which menu opens when you tap a word — the ring or the older popup
 - Allow screen rotation
 
-### 21.4 Read Aloud settings
+### 21.6 Read Aloud settings
 
-Voice, speed, read section headings aloud, highlight the verse being read, and the drifting glow. See [16](#16-read-aloud).
+Voice, speed, read section headings aloud, highlight the verse being read, the drifting glow, and the wake alarm. See [16](#16-read-aloud) and [22](#22-wake-alarm).
 
-### 21.5 Time zone
+### 21.7 Time zone
 
 Set your time zone so "today" means today where you are. This drives the journal, reading plans, streaks, and the daily greeting. Defaults to your device's time zone.
 
-### 21.6 Updates
+### 21.8 Updates
 
 - **Automatic updates** — the app checks for a new version on open and whenever you come back to it, then updates itself and tells you it's running the latest version. Can be turned off.
 - **Check for updates** manually at any time.
 - **Clear cache** — wipes cached packs, service workers, and databases. The fix if packs won't install or the app is stuck on old data.
 
-### 21.7 Daily greeting
+### 21.9 Daily greeting
 
 The first time you open the app each day you get a greeting and a **Verse of the Day**, tappable to go straight there. The greeting knows the church calendar — Easter, Good Friday, and other moveable feasts are worked out for the actual year, along with Thanksgiving, so they land on the right day rather than a fixed guess.
 
-### 21.8 Installing as an app
+### 21.10 Installing as an app
 
 ProjectBible is a Progressive Web App. Install it from your browser and it runs like a native app — its own icon, full screen, and fully offline.
+
+## 22. Wake Alarm
+
+An alarm that wakes you with Scripture. Set a time, and the app opens on a passage.
+
+- **Set the time and the days** — every day, or only the ones you choose.
+- **Choose what it opens on** — carry on where you left off, a fixed chapter you pick, or the next day of your reading plan.
+- **It works with the app closed.** A web app can't wake itself, so the alarm is sent to your phone the way any other notification is. That does mean it needs an account and an internet connection at the moment it's due.
+- **What it opens on is decided when it rings**, not when it was set. Finish a chapter at 11pm and the 6am alarm reflects that.
+- **Send a test alarm** to check the whole thing works without waiting for morning.
+
+The sleep timer is the other half of this idea — see [16.4](#164-sleep-timer).
+
+## 23. The Study Library
+
+Four reference works you can **browse like books**, rather than only reaching them by tapping a word: the **Dictionary**, **Nave's Topical Bible**, the **Encyclopedia**, and **People**.
+
+### 23.1 Four tabs, one card
+
+All four works sit as tabs across the top of every lookup. They're always in the same order and always the same width, so a tab is in the same place every time. A tab is greyed out when that work has nothing on your subject — so a tab you can tap is one that will definitely open something.
+
+Switching tabs doesn't close and reopen anything. Each work remembers where you were, so you can look something up in the Encyclopedia, check the Dictionary, and come back to find your place kept.
+
+### 23.2 Browsing
+
+- **An A–Z rail** down the side. Letters with no entries are dimmed rather than hidden, so the strip stays a steady ruler you can aim at.
+- **Jump to any letter**, and see how many entries it holds.
+- **Search inside one work** from its own search box.
+- **Star entries** you want to keep, and see the ones you read recently.
+- **Picks up where you left off** — reopen within half an hour and you're back on the same entry. After that it opens fresh, because an hour later is a new sitting.
+
+All three lists work identically, so learning one teaches you the others.
+
+## 24. Nave's Topical Bible
+
+The classic topical index: pick a subject and get its outline and every verse under each point.
+
+- **Browse every topic** A–Z, or search.
+- **The outline** — the numbered structure of the subject, each point with its verses.
+- **Every verse is tappable**, and colored by the book it comes from.
+- **Bridged to the other works** — a topic connects to its encyclopedia article, its dictionary entry, and the people involved.
+
+Included free with the encyclopedia pack.
+
+## 25. People
+
+Biographies of the people of the Bible.
+
+- **Browse everyone** A–Z, or search by name.
+- **Open a person from the text** by tapping their name.
+- **When a name belongs to several people** — the Herods, the Marys — you're offered the list rather than being guessed at, and the one you pick is the one that stays open.
+- **Family links** — parents, children, and spouses are links you can follow.
+- **Pin a biography beside the reader** so you can keep reading with it open.
+- **Bridged to the encyclopedia**, the dictionary, and the topical index.
+
+## 26. Notes & Notebooks
+
+A desk for everything you write, in its own panel.
+
+### 26.1 Two kinds of notes
+
+- **Verse notes** — everything you've attached to a verse, organised in a book-by-book tree.
+- **Notebooks** — folders you name yourself, holding free-form pages that aren't tied to any verse.
+
+Tap to open, edit full-width, and use Back to return to the list. The same shape works whether the panel is a narrow sliver or half the screen.
+
+### 26.2 Bible references become links as you type
+
+Write "Romans 8:28" in a note and it becomes a link.
+
+- **It waits until you're finished.** Typing "Luke 1" won't link and rewrite itself while you're still typing the "2".
+- **It corrects itself.** Fix "Luke 12:1" to "Luke 12:11" and the link follows. Break it into something that isn't a reference and it quietly turns back into ordinary text.
+- **Print the verse inline** — expand a reference to show the verse text with it. The printed verse can't be edited, because a verse printed in a note should be the verse. Delete the reference and the verse goes with it.
+- **Tap a link** to open a menu: go there, expand, or collapse.
+
+Notes and notebooks sync to your account like everything else.

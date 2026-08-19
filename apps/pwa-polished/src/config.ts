@@ -3,7 +3,7 @@
 /**
  * App Configuration
  * 
- * Central configuration for the ProjectBible app.
+ * Central configuration for the Hexapla app.
  */
 
 export const APP_VERSION = '1.0.0';

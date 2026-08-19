@@ -62,8 +62,8 @@ function currentTitle(): string {
 
 function currentSubtitle(): string {
   const counter = get(verseCounter);
-  if (!counter || counter.total === 0) return 'ProjectBible';
-  if (counter.index === 0) return 'ProjectBible';
+  if (!counter || counter.total === 0) return 'Hexapla';
+  if (counter.index === 0) return 'Hexapla';
   return `Verse ${counter.index} of ${counter.total}`;
 }
 

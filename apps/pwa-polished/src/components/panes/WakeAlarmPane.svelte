@@ -189,7 +189,7 @@
   </h2>
 
   <p class="section-description">
-    At the time you set, your phone gets a ProjectBible notification. Tap it and
+    At the time you set, your phone gets a Hexapla notification. Tap it and
     the app opens with a start button — reading never begins on its own.
   </p>
 
@@ -332,8 +332,8 @@
       make louder from here. Fix it once, by hand:
     </p>
     <ul>
-      <li><strong>Android:</strong> long-press a ProjectBible notification → its settings → set the sound to an alarm tone and raise the importance.</li>
-      <li><strong>iPhone:</strong> Settings → Focus → Sleep → allow notifications from ProjectBible.</li>
+      <li><strong>Android:</strong> long-press a Hexapla notification → its settings → set the sound to an alarm tone and raise the importance.</li>
+      <li><strong>iPhone:</strong> Settings → Focus → Sleep → allow notifications from Hexapla.</li>
     </ul>
   </div>
 </div>

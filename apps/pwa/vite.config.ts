@@ -23,8 +23,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico'],
       manifest: {
-        name: 'ProjectBible',
-        short_name: 'ProjectBible',
+        name: 'Hexapla',
+        short_name: 'Hexapla',
         description: 'Offline Interactive Bible Study App',
         theme_color: '#ffffff',
         background_color: '#ffffff',

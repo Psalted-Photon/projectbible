@@ -84,7 +84,7 @@ async function initApp() {
     // Show loading screen during initialization
     appElement.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; font-family: 'Milonga', cursive;">
-        <h1 style="margin-bottom: 20px;">ProjectBible</h1>
+        <h1 style="margin-bottom: 20px;">Hexapla</h1>
         <div style="width: 300px; background: #333; border-radius: 8px; padding: 20px;">
           <div id="init-message" style="margin-bottom: 10px; text-align: center;">Loading bootstrap...</div>
           <div style="width: 100%; height: 6px; background: #555; border-radius: 3px; overflow: hidden;">

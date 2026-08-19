@@ -70,7 +70,7 @@ export function pushSupport():
       return {
         supported: false,
         reason: 'ios-needs-install',
-        message: 'On iPhone, add ProjectBible to your home screen first — Safari tabs cannot receive alarms.',
+        message: 'On iPhone, add Hexapla to your home screen first — Safari tabs cannot receive alarms.',
       };
     }
     return {
@@ -84,7 +84,7 @@ export function pushSupport():
     return {
       supported: false,
       reason: 'ios-needs-install',
-      message: 'On iPhone, add ProjectBible to your home screen first — Safari tabs cannot receive alarms.',
+      message: 'On iPhone, add Hexapla to your home screen first — Safari tabs cannot receive alarms.',
     };
   }
 
@@ -276,7 +276,7 @@ export async function showTestNotification(): Promise<PushSetupResult> {
     };
   }
 
-  await registration.showNotification('ProjectBible', {
+  await registration.showNotification('Hexapla', {
     body: 'Test notification — this is how your wake alarm will look.',
     icon: '/pwa-192x192.png',
     badge: '/notification-badge-96.png',

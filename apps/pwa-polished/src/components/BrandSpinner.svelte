@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * The ProjectBible gem, spinning, shown while Read Aloud is generating audio.
+   * The Hexapla gem, spinning, shown while Read Aloud is generating audio.
    *
    * `pb-gem.png` is the app icon's own artwork with the black tile behind it
    * removed and cropped to the gem — in the original, the tile fills 182 of 192

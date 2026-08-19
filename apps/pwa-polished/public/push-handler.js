@@ -30,7 +30,7 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  const title = payload.title || 'ProjectBible';
+  const title = payload.title || 'Hexapla';
   const options = {
     body: payload.body || 'Time to read.',
     icon: payload.icon || '/pwa-192x192.png',

@@ -750,3 +750,68 @@ behind it, and there are a couple of dozen other subscribers.
 Fix direction: either compare before calling `update` and skip the write entirely, or
 give the store a custom equality check. Worth confirming the same pattern isn't
 repeated in the other stores while in there.
+
+---
+
+## Project
+
+### [ ] 11. The repo still lives under the old name, not the Hexapla org
+
+Open. Not a bug — a move that was deliberately deferred, parked here so it can be
+picked up cold.
+
+Paths in this entry are repo-relative, not relative to `apps/pwa-polished/src/`.
+
+The app was renamed ProjectBible → Hexapla on 2026-08-18, but **only the strings a
+user can see**. The `hexapla` GitHub org has been created and is empty; the repo is
+still `Psalted-Photon/projectbible`, and the local folder is still
+`Desktop\ProjectBible`. Both are invisible to users, which is why neither was
+urgent.
+
+Deliberately left alone in that rename, and still to be left alone unless someone
+writes a migration first: the IndexedDB databases `projectbible` and
+`ProjectBible_Packs`, the 17 `projectbible_*` localStorage keys, the
+`@projectbible/core` package scope across 47 files, and the
+`projectbible-wake-alarm` push tag. Renaming the first two wipes every note,
+highlight, journal entry and reading plan and forces a multi-GB pack re-download.
+The push tag is a matched pair between `lib/alarm/pushSubscription.ts` and
+`supabase/functions/wake-alarm-send/index.ts` — change one without the other and
+alarms stop being replaced correctly.
+
+**The clean route is GitHub's own transfer**, at repo Settings → Danger Zone →
+Transfer ownership. Releases and their download assets travel with the repo, and
+GitHub leaves permanent redirects behind, so the pack manifests already shipped to
+installed apps keep downloading throughout. The repo can be renamed in the same
+step. Afterwards the local clone needs `git remote set-url origin` pointed at the
+new path.
+
+**Then update the 13 baked-in old URLs**, so nothing depends on those redirects
+permanently:
+
+- `api/packs/[name].ts:13` — the production pack proxy target
+- `scripts/generate-manifest.mjs:27` — `GITHUB_RELEASE_BASE`, which stamps the URL
+  into every manifest it writes
+- `scripts/ensure-bundled-packs.mjs:11` — clone URL used by the Vercel build
+- `scripts/build-net-pack.mjs:301` — printed import URL
+- `packs/consolidated/manifest.json` and
+  `apps/pwa-polished/public/packs/consolidated/manifest.json` — two copies, both
+  with `bsb-audio-pt1` and `-pt2` download URLs
+- `RELEASE-INSTRUCTIONS.md` and `docs/CONSOLIDATED-PACKS-IMPLEMENTATION.md`
+
+Regenerating the manifest via `scripts/generate-manifest.mjs` covers the two JSON
+copies, but the manifest sha256 has to be re-synced afterward the usual way.
+
+**Gotcha — Vercel.** The project's Git connection points at the old owner, and a
+transfer does not carry it over. The Vercel GitHub App has to be authorized on the
+`hexapla` org and the project re-linked under Project Settings → Git, or pushes
+silently stop triggering deploys. Worth doing immediately after the transfer rather
+than discovering it at the next deploy.
+
+**Caveat.** The redirects hold only while nothing occupies the old path. Creating
+any new repo at `Psalted-Photon/projectbible` breaks them for every already-shipped
+app. Updating the baked-in URLs above is what removes that exposure.
+
+Renaming the local folder is independent and purely cosmetic, but it breaks 29
+hardcoded absolute `C:\Users\Marlowe\Desktop\ProjectBible\...` paths scattered
+through `scripts/` (mostly the Python and PowerShell data-prep one-offs) plus a
+couple of docs. Low value; do it only alongside a sweep of those.

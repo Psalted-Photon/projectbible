@@ -267,11 +267,11 @@ export default defineConfig({
         ]
       },
       manifest: {
-        name: 'ProjectBible',
+        name: 'Hexapla',
         // Android labels notifications with short_name, so this is the name that
         // appears above a wake alarm. Changing it only takes effect after the
         // app is removed from the home screen and re-added.
-        short_name: 'ProjectBible',
+        short_name: 'Hexapla',
         description: 'Immersive Bible reading experience',
         theme_color: '#1a1a1a',
         background_color: '#1a1a1a',
