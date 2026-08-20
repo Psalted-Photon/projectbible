@@ -3,7 +3,6 @@
  * 
  * Provides access to English lexical data from IndexedDB:
  * - Wordlist with IPA pronunciations
- * - Thesaurus with synonyms
  * - Grammar with POS tags, irregular verbs, plurals
  * 
  * Data is loaded from SQLite packs into IndexedDB for offline access.
@@ -13,11 +12,6 @@ export interface WordInfo {
   word: string;
   ipa_us?: string;
   ipa_uk?: string;
-}
-
-export interface Synonym {
-  word: string;
-  synonym: string;
 }
 
 export interface VerbForm {
@@ -44,7 +38,7 @@ class EnglishLexicalService {
   private readonly DB_VERSION = 1;
 
   /**
-   * Initialize IndexedDB with stores for wordlist, thesaurus, and grammar
+   * Initialize IndexedDB with stores for wordlist and grammar
    */
   async initialize(): Promise<void> {
     if (this.db) return;
@@ -65,13 +59,6 @@ class EnglishLexicalService {
         if (!db.objectStoreNames.contains('wordlist')) {
           const wordlistStore = db.createObjectStore('wordlist', { keyPath: 'word' });
           wordlistStore.createIndex('word', 'word', { unique: true });
-        }
-
-        // Synonyms store (word -> list of synonyms)
-        if (!db.objectStoreNames.contains('synonyms')) {
-          const synonymsStore = db.createObjectStore('synonyms', { autoIncrement: true });
-          synonymsStore.createIndex('word', 'word', { unique: false });
-          synonymsStore.createIndex('synonym', 'synonym', { unique: false });
         }
 
         // Verb forms store
@@ -111,42 +98,6 @@ class EnglishLexicalService {
       request.onsuccess = () => resolve(request.result || null);
       request.onerror = () => reject(request.error);
     });
-  }
-
-  /**
-   * Get synonyms for a word
-   */
-  async getSynonyms(word: string, limit: number = 50): Promise<string[]> {
-    await this.initialize();
-    if (!this.db) return [];
-
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['synonyms'], 'readonly');
-      const store = transaction.objectStore('synonyms');
-      const index = store.index('word');
-      const request = index.getAll(IDBKeyRange.only(word.toLowerCase()));
-
-      request.onsuccess = () => {
-        const results = request.result || [];
-        const synonyms = results.map((r: Synonym) => r.synonym).slice(0, limit);
-        resolve(synonyms);
-      };
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  /**
-   * Expand search terms with synonyms
-   */
-  async expandWithSynonyms(words: string[], maxSynonymsPerWord: number = 10): Promise<string[]> {
-    const expanded = new Set(words.map(w => w.toLowerCase()));
-
-    for (const word of words) {
-      const synonyms = await this.getSynonyms(word, maxSynonymsPerWord);
-      synonyms.forEach(syn => expanded.add(syn.toLowerCase()));
-    }
-
-    return Array.from(expanded);
   }
 
   /**
@@ -248,26 +199,6 @@ class EnglishLexicalService {
   }
 
   /**
-   * Bulk insert synonyms
-   */
-  async bulkInsertSynonyms(synonyms: Synonym[]): Promise<void> {
-    await this.initialize();
-    if (!this.db) throw new Error('Database not initialized');
-
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['synonyms'], 'readwrite');
-      const store = transaction.objectStore('synonyms');
-
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-
-      for (const synonym of synonyms) {
-        store.add(synonym);
-      }
-    });
-  }
-
-  /**
    * Bulk insert verb forms
    */
   async bulkInsertVerbForms(verbs: VerbForm[]): Promise<void> {
@@ -334,7 +265,7 @@ class EnglishLexicalService {
     await this.initialize();
     if (!this.db) return;
 
-    const stores = ['wordlist', 'synonyms', 'verb_forms', 'noun_plurals', 'pos_tags'];
+    const stores = ['wordlist', 'verb_forms', 'noun_plurals', 'pos_tags'];
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(stores, 'readwrite');

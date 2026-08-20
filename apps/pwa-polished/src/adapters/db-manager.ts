@@ -136,8 +136,7 @@ export async function removePack(packId: string): Promise<void> {
   } else if (packType === 'lexicon') {
     const lexStores = [
       'greek_strongs_entries', 'hebrew_strongs_entries', 'lexicon_entries',
-      'english_words', 'english_synonyms', 'thesaurus_synonyms', 'thesaurus_antonyms',
-      'english_grammar', 'word_occurrences', 'strongs_entries'
+      'english_words', 'english_grammar', 'word_occurrences', 'strongs_entries'
     ] as const;
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction([...lexStores], 'readwrite');

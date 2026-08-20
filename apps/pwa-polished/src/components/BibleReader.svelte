@@ -1843,11 +1843,15 @@
   }
 
   function clearLinkNavHighlight(): void {
-    readerElement?.querySelectorAll('.link-nav-verse-highlight').forEach(el => {
-      el.classList.remove('link-nav-verse-highlight');
-      (el as HTMLElement).style.removeProperty('--rp-hl-left');
-      (el as HTMLElement).style.removeProperty('--link-hl-color');
-    });
+    readerElement
+      ?.querySelectorAll('.link-nav-verse-highlight, .link-nav-verse-highlight-rtl')
+      .forEach(el => {
+        el.classList.remove('link-nav-verse-highlight');
+        el.classList.remove('link-nav-verse-highlight-rtl');
+        (el as HTMLElement).style.removeProperty('--rp-hl-left');
+        (el as HTMLElement).style.removeProperty('--rp-hl-right');
+        (el as HTMLElement).style.removeProperty('--link-hl-color');
+      });
   }
 
   // Highlight the navigated verse with a fade gradient in the target book's category color.
@@ -1861,10 +1865,20 @@
     ) as HTMLElement | null;
     if (!verseEl) return;
     const textEl = verseEl.querySelector('.verse-text') as HTMLElement | null;
-    const leftOffset = textEl ? textEl.offsetLeft : 32;
-    verseEl.style.setProperty('--rp-hl-left', `${leftOffset}px`);
     verseEl.style.setProperty('--link-hl-color', hexToRgba(getCategoryColor(currentBook), 0.45));
-    verseEl.classList.add('link-nav-verse-highlight');
+    if (isHebrewTranslation(currentTranslation)) {
+      // Anchor from the right, where a Hebrew verse starts reading. Measured
+      // from the verse box's own right edge so the fade clears the verse number
+      // the same way the left-to-right one does.
+      const rightInset = textEl
+        ? Math.max(0, verseEl.clientWidth - (textEl.offsetLeft + textEl.offsetWidth))
+        : 0;
+      verseEl.style.setProperty('--rp-hl-right', `calc(100% - ${rightInset}px)`);
+      verseEl.classList.add('link-nav-verse-highlight-rtl');
+    } else {
+      verseEl.style.setProperty('--rp-hl-left', `${textEl ? textEl.offsetLeft : 32}px`);
+      verseEl.classList.add('link-nav-verse-highlight');
+    }
     _linkNavHighlightVerse = null;
   }
 
@@ -4355,12 +4369,6 @@
                 console.log(`   Word: ${englishEntry.word}`);
                 if (englishEntry.ipa_us) console.log(`   Pronunciation (US): /${englishEntry.ipa_us}/`);
                 if (englishEntry.pos) console.log(`   Part of Speech: ${englishEntry.pos}`);
-                if (englishEntry.synonyms && englishEntry.synonyms.length > 0) {
-                  console.log(`   Synonyms (${englishEntry.synonyms.length}): ${englishEntry.synonyms.slice(0, 10).join(', ')}${englishEntry.synonyms.length > 10 ? '...' : ''}`);
-                }
-                if (englishEntry.antonyms && englishEntry.antonyms.length > 0) {
-                  console.log(`   Antonyms (${englishEntry.antonyms.length}): ${englishEntry.antonyms.slice(0, 10).join(', ')}${englishEntry.antonyms.length > 10 ? '...' : ''}`);
-                }
                 if (englishEntry.grammar) {
                   console.log('   Grammar:', englishEntry.grammar);
                 }
@@ -6284,6 +6292,19 @@
     isolation: isolate;
     background: linear-gradient(to right, var(--link-hl-color, rgba(255, 215, 0, 0.45)), transparent);
     background-position: var(--rp-hl-left, 2em) center;
+    background-size: 30ch calc(1em + 7px);
+    background-repeat: no-repeat;
+    border-radius: 3px;
+  }
+
+  /* The same highlight on a Hebrew verse, mirrored. A right-to-left verse begins
+     at its right edge, so a left-to-right fade would put the strongest colour on
+     the last word read and trail off over the first — backwards. Same recipe as
+     .rp-verse-end-highlight below, which already does this. */
+  :global(.link-nav-verse-highlight-rtl) {
+    isolation: isolate;
+    background: linear-gradient(to left, var(--link-hl-color, rgba(255, 215, 0, 0.45)), transparent);
+    background-position: var(--rp-hl-right, right) center;
     background-size: 30ch calc(1em + 7px);
     background-repeat: no-repeat;
     border-radius: 3px;

@@ -5,7 +5,7 @@
  * - Streaming downloads with progress callbacks
  * - SHA-256 validation
  * - Retry logic (3 attempts with exponential backoff)
- * - Partial download detection
+ * - Partial download detection, kept distinct from a wrong-file mismatch
  * - Corrupted IndexedDB blob recovery
  * - Pack caching in IndexedDB
  */
@@ -13,6 +13,21 @@
 import type { PackEntry, PackManifest } from '../schemas/PackManifest';
 import { validateManifest, isPackCompatible } from '../schemas/PackManifest';
 import { sqliteWorker } from './SQLiteWorkerPool';
+
+/**
+ * An error meaning the bytes on the server are not the bytes the manifest
+ * describes -- a stale release asset, or a manifest generated against a
+ * different build. Retrying cannot fix it, so the retry loop rethrows on sight.
+ */
+export interface PackContentError extends Error {
+  isContentMismatch?: true;
+}
+
+function contentMismatch(message: string): PackContentError {
+  const error: PackContentError = new Error(message);
+  error.isContentMismatch = true;
+  return error;
+}
 
 export interface DownloadProgress {
   packId: string;
@@ -218,7 +233,16 @@ export class PackLoader {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         console.error(`Download attempt ${attempt} failed:`, lastError.message);
-        
+
+        // A content mismatch means the server is serving a different file than
+        // the manifest describes -- usually a stale release asset. Retrying
+        // fetches the same wrong bytes again, so three attempts just burn the
+        // user's data (three 46 MB downloads, in the case that prompted this)
+        // before reporting a problem no retry could fix.
+        if ((lastError as PackContentError).isContentMismatch) {
+          throw lastError;
+        }
+
         // Wait before retrying (exponential backoff)
         if (attempt < this.options.maxRetries) {
           const delay = this.options.retryDelay * Math.pow(2, attempt - 1);
@@ -269,9 +293,20 @@ export class PackLoader {
       });
     }
     
-    // Check for partial download
-    if (loaded !== total) {
-      throw new Error(`Partial download: expected ${total} bytes, got ${loaded} bytes`);
+    // A short read is a broken transfer and worth retrying. Receiving MORE
+    // than expected is not "partial" at all -- it means the file on the server
+    // is not the file the manifest describes, and no retry will change that.
+    if (loaded < total) {
+      throw new Error(
+        `Partial download of ${pack.id}: expected ${total} bytes, got ${loaded}`,
+      );
+    }
+    if (loaded > total) {
+      throw contentMismatch(
+        `${pack.id} on the server does not match the manifest: expected ` +
+          `${total} bytes, got ${loaded}. The published pack is probably out ` +
+          `of date -- re-upload it, or regenerate the manifest.`,
+      );
     }
     
     // Concatenate chunks
@@ -295,7 +330,9 @@ export class PackLoader {
     const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     
     if (hashHex !== expectedHash.toLowerCase()) {
-      throw new Error(`SHA-256 mismatch: expected ${expectedHash}, got ${hashHex}`);
+      throw contentMismatch(
+        `SHA-256 mismatch: expected ${expectedHash}, got ${hashHex}`,
+      );
     }
   }
   

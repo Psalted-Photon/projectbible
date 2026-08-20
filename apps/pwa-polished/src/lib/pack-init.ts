@@ -198,15 +198,6 @@ const BUNDLED_PACKS: BundledPack[] = [
   //   isLexical: true
   // },
   // {
-  //   id: 'english-thesaurus',
-  //   name: 'English Thesaurus (3.5M synonyms)',
-  //   filename: 'english-thesaurus-v1.sqlite',
-  //   url: '/english-thesaurus-v1.sqlite',
-  //   type: 'lexicon',
-  //   required: false,
-  //   isLexical: true
-  // },
-  // {
   //   id: 'english-grammar',
   //   name: 'English Grammar (POS tags, verb forms)',
   //   filename: 'english-grammar-v1.sqlite',
@@ -368,12 +359,6 @@ export async function initializePolishedApp(
           
           if (pack.id === 'english-wordlist') {
             await englishLexicalPackLoader.loadWordlistPack(pack.url, (loadProgress) => {
-              const currentProgress = Math.round((completed / total) * 100);
-              const packProgress = Math.round(loadProgress.progress * 0.01 * (1 / total) * 100);
-              onProgress?.(loadProgress.message, currentProgress + packProgress);
-            });
-          } else if (pack.id === 'english-thesaurus') {
-            await englishLexicalPackLoader.loadThesaurusPack(pack.url, (loadProgress) => {
               const currentProgress = Math.round((completed / total) * 100);
               const packProgress = Math.round(loadProgress.progress * 0.01 * (1 / total) * 100);
               onProgress?.(loadProgress.message, currentProgress + packProgress);

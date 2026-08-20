@@ -623,24 +623,6 @@ export function openDB(): Promise<IDBDatabase> {
         englishStore.createIndex('pos', 'pos', { unique: false });
       }
       
-      // English synonyms
-      if (!db.objectStoreNames.contains('english_synonyms')) {
-        const synStore = db.createObjectStore('english_synonyms', { keyPath: 'id', autoIncrement: true });
-        synStore.createIndex('word', 'word', { unique: false });
-      }
-      
-      // Thesaurus synonyms
-      if (!db.objectStoreNames.contains('thesaurus_synonyms')) {
-        const thesaurusStore = db.createObjectStore('thesaurus_synonyms', { keyPath: 'id', autoIncrement: true });
-        thesaurusStore.createIndex('word', 'word', { unique: false });
-      }
-      
-      // Thesaurus antonyms
-      if (!db.objectStoreNames.contains('thesaurus_antonyms')) {
-        const antonymsStore = db.createObjectStore('thesaurus_antonyms', { keyPath: 'id', autoIncrement: true });
-        antonymsStore.createIndex('word', 'word', { unique: false });
-      }
-      
       // English grammar data
       if (!db.objectStoreNames.contains('english_grammar')) {
         const grammarStore = db.createObjectStore('english_grammar', { keyPath: 'id', autoIncrement: true });

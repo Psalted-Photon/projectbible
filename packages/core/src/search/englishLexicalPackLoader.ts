@@ -8,10 +8,10 @@
 import initSqlJs from 'sql.js';
 import type { Database } from 'sql.js';
 import { englishLexicalService } from './englishLexicalService';
-import type { WordInfo, Synonym, VerbForm, NounPlural, POSTag } from './englishLexicalService';
+import type { WordInfo, VerbForm, NounPlural, POSTag } from './englishLexicalService';
 
 export interface LoadProgress {
-  pack: 'wordlist' | 'thesaurus' | 'grammar';
+  pack: 'wordlist' | 'grammar';
   stage: 'downloading' | 'parsing' | 'importing' | 'complete';
   progress: number; // 0-100
   message: string;
@@ -123,83 +123,6 @@ export class EnglishLexicalPackLoader {
       });
     } catch (error) {
       console.error('Failed to load wordlist pack:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Load thesaurus pack into IndexedDB
-   */
-  async loadThesaurusPack(
-    packUrl: string,
-    onProgress?: (progress: LoadProgress) => void
-  ): Promise<void> {
-    try {
-      onProgress?.({
-        pack: 'thesaurus',
-        stage: 'downloading',
-        progress: 0,
-        message: 'Downloading thesaurus pack...'
-      });
-
-      const db = await this.loadSQLiteDB(packUrl);
-
-      onProgress?.({
-        pack: 'thesaurus',
-        stage: 'parsing',
-        progress: 30,
-        message: 'Reading synonym data...'
-      });
-
-      // Get total count
-      const countResult = db.exec('SELECT COUNT(*) as count FROM synonyms');
-      const totalSynonyms = countResult[0]?.values[0]?.[0] as number || 0;
-
-      // Read all synonyms
-      const results = db.exec('SELECT word, synonym FROM synonyms');
-      const synonyms: Synonym[] = [];
-
-      if (results.length > 0) {
-        const rows = results[0].values;
-        for (const row of rows) {
-          synonyms.push({
-            word: row[0] as string,
-            synonym: row[1] as string
-          });
-        }
-      }
-
-      db.close();
-
-      onProgress?.({
-        pack: 'thesaurus',
-        stage: 'importing',
-        progress: 60,
-        message: `Importing ${totalSynonyms.toLocaleString()} synonyms...`
-      });
-
-      // Import in chunks
-      for (let i = 0; i < synonyms.length; i += CHUNK_SIZE) {
-        const chunk = synonyms.slice(i, i + CHUNK_SIZE);
-        await englishLexicalService.bulkInsertSynonyms(chunk);
-
-        const progress = 60 + Math.floor((i / synonyms.length) * 40);
-        onProgress?.({
-          pack: 'thesaurus',
-          stage: 'importing',
-          progress,
-          message: `Imported ${Math.min(i + CHUNK_SIZE, synonyms.length).toLocaleString()} / ${totalSynonyms.toLocaleString()} synonyms`
-        });
-      }
-
-      onProgress?.({
-        pack: 'thesaurus',
-        stage: 'complete',
-        progress: 100,
-        message: `Thesaurus loaded: ${totalSynonyms.toLocaleString()} synonyms`
-      });
-    } catch (error) {
-      console.error('Failed to load thesaurus pack:', error);
       throw error;
     }
   }
@@ -319,7 +242,6 @@ export class EnglishLexicalPackLoader {
     onProgress?: (progress: LoadProgress) => void
   ): Promise<void> {
     await this.loadWordlistPack(`${baseUrl}/english-wordlist-v1.sqlite`, onProgress);
-    await this.loadThesaurusPack(`${baseUrl}/english-thesaurus-v1.sqlite`, onProgress);
     await this.loadGrammarPack(`${baseUrl}/english-grammar-v1.sqlite`, onProgress);
   }
 

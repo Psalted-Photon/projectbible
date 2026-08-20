@@ -74,13 +74,11 @@
           <h3>Available Resources</h3>
           <ul>
             <li><strong>Wordlist Pack</strong> - 440,000+ words with IPA pronunciation (31 MB)</li>
-            <li><strong>Thesaurus Pack</strong> - 3.5M synonym relationships (326 MB)</li>
             <li><strong>Grammar Pack</strong> - POS tags, irregular verbs, plurals (0.85 MB)</li>
           </ul>
           
           <p class="pack-description">
             Load these packs to enable:
-            <br>• Synonym expansion in searches
             <br>• IPA pronunciation display
             <br>• Part-of-speech filtering
             <br>• Advanced morphology features
@@ -111,8 +109,6 @@
               <span class="pack-name">
                 {#if currentPack === 'wordlist'}
                   <span class="emoji">📖</span> Wordlist
-                {:else if currentPack === 'thesaurus'}
-                  <span class="emoji">🔄</span> Thesaurus
                 {:else if currentPack === 'grammar'}
                   <span class="emoji">📝</span> Grammar
                 {:else}

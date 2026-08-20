@@ -28,8 +28,6 @@ export interface EnglishWordEntry {
   ipa_us: string | null;
   ipa_uk: string | null;
   pos: string | null;
-  synonyms: string[];
-  antonyms: string[];
   grammar?: any;
   modern: Definition[];
   historic: Definition[];
@@ -415,56 +413,10 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
       ipa_us: wordData?.ipa_us ?? null,
       ipa_uk: wordData?.ipa_uk ?? null,
       pos: wordData?.pos ?? null,
-      synonyms: [],
-      antonyms: [],
       modern: [],
       historic: [],
       wordset: []
     };
-    
-    // Look up synonyms from thesaurus using index
-    console.log('🔍 Looking up synonyms for:', normalizedWord);
-    const synonyms = await new Promise<string[]>((resolve) => {
-      const tx = db.transaction('thesaurus_synonyms', 'readonly');
-      const store = tx.objectStore('thesaurus_synonyms');
-      const index = store.index('word');
-      const request = index.getAll(normalizedWord);
-      
-      request.onsuccess = () => {
-        const results = request.result || [];
-        const syns = results.map((r: any) => r.synonym);
-        console.log(`✅ Found ${syns.length} synonyms`);
-        resolve(syns);
-      };
-      request.onerror = () => {
-        console.log('❌ Synonym lookup failed');
-        resolve([]);
-      };
-    });
-    
-    entry.synonyms = synonyms;
-    
-    // Look up antonyms from thesaurus using index
-    console.log('🔍 Looking up antonyms for:', normalizedWord);
-    const antonyms = await new Promise<string[]>((resolve) => {
-      const tx = db.transaction('thesaurus_antonyms', 'readonly');
-      const store = tx.objectStore('thesaurus_antonyms');
-      const index = store.index('word');
-      const request = index.getAll(normalizedWord);
-      
-      request.onsuccess = () => {
-        const results = request.result || [];
-        const ants = results.map((r: any) => r.antonym);
-        console.log(`✅ Found ${ants.length} antonyms`);
-        resolve(ants);
-      };
-      request.onerror = () => {
-        console.log('❌ Antonym lookup failed');
-        resolve([]);
-      };
-    });
-    
-    entry.antonyms = antonyms;
     
     // Look up grammar info using index
     console.log('🔍 Looking up grammar for:', normalizedWord);
@@ -566,7 +518,7 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
       entry.wordset = wordsetDefs;
     }
 
-    console.log('✅ Returning complete entry with', entry.synonyms.length, 'synonyms,', entry.modern.length, 'modern defs,', entry.historic.length, 'historic defs,', entry.wordset.length, 'wordset defs');
+    console.log('✅ Returning complete entry with', entry.modern.length, 'modern defs,', entry.historic.length, 'historic defs,', entry.wordset.length, 'wordset defs');
     
     // Cache the result
     dictionaryCache.set(normalizedWord, entry);

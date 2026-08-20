@@ -2,7 +2,16 @@
   import { onMount, onDestroy, tick } from "svelte";
   import { IndexedDBLexiconStore } from "../adapters/LexiconStore";
   import type { StrongEntry } from "@projectbible/core";
-  import { BIBLE_BOOKS } from "../lib/bibleData.js";
+  import StrongsVerseList from "./StrongsVerseList.svelte";
+  import {
+    loadStrongsUsage,
+    buildVerseUses,
+    buildFormGroups,
+    sourcesByTestament,
+    refKey,
+    type StrongsUsage,
+    type VerseUse,
+  } from "../lib/strongsUsage";
   import {
     englishLexicalService,
     type WordInfo,
@@ -37,7 +46,7 @@
   /** The host's own close. Docked, Window.svelte supplies the ×. */
   export let onClose: (() => void) | null = null;
   /** Which sub-tab was open and how far down, restored when you come back. */
-  export let initialTab: "definition" | "occurrences" | "related" | null = null;
+  export let initialTab: "definition" | "forms" | "occurrences" | "related" | null = null;
   export let initialScrollTop = 0;
   /** Reports the view on the way out, so switching tabs and coming back lands
    *  where you left rather than at the top. */
@@ -72,38 +81,51 @@
   let searchResults: StrongEntry[] = [];
   let loading = false;
   let error = "";
-  let activeTab: "definition" | "occurrences" | "related" = initialTab ?? "definition";
+  let activeTab: "definition" | "forms" | "occurrences" | "related" = initialTab ?? "definition";
   let bodyEl: HTMLDivElement | null = null;
 
   onDestroy(() => onSnapshot?.({ tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0 }));
 
-  // Two different tab strips share this one variable: the Strong's view has
-  // Definition/Occurrences/Related, the English-word view only has
-  // Definition/Synonyms. Landing on the English view with "occurrences" left
-  // over from a previous Strong's lookup would render an empty body.
-  $: if (isEnglishWord && activeTab === "occurrences") activeTab = "definition";
+  // activeTab now belongs to the Strong's view alone
+  // (Definition/Occurrences/Related). The English-word view has no tab strip:
+  // definitions are all it shows.
 
   // English lexical data
   let englishWordInfo: WordInfo | null = null;
-  let englishSynonyms: string[] = [];
   let englishPOS: string[] = [];
-  let englishDefinitions: any[] = [];
   let isEnglishWord = false;
-  let loadingDefinition = false;
   let hasOfflineDefinitions = false;
   let localLexicalEntries: any = null;
 
-  // Occurrences tab state
-  type OccurrenceEntry = { book: string; chapter: number; verse: number; word: string; translationId: string };
-  let occurrences: OccurrenceEntry[] = [];
-  let occurrencesLoading = false;
-  let occurrencesLoaded = false;
+  // --- Usage: the Forms and Occurrences tabs ------------------------------
+  // Both tabs answer questions about the same set of tagged words, so they share
+  // one scan of the morphology store rather than running one apiece.
+  let usage: StrongsUsage | null = null;
+  let usageLoading = false;
+  let usageLoadedFor = "";
+  /** Which edition is being studied. Null means all of them at once. */
+  let source: string | null = null;
+  /** Refs already followed, dimmed on return. Shared by both tabs, since they
+   *  are two views of the same verses. */
+  let visitedRefs = new Set<string>();
+  /** Which inflected form is open. One at a time: the table is the index you
+   *  scan, and several open at once buries it. */
+  let openForm: string | null = null;
 
-  // Inflection forms state
-  type FormEntry = { form: string; morphCode: string; count: number };
-  let formsData: FormEntry[] = [];
-  let formsLoading = false;
-  let formsLoaded = false;
+  $: verseUses = usage ? buildVerseUses(usage, source) : [];
+  $: formGroups = usage ? buildFormGroups(usage, source) : [];
+  $: variantBaseline = usage ? sourcesByTestament(usage) : { OT: [], NT: [] };
+  /**
+   * A badge says the editions disagree about a verse, which is only a question
+   * worth asking when you are looking at all of them. Studying one edition,
+   * every row would trivially be "only in" that edition and the badge would
+   * become wallpaper.
+   */
+  $: activeBaseline = source === null ? variantBaseline : { OT: [], NT: [] };
+  /** The picker only earns its row when there is a choice to make. A Hebrew
+   *  entry only ever appears in one text. */
+  $: showSourcePicker = (usage?.sources.length ?? 0) > 1;
+  $: isRtlLanguage = strongEntry?.language === "hebrew" || strongEntry?.language === "aramaic";
 
   onMount(async () => {
     lexiconStore = new IndexedDBLexiconStore();
@@ -193,17 +215,11 @@
     strongEntry = null;
     searchResults = [];
     englishWordInfo = null;
-    englishSynonyms = [];
     englishPOS = [];
-    englishDefinitions = [];
     isEnglishWord = false;
-    loadingDefinition = false;
     localLexicalEntries = null;
     activeTab = "definition";
-    occurrences = [];
-    occurrencesLoaded = false;
-    formsData = [];
-    formsLoaded = false;
+    resetUsage();
 
     try {
       // Check if we already have lexical entries from the new lookup system
@@ -220,14 +236,6 @@
         // Use POS from lexicalEntries if available
         if (lexicalEntries.pos) {
           englishPOS = Array.isArray(lexicalEntries.pos) ? lexicalEntries.pos : [lexicalEntries.pos];
-        }
-        
-        if (lexicalEntries.synonyms && lexicalEntries.synonyms.length > 0) {
-          englishSynonyms = lexicalEntries.synonyms;
-        }
-        
-        if (lexicalEntries.antonyms && lexicalEntries.antonyms.length > 0) {
-          // Store antonyms (TODO: display in UI)
         }
         
         // Use offline definitions from dictionary pack (NO API CALL)
@@ -290,9 +298,6 @@
                 ? offlineEntry.pos
                 : [offlineEntry.pos];
             }
-            if (offlineEntry.synonyms && offlineEntry.synonyms.length > 0) {
-              englishSynonyms = offlineEntry.synonyms;
-            }
             loading = false;
             return;
           }
@@ -308,60 +313,9 @@
 
           if (englishWordInfo) {
             isEnglishWord = true;
-            // Get additional data in parallel
-            let [synonyms, posTags, verbForm] = await Promise.all([
-              englishLexicalService.getSynonyms(searchText).catch(() => []),
-              englishLexicalService.getPOSTags(searchText).catch(() => []),
-              englishLexicalService.getVerbForms(searchText).catch(() => null),
-            ]);
-
-            englishSynonyms = synonyms;
-            englishPOS = posTags;
-
-            // If no synonyms found, try the base form
-            if (englishSynonyms.length === 0) {
-              // Try removing common suffixes to get base form
-              const baseFormAttempts = [
-                searchText.replace(/ed$/, ""), // surpassed -> surpass
-                searchText.replace(/ing$/, ""), // running -> runn
-                searchText.replace(/s$/, ""), // runs -> run
-                searchText.replace(/es$/, ""), // matches -> match
-                searchText.replace(/ied$/, "y"), // studied -> study
-              ];
-
-              // If we have verb form data, use that
-              if (verbForm?.base_form) {
-                baseFormAttempts.unshift(verbForm.base_form);
-              }
-
-              // Try each base form until we find synonyms
-              for (const baseForm of baseFormAttempts) {
-                if (baseForm !== searchText && baseForm.length > 2) {
-                  const baseSynonyms = await englishLexicalService
-                    .getSynonyms(baseForm)
-                    .catch(() => []);
-                  if (baseSynonyms.length > 0) {
-                    englishSynonyms = baseSynonyms;
-                    break;
-                  }
-                }
-              }
-            }
-
-            // Fetch definition from free dictionary API
-            loadingDefinition = true;
-            try {
-              const response = await fetch(
-                `https://api.dictionaryapi.dev/api/v2/entries/en/${searchText}`,
-              );
-              if (response.ok) {
-                englishDefinitions = await response.json();
-              }
-            } catch (err) {
-              console.log("Dictionary API failed:", err);
-            } finally {
-              loadingDefinition = false;
-            }
+            englishPOS = await englishLexicalService
+              .getPOSTags(searchText)
+              .catch(() => []);
 
             return; // Found English word, no need to search biblical languages
           }
@@ -401,73 +355,73 @@
     onClose?.();
   }
 
-  async function loadOccurrences(id: string) {
-    if (occurrencesLoaded) return;
-    occurrencesLoading = true;
+  /**
+   * Every tagged word carrying this number, in one pass.
+   *
+   * Both tabs read from the result, and the source picker filters it in memory,
+   * so switching editions or tabs never goes back to the database.
+   */
+  async function loadUsage(id: string) {
+    if (usageLoadedFor === id || usageLoading) return;
+    usageLoading = true;
     try {
-      const db = await openDB();
-      const results = await new Promise<OccurrenceEntry[]>((resolve, reject) => {
-        const tx = db.transaction('morphology', 'readonly');
-        const store = tx.objectStore('morphology');
-        // Try both index names that may exist depending on DB version
-        const indexName = store.indexNames.contains('strongsId') ? 'strongsId' : 'by_strongs';
-        const fieldName = indexName === 'strongsId' ? id : id; // same value either way
-        const index = store.index(indexName);
-        const found: OccurrenceEntry[] = [];
-        const req = index.openCursor(IDBKeyRange.only(fieldName));
-        req.onsuccess = (e) => {
-          const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
-          if (cursor) {
-            const m = cursor.value;
-            found.push({
-              book: m.book,
-              chapter: m.chapter,
-              verse: m.verse,
-              word: m.text ?? m.word ?? '',
-              translationId: m.translationId ?? m.translation_id ?? '',
-            });
-            cursor.continue();
-          } else {
-            resolve(found);
-          }
-        };
-        req.onerror = () => reject(req.error);
-      });
-      // Deduplicate by book+chapter+verse (multiple translations may have same verse)
-      const seen = new Set<string>();
-      const bookOrderMap = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
-      occurrences = results.filter(o => {
-        const key = `${o.book}|${o.chapter}|${o.verse}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      }).sort((a, b) => {
-        const orderA = bookOrderMap.get(a.book) ?? 999;
-        const orderB = bookOrderMap.get(b.book) ?? 999;
-        if (orderA !== orderB) return orderA - orderB;
-        if (a.chapter !== b.chapter) return a.chapter - b.chapter;
-        return a.verse - b.verse;
-      });
+      const found = await loadStrongsUsage(id);
+      // A slower scan must not overwrite a word opened since.
+      if (strongEntry?.id !== id) return;
+      usage = found;
+      usageLoadedFor = id;
+      source = defaultSource(found.sources);
     } catch (err) {
-      console.error('Failed to load occurrences:', err);
+      console.error("Failed to load Strong's usage:", err);
+      usage = { rows: [], sources: [] };
+      usageLoadedFor = id;
     } finally {
-      occurrencesLoading = false;
-      occurrencesLoaded = true;
+      usageLoading = false;
     }
   }
 
-  function handleOccurrenceClick(occ: OccurrenceEntry) {
-    const nav = get(navigationStore);
-    navigationStore.pushHistory({ ...nav });
-    navigationStore.navigateTo(occ.translationId || 'byz', occ.book, occ.chapter, occ.verse);
+  /** Open on the text you are already reading when that is one of the originals,
+   *  so the study agrees with the passage beside it. */
+  function defaultSource(sources: string[]): string | null {
+    if (sources.length < 2) return null;
+    const reading = get(navigationStore).translation?.toLowerCase();
+    const match = sources.find((s) => s.toLowerCase() === reading);
+    return match ?? null;
+  }
+
+  /**
+   * Follow a verse into the reader.
+   *
+   * Keeps the translation you are reading rather than forcing the tagged text's
+   * own edition on you, and goes through `navigateToVerse` so the verse arrives
+   * with the category-coloured fade every other verse list in the app gives you.
+   */
+  function handleVerseClick(use: VerseUse) {
+    visitedRefs = new Set(visitedRefs).add(refKey(use));
+    const current = get(navigationStore);
+    navigationStore.pushHistory(current);
+    navigationStore.navigateToVerse(current.translation, use.book, use.chapter, use.verse);
     // Docked, the study stays put beside the passage you just jumped to.
     if (!docked) close();
+  }
+
+  /** Everything the usage tabs hold about one number, forgotten. Following a
+   *  Strong's link swaps the word without going back through `loadLexicalData`,
+   *  so without this the previous word's verses stay on screen under the new
+   *  word's heading until the fresh scan lands. */
+  function resetUsage() {
+    usage = null;
+    usageLoadedFor = "";
+    source = null;
+    visitedRefs = new Set();
+    openForm = null;
   }
 
   async function loadStrongsEntry(strongsNum: string) {
     loading = true;
     error = "";
     strongEntry = null;
+    resetUsage();
     const result = await lookupStrongs(strongsNum);
     if (result) {
       strongEntry = {
@@ -488,60 +442,19 @@
     loading = false;
   }
 
-  // Trigger occurrence load when user switches to that tab
-  $: if (activeTab === 'occurrences' && strongEntry && !occurrencesLoaded && !occurrencesLoading) {
-    loadOccurrences(strongEntry.id);
+  // One scan serves Forms and Occurrences, so it starts as soon as either is
+  // asked for and neither waits on the other afterwards.
+  $: if ((activeTab === "forms" || activeTab === "occurrences") && strongEntry) {
+    loadUsage(strongEntry.id);
   }
 
-  // Trigger inflection forms load when definition tab is active with a strong entry
-  $: if (activeTab === 'definition' && strongEntry && !formsLoaded && !formsLoading) {
-    loadForms(strongEntry.id);
+  /** Parsing in words. Hebrew and Aramaic are coded differently from Greek. */
+  function parseOf(morphCode: string): string {
+    return isRtlLanguage ? expandOshbCode(morphCode) : expandRmacCode(morphCode);
   }
 
-  async function loadForms(id: string) {
-    if (formsLoaded) return;
-    formsLoading = true;
-    try {
-      const db = await openDB();
-      const raw = await new Promise<{form: string; morphCode: string}[]>((resolve, reject) => {
-        const tx = db.transaction('morphology', 'readonly');
-        const store = tx.objectStore('morphology');
-        const indexName = store.indexNames.contains('strongsId') ? 'strongsId' : 'by_strongs';
-        const index = store.index(indexName);
-        const found: {form: string; morphCode: string}[] = [];
-        const req = index.openCursor(IDBKeyRange.only(id));
-        req.onsuccess = (e) => {
-          const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
-          if (cursor) {
-            const m = cursor.value;
-            const form = (m.text ?? m.word ?? '').trim();
-            const morphCode = (m.morph_code ?? m.parsing ?? '').trim();
-            if (form) found.push({ form, morphCode });
-            cursor.continue();
-          } else {
-            resolve(found);
-          }
-        };
-        req.onerror = () => reject(req.error);
-      });
-      // Group by form + morphCode, count occurrences
-      const formMap = new Map<string, FormEntry>();
-      for (const { form, morphCode } of raw) {
-        const key = `${form}|${morphCode}`;
-        const existing = formMap.get(key);
-        if (existing) {
-          existing.count++;
-        } else {
-          formMap.set(key, { form, morphCode, count: 1 });
-        }
-      }
-      formsData = [...formMap.values()].sort((a, b) => b.count - a.count);
-    } catch (err) {
-      console.error('Failed to load inflection forms:', err);
-    } finally {
-      formsLoading = false;
-      formsLoaded = true;
-    }
+  function toggleForm(key: string) {
+    openForm = openForm === key ? null : key;
   }
 
   function getLanguageColor(lang: string): string {
@@ -622,7 +535,10 @@
     if (!parsed) return;
     const current = get(navigationStore);
     navigationStore.pushHistory(current);
-    navigationStore.navigateTo(current.translation, parsed.book, parsed.chapter, parsed.verse);
+    // navigateToVerse, not navigateTo: a scripture reference followed out of a
+    // definition should land with the same fade highlight every other verse link
+    // in the app gives you.
+    navigationStore.navigateToVerse(current.translation, parsed.book, parsed.chapter, parsed.verse);
     // Docked, the study stays put — reading the passage beside it is the whole
     // point of pinning it. Only a card has to get out of the way.
     if (!docked) close();
@@ -823,26 +739,9 @@
         </div>
       </div>
     {:else if isEnglishWord && englishWordInfo}
-      <!-- English Word Information -->
-      <div class="tabs">
-        <button
-          class="tab"
-          class:active={activeTab === "definition"}
-          on:click={() => (activeTab = "definition")}
-        >
-          Definition
-        </button>
-        <button
-          class="tab"
-          class:active={activeTab === "related"}
-          on:click={() => (activeTab = "related")}
-        >
-          Synonyms ({englishSynonyms.length})
-        </button>
-      </div>
-
+      <!-- English Word Information. No tab strip: definitions are the only
+           thing this view shows now that synonyms are gone. -->
       <div class="tab-content">
-        {#if activeTab === "definition"}
           <div class="definition-view">
             <div class="info-section">
               <h3>Word Information</h3>
@@ -864,49 +763,12 @@
               </dl>
             </div>
 
-            {#if loadingDefinition}
-              <div class="info-section">
-                <div class="loading-inline">
-                  <div class="spinner-small"></div>
-                  <span>Loading definition...</span>
-                </div>
-              </div>
-            {/if}
-
-            {#if englishDefinitions.length > 0}
-              {#each englishDefinitions as entry}
-                {#each entry.meanings || [] as meaning}
-                  <div class="info-section">
-                    <h3 style="text-transform: capitalize;">
-                      {meaning.partOfSpeech}
-                    </h3>
-                    <ol class="definition-list">
-                      {#each meaning.definitions || [] as def}
-                        <li>
-                          <p class="definition-text">{def.definition}</p>
-                          {#if def.example}
-                            <p class="example-text">
-                              "<em>{def.example}</em>"
-                            </p>
-                          {/if}
-                          {#if def.synonyms && def.synonyms.length > 0}
-                            <p class="inline-synonyms">
-                              <strong>Similar:</strong>
-                              {def.synonyms.slice(0, 5).join(", ")}
-                            </p>
-                          {/if}
-                        </li>
-                      {/each}
-                    </ol>
-                  </div>
-                {/each}
-              {/each}
-            {/if}
-
             {#if effectiveLexicalEntries && (effectiveLexicalEntries.wordset?.length > 0 || effectiveLexicalEntries.historic?.length > 0)}
-              <!-- Offline Dictionary Definitions from Dictionary Pack.
-                   "Modern" is the Concise (Wordset) dictionary — Wiktionary was
-                   removed because its example sentences were unfit for this app. -->
+              <!-- Offline Dictionary Definitions from Dictionary Pack. Both
+                   layers come from the installed pack; there is no online
+                   lookup. Wiktionary is deliberately absent from both — the
+                   pack dropped it, and the api.dictionaryapi.dev call that
+                   served it live has been removed. -->
               <div class="definitions-grid">
                 <!-- Modern Definitions (Concise / Wordset) -->
                 {#if effectiveLexicalEntries.wordset && effectiveLexicalEntries.wordset.length > 0}
@@ -970,17 +832,13 @@
               </div>
             {/if}
 
-            {#if !loadingDefinition && englishDefinitions.length === 0 && !hasOfflineDefinitions}
+            {#if !hasOfflineDefinitions}
               <!-- No offline definitions available -->
               <div class="info-section">
                 <h3>About This Word</h3>
                 <p class="full-def">
                   This is an English word from the Bible translation.
-                  {#if englishSynonyms.length > 0}
-                    See the Synonyms tab for {englishSynonyms.length} related words.
-                  {:else}
-                    For deeper study, look up the original Greek or Hebrew word from an interlinear Bible.
-                  {/if}
+                  For deeper study, look up the original Greek or Hebrew word from an interlinear Bible.
                 </p>
                 {#if isDictionaryInstalled}
                   <p style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px; color: #555;">
@@ -994,22 +852,6 @@
               </div>
             {/if}
           </div>
-        {:else if activeTab === "related"}
-          <div class="related-view">
-            {#if englishSynonyms.length > 0}
-              <div class="synonyms-section">
-                <h3>Synonyms</h3>
-                <div class="synonym-grid">
-                  {#each englishSynonyms as synonym}
-                    <span class="synonym-tag">{synonym}</span>
-                  {/each}
-                </div>
-              </div>
-            {:else}
-              <p class="coming-soon">No synonyms available for this word</p>
-            {/if}
-          </div>
-        {/if}
       </div>
     {:else if strongEntry}
       {#if morphologyData}
@@ -1022,6 +864,13 @@
           on:click={() => (activeTab = "definition")}
         >
           Definition
+        </button>
+        <button
+          class="tab"
+          class:active={activeTab === "forms"}
+          on:click={() => (activeTab = "forms")}
+        >
+          Forms
         </button>
         <button
           class="tab"
@@ -1040,6 +889,21 @@
       </div>
 
       <div class="tab-content">
+        <!-- Which text is being studied. Sits above the pane rather than inside
+             each tab, so switching between Forms and Occurrences keeps the
+             control in one place and the choice applies to both. -->
+        {#if showSourcePicker && (activeTab === "forms" || activeTab === "occurrences")}
+          <div class="source-picker" role="group" aria-label="Source text">
+            {#each usage?.sources ?? [] as s (s)}
+              <button class="src" class:active={source === s} on:click={() => (source = s)}>
+                {s.toUpperCase()}
+              </button>
+            {/each}
+            <button class="src" class:active={source === null} on:click={() => (source = null)}>
+              All
+            </button>
+          </div>
+        {/if}
         {#if activeTab === "definition"}
           <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
           <div class="definition-view" on:click={handleDefinitionClick}>
@@ -1081,10 +945,9 @@
                   </dd>
                 {/if}
 
-                {#if strongEntry.occurrences}
-                  <dt>Occurrences:</dt>
-                  <dd>{strongEntry.occurrences}× in the Bible</dd>
-                {/if}
+                <!-- No occurrence count here: the lexicon lookup never fills
+                     `occurrences`, so this row only ever rendered as nothing.
+                     The Occurrences tab counts the real verses instead. -->
               </dl>
             </div>
 
@@ -1114,55 +977,66 @@
               </div>
             {/if}
 
-            {#if formsData.length > 0}
-              <div class="info-section">
-                <h3>Inflection Forms</h3>
-                <table class="forms-table">
-                  <thead>
-                    <tr><th>Form</th><th>Parsing</th><th>×</th></tr>
-                  </thead>
-                  <tbody>
-                    {#each formsData as f}
-                      <tr>
-                        <td class="form-text">{f.form}</td>
-                        <td class="form-parse">{strongEntry?.language === 'hebrew' || strongEntry?.language === 'aramaic' ? expandOshbCode(f.morphCode) : expandRmacCode(f.morphCode)}</td>
-                        <td class="form-count">{f.count}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-            {:else if formsLoading}
-              <div class="info-section">
-                <h3>Inflection Forms</h3>
-                <p class="hint">Loading…</p>
+          </div>
+        {:else if activeTab === "forms"}
+          <div class="usage-view">
+            {#if usageLoading}
+              <p class="hint">Loading forms…</p>
+            {:else if formGroups.length === 0}
+              <p class="coming-soon">No tagged forms found in the installed texts.</p>
+            {:else}
+              <p class="usage-count">
+                {formGroups.length} form{formGroups.length === 1 ? "" : "s"}
+              </p>
+              <div class="forms">
+                {#each formGroups as f (f.key)}
+                  <div class="form-group">
+                    <button class="form-row" on:click={() => toggleForm(f.key)}>
+                      <span class="form-caret">{openForm === f.key ? "▼" : "▶"}</span>
+                      <span class="form-text" dir={isRtlLanguage ? "rtl" : "ltr"}>{f.form}</span>
+                      <span class="form-parse">{parseOf(f.morphCode)}</span>
+                      <span class="form-count">{f.count}</span>
+                    </button>
+                    {#if openForm === f.key}
+                      <div class="form-verses">
+                        <StrongsVerseList
+                          uses={f.uses}
+                          rtl={isRtlLanguage}
+                          variantBaseline={activeBaseline}
+                          visited={visitedRefs}
+                          onNavigate={handleVerseClick}
+                        />
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
               </div>
             {/if}
           </div>
         {:else if activeTab === "occurrences"}
-          <div class="occurrences-view">
-            {#if occurrencesLoading}
+          <div class="usage-view">
+            {#if usageLoading}
               <p class="hint">Loading occurrences…</p>
-            {:else if occurrences.length === 0 && occurrencesLoaded}
-              <p class="coming-soon">No occurrences found in imported data.</p>
-            {:else if occurrences.length > 0}
-              <p class="occ-count">{occurrences.length} occurrence{occurrences.length === 1 ? '' : 's'}</p>
-              <div class="occ-list">
-                {#each occurrences as occ}
-                  <button class="occ-ref" on:click={() => handleOccurrenceClick(occ)}>
-                    {occ.book} {occ.chapter}:{occ.verse}
-                  </button>
-                {/each}
-              </div>
+            {:else if verseUses.length === 0}
+              <p class="coming-soon">No occurrences found in the installed texts.</p>
             {:else}
-              <p class="hint">Loading…</p>
+              <p class="usage-count">
+                {verseUses.length} verse{verseUses.length === 1 ? "" : "s"}
+              </p>
+              <StrongsVerseList
+                uses={verseUses}
+                rtl={isRtlLanguage}
+                variantBaseline={activeBaseline}
+                visited={visitedRefs}
+                onNavigate={handleVerseClick}
+              />
             {/if}
           </div>
         {:else if activeTab === "related"}
           <div class="related-view">
             <p class="coming-soon">Related words coming soon...</p>
             <p class="hint">
-              This will show synonyms, antonyms, and related concepts
+              This will show cognates and related concepts
             </p>
           </div>
         {/if}
@@ -1624,41 +1498,53 @@
     margin-right: 2px;
   }
 
-  .occurrences-view,
+  .usage-view,
   .related-view {
     display: flex;
     flex-direction: column;
     padding: 20px;
-    gap: 16px;
+    gap: 12px;
   }
 
-  .occ-count {
+  .usage-count {
     font-size: 13px;
     color: var(--text-muted, #888);
     margin: 0;
   }
 
-  .occ-list {
+  /* --- Source picker ------------------------------------------------------
+     Which of the installed original texts the counts and lists describe. Shown
+     only when more than one has this word, so a Hebrew study never grows a
+     one-button row. */
+  .source-picker {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
+    padding: 12px 20px 0;
   }
 
-  .occ-ref {
+  .src {
     background: none;
-    border: 1px solid var(--color-primary, #4a90e2);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 4px;
-    color: var(--color-primary, #4a90e2);
+    color: var(--text-muted, #9aa0aa);
     cursor: pointer;
-    font-size: 13px;
-    padding: 3px 8px;
-    transition: background 0.15s, color 0.15s;
-    white-space: nowrap;
+    font-family: inherit;
+    font-size: 11.5px;
+    letter-spacing: 0.03em;
+    padding: 3px 9px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
 
-  .occ-ref:hover {
-    background: var(--color-primary, #4a90e2);
-    color: #fff;
+  .src:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-color, #dfe2e8);
+  }
+
+  .src.active {
+    background: color-mix(in srgb, var(--color-primary, #4a90e2) 18%, transparent);
+    border-color: var(--color-primary, #4a90e2);
+    color: var(--color-primary, #4a90e2);
   }
 
   .phonetic {
@@ -1668,86 +1554,67 @@
     letter-spacing: 0.03em;
   }
 
-  .forms-table {
+  /* --- Forms tab ----------------------------------------------------------
+     A row per inflected form, opening onto the verses that use it. Was a table;
+     it became rows because a table cell is a poor place to hang a verse list. */
+  .forms {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .form-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
     width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9em;
-  }
-
-  .forms-table th {
+    background: none;
+    border: none;
+    color: var(--text-color, #dfe2e8);
+    cursor: pointer;
+    font-family: inherit;
+    padding: 7px 4px;
     text-align: left;
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--border-color, #333);
-    color: var(--text-muted, #888);
-    font-weight: 600;
-    font-size: 0.85em;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
   }
 
-  .forms-table td {
-    padding: 5px 8px;
-    border-bottom: 1px solid var(--border-color, #2a2a2a);
-    vertical-align: middle;
+  .form-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .form-caret {
+    font-size: 10px;
+    color: var(--text-muted, #9aa0aa);
   }
 
   .form-text {
-    font-family: 'Gentium Plus', 'SBL Greek', serif;
-    font-size: 1.05em;
+    font-family: "Gentium Plus", "SBL Greek", "SBL Hebrew", serif;
+    font-size: 15px;
   }
 
   .form-parse {
+    flex: 1;
     color: var(--text-secondary, #ccc);
-    font-size: 0.85em;
+    font-size: 12px;
   }
 
+  /* Verses, not raw hits — so it agrees with the list it opens onto. */
   .form-count {
-    text-align: right;
     color: var(--text-muted, #888);
     font-variant-numeric: tabular-nums;
+    font-size: 12px;
     white-space: nowrap;
   }
 
-  .related-view:has(.synonyms-section) {
-    align-items: flex-start;
-    padding: 20px;
+  .form-verses {
+    padding: 0 0 8px 20px;
   }
 
-  .related-view:not(:has(.synonyms-section)) {
+  .related-view {
     align-items: center;
     padding: 60px 20px;
-  }
-
-  .synonyms-section {
-    width: 100%;
-  }
-
-  .synonyms-section h3 {
-    margin: 0 0 16px 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: #4caf50;
-  }
-
-  .synonym-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .synonym-tag {
-    padding: 8px 16px;
-    background: rgba(76, 175, 80, 0.1);
-    border: 1px solid rgba(76, 175, 80, 0.3);
-    border-radius: 20px;
-    font-size: 14px;
-    color: #8bc34a;
-    transition: all 0.2s;
-  }
-
-  .synonym-tag:hover {
-    background: rgba(76, 175, 80, 0.2);
-    border-color: rgba(76, 175, 80, 0.5);
   }
 
   .ipa-text {
@@ -1815,16 +1682,6 @@
   .example-text em {
     font-style: italic;
     color: #ccc;
-  }
-
-  .inline-synonyms {
-    margin: 8px 0 0 0;
-    font-size: 13px;
-    color: #888;
-  }
-
-  .inline-synonyms strong {
-    color: #4caf50;
   }
 
   .coming-soon {

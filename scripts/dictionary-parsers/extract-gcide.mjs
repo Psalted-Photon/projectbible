@@ -17,13 +17,17 @@ const tempDir = path.join(__dirname, '../../data/raw/gcide-temp');
 console.log('📦 Step 1: Decompressing XZ archive...');
 
 // Decompress .xz file
-const input = fs.createReadStream(tarPath);
-const output = fs.createWriteStream(tarUncompressed);
-const decompressor = lzma.createDecompressor();
+if (fs.existsSync(tarUncompressed)) {
+  console.log('✅ TAR already present, skipping decompression');
+} else {
+  const input = fs.createReadStream(tarPath);
+  const output = fs.createWriteStream(tarUncompressed);
+  const decompressor = lzma.createDecompressor();
 
-await pipeline(input, decompressor, output);
+  await pipeline(input, decompressor, output);
 
-console.log('✅ Decompressed to TAR');
+  console.log('✅ Decompressed to TAR');
+}
 console.log('📦 Step 2: Extracting TAR archive...');
 
 // Create temp directory
@@ -57,8 +61,14 @@ writeStream.write('<gcide>\n');
 
 for (const file of cideFiles) {
   const content = fs.readFileSync(file, 'utf8');
-  // Skip comments (<!--...-->) and extract only entry paragraphs
-  const paragraphs = content.split(/<p>/).filter(p => p.includes('<ent>'));
+  // Keep EVERY paragraph, in document order - not just those holding an <ent>.
+  // Webster splits an entry across several <p> blocks: the first carries
+  // <ent>/<hw>/<ety>, and the numbered senses follow in their own <p> blocks
+  // holding <sn> and <def> but no <ent> of their own. Filtering on <ent> threw
+  // all of those away, which is why Beauty and Prophet reached the pack with an
+  // etymology and no definition. The parser downstream slices on <ent>, so plain
+  // document order re-associates each sense paragraph with its headword.
+  const paragraphs = content.split(/<p>/).slice(1);
   for (const para of paragraphs) {
     writeStream.write('<p>' + para.split('</p>')[0] + '</p>\n');
   }

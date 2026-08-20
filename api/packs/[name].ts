@@ -31,6 +31,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Content-Type", name === "manifest.json" ? "application/json" : "application/octet-stream");
     res.setHeader("Cache-Control", "no-cache, must-revalidate");
+
+    // Pass GitHub's Content-Length through. Without it the client falls back to
+    // the size recorded in the manifest, so the progress bar tracks a guess and
+    // a stale asset surfaces as a byte-count error rather than the SHA-256
+    // mismatch that actually describes the problem.
+    const contentLength = gh.headers.get("content-length");
+    if (contentLength) {
+      res.setHeader("Content-Length", contentLength);
+    }
+
     res.status(200);
 
     const reader = gh.body.getReader();

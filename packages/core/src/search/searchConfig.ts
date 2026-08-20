@@ -55,7 +55,6 @@ export interface EnglishMorphologyFilter {
   // TODO: Will be populated from dictionary packs containing:
   // - Definitions from Webster's 1913, OPTED, Wiktionary
   // - Etymology and word origins
-  // - Synonyms/antonyms from Moby Thesaurus, WordNet
   // - Grammar patterns from NLP corpora
   // - POS tagging from annotated datasets
 }
@@ -71,8 +70,6 @@ export interface SearchConfig {
   
   // Word variations
   includePlurals: boolean;
-  includeSynonyms: boolean; // Expand search with synonyms from thesaurus
-  maxSynonymsPerWord: number; // Limit to prevent pattern explosion (default: 10)
   
   // Must contain/exclude logic
   mustContain: string[];
@@ -161,16 +158,13 @@ function estimateResultVolume(pattern: string, text: string): 'safe' | 'moderate
 
 /**
  * Generate safe regex pattern from match type
- * Can now handle synonym expansion (multiple words with OR pattern)
  */
 function generateMatchPattern(
   text: string, 
   matchType: MatchType, 
-  includePlurals: boolean,
-  synonyms?: string[]
+  includePlurals: boolean
 ): string {
-  const words = synonyms && synonyms.length > 0 ? [text, ...synonyms] : [text];
-  const escaped = words.map(w => escapeRegex(w));
+  const escaped = [escapeRegex(text)];
   const plural = includePlurals ? 's?' : '';
   
   // Build OR pattern if we have multiple words
@@ -239,10 +233,8 @@ function generateProximityPattern(rule: ProximityRule): string {
 
 /**
  * Generate complete regex pattern from search config
- * Note: Synonym expansion should be done before calling this function
- * by the caller using englishLexicalService.expandWithSynonyms()
  */
-export function generateSafeRegex(config: SearchConfig, expandedSynonyms?: string[]): GeneratedQuery {
+export function generateSafeRegex(config: SearchConfig): GeneratedQuery {
   if (!config.text.trim() && config.proximityRules.length === 0) {
     throw new Error('Search text cannot be empty');
   }
@@ -262,20 +254,15 @@ export function generateSafeRegex(config: SearchConfig, expandedSynonyms?: strin
       `"${r.word1}" within ${r.maxDistance} words of "${r.word2}"`
     ).join(', ')}`;
   } else if (config.text.trim()) {
-    // Add main search pattern with optional synonym expansion
     const mainPattern = generateMatchPattern(
       config.text, 
       config.matchType, 
-      config.includePlurals,
-      expandedSynonyms
+      config.includePlurals
     );
     pattern += mainPattern;
     
     description = `${config.matchType} "${config.text}"`;
     if (config.includePlurals) description += ' (with plurals)';
-    if (expandedSynonyms && expandedSynonyms.length > 0) {
-      description += ` + ${expandedSynonyms.length} synonyms`;
-    }
   }
   
   // Add must contain/exclude to description
@@ -330,8 +317,6 @@ export function createDefaultConfig(): SearchConfig {
     caseInsensitive: true,
     exactPhrase: false,
     includePlurals: false,
-    includeSynonyms: false,
-    maxSynonymsPerWord: 10,
     mustContain: [],
     mustNotContain: [],
     proximityRules: [],

@@ -14,7 +14,6 @@
   } from "../lib/services/searchService";
   import { navigationStore } from "../stores/navigationStore";
   import { get } from "svelte/store";
-  import { englishLexicalService } from "../../../../packages/core/src/search/englishLexicalService";
   import { buildSearchTree } from "../lib/searchTree";
   import SearchResultsTree from "./SearchResultsTree.svelte";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
@@ -122,19 +121,7 @@
 
     isSearching = true;
     try {
-      // Expand with synonyms if enabled
-      let expandedSynonyms: string[] | undefined;
-      if (config.includeSynonyms && config.text.trim()) {
-        const words = config.text.split(/\s+/);
-        const allExpanded = await englishLexicalService.expandWithSynonyms(
-          words, 
-          config.maxSynonymsPerWord
-        );
-        // Remove original words to get just synonyms
-        expandedSynonyms = allExpanded.filter(w => !words.map(x => x.toLowerCase()).includes(w));
-      }
-      
-      const query = generateSafeRegex(config, expandedSynonyms);
+      const query = generateSafeRegex(config);
       generatedQuery = query;
 
       // Power Search is always an explicit search, so run the deep categories too.
@@ -301,12 +288,6 @@
                 <input type="checkbox" bind:checked={config.includePlurals} />
                 Include plurals
                 <button class="help-btn-inline" on:click={() => openHelp('plurals')}>?</button>
-              </label>
-              
-              <label title="Expand search with synonyms from thesaurus (requires lexical packs)">
-                <input type="checkbox" bind:checked={config.includeSynonyms} />
-                Include synonyms
-                <button class="help-btn-inline" on:click={() => openHelp('synonyms')}>?</button>
               </label>
               
               <label title="Show IPA pronunciation for search results (requires lexical packs)">
