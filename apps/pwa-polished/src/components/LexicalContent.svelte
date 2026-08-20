@@ -27,6 +27,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
+  import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { parseOsisRef } from "../lib/parseRefString";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../lib/morphologyExpander";
   import { openDB } from "../adapters/db";
@@ -169,7 +170,49 @@
   // resolvers underneath; silent when a pack isn't installed.
   let works: WorksResolution | null = null;
   let worksCheckedFor = "";
-  $: if (selectedText && !strongsId && !morphologyData) checkWorks(selectedText);
+
+  /**
+   * The term to ask the other three works about.
+   *
+   * They are all indexed in English — the encyclopedia has "Abraham", not
+   * Ἀβραάμ — so on a Strong's entry the word on screen was never going to match
+   * anything, and the tab bar sat dead on the one screen most likely to want it.
+   * The gloss is the English handle; the transliteration is the fallback for
+   * entries that have no gloss.
+   */
+  $: worksTerm = ((): string => {
+    if (!strongsId && !morphologyData) return selectedText;
+    const m = morphologyData as any;
+    return glossHead(m?.gloss_en ?? m?.gloss ?? "") || strongEntry?.transliteration || m?.transliteration || "";
+  })();
+
+  $: if (worksTerm) checkWorks(worksTerm);
+
+  /** Glosses often qualify themselves — "Abraham, the patriarch" — and only the
+   *  head word stands a chance of resolving or of being a dictionary entry. */
+  function glossHead(gloss: string): string {
+    return String(gloss ?? "").split(/[,;(]/)[0].trim();
+  }
+
+  /**
+   * The gloss is the English word behind the original one, so it behaves like
+   * any other English word in the app: tapping it opens the dictionary on it.
+   * Clearing the Strong's id is what moves this card off the morphology view.
+   */
+  function openGloss(gloss: string) {
+    const word = glossHead(gloss);
+    if (!word) return;
+    if (windowId) {
+      windowStore.updateContentState(windowId, { selectedText: word, strongsId: null });
+      return;
+    }
+    lexicalModalStore.open({
+      selectedText: word,
+      strongsId: undefined,
+      morphologyData: null,
+      lexicalEntries: null,
+    });
+  }
 
   async function checkWorks(text: string) {
     const key = text.trim().toLowerCase();
@@ -206,7 +249,7 @@
    */
   function selectWork(work: WorkKey) {
     // Nothing closes: the card keeps its frame and swaps the work inside it.
-    openWorkSubject(work, works, selectedText, windowId);
+    openWorkSubject(work, works, worksTerm || selectedText, windowId);
   }
 
   async function loadLexicalData() {
@@ -678,8 +721,17 @@
             {/if}
 
             {#if (morphologyData as any).gloss_en || (morphologyData as any).gloss}
+              {@const gloss = (morphologyData as any).gloss_en ?? (morphologyData as any).gloss}
               <dt>English Gloss:</dt>
-              <dd class="gloss">{(morphologyData as any).gloss_en ?? (morphologyData as any).gloss}</dd>
+              <dd>
+                <button
+                  class="gloss"
+                  on:click={() => openGloss(gloss)}
+                  title="Look up “{glossHead(gloss)}” in the dictionary"
+                >
+                  {gloss}
+                </button>
+              </dd>
             {/if}
 
             {#if (morphologyData as any).morph_code || (morphologyData as any).parsing}
@@ -1382,8 +1434,21 @@
   }
 
   .gloss {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
     font-size: 16px;
     color: #8bc34a;
+    cursor: pointer;
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+  }
+
+  .gloss:hover {
+    text-decoration-style: solid;
   }
 
   .parsing {
