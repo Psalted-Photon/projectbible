@@ -10,6 +10,7 @@
     buildFormGroups,
     sourcesByTestament,
     summarizeArc,
+    buildDistribution,
     refKey,
     type StrongsUsage,
     type VerseUse,
@@ -49,7 +50,7 @@
   /** The host's own close. Docked, Window.svelte supplies the ×. */
   export let onClose: (() => void) | null = null;
   /** Which sub-tab was open and how far down, restored when you come back. */
-  export let initialTab: "definition" | "forms" | "occurrences" | "arc" | "related" | null = null;
+  export let initialTab: "definition" | "forms" | "occurrences" | "arc" | "spread" | "related" | null = null;
   export let initialScrollTop = 0;
   /** Reports the view on the way out, so switching tabs and coming back lands
    *  where you left rather than at the top. */
@@ -84,7 +85,7 @@
   let searchResults: StrongEntry[] = [];
   let loading = false;
   let error = "";
-  let activeTab: "definition" | "forms" | "occurrences" | "arc" | "related" = initialTab ?? "definition";
+  let activeTab: "definition" | "forms" | "occurrences" | "arc" | "spread" | "related" = initialTab ?? "definition";
   let bodyEl: HTMLDivElement | null = null;
 
   onDestroy(() => onSnapshot?.({ tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0 }));
@@ -126,6 +127,7 @@
    */
   $: activeBaseline = source === null ? variantBaseline : { OT: [], NT: [] };
   $: arc = summarizeArc(verseUses);
+  $: distribution = buildDistribution(verseUses);
   /** The picker only earns its row when there is a choice to make. A Hebrew
    *  entry only ever appears in one text. */
   $: showSourcePicker = (usage?.sources.length ?? 0) > 1;
@@ -490,7 +492,13 @@
 
   // One scan serves Forms and Occurrences, so it starts as soon as either is
   // asked for and neither waits on the other afterwards.
-  $: if ((activeTab === "forms" || activeTab === "occurrences" || activeTab === "arc") && strongEntry) {
+  $: if (
+    (activeTab === "forms" ||
+      activeTab === "occurrences" ||
+      activeTab === "arc" ||
+      activeTab === "spread") &&
+    strongEntry
+  ) {
     loadUsage(strongEntry.id);
   }
 
@@ -939,6 +947,13 @@
         </button>
         <button
           class="tab"
+          class:active={activeTab === "spread"}
+          on:click={() => (activeTab = "spread")}
+        >
+          Spread
+        </button>
+        <button
+          class="tab"
           class:active={activeTab === "related"}
           on:click={() => (activeTab = "related")}
         >
@@ -950,7 +965,7 @@
         <!-- Which text is being studied. Sits above the pane rather than inside
              each tab, so switching between Forms and Occurrences keeps the
              control in one place and the choice applies to both. -->
-        {#if showSourcePicker && (activeTab === "forms" || activeTab === "occurrences")}
+        {#if showSourcePicker && activeTab !== "definition" && activeTab !== "related"}
           <div class="source-picker" role="group" aria-label="Source text">
             {#each usage?.sources ?? [] as s (s)}
               <button class="src" class:active={source === s} on:click={() => (source = s)}>
@@ -1161,6 +1176,45 @@
               {/each}
             {:else}
               <p class="coming-soon">No occurrences found in the installed texts.</p>
+            {/if}
+          </div>
+        {:else if activeTab === "spread"}
+          <div class="usage-view">
+            {#if usageLoading}
+              <p class="hint">Loading…</p>
+            {:else if distribution.total === 0}
+              <p class="coming-soon">No occurrences found in the installed texts.</p>
+            {:else}
+              <p class="usage-count">
+                {distribution.total} verse{distribution.total === 1 ? "" : "s"}, by book
+              </p>
+              {#each distribution.corpora as corpus (corpus.testament)}
+                <div class="spread-corpus">
+                  {#if distribution.corpora.length > 1}
+                    <h3 class="spread-corpus-name">
+                      {corpus.label}
+                      <span class="arc-dim">{corpus.total}</span>
+                    </h3>
+                  {/if}
+                  {#each corpus.categories as cat (cat.category)}
+                    <p class="spread-cat">{cat.label}</p>
+                    {#each cat.books as b (b.book)}
+                      <div class="bar-row" title="{b.book}: {b.count} verses">
+                        <span class="bar-label">{b.book}</span>
+                        <span class="bar-track">
+                          <!-- Every bar measured against the busiest single book,
+                               so one scale serves the whole chart. -->
+                          <span
+                            class="bar-fill"
+                            style="width:{Math.max(2, (b.count / distribution.max) * 100)}%; background:{b.color}"
+                          ></span>
+                        </span>
+                        <span class="bar-value">{b.count}</span>
+                      </div>
+                    {/each}
+                  {/each}
+                </div>
+              {/each}
             {/if}
           </div>
         {:else if activeTab === "related"}
@@ -1759,6 +1813,84 @@
   .related-view {
     align-items: center;
     padding: 60px 20px;
+  }
+
+  /* --- Spread tab ---------------------------------------------------------
+     A bar per book, coloured by the app's own book-category ramp so a bar means
+     the same thing here as a verse number does in the reader.
+
+     That ramp was built for identity cues, not for charting, and measured as a
+     chart palette it has two real problems: the prophets' and Pauline purples
+     sit under 3:1 against this surface, and Acts' orange against the Gospels'
+     red is below the normal-vision separation floor. Neither is worth forking
+     the app's colours over, because colour is not carrying identity here — every
+     bar is named and grouped under its category. The relief the contrast
+     shortfall obliges is built in instead: each bar sits on a visible track and
+     carries a 1px inner ring, so a dark purple still reads as a length, and the
+     count is printed in text ink beyond the bar rather than on the fill. */
+  .spread-corpus + .spread-corpus {
+    margin-top: 6px;
+  }
+
+  .spread-corpus-name {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 0 0 8px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-color, #dfe2e8);
+  }
+
+  .spread-cat {
+    margin: 10px 0 5px;
+    color: var(--text-muted, #9aa0aa);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: 8.5em 1fr 2.2em;
+    align-items: center;
+    gap: 8px;
+    /* 2px of surface between adjacent bars. */
+    padding: 2px 0;
+  }
+
+  .bar-label {
+    font-size: 12.5px;
+    color: var(--text-color, #dfe2e8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The track is what makes a low-contrast fill still legible as a length. */
+  .bar-track {
+    display: block;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    height: 10px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  }
+
+  /* Text ink, never the series colour. */
+  .bar-value {
+    color: var(--text-muted, #9aa0aa);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
   }
 
   /* --- Arc tab ------------------------------------------------------------ */

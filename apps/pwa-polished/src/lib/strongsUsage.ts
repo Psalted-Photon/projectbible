@@ -18,7 +18,7 @@
  *     them, which is why callers group by testament before showing anything.
  */
 
-import { BIBLE_BOOKS, normalizeBookName } from './bibleData.js';
+import { BIBLE_BOOKS, CATEGORY_LABELS, getBookColor, normalizeBookName } from './bibleData.js';
 import { openDB } from '../adapters/db';
 
 /** One morphology row: a single tagged word in a single text. */
@@ -350,5 +350,89 @@ export function summarizeArc(uses: VerseUse[]): ArcSummary {
     // One book is its own answer; naming it "busiest" would be noise.
     busiest: perBook.size > 1 ? busiest : null,
     spans: spans.length > 1 ? spans : [],
+  };
+}
+
+// --- Distribution: how a word spreads across the canon ----------------------
+
+export interface DistBook {
+  book: string;
+  count: number;
+  color: string;
+}
+
+export interface DistCategory {
+  category: string;
+  label: string;
+  total: number;
+  books: DistBook[];
+}
+
+export interface DistCorpus {
+  testament: 'OT' | 'NT';
+  label: string;
+  total: number;
+  categories: DistCategory[];
+}
+
+export interface Distribution {
+  total: number;
+  /** The busiest single book, so every bar can be measured against one scale.
+   *  Two scales would make a word look evenly spread when it is not. */
+  max: number;
+  corpora: DistCorpus[];
+}
+
+const BOOK_CATEGORY = new Map(BIBLE_BOOKS.map((b) => [b.name, b.category]));
+const CATEGORY_INDEX = new Map(Object.keys(CATEGORY_LABELS).map((c, i) => [c, i]));
+
+/**
+ * Verse counts per book, grouped the way the canon is: corpus, then category.
+ *
+ * A word landing in several categories at once is the ordinary case rather than
+ * an awkward one — nothing has to choose a winner, because each bar carries its
+ * own book's colour and the spread across categories is the finding.
+ */
+export function buildDistribution(uses: VerseUse[]): Distribution {
+  const perBook = new Map<string, number>();
+  for (const u of uses) perBook.set(u.book, (perBook.get(u.book) ?? 0) + 1);
+
+  const corpora: DistCorpus[] = [];
+  for (const testament of ['OT', 'NT'] as const) {
+    const books = [...perBook.entries()].filter(([book]) => testamentOf(book) === testament);
+    if (!books.length) continue;
+
+    const byCategory = new Map<string, DistBook[]>();
+    for (const [book, count] of books) {
+      const category = BOOK_CATEGORY.get(book) ?? 'historical';
+      const entry: DistBook = { book, count, color: getBookColor(book) };
+      const bucket = byCategory.get(category);
+      if (bucket) bucket.push(entry);
+      else byCategory.set(category, [entry]);
+    }
+
+    const categories: DistCategory[] = [...byCategory.entries()]
+      .map(([category, list]) => ({
+        category,
+        label: (CATEGORY_LABELS as Record<string, string>)[category] ?? category,
+        total: list.reduce((n, b) => n + b.count, 0),
+        // Canonical order within a category, not by size: a reader looking for
+        // Mark should not have to hunt for it.
+        books: list.sort((a, b) => (BOOK_ORDER.get(a.book) ?? 999) - (BOOK_ORDER.get(b.book) ?? 999)),
+      }))
+      .sort((a, b) => (CATEGORY_INDEX.get(a.category) ?? 99) - (CATEGORY_INDEX.get(b.category) ?? 99));
+
+    corpora.push({
+      testament,
+      label: CORPUS_LABEL[testament],
+      total: books.reduce((n, [, count]) => n + count, 0),
+      categories,
+    });
+  }
+
+  return {
+    total: uses.length,
+    max: Math.max(1, ...perBook.values()),
+    corpora,
   };
 }
