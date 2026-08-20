@@ -13,7 +13,13 @@
    * evidence rather than one run of references.
    */
   import { getBookColor } from "../lib/bibleData.js";
-  import { loadOriginalTokens, refKey, type VerseUse, type Token } from "../lib/strongsUsage";
+  import {
+    loadOriginalTokens,
+    refKey,
+    CORPUS_LABEL,
+    type VerseUse,
+    type Token,
+  } from "../lib/strongsUsage";
 
   export let uses: VerseUse[] = [];
   /** Hebrew and Aramaic previews read right-to-left. */
@@ -31,11 +37,6 @@
 
   type BookGroup = { book: string; color: string; uses: VerseUse[] };
   type Corpus = { testament: "OT" | "NT"; label: string; count: number; books: BookGroup[] };
-
-  const CORPUS_LABEL: Record<"OT" | "NT", string> = {
-    OT: "Septuagint (OT)",
-    NT: "New Testament",
-  };
 
   // `uses` arrives already in canonical order, so grouping preserves it.
   $: corpora = ((): Corpus[] => {

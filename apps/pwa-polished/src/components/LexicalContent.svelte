@@ -2,12 +2,14 @@
   import { onMount, onDestroy, tick } from "svelte";
   import { IndexedDBLexiconStore } from "../adapters/LexiconStore";
   import type { StrongEntry } from "@projectbible/core";
+  import { getBookColor } from "../lib/bibleData.js";
   import StrongsVerseList from "./StrongsVerseList.svelte";
   import {
     loadStrongsUsage,
     buildVerseUses,
     buildFormGroups,
     sourcesByTestament,
+    summarizeArc,
     refKey,
     type StrongsUsage,
     type VerseUse,
@@ -47,7 +49,7 @@
   /** The host's own close. Docked, Window.svelte supplies the ×. */
   export let onClose: (() => void) | null = null;
   /** Which sub-tab was open and how far down, restored when you come back. */
-  export let initialTab: "definition" | "forms" | "occurrences" | "related" | null = null;
+  export let initialTab: "definition" | "forms" | "occurrences" | "arc" | "related" | null = null;
   export let initialScrollTop = 0;
   /** Reports the view on the way out, so switching tabs and coming back lands
    *  where you left rather than at the top. */
@@ -82,7 +84,7 @@
   let searchResults: StrongEntry[] = [];
   let loading = false;
   let error = "";
-  let activeTab: "definition" | "forms" | "occurrences" | "related" = initialTab ?? "definition";
+  let activeTab: "definition" | "forms" | "occurrences" | "arc" | "related" = initialTab ?? "definition";
   let bodyEl: HTMLDivElement | null = null;
 
   onDestroy(() => onSnapshot?.({ tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0 }));
@@ -123,6 +125,7 @@
    * become wallpaper.
    */
   $: activeBaseline = source === null ? variantBaseline : { OT: [], NT: [] };
+  $: arc = summarizeArc(verseUses);
   /** The picker only earns its row when there is a choice to make. A Hebrew
    *  entry only ever appears in one text. */
   $: showSourcePicker = (usage?.sources.length ?? 0) > 1;
@@ -487,7 +490,7 @@
 
   // One scan serves Forms and Occurrences, so it starts as soon as either is
   // asked for and neither waits on the other afterwards.
-  $: if ((activeTab === "forms" || activeTab === "occurrences") && strongEntry) {
+  $: if ((activeTab === "forms" || activeTab === "occurrences" || activeTab === "arc") && strongEntry) {
     loadUsage(strongEntry.id);
   }
 
@@ -931,6 +934,9 @@
         >
           Occurrences
         </button>
+        <button class="tab" class:active={activeTab === "arc"} on:click={() => (activeTab = "arc")}>
+          Arc
+        </button>
         <button
           class="tab"
           class:active={activeTab === "related"}
@@ -1082,6 +1088,79 @@
                 visited={visitedRefs}
                 onNavigate={handleVerseClick}
               />
+            {/if}
+          </div>
+        {:else if activeTab === "arc"}
+          <div class="usage-view">
+            {#if usageLoading}
+              <p class="hint">Loading…</p>
+            {:else if arc.first && arc.last}
+              <!-- Bound once here so the click handlers close over a verse that
+                   is known to exist, rather than re-reading a nullable field
+                   whenever they happen to fire. -->
+              {@const first = arc.first}
+              {@const last = arc.last}
+              {#if arc.hapax}
+                <p class="hapax">
+                  <strong>Hapax legomenon</strong> — used once in the whole of the
+                  text installed. Everything this word means rests on one verse.
+                </p>
+              {/if}
+              <dl class="arc">
+                <dt>Reach</dt>
+                <dd>
+                  {arc.total} verse{arc.total === 1 ? "" : "s"} across
+                  {arc.books} book{arc.books === 1 ? "" : "s"}
+                </dd>
+                <dt>First</dt>
+                <dd>
+                  <button class="arc-ref" on:click={() => handleVerseClick(first)}>
+                    {refKey(first)}
+                  </button>
+                </dd>
+                <dt>Last</dt>
+                <dd>
+                  <button class="arc-ref" on:click={() => handleVerseClick(last)}>
+                    {refKey(last)}
+                  </button>
+                </dd>
+                {#if arc.busiest}
+                  <dt>Densest</dt>
+                  <dd>
+                    <span style="color:{getBookColor(arc.busiest.book)}">{arc.busiest.book}</span>
+                    <span class="arc-dim">({arc.busiest.count})</span>
+                  </dd>
+                {/if}
+              </dl>
+              <!-- Only when a word actually reaches both. How the Septuagint uses
+                   a word against how the New Testament does is the comparison
+                   that makes a Greek word study worth doing. -->
+              {#each arc.spans as span (span.testament)}
+                <div class="arc-span">
+                  <h3>{span.label}</h3>
+                  <dl class="arc">
+                    <dt>Reach</dt>
+                    <dd>
+                      {span.total} verse{span.total === 1 ? "" : "s"} across
+                      {span.books} book{span.books === 1 ? "" : "s"}
+                    </dd>
+                    <dt>First</dt>
+                    <dd>
+                      <button class="arc-ref" on:click={() => handleVerseClick(span.first)}>
+                        {refKey(span.first)}
+                      </button>
+                    </dd>
+                    <dt>Last</dt>
+                    <dd>
+                      <button class="arc-ref" on:click={() => handleVerseClick(span.last)}>
+                        {refKey(span.last)}
+                      </button>
+                    </dd>
+                  </dl>
+                </div>
+              {/each}
+            {:else}
+              <p class="coming-soon">No occurrences found in the installed texts.</p>
             {/if}
           </div>
         {:else if activeTab === "related"}
@@ -1680,6 +1759,76 @@
   .related-view {
     align-items: center;
     padding: 60px 20px;
+  }
+
+  /* --- Arc tab ------------------------------------------------------------ */
+  .hapax {
+    background: color-mix(in srgb, #fde047 12%, transparent);
+    border: 1px solid color-mix(in srgb, #fde047 35%, transparent);
+    border-radius: 6px;
+    color: #e4e7ec;
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 0;
+    padding: 9px 11px;
+  }
+
+  .hapax strong {
+    color: #fde047;
+  }
+
+  dl.arc {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 0;
+    align-items: baseline;
+  }
+
+  dl.arc dt {
+    color: var(--text-muted, #9aa0aa);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  dl.arc dd {
+    margin: 0;
+    font-size: 13.5px;
+  }
+
+  .arc-ref {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: 13.5px;
+    color: var(--color-primary, #4a90e2);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+  }
+
+  .arc-ref:hover {
+    text-decoration-style: solid;
+  }
+
+  .arc-dim {
+    color: var(--text-muted, #9aa0aa);
+    font-size: 12px;
+  }
+
+  .arc-span {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    padding-top: 12px;
+  }
+
+  .arc-span h3 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-color, #dfe2e8);
   }
 
   .ipa-text {

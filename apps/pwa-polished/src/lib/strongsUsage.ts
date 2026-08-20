@@ -280,3 +280,75 @@ export async function loadOriginalTokens(
     req.onerror = () => resolve([]);
   });
 }
+
+// --- Arc: where a word sits across the canon --------------------------------
+
+/** First and last sighting of a word within one body of text. */
+export interface ArcSpan {
+  testament: 'OT' | 'NT';
+  label: string;
+  total: number;
+  books: number;
+  first: VerseUse;
+  last: VerseUse;
+}
+
+export interface ArcSummary {
+  total: number;
+  books: number;
+  /** A word used exactly once. Worth saying out loud — it changes how much
+   *  weight a single passage can carry. */
+  hapax: boolean;
+  first: VerseUse | null;
+  last: VerseUse | null;
+  /** Where the word is densest, when that is not simply everywhere. */
+  busiest: { book: string; count: number } | null;
+  /** Per corpus, and only when the word actually reaches both. The Septuagint's
+   *  first use against the New Testament's is the comparison worth having. */
+  spans: ArcSpan[];
+}
+
+/** What each corpus is called on screen. Shared so the verse list and the arc
+ *  cannot drift into naming the same thing two ways. */
+export const CORPUS_LABEL: Record<'OT' | 'NT', string> = {
+  OT: 'Septuagint (OT)',
+  NT: 'New Testament',
+};
+
+/** `uses` must already be in canonical order, which every builder here returns. */
+export function summarizeArc(uses: VerseUse[]): ArcSummary {
+  if (!uses.length) {
+    return { total: 0, books: 0, hapax: false, first: null, last: null, busiest: null, spans: [] };
+  }
+  const perBook = new Map<string, number>();
+  for (const u of uses) perBook.set(u.book, (perBook.get(u.book) ?? 0) + 1);
+  let busiest: { book: string; count: number } | null = null;
+  for (const [book, count] of perBook) {
+    if (!busiest || count > busiest.count) busiest = { book, count };
+  }
+
+  const spans: ArcSpan[] = [];
+  for (const testament of ['OT', 'NT'] as const) {
+    const mine = uses.filter((u) => u.testament === testament);
+    if (!mine.length) continue;
+    spans.push({
+      testament,
+      label: CORPUS_LABEL[testament],
+      total: mine.length,
+      books: new Set(mine.map((u) => u.book)).size,
+      first: mine[0],
+      last: mine[mine.length - 1],
+    });
+  }
+
+  return {
+    total: uses.length,
+    books: perBook.size,
+    hapax: uses.length === 1,
+    first: uses[0],
+    last: uses[uses.length - 1],
+    // One book is its own answer; naming it "busiest" would be noise.
+    busiest: perBook.size > 1 ? busiest : null,
+    spans: spans.length > 1 ? spans : [],
+  };
+}
