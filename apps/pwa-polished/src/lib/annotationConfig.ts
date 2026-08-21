@@ -20,7 +20,17 @@ export const COMMENTARY_AUTHORS: Record<string, AuthorConfig> = {
   'E.W. Bullinger':        { color: '#4F46E5', initials: 'Bu', fullName: 'E.W. Bullinger' },
   'Family Bible Notes':    { color: '#65A30D', initials: 'Fb', fullName: 'Family Bible Notes' },
   'Abbott':                { color: '#475569', initials: 'Ab', fullName: 'Abbott' },
-  'Thomas Aquinas':        { color: '#B45309', initials: 'Aq', fullName: 'Thomas Aquinas (Catena Aurea)' },
+  // Keyed on the author string the pack actually stores. It reads "Thomas
+  // Aquinas (Catena Aurea)", so the shorter key never matched and Aquinas fell
+  // through to the grey fallback.
+  'Thomas Aquinas (Catena Aurea)': { color: '#B45309', initials: 'Aq', fullName: 'Thomas Aquinas (Catena Aurea)' },
+  'John Lightfoot':        { color: '#0369A1', initials: 'Li', fullName: 'John Lightfoot' },
+  'Martin Luther':         { color: '#A21CAF', initials: 'Lu', fullName: 'Martin Luther' },
+  // Where a verse quotes, or is quoted by, another. Its own colour so the badge
+  // reads as "there is a quotation here" rather than as one more commentator.
+  'Quoting Passages':      { color: '#14B8A6', initials: 'Qp', fullName: 'Quotations & Allusions' },
+  // Matches TSK_COLOR below — same body of cross-references, same cue.
+  'Treasury of Scripture Knowledge': { color: '#D97706', initials: 'Ts', fullName: 'Treasury of Scripture Knowledge' },
   'Matthew Henry':         { color: '#7C3AED', initials: 'Mh', fullName: 'Matthew Henry' },
   'Jamieson-Fausset-Brown':{ color: '#0F766E', initials: 'Jf', fullName: 'Jamieson-Fausset-Brown' },
   'Charles Spurgeon':      { color: '#92400E', initials: 'Sp', fullName: 'Charles Spurgeon' },
