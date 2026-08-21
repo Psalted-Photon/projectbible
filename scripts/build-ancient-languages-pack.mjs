@@ -255,9 +255,28 @@ if (!existsSync(tagntPath)) {
 {
   const source = new Database(tagntPath, { readonly: true });
 
-  const morphRows = source.prepare(
-    'SELECT translation_id, book, chapter, verse, word_order, text, lemma, strongs, morph_code, gloss_en, transliteration FROM words'
-  ).all();
+  // Only ship tagging for editions that have text to read. TAGNT also yields
+  // SBLGNT, but there is no SBLGNT reading text in this pack, so shipping its
+  // morphology would put an edition in the word study's source picker that you
+  // cannot open in the reader. The moment SBLGNT verses are added above, its
+  // tagging flows through here on its own.
+  const readable = new Set(
+    output.prepare('SELECT DISTINCT translation_id FROM verses').all().map((r) => r.translation_id),
+  );
+
+  const morphRows = source
+    .prepare(
+      'SELECT translation_id, book, chapter, verse, word_order, text, lemma, strongs, morph_code, gloss_en, transliteration FROM words',
+    )
+    .all()
+    .filter((r) => readable.has(r.translation_id));
+
+  const skipped = source.prepare('SELECT DISTINCT translation_id FROM words').all()
+    .map((r) => r.translation_id)
+    .filter((id) => !readable.has(id));
+  if (skipped.length) {
+    console.log(`      (holding back, no reading text: ${skipped.join(', ')})`);
+  }
 
   const insertWord = output.prepare(`
     INSERT OR IGNORE INTO words
@@ -276,10 +295,11 @@ if (!existsSync(tagntPath)) {
   copyMorph(morphRows);
   totalWords += morphRows.length;
 
-  for (const row of source
+  // Report what actually landed, not what the source offered.
+  for (const row of output
     .prepare('SELECT translation_id, COUNT(*) n FROM words GROUP BY translation_id ORDER BY 1')
     .all()) {
-    console.log(`      ${row.translation_id.padEnd(8)} ${row.n.toLocaleString()} words`);
+    console.log(`      ${row.translation_id.padEnd(12)} ${row.n.toLocaleString()} words`);
   }
   source.close();
   console.log('      ✅ Complete');
