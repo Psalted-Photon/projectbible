@@ -579,6 +579,59 @@
       .replace(/<(?!\/?(strong|em|br|button|span)[^>]*>)[^>]+>/gi, "");
   }
 
+  /**
+   * Strong's KJV usage is one long comma-separated string carrying its own
+   * notation, which reads as noise until it is broken apart:
+   *   X    the KJV supplied this word with nothing behind it in the Greek
+   *   +    the word is only ever rendered in combination with another
+   *   ( )  alternative endings, or optional words — "alway(-s)"
+   * Commas inside brackets belong to a rendering rather than separating two,
+   * so "all (manner of, means)" must not split into three.
+   */
+  type Rendering = { text: string; marker: "supplied" | "combined" | null };
+
+  function parseKjvUsage(usage: string): Rendering[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let buf = "";
+    for (const ch of usage) {
+      if (ch === "(" || ch === "[") depth++;
+      else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+      if (ch === "," && depth === 0) {
+        parts.push(buf);
+        buf = "";
+        continue;
+      }
+      buf += ch;
+    }
+    parts.push(buf);
+
+    const out: Rendering[] = [];
+    for (const raw of parts) {
+      // Strong's ends the list with a full stop, and sometimes appends a prose
+      // aside ("Compare names in 'Abi-'.") that is not a rendering.
+      // Strong's sometimes closes a list with a prose aside riding on the last
+      // rendering — "principal. Compare names in 'Abi-'." Cut at the sentence
+      // boundary so the aside does not become a rendering.
+      let t = raw.replace(/\s+/g, " ").trim().split(/\.\s+(?=[A-Z])/)[0];
+      t = t.replace(/\.$/, "").trim();
+      if (!t || /^compare\b/i.test(t)) continue;
+      let marker: Rendering["marker"] = null;
+      if (/^X\s+/.test(t)) {
+        marker = "supplied";
+        t = t.replace(/^X\s+/, "");
+      } else if (/^\+\s*/.test(t)) {
+        marker = "combined";
+        t = t.replace(/^\+\s*/, "");
+      }
+      if (t) out.push({ text: t, marker });
+    }
+    return out;
+  }
+
+  $: kjvRenderings = strongEntry?.kjvUsage ? parseKjvUsage(strongEntry.kjvUsage) : [];
+  $: kjvHasMarkers = kjvRenderings.some((r) => r.marker);
+
   /** Handle clicks on rendered Strong's markup — catches scripture-ref buttons. */
   function handleDefinitionClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
@@ -1036,10 +1089,25 @@
               <p class="full-def">{@html renderStrongsMarkup(strongEntry.definition)}</p>
             </div>
 
-            {#if strongEntry.kjvUsage}
+            {#if kjvRenderings.length}
               <div class="info-section">
-                <h3>KJV Usage</h3>
-                <p class="usage">{@html renderStrongsMarkup(strongEntry.kjvUsage)}</p>
+                <h3>KJV Renderings</h3>
+                <div class="renderings">
+                  {#each kjvRenderings as r (r.text + (r.marker ?? ""))}
+                    <span class="rendering" class:marked={r.marker}>
+                      {#if r.marker === "supplied"}<span class="rend-mark" title="Supplied by the KJV translators — nothing stands behind it in the Greek">✛</span>{/if}
+                      {#if r.marker === "combined"}<span class="rend-mark" title="Rendered only in combination with another word">+</span>{/if}
+                      {r.text}
+                    </span>
+                  {/each}
+                </div>
+                {#if kjvHasMarkers}
+                  <p class="rend-legend">
+                    <span class="rend-mark">✛</span> supplied by the translators
+                    &nbsp;·&nbsp;
+                    <span class="rend-mark">+</span> only in combination
+                  </p>
+                {/if}
               </div>
             {/if}
 
@@ -1813,6 +1881,40 @@
   .related-view {
     align-items: center;
     padding: 60px 20px;
+  }
+
+  /* --- KJV renderings -----------------------------------------------------
+     One comma-separated string in the source; chips here, because the point is
+     to see the spread of senses the translators reached for at a glance. */
+  .renderings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .rendering {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: var(--text-color, #dfe2e8);
+    font-size: 12.5px;
+    padding: 3px 8px;
+  }
+
+  .rendering.marked {
+    border-style: dashed;
+  }
+
+  .rend-mark {
+    color: var(--text-muted, #9aa0aa);
+    font-size: 11px;
+    margin-right: 3px;
+  }
+
+  .rend-legend {
+    color: var(--text-muted, #9aa0aa);
+    font-size: 11.5px;
+    margin: 8px 0 0;
   }
 
   /* --- Spread tab ---------------------------------------------------------

@@ -182,20 +182,38 @@ export async function lookupStrongs(strongsId: string): Promise<LexiconEntry | n
         const row = request.result;
         if (row) {
           resolve(toEntry(row));
-        } else {
-          // Try zero-padded fallback: 'G976' → 'G0976'.
-          // The lexical pack stores Strong's keys zero-padded to 4 digits
-          // (e.g. 'G0976') but OpenGNT omits leading zeros (e.g. 'G976').
-          const m = strongsId.match(/^([GH])(\d+)$/);
-          if (m && m[2].length < 4) {
-            const padded = m[1] + m[2].padStart(4, '0');
-            const req2 = store.get(padded);
-            req2.onsuccess = () => resolve(req2.result ? toEntry(req2.result) : null);
-            req2.onerror = () => resolve(null);
-          } else {
-            resolve(null);
-          }
+          return;
         }
+        // Ids reach us in three shapes and the lexicon is keyed in one:
+        //   'G976'    OpenGNT drops leading zeros
+        //   'G0976'   the lexical pack pads to four digits
+        //   'G2424G'  STEPBible disambiguates homographs with a letter suffix,
+        //             separating Ἰησοῦς-as-Jesus from Ἰησοῦς-as-Joshua
+        // Try padding first, then fall back to the undisambiguated entry so a
+        // suffixed id that has no distinct headword still resolves to its base
+        // word rather than to nothing.
+        const m = strongsId.match(/^([GH])(\d+)([A-Za-z]?)$/);
+        if (!m) {
+          resolve(null);
+          return;
+        }
+        const [, prefix, digits, suffix] = m;
+        const candidates = [
+          prefix + digits.padStart(4, '0') + suffix,
+          suffix ? prefix + digits.padStart(4, '0') : '',
+        ].filter((id) => id && id !== strongsId);
+
+        const tryNext = (i: number) => {
+          if (i >= candidates.length) {
+            resolve(null);
+            return;
+          }
+          const req = store.get(candidates[i]);
+          req.onsuccess = () =>
+            req.result ? resolve(toEntry(req.result)) : tryNext(i + 1);
+          req.onerror = () => tryNext(i + 1);
+        };
+        tryNext(0);
       };
 
       request.onerror = () => resolve(null);

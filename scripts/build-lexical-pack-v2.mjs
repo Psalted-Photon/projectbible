@@ -6,7 +6,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, statSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -24,6 +24,10 @@ console.log('📦 Building Lexical Pack...\n');
 if (!existsSync(OUTPUT_DIR)) {
   mkdirSync(OUTPUT_DIR, { recursive: true });
 }
+
+// Rebuild from scratch, or a second run fails on existing tables and the pack
+// silently keeps whatever the first run produced.
+if (existsSync(OUTPUT_FILE)) unlinkSync(OUTPUT_FILE);
 
 const output = new Database(OUTPUT_FILE);
 
