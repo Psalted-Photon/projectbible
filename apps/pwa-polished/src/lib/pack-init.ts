@@ -78,7 +78,8 @@ const BUNDLED_PACKS: BundledPack[] = [
   },
   {
     id: 'lxx-greek',
-    name: 'Septuagint (LXX) Greek',
+    // Lemma forms, not the Septuagint text — see the note in bibleData.ts.
+    name: 'LXX Greek (lemma forms)',
     filename: 'lxx-greek.sqlite',
     url: '/lxx-greek.sqlite',
     type: 'translation',

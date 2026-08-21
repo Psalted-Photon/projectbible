@@ -268,7 +268,12 @@ const TRANSLATION_LABELS: Record<string, string> = {
   'HEBREW-OSHB': 'OSHB-HEBREW',
   'TR': 'TR-GREEK',
   'BYZ': 'BYZ-GREEK',
-  'LXX': 'LXX-GREEK'
+  // Not the Septuagint. What ships under this id is the Open Scriptures lemma
+  // analysis — every word in its dictionary form, so Gen 1:1 reads
+  // "ἐν ἀρχή ποιέω ὁ θεός" rather than "ἐν ἀρχῇ ἐποίησεν ὁ θεὸς". Useful for
+  // vocabulary, misleading if it claims to be the text. Renamed until a real
+  // inflected LXX lands.
+  'LXX': 'LXX-LEMMAS'
 };
 
 /**
