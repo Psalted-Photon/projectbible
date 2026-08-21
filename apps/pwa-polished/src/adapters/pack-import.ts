@@ -1779,22 +1779,52 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       
       const CHUNK_SIZE = 500;
       
-      // Import chronological ordering
-      if (tableNames.includes('chronological_order')) {
-        console.log('Importing chronological ordering...');
+      // Import chronological ordering.
+      //
+      // Three things were wrong here and each one alone was enough to stop the
+      // 31,092 rows in the pack ever reaching the reader:
+      //   - the pack's table is `chronological_verses`, not `chronological_order`,
+      //     and the guard below silently skipped it
+      //   - its ordering column is `chrono_index`, not `order_index`
+      //   - the object store keys on `sequence`, which was never written, so
+      //     every put() would have thrown on a missing key anyway
+      // The reader's chronological mode has a consumer waiting for this.
+      const chronoTable = tableNames.includes('chronological_verses')
+        ? 'chronological_verses'
+        : tableNames.includes('chronological_order')
+          ? 'chronological_order'
+          : null;
+      if (chronoTable) {
+        console.log(`Importing chronological ordering from ${chronoTable}...`);
+        const chronoCols = db.exec(`PRAGMA table_info(${chronoTable})`);
+        const chronoColNames: string[] =
+          chronoCols.length > 0 ? chronoCols[0].values.map((r: any[]) => r[1] as string) : [];
+        const orderCol = chronoColNames.includes('chrono_index') ? 'chrono_index' : 'order_index';
+        const hasEra = chronoColNames.includes('era');
+        const hasYear = chronoColNames.includes('timestamp_year');
         const rows = db.exec(`
-          SELECT book, chapter, verse, order_index
-          FROM chronological_order
+          SELECT book, chapter, verse, ${orderCol}${hasEra ? ', era' : ''}${hasYear ? ', timestamp_year' : ''}
+          FROM ${chronoTable}
         `);
         
         if (rows.length && rows[0].values.length) {
-          const data = rows[0].values.map(([book, chapter, verse, order]) => ({
-            id: `${book}:${chapter}:${verse}`,
-            book: book as string,
-            chapter: chapter as number,
-            verse: verse as number,
-            order_index: order as number
-          }));
+          const data = rows[0].values.map((row: any[]) => {
+            const [book, chapter, verse, order] = row;
+            let i = 4;
+            const era = hasEra ? (row[i++] as string | null) : null;
+            const year = hasYear ? (row[i++] as number | null) : null;
+            return {
+              // The store's key path. Without it nothing is written at all.
+              sequence: order as number,
+              id: `${book}:${chapter}:${verse}`,
+              book: book as string,
+              chapter: chapter as number,
+              verse: verse as number,
+              order_index: order as number,
+              era,
+              year,
+            };
+          });
           
           for (let i = 0; i < data.length; i += CHUNK_SIZE) {
             const chunk = data.slice(i, i + CHUNK_SIZE);
