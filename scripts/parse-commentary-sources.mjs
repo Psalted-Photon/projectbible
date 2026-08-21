@@ -41,6 +41,17 @@ const parseXML = (xml) => parseXMLRaw(xml, {
 const SOURCES_DIR = join(__dirname, '../data-sources/commentaries/osis');
 const OUTPUT_FILE = join(__dirname, '../data/processed/commentary-unified.ndjson');
 
+// Optional CLI narrowing, so a commentary can be added to an existing pack
+// without re-parsing every source. A full rebuild is not always safe: the
+// shipping pack contains authors with no OSIS file here (E.W. Bullinger), and
+// regenerating from this directory alone would silently drop them.
+//   --only=clarke,wesley   parse just these ids
+//   --out=path.ndjson      write somewhere other than the shared intermediate
+const ARG_ONLY = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
+const ONLY = ARG_ONLY ? new Set(ARG_ONLY.split(',').map((s) => s.trim().toLowerCase())) : null;
+const ARG_OUT = (process.argv.find((a) => a.startsWith('--out=')) || '').slice(6);
+const OUT_PATH = ARG_OUT ? (ARG_OUT.match(/^[A-Za-z]:|^[/]/) ? ARG_OUT : join(__dirname, '..', ARG_OUT)) : OUTPUT_FILE;
+
 // Canonical book names (66 books)
 const BOOK_NAMES = [
   'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy',
@@ -510,9 +521,13 @@ async function main() {
   
   // Find all OSIS files directly in SOURCES_DIR
   const allItems = readdirSync(SOURCES_DIR, { withFileTypes: true });
-  const osisFiles = allItems
+  let osisFiles = allItems
     .filter(item => item.isFile() && item.name.endsWith('.osis.xml'))
     .map(item => item.name);
+  if (ONLY) {
+    osisFiles = osisFiles.filter((f) => ONLY.has(f.split('.')[0].toLowerCase()));
+    console.log(`Restricted to: ${[...ONLY].join(', ')}`);
+  }
   
   if (osisFiles.length === 0) {
     console.warn('No OSIS files found.');
@@ -543,7 +558,11 @@ async function main() {
       // OSIS XML format
       try {
         const entries = await parseOSISCommentary(filePath, commentaryId);
-        allEntries.push(...entries);
+        // Not push(...entries): spreading a large array passes one argument
+        // per element, and a commentary with 168,000 of them overflows the
+        // stack. Clarke, Wesley and the NET notes all parsed fine and were then
+        // thrown away by this line.
+        for (const e of entries) allEntries.push(e);
         
         const fileSize = statSync(filePath).size;
         totalSize += fileSize;
@@ -559,19 +578,19 @@ async function main() {
   }
   
   // Write NDJSON output line-by-line (avoids string length overflow on large datasets)
-  console.log(`\nWriting ${allEntries.length} entries to ${OUTPUT_FILE}`);
-  const stream = createWriteStream(OUTPUT_FILE, { encoding: 'utf-8' });
+  console.log(`\nWriting ${allEntries.length} entries to ${OUT_PATH}`);
+  const stream = createWriteStream(OUT_PATH, { encoding: 'utf-8' });
   for (const entry of allEntries) {
     stream.write(JSON.stringify(entry) + '\n');
   }
   await new Promise((resolve, reject) => { stream.end(); stream.on('finish', resolve); stream.on('error', reject); });
   
   // Statistics
-  const outputSizeMB = (statSync(OUTPUT_FILE).size / 1024 / 1024).toFixed(2);
+  const outputSizeMB = (statSync(OUT_PATH).size / 1024 / 1024).toFixed(2);
   console.log('\n=== Parsing Complete ===');
   console.log(`Total entries: ${allEntries.length.toLocaleString()}`);
   console.log(`Total source size: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
-  console.log(`Output file: ${OUTPUT_FILE}`);
+  console.log(`Output file: ${OUT_PATH}`);
   console.log(`Output size: ${outputSizeMB} MB`);
   
   // Coverage by author
