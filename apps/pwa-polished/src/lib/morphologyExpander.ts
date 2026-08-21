@@ -32,6 +32,9 @@ const RMAC_POS: Record<string, string> = {
   C:    'Reciprocal pronoun',
   D:    'Demonstrative pronoun',
   I:    'Interrogative pronoun',
+  // TAGNT distinguishes the indefinite τις "someone, anyone" from the
+  // interrogative τίς "who?", which older tagging ran together under I-.
+  X:    'Indefinite pronoun',
   F:    'Reflexive pronoun',
   S:    'Possessive pronoun',
   K:    'Correlative pronoun',
@@ -133,6 +136,20 @@ const RMAC_STANDALONE = new Set(['ADV', 'PREP', 'CONJ', 'PRT', 'INJ', 'COND', 'H
  */
 export function expandRmacCode(code: string): string {
   if (!code) return '';
+
+  // TAGNT joins two words that are grammatically one — crasis, mostly — and
+  // codes them as "CONJ + G1437=COND". Expand each side and keep the join
+  // visible rather than handing back the raw code.
+  if (code.includes('+')) {
+    const sides = code
+      .split('+')
+      .map((side) => side.trim().replace(/^G\d+[A-Za-z]?=/, ''))
+      .filter(Boolean)
+      .map((side) => expandRmacCode(side));
+    if (sides.length > 1 && sides.some((s, i) => s !== code.split('+')[i]?.trim())) {
+      return sides.join(' + ');
+    }
+  }
 
   // MorphGNT 8-char positional codes like "----NSF-" — not RMAC, skip
   if (/^-/.test(code) || /^\d/.test(code.slice(1))) {
