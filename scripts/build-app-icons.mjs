@@ -36,16 +36,28 @@ const SOURCE = join(PUBLIC, 'Logo.png');
 // circular crop — pwa-192 doubles as the push notification icon, and Android
 // circle-crops that one.
 //
-// 78% on the maskable icon sits just inside the spec's safe zone, a circle of
-// 80% diameter: a pointy-top hexagon's circumradius is half its height, so its
-// height is what has to fit.
+// 60% on the maskable icon is set by Android, not by the maskable spec. The
+// spec promises a safe zone of 80% diameter, but Android hands the image to an
+// adaptive icon where only the inner 72dp of 108dp survives — about 67%. A
+// first attempt at 78% trusted the spec and lost its points on a real home
+// screen.
+//
+// What has to fit is the gem's furthest pixel from centre, and that is NOT half
+// its height. The gem is a pointy-top hexagon whose side vertices sit at
+// roughly (W/2, H/4); with W=505 and H=547 that diagonal is longer than H/2, so
+// the sides bind before the points do. assertMaskableFits() below measures it
+// rather than trusting the arithmetic — 63% looked right on paper and still
+// overran the safe zone by a pixel.
 const TARGETS = [
   { file: 'pwa-64x64.png',                size: 64,  fill: 0.84 },
   { file: 'pwa-192x192.png',              size: 192, fill: 0.84 },
   { file: 'pwa-512x512.png',              size: 512, fill: 0.84 },
-  { file: 'maskable-icon-512x512.png',    size: 512, fill: 0.78 },
+  { file: 'maskable-icon-512x512.png',    size: 512, fill: 0.60 },
   { file: 'apple-touch-icon-180x180.png', size: 180, fill: 0.86 }
 ];
+
+// Android's adaptive-icon safe zone, as a share of the icon's width.
+const ANDROID_SAFE_ZONE = 72 / 108;
 
 // At favicon sizes legibility beats margin.
 const FAVICON_SIZES = [16, 32, 48];
@@ -141,3 +153,36 @@ for (const size of FAVICON_SIZES) {
 writeFileSync(join(PUBLIC, 'favicon.ico'), buildIco(images));
 console.log('  ' + 'favicon.ico'.padEnd(30) + FAVICON_SIZES.join('/').padEnd(9) +
   'gem ' + (FAVICON_FILL * 100).toFixed(0) + '%');
+
+/**
+ * The maskable icon is the one Android crops, and getting it wrong stays
+ * invisible until it reaches a home screen. Measure the furthest gold pixel
+ * from the centre and fail loudly if it falls outside the safe zone.
+ */
+async function assertMaskableFits(file) {
+  const { data, info } = await sharp(join(PUBLIC, file)).ensureAlpha().raw()
+    .toBuffer({ resolveWithObject: true });
+  const { width: w, height: h, channels: c } = info;
+  const cx = (w - 1) / 2, cy = (h - 1) / 2;
+  let maxR = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * c;
+      const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+      if (a < 128) continue;
+      if (r > 90 && g > 60 && r - b > 50 && g - b > 30) {
+        const d = Math.hypot(x - cx, y - cy);
+        if (d > maxR) maxR = d;
+      }
+    }
+  }
+  const safeR = (w * ANDROID_SAFE_ZONE) / 2;
+  console.log('\n  maskable: furthest gold ' + maxR.toFixed(1) + 'px vs Android safe radius ' +
+    safeR.toFixed(1) + 'px -> ' + ((1 - maxR / safeR) * 100).toFixed(1) + '% margin');
+  if (maxR > safeR) {
+    console.error('  FAIL: the gem overruns Android\'s safe zone and will be clipped on a home screen.');
+    process.exit(1);
+  }
+}
+
+await assertMaskableFits('maskable-icon-512x512.png');
