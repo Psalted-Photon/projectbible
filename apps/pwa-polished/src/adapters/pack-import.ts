@@ -578,7 +578,16 @@ export async function importPackFromSQLite(file: File): Promise<void> {
           });
           
           console.log(`Importing ${morphologyData.length} morphology entries...`);
-          
+
+          // Clear before writing. Rows are keyed by translation, reference and
+          // word position, and put() only overwrites keys the new data also
+          // has. When an edition's word count for a verse drops — which it does
+          // whenever the tagging is corrected — the trailing rows from the old
+          // import survive and attach themselves to the end of that verse.
+          await batchWriteTransaction('morphology', (store) => {
+            store.clear();
+          });
+
           // Batch insert morphology
           const CHUNK_SIZE = 500;
           for (let i = 0; i < morphologyData.length; i += CHUNK_SIZE) {
