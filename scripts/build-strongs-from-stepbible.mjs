@@ -121,7 +121,8 @@ function parseStepBibleLexicon(filePath, language) {
   const content = readFileSync(filePath, 'utf8');
   const lines = content.split('\n');
   
-  const entriesMap = new Map(); // Use Map to deduplicate by ID
+  const entriesMap = new Map(); // keyed by eStrong; first row wins
+  const pendingU = []; // [uStrongId, entry] — applied after every eStrong exists
   let inData = false;
   
   for (const line of lines) {
@@ -172,20 +173,26 @@ function parseStepBibleLexicon(filePath, language) {
       phonetic: strongsData.get(strongsId)?.phonetic || null
     };
 
-    // Primary key stays eStrong so every existing lookup keeps working.
+    // Two passes, because a uStrong can name an id whose own eStrong row has
+    // not been read yet. Claiming it early made the rightful owner lose its
+    // place: G5140 became "Taverns" (from Three Taverns) instead of "three",
+    // because that row's uStrong reached G5140 first and the real τρεῖς row was
+    // then skipped as already present.
     if (!entriesMap.has(strongsId)) entriesMap.set(strongsId, entry);
 
-    // Also file it under its disambiguated id, which is what TAGNT tags words
-    // with. Same-language only: a Greek entry's uStrong can point at the Hebrew
-    // it translates (G0002 Aaron = "the Greek of H0175"), and that is a
-    // cross-reference, not a Greek headword.
+    // Same-language only: a Greek entry's uStrong can point at the Hebrew it
+    // translates (G0002 Aaron = "the Greek of H0175"), which is a
+    // cross-reference rather than a Greek headword.
     const um = uStrongRaw.match(/^([GH])(\d+)([A-Za-z]?)$/);
     if (um && um[1] === prefix) {
       const uId = um[1] + um[2].padStart(4, '0') + um[3];
-      if (uId !== strongsId && !entriesMap.has(uId)) {
-        entriesMap.set(uId, { ...entry, id: uId });
-      }
+      if (uId !== strongsId) pendingU.push([uId, entry]);
     }
+  }
+
+  // Second pass: disambiguated ids, only where nothing authoritative sits.
+  for (const [uId, entry] of pendingU) {
+    if (!entriesMap.has(uId)) entriesMap.set(uId, { ...entry, id: uId });
   }
   
   const entries = Array.from(entriesMap.values());

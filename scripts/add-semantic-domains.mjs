@@ -153,15 +153,30 @@ if (!cols.includes('related')) {
 const update = target.prepare('UPDATE strongs_entries SET related = ? WHERE id = ?');
 let written = 0;
 let empty = 0;
+let inherited = 0;
 const writeAll = target.transaction(() => {
   for (const row of target.prepare('SELECT id FROM strongs_entries').all()) {
-    const rel = wordSub.has(row.id) ? relationsFor(row.id) : { sense: [], area: [] };
+    let id = row.id;
+    let viaBase = false;
+    if (!wordSub.has(id)) {
+      // TAGNT tags words with disambiguated ids — πίστις is G4102G, not G4102 —
+      // but the domain tagging is keyed on the plain number. Without this the
+      // ~4,000 disambiguated words in the text get no relations at all.
+      const m = id.match(/^([GH])(\d+)[A-Za-z]$/);
+      const base = m ? m[1] + m[2] : null;
+      if (base && wordSub.has(base)) {
+        id = base;
+        viaBase = true;
+      }
+    }
+    const rel = wordSub.has(id) ? relationsFor(id) : { sense: [], area: [] };
     if (!rel.sense.length && !rel.area.length) {
       empty++;
       continue;
     }
     update.run(JSON.stringify(rel), row.id);
     written++;
+    if (viaBase) inherited++;
   }
 });
 writeAll();
