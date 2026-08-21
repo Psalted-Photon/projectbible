@@ -234,16 +234,30 @@ if (existsSync(lxxPath)) {
   console.log(`      ✅ Complete`);
 }
 
-// 5. OpenGNT morphology for Greek NT (byz + tr)
-console.log('\n   Merging OpenGNT morphology (for byz/tr)...');
-const ogntPath = join(PACKS_DIR, 'opengnt-morphology.sqlite');
-if (existsSync(ogntPath)) {
-  const source = new Database(ogntPath, { readonly: true });
+// 5. Per-edition Greek NT morphology from TAGNT
+//
+// This used to copy one OpenGNT dataset in twice, once as 'byz' and once as
+// 'tr', so the two editions had byte-identical tagging and the word study could
+// never tell them apart. Worse, OpenGNT is Nestle-Aland family, so neither
+// label was correct — the Byzantine text was being explained by a critical one.
+//
+// TAGNT records which editions actually contain each word, so every edition
+// gets its own tagging and Acts 8:37 exists in TR and nowhere else.
+console.log('\nMerging TAGNT per-edition Greek morphology...');
+const tagntPath = join(PACKS_DIR, 'tagnt-morphology.sqlite');
+if (!existsSync(tagntPath)) {
+  // Deliberately fatal. Falling back to the old one-text-two-labels behaviour
+  // is what produced silently wrong data for months; a loud failure is better.
+  console.error(`\n❌ Missing ${tagntPath}`);
+  console.error('   Run: node scripts/build-tagnt-morphology.mjs');
+  process.exit(1);
+}
+{
+  const source = new Database(tagntPath, { readonly: true });
 
   const morphRows = source.prepare(
-    'SELECT book, chapter, verse, word_order, text, lemma, strongs, morph_code, gloss_en, transliteration FROM words'
+    'SELECT translation_id, book, chapter, verse, word_order, text, lemma, strongs, morph_code, gloss_en, transliteration FROM words'
   ).all();
-  console.log(`      ${morphRows.length.toLocaleString()} morphology entries`);
 
   const insertWord = output.prepare(`
     INSERT OR IGNORE INTO words
@@ -251,22 +265,22 @@ if (existsSync(ogntPath)) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  // OpenGNT strongs values have stray 〔〕 bracket characters — strip them.
-  const cleanStrongs = (s) => s ? s.replace(/[〔〕]/g, '').trim() : s;
-  const cleanGloss   = (g) => g ? g.replace(/[〔〕]/g, '').trim() : g;
-
   const copyMorph = output.transaction((rows) => {
     for (const r of rows) {
-      const strongs = cleanStrongs(r.strongs);
-      const gloss   = cleanGloss(r.gloss_en);
-      // Store under 'byz' — also store under 'tr' so both translations benefit
-      insertWord.run('byz', r.book, r.chapter, r.verse, r.word_order, r.text, r.lemma, strongs, r.morph_code, gloss, r.transliteration);
-      insertWord.run('tr',  r.book, r.chapter, r.verse, r.word_order, r.text, r.lemma, strongs, r.morph_code, gloss, r.transliteration);
+      insertWord.run(
+        r.translation_id, r.book, r.chapter, r.verse, r.word_order,
+        r.text, r.lemma, r.strongs, r.morph_code, r.gloss_en, r.transliteration,
+      );
     }
   });
   copyMorph(morphRows);
-  totalWords += morphRows.length * 2;
+  totalWords += morphRows.length;
 
+  for (const row of source
+    .prepare('SELECT translation_id, COUNT(*) n FROM words GROUP BY translation_id ORDER BY 1')
+    .all()) {
+    console.log(`      ${row.translation_id.padEnd(8)} ${row.n.toLocaleString()} words`);
+  }
   source.close();
   console.log('      ✅ Complete');
 }
