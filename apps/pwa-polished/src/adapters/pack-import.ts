@@ -1412,26 +1412,37 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         console.log('Importing Greek Strong\'s entries...');
         // Check if phonetic column exists (added in newer packs)
         const greekCols = db.exec(`PRAGMA table_info(greek_strongs_entries)`);
-        const hasPhonetic = greekCols.length > 0 && greekCols[0].values.some((r: any[]) => r[1] === 'phonetic');
+        const greekColNames = greekCols.length > 0 ? greekCols[0].values.map((r: any[]) => r[1]) : [];
+        const hasPhonetic = greekColNames.includes('phonetic');
+        // Words sharing a Louw-Nida sense, precomputed at build time so the
+        // Related tab is a read rather than a scan.
+        const hasRelated = greekColNames.includes('related');
         const rows = db.exec(`
           SELECT id, lemma, transliteration, definition, shortDefinition, 
-                 partOfSpeech, language, derivation, kjvUsage${hasPhonetic ? ', phonetic' : ''}
+                 partOfSpeech, language, derivation, kjvUsage${hasPhonetic ? ', phonetic' : ''}${hasRelated ? ', related' : ''}
           FROM greek_strongs_entries
         `);
         
         if (rows.length && rows[0].values.length) {
-          const data = rows[0].values.map(([id, lemma, trans, def, shortDef, pos, lang, deriv, kjv, phonetic]: any[]) => ({
-            id: id as string,
-            lemma: lemma as string,
-            transliteration: trans as string | null,
-            definition: def as string,
-            shortDefinition: shortDef as string | null,
-            partOfSpeech: pos as string | null,
-            language: lang as string | null,
-            derivation: deriv as string | null,
-            kjvUsage: kjv as string | null,
-            phonetic: hasPhonetic ? (phonetic as string | null) : null
-          }));
+          const data = rows[0].values.map((row: any[]) => {
+            const [id, lemma, trans, def, shortDef, pos, lang, deriv, kjv] = row;
+            let i = 9;
+            const phonetic = hasPhonetic ? row[i++] : null;
+            const related = hasRelated ? row[i++] : null;
+            return {
+              id: id as string,
+              lemma: lemma as string,
+              transliteration: trans as string | null,
+              definition: def as string,
+              shortDefinition: shortDef as string | null,
+              partOfSpeech: pos as string | null,
+              language: lang as string | null,
+              derivation: deriv as string | null,
+              kjvUsage: kjv as string | null,
+              phonetic: phonetic as string | null,
+              related: related as string | null,
+            };
+          });
           
           for (let i = 0; i < data.length; i += CHUNK_SIZE) {
             const chunk = data.slice(i, i + CHUNK_SIZE);

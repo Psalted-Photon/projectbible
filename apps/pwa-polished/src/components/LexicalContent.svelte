@@ -133,6 +133,14 @@
   $: showSourcePicker = (usage?.sources.length ?? 0) > 1;
   $: isRtlLanguage = strongEntry?.language === "hebrew" || strongEntry?.language === "aramaic";
 
+  /**
+   * Words sharing this one's sense, grouped in two tiers. Greek only: the
+   * domain tagging comes from the Greek NT, so a Hebrew entry has none.
+   */
+  $: related = (strongEntry as any)?.related as
+    | { sense: { id: string; lemma: string; gloss: string }[]; area: { id: string; lemma: string; gloss: string }[] }
+    | undefined;
+
   onMount(async () => {
     lexiconStore = new IndexedDBLexiconStore();
     if (initialScrollTop) {
@@ -325,6 +333,7 @@
             derivation: result.derivation,
             kjvUsage: result.kjvUsage,
             pronunciation: result.phonetic ? { phonetic: result.phonetic } : undefined,
+            related: result.related,
           } as StrongEntry;
         } else {
           error = `Strong's ${strongsId} not found in lexicon`;
@@ -483,6 +492,7 @@
         derivation: result.derivation,
         kjvUsage: result.kjvUsage,
         pronunciation: result.phonetic ? { phonetic: result.phonetic } : undefined,
+        related: result.related,
       } as StrongEntry;
     } else {
       error = `Strong's ${strongsNum} not found in lexicon`;
@@ -1286,11 +1296,48 @@
             {/if}
           </div>
         {:else if activeTab === "related"}
-          <div class="related-view">
-            <p class="coming-soon">Related words coming soon...</p>
-            <p class="hint">
-              This will show cognates and related concepts
-            </p>
+          <div class="usage-view">
+            {#if related?.sense?.length || related?.area?.length}
+              <p class="usage-count">Words grouped by sense, not by spelling</p>
+              {#if related.sense.length}
+                <div class="rel-group">
+                  <h3>The same sense</h3>
+                  <div class="rel-words">
+                    {#each related.sense as w (w.id)}
+                      <button class="rel-word" on:click={() => loadStrongsEntry(w.id)}>
+                        <span class="rel-lemma">{w.lemma}</span>
+                        <span class="rel-gloss">{w.gloss}</span>
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+              {#if related.area.length}
+                <div class="rel-group">
+                  <h3>Nearby in meaning</h3>
+                  <div class="rel-words">
+                    {#each related.area as w (w.id)}
+                      <button class="rel-word" on:click={() => loadStrongsEntry(w.id)}>
+                        <span class="rel-lemma">{w.lemma}</span>
+                        <span class="rel-gloss">{w.gloss}</span>
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            {:else if isRtlLanguage}
+              <p class="coming-soon">Sense grouping covers Greek only.</p>
+              <p class="hint">
+                The tagging behind it comes from the Greek New Testament, so
+                Hebrew and Aramaic entries have none yet.
+              </p>
+            {:else}
+              <p class="coming-soon">No words share this one's sense.</p>
+              <p class="hint">
+                Only words tagged in the Greek New Testament can be grouped, so
+                a word that never occurs there has nothing to sit beside.
+              </p>
+            {/if}
           </div>
         {/if}
       </div>
@@ -1881,6 +1928,59 @@
   .related-view {
     align-items: center;
     padding: 60px 20px;
+  }
+
+  /* --- Related by sense ---------------------------------------------------
+     Grouped by Louw-Nida semantic domain, so these are words that mean
+     something similar rather than words that look similar. The domain numbers
+     stay internal: Louw-Nida's category names are UBS's, so each group is
+     described by its own members instead. */
+  .rel-group + .rel-group {
+    margin-top: 4px;
+  }
+
+  .rel-group h3 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted, #9aa0aa);
+  }
+
+  .rel-words {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .rel-word {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    padding: 5px 9px;
+    text-align: left;
+  }
+
+  .rel-word:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: color-mix(in srgb, var(--color-primary, #4a90e2) 45%, transparent);
+  }
+
+  .rel-lemma {
+    font-family: "Gentium Plus", "SBL Greek", serif;
+    font-size: 14.5px;
+    color: var(--text-color, #dfe2e8);
+  }
+
+  .rel-gloss {
+    font-size: 11.5px;
+    color: var(--text-muted, #9aa0aa);
   }
 
   /* --- KJV renderings -----------------------------------------------------

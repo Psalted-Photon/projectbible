@@ -45,6 +45,21 @@ export interface LexiconEntry {
   language?: 'greek' | 'hebrew' | 'english';
   derivation?: string;
   kjvUsage?: string;
+  /** Words sharing this one's Louw-Nida sense, precomputed at pack-build time.
+   *  Greek only — the domain tagging comes from the Greek NT. */
+  related?: RelatedWords;
+}
+
+/** Two tiers: the same sense, then the surrounding area of meaning. */
+export interface RelatedWord {
+  id: string;
+  lemma: string;
+  gloss: string;
+}
+
+export interface RelatedWords {
+  sense: RelatedWord[];
+  area: RelatedWord[];
 }
 
 export interface MorphologyEntry {
@@ -152,6 +167,19 @@ export async function lookupWord(word: string): Promise<LexiconEntry[]> {
 /**
  * Look up a Strong's number (e.g., "G2424" or "H430")
  */
+/** Stored as JSON in the pack so the tab is a read rather than a scan. */
+function parseRelated(raw: unknown): RelatedWords | undefined {
+  if (typeof raw !== 'string' || !raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    const sense = Array.isArray(parsed?.sense) ? parsed.sense : [];
+    const area = Array.isArray(parsed?.area) ? parsed.area : [];
+    return sense.length || area.length ? { sense, area } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function lookupStrongs(strongsId: string): Promise<LexiconEntry | null> {
   const db = await openDB();
   
@@ -176,6 +204,7 @@ export async function lookupStrongs(strongsId: string): Promise<LexiconEntry | n
         language: row.language,
         derivation: row.derivation,
         kjvUsage: row.kjvUsage,
+        related: parseRelated(row.related),
       });
 
       request.onsuccess = () => {
