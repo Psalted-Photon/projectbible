@@ -1,5 +1,6 @@
 import type { DBPack, DBVerse } from './db.js';
 import { batchWriteTransaction, writeTransaction, openDB } from './db.js';
+import { logInstall, logInstallError } from '../lib/install-log';
 
 /**
  * Import a pack from a SQLite file into IndexedDB
@@ -23,6 +24,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
     return;
   }
 
+  logInstall('sqljs-loading');
   // Dynamically import sql.js
   const sqlJsModule = await import('sql.js');
   console.log('sql.js module:', sqlJsModule);
@@ -34,15 +36,22 @@ export async function importPackFromSQLite(file: File): Promise<void> {
     locateFile: (file: string) => `/${file}`
   });
 
+  logInstall('sqljs-ready');
+
   // Read the SQLite file
   const arrayBuffer = await file.arrayBuffer();
+  logInstall('arraybuffer-read', { bytes: arrayBuffer.byteLength });
   /** Content hash of the installed bytes, in the same hex form the manifest uses. */
   const sha256Hex = async (buf: ArrayBuffer) =>
     Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', buf)))
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
   const uint8Array = new Uint8Array(arrayBuffer);
+  // sql.js copies these bytes into its own heap, so this is the point where a
+  // second full-size copy of the pack comes into existence.
+  logInstall('sqlite-open-start', { bytes: uint8Array.length });
   const db = new SQL.Database(uint8Array);
+  logInstall('sqlite-open-done');
 
   try {
     // Read metadata
@@ -90,9 +99,11 @@ export async function importPackFromSQLite(file: File): Promise<void> {
     }
 
     console.log('Parsed pack info:', packInfo);
+    logInstall('metadata-read', { id: packInfo.id, type: packInfo.type, version: packInfo.version });
 
     // Store pack metadata
     await writeTransaction('packs', (store) => store.put(packInfo));
+    logInstall('import-branch-start', { type: packInfo.type });
 
     console.log(`Pack metadata stored: ${packInfo.id}`);
 
@@ -165,6 +176,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         });
 
         console.log(`✅ Biblical art pack imported: ${entries.length} scenes`);
+        logInstall('art-scenes-done', { scenes: entries.length });
       }
 
       // Bundled image blobs (full + thumbnail) for offline display.
@@ -198,12 +210,18 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         const flushImages = async () => {
           if (!batch.length) return;
           const pending = batch;
+          const pendingBytes = batchBytes;
           batch = [];
           batchBytes = 0;
           await batchWriteTransaction('art_images', (store) => {
             pending.forEach((img) => store.put(img));
           });
           imported += pending.length;
+          logInstall('art-images-batch', {
+            wrote: pending.length,
+            totalSoFar: imported,
+            batchMB: Math.round((pendingBytes / 1048576) * 10) / 10
+          });
         };
 
         const stmt = db.prepare('SELECT id, mime, data FROM art_images');
@@ -220,6 +238,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         await flushImages();
 
         console.log(`✅ Imported ${imported} art images`);
+        logInstall('art-images-done', { images: imported });
       } else {
         console.log('No art_images table in this pack — scenes imported without images');
       }
@@ -2257,7 +2276,11 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       return; // skip the generic sql.js processing below
     }
 
+  } catch (importErr) {
+    logInstallError('import-threw', importErr);
+    throw importErr;
   } finally {
+    logInstall('sqlite-closing');
     db.close();
   }
 }

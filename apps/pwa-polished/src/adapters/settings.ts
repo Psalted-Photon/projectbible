@@ -119,6 +119,29 @@ export const DEFAULT_EDITOR_THEME: EditorThemeSettings = {
 /** Which writing surface a theme belongs to. Sticky notes ride on 'notes'. */
 export type EditorSurface = 'notes' | 'journal';
 
+/**
+ * Biblical-art gallery prefs.
+ *
+ * Per-device on purpose (not in SYNCED_KEYS): how big the previews are is an
+ * ergonomic choice like font size, and a phone and a desktop rarely want the
+ * same answer.
+ */
+export interface ArtSettings {
+  /**
+   * Edge length of a browse preview, in CSS pixels.
+   * At the minimum the gallery stays a compact row list; larger values grow the
+   * thumbnail and then switch to a tile grid. See ArtPane.
+   */
+  previewSize: number;
+}
+
+/** Smallest preview the gallery offers -- the layout it had before the slider. */
+export const ART_PREVIEW_MIN = 52;
+/** Largest preview; beyond this a tile stops being a preview. */
+export const ART_PREVIEW_MAX = 240;
+/** At or above this edge the row list becomes a tile grid. */
+export const ART_GRID_THRESHOLD = 96;
+
 export interface UserSettings {
   // Daily Driver defaults by testament + language family
   dailyDriverEnglishOT?: string; // e.g., 'kjv' or 'web'
@@ -157,6 +180,7 @@ export interface UserSettings {
   themedTitles?: boolean; // Theme-colored 3D shadow on reader titles/headings (default true)
   interlinear?: InterlinearSettings; // Interlinear view prefs for Greek/Hebrew (default: disabled, gloss-only)
   tts?: TtsSettings; // Read Aloud (on-device TTS) prefs
+  art?: ArtSettings; // Biblical-art gallery prefs (preview size)
   wakeAlarm?: WakeAlarmSettings; // Wake alarm push schedule (needs internet at the set time)
   allowRotation?: boolean; // Allow screen to rotate to landscape (default false = portrait locked)
   autoCheckUpdates?: boolean; // Automatically check for updates on app open (default true)
@@ -457,6 +481,25 @@ export function getTtsSettings(): TtsSettings {
 export function updateTtsSettings(updates: Partial<TtsSettings>): void {
   const current = getTtsSettings();
   updateSettings({ tts: { ...current, ...updates } });
+}
+
+/**
+ * Resolve art gallery settings with defaults applied.
+ * Defaults to the smallest preview, which is the layout the pane had before
+ * the slider existed -- so upgrading changes nothing until it is touched.
+ */
+export function getArtSettings(): ArtSettings {
+  const s = getSettings().art;
+  const size = s?.previewSize ?? ART_PREVIEW_MIN;
+  return {
+    previewSize: Math.min(ART_PREVIEW_MAX, Math.max(ART_PREVIEW_MIN, size)),
+  };
+}
+
+/** Persist art gallery settings (merges with existing settings object). */
+export function updateArtSettings(updates: Partial<ArtSettings>): void {
+  const current = getArtSettings();
+  updateSettings({ art: { ...current, ...updates } });
 }
 
 /**

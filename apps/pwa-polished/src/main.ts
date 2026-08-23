@@ -9,6 +9,7 @@ import { loadPackOnDemand, getInstalledPacks } from './lib/progressive-init';
 import { FEATURES } from './config';
 import './adapters/tts'; // Read Aloud engine client (registers __tts dev hook; worker starts lazily)
 import { initMediaSession } from './lib/tts/mediaSession';
+import { dumpPreviousInstallLog } from './lib/install-log';
 
 console.log('🔥 IMPORTS LOADED');
 
@@ -54,6 +55,10 @@ async function initApp() {
   console.log('🚀 Starting app initialization...');
   console.log('Environment:', import.meta.env.DEV ? 'DEV' : 'PROD');
   console.log('Features:', FEATURES);
+
+  // If a pack install killed the tab, its breadcrumbs outlived the crash.
+  // Replay them here, since the console buffer did not survive.
+  dumpPreviousInstallLog();
 
   // Request persistent storage so the browser won't evict IndexedDB/OPFS under pressure.
   // Without this, mobile OSes can silently delete all pack data overnight.

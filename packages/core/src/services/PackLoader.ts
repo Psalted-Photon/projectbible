@@ -59,9 +59,19 @@ export interface PackLoaderOptions {
   
   /** Maximum retry attempts */
   maxRetries?: number;
-  
+
   /** Initial retry delay in ms */
   retryDelay?: number;
+
+  /**
+   * Breadcrumb hook for diagnosing installs that kill the tab.
+   *
+   * Separate from onProgress, which drives the UI and only fires during the
+   * download. This fires at every stage boundary so a caller can persist a
+   * trail that outlives a renderer crash. Core cannot reach the app's logger,
+   * so the app supplies one.
+   */
+  onStage?: (stage: string, detail?: Record<string, unknown>) => void;
 }
 
 export class PackLoader {
@@ -74,7 +84,8 @@ export class PackLoader {
       ...options,
       maxRetries: options.maxRetries ?? 3,
       retryDelay: options.retryDelay ?? 1000,
-      onProgress: options.onProgress ?? (() => {})
+      onProgress: options.onProgress ?? (() => {}),
+      onStage: options.onStage ?? (() => {})
     };
   }
   
@@ -188,6 +199,7 @@ export class PackLoader {
     const cached = await this.getCachedPack(packId, pack.version, pack.sha256);
     
     if (cached) {
+      this.options.onStage('cache-hit', { bytes: cached.length });
       console.log(`✓ Using cached pack: ${packId}`);
       this.options.onProgress({
         packId,
@@ -204,11 +216,13 @@ export class PackLoader {
     
     for (let attempt = 1; attempt <= this.options.maxRetries; attempt++) {
       try {
+        this.options.onStage('attempt', { attempt, of: this.options.maxRetries });
         console.log(`Downloading ${packId} (attempt ${attempt}/${this.options.maxRetries})...`);
         
         const data = await this.downloadWithProgress(pack);
-        
+
         // Validate SHA-256
+        this.options.onStage('sha256-start', { bytes: data.length });
         this.options.onProgress({
           packId,
           loaded: pack.size,
@@ -218,7 +232,8 @@ export class PackLoader {
         });
         
         await this.validateSHA256(data, pack.sha256);
-        
+        this.options.onStage('sha256-ok');
+
         // Cache the pack, unless it is large enough that the second copy
         // costs more than the re-download it would save.
         if (pack.size <= MAX_CACHED_PACK_BYTES) {
@@ -230,9 +245,13 @@ export class PackLoader {
             stage: 'caching'
           });
 
+          this.options.onStage('cache-start', { bytes: data.length });
           await this.cachePack(packId, pack.version, pack.sha256, data);
+          this.options.onStage('cache-done');
+        } else {
+          this.options.onStage('cache-skipped', { bytes: pack.size });
         }
-        
+
         this.options.onProgress({
           packId,
           loaded: pack.size,
@@ -245,6 +264,11 @@ export class PackLoader {
         
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
+        this.options.onStage('attempt-failed', {
+          attempt,
+          name: lastError.name,
+          message: lastError.message
+        });
         console.error(`Download attempt ${attempt} failed:`, lastError.message);
 
         // A content mismatch means the server is serving a different file than
@@ -272,31 +296,62 @@ export class PackLoader {
    * Download with progress tracking using ReadableStream
    */
   private async downloadWithProgress(pack: PackEntry): Promise<Uint8Array> {
+    this.options.onStage('fetch-start', { url: pack.downloadUrl });
     const response = await fetch(pack.downloadUrl);
-    
+
+    this.options.onStage('fetch-resolved', {
+      status: response.status,
+      // A redirect to a different host, or an HTML error page with a 200, both
+      // show up here rather than as a thrown error.
+      finalUrl: response.url,
+      contentType: response.headers.get('content-type'),
+      contentLength: response.headers.get('content-length'),
+      contentEncoding: response.headers.get('content-encoding'),
+      hasBody: !!response.body
+    });
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    
+
     const contentLength = response.headers.get('content-length');
     const total = contentLength ? parseInt(contentLength, 10) : pack.size;
-    
+
+    this.options.onStage('download-begin', {
+      expectedBytes: total,
+      fromHeader: !!contentLength,
+      manifestSize: pack.size
+    });
+
     if (!response.body) {
       throw new Error('ReadableStream not supported');
     }
-    
+
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
     let loaded = 0;
-    
+    let chunkCount = 0;
+    let nextLogAt = 10 * 1024 * 1024;
+
     while (true) {
       const { done, value } = await reader.read();
-      
+
       if (done) break;
-      
+
       chunks.push(value);
       loaded += value.length;
-      
+      chunkCount++;
+
+      // Every ~10 MB, so a crash mid-stream leaves a trail showing how far it
+      // got and what the heap was doing on the way.
+      if (loaded >= nextLogAt) {
+        this.options.onStage('download-progress', {
+          loadedMB: Math.round(loaded / 1048576),
+          chunks: chunkCount
+        });
+        nextLogAt += 10 * 1024 * 1024;
+      }
+
       this.options.onProgress({
         packId: pack.id,
         loaded,
@@ -305,7 +360,13 @@ export class PackLoader {
         stage: 'downloading'
       });
     }
-    
+
+    this.options.onStage('download-complete', {
+      loadedBytes: loaded,
+      expectedBytes: total,
+      chunks: chunkCount
+    });
+
     // A short read is a broken transfer and worth retrying. Receiving MORE
     // than expected is not "partial" at all -- it means the file on the server
     // is not the file the manifest describes, and no retry will change that.
@@ -322,15 +383,22 @@ export class PackLoader {
       );
     }
     
-    // Concatenate chunks
+    // Concatenate chunks. This is the moment both the chunk array and the
+    // combined buffer are live at once, so peak heap is ~2x the pack here.
+    this.options.onStage('concat-start', { bytes: loaded });
     const data = new Uint8Array(loaded);
     let offset = 0;
-    
+
     for (const chunk of chunks) {
       data.set(chunk, offset);
       offset += chunk.length;
     }
-    
+
+    // Release the chunk array before returning, so the doubled peak does not
+    // outlive the copy. Harmless if the caller never allocates again.
+    chunks.length = 0;
+    this.options.onStage('concat-done', { bytes: data.length });
+
     return data;
   }
   

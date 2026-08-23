@@ -37,9 +37,13 @@
    * sits right in the swipe lane on a left-docked panel — so a drag there is
    * the user working that panel, not asking for another one. Same shape as the
    * text-entry guard below.
+   *
+   * `.no-edge-gesture` opts in anything rendered outside a panel that owns its
+   * own drags -- the fullscreen art viewer portals to <body>, so panning a
+   * zoomed painting near the screen edge would otherwise arm a window instead.
    */
   function insidePanel(target: EventTarget | null): boolean {
-    return !!(target as HTMLElement | null)?.closest?.('.panel');
+    return !!(target as HTMLElement | null)?.closest?.('.panel, .no-edge-gesture');
   }
 
   /**

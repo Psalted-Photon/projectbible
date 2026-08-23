@@ -2,6 +2,18 @@ import type { ArtStore, ArtScene, ArtWork, BCV } from '@projectbible/core';
 import { openDB } from './db';
 import type { DBArtScene, DBArtImage } from './db';
 import { BIBLE_BOOKS } from '../lib/bibleData';
+import { downscaleBlob, enqueueThumbTask, thumbKey, THUMB_SKIP_BYTES } from '../lib/artThumbs';
+
+/**
+ * Re-view stored bytes so they can go into a Blob.
+ *
+ * IndexedDB hands back a Uint8Array typed against ArrayBufferLike, which the
+ * DOM lib won't take as a BlobPart. Wrapping the same memory in a fresh view
+ * satisfies it without copying the megabytes back out.
+ */
+function asBlobPart(data: Uint8Array) {
+  return new Uint8Array(data.buffer as ArrayBuffer, data.byteOffset, data.byteLength);
+}
 
 /** Canonical book order for sorting the browsable gallery. */
 const CANONICAL_ORDER: string[] = BIBLE_BOOKS.map((b) => b.name);
@@ -23,6 +35,13 @@ export class IndexedDBArtStore implements ArtStore {
    * from breaking images another pane is still showing.
    */
   private imageUrlCache = new Map<string, string>();
+
+  /**
+   * Set by releaseImages(), which is a teardown call -- the pane is going away.
+   * Previews are generated in the background, so without this a slow one could
+   * finish afterwards and mint an object URL that nothing is left to revoke.
+   */
+  private disposed = false;
 
   /** Get a scene (with its artworks) by id */
   async getScene(id: string): Promise<ArtScene | null> {
@@ -127,24 +146,110 @@ export class IndexedDBArtStore implements ArtStore {
    * (so repeated renders reuse it). Returns null if the image isn't installed.
    */
   async getImageUrl(id: string): Promise<string | null> {
-    if (!id) return null;
+    if (!id || this.disposed) return null;
     const cached = this.imageUrlCache.get(id);
     if (cached) return cached;
     try {
       const db = await openDB();
-      const row = await new Promise<DBArtImage | undefined>((resolve, reject) => {
-        const tx = db.transaction('art_images', 'readonly');
-        const req = tx.objectStore('art_images').get(id);
-        req.onsuccess = () => resolve(req.result as DBArtImage | undefined);
-        req.onerror = () => reject(req.error);
-      });
+      const row = await this.readImage(db, id);
       if (!row?.data) return null;
-      const url = URL.createObjectURL(new Blob([row.data], { type: row.mime || 'image/jpeg' }));
-      this.imageUrlCache.set(id, url);
-      return url;
+      return this.cacheBlobUrl(id, row.data, row.mime);
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Resolve an image id to a small preview URL, generating one if needed.
+   *
+   * The art pack has no usable thumbnails -- `thumbId` falls back to the full
+   * image everywhere -- so the browse grid would otherwise decode dozens of
+   * multi-megabyte JPEGs to paint small squares. The downscaled copy is written
+   * back into `art_images` under a prefixed key, which needs no schema change:
+   * every read of that store is a keyed `.get`, so the extra rows are invisible
+   * to the rest of the app, and importing or removing the pack clears them
+   * along with everything else, so the cache heals itself.
+   *
+   * Falls back to the full image if the preview can't be made, so a decode
+   * failure costs memory rather than showing a blank tile.
+   */
+  async getThumbUrl(id: string): Promise<string | null> {
+    if (!id || this.disposed) return null;
+    const key = thumbKey(id);
+
+    const cached = this.imageUrlCache.get(key);
+    if (cached) return cached;
+
+    try {
+      const db = await openDB();
+      const existing = await this.readImage(db, key);
+      if (existing?.data) return this.cacheBlobUrl(key, existing.data, existing.mime);
+
+      // Collapse duplicate work: two panes browsing at once ask for the same
+      // previews, and generating is far more expensive than the read above.
+      //
+      // The shared task yields bytes rather than an object URL on purpose. URLs
+      // are owned per instance and revoked in releaseImages(), so handing one
+      // pane's URL to another would break its images the moment the first pane
+      // closed -- the same trap the imageUrlCache comment describes.
+      const made = await enqueueThumbTask(key, async () => {
+        // Another instance may have generated and stored it while this call
+        // waited its turn in the queue.
+        const raced = await this.readImage(db, key);
+        if (raced?.data) return { data: raced.data, mime: raced.mime };
+
+        const source = await this.readImage(db, id);
+        if (!source?.data) return null;
+
+        const mime = source.mime || 'image/jpeg';
+
+        // Already small enough that re-encoding would only lose quality.
+        if (source.data.byteLength <= THUMB_SKIP_BYTES) return { data: source.data, mime };
+
+        const small = await downscaleBlob(new Blob([asBlobPart(source.data)], { type: mime }));
+        if (!small) return { data: source.data, mime };
+
+        const bytes = new Uint8Array(await small.arrayBuffer());
+
+        // Persisting is an optimisation for next time, not part of showing the
+        // image now -- a full quota must not blank the gallery.
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction('art_images', 'readwrite');
+            tx.objectStore('art_images').put({ id: key, mime: 'image/jpeg', data: bytes });
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+          });
+        } catch {
+          // Keep the generated preview for this session anyway.
+        }
+
+        return { data: bytes, mime: 'image/jpeg' };
+      });
+
+      if (!made || this.disposed) return null;
+      return this.cacheBlobUrl(key, made.data, made.mime);
+    } catch {
+      return null;
+    }
+  }
+
+  /** One keyed read from the image store. */
+  private readImage(db: IDBDatabase, key: string): Promise<DBArtImage | undefined> {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('art_images', 'readonly');
+      const req = tx.objectStore('art_images').get(key);
+      req.onsuccess = () => resolve(req.result as DBArtImage | undefined);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  /** Wrap stored bytes in an object URL and remember it for releaseImages(). */
+  private cacheBlobUrl(key: string, data: Uint8Array, mime?: string): string {
+    const url = URL.createObjectURL(new Blob([asBlobPart(data)], { type: mime || 'image/jpeg' }));
+    this.imageUrlCache.set(key, url);
+    return url;
   }
 
   /**
@@ -154,6 +259,7 @@ export class IndexedDBArtStore implements ArtStore {
    * caller must drop any it is still holding.
    */
   releaseImages(): void {
+    this.disposed = true;
     for (const url of this.imageUrlCache.values()) URL.revokeObjectURL(url);
     this.imageUrlCache.clear();
   }

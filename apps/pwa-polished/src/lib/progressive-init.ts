@@ -13,6 +13,7 @@ import { importPackFromSQLite } from '../adapters/pack-import';
 import { listInstalledPacks as listInstalledPacksFromDb, removePack as removePackFromDb } from '../adapters/db-manager';
 import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
+import { startInstallLog, logInstall, logInstallError } from './install-log';
 
 let bootstrapLoaded = false;
 let packLoader: PackLoader | null = null;
@@ -26,7 +27,9 @@ function getPackLoaderInstance(): PackLoader {
       appVersion: APP_VERSION,
       onProgress: (progress) => {
         progressHandler?.(progress);
-      }
+      },
+      // Core cannot import the app's logger, so hand it one.
+      onStage: (stage, detail) => logInstall(stage, detail)
     });
   }
   return packLoader;
@@ -97,6 +100,7 @@ export async function loadPackOnDemand(
   }
 
   setProgressHandler(onProgress);
+  startInstallLog(packId);
 
   try {
     const installed = await listInstalledPacksFromDb();
@@ -130,6 +134,7 @@ export async function loadPackOnDemand(
 
     try {
       const data = await loader.downloadPack(packId);
+      logInstall('download-returned', { bytes: data.length });
 
       onProgress?.({
         packId,
@@ -144,8 +149,10 @@ export async function loadPackOnDemand(
       const file = new File([data as unknown as BlobPart], `${packId}.sqlite`, {
         type: 'application/x-sqlite3'
       });
+      logInstall('file-created', { bytes: file.size });
 
       await importPackFromSQLite(file);
+      logInstall('import-returned');
 
       onProgress?.({
         packId,
@@ -154,7 +161,9 @@ export async function loadPackOnDemand(
         percentage: 100,
         stage: 'complete'
       });
+      logInstall('install-complete');
     } catch (error) {
+      logInstallError('install-failed', error);
       console.error(`Pack download failed for ${packId}`, error);
       throw error; // Re-throw to allow caller to handle
     }
