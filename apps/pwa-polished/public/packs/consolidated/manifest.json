@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-08-21T12:09:28.669Z",
+  "createdAt": "2026-08-22T21:51:23.845Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -76,7 +76,7 @@
       "sha256": "3dbc698da339d9c3b0f8050e5ec0374b734c4ba57a85f4a7925b6af9a1fa9239",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-08-21T12:09:33.525Z"
+      "createdAt": "2026-08-22T21:51:27.106Z"
     },
     {
       "id": "dictionary-en",
@@ -91,7 +91,7 @@
       "sha256": "1bd67240913ebbbf4f78f70add13279e150a989f6abb55eaf001e816a0f3a50a",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-08-21T12:09:33.354Z"
+      "createdAt": "2026-08-22T21:51:26.945Z"
     },
     {
       "id": "encyclotopical",
@@ -106,7 +106,7 @@
       "sha256": "310058b1e7b0dfe240d311fb58728e11bba79dc834d874ab994acd106e393dba",
       "dependencies": [],
       "downloadUrl": "/api/packs/encyclotopical.sqlite",
-      "createdAt": "2026-08-21T12:09:33.611Z"
+      "createdAt": "2026-08-22T21:51:27.185Z"
     },
     {
       "id": "geonames-modern-places-v1",
@@ -151,7 +151,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-08-21T12:09:29.517Z"
+      "createdAt": "2026-08-22T21:51:24.305Z"
     },
     {
       "id": "section-headings",
@@ -166,7 +166,7 @@
       "sha256": "730855faa5fa34cc9920d4cd9d8c310181c6977d10831caeebcaed1d8bf2296d",
       "dependencies": [],
       "downloadUrl": "/api/packs/section-headings.sqlite",
-      "createdAt": "2026-08-21T12:09:29.512Z"
+      "createdAt": "2026-08-22T21:51:24.301Z"
     },
     {
       "id": "study-tools",
@@ -176,12 +176,12 @@
       "version": "1.0.0",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 549224448,
-      "sizeMB": 523.78,
-      "sha256": "46cb9af7536bfe43d8799a6442fc1fa71dbe8c983faa873bda940e1d74cb763b",
+      "size": 14487552,
+      "sizeMB": 13.82,
+      "sha256": "e57b5da871759ae02c71f02a78456bbf12cd62fab8394742527d8c8a1114f93e",
       "dependencies": [],
       "downloadUrl": "/api/packs/study-tools.sqlite",
-      "createdAt": "2026-04-09T23:32:39.674Z"
+      "createdAt": "2026-08-22T21:43:56.231Z"
     },
     {
       "id": "translations",
@@ -208,10 +208,10 @@
       "minAppVersion": "1.0.0",
       "size": 6516736,
       "sizeMB": 6.21,
-      "sha256": "f4f492fd23fdb74d61d30345ca5650444b3fbc9b02a8602ccd04f26b8eb8fb46",
+      "sha256": "c4541999b5170cfb5c2bf05cc512712e0e3b1e387226a331d2fb85db007238dc",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-08-21T12:09:29.448Z"
+      "createdAt": "2026-08-22T21:51:24.270Z"
     }
   ]
 }

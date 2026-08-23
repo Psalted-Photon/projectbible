@@ -9,7 +9,7 @@
   import { importPackFromSQLite } from "../../adapters/pack-import";
   import { installAudioPackToOPFS, reindexAudioPack } from "../../adapters/audio";
   import { loadPackOnDemand } from "../../lib/progressive-init";
-  import { USE_BUNDLED_PACKS } from "../../config";
+  import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from "../../config";
   import {
     isTtsSupported,
     storedVoices,
@@ -45,6 +45,13 @@
   let installUrl = "";
   let isInstalling = false;
   let installProgress = "";
+
+  // Live pack sizes, keyed by pack id. The hardcoded `size` strings below are
+  // only a fallback for when the manifest cannot be fetched -- they drift every
+  // time a pack is rebuilt, and drifted badly enough that Study Tools advertised
+  // 438.89 MB while shipping 523.78 MB.
+  let manifestSizes: Record<string, string> = {};
+  let manifestBytes: Record<string, number> = {};
   let fileInputElement: HTMLInputElement;
   let installedVoices: string[] = [];
   let voiceList: TtsVoiceInfo[] = [];
@@ -148,7 +155,7 @@
       id: "translations",
       name: "English Translations",
       description: "KJV, WEB, BSB, NET, LXX2012",
-      size: "33.80 MB",
+      size: "34.55 MB",
       icon: "📖",
       url: `${BASE_URL}/translations.sqlite`,
     },
@@ -156,7 +163,7 @@
       id: "dictionary-en",
       name: "English Dictionary (Modern + Historic)",
       description: "Modern + Webster 1913 offline definitions",
-      size: "38.48 MB",
+      size: "48.67 MB",
       icon: "📖",
       url: `${BASE_URL}/dictionary-en.sqlite`,
     },
@@ -164,7 +171,7 @@
       id: "commentaries",
       name: "Multi-Author Commentaries",
       description: "Clarke, Wesley, Calvin, Barnes, Robertson + 6 more",
-      size: "145.63 MB",
+      size: "224.84 MB",
       icon: "💭",
       url: `${BASE_URL}/commentaries.sqlite`,
     },
@@ -172,7 +179,7 @@
       id: "tsk-references",
       name: "TSK References",
       description: "Treasury of Scripture Knowledge — 43,000+ cross-reference entries by keyword",
-      size: "3.80 MB",
+      size: "6.21 MB",
       icon: "🔗",
       url: `${BASE_URL}/tsk-references.sqlite`,
     },
@@ -180,7 +187,7 @@
       id: "ancient-languages",
       name: "Ancient Languages",
       description: "Hebrew, Greek with morphology",
-      size: "104.50 MB",
+      size: "105.31 MB",
       icon: "📜",
       url: `${BASE_URL}/ancient-languages.sqlite`,
     },
@@ -188,15 +195,15 @@
       id: "lexical",
       name: "Lexical Resources",
       description: "Strong's + English dictionaries",
-      size: "365.45 MB",
+      size: "372.67 MB",
       icon: "📚",
       url: `${BASE_URL}/lexical.sqlite`,
     },
     {
       id: "study-tools",
       name: "Study Tools",
-      description: "Maps, OpenBible, Pleiades, cross-refs, chronological",
-      size: "438.89 MB",
+      description: "Biblical and ancient places, historical map layers, chronological reading order",
+      size: "13.82 MB",
       icon: "🗺️",
       url: `${BASE_URL}/study-tools.sqlite`,
     },
@@ -213,7 +220,7 @@
       id: "geonames-modern-places-v1",
       name: "World Places (GeoNames)",
       description: "Search any modern place: cities, states, countries worldwide. 172,000+ places. License: CC BY 4.0 — geonames.org",
-      size: "37.2 MB",
+      size: "37.23 MB",
       icon: "🌍",
       url: `${BASE_URL}/geonames.sqlite`,
     },
@@ -229,7 +236,7 @@
       id: "biblical-art",
       name: "Biblical Art",
       description: "Famous public-domain paintings tied to Bible scenes. Tap the in-text art icon in the reader to view. Images bundled for offline. Public domain — Wikimedia Commons",
-      size: "83.4 MB",
+      size: "83.45 MB",
       icon: "🖼️",
       url: `${BASE_URL}/art.sqlite`,
     },
@@ -295,6 +302,8 @@
       }
     }
 
+    if (!(await hasRoomFor(pack))) return;
+
     isInstalling = true;
     installProgress = `Preparing ${pack.name}...`;
 
@@ -351,18 +360,84 @@
       window.dispatchEvent(new CustomEvent("packsUpdated"));
     } catch (error) {
       console.error(`Error installing ${pack.name}:`, error);
-      alert(`Failed to install ${pack.name}: ${error}`);
+      const isQuota =
+        error instanceof DOMException &&
+        (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED");
+      alert(
+        isQuota
+          ? `Not enough storage to install ${pack.name}.
+
+Free up space on your device, or remove a pack you are not using, then try again.`
+          : `Failed to install ${pack.name}: ${error}`
+      );
     } finally {
       isInstalling = false;
       installProgress = "";
     }
   }
 
+  /**
+   * Rough pre-flight space check.
+   *
+   * Installing costs more than the download itself: the file is cached and then
+   * expanded into object stores, so budget for roughly twice its size. Returns
+   * false only when the user declines to continue after being warned -- the
+   * estimate is advisory, and browsers under-report it often enough that a hard
+   * block would be wrong.
+   */
+  async function hasRoomFor(pack: (typeof CONSOLIDATED_PACKS)[0]): Promise<boolean> {
+    const needed = manifestBytes[pack.id];
+    if (!needed || !navigator.storage?.estimate) return true;
+
+    try {
+      const { quota = 0, usage = 0 } = await navigator.storage.estimate();
+      if (!quota) return true;
+
+      const available = quota - usage;
+      if (available >= needed * 2) return true;
+
+      return confirm(
+        `${pack.name} needs about ${formatBytes(needed * 2)} to install, ` +
+          `but only ${formatBytes(Math.max(available, 0))} looks available on this device.
+
+` +
+          `The install may fail partway through. Continue anyway?`
+      );
+    } catch {
+      return true;
+    }
+  }
+
   onMount(async () => {
+    await loadManifestSizes();
     await loadPacks();
     await loadStats();
     await refreshVoices();
   });
+
+  async function loadManifestSizes() {
+    try {
+      const response = await fetch(PACK_MANIFEST_URL);
+      if (!response.ok) return;
+      const manifest = await response.json();
+      const packs = Array.isArray(manifest) ? manifest : (manifest?.packs ?? []);
+      const sizes: Record<string, string> = {};
+      const bytesById: Record<string, number> = {};
+      for (const entry of packs) {
+        if (!entry?.id) continue;
+        const bytes = Number(entry.size);
+        if (Number.isFinite(bytes) && bytes > 0) {
+          sizes[entry.id] = formatBytes(bytes);
+          bytesById[entry.id] = bytes;
+        }
+      }
+      manifestSizes = sizes;
+      manifestBytes = bytesById;
+    } catch (error) {
+      // Non-fatal: the cards fall back to their hardcoded size strings.
+      console.warn("Could not read pack sizes from manifest:", error);
+    }
+  }
 
   async function loadPacks() {
     isLoading = true;
@@ -410,6 +485,10 @@
 
     if (!confirm(confirmMessage)) return;
 
+    // Clearing a large pack takes a while. Without a busy state the pane just
+    // sits there, which looks exactly like the delete having died.
+    isInstalling = true;
+    installProgress = `Removing ${packId}…`;
     try {
       await removePack(packId);
       alert(`Pack "${packId}" removed successfully`);
@@ -421,6 +500,9 @@
     } catch (error) {
       console.error("Error removing pack:", error);
       alert(`Failed to remove pack: ${error}`);
+    } finally {
+      isInstalling = false;
+      installProgress = "";
     }
   }
 
@@ -615,6 +697,7 @@
             <button
               class="remove-btn"
               on:click={() => handleRemovePack(pack.id)}
+              disabled={isInstalling}
               title="Remove this pack"
             >
               <span class="emoji">🗑️</span>
@@ -652,7 +735,7 @@
               {#if isInstalled}<span class="installed-badge">✓</span>{/if}
             </div>
             <div class="pack-card-description">{pack.description}</div>
-            <div class="pack-card-size">{pack.size}</div>
+            <div class="pack-card-size">{manifestSizes[pack.id] ?? pack.size}</div>
           </div>
         </button>
       {/each}

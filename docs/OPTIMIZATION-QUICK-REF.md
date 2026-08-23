@@ -21,7 +21,7 @@ node scripts/publish-packs-release.mjs 1.0.0
 | translations.sqlite | ~1.5GB | KJV, WEB, BSB, NET, LXX2012 |
 | ancient-languages.sqlite | ~1.5GB | Hebrew, Greek NT, LXX + morphology |
 | lexical.sqlite | ~1.2GB | Strong's + English resources |
-| study-tools.sqlite | ~300MB | Maps, places, chronology, cross-refs |
+| study-tools.sqlite | 13.82 MB | Places, historical map layers, chronology |
 | bsb-audio-pt1.sqlite | ~1.7GB | Genesis-Psalms audio |
 | bsb-audio-pt2.sqlite | ~1.7GB | Proverbs-Revelation audio |
 

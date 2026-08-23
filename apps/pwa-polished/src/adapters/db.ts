@@ -469,6 +469,19 @@ export interface DBSyncOperation {
 }
 
 /**
+ * Close the shared connection and drop the cached handles.
+ *
+ * Needed before deleting the database: an open connection blocks
+ * indexedDB.deleteDatabase, and the blocked path is easy to mistake for
+ * success. The next openDB() call reopens from scratch.
+ */
+export function closeDB(): void {
+  dbInstance?.close();
+  dbInstance = null;
+  dbPromise = null;
+}
+
+/**
  * Open the IndexedDB database, creating it if needed
  */
 export function openDB(): Promise<IDBDatabase> {
@@ -1023,6 +1036,8 @@ export async function batchWriteTransaction(
     
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error(`${storeName} transaction aborted`));
   });
 }
 

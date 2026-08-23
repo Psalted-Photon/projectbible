@@ -29,6 +29,16 @@ function contentMismatch(message: string): PackContentError {
   return error;
 }
 
+/**
+ * Above this size we do not keep the raw downloaded bytes in `pack_files`.
+ *
+ * That cache only ever saves a re-download -- what the app actually reads is
+ * the expanded object stores -- so for a big pack it doubles the storage cost
+ * of being installed in exchange for a convenience the user rarely collects.
+ * Small packs stay cached: the copy is cheap and re-installs are instant.
+ */
+const MAX_CACHED_PACK_BYTES = 32 * 1024 * 1024;
+
 export interface DownloadProgress {
   packId: string;
   loaded: number;
@@ -209,16 +219,19 @@ export class PackLoader {
         
         await this.validateSHA256(data, pack.sha256);
         
-        // Cache the pack
-        this.options.onProgress({
-          packId,
-          loaded: pack.size,
-          total: pack.size,
-          percentage: 100,
-          stage: 'caching'
-        });
-        
-        await this.cachePack(packId, pack.version, pack.sha256, data);
+        // Cache the pack, unless it is large enough that the second copy
+        // costs more than the re-download it would save.
+        if (pack.size <= MAX_CACHED_PACK_BYTES) {
+          this.options.onProgress({
+            packId,
+            loaded: pack.size,
+            total: pack.size,
+            percentage: 100,
+            stage: 'caching'
+          });
+
+          await this.cachePack(packId, pack.version, pack.sha256, data);
+        }
         
         this.options.onProgress({
           packId,
@@ -456,10 +469,14 @@ export class PackLoader {
       const transaction = this.db!.transaction(['pack_files'], 'readwrite');
       const store = transaction.objectStore('pack_files');
       
-      const request = store.delete(packId);
+      store.delete(packId);
       
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      // Settle on the transaction rather than the request: an abort fires
+      // neither the request's success nor its error, so the caller was left
+      // waiting forever with nothing shown on screen.
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error ?? new Error('Pack file delete aborted'));
     });
   }
   

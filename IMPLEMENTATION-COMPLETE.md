@@ -194,7 +194,7 @@ You now have a complete workbench-to-polished pipeline for creating and shipping
 1. `translations.sqlite` (~1.5GB) - KJV, WEB, BSB, NET, LXX2012
 2. `ancient-languages.sqlite` (~1.5GB) - Hebrew, Greek NT, LXX + morphology
 3. `lexical.sqlite` (~1.2GB) - Strong's + English resources
-4. `study-tools.sqlite` (~300MB) - Maps, places, chronology, cross-refs
+4. `study-tools.sqlite` (13.82 MB) - Places, historical map layers, chronology
 5. `bsb-audio-pt1.sqlite` (~1.7GB) - Genesis-Psalms audio
 6. `bsb-audio-pt2.sqlite` (~1.7GB) - Proverbs-Revelation audio
 

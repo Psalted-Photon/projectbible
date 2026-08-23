@@ -1,3 +1,8 @@
+param(
+    # Also upload the two ~1.7 GB BSB audio packs.
+    [switch]$IncludeAudio
+)
+
 # Upload consolidated packs to GitHub release
 # Requires GitHub CLI (gh) to be installed and authenticated
 
@@ -5,14 +10,18 @@ $REPO = "Psalted-Photon/ProjectBible"
 $TAG = "packs-v1.0.0"
 $PACK_DIR = "packs/consolidated"
 
-# Packs to upload (excluding large audio packs for now)
-$packs = @(
-    "translations.sqlite",
-    "dictionary-en.sqlite",
-    "ancient-languages.sqlite",
-    "lexical.sqlite",
-    "study-tools.sqlite"
-)
+# Every pack in the directory, so a newly built one cannot be forgotten here --
+# a hardcoded list silently dropped art.sqlite and eight others. The audio packs
+# are ~1.7 GB each, so they upload only when asked for with -IncludeAudio.
+$packs = Get-ChildItem -Path $PACK_DIR -Filter *.sqlite |
+    Where-Object { $IncludeAudio -or $_.Name -notlike "bsb-audio-*" } |
+    Sort-Object Name |
+    Select-Object -ExpandProperty Name
+
+if (-not $packs) {
+    Write-Host "No .sqlite packs found in $PACK_DIR" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host "Uploading consolidated packs to release $TAG..." -ForegroundColor Cyan
 

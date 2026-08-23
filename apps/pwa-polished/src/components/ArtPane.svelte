@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import type { ArtScene, ArtWork } from '@projectbible/core';
   import { IndexedDBArtStore } from '../adapters/ArtStore';
 
@@ -60,6 +61,13 @@
 
   // Reload whenever the incoming context changes (also fires once on init)
   $: load(sceneId, book, chapter, verse);
+
+  // Object URLs keep their blob alive until revoked, so hand them back when the
+  // pane closes instead of leaving the gallery pinned in memory for the session.
+  onDestroy(() => {
+    artStore.releaseImages();
+    urls = {};
+  });
 
   async function pick(scene: ArtScene) {
     selected = scene;

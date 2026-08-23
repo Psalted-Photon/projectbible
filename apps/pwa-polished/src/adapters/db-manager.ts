@@ -86,17 +86,13 @@ const ISBE_STORES = [
 const NAVES_STORES = ['naves_topics', 'naves_names', 'naves_points', 'naves_verses', 'naves_tokens'];
 
 export async function removePack(packId: string): Promise<void> {
-  const db = await openDB();
-
   // Step 1: Read all pack metadata to determine type and collect sub-pack IDs / translation IDs.
   // Virtual sub-packs (e.g. 'translations-consolidated-KJV') share the packId prefix.
-  const allPacks: Array<{ id: string; type: string; translationId?: string }> =
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction('packs', 'readonly');
-      const req = tx.objectStore('packs').getAll();
-      req.onsuccess = () => resolve(req.result ?? []);
-      req.onerror = () => reject(req.error);
-    });
+  let allPacks: Array<{ id: string; type: string; translationId?: string }> = [];
+  await withTx('packs', 'readonly', tx => {
+    const req = tx.objectStore('packs').getAll();
+    req.onsuccess = () => { allPacks = req.result ?? []; };
+  });
 
   const pack = allPacks.find(p => p.id === packId);
   if (!pack) return; // already gone
@@ -114,23 +110,18 @@ export async function removePack(packId: string): Promise<void> {
 
   const packType = pack.type;
 
-  // Step 2: Clear type-specific data stores using separate transactions so there
-  // is no risk of the IDB transaction auto-committing between awaited cursor calls.
+  // Step 2: Clear type-specific data stores. Every transaction goes through
+  // withTx, which re-acquires the connection and rejects on abort — without
+  // that, a removal interrupted partway just stopped, silently.
 
   if (packType === 'references') {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(['tsk_references'], 'readwrite');
+    await withTx(['tsk_references'], 'readwrite', tx => {
       tx.objectStore('tsk_references').clear();
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
     });
 
   } else if (packType === 'commentary') {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(['commentary_entries'], 'readwrite');
+    await withTx(['commentary_entries'], 'readwrite', tx => {
       tx.objectStore('commentary_entries').clear();
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
     });
 
   } else if (packType === 'lexicon') {
@@ -138,22 +129,16 @@ export async function removePack(packId: string): Promise<void> {
       'greek_strongs_entries', 'hebrew_strongs_entries', 'lexicon_entries',
       'english_words', 'english_grammar', 'word_occurrences', 'strongs_entries'
     ] as const;
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction([...lexStores], 'readwrite');
+    await withTx([...lexStores], 'readwrite', tx => {
       lexStores.forEach(s => tx.objectStore(s).clear());
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
     });
 
   } else if (packType === 'dictionary') {
     const dictStores = [
       'english_definitions_modern', 'english_definitions_historic', 'word_mapping'
     ] as const;
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction([...dictStores], 'readwrite');
+    await withTx([...dictStores], 'readwrite', tx => {
       dictStores.forEach(s => tx.objectStore(s).clear());
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
     });
 
   } else if (packType === 'study') {
@@ -162,27 +147,20 @@ export async function removePack(packId: string): Promise<void> {
       'pleiades_locations', 'openbible_locations', 'openbible_places',
       'openbible_identifications', 'place_name_links', 'historical_layers', 'map_tiles'
     ] as const;
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction([...studyStores], 'readwrite');
+    await withTx([...studyStores], 'readwrite', tx => {
       studyStores.forEach(s => tx.objectStore(s).clear());
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
     });
     // Delete non-user cross-references (preserve any user-added ones)
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(['cross_references'], 'readwrite');
+    await withTx(['cross_references'], 'readwrite', tx => {
       const cursor = tx.objectStore('cross_references').openCursor();
       cursor.onsuccess = (event) => {
         const c = (event.target as IDBRequest).result as IDBCursorWithValue | null;
         if (c) { if (c.value.source !== 'user') c.delete(); c.continue(); }
       };
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
     });
 
   } else if (packType === 'audio') {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(['audio_chapters'], 'readwrite');
+    await withTx(['audio_chapters'], 'readwrite', tx => {
       const cursor = tx.objectStore('audio_chapters').openCursor();
       cursor.onsuccess = (event) => {
         const c = (event.target as IDBRequest).result as IDBCursorWithValue | null;
@@ -194,16 +172,12 @@ export async function removePack(packId: string): Promise<void> {
           c.continue();
         }
       };
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
     });
 
   } else if (packType === 'text') {
     // Both cursors run concurrently inside one transaction — IDB keeps it open
     // until all pending cursor activity is exhausted.
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(['verses', 'morphology'], 'readwrite');
-
+    await withTx(['verses', 'morphology'], 'readwrite', tx => {
       const versesCursor = tx.objectStore('verses').openCursor();
       versesCursor.onsuccess = (event) => {
         const c = (event.target as IDBRequest).result as IDBCursorWithValue | null;
@@ -227,9 +201,6 @@ export async function removePack(packId: string): Promise<void> {
           c.continue();
         }
       };
-
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
     });
 
   } else {
@@ -249,27 +220,22 @@ export async function removePack(packId: string): Promise<void> {
 
     // Only clear stores this database actually has — the list spans packs whose
     // schema may predate or postdate any given install.
+    const db = await openDB();
     const stores = (STORES_BY_TYPE[packType] ?? []).filter(name =>
       db.objectStoreNames.contains(name),
     );
 
     if (stores.length) {
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(stores, 'readwrite');
+      await withTx(stores, 'readwrite', tx => {
         stores.forEach(name => tx.objectStore(name).clear());
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
       });
     }
   }
 
   // Step 3: Delete pack metadata for main pack and all virtual sub-packs
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(['packs'], 'readwrite');
+  await withTx(['packs'], 'readwrite', tx => {
     const store = tx.objectStore('packs');
     allPackIds.forEach(id => store.delete(id));
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
   });
 
   // Step 4: Drop the downloaded file the loader kept. Without this a deleted
@@ -387,4 +353,38 @@ function waitForTransaction(tx: IDBTransaction): Promise<void> {
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(new Error('Transaction aborted'));
   });
+}
+
+/**
+ * Run one transaction on a freshly-acquired connection.
+ *
+ * Two failure modes this exists to close, both of which used to surface as the
+ * UI simply going quiet:
+ *
+ * - A connection closed by `versionchange` (the Clear Cache button deletes the
+ *   database) leaves any handle held across an await dead, so the next
+ *   `db.transaction()` throws InvalidStateError. Re-acquiring per transaction
+ *   means there is no stale handle to hold.
+ * - An aborted transaction fires neither `oncomplete` nor `onerror`. Without an
+ *   `onabort` handler the promise never settles and the caller waits forever.
+ *
+ * `setup` must issue its requests synchronously — capture results in a closure
+ * rather than awaiting inside it, or the transaction will auto-commit early.
+ */
+async function withTx(
+  stores: string | string[],
+  mode: IDBTransactionMode,
+  setup: (tx: IDBTransaction) => void
+): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction(stores, mode);
+
+  const settled = new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error(`Transaction failed on ${stores}`));
+    tx.onabort = () => reject(tx.error ?? new Error(`Transaction aborted on ${stores}`));
+  });
+
+  setup(tx);
+  return settled;
 }

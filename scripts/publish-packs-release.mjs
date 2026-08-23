@@ -154,6 +154,19 @@ if (packFiles.length === 0) {
 console.log(`   Found ${packFiles.length} packs:`);
 packFiles.forEach(f => console.log(`   • ${f}`));
 
+// getPackMetadata() below is a hardcoded map, and anything missing from it used
+// to be skipped with a warning -- which quietly published a manifest without
+// art.sqlite and eight other packs. Refuse to publish a partial manifest.
+const unknownPacks = packFiles.filter(f => !getPackMetadata(f));
+if (unknownPacks.length > 0) {
+  console.error('\n❌ No metadata for these packs:');
+  unknownPacks.forEach(f => console.error(`   • ${f}`));
+  console.error('\n   Publishing would write a manifest that omits them.');
+  console.error('   Add them to getPackMetadata() in this script, or use');
+  console.error('   scripts/generate-manifest.mjs, which already has the full config.');
+  process.exit(1);
+}
+
 // Generate pack entries
 console.log('\n🔐 Generating pack entries with SHA-256 hashes...');
 const packEntries = [];
@@ -165,8 +178,8 @@ for (const filename of packFiles) {
   const metadata = getPackMetadata(filename);
   
   if (!metadata) {
-    console.warn(`   ⚠️  No metadata for ${filename}, skipping`);
-    continue;
+    // Pre-checked above; reaching here means the two paths disagree.
+    throw new Error(`No metadata for ${filename}`);
   }
   
   const sizeMB = (stats.size / (1024 * 1024)).toFixed(2);

@@ -167,37 +167,61 @@ export async function importPackFromSQLite(file: File): Promise<void> {
         console.log(`✅ Biblical art pack imported: ${entries.length} scenes`);
       }
 
-      // Bundled image blobs (full + thumbnail) for offline display
-      try {
-        const imgRows = db.exec('SELECT id, mime, data FROM art_images');
-        if (imgRows.length && imgRows[0].values.length) {
-          const images = imgRows[0].values.map(([id, mime, data]) => ({
-            id: id as string,
-            mime: mime as string,
-            data: data as Uint8Array,
-          }));
-          console.log(`Importing ${images.length} art images...`);
+      // Bundled image blobs (full + thumbnail) for offline display.
+      //
+      // These blobs are ~99% of the pack, so reading them with db.exec would
+      // materialise the whole file as binary in JS -- on top of the source
+      // ArrayBuffer and sql.js's own WASM-heap copy -- and kill the renderer on
+      // a phone without the headroom. Step through the rows instead, writing
+      // each one out and dropping it, so only a few MB are ever held at once.
+      const imagesTable = db.exec(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='art_images'"
+      );
 
-          const idbImg = await openDB();
-          await new Promise<void>((resolve, reject) => {
-            const tx = idbImg.transaction('art_images', 'readwrite');
-            tx.objectStore('art_images').clear();
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-            tx.onabort = () => reject(new Error('art_images clear aborted'));
+      if (imagesTable.length && imagesTable[0].values.length) {
+        const idbImg = await openDB();
+        await new Promise<void>((resolve, reject) => {
+          const tx = idbImg.transaction('art_images', 'readwrite');
+          tx.objectStore('art_images').clear();
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(new Error('art_images clear aborted'));
+        });
+
+        // Flush on a byte budget rather than a row count: individual paintings
+        // range from a few KB to several MB, so a fixed row count still spikes.
+        const FLUSH_BYTES = 4 * 1024 * 1024;
+        let batch: { id: string; mime: string; data: Uint8Array }[] = [];
+        let batchBytes = 0;
+        let imported = 0;
+
+        const flushImages = async () => {
+          if (!batch.length) return;
+          const pending = batch;
+          batch = [];
+          batchBytes = 0;
+          await batchWriteTransaction('art_images', (store) => {
+            pending.forEach((img) => store.put(img));
           });
+          imported += pending.length;
+        };
 
-          const CHUNK = 20;
-          for (let i = 0; i < images.length; i += CHUNK) {
-            const chunk = images.slice(i, i + CHUNK);
-            await batchWriteTransaction('art_images', (store) => {
-              chunk.forEach((img) => store.put(img));
-            });
+        const stmt = db.prepare('SELECT id, mime, data FROM art_images');
+        try {
+          while (stmt.step()) {
+            const [id, mime, data] = stmt.get() as [string, string, Uint8Array];
+            batch.push({ id, mime, data });
+            batchBytes += data?.length ?? 0;
+            if (batchBytes >= FLUSH_BYTES) await flushImages();
           }
-          console.log(`✅ Imported ${images.length} art images`);
+        } finally {
+          stmt.free();
         }
-      } catch (e) {
-        console.warn('Art images import skipped (no art_images table?):', e);
+        await flushImages();
+
+        console.log(`✅ Imported ${imported} art images`);
+      } else {
+        console.log('No art_images table in this pack — scenes imported without images');
       }
     } else if (packInfo.type === 'cross-references') {
       // Import cross-references
@@ -1779,6 +1803,62 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       
       const CHUNK_SIZE = 500;
       
+      // Import the historical map layers.
+      //
+      // MapPane's loadHistoricalLayers() and its Ancient Boundaries control have
+      // always read this store, but the only importer sat in the `map` branch
+      // above and no pack of type `map` is offered in the manifest -- so the
+      // store was never written and the control never appeared. 12 rows, ~9 KB.
+      if (tableNames.includes('historical_layers')) {
+        console.log('Importing historical map layers...');
+        const layersRows = db.exec(`
+          SELECT id, name, display_name, period, year_start, year_end, type,
+                 boundaries, overlay_url, opacity, description
+          FROM historical_layers
+        `);
+
+        if (layersRows.length && layersRows[0].values.length) {
+          const layerColumns = layersRows[0].columns;
+          const layers = layersRows[0].values
+            .map((row: unknown[]) => {
+              const obj: any = {};
+              layerColumns.forEach((col: string, idx: number) => {
+                obj[col] = row[idx];
+              });
+
+              return {
+                id: obj.id as string,
+                name: obj.name as string,
+                displayName: obj.display_name as string,
+                period: obj.period as string,
+                yearStart: obj.year_start as number,
+                yearEnd: obj.year_end as number,
+                type: obj.type as string,
+                boundaries: obj.boundaries ? JSON.parse(obj.boundaries as string) : undefined,
+                overlayUrl: obj.overlay_url as string | undefined,
+                opacity: obj.opacity as number,
+                description: obj.description as string | undefined,
+                packId: packInfo.id
+              };
+            })
+            // Skip rather than throw: the store keys on id, and one malformed
+            // row should not abort the whole pack install.
+            .filter((layer: { id: string }) => {
+              if (!layer.id) {
+                console.error('Skipping historical layer with no id:', layer);
+                return false;
+              }
+              return true;
+            });
+
+          await batchWriteTransaction('historical_layers', (store) => {
+            layers.forEach((layer: unknown) => store.put(layer));
+          });
+
+          console.log(`✅ Imported ${layers.length} historical map layers`);
+        }
+      }
+
       // Import chronological ordering.
       //
       // Three things were wrong here and each one alone was enough to stop the
@@ -1932,7 +2012,15 @@ export async function importPackFromSQLite(file: File): Promise<void> {
           ? placeColumnInfo[0].values.map((row) => row[1] as string)
           : [];
         const hasDescription = placeColumns.includes('description');
-        const hasType = placeColumns.includes('type');
+        // The consolidated study-tools pack names this column `place_type`;
+        // older standalone place packs used `type`. Testing only for `type`
+        // meant the value was always dropped, so DBPlace.type was never set and
+        // the places store's `type` index stayed permanently empty.
+        const typeColumn = placeColumns.includes('type')
+          ? 'type'
+          : placeColumns.includes('place_type')
+            ? 'place_type'
+            : null;
 
         const selectedPlaceColumns = [
           'id',
@@ -1940,7 +2028,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
           hasDescription ? 'description' : null,
           'latitude',
           'longitude',
-          hasType ? 'type' : null
+          typeColumn
         ].filter(Boolean) as string[];
 
         const rows = db.exec(`
@@ -1961,7 +2049,7 @@ export async function importPackFromSQLite(file: File): Promise<void> {
             description: (hasDescription ? getValue(row, 'description') : null) as string | null,
             latitude: getValue(row, 'latitude') as number,
             longitude: getValue(row, 'longitude') as number,
-            type: (hasType ? getValue(row, 'type') : null) as string | null
+            type: (typeColumn ? getValue(row, typeColumn) : null) as string | null
           }));
           
           for (let i = 0; i < data.length; i += CHUNK_SIZE) {

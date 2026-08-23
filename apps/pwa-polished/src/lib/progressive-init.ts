@@ -139,7 +139,9 @@ export async function loadPackOnDemand(
         stage: 'extracting'
       });
 
-      const file = new File([data.slice()], `${packId}.sqlite`, {
+      // Not data.slice(): that copied the whole pack a second time just to
+      // satisfy BlobPart, and the File constructor snapshots the bytes anyway.
+      const file = new File([data as unknown as BlobPart], `${packId}.sqlite`, {
         type: 'application/x-sqlite3'
       });
 

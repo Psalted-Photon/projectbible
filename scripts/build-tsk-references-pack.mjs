@@ -110,6 +110,20 @@ async function build() {
 
   console.log(`\r  Inserted ${count.toLocaleString()} rows total.   `);
 
+  // Curated additions.
+  //
+  // Carried over from the study-tools pack, which used to ship its own 760,343-row
+  // copy of TSK alongside 76 "curated" rows. That copy is no longer built (the
+  // reader has always read cross-references from this pack instead), and of its
+  // 38 curated pairs all but these three already existed in TSK.
+  const CURATED = [
+    { book: 'Matthew',         chapter: 5, verse: 17, keyword: 'Fulfill the Law',             references: ['De 18:18'] },
+    { book: 'Acts',            chapter: 4, verse: 12, keyword: 'No other name for salvation', references: ['Joe 2:32'] },
+    { book: '1 Thessalonians', chapter: 4, verse: 16, keyword: 'Resurrection of the dead',    references: ['Da 12:2'] },
+  ];
+  insertBatch(CURATED);
+  console.log(`  Added ${CURATED.length} curated references.`);
+
   db.close();
 
   console.log(`\n✅ TSK references pack written to:\n   ${OUTPUT_FILE}`);

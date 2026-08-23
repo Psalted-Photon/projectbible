@@ -27,7 +27,7 @@ Successfully implemented a consolidated pack system that reduces the pack count 
    - English thesaurus (synonyms/antonyms)
    - English grammar (POS tagging)
 
-4. **Study Tools Pack** (`study-tools.sqlite`) - 3.57 MB
+4. **Study Tools Pack** (`study-tools.sqlite`) - 13.82 MB
    - Chronological ordering (31,102 verses)
    - Cross-references (340k+ references)
    - Places/geography data

@@ -43,7 +43,7 @@ All 6 consolidated packs have been successfully built and are ready for GitHub R
 - **Tables:** greek_strongs_entries, hebrew_strongs_entries, english_words, thesaurus_synonyms, thesaurus_antonyms, grammar_* tables
 - **Build Method:** ATTACH DATABASE for direct table copying
 
-### 4. study-tools.sqlite (3.57 MB)
+### 4. study-tools.sqlite (13.82 MB)
 - **Contents:** Study aids and reference materials
 - **Components:**
   - Historical Maps (layers, tiles)

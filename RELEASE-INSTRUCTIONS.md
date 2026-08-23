@@ -23,7 +23,7 @@
      - `translations.sqlite` (33.80 MB)
      - `ancient-languages.sqlite` (67.11 MB)
      - `lexical.sqlite` (365.45 MB)
-     - `study-tools.sqlite` (3.57 MB)
+     - `study-tools.sqlite` (13.82 MB)
      - `bsb-audio-pt1.sqlite` (1.76 GB) - Genesis through Psalms
      - `bsb-audio-pt2.sqlite` (1.65 GB) - Proverbs through Revelation
      - `manifest.json` - Pack metadata with SHA-256 hashes
@@ -80,7 +80,7 @@ git push origin v1.0.0
    - `translations.sqlite` (33.80 MB) ✅
    - `ancient-languages.sqlite` (67.11 MB) ✅
    - `lexical.sqlite` (365.45 MB) ✅
-   - `study-tools.sqlite` (3.57 MB) ✅
+   - `study-tools.sqlite` (13.82 MB) ✅
    - `manifest.json` ✅
    - ❌ `bsb-audio-pt1.sqlite` (TOO LARGE - 1.76 GB)
    - ❌ `bsb-audio-pt2.sqlite` (TOO LARGE - 1.65 GB)
@@ -111,7 +111,7 @@ Located in: `C:\Users\Marlowe\Desktop\ProjectBible\packs\consolidated\`
 - [ ] translations.sqlite (33.80 MB)
 - [ ] ancient-languages.sqlite (67.11 MB)
 - [ ] lexical.sqlite (365.45 MB)
-- [ ] study-tools.sqlite (3.57 MB)
+- [ ] study-tools.sqlite (13.82 MB)
 - [ ] bsb-audio-pt1.sqlite (1.76 GB) - **Requires Git LFS**
 - [ ] bsb-audio-pt2.sqlite (1.65 GB) - **Requires Git LFS**
 

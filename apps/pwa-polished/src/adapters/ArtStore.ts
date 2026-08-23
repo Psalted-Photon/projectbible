@@ -6,8 +6,6 @@ import { BIBLE_BOOKS } from '../lib/bibleData';
 /** Canonical book order for sorting the browsable gallery. */
 const CANONICAL_ORDER: string[] = BIBLE_BOOKS.map((b) => b.name);
 
-/** Session cache of image id → object URL (created once, reused across renders). */
-const imageUrlCache = new Map<string, string>();
 
 /**
  * IndexedDB implementation of ArtStore.
@@ -15,6 +13,17 @@ const imageUrlCache = new Map<string, string>();
  * `art_scenes` store, populated when the user installs the art.sqlite pack.
  */
 export class IndexedDBArtStore implements ArtStore {
+  /**
+   * Image id → object URL, created once and reused across renders.
+   *
+   * Per instance, not per module: object URLs hold their blob in memory until
+   * they are revoked, and a module-level cache outlived the pane that made it,
+   * so browsing the gallery pinned the whole pack until a reload. Each pane owns
+   * its own map and drops it in releaseImages(), which keeps one pane's cleanup
+   * from breaking images another pane is still showing.
+   */
+  private imageUrlCache = new Map<string, string>();
+
   /** Get a scene (with its artworks) by id */
   async getScene(id: string): Promise<ArtScene | null> {
     const db = await openDB();
@@ -119,7 +128,7 @@ export class IndexedDBArtStore implements ArtStore {
    */
   async getImageUrl(id: string): Promise<string | null> {
     if (!id) return null;
-    const cached = imageUrlCache.get(id);
+    const cached = this.imageUrlCache.get(id);
     if (cached) return cached;
     try {
       const db = await openDB();
@@ -131,11 +140,22 @@ export class IndexedDBArtStore implements ArtStore {
       });
       if (!row?.data) return null;
       const url = URL.createObjectURL(new Blob([row.data], { type: row.mime || 'image/jpeg' }));
-      imageUrlCache.set(id, url);
+      this.imageUrlCache.set(id, url);
       return url;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Revoke every object URL this store handed out and forget them.
+   *
+   * Call when the pane using it goes away; the URLs are dead afterwards, so the
+   * caller must drop any it is still holding.
+   */
+  releaseImages(): void {
+    for (const url of this.imageUrlCache.values()) URL.revokeObjectURL(url);
+    this.imageUrlCache.clear();
   }
 
   // ===== Conversion helpers =====

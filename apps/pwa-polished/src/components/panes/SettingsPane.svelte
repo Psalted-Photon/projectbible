@@ -11,6 +11,7 @@
   import InterlinearControls from "../InterlinearControls.svelte";
   import SettingsSection from "../SettingsSection.svelte";
   import { getInterlinearSettings } from "../../adapters/settings";
+  import { closeDB } from "../../adapters/db";
   import { getReaderFont } from "../../lib/readerFonts";
   import ColorField from "../ColorField.svelte";
   import FontField from "../FontField.svelte";
@@ -279,25 +280,30 @@
     if (persistTimer) persistNow();
   });
 
-  function deleteIndexedDbDatabase(name: string): Promise<void> {
+  /**
+   * Delete one IndexedDB database. Resolves with null when it went, or with a
+   * reason when it did not — a blocked delete used to resolve as though it had
+   * succeeded, so the wipe could reload having removed nothing.
+   */
+  function deleteIndexedDbDatabase(name: string): Promise<string | null> {
     return new Promise((resolve) => {
       try {
         const request = indexedDB.deleteDatabase(name);
         request.onsuccess = () => {
           console.log(`Deleted database: ${name}`);
-          resolve();
+          resolve(null);
         };
         request.onerror = () => {
           console.warn(`Failed to delete database: ${name}`, request.error);
-          resolve();
+          resolve(`${name} — ${request.error?.message ?? 'delete failed'}`);
         };
         request.onblocked = () => {
           console.warn(`Database deletion blocked: ${name}`);
-          resolve();
+          resolve(`${name} — still open in another tab`);
         };
       } catch (error) {
         console.warn(`Error deleting database: ${name}`, error);
-        resolve();
+        resolve(`${name} — ${error}`);
       }
     });
   }
@@ -336,9 +342,14 @@
     clearing = true;
 
     try {
-      // 1. Clear all IndexedDB databases
+      // 1. Clear all IndexedDB databases. Release our own connection first so
+      // it cannot block its own wipe.
       if ('indexedDB' in window) {
-        const namesToDelete = new Set<string>(["projectbible", "ProjectBible_Packs"]);
+        closeDB();
+        // 'projectbible-packs' is where PackLoader keeps the downloaded files.
+        // The name used to be spelt 'ProjectBible_Packs', which matches nothing,
+        // so on browsers without indexedDB.databases() the payloads survived.
+        const namesToDelete = new Set<string>(["projectbible", "projectbible-packs"]);
         if ('databases' in indexedDB) {
           try {
             const dbs = await indexedDB.databases();
@@ -351,7 +362,17 @@
             console.warn('indexedDB.databases() not available:', error);
           }
         }
-        await Promise.all([...namesToDelete].map(deleteIndexedDbDatabase));
+        const failures = (await Promise.all([...namesToDelete].map(deleteIndexedDbDatabase)))
+          .filter((reason): reason is string => reason !== null);
+        if (failures.length) {
+          alert(
+            'Could not clear everything:\n\n' +
+            failures.join('\n') +
+            '\n\nClose any other tabs running the app, then try again.'
+          );
+          clearing = false;
+          return;
+        }
       }
 
       // 2. Clear all caches (Service Worker caches)

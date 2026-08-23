@@ -148,7 +148,7 @@ Streamlined navigation using Translation selector + Book/Chapter tree. Swipe ges
 - `translations.sqlite` (33.69 MB) — KJV, WEB, BSB, NET, LXX2012
 - `ancient-languages.sqlite` (67 MB) — Hebrew OT, Greek NT/LXX with morphology
 - `lexical.sqlite` (365.32 MB) — Strong's lexicons, 470k+ English words, thesaurus
-- `study-tools.sqlite` (3.57 MB) — Maps, cross-references, chronology
+- `study-tools.sqlite` (13.82 MB) — Places, historical map layers, chronological reading order
 - `bsb-audio-pt1.sqlite` (1.76 GB) — Genesis–Psalms audio
 - `bsb-audio-pt2.sqlite` (1.65 GB) — Proverbs–Revelation audio
 

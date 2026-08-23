@@ -34,7 +34,7 @@ All 10 core components of the performance optimization plan have been successful
 1. `translations.sqlite` (~1.5GB)
 2. `ancient-languages.sqlite` (~1.5GB)
 3. `lexical.sqlite` (~1.2GB)
-4. `study-tools.sqlite` (~300MB)
+4. `study-tools.sqlite` (13.82 MB)
 5. `bsb-audio-pt1.sqlite` (~1.7GB)
 6. `bsb-audio-pt2.sqlite` (~1.7GB)
 
@@ -239,7 +239,7 @@ await loader.requestPersistentStorage();
 | translations | ~1.5GB | +5-10 translations | ✅ Ready |
 | ancient-languages | ~1.5GB | Near limit | ✅ Cannot merge |
 | lexical | ~1.2GB | +Hebrew/Greek lexicons | ✅ Ready |
-| study-tools | ~300MB | +Maps/routes | ✅ Expandable |
+| study-tools | 13.82 MB | Places/map layers/chronology | ✅ Expandable |
 | bsb-audio-pt1 | ~1.7GB | Fixed | ✅ Ready |
 | bsb-audio-pt2 | ~1.7GB | Fixed | ✅ Ready |
 

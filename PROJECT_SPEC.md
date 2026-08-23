@@ -849,7 +849,7 @@ This section describes how the system **currently works**, not how it was origin
    - Thesaurus: 1.1M+ synonym/antonym pairs
    - English grammar POS data
 
-4. **study-tools.sqlite** (3.57 MB)
+4. **study-tools.sqlite** (13.82 MB)
    - Maps, cross-references, chronology
    - 340k+ cross-references
    - 31,102 chronological verses

@@ -1,8 +1,27 @@
 #!/usr/bin/env node
 /**
  * Build Consolidated Study Tools Pack
- * 
- * Merges maps, places, cross-references, chronological data.
+ *
+ * Ships ONLY the tables the app actually reads. Everything else stays in its
+ * source pack under packs/ (all committed to git) so it can be pulled back in
+ * with a one-line change if a feature is ever built for it.
+ *
+ * Deliberately NOT shipped, and where each one lives instead:
+ *
+ *   map_layers (38 rows, 320 MB) ........ packs/maps-enhanced.sqlite
+ *   journey_routes / _waypoints / _events  packs/maps-enhanced.sqlite
+ *   points_of_interest / poi_events ..... packs/maps-enhanced.sqlite
+ *   place_verses ........................ packs/maps-enhanced.sqlite
+ *   places (12,606 duplicate rows) ...... packs/maps-enhanced.sqlite
+ *   pleiades_locations / pleiades_names   packs/pleiades.sqlite
+ *   eras / events ....................... packs/chronological.sqlite
+ *   cross_references (760,343 rows) ..... packs/cross-references.sqlite
+ *   place_name_links .................... packs/places-biblical.sqlite
+ *   map_tiles (0 rows) .................. packs/maps.sqlite
+ *
+ * Cross-references are served to the reader by the separate tsk-references
+ * pack (see scripts/build-tsk-cross-references-pack.mjs), which is why the
+ * 760k-row copy is not duplicated here.
  */
 
 import Database from 'better-sqlite3';
@@ -52,32 +71,43 @@ insertMeta.run('type', 'study');
 insertMeta.run('schemaVersion', '1');
 insertMeta.run('minAppVersion', '1.0.0');
 insertMeta.run('name', 'Study Tools Pack');
-insertMeta.run('description', 'Maps, places, OpenBible, Pleiades, chronological ordering, cross-references');
+insertMeta.run('description', 'Biblical and ancient places, historical map layers, chronological reading order');
 insertMeta.run('createdAt', new Date().toISOString());
 
-// Helper to copy all tables
-function copyAllTables(sourcePath, packName) {
+/**
+ * Copy specific tables out of a source pack.
+ *
+ * @param {string} sourcePath     repo-relative path to the source .sqlite
+ * @param {string} packName       label for logging
+ * @param {string[]} allowTables  tables to copy; anything else in the source is skipped
+ */
+function copyTables(sourcePath, packName, allowTables) {
   if (!existsSync(join(repoRoot, sourcePath))) {
     console.log(`      ⚠️  ${packName} not found, skipping`);
     return;
   }
-  
+
   const absPath = join(repoRoot, sourcePath).replace(/\\/g, '/');
   output.exec(`ATTACH DATABASE '${absPath}' AS source`);
-  
+
   const tables = output.prepare(`
-    SELECT name FROM source.sqlite_master 
+    SELECT name FROM source.sqlite_master
     WHERE type='table' AND name != 'metadata' AND name NOT LIKE 'sqlite_%'
   `).all();
-  
+
   for (const table of tables) {
+    if (!allowTables.includes(table.name)) {
+      console.log(`      ⏭️  Skipping ${table.name} (stays in ${sourcePath})`);
+      continue;
+    }
+
     console.log(`      Copying ${table.name}`);
-    
+
     const createStmt = output.prepare(`
-      SELECT sql FROM source.sqlite_master 
+      SELECT sql FROM source.sqlite_master
       WHERE type='table' AND name=?
     `).get(table.name);
-    
+
     try {
       output.exec(createStmt.sql);
     } catch (e) {
@@ -97,13 +127,13 @@ function copyAllTables(sourcePath, packName) {
         `INSERT OR IGNORE INTO ${table.name} (${columnList}) SELECT ${columnList} FROM source.${table.name}`
       );
     }
-    
+
     // Copy indexes
     const indexes = output.prepare(`
-      SELECT sql FROM source.sqlite_master 
+      SELECT sql FROM source.sqlite_master
       WHERE type='index' AND tbl_name=? AND sql IS NOT NULL
     `).all(table.name);
-    
+
     for (const idx of indexes) {
       try {
         output.exec(idx.sql);
@@ -112,7 +142,7 @@ function copyAllTables(sourcePath, packName) {
       }
     }
   }
-  
+
   output.exec('DETACH DATABASE source');
 }
 
@@ -196,6 +226,13 @@ function mergeOpenBible(sourcePath) {
   output.exec('DETACH DATABASE source');
 }
 
+/**
+ * Pleiades: only pleiades_places ships. It already carries latitude/longitude,
+ * which is all MapPane place search reads.
+ *
+ * place_locations (44,932 rows / 96 MB of OSM outline geometry) and place_names
+ * (41,701 rows) stay in packs/pleiades.sqlite — nothing in the app opens them.
+ */
 function mergePleiades(sourcePath) {
   if (!existsSync(join(repoRoot, sourcePath))) {
     console.log('      ⚠️  Pleiades not found, skipping');
@@ -220,27 +257,6 @@ function mergePleiades(sourcePath) {
       latitude REAL,
       longitude REAL
     );
-
-    CREATE TABLE IF NOT EXISTS pleiades_names (
-      place_id TEXT,
-      name TEXT,
-      language TEXT,
-      romanized TEXT,
-      name_type TEXT,
-      time_period TEXT,
-      certainty TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS pleiades_locations (
-      place_id TEXT,
-      title TEXT,
-      geometry_type TEXT,
-      coordinates TEXT,
-      latitude REAL,
-      longitude REAL,
-      certainty TEXT,
-      time_period TEXT
-    );
   `);
 
   try {
@@ -262,44 +278,24 @@ function mergePleiades(sourcePath) {
     console.log('      ⚠️  pleiades_places import skipped');
   }
 
-  try {
-    output.exec(`
-      INSERT OR IGNORE INTO pleiades_names (
-        place_id, name, language, romanized, name_type, time_period, certainty
-      )
-      SELECT place_id, name, language, romanized, name_type, time_period, certainty
-      FROM source.place_names
-    `);
-  } catch (e) {
-    console.log('      ⚠️  pleiades_names import skipped');
-  }
-
-  try {
-    output.exec(`
-      INSERT OR IGNORE INTO pleiades_locations (
-        place_id, title, geometry_type, coordinates, latitude, longitude, certainty, time_period
-      )
-      SELECT place_id, title, geometry_type, coordinates, latitude, longitude, certainty, time_period
-      FROM source.place_locations
-    `);
-  } catch (e) {
-    console.log('      ⚠️  pleiades_locations import skipped');
-  }
+  console.log('      ⏭️  Skipping place_locations + place_names (stay in packs/pleiades.sqlite)');
 
   output.exec('DETACH DATABASE source');
 }
 
-// 1. Maps
-console.log('\n   Merging maps...');
-copyAllTables('packs/maps.sqlite', 'Maps');
-copyAllTables('packs/maps-enhanced.sqlite', 'Enhanced Maps');
-copyAllTables('packs/maps-biblical.sqlite', 'Biblical Maps');
+// 1. Historical map layers — the 12 boundary/journey overlays MapPane renders.
+//    maps-enhanced.sqlite is intentionally not read: its only tables are the
+//    320 MB map_layers blob set and journey/POI data no feature reads yet.
+console.log('\n   Merging historical map layers...');
+copyTables('packs/maps.sqlite', 'Maps', ['historical_layers']);
 console.log(`      ✅ Complete`);
 
-// 2. Places
+// 2. Places — the 3 hand-made entries (bethel, jerusalem, mount-sinai).
+//    The 12,606 prefixed rows in maps-enhanced.sqlite are a copy of
+//    pleiades_places and made every map search return each hit twice.
 console.log('\n   Merging places...');
-copyAllTables('packs/places.sqlite', 'Places');
-copyAllTables('packs/places-biblical.sqlite', 'Biblical Places');
+copyTables('packs/places.sqlite', 'Places', ['places']);
+copyTables('packs/places-biblical.sqlite', 'Biblical Places', ['places']);
 console.log(`      ✅ Complete`);
 
 // 3. OpenBible
@@ -312,14 +308,10 @@ console.log('\n   Merging Pleiades...');
 mergePleiades('packs/pleiades.sqlite');
 console.log(`      ✅ Complete`);
 
-// 5. Cross-references
-console.log('\n   Merging cross-references...');
-copyAllTables('packs/cross-references.sqlite', 'Cross-references');
-console.log(`      ✅ Complete`);
-
-// 6. Chronological
+// 5. Chronological reading order. eras/events are not imported by the app;
+//    they stay in packs/chronological.sqlite.
 console.log('\n   Merging chronological data...');
-copyAllTables('packs/chronological.sqlite', 'Chronological');
+copyTables('packs/chronological.sqlite', 'Chronological', ['chronological_verses']);
 console.log(`      ✅ Complete`);
 
 // Optimize
