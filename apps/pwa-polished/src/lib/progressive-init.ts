@@ -9,7 +9,7 @@
 
 import { loadBootstrap } from './bootstrap-loader';
 import { APP_VERSION, PACK_MANIFEST_URL, USE_BUNDLED_PACKS, FEATURES } from '../config';
-import { importPackFromSQLite } from '../adapters/pack-import';
+import { importPackFromBytes } from '../adapters/pack-import';
 import { listInstalledPacks as listInstalledPacksFromDb, removePack as removePackFromDb } from '../adapters/db-manager';
 import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
@@ -144,14 +144,10 @@ export async function loadPackOnDemand(
         stage: 'extracting'
       });
 
-      // Not data.slice(): that copied the whole pack a second time just to
-      // satisfy BlobPart, and the File constructor snapshots the bytes anyway.
-      const file = new File([data as unknown as BlobPart], `${packId}.sqlite`, {
-        type: 'application/x-sqlite3'
-      });
-      logInstall('file-created', { bytes: file.size });
-
-      await importPackFromSQLite(file);
+      // Straight to the byte importer. Wrapping this in a File copied all
+      // 83 MB into blob storage and then allocated another 83 MB reading it
+      // back -- and that second allocation was where the renderer died.
+      await importPackFromBytes(data, `${packId}.sqlite`);
       logInstall('import-returned');
 
       onProgress?.({

@@ -2,17 +2,21 @@ import type { DBPack, DBVerse } from './db.js';
 import { batchWriteTransaction, writeTransaction, openDB } from './db.js';
 import { logInstall, logInstallError } from '../lib/install-log';
 
+/** Packs whose blobs are far too large to go through sql.js at all. */
+const AUDIO_PACK_IDS = ['bsb-audio-pt1', 'bsb-audio-pt2'];
+
 /**
- * Import a pack from a SQLite file into IndexedDB
- * Uses sql.js (WASM SQLite) to read the pack file
+ * Import a pack from a SQLite File into IndexedDB.
+ *
+ * For callers that genuinely start with a File -- drag-and-drop, install-from-URL.
+ * If you already hold the bytes, call importPackFromBytes instead: wrapping them
+ * in a File costs one full-size copy into blob storage and another to read it
+ * back out, and on an 83 MB pack that second allocation was enough to get the
+ * renderer killed mid-install.
  */
 export async function importPackFromSQLite(file: File): Promise<void> {
-  console.log(`Importing pack from ${file.name}...`);
-
-  // Audio packs contain 1-2 GB of binary blobs — loading them into sql.js
-  // would crash the browser.  Detect by filename and redirect to the
-  // OPFS-based streaming installer before anything is loaded into memory.
-  const AUDIO_PACK_IDS = ['bsb-audio-pt1', 'bsb-audio-pt2'];
+  // Audio packs stream from the File straight to OPFS and never come through
+  // memory, so this has to happen before the bytes are read.
   const packIdFromFilename = file.name.replace(/\.sqlite$/i, '');
   if (AUDIO_PACK_IDS.includes(packIdFromFilename)) {
     console.log(`Detected audio pack "${packIdFromFilename}" — using OPFS streaming installer`);
@@ -21,6 +25,37 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
       if (pct % 10 === 0) console.log(`  Audio pack OPFS write: ${pct}%`);
     });
+    return;
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  logInstall('arraybuffer-read', { bytes: arrayBuffer.byteLength });
+  await importPackFromBytes(new Uint8Array(arrayBuffer), file.name);
+}
+
+/**
+ * Import a pack that is already in memory as bytes.
+ *
+ * Uses sql.js (WASM SQLite) to read the pack. sql.js still takes its own copy
+ * when the database is opened -- that is inherent to sql.js -- but nothing here
+ * copies the pack beyond that.
+ */
+export async function importPackFromBytes(
+  bytes: Uint8Array,
+  sourceName: string
+): Promise<void> {
+  console.log(`Importing pack from ${sourceName}...`);
+  logInstall('bytes-received', { bytes: bytes.length, source: sourceName });
+
+  // Guard for an unusual caller reaching here with audio bytes. The normal audio
+  // routes (PacksPane and importPackFromSQLite) divert well before this point.
+  const packIdFromName = sourceName.replace(/\.sqlite$/i, '');
+  if (AUDIO_PACK_IDS.includes(packIdFromName)) {
+    const { installAudioPackFromFile } = await import('./audio.js');
+    const asFile = new File([bytes as unknown as BlobPart], `${packIdFromName}.sqlite`, {
+      type: 'application/x-sqlite3'
+    });
+    await installAudioPackFromFile(asFile, packIdFromName, () => {});
     return;
   }
 
@@ -38,19 +73,15 @@ export async function importPackFromSQLite(file: File): Promise<void> {
 
   logInstall('sqljs-ready');
 
-  // Read the SQLite file
-  const arrayBuffer = await file.arrayBuffer();
-  logInstall('arraybuffer-read', { bytes: arrayBuffer.byteLength });
   /** Content hash of the installed bytes, in the same hex form the manifest uses. */
-  const sha256Hex = async (buf: ArrayBuffer) =>
-    Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', buf)))
+  const sha256Hex = async (buf: Uint8Array) =>
+    Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', buf as unknown as BufferSource)))
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
-  const uint8Array = new Uint8Array(arrayBuffer);
   // sql.js copies these bytes into its own heap, so this is the point where a
   // second full-size copy of the pack comes into existence.
-  logInstall('sqlite-open-start', { bytes: uint8Array.length });
-  const db = new SQL.Database(uint8Array);
+  logInstall('sqlite-open-start', { bytes: bytes.length });
+  const db = new SQL.Database(bytes);
   logInstall('sqlite-open-done');
 
   try {
@@ -85,13 +116,13 @@ export async function importPackFromSQLite(file: File): Promise<void> {
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
       attribution: metadata.attribution,
-      size: file.size,
+      size: bytes.length,
       installedAt: Date.now(),
       description: metadata.description,
       // What was actually installed. Pack versions are held steady across
       // rebuilds, so this is the only thing that can tell a corrected pack
       // apart from the one already on the device.
-      contentHash: await sha256Hex(arrayBuffer)
+      contentHash: await sha256Hex(bytes)
     };
 
     if (!packInfo.id) {
@@ -2264,7 +2295,13 @@ export async function importPackFromSQLite(file: File): Promise<void> {
 
       try {
         const { installAudioPackFromFile } = await import('./audio.js');
-        await installAudioPackFromFile(file, packInfo.id, (loaded, total) => {
+        // The installer streams from a File, and we hold bytes here, so this
+        // one wrap is unavoidable. Only reached when a pack declares itself
+        // audio in its own metadata rather than by id.
+        const audioFile = new File([bytes as unknown as BlobPart], `${packInfo.id}.sqlite`, {
+          type: 'application/x-sqlite3'
+        });
+        await installAudioPackFromFile(audioFile, packInfo.id, (loaded, total) => {
           const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
           if (pct % 10 === 0) console.log(`  Audio pack write: ${pct}%`);
         });

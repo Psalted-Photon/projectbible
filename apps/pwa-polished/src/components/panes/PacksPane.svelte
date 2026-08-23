@@ -6,7 +6,7 @@
     getDatabaseStats,
     audioPackHasChapters,
   } from "../../adapters/db-manager";
-  import { importPackFromSQLite } from "../../adapters/pack-import";
+  import { importPackFromSQLite, importPackFromBytes } from "../../adapters/pack-import";
   import { installAudioPackToOPFS, reindexAudioPack } from "../../adapters/audio";
   import { loadPackOnDemand } from "../../lib/progressive-init";
   import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from "../../config";
@@ -332,12 +332,11 @@
         }
         
         const buffer = await response.arrayBuffer();
-        const file = new File([buffer], `${pack.id}.sqlite`, {
-          type: "application/x-sqlite3",
-        });
 
         installProgress = `Installing ${pack.name}...`;
-        await importPackFromSQLite(file);
+        // No File wrapper: it would copy the whole pack into blob storage
+        // just to be read straight back out again.
+        await importPackFromBytes(new Uint8Array(buffer), `${pack.id}.sqlite`);
       } else {
         await loadPackOnDemand(pack.id, (progress) => {
           const stageLabel = getStageLabel(progress.stage);

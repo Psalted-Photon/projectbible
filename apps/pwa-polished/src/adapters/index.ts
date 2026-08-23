@@ -23,7 +23,7 @@ export { IndexedDBLexiconStore } from './LexiconStore.js';
 export { IndexedDBPlaceStore } from './PlaceStore.js';
 export { IndexedDBMapStore } from './MapStore.js';
 export { IndexedDBReadingHistoryStore } from './ReadingHistoryStore.js';
-export { importPackFromSQLite, exportPackToSQLite } from './pack-import.js';
+export { importPackFromSQLite, importPackFromBytes, exportPackToSQLite } from './pack-import.js';
 
 export {
   getSettings,
