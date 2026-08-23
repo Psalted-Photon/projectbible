@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dumpPreviousInstallLog } from "./lib/install-log";
   import BibleReader from "./components/BibleReader.svelte";
   import LookupModal from "./components/LookupModal.svelte";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
@@ -70,6 +71,9 @@
           y: window.innerHeight - 60,
         });
         console.log("🐛 Eruda initialized");
+        // Only now is there a console to print into. The startup replay in
+        // main.ts runs before this and is therefore invisible on the phone.
+        dumpPreviousInstallLog();
       }
       appReady = true;
       console.log("✅ App ready (auto-update test build 2)");

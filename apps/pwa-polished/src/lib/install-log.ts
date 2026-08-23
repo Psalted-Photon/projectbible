@@ -125,7 +125,10 @@ export function dumpPreviousInstallLog(): void {
   } catch {
     return;
   }
-  if (!raw) return;
+  if (!raw) {
+    console.log('[install-log] no previous pack install recorded on this device');
+    return;
+  }
 
   try {
     const previous = JSON.parse(raw) as LogEntry[];
@@ -148,4 +151,18 @@ export function dumpPreviousInstallLog(): void {
   } catch {
     console.log('[install-log] previous log was unreadable:', raw.slice(0, 200));
   }
+}
+
+/**
+ * Expose the dump on `window` so it can be read from a console that attached
+ * late.
+ *
+ * Eruda initialises when the app component mounts, well after startup logging
+ * has already run, and it only captures console output from its own init
+ * onward -- so the automatic replay is invisible on exactly the device we need
+ * it from. Calling `__installLog()` by hand works no matter when the console
+ * showed up.
+ */
+if (typeof window !== 'undefined') {
+  (window as unknown as { __installLog: () => void }).__installLog = dumpPreviousInstallLog;
 }
