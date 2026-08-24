@@ -13,7 +13,7 @@ import { importPackFromBytes, importArtImageShard } from '../adapters/pack-impor
 import { listInstalledPacks as listInstalledPacksFromDb, removePack as removePackFromDb } from '../adapters/db-manager';
 import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
-import { startInstallLog, logInstall, logInstallError } from './install-log';
+import { startInstallLog, logInstall, logInstallError, endInstallLog } from './install-log';
 
 let bootstrapLoaded = false;
 let packLoader: PackLoader | null = null;
@@ -173,6 +173,8 @@ export async function loadPackOnDemand(
     }
   } finally {
     setProgressHandler();
+    // Stop shared helpers appending to this run's log once it is over.
+    endInstallLog();
   }
 }
 

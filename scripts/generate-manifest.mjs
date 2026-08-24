@@ -135,13 +135,19 @@ const PACK_CONFIGS = {
 // entries are discovered rather than listed. Each shard is a real manifest entry
 // so PackLoader can fetch and SHA-256 it like any other download; they are absent
 // from the Packs pane, so they never appear as separately installable.
+//
+// The type must be one the schema already accepts (see validTypes in
+// packages/core/src/schemas/PackManifest.ts). validateManifest rejects the whole
+// manifest over a single unrecognised type, and older builds carry their own copy
+// of that list -- so inventing a new type here takes every pack down on every
+// device that has not updated yet, which is exactly what "art-images" did.
 for (const filename of readdirSync(PACKS_DIR)
   .filter((f) => /^art-images-\d+\.sqlite$/.test(f))
   .sort()) {
   const part = filename.match(/(\d+)/)[1];
   PACK_CONFIGS[filename] = {
     id: `biblical-art-images-${part}`,
-    type: 'art-images',
+    type: 'art',
     name: `Biblical Art images (part ${Number(part)})`,
     description: 'Image data for the Biblical Art pack.',
     dependencies: []

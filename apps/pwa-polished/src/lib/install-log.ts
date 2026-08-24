@@ -27,6 +27,7 @@ interface LogEntry {
 
 let entries: LogEntry[] = [];
 let runStart = 0;
+let installActive = false;
 
 /** Chrome-only, and absent on other engines -- hence the loose typing. */
 function heapMB(): number | undefined {
@@ -59,6 +60,7 @@ function persist(): void {
 export function startInstallLog(packId: string, extra?: Record<string, unknown>): void {
   runStart = Date.now();
   entries = [];
+  installActive = true;
   logInstall('run-start', { packId, heapLimitMB: heapLimitMB(), ...extra });
   void recordDeviceFacts();
 }
@@ -116,6 +118,28 @@ export async function logInstallFlush(
 ): Promise<void> {
   logInstall(stage, detail);
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * Close the current run, so shared helpers stop appending to it.
+ *
+ * Without this, writeTransaction kept logging every write the app ever made --
+ * one captured trace had entries eleven hours past the install, overwriting the
+ * run we needed to read.
+ */
+export function endInstallLog(): void {
+  installActive = false;
+}
+
+/**
+ * Log only while an install is running.
+ *
+ * For code on shared paths (IndexedDB helpers) that is interesting during an
+ * install and pure noise the rest of the time.
+ */
+export function logInstallIfActive(stage: string, detail?: Record<string, unknown>): void {
+  if (!installActive) return;
+  logInstall(stage, detail);
 }
 
 /** Record a thrown error with the fields that actually identify it. */

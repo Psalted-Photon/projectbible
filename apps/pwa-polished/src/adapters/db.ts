@@ -1,4 +1,4 @@
-import { logInstall } from '../lib/install-log';
+import { logInstallIfActive } from '../lib/install-log';
 /**
  * IndexedDB schema and utilities for PWA storage
  * 
@@ -1022,18 +1022,18 @@ export async function writeTransaction<T>(
   // Stage logging: a single small write here once took 13.6 s and coincided
   // with ~2 GB of heap growth, and with one await there was no way to tell
   // which part was responsible.
-  logInstall('tx-open-db', { store: storeName });
+  logInstallIfActive('tx-open-db', { store: storeName });
   const db = await openDB();
-  logInstall('tx-db-ready', { store: storeName });
+  logInstallIfActive('tx-db-ready', { store: storeName });
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, 'readwrite');
     const store = transaction.objectStore(storeName);
-    logInstall('tx-created', { store: storeName });
+    logInstallIfActive('tx-created', { store: storeName });
     const request = callback(store);
-    logInstall('tx-request-issued', { store: storeName });
+    logInstallIfActive('tx-request-issued', { store: storeName });
 
     request.onsuccess = () => {
-      logInstall('tx-request-success', { store: storeName });
+      logInstallIfActive('tx-request-success', { store: storeName });
       resolve(request.result);
     };
     request.onerror = () => reject(request.error);
