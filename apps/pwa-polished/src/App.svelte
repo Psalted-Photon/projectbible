@@ -62,16 +62,9 @@
   onMount(() => {
     console.log("🚀 App mounted, initializing...");
     const init = async () => {
-      // Eruda hooks the console and retains every entry with its arguments, so
-      // leaving it on for everyone means every user carries a debug console and
-      // its retained log. Opt in with ?debug=1 (remembered), or ?debug=0 to stop.
-      const debugParam = new URLSearchParams(location.search).get("debug");
-      if (debugParam === "1") localStorage.setItem("pb:debug", "1");
-      if (debugParam === "0") localStorage.removeItem("pb:debug");
-      const wantDebug =
-        import.meta.env.DEV || localStorage.getItem("pb:debug") === "1";
-
-      if (typeof window !== "undefined" && wantDebug) {
+      // Eruda stays on in production by choice -- it is how this app gets
+      // debugged on a real phone. Do not gate it behind a flag.
+      if (typeof window !== "undefined") {
         const eruda = await import("eruda");
         eruda.default.init();
         // Make the eruda button draggable
@@ -84,7 +77,6 @@
         // main.ts runs before this and is therefore invisible on the phone.
         dumpPreviousInstallLog();
       }
-      // __installLog() stays available either way.
       appReady = true;
       console.log("✅ App ready (auto-update test build 2)");
     };
