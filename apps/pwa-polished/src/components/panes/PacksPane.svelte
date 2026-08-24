@@ -397,6 +397,23 @@ Free up space on your device, or remove a pack you are not using, then try again
   }
 
   /**
+   * Bytes an install actually pulls down, shards included.
+   *
+   * The art pack is split: art.sqlite holds only the scenes (60 KB) and the
+   * paintings arrive as biblical-art-images-NN. Reading the pack's own manifest
+   * entry alone would call an 85 MB install "60 KB".
+   */
+  function installBytesFor(packId: string): number {
+    let total = manifestBytes[packId] ?? 0;
+    if (packId === "biblical-art") {
+      for (const [id, bytes] of Object.entries(manifestBytes)) {
+        if (id.startsWith("biblical-art-images-")) total += bytes;
+      }
+    }
+    return total;
+  }
+
+  /**
    * Rough pre-flight space check.
    *
    * Installing costs more than the download itself: the file is cached and then
@@ -406,12 +423,18 @@ Free up space on your device, or remove a pack you are not using, then try again
    * block would be wrong.
    */
   async function hasRoomFor(pack: (typeof CONSOLIDATED_PACKS)[0]): Promise<boolean> {
-    const needed = manifestBytes[pack.id];
+    const needed = installBytesFor(pack.id);
     if (!needed || !navigator.storage?.estimate) return true;
 
     try {
       const { quota = 0, usage = 0 } = await navigator.storage.estimate();
       if (!quota) return true;
+
+      // A device reporting more usage than quota is not out of space -- it is
+      // reporting nonsense, and it does so often enough (6 GB used against a
+      // 2 GB quota, on a machine with room to spare) that warning from these
+      // numbers means warning when nothing is wrong.
+      if (usage >= quota) return true;
 
       const available = quota - usage;
       if (available >= needed * 2) return true;
@@ -451,6 +474,15 @@ Free up space on your device, or remove a pack you are not using, then try again
           bytesById[entry.id] = bytes;
         }
       }
+      // Show the art pack as what it downloads, not as the 60 KB scenes file --
+      // its paintings arrive in separate shards.
+      const artTotal = Object.entries(bytesById).reduce(
+        (sum, [id, bytes]) =>
+          id === "biblical-art" || id.startsWith("biblical-art-images-") ? sum + bytes : sum,
+        0
+      );
+      if (artTotal > 0) sizes["biblical-art"] = formatBytes(artTotal);
+
       manifestSizes = sizes;
       manifestBytes = bytesById;
     } catch (error) {
