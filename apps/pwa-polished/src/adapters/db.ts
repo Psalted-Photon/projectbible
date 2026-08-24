@@ -1,3 +1,4 @@
+import { logInstall } from '../lib/install-log';
 /**
  * IndexedDB schema and utilities for PWA storage
  * 
@@ -39,7 +40,16 @@ export interface DBArtScene {
 export interface DBArtImage {
   id: string;         // content id referenced by ArtWork.imageId / thumbId
   mime: string;       // e.g. "image/jpeg"
-  data: Uint8Array;   // raw image bytes (bundled in the pack for offline display)
+  /**
+   * The image, for offline display.
+   *
+   * Stored as a Blob: IndexedDB structured-clones a raw Uint8Array through
+   * memory, which for the art pack meant pushing 87 MB of bytes through the
+   * serialiser, while a Blob is handed to Chrome's file-backed blob store
+   * instead. Packs installed by older builds still hold a Uint8Array here, so
+   * readers must accept both.
+   */
+  data: Blob | Uint8Array;
 }
 
 export interface DBPack {
@@ -1009,14 +1019,26 @@ export async function writeTransaction<T>(
   storeName: string,
   callback: (store: IDBObjectStore) => IDBRequest<T>
 ): Promise<T> {
+  // Stage logging: a single small write here once took 13.6 s and coincided
+  // with ~2 GB of heap growth, and with one await there was no way to tell
+  // which part was responsible.
+  logInstall('tx-open-db', { store: storeName });
   const db = await openDB();
+  logInstall('tx-db-ready', { store: storeName });
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, 'readwrite');
     const store = transaction.objectStore(storeName);
+    logInstall('tx-created', { store: storeName });
     const request = callback(store);
-    
-    request.onsuccess = () => resolve(request.result);
+    logInstall('tx-request-issued', { store: storeName });
+
+    request.onsuccess = () => {
+      logInstall('tx-request-success', { store: storeName });
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error);
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error(`${storeName} transaction aborted`));
   });
 }
 

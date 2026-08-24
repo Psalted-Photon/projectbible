@@ -133,27 +133,35 @@ export async function loadPackOnDemand(
     }
 
     try {
-      const data = await loader.downloadPack(packId);
-      logInstall('download-returned', { bytes: data.length });
+      let data: Uint8Array | null = await loader.downloadPack(packId);
+      const byteLength = data.length;
+      logInstall('download-returned', { bytes: byteLength });
 
       onProgress?.({
         packId,
-        loaded: data.length,
-        total: data.length,
+        loaded: byteLength,
+        total: byteLength,
         percentage: 100,
         stage: 'extracting'
       });
 
-      // Straight to the byte importer. Wrapping this in a File copied all
-      // 83 MB into blob storage and then allocated another 83 MB reading it
-      // back -- and that second allocation was where the renderer died.
-      await importPackFromBytes(data, `${packId}.sqlite`);
+      // downloadPack already checked these bytes against the manifest, so the
+      // manifest hash is the content hash -- no need to digest 87 MB again.
+      const validatedHash = loader.getPackSha256(packId);
+
+      // Start the import, then drop our reference before awaiting it. Holding
+      // the array in a local across the await would pin the original for the
+      // whole import; the importer releases its own binding once sql.js has
+      // taken its copy.
+      const importing = importPackFromBytes(data, `${packId}.sqlite`, validatedHash);
+      data = null;
+      await importing;
       logInstall('import-returned');
 
       onProgress?.({
         packId,
-        loaded: data.length,
-        total: data.length,
+        loaded: byteLength,
+        total: byteLength,
         percentage: 100,
         stage: 'complete'
       });

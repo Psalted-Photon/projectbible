@@ -1,6 +1,6 @@
 import type { DBPack, DBVerse } from './db.js';
 import { batchWriteTransaction, writeTransaction, openDB } from './db.js';
-import { logInstall, logInstallError } from '../lib/install-log';
+import { logInstall, logInstallFlush, logInstallError } from '../lib/install-log';
 
 /** Packs whose blobs are far too large to go through sql.js at all. */
 const AUDIO_PACK_IDS = ['bsb-audio-pt1', 'bsb-audio-pt2'];
@@ -42,10 +42,15 @@ export async function importPackFromSQLite(file: File): Promise<void> {
  */
 export async function importPackFromBytes(
   bytes: Uint8Array,
-  sourceName: string
+  sourceName: string,
+  knownHash?: string
 ): Promise<void> {
   console.log(`Importing pack from ${sourceName}...`);
-  logInstall('bytes-received', { bytes: bytes.length, source: sourceName });
+  logInstall('bytes-received', {
+    bytes: bytes.length,
+    source: sourceName,
+    hashed: !knownHash
+  });
 
   // Guard for an unusual caller reaching here with audio bytes. The normal audio
   // routes (PacksPane and importPackFromSQLite) divert well before this point.
@@ -73,16 +78,32 @@ export async function importPackFromBytes(
 
   logInstall('sqljs-ready');
 
-  /** Content hash of the installed bytes, in the same hex form the manifest uses. */
-  const sha256Hex = async (buf: Uint8Array) =>
-    Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', buf as unknown as BufferSource)))
+  /**
+   * Content hash of the installed bytes, in the same hex form the manifest uses.
+   *
+   * The download path already validated the bytes against the manifest, so it
+   * passes that hash in rather than making us digest the same megabytes twice.
+   */
+  const byteCount = bytes.length;
+  const contentHash =
+    knownHash ??
+    Array.from(
+      new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as unknown as BufferSource))
+    )
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
+  logInstall('hash-ready', { reused: !!knownHash });
+
   // sql.js copies these bytes into its own heap, so this is the point where a
   // second full-size copy of the pack comes into existence.
-  logInstall('sqlite-open-start', { bytes: bytes.length });
+  logInstall('sqlite-open-start', { bytes: byteCount });
   const db = new SQL.Database(bytes);
-  logInstall('sqlite-open-done');
+  // sql.js owns a copy now, and the import ahead is the long part. Drop our
+  // binding so the original can be collected instead of being held for all of
+  // it. The caller has to release its own reference too, or this achieves
+  // nothing.
+  bytes = null as unknown as Uint8Array;
+  logInstall('sqlite-open-done', { released: true });
 
   try {
     // Read metadata
@@ -116,13 +137,13 @@ export async function importPackFromBytes(
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
       attribution: metadata.attribution,
-      size: bytes.length,
+      size: byteCount,
       installedAt: Date.now(),
       description: metadata.description,
       // What was actually installed. Pack versions are held steady across
       // rebuilds, so this is the only thing that can tell a corrected pack
       // apart from the one already on the device.
-      contentHash: await sha256Hex(bytes)
+      contentHash
     };
 
     if (!packInfo.id) {
@@ -231,42 +252,37 @@ export async function importPackFromBytes(
           tx.onabort = () => reject(new Error('art_images clear aborted'));
         });
 
-        // Flush on a byte budget rather than a row count: individual paintings
-        // range from a few KB to several MB, so a fixed row count still spikes.
-        const FLUSH_BYTES = 4 * 1024 * 1024;
-        let batch: { id: string; mime: string; data: Uint8Array }[] = [];
-        let batchBytes = 0;
+        // One image per transaction. Each is wrapped as a Blob so IndexedDB
+        // hands it to Chrome's file-backed blob store rather than cloning the
+        // bytes through memory, and nothing larger than a single painting is
+        // ever held. The yield between writes also lets the crash log flush.
         let imported = 0;
-
-        const flushImages = async () => {
-          if (!batch.length) return;
-          const pending = batch;
-          const pendingBytes = batchBytes;
-          batch = [];
-          batchBytes = 0;
-          await batchWriteTransaction('art_images', (store) => {
-            pending.forEach((img) => store.put(img));
-          });
-          imported += pending.length;
-          logInstall('art-images-batch', {
-            wrote: pending.length,
-            totalSoFar: imported,
-            batchMB: Math.round((pendingBytes / 1048576) * 10) / 10
-          });
-        };
 
         const stmt = db.prepare('SELECT id, mime, data FROM art_images');
         try {
           while (stmt.step()) {
             const [id, mime, data] = stmt.get() as [string, string, Uint8Array];
-            batch.push({ id, mime, data });
-            batchBytes += data?.length ?? 0;
-            if (batchBytes >= FLUSH_BYTES) await flushImages();
+            // slice(): sql.js hands back a view that the next step() invalidates.
+            const blob = new Blob([data.slice() as unknown as BlobPart], {
+              type: (mime as string) || 'image/jpeg'
+            });
+            const bytes = blob.size;
+
+            await batchWriteTransaction('art_images', (store) => {
+              store.put({ id, mime, data: blob });
+            });
+
+            imported++;
+            if (imported % 10 === 0 || imported === 1) {
+              await logInstallFlush('art-images-progress', {
+                wrote: imported,
+                lastMB: Math.round((bytes / 1048576) * 10) / 10
+              });
+            }
           }
         } finally {
           stmt.free();
         }
-        await flushImages();
 
         console.log(`✅ Imported ${imported} art images`);
         logInstall('art-images-done', { images: imported });

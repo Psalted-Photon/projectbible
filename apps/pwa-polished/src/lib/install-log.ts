@@ -102,6 +102,22 @@ export function logInstall(stage: string, detail?: Record<string, unknown>): voi
   );
 }
 
+/**
+ * Log, then yield to the event loop so the write actually reaches disk.
+ *
+ * localStorage.setItem is synchronous to JS but Chrome flushes it out of band,
+ * so entries written in a tight loop right before a crash never land -- which is
+ * why earlier traces stopped short of where they really died. Awaiting a
+ * macrotask gives the flush a chance to happen.
+ */
+export async function logInstallFlush(
+  stage: string,
+  detail?: Record<string, unknown>
+): Promise<void> {
+  logInstall(stage, detail);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /** Record a thrown error with the fields that actually identify it. */
 export function logInstallError(stage: string, error: unknown): void {
   const e = error as { name?: string; message?: string; stack?: string };
@@ -165,4 +181,27 @@ export function dumpPreviousInstallLog(): void {
  */
 if (typeof window !== 'undefined') {
   (window as unknown as { __installLog: () => void }).__installLog = dumpPreviousInstallLog;
+}
+
+/**
+ * Route uncaught failures into the install log.
+ *
+ * A thrown-and-swallowed error and a killed renderer look identical from the
+ * log's point of view -- both just stop. Recording them tells the two apart.
+ */
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    logInstall('window-error', {
+      message: event.message,
+      source: event.filename,
+      line: event.lineno
+    });
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason as { name?: string; message?: string } | undefined;
+    logInstall('unhandled-rejection', {
+      name: reason?.name,
+      message: reason?.message ?? String(event.reason)
+    });
+  });
 }

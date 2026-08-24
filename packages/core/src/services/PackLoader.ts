@@ -328,7 +328,13 @@ export class PackLoader {
     }
 
     const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
+    // One buffer, filled as chunks arrive. Collecting chunks in an array and
+    // concatenating afterwards meant the array and the combined copy were both
+    // live at once -- a doubled peak for no reason, when the size is already
+    // known here. Overflow falls back to collecting the excess, which only
+    // happens when the server disagrees with the manifest and is rejected below.
+    let buffer = new Uint8Array(total);
+    const overflow: Uint8Array[] = [];
     let loaded = 0;
     let chunkCount = 0;
     let nextLogAt = 10 * 1024 * 1024;
@@ -338,7 +344,11 @@ export class PackLoader {
 
       if (done) break;
 
-      chunks.push(value);
+      if (loaded + value.length <= buffer.length) {
+        buffer.set(value, loaded);
+      } else {
+        overflow.push(value);
+      }
       loaded += value.length;
       chunkCount++;
 
@@ -383,25 +393,24 @@ export class PackLoader {
       );
     }
     
-    // Concatenate chunks. This is the moment both the chunk array and the
-    // combined buffer are live at once, so peak heap is ~2x the pack here.
-    this.options.onStage('concat-start', { bytes: loaded });
-    const data = new Uint8Array(loaded);
-    let offset = 0;
+    // Already contiguous -- the stream was written straight into it.
+    overflow.length = 0;
+    this.options.onStage('buffer-ready', { bytes: buffer.length });
 
-    for (const chunk of chunks) {
-      data.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    // Release the chunk array before returning, so the doubled peak does not
-    // outlive the copy. Harmless if the caller never allocates again.
-    chunks.length = 0;
-    this.options.onStage('concat-done', { bytes: data.length });
-
-    return data;
+    return buffer;
   }
   
+  /**
+   * The manifest's SHA-256 for a pack, once the manifest has been fetched.
+   *
+   * After downloadPack returns, the bytes have been checked against this, so it
+   * is also the content hash of what was downloaded -- callers can record it
+   * instead of hashing the same megabytes a second time.
+   */
+  getPackSha256(packId: string): string | undefined {
+    return this.manifest?.packs.find(p => p.id === packId)?.sha256;
+  }
+
   /**
    * Validate SHA-256 hash
    */

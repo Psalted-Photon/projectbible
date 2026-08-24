@@ -15,6 +15,20 @@ function asBlobPart(data: Uint8Array) {
   return new Uint8Array(data.buffer as ArrayBuffer, data.byteOffset, data.byteLength);
 }
 
+/**
+ * Stored images are Blobs since the import change, but packs installed by an
+ * older build still hold raw bytes, so every read has to accept both.
+ */
+function toBlob(data: Blob | Uint8Array, mime?: string): Blob {
+  return data instanceof Blob
+    ? data
+    : new Blob([asBlobPart(data)], { type: mime || 'image/jpeg' });
+}
+
+function byteSize(data: Blob | Uint8Array): number {
+  return data instanceof Blob ? data.size : data.byteLength;
+}
+
 /** Canonical book order for sorting the browsable gallery. */
 const CANONICAL_ORDER: string[] = BIBLE_BOOKS.map((b) => b.name);
 
@@ -204,19 +218,17 @@ export class IndexedDBArtStore implements ArtStore {
         const mime = source.mime || 'image/jpeg';
 
         // Already small enough that re-encoding would only lose quality.
-        if (source.data.byteLength <= THUMB_SKIP_BYTES) return { data: source.data, mime };
+        if (byteSize(source.data) <= THUMB_SKIP_BYTES) return { data: source.data, mime };
 
-        const small = await downscaleBlob(new Blob([asBlobPart(source.data)], { type: mime }));
+        const small = await downscaleBlob(toBlob(source.data, mime));
         if (!small) return { data: source.data, mime };
-
-        const bytes = new Uint8Array(await small.arrayBuffer());
 
         // Persisting is an optimisation for next time, not part of showing the
         // image now -- a full quota must not blank the gallery.
         try {
           await new Promise<void>((resolve, reject) => {
             const tx = db.transaction('art_images', 'readwrite');
-            tx.objectStore('art_images').put({ id: key, mime: 'image/jpeg', data: bytes });
+            tx.objectStore('art_images').put({ id: key, mime: 'image/jpeg', data: small });
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
             tx.onabort = () => reject(tx.error);
@@ -225,7 +237,7 @@ export class IndexedDBArtStore implements ArtStore {
           // Keep the generated preview for this session anyway.
         }
 
-        return { data: bytes, mime: 'image/jpeg' };
+        return { data: small, mime: 'image/jpeg' };
       });
 
       if (!made || this.disposed) return null;
@@ -246,8 +258,8 @@ export class IndexedDBArtStore implements ArtStore {
   }
 
   /** Wrap stored bytes in an object URL and remember it for releaseImages(). */
-  private cacheBlobUrl(key: string, data: Uint8Array, mime?: string): string {
-    const url = URL.createObjectURL(new Blob([asBlobPart(data)], { type: mime || 'image/jpeg' }));
+  private cacheBlobUrl(key: string, data: Blob | Uint8Array, mime?: string): string {
+    const url = URL.createObjectURL(toBlob(data, mime));
     this.imageUrlCache.set(key, url);
     return url;
   }
