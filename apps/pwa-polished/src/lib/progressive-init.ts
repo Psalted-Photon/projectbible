@@ -9,7 +9,7 @@
 
 import { loadBootstrap } from './bootstrap-loader';
 import { APP_VERSION, PACK_MANIFEST_URL, USE_BUNDLED_PACKS, FEATURES } from '../config';
-import { importPackFromBytes } from '../adapters/pack-import';
+import { importPackFromBytes, importArtImageShard } from '../adapters/pack-import';
 import { listInstalledPacks as listInstalledPacksFromDb, removePack as removePackFromDb } from '../adapters/db-manager';
 import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
@@ -174,6 +174,50 @@ export async function loadPackOnDemand(
   } finally {
     setProgressHandler();
   }
+}
+
+/** Manifest ids of the art image shards, in install order. */
+const ART_SHARD_PREFIX = 'biblical-art-images-';
+
+/**
+ * Download and import the art pack's image shards.
+ *
+ * art.sqlite carries only the scenes now; the images arrive as ~10 MB shards so
+ * sql.js never holds the whole 83 MB at once. Each shard goes through
+ * PackLoader, so it keeps the retry and SHA-256 validation every other download
+ * gets, and its buffer is released before the next one starts.
+ */
+export async function installArtImageShards(
+  onProgress?: (message: string) => void
+): Promise<number> {
+  const loader = getPackLoaderInstance();
+  const manifest = (await loader.fetchManifest()) as any;
+  const shards: Array<{ id: string }> = (manifest?.packs ?? [])
+    .filter((p: any) => typeof p?.id === 'string' && p.id.startsWith(ART_SHARD_PREFIX))
+    .sort((a: any, b: any) => a.id.localeCompare(b.id));
+
+  if (shards.length === 0) {
+    logInstall('art-shards-none');
+    return 0;
+  }
+
+  logInstall('art-shards-begin', { count: shards.length });
+  let total = 0;
+
+  for (let i = 0; i < shards.length; i++) {
+    const id = shards[i].id;
+    onProgress?.(`Installing artwork ${i + 1} of ${shards.length}…`);
+
+    let data: Uint8Array | null = await loader.downloadPack(id);
+    // Hand the bytes over and drop our reference before awaiting, so the
+    // shard is not pinned in two places while it imports.
+    const importing = importArtImageShard(data, { clearFirst: i === 0, label: id });
+    data = null;
+    total += await importing;
+  }
+
+  logInstall('art-shards-done', { images: total });
+  return total;
 }
 
 /**

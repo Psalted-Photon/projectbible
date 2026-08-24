@@ -11,7 +11,7 @@
  */
 
 import { createHash } from 'crypto';
-import { readFileSync, writeFileSync, existsSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
@@ -130,6 +130,23 @@ const PACK_CONFIGS = {
     dependencies: []
   }
 };
+
+// The art pack ships its images as numbered shards rather than one file, so its
+// entries are discovered rather than listed. Each shard is a real manifest entry
+// so PackLoader can fetch and SHA-256 it like any other download; they are absent
+// from the Packs pane, so they never appear as separately installable.
+for (const filename of readdirSync(PACKS_DIR)
+  .filter((f) => /^art-images-\d+\.sqlite$/.test(f))
+  .sort()) {
+  const part = filename.match(/(\d+)/)[1];
+  PACK_CONFIGS[filename] = {
+    id: `biblical-art-images-${part}`,
+    type: 'art-images',
+    name: `Biblical Art images (part ${Number(part)})`,
+    description: 'Image data for the Biblical Art pack.',
+    dependencies: []
+  };
+}
 
 console.log('📝 Generating Pack Manifest...\n');
 

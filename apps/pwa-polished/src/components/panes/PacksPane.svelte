@@ -6,9 +6,9 @@
     getDatabaseStats,
     audioPackHasChapters,
   } from "../../adapters/db-manager";
-  import { importPackFromSQLite, importPackFromBytes } from "../../adapters/pack-import";
+  import { importPackFromSQLite, importPackFromBytes, importArtImageShard } from "../../adapters/pack-import";
   import { installAudioPackToOPFS, reindexAudioPack } from "../../adapters/audio";
-  import { loadPackOnDemand } from "../../lib/progressive-init";
+  import { loadPackOnDemand, installArtImageShards } from "../../lib/progressive-init";
   import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from "../../config";
   import {
     isTtsSupported,
@@ -337,6 +337,19 @@
         // No File wrapper: it would copy the whole pack into blob storage
         // just to be read straight back out again.
         await importPackFromBytes(new Uint8Array(buffer), `${pack.id}.sqlite`);
+
+        if (pack.id === "biblical-art") {
+          // Bundled mode has no manifest to enumerate, so walk the numbered
+          // shards until one is missing.
+          for (let n = 1; ; n++) {
+            const part = String(n).padStart(2, "0");
+            const res = await fetch(`${BASE_URL}/art-images-${part}.sqlite`);
+            if (!res.ok) break;
+            installProgress = `Installing artwork (part ${n})…`;
+            const shard = new Uint8Array(await res.arrayBuffer());
+            await importArtImageShard(shard, { clearFirst: n === 1, label: `art-images-${part}` });
+          }
+        }
       } else {
         await loadPackOnDemand(pack.id, (progress) => {
           const stageLabel = getStageLabel(progress.stage);
@@ -348,6 +361,14 @@
             installProgress = `${stageLabel} ${pack.name}...`;
           }
         });
+
+        // art.sqlite carries only the scenes; the paintings arrive as small
+        // shards so sql.js never holds the whole pack at once.
+        if (pack.id === "biblical-art") {
+          await installArtImageShards((message) => {
+            installProgress = message;
+          });
+        }
       }
 
       installProgress = "Complete!";

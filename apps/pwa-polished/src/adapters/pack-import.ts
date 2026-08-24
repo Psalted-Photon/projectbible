@@ -40,6 +40,71 @@ export async function importPackFromSQLite(file: File): Promise<void> {
  * when the database is opened -- that is inherent to sql.js -- but nothing here
  * copies the pack beyond that.
  */
+/**
+ * Import one shard of the art pack: images only.
+ *
+ * The art pack's images live in numbered shards rather than in art.sqlite, so
+ * sql.js only ever holds ~10 MB at a time. Opening the single 83 MB pack cost
+ * around 2.2 GB of heap, which fits on a roomy phone and kills one whose V8
+ * ceiling is lower.
+ *
+ * A shard is not a pack: it registers no row in `packs`, and only the first one
+ * clears the store. Returns how many images it wrote.
+ */
+export async function importArtImageShard(
+  bytes: Uint8Array,
+  options: { clearFirst?: boolean; label?: string } = {}
+): Promise<number> {
+  const label = options.label ?? 'art-shard';
+  logInstall('shard-open-start', { label, bytes: bytes.length });
+
+  const sqlJsModule = await import('sql.js');
+  const initSqlJs = sqlJsModule.default || sqlJsModule;
+  const SQL = await initSqlJs({ locateFile: (file: string) => `/${file}` });
+
+  const db = new SQL.Database(bytes);
+  // sql.js has its own copy; let the download buffer go before the writes.
+  bytes = null as unknown as Uint8Array;
+  logInstall('shard-open-done', { label });
+
+  try {
+    if (options.clearFirst) {
+      const idb = await openDB();
+      await new Promise<void>((resolve, reject) => {
+        const tx = idb.transaction('art_images', 'readwrite');
+        tx.objectStore('art_images').clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(new Error('art_images clear aborted'));
+      });
+      logInstall('shard-cleared', { label });
+    }
+
+    let wrote = 0;
+    const stmt = db.prepare('SELECT id, mime, data FROM art_images');
+    try {
+      while (stmt.step()) {
+        const [id, mime, data] = stmt.get() as [string, string, Uint8Array];
+        // slice(): sql.js hands back a view that the next step() invalidates.
+        const blob = new Blob([data.slice() as unknown as BlobPart], {
+          type: (mime as string) || 'image/jpeg'
+        });
+        await batchWriteTransaction('art_images', (store) => {
+          store.put({ id, mime, data: blob });
+        });
+        wrote++;
+      }
+    } finally {
+      stmt.free();
+    }
+
+    await logInstallFlush('shard-done', { label, wrote });
+    return wrote;
+  } finally {
+    db.close();
+  }
+}
+
 export async function importPackFromBytes(
   bytes: Uint8Array,
   sourceName: string,
