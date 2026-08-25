@@ -86,22 +86,29 @@ export interface SpeechRoute {
 /**
  * Pick the voice and pronunciation for Greek text.
  *
- * Every Piper voice shares one IPA symbol table, so any phoneme *maps* — but a
- * voice only ever trained embeddings for sounds in its own language. Handing it
- * an id it never saw yields an untrained embedding, which is noise rather than
- * an accent. That decides both pairings here:
+ * Both pronunciations use the Greek voice. Reconstructed Koine used to be
+ * voiced by the English model, on the theory that it had the ancient-only
+ * sounds Modern Greek lacks — but that cost a real chi, which English cannot
+ * make at all, and it left two different voices in play for one language.
+ * Folding the ancient-only sounds onto Greek ones the voice actually knows
+ * keeps the Erasmian character (eta as "ay", alpha-iota as "eye", hard g,
+ * rough breathing) and gets chi back.
  *
- *  - Modern Greek is the Greek voice's native language, so it needs no fixups.
- *  - Reconstructed Koine emits h, ɛː and uː, none of which exist in Modern
- *    Greek. The English voice has all of them and lacks only χ, which we remap
- *    to h — and an English-voiced Erasmian is what the classroom sounds like.
+ * Substitutions match ONE symbol at a time: espeak emits "ɛ" and "ː" as
+ * separate entries, so a multi-character key like "ɛː" silently matches
+ * nothing. Map the length mark away on its own instead.
  */
-export function resolveGreekRoute(
-  pronunciation: GreekPronunciation,
-  englishVoiceId: string
-): SpeechRoute {
+const KOINE_FOLD: Record<string, string> = {
+  ː: '',  // ː — drop vowel length; Greek has no long/short contrast
+  ɛ: 'e', // ɛ → e
+  ɪ: 'i', // ɪ → i
+  ʊ: 'u', // ʊ → u
+  y: 'i',      // upsilon, the front rounded vowel Modern Greek lost
+};
+
+export function resolveGreekRoute(pronunciation: GreekPronunciation): SpeechRoute {
   if (pronunciation === 'reconstructed') {
-    return { voiceId: englishVoiceId, espeakVoice: 'grc', substitutions: { x: 'h' } };
+    return { voiceId: GREEK_VOICE_ID, espeakVoice: 'grc', substitutions: KOINE_FOLD };
   }
   return { voiceId: GREEK_VOICE_ID, espeakVoice: 'el', substitutions: {} };
 }

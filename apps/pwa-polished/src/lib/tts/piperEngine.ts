@@ -288,7 +288,8 @@ export async function synthesize(
 ): Promise<ArrayBuffer> {
   const config = await getConfig(voiceId);
   const session = await getSession(voiceId);
-  const result = await phonemize(text, speech?.espeakVoice || config.espeak.voice);
+  const espeakVoice = speech?.espeakVoice || config.espeak.voice;
+  const result = await phonemize(text, espeakVoice);
 
   // Only re-derive ids when a substitution actually applies — the phonemizer's
   // own ids are authoritative otherwise, and English must stay untouched.
@@ -313,6 +314,12 @@ export async function synthesize(
   if (Object.keys(config.speaker_id_map ?? {}).length > 0) {
     feeds.sid = new ort.Tensor('int64', [0]);
   }
+
+  console.log(
+    `🔊 synth voice=${voiceId} espeak=${espeakVoice} ` +
+      `text="${text.slice(0, 40)}${text.length > 40 ? '…' : ''}" ` +
+      `phonemes="${result.phonemes.join('').slice(0, 60)}"`
+  );
 
   const results = await session.run(feeds);
   const samples = results.output.data as Float32Array;

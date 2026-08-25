@@ -387,8 +387,17 @@ async function renderUtterance(u: Utterance, gen: number): Promise<boolean> {
     measuredChars += u.text.length;
     measuredSeconds += wav.seconds;
     return true;
-  } catch (err) {
+  } catch (err: any) {
     if (gen !== generation) return false;
+    // A missing voice is not a bad verse — every verse will fail the same way,
+    // and carrying on would read Greek in whatever voice happens to be loaded.
+    // That is exactly how this feature shipped broken, so it stops here.
+    if (err?.code === 'VOICE_NOT_INSTALLED') {
+      console.error('🔊 Read Aloud stopped: required voice is not installed', err);
+      readingError.set('The voice for this text is not downloaded yet.');
+      readingState.set('voice-needed');
+      return false;
+    }
     console.warn('🔊 Read Aloud could not render an utterance:', err);
     // Drop it rather than wedging the queue on one bad verse.
     u.pcm = new Uint8Array(0);

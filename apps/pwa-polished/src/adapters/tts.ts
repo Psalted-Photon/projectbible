@@ -25,19 +25,9 @@ export type { TtsVoiceInfo, TtsProgress, SpeechRoute };
 
 export const DEFAULT_TTS_VOICE = 'en_US-lessac-medium';
 
-/**
- * Which voice and pronunciation to use for Greek right now.
- *
- * Reconstructed Koine is voiced by an English model (see resolveGreekRoute),
- * so it borrows whichever English voice the user actually reads with — falling
- * back to the default if they have picked a non-English one.
- */
+/** Which voice and pronunciation to use for Greek right now. */
 export function greekSpeechRoute(): SpeechRoute {
-  const settings = getTtsSettings();
-  const chosen = getVoiceInfo(settings.voiceId);
-  const englishVoiceId =
-    chosen && chosen.lang === 'en' ? settings.voiceId : DEFAULT_TTS_VOICE;
-  return resolveGreekRoute(settings.greekPronunciation, englishVoiceId);
+  return resolveGreekRoute(getTtsSettings().greekPronunciation);
 }
 
 /** Output rate of a voice, for deciding whether two clips can share a segment. */
