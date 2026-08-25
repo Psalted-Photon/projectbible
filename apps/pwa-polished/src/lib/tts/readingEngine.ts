@@ -31,7 +31,10 @@ import {
   getSharedTtsAudio,
   unlockTtsAudio,
   isVoiceInstalled,
+  greekSpeechRoute,
 } from '../../adapters/tts';
+import { getMorphologyForChapter } from '../../adapters/db';
+import { originalSpeechText, canSpeakOriginal } from './originalText';
 import { continuousPlay, ttsCurrentVerse } from '../../stores/audioStore';
 // One-way dependency on purpose: the timer knows nothing about the engine, so
 // the engine listens to it. The reverse would be a circular import.
@@ -90,6 +93,16 @@ interface Utterance {
   seconds?: number;
   /** Seconds from the start of its chapter, for chapter-wide progress. */
   chapterOffset?: number;
+  /**
+   * Voice and pronunciation for this line specifically. Unset means the
+   * session's own voice — only Greek and bilingual reading set them, so English
+   * chapters behave exactly as before.
+   */
+  voiceId?: string;
+  espeakVoice?: string;
+  substitutions?: Record<string, string>;
+  /** Measured from the rendered clip; clips of different rates cannot be stitched together. */
+  sampleRate?: number;
 }
 
 interface Mark {
@@ -116,6 +129,7 @@ export interface ReadingPosition {
 
 export const readingState = writable<ReadingState>('idle');
 export const readingError = writable<string>('');
+
 export const readingPosition = writable<ReadingPosition | null>(null);
 
 /** Verse numbers of the chapter being read, for the jump dropdown. */
@@ -174,6 +188,9 @@ let generation = 0;               // bumped to invalidate all in-flight work
 let translation = '';
 let voiceId = '';
 let rate = 1;
+/** Snapshotted at start, so a mid-read change to either can be detected. */
+let greekPronunciation = 'modern';
+let bilingualReading = false;
 let sampleRate = 22050;
 let tailBook = '';
 let tailChapter = 0;
@@ -235,20 +252,73 @@ async function loadChapterUtterances(
     });
   }
 
+  // Original-language chapters read from the per-word morphology rather than the
+  // verse prose: the plain Greek in the pack is unaccented, which puts espeak's
+  // stress on the wrong syllable.
+  const greek = isGreekTranslation(translation)
+    ? await loadGreekVerses(book, chapter)
+    : null;
+
   let first = true;
   for (const row of rows) {
     let speech = extractSpeechText(row.text);
-    if (!speech) continue;
-    if (settings.readHeadings && row.heading) {
+    const original = greek?.get(row.verse);
+    if (!speech && !original) continue;
+    if (settings.readHeadings && row.heading && speech) {
       speech = `${row.heading.trim().replace(/\.?$/, '.')} ${speech}`;
     }
-    out.push({
-      kind: 'verse', text: speech, book, chapter, verse: row.verse,
-      gapBefore: first && announce !== 'none' ? GAP_AFTER : 0,
-    });
+    const gapBefore = first && announce !== 'none' ? GAP_AFTER : 0;
+
+    if (original) {
+      const route = greekSpeechRoute();
+      out.push({
+        kind: 'verse', text: original, book, chapter, verse: row.verse, gapBefore,
+        voiceId: route.voiceId,
+        espeakVoice: route.espeakVoice,
+        substitutions: route.substitutions,
+      });
+      // Bilingual: the same verse again in English, close behind the Greek.
+      if (settings.bilingualReading && speech) {
+        out.push({
+          kind: 'verse', text: speech, book, chapter, verse: row.verse,
+          gapBefore: GAP_MID,
+        });
+      }
+    } else if (speech) {
+      out.push({ kind: 'verse', text: speech, book, chapter, verse: row.verse, gapBefore });
+    }
     first = false;
   }
 
+  return out;
+}
+
+function isGreekTranslation(translationId: string): boolean {
+  const id = translationId.toLowerCase();
+  return id === 'byz' || id === 'tr' || id === 'sblgnt' || id === 'lxx';
+}
+
+/** Speakable Greek text per verse, or null when this chapter has no word data. */
+async function loadGreekVerses(
+  book: string,
+  chapter: number
+): Promise<Map<number, string> | null> {
+  if (!canSpeakOriginal(translation)) return null;
+  const rows = await getMorphologyForChapter(translation, book, chapter);
+  if (rows.length === 0) return null;
+
+  const byVerse = new Map<number, typeof rows>();
+  for (const row of rows) {
+    const list = byVerse.get(row.verse);
+    if (list) list.push(row);
+    else byVerse.set(row.verse, [row]);
+  }
+
+  const out = new Map<number, string>();
+  for (const [verse, words] of byVerse) {
+    const text = originalSpeechText(words, words[0]?.language ?? 'greek');
+    if (text) out.set(verse, text);
+  }
   return out;
 }
 
@@ -301,12 +371,16 @@ function recomputeChapterOffsets(book: string, chapter: number): void {
 
 async function renderUtterance(u: Utterance, gen: number): Promise<boolean> {
   try {
-    const blob = await synthesizeSpeech(u.text, voiceId);
+    const blob = await synthesizeSpeech(u.text, u.voiceId ?? voiceId, {
+      espeakVoice: u.espeakVoice,
+      substitutions: u.substitutions,
+    });
     if (gen !== generation) return false;
     const wav = readWav(await blob.arrayBuffer());
     if (gen !== generation) return false;
 
     sampleRate = wav.sampleRate;
+    u.sampleRate = wav.sampleRate;
     u.pcm = wav.pcm;
     u.seconds = wav.seconds;
 
@@ -331,6 +405,11 @@ async function buildSegment(gen: number): Promise<boolean> {
   const pieces: Uint8Array[] = [];
   const marks: Mark[] = [];
   let seconds = 0;
+  // A segment is one WAV, so everything in it has to share a rate. Bilingual
+  // reading can alternate voices that do not (the Compact English voice is
+  // 16 kHz where Greek is 22.05 kHz), so the segment ends at the change instead
+  // of splicing mismatched samples into noise.
+  let segmentRate = 0;
 
   // Long segments are the goal, but never at the cost of a silence. If the
   // player has nothing queued behind what it is playing, hand over whatever is
@@ -353,10 +432,16 @@ async function buildSegment(gen: number): Promise<boolean> {
       if (!(await renderUtterance(u, gen))) return false;
     }
 
+    // Leave it for the next segment, rendered audio and all — the cursor does
+    // not advance, so nothing is lost and nothing is synthesized twice.
+    const rate = u.sampleRate ?? sampleRate;
+    if (marks.length > 0 && rate !== segmentRate) break;
+    segmentRate = rate;
+
     // The pause before an utterance becomes part of the audio, so the player
     // never stops between chapters — silence is just quiet audio.
     if (u.gapBefore > 0) {
-      const gap = silencePcm(u.gapBefore, sampleRate);
+      const gap = silencePcm(u.gapBefore, segmentRate);
       pieces.push(gap);
       seconds += u.gapBefore;
     }
@@ -380,7 +465,7 @@ async function buildSegment(gen: number): Promise<boolean> {
 
   segments = [
     ...segments,
-    { blob: joinPcm(pieces, sampleRate), seconds: pcmSeconds(pieces, sampleRate), bytes: pieces.reduce((n, p) => n + p.byteLength, 0), marks },
+    { blob: joinPcm(pieces, segmentRate), seconds: pcmSeconds(pieces, segmentRate), bytes: pieces.reduce((n, p) => n + p.byteLength, 0), marks },
   ];
 
   // The samples are now inside the segment; drop the per-utterance copies so we
@@ -599,9 +684,15 @@ function updatePositionFromClock(): void {
 }
 
 function refreshChapterInfo(book: string, chapter: number, verse: number | null): void {
-  const verses = queue
-    .filter((u) => u.kind === 'verse' && u.book === book && u.chapter === chapter)
-    .map((u) => u.verse as number);
+  // Bilingual reading queues each verse twice (original, then English), but it
+  // is still one verse as far as the counter and the jump list are concerned.
+  const verses = [
+    ...new Set(
+      queue
+        .filter((u) => u.kind === 'verse' && u.book === book && u.chapter === chapter)
+        .map((u) => u.verse as number)
+    ),
+  ];
   readingVerseList.set(verses);
 
   if (verse === null) {
@@ -639,6 +730,8 @@ export async function startReading(
   translation = translationId;
   voiceId = settings.voiceId;
   rate = settings.rate;
+  greekPronunciation = settings.greekPronunciation;
+  bilingualReading = settings.bilingualReading;
 
   readingState.set('starting');
   readingError.set('');
@@ -654,9 +747,21 @@ export async function startReading(
     if (gen !== generation) return;
     if (utterances.length === 0) {
       readingState.set('error');
-      readingError.set('No text available for this chapter.');
+      readingError.set(
+        isGreekTranslation(translationId) && !canSpeakOriginal(translationId)
+          ? 'This text has no word-by-word data, so it cannot be read aloud yet.'
+          : 'No text available for this chapter.'
+      );
       return;
     }
+
+    // Greek can be voiced by a model the user has not downloaded yet.
+    const needed = utterances.find((u) => u.voiceId && u.voiceId !== voiceId)?.voiceId;
+    if (needed && !(await isVoiceInstalled(needed))) {
+      readingState.set('voice-needed');
+      return;
+    }
+    if (gen !== generation) return;
 
     queue = utterances;
     renderCursor = verse === null ? 0 : Math.max(0, utterances.findIndex((u) => u.verse === verse));
@@ -871,9 +976,17 @@ if (typeof window !== 'undefined') {
     getSharedTtsAudio().playbackRate = rate;
 
     // A different voice invalidates everything banked — it would play back in
-    // the old voice, which is worse than a short pause.
+    // the old voice, which is worse than a short pause. Changing the Greek
+    // pronunciation or turning bilingual on is the same problem: the banked
+    // audio no longer matches what was asked for.
     if (settings.voiceId !== voiceId) {
       console.log('🔊 Read Aloud stopped: the voice changed');
+      stopReading();
+    } else if (
+      settings.greekPronunciation !== greekPronunciation ||
+      settings.bilingualReading !== bilingualReading
+    ) {
+      console.log('🔊 Read Aloud stopped: the reading language changed');
       stopReading();
     }
   });

@@ -165,6 +165,8 @@ interface VoiceConfig {
   espeak: { voice: string };
   inference: { noise_scale: number; length_scale: number; noise_w: number };
   speaker_id_map: Record<string, number>;
+  /** Shared IPA symbol table. Identical across Piper voices, but read per-voice. */
+  phoneme_id_map?: Record<string, number[] | number>;
 }
 
 const configs = new Map<string, VoiceConfig>();
@@ -201,13 +203,17 @@ async function getSession(voiceId: string): Promise<ort.InferenceSession> {
   return session;
 }
 
-async function phonemize(text: string, espeakVoice: string): Promise<number[]> {
+async function phonemize(
+  text: string,
+  espeakVoice: string
+): Promise<{ phonemes: string[]; phonemeIds: number[] }> {
   const input = JSON.stringify([{ text: text.trim() }]);
   return new Promise((resolve, reject) => {
     createPiperPhonemize({
       print: (msg) => {
         try {
-          resolve(JSON.parse(msg).phoneme_ids);
+          const parsed = JSON.parse(msg);
+          resolve({ phonemes: parsed.phonemes ?? [], phonemeIds: parsed.phoneme_ids });
         } catch (e) {
           reject(new Error(`Unexpected phonemizer output: ${msg}`));
         }
@@ -220,6 +226,29 @@ async function phonemize(text: string, espeakVoice: string): Promise<number[]> {
       })
       .catch(reject);
   });
+}
+
+/**
+ * Rebuild phoneme ids after rewriting some phonemes.
+ *
+ * Piper's id stream is `^ _ p₁ _ p₂ _ … pₙ _ $` — a start symbol, then every
+ * phoneme separated by padding, then an end symbol, which is why the length is
+ * always 2n+3. Phonemes missing from the table are dropped, matching Piper.
+ */
+function idsFromPhonemes(phonemes: string[], map: Record<string, number[] | number>): number[] {
+  const idOf = (symbol: string): number | undefined => {
+    const entry = map[symbol];
+    return Array.isArray(entry) ? entry[0] : entry;
+  };
+  const pad = idOf('_') ?? 0;
+  const ids: number[] = [idOf('^') ?? 1, pad];
+  for (const phoneme of phonemes) {
+    const id = idOf(phoneme);
+    if (id === undefined) continue;
+    ids.push(id, pad);
+  }
+  ids.push(idOf('$') ?? 2);
+  return ids;
 }
 
 /** Mono 16-bit PCM WAV from float samples. */
@@ -252,10 +281,25 @@ function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
  * Synthesize speech for one piece of text. Returns a WAV file as ArrayBuffer
  * (transferable across the worker boundary without copying).
  */
-export async function synthesize(text: string, voiceId: string): Promise<ArrayBuffer> {
+export async function synthesize(
+  text: string,
+  voiceId: string,
+  speech?: { espeakVoice?: string; substitutions?: Record<string, string> }
+): Promise<ArrayBuffer> {
   const config = await getConfig(voiceId);
   const session = await getSession(voiceId);
-  const phonemeIds = await phonemize(text, config.espeak.voice);
+  const result = await phonemize(text, speech?.espeakVoice || config.espeak.voice);
+
+  // Only re-derive ids when a substitution actually applies — the phonemizer's
+  // own ids are authoritative otherwise, and English must stay untouched.
+  const substitutions = speech?.substitutions;
+  let phonemeIds = result.phonemeIds;
+  if (substitutions && Object.keys(substitutions).length > 0 && config.phoneme_id_map) {
+    const rewritten = result.phonemes.map((p) => substitutions[p] ?? p);
+    if (rewritten.some((p, i) => p !== result.phonemes[i])) {
+      phonemeIds = idsFromPhonemes(rewritten, config.phoneme_id_map);
+    }
+  }
 
   const feeds: Record<string, ort.Tensor> = {
     input: new ort.Tensor('int64', phonemeIds, [1, phonemeIds.length]),

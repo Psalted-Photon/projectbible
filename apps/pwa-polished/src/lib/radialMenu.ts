@@ -118,6 +118,8 @@ export interface RadialItemOpts {
   isPerson: boolean;
   moreInfo: boolean;
   extendArmed: boolean;
+  /** Greek/Hebrew word Read Aloud can pronounce. */
+  canSpeak?: boolean;
 }
 
 /**
@@ -150,6 +152,9 @@ export function radialItems(o: RadialItemOpts): RadialItem[] {
   }
   if (o.isPlace) {
     actions.push({ kind: 'action', id: 'map', label: 'Map', icon: 'map', accent: '#f2893e' });
+  }
+  if (o.canSpeak) {
+    actions.push({ kind: 'action', id: 'speak', label: 'Speak', icon: 'speak', accent: '#34d399' });
   }
   actions.push({ kind: 'action', id: 'highlight', label: 'Mark', icon: 'highlight', accent: '#fde047' });
   actions.push({ kind: 'action', id: 'notes', label: 'Notes', icon: 'notes', accent: '#d1e3f5' });

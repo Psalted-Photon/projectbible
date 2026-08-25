@@ -27,6 +27,9 @@ interface TtsRequest {
     source?: TtsSource;
     model?: ArrayBuffer;
     config?: ArrayBuffer;
+    /** Overrides the voice's own espeak language (Greek pronunciation, etc.). */
+    espeakVoice?: string;
+    substitutions?: Record<string, string>;
   };
 }
 
@@ -60,7 +63,10 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
         break;
       }
       case 'synthesize': {
-        const wav = await synthesize(payload!.text!, payload!.voiceId!);
+        const wav = await synthesize(payload!.text!, payload!.voiceId!, {
+          espeakVoice: payload!.espeakVoice,
+          substitutions: payload!.substitutions,
+        });
         (self as unknown as Worker).postMessage({ id, ok: true, result: wav }, [wav]);
         break;
       }

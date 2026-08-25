@@ -17,8 +17,10 @@
     downloadVoice,
     getVoiceInfo,
     unlockTtsAudio,
+    greekSpeechRoute,
   } from '../adapters/tts.js';
   import { getTtsSettings } from '../adapters/settings.js';
+  import { canSpeakOriginal } from '../lib/tts/originalText.js';
   import {
     readingState,
     readingPosition,
@@ -39,7 +41,11 @@
   /** Pressed, and still getting to the point where the engine takes over. */
   let pressing = false;
 
-  $: voiceId = getTtsSettings().voiceId;
+  // Greek chapters are voiced by whichever model the pronunciation setting
+  // picks, which may not be the voice the user reads English with.
+  $: isGreek =
+    /^(byz|tr|sblgnt|lxx)$/i.test(translation) && canSpeakOriginal(translation);
+  $: voiceId = isGreek ? greekSpeechRoute().voiceId : getTtsSettings().voiceId;
   $: voiceSizeMB = getVoiceInfo(voiceId)?.approxSizeMB ?? 64;
 
   // Is the engine reading *this* chapter right now? Only that chapter's button

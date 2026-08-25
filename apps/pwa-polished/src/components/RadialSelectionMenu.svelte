@@ -9,6 +9,7 @@
   import ArrowsOutLineHorizontal from 'phosphor-svelte/lib/ArrowsOutLineHorizontal';
   import User from 'phosphor-svelte/lib/User';
   import Article from 'phosphor-svelte/lib/Article';
+  import SpeakerHigh from 'phosphor-svelte/lib/SpeakerHigh';
   import {
     BADGE,
     ringRadius,
@@ -37,6 +38,8 @@
   export let wordCount = 1;
   /** True while the next tap is armed to stretch the selection. */
   export let extendArmed = false;
+  /** Greek/Hebrew selection Read Aloud can pronounce. */
+  export let canSpeak = false;
   /**
    * Accepted for parity with SelectionToast, and deliberately unused. That
    * component hides itself for a frame while the caller measures it; the ring
@@ -64,6 +67,7 @@
     notes: NotePencil,
     repeats: Repeat,
     extend: ArrowsOutLineHorizontal,
+    speak: SpeakerHigh,
   };
 
   // The sweep runs in list order, which seatAngles already returns as one
@@ -87,7 +91,7 @@
   // So a change that moves seats waits for the sweep to finish; a change that
   // only rewrites labels (Define → Bio → Info) is adopted straight away,
   // because nothing has to move for it.
-  $: live = radialItems({ mode, wordCount, isPlace, isPerson, moreInfo, extendArmed });
+  $: live = radialItems({ mode, wordCount, isPlace, isPerson, moreInfo, extendArmed, canSpeak });
 
   let shown: RadialItem[] = [];
   let settled = reduceMotion;

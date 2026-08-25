@@ -10,16 +10,40 @@
 
 import {
   TTS_VOICES,
+  GREEK_VOICE_ID,
   resolveVoiceSource,
+  resolveGreekRoute,
   type TtsVoiceInfo,
   type TtsProgress,
   type TtsSource,
+  type SpeechRoute,
 } from '../lib/tts/voices.js';
+import { getTtsSettings } from './settings.js';
 
-export { TTS_VOICES };
-export type { TtsVoiceInfo, TtsProgress };
+export { TTS_VOICES, GREEK_VOICE_ID };
+export type { TtsVoiceInfo, TtsProgress, SpeechRoute };
 
 export const DEFAULT_TTS_VOICE = 'en_US-lessac-medium';
+
+/**
+ * Which voice and pronunciation to use for Greek right now.
+ *
+ * Reconstructed Koine is voiced by an English model (see resolveGreekRoute),
+ * so it borrows whichever English voice the user actually reads with — falling
+ * back to the default if they have picked a non-English one.
+ */
+export function greekSpeechRoute(): SpeechRoute {
+  const settings = getTtsSettings();
+  const chosen = getVoiceInfo(settings.voiceId);
+  const englishVoiceId =
+    chosen && chosen.lang === 'en' ? settings.voiceId : DEFAULT_TTS_VOICE;
+  return resolveGreekRoute(settings.greekPronunciation, englishVoiceId);
+}
+
+/** Output rate of a voice, for deciding whether two clips can share a segment. */
+export function voiceSampleRate(voiceId: string): number {
+  return getVoiceInfo(voiceId)?.sampleRate ?? 22050;
+}
 
 // ─── custom voice registry (localStorage) ───────────────────────────────────
 // User-added voices (from a local file or a hosted URL). Persisted separately
@@ -33,7 +57,13 @@ export function getCustomVoices(): TtsVoiceInfo[] {
     const raw = localStorage.getItem(CUSTOM_VOICES_KEY);
     if (!raw) return [];
     const list = JSON.parse(raw);
-    return Array.isArray(list) ? list : [];
+    if (!Array.isArray(list)) return [];
+    // Voices registered before language/rate were tracked: assume the common case.
+    return list.map((v: Partial<TtsVoiceInfo>) => ({
+      ...v,
+      lang: v.lang ?? 'en',
+      sampleRate: v.sampleRate ?? 22050,
+    })) as TtsVoiceInfo[];
   } catch {
     return [];
   }
@@ -184,6 +214,15 @@ export async function installVoiceFromFiles(
   meta?: { label?: string }
 ): Promise<string> {
   const id = voiceIdFromFilename(modelFile.name);
+  const configText = await configFile.text();
+  // Read the rate before the buffer is transferred away — the reading engine
+  // needs it to know whether this voice can share a segment with another.
+  let sampleRate = 22050;
+  try {
+    sampleRate = JSON.parse(configText)?.audio?.sample_rate || 22050;
+  } catch {
+    // installData validates the config properly and will reject it.
+  }
   const [model, config] = await Promise.all([modelFile.arrayBuffer(), configFile.arrayBuffer()]);
   await call<void>('installData', { voiceId: id, model, config }, { transfer: [model, config] });
   registerCustomVoice({
@@ -191,16 +230,28 @@ export async function installVoiceFromFiles(
     label: meta?.label?.trim() || modelFile.name.replace(/\.onnx$/i, ''),
     quality: 'custom',
     approxSizeMB: Math.max(1, Math.round(modelFile.size / 1024 / 1024)),
+    lang: 'en',
+    sampleRate,
     custom: true,
   });
   return id;
 }
 
-/** Synthesize one piece of text; resolves to a playable WAV blob. */
-export async function synthesizeSpeech(text: string, voiceId: string): Promise<Blob> {
+/**
+ * Synthesize one piece of text; resolves to a playable WAV blob.
+ *
+ * `speech` overrides the pronunciation the voice would use on its own — that is
+ * how one Greek download serves both Modern and reconstructed Koine without
+ * being reinstalled. Omit it for ordinary English reading.
+ */
+export async function synthesizeSpeech(
+  text: string,
+  voiceId: string,
+  speech?: { espeakVoice?: string; substitutions?: Record<string, string> }
+): Promise<Blob> {
   const wav = await call<ArrayBuffer>(
     'synthesize',
-    { text, voiceId },
+    { text, voiceId, espeakVoice: speech?.espeakVoice, substitutions: speech?.substitutions },
     { timeoutMs: SYNTH_TIMEOUT_MS }
   );
   return new Blob([wav], { type: 'audio/wav' });

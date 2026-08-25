@@ -46,6 +46,13 @@
   import AudioPlayer from "./AudioPlayer.svelte";
   import TtsPlayer from "./TtsPlayer.svelte";
   import { FEATURES } from "../config";
+  import {
+    synthesizeSpeech,
+    unlockTtsAudio,
+    isVoiceInstalled,
+    greekSpeechRoute,
+  } from "../adapters/tts";
+  import { speechWordText, canSpeakOriginal } from "../lib/tts/originalText";
   import BookIntroPanel from "./BookIntroPanel.svelte";
   import { syncQueue } from "../lib/sync/SyncQueueService";
   import type { UserHighlight, UserWordHighlight, HighlightStyle } from "@projectbible/core";
@@ -628,6 +635,42 @@
 
   // Morphology state
   let selectedMorphology: DBMorphology | null = null;
+
+  // Read Aloud can pronounce the selected word only when it is an actual
+  // Greek word from the interlinear — English selections have nothing to say
+  // in the original, and Hebrew has no shippable voice yet.
+  $: selectionCanSpeak =
+    FEATURES.ttsReadAloud &&
+    selectedMorphology?.language === "greek" &&
+    canSpeakOriginal(currentTranslation);
+
+  /** Speak one original-language word, from a tap. */
+  async function speakOriginalWord(word: string, language?: string) {
+    const text = speechWordText(word ?? "", language ?? "greek");
+    if (!text) return;
+    // Must happen inside the tap, before any await, or iOS refuses to play.
+    unlockTtsAudio();
+    try {
+      const route = greekSpeechRoute();
+      if (!(await isVoiceInstalled(route.voiceId))) {
+        showTtsVoiceNeeded = route.voiceId;
+        return;
+      }
+      const blob = await synthesizeSpeech(text, route.voiceId, {
+        espeakVoice: route.espeakVoice,
+        substitutions: route.substitutions,
+      });
+      const audio = getSharedTtsAudio();
+      audio.src = URL.createObjectURL(blob);
+      audio.playbackRate = 1;
+      await audio.play();
+    } catch (err) {
+      console.warn("Could not speak the word:", err);
+    }
+  }
+
+  /** Voice id the user needs to download before a tap-to-speak will work. */
+  let showTtsVoiceNeeded: string | null = null;
 
   // Morphology cache state
   let morphologyCache = new Map<number, DBMorphology[]>();
@@ -3877,6 +3920,7 @@
       isPerson: selectedIsPerson,
       moreInfo: !selectedIsPerson && selectedIsbeKind !== null,
       extendArmed,
+      canSpeak: selectionCanSpeak,
     };
   }
 
@@ -4308,6 +4352,11 @@
 
     // TODO: Wire up actual actions
     switch (action) {
+      case "speak":
+        void speakOriginalWord(capturedMorphology?.text || text, capturedMorphology?.language);
+        showToast = false;
+        break;
+
       case "dissect":
         // Open lexical modal with morphology data if available
         console.log('🔍 Starting lexicon lookup for:', text);
@@ -4869,6 +4918,7 @@
       mode={selectionMode}
       wordCount={selectedWordCount}
       {extendArmed}
+      canSpeak={selectionCanSpeak}
       on:action={handleToastAction}
       on:modeChange={handleModeChange}
     />
@@ -4885,6 +4935,7 @@
       mode={selectionMode}
       wordCount={selectedWordCount}
       {extendArmed}
+      canSpeak={selectionCanSpeak}
       on:action={handleToastAction}
       on:modeChange={handleModeChange}
     />
@@ -5140,7 +5191,7 @@
               </div>
             {/if}
             <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
-            {#if FEATURES.ttsReadAloud && !isOriginalLanguage(currentTranslation)}
+            {#if FEATURES.ttsReadAloud && (!isOriginalLanguage(currentTranslation) || canSpeakOriginal(currentTranslation))}
               <TtsPlayer translation={currentTranslation} book={chapterData.book} chapter={chapterData.chapter} />
             {/if}
           </div>
@@ -5319,6 +5370,13 @@
   </div>
 {/if}
 
+{#if showTtsVoiceNeeded}
+  <div class="speak-voice-notice">
+    <span>The Greek voice isn't downloaded yet — use the Read Aloud button above the chapter.</span>
+    <button on:click={() => (showTtsVoiceNeeded = null)} aria-label="Dismiss">✕</button>
+  </div>
+{/if}
+
 {#if !windowId && $annotationReturnStore !== null}
   {@const bookColor = getBookColor($annotationReturnStore.book)}
   <div class="annotation-return-bar" style="left: {readerLeft + readerClientWidth / 2}px;">
@@ -5350,6 +5408,36 @@
 
 
 <style>
+  .speak-voice-notice {
+    position: fixed;
+    left: 50%;
+    bottom: 92px;
+    transform: translateX(-50%);
+    z-index: 1002;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: min(92vw, 460px);
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #1c1c1c;
+    border: 1px solid #3a3a3a;
+    color: #e0e0e0;
+    font-size: 13px;
+    line-height: 1.35;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  }
+
+  .speak-voice-notice button {
+    flex: none;
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+
   /* ——— Fixed annotation back button bar ——— */
   .annotation-return-bar {
     position: fixed;

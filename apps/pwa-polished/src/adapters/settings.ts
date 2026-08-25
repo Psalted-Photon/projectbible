@@ -6,6 +6,7 @@
 
 import { getReaderFont } from '../lib/readerFonts';
 import { dimTowardsBg, redLetterFor } from '../lib/themeColors';
+import type { GreekPronunciation } from '../lib/tts/voices';
 
 const SETTINGS_KEY = 'projectbible_settings';
 
@@ -36,6 +37,14 @@ export interface TtsSettings {
   // The two follow-along effects are independent: either, both, or neither.
   highlightVerse: boolean; // tint the verse being read (default true)
   glowFollow: boolean;     // soft glow drifting along the words (default false)
+  /**
+   * How to read Greek aloud: 'modern' is the liturgical pronunciation used in
+   * Greek churches, 'reconstructed' the Erasmian one taught in seminaries.
+   * Only applies to original-language texts.
+   */
+  greekPronunciation: GreekPronunciation;
+  /** Speak each verse in Greek, then in English. */
+  bilingualReading: boolean;
 }
 
 /**
@@ -474,6 +483,8 @@ export function getTtsSettings(): TtsSettings {
     readHeadings: s?.readHeadings ?? false,
     highlightVerse: s?.highlightVerse ?? true,
     glowFollow: s?.glowFollow ?? false,
+    greekPronunciation: s?.greekPronunciation ?? 'modern',
+    bilingualReading: s?.bilingualReading ?? false,
   };
 }
 

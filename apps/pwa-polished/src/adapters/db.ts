@@ -1013,6 +1013,32 @@ export async function readTransaction<T>(
 }
 
 /**
+ * Every morphology word in a chapter, for original-language reading.
+ *
+ * The words table always keys on a lowercase translation id, while the reader
+ * may be showing an uppercase one, so the id is normalised here rather than at
+ * each call site.
+ */
+export async function getMorphologyForChapter(
+  translationId: string,
+  book: string,
+  chapter: number
+): Promise<DBMorphology[]> {
+  try {
+    const id = translationId.toLowerCase();
+    const rows = await readTransaction<DBMorphology[]>('morphology', (store) =>
+      store.index('verse_ref').getAll(
+        IDBKeyRange.bound([id, book, chapter, 1], [id, book, chapter, 999])
+      )
+    );
+    return rows ?? [];
+  } catch (error) {
+    console.error('Error fetching chapter morphology:', error);
+    return [];
+  }
+}
+
+/**
  * Helper to execute a write transaction
  */
 export async function writeTransaction<T>(

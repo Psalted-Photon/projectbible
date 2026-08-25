@@ -15,6 +15,8 @@
   export let wordCount = 1;
   /** True while the next tap is armed to stretch the selection. */
   export let extendArmed = false;
+  /** Greek/Hebrew selection that Read Aloud can pronounce — shows "Speak". */
+  export let canSpeak = false;
   /**
    * False for the first frame after opening, while the caller measures us and
    * works out where we go. Kept laid out but invisible so the measurement is
@@ -69,6 +71,12 @@
            Precedence: a biblical character (Bio) outranks an ISBE entry (More Info). -->
       <button class="action-btn" on:click={() => handleAction('dissect')}>
         {isPerson ? 'Bio' : moreInfo ? 'More Info' : 'Define'}
+      </button>
+    {/if}
+
+    {#if canSpeak}
+      <button class="action-btn" on:click={() => handleAction('speak')}>
+        Speak
       </button>
     {/if}
 

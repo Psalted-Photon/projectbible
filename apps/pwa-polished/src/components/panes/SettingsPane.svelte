@@ -112,6 +112,8 @@
   let ttsReadHeadings: boolean = false;
   let ttsHighlightVerse: boolean = true;
   let ttsGlowFollow: boolean = false;
+  let ttsGreekPronunciation: 'modern' | 'reconstructed' = 'modern';
+  let ttsBilingual: boolean = false;
   let ttsVoices: TtsVoiceInfo[] = getAllVoices();
   let alarmSummary = "";
 
@@ -154,6 +156,8 @@
         readHeadings: ttsReadHeadings,
         highlightVerse: ttsHighlightVerse,
         glowFollow: ttsGlowFollow,
+        greekPronunciation: ttsGreekPronunciation,
+        bilingualReading: ttsBilingual,
       },
     };
   }
@@ -265,6 +269,8 @@
     ttsReadHeadings = tts.readHeadings;
     ttsHighlightVerse = tts.highlightVerse;
     ttsGlowFollow = tts.glowFollow;
+    ttsGreekPronunciation = tts.greekPronunciation;
+    ttsBilingual = tts.bilingualReading;
 
     // Everything above is now the stored state, so the first reactive pass
     // has nothing to write. Only real edits from here on.
@@ -478,6 +484,8 @@
     ttsReadHeadings;
     ttsHighlightVerse;
     ttsGlowFollow;
+    ttsGreekPronunciation;
+    ttsBilingual;
     if (hydrated) {
       applySettings();
       schedulePersist();
@@ -740,6 +748,23 @@
         <input type="checkbox" bind:checked={ttsGlowFollow} />
         <span class="label-text">Soft glow drifts along the words</span>
       </label>
+      <div class="greek-block">
+        <p class="section-description il-hint">
+          Greek and Hebrew texts read from the interlinear words, so the accents are
+          right. Hebrew has no voice yet.
+        </p>
+        <label>
+          <span class="label-text">Greek pronunciation</span>
+          <select bind:value={ttsGreekPronunciation}>
+            <option value="modern">Modern — as read in Greek churches</option>
+            <option value="reconstructed">Reconstructed Koine — as taught in seminary</option>
+          </select>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" bind:checked={ttsBilingual} />
+          <span class="label-text">Read each verse in Greek, then in English</span>
+        </label>
+      </div>
       <button class="packs-button alarm-button" on:click={openWakeAlarmPane}>
         <span class="icon emoji">⏰</span>
         <span class="text">Wake Alarm{alarmSummary ? ` — ${alarmSummary}` : ""}</span>
