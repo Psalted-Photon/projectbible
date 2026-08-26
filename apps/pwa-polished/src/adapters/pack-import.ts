@@ -1,9 +1,66 @@
 import type { DBPack, DBVerse } from './db.js';
 import { batchWriteTransaction, writeTransaction, openDB } from './db.js';
 import { logInstall, logInstallFlush, logInstallError } from '../lib/install-log';
+import { normalizeBookName } from '../lib/bibleData';
 
 /** Packs whose blobs are far too large to go through sql.js at all. */
 const AUDIO_PACK_IDS = ['bsb-audio-pt1', 'bsb-audio-pt2'];
+
+/**
+ * Copy one table into an IndexedDB store, a batch at a time.
+ *
+ * The obvious version -- db.exec() then .map() then write in chunks -- builds
+ * the entire table as a JavaScript array before a single row is written. The
+ * chunking that follows only limits how much goes to IndexedDB at once; it does
+ * nothing about how much is being held. On the Encyclotopical pack that meant
+ * 860,000 token rows, then 139,000 verse links, live at the same time as the
+ * 81 MB pack sql.js is already holding -- and Chrome killed the tab a fifth of
+ * the way through the outline points. Everything after that point never landed,
+ * and because the pack's registry row is written before any of this, the result
+ * was indistinguishable from a healthy install.
+ *
+ * Stepping the statement keeps one batch in memory instead of one table.
+ */
+async function streamTable<T>(
+  db: any,
+  sql: string,
+  storeName: string,
+  map: (row: any[]) => T,
+  options: { batchSize?: number; label?: string } = {},
+): Promise<number> {
+  const batchSize = options.batchSize ?? 1000;
+  const label = options.label ?? storeName;
+  let wrote = 0;
+  let batch: T[] = [];
+
+  const flush = async () => {
+    if (!batch.length) return;
+    // Hand the array off and start a fresh one, so the rows just written can be
+    // collected while the next batch is being read.
+    const rows = batch;
+    batch = [];
+    await batchWriteTransaction(storeName, (store) => rows.forEach((r) => store.put(r)));
+    wrote += rows.length;
+  };
+
+  const stmt = db.prepare(sql);
+  try {
+    while (stmt.step()) {
+      batch.push(map(stmt.get()));
+      if (batch.length >= batchSize) await flush();
+    }
+    await flush();
+  } finally {
+    stmt.free();
+  }
+
+  // Flushed rather than plain: localStorage is written out of band, so a
+  // breadcrumb logged in a tight loop is lost in exactly the crash it exists to
+  // explain. Yielding gives it a chance to land.
+  await logInstallFlush('table-done', { label, wrote });
+  console.log(`✅ Imported ${wrote} ${label}`);
+  return wrote;
+}
 
 /**
  * Import a pack from a SQLite File into IndexedDB.
@@ -208,7 +265,16 @@ export async function importPackFromBytes(
       // What was actually installed. Pack versions are held steady across
       // rebuilds, so this is the only thing that can tell a corrected pack
       // apart from the one already on the device.
-      contentHash
+      //
+      // Deliberately left off the row written before the import runs, and put
+      // on afterwards by markImportComplete(). An import can be killed partway
+      // — Chrome reclaiming a tab under memory pressure, the app closed, a
+      // failed write — and stamping the hash up front made the wreckage
+      // indistinguishable from a healthy install, so installNeededPack reported
+      // it up to date forever. No hash means "re-install once", which is
+      // already exactly what that check does for a pack installed before
+      // hashes existed.
+      contentHash: undefined
     };
 
     if (!packInfo.id) {
@@ -218,8 +284,15 @@ export async function importPackFromBytes(
     console.log('Parsed pack info:', packInfo);
     logInstall('metadata-read', { id: packInfo.id, type: packInfo.type, version: packInfo.version });
 
-    // Store pack metadata
+    // Store pack metadata. Hash-less until the data lands — see contentHash above.
     await writeTransaction('packs', (store) => store.put(packInfo));
+
+    /** Stamp the row as finished. Every successful path has to end here. */
+    const markImportComplete = async () => {
+      await writeTransaction('packs', (store) => store.put({ ...packInfo, contentHash }));
+      await logInstallFlush('import-complete', { id: packInfo.id, type: packInfo.type });
+    };
+
     logInstall('import-branch-start', { type: packInfo.type });
 
     console.log(`Pack metadata stored: ${packInfo.id}`);
@@ -1173,30 +1246,27 @@ export async function importPackFromBytes(
         console.log(`✅ Imported ${names.length} name index entries`);
       }
 
-      // Verse appearances — clear first (autoIncrement keys)
-      const verseRows = db.exec('SELECT person_id, book, chapter, verse, osis FROM person_verses');
-      if (verseRows.length && verseRows[0].values.length) {
-        await new Promise<void>((resolve, reject) => {
-          const tx = idb.transaction('person_verses', 'readwrite');
-          tx.objectStore('person_verses').clear();
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        });
-        const verses = verseRows[0].values.map(([personId, book, chapter, verse, osis]) => ({
+      // Verse appearances — clear first (autoIncrement keys). The book name is
+      // normalised on the way in, for the reason given on topic_verses below.
+      await new Promise<void>((resolve, reject) => {
+        const tx = idb.transaction('person_verses', 'readwrite');
+        tx.objectStore('person_verses').clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+      await streamTable(
+        db,
+        'SELECT person_id, book, chapter, verse, osis FROM person_verses',
+        'person_verses',
+        ([personId, book, chapter, verse, osis]) => ({
           personId: personId as string,
-          book: book as string,
+          book: normalizeBookName(book as string),
           chapter: chapter as number,
           verse: verse as number,
           osis: osis as string | undefined,
-        }));
-        console.log(`Importing ${verses.length} person-verse links...`);
-        const CHUNK_SIZE = 1000;
-        for (let i = 0; i < verses.length; i += CHUNK_SIZE) {
-          const chunk = verses.slice(i, i + CHUNK_SIZE);
-          await batchWriteTransaction('person_verses', (store) => chunk.forEach((v) => store.put(v)));
-        }
-        console.log(`✅ Imported ${verses.length} person-verse links`);
-      }
+        }),
+        { label: 'person-verse links' },
+      );
 
       console.log(`✅ People pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'isbe' || packInfo.type === 'encyclotopical') {
@@ -1217,184 +1287,140 @@ export async function importPackFromBytes(
         });
 
       // Entries (keyPath entryId — put() overwrites, no clear needed)
-      const entryRows = db.exec(
+      await streamTable(
+        db,
         'SELECT entry_id, title, primary_name, body_html, lead, outline, char_count, is_place FROM entries',
+        'isbe_entries',
+        ([entryId, title, primaryName, bodyHtml, lead, outline, charCount, isPlace]) => ({
+          entryId: entryId as number,
+          title: title as string,
+          primaryName: primaryName as string,
+          primaryNameLower: ((primaryName as string) || '').toLowerCase(),
+          bodyHtml: bodyHtml as string,
+          lead: lead as string | null,
+          outline: outline as string | null,
+          charCount: charCount as number,
+          isPlace: isPlace as number,
+        }),
+        { batchSize: 300, label: 'ISBE entries' },
       );
-      if (entryRows.length && entryRows[0].values.length) {
-        const entries = entryRows[0].values.map(
-          ([entryId, title, primaryName, bodyHtml, lead, outline, charCount, isPlace]) => ({
-            entryId: entryId as number,
-            title: title as string,
-            primaryName: primaryName as string,
-            primaryNameLower: ((primaryName as string) || '').toLowerCase(),
-            bodyHtml: bodyHtml as string,
-            lead: lead as string | null,
-            outline: outline as string | null,
-            charCount: charCount as number,
-            isPlace: isPlace as number,
-          }),
-        );
-        console.log(`Importing ${entries.length} ISBE entries...`);
-        const CHUNK_SIZE = 300;
-        for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
-          const chunk = entries.slice(i, i + CHUNK_SIZE);
-          await batchWriteTransaction('isbe_entries', (store) => chunk.forEach((e) => store.put(e)));
-        }
-        console.log(`✅ Imported ${entries.length} ISBE entries`);
-      }
 
       // Entry name index
-      const enRows = db.exec('SELECT name_lower, entry_id FROM entry_names');
-      if (enRows.length && enRows[0].values.length) {
-        await clearStore('isbe_entry_names');
-        const names = enRows[0].values.map(([nameLower, entryId]) => ({
-          nameLower: nameLower as string,
-          entryId: entryId as number,
-        }));
-        console.log(`Importing ${names.length} ISBE entry-name index entries...`);
-        const CHUNK_SIZE = 1000;
-        for (let i = 0; i < names.length; i += CHUNK_SIZE) {
-          const chunk = names.slice(i, i + CHUNK_SIZE);
-          await batchWriteTransaction('isbe_entry_names', (store) => chunk.forEach((n) => store.put(n)));
-        }
-        console.log(`✅ Imported ${names.length} entry-name index entries`);
-      }
+      await clearStore('isbe_entry_names');
+      await streamTable(
+        db,
+        'SELECT name_lower, entry_id FROM entry_names',
+        'isbe_entry_names',
+        ([nameLower, entryId]) => ({ nameLower: nameLower as string, entryId: entryId as number }),
+        { label: 'entry-name index entries' },
+      );
 
-      // Full-text token index (large — ~860k rows)
-      const tokRows = db.exec('SELECT token, entry_id FROM entry_tokens');
-      if (tokRows.length && tokRows[0].values.length) {
-        await clearStore('isbe_tokens');
-        const toks = tokRows[0].values.map(([token, entryId]) => ({
-          token: token as string,
-          entryId: entryId as number,
-        }));
-        console.log(`Importing ${toks.length} ISBE token postings...`);
-        const CHUNK_SIZE = 2000;
-        for (let i = 0; i < toks.length; i += CHUNK_SIZE) {
-          const chunk = toks.slice(i, i + CHUNK_SIZE);
-          await batchWriteTransaction('isbe_tokens', (store) => chunk.forEach((t) => store.put(t)));
-        }
-        console.log(`✅ Imported ${toks.length} token postings`);
-      }
+      // Full-text token index — 860,000 rows, the biggest table in the pack and
+      // the one that used to set the memory high-water mark for everything
+      // imported after it.
+      await clearStore('isbe_tokens');
+      await streamTable(
+        db,
+        'SELECT token, entry_id FROM entry_tokens',
+        'isbe_tokens',
+        ([token, entryId]) => ({ token: token as string, entryId: entryId as number }),
+        { batchSize: 2000, label: 'token postings' },
+      );
 
       // Places (keyPath placeId)
-      const placeRows = db.exec(
+      await streamTable(
+        db,
         'SELECT place_id, primary_name, entry_id, type, latitude, longitude, modern_name, preceding_article, verse_count FROM places',
+        'isbe_places',
+        ([placeId, primaryName, entryId, type, latitude, longitude, modernName, precedingArticle, verseCount]) => ({
+          placeId: placeId as string,
+          primaryName: primaryName as string,
+          entryId: entryId as number | null,
+          type: type as string | null,
+          latitude: latitude as number | null,
+          longitude: longitude as number | null,
+          modernName: modernName as string | null,
+          precedingArticle: precedingArticle as string | null,
+          verseCount: verseCount as number,
+        }),
+        { batchSize: 500, label: 'places' },
       );
-      if (placeRows.length && placeRows[0].values.length) {
-        const places = placeRows[0].values.map(
-          ([placeId, primaryName, entryId, type, latitude, longitude, modernName, precedingArticle, verseCount]) => ({
-            placeId: placeId as string,
-            primaryName: primaryName as string,
-            entryId: entryId as number | null,
-            type: type as string | null,
-            latitude: latitude as number | null,
-            longitude: longitude as number | null,
-            modernName: modernName as string | null,
-            precedingArticle: precedingArticle as string | null,
-            verseCount: verseCount as number,
-          }),
-        );
-        console.log(`Importing ${places.length} ISBE places...`);
-        const CHUNK_SIZE = 500;
-        for (let i = 0; i < places.length; i += CHUNK_SIZE) {
-          const chunk = places.slice(i, i + CHUNK_SIZE);
-          await batchWriteTransaction('isbe_places', (store) => chunk.forEach((p) => store.put(p)));
-        }
-        console.log(`✅ Imported ${places.length} places`);
-      }
 
       // Place name index (with is_phrase flag)
-      const pnRows = db.exec('SELECT name_lower, place_id, is_phrase FROM place_names');
-      if (pnRows.length && pnRows[0].values.length) {
-        await clearStore('isbe_place_names');
-        const names = pnRows[0].values.map(([nameLower, placeId, isPhrase]) => ({
+      await clearStore('isbe_place_names');
+      await streamTable(
+        db,
+        'SELECT name_lower, place_id, is_phrase FROM place_names',
+        'isbe_place_names',
+        ([nameLower, placeId, isPhrase]) => ({
           nameLower: nameLower as string,
           placeId: placeId as string,
           isPhrase: isPhrase as number,
-        }));
-        console.log(`Importing ${names.length} ISBE place-name index entries...`);
-        const CHUNK_SIZE = 1000;
-        for (let i = 0; i < names.length; i += CHUNK_SIZE) {
-          const chunk = names.slice(i, i + CHUNK_SIZE);
-          await batchWriteTransaction('isbe_place_names', (store) => chunk.forEach((n) => store.put(n)));
-        }
-        console.log(`✅ Imported ${names.length} place-name index entries`);
-      }
+        }),
+        { label: 'place-name index entries' },
+      );
 
-      // Place verse appearances
-      const pvRows = db.exec('SELECT place_id, book, chapter, verse, osis FROM place_verses');
-      if (pvRows.length && pvRows[0].values.length) {
-        await clearStore('isbe_place_verses');
-        const verses = pvRows[0].values.map(([placeId, book, chapter, verse, osis]) => ({
+      // Place verse appearances. The book name is normalised on the way in
+      // because "in this chapter" looks these up by the exact stored string —
+      // see the note on topic_verses below.
+      await clearStore('isbe_place_verses');
+      await streamTable(
+        db,
+        'SELECT place_id, book, chapter, verse, osis FROM place_verses',
+        'isbe_place_verses',
+        ([placeId, book, chapter, verse, osis]) => ({
           placeId: placeId as string,
-          book: book as string,
+          book: normalizeBookName(book as string),
           chapter: chapter as number,
           verse: verse as number,
           osis: osis as string | undefined,
-        }));
-        console.log(`Importing ${verses.length} ISBE place-verse links...`);
-        const CHUNK_SIZE = 1000;
-        for (let i = 0; i < verses.length; i += CHUNK_SIZE) {
-          const chunk = verses.slice(i, i + CHUNK_SIZE);
-          await batchWriteTransaction('isbe_place_verses', (store) => chunk.forEach((v) => store.put(v)));
-        }
-        console.log(`✅ Imported ${verses.length} place-verse links`);
-      }
+        }),
+        { label: 'place-verse links' },
+      );
 
       // The Encyclotopical pack is the ISBE tables above plus Nave's Topical.
       // Splitting it this way means an older isbe pack still imports exactly as
       // it always did, and the encyclopedia half of this one is the same rows.
       if (packInfo.type === 'encyclotopical') {
+        await logInstallFlush('naves-start');
         console.log("Importing Nave's Topical Bible...");
 
         // Topics (keyPath topicId — put() overwrites, no clear needed)
-        const topicRows = db.exec(
+        await streamTable(
+          db,
           'SELECT topic_id, title, primary_name, lead, point_count, ref_count FROM topics',
+          'naves_topics',
+          ([topicId, title, primaryName, lead, pointCount, refCount]) => ({
+            topicId: topicId as number,
+            title: title as string,
+            primaryName: primaryName as string,
+            primaryNameLower: ((primaryName as string) || '').toLowerCase(),
+            lead: lead as string | null,
+            pointCount: pointCount as number,
+            refCount: refCount as number,
+          }),
+          { batchSize: 500, label: "Nave's topics" },
         );
-        if (topicRows.length && topicRows[0].values.length) {
-          const topics = topicRows[0].values.map(
-            ([topicId, title, primaryName, lead, pointCount, refCount]) => ({
-              topicId: topicId as number,
-              title: title as string,
-              primaryName: primaryName as string,
-              primaryNameLower: ((primaryName as string) || '').toLowerCase(),
-              lead: lead as string | null,
-              pointCount: pointCount as number,
-              refCount: refCount as number,
-            }),
-          );
-          console.log(`Importing ${topics.length} Nave's topics...`);
-          const CHUNK_SIZE = 500;
-          for (let i = 0; i < topics.length; i += CHUNK_SIZE) {
-            const chunk = topics.slice(i, i + CHUNK_SIZE);
-            await batchWriteTransaction('naves_topics', (store) => chunk.forEach((t) => store.put(t)));
-          }
-          console.log(`✅ Imported ${topics.length} topics`);
-        }
 
         // Name index
-        const tnRows = db.exec('SELECT name_lower, topic_id FROM topic_names');
-        if (tnRows.length && tnRows[0].values.length) {
-          await clearStore('naves_names');
-          const names = tnRows[0].values.map(([nameLower, topicId]) => ({
-            nameLower: nameLower as string,
-            topicId: topicId as number,
-          }));
-          console.log(`Importing ${names.length} topic-name index entries...`);
-          const CHUNK_SIZE = 1000;
-          for (let i = 0; i < names.length; i += CHUNK_SIZE) {
-            const chunk = names.slice(i, i + CHUNK_SIZE);
-            await batchWriteTransaction('naves_names', (store) => chunk.forEach((n) => store.put(n)));
-          }
-          console.log(`✅ Imported ${names.length} topic-name index entries`);
-        }
+        await clearStore('naves_names');
+        await streamTable(
+          db,
+          'SELECT name_lower, topic_id FROM topic_names',
+          'naves_names',
+          ([nameLower, topicId]) => ({ nameLower: nameLower as string, topicId: topicId as number }),
+          { label: 'topic-name index entries' },
+        );
 
-        // Outline points
-        const tpRows = db.exec('SELECT topic_id, seq, depth, text, refs, links FROM topic_points');
-        if (tpRows.length && tpRows[0].values.length) {
-          await clearStore('naves_points');
-          const points = tpRows[0].values.map(([topicId, seq, depth, text, refs, links]) => ({
+        // Outline points. This is the table the install used to die a fifth of
+        // the way into, which left every topic past the letter C with a header
+        // promising points and references and a body with nothing in it.
+        await clearStore('naves_points');
+        await streamTable(
+          db,
+          'SELECT topic_id, seq, depth, text, refs, links FROM topic_points',
+          'naves_points',
+          ([topicId, seq, depth, text, refs, links]) => ({
             topicId: topicId as number,
             seq: seq as number,
             depth: depth as number,
@@ -1403,52 +1429,44 @@ export async function importPackFromBytes(
             // topic is opened, so parsing 29,000 of them up front would be waste.
             refs: refs as string | null,
             links: links as string | null,
-          }));
-          console.log(`Importing ${points.length} outline points...`);
-          const CHUNK_SIZE = 1000;
-          for (let i = 0; i < points.length; i += CHUNK_SIZE) {
-            const chunk = points.slice(i, i + CHUNK_SIZE);
-            await batchWriteTransaction('naves_points', (store) => chunk.forEach((p) => store.put(p)));
-          }
-          console.log(`✅ Imported ${points.length} outline points`);
-        }
+          }),
+          { label: 'outline points' },
+        );
 
-        // Verse citations
-        const tvRows = db.exec('SELECT topic_id, book, chapter, verse, osis FROM topic_verses');
-        if (tvRows.length && tvRows[0].values.length) {
-          await clearStore('naves_verses');
-          const verses = tvRows[0].values.map(([topicId, book, chapter, verse, osis]) => ({
+        // Verse citations.
+        //
+        // The book name is normalised on the way in. The builders write the OSIS
+        // book title, which calls the book of Psalms "Psalms"; the app's
+        // canonical name is the singular "Psalm", the way you'd name one song
+        // out of a songbook. Everywhere that folds the name in passing coped
+        // with the difference, but getNavesInChapter queries the store index by
+        // the exact string -- so the "In Psalm 23" button matched nothing, for
+        // all 150 Psalms. Folding it here fixes it for every pack at once and
+        // keeps a builder's naming from ever reaching a stored key again.
+        await clearStore('naves_verses');
+        await streamTable(
+          db,
+          'SELECT topic_id, book, chapter, verse, osis FROM topic_verses',
+          'naves_verses',
+          ([topicId, book, chapter, verse, osis]) => ({
             topicId: topicId as number,
-            book: book as string,
+            book: normalizeBookName(book as string),
             chapter: chapter as number,
             verse: verse as number,
             osis: osis as string | undefined,
-          }));
-          console.log(`Importing ${verses.length} topic-verse links...`);
-          const CHUNK_SIZE = 2000;
-          for (let i = 0; i < verses.length; i += CHUNK_SIZE) {
-            const chunk = verses.slice(i, i + CHUNK_SIZE);
-            await batchWriteTransaction('naves_verses', (store) => chunk.forEach((v) => store.put(v)));
-          }
-          console.log(`✅ Imported ${verses.length} topic-verse links`);
-        }
+          }),
+          { batchSize: 2000, label: 'topic-verse links' },
+        );
 
         // Full-text token index
-        const ttRows = db.exec('SELECT token, topic_id FROM topic_tokens');
-        if (ttRows.length && ttRows[0].values.length) {
-          await clearStore('naves_tokens');
-          const toks = ttRows[0].values.map(([token, topicId]) => ({
-            token: token as string,
-            topicId: topicId as number,
-          }));
-          console.log(`Importing ${toks.length} topic search tokens...`);
-          const CHUNK_SIZE = 2000;
-          for (let i = 0; i < toks.length; i += CHUNK_SIZE) {
-            const chunk = toks.slice(i, i + CHUNK_SIZE);
-            await batchWriteTransaction('naves_tokens', (store) => chunk.forEach((t) => store.put(t)));
-          }
-          console.log(`✅ Imported ${toks.length} topic search tokens`);
-        }
+        await clearStore('naves_tokens');
+        await streamTable(
+          db,
+          'SELECT token, topic_id FROM topic_tokens',
+          'naves_tokens',
+          ([token, topicId]) => ({ token: token as string, topicId: topicId as number }),
+          { batchSize: 2000, label: 'topic search tokens' },
+        );
       }
 
       console.log(`✅ ${packInfo.type === 'encyclotopical' ? 'Encyclotopical' : 'ISBE'} pack ${packInfo.id} imported`);
@@ -2391,9 +2409,11 @@ export async function importPackFromBytes(
         console.error('Audio pack OPFS install failed:', audioErr);
         throw audioErr;
       }
+      await markImportComplete();
       return; // skip the generic sql.js processing below
     }
 
+    await markImportComplete();
   } catch (importErr) {
     logInstallError('import-threw', importErr);
     throw importErr;

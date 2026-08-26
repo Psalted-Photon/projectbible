@@ -118,6 +118,31 @@
   $: title = topic?.primaryName || primaryName;
   $: hasVerses = verses.length > 0;
 
+  // The header counts come from the topic row; the outline and the verse list
+  // come from two other tables, imported separately. An install killed partway
+  // through leaves the counts promising content that never arrived, so the card
+  // says so rather than rendering empty space under a header that reads
+  // "6 points · 11 references".
+  $: outlineIncomplete = !!topic && topic.pointCount > 0 && topic.points.length === 0;
+  // Not "refCount > 0 && no verses": 22 topics cite nothing but whole chapters
+  // ("Cornelius" points at Acts 10 and no verse in it), and a chapter pins no
+  // verse to list. Those have an empty Verses tab honestly. What can't happen
+  // on its own is a topic citing an actual verse and having no verse rows.
+  $: versesIncomplete =
+    !!topic &&
+    verses.length === 0 &&
+    topic.points.some((p) => p.refs.some((r) => citesAVerse(r.osis)));
+
+  /** Does this reference name a verse, rather than a whole chapter? */
+  function citesAVerse(osis: string): boolean {
+    return osis.split('-')[0].split('.').length >= 3;
+  }
+
+  // Nothing re-downloads this pack on its own — it isn't one of the packs with
+  // a load trigger — so the fix is a deliberate tap, and the message says where.
+  const REPAIR_HINT =
+    "Open Settings → Manage Packs and tap Encyclotopical to finish installing it.";
+
   function persistView() {
     if (!windowId) return;
     windowStore.updateContentState(windowId, {
@@ -242,6 +267,18 @@
    */
   function refColor(osis: string): string {
     return getBookColor(parseOsisRef(osis)?.book ?? "");
+  }
+
+  /**
+   * Can we actually go where this reference points?
+   *
+   * Nave's cites the Prayer of Azariah and the Wisdom of Solomon a handful of
+   * times — apocrypha, which this app doesn't carry. Those are still worth
+   * printing, because they say what the author had in mind, but not as
+   * something that looks tappable and then does nothing.
+   */
+  function refIsLive(osis: string): boolean {
+    return parseOsisRef(osis) !== null;
   }
 
   function openTopic(id: number, name: string) {
@@ -480,7 +517,7 @@
 
     <div class="tabs">
       <button class:active={activeTab === "outline"} on:click={() => selectTab("outline")}>Outline</button>
-      {#if hasVerses}
+      {#if hasVerses || versesIncomplete}
         <button class:active={activeTab === "verses"} on:click={() => selectTab("verses")}>Verses</button>
       {/if}
     </div>
@@ -490,6 +527,8 @@
         <div class="muted">Loading…</div>
       {:else if !topic}
         <div class="muted">No topic here. Install the Encyclotopical pack to read Nave's.</div>
+      {:else if outlineIncomplete}
+        <div class="muted">This topic's outline didn't finish installing. {REPAIR_HINT}</div>
       {:else if activeTab === "outline"}
         {#if sections.some((s) => s.children.length)}
           <button class="expand-all" on:click={toggleAll}>
@@ -509,7 +548,11 @@
               {#if section.point.refs.length || section.point.links.length}
                 <div class="chips indent">
                   {#each section.point.refs as r}
-                    <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
+                    {#if refIsLive(r.osis)}
+                      <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
+                    {:else}
+                      <span class="ref-dead" title="Nave's cites a book this app doesn't carry">{r.label}</span>
+                    {/if}
                   {/each}
                   {#each section.point.links as l}
                     {#if l.topicId != null}
@@ -528,7 +571,11 @@
                       {#if child.refs.length || child.links.length}
                         <div class="chips">
                           {#each child.refs as r}
-                            <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
+                            {#if refIsLive(r.osis)}
+                      <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
+                    {:else}
+                      <span class="ref-dead" title="Nave's cites a book this app doesn't carry">{r.label}</span>
+                    {/if}
                           {/each}
                           {#each child.links as l}
                             {#if l.topicId != null}
@@ -551,7 +598,11 @@
                 {#if section.point.refs.length || section.point.links.length}
                   <div class="chips">
                     {#each section.point.refs as r}
+                      {#if refIsLive(r.osis)}
                       <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
+                    {:else}
+                      <span class="ref-dead" title="Nave's cites a book this app doesn't carry">{r.label}</span>
+                    {/if}
                     {/each}
                     {#each section.point.links as l}
                       {#if l.topicId != null}
@@ -567,38 +618,42 @@
           </div>
         {/each}
       {:else if activeTab === "verses"}
-        <div class="verses">
-          {#each versesByBook as group}
-            <div class="vb-group">
-              <button class="vb-header" on:click={() => toggleBook(group.book)}>
-                <span class="vb-caret" style="color:{group.color}">
-                  {expandedBooks.has(group.book) ? "▼" : "▶"}
-                </span>
-                <span class="vb-name" style="color:{group.color}">{group.book}</span>
-                <span class="vb-count">({group.refs.length})</span>
-              </button>
-              {#if expandedBooks.has(group.book)}
-                <div class="vb-refs">
-                  {#each group.refs as r}
-                    {@const key = `${group.book} ${r.chapter}:${r.verse}`}
-                    <button
-                      class="vb-ref"
-                      style="border-left-color:{group.color}"
-                      on:click={() => navigateToVerse(group.book, r.chapter, r.verse)}
-                    >
-                      <span class="vb-ref-label" style="color:{group.color}">
-                        {group.book} {r.chapter}:{r.verse}
-                      </span>
-                      {#if versePreviews[key]}
-                        <span class="vb-ref-text">{@html renderVersePreviewHtml(versePreviews[key], { maxLength: 150 })}</span>
-                      {/if}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/each}
-        </div>
+        {#if versesIncomplete}
+          <div class="muted">This topic's verse list didn't finish installing. {REPAIR_HINT}</div>
+        {:else}
+          <div class="verses">
+            {#each versesByBook as group}
+              <div class="vb-group">
+                <button class="vb-header" on:click={() => toggleBook(group.book)}>
+                  <span class="vb-caret" style="color:{group.color}">
+                    {expandedBooks.has(group.book) ? "▼" : "▶"}
+                  </span>
+                  <span class="vb-name" style="color:{group.color}">{group.book}</span>
+                  <span class="vb-count">({group.refs.length})</span>
+                </button>
+                {#if expandedBooks.has(group.book)}
+                  <div class="vb-refs">
+                    {#each group.refs as r}
+                      {@const key = `${group.book} ${r.chapter}:${r.verse}`}
+                      <button
+                        class="vb-ref"
+                        style="border-left-color:{group.color}"
+                        on:click={() => navigateToVerse(group.book, r.chapter, r.verse)}
+                      >
+                        <span class="vb-ref-label" style="color:{group.color}">
+                          {group.book} {r.chapter}:{r.verse}
+                        </span>
+                        {#if versePreviews[key]}
+                          <span class="vb-ref-text">{@html renderVersePreviewHtml(versePreviews[key], { maxLength: 150 })}</span>
+                        {/if}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
       {/if}
     </div>
 
@@ -873,7 +928,8 @@
   /* Nave's points at a few hundred topics the module never carried. They are
      still worth printing — they say what the author had in mind — but not as
      something that looks tappable. */
-  .link-dead {
+  .link-dead,
+  .ref-dead {
     border: 1px dashed rgba(255, 255, 255, 0.12);
     border-radius: 4px;
     color: var(--text-muted, #888);

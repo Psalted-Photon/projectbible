@@ -118,13 +118,19 @@ export async function loadPackOnDemand(
         // predates contentHash has none recorded, so it re-installs once.
         const installedHash = (installedPack as any).contentHash;
         const sameContent = !!installedHash && installedHash === manifestPack?.sha256;
-        if (!manifestPack || (installedPack.version === manifestPack.version && sameContent)) {
+        // Matching hashes say the right bytes were downloaded, not that they
+        // finished being imported. An install killed partway leaves stores empty
+        // behind a registry row that looks perfect, so check the data too.
+        const { packDataLooksComplete } = await import('../adapters/db-manager');
+        const dataComplete = await packDataLooksComplete(packId, installedPack.type);
+        if (!manifestPack || (installedPack.version === manifestPack.version && sameContent && dataComplete)) {
           console.log(`Pack ${packId} already installed and up-to-date (${installedPack.version})`);
           return;
         }
         console.log(
           `Pack ${packId} update available: ${installedPack.version} → ${manifestPack.version}`
-          + (sameContent ? '' : ' (contents changed)'),
+          + (sameContent ? '' : ' (contents changed)')
+          + (dataComplete ? '' : ' (last install did not finish)'),
         );
       } catch {
         console.log(`Pack ${packId} already installed`);

@@ -258,17 +258,26 @@ export function parseRefString(
 /**
  * Parse an OSIS-style ref string (e.g. "Gen.2.4", "1John.4.9-1John.4.10")
  * into a navigable target. Returns null if the ref can't be parsed.
+ *
+ * A reference to a whole chapter ("2Sam.20", "Acts.10") lands on its first
+ * verse — the same convention parseRefString uses a few lines up for a bare
+ * "Genesis 5". Nave's cites a chapter this way 2,207 times, and insisting on a
+ * verse number meant every one of them rendered as an uncoloured chip that did
+ * nothing at all when tapped.
  */
 export function parseOsisRef(ref: string): RefTarget | null {
   if (!ref) return null;
   // Take only the first ref in a range (strip everything from '-' onward)
   const primary = ref.split('-')[0].trim();
-  // OSIS format: BOOK.CHAPTER.VERSE  (e.g. Gen.2.4, 1John.4.9)
-  // The book portion is everything up to the first run of digits followed by a dot+digit
-  const m = primary.match(/^([1-9]?[A-Za-z]+)\.([0-9]+)\.([0-9]+)$/);
+  // OSIS format: BOOK.CHAPTER.VERSE (e.g. Gen.2.4, 1John.4.9), or BOOK.CHAPTER
+  const m = primary.match(/^([1-9]?[A-Za-z]+)\.([0-9]+)(?:\.([0-9]+))?$/);
   if (!m) return null;
   const [, bookRaw, chapterStr, verseStr] = m;
   const canonical = BOOK_MAP[bookRaw.toLowerCase()];
   if (!canonical) return null;
-  return { book: canonical, chapter: parseInt(chapterStr), verse: parseInt(verseStr) };
+  return {
+    book: canonical,
+    chapter: parseInt(chapterStr),
+    verse: verseStr ? parseInt(verseStr) : 1,
+  };
 }

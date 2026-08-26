@@ -5,6 +5,7 @@
     removePack,
     getDatabaseStats,
     audioPackHasChapters,
+    packDataLooksComplete,
   } from "../../adapters/db-manager";
   import { importPackFromSQLite, importPackFromBytes, importArtImageShard } from "../../adapters/pack-import";
   import { installAudioPackToOPFS, reindexAudioPack } from "../../adapters/audio";
@@ -35,6 +36,8 @@
 
   let installedPacks: PackInfo[] = [];
   let packsNeedingReindex = new Set<string>();
+  /** Reference packs whose import was cut short — installed, but missing rows. */
+  let packsIncomplete = new Set<string>();
   let isLoading = true;
   let dbStats = {
     totalSize: "0 MB",
@@ -501,13 +504,21 @@ Free up space on your device, or remove a pack you are not using, then try again
       // but audio_chapters were evicted). Flag these for Re-index instead of
       // forcing a full re-download.
       const reindexSet = new Set<string>();
+      // And each reference pack for a cut-short import — a registry row over
+      // stores that are partly or entirely empty. Nothing re-downloads these on
+      // their own, so without a flag here the damage is invisible until you open
+      // an article or a topic and find the page blank.
+      const incompleteSet = new Set<string>();
       for (const pack of installedPacks) {
         if (pack.type === 'audio') {
           const hasChapters = await audioPackHasChapters(pack.id);
           if (!hasChapters) reindexSet.add(pack.id);
+        } else if (!(await packDataLooksComplete(pack.id, pack.type))) {
+          incompleteSet.add(pack.id);
         }
       }
       packsNeedingReindex = reindexSet;
+      packsIncomplete = incompleteSet;
     } catch (error) {
       console.error("Error loading packs:", error);
       alert(`Failed to load packs: ${error}`);
@@ -720,7 +731,10 @@ Free up space on your device, or remove a pack you are not using, then try again
     {:else}
       <div class="pack-list">
         {#each installedPacks as pack (pack.id)}
-          <div class="pack-item" class:needs-reindex={packsNeedingReindex.has(pack.id)}>
+          <div
+            class="pack-item"
+            class:needs-reindex={packsNeedingReindex.has(pack.id) || packsIncomplete.has(pack.id)}
+          >
             <div class="pack-icon"><span class="emoji">{getPackTypeIcon(pack.type)}</span></div>
             <div class="pack-info">
               <div class="pack-name">{pack.id}</div>
@@ -733,6 +747,9 @@ Free up space on your device, or remove a pack you are not using, then try again
                 {#if packsNeedingReindex.has(pack.id)}
                   <span class="pack-separator">•</span>
                   <span class="reindex-warning">index missing</span>
+                {:else if packsIncomplete.has(pack.id)}
+                  <span class="pack-separator">•</span>
+                  <span class="reindex-warning">install unfinished</span>
                 {/if}
               </div>
             </div>

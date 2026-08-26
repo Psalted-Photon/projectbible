@@ -85,6 +85,59 @@ const ISBE_STORES = [
 ];
 const NAVES_STORES = ['naves_topics', 'naves_names', 'naves_points', 'naves_verses', 'naves_tokens'];
 
+/**
+ * Stores that a finished install of each pack must have put rows in.
+ *
+ * Only the reference works whose import fills every one of their own stores in
+ * a single run. Deliberately not 'art': its images arrive in separate shard
+ * packs, so an art install with an empty art_images store is normal, and
+ * treating that as damage would re-download it on every launch forever.
+ */
+const REQUIRED_STORES_BY_TYPE: Record<string, string[]> = {
+  isbe: ISBE_STORES,
+  encyclotopical: [...ISBE_STORES, ...NAVES_STORES],
+  people: ['people', 'person_names', 'person_verses'],
+};
+
+/**
+ * Did this pack's data actually all arrive?
+ *
+ * A pack is imported one table at a time, and an import can be killed partway
+ * through — Chrome reclaiming the tab under memory pressure is the usual way.
+ * What that leaves behind is a registry row saying "installed" over stores that
+ * are partly or entirely empty. The Encyclotopical pack failed exactly this way:
+ * the encyclopedia and the topic list arrived, the outline points stopped a
+ * fifth of the way in, and the verse links never started — so every topic past
+ * the letter C showed a header promising references above an empty card.
+ *
+ * An empty store is the cheap, unambiguous signal. A store that is short rather
+ * than empty isn't caught here, but the tables import in order, so a run that
+ * died anywhere leaves at least one of the later ones with nothing in it.
+ */
+export async function packDataLooksComplete(packId: string, packType: string): Promise<boolean> {
+  const required = REQUIRED_STORES_BY_TYPE[packType];
+  if (!required) return true;
+
+  const db = await openDB();
+  // A pack whose schema postdates this database has stores that aren't there to
+  // count; that's a migration matter, not a half-finished install.
+  const present = required.filter((name) => db.objectStoreNames.contains(name));
+  if (!present.length) return true;
+
+  for (const name of present) {
+    const count = await new Promise<number>((resolve) => {
+      const req = db.transaction(name, 'readonly').objectStore(name).count();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(0);
+    });
+    if (count === 0) {
+      console.warn(`[packs] ${packId}: "${name}" is empty — the last install did not finish`);
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function removePack(packId: string): Promise<void> {
   // Step 1: Read all pack metadata to determine type and collect sub-pack IDs / translation IDs.
   // Virtual sub-packs (e.g. 'translations-consolidated-KJV') share the packId prefix.
@@ -209,10 +262,9 @@ export async function removePack(packId: string): Promise<void> {
     // encyclopedia removed its registry row and left all of its data in place
     // — the pack looked gone but every article still worked.
     const STORES_BY_TYPE: Record<string, string[]> = {
-      isbe: ISBE_STORES,
-      // Encyclotopical is the ISBE tables plus Nave's, so it clears both.
-      encyclotopical: [...ISBE_STORES, ...NAVES_STORES],
-      people: ['people', 'person_names', 'person_verses'],
+      ...REQUIRED_STORES_BY_TYPE,
+      // Removal covers more than the completeness check does: art's images
+      // arrive in shard packs, but deleting art should still take them with it.
       art: ['art_scenes', 'art_images'],
       geonames: ['modern_places'],
       headings: ['section_headings'],

@@ -5,6 +5,7 @@
 
 import { openDB } from './db.js';
 import { dictionaryCache } from '../lib/lru-cache.js';
+import { normalizeBookName } from '../lib/bibleData.js';
 
 export interface Definition {
   id: number;
@@ -1745,6 +1746,7 @@ export async function annotateLibraryBadges(rows: LibraryRow[], letter: string):
  * back to their articles.
  */
 export async function getIsbeEntriesInChapter(book: string, chapter: number): Promise<LibraryRow[]> {
+  const name = normalizeBookName(book);
   const db = await openDB();
   if (!db.objectStoreNames.contains('isbe_place_verses') || !db.objectStoreNames.contains('isbe_places')) {
     return [];
@@ -1757,7 +1759,7 @@ export async function getIsbeEntriesInChapter(book: string, chapter: number): Pr
       .index('book_chapter_verse');
     // An array sorts after any number, so this upper bound catches every verse
     // in the chapter without needing to know how many there are.
-    const req = idx.getAll(IDBKeyRange.bound([book, chapter], [book, chapter, []]));
+    const req = idx.getAll(IDBKeyRange.bound([name, chapter], [name, chapter, []]));
     req.onsuccess = () => resolve([...new Set((req.result || []).map((r: any) => r.placeId))]);
     req.onerror = () => resolve([]);
   });
@@ -2196,12 +2198,13 @@ export async function searchNaves(query: string, limit = 60): Promise<LibraryRow
 
 /** Topics citing a verse in this chapter — the "in this chapter" button. */
 export async function getNavesInChapter(book: string, chapter: number): Promise<LibraryRow[]> {
+  const name = normalizeBookName(book);
   const db = await openDB();
   if (!db.objectStoreNames.contains('naves_verses')) return [];
 
   const ids = await new Promise<number[]>((resolve) => {
     const idx = db.transaction('naves_verses', 'readonly').objectStore('naves_verses').index('book_chapter_verse');
-    const req = idx.getAll(IDBKeyRange.bound([book, chapter], [book, chapter, []]));
+    const req = idx.getAll(IDBKeyRange.bound([name, chapter], [name, chapter, []]));
     req.onsuccess = () => resolve([...new Set((req.result || []).map((r: any) => r.topicId as number))]);
     req.onerror = () => resolve([]);
   });
@@ -2331,6 +2334,7 @@ export async function searchPeople(query: string, limit = 60): Promise<LibraryRo
 
 /** People who turn up in one chapter — the "in this chapter" button. */
 export async function getPeopleInChapter(book: string, chapter: number): Promise<LibraryRow[]> {
+  const name = normalizeBookName(book);
   const db = await openDB();
   if (!db.objectStoreNames.contains('person_verses')) return [];
 
@@ -2339,7 +2343,7 @@ export async function getPeopleInChapter(book: string, chapter: number): Promise
       .transaction('person_verses', 'readonly')
       .objectStore('person_verses')
       .index('book_chapter_verse');
-    const req = idx.getAll(IDBKeyRange.bound([book, chapter], [book, chapter, []]));
+    const req = idx.getAll(IDBKeyRange.bound([name, chapter], [name, chapter, []]));
     req.onsuccess = () => resolve(new Set((req.result || []).map((r: any) => r.personId)));
     req.onerror = () => resolve(new Set());
   });
