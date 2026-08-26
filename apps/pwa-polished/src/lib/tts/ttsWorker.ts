@@ -15,12 +15,13 @@ import {
   storedVoices,
   isVoiceInstalled,
   synthesize,
+  synthesizeWord,
 } from './piperEngine.js';
 import { TtsError, type TtsSource } from './voices.js';
 
 interface TtsRequest {
   id: number;
-  action: 'download' | 'installData' | 'remove' | 'stored' | 'installed' | 'synthesize';
+  action: 'download' | 'installData' | 'remove' | 'stored' | 'installed' | 'synthesize' | 'synthesizeWord';
   payload?: {
     voiceId?: string;
     text?: string;
@@ -60,6 +61,14 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
       }
       case 'installed': {
         self.postMessage({ id, ok: true, result: await isVoiceInstalled(payload!.voiceId!) });
+        break;
+      }
+      case 'synthesizeWord': {
+        const clip = await synthesizeWord(payload!.text!, payload!.voiceId!, {
+          espeakVoice: payload!.espeakVoice,
+          substitutions: payload!.substitutions,
+        });
+        (self as unknown as Worker).postMessage({ id, ok: true, result: clip }, [clip]);
         break;
       }
       case 'synthesize': {

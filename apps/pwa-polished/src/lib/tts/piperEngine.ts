@@ -25,6 +25,13 @@ import {
   type TtsProgressCallback,
   type TtsSource,
 } from './voices.js';
+import {
+  carrierFor,
+  measureCopies,
+  copiesAgree,
+  cutWord,
+  WORD_ATTEMPTS,
+} from './wordAudio.js';
 
 const ASSET_BASE = '/tts';
 const OPFS_DIR = 'piper';
@@ -324,4 +331,60 @@ export async function synthesize(
   const results = await session.run(feeds);
   const samples = results.output.data as Float32Array;
   return encodeWav(samples, config.audio.sample_rate);
+}
+
+/**
+ * Synthesize a single word.
+ *
+ * The word is spoken inside a carrier and cut back out; see wordAudio.ts for
+ * why it cannot simply be synthesized on its own. Renders are stochastic, so a
+ * clip whose two copies disagree is thrown away and re-rolled rather than
+ * played — a wrong cut is never heard, at worst the word is reported unspoken.
+ */
+export async function synthesizeWord(
+  word: string,
+  voiceId: string,
+  speech?: { espeakVoice?: string; substitutions?: Record<string, string> }
+): Promise<ArrayBuffer> {
+  const config = await getConfig(voiceId);
+  const session = await getSession(voiceId);
+  const espeakVoice = speech?.espeakVoice || config.espeak.voice;
+  const sampleRate = config.audio.sample_rate;
+  const text = carrierFor(word.trim());
+
+  for (let attempt = 0; attempt < WORD_ATTEMPTS; attempt++) {
+    const result = await phonemize(text, espeakVoice);
+    let phonemeIds = result.phonemeIds;
+    const subs = speech?.substitutions;
+    if (subs && Object.keys(subs).length > 0 && config.phoneme_id_map) {
+      const rewritten = result.phonemes.map((p) => subs[p] ?? p);
+      if (rewritten.some((p, i) => p !== result.phonemes[i])) {
+        phonemeIds = idsFromPhonemes(rewritten, config.phoneme_id_map);
+      }
+    }
+
+    const feeds: Record<string, ort.Tensor> = {
+      input: new ort.Tensor('int64', phonemeIds, [1, phonemeIds.length]),
+      input_lengths: new ort.Tensor('int64', [phonemeIds.length]),
+      scales: new ort.Tensor('float32', [
+        config.inference.noise_scale,
+        config.inference.length_scale,
+        config.inference.noise_w,
+      ]),
+    };
+    if (Object.keys(config.speaker_id_map ?? {}).length > 0) {
+      feeds.sid = new ort.Tensor('int64', [0]);
+    }
+
+    const results = await session.run(feeds);
+    const samples = results.output.data as Float32Array;
+
+    const measured = measureCopies(samples, sampleRate);
+    if (!measured) continue;
+    if (!copiesAgree(measured.first, measured.last)) continue;
+
+    return encodeWav(cutWord(samples, sampleRate, measured.cutAt, measured.gapEnd), sampleRate);
+  }
+
+  throw new TtsError('SYNTH_FAILED', `Could not pronounce "${word}" cleanly`);
 }

@@ -247,6 +247,26 @@ export async function synthesizeSpeech(
   return new Blob([wav], { type: 'audio/wav' });
 }
 
+/**
+ * Speak one Greek word on its own.
+ *
+ * The voice cannot render a two- or three-sound utterance, so the word is
+ * synthesized inside a carrier and cut back out in the worker. Rejects rather
+ * than returning audio it could not verify.
+ */
+export async function synthesizeWordSpeech(
+  word: string,
+  voiceId: string,
+  speech?: { espeakVoice?: string; substitutions?: Record<string, string> }
+): Promise<Blob> {
+  const wav = await call<ArrayBuffer>(
+    'synthesizeWord',
+    { text: word, voiceId, espeakVoice: speech?.espeakVoice, substitutions: speech?.substitutions },
+    { timeoutMs: SYNTH_TIMEOUT_MS }
+  );
+  return new Blob([wav], { type: 'audio/wav' });
+}
+
 // ─── shared audio element (iOS autoplay workaround) ─────────────────────────
 
 let sharedAudio: HTMLAudioElement | null = null;

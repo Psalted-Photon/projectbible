@@ -47,7 +47,7 @@
   import TtsPlayer from "./TtsPlayer.svelte";
   import { FEATURES } from "../config";
   import {
-    synthesizeSpeech,
+    synthesizeWordSpeech,
     unlockTtsAudio,
     isVoiceInstalled,
     greekSpeechRoute,
@@ -656,7 +656,14 @@
         showTtsVoiceNeeded = route.voiceId;
         return;
       }
-      const blob = await synthesizeSpeech(text, route.voiceId, {
+      // The voice cannot say a short word on its own; the worker speaks it
+      // inside a carrier and cuts it back out, rejecting anything it cannot
+      // verify. Logged here, on the main thread, because eruda cannot see
+      // console output from inside a Web Worker.
+      console.log(
+        `🔊 word "${text}" voice=${route.voiceId} espeak=${route.espeakVoice}`
+      );
+      const blob = await synthesizeWordSpeech(text, route.voiceId, {
         espeakVoice: route.espeakVoice,
         substitutions: route.substitutions,
       });
@@ -665,9 +672,14 @@
       audio.playbackRate = 1;
       await audio.play();
     } catch (err) {
-      console.warn("Could not speak the word:", err);
+      console.warn(`🔊 could not speak "${text}":`, err);
+      speakFailedWord = text;
+      setTimeout(() => { if (speakFailedWord === text) speakFailedWord = null; }, 2500);
     }
   }
+
+  /** Word we could not pronounce cleanly, shown briefly instead of bad audio. */
+  let speakFailedWord: string | null = null;
 
   /** Voice id the user needs to download before a tap-to-speak will work. */
   let showTtsVoiceNeeded: string | null = null;
@@ -5367,6 +5379,13 @@
       <p class="day-complete-plan">{dayCompleteMessage}</p>
       <button class="day-complete-btn" on:click={() => dayCompleteMessage = null}>Great!</button>
     </div>
+  </div>
+{/if}
+
+{#if speakFailedWord}
+  <div class="speak-voice-notice">
+    <span>Couldn’t pronounce “{speakFailedWord}” cleanly — nothing played.</span>
+    <button on:click={() => (speakFailedWord = null)} aria-label="Dismiss">✕</button>
   </div>
 {/if}
 

@@ -99,11 +99,19 @@ export interface SpeechRoute {
  * nothing. Map the length mark away on its own instead.
  */
 const KOINE_FOLD: Record<string, string> = {
-  ː: '',  // ː — drop vowel length; Greek has no long/short contrast
-  ɛ: 'e', // ɛ → e
-  ɪ: 'i', // ɪ → i
-  ʊ: 'u', // ʊ → u
-  y: 'i',      // upsilon, the front rounded vowel Modern Greek lost
+  // Sounds reconstructed Koine needs that this Modern-Greek voice never met.
+  // Measured against 5,000 characters of NT text: the share of a Koine reading
+  // each accounts for, against how often the voice heard it while training.
+  'ː': '',   // ː  8.7% of Koine, 0.0% of Modern — drop vowel length
+  'ɛ': 'e',  // ɛ  3.5% / 0.0%
+  'ɔ': 'o',  // ɔ  2.2% / 0.0%
+  'ɪ': 'i',  // ɪ  1.9% / 0.04%
+  'ɡ': 'ɣ', // ɡ → ɣ  1.9% / 0.13%. Koine wants a hard g; Modern Greek's
+                  // gamma is the fricative, so a hard g renders as weak breath.
+  'ʊ': 'u',  // ʊ  1.2% / 0.0%
+  y: 'i',         // upsilon, the front rounded vowel Modern Greek lost
+  // Hard b is deliberately NOT folded: at 0.30% it is rare but audible, and
+  // keeping it preserves a real Erasmian distinction (βίβλος as b, not v).
 };
 
 export function resolveGreekRoute(pronunciation: GreekPronunciation): SpeechRoute {

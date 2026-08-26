@@ -285,7 +285,17 @@ async function loadChapterUtterances(
         });
       }
     } else if (speech) {
-      out.push({ kind: 'verse', text: speech, book, chapter, verse: row.verse, gapBefore });
+      // A Greek chapter stays on the Greek voice even when the per-word data
+      // is missing. Deciding this from the morphology instead of the
+      // translation is what let Greek text reach an English voice, which
+      // reads it out letter by letter.
+      const route = isGreekTranslation(translation) ? greekSpeechRoute() : null;
+      out.push({
+        kind: 'verse', text: speech, book, chapter, verse: row.verse, gapBefore,
+        voiceId: route?.voiceId,
+        espeakVoice: route?.espeakVoice,
+        substitutions: route?.substitutions,
+      });
     }
     first = false;
   }
