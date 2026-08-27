@@ -935,6 +935,47 @@ Free up space on your device, or remove a pack you are not using, then try again
     {/if}
   {/if}
 
+  <h3 class="sub-head">Advanced Install</h3>
+  <div class="adv-actions">
+    <button
+      class="small-btn"
+      on:click={() => (showInstallUrl = !showInstallUrl)}
+      disabled={isInstalling}
+    >
+      <span class="emoji">🌐</span> From URL
+    </button>
+    <button class="small-btn" on:click={handleInstallFromFileClick} disabled={isInstalling}>
+      <span class="emoji">📁</span> From File
+    </button>
+  </div>
+
+  {#if showInstallUrl}
+    <div class="install-url-form">
+      <input
+        type="text"
+        bind:value={installUrl}
+        placeholder="https://example.com/pack.sqlite"
+        disabled={isInstalling}
+      />
+      <button
+        class="install-btn"
+        on:click={handleInstallFromUrl}
+        disabled={isInstalling || !installUrl.trim()}
+      >
+        Install
+      </button>
+    </div>
+  {/if}
+
+  <!-- Hidden file input -->
+  <input
+    type="file"
+    accept=".sqlite,.db,.sqlite3"
+    bind:this={fileInputElement}
+    on:change={handleFileSelected}
+    style="display: none;"
+  />
+
   {#if isTtsSupported()}
     <h3 class="sub-head"><span class="emoji">🗣</span> Voices (Read Aloud)</h3>
     <div class="pill-list">
@@ -1000,47 +1041,6 @@ Free up space on your device, or remove a pack you are not using, then try again
       style="display:none"
     />
   {/if}
-
-  <h3 class="sub-head">Advanced Install</h3>
-  <div class="adv-actions">
-    <button
-      class="small-btn"
-      on:click={() => (showInstallUrl = !showInstallUrl)}
-      disabled={isInstalling}
-    >
-      <span class="emoji">🌐</span> From URL
-    </button>
-    <button class="small-btn" on:click={handleInstallFromFileClick} disabled={isInstalling}>
-      <span class="emoji">📁</span> From File
-    </button>
-  </div>
-
-  {#if showInstallUrl}
-    <div class="install-url-form">
-      <input
-        type="text"
-        bind:value={installUrl}
-        placeholder="https://example.com/pack.sqlite"
-        disabled={isInstalling}
-      />
-      <button
-        class="install-btn"
-        on:click={handleInstallFromUrl}
-        disabled={isInstalling || !installUrl.trim()}
-      >
-        Install
-      </button>
-    </div>
-  {/if}
-
-  <!-- Hidden file input -->
-  <input
-    type="file"
-    accept=".sqlite,.db,.sqlite3"
-    bind:this={fileInputElement}
-    on:change={handleFileSelected}
-    style="display: none;"
-  />
 
   <p class="footnote">
     <span class="emoji">⚠️</span> Only install packs from sources you trust. Removing
