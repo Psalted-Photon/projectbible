@@ -240,7 +240,13 @@ export default defineConfig({
         // TTS runtime files (~30 MB) are cached on first Read Aloud use, not
         // precached — users who never use TTS never pay the download. The
         // voice model itself lives in OPFS, managed by src/lib/tts/.
-        globIgnores: ['**/tts/**'],
+        // kokoro-test.html is a throwaway speed diagnostic (remove when done).
+        // It must bypass the service worker entirely: precaching would replay a
+        // stored response, and the navigation fallback below would hand back
+        // index.html instead — either way the cross-origin-isolation headers it
+        // needs would not be the ones the browser sees.
+        globIgnores: ['**/tts/**', '**/kokoro-test.html'],
+        navigateFallbackDenylist: [/^\/kokoro-test\.html$/],
         runtimeCaching: [
           {
             urlPattern: /\/tts\/.+\.(wasm|data)$/,
