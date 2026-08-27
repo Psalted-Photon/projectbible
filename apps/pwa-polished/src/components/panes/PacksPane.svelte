@@ -153,11 +153,16 @@
   // Base URL depends on environment
   const BASE_URL = USE_BUNDLED ? "/packs/consolidated" : "/api/packs";
   // Consolidated pack definitions
+  // Each pack carries two descriptions: `description` is the single line that
+  // fits on the pill, and `info` is what the (i) button opens. Everything that
+  // used to be crammed onto the card -- author lists, licence terms, where the
+  // pack actually shows up in the app -- lives in `info` now.
   const CONSOLIDATED_PACKS = [
     {
       id: "translations",
       name: "English Translations",
       description: "KJV, WEB, BSB, NET, LXX2012",
+      info: "Five complete English Bibles: the King James Version (1611), World English Bible, Berean Standard Bible, NET Bible, and LXX2012 — an English rendering of the Greek Septuagint.\n\nThis is the pack everything else builds on; without it there is nothing to read. Switch between the five from the translation picker in any reader window. All public domain or freely licensed.",
       size: "34.55 MB",
       icon: "📖",
       url: `${BASE_URL}/translations.sqlite`,
@@ -165,7 +170,8 @@
     {
       id: "dictionary-en",
       name: "English Dictionary (Modern + Historic)",
-      description: "Modern + Webster 1913 offline definitions",
+      description: "Modern + Webster 1913 definitions",
+      info: "Two English dictionaries in one: a modern definition set, and Webster’s 1913 unabridged — which is what the KJV’s older vocabulary actually meant to the people reading it.\n\nTap any English word in the reader and choose Define. Public domain.",
       size: "48.67 MB",
       icon: "📖",
       url: `${BASE_URL}/dictionary-en.sqlite`,
@@ -173,7 +179,8 @@
     {
       id: "commentaries",
       name: "Multi-Author Commentaries",
-      description: "Clarke, Wesley, Calvin, Barnes, Robertson + 6 more",
+      description: "Henry, Clarke, Calvin, Spurgeon + 14 more",
+      info: "Eighteen commentary sets working through the text a verse at a time: Matthew Henry, Adam Clarke, John Calvin, Charles Spurgeon, John Wesley, Albert Barnes, A.T. Robertson, Martin Luther, Thomas Aquinas (Catena Aurea), Jamieson-Fausset-Brown, E.W. Bullinger, John Lightfoot, Abbott, KingComments, Family Bible Notes, NET Bible Notes, Quotations & Allusions, and the Treasury of Scripture Knowledge.\n\nOpen the Commentary window, or tap a verse and choose Commentary, to read what each one said about where you are. Public domain or free for personal use, via the CrossWire Sword Project and Plano Bible Chapel.",
       size: "224.84 MB",
       icon: "💭",
       url: `${BASE_URL}/commentaries.sqlite`,
@@ -181,7 +188,8 @@
     {
       id: "tsk-references",
       name: "TSK References",
-      description: "Treasury of Scripture Knowledge — 43,000+ cross-reference entries by keyword",
+      description: "43,000+ cross-references by keyword",
+      info: "The Treasury of Scripture Knowledge: over 43,000 entries linking each verse to the other passages that echo it, organised by the specific word in the verse that triggers the link.\n\nCross-references show beside the verse you are reading and in the Cross-References window. Public domain (1830s).",
       size: "6.21 MB",
       icon: "🔗",
       url: `${BASE_URL}/tsk-references.sqlite`,
@@ -189,7 +197,8 @@
     {
       id: "ancient-languages",
       name: "Ancient Languages",
-      description: "Hebrew, Greek with morphology",
+      description: "Hebrew + Greek with morphology",
+      info: "The Hebrew Old Testament and Greek New Testament in their original words, with every word tagged for grammar — tense, case, person and number.\n\nPowers the interlinear view and Greek read-aloud. Turn it on with the interlinear controls in the reader. Public domain.",
       size: "105.31 MB",
       icon: "📜",
       url: `${BASE_URL}/ancient-languages.sqlite`,
@@ -197,7 +206,8 @@
     {
       id: "lexical",
       name: "Lexical Resources",
-      description: "Strong's + English dictionaries",
+      description: "Strong’s + English dictionaries",
+      info: "Strong’s Hebrew and Greek lexicons plus supporting English dictionaries — root meanings, definitions, and every place a given original word appears in scripture.\n\nTap a Greek or Hebrew word in the interlinear to see its Strong’s entry and full verse list. The largest reference pack at around 370 MB. Public domain.",
       size: "372.67 MB",
       icon: "📚",
       url: `${BASE_URL}/lexical.sqlite`,
@@ -205,7 +215,8 @@
     {
       id: "study-tools",
       name: "Study Tools",
-      description: "Biblical and ancient places, historical map layers, chronological reading order",
+      description: "Biblical places, map layers, reading order",
+      info: "Biblical and ancient place locations, historical map layers running from the Old Testament through the Roman era, and a chronological reading order that puts the books in the sequence the events happened.\n\nFeeds the Map window and the chronological plan under Reading Plans. Public domain; place data CC BY 4.0 (OpenBible.info).",
       size: "13.82 MB",
       icon: "🗺️",
       url: `${BASE_URL}/study-tools.sqlite`,
@@ -213,8 +224,8 @@
     {
       id: "encyclotopical",
       name: "Encyclotopical",
-      description:
-        "ISBE Encyclopedia and Nave's Topical Bible. 9,380 scholarly articles on places, people, customs, plants and doctrine, plus 5,322 topics indexing 100,000+ scripture references. Browse both A–Z from the Encyclopedia and Topical windows, or tap a word in the reader → More Info. Public Domain (ISBE 1915; Nave's 1900s); place data CC BY 4.0 (OpenBible.info)",
+      description: "Bible encyclopedia + Nave’s topical index",
+      info: "Two classic references in one pack. The International Standard Bible Encyclopedia (ISBE, 1915) — 9,380 scholarly articles on people, places, customs, plants and doctrine. And Nave’s Topical Bible — 5,322 topics indexing over 100,000 verse references, so looking up “mercy” or “fasting” gives you every passage on it.\n\nBrowse either A–Z from the Encyclopedia and Topical windows, or tap a word in the reader and choose More Info. Public domain; place data CC BY 4.0 (OpenBible.info).",
       size: "77.52 MB",
       icon: "📕",
       url: `${BASE_URL}/encyclotopical.sqlite`,
@@ -222,7 +233,8 @@
     {
       id: "geonames-modern-places-v1",
       name: "World Places (GeoNames)",
-      description: "Search any modern place: cities, states, countries worldwide. 172,000+ places. License: CC BY 4.0 — geonames.org",
+      description: "172,000+ modern cities, states, countries",
+      info: "A gazetteer of over 172,000 modern places worldwide — cities, states, provinces and countries — so you can find somewhere by its present-day name rather than its biblical one.\n\nUsed by the Map window’s search. Entirely optional: the biblical places in Study Tools work without it. CC BY 4.0 — geonames.org.",
       size: "37.23 MB",
       icon: "🌍",
       url: `${BASE_URL}/geonames.sqlite`,
@@ -230,7 +242,8 @@
     {
       id: "section-headings",
       name: "Section Headings",
-      description: "Pericope titles for all 66 books — works with any translation",
+      description: "Pericope titles for all 66 books",
+      info: "The short headings that mark where one passage ends and the next begins — “The Beatitudes”, “Jesus Calms the Storm” — for all 66 books.\n\nThey render above the verse they introduce and work with whichever translation you are reading. Under a megabyte.",
       size: "0.29 MB",
       icon: "📑",
       url: `${BASE_URL}/section-headings.sqlite`,
@@ -238,7 +251,8 @@
     {
       id: "biblical-art",
       name: "Biblical Art",
-      description: "Famous public-domain paintings tied to Bible scenes. Tap the in-text art icon in the reader to view. Images bundled for offline. Public domain — Wikimedia Commons",
+      description: "Public-domain paintings of Bible scenes",
+      info: "Famous paintings by the old masters, matched to the passages they depict. The images ship inside the pack, so they display with no connection.\n\nA small art icon appears in the text wherever a painting exists — tap it to view full screen. Public domain — Wikimedia Commons.",
       size: "83.45 MB",
       icon: "🖼️",
       url: `${BASE_URL}/art.sqlite`,
@@ -246,7 +260,8 @@
     {
       id: "people-biblical-v1",
       name: "Biblical Characters",
-      description: "Every named person: dates, places, family, name meaning, and verse appearances. Tap a name in the reader → Define. License: CC BY-SA 4.0 — Theographic + Hitchcock's (public domain)",
+      description: "Every named person: family, dates, verses",
+      info: "Every named person in scripture: what their name means, roughly when and where they lived, their family relationships, and every verse they appear in.\n\nTap a name in the reader and choose Bio. CC BY-SA 4.0 (Theographic); name meanings from Hitchcock’s (public domain).",
       size: "3.82 MB",
       icon: "👤",
       url: `${BASE_URL}/people.sqlite`,
@@ -254,7 +269,8 @@
     {
       id: "bsb-audio-pt1",
       name: "BSB Audio Part 1",
-      description: "Genesis - Psalms",
+      description: "Genesis – Psalms",
+      info: "The Berean Standard Bible read aloud from Genesis through Psalms — a human narrator, not a synthetic voice.\n\nPlay it with the audio button in any chapter. Around 1.8 GB, stored outside the main database, which is why it can be re-indexed without downloading again. Free to use — bereanbible.com.",
       size: "1.76 GB",
       icon: "🎵",
       url: `${BASE_URL}/bsb-audio-pt1.sqlite`,
@@ -262,12 +278,121 @@
     {
       id: "bsb-audio-pt2",
       name: "BSB Audio Part 2",
-      description: "Proverbs - Revelation",
+      description: "Proverbs – Revelation",
+      info: "The Berean Standard Bible read aloud from Proverbs through Revelation — a human narrator, not a synthetic voice.\n\nPlay it with the audio button in any chapter. Around 1.7 GB, stored outside the main database, which is why it can be re-indexed without downloading again. Free to use — bereanbible.com.",
       size: "1.65 GB",
       icon: "🎵",
       url: `${BASE_URL}/bsb-audio-pt2.sqlite`,
     },
   ];
+
+  const CATALOG_IDS = CONSOLIDATED_PACKS.map((p) => p.id);
+
+  /**
+   * The catalog pack an installed row belongs to, or null when nothing in the
+   * catalog claims it.
+   *
+   * Importing a pack writes a row per translation and per edition inside it --
+   * `translations-KJV`, `biblical-art-images-01` -- and the old installed list
+   * rendered every one of them as a pack in its own right. They fold into their
+   * parent here. What is left over is a real orphan: the standalone `isbe` pack
+   * from before Encyclotopical absorbed it is still installed on devices that
+   * had it, and with the installed list gone there would otherwise be nowhere
+   * left to remove it from.
+   */
+  function catalogIdFor(rowId: string): string | null {
+    if (CATALOG_IDS.includes(rowId)) return rowId;
+    return CATALOG_IDS.find((id) => rowId.startsWith(`${id}-`)) ?? null;
+  }
+
+  interface InstalledState {
+    version: string;
+    bytes: number;
+    needsReindex: boolean;
+    incomplete: boolean;
+  }
+
+  /** Roll the installed rows up into one entry per catalog pack. */
+  function mergeInstalled(
+    rows: PackInfo[],
+    reindex: Set<string>,
+    incomplete: Set<string>
+  ): Map<string, InstalledState> {
+    const merged = new Map<string, InstalledState>();
+    for (const row of rows) {
+      const catalogId = catalogIdFor(row.id);
+      if (!catalogId) continue;
+      let state = merged.get(catalogId);
+      if (!state) {
+        state = { version: "", bytes: 0, needsReindex: false, incomplete: false };
+        merged.set(catalogId, state);
+      }
+      // Only the parent row carries the pack's own version -- the sub-rows get
+      // whatever the import happened to stamp on them, which is not it.
+      if (row.id === catalogId) state.version = row.version;
+      state.bytes += row.size;
+      if (reindex.has(row.id)) state.needsReindex = true;
+      if (incomplete.has(row.id)) state.incomplete = true;
+    }
+    return merged;
+  }
+
+  $: installedById = mergeInstalled(installedPacks, packsNeedingReindex, packsIncomplete);
+  $: orphanPacks = installedPacks.filter((p) => catalogIdFor(p.id) === null);
+  // Count what is on screen. getDatabaseStats() counts rows, so on its own it
+  // reports every sub-row this list folds away.
+  $: packCount = installedById.size + orphanPacks.length;
+
+  /** The one open info card, or null. Shared by packs and voices. */
+  let infoCard: { title: string; body: string; meta: string } | null = null;
+
+  function openPackInfo(
+    pack: (typeof CONSOLIDATED_PACKS)[0],
+    state: InstalledState | undefined
+  ) {
+    infoCard = {
+      title: pack.name,
+      body: pack.info,
+      meta: state
+        ? `Installed${state.version ? ` · v${state.version}` : ""} · ${formatBytes(state.bytes)}`
+        : `Download size ${manifestSizes[pack.id] ?? pack.size}`,
+    };
+  }
+
+  function voiceInfoText(voice: TtsVoiceInfo): string {
+    if (voice.custom) {
+      return (
+        "A voice you added yourself, from a Piper model file and its settings.\n\n" +
+        "It reads chapters like any other voice. Removing it deletes it permanently — " +
+        "there is nothing to download it back from."
+      );
+    }
+    const quality =
+      voice.quality === "standard"
+        ? "Standard quality: the fuller and more natural of the two sizes, and the better pick for long stretches of listening."
+        : "Compact quality: a smaller, lighter model that stays responsive on older phones, at the cost of some smoothness.";
+    return (
+      `${quality}\n\nThe voice downloads once and then runs entirely on your device — ` +
+      "no connection needed, and nothing you listen to leaves the phone. Start it from " +
+      "the 🗣 button in any chapter."
+    );
+  }
+
+  function openVoiceInfo(voice: TtsVoiceInfo, installed: boolean) {
+    infoCard = {
+      title: voice.label,
+      body: voiceInfoText(voice),
+      meta: installed ? "Installed" : `Download size ~${voice.approxSizeMB} MB`,
+    };
+  }
+
+  function closeInfo() {
+    infoCard = null;
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" && infoCard) closeInfo();
+  }
 
   function getStageLabel(stage: string): string {
     switch (stage) {
@@ -695,260 +820,247 @@ Free up space on your device, or remove a pack you are not using, then try again
   }
 </script>
 
+<svelte:window on:keydown={handleKeydown} />
+
 <div class="packs-pane">
   <h2><span class="emoji">📦</span> Pack Management</h2>
+  <p class="db-line">
+    {packCount}
+    {packCount === 1 ? "pack" : "packs"} · {dbStats.verseCount.toLocaleString()} verses
+    · {dbStats.totalSize} used
+  </p>
 
-  <!-- Database Stats -->
-  <div class="stats-card">
-    <h3>Database Statistics</h3>
-    <div class="stats-grid">
-      <div class="stat">
-        <span class="stat-label">Installed Packs</span>
-        <span class="stat-value">{dbStats.packCount}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Total Verses</span>
-        <span class="stat-value">{dbStats.verseCount.toLocaleString()}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Storage Used</span>
-        <span class="stat-value">{dbStats.totalSize}</span>
-      </div>
-    </div>
-  </div>
+  <!-- Sticky: an install started from the top of the list has to stay visible
+       once you scroll down to watch something else. -->
+  {#if installProgress}
+    <div class="progress-message">{installProgress}</div>
+  {/if}
 
-  <!-- Installed Packs List -->
-  <div class="section">
-    <h3>Installed Packs</h3>
-
-    {#if isLoading}
-      <div class="loading">Loading packs...</div>
-    {:else if installedPacks.length === 0}
-      <div class="empty-state">
-        <p>No packs installed yet.</p>
-        <p>Install a pack to get started!</p>
-      </div>
-    {:else}
-      <div class="pack-list">
-        {#each installedPacks as pack (pack.id)}
-          <div
-            class="pack-item"
-            class:needs-reindex={packsNeedingReindex.has(pack.id) || packsIncomplete.has(pack.id)}
-          >
-            <div class="pack-icon"><span class="emoji">{getPackTypeIcon(pack.type)}</span></div>
-            <div class="pack-info">
-              <div class="pack-name">{pack.id}</div>
-              <div class="pack-meta">
-                <span class="pack-type">{pack.type}</span>
-                <span class="pack-separator">•</span>
-                <span class="pack-version">v{pack.version}</span>
-                <span class="pack-separator">•</span>
-                <span class="pack-size">{formatBytes(pack.size)}</span>
-                {#if packsNeedingReindex.has(pack.id)}
-                  <span class="pack-separator">•</span>
-                  <span class="reindex-warning">index missing</span>
-                {:else if packsIncomplete.has(pack.id)}
-                  <span class="pack-separator">•</span>
-                  <span class="reindex-warning">install unfinished</span>
+  {#if isLoading}
+    <div class="loading">Loading packs…</div>
+  {:else}
+    <div class="pill-list">
+      {#each CONSOLIDATED_PACKS as pack (pack.id)}
+        {@const state = installedById.get(pack.id)}
+        <div
+          class="pill"
+          class:installed={!!state}
+          class:flagged={state?.needsReindex || state?.incomplete}
+        >
+          <span class="pill-icon emoji">{pack.icon}</span>
+          <div class="pill-text">
+            <div class="pill-head">
+              <span class="pill-name">{pack.name}</span>
+              <span class="pill-meta">
+                {#if state}
+                  {#if state.version}v{state.version} · {/if}{formatBytes(state.bytes)}
+                {:else}
+                  {manifestSizes[pack.id] ?? pack.size}
                 {/if}
-              </div>
+              </span>
+              {#if state?.needsReindex}
+                <span class="pill-flag">index missing</span>
+              {:else if state?.incomplete}
+                <span class="pill-flag">install unfinished</span>
+              {/if}
             </div>
-            {#if packsNeedingReindex.has(pack.id)}
+            <div class="pill-desc">{pack.description}</div>
+          </div>
+          <div class="pill-actions">
+            <button
+              class="icon-btn"
+              on:click={() => openPackInfo(pack, state)}
+              title="About {pack.name}"
+              aria-label="About {pack.name}">ⓘ</button
+            >
+            {#if state?.needsReindex}
               <button
-                class="reindex-btn"
+                class="text-btn"
                 on:click={() => handleReindexPack(pack.id)}
                 disabled={isInstalling}
-                title="Re-index audio chapters (no re-download needed)"
+                title="Re-index audio chapters (no re-download needed)">Re-index</button
               >
-                Re-index
-              </button>
             {/if}
             <button
-              class="remove-btn"
-              on:click={() => handleRemovePack(pack.id)}
+              class="icon-btn"
+              class:go={!state}
+              on:click={() => installConsolidatedPack(pack)}
               disabled={isInstalling}
-              title="Remove this pack"
+              title={state ? `Re-download ${pack.name}` : `Install ${pack.name}`}
+              aria-label={state ? `Re-download ${pack.name}` : `Install ${pack.name}`}
+              >{state ? "↻" : "↓"}</button
             >
-              <span class="emoji">🗑️</span>
-            </button>
+            {#if state}
+              <button
+                class="icon-btn danger"
+                on:click={() => handleRemovePack(pack.id)}
+                disabled={isInstalling}
+                title="Remove {pack.name}"
+                aria-label="Remove {pack.name}"><span class="emoji">🗑️</span></button
+              >
+            {/if}
+          </div>
+        </div>
+      {/each}
+    </div>
+
+    <!-- Packs installed from an older release that the catalog no longer
+         offers. Nothing describes them any more, but they still take up space,
+         so they keep a delete button. -->
+    {#if orphanPacks.length > 0}
+      <h3 class="sub-head">Other installed</h3>
+      <div class="pill-list">
+        {#each orphanPacks as pack (pack.id)}
+          <div class="pill">
+            <span class="pill-icon emoji">{getPackTypeIcon(pack.type)}</span>
+            <div class="pill-text">
+              <div class="pill-head">
+                <span class="pill-name">{pack.id}</span>
+                <span class="pill-meta">v{pack.version} · {formatBytes(pack.size)}</span>
+              </div>
+              <div class="pill-desc">Older pack, no longer offered</div>
+            </div>
+            <div class="pill-actions">
+              <button
+                class="icon-btn danger"
+                on:click={() => handleRemovePack(pack.id)}
+                disabled={isInstalling}
+                title="Remove {pack.id}"
+                aria-label="Remove {pack.id}"><span class="emoji">🗑️</span></button
+              >
+            </div>
           </div>
         {/each}
       </div>
     {/if}
-  </div>
+  {/if}
 
-  <!-- Quick Install: Consolidated Packs -->
-  <div class="section">
-    <h3><span class="emoji">📦</span> Quick Install</h3>
-    <p class="section-description">
-      Install official consolidated packs with one click. These packs are hosted
-      on GitHub Releases and verified with SHA-256 hashes.
-    </p>
-
-    <div class="pack-grid">
-      {#each CONSOLIDATED_PACKS as pack}
-        {@const isInstalled = installedPacks.some((p) => p.id === pack.id)}
-        <button
-          class="pack-card"
-          class:installed={isInstalled}
-          on:click={() => installConsolidatedPack(pack)}
-          disabled={isInstalling}
-          title={isInstalled
-            ? `Already installed - click to re-download`
-            : `Download ${pack.name}`}
-        >
-          <div class="pack-card-icon"><span class="emoji">{pack.icon}</span></div>
-          <div class="pack-card-content">
-            <div class="pack-card-name">
-              {pack.name}
-              {#if isInstalled}<span class="installed-badge">✓</span>{/if}
+  {#if isTtsSupported()}
+    <h3 class="sub-head"><span class="emoji">🗣</span> Voices (Read Aloud)</h3>
+    <div class="pill-list">
+      {#each voiceList as voice (voice.id)}
+        {@const isVoiceInstalled = installedVoices.includes(voice.id)}
+        {@const canDownload = voiceIsDownloadable(voice)}
+        <div class="pill" class:installed={isVoiceInstalled}>
+          <span class="pill-icon emoji">{voice.custom ? "🎙" : "🗣"}</span>
+          <div class="pill-text">
+            <div class="pill-head">
+              <span class="pill-name">{voice.label}</span>
+              <span class="pill-meta">~{voice.approxSizeMB} MB</span>
             </div>
-            <div class="pack-card-description">{pack.description}</div>
-            <div class="pack-card-size">{manifestSizes[pack.id] ?? pack.size}</div>
+            <div class="pill-desc">
+              {voice.custom
+                ? "Your own voice"
+                : voice.quality === "standard"
+                  ? "Natural quality, best for daily listening"
+                  : "Smaller and faster on older phones"}
+            </div>
           </div>
-        </button>
+          <div class="pill-actions">
+            <button
+              class="icon-btn"
+              on:click={() => openVoiceInfo(voice, isVoiceInstalled)}
+              title="About {voice.label}"
+              aria-label="About {voice.label}">ⓘ</button
+            >
+            {#if isVoiceInstalled || !canDownload}
+              <button
+                class="icon-btn danger"
+                on:click={() => removeTtsVoice(voice.id)}
+                disabled={isInstalling || (!isVoiceInstalled && !canDownload)}
+                title="Remove {voice.label}"
+                aria-label="Remove {voice.label}"><span class="emoji">🗑️</span></button
+              >
+            {:else}
+              <button
+                class="icon-btn go"
+                on:click={() => installTtsVoice(voice.id)}
+                disabled={isInstalling}
+                title="Install {voice.label}"
+                aria-label="Install {voice.label}">↓</button
+              >
+            {/if}
+          </div>
+        </div>
       {/each}
     </div>
+
+    <button class="small-btn" on:click={triggerVoiceFilePicker} disabled={isInstalling}>
+      <span class="emoji">🎙</span> Install voice from file
+    </button>
+    <p class="hint">
+      Pick a voice's model (.onnx) and settings (.onnx.json) together.
+    </p>
+    <input
+      type="file"
+      accept=".onnx,.json,application/json"
+      multiple
+      bind:this={voiceFileInput}
+      on:change={handleVoiceFiles}
+      style="display:none"
+    />
+  {/if}
+
+  <h3 class="sub-head">Advanced Install</h3>
+  <div class="adv-actions">
+    <button
+      class="small-btn"
+      on:click={() => (showInstallUrl = !showInstallUrl)}
+      disabled={isInstalling}
+    >
+      <span class="emoji">🌐</span> From URL
+    </button>
+    <button class="small-btn" on:click={handleInstallFromFileClick} disabled={isInstalling}>
+      <span class="emoji">📁</span> From File
+    </button>
   </div>
 
-  <!-- Read Aloud Voices -->
-  {#if isTtsSupported()}
-    <div class="section">
-      <h3><span class="emoji">🗣</span> Voices (Read Aloud)</h3>
-      <p class="section-description">
-        AI voices for reading chapters aloud. Downloaded once, then they work
-        fully offline — start playback from the 🗣 button in any chapter.
-      </p>
-
-      <div class="pack-grid">
-        {#each voiceList as voice}
-          {@const isVoiceInstalled = installedVoices.includes(voice.id)}
-          {@const canDownload = voiceIsDownloadable(voice)}
-          <button
-            class="pack-card"
-            class:installed={isVoiceInstalled}
-            on:click={() =>
-              isVoiceInstalled || !canDownload
-                ? removeTtsVoice(voice.id)
-                : installTtsVoice(voice.id)}
-            disabled={isInstalling || (!isVoiceInstalled && !canDownload)}
-            title={isVoiceInstalled
-              ? "Installed — click to remove"
-              : canDownload
-                ? `Download ${voice.label}`
-                : `${voice.label} (custom)`}
-          >
-            <div class="pack-card-icon"><span class="emoji">{voice.custom ? "🎙" : "🗣"}</span></div>
-            <div class="pack-card-content">
-              <div class="pack-card-name">
-                {voice.label}
-                {#if isVoiceInstalled}<span class="installed-badge">✓</span>{/if}
-              </div>
-              <div class="pack-card-description">
-                {voice.quality === "standard"
-                  ? "Natural quality, best for daily listening"
-                  : voice.quality === "compact"
-                    ? "Smaller and faster on older phones"
-                    : "Your custom voice"}
-              </div>
-              <div class="pack-card-size">~{voice.approxSizeMB} MB</div>
-            </div>
-          </button>
-        {/each}
-      </div>
-
-      <div class="actions voice-actions">
-        <button class="primary-btn" on:click={triggerVoiceFilePicker} disabled={isInstalling}>
-          <span class="emoji">🎙</span> Install voice from file
-        </button>
-      </div>
-      <p class="section-description voice-hint">
-        Pick a voice's model (.onnx) and settings (.onnx.json) together to add a
-        custom or cloned voice.
-      </p>
+  {#if showInstallUrl}
+    <div class="install-url-form">
       <input
-        type="file"
-        accept=".onnx,.json,application/json"
-        multiple
-        bind:this={voiceFileInput}
-        on:change={handleVoiceFiles}
-        style="display:none"
+        type="text"
+        bind:value={installUrl}
+        placeholder="https://example.com/pack.sqlite"
+        disabled={isInstalling}
       />
+      <button
+        class="install-btn"
+        on:click={handleInstallFromUrl}
+        disabled={isInstalling || !installUrl.trim()}
+      >
+        Install
+      </button>
     </div>
   {/if}
 
-  <!-- Install Actions -->
-  <div class="section">
-    <h3>Advanced Install</h3>
+  <!-- Hidden file input -->
+  <input
+    type="file"
+    accept=".sqlite,.db,.sqlite3"
+    bind:this={fileInputElement}
+    on:change={handleFileSelected}
+    style="display: none;"
+  />
 
-    <div class="actions">
-      <button
-        class="primary-btn"
-        on:click={() => (showInstallUrl = !showInstallUrl)}
-        disabled={isInstalling}
-      >
-        <span class="emoji">🌐</span> Install from URL
-      </button>
-
-      <button
-        class="primary-btn"
-        on:click={handleInstallFromFileClick}
-        disabled={isInstalling}
-      >
-        <span class="emoji">📁</span> Install from File
-      </button>
-    </div>
-
-    {#if showInstallUrl}
-      <div class="install-url-form">
-        <input
-          type="text"
-          bind:value={installUrl}
-          placeholder="https://example.com/pack.sqlite"
-          disabled={isInstalling}
-        />
-        <button
-          class="install-btn"
-          on:click={handleInstallFromUrl}
-          disabled={isInstalling || !installUrl.trim()}
-        >
-          Install
-        </button>
-      </div>
-    {/if}
-
-    {#if installProgress}
-      <div class="progress-message">{installProgress}</div>
-    {/if}
-
-    <!-- Hidden file input -->
-    <input
-      type="file"
-      accept=".sqlite,.db,.sqlite3"
-      bind:this={fileInputElement}
-      on:change={handleFileSelected}
-      style="display: none;"
-    />
-  </div>
-
-  <!-- Help Text -->
-  <div class="help-section">
-    <h3><span class="emoji">ℹ️</span> About Packs</h3>
-    <p>
-      Packs are SQLite databases containing Bible texts, lexicons, maps, and
-      other resources.
-    </p>
-    <p>You can install packs from:</p>
-    <ul>
-      <li>A URL (must be a direct link to a .sqlite file)</li>
-      <li>A local file on your device</li>
-    </ul>
-    <p class="warning">
-      <span class="emoji">⚠️</span> Only install packs from trusted sources. Removing a pack will delete
-      all its data.
-    </p>
-  </div>
+  <p class="footnote">
+    <span class="emoji">⚠️</span> Only install packs from sources you trust. Removing
+    a pack deletes all of its data.
+  </p>
 </div>
+
+<!-- Info card. The backdrop is a real button so dismissing by tapping away
+     works from the keyboard too, without an interactive-div warning. -->
+{#if infoCard}
+  <button class="info-backdrop" on:click={closeInfo} aria-label="Close"></button>
+  <div class="info-card" role="dialog" aria-modal="true" aria-label={infoCard.title}>
+    <button class="info-close" on:click={closeInfo} aria-label="Close">✕</button>
+    <h4>{infoCard.title}</h4>
+    {#each infoCard.body.split("\n\n") as paragraph}
+      <p>{paragraph}</p>
+    {/each}
+    <div class="info-meta">{infoCard.meta}</div>
+  </div>
+{/if}
 
 <style>
   .packs-pane {
@@ -958,307 +1070,243 @@ Free up space on your device, or remove a pack you are not using, then try again
   }
 
   h2 {
-    font-size: 1.5rem;
-    margin-bottom: 2rem;
-    color: #f0f0f0;
+    font-size: 1.25rem;
     font-weight: 600;
-  }
-
-  h3 {
-    font-size: 1.1rem;
-    margin-bottom: 1rem;
     color: #f0f0f0;
+    margin: 0 0 0.2rem;
+  }
+
+  .db-line {
+    font-size: 0.78rem;
+    color: #888;
+    margin: 0 0 0.9rem;
+  }
+
+  .sub-head {
+    font-size: 0.75rem;
     font-weight: 600;
-  }
-
-  .stats-card {
-    background: linear-gradient(
-      135deg,
-      rgba(102, 126, 234, 0.1),
-      rgba(118, 75, 162, 0.1)
-    );
-    border: 1px solid rgba(102, 126, 234, 0.3);
-    border-radius: 8px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-  }
-
-  .stats-card h3 {
-    margin-top: 0;
-    margin-bottom: 1.5rem;
-    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
     color: #667eea;
-  }
-
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1.5rem;
-  }
-
-  .stat {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .stat-label {
-    font-size: 0.85rem;
-    color: #aaa;
-  }
-
-  .stat-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #667eea;
-  }
-
-  .section {
-    margin-bottom: 2.5rem;
+    margin: 1.4rem 0 0.4rem;
   }
 
   .loading {
-    text-align: center;
-    padding: 2rem;
+    padding: 1rem 0;
     color: #888;
     font-style: italic;
   }
 
-  .empty-state {
-    text-align: center;
-    padding: 3rem 2rem;
-    background: #1a1a1a;
-    border: 2px dashed #444;
-    border-radius: 8px;
-    color: #888;
-  }
-
-  .empty-state p {
-    margin: 0.5rem 0;
-  }
-
-  .pack-list {
+  .pill-list {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.3rem;
   }
 
-  .pack-item {
+  .pill {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 1rem;
+    gap: 0.5rem;
+    padding: 0.35rem 0.45rem;
     background: #1a1a1a;
-    border: 1px solid #444;
-    border-radius: 8px;
-    transition: all 0.2s;
+    border: 1px solid #333;
+    border-radius: 6px;
   }
 
-  .pack-item:hover {
-    background: #252525;
-    border-color: #667eea;
+  .pill.installed {
+    background: rgba(76, 175, 80, 0.06);
+    border-color: rgba(76, 175, 80, 0.35);
   }
 
-  .pack-icon {
-    font-size: 2rem;
+  .pill.flagged {
+    background: rgba(255, 165, 0, 0.06);
+    border-color: rgba(255, 165, 0, 0.45);
+  }
+
+  .pill-icon {
+    font-size: 1.15rem;
+    line-height: 1;
     flex-shrink: 0;
   }
 
-  .pack-info {
+  .pill-text {
     flex: 1;
     min-width: 0;
   }
 
-  .pack-name {
-    font-weight: 600;
-    font-size: 1rem;
-    margin-bottom: 0.25rem;
-    word-break: break-word;
-  }
-
-  .pack-meta {
+  .pill-head {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.85rem;
-    color: #888;
-    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem;
   }
 
-  .pack-type {
-    color: #667eea;
-    font-weight: 500;
+  .pill-name {
+    /* min-width lets the name shrink and ellipsis instead of shoving the size
+       and the buttons off the end of a narrow pill. */
+    min-width: 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #f0f0f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .pack-separator {
-    color: #555;
-  }
-
-  .pack-version,
-  .pack-size {
-    color: #888;
-  }
-
-  .remove-btn {
-    padding: 0.5rem 1rem;
-    background: rgba(220, 38, 38, 0.1);
-    border: 1px solid rgba(220, 38, 38, 0.3);
-    color: #ff6b6b;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-size: 1.2rem;
+  .pill-meta {
+    font-size: 0.72rem;
+    color: #777;
+    white-space: nowrap;
     flex-shrink: 0;
   }
 
-  .remove-btn:hover {
+  .pill-flag {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #ffa500;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* One line, always. The full text is a tap away on the info button, and a
+     pill that wraps to three lines puts the scroll back where it started. */
+  .pill-desc {
+    font-size: 0.72rem;
+    color: #999;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pill-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: #262626;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #bbb;
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .icon-btn:hover:not(:disabled) {
+    background: #303030;
+    border-color: #667eea;
+    color: #fff;
+  }
+
+  .icon-btn.go {
+    background: rgba(102, 126, 234, 0.15);
+    border-color: rgba(102, 126, 234, 0.45);
+    color: #8fa3f5;
+  }
+
+  .icon-btn.danger {
+    background: rgba(220, 38, 38, 0.1);
+    border-color: rgba(220, 38, 38, 0.3);
+    color: #ff6b6b;
+    font-size: 0.85rem;
+  }
+
+  .icon-btn.danger:hover:not(:disabled) {
     background: rgba(220, 38, 38, 0.2);
     border-color: rgba(220, 38, 38, 0.5);
   }
 
-  .actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-  }
-
-  .pack-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
-  }
-
-  .pack-card {
-    display: flex;
-    align-items: flex-start;
-    gap: 1rem;
-    padding: 1rem;
-    background: linear-gradient(
-      135deg,
-      rgba(102, 126, 234, 0.08),
-      rgba(118, 75, 162, 0.08)
-    );
-    border: 1px solid rgba(102, 126, 234, 0.25);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-align: left;
-  }
-
-  .pack-card:hover:not(:disabled) {
-    background: linear-gradient(
-      135deg,
-      rgba(102, 126, 234, 0.15),
-      rgba(118, 75, 162, 0.15)
-    );
-    border-color: rgba(102, 126, 234, 0.5);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-  }
-
-  .pack-card:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .pack-card.installed {
-    background: linear-gradient(
-      135deg,
-      rgba(76, 175, 80, 0.1),
-      rgba(56, 142, 60, 0.1)
-    );
-    border-color: rgba(76, 175, 80, 0.4);
-  }
-
-  .pack-card-icon {
-    font-size: 2rem;
-    line-height: 1;
-  }
-
-  .pack-card-content {
-    flex: 1;
-  }
-
-  .pack-card-name {
-    font-weight: 600;
-    color: #f0f0f0;
-    margin-bottom: 0.25rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .installed-badge {
-    display: inline-block;
-    background: #4caf50;
-    color: white;
-    font-size: 0.7rem;
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
-    font-weight: 700;
-  }
-
-  .pack-card-description {
-    font-size: 0.85rem;
-    color: #aaa;
-    margin-bottom: 0.5rem;
-  }
-
-  .pack-card-size {
-    font-size: 0.75rem;
-    color: #888;
-    font-weight: 500;
-  }
-
-  .primary-btn {
-    padding: 0.875rem 1.25rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    color: white;
+  .text-btn {
+    height: 34px;
+    padding: 0 0.6rem;
+    background: rgba(255, 165, 0, 0.15);
+    border: 1px solid rgba(255, 165, 0, 0.5);
     border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-size: 1rem;
+    color: #ffa500;
+    font-size: 0.72rem;
     font-weight: 600;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    white-space: nowrap;
+    cursor: pointer;
   }
 
-  .primary-btn:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  .text-btn:hover:not(:disabled) {
+    background: rgba(255, 165, 0, 0.25);
   }
 
-  .primary-btn:disabled {
-    opacity: 0.5;
+  .small-btn {
+    margin-top: 0.5rem;
+    padding: 0.45rem 0.8rem;
+    background: #262626;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #ddd;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .small-btn:hover:not(:disabled) {
+    border-color: #667eea;
+    color: #fff;
+  }
+
+  .icon-btn:disabled,
+  .text-btn:disabled,
+  .small-btn:disabled,
+  .install-btn:disabled {
+    opacity: 0.45;
     cursor: not-allowed;
-    transform: none;
+  }
+
+  .adv-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .hint {
+    font-size: 0.7rem;
+    color: #777;
+    margin: 0.3rem 0 0;
+  }
+
+  .footnote {
+    font-size: 0.7rem;
+    color: #777;
+    line-height: 1.5;
+    margin: 1.4rem 0 0;
   }
 
   .install-url-form {
     display: flex;
-    gap: 0.75rem;
-    margin-top: 1rem;
-    padding: 1rem;
-    background: #1a1a1a;
-    border-radius: 8px;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
   }
 
   .install-url-form input {
     flex: 1;
-    padding: 0.75rem;
-    background: #2a2a2a;
-    border: 1px solid #444;
+    min-width: 0;
+    padding: 0.45rem 0.6rem;
+    background: #202020;
+    border: 1px solid #3a3a3a;
     border-radius: 6px;
     color: #e0e0e0;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
   }
 
   .install-url-form input:focus {
     outline: none;
     border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
   }
 
   .install-url-form input::placeholder {
@@ -1266,125 +1314,104 @@ Free up space on your device, or remove a pack you are not using, then try again
   }
 
   .install-btn {
-    padding: 0.75rem 1.5rem;
+    padding: 0.45rem 1rem;
     background: #4caf50;
     border: none;
-    color: white;
     border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
+    color: white;
+    font-size: 0.85rem;
     font-weight: 600;
+    cursor: pointer;
   }
 
   .install-btn:hover:not(:disabled) {
     background: #45a049;
   }
 
-  .install-btn:disabled {
-    background: #2a4a2a;
-    cursor: not-allowed;
-  }
-
+  /* Opaque, because it sticks over the list as you scroll past it. */
   .progress-message {
-    margin-top: 1rem;
-    padding: 1rem;
-    background: rgba(102, 126, 234, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    margin-bottom: 0.7rem;
+    padding: 0.5rem 0.7rem;
+    background: #1c2033;
     border-left: 3px solid #667eea;
     border-radius: 4px;
-    color: #667eea;
-    font-weight: 500;
-  }
-
-  .help-section {
-    margin-top: 3rem;
-    padding: 1.5rem;
-    background: #1a1a1a;
-    border-radius: 8px;
-    border: 1px solid #333;
-  }
-
-  .help-section h3 {
-    margin-top: 0;
-    color: #667eea;
-  }
-
-  .help-section p {
-    margin: 0.75rem 0;
-    line-height: 1.6;
-    color: #ccc;
-  }
-
-  .help-section ul {
-    margin: 0.75rem 0;
-    padding-left: 1.5rem;
-    color: #ccc;
-  }
-
-  .help-section li {
-    margin: 0.5rem 0;
-    line-height: 1.6;
-  }
-
-  .warning {
-    color: #ffa500 !important;
-    font-weight: 500;
-    margin-top: 1rem !important;
-  }
-
-  .pack-item.needs-reindex {
-    border-color: rgba(255, 165, 0, 0.4);
-    background: rgba(255, 165, 0, 0.05);
-  }
-
-  .reindex-warning {
-    color: #ffa500;
-    font-weight: 500;
+    color: #8fa3f5;
     font-size: 0.8rem;
+    font-weight: 500;
   }
 
-  .reindex-btn {
-    padding: 0.4rem 0.85rem;
-    background: rgba(255, 165, 0, 0.15);
-    border: 1px solid rgba(255, 165, 0, 0.5);
-    color: #ffa500;
-    border-radius: 6px;
+  .info-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.6);
+    border: none;
     cursor: pointer;
-    transition: all 0.2s;
-    font-size: 0.85rem;
+  }
+
+  .info-card {
+    position: fixed;
+    z-index: 901;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(430px, calc(100vw - 2rem));
+    max-height: min(70vh, 540px);
+    overflow-y: auto;
+    padding: 1rem 1.1rem 0.9rem;
+    background: #1c1c1c;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  }
+
+  .info-close {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.45rem;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .info-close:hover {
+    color: #fff;
+  }
+
+  .info-card h4 {
+    margin: 0 2rem 0.6rem 0;
+    font-size: 1rem;
     font-weight: 600;
-    flex-shrink: 0;
-    white-space: nowrap;
+    color: #f0f0f0;
   }
 
-  .reindex-btn:hover:not(:disabled) {
-    background: rgba(255, 165, 0, 0.25);
-    border-color: rgba(255, 165, 0, 0.7);
+  .info-card p {
+    margin: 0 0 0.7rem;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: #c8c8c8;
   }
 
-  .reindex-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .info-meta {
+    padding-top: 0.6rem;
+    border-top: 1px solid #333;
+    font-size: 0.72rem;
+    color: #777;
   }
 
-  @media (max-width: 768px) {
-    .stats-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .actions {
-      grid-template-columns: 1fr;
-    }
-
+  @media (max-width: 600px) {
     .install-url-form {
       flex-direction: column;
-    }
-
-    .pack-item {
-      padding: 0.875rem;
-    }
-
-    .pack-icon {
-      font-size: 1.5rem;
     }
   }
 </style>
