@@ -6,39 +6,51 @@
 <title>Kokoro speed test</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin:0; padding:16px; background:#111; color:#e0e0e0;
+  body { margin:0; padding:16px 16px 60px; background:#111; color:#e0e0e0;
          font:16px/1.5 system-ui, -apple-system, sans-serif; }
   h1 { font-size:1.25rem; margin:0 0 4px; }
-  .sub { color:#888; font-size:.85rem; margin-bottom:16px; }
+  .sub { color:#888; font-size:.85rem; margin-bottom:14px; }
   .card { background:#1c1c1c; border:1px solid #2e2e2e; border-radius:10px;
           padding:12px 14px; margin-bottom:12px; }
-  .card h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em;
+  .card h2 { font-size:.78rem; text-transform:uppercase; letter-spacing:.06em;
              color:#999; margin:0 0 8px; font-weight:600; }
-  .row { display:flex; justify-content:space-between; gap:12px; padding:3px 0;
-         font-size:.9rem; }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:3px 0; font-size:.88rem; }
   .row span:last-child { color:#fff; text-align:right; word-break:break-word; }
   .yes { color:#4ade80 !important; } .no { color:#f87171 !important; }
-  button { width:100%; padding:14px; margin:6px 0; font-size:1rem; font-weight:600;
-           border:0; border-radius:10px; background:#2563eb; color:#fff; }
-  button:disabled { background:#333; color:#777; }
+  button { width:100%; padding:13px; margin:0; font-size:.95rem; font-weight:600;
+           border:0; border-radius:9px; background:#2563eb; color:#fff; }
+  button:disabled { background:#2a2a2a; color:#666; }
   button.sec { background:#333; }
-  .result { display:flex; align-items:baseline; justify-content:space-between;
-            padding:10px 0; border-bottom:1px solid #262626; gap:10px; }
-  .result:last-child { border-bottom:0; }
-  .label { font-size:.9rem; color:#bbb; }
-  .score { font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
-  .good{color:#4ade80}.ok{color:#fbbf24}.bad{color:#f87171}.pend{color:#555;font-size:1rem}
-  .detail { font-size:.75rem; color:#777; text-align:right; }
-  #log { font:12px/1.45 ui-monospace, monospace; color:#999; white-space:pre-wrap;
-         word-break:break-word; max-height:260px; overflow:auto; }
-  .verdict { font-size:1rem; font-weight:600; padding:12px; border-radius:8px;
+  .test { border-bottom:1px solid #262626; padding:12px 0; }
+  .test:last-child { border-bottom:0; }
+  .test-head { display:flex; justify-content:space-between; align-items:baseline;
+               gap:10px; margin-bottom:8px; }
+  .label { font-size:.92rem; color:#ddd; font-weight:600; }
+  .note { font-size:.74rem; color:#777; display:block; font-weight:400; }
+  .score { font-size:1.45rem; font-weight:700; font-variant-numeric:tabular-nums;
+           white-space:nowrap; }
+  .good{color:#4ade80}.ok{color:#fbbf24}.bad{color:#f87171}.pend{color:#555;font-size:.95rem}
+  .detail { font-size:.73rem; color:#777; text-align:right; }
+  #log { font:11.5px/1.45 ui-monospace, monospace; color:#9a9a9a; white-space:pre-wrap;
+         word-break:break-word; max-height:300px; overflow:auto; }
+  .verdict { font-size:.98rem; font-weight:600; padding:12px; border-radius:8px;
              margin-bottom:12px; display:none; }
-  progress { width:100%; height:8px; }
+  .warn { background:#3b2d0b; border:1px solid #5c4610; color:#fde68a;
+          font-size:.83rem; padding:10px 12px; border-radius:8px; margin-bottom:12px; }
+  progress { width:100%; height:6px; margin-top:8px; display:none; }
 </style>
 </head>
 <body>
 <h1>Kokoro speed test</h1>
 <div class="sub">Throwaway diagnostic. Nothing here touches the app.</div>
+
+<div class="warn">
+  <strong>This is slow on purpose.</strong> The processor tests can take
+  <strong>45&ndash;70 seconds per run</strong> on a phone, four runs each &mdash; so a
+  processor row may sit there for 3&ndash;5 minutes. The log below updates as it goes,
+  so if it is moving, it is working. Each test gives up on its own after 5 minutes.
+  Run them one at a time on wifi.
+</div>
 
 <div id="verdict" class="verdict"></div>
 
@@ -48,20 +60,11 @@
 </div>
 
 <div class="card">
-  <h2>Results &mdash; seconds of speech per second of work</h2>
-  <div class="result"><span class="label">Graphics chip (WebGPU)</span>
-    <span><span id="s-gpu" class="score pend">&mdash;</span><div id="d-gpu" class="detail"></div></span></div>
-  <div class="result"><span class="label">Processor, 1 core <em>(app today)</em></span>
-    <span><span id="s-w1" class="score pend">&mdash;</span><div id="d-w1" class="detail"></div></span></div>
-  <div class="result"><span class="label">Processor, several cores</span>
-    <span><span id="s-wn" class="score pend">&mdash;</span><div id="d-wn" class="detail"></div></span></div>
-  <div class="result"><span class="label">Piper, 1 core <em>(for comparison)</em></span>
-    <span><span id="s-pp" class="score pend">&mdash;</span><div id="d-pp" class="detail"></div></span></div>
+  <h2>Tests &mdash; seconds of speech per second of work</h2>
+  <div id="tests"></div>
 </div>
 
-<button id="go">Run the test</button>
-<button id="play" class="sec" disabled>Play what it produced</button>
-<progress id="prog" value="0" max="100" style="display:none"></progress>
+<button id="play" class="sec" disabled>Play the last clip it made</button>
 
 <div class="card"><h2>Log</h2><div id="log"></div></div>
 
@@ -70,207 +73,274 @@ const ORT_VER = '1.23.2';
 const CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@' + ORT_VER + '/dist/';
 const HF = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/';
 const PIPER = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx';
+const TIMEOUT_MS = 5 * 60 * 1000;
 
 const $ = id => document.getElementById(id);
-const log = m => { $('log').textContent += m + '\n'; $('log').scrollTop = 1e9; console.log(m); };
-
-// Kokoro's sound-to-number table, taken from the model's own tokenizer file.
-const VOCAB = {"$":0,";":1,":":2,",":3,".":4,"!":5,"?":6,"—":9,"…":10,"\"":11,"(":12,")":13,"“":14,"”":15," ":16,"̃":17,"ʣ":18,"ʥ":19,"ʦ":20,"ʨ":21,"ᵝ":22,"ꭧ":23,"A":24,"I":25,"O":31,"Q":33,"S":35,"T":36,"W":39,"Y":41,"ᵊ":42,"a":43,"b":44,"c":45,"d":46,"e":47,"f":48,"h":50,"i":51,"j":52,"k":53,"l":54,"m":55,"n":56,"o":57,"p":58,"q":59,"r":60,"s":61,"t":62,"u":63,"v":64,"w":65,"x":66,"y":67,"z":68,"ɑ":69,"ɐ":70,"ɒ":71,"æ":72,"β":75,"ɔ":76,"ɕ":77,"ç":78,"ɖ":80,"ð":81,"ʤ":82,"ə":83,"ɚ":85,"ɛ":86,"ɜ":87,"ɟ":90,"ɡ":92,"ɥ":99,"ɨ":101,"ɪ":102,"ʝ":103,"ɯ":110,"ɰ":111,"ŋ":112,"ɳ":113,"ɲ":114,"ɴ":115,"ø":116,"ɸ":118,"θ":119,"œ":120,"ɹ":123,"ɾ":125,"ɻ":126,"ʁ":128,"ɽ":129,"ʂ":130,"ʃ":131,"ʈ":132,"ʧ":133,"ʊ":135,"ʋ":136,"ʌ":138,"ɣ":139,"ɤ":140,"χ":142,"ʎ":143,"ʒ":147,"ʔ":148,"ˈ":156,"ˌ":157,"ː":158,"ʰ":162,"ʲ":164,"↓":169,"→":171,"↗":172,"↘":173,"ᵻ":177};
-
-// John 3:16 in phonetic form - a realistic verse length.
-const PHON = 'fɔːɹ ɡˈɑːd sˈoʊ lˈʌvd ðə wˈɜːld, ðæt hiː ɡˈeɪv hɪz ˈoʊnli sˈʌn, ðæt hˈuːˈɛvɚ bɪlˈiːvz ɪn hɪm ʃˌʊd nˌɑːt pˈɛɹɪʃ bˌʌt hæv ɪtˈɜːnəl lˈaɪf.';
-
-let lastWav = null;
+const pad2 = n => String(n).padStart(2, '0');
+function log(m) {
+  const d = new Date();
+  $('log').textContent += pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + '  ' + m + '\n';
+  $('log').scrollTop = 1e9;
+}
 
 const gpuOK = !!navigator.gpu;
 const iso = self.crossOriginIsolated === true;
+const cores = navigator.hardwareConcurrency || 1;
+
+// Every test row. Kokoro on the graphics chip needs fp16/fp32 — the compressed
+// q8 build is a processor format, and int8 on WebGPU falls back to the processor
+// op by op, which is what made the first version of this page appear to hang.
+const TESTS = [
+  { id:'gpu16', label:'Graphics chip — fp16', note:'the realistic one to ship',
+    url: HF + 'onnx/model_fp16.onnx', mb:156, ep:'webgpu', threads:1, kind:'kokoro' },
+  { id:'gpu32', label:'Graphics chip — fp32', note:'what kokoro-js recommends',
+    url: HF + 'onnx/model.onnx', mb:310, ep:'webgpu', threads:1, kind:'kokoro' },
+  { id:'w1', label:'Processor, 1 core', note:'what the app does today',
+    url: HF + 'onnx/model_quantized.onnx', mb:88, ep:'wasm', threads:1, kind:'kokoro' },
+  { id:'wn', label:'Processor, ' + Math.min(4, cores) + ' cores', note:'the sherpa-onnx question',
+    url: HF + 'onnx/model_quantized.onnx', mb:88, ep:'wasm', threads:Math.min(4, cores), kind:'kokoro' },
+  { id:'pp', label:'Piper, 1 core', note:'the voice you have now, for comparison',
+    url: PIPER, mb:60, ep:'wasm', threads:1, kind:'piper' },
+];
 
 function envRow(k, v, cls) {
-  return '<div class="row"><span>' + k + '</span><span class="' + (cls || '') + '">' + v + '</span></div>';
+  return '<div class="row"><span>' + k + '</span><span class="' + (cls||'') + '">' + v + '</span></div>';
 }
-
 $('env').innerHTML =
   envRow('Graphics chip available', gpuOK ? 'yes' : 'NO', gpuOK ? 'yes' : 'no') +
   envRow('Graphics chip model', '<span id="adap">checking&hellip;</span>') +
   envRow('Several cores allowed', iso ? 'yes' : 'NO', iso ? 'yes' : 'no') +
-  envRow('Cores reported', navigator.hardwareConcurrency || '?') +
-  envRow('Secure connection', self.isSecureContext ? 'yes' : 'NO', self.isSecureContext ? 'yes' : 'no') +
+  envRow('Cores reported', cores) +
+  envRow('Secure connection', self.isSecureContext ? 'yes' : 'NO', self.isSecureContext ? 'yes':'no') +
   envRow('Browser', navigator.userAgent.slice(0, 90));
 
 if (gpuOK) {
   navigator.gpu.requestAdapter().then(a => {
     if (!a) { $('adap').textContent = 'none returned'; $('adap').className = 'no'; return; }
     const i = a.info || {};
-    $('adap').textContent = [i.vendor, i.architecture, i.device, i.description]
-      .filter(Boolean).join(' ') || 'available (no details)';
+    const bits = [i.vendor, i.architecture, i.device, i.description].filter(Boolean);
+    $('adap').textContent = bits.join(' ') || 'available (no details)';
+    log('graphics chip: ' + ($('adap').textContent));
   }).catch(e => { $('adap').textContent = 'error: ' + e.message; });
 }
 
-async function grab(url, name) {
+$('tests').innerHTML = TESTS.map(t =>
+  '<div class="test">' +
+    '<div class="test-head">' +
+      '<span class="label">' + t.label + '<span class="note">' + t.note + '</span></span>' +
+      '<span><span id="s-' + t.id + '" class="score pend">&mdash;</span>' +
+      '<div id="d-' + t.id + '" class="detail"></div></span>' +
+    '</div>' +
+    '<button id="b-' + t.id + '">Download &amp; run (' + t.mb + ' MB)</button>' +
+    '<progress id="p-' + t.id + '" value="0" max="100"></progress>' +
+  '</div>').join('');
+
+let lastWav = null;
+const results = {};
+
+function verdict() {
+  const best = Math.max(0, ...Object.entries(results)
+    .filter(([k]) => k !== 'pp').map(([, v]) => v || 0));
+  if (!best) return;
+  const v = $('verdict'); v.style.display = 'block';
+  if (best >= 2) { v.style.background = '#14532d';
+    v.textContent = 'Works. Best so far ' + best.toFixed(2) + 'x — comfortably ahead of playback.'; }
+  else if (best >= 1) { v.style.background = '#78350f';
+    v.textContent = 'Marginal. Best so far ' + best.toFixed(2) + 'x — only just keeping up, likely to stutter with the screen off.'; }
+  else { v.style.background = '#7f1d1d';
+    v.textContent = 'Too slow so far. Best ' + best.toFixed(2) + 'x — slower than playback.'; }
+}
+
+// The engine blocks whatever thread it runs on, so it goes in a worker —
+// otherwise the page freezes and none of this logging ever paints.
+const WORKER_SRC = `
+import * as ort from '${CDN}ort.all.min.mjs';
+const CDN = '${CDN}';
+const VOCAB = __VOCAB__;
+const PHON = __PHON__;
+const say = (m) => self.postMessage({ type:'log', m });
+
+async function grab(url, mb) {
   const cache = await caches.open('kokoro-test');
   const hit = await cache.match(url);
-  if (hit) { log(name + ': already downloaded'); return new Uint8Array(await hit.arrayBuffer()); }
-  log(name + ': downloading…');
-  $('prog').style.display = 'block';
+  if (hit) { say('already downloaded, reading from cache'); return new Uint8Array(await hit.arrayBuffer()); }
+  say('downloading ' + mb + ' MB...');
   const r = await fetch(url);
-  if (!r.ok) throw new Error(name + ' download failed (' + r.status + ')');
+  if (!r.ok) throw new Error('download failed (' + r.status + ')');
   const total = +(r.headers.get('Content-Length') || 0);
   const reader = r.body.getReader();
-  const chunks = []; let got = 0;
+  const chunks = []; let got = 0, lastPct = -1;
   for (;;) {
-    const step = await reader.read();
-    if (step.done) break;
-    chunks.push(step.value); got += step.value.length;
-    if (total) $('prog').value = (got / total) * 100;
+    const s = await reader.read();
+    if (s.done) break;
+    chunks.push(s.value); got += s.value.length;
+    const pct = total ? Math.floor(got / total * 100) : 0;
+    if (pct !== lastPct) { lastPct = pct; self.postMessage({ type:'progress', pct }); }
   }
-  $('prog').style.display = 'none';
   const blob = new Blob(chunks);
   await cache.put(url, new Response(blob));
-  log(name + ': downloaded ' + (got / 1048576).toFixed(1) + ' MB');
+  say('downloaded ' + (got/1048576).toFixed(1) + ' MB');
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-function show(id, secs, ms) {
-  const x = secs * 1000 / ms;
-  const el = $('s-' + id);
-  el.textContent = x.toFixed(2) + 'x';
-  el.className = 'score ' + (x >= 2 ? 'good' : x >= 1 ? 'ok' : 'bad');
-  $('d-' + id).textContent = (ms / 1000).toFixed(1) + 's work → ' + secs.toFixed(1) + 's speech';
-  return x;
-}
+self.onmessage = async (e) => {
+  const t = e.data;
+  try {
+    const bytes = await grab(t.url, t.mb);
+    ort.env.wasm.wasmPaths = CDN;
+    ort.env.wasm.numThreads = t.threads;
+    say('creating session (' + t.ep + ', ' + t.threads + ' thread(s))...');
+    const t0 = performance.now();
+    const session = await ort.InferenceSession.create(bytes, { executionProviders: [t.ep] });
+    say('session ready in ' + ((performance.now()-t0)/1000).toFixed(1) + 's');
 
-function fail(id, msg) {
-  $('s-' + id).textContent = 'failed';
-  $('s-' + id).className = 'score bad';
-  $('d-' + id).textContent = String(msg).slice(0, 70);
-}
+    let feed, rate, outKey;
+    if (t.kind === 'kokoro') {
+      const style = new Float32Array((await grab(t.styleUrl, 1)).buffer.slice(0));
+      say('voice rows: ' + (style.length/256));
+      const ids = Array.from(PHON).map(c => VOCAB[c]).filter(v => v !== undefined);
+      const padded = [0].concat(ids, [0]);
+      say('tokens: ' + ids.length);
+      feed = () => ({
+        input_ids: new ort.Tensor('int64', BigInt64Array.from(padded.map(v=>BigInt(v))), [1, padded.length]),
+        style: new ort.Tensor('float32', style.slice(ids.length*256, (ids.length+1)*256), [1,256]),
+        speed: new ort.Tensor('float32', new Float32Array([1]), [1]),
+      });
+      rate = 24000; outKey = 'waveform';
+    } else {
+      const cfg = await (await fetch(t.url + '.json')).json();
+      const map = cfg.phoneme_id_map;
+      const idOf = x => Array.isArray(map[x]) ? map[x][0] : map[x];
+      const pad = idOf('_') !== undefined ? idOf('_') : 0;
+      const ids = [idOf('^') !== undefined ? idOf('^') : 1, pad];
+      for (const c of PHON) { const v = idOf(c); if (v !== undefined) ids.push(v, pad); }
+      ids.push(idOf('$') !== undefined ? idOf('$') : 2);
+      feed = () => ({
+        input: new ort.Tensor('int64', BigInt64Array.from(ids.map(v=>BigInt(v))), [1, ids.length]),
+        input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)])),
+        scales: new ort.Tensor('float32', new Float32Array([cfg.inference.noise_scale,
+          cfg.inference.length_scale, cfg.inference.noise_w])),
+      });
+      rate = cfg.audio.sample_rate; outKey = 'output';
+    }
+
+    say('warm-up run (first one is slowest — shaders compile here)...');
+    const w0 = performance.now();
+    await session.run(feed());
+    say('warm-up done in ' + ((performance.now()-w0)/1000).toFixed(1) + 's');
+
+    const times = []; let out = null;
+    for (let i = 1; i <= 3; i++) {
+      const s0 = performance.now();
+      out = await session.run(feed());
+      const ms = performance.now() - s0;
+      times.push(ms);
+      say('  run ' + i + '/3: ' + (ms/1000).toFixed(2) + 's');
+    }
+    const ms = Math.min.apply(null, times);
+    const data = out[outKey].data;
+    self.postMessage({ type:'result', ms, samples: Float32Array.from(data), rate });
+  } catch (err) {
+    self.postMessage({ type:'error', message: err && err.message ? err.message : String(err) });
+  }
+};
+`;
+
+const VOCAB = {"$":0,";":1,":":2,",":3,".":4,"!":5,"?":6,"—":9,"…":10,"\"":11,"(":12,")":13,"“":14,"”":15," ":16,"̃":17,"ʣ":18,"ʥ":19,"ʦ":20,"ʨ":21,"ᵝ":22,"ꭧ":23,"A":24,"I":25,"O":31,"Q":33,"S":35,"T":36,"W":39,"Y":41,"ᵊ":42,"a":43,"b":44,"c":45,"d":46,"e":47,"f":48,"h":50,"i":51,"j":52,"k":53,"l":54,"m":55,"n":56,"o":57,"p":58,"q":59,"r":60,"s":61,"t":62,"u":63,"v":64,"w":65,"x":66,"y":67,"z":68,"ɑ":69,"ɐ":70,"ɒ":71,"æ":72,"β":75,"ɔ":76,"ɕ":77,"ç":78,"ɖ":80,"ð":81,"ʤ":82,"ə":83,"ɚ":85,"ɛ":86,"ɜ":87,"ɟ":90,"ɡ":92,"ɥ":99,"ɨ":101,"ɪ":102,"ʝ":103,"ɯ":110,"ɰ":111,"ŋ":112,"ɳ":113,"ɲ":114,"ɴ":115,"ø":116,"ɸ":118,"θ":119,"œ":120,"ɹ":123,"ɾ":125,"ɻ":126,"ʁ":128,"ɽ":129,"ʂ":130,"ʃ":131,"ʈ":132,"ʧ":133,"ʊ":135,"ʋ":136,"ʌ":138,"ɣ":139,"ɤ":140,"χ":142,"ʎ":143,"ʒ":147,"ʔ":148,"ˈ":156,"ˌ":157,"ː":158,"ʰ":162,"ʲ":164,"↓":169,"→":171,"↗":172,"↘":173,"ᵻ":177};
+const PHON = 'fɔːɹ ɡˈɑːd sˈoʊ lˈʌvd ðə wˈɜːld, ðæt hiː ɡˈeɪv hɪz ˈoʊnli sˈʌn, ðæt hˈuːˈɛvɚ bɪlˈiːvz ɪn hɪm ʃˌʊd nˌɑːt pˈɛɹɪʃ bˌʌt hæv ɪtˈɜːnəl lˈaɪf.';
+
+const workerSrc = WORKER_SRC
+  .replace('__VOCAB__', JSON.stringify(VOCAB))
+  .replace('__PHON__', JSON.stringify(PHON));
+const workerUrl = URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' }));
 
 function makeWav(samples, rate) {
   const b = new DataView(new ArrayBuffer(44 + samples.length * 2));
-  b.setUint32(0, 0x46464952, true); b.setUint32(4, 36 + samples.length * 2, true);
-  b.setUint32(8, 0x45564157, true); b.setUint32(12, 0x20746d66, true);
-  b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true);
-  b.setUint32(24, rate, true); b.setUint32(28, rate * 2, true); b.setUint16(32, 2, true);
-  b.setUint16(34, 16, true); b.setUint32(36, 0x61746164, true);
-  b.setUint32(40, samples.length * 2, true);
-  for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    b.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  b.setUint32(0,0x46464952,true); b.setUint32(4,36+samples.length*2,true);
+  b.setUint32(8,0x45564157,true); b.setUint32(12,0x20746d66,true);
+  b.setUint32(16,16,true); b.setUint16(20,1,true); b.setUint16(22,1,true);
+  b.setUint32(24,rate,true); b.setUint32(28,rate*2,true); b.setUint16(32,2,true);
+  b.setUint16(34,16,true); b.setUint32(36,0x61746164,true);
+  b.setUint32(40,samples.length*2,true);
+  for (let i=0;i<samples.length;i++){ const s=Math.max(-1,Math.min(1,samples[i]));
+    b.setInt16(44+i*2, s<0?s*0x8000:s*0x7fff, true); }
+  return new Blob([b.buffer], { type:'audio/wav' });
+}
+
+let busy = false;
+function setButtons(disabled) {
+  TESTS.forEach(t => { $('b-' + t.id).disabled = disabled; });
+}
+
+function run(t) {
+  if (busy) return;
+  busy = true; setButtons(true);
+  const btn = $('b-' + t.id), prog = $('p-' + t.id);
+  btn.textContent = 'Running…';
+  prog.style.display = 'block'; prog.value = 0;
+  $('s-' + t.id).textContent = '…'; $('s-' + t.id).className = 'score pend';
+  $('d-' + t.id).textContent = '';
+  log('\n=== ' + t.label + ' ===');
+
+  const worker = new Worker(workerUrl, { type: 'module' });
+  let done = false;
+  const timer = setTimeout(() => {
+    if (done) return;
+    done = true; worker.terminate();
+    log('GAVE UP after 5 minutes — this configuration is not viable.');
+    finish(t, btn, prog, null, 'gave up after 5 min');
+  }, TIMEOUT_MS);
+
+  worker.onmessage = (e) => {
+    const d = e.data;
+    if (d.type === 'log') { log('  ' + d.m); return; }
+    if (d.type === 'progress') { prog.value = d.pct; return; }
+    if (done) return;
+    done = true; clearTimeout(timer); worker.terminate();
+    if (d.type === 'error') {
+      log('  FAILED: ' + d.message);
+      finish(t, btn, prog, null, d.message);
+      return;
+    }
+    const secs = d.samples.length / d.rate;
+    const x = secs * 1000 / d.ms;
+    results[t.id] = x;
+    lastWav = makeWav(d.samples, d.rate); $('play').disabled = false;
+    log('  RESULT: ' + (d.ms/1000).toFixed(2) + 's work -> ' + secs.toFixed(2) + 's speech = ' + x.toFixed(2) + 'x');
+    const el = $('s-' + t.id);
+    el.textContent = x.toFixed(2) + 'x';
+    el.className = 'score ' + (x >= 2 ? 'good' : x >= 1 ? 'ok' : 'bad');
+    $('d-' + t.id).textContent = (d.ms/1000).toFixed(1) + 's work → ' + secs.toFixed(1) + 's speech';
+    finish(t, btn, prog, x, null);
+  };
+  worker.onerror = (e) => {
+    if (done) return;
+    done = true; clearTimeout(timer); worker.terminate();
+    log('  WORKER ERROR: ' + (e.message || 'unknown'));
+    finish(t, btn, prog, null, e.message || 'worker error');
+  };
+
+  worker.postMessage({ url:t.url, mb:t.mb, ep:t.ep, threads:t.threads, kind:t.kind,
+                       styleUrl: HF + 'voices/af_heart.bin' });
+}
+
+function finish(t, btn, prog, x, errMsg) {
+  if (errMsg) {
+    $('s-' + t.id).textContent = 'failed';
+    $('s-' + t.id).className = 'score bad';
+    $('d-' + t.id).textContent = String(errMsg).slice(0, 60);
   }
-  return new Blob([b.buffer], { type: 'audio/wav' });
+  btn.textContent = 'Run again';
+  prog.style.display = 'none';
+  busy = false; setButtons(false);
+  verdict();
 }
 
-async function benchKokoro(ort, model, style, ep, threads, id) {
-  log('\n--- ' + id + ': ' + ep + ', ' + threads + ' thread(s) ---');
-  ort.env.wasm.wasmPaths = CDN;
-  ort.env.wasm.numThreads = threads;
-  let session;
-  try {
-    session = await ort.InferenceSession.create(model, { executionProviders: [ep] });
-  } catch (e) { log('  session failed: ' + e.message); fail(id, e.message); return null; }
-  log('  session ready');
-
-  const ids = Array.from(PHON).map(c => VOCAB[c]).filter(v => v !== undefined);
-  const padded = [0].concat(ids, [0]);
-  const feed = () => ({
-    input_ids: new ort.Tensor('int64', BigInt64Array.from(padded.map(v => BigInt(v))), [1, padded.length]),
-    style: new ort.Tensor('float32', style.slice(ids.length * 256, (ids.length + 1) * 256), [1, 256]),
-    speed: new ort.Tensor('float32', new Float32Array([1]), [1])
-  });
-  try {
-    await session.run(feed());
-    const times = []; let out = null;
-    for (let i = 0; i < 3; i++) {
-      const t = performance.now(); out = await session.run(feed()); times.push(performance.now() - t);
-    }
-    const ms = Math.min.apply(null, times);
-    const data = out.waveform.data;
-    const secs = data.length / 24000;
-    if (id === 'gpu' || !lastWav) lastWav = makeWav(data, 24000);
-    $('play').disabled = false;
-    const x = show(id, secs, ms);
-    log('  ' + (ms / 1000).toFixed(2) + 's work → ' + secs.toFixed(2) + 's speech = ' + x.toFixed(2) + 'x');
-    return x;
-  } catch (e) { log('  run failed: ' + e.message); fail(id, e.message); return null; }
-}
-
-async function benchPiper(ort, model, cfg) {
-  log('\n--- piper: processor, 1 thread ---');
-  ort.env.wasm.wasmPaths = CDN; ort.env.wasm.numThreads = 1;
-  try {
-    const s = await ort.InferenceSession.create(model, { executionProviders: ['wasm'] });
-    const map = cfg.phoneme_id_map;
-    const idOf = x => Array.isArray(map[x]) ? map[x][0] : map[x];
-    const pad = idOf('_') !== undefined ? idOf('_') : 0;
-    const ids = [idOf('^') !== undefined ? idOf('^') : 1, pad];
-    for (const c of PHON) { const v = idOf(c); if (v !== undefined) ids.push(v, pad); }
-    ids.push(idOf('$') !== undefined ? idOf('$') : 2);
-    const f = () => ({
-      input: new ort.Tensor('int64', BigInt64Array.from(ids.map(v => BigInt(v))), [1, ids.length]),
-      input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)])),
-      scales: new ort.Tensor('float32', new Float32Array([cfg.inference.noise_scale,
-        cfg.inference.length_scale, cfg.inference.noise_w]))
-    });
-    await s.run(f());
-    const times = []; let out = null;
-    for (let i = 0; i < 3; i++) {
-      const t = performance.now(); out = await s.run(f()); times.push(performance.now() - t);
-    }
-    const ms = Math.min.apply(null, times);
-    const secs = out.output.data.length / cfg.audio.sample_rate;
-    const x = show('pp', secs, ms);
-    log('  ' + (ms / 1000).toFixed(2) + 's work → ' + secs.toFixed(2) + 's speech = ' + x.toFixed(2) + 'x');
-    return x;
-  } catch (e) { log('  piper failed: ' + e.message); fail('pp', e.message); return null; }
-}
-
-$('go').onclick = async () => {
-  $('go').disabled = true; $('go').textContent = 'Running…';
-  try {
-    log('loading onnxruntime-web ' + ORT_VER + '…');
-    const ort = await import(CDN + 'ort.all.min.mjs');
-    log('onnxruntime loaded');
-
-    const model = await grab(HF + 'onnx/model_quantized.onnx', 'Kokoro model (92 MB)');
-    const styleRaw = await grab(HF + 'voices/af_heart.bin', 'voice af_heart');
-    const style = new Float32Array(styleRaw.buffer.slice(0));
-    log('voice rows: ' + (style.length / 256));
-
-    const results = {};
-    if (gpuOK) results.gpu = await benchKokoro(ort, model, style, 'webgpu', 1, 'gpu');
-    else fail('gpu', 'no graphics chip in this browser');
-
-    results.w1 = await benchKokoro(ort, model, style, 'wasm', 1, 'w1');
-
-    const n = Math.min(4, navigator.hardwareConcurrency || 1);
-    if (iso && n > 1) results.wn = await benchKokoro(ort, model, style, 'wasm', n, 'wn');
-    else fail('wn', iso ? 'only one core reported' : 'several cores not allowed here');
-
-    try {
-      const pm = await grab(PIPER, 'Piper voice (63 MB)');
-      const pc = await (await fetch(PIPER + '.json')).json();
-      results.pp = await benchPiper(ort, pm, pc);
-    } catch (e) { fail('pp', e.message); }
-
-    const best = Math.max(results.gpu || 0, results.wn || 0, results.w1 || 0);
-    const v = $('verdict'); v.style.display = 'block';
-    if (best >= 2) {
-      v.style.background = '#14532d';
-      v.textContent = 'Works. Best is ' + best.toFixed(2) + 'x — comfortably ahead of playback.';
-    } else if (best >= 1) {
-      v.style.background = '#78350f';
-      v.textContent = 'Marginal. Best is ' + best.toFixed(2) + 'x — only just keeping up, likely to stutter with the screen off.';
-    } else {
-      v.style.background = '#7f1d1d';
-      v.textContent = 'Too slow. Best is ' + best.toFixed(2) + 'x — slower than playback.';
-    }
-    log('\ndone.');
-  } catch (e) {
-    log('FATAL: ' + e.message); log(e.stack || '');
-  } finally { $('go').disabled = false; $('go').textContent = 'Run again'; }
-};
-
+TESTS.forEach(t => { $('b-' + t.id).onclick = () => run(t); });
 $('play').onclick = () => { if (lastWav) new Audio(URL.createObjectURL(lastWav)).play(); };
+
+log('ready. ' + (gpuOK ? 'graphics chip available.' : 'NO graphics chip in this browser.'));
+if (!iso) log('WARNING: several-cores test unavailable (page is not cross-origin isolated).');
 </script>
 </body>
 </html>
