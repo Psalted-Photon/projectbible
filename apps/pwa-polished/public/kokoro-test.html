@@ -636,11 +636,13 @@ function runDiagnostic() {
   busy = true; setButtons(true);
   $('diagGo').disabled = true; $('endGo').disabled = true;
   $('diagGo').textContent = 'Diagnosing...';
-  log('\n=== DIAGNOSTIC: two separate sessions, 4 clips each ===');
-  log('Every silent run so far has been the FIRST graphics-chip session of the');
-  log('page load; the one that produced audio was the second. Testing that.');
+  log('\n=== DIAGNOSTIC: fp16 vs fp32 on the graphics chip ===');
+  log('Every silent run has used fp16. The clip that played was fp32 — the Play');
+  log('button holds whichever ran last. Testing whether fp16 is the problem.');
 
   const rounds = { 1: [], 2: [] };
+  const MODELS = { 1: { url: FP16, mb: 156, name: 'fp16' },
+                   2: { url: HF + 'onnx/model.onnx', mb: 310, name: 'fp32' } };
 
   const finish = () => {
     busy = false; setButtons(false);
@@ -653,18 +655,16 @@ function runDiagnostic() {
   function conclude() {
     const a = rounds[1], b = rounds[2];
     log('\n  --- conclusion ---');
-    log('  session 1: ' + loud(a) + ' of ' + a.length + ' clips had sound');
-    log('  session 2: ' + loud(b) + ' of ' + b.length + ' clips had sound');
+    log('  fp16: ' + loud(a) + ' of ' + a.length + ' clips had sound');
+    log('  fp32: ' + loud(b) + ' of ' + b.length + ' clips had sound');
     if (a.length && b.length && loud(a) === 0 && loud(b) === b.length) {
-      log('  CONFIRMED: the first session is silent, the second works.');
-      log('  Fix is a throwaway warm-up session before the real one.');
+      log('  CONFIRMED: fp16 is silent on this chip, fp32 works.');
+      log('  Ship fp32 (310 MB) - fp16 is not an option here.');
     } else if (loud(a) === 0 && loud(b) === 0) {
-      log('  Both sessions silent. Not about session order — the graphics chip');
-      log('  is not producing audio here at all, and the earlier audible run');
-      log('  needs re-checking.');
+      log('  Both formats silent. The graphics chip is not producing audio at');
+      log('  all in this loop, and the whole WebGPU path is in doubt.');
     } else if (loud(a) === a.length && loud(b) === b.length) {
-      log('  Both sessions fine. The silence is specific to the endurance loop,');
-      log('  not to sessions or idling.');
+      log('  Both formats fine. The silence belongs to the endurance loop.');
     } else {
       const idleBroke = [a, b].some(r =>
         r.length === 4 && r[0].p > 0.01 && r[1].p > 0.01 && r[2].p > 0.01 && r[3].p <= 0.01);
@@ -678,7 +678,8 @@ function runDiagnostic() {
   // Each session: 3 clips back to back, a 3s idle, then one more. That covers
   // the session-order theory and the idling theory in a single run.
   function runSession(round, next) {
-    log('\n  --- session ' + round + ' (fresh worker) ---');
+    const M = MODELS[round];
+    log('\n  --- ' + M.name + ' (' + M.mb + ' MB), fresh worker ---');
     const w = new Worker(workerUrl, { type: 'module' });
     let n = 0;
     const done = () => { try { w.terminate(); } catch (e) {} next(); };
@@ -686,7 +687,7 @@ function runDiagnostic() {
       const d = e.data;
       if (d.type === 'log') { log(d.m); return; }
       if (d.type === 'progress') return;
-      if (d.type === 'error') { log('  session ' + round + ' FAILED: ' + d.message); done(); return; }
+      if (d.type === 'error') { log('  ' + M.name + ' FAILED: ' + d.message); done(); return; }
       if (d.type === 'ready') { w.postMessage({ cmd: 'synth', diag: true }); return; }
       if (d.type === 'clip') {
         n++;
@@ -696,7 +697,7 @@ function runDiagnostic() {
           if (v > p) p = v;
         }
         rounds[round].push({ n: n, w: d.wpeak, p: p });
-        log('  s' + round + ' clip ' + n + (n === 4 ? ' (after idle)' : '') +
+        log('  ' + M.name + ' clip ' + n + (n === 4 ? ' (after idle)' : '') +
             ': inWorker=' + d.wpeak.toFixed(4) + '  onPage=' + p.toFixed(4) +
             '  len=' + d.samples.length);
         if (n >= 4) { done(); return; }
@@ -708,8 +709,8 @@ function runDiagnostic() {
         }
       }
     };
-    w.onerror = (ev) => { log('  session ' + round + ' WORKER ERROR: ' + (ev.message || '?')); done(); };
-    w.postMessage({ cmd: 'init', t: { url: FP16, mb: 156, ep: 'webgpu', threads: 1,
+    w.onerror = (ev) => { log('  ' + M.name + ' WORKER ERROR: ' + (ev.message || '?')); done(); };
+    w.postMessage({ cmd: 'init', t: { url: M.url, mb: M.mb, ep: 'webgpu', threads: 1,
                                       kind: 'kokoro', styleUrl: STYLE_URL } });
   }
 
