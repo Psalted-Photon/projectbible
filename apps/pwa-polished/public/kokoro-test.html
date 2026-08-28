@@ -357,25 +357,46 @@ audio.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-even
 document.body.appendChild(audio);
 
 let endWorker = null, endRunning = false, endEntries = [], endQueue = [], endStart = 0;
+let queuedSeconds = 0, heartbeat = null, pacer = null;
+
+// Stay this far ahead and no further. Running flat out pins the chip and cooks
+// the phone, which is what produced the -51% decay last time; the real reading
+// engine keeps a buffer and then idles, so this does the same.
+const TARGET_BUFFER_S = 60;
 
 const saveLog = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(endEntries)); } catch {} };
 const loadLog = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; } };
 
 let currentUrl = null;
+// Explicit, rather than reading audio.paused. Last run never played a note
+// because paused was not the state this loop thought it was.
+let isPlaying = false;
+let everPlayed = false;
 
 function playNext() {
-  if (!endRunning) return;
+  if (!endRunning) { isPlaying = false; return; }
   if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
   const next = endQueue.shift();
   if (!next) {
-    // Nothing ready to play — in the real app this is a stutter.
-    endEntries.push({ t: Date.now(), stutter: true });
-    saveLog();
+    isPlaying = false;
+    // Only a real stutter once actual audio has started. Before that it is just
+    // the silent unlock clip finishing with nothing queued behind it.
+    if (everPlayed) { endEntries.push({ t: Date.now(), stutter: true }); saveLog(); }
     return; // the next finished clip restarts playback
   }
-  currentUrl = URL.createObjectURL(next);
+  queuedSeconds = Math.max(0, queuedSeconds - (next.seconds || 0));
+  currentUrl = URL.createObjectURL(next.blob);
   audio.src = currentUrl;
-  audio.play().catch(e => { endEntries.push({ t:Date.now(), err:'play blocked: '+e.message }); saveLog(); });
+  isPlaying = true;
+  audio.play().then(
+    () => { if (!everPlayed) { everPlayed = true; log('  audio playing'); } },
+    e => {
+      isPlaying = false;
+      endEntries.push({ t: Date.now(), err: 'play rejected: ' + e.message });
+      saveLog();
+      log('  PLAY REJECTED: ' + e.message);
+    }
+  );
 }
 
 audio.onended = playNext;
@@ -384,6 +405,7 @@ audio.onended = playNext;
 audio.onerror = () => {
   endEntries.push({ t: Date.now(), err: 'audio element error' });
   saveLog();
+  isPlaying = false;
   playNext();
 };
 
@@ -403,6 +425,16 @@ function unlockAudio() {
 
 function endLive(msg) { $('endLive').textContent = msg; }
 
+// Ask for the next clip only if we are not already far enough ahead. Idling here
+// is the whole point — it is what the real reading engine does, and it is what
+// keeps the chip from cooking.
+function requestNext() {
+  if (!endRunning || !endWorker) return;
+  if (queuedSeconds < TARGET_BUFFER_S) { endWorker.postMessage({ cmd: 'synth' }); return; }
+  clearTimeout(pacer);
+  pacer = setTimeout(requestNext, 2000);
+}
+
 function startEndurance() {
   if (busy || endRunning) return;
   // Before endRunning goes true, so the silent clip's 'ended' event does not
@@ -411,8 +443,17 @@ function startEndurance() {
   endRunning = true; busy = true; setButtons(true);
   $('endGo').textContent = 'Stop'; $('endGo').className = 'stop';
   endEntries = []; endQueue = []; endStart = Date.now();
+  queuedSeconds = 0; isPlaying = false; everPlayed = false;
   $('endSummary').innerHTML = ''; $('endLog').textContent = '';
   saveLog();
+
+  // Independent of synthesis. If beats keep landing but clips stop, the chip
+  // gave up; if both stop, the whole page was suspended. Different problems.
+  clearInterval(heartbeat);
+  heartbeat = setInterval(() => {
+    endEntries.push({ t: Date.now(), beat: true });
+    saveLog();
+  }, 5000);
   log('\n=== ENDURANCE (fp16, graphics chip) ===');
   endLive('starting…');
 
@@ -429,22 +470,30 @@ function startEndurance() {
     }
     if (d.type === 'ready') {
       endLive('running — lock your phone now');
-      endWorker.postMessage({ cmd:'synth' });
+      requestNext();
       return;
     }
     if (d.type === 'clip') {
       const secs = d.samples.length / d.rate;
+      // Peak volume, so silence can never masquerade as a working run again.
+      let peak = 0;
+      for (let i = 0; i < d.samples.length; i++) {
+        const v = d.samples[i] < 0 ? -d.samples[i] : d.samples[i];
+        if (v > peak) peak = v;
+      }
       endEntries.push({ t: Date.now(), ms: Math.round(d.ms), x: +(secs*1000/d.ms).toFixed(2),
-                        q: endQueue.length });
+                        q: +queuedSeconds.toFixed(0), pk: +peak.toFixed(3) });
       saveLog();
-      endQueue.push(makeWav(d.samples, d.rate));
-      if (audio.paused) playNext();
+      endQueue.push({ blob: makeWav(d.samples, d.rate), seconds: secs });
+      queuedSeconds += secs;
+      if (!isPlaying) playNext();
       const elapsed = Date.now() - endStart;
       endLive('running ' + Math.floor(elapsed/1000) + 's — ' +
-              endEntries.filter(e=>e.x).length + ' clips, last ' +
-              (endEntries[endEntries.length-1].x||'?') + 'x');
+              endEntries.filter(e => e.x).length + ' clips, last ' +
+              (endEntries[endEntries.length-1].x || '?') + 'x, ' +
+              Math.round(queuedSeconds) + 's buffered');
       if (elapsed >= ENDURANCE_MS) { log('  endurance complete'); stopEndurance(); return; }
-      endWorker.postMessage({ cmd:'synth' });
+      requestNext();
     }
   };
   endWorker.onerror = (e) => {
@@ -462,8 +511,10 @@ function startEndurance() {
 
 function stopEndurance() {
   endRunning = false;
+  clearInterval(heartbeat); heartbeat = null;
+  clearTimeout(pacer); pacer = null;
   if (endWorker) { endWorker.terminate(); endWorker = null; }
-  audio.pause();
+  audio.pause(); isPlaying = false;
   $('endGo').textContent = 'Start 5-minute endurance test'; $('endGo').className = '';
   busy = false; setButtons(false);
   endLive('stopped');
@@ -488,20 +539,43 @@ function showEndurance() {
   const lastQ  = clips.slice(-Math.ceil(clips.length/4)).map(c=>c.x);
   const avg = a => a.reduce((s,v)=>s+v,0)/a.length;
   const decay = ((avg(lastQ) - avg(firstQ)) / avg(firstQ)) * 100;
-  // Biggest hole between consecutive log entries — a long one means the browser
-  // suspended the page while the screen was off.
-  let maxGap = 0;
-  for (let i=1;i<e.length;i++) maxGap = Math.max(maxGap, e[i].t - e[i-1].t);
+  // Peaks prove the clips held sound rather than correctly-shaped silence.
+  const peaks = clips.map(c => c.pk).filter(v => v !== undefined);
+  const quietest = peaks.length ? Math.min.apply(null, peaks) : null;
+  const silent = quietest !== null && quietest < 0.01;
+
+  // Gaps between clips and gaps between heartbeats mean different things, so they
+  // must be measured separately. Heartbeats land every 5s, so folding them into
+  // one figure would cap it at 5s and hide any stall at all.
+  const gapOf = arr => {
+    let g = 0;
+    for (let i = 1; i < arr.length; i++) g = Math.max(g, arr[i].t - arr[i-1].t);
+    return g;
+  };
+  const beats = e.filter(x => x.beat);
+  const beatGap = beats.length > 1 ? gapOf(beats) : null;
   const span = (e[e.length-1].t - e[0].t) / 1000;
+  // The gap that matters most is the trailing one: synthesis dying partway and
+  // never resuming leaves no hole *between* clips, only silence after the last.
+  // Measuring only inter-clip gaps calls that a pass, which is exactly backwards.
+  const tailGap = e[e.length-1].t - clips[clips.length-1].t;
+  const clipGap = Math.max(gapOf(clips), tailGap);
 
   const verdictText =
-    stutters > 0 || maxGap > 30000
-      ? ['no', 'Stalled with the screen off — not viable as a streaming voice.']
-      : decay < -25
-      ? ['no', 'Slowed badly as the phone warmed — risky over a long chapter.']
-      : median >= 1.3
-      ? ['yes', 'Held up. Kept ahead of playback for the whole run.']
-      : ['no', 'Median fell too close to playback speed.'];
+    silent
+      ? ['no', 'Clips came back silent — the graphics chip produced empty audio, so these speeds mean nothing.']
+    : clipGap > 45000
+      ? ['no', 'Synthesis stalled for ' + (clipGap/1000).toFixed(0) + 's' +
+               (beatGap !== null && beatGap > 30000
+                 ? ' — the whole page was suspended.'
+                 : ' while the page stayed alive — the graphics chip gave up.')]
+    : stutters > 0
+      ? ['no', stutters + ' stutter(s) — audio ran dry mid-playback.']
+    : decay < -35
+      ? ['no', 'Slowed ' + Math.abs(decay).toFixed(0) + '% as the phone warmed — risky over a long chapter.']
+    : median >= 1.2
+      ? ['yes', 'Held up. Stayed ahead of playback for the whole run, screen off.']
+      : ['no', 'Median ' + median.toFixed(2) + 'x is too close to playback speed.'];
 
   $('endSummary').innerHTML =
     '<p class="' + verdictText[0] + '" style="font-size:.95rem;font-weight:600;margin:10px 0 4px">' +
@@ -512,15 +586,22 @@ function showEndurance() {
     '<tr><td>Median speed</td><td>' + median.toFixed(2) + 'x</td></tr>' +
     '<tr><td>Slowest / fastest</td><td>' + xs[0].toFixed(2) + 'x / ' + xs[xs.length-1].toFixed(2) + 'x</td></tr>' +
     '<tr><td>Change first → last quarter</td><td>' + (decay>=0?'+':'') + decay.toFixed(0) + '%</td></tr>' +
+    (quietest !== null
+      ? '<tr><td>Quietest clip volume</td><td class="' + (silent?'no':'yes') + '">' +
+        quietest.toFixed(3) + (silent ? ' — SILENT' : ' — real audio') + '</td></tr>' : '') +
     '<tr><td>Stutters (audio ran dry)</td><td class="' + (stutters?'no':'yes') + '">' + stutters + '</td></tr>' +
-    '<tr><td>Longest gap between clips</td><td class="' + (maxGap>30000?'no':'yes') + '">' +
-      (maxGap/1000).toFixed(1) + 's</td></tr>' +
-    (errs.length ? '<tr><td>Errors</td><td class="no">' + errs.length + '</td></tr>' : '') +
+    '<tr><td>Longest gap between clips</td><td class="' + (clipGap>45000?'no':'yes') + '">' +
+      (clipGap/1000).toFixed(1) + 's</td></tr>' +
+    (beatGap !== null
+      ? '<tr><td>Longest heartbeat gap</td><td class="' + (beatGap>30000?'no':'yes') + '">' +
+        (beatGap/1000).toFixed(1) + 's' + (beatGap > 30000 ? ' — page suspended' : '') + '</td></tr>' : '') +
+    (errs.length ? '<tr><td>First error</td><td class="no">' + errs[0].err + '</td></tr>' : '') +
     '</table>';
 
-  $('endLog').textContent = e.map(x => clock(new Date(x.t)) + '  ' +
+  $('endLog').textContent = e.filter(x => !x.beat).map(x => clock(new Date(x.t)) + '  ' +
     (x.err ? 'ERROR ' + x.err : x.stutter ? '*** STUTTER — audio ran dry ***'
-      : (x.ms/1000).toFixed(2) + 's  ' + x.x + 'x  queued:' + x.q)).join('\n');
+      : (x.ms/1000).toFixed(2) + 's  ' + x.x + 'x  buffered:' + x.q + 's  vol:' +
+        (x.pk === undefined ? '?' : x.pk))).join('\n');
 }
 
 $('endGo').onclick = () => { endRunning ? stopEndurance() : startEndurance(); };
