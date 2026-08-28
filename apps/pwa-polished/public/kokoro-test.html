@@ -69,6 +69,7 @@
   </ol>
   <button id="endGo">Start 5-minute endurance test</button>
   <button id="endShow" class="sec">Show last results</button>
+  <button id="diagGo" class="sec">Diagnose the silence (about 1 minute)</button>
   <div id="endLive"></div>
   <div id="endSummary"></div>
   <div id="endLog" style="margin-top:8px"></div>
@@ -243,8 +244,29 @@ self.onmessage = async (e) => {
       const t0 = performance.now();
       const out = await session.run(feed());
       const ms = performance.now() - t0;
-      const data = out[outKey].data;
-      self.postMessage({ type:'clip', ms, samples: Float32Array.from(data), rate, tag: d.tag });
+      const tensor = out[outKey];
+      const data = tensor.data;
+      // Measured HERE, before anything crosses back to the page. If this is
+      // non-zero and the page still sees zeros, the loss is in transit; if it is
+      // zero, the model itself produced nothing.
+      let wpeak = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = data[i] < 0 ? -data[i] : data[i];
+        if (v > wpeak) wpeak = v;
+      }
+      const copy = Float32Array.from(data);
+      let cpeak = 0;
+      for (let i = 0; i < copy.length; i++) {
+        const v = copy[i] < 0 ? -copy[i] : copy[i];
+        if (v > cpeak) cpeak = v;
+      }
+      if (d.diag) {
+        say('  run: ' + (ms/1000).toFixed(2) + 's  len=' + data.length +
+            '  type=' + (data.constructor && data.constructor.name) +
+            '  loc=' + (tensor.location || '?') +
+            '  peakInWorker=' + wpeak.toFixed(4) + '  peakAfterCopy=' + cpeak.toFixed(4));
+      }
+      self.postMessage({ type:'clip', ms, samples: copy, rate, wpeak, tag: d.tag });
       return;
     }
   } catch (err) {
@@ -603,6 +625,84 @@ function showEndurance() {
       : (x.ms/1000).toFixed(2) + 's  ' + x.x + 'x  buffered:' + x.q + 's  vol:' +
         (x.pk === undefined ? '?' : x.pk))).join('\n');
 }
+
+
+// ---------- diagnostic ----------
+// Endurance clips come back silent while the one-off benchmark plays fine, on
+// identical worker code. This measures volume on BOTH sides of the worker
+// boundary, and brackets an idle period, to find where the audio goes.
+function runDiagnostic() {
+  if (busy || endRunning) return;
+  busy = true; setButtons(true);
+  $('diagGo').disabled = true; $('endGo').disabled = true;
+  $('diagGo').textContent = 'Diagnosing...';
+  log('\n=== DIAGNOSTIC: 5 clips back to back, idle 3s, then 3 more ===');
+
+  const w = new Worker(workerUrl, { type: 'module' });
+  const TOTAL = 8, IDLE_AFTER = 5;
+  let n = 0;
+  const rows = [];
+
+  const finish = () => {
+    try { w.terminate(); } catch (e) {}
+    busy = false; setButtons(false);
+    $('diagGo').disabled = false; $('endGo').disabled = false;
+    $('diagGo').textContent = 'Diagnose the silence (about 1 minute)';
+  };
+
+  w.onmessage = (e) => {
+    const d = e.data;
+    if (d.type === 'log') { log(d.m); return; }
+    if (d.type === 'progress') return;
+    if (d.type === 'error') { log('  DIAGNOSTIC FAILED: ' + d.message); finish(); return; }
+    if (d.type === 'ready') { w.postMessage({ cmd: 'synth', diag: true }); return; }
+    if (d.type === 'clip') {
+      n++;
+      let p = 0;
+      for (let i = 0; i < d.samples.length; i++) {
+        const v = d.samples[i] < 0 ? -d.samples[i] : d.samples[i];
+        if (v > p) p = v;
+      }
+      rows.push({ n: n, w: d.wpeak, p: p, idled: n > IDLE_AFTER });
+      log('  clip ' + n + (n === IDLE_AFTER + 1 ? ' (first after idle)' : '') +
+          ': inWorker=' + d.wpeak.toFixed(4) + '  onPage=' + p.toFixed(4) +
+          '  len=' + d.samples.length + '  type=' + d.samples.constructor.name);
+      if (n >= TOTAL) {
+        const before = rows.filter(r => !r.idled);
+        const after  = rows.filter(r => r.idled);
+        const anyW = rows.some(r => r.w > 0.01);
+        const anyP = rows.some(r => r.p > 0.01);
+        log('\n  --- conclusion ---');
+        if (!anyW) {
+          log('  The model itself returns silence in this loop, even before the');
+          log('  audio leaves the worker. Not a transfer problem.');
+        } else if (anyW && !anyP) {
+          log('  Audio exists inside the worker but arrives empty at the page.');
+          log('  The samples are being lost in transit.');
+        } else if (before.every(r => r.p > 0.01) && after.every(r => r.p <= 0.01)) {
+          log('  Audio is fine until the idle, then silent afterwards.');
+          log('  Idling breaks it — the pacing is the cause.');
+        } else {
+          log('  Audio present throughout. The silence is specific to the');
+          log('  endurance loop rather than to the model or to idling.');
+        }
+        finish();
+        return;
+      }
+      if (n === IDLE_AFTER) {
+        log('  --- idling 3s, as the endurance loop does ---');
+        setTimeout(() => { try { w.postMessage({ cmd: 'synth', diag: true }); } catch (e) {} }, 3000);
+      } else {
+        w.postMessage({ cmd: 'synth', diag: true });
+      }
+    }
+  };
+  w.onerror = (ev) => { log('  DIAGNOSTIC WORKER ERROR: ' + (ev.message || '?')); finish(); };
+  w.postMessage({ cmd: 'init', t: { url: FP16, mb: 156, ep: 'webgpu', threads: 1,
+                                    kind: 'kokoro', styleUrl: STYLE_URL } });
+}
+
+$('diagGo').onclick = runDiagnostic;
 
 $('endGo').onclick = () => { endRunning ? stopEndurance() : startEndurance(); };
 $('endShow').onclick = showEndurance;
