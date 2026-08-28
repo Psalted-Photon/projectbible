@@ -12,15 +12,18 @@
   .sub { color:#888; font-size:.85rem; margin-bottom:14px; }
   .card { background:#1c1c1c; border:1px solid #2e2e2e; border-radius:10px;
           padding:12px 14px; margin-bottom:12px; }
+  .card.hero { border-color:#2563eb; }
   .card h2 { font-size:.78rem; text-transform:uppercase; letter-spacing:.06em;
              color:#999; margin:0 0 8px; font-weight:600; }
+  .card.hero h2 { color:#7aa5f7; }
   .row { display:flex; justify-content:space-between; gap:12px; padding:3px 0; font-size:.88rem; }
   .row span:last-child { color:#fff; text-align:right; word-break:break-word; }
   .yes { color:#4ade80 !important; } .no { color:#f87171 !important; }
   button { width:100%; padding:13px; margin:0; font-size:.95rem; font-weight:600;
            border:0; border-radius:9px; background:#2563eb; color:#fff; }
   button:disabled { background:#2a2a2a; color:#666; }
-  button.sec { background:#333; }
+  button.sec { background:#333; margin-top:8px; }
+  button.stop { background:#b91c1c; }
   .test { border-bottom:1px solid #262626; padding:12px 0; }
   .test:last-child { border-bottom:0; }
   .test-head { display:flex; justify-content:space-between; align-items:baseline;
@@ -31,25 +34,50 @@
            white-space:nowrap; }
   .good{color:#4ade80}.ok{color:#fbbf24}.bad{color:#f87171}.pend{color:#555;font-size:.95rem}
   .detail { font-size:.73rem; color:#777; text-align:right; }
-  #log { font:11.5px/1.45 ui-monospace, monospace; color:#9a9a9a; white-space:pre-wrap;
-         word-break:break-word; max-height:300px; overflow:auto; }
+  #log, #endLog { font:11.5px/1.45 ui-monospace, monospace; color:#9a9a9a;
+         white-space:pre-wrap; word-break:break-word; max-height:300px; overflow:auto; }
   .verdict { font-size:.98rem; font-weight:600; padding:12px; border-radius:8px;
              margin-bottom:12px; display:none; }
   .warn { background:#3b2d0b; border:1px solid #5c4610; color:#fde68a;
           font-size:.83rem; padding:10px 12px; border-radius:8px; margin-bottom:12px; }
+  .steps { font-size:.85rem; color:#bbb; margin:0 0 10px; padding-left:20px; }
+  .steps li { margin-bottom:4px; }
   progress { width:100%; height:6px; margin-top:8px; display:none; }
+  #endLive { font-size:.85rem; color:#7aa5f7; margin:8px 0 0; min-height:1.4em; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; margin-top:6px; }
+  td { padding:4px 0; border-bottom:1px solid #242424; }
+  td:last-child { text-align:right; color:#fff; font-variant-numeric:tabular-nums; }
 </style>
 </head>
 <body>
 <h1>Kokoro speed test</h1>
 <div class="sub">Throwaway diagnostic. Nothing here touches the app.</div>
 
+<!-- ============ ENDURANCE (the one that decides it) ============ -->
+<div class="card hero">
+  <h2>Screen-off endurance &mdash; the real test</h2>
+  <p style="font-size:.85rem;color:#bbb;margin:0 0 10px">
+    Makes speech and plays it on a loop, exactly like reading a chapter. The point is
+    to find out whether the graphics chip keeps working once your phone is locked in
+    your pocket &mdash; and whether it slows down as the phone warms up.
+  </p>
+  <ol class="steps">
+    <li>Tap start. Wait for audio to begin.</li>
+    <li><strong>Lock your phone and pocket it for 5 minutes.</strong></li>
+    <li>Come back, unlock, reopen this page.</li>
+    <li>Results appear automatically &mdash; they survive a reload.</li>
+  </ol>
+  <button id="endGo">Start 5-minute endurance test</button>
+  <button id="endShow" class="sec">Show last results</button>
+  <div id="endLive"></div>
+  <div id="endSummary"></div>
+  <div id="endLog" style="margin-top:8px"></div>
+</div>
+
 <div class="warn">
-  <strong>This is slow on purpose.</strong> The processor tests can take
-  <strong>45&ndash;70 seconds per run</strong> on a phone, four runs each &mdash; so a
-  processor row may sit there for 3&ndash;5 minutes. The log below updates as it goes,
-  so if it is moving, it is working. Each test gives up on its own after 5 minutes.
-  Run them one at a time on wifi.
+  <strong>The tests below are slow on purpose.</strong> The processor rows can take
+  <strong>45&ndash;70 seconds per run</strong>, four runs each. The log updates as it goes,
+  so if it is moving, it is working. Each gives up on its own after 5 minutes.
 </div>
 
 <div id="verdict" class="verdict"></div>
@@ -60,7 +88,7 @@
 </div>
 
 <div class="card">
-  <h2>Tests &mdash; seconds of speech per second of work</h2>
+  <h2>One-off tests &mdash; seconds of speech per second of work</h2>
   <div id="tests"></div>
 </div>
 
@@ -73,13 +101,17 @@ const ORT_VER = '1.23.2';
 const CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@' + ORT_VER + '/dist/';
 const HF = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/';
 const PIPER = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx';
+const STYLE_URL = HF + 'voices/af_heart.bin';
+const FP16 = HF + 'onnx/model_fp16.onnx';
 const TIMEOUT_MS = 5 * 60 * 1000;
+const ENDURANCE_MS = 5 * 60 * 1000;
+const LS_KEY = 'kokoro-endurance-log';
 
 const $ = id => document.getElementById(id);
 const pad2 = n => String(n).padStart(2, '0');
+const clock = d => pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
 function log(m) {
-  const d = new Date();
-  $('log').textContent += pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + '  ' + m + '\n';
+  $('log').textContent += clock(new Date()) + '  ' + m + '\n';
   $('log').scrollTop = 1e9;
 }
 
@@ -87,18 +119,15 @@ const gpuOK = !!navigator.gpu;
 const iso = self.crossOriginIsolated === true;
 const cores = navigator.hardwareConcurrency || 1;
 
-// Every test row. Kokoro on the graphics chip needs fp16/fp32 — the compressed
-// q8 build is a processor format, and int8 on WebGPU falls back to the processor
-// op by op, which is what made the first version of this page appear to hang.
 const TESTS = [
   { id:'gpu16', label:'Graphics chip — fp16', note:'the realistic one to ship',
-    url: HF + 'onnx/model_fp16.onnx', mb:156, ep:'webgpu', threads:1, kind:'kokoro' },
+    url: FP16, mb:156, ep:'webgpu', threads:1, kind:'kokoro' },
   { id:'gpu32', label:'Graphics chip — fp32', note:'what kokoro-js recommends',
     url: HF + 'onnx/model.onnx', mb:310, ep:'webgpu', threads:1, kind:'kokoro' },
   { id:'w1', label:'Processor, 1 core', note:'what the app does today',
     url: HF + 'onnx/model_quantized.onnx', mb:88, ep:'wasm', threads:1, kind:'kokoro' },
   { id:'wn', label:'Processor, ' + Math.min(4, cores) + ' cores', note:'the sherpa-onnx question',
-    url: HF + 'onnx/model_quantized.onnx', mb:88, ep:'wasm', threads:Math.min(4, cores), kind:'kokoro' },
+    url: HF + 'onnx/model_quantized.onnx', mb:88, ep:'wasm', threads:Math.min(4,cores), kind:'kokoro' },
   { id:'pp', label:'Piper, 1 core', note:'the voice you have now, for comparison',
     url: PIPER, mb:60, ep:'wasm', threads:1, kind:'piper' },
 ];
@@ -111,71 +140,56 @@ $('env').innerHTML =
   envRow('Graphics chip model', '<span id="adap">checking&hellip;</span>') +
   envRow('Several cores allowed', iso ? 'yes' : 'NO', iso ? 'yes' : 'no') +
   envRow('Cores reported', cores) +
-  envRow('Secure connection', self.isSecureContext ? 'yes' : 'NO', self.isSecureContext ? 'yes':'no') +
+  envRow('Secure connection', self.isSecureContext ? 'yes':'NO', self.isSecureContext?'yes':'no') +
   envRow('Browser', navigator.userAgent.slice(0, 90));
 
 if (gpuOK) {
   navigator.gpu.requestAdapter().then(a => {
-    if (!a) { $('adap').textContent = 'none returned'; $('adap').className = 'no'; return; }
+    if (!a) { $('adap').textContent = 'none returned'; $('adap').className='no'; return; }
     const i = a.info || {};
-    const bits = [i.vendor, i.architecture, i.device, i.description].filter(Boolean);
-    $('adap').textContent = bits.join(' ') || 'available (no details)';
-    log('graphics chip: ' + ($('adap').textContent));
+    $('adap').textContent = [i.vendor,i.architecture,i.device,i.description].filter(Boolean).join(' ')
+      || 'available (no details)';
   }).catch(e => { $('adap').textContent = 'error: ' + e.message; });
 }
 
 $('tests').innerHTML = TESTS.map(t =>
-  '<div class="test">' +
-    '<div class="test-head">' +
-      '<span class="label">' + t.label + '<span class="note">' + t.note + '</span></span>' +
-      '<span><span id="s-' + t.id + '" class="score pend">&mdash;</span>' +
-      '<div id="d-' + t.id + '" class="detail"></div></span>' +
-    '</div>' +
-    '<button id="b-' + t.id + '">Download &amp; run (' + t.mb + ' MB)</button>' +
-    '<progress id="p-' + t.id + '" value="0" max="100"></progress>' +
-  '</div>').join('');
+  '<div class="test"><div class="test-head">' +
+    '<span class="label">' + t.label + '<span class="note">' + t.note + '</span></span>' +
+    '<span><span id="s-'+t.id+'" class="score pend">&mdash;</span>' +
+    '<div id="d-'+t.id+'" class="detail"></div></span>' +
+  '</div><button id="b-'+t.id+'">Download &amp; run ('+t.mb+' MB)</button>' +
+  '<progress id="p-'+t.id+'" value="0" max="100"></progress></div>').join('');
 
-let lastWav = null;
-const results = {};
+const VOCAB = {"$":0,";":1,":":2,",":3,".":4,"!":5,"?":6,"—":9,"…":10,"\"":11,"(":12,")":13,"“":14,"”":15," ":16,"̃":17,"ʣ":18,"ʥ":19,"ʦ":20,"ʨ":21,"ᵝ":22,"ꭧ":23,"A":24,"I":25,"O":31,"Q":33,"S":35,"T":36,"W":39,"Y":41,"ᵊ":42,"a":43,"b":44,"c":45,"d":46,"e":47,"f":48,"h":50,"i":51,"j":52,"k":53,"l":54,"m":55,"n":56,"o":57,"p":58,"q":59,"r":60,"s":61,"t":62,"u":63,"v":64,"w":65,"x":66,"y":67,"z":68,"ɑ":69,"ɐ":70,"ɒ":71,"æ":72,"β":75,"ɔ":76,"ɕ":77,"ç":78,"ɖ":80,"ð":81,"ʤ":82,"ə":83,"ɚ":85,"ɛ":86,"ɜ":87,"ɟ":90,"ɡ":92,"ɥ":99,"ɨ":101,"ɪ":102,"ʝ":103,"ɯ":110,"ɰ":111,"ŋ":112,"ɳ":113,"ɲ":114,"ɴ":115,"ø":116,"ɸ":118,"θ":119,"œ":120,"ɹ":123,"ɾ":125,"ɻ":126,"ʁ":128,"ɽ":129,"ʂ":130,"ʃ":131,"ʈ":132,"ʧ":133,"ʊ":135,"ʋ":136,"ʌ":138,"ɣ":139,"ɤ":140,"χ":142,"ʎ":143,"ʒ":147,"ʔ":148,"ˈ":156,"ˌ":157,"ː":158,"ʰ":162,"ʲ":164,"↓":169,"→":171,"↗":172,"↘":173,"ᵻ":177};
+const PHON = 'fɔːɹ ɡˈɑːd sˈoʊ lˈʌvd ðə wˈɜːld, ðæt hiː ɡˈeɪv hɪz ˈoʊnli sˈʌn, ðæt hˈuːˈɛvɚ bɪlˈiːvz ɪn hɪm ʃˌʊd nˌɑːt pˈɛɹɪʃ bˌʌt hæv ɪtˈɜːnəl lˈaɪf.';
 
-function verdict() {
-  const best = Math.max(0, ...Object.entries(results)
-    .filter(([k]) => k !== 'pp').map(([, v]) => v || 0));
-  if (!best) return;
-  const v = $('verdict'); v.style.display = 'block';
-  if (best >= 2) { v.style.background = '#14532d';
-    v.textContent = 'Works. Best so far ' + best.toFixed(2) + 'x — comfortably ahead of playback.'; }
-  else if (best >= 1) { v.style.background = '#78350f';
-    v.textContent = 'Marginal. Best so far ' + best.toFixed(2) + 'x — only just keeping up, likely to stutter with the screen off.'; }
-  else { v.style.background = '#7f1d1d';
-    v.textContent = 'Too slow so far. Best ' + best.toFixed(2) + 'x — slower than playback.'; }
-}
-
-// The engine blocks whatever thread it runs on, so it goes in a worker —
-// otherwise the page freezes and none of this logging ever paints.
+// The engine blocks whatever thread it runs on, so it lives in a worker.
+// 'init' builds the session once; 'synth' reuses it — rebuilding per clip would
+// measure session creation instead of synthesis.
 const WORKER_SRC = `
 import * as ort from '${CDN}ort.all.min.mjs';
 const CDN = '${CDN}';
 const VOCAB = __VOCAB__;
 const PHON = __PHON__;
-const say = (m) => self.postMessage({ type:'log', m });
+const say = m => self.postMessage({ type:'log', m });
+let session = null, feed = null, rate = 24000, outKey = 'waveform';
 
 async function grab(url, mb) {
   const cache = await caches.open('kokoro-test');
   const hit = await cache.match(url);
-  if (hit) { say('already downloaded, reading from cache'); return new Uint8Array(await hit.arrayBuffer()); }
+  if (hit) { say('reading from cache'); return new Uint8Array(await hit.arrayBuffer()); }
   say('downloading ' + mb + ' MB...');
   const r = await fetch(url);
   if (!r.ok) throw new Error('download failed (' + r.status + ')');
   const total = +(r.headers.get('Content-Length') || 0);
   const reader = r.body.getReader();
-  const chunks = []; let got = 0, lastPct = -1;
+  const chunks = []; let got = 0, last = -1;
   for (;;) {
     const s = await reader.read();
     if (s.done) break;
     chunks.push(s.value); got += s.value.length;
-    const pct = total ? Math.floor(got / total * 100) : 0;
-    if (pct !== lastPct) { lastPct = pct; self.postMessage({ type:'progress', pct }); }
+    const pct = total ? Math.floor(got/total*100) : 0;
+    if (pct !== last) { last = pct; self.postMessage({ type:'progress', pct }); }
   }
   const blob = new Blob(chunks);
   await cache.put(url, new Response(blob));
@@ -183,164 +197,338 @@ async function grab(url, mb) {
   return new Uint8Array(await blob.arrayBuffer());
 }
 
+async function init(t) {
+  const bytes = await grab(t.url, t.mb);
+  ort.env.wasm.wasmPaths = CDN;
+  ort.env.wasm.numThreads = t.threads;
+  say('creating session (' + t.ep + ', ' + t.threads + ' thread(s))...');
+  const t0 = performance.now();
+  session = await ort.InferenceSession.create(bytes, { executionProviders: [t.ep] });
+  say('session ready in ' + ((performance.now()-t0)/1000).toFixed(1) + 's');
+
+  if (t.kind === 'kokoro') {
+    const style = new Float32Array((await grab(t.styleUrl, 1)).buffer.slice(0));
+    const ids = Array.from(PHON).map(c => VOCAB[c]).filter(v => v !== undefined);
+    const padded = [0].concat(ids, [0]);
+    say('tokens: ' + ids.length);
+    feed = () => ({
+      input_ids: new ort.Tensor('int64', BigInt64Array.from(padded.map(v=>BigInt(v))), [1, padded.length]),
+      style: new ort.Tensor('float32', style.slice(ids.length*256,(ids.length+1)*256), [1,256]),
+      speed: new ort.Tensor('float32', new Float32Array([1]), [1]),
+    });
+    rate = 24000; outKey = 'waveform';
+  } else {
+    const cfg = await (await fetch(t.url + '.json')).json();
+    const map = cfg.phoneme_id_map;
+    const idOf = x => Array.isArray(map[x]) ? map[x][0] : map[x];
+    const pad = idOf('_') !== undefined ? idOf('_') : 0;
+    const ids = [idOf('^') !== undefined ? idOf('^') : 1, pad];
+    for (const c of PHON) { const v = idOf(c); if (v !== undefined) ids.push(v, pad); }
+    ids.push(idOf('$') !== undefined ? idOf('$') : 2);
+    feed = () => ({
+      input: new ort.Tensor('int64', BigInt64Array.from(ids.map(v=>BigInt(v))), [1, ids.length]),
+      input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)])),
+      scales: new ort.Tensor('float32', new Float32Array([cfg.inference.noise_scale,
+        cfg.inference.length_scale, cfg.inference.noise_w])),
+    });
+    rate = cfg.audio.sample_rate; outKey = 'output';
+  }
+}
+
 self.onmessage = async (e) => {
-  const t = e.data;
+  const d = e.data;
   try {
-    const bytes = await grab(t.url, t.mb);
-    ort.env.wasm.wasmPaths = CDN;
-    ort.env.wasm.numThreads = t.threads;
-    say('creating session (' + t.ep + ', ' + t.threads + ' thread(s))...');
-    const t0 = performance.now();
-    const session = await ort.InferenceSession.create(bytes, { executionProviders: [t.ep] });
-    say('session ready in ' + ((performance.now()-t0)/1000).toFixed(1) + 's');
-
-    let feed, rate, outKey;
-    if (t.kind === 'kokoro') {
-      const style = new Float32Array((await grab(t.styleUrl, 1)).buffer.slice(0));
-      say('voice rows: ' + (style.length/256));
-      const ids = Array.from(PHON).map(c => VOCAB[c]).filter(v => v !== undefined);
-      const padded = [0].concat(ids, [0]);
-      say('tokens: ' + ids.length);
-      feed = () => ({
-        input_ids: new ort.Tensor('int64', BigInt64Array.from(padded.map(v=>BigInt(v))), [1, padded.length]),
-        style: new ort.Tensor('float32', style.slice(ids.length*256, (ids.length+1)*256), [1,256]),
-        speed: new ort.Tensor('float32', new Float32Array([1]), [1]),
-      });
-      rate = 24000; outKey = 'waveform';
-    } else {
-      const cfg = await (await fetch(t.url + '.json')).json();
-      const map = cfg.phoneme_id_map;
-      const idOf = x => Array.isArray(map[x]) ? map[x][0] : map[x];
-      const pad = idOf('_') !== undefined ? idOf('_') : 0;
-      const ids = [idOf('^') !== undefined ? idOf('^') : 1, pad];
-      for (const c of PHON) { const v = idOf(c); if (v !== undefined) ids.push(v, pad); }
-      ids.push(idOf('$') !== undefined ? idOf('$') : 2);
-      feed = () => ({
-        input: new ort.Tensor('int64', BigInt64Array.from(ids.map(v=>BigInt(v))), [1, ids.length]),
-        input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)])),
-        scales: new ort.Tensor('float32', new Float32Array([cfg.inference.noise_scale,
-          cfg.inference.length_scale, cfg.inference.noise_w])),
-      });
-      rate = cfg.audio.sample_rate; outKey = 'output';
+    if (d.cmd === 'init') { await init(d.t); self.postMessage({ type:'ready' }); return; }
+    if (d.cmd === 'synth') {
+      const t0 = performance.now();
+      const out = await session.run(feed());
+      const ms = performance.now() - t0;
+      const data = out[outKey].data;
+      self.postMessage({ type:'clip', ms, samples: Float32Array.from(data), rate, tag: d.tag });
+      return;
     }
-
-    say('warm-up run (first one is slowest — shaders compile here)...');
-    const w0 = performance.now();
-    await session.run(feed());
-    say('warm-up done in ' + ((performance.now()-w0)/1000).toFixed(1) + 's');
-
-    const times = []; let out = null;
-    for (let i = 1; i <= 3; i++) {
-      const s0 = performance.now();
-      out = await session.run(feed());
-      const ms = performance.now() - s0;
-      times.push(ms);
-      say('  run ' + i + '/3: ' + (ms/1000).toFixed(2) + 's');
-    }
-    const ms = Math.min.apply(null, times);
-    const data = out[outKey].data;
-    self.postMessage({ type:'result', ms, samples: Float32Array.from(data), rate });
   } catch (err) {
     self.postMessage({ type:'error', message: err && err.message ? err.message : String(err) });
   }
 };
 `;
 
-const VOCAB = {"$":0,";":1,":":2,",":3,".":4,"!":5,"?":6,"—":9,"…":10,"\"":11,"(":12,")":13,"“":14,"”":15," ":16,"̃":17,"ʣ":18,"ʥ":19,"ʦ":20,"ʨ":21,"ᵝ":22,"ꭧ":23,"A":24,"I":25,"O":31,"Q":33,"S":35,"T":36,"W":39,"Y":41,"ᵊ":42,"a":43,"b":44,"c":45,"d":46,"e":47,"f":48,"h":50,"i":51,"j":52,"k":53,"l":54,"m":55,"n":56,"o":57,"p":58,"q":59,"r":60,"s":61,"t":62,"u":63,"v":64,"w":65,"x":66,"y":67,"z":68,"ɑ":69,"ɐ":70,"ɒ":71,"æ":72,"β":75,"ɔ":76,"ɕ":77,"ç":78,"ɖ":80,"ð":81,"ʤ":82,"ə":83,"ɚ":85,"ɛ":86,"ɜ":87,"ɟ":90,"ɡ":92,"ɥ":99,"ɨ":101,"ɪ":102,"ʝ":103,"ɯ":110,"ɰ":111,"ŋ":112,"ɳ":113,"ɲ":114,"ɴ":115,"ø":116,"ɸ":118,"θ":119,"œ":120,"ɹ":123,"ɾ":125,"ɻ":126,"ʁ":128,"ɽ":129,"ʂ":130,"ʃ":131,"ʈ":132,"ʧ":133,"ʊ":135,"ʋ":136,"ʌ":138,"ɣ":139,"ɤ":140,"χ":142,"ʎ":143,"ʒ":147,"ʔ":148,"ˈ":156,"ˌ":157,"ː":158,"ʰ":162,"ʲ":164,"↓":169,"→":171,"↗":172,"↘":173,"ᵻ":177};
-const PHON = 'fɔːɹ ɡˈɑːd sˈoʊ lˈʌvd ðə wˈɜːld, ðæt hiː ɡˈeɪv hɪz ˈoʊnli sˈʌn, ðæt hˈuːˈɛvɚ bɪlˈiːvz ɪn hɪm ʃˌʊd nˌɑːt pˈɛɹɪʃ bˌʌt hæv ɪtˈɜːnəl lˈaɪf.';
-
-const workerSrc = WORKER_SRC
-  .replace('__VOCAB__', JSON.stringify(VOCAB))
-  .replace('__PHON__', JSON.stringify(PHON));
-const workerUrl = URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' }));
+const workerSrc = WORKER_SRC.replace('__VOCAB__', JSON.stringify(VOCAB))
+                            .replace('__PHON__', JSON.stringify(PHON));
+const workerUrl = URL.createObjectURL(new Blob([workerSrc], { type:'text/javascript' }));
 
 function makeWav(samples, rate) {
-  const b = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const b = new DataView(new ArrayBuffer(44 + samples.length*2));
   b.setUint32(0,0x46464952,true); b.setUint32(4,36+samples.length*2,true);
   b.setUint32(8,0x45564157,true); b.setUint32(12,0x20746d66,true);
   b.setUint32(16,16,true); b.setUint16(20,1,true); b.setUint16(22,1,true);
   b.setUint32(24,rate,true); b.setUint32(28,rate*2,true); b.setUint16(32,2,true);
   b.setUint16(34,16,true); b.setUint32(36,0x61746164,true);
   b.setUint32(40,samples.length*2,true);
-  for (let i=0;i<samples.length;i++){ const s=Math.max(-1,Math.min(1,samples[i]));
-    b.setInt16(44+i*2, s<0?s*0x8000:s*0x7fff, true); }
+  for (let i=0;i<samples.length;i++){const s=Math.max(-1,Math.min(1,samples[i]));
+    b.setInt16(44+i*2, s<0?s*0x8000:s*0x7fff, true);}
   return new Blob([b.buffer], { type:'audio/wav' });
 }
 
-let busy = false;
-function setButtons(disabled) {
-  TESTS.forEach(t => { $('b-' + t.id).disabled = disabled; });
+// ---------- one-off benchmarks ----------
+let lastWav = null, busy = false;
+const results = {};
+const setButtons = d => TESTS.forEach(t => { $('b-'+t.id).disabled = d; });
+
+function verdict() {
+  const vals = Object.entries(results).filter(([k]) => k !== 'pp').map(([,v]) => v || 0);
+  if (!vals.length) return;
+  const best = Math.max.apply(null, vals);
+  const v = $('verdict'); v.style.display = 'block';
+  if (best >= 2) { v.style.background='#14532d';
+    v.textContent = 'Works. Best so far ' + best.toFixed(2) + 'x — comfortably ahead of playback.'; }
+  else if (best >= 1) { v.style.background='#78350f';
+    v.textContent = 'Marginal. Best so far ' + best.toFixed(2) + 'x — ahead of playback but with little headroom.'; }
+  else { v.style.background='#7f1d1d';
+    v.textContent = 'Too slow. Best ' + best.toFixed(2) + 'x — slower than playback.'; }
 }
 
-function run(t) {
+function runBench(t) {
   if (busy) return;
-  busy = true; setButtons(true);
-  const btn = $('b-' + t.id), prog = $('p-' + t.id);
-  btn.textContent = 'Running…';
-  prog.style.display = 'block'; prog.value = 0;
-  $('s-' + t.id).textContent = '…'; $('s-' + t.id).className = 'score pend';
-  $('d-' + t.id).textContent = '';
+  busy = true; setButtons(true); $('endGo').disabled = true;
+  const btn = $('b-'+t.id), prog = $('p-'+t.id);
+  btn.textContent = 'Running…'; prog.style.display='block'; prog.value=0;
+  $('s-'+t.id).textContent='…'; $('s-'+t.id).className='score pend'; $('d-'+t.id).textContent='';
   log('\n=== ' + t.label + ' ===');
 
-  const worker = new Worker(workerUrl, { type: 'module' });
-  let done = false;
+  const w = new Worker(workerUrl, { type:'module' });
+  let done = false, times = [], runs = 0, last = null;
   const timer = setTimeout(() => {
-    if (done) return;
-    done = true; worker.terminate();
-    log('GAVE UP after 5 minutes — this configuration is not viable.');
-    finish(t, btn, prog, null, 'gave up after 5 min');
+    if (done) return; done = true; w.terminate();
+    log('GAVE UP after 5 minutes.');
+    finishBench(t, btn, prog, 'gave up after 5 min');
   }, TIMEOUT_MS);
 
-  worker.onmessage = (e) => {
+  const stop = () => { done = true; clearTimeout(timer); w.terminate(); };
+
+  w.onmessage = (e) => {
     const d = e.data;
     if (d.type === 'log') { log('  ' + d.m); return; }
     if (d.type === 'progress') { prog.value = d.pct; return; }
     if (done) return;
-    done = true; clearTimeout(timer); worker.terminate();
-    if (d.type === 'error') {
-      log('  FAILED: ' + d.message);
-      finish(t, btn, prog, null, d.message);
-      return;
+    if (d.type === 'error') { stop(); log('  FAILED: '+d.message); finishBench(t,btn,prog,d.message); return; }
+    if (d.type === 'ready') { log('  warm-up (shaders compile here)…'); w.postMessage({cmd:'synth'}); return; }
+    if (d.type === 'clip') {
+      last = d;
+      if (runs === 0) log('  warm-up done in ' + (d.ms/1000).toFixed(1) + 's');
+      else { times.push(d.ms); log('  run ' + runs + '/3: ' + (d.ms/1000).toFixed(2) + 's'); }
+      runs++;
+      if (runs <= 3) { w.postMessage({cmd:'synth'}); return; }
+      stop();
+      const ms = Math.min.apply(null, times);
+      const secs = last.samples.length / last.rate;
+      const x = secs*1000/ms;
+      results[t.id] = x;
+      lastWav = makeWav(last.samples, last.rate); $('play').disabled = false;
+      log('  RESULT: ' + (ms/1000).toFixed(2) + 's work -> ' + secs.toFixed(2) + 's speech = ' + x.toFixed(2) + 'x');
+      const el = $('s-'+t.id);
+      el.textContent = x.toFixed(2)+'x';
+      el.className = 'score ' + (x>=2?'good':x>=1?'ok':'bad');
+      $('d-'+t.id).textContent = (ms/1000).toFixed(1)+'s work → '+secs.toFixed(1)+'s speech';
+      finishBench(t, btn, prog, null);
     }
-    const secs = d.samples.length / d.rate;
-    const x = secs * 1000 / d.ms;
-    results[t.id] = x;
-    lastWav = makeWav(d.samples, d.rate); $('play').disabled = false;
-    log('  RESULT: ' + (d.ms/1000).toFixed(2) + 's work -> ' + secs.toFixed(2) + 's speech = ' + x.toFixed(2) + 'x');
-    const el = $('s-' + t.id);
-    el.textContent = x.toFixed(2) + 'x';
-    el.className = 'score ' + (x >= 2 ? 'good' : x >= 1 ? 'ok' : 'bad');
-    $('d-' + t.id).textContent = (d.ms/1000).toFixed(1) + 's work → ' + secs.toFixed(1) + 's speech';
-    finish(t, btn, prog, x, null);
   };
-  worker.onerror = (e) => {
-    if (done) return;
-    done = true; clearTimeout(timer); worker.terminate();
-    log('  WORKER ERROR: ' + (e.message || 'unknown'));
-    finish(t, btn, prog, null, e.message || 'worker error');
-  };
-
-  worker.postMessage({ url:t.url, mb:t.mb, ep:t.ep, threads:t.threads, kind:t.kind,
-                       styleUrl: HF + 'voices/af_heart.bin' });
+  w.onerror = (e) => { if (done) return; stop(); log('  WORKER ERROR: '+(e.message||'?'));
+                       finishBench(t,btn,prog,e.message||'worker error'); };
+  w.postMessage({ cmd:'init', t: { url:t.url, mb:t.mb, ep:t.ep, threads:t.threads,
+                                   kind:t.kind, styleUrl: STYLE_URL } });
 }
 
-function finish(t, btn, prog, x, errMsg) {
-  if (errMsg) {
-    $('s-' + t.id).textContent = 'failed';
-    $('s-' + t.id).className = 'score bad';
-    $('d-' + t.id).textContent = String(errMsg).slice(0, 60);
-  }
-  btn.textContent = 'Run again';
-  prog.style.display = 'none';
-  busy = false; setButtons(false);
+function finishBench(t, btn, prog, err) {
+  if (err) { $('s-'+t.id).textContent='failed'; $('s-'+t.id).className='score bad';
+             $('d-'+t.id).textContent = String(err).slice(0,60); }
+  btn.textContent = 'Run again'; prog.style.display='none';
+  busy = false; setButtons(false); $('endGo').disabled = false;
   verdict();
 }
 
-TESTS.forEach(t => { $('b-' + t.id).onclick = () => run(t); });
+TESTS.forEach(t => { $('b-'+t.id).onclick = () => runBench(t); });
 $('play').onclick = () => { if (lastWav) new Audio(URL.createObjectURL(lastWav)).play(); };
 
+// ---------- endurance ----------
+const audio = new Audio();
+audio.setAttribute('aria-hidden','true');
+audio.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
+document.body.appendChild(audio);
+
+let endWorker = null, endRunning = false, endEntries = [], endQueue = [], endStart = 0;
+
+const saveLog = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(endEntries)); } catch {} };
+const loadLog = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; } };
+
+let currentUrl = null;
+
+function playNext() {
+  if (!endRunning) return;
+  if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+  const next = endQueue.shift();
+  if (!next) {
+    // Nothing ready to play — in the real app this is a stutter.
+    endEntries.push({ t: Date.now(), stutter: true });
+    saveLog();
+    return; // the next finished clip restarts playback
+  }
+  currentUrl = URL.createObjectURL(next);
+  audio.src = currentUrl;
+  audio.play().catch(e => { endEntries.push({ t:Date.now(), err:'play blocked: '+e.message }); saveLog(); });
+}
+
+audio.onended = playNext;
+// Without this a single bad clip would end playback silently, and the run would
+// look like a stall that was really just one failed decode.
+audio.onerror = () => {
+  endEntries.push({ t: Date.now(), err: 'audio element error' });
+  saveLog();
+  playNext();
+};
+
+// Android only keeps letting us call play() if the element was started inside a
+// real tap. The first clip is 20+ seconds away, long after the tap, so unlock the
+// element immediately with a moment of silence — same trick as unlockTtsAudio().
+function unlockAudio() {
+  const b = new DataView(new ArrayBuffer(44 + 480));
+  b.setUint32(0,0x46464952,true); b.setUint32(4,36+480,true);
+  b.setUint32(8,0x45564157,true); b.setUint32(12,0x20746d66,true);
+  b.setUint32(16,16,true); b.setUint16(20,1,true); b.setUint16(22,1,true);
+  b.setUint32(24,24000,true); b.setUint32(28,48000,true); b.setUint16(32,2,true);
+  b.setUint16(34,16,true); b.setUint32(36,0x61746164,true); b.setUint32(40,480,true);
+  audio.src = URL.createObjectURL(new Blob([b.buffer], { type:'audio/wav' }));
+  audio.play().then(() => log('  audio unlocked'), e => log('  audio unlock failed: ' + e.message));
+}
+
+function endLive(msg) { $('endLive').textContent = msg; }
+
+function startEndurance() {
+  if (busy || endRunning) return;
+  // Before endRunning goes true, so the silent clip's 'ended' event does not
+  // count as a stutter.
+  unlockAudio();
+  endRunning = true; busy = true; setButtons(true);
+  $('endGo').textContent = 'Stop'; $('endGo').className = 'stop';
+  endEntries = []; endQueue = []; endStart = Date.now();
+  $('endSummary').innerHTML = ''; $('endLog').textContent = '';
+  saveLog();
+  log('\n=== ENDURANCE (fp16, graphics chip) ===');
+  endLive('starting…');
+
+  endWorker = new Worker(workerUrl, { type:'module' });
+  endWorker.onmessage = (e) => {
+    const d = e.data;
+    if (d.type === 'log') { log('  ' + d.m); endLive(d.m); return; }
+    if (d.type === 'progress') return;
+    if (!endRunning) return;
+    if (d.type === 'error') {
+      endEntries.push({ t:Date.now(), err:d.message }); saveLog();
+      log('  ENDURANCE FAILED: ' + d.message);
+      stopEndurance(); return;
+    }
+    if (d.type === 'ready') {
+      endLive('running — lock your phone now');
+      endWorker.postMessage({ cmd:'synth' });
+      return;
+    }
+    if (d.type === 'clip') {
+      const secs = d.samples.length / d.rate;
+      endEntries.push({ t: Date.now(), ms: Math.round(d.ms), x: +(secs*1000/d.ms).toFixed(2),
+                        q: endQueue.length });
+      saveLog();
+      endQueue.push(makeWav(d.samples, d.rate));
+      if (audio.paused) playNext();
+      const elapsed = Date.now() - endStart;
+      endLive('running ' + Math.floor(elapsed/1000) + 's — ' +
+              endEntries.filter(e=>e.x).length + ' clips, last ' +
+              (endEntries[endEntries.length-1].x||'?') + 'x');
+      if (elapsed >= ENDURANCE_MS) { log('  endurance complete'); stopEndurance(); return; }
+      endWorker.postMessage({ cmd:'synth' });
+    }
+  };
+  endWorker.onerror = (e) => {
+    endEntries.push({ t:Date.now(), err:'worker: '+(e.message||'?') }); saveLog();
+    stopEndurance();
+  };
+  endWorker.postMessage({ cmd:'init', t:{ url:FP16, mb:156, ep:'webgpu', threads:1,
+                                          kind:'kokoro', styleUrl: STYLE_URL } });
+
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'Kokoro endurance test', artist: 'Speed diagnostic' });
+  }
+}
+
+function stopEndurance() {
+  endRunning = false;
+  if (endWorker) { endWorker.terminate(); endWorker = null; }
+  audio.pause();
+  $('endGo').textContent = 'Start 5-minute endurance test'; $('endGo').className = '';
+  busy = false; setButtons(false);
+  endLive('stopped');
+  showEndurance();
+}
+
+function showEndurance() {
+  const e = loadLog();
+  if (!e.length) { $('endSummary').innerHTML =
+    '<p style="color:#777;font-size:.85rem">No endurance results saved yet.</p>'; return; }
+  const clips = e.filter(x => x.x);
+  const stutters = e.filter(x => x.stutter).length;
+  const errs = e.filter(x => x.err);
+  if (!clips.length) {
+    $('endSummary').innerHTML = '<p class="no" style="font-size:.9rem">No clips completed. ' +
+      (errs.length ? errs[0].err : 'Unknown failure.') + '</p>';
+    return;
+  }
+  const xs = clips.map(c => c.x).sort((a,b) => a-b);
+  const median = xs[Math.floor(xs.length/2)];
+  const firstQ = clips.slice(0, Math.ceil(clips.length/4)).map(c=>c.x);
+  const lastQ  = clips.slice(-Math.ceil(clips.length/4)).map(c=>c.x);
+  const avg = a => a.reduce((s,v)=>s+v,0)/a.length;
+  const decay = ((avg(lastQ) - avg(firstQ)) / avg(firstQ)) * 100;
+  // Biggest hole between consecutive log entries — a long one means the browser
+  // suspended the page while the screen was off.
+  let maxGap = 0;
+  for (let i=1;i<e.length;i++) maxGap = Math.max(maxGap, e[i].t - e[i-1].t);
+  const span = (e[e.length-1].t - e[0].t) / 1000;
+
+  const verdictText =
+    stutters > 0 || maxGap > 30000
+      ? ['no', 'Stalled with the screen off — not viable as a streaming voice.']
+      : decay < -25
+      ? ['no', 'Slowed badly as the phone warmed — risky over a long chapter.']
+      : median >= 1.3
+      ? ['yes', 'Held up. Kept ahead of playback for the whole run.']
+      : ['no', 'Median fell too close to playback speed.'];
+
+  $('endSummary').innerHTML =
+    '<p class="' + verdictText[0] + '" style="font-size:.95rem;font-weight:600;margin:10px 0 4px">' +
+      verdictText[1] + '</p>' +
+    '<table>' +
+    '<tr><td>Ran for</td><td>' + Math.round(span) + 's</td></tr>' +
+    '<tr><td>Clips made</td><td>' + clips.length + '</td></tr>' +
+    '<tr><td>Median speed</td><td>' + median.toFixed(2) + 'x</td></tr>' +
+    '<tr><td>Slowest / fastest</td><td>' + xs[0].toFixed(2) + 'x / ' + xs[xs.length-1].toFixed(2) + 'x</td></tr>' +
+    '<tr><td>Change first → last quarter</td><td>' + (decay>=0?'+':'') + decay.toFixed(0) + '%</td></tr>' +
+    '<tr><td>Stutters (audio ran dry)</td><td class="' + (stutters?'no':'yes') + '">' + stutters + '</td></tr>' +
+    '<tr><td>Longest gap between clips</td><td class="' + (maxGap>30000?'no':'yes') + '">' +
+      (maxGap/1000).toFixed(1) + 's</td></tr>' +
+    (errs.length ? '<tr><td>Errors</td><td class="no">' + errs.length + '</td></tr>' : '') +
+    '</table>';
+
+  $('endLog').textContent = e.map(x => clock(new Date(x.t)) + '  ' +
+    (x.err ? 'ERROR ' + x.err : x.stutter ? '*** STUTTER — audio ran dry ***'
+      : (x.ms/1000).toFixed(2) + 's  ' + x.x + 'x  queued:' + x.q)).join('\n');
+}
+
+$('endGo').onclick = () => { endRunning ? stopEndurance() : startEndurance(); };
+$('endShow').onclick = showEndurance;
+
+showEndurance();
 log('ready. ' + (gpuOK ? 'graphics chip available.' : 'NO graphics chip in this browser.'));
-if (!iso) log('WARNING: several-cores test unavailable (page is not cross-origin isolated).');
+if (!iso) log('note: several-cores test unavailable (page is not cross-origin isolated).');
 </script>
 </body>
 </html>
