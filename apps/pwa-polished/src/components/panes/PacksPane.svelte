@@ -894,13 +894,6 @@ Free up space on your device, or remove a pack you are not using, then try again
           <div class="pill-text">
             <div class="pill-head">
               <span class="pill-name">{pack.name}</span>
-              <span class="pill-meta">
-                {#if state}
-                  {#if state.version}v{state.version} · {/if}{formatBytes(state.bytes)}
-                {:else}
-                  {manifestSizes[pack.id] ?? pack.size}
-                {/if}
-              </span>
               {#if state?.needsReindex}
                 <span class="pill-flag">index missing</span>
               {:else if state?.incomplete}
@@ -959,9 +952,12 @@ Free up space on your device, or remove a pack you are not using, then try again
             <div class="pill-text">
               <div class="pill-head">
                 <span class="pill-name">{pack.id}</span>
-                <span class="pill-meta">v{pack.version} · {formatBytes(pack.size)}</span>
               </div>
-              <div class="pill-desc">Older pack, no longer offered</div>
+              <!-- No info button on these rows, so the version and size ride
+                   along on the description line rather than vanishing. -->
+              <div class="pill-desc">
+                Older pack, no longer offered · v{pack.version} · {formatBytes(pack.size)}
+              </div>
             </div>
             <div class="pill-actions">
               <button
@@ -1044,7 +1040,6 @@ Free up space on your device, or remove a pack you are not using, then try again
           <div class="pill-text">
             <div class="pill-head">
               <span class="pill-name">{voice.label}</span>
-              <span class="pill-meta">~{voiceSizes[voice.id] ?? voice.approxSizeMB} MB</span>
             </div>
             <div class="pill-desc">
               {voice.custom
@@ -1217,22 +1212,15 @@ Free up space on your device, or remove a pack you are not using, then try again
   }
 
   .pill-name {
-    /* min-width lets the name shrink and ellipsis instead of shoving the size
-       and the buttons off the end of a narrow pill. */
+    /* The name owns this line on its own now -- version and size live in the
+       info card. min-width and the ellipsis stay as a guard for long names. */
     min-width: 0;
-    font-size: 0.88rem;
+    font-size: 0.95rem;
     font-weight: 600;
     color: #f0f0f0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .pill-meta {
-    font-size: 0.72rem;
-    color: #777;
-    white-space: nowrap;
-    flex-shrink: 0;
   }
 
   .pill-flag {
