@@ -116,10 +116,18 @@ export const KOKORO_MODEL_MB = 310;
 /** OPFS name for the one model every Kokoro voice shares. */
 export const KOKORO_MODEL_FILE = 'kokoro-model.onnx';
 
+/**
+ * British is "en-gb-x-rp", not "en-gb". The bundled espeak has no plain en-GB —
+ * only en-GB-x-rp, en-GB-scotland and two regional variants — and asking for a
+ * language file it does not have fails synthesis with an unhelpful error rather
+ * than falling back. Verified against the shipped phonemizer: en-gb-x-rp drops
+ * the rhotic r ("kˈɑː" against American "kˈɑːɹ"), so it is genuinely British and
+ * not just an alias.
+ */
 function kokoro(
   id: string,
   label: string,
-  phonemeVoice: 'en-us' | 'en-gb'
+  phonemeVoice: 'en-us' | 'en-gb-x-rp'
 ): TtsVoiceInfo {
   return {
     id,
@@ -153,8 +161,8 @@ export const KOKORO_VOICES: TtsVoiceInfo[] = [
   kokoro('am_michael', 'Michael (US, male)', 'en-us'),
   kokoro('am_fenrir', 'Fenrir (US, male)', 'en-us'),
   kokoro('am_puck', 'Puck (US, male)', 'en-us'),
-  kokoro('bf_emma', 'Emma (UK, female)', 'en-gb'),
-  kokoro('bm_george', 'George (UK, male)', 'en-gb'),
+  kokoro('bf_emma', 'Emma (UK, female)', 'en-gb-x-rp'),
+  kokoro('bm_george', 'George (UK, male)', 'en-gb-x-rp'),
 ];
 
 /**

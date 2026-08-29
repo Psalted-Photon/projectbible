@@ -15,7 +15,6 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { createPiperPhonemize } from './vendor/piper-phonemize.js';
 import {
   TTS_VOICES,
   TtsError,
@@ -33,62 +32,10 @@ import {
   cutWord,
   WORD_ATTEMPTS,
 } from './wordAudio.js';
+import { opfsFolder, fetchWithProgress, configureOrt, encodeWav } from './ttsRuntime.js';
+import { phonemize } from './phonemize.js';
 
-const ASSET_BASE = '/tts';
-const OPFS_DIR = 'piper';
-
-// ─── OPFS storage (layout-compatible with vits-web; keyed by voice id) ──────
-
-async function opfsDir(): Promise<FileSystemDirectoryHandle> {
-  const root = await navigator.storage.getDirectory();
-  return root.getDirectoryHandle(OPFS_DIR, { create: true });
-}
-
-async function opfsRead(name: string): Promise<File | undefined> {
-  try {
-    const dir = await opfsDir();
-    const handle = await dir.getFileHandle(name);
-    return await handle.getFile();
-  } catch {
-    return undefined;
-  }
-}
-
-async function opfsWrite(name: string, data: Blob | ArrayBuffer): Promise<void> {
-  const dir = await opfsDir();
-  const handle = await dir.getFileHandle(name, { create: true });
-  const writable = await handle.createWritable();
-  await writable.write(data);
-  await writable.close();
-}
-
-async function opfsRemove(name: string): Promise<void> {
-  try {
-    const dir = await opfsDir();
-    await dir.removeEntry(name);
-  } catch {
-    // already gone
-  }
-}
-
-async function fetchWithProgress(url: string, onProgress?: TtsProgressCallback): Promise<Blob> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
-  const total = +(response.headers.get('Content-Length') ?? 0);
-  const reader = response.body?.getReader();
-  if (!reader) return response.blob();
-
-  let loaded = 0;
-  const chunks: Uint8Array[] = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    loaded += value.length;
-    onProgress?.({ loaded, total });
-  }
-  return new Blob(chunks, { type: response.headers.get('Content-Type') ?? undefined });
-}
+const store = opfsFolder('piper');
 
 // ─── voice management ───────────────────────────────────────────────────────
 
@@ -119,9 +66,9 @@ export async function downloadVoice(
   const { modelUrl, configUrl } = downloadSource(voiceId, source);
   // Config first (tiny), then the model with progress reporting.
   const configBlob = await fetchWithProgress(configUrl);
-  await opfsWrite(voiceConfigName(voiceId), configBlob);
+  await store.write(voiceConfigName(voiceId), configBlob);
   const modelBlob = await fetchWithProgress(modelUrl, onProgress);
-  await opfsWrite(voiceModelName(voiceId), modelBlob);
+  await store.write(voiceModelName(voiceId), modelBlob);
 }
 
 /**
@@ -139,37 +86,29 @@ export async function installVoiceData(
   if (!parsed?.audio?.sample_rate || !parsed?.espeak?.voice) {
     throw new TtsError('SYNTH_FAILED', 'Config JSON is missing audio.sample_rate or espeak.voice');
   }
-  await opfsWrite(voiceConfigName(voiceId), config);
-  await opfsWrite(voiceModelName(voiceId), model);
+  await store.write(voiceConfigName(voiceId), config);
+  await store.write(voiceModelName(voiceId), model);
   sessions.delete(voiceId);
   configs.delete(voiceId);
 }
 
 export async function removeVoice(voiceId: string): Promise<void> {
-  await opfsRemove(voiceModelName(voiceId));
-  await opfsRemove(voiceConfigName(voiceId));
+  await store.remove(voiceModelName(voiceId));
+  await store.remove(voiceConfigName(voiceId));
   sessions.delete(voiceId);
   configs.delete(voiceId);
 }
 
 /** All voice ids with a model file in OPFS (built-in and custom alike). */
 export async function storedVoices(): Promise<string[]> {
-  const found: string[] = [];
-  try {
-    const dir = await opfsDir();
-    for await (const name of (dir as any).keys()) {
-      if (typeof name === 'string' && name.endsWith('.onnx') && !name.endsWith('.onnx.json')) {
-        found.push(name.slice(0, -'.onnx'.length));
-      }
-    }
-  } catch {
-    // OPFS unavailable → no voices
-  }
-  return found;
+  const names = await store.list();
+  return names
+    .filter((n) => n.endsWith('.onnx') && !n.endsWith('.onnx.json'))
+    .map((n) => n.slice(0, -'.onnx'.length));
 }
 
 export async function isVoiceInstalled(voiceId: string): Promise<boolean> {
-  return !!(await opfsRead(voiceModelName(voiceId)));
+  return !!(await store.read(voiceModelName(voiceId)));
 }
 
 // ─── synthesis (cached config + session) ────────────────────────────────────
@@ -185,21 +124,10 @@ interface VoiceConfig {
 
 const configs = new Map<string, VoiceConfig>();
 const sessions = new Map<string, ort.InferenceSession>();
-let ortConfigured = false;
-
-function configureOrt(): void {
-  if (ortConfigured) return;
-  // Single-threaded on purpose: the app is not cross-origin isolated, and a
-  // deterministic single .wasm keeps the offline cache small and predictable.
-  ort.env.wasm.numThreads = 1;
-  ort.env.wasm.wasmPaths = `${ASSET_BASE}/`;
-  ortConfigured = true;
-}
-
 async function getConfig(voiceId: string): Promise<VoiceConfig> {
   const cached = configs.get(voiceId);
   if (cached) return cached;
-  const file = await opfsRead(voiceConfigName(voiceId));
+  const file = await store.read(voiceConfigName(voiceId));
   if (!file) throw new TtsError('VOICE_NOT_INSTALLED', `Voice ${voiceId} is not installed`);
   const parsed = JSON.parse(await file.text()) as VoiceConfig;
   configs.set(voiceId, parsed);
@@ -210,36 +138,11 @@ async function getSession(voiceId: string): Promise<ort.InferenceSession> {
   const cached = sessions.get(voiceId);
   if (cached) return cached;
   configureOrt();
-  const file = await opfsRead(voiceModelName(voiceId));
+  const file = await store.read(voiceModelName(voiceId));
   if (!file) throw new TtsError('VOICE_NOT_INSTALLED', `Voice ${voiceId} is not installed`);
   const session = await ort.InferenceSession.create(await file.arrayBuffer());
   sessions.set(voiceId, session);
   return session;
-}
-
-async function phonemize(
-  text: string,
-  espeakVoice: string
-): Promise<{ phonemes: string[]; phonemeIds: number[] }> {
-  const input = JSON.stringify([{ text: text.trim() }]);
-  return new Promise((resolve, reject) => {
-    createPiperPhonemize({
-      print: (msg) => {
-        try {
-          const parsed = JSON.parse(msg);
-          resolve({ phonemes: parsed.phonemes ?? [], phonemeIds: parsed.phoneme_ids });
-        } catch (e) {
-          reject(new Error(`Unexpected phonemizer output: ${msg}`));
-        }
-      },
-      printErr: (msg) => reject(new Error(`Phonemizer error: ${msg}`)),
-      locateFile: (file) => `${ASSET_BASE}/${file}`,
-    })
-      .then((mod) => {
-        mod.callMain(['-l', espeakVoice, '--input', input, '--espeak_data', '/espeak-ng-data']);
-      })
-      .catch(reject);
-  });
 }
 
 /**
@@ -263,32 +166,6 @@ function idsFromPhonemes(phonemes: string[], map: Record<string, number[] | numb
   }
   ids.push(idOf('$') ?? 2);
   return ids;
-}
-
-/** Mono 16-bit PCM WAV from float samples. */
-function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
-  const headerBytes = 44;
-  const view = new DataView(new ArrayBuffer(samples.length * 2 + headerBytes));
-  view.setUint32(0, 0x46464952, true); // "RIFF"
-  view.setUint32(4, view.buffer.byteLength - 8, true);
-  view.setUint32(8, 0x45564157, true); // "WAVE"
-  view.setUint32(12, 0x20746d66, true); // "fmt "
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  view.setUint32(36, 0x61746164, true); // "data"
-  view.setUint32(40, samples.length * 2, true);
-  let offset = headerBytes;
-  for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-    offset += 2;
-  }
-  return view.buffer;
 }
 
 /**
