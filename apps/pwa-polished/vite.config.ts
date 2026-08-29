@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, defaultClientConditions } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
@@ -355,6 +355,17 @@ export default defineConfig({
     }
   },
   assetsInclude: ['**/*.wasm', '**/*.sqlite'],
+
+  resolve: {
+    // onnxruntime 1.19+ ships two builds behind this export condition. The
+    // default one references its .wasm statically so a bundler will emit it,
+    // which lands a 24 MB copy in assets/ and fails the build when workbox
+    // refuses to precache it. We serve the runtime ourselves from /tts/ (see
+    // copyTtsRuntime above and wasmPaths in piperEngine.ts), so we want the
+    // extern build, which resolves the file at runtime instead.
+    // The defaults must be spread back in: conditions replaces, not extends.
+    conditions: ['onnxruntime-web-use-extern-wasm', ...defaultClientConditions],
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
