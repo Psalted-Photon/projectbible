@@ -1,84 +1,134 @@
 /**
- * TTS worker — hosts the Piper engine off the main thread so synthesis
+ * TTS worker — hosts the speech engines off the main thread so synthesis
  * never janks the reader UI. Message protocol mirrors SQLiteWorkerPool:
  * id-correlated request/response plus unsolicited progress events.
  *
  * Requests:  { id, action, payload }
  * Responses: { id, ok: true, result } | { id, ok: false, error, code? }
  * Progress:  { id, progress: { loaded, total } }
+ *
+ * Two engines live behind this one protocol. Which to use travels in the
+ * payload rather than being looked up here, because custom voices are only
+ * known to the main thread (they live in localStorage) — the same reason
+ * `source` is passed in rather than resolved here.
  */
 
-import {
-  downloadVoice,
-  installVoiceData,
-  removeVoice,
-  storedVoices,
-  isVoiceInstalled,
-  synthesize,
-  synthesizeWord,
-} from './piperEngine.js';
-import { TtsError, type TtsSource } from './voices.js';
+import * as piper from './piperEngine.js';
+import * as kokoro from './kokoroEngine.js';
+import { TtsError, type TtsEngine, type TtsSource } from './voices.js';
 
 interface TtsRequest {
   id: number;
-  action: 'download' | 'installData' | 'remove' | 'stored' | 'installed' | 'synthesize' | 'synthesizeWord';
+  action:
+    | 'download'
+    | 'installData'
+    | 'remove'
+    | 'stored'
+    | 'installed'
+    | 'synthesize'
+    | 'synthesizeWord'
+    | 'hasKokoroModel'
+    | 'removeKokoroModel';
   payload?: {
     voiceId?: string;
     text?: string;
     source?: TtsSource;
     model?: ArrayBuffer;
     config?: ArrayBuffer;
-    /** Overrides the voice's own espeak language (Greek pronunciation, etc.). */
+    /** Which engine owns this voice. Absent means Piper. */
+    engine?: TtsEngine;
+    /** Piper: overrides the voice's own espeak language (Greek pronunciation). */
     espeakVoice?: string;
     substitutions?: Record<string, string>;
+    /** Kokoro: the voice's espeak language, since it has no config file of its own. */
+    phonemeVoice?: string;
   };
 }
 
 self.onmessage = async (event: MessageEvent<TtsRequest>) => {
   const { id, action, payload } = event.data;
+  const engine: TtsEngine = payload?.engine ?? 'piper';
+  const isKokoro = engine === 'kokoro';
+
   try {
     switch (action) {
       case 'download': {
-        await downloadVoice(payload!.voiceId!, payload!.source, (progress) => {
+        const onProgress = (progress: { loaded: number; total: number }) =>
           self.postMessage({ id, progress });
-        });
+        if (isKokoro) {
+          await kokoro.downloadVoice(payload!.voiceId!, payload!.source, onProgress);
+        } else {
+          await piper.downloadVoice(payload!.voiceId!, payload!.source, onProgress);
+        }
         self.postMessage({ id, ok: true, result: null });
         break;
       }
+
       case 'installData': {
-        await installVoiceData(payload!.voiceId!, payload!.model!, payload!.config!);
+        // Installing from a picked file is Piper-only: a Kokoro voice is a style
+        // vector for a model it does not ship with, so a lone file means nothing.
+        if (isKokoro) throw new TtsError('UNKNOWN_VOICE', 'Kokoro voices cannot be installed from a file');
+        await piper.installVoiceData(payload!.voiceId!, payload!.model!, payload!.config!);
         self.postMessage({ id, ok: true, result: null });
         break;
       }
+
       case 'remove': {
-        await removeVoice(payload!.voiceId!);
+        if (isKokoro) await kokoro.removeVoice(payload!.voiceId!);
+        else await piper.removeVoice(payload!.voiceId!);
         self.postMessage({ id, ok: true, result: null });
         break;
       }
+
       case 'stored': {
-        self.postMessage({ id, ok: true, result: await storedVoices() });
+        // Both engines, since the caller wants everything installed, not one kind.
+        const [p, k] = await Promise.all([piper.storedVoices(), kokoro.storedVoices()]);
+        self.postMessage({ id, ok: true, result: [...p, ...k] });
         break;
       }
+
       case 'installed': {
-        self.postMessage({ id, ok: true, result: await isVoiceInstalled(payload!.voiceId!) });
+        const installed = isKokoro
+          ? await kokoro.isVoiceInstalled(payload!.voiceId!)
+          : await piper.isVoiceInstalled(payload!.voiceId!);
+        self.postMessage({ id, ok: true, result: installed });
         break;
       }
+
+      case 'hasKokoroModel': {
+        self.postMessage({ id, ok: true, result: await kokoro.hasSharedModel() });
+        break;
+      }
+
+      case 'removeKokoroModel': {
+        await kokoro.removeSharedModel();
+        self.postMessage({ id, ok: true, result: null });
+        break;
+      }
+
       case 'synthesizeWord': {
-        const clip = await synthesizeWord(payload!.text!, payload!.voiceId!, {
+        // Tapping a word is a Greek feature and stays on Piper. Kokoro has no
+        // Greek voice, and the carrier-and-cut trick is tuned to Piper's output.
+        if (isKokoro) throw new TtsError('UNKNOWN_VOICE', 'Single words are spoken by Piper only');
+        const clip = await piper.synthesizeWord(payload!.text!, payload!.voiceId!, {
           espeakVoice: payload!.espeakVoice,
           substitutions: payload!.substitutions,
         });
         (self as unknown as Worker).postMessage({ id, ok: true, result: clip }, [clip]);
         break;
       }
+
       case 'synthesize': {
-        const wav = await synthesize(payload!.text!, payload!.voiceId!, {
-          espeakVoice: payload!.espeakVoice,
-          substitutions: payload!.substitutions,
-        });
+        const wav = isKokoro
+          ? await kokoro.synthesize(payload!.text!, payload!.voiceId!, payload!.phonemeVoice!)
+          : await piper.synthesize(payload!.text!, payload!.voiceId!, {
+              espeakVoice: payload!.espeakVoice,
+              substitutions: payload!.substitutions,
+            });
         (self as unknown as Worker).postMessage({ id, ok: true, result: wav }, [wav]);
         break;
       }
+
       default:
         self.postMessage({ id, ok: false, error: `Unknown TTS action: ${action satisfies never}` });
     }

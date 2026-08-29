@@ -13,10 +13,12 @@ import {
   GREEK_VOICE_ID,
   resolveVoiceSource,
   resolveGreekRoute,
+  voiceEngine,
   type TtsVoiceInfo,
   type TtsProgress,
   type TtsSource,
   type SpeechRoute,
+  type TtsEngine,
 } from '../lib/tts/voices.js';
 import { getTtsSettings } from './settings.js';
 
@@ -179,8 +181,18 @@ export function storedVoices(): Promise<string[]> {
   return call<string[]>('stored');
 }
 
+/**
+ * Which engine owns a voice. The worker cannot work this out itself for custom
+ * voices, which live in localStorage on this side, so it travels with every
+ * request that names a voice.
+ */
+function engineOf(voiceId: string): TtsEngine {
+  const info = getVoiceInfo(voiceId);
+  return info ? voiceEngine(info) : 'piper';
+}
+
 export function isVoiceInstalled(voiceId: string): Promise<boolean> {
-  return call<boolean>('installed', { voiceId });
+  return call<boolean>('installed', { voiceId, engine: engineOf(voiceId) });
 }
 
 export function downloadVoice(
@@ -189,12 +201,39 @@ export function downloadVoice(
 ): Promise<void> {
   const info = getVoiceInfo(voiceId);
   const source: TtsSource | undefined = info ? resolveVoiceSource(info) ?? undefined : undefined;
-  return call<void>('download', { voiceId, source }, { onProgress });
+  return call<void>('download', { voiceId, source, engine: engineOf(voiceId) }, { onProgress });
 }
 
 export async function removeVoice(voiceId: string): Promise<void> {
-  await call<void>('remove', { voiceId });
+  await call<void>('remove', { voiceId, engine: engineOf(voiceId) });
   unregisterCustomVoice(voiceId);
+}
+
+// ─── the shared Kokoro model ────────────────────────────────────────────────
+// Every Kokoro voice runs on one 310 MB model. It is downloaded with the first
+// voice and outlives the rest, so its presence has to be visible separately —
+// the second voice costs half a megabyte, and the UI should say so.
+
+/** True once the shared model is on disk, so further Kokoro voices are cheap. */
+export function hasKokoroModel(): Promise<boolean> {
+  return call<boolean>('hasKokoroModel');
+}
+
+/** Free the shared 310 MB. Every Kokoro voice stops working until re-downloaded. */
+export function removeKokoroModel(): Promise<void> {
+  return call<void>('removeKokoroModel');
+}
+
+/**
+ * What installing this voice will actually cost right now.
+ *
+ * A Piper voice is always its own size. A Kokoro voice is 310 MB the first time
+ * and about half a megabyte after that, so a fixed figure would be wrong in one
+ * direction or the other every time.
+ */
+export async function voiceDownloadSizeMB(info: TtsVoiceInfo): Promise<number> {
+  if (voiceEngine(info) !== 'kokoro') return info.approxSizeMB;
+  return (await hasKokoroModel()) ? 1 : info.approxSizeMB;
 }
 
 /**
@@ -242,11 +281,25 @@ export async function synthesizeSpeech(
   voiceId: string,
   speech?: { espeakVoice?: string; substitutions?: Record<string, string> }
 ): Promise<Blob> {
-  const wav = await call<ArrayBuffer>(
-    'synthesize',
-    { text, voiceId, espeakVoice: speech?.espeakVoice, substitutions: speech?.substitutions },
-    { timeoutMs: SYNTH_TIMEOUT_MS }
-  );
+  const info = getVoiceInfo(voiceId);
+  const engine = info ? voiceEngine(info) : 'piper';
+
+  // The two engines are told about pronunciation in different ways. Kokoro has
+  // no config file of its own, so its espeak language comes from the catalog;
+  // `speech` is the Greek override and is Piper's alone — passing it to Kokoro
+  // would ask an English voice to read with Greek rules.
+  const payload =
+    engine === 'kokoro'
+      ? { text, voiceId, engine, phonemeVoice: info?.phonemeVoice ?? 'en-us' }
+      : {
+          text,
+          voiceId,
+          engine,
+          espeakVoice: speech?.espeakVoice,
+          substitutions: speech?.substitutions,
+        };
+
+  const wav = await call<ArrayBuffer>('synthesize', payload, { timeoutMs: SYNTH_TIMEOUT_MS });
   return new Blob([wav], { type: 'audio/wav' });
 }
 
