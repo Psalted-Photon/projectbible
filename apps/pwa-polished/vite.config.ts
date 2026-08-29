@@ -55,9 +55,31 @@ function copyBootstrapPack() {
 // worker's runtime route — deliberately NOT precached (see workbox config).
 function copyTtsRuntime() {
   const nm = resolve(__dirname, '../../node_modules');
+  // Look in the app's own node_modules before the root one. Another dependency
+  // pinning a different onnxruntime version pushes our copy down here, and
+  // assuming the root path silently copies the wrong version — or nothing.
+  // Probing for a file we actually need also catches a version whose layout
+  // changed, rather than copying whatever happens to be there.
+  const ortDist = [
+    resolve(__dirname, 'node_modules/onnxruntime-web/dist'),
+    resolve(nm, 'onnxruntime-web/dist'),
+  ].find((d) => existsSync(resolve(d, 'ort-wasm-simd-threaded.wasm')));
+  if (!ortDist) {
+    throw new Error(
+      'onnxruntime-web runtime not found. Expected ort-wasm-simd-threaded.wasm in ' +
+        'apps/pwa-polished/node_modules or the root node_modules. Read Aloud would ' +
+        'ship broken, so this fails the build rather than warning.'
+    );
+  }
+  // onnxruntime renamed these after 1.18 and split the loader out into a
+  // separate .mjs that sits beside each .wasm — both halves must be here or the
+  // runtime cannot start. The plain build runs Piper on the processor; the jsep
+  // build is the one that can use the graphics chip.
   const files = [
-    [resolve(nm, 'onnxruntime-web/dist/ort-wasm-simd.wasm'), 'ort-wasm-simd.wasm'],
-    [resolve(nm, 'onnxruntime-web/dist/ort-wasm.wasm'), 'ort-wasm.wasm'],
+    [resolve(ortDist, 'ort-wasm-simd-threaded.wasm'), 'ort-wasm-simd-threaded.wasm'],
+    [resolve(ortDist, 'ort-wasm-simd-threaded.mjs'), 'ort-wasm-simd-threaded.mjs'],
+    [resolve(ortDist, 'ort-wasm-simd-threaded.jsep.wasm'), 'ort-wasm-simd-threaded.jsep.wasm'],
+    [resolve(ortDist, 'ort-wasm-simd-threaded.jsep.mjs'), 'ort-wasm-simd-threaded.jsep.mjs'],
     [resolve(nm, '@diffusionstudio/piper-wasm/build/piper_phonemize.wasm'), 'piper_phonemize.wasm'],
     [resolve(nm, '@diffusionstudio/piper-wasm/build/piper_phonemize.data'), 'piper_phonemize.data'],
   ];
@@ -249,7 +271,10 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/kokoro-test\.html$/],
         runtimeCaching: [
           {
-            urlPattern: /\/tts\/.+\.(wasm|data)$/,
+            // .mjs included since onnxruntime 1.19: each .wasm now ships with a
+            // loader beside it, and caching only the .wasm would leave Read
+            // Aloud broken offline.
+            urlPattern: /\/tts\/.+\.(wasm|data|mjs)$/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'tts-runtime',
