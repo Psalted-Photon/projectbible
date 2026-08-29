@@ -37,7 +37,7 @@ import { phonemize } from './phonemize.js';
 import {
   phonemesToTokens,
   padTokens,
-  KOKORO_TOKEN_LIMIT,
+  splitPhonemes,
 } from './kokoroTokens.js';
 
 const store = opfsFolder('kokoro');
@@ -181,32 +181,49 @@ export async function synthesize(
   phonemeVoice: string
 ): Promise<ArrayBuffer> {
   const { phonemes } = await phonemize(text, phonemeVoice);
-  const { tokens, dropped } = phonemesToTokens(phonemes);
 
-  if (tokens.length === 0) {
-    throw new TtsError('SYNTH_FAILED', `Nothing to say for: "${text.slice(0, 40)}"`);
-  }
+  const { dropped } = phonemesToTokens(phonemes);
   if (dropped.length > 0) {
     console.warn(`[Kokoro] dropped ${dropped.length} unknown sound(s):`, dropped.join(' '));
   }
-  // Phase 4 splits long text; until then this fails loudly rather than letting
-  // the model quietly cut the end off a long verse.
-  if (tokens.length > KOKORO_TOKEN_LIMIT) {
-    throw new TtsError(
-      'SYNTH_FAILED',
-      `Too long for one pass: ${tokens.length} sounds, limit ${KOKORO_TOKEN_LIMIT}`
-    );
+
+  // Long text is split here rather than in the reading engine, so one verse
+  // stays one verse: the joining, highlighting and position tracking upstream
+  // never learn that this happened.
+  const pieces = splitPhonemes(phonemes);
+  if (pieces.length === 0) {
+    throw new TtsError('SYNTH_FAILED', `Nothing to say for: "${text.slice(0, 40)}"`);
+  }
+  if (pieces.length > 1) {
+    console.log(`[Kokoro] verse split into ${pieces.length} pieces to fit the model`);
   }
 
   const style = await getStyle(voiceId);
-  // The style vector has a row per possible length, and the row is chosen by
-  // the unpadded token count — that is why the file is half a megabyte.
+  const model = await getSession();
+
+  const rendered: Float32Array[] = [];
+  for (const piece of pieces) {
+    rendered.push(await speak(piece, style, model));
+  }
+
+  return encodeWav(concat(rendered), KOKORO_SAMPLE_RATE);
+}
+
+/** One pass through the model, for a run of sounds already known to fit. */
+async function speak(
+  phonemes: string[],
+  style: Float32Array,
+  model: ort.InferenceSession
+): Promise<Float32Array> {
+  const { tokens } = phonemesToTokens(phonemes);
+
+  // The style vector holds a row per possible length and is indexed by the
+  // unpadded token count — which is why the file is half a megabyte.
   const row = tokens.length;
   if ((row + 1) * STYLE_DIMS > style.length) {
     throw new TtsError('SYNTH_FAILED', `Style vector has no row for ${row} sounds`);
   }
 
-  const model = await getSession();
   const padded = padTokens(tokens);
   const results = await model.run({
     input_ids: new ort.Tensor(
@@ -233,6 +250,18 @@ export async function synthesize(
       `Model returned silence (peak ${peak.toFixed(4)}) on ${sessionBackend ?? 'unknown'}`
     );
   }
+  return samples;
+}
 
-  return encodeWav(samples, KOKORO_SAMPLE_RATE);
+function concat(parts: Float32Array[]): Float32Array {
+  if (parts.length === 1) return parts[0];
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Float32Array(total);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
 }

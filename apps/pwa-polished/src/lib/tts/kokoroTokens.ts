@@ -87,3 +87,82 @@ export function phonemesToTokens(phonemes: string[]): {
 export function padTokens(tokens: number[]): number[] {
   return [0, ...tokens, 0];
 }
+
+// ─── splitting long text ────────────────────────────────────────────────────
+
+/** How many tokens one espeak symbol turns into (0 if Kokoro has no id for it). */
+function tokenCost(phoneme: string): number {
+  let n = 0;
+  for (const ch of phoneme) {
+    if (KOKORO_VOCAB[KOKORO_FOLD[ch] ?? ch] !== undefined) n++;
+  }
+  return n;
+}
+
+/** A chunk shorter than this is a scrap; prefer a lower-quality break over one. */
+const MIN_FILL = 0.5;
+
+const isSentenceEnd = (p: string) => p === '.' || p === '!' || p === '?' || p === '…';
+const isClauseEnd = (p: string) => p === ',' || p === ';' || p === ':' || p === '—';
+
+/**
+ * Break a run of sounds into pieces the model will accept whole.
+ *
+ * Kokoro reads at most 510 sounds at once and gives no warning when text runs
+ * past that — it just stops, so a long verse would lose its ending silently.
+ *
+ * Splitting happens on the *sounds* rather than the original text because
+ * espeak keeps punctuation and spaces as symbols, so the natural breaks are
+ * already here and the exact cost of every piece is known. Splitting the text
+ * instead would mean phonemizing repeatedly to discover where the limit falls,
+ * restarting the phonemizer each time, only to arrive at the same boundaries.
+ *
+ * Breaks are preferred at sentence ends, then clauses, then between words, and
+ * a break is only taken if it leaves a reasonably full piece — otherwise a
+ * comma near the start would strand three words on their own. Text with no
+ * break at all is cut at the limit, which is still better than losing it.
+ */
+export function splitPhonemes(
+  phonemes: string[],
+  limit: number = KOKORO_TOKEN_LIMIT
+): string[][] {
+  const cost = phonemes.map(tokenCost);
+  const prefix = [0];
+  for (const c of cost) prefix.push(prefix[prefix.length - 1] + c);
+  /** Token cost of phonemes[a..b] inclusive. */
+  const costOf = (a: number, b: number) => prefix[b + 1] - prefix[a];
+
+  if (costOf(0, phonemes.length - 1) <= limit) return [phonemes];
+
+  const groups: string[][] = [];
+  let start = 0;
+  let sentence = -1;
+  let clause = -1;
+  let space = -1;
+
+  for (let i = 0; i < phonemes.length; i++) {
+    if (costOf(start, i) > limit && i > start) {
+      // Latest break of the best type that still leaves a decently full piece.
+      const enough = (at: number) => at >= start && costOf(start, at) >= limit * MIN_FILL;
+      const cut = enough(sentence)
+        ? sentence
+        : enough(clause)
+          ? clause
+          : enough(space)
+            ? space
+            : Math.max(sentence, clause, space, i - 1);
+
+      groups.push(phonemes.slice(start, cut + 1));
+      start = cut + 1;
+      sentence = clause = space = -1;
+    }
+    if (isSentenceEnd(phonemes[i])) sentence = i;
+    else if (isClauseEnd(phonemes[i])) clause = i;
+    else if (phonemes[i] === ' ') space = i;
+  }
+  if (start < phonemes.length) groups.push(phonemes.slice(start));
+
+  // A piece of pure punctuation or spaces contributes no sound; dropping it
+  // here keeps the engine from asking the model to say nothing.
+  return groups.filter((g) => g.some((p) => tokenCost(p) > 0));
+}
