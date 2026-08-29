@@ -1345,13 +1345,14 @@ Free up space on your device, or remove a pack you are not using, then try again
     }
 
     /* flex: 1 splits the row evenly however many buttons the pack has -- one
-       for an orphan, four for a flagged audio pack. Shorter than they are
-       tall now, but far wider, so an easier target than the squares were. */
+       for an orphan, four for a flagged audio pack. A quarter shorter than
+       the 34px square, since the glyphs never needed that much headroom, and
+       far wider, so still an easier target than the squares were. */
     .pill.stacked .icon-btn,
     .pill.stacked .text-btn {
       flex: 1;
       width: auto;
-      height: 30px;
+      height: 25px;
     }
   }
 
