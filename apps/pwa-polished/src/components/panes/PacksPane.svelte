@@ -276,7 +276,7 @@
     },
     {
       id: "geonames-modern-places-v1",
-      name: "World Places (GeoNames)",
+      name: "World Places",
       description: "172,000+ modern cities, states, countries",
       info: "A gazetteer of over 172,000 modern places worldwide — cities, states, provinces and countries — so you can find somewhere by its present-day name rather than its biblical one.\n\nUsed by the Map window’s search. Entirely optional: the biblical places in Study Tools work without it. CC BY 4.0 — geonames.org.",
       size: "37.23 MB",
@@ -896,13 +896,13 @@ Free up space on your device, or remove a pack you are not using, then try again
       {#each CONSOLIDATED_PACKS as pack (pack.id)}
         {@const state = installedById.get(pack.id)}
         <div
-          class="pill"
+          class="pill stacked"
           class:installed={!!state}
           class:flagged={state?.needsReindex || state?.incomplete}
         >
-          <span class="pill-icon emoji">{pack.icon}</span>
           <div class="pill-text">
             <div class="pill-head">
+              <span class="pill-icon emoji">{pack.icon}</span>
               <span class="pill-name">{pack.name}</span>
               {#if state?.needsReindex}
                 <span class="pill-flag">index missing</span>
@@ -956,10 +956,10 @@ Free up space on your device, or remove a pack you are not using, then try again
       <h3 class="sub-head">Other installed</h3>
       <div class="pill-list">
         {#each orphanPacks as pack (pack.id)}
-          <div class="pill">
-            <span class="pill-icon emoji">{getPackTypeIcon(pack.type)}</span>
+          <div class="pill stacked">
             <div class="pill-text">
               <div class="pill-head">
+                <span class="pill-icon emoji">{getPackTypeIcon(pack.type)}</span>
                 <span class="pill-name">{pack.id}</span>
               </div>
               <!-- No info button on these rows, so the version and size ride
@@ -1045,9 +1045,9 @@ Free up space on your device, or remove a pack you are not using, then try again
         {@const isVoiceInstalled = installedVoices.includes(voice.id)}
         {@const canDownload = voiceIsDownloadable(voice)}
         <div class="pill" class:installed={isVoiceInstalled}>
-          <span class="pill-icon emoji">{voice.custom ? "🎙" : "🗣"}</span>
           <div class="pill-text">
             <div class="pill-head">
+              <span class="pill-icon emoji">{voice.custom ? "🎙" : "🗣"}</span>
               <span class="pill-name">{voice.label}</span>
             </div>
             <div class="pill-desc">
@@ -1180,10 +1180,18 @@ Free up space on your device, or remove a pack you are not using, then try again
     font-style: italic;
   }
 
+  /* The @container rule further down reflows pack pills when the pane itself
+     is narrow. It has to key off the pane and not the viewport: panes are
+     resizable drawers at 75% width on a phone and 40% elsewhere, so 40% of a
+     768px tablet is the same ~307px as a phone, while 40% of a 1920px desktop
+     has room to spare. The list is the container rather than the pane, because
+     container-type would make an ancestor the containing block for any
+     position:fixed descendant -- the list holds only pills. */
   .pill-list {
     display: flex;
     flex-direction: column;
     gap: 0.3rem;
+    container-type: inline-size;
   }
 
   .pill {
@@ -1219,20 +1227,22 @@ Free up space on your device, or remove a pack you are not using, then try again
 
   .pill-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.4rem;
   }
 
   .pill-name {
-    /* The name is the whole pill now, and it wraps rather than truncating --
-       on a narrow phone an ellipsis ate everything past "English Tra...".
-       Names run 11-25 characters, so this is one line for most packs and two
-       for the longest. overflow-wrap catches anything unbroken. */
+    /* One line, never wrapped. Names top out at 20 characters and the stacked
+       layout below hands them the whole row, so the ellipsis is only a guard
+       -- wrapping was a workaround for the buttons taking the width, and it
+       broke names mid-word. */
     min-width: 0;
     font-size: 0.95rem;
     font-weight: 600;
     color: #f0f0f0;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .pill-flag {
@@ -1316,6 +1326,33 @@ Free up space on your device, or remove a pack you are not using, then try again
 
   .text-btn:hover:not(:disabled) {
     background: rgba(255, 165, 0, 0.25);
+  }
+
+  /* Narrow pane: give the name the whole first row and drop the buttons onto
+     a second one, stretched edge to edge. Three 34px squares crammed at the
+     right of a 300px pane left the name ~130px and nothing read in full.
+     Packs and orphans only -- voice rows are short enough to stay on one line
+     at any width, so they never get the `stacked` class. */
+  @container (max-width: 360px) {
+    .pill.stacked {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.4rem;
+    }
+
+    .pill.stacked .pill-actions {
+      gap: 0.3rem;
+    }
+
+    /* flex: 1 splits the row evenly however many buttons the pack has -- one
+       for an orphan, four for a flagged audio pack. Shorter than they are
+       tall now, but far wider, so an easier target than the squares were. */
+    .pill.stacked .icon-btn,
+    .pill.stacked .text-btn {
+      flex: 1;
+      width: auto;
+      height: 30px;
+    }
   }
 
   .small-btn {
