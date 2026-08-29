@@ -16,7 +16,10 @@
     storedVoices,
     downloadVoice,
     removeVoice,
-    getAllVoices,
+    getSelectableVoices,
+    voiceDownloadSizeMB,
+    hasKokoroModel,
+    removeKokoroModel,
     getVoiceInfo,
     installVoiceFromFiles,
     voiceIsDownloadable,
@@ -58,13 +61,22 @@
   let fileInputElement: HTMLInputElement;
   let installedVoices: string[] = [];
   let voiceList: TtsVoiceInfo[] = [];
+  // Kokoro voices share one 310 MB model, so what a voice actually costs to
+  // install depends on whether that model is already here. A fixed number would
+  // be wrong every time, in one direction or the other.
+  let voiceSizes: Record<string, number> = {};
+  $: naturalVoices = voiceList.filter((v) => v.engine === "kokoro");
+  $: standardVoices = voiceList.filter((v) => v.engine !== "kokoro");
   let voiceFileInput: HTMLInputElement;
 
   async function refreshVoices() {
     if (!isTtsSupported()) return;
-    voiceList = getAllVoices();
     try {
+      voiceList = await getSelectableVoices();
       installedVoices = await storedVoices();
+      const sizes: Record<string, number> = {};
+      for (const v of voiceList) sizes[v.id] = await voiceDownloadSizeMB(v);
+      voiceSizes = sizes;
     } catch (err) {
       console.warn("[Packs] Could not list TTS voices:", err);
     }
@@ -93,12 +105,42 @@
     }
   }
 
+  /**
+   * Every natural voice runs on one shared 310 MB model, so removing the last
+   * of them leaves it behind taking up space for nothing. Asked separately and
+   * only when none are left: it is a much bigger deletion than the voice the
+   * user actually clicked, and folding it into that first confirmation would
+   * make a 310 MB delete look like a 1 MB one.
+   */
+  async function offerToFreeSharedModel(removed: TtsVoiceInfo) {
+    if (removed.engine !== "kokoro") return;
+    if (naturalVoices.some((v) => installedVoices.includes(v.id))) return;
+    if (!(await hasKokoroModel())) return;
+    if (
+      !confirm(
+        `That was your last natural voice.\n\n` +
+          `They all share one 310 MB engine, which is still stored on this device. ` +
+          `Free it up?\n\n` +
+          `Installing a natural voice again later will re-download it.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await removeKokoroModel();
+      await refreshVoices();
+    } catch (err: any) {
+      console.error("[Packs] Could not free the shared voice engine:", err);
+      alert(`Could not free the shared engine: ${err?.message ?? err}`);
+    }
+  }
+
   async function removeTtsVoice(voiceId: string) {
     const voice = getVoiceInfo(voiceId);
     if (!voice) return;
     const canRedownload = voiceIsDownloadable(voice);
     const note = canRedownload
-      ? `You can re-download it any time (~${voice.approxSizeMB} MB).`
+      ? `You can re-download it any time (~${voiceSizes[voiceId] ?? voice.approxSizeMB} MB).`
       : `This is a custom voice — removing it deletes it from this device permanently.`;
     if (!confirm(`Remove the "${voice.label}" voice? ${note}`)) {
       return;
@@ -106,6 +148,7 @@
     try {
       await removeVoice(voiceId);
       await refreshVoices();
+      await offerToFreeSharedModel(voice);
     } catch (err: any) {
       console.error("[Packs] Voice removal failed:", err);
       alert(`Could not remove voice: ${err?.message ?? err}`);
@@ -978,8 +1021,22 @@ Free up space on your device, or remove a pack you are not using, then try again
 
   {#if isTtsSupported()}
     <h3 class="sub-head"><span class="emoji">🗣</span> Voices (Read Aloud)</h3>
+
+    {#if naturalVoices.length > 0}
+      <p class="voice-group-note">
+        <strong>Natural voices.</strong> These sound closest to a real reader. They
+        share one engine, so the first one is a large download and the rest are
+        nearly instant.
+      </p>
+    {/if}
     <div class="pill-list">
-      {#each voiceList as voice (voice.id)}
+      {#each [...naturalVoices, ...standardVoices] as voice (voice.id)}
+        {#if voice === standardVoices[0] && naturalVoices.length > 0}
+          <p class="voice-group-note second">
+            <strong>Standard voices.</strong> Lighter on the battery, and the only
+            option for Greek.
+          </p>
+        {/if}
         {@const isVoiceInstalled = installedVoices.includes(voice.id)}
         {@const canDownload = voiceIsDownloadable(voice)}
         <div class="pill" class:installed={isVoiceInstalled}>
@@ -987,14 +1044,18 @@ Free up space on your device, or remove a pack you are not using, then try again
           <div class="pill-text">
             <div class="pill-head">
               <span class="pill-name">{voice.label}</span>
-              <span class="pill-meta">~{voice.approxSizeMB} MB</span>
+              <span class="pill-meta">~{voiceSizes[voice.id] ?? voice.approxSizeMB} MB</span>
             </div>
             <div class="pill-desc">
               {voice.custom
                 ? "Your own voice"
-                : voice.quality === "standard"
-                  ? "Natural quality, best for daily listening"
-                  : "Smaller and faster on older phones"}
+                : voice.engine === "kokoro"
+                  ? (voiceSizes[voice.id] ?? 0) < 10
+                    ? "Shares the engine you already have"
+                    : "Includes the shared engine, downloaded once"
+                  : voice.quality === "standard"
+                    ? "Lighter on the battery"
+                    : "Smaller and faster on older phones"}
             </div>
           </div>
           <div class="pill-actions">
@@ -1063,6 +1124,21 @@ Free up space on your device, or remove a pack you are not using, then try again
 {/if}
 
 <style>
+  .voice-group-note {
+    font-size: 0.8rem;
+    color: #9a9a9a;
+    line-height: 1.5;
+    margin: 2px 0 10px;
+  }
+  .voice-group-note.second {
+    margin-top: 18px;
+    grid-column: 1 / -1;
+  }
+  .voice-group-note strong {
+    color: #d5d5d5;
+    font-weight: 600;
+  }
+
   .packs-pane {
     color: #e0e0e0;
     max-width: 800px;

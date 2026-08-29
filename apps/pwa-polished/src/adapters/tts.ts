@@ -10,6 +10,7 @@
 
 import {
   TTS_VOICES,
+  KOKORO_VOICES,
   GREEK_VOICE_ID,
   resolveVoiceSource,
   resolveGreekRoute,
@@ -22,7 +23,7 @@ import {
 } from '../lib/tts/voices.js';
 import { getTtsSettings } from './settings.js';
 
-export { TTS_VOICES, GREEK_VOICE_ID };
+export { TTS_VOICES, KOKORO_VOICES, GREEK_VOICE_ID };
 export type { TtsVoiceInfo, TtsProgress, SpeechRoute };
 
 export const DEFAULT_TTS_VOICE = 'en_US-lessac-medium';
@@ -78,9 +79,51 @@ function unregisterCustomVoice(id: string): void {
   saveCustomVoices(getCustomVoices().filter((v) => v.id !== id));
 }
 
-/** Built-in voices plus any user-added ones. */
+/**
+ * Every voice the app knows about, whether or not this device can run it.
+ *
+ * Lookups by id must always succeed — a voice already installed on a device
+ * that later loses graphics-chip support still has to resolve, or removing it
+ * becomes impossible. Use getSelectableVoices() for anything the user picks from.
+ */
 export function getAllVoices(): TtsVoiceInfo[] {
-  return [...TTS_VOICES, ...getCustomVoices()];
+  return [...TTS_VOICES, ...KOKORO_VOICES, ...getCustomVoices()];
+}
+
+// ─── can this device run the natural voices? ────────────────────────────────
+// Kokoro on the main processor manages about 0.55x realtime — slower than
+// playback, so it can never keep up. Rather than let someone download 310 MB
+// and discover it stutters, the voices are simply not offered without a usable
+// graphics chip.
+
+let graphicsChip: boolean | null = null;
+
+/**
+ * Whether the graphics chip is actually usable, not merely present. Some
+ * browsers expose the API but return no adapter, which would fail only at the
+ * point of loading a 310 MB model.
+ */
+export async function canUseGraphicsChip(): Promise<boolean> {
+  if (graphicsChip !== null) return graphicsChip;
+  try {
+    const gpu = (navigator as any).gpu;
+    graphicsChip = gpu ? !!(await gpu.requestAdapter()) : false;
+  } catch {
+    graphicsChip = false;
+  }
+  return graphicsChip;
+}
+
+/**
+ * Voices to offer the user: everything, minus the ones this device cannot run
+ * well. Already-installed voices are kept regardless, so nothing a user has
+ * becomes invisible and therefore unremovable.
+ */
+export async function getSelectableVoices(): Promise<TtsVoiceInfo[]> {
+  const all = getAllVoices();
+  if (await canUseGraphicsChip()) return all;
+  const installed = await storedVoices().catch(() => [] as string[]);
+  return all.filter((v) => voiceEngine(v) !== 'kokoro' || installed.includes(v.id));
 }
 
 export function getVoiceInfo(id: string): TtsVoiceInfo | undefined {

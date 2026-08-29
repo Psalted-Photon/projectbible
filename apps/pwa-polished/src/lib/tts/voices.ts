@@ -149,10 +149,10 @@ function kokoro(
  * pick a voice you like without turning the Settings dropdown into a list.
  * Adding more is a matter of appending here.
  *
- * Deliberately NOT merged into TTS_VOICES yet. Settings and Manage Packs both
- * build their lists from that array, so merging here would offer voices the
- * engine cannot yet synthesize. They join the list in Phase 7, once the engine
- * exists and the device check that hides them on unsupported hardware does too.
+ * Kept separate from TTS_VOICES rather than appended to it: the two lists are
+ * grouped separately in the UI, and getAllVoices() joins them. Anything the
+ * user picks from should come from getSelectableVoices(), which drops these on
+ * devices without a usable graphics chip.
  */
 export const KOKORO_VOICES: TtsVoiceInfo[] = [
   kokoro('af_heart', 'Heart (US, female)', 'en-us'),

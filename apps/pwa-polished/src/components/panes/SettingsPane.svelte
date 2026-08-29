@@ -5,7 +5,7 @@
     getCustomThemeSettings, applyCustomThemeVars, MAX_COLOR_PRESETS,
   } from "../../adapters/settings";
   import { formatDays, formatTime12h } from "../../lib/alarm/alarmSchedule";
-  import { getAllVoices, type TtsVoiceInfo } from "../../adapters/tts";
+  import { getAllVoices, getSelectableVoices, type TtsVoiceInfo } from "../../adapters/tts";
   import { paneStore } from "../../stores/paneStore";
   import { Gear, Palette, BookOpenText, SpeakerHigh, Globe, Package } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
@@ -114,7 +114,12 @@
   let ttsGlowFollow: boolean = false;
   let ttsGreekPronunciation: 'modern' | 'reconstructed' = 'modern';
   let ttsBilingual: boolean = false;
-  let ttsVoices: TtsVoiceInfo[] = getAllVoices();
+  // Seeded synchronously so the dropdown is never empty on first paint, then
+  // replaced once the graphics-chip check answers — that decides whether the
+  // natural voices can be offered at all.
+  let ttsVoices: TtsVoiceInfo[] = getAllVoices().filter((v) => v.engine !== "kokoro");
+  $: naturalVoices = ttsVoices.filter((v) => v.engine === "kokoro");
+  $: standardVoices = ttsVoices.filter((v) => v.engine !== "kokoro");
   let alarmSummary = "";
 
   // ── Instant save ────────────────────────────────────────────────────────
@@ -242,7 +247,7 @@
   onMount(() => {
     refreshExternalSummaries();
     window.addEventListener("settingsUpdated", refreshExternalSummaries);
-    ttsVoices = getAllVoices();
+    getSelectableVoices().then((v) => (ttsVoices = v));
     const settings = getSettings();
     theme = settings.theme || "dark";
     fontSize = settings.fontSize || 18;
@@ -727,9 +732,22 @@
       <label>
         <span class="label-text">Voice</span>
         <select bind:value={ttsVoice}>
-          {#each ttsVoices as v}
-            <option value={v.id}>{v.label} — ~{v.approxSizeMB} MB</option>
-          {/each}
+          {#if naturalVoices.length > 0}
+            <optgroup label="Natural — closest to a real reader">
+              {#each naturalVoices as v}
+                <option value={v.id}>{v.label}</option>
+              {/each}
+            </optgroup>
+            <optgroup label="Standard — lighter on the battery">
+              {#each standardVoices as v}
+                <option value={v.id}>{v.label}</option>
+              {/each}
+            </optgroup>
+          {:else}
+            {#each ttsVoices as v}
+              <option value={v.id}>{v.label} — ~{v.approxSizeMB} MB</option>
+            {/each}
+          {/if}
         </select>
       </label>
       <label>
