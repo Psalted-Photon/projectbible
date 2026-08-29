@@ -24,6 +24,7 @@ import {
   voiceConfigName,
   type TtsProgressCallback,
   type TtsSource,
+  type PiperSource,
 } from './voices.js';
 import {
   carrierFor,
@@ -95,12 +96,18 @@ async function fetchWithProgress(url: string, onProgress?: TtsProgressCallback):
  * Resolve the download source for a voice. The main thread passes `source`
  * for custom voices (from its localStorage catalog); built-ins fall back to
  * the static catalog so the dev hook and internal callers work source-free.
+ *
+ * Rejects a Kokoro source rather than reading the fields it happens to share.
+ * A Kokoro voice reaching this engine is a routing mistake, and failing here
+ * says so instead of downloading a 310 MB model into Piper's OPFS folder.
  */
-function downloadSource(voiceId: string, source?: TtsSource): TtsSource {
-  if (source) return source;
+function downloadSource(voiceId: string, source?: TtsSource): PiperSource {
   const info = TTS_VOICES.find((v) => v.id === voiceId);
-  const resolved = info ? resolveVoiceSource(info) : null;
+  const resolved = source ?? (info ? resolveVoiceSource(info) : null);
   if (!resolved) throw new TtsError('UNKNOWN_VOICE', `No download source for voice: ${voiceId}`);
+  if (resolved.engine !== 'piper') {
+    throw new TtsError('UNKNOWN_VOICE', `Voice ${voiceId} is not a Piper voice`);
+  }
   return resolved;
 }
 

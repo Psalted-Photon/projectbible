@@ -48,11 +48,14 @@ export function getCustomVoices(): TtsVoiceInfo[] {
     if (!raw) return [];
     const list = JSON.parse(raw);
     if (!Array.isArray(list)) return [];
-    // Voices registered before language/rate were tracked: assume the common case.
+    // Voices registered before language/rate/engine were tracked: assume the
+    // common case. Every voice installed from a file is a Piper one — that flow
+    // has never accepted anything else — so the engine default is safe.
     return list.map((v: Partial<TtsVoiceInfo>) => ({
       ...v,
       lang: v.lang ?? 'en',
       sampleRate: v.sampleRate ?? 22050,
+      engine: v.engine ?? 'piper',
     })) as TtsVoiceInfo[];
   } catch {
     return [];
