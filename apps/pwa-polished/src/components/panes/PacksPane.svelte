@@ -196,10 +196,11 @@
   // Base URL depends on environment
   const BASE_URL = USE_BUNDLED ? "/packs/consolidated" : "/api/packs";
   // Consolidated pack definitions
-  // Each pack carries two descriptions: `description` is the single line that
-  // fits on the pill, and `info` is what the (i) button opens. Everything that
-  // used to be crammed onto the card -- author lists, licence terms, where the
-  // pack actually shows up in the app -- lives in `info` now.
+  // Each pack carries two descriptions, and both open with the (i) button:
+  // `description` is the one-line summary that heads the info card, and `info`
+  // is the body under it -- author lists, licence terms, where the pack
+  // actually shows up in the app. The pill itself shows only the name, because
+  // on a phone that is all there is room to read.
   const CONSOLIDATED_PACKS = [
     {
       id: "translations",
@@ -212,7 +213,7 @@
     },
     {
       id: "dictionary-en",
-      name: "English Dictionary (Modern + Historic)",
+      name: "English Dictionary",
       description: "Modern + Webster 1913 definitions",
       info: "Two English dictionaries in one: a modern definition set, and Webster’s 1913 unabridged — which is what the KJV’s older vocabulary actually meant to the people reading it.\n\nTap any English word in the reader and choose Define. Public domain.",
       size: "48.67 MB",
@@ -221,7 +222,7 @@
     },
     {
       id: "commentaries",
-      name: "Multi-Author Commentaries",
+      name: "Commentaries",
       description: "Henry, Clarke, Calvin, Spurgeon + 14 more",
       info: "Eighteen commentary sets working through the text a verse at a time: Matthew Henry, Adam Clarke, John Calvin, Charles Spurgeon, John Wesley, Albert Barnes, A.T. Robertson, Martin Luther, Thomas Aquinas (Catena Aurea), Jamieson-Fausset-Brown, E.W. Bullinger, John Lightfoot, Abbott, KingComments, Family Bible Notes, NET Bible Notes, Quotations & Allusions, and the Treasury of Scripture Knowledge.\n\nOpen the Commentary window, or tap a verse and choose Commentary, to read what each one said about where you are. Public domain or free for personal use, via the CrossWire Sword Project and Plano Bible Chapel.",
       size: "224.84 MB",
@@ -386,8 +387,16 @@
   // reports every sub-row this list folds away.
   $: packCount = installedById.size + orphanPacks.length;
 
-  /** The one open info card, or null. Shared by packs and voices. */
-  let infoCard: { title: string; body: string; meta: string } | null = null;
+  /**
+   * The one open info card, or null. Shared by packs and voices. `subtitle` is
+   * the pack's one-line summary; voices have no equivalent and leave it unset.
+   */
+  let infoCard: {
+    title: string;
+    subtitle?: string;
+    body: string;
+    meta: string;
+  } | null = null;
 
   function openPackInfo(
     pack: (typeof CONSOLIDATED_PACKS)[0],
@@ -395,6 +404,7 @@
   ) {
     infoCard = {
       title: pack.name,
+      subtitle: pack.description,
       body: pack.info,
       meta: state
         ? `Installed${state.version ? ` · v${state.version}` : ""} · ${formatBytes(state.bytes)}`
@@ -900,7 +910,6 @@ Free up space on your device, or remove a pack you are not using, then try again
                 <span class="pill-flag">install unfinished</span>
               {/if}
             </div>
-            <div class="pill-desc">{pack.description}</div>
           </div>
           <div class="pill-actions">
             <button
@@ -1111,6 +1120,9 @@ Free up space on your device, or remove a pack you are not using, then try again
   <div class="info-card" role="dialog" aria-modal="true" aria-label={infoCard.title}>
     <button class="info-close" on:click={closeInfo} aria-label="Close">✕</button>
     <h4>{infoCard.title}</h4>
+    {#if infoCard.subtitle}
+      <div class="info-sub">{infoCard.subtitle}</div>
+    {/if}
     {#each infoCard.body.split("\n\n") as paragraph}
       <p>{paragraph}</p>
     {/each}
@@ -1212,15 +1224,15 @@ Free up space on your device, or remove a pack you are not using, then try again
   }
 
   .pill-name {
-    /* The name owns this line on its own now -- version and size live in the
-       info card. min-width and the ellipsis stay as a guard for long names. */
+    /* The name is the whole pill now, and it wraps rather than truncating --
+       on a narrow phone an ellipsis ate everything past "English Tra...".
+       Names run 11-25 characters, so this is one line for most packs and two
+       for the longest. overflow-wrap catches anything unbroken. */
     min-width: 0;
     font-size: 0.95rem;
     font-weight: 600;
     color: #f0f0f0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
   }
 
   .pill-flag {
@@ -1231,8 +1243,8 @@ Free up space on your device, or remove a pack you are not using, then try again
     flex-shrink: 0;
   }
 
-  /* One line, always. The full text is a tap away on the info button, and a
-     pill that wraps to three lines puts the scroll back where it started. */
+  /* Voice and orphan rows only -- pack pills show the name alone. One line,
+     always: for voices the full text is a tap away on the info button. */
   .pill-desc {
     font-size: 0.72rem;
     color: #999;
@@ -1457,6 +1469,15 @@ Free up space on your device, or remove a pack you are not using, then try again
     font-size: 1rem;
     font-weight: 600;
     color: #f0f0f0;
+  }
+
+  /* The pack's one-line summary, which used to sit on the pill. The negative
+     top margin pulls it up under its own title -- the h4 keeps its 0.6rem gap
+     for voice cards, which have no subtitle. */
+  .info-sub {
+    margin: -0.4rem 2rem 0.85rem 0;
+    font-size: 0.8rem;
+    color: #999;
   }
 
   .info-card p {
