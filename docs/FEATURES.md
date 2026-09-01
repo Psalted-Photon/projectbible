@@ -78,7 +78,7 @@ Two complete English editions are included and read like any other book:
 ### 2.2 Moving between passages
 
 - **Back button** — steps back through the passages you've visited, like a browser's back button. It only appears when there's somewhere to go back to.
-- **Tap any reference to follow it** — references inside cross-references, commentaries, and encyclopedia articles are all live links. The verse you land on flashes briefly in its book's category color so you can spot it immediately.
+- **Tap any reference to follow it** — references inside cross-references, commentaries, and encyclopedia articles are all live links. The verse you land on is marked in its book's category color so you can spot where to start reading. The mark stays until you follow another link or step away by hand, and it comes back if you leave the chapter and return.
 - **Reference shorthand is understood** — "Ex 20:21", "Am 5:18-20", or a bare "3:14" while you're already in a book all resolve correctly. Common abbreviations and alternate book spellings are recognised.
 - **The toolbar follows your scrolling** — as you scroll into a new chapter, the book and chapter shown in the toolbar update to match, without yanking the page around.
 

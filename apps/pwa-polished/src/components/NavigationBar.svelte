@@ -453,6 +453,9 @@
       });
     } else {
       navigationStore.navigateTo(currentTranslation, bookName, chapter);
+      // Mark verse 1 but do not scroll to it — you land at the chapter top and
+      // jumping to the first verse would push the chapter title out of view.
+      navigationStore.setLinkHighlight(bookName, chapter, 1);
     }
     referenceDropdownOpen = false;
     expandedBooks = new Set();

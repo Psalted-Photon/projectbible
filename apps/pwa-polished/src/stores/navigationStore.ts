@@ -8,12 +8,21 @@ export interface NavigationState {
   isChronologicalMode?: boolean;
   highlightedVerse?: number | null;
   scrollTargetVerse?: number | null;
-  /** Verse to flash with a category-colored fade highlight after a link navigation. */
-  linkHighlightVerse?: number | null;
+  /**
+   * Where the "start here" highlight belongs after a link navigation, in the
+   * book category colour of the target book.
+   *
+   * This carries its own book and chapter rather than a bare verse number.
+   * The reader mounts several chapters at once, so a lone number cannot say
+   * which chapter it meant — and it is not consumed on first use, so returning
+   * to the chapter shows it again instead of losing it for good. That matches
+   * how the reading plan target behaves; the two used to follow opposite rules.
+   */
+  linkHighlight?: { book: string; chapter: number; verse: number; at: number } | null;
   showReferences?: boolean;
   showCommentaries?: boolean;
   selectedCommentaryAuthors?: string[];
-  readingPlanActiveTarget?: { book: string; chapter: number; verse: number | null; consecutiveDay: boolean } | null;
+  readingPlanActiveTarget?: { book: string; chapter: number; verse: number | null; consecutiveDay: boolean; at: number } | null;
   commentaryAnchored?: boolean;
 }
 
@@ -69,16 +78,18 @@ function createNavigationStore() {
         return next;
       });
     },
+    // Stepping to another book or chapter by hand is a deliberate move away, so
+    // the mark from the last link goes with it.
     setBook: (book: string) => {
       update(state => {
-        const next = { ...state, book: normalizeBookName(book), chapter: 1, highlightedVerse: null };
+        const next = { ...state, book: normalizeBookName(book), chapter: 1, highlightedVerse: null, linkHighlight: null };
         persistState(next);
         return next;
       });
     },
     setChapter: (chapter: number) => {
       update(state => {
-        const next = { ...state, chapter, highlightedVerse: null };
+        const next = { ...state, chapter, highlightedVerse: null, linkHighlight: null };
         persistState(next);
         return next;
       });
@@ -111,19 +122,40 @@ function createNavigationStore() {
         return next;
       });
     },
+    /**
+     * Go somewhere, and by default mark the verse you land on.
+     *
+     * `highlight` defaults to true because that is the app-wide rule: any link
+     * that takes you to a place in the Bible marks where to start reading, in
+     * the target book's category colour. Only callers that paint their own
+     * highlight — the reading plan, which keeps its green — pass false.
+     */
     navigateTo: (
       translation: string,
       book: string,
       chapter: number,
       scrollTargetVerse: number | null = null,
+      highlight = true,
     ) => {
       update(state => {
-        const next = { ...state, translation, book: normalizeBookName(book), chapter, highlightedVerse: null, scrollTargetVerse, linkHighlightVerse: null };
+        const normalized = normalizeBookName(book);
+        const next = {
+          ...state,
+          translation,
+          book: normalized,
+          chapter,
+          highlightedVerse: null,
+          scrollTargetVerse,
+          linkHighlight:
+            highlight && scrollTargetVerse != null
+              ? { book: normalized, chapter, verse: scrollTargetVerse, at: Date.now() }
+              : null,
+        };
         persistState(next);
         return next;
       });
     },
-    // Navigate to a specific verse and flash a category-colored fade highlight on it.
+    // Navigate to a specific verse and mark it in the target book's category color.
     navigateToVerse: (
       translation: string,
       book: string,
@@ -131,7 +163,16 @@ function createNavigationStore() {
       verse: number,
     ) => {
       update(state => {
-        const next = { ...state, translation, book: normalizeBookName(book), chapter, highlightedVerse: null, scrollTargetVerse: verse, linkHighlightVerse: verse };
+        const normalized = normalizeBookName(book);
+        const next = {
+          ...state,
+          translation,
+          book: normalized,
+          chapter,
+          highlightedVerse: null,
+          scrollTargetVerse: verse,
+          linkHighlight: { book: normalized, chapter, verse, at: Date.now() },
+        };
         persistState(next);
         return next;
       });
@@ -140,10 +181,21 @@ function createNavigationStore() {
       update(state => ({ ...state, scrollTargetVerse: null }));
     },
     clearLinkHighlight: () => {
-      update(state => ({ ...state, linkHighlightVerse: null }));
+      update(state => ({ ...state, linkHighlight: null }));
+    },
+    /**
+     * Mark a verse without scrolling to it — for links that land you at the top
+     * of a chapter (the table of contents) where the first verse is already in
+     * view and jumping to it would hide the chapter title.
+     */
+    setLinkHighlight: (book: string, chapter: number, verse: number) => {
+      update(state => ({
+        ...state,
+        linkHighlight: { book: normalizeBookName(book), chapter, verse, at: Date.now() },
+      }));
     },
     setReadingPlanActiveTarget: (book: string, chapter: number, verse: number | null, consecutiveDay: boolean) => {
-      update(state => ({ ...state, readingPlanActiveTarget: { book: normalizeBookName(book), chapter, verse, consecutiveDay } }));
+      update(state => ({ ...state, readingPlanActiveTarget: { book: normalizeBookName(book), chapter, verse, consecutiveDay, at: Date.now() } }));
     },
     clearReadingPlanActiveTarget: () => {
       update(state => ({ ...state, readingPlanActiveTarget: null }));

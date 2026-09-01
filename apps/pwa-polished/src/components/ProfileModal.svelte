@@ -390,8 +390,12 @@
   }
 
   function navigateToChapter(book: string, chapter: number) {
-    navigationStore.setBook(book);
-    navigationStore.setChapter(chapter);
+    // setBook/setChapter moved the reader without ever marking where to start.
+    // Going through navigateTo makes history behave like every other link, and
+    // the mark goes on verse 1 without a scroll target so the chapter title
+    // stays in view.
+    navigationStore.navigateTo($navigationStore.translation, book, chapter);
+    navigationStore.setLinkHighlight(book, chapter, 1);
     profileModalStore.close();
   }
 

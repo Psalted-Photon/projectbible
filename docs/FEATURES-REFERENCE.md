@@ -104,8 +104,10 @@ Primary files: `src/stores/navigationStore.ts`, `src/components/NavigationBar.sv
 | Feature | Detail |
 |---|---|
 | Back | `navigationStore.goBack()`. History is a separate `navigationHistory` writable; `canGoBack` derived store gates the button. Toolbar button at `NavigationBar.svelte`. When the back button is active the navbar is fully hidden in the main reader (`BibleReader.svelte`). |
-| Link navigation + flash | `navigationStore.navigateToVerse()` sets `linkHighlightVerse`, which flashes the target verse in its book's category color, then clears via `clearLinkHighlight()`. Handles same-chapter and cross-book cases; fires only once the target chapter is in the DOM (`BibleReader.svelte`). |
-| Plain navigation | `navigationStore.navigateTo()` — sets `scrollTargetVerse` without the flash. |
+| Link navigation + mark | `navigationStore.navigateToVerse()` sets `linkHighlight` (book + chapter + verse), and `lib/verseHighlight.ts` paints the target in its book's category color. Fires only once the target chapter is in the DOM, so a cross-book jump marks the new chapter rather than the old one still on screen. Not consumed on use — leaving and returning shows it again. |
+| Plain navigation | `navigationStore.navigateTo()` — marks the landing verse by default. Pass `highlight: false` only when the caller paints its own, which the reading plan does. |
+| Where the mark goes | Measured from the verse's first line box via `Range.getClientRects()`, re-measured on reflow and after webfonts load, so any typeface, size, spacing or paragraph layout lands correctly. All lookups are scoped to a chapter section — the reader mounts several chapters at once and `data-verse` is only unique within one. |
+| Colors | Reading plan keeps green (start) and brown (end of day). Everything else uses the target book's `CATEGORY_COLORS` entry, identical in shape, size and opacity — hue is the only difference. |
 | TSK reference parsing | `parseRefString(ref, contextBook, contextChapter)`, `src/lib/parseRefString.ts`. Handles `"Ex 20:21"`, `"Am 5:18-20"` (range → first verse), `"3:14,15"`, `"8:22"`, and bare `"10,31"` relative to context. |
 | OSIS reference parsing | `parseOsisRef()`, `parseRefString.ts` — e.g. `"Gen.2.4"`, `"1John.4.9-1John.4.10"`. |
 | Abbreviation table | Lower-cased KJV/TSK abbreviation → canonical book name, `parseRefString.ts`. Separate alias table `BOOK_NAME_ALIASES` at `bibleData.ts`, applied by `normalizeBookName()` on every `setBook`/`navigateTo`. |

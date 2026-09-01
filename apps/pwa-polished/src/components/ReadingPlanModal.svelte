@@ -694,7 +694,8 @@
 
     const nav = get(navigationStore);
     navigationStore.setReadingPlanActiveTarget(passage.book, passage.startChapter, passage.startVerse, false);
-    navigationStore.navigateTo(nav.translation, passage.book, passage.startChapter, passage.startVerse);
+    // false: the plan paints its own green mark, so no category-coloured one too.
+    navigationStore.navigateTo(nav.translation, passage.book, passage.startChapter, passage.startVerse, false);
     isOpen = false;
   }
 
@@ -1303,7 +1304,7 @@
   function navigateToChapter(book: string, chapter: number, chapters: Array<{ book: string; chapter: number }> = [{ book, chapter }]) {
     const consecutiveDay = isConsecutiveDay(chapters);
     navigationStore.setReadingPlanActiveTarget(book, chapter, null, consecutiveDay);
-    navigationStore.navigateTo(get(navigationStore).translation, book, chapter);
+    navigationStore.navigateTo(get(navigationStore).translation, book, chapter, null, false);
     isOpen = false;
   }
   

@@ -67,13 +67,25 @@
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading, verseStructure } from "../lib/verseRendering";
-  import { BIBLE_BOOKS, normalizeBookName, getBookColor as getCategoryColor } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData";
   import { getSettings, getInterlinearSettings, getTtsSettings } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
   import { ttsCurrentVerse } from "../stores/audioStore";
   import { getSharedTtsAudio } from "../adapters/tts";
   import { readingPosition, isReadingActive, currentVerseWindow } from "../lib/tts/readingEngine";
   import { startGlow } from "../lib/ttsGlow";
+  import {
+    showVerseHighlight,
+    clearVerseHighlight,
+    clearVerseHighlightsFor,
+    reapplyVerseHighlights,
+    findVerseEl,
+    slotFor,
+    waitForTextToSettle,
+    categoryColorFor,
+    PLAN_START_COLOR,
+    PLAN_END_COLOR,
+  } from "../lib/verseHighlight";
   import { expandRmacCode, expandOshbCode } from "../lib/morphologyExpander";
   import { readTransaction } from "../adapters/db";
   import type { DBMorphology } from "../adapters/db";
@@ -413,11 +425,10 @@
   let _navigatedFromIntro = false;
   // Set only when user presses Back after intro navigation; consumed by loadChapter / reactive block
   let _reopenBookIntroPanel = false;
-  // Verse to highlight after navigating from a commentary popup verse link
-  let _commNavHighlightVerse: number | null = null;
-  // Verse to highlight after navigating from a link (e.g. Character modal verse list);
-  // colored by the target book's category.
-  let _linkNavHighlightVerse: number | null = null;
+  // Where the "start here" mark belongs now lives in the navigation store as
+  // linkHighlight (book + chapter + verse), not in component-local numbers.
+  // A bare verse number could not say which chapter it meant, and the reader
+  // holds several at once.
 
   function handleAnnotationNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
@@ -428,7 +439,6 @@
       tab: annotationPanelTab,
     });
     annotationPanelOpen = false;
-    _commNavHighlightVerse = verse;
     if (windowId) {
       _windowScrollTarget = verse;
       windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
@@ -444,7 +454,6 @@
   $: displayNavOffset = (!windowId && $annotationReturnStore !== null) ? -100 : navBarOffset;
 
   function handleAnnotationReturn() {
-    _commNavHighlightVerse = null;
     const ctx = $annotationReturnStore;
     if (!ctx) return;
     const fromIntro = _navigatedFromIntro;
@@ -850,58 +859,81 @@
   // ---------------------------------------------------------------------------
   // Apply highlight immediately when readingPlanActiveTarget changes but we're already
   // on the target chapter (navKey doesn't change so loadChapter won't fire).
+  // The key carries the target's `at` stamp, so tapping the same passage again
+  // is a fresh event and scrolls again. Without it a repeat tap was swallowed —
+  // and it took the pending scroll target with it, leaving a stale verse in the
+  // store for the next unrelated navigation to jump to.
   let _lastRpTargetKey: string | null = null;
   $: {
     // Window panes are isolated — reading plan state is main-reader-only
     if (windowId) { _lastRpTargetKey = null; }
     const rpTarget = windowId ? null : $navigationStore.readingPlanActiveTarget;
-    const newKey = rpTarget ? `${rpTarget.book}-${rpTarget.chapter}-${rpTarget.verse ?? 'null'}` : null;
-    if (
-      newKey !== null &&
-      newKey !== _lastRpTargetKey &&
-      rpTarget!.book === currentBook &&
-      rpTarget!.chapter === currentChapter &&
+    const newKey = rpTarget
+      ? `${rpTarget.book}-${rpTarget.chapter}-${rpTarget.verse ?? 'null'}-${rpTarget.at}`
+      : null;
+    const loaded =
+      !!rpTarget &&
       chapters.length > 0 &&
-      chapters.some(c => c.book === rpTarget!.book && c.chapter === rpTarget!.chapter)
-    ) {
-      const scrollVerse = $navigationStore.scrollTargetVerse;
+      chapters.some(c => c.book === rpTarget.book && c.chapter === rpTarget.chapter);
+    if (newKey !== null && newKey !== _lastRpTargetKey && loaded) {
       _lastRpTargetKey = newKey;
+      const scrollVerse = $navigationStore.scrollTargetVerse;
+      // Consumed here rather than inside the branch below: a target that turned
+      // out to have nothing to scroll to still has to be cleared, or it waits
+      // in the store and hijacks a later navigation.
+      if (scrollVerse != null) navigationStore.clearScrollTarget();
+      const target = rpTarget!;
+      const goTo = scrollVerse ?? target.verse;
       tick().then(async () => {
-        if (scrollVerse != null) {
-          const el = readerElement?.querySelector(`.verse[data-verse="${scrollVerse}"]`) as HTMLElement | null;
-          if (el) scrollToVerseEl(el);
-          navigationStore.clearScrollTarget();
+        // Only scroll when a verse was actually named. A chapter-level plan
+        // target lands you at the top of the chapter, where verse 1 is already
+        // in view — scrolling to it would push the chapter title off screen.
+        if (goTo != null) {
+          await scrollToTarget(target.book, target.chapter, goTo);
+          // The scroll waits on webfonts, which on a cold cache is long enough
+          // for another navigation to land. If one did, that one owns the page.
+          if (get(navigationStore).readingPlanActiveTarget?.at !== target.at) return;
         }
         await applyReadingPlanHighlight();
         await applyReadingPlanEndHighlight();
       });
     }
-    if (newKey === null) _lastRpTargetKey = null;
+    if (newKey === null && _lastRpTargetKey !== null) {
+      // Plan finished or cleared — take its marks with it.
+      _lastRpTargetKey = null;
+      clearReadingPlanHighlight();
+      clearReadingPlanEndHighlight();
+    }
   }
 
-  // Apply the link-nav category-colored highlight (e.g. from the Character verse list).
-  // Handles both same-chapter clicks and cross-book navigation: it only fires once the
-  // loaded chapter actually matches the target, so cross-book nav applies after the new
-  // chapter renders (not prematurely on the still-loaded old chapter).
+  // The "start here" mark for link navigation. It fires only once the target's
+  // own chapter is actually loaded, so a cross-book jump paints the new chapter
+  // rather than the old one still on screen. It does not consume the target:
+  // leaving the chapter and coming back shows the mark again, the same way the
+  // reading plan one does. The two used to follow opposite rules.
   let _lastLinkHlKey: string | null = null;
   $: {
-    const lhv = windowId ? null : $navigationStore.linkHighlightVerse;
-    const onTarget =
-      lhv != null &&
+    const lh = windowId ? null : $navigationStore.linkHighlight;
+    const loaded =
+      !!lh &&
       chapters.length > 0 &&
-      chapters.some((c) => c.book === currentBook && c.chapter === currentChapter);
-    const key = lhv != null ? `${currentBook}-${currentChapter}-${lhv}` : null;
-    if (onTarget && key !== _lastLinkHlKey) {
+      chapters.some((c) => c.book === lh.book && c.chapter === lh.chapter);
+    const key = lh ? `${lh.book}-${lh.chapter}-${lh.verse}-${lh.at}` : null;
+    if (key !== null && key !== _lastLinkHlKey && loaded) {
       _lastLinkHlKey = key;
-      _linkNavHighlightVerse = lhv;
+      const target = lh!;
       tick().then(async () => {
-        const el = readerElement?.querySelector(`.verse[data-verse="${lhv}"]`) as HTMLElement | null;
-        if (el) scrollToVerseEl(el);
+        await scrollToTarget(target.book, target.chapter, target.verse);
+        // Overtaken while waiting on webfonts — the newer navigation wins.
+        if (get(navigationStore).linkHighlight?.at !== target.at) return;
         await applyLinkNavHighlight();
-        navigationStore.clearLinkHighlight();
       });
     }
-    if (key === null) _lastLinkHlKey = null;
+    if (key === null && _lastLinkHlKey !== null) {
+      // Stepped away by hand, or went back to a spot that carried no mark.
+      _lastLinkHlKey = null;
+      clearLinkNavHighlight();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -954,23 +986,33 @@
     dayCompleteMessage = ctx.planName;
   }
 
+  /**
+   * Continue to the next chapter of a plan.
+   *
+   * `clearReadingPlanHighlight()` first, which the harmony handlers always did
+   * and these two never did: they assumed the chapter reload would wipe the old
+   * mark off the DOM, and when the next chapter was already on screen from
+   * scrolling there was no reload, so the old mark stayed and a second one was
+   * added beside it.
+   *
+   * `false` for the highlight argument because the plan paints its own green.
+   */
+  function continueToChapter(next: { book: string; chapter: number }) {
+    clearReadingPlanHighlight();
+    navigationStore.setReadingPlanActiveTarget(next.book, next.chapter, null, false);
+    navigationStore.navigateTo(currentTranslation, next.book, next.chapter, null, false);
+    navBarOffset = -68;
+  }
+
   async function handleMarkAndContinue(ctx: any, book: string, chapter: number) {
     await readingProgressStore.setChapterAction(
       ctx.planId, ctx.dayNumber, ctx.todayChapters, { book, chapter }, 'checked'
     );
-    if (ctx.nextChapter) {
-      navigationStore.setReadingPlanActiveTarget(ctx.nextChapter.book, ctx.nextChapter.chapter, null, false);
-      navigationStore.navigateTo(currentTranslation, ctx.nextChapter.book, ctx.nextChapter.chapter);
-      navBarOffset = -68;
-    }
+    if (ctx.nextChapter) continueToChapter(ctx.nextChapter);
   }
 
   function handleContinueOnly(ctx: any) {
-    if (ctx.nextChapter) {
-      navigationStore.setReadingPlanActiveTarget(ctx.nextChapter.book, ctx.nextChapter.chapter, null, false);
-      navigationStore.navigateTo(currentTranslation, ctx.nextChapter.book, ctx.nextChapter.chapter);
-      navBarOffset = -68;
-    }
+    if (ctx.nextChapter) continueToChapter(ctx.nextChapter);
   }
 
   function handleAudioNextChapter(event: CustomEvent<{ book: string; chapter: number }>) {
@@ -1101,21 +1143,58 @@
   // Scroll helper: same-chapter → direct DOM scroll; different chapter → navigateTo sets
   // scrollTargetVerse which loadChapter reads after resetting scrollTop.
   function doScrollToVerse(book: string, chapter: number, verse: number) {
-    if (book === currentBook && chapter === currentChapter) {
-      // Chapter already loaded — scroll directly, no store navigation needed.
-      const el = readerElement?.querySelector(
-        `.verse[data-verse="${verse}"]`,
-      ) as HTMLElement | null;
-      if (el) scrollToVerseEl(el);
+    // "Already loaded" means the chapter is in the DOM, not that it matches the
+    // navigation store — the scroll handler rewrites the store's book and
+    // chapter as the user moves, so those can name a neighbour while the
+    // chapter we want is still mounted and perfectly scrollable.
+    if (findVerseEl(readerElement, book, chapter, verse)) {
+      void scrollToTarget(book, chapter, verse);
     } else {
       // Different chapter — update window or global nav; loadChapter will pick up scroll target.
       if (windowId) {
         _windowScrollTarget = verse;
         windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
       } else {
-        navigationStore.navigateTo(currentTranslation, book, chapter, verse);
+        // The reading plan paints its own green mark, so no category one here.
+        navigationStore.navigateTo(currentTranslation, book, chapter, verse, false);
       }
     }
+  }
+
+  /**
+   * Scroll to a verse, named by its own chapter, once the page has stopped
+   * moving.
+   *
+   * Landing accurately needs two things the old code did not do. First, wait:
+   * the reader's typefaces all load with `font-display: swap`, so measuring
+   * before they arrive measures the fallback metrics and the text reflows out
+   * from under the scroll. Second, look again: `.main-content` animates its
+   * width for 300ms whenever a side pane opens or closes as part of the same
+   * navigation, and repeat markers, place markers and note icons are injected
+   * later still. So we re-check once the transition is over and correct the
+   * landing — unless the user has taken the scroll themselves, in which case
+   * we leave it alone rather than fight them.
+   */
+  async function scrollToTarget(
+    book: string,
+    chapter: number,
+    verse: number | null,
+  ): Promise<void> {
+    if (!readerElement) return;
+    await waitForTextToSettle();
+    if (!readerElement) return;
+    const el = findVerseEl(readerElement, book, chapter, verse);
+    if (!el) return;
+    scrollToVerseEl(el);
+    const settledAt = readerElement.scrollTop;
+    window.setTimeout(() => {
+      if (!readerElement || !el.isConnected) return;
+      // Anything more than a pixel or two means the user is scrolling; theirs wins.
+      if (Math.abs(readerElement.scrollTop - settledAt) > 2) return;
+      const containerTop = readerElement.getBoundingClientRect().top;
+      const drift = el.getBoundingClientRect().top - containerTop;
+      if (Math.abs(drift - 8) > 4) scrollToVerseEl(el);
+    }, 360);
   }
 
   // Scroll to a verse element, pulling in any immediately-preceding section heading
@@ -1123,11 +1202,14 @@
   function scrollToVerseEl(verseEl: HTMLElement): void {
     const budget = window.innerHeight * 0.55;
     let scrollTarget: HTMLElement = verseEl;
+    // Compare positions rather than adding up sibling heights. In paragraph
+    // layout a verse is an inline box whose height is the union of every line
+    // it touches, so the running total overshot the budget almost immediately
+    // and the heading above was never picked up.
+    const verseTop = verseEl.getBoundingClientRect().top;
     let prev = verseEl.previousElementSibling as HTMLElement | null;
-    let accumulated = 0;
     while (prev) {
-      accumulated += prev.getBoundingClientRect().height;
-      if (accumulated > budget) break;
+      if (verseTop - prev.getBoundingClientRect().top > budget) break;
       if (prev.classList.contains('section-heading')) {
         scrollTarget = prev;
         break;
@@ -1767,24 +1849,25 @@
         lastScrollTop = 0;
         readerElement.scrollTop = 0; // direct assignment — always instant, ignores scroll-behavior CSS
         if (scrollToVerse != null) {
-          const verseEl = readerElement.querySelector(
-            `.verse[data-verse="${scrollToVerse}"]`,
-          ) as HTMLElement | null;
-          if (verseEl) {
-            scrollToVerseEl(verseEl);
-          }
-          navigationStore.clearScrollTarget();
+          // Cleared before the await, not after: the scroll waits on fonts, and
+          // leaving the target set across that gap let another navigation pick
+          // it up and jump somewhere the user never asked for. Window panes read
+          // their own target and must not clear the main reader's.
+          if (!windowId) navigationStore.clearScrollTarget();
+          await scrollToTarget(book, chapter, scrollToVerse);
         }
         const rpTarget = $navigationStore.readingPlanActiveTarget;
         if (rpTarget && rpTarget.book === book && rpTarget.chapter === chapter) {
-          _lastRpTargetKey = `${rpTarget.book}-${rpTarget.chapter}-${rpTarget.verse ?? 'null'}`;
+          _lastRpTargetKey = `${rpTarget.book}-${rpTarget.chapter}-${rpTarget.verse ?? 'null'}-${rpTarget.at}`;
           await applyReadingPlanHighlight();
         }
         // Always attempt end highlight — end chapter may differ from start chapter
         await applyReadingPlanEndHighlight();
-        if (_commNavHighlightVerse != null) {
-          await applyCommNavHighlight();
-        }
+        // Svelte rebuilt the verse elements, so any mark painted on the old ones
+        // is gone. Put back whatever is still aimed at a chapter now on screen —
+        // this is what makes a link mark survive leaving and coming back, which
+        // it never used to.
+        reapplyVerseHighlights(readerElement, windowId);
       }
     } catch (err: unknown) {
       console.error("Error loading chapter:", err);
@@ -1797,15 +1880,11 @@
   }
 
   function clearReadingPlanEndHighlight(): void {
-    readerElement?.querySelectorAll('.rp-verse-end-highlight').forEach(el => {
-      el.classList.remove('rp-verse-end-highlight');
-      (el as HTMLElement).style.removeProperty('--rp-hl-right');
-    });
+    clearVerseHighlight(slotFor('plan-end', windowId));
   }
 
   async function applyReadingPlanEndHighlight(): Promise<void> {
     await tick();
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     const session = get(readingSessionStore);
     if (!session || !readerElement) return;
     clearReadingPlanEndHighlight();
@@ -1833,116 +1912,56 @@
       lastChapter = last.chapter;
     }
     // Only apply if that chapter is currently in the DOM
-    const section = readerElement.querySelector<HTMLElement>(
-      `[data-chapter-section][data-book="${lastBook}"][data-chapter="${lastChapter}"]`
+    showVerseHighlight(
+      readerElement,
+      slotFor('plan-end', windowId),
+      { book: lastBook, chapter: lastChapter, verse: null, last: true },
+      { color: PLAN_END_COLOR, side: 'end' },
     );
-    if (!section) return;
-    // Last .verse in that chapter section
-    const allVerses = section.querySelectorAll<HTMLElement>('.verse');
-    const verseEl = allVerses[allVerses.length - 1] ?? null;
-    if (!verseEl) return;
-    const textEl = verseEl.querySelector('.verse-text') as HTMLElement | null;
-    const rightOffset = textEl ? textEl.offsetLeft : 32;
-    verseEl.style.setProperty('--rp-hl-right', `${rightOffset}px`);
-    verseEl.classList.add('rp-verse-end-highlight');
   }
 
   function clearReadingPlanHighlight(): void {
-    readerElement?.querySelectorAll('.rp-verse-highlight').forEach(el => {
-      el.classList.remove('rp-verse-highlight');
-      (el as HTMLElement).style.removeProperty('--rp-hl-left');
-    });
+    clearVerseHighlight(slotFor('plan-start', windowId));
   }
 
   async function applyReadingPlanHighlight(): Promise<void> {
     await tick();
-    // Wait for browser layout to settle before measuring offsetLeft
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     const target = $navigationStore.readingPlanActiveTarget;
-    if (!readerElement) return;
-    clearReadingPlanHighlight();
-    let verseEl: HTMLElement | null = null;
-    if (target?.verse != null) {
-      verseEl = readerElement.querySelector(`.verse[data-verse="${target.verse}"]`) as HTMLElement | null;
-    } else {
-      verseEl = readerElement.querySelector('.verse') as HTMLElement | null;
+    if (!readerElement || !target) {
+      clearReadingPlanHighlight();
+      return;
     }
-    if (!verseEl) return;
-    const textEl = verseEl.querySelector('.verse-text') as HTMLElement | null;
-    const leftOffset = textEl ? textEl.offsetLeft : 32;
-    verseEl.style.setProperty('--rp-hl-left', `${leftOffset}px`);
-    verseEl.classList.add('rp-verse-highlight');
+    // Scoped to the target's own chapter. The old version asked the whole
+    // reader for a verse number, and with several chapters mounted at once
+    // that answered with whichever chapter sat highest in the DOM — which is
+    // why continuing a plan so often marked a chapter you had already read.
+    showVerseHighlight(
+      readerElement,
+      slotFor('plan-start', windowId),
+      { book: target.book, chapter: target.chapter, verse: target.verse },
+      { color: PLAN_START_COLOR },
+    );
   }
 
-  function clearCommNavHighlight(): void {
-    readerElement?.querySelectorAll('.comm-nav-verse-highlight').forEach(el => {
-      el.classList.remove('comm-nav-verse-highlight');
-      (el as HTMLElement).style.removeProperty('--rp-hl-left');
-    });
-  }
-
-  async function applyCommNavHighlight(): Promise<void> {
-    await tick();
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-    if (!readerElement || _commNavHighlightVerse == null) return;
-    clearCommNavHighlight();
-    const verseEl = readerElement.querySelector(
-      `.verse[data-verse="${_commNavHighlightVerse}"]`
-    ) as HTMLElement | null;
-    if (!verseEl) return;
-    const textEl = verseEl.querySelector('.verse-text') as HTMLElement | null;
-    const leftOffset = textEl ? textEl.offsetLeft : 32;
-    verseEl.style.setProperty('--rp-hl-left', `${leftOffset}px`);
-    verseEl.classList.add('comm-nav-verse-highlight');
-    _commNavHighlightVerse = null;
-  }
-
+  // The "start here" mark for any link navigation, in the target book's
+  // category color. Reading plan is the only thing that carries its own color.
   function clearLinkNavHighlight(): void {
-    readerElement
-      ?.querySelectorAll('.link-nav-verse-highlight, .link-nav-verse-highlight-rtl')
-      .forEach(el => {
-        el.classList.remove('link-nav-verse-highlight');
-        el.classList.remove('link-nav-verse-highlight-rtl');
-        (el as HTMLElement).style.removeProperty('--rp-hl-left');
-        (el as HTMLElement).style.removeProperty('--rp-hl-right');
-        (el as HTMLElement).style.removeProperty('--link-hl-color');
-      });
+    clearVerseHighlight(slotFor('nav', windowId));
   }
 
-  // Highlight the navigated verse with a fade gradient in the target book's category color.
   async function applyLinkNavHighlight(): Promise<void> {
     await tick();
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-    if (!readerElement || _linkNavHighlightVerse == null) return;
-    clearLinkNavHighlight();
-    const verseEl = readerElement.querySelector(
-      `.verse[data-verse="${_linkNavHighlightVerse}"]`
-    ) as HTMLElement | null;
-    if (!verseEl) return;
-    const textEl = verseEl.querySelector('.verse-text') as HTMLElement | null;
-    verseEl.style.setProperty('--link-hl-color', hexToRgba(getCategoryColor(currentBook), 0.45));
-    if (isHebrewTranslation(currentTranslation)) {
-      // Anchor from the right, where a Hebrew verse starts reading. Measured
-      // from the verse box's own right edge so the fade clears the verse number
-      // the same way the left-to-right one does.
-      const rightInset = textEl
-        ? Math.max(0, verseEl.clientWidth - (textEl.offsetLeft + textEl.offsetWidth))
-        : 0;
-      verseEl.style.setProperty('--rp-hl-right', `calc(100% - ${rightInset}px)`);
-      verseEl.classList.add('link-nav-verse-highlight-rtl');
-    } else {
-      verseEl.style.setProperty('--rp-hl-left', `${textEl ? textEl.offsetLeft : 32}px`);
-      verseEl.classList.add('link-nav-verse-highlight');
-    }
-    _linkNavHighlightVerse = null;
-  }
-
-  function hexToRgba(hex: string, alpha: number): string {
-    const m = hex.replace('#', '');
-    const r = parseInt(m.slice(0, 2), 16);
-    const g = parseInt(m.slice(2, 4), 16);
-    const b = parseInt(m.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    const target = $navigationStore.linkHighlight;
+    if (!readerElement || !target) return;
+    showVerseHighlight(
+      readerElement,
+      slotFor('nav', windowId),
+      { book: target.book, chapter: target.chapter, verse: target.verse },
+      {
+        color: categoryColorFor(target.book),
+        rtl: isHebrewTranslation(currentTranslation),
+      },
+    );
   }
 
   async function loadAndApplyHighlights(book: string, chapter: number) {
@@ -3551,20 +3570,29 @@
     }
   }
 
+  // A search result is a link like any other, so it gets the same mark in the
+  // same book category color. It used to be an orange bordered box that matched
+  // nothing else in the app, and in the main reader it never appeared at all.
   function clearSearchHighlight() {
-    if (searchHighlightedElement) {
-      searchHighlightedElement.classList.remove("search-verse-highlighted");
-      searchHighlightedElement = null;
-    }
+    // Only clears a mark this function actually put there. It is called from a
+    // reactive statement that runs whenever `highlightVerse` is falsy — which in
+    // the main reader is always — so without this guard it would wipe the mark
+    // every link navigation had just painted into the same slot.
+    if (!searchHighlightedElement) return;
+    searchHighlightedElement = null;
+    clearVerseHighlight(slotFor('nav', windowId));
   }
 
-  // Commentary anchor: highlight all checkpoint verses in BibleReader (no scrolling)
+  // Commentary anchor: mark all checkpoint verses in BibleReader (no scrolling).
+  // Not a link navigation, so it keeps its own amber look rather than the book
+  // category color. Scoped to the chapter like everything else now — unscoped,
+  // it marked whichever loaded chapter happened to hold that verse number.
   async function applyAnchorHighlights(checkpoints: number[]) {
     clearAnchorHighlights();
     await tick();
     if (!readerElement) return;
     for (const n of checkpoints) {
-      const el = readerElement.querySelector(`.verse[data-verse="${n}"]`) as HTMLElement | null;
+      const el = findVerseEl(readerElement, currentBook, currentChapter, n);
       if (el) {
         el.classList.add('comm-anchor-highlight');
         anchorHighlightedElements.push(el);
@@ -3580,18 +3608,20 @@
   }
 
   async function applySearchHighlight(verseNumber: number) {
-    clearSearchHighlight();
     await tick();
-
-    const verseEl = readerElement?.querySelector(
-      `.verse[data-verse="${verseNumber}"]`,
-    ) as HTMLElement | null;
-
+    if (!readerElement) return;
+    const verseEl = showVerseHighlight(
+      readerElement,
+      slotFor('nav', windowId),
+      { book: currentBook, chapter: currentChapter, verse: verseNumber },
+      { color: categoryColorFor(currentBook), rtl: isHebrewTranslation(currentTranslation) },
+    );
     if (!verseEl) return;
-
-    verseEl.classList.add("search-verse-highlighted");
     searchHighlightedElement = verseEl;
-    verseEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    // One landing behaviour for the whole app. This used to centre the verse
+    // with scrollIntoView while every other jump put it near the top, so the
+    // same verse arrived in a different place depending on how you got there.
+    void scrollToTarget(currentBook, currentChapter, verseNumber);
   }
 
   function clearHighlights() {
@@ -4881,6 +4911,9 @@
     return () => {
       glowCleanup?.();
       glowCleanup = null;
+      // Drop this reader's marks along with their observers and timers. Only
+      // its own — the main view and any window panes each keep their own.
+      clearVerseHighlightsFor(windowId);
       window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
       readerElement?.removeEventListener("pointermove", handleMouseMove);
@@ -6362,72 +6395,62 @@
     border-radius: 2px;
   }
 
-  :global(.search-verse-highlighted) {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 183, 77, 0.35) 0%,
-      rgba(245, 124, 0, 0.25) 100%
-    );
-    border-left: 3px solid #f57c00;
-    padding-left: 8px;
-    margin-left: -8px;
-    border-radius: 2px;
-    box-shadow: 0 0 0 1px rgba(255, 183, 77, 0.25);
-  }
+  /* ── The "start here" mark ────────────────────────────────────────────────
+     One recipe for the whole family. Reading plan passes its green (or brown,
+     to close the day); every other link passes the target book's category
+     colour. Shape, size, opacity and radius are identical in every case — hue
+     is the only thing that varies, which is what makes them read as one
+     feature rather than six.
 
-  :global(.rp-verse-highlight) {
+     Position and band height are measured per verse in lib/verseHighlight.ts
+     rather than declared here. The old rules pinned the gradient to `center`,
+     which put it halfway down any verse that wrapped instead of on the first
+     line where reading starts, and sized the band `1em + 7px`, which ignored
+     the line-spacing setting entirely. Both are now taken from the real first
+     line box, so every typeface, size and spacing lands right with no tuning. */
+  :global(.vh-hl) {
     isolation: isolate;
-    background: linear-gradient(to right, rgba(34, 197, 94, 0.40), transparent);
-    background-position: var(--rp-hl-left, 2em) center;
-    background-size: 30ch calc(1em + 7px);
     background-repeat: no-repeat;
+    background-size: 30ch var(--vh-h, calc(1em + 7px));
+    background-position: var(--vh-pos, 2em center);
     border-radius: 3px;
   }
 
-  /* Commentary-link navigation highlight — gold/yellow, same gradient style as rp-verse-highlight */
-  :global(.comm-nav-verse-highlight) {
-    isolation: isolate;
-    background: linear-gradient(to right, rgba(255, 215, 0, 0.45), transparent);
-    background-position: var(--rp-hl-left, 2em) center;
-    background-size: 30ch calc(1em + 7px);
-    background-repeat: no-repeat;
-    border-radius: 3px;
+  :global(.vh-hl.vh-ltr) {
+    background-image: linear-gradient(to right, var(--vh-color, transparent), transparent);
   }
 
-  /* Link navigation highlight (e.g. Character verse list) — color set per book category */
-  :global(.link-nav-verse-highlight) {
-    isolation: isolate;
-    background: linear-gradient(to right, var(--link-hl-color, rgba(255, 215, 0, 0.45)), transparent);
-    background-position: var(--rp-hl-left, 2em) center;
-    background-size: 30ch calc(1em + 7px);
-    background-repeat: no-repeat;
-    border-radius: 3px;
+  /* A right-to-left verse begins at its right edge, so a left-to-right fade
+     would put the strongest colour on the last word read and trail off over the
+     first — backwards. The end-of-day bookmark is mirrored for the same reason:
+     it marks where reading stops. */
+  :global(.vh-hl.vh-rtl) {
+    background-image: linear-gradient(to left, var(--vh-color, transparent), transparent);
   }
 
-  /* The same highlight on a Hebrew verse, mirrored. A right-to-left verse begins
-     at its right edge, so a left-to-right fade would put the strongest colour on
-     the last word read and trail off over the first — backwards. Same recipe as
-     .rp-verse-end-highlight below, which already does this. */
-  :global(.link-nav-verse-highlight-rtl) {
-    isolation: isolate;
-    background: linear-gradient(to left, var(--link-hl-color, rgba(255, 215, 0, 0.45)), transparent);
-    background-position: var(--rp-hl-right, right) center;
-    background-size: 30ch calc(1em + 7px);
-    background-repeat: no-repeat;
+  /* Paragraph layouts make a verse `display: inline`, and a gradient background
+     cannot be positioned on a multi-line inline box — the browser treats it as
+     one unbroken run and slices it across lines, which is why the mark used to
+     land somewhere arbitrary there. Those get this placed element instead, same
+     gradient, sat behind the text. */
+  :global(.vh-overlay) {
+    position: absolute;
+    width: 30ch;
+    pointer-events: none;
     border-radius: 3px;
+    z-index: -1;
   }
 
-  /* End-of-reading bookmark — brown, gradient reversed (right-to-left) */
-  :global(.rp-verse-end-highlight) {
-    isolation: isolate;
-    background: linear-gradient(to left, rgba(139, 90, 43, 0.40), transparent);
-    background-position: right center;
-    background-size: 30ch calc(1em + 7px);
-    background-repeat: no-repeat;
-    border-radius: 3px;
+  :global(.vh-overlay.vh-ltr) {
+    background-image: linear-gradient(to right, var(--vh-color, transparent), transparent);
   }
 
-  /* Commentary anchor checkpoint highlights — amber, half width, half opacity of .rp-verse-highlight */
+  :global(.vh-overlay.vh-rtl) {
+    background-image: linear-gradient(to left, var(--vh-color, transparent), transparent);
+  }
+
+  /* Commentary anchor checkpoints — amber, half width, half opacity. Not a link
+     navigation, so the category-colour rule does not reach it. */
   :global(.comm-anchor-highlight) {
     isolation: isolate;
     background: linear-gradient(to right, rgba(251, 146, 60, 0.20), transparent);

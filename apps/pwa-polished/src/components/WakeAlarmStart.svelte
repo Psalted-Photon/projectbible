@@ -103,8 +103,8 @@
 
   function openWithoutReading() {
     if (passage) {
-      if ($navigationStore.book !== passage.book) navigationStore.setBook(passage.book);
-      if ($navigationStore.chapter !== passage.chapter) navigationStore.setChapter(passage.chapter);
+      navigationStore.navigateTo($navigationStore.translation, passage.book, passage.chapter);
+      navigationStore.setLinkHighlight(passage.book, passage.chapter, 1);
     }
     close();
   }

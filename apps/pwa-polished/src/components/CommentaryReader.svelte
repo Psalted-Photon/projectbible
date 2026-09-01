@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import CommentaryNavigationBar from "./CommentaryNavigationBar.svelte";
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
@@ -154,6 +154,10 @@
     }
   }
 
+  /** Pending un-mark timer, so a second jump cannot clear the first one's mark. */
+  let markTimer: number | null = null;
+  onDestroy(() => { if (markTimer !== null) clearTimeout(markTimer); });
+
   function scrollToVerse(verseNum: number) {
     if (!readerElement) return;
 
@@ -175,12 +179,18 @@
     ) as HTMLElement | null;
 
     if (entryEl) {
-      entryEl.classList.add('search-verse-highlighted');
+      // Renamed off `search-verse-highlighted`: BibleReader has a global class by
+      // that name with an entirely different look, so the two were only ever
+      // kept apart by this component's scoping.
+      entryEl.classList.add('commentary-entry-marked');
       entryEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-      // Remove highlight after delay
-      setTimeout(() => {
-        entryEl.classList.remove('search-verse-highlighted');
+      // One timer, cancelled if another jump lands first. Left uncancelled it
+      // could strip the mark off a later entry, or fire after teardown.
+      if (markTimer !== null) clearTimeout(markTimer);
+      markTimer = window.setTimeout(() => {
+        markTimer = null;
+        entryEl.classList.remove('commentary-entry-marked');
       }, 3000);
     }
   }
@@ -369,7 +379,7 @@
     margin-bottom: 0;
   }
 
-  .commentary-entry:global(.search-verse-highlighted) {
+  .commentary-entry:global(.commentary-entry-marked) {
     background: rgba(102, 126, 234, 0.2);
     border-left-color: #667eea;
     box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);

@@ -199,6 +199,8 @@
       });
     } else {
       navigationStore.navigateTo($navigationStore.translation, bookName, chapter);
+      // Same as the reader's own chapter picker: mark verse 1 without scrolling.
+      navigationStore.setLinkHighlight(bookName, chapter, 1);
     }
     referenceDropdownOpen = false;
     expandedBooks = new Set();
