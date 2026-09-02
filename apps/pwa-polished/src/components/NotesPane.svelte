@@ -21,6 +21,7 @@
   import type { Notebook, NotebookPage } from '../adapters/NotebookStore';
   import { userProfileStore } from '../stores/userProfileStore';
   import { profileModalStore } from '../stores/profileModalStore';
+  import { get } from 'svelte/store';
   import { navigationStore } from '../stores/navigationStore';
   import { windowStore } from '../lib/stores/windowStore';
 
@@ -416,6 +417,7 @@
   async function jumpToVerse() {
     if (!target || target.kind !== 'verse') return;
     if (isDirty) await save();
+    navigationStore.pushHistory(get(navigationStore), 'notes');
     navigationStore.navigateToVerse(
       $navigationStore.translation,
       target.book,

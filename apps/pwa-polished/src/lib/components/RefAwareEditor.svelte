@@ -67,7 +67,7 @@
     const current = get(navigationStore);
     // Record where we are first, so the nav bar's Back arrow returns here —
     // same two-step the lexicon modal uses.
-    navigationStore.pushHistory(current);
+    navigationStore.pushHistory(current, 'notes');
     navigationStore.navigateToVerse(current.translation, hit.book, hit.chapter, hit.verse);
     close();
   }

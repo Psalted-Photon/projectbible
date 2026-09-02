@@ -456,7 +456,7 @@
   function handleVerseClick(use: VerseUse) {
     visitedRefs = new Set(visitedRefs).add(refKey(use));
     const current = get(navigationStore);
-    navigationStore.pushHistory(current);
+    navigationStore.pushHistory(current, 'library');
     navigationStore.navigateToVerse(current.translation, use.book, use.chapter, use.verse);
     // Docked, the study stays put beside the passage you just jumped to.
     if (!docked) close();
@@ -651,7 +651,7 @@
     const parsed = parseOsisRef(osisRef);
     if (!parsed) return;
     const current = get(navigationStore);
-    navigationStore.pushHistory(current);
+    navigationStore.pushHistory(current, 'library');
     // navigateToVerse, not navigateTo: a scripture reference followed out of a
     // definition should land with the same fade highlight every other verse link
     // in the app gives you.

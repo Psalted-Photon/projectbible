@@ -59,6 +59,7 @@
   import {
     navigationStore,
     availableTranslations,
+    pendingRestore,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { openMapWindow } from "../lib/openMapWindow";
@@ -101,7 +102,6 @@
   import { readingProgressStore } from "../stores/ReadingProgressStore";
   import { localDateStr } from "../stores/clockStore";
   import type { HarmonyPassage, HarmonySection } from "@projectbible/core";
-  import { annotationReturnStore } from "../stores/annotationReturnStore";
 
   const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans';
 
@@ -207,7 +207,6 @@
   let lastScrollTop = 0;
   let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
-  let paneOpened = false; // True after "Open Split View" is tapped
   let readerClientWidth = 0;
   let readerLeft = 0;
   $: if (readerElement && ($windowStore, readerClientWidth)) {
@@ -441,79 +440,88 @@
   let annotationPanelCommentary: CommentaryEntry[] = [];
   let annotationPanelTargetAuthor = '';
 
-  // Reopen annotation panel after back-navigation from a "Go →" link
+  // Reopen annotation panel after walking a crumb back to it
   let _reopenAnnotationVerse: number | null = null;
   let _reopenAnnotationTab: 'references' | 'commentary' = 'commentary';
+  let _reopenAnnotationAuthor = '';
   // Local scroll target for window panes (replaces global navigationStore.scrollTargetVerse)
   let _windowScrollTarget: number | null = null;
-  // Set at navigate time to remember the navigation came from the intro panel (no auto-reopen)
-  let _navigatedFromIntro = false;
-  // Set only when user presses Back after intro navigation; consumed by loadChapter / reactive block
+  // Set only when a crumb walks back to an intro panel; consumed by loadChapter
   let _reopenBookIntroPanel = false;
   // Where the "start here" mark belongs now lives in the navigation store as
   // linkHighlight (book + chapter + verse), not in component-local numbers.
   // A bare verse number could not say which chapter it meant, and the reader
   // holds several at once.
 
+  /**
+   * What the reader needs to put a panel back when you walk a crumb back to it.
+   * Carried on the shared trail rather than in a store of its own — the old
+   * single-slot return store was overwritten by every jump, so a chain of
+   * commentary links could never reach the first one again.
+   */
+  type ReaderOrigin =
+    | { surface: 'annotation'; book: string; chapter: number; verse: number; tab: 'references' | 'commentary'; author: string }
+    | { surface: 'bookIntro'; book: string };
+
   function handleAnnotationNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
-    annotationReturnStore.set({
+    const origin: ReaderOrigin = {
+      surface: 'annotation',
       book: annotationPanelBook,
       chapter: annotationPanelChapter,
       verse: annotationPanelVerse,
       tab: annotationPanelTab,
-    });
+      // Kept so the badge you actually tapped can be identified on the way back.
+      author: annotationPanelTargetAuthor,
+    };
     annotationPanelOpen = false;
     if (windowId) {
       _windowScrollTarget = verse;
       windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
     } else {
+      navigationStore.pushHistory(
+        get(navigationStore),
+        annotationPanelTab === 'commentary' ? 'commentary' : 'crossref',
+        origin,
+      );
       navigationStore.navigateTo(currentTranslation, book, chapter, verse);
     }
   }
 
-  // Reset paneOpened whenever a new annotation return is set
-  $: if ($annotationReturnStore !== null) paneOpened = false;
-
-  // Derive navbar display offset — fully hide navbar when back button is active (main reader only)
-  $: displayNavOffset = (!windowId && $annotationReturnStore !== null) ? -100 : navBarOffset;
-
-  function handleAnnotationReturn() {
-    const ctx = $annotationReturnStore;
-    if (!ctx) return;
-    const fromIntro = _navigatedFromIntro;
-    _navigatedFromIntro = false;
-    annotationReturnStore.set(null);
-    if (fromIntro) {
-      // User pressed Back after navigating from intro panel — reopen intro panel after load
-      bookIntroPanelBook = ctx.book;
+  /**
+   * Put back whatever panel the crumb we just returned to was showing.
+   *
+   * The reopen is deferred to the chapter load, because the panel needs the
+   * chapter's annotations in memory before it can render them.
+   */
+  function restoreReaderOrigin(origin: ReaderOrigin): void {
+    if (origin.surface === 'bookIntro') {
+      bookIntroPanelBook = origin.book;
       _reopenBookIntroPanel = true;
-      if (windowId) {
-        _windowScrollTarget = ctx.verse;
-        windowStore.updateContentState(windowId, { book: ctx.book, chapter: ctx.chapter, highlightedVerse: null });
-      } else {
-        navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
-      }
-    } else {
-      _reopenAnnotationVerse = ctx.verse;
-      _reopenAnnotationTab = ctx.tab;
-      if (windowId) {
-        windowStore.updateContentState(windowId, { book: ctx.book, chapter: ctx.chapter, highlightedVerse: null });
-      } else {
-        navigationStore.navigateTo(currentTranslation, ctx.book, ctx.chapter, ctx.verse);
-      }
+      return;
+    }
+    _reopenAnnotationVerse = origin.verse;
+    _reopenAnnotationTab = origin.tab;
+    _reopenAnnotationAuthor = origin.author;
+  }
+
+  $: {
+    const pending = $pendingRestore as ReaderOrigin | null;
+    if (!windowId && pending && (pending.surface === 'annotation' || pending.surface === 'bookIntro')) {
+      pendingRestore.set(null);
+      restoreReaderOrigin(pending);
     }
   }
 
   function handleBookIntroNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
-    _navigatedFromIntro = true;  // remember origin; panel only reopens when Back is pressed
     bookIntroPanelOpen = false;
-    annotationReturnStore.set({ book: bookIntroPanelBook, chapter: 1, verse: 1, tab: 'references' });
     if (windowId) {
       _windowScrollTarget = verse;
       windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
     } else {
+      const origin: ReaderOrigin = { surface: 'bookIntro', book: bookIntroPanelBook };
+      navigationStore.pushHistory(get(navigationStore), 'library', origin);
       navigationStore.navigateTo(currentTranslation, book, chapter, verse);
     }
   }
@@ -1122,8 +1130,12 @@
         }
       } else if (_reopenAnnotationVerse !== null) {
         // Chapter already in DOM (e.g. already appended by infinite scroll) — open panel directly
-        openAnnotationPanel(_reopenAnnotationVerse, _reopenAnnotationTab, currentBook, currentChapter);
+        // The author goes back too, so the badge you originally tapped is the
+        // one identified again — the old return payload dropped it, which left
+        // the panel scrolled to the top with no idea which author you meant.
+        openAnnotationPanel(_reopenAnnotationVerse, _reopenAnnotationTab, currentBook, currentChapter, _reopenAnnotationAuthor);
         _reopenAnnotationVerse = null;
+        _reopenAnnotationAuthor = '';
       } else if (_reopenBookIntroPanel) {
         bookIntroPanelOpen = true;
         _reopenBookIntroPanel = false;
@@ -1885,8 +1897,9 @@
 
       // Re-open annotation panel if user navigated back via the floating Back button
       if (_reopenAnnotationVerse !== null) {
-        openAnnotationPanel(_reopenAnnotationVerse, _reopenAnnotationTab, book, chapter);
+        openAnnotationPanel(_reopenAnnotationVerse, _reopenAnnotationTab, book, chapter, _reopenAnnotationAuthor);
         _reopenAnnotationVerse = null;
+        _reopenAnnotationAuthor = '';
       } else if (_reopenBookIntroPanel) {
         bookIntroPanelOpen = true;
         _reopenBookIntroPanel = false;
@@ -5246,7 +5259,7 @@
 >
   <NavigationBar
     {windowId}
-    style="transform: translateY({windowId ? navBarOffset : displayNavOffset}px); transition: transform 0.25s ease;"
+    style="transform: translateY({navBarOffset}px); transition: transform 0.25s ease;"
   />
 
   <div class="text-container">
@@ -5500,35 +5513,6 @@
   </div>
 {/if}
 
-{#if !windowId && $annotationReturnStore !== null}
-  {@const bookColor = getBookColor($annotationReturnStore.book)}
-  <div class="annotation-return-bar" style="left: {readerLeft + readerClientWidth / 2}px;">
-    <button
-      class="annotation-return-fixed"
-      style="border-color: {bookColor}; color: {bookColor};"
-      on:click={handleAnnotationReturn}
-      aria-label="Return to previous verse"
-    >
-      ← Back to {$annotationReturnStore.book} {$annotationReturnStore.chapter}:{$annotationReturnStore.verse}
-    </button>
-    {#if !paneOpened}
-      <button
-        class="annotation-return-fixed"
-        style="border-color: {bookColor}; color: {bookColor};"
-        on:click={() => {
-          const edge = window.innerWidth > window.innerHeight ? 'right' : 'bottom';
-          const id = windowStore.createWindow(edge, 50);
-          if (id) windowStore.setWindowContent(id, 'bible', { translation: currentTranslation, book: currentBook, chapter: currentChapter, highlightedVerse: highlightVerse });
-          paneOpened = true;
-        }}
-        aria-label="Open in split view"
-      >
-        Open Split View
-      </button>
-    {/if}
-  </div>
-{/if}
-
 
 <style>
   .speak-voice-notice {
@@ -5559,32 +5543,6 @@
     font-size: 14px;
     cursor: pointer;
     padding: 2px 4px;
-  }
-
-  /* ——— Fixed annotation back button bar ——— */
-  .annotation-return-bar {
-    position: fixed;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1001;
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .annotation-return-fixed {
-    background: #1c1c1c;
-    border: 1px solid;
-    border-radius: 8px;
-    padding: 0 12px;
-    height: 38px;
-    font-size: 13px;
-    font-weight: 600;
-    font-family: inherit;
-    cursor: pointer;
-    white-space: nowrap;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
   }
 
   .bible-reader {

@@ -201,7 +201,7 @@
 
     if (!result.data.book) return;
     const current = get(navigationStore);
-    navigationStore.pushHistory(current);
+    navigationStore.pushHistory(current, 'search');
     const targetTranslation = result.data.translation || current.translation;
     navigationStore.navigateTo(
       targetTranslation,

@@ -64,7 +64,51 @@ function persistState(state: NavigationState): void {
   }
 }
 
-const navigationHistory = writable<NavigationState[]>([]);
+/**
+ * What kind of place you were in when you followed a link. Drives the crumb's
+ * icon, and later which surface knows how to put itself back.
+ */
+export type CrumbKind =
+  | 'commentary'
+  | 'crossref'
+  | 'search'
+  | 'library'
+  | 'notes'
+  | 'history'
+  | 'plan'
+  | 'link';
+
+/**
+ * One step on the way out from home.
+ *
+ * `nav` is the reader state to restore. `origin` is an opaque snapshot the
+ * surface that owned the link hands over — what card was open, what was
+ * expanded, where it was scrolled — so tapping the crumb can put it back. It is
+ * deliberately untyped here: the store should not need to know what an ISBE
+ * article or a search result tree looks like.
+ */
+export interface TrailCrumb {
+  nav: NavigationState;
+  kind: CrumbKind;
+  /** Where the reader was standing, for the crumb's label. */
+  book: string;
+  chapter: number;
+  verse: number | null;
+  origin?: unknown;
+}
+
+const navigationHistory = writable<TrailCrumb[]>([]);
+
+/**
+ * The origin snapshot from the step just walked back to, waiting for whichever
+ * surface recognises it to put itself back.
+ *
+ * This is how a crumb reopens the panel you left from without the navigation
+ * store needing to know what a commentary panel or a search tree is. Whoever
+ * handles it clears it. It replaces a set of one-off return stores that each
+ * knew about exactly one surface and could not be chained.
+ */
+export const pendingRestore = writable<unknown | null>(null);
 
 function createNavigationStore() {
   const { subscribe, set, update } = writable<NavigationState>(loadPersistedState());
@@ -226,29 +270,74 @@ function createNavigationStore() {
         return next;
       });
     },
-    // Returns the new stack depth. Callers that want to come back to something
-    // when this exact step is undone (the ISBE modal) keep the depth as a token
-    // — comparing book/chapter instead would break as soon as the reader's
-    // scroll handler nudges the store to a neighboring chapter.
-    pushHistory: (state: NavigationState) => {
+    /**
+     * Record where you are before a link takes you somewhere else.
+     *
+     * Returns the new stack depth. Callers that want to come back to something
+     * when this exact step is undone keep the depth as a token — comparing
+     * book/chapter instead would break as soon as the reader's scroll handler
+     * nudges the store to a neighboring chapter.
+     */
+    pushHistory: (state: NavigationState, kind: CrumbKind = 'link', origin?: unknown) => {
       let depth = 0;
       navigationHistory.update((history) => {
-        const next = [...history, state];
+        const crumb: TrailCrumb = {
+          nav: state,
+          kind,
+          book: state.book,
+          chapter: state.chapter,
+          verse: state.linkHighlight?.verse ?? state.scrollTargetVerse ?? null,
+          origin,
+        };
+        const next = [...history, crumb];
         depth = next.length;
         return next;
       });
       return depth;
     },
+    /** Attach an origin snapshot to the step just pushed. */
+    attachOrigin: (depth: number, origin: unknown) => {
+      navigationHistory.update((history) => {
+        if (depth < 1 || depth > history.length) return history;
+        const next = [...history];
+        next[depth - 1] = { ...next[depth - 1], origin };
+        return next;
+      });
+    },
     goBack: () => {
-      let previous: NavigationState | undefined;
+      let previous: TrailCrumb | undefined;
       navigationHistory.update((history) => {
         previous = history[history.length - 1];
         return history.slice(0, -1);
       });
       if (previous) {
-        persistState(previous);
-        set(previous);
+        persistState(previous.nav);
+        set(previous.nav);
+        pendingRestore.set(previous.origin ?? null);
       }
+      return previous ?? null;
+    },
+    /**
+     * Walk back to a specific step and drop everything after it — what tapping
+     * a breadcrumb does. `depth` is 1-based, matching what pushHistory returns,
+     * so depth 1 is the first hop away from home.
+     */
+    goToDepth: (depth: number) => {
+      let target: TrailCrumb | undefined;
+      navigationHistory.update((history) => {
+        if (depth < 1 || depth > history.length) return history;
+        target = history[depth - 1];
+        return history.slice(0, depth - 1);
+      });
+      if (target) {
+        persistState(target.nav);
+        set(target.nav);
+        pendingRestore.set(target.origin ?? null);
+      }
+      return target ?? null;
+    },
+    clearHistory: () => {
+      navigationHistory.set([]);
     },
     reset: () => {
       persistState(initialState);
@@ -260,6 +349,12 @@ function createNavigationStore() {
 export const navigationStore = createNavigationStore();
 
 export const canGoBack = derived(navigationHistory, (history) => history.length > 0);
+
+/**
+ * The trail of steps between home and here, oldest first — what the navbar
+ * breadcrumbs render. Empty means you are home.
+ */
+export const navTrail = derived(navigationHistory, (history) => history);
 
 /** How many steps are on the back stack — the token pushHistory hands back. */
 export const historyDepth = derived(navigationHistory, (history) => history.length);

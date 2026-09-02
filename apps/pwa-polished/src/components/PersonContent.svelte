@@ -430,7 +430,7 @@
 
   function navigateToVerse(book: string, chapter: number, verse: number) {
     const current = get(navigationStore);
-    navigationStore.pushHistory(current);
+    navigationStore.pushHistory(current, 'library');
     navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     // A pinned bio stays open across the jump — reading the passage beside the
     // person is the whole point of pinning it.

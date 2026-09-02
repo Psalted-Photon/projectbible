@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import CommentaryNavigationBar from "./CommentaryNavigationBar.svelte";
+  import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { IndexedDBCommentaryStore, type CommentaryEntry } from "../adapters/CommentaryStore";
@@ -120,6 +121,7 @@
   function handleRefClick(ref: string) {
     const t = parseRefString(ref, currentBook, currentChapter);
     if (!t) return;
+    navigationStore.pushHistory(get(navigationStore), 'commentary');
     navigationStore.navigateToVerse(
       $navigationStore.translation,
       t.book,

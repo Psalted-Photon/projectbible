@@ -4,9 +4,11 @@
     availableTranslations,
     canGoBack,
     historyDepth,
+    navTrail,
+    type CrumbKind,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { BIBLE_BOOKS, normalizeBookName, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import {
     searchService,
@@ -52,6 +54,10 @@
   import { COMMENTARY_AUTHORS } from "../lib/annotationConfig";
   import {
     ArrowLeft,
+    ArrowsOutSimple,
+    Books,
+    ClockCounterClockwise,
+    NotePencil,
     CaretDown,
     CaretUp,
     CaretRight,
@@ -452,9 +458,10 @@
         highlightedVerse: null,
       });
     } else {
-      // No mark: you picked this chapter yourself off the dropdown, so you
-      // already know where you are. The mark is for arriving somewhere a link
-      // chose for you.
+      // No mark, and no trail: picking a chapter off the dropdown is not a step
+      // away from anywhere, it is choosing a new home. Keeping the old crumbs
+      // would leave the bar claiming you were still mid-journey somewhere else.
+      navigationStore.clearHistory();
       navigationStore.navigateTo(currentTranslation, bookName, chapter);
     }
     referenceDropdownOpen = false;
@@ -647,6 +654,66 @@
    * The breadcrumb is only honored when this press is undoing the very step
    * that left it; if they've navigated on since, reopening would be a surprise.
    */
+  /**
+   * The icon on a crumb — how you left that spot, and so what comes back if you
+   * tap it. Reuses icons already in this bar rather than introducing a new set.
+   */
+  const CRUMB_ICONS: Record<CrumbKind, typeof Graph> = {
+    commentary: ChatText,
+    crossref: Graph,
+    search: MagnifyingGlass,
+    library: Books,
+    notes: NotePencil,
+    history: ClockCounterClockwise,
+    plan: BookOpenText,
+    link: Graph,
+  };
+
+  /**
+   * Black or white label for a filled pill, whichever the category colour can
+   * carry. Major Prophets is a deep purple and Eschaton a pale cyan, so a
+   * single hardcoded ink would be unreadable on one or the other.
+   */
+  function inkOn(hex: string): string {
+    const m = (hex || "").replace("#", "");
+    if (m.length < 6) return "#fff";
+    const r = parseInt(m.slice(0, 2), 16);
+    const g = parseInt(m.slice(2, 4), 16);
+    const b = parseInt(m.slice(4, 6), 16);
+    // Rec. 601 luma — close enough for a two-way choice.
+    return (r * 299 + g * 587 + b * 114) / 1000 > 140 ? "#111" : "#fff";
+  }
+
+  /** "Ps 23:4" — abbreviated so a deep trail still fits on a phone. */
+  function crumbLabel(c: { book: string; chapter: number; verse: number | null }): string {
+    const ref = `${shortBookName(c.book)} ${c.chapter}`;
+    return c.verse != null ? `${ref}:${c.verse}` : ref;
+  }
+
+  /**
+   * Walk back to a step in the trail. Depth is 1-based, so crumb 1 is the first
+   * hop away from home — tapping it puts you all the way back.
+   */
+  function goToCrumb(depth: number) {
+    const ret = get(isbeReturnStore);
+    navigationStore.goToDepth(depth);
+    if (ret && get(historyDepth) < ret.depth) isbeReturnStore.set(null);
+    else if (ret && get(historyDepth) === ret.depth) isbeModalStore.open(ret.modal);
+  }
+
+  /** Mirror of the reader's old split-view button, now that the bar is gone. */
+  function openSplitView() {
+    const edge = window.innerWidth > window.innerHeight ? "right" : "bottom";
+    const id = windowStore.createWindow(edge, 50);
+    if (id) {
+      windowStore.setWindowContent(id, "bible", {
+        translation: currentTranslation,
+        book: $navigationStore.book,
+        chapter: $navigationStore.chapter,
+      });
+    }
+  }
+
   function goBack() {
     const ret = get(isbeReturnStore);
     const undoingTheJump = !!ret && get(historyDepth) === ret.depth;
@@ -674,6 +741,9 @@
         highlightedVerse: verse,
       });
     } else {
+      // Leave a crumb before moving. Search used to navigate without one, so
+      // following a result stranded you with no way back and the query gone.
+      navigationStore.pushHistory(get(navigationStore), 'search');
       navigationStore.navigateTo(target, book, chapter, verse);
     }
   }
@@ -908,16 +978,27 @@
 
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 1: Navigation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-nav">
+      <!-- ── The trail out from home ──────────────────────────────────────
+           Empty means you are home, and the bar is deliberately sparse. Every
+           hop adds a crumb, so it fills up the further out you go — that
+           crowding is the signal. Each crumb carries the mark of how you left
+           that spot, and tapping one walks back to it; the first crumb is home.
+           This replaces the floating bar that used to do the job, which was a
+           single slot and so could only ever remember the most recent hop. -->
       {#if $canGoBack}
-        <button
-          class="pill-btn"
-          on:click={goBack}
-          title="Back"
-          aria-label="Back"
-        >
-          <ArrowLeft size={16} weight="duotone" />
-        </button>
-        <div class="pill-divider"></div>
+        {#each $navTrail as crumb, i}
+          {@const Icon = CRUMB_ICONS[crumb.kind]}
+          <button
+            class="pill-btn pill-btn-text crumb-btn"
+            style="color: {getBookColor(crumb.book)};"
+            on:click={() => goToCrumb(i + 1)}
+            title={i === 0 ? `Back to ${crumbLabel(crumb)} (home)` : `Back to ${crumbLabel(crumb)}`}
+          >
+            <span class="pill-label">{crumbLabel(crumb)}</span>
+            <Icon size={11} weight="fill" />
+          </button>
+          <span class="crumb-sep"><CaretRight size={9} weight="bold" /></span>
+        {/each}
       {/if}
 
       <!-- Translation -->
@@ -940,11 +1021,16 @@
 
       <div class="pill-divider"></div>
 
-      <!-- Reference (book + chapter) -->
+      <!-- Reference (book + chapter) — the last crumb in the trail.
+           Filled in the book's category colour when you are home, hollow when
+           there is a trail behind it. Solid reads as settled; an outline reads
+           as provisional, which is what being off home is. -->
       <div class="nav-dropdown reference-dropdown-trigger category-{currentBookCategory}">
         <button
           bind:this={referenceButtonRef}
           class="pill-btn pill-btn-text pill-btn-reference"
+          class:at-home={!$canGoBack}
+          style="--home-color: {getBookColor($navigationStore.book)}; --home-ink: {inkOn(getBookColor($navigationStore.book))};"
           on:click={toggleReferenceDropdown}
           title="Bible Navigation"
         >
@@ -956,6 +1042,20 @@
           {/if}
         </button>
       </div>
+
+      <!-- Only offered while away: it opens where you came from beside where
+           you landed, which is meaningless when those are the same place. -->
+      {#if $canGoBack}
+        <div class="pill-divider"></div>
+        <button
+          class="pill-btn"
+          on:click={openSplitView}
+          title="Open in split view"
+          aria-label="Open in split view"
+        >
+          <ArrowsOutSimple size={16} weight="duotone" />
+        </button>
+      {/if}
 
       <div class="pill-divider"></div>
 
@@ -1813,6 +1913,40 @@
   }
 
   /* Reference button category colors (text tint only) */
+  /* ── Home vs away ──────────────────────────────────────────────────────
+     Home is a filled pill: you chose this chapter, you are settled. Away is
+     the same pill hollow, with the trail of crumbs to its left. The colour
+     comes from the book's category either way, so only the treatment changes.
+     Declared before the per-category colour rules so those still set the text
+     colour when away. */
+  .pill-btn-reference.at-home {
+    background: var(--home-color, #8a8f98);
+    border-radius: 999px;
+    padding: 0 10px;
+    /* The category colour is the fill now, so the label has to stop using it. */
+    color: var(--home-ink, #111) !important;
+    font-weight: 700;
+  }
+
+  .crumb-btn {
+    flex: 0 0 auto;
+    gap: 3px;
+    opacity: 0.85;
+  }
+
+  .crumb-btn:hover {
+    opacity: 1;
+  }
+
+  /* Chevrons between crumbs — quiet enough to read as punctuation. */
+  .crumb-sep {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.35;
+    margin: 0 -1px;
+  }
+
   .nav-dropdown.reference-dropdown-trigger.category-pentateuch .pill-btn-reference { color: #a67c52; }
   .nav-dropdown.reference-dropdown-trigger.category-historical .pill-btn-reference { color: #6496c8; }
   .nav-dropdown.reference-dropdown-trigger.category-wisdom .pill-btn-reference { color: #daa520; }

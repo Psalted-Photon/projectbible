@@ -546,7 +546,7 @@
   /** Returns the back-stack depth this jump occupies, for the return crumb. */
   function navigateToVerse(book: string, chapter: number, verse: number): number {
     const current = get(navigationStore);
-    const depth = navigationStore.pushHistory(current);
+    const depth = navigationStore.pushHistory(current, 'library');
     navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     // A docked article stays open across the jump — reading the passage beside
     // the article is the whole point of pinning it.

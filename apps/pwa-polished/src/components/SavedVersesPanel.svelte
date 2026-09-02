@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
+  import { get } from 'svelte/store';
   import { navigationStore } from '../stores/navigationStore';
   import { syncedUserDataStore } from '../adapters/SyncedUserDataStore';
   import { IndexedDBTextStore } from '../lib/adapters';
@@ -151,6 +152,7 @@
 
   // ─── navigation ──────────────────────────────────────────────────────────────
   function navigateTo(book: string, chapter: number, verse: number) {
+    navigationStore.pushHistory(get(navigationStore), 'notes');
     navigationStore.navigateTo($navigationStore.translation, book, chapter, verse);
     dispatch('close');
   }

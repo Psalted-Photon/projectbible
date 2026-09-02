@@ -198,7 +198,8 @@
         highlightedVerse: null,
       });
     } else {
-      // Same as the reader's own chapter picker: no mark, you chose this.
+      // Same as the reader's own chapter picker: no mark, no trail, new home.
+      navigationStore.clearHistory();
       navigationStore.navigateTo($navigationStore.translation, bookName, chapter);
     }
     referenceDropdownOpen = false;
