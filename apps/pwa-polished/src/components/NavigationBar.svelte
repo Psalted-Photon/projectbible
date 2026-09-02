@@ -2012,12 +2012,15 @@
   .at-home .pill-label::before {
     content: "";
     position: absolute;
-    /* Inset and blur are tuned against each other: the band has to stay wide
-       enough for the blur to finish inside it rather than reaching the border. */
-    inset: 4px;
+    /* Vertical then horizontal. The ends sit 2.5px further out than the top
+       and bottom, which lengthens the stadium by 5px overall and keeps the
+       dark band tighter above and below than it is at the ends — the colour
+       reads as a pill lying in the chip rather than a blob centred in it.
+       Blur grows with the shape; overflow on the chip clips whatever spills. */
+    inset: 2.5px 1.5px;
     border-radius: 999px;
     background: var(--home-color, #8a8f98);
-    filter: blur(3px);
+    filter: blur(3.5px);
     z-index: -1;
   }
 
