@@ -5,6 +5,7 @@
     canGoBack,
     historyDepth,
     navTrail,
+    pendingRestore,
     type CrumbKind,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
@@ -111,6 +112,7 @@
   let showingAll = false;
   let showPowerSearchModal = false;
   let searchExpanded = false;
+  let searchResultsEl: HTMLDivElement | null = null;
 
   // Refs for dropdown positioning
   let navElement: HTMLElement;
@@ -696,9 +698,13 @@
    */
   function goToCrumb(depth: number) {
     const ret = get(isbeReturnStore);
+    // Checked before the pop, like goBack: a crumb at position N undoes the
+    // step that was recorded at depth N. Reading the depth afterwards would
+    // always be one short and never match.
+    const undoingTheJump = !!ret && depth === ret.depth;
     navigationStore.goToDepth(depth);
-    if (ret && get(historyDepth) < ret.depth) isbeReturnStore.set(null);
-    else if (ret && get(historyDepth) === ret.depth) isbeModalStore.open(ret.modal);
+    if (undoingTheJump) isbeModalStore.open(ret!.modal);
+    else if (ret && get(historyDepth) < ret.depth) isbeReturnStore.set(null);
   }
 
   /** Mirror of the reader's old split-view button, now that the bar is gone. */
@@ -741,10 +747,63 @@
         highlightedVerse: verse,
       });
     } else {
-      // Leave a crumb before moving. Search used to navigate without one, so
-      // following a result stranded you with no way back and the query gone.
-      navigationStore.pushHistory(get(navigationStore), 'search');
+      // Leave a crumb before moving, carrying the search itself. Search used to
+      // navigate without one, so following a result stranded you with no way
+      // back — and the query, results and expansion were wiped on the way out,
+      // so there was nothing left to come back to even if there had been.
+      navigationStore.pushHistory(get(navigationStore), 'search', snapshotSearch());
       navigationStore.navigateTo(target, book, chapter, verse);
+    }
+  }
+
+  /** Everything needed to put this search back the way it was. */
+  interface SearchOrigin {
+    surface: 'search';
+    query: string;
+    results: SearchCategory[];
+    expanded: string[];
+    total: number;
+    displayed: number;
+    showingAll: boolean;
+    expandedUi: boolean;
+    scrollTop: number;
+  }
+
+  function snapshotSearch(): SearchOrigin {
+    return {
+      surface: 'search',
+      query: searchQuery,
+      results: searchResults,
+      expanded: [...expandedSearchNodes],
+      total: totalResultCount,
+      displayed: displayedResultCount,
+      showingAll,
+      expandedUi: searchExpanded,
+      scrollTop: searchResultsEl?.scrollTop ?? 0,
+    };
+  }
+
+  async function restoreSearch(origin: SearchOrigin) {
+    searchQuery = origin.query;
+    searchResults = origin.results;
+    expandedSearchNodes = new Set(origin.expanded);
+    totalResultCount = origin.total;
+    displayedResultCount = origin.displayed;
+    showingAll = origin.showingAll;
+    searchExpanded = origin.expandedUi;
+    showResults = true;
+    // Two ticks: the first mounts the dropdown, the second lets the result rows
+    // lay out. Setting scrollTop before the list has height would land at 0.
+    await tick();
+    await tick();
+    if (searchResultsEl) searchResultsEl.scrollTop = origin.scrollTop;
+  }
+
+  $: {
+    const pending = $pendingRestore as { surface?: string } | null;
+    if (!windowId && pending?.surface === 'search') {
+      pendingRestore.set(null);
+      void restoreSearch(pending as SearchOrigin);
     }
   }
 
@@ -1347,7 +1406,7 @@
   </div>
 
   {#if showResults}
-    <div class="search-results-dropdown">
+    <div class="search-results-dropdown" bind:this={searchResultsEl}>
       {#if displayedResultCount > 0}
         <div class="search-stats">
           Showing {displayedResultCount}

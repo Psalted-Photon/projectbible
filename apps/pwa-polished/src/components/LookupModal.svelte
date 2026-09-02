@@ -11,6 +11,7 @@
   import { personModalStore } from "../stores/personModalStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
+  import { pendingRestore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { clearCarriedWorks } from "../lib/openWork";
 
@@ -74,6 +75,34 @@
 
   function remember(work: string, snap: any) {
     if (!closing) saved[work] = snap;
+  }
+
+  /**
+   * Reopen a work when a breadcrumb walks back to it.
+   *
+   * The crumb carries the snapshot the content captured on its way out, which
+   * is the same shape `saved` holds for tab-switch memory — so it is seeded
+   * straight into there and the existing `initial*` props do the rest. Without
+   * this the back step landed you on the passage with the card simply gone.
+   */
+  $: {
+    const pending = $pendingRestore as { surface?: string; snapshot?: any } | null;
+    if (pending?.surface === 'naves' && pending.snapshot) {
+      pendingRestore.set(null);
+      const snap = pending.snapshot;
+      saved = { ...saved, topical: snap };
+      navesModalStore.open({ topicId: snap.topicId, primaryName: snap.primaryName, tab: snap.tab ?? null });
+    } else if (pending?.surface === 'person' && pending.snapshot) {
+      pendingRestore.set(null);
+      const snap = pending.snapshot;
+      saved = { ...saved, people: snap };
+      personModalStore.open({ personId: snap.personId, primaryName: snap.primaryName });
+    } else if (pending?.surface === 'lexical' && pending.snapshot) {
+      pendingRestore.set(null);
+      const snap = pending.snapshot;
+      saved = { ...saved, dictionary: { tab: snap.tab, scrollTop: snap.scrollTop } };
+      lexicalModalStore.open(snap.payload);
+    }
   }
 
   function close() {

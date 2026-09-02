@@ -90,6 +90,18 @@
 
   onDestroy(() => onSnapshot?.({ tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0 }));
 
+  /**
+   * The word study as it stands, plus what it takes to reopen it.
+   *
+   * Unlike the other works this one cannot be rebuilt from an id — the card is
+   * opened with a whole resolution (the clicked text, its morphology, the
+   * matched entries) — so the crumb carries that payload rather than a key.
+   */
+  function viewSnapshot() {
+    const { isOpen: _isOpen, ...payload } = get(lexicalModalStore);
+    return { payload, tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0 };
+  }
+
   // activeTab now belongs to the Strong's view alone
   // (Definition/Occurrences/Related). The English-word view has no tab strip:
   // definitions are all it shows.
@@ -456,7 +468,7 @@
   function handleVerseClick(use: VerseUse) {
     visitedRefs = new Set(visitedRefs).add(refKey(use));
     const current = get(navigationStore);
-    navigationStore.pushHistory(current, 'library');
+    navigationStore.pushHistory(current, 'library', { surface: 'lexical', snapshot: viewSnapshot() });
     navigationStore.navigateToVerse(current.translation, use.book, use.chapter, use.verse);
     // Docked, the study stays put beside the passage you just jumped to.
     if (!docked) close();
@@ -651,7 +663,7 @@
     const parsed = parseOsisRef(osisRef);
     if (!parsed) return;
     const current = get(navigationStore);
-    navigationStore.pushHistory(current, 'library');
+    navigationStore.pushHistory(current, 'library', { surface: 'lexical', snapshot: viewSnapshot() });
     // navigateToVerse, not navigateTo: a scripture reference followed out of a
     // definition should land with the same fade highlight every other verse link
     // in the app gives you.

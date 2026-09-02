@@ -246,7 +246,13 @@
   // --- Navigation --------------------------------------------------------
   function navigateToVerse(book: string, chapter: number, verse: number) {
     const current = get(navigationStore);
-    navigationStore.pushHistory(current, 'library');
+    // The topic rides along on the crumb, so walking back reopens it where you
+    // left it rather than dropping you on the passage with the card gone.
+    // Captured before navigating, because closing tears the state down.
+    navigationStore.pushHistory(current, 'library', {
+      surface: 'naves',
+      snapshot: viewSnapshot(),
+    });
     navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     // A pinned topic stays open across the jump — reading the passage beside
     // the outline is the whole point of pinning it.

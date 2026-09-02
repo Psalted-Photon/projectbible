@@ -79,13 +79,17 @@
   // back as it was. The other three works have always reported their trail;
   // People reported only the offset, so walking a family tree and stepping over
   // to another tab lost both the relative and the way back.
-  onDestroy(() =>
-    onSnapshot?.({
+  /** Everything needed to put this bio back exactly as it is now. */
+  function viewSnapshot() {
+    return {
       personId: person?.id ?? null,
+      primaryName: title,
       trail,
       scrollTop: bodyEl?.scrollTop ?? 0,
-    }),
-  );
+    };
+  }
+
+  onDestroy(() => onSnapshot?.(viewSnapshot()));
 
   let loaded: PersonRecord | null = null;
   let loading = false;
@@ -430,7 +434,12 @@
 
   function navigateToVerse(book: string, chapter: number, verse: number) {
     const current = get(navigationStore);
-    navigationStore.pushHistory(current, 'library');
+    // Same as the other works: the bio rides the crumb so walking back reopens
+    // it, family-tree trail and scroll offset included.
+    navigationStore.pushHistory(current, 'library', {
+      surface: 'person',
+      snapshot: viewSnapshot(),
+    });
     navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     // A pinned bio stays open across the jump — reading the passage beside the
     // person is the whole point of pinning it.
