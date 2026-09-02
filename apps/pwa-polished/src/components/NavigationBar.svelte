@@ -1045,6 +1045,12 @@
         {/each}
       {/if}
 
+      <!-- ── Where you are, and what you're reading it in ─────────────────
+           Reversed while away, so the trail runs straight from the first crumb
+           into the location pill instead of having the translation wedged in
+           front of it. The location pill is the last crumb; nothing belongs
+           between it and the ones before it. -->
+      <div class="nav-locus" class:away={$canGoBack}>
       <!-- Translation -->
       <div class="nav-dropdown translation-dropdown-trigger">
         <button
@@ -1085,6 +1091,8 @@
             <CaretDown size={10} weight="bold" />
           {/if}
         </button>
+      </div>
+
       </div>
 
       <!-- Only offered while away: it opens where you came from beside where
@@ -1983,6 +1991,40 @@
      by definition, so a fill there has nowhere to breathe above and below. The
      caret is the label's sibling and stays outside the chip, uncoloured, like
      every other dropdown. */
+  /* Holds the translation and the location pill. Its own flex context is what
+     lets the two swap without duplicating either block of markup — the divider
+     stays between them either way. Note this reorders visually only; keyboard
+     tab order still follows the DOM. */
+  .nav-locus {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .nav-locus.away {
+    flex-direction: row-reverse;
+  }
+
+  /* Away: the same 6px rectangle as the home chip, but a hollow ring rather
+     than a filled stadium. Solid reads as settled, an outline as provisional,
+     which is what being off home is.
+
+     The ring is currentColor so it always matches the label it surrounds. The
+     bar keeps its own per-category colours further down this file, and four of
+     them have drifted from CATEGORY_COLORS — historical, wisdom, acts and
+     general — so drawing the border from the shared palette would have shown a
+     mismatched ring on exactly those books.
+
+     A pixel comes off the padding to pay for the border, so the pill is the
+     same size filled or ringed and does not jump when you leave home. */
+  .pill-btn-reference:not(.at-home) .pill-label {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 8px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+  }
+
   .at-home .pill-label {
     position: relative;
     /* Load-bearing. `position: relative` alone does not open a stacking
