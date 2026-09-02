@@ -1963,14 +1963,37 @@
      comes from the book's category either way, so only the treatment changes.
      Declared before the per-category colour rules so those still set the text
      colour when away. */
-  /* Home wears the same badge as every other coloured thing in this bar:
-     6px corners, inset with padding all round, and a radial gradient out to
-     black for the edge — that dark rim is the gradient landing, not a border.
-     It goes on the label, not the button: the button is 32px tall by
-     definition, so a fill there has nowhere to breathe above and below. The
+  /* ── Home ─────────────────────────────────────────────────────────────────
+     The chip is the dark plate: 6px corners, matching the icon badges. The
+     colour inside is a separate shape, not a background — a stadium, flat top
+     and bottom with true semicircular ends.
+
+     A gradient cannot draw that. A radial gradient is an ellipse: it curves the
+     whole way round and pinches toward the ends, and sized to the corners (the
+     default) its black endpoint lands outside the box, so the colour was being
+     clipped at roughly 70% of the way to black rather than fading out — a hard
+     cut at the sides and no dark band at all along the top and bottom.
+
+     Drawn as a shape instead, the softness belongs to the edge rather than to
+     the form: `border-radius: 999px` clamps to half the height, which is what
+     makes the ends exact semicircles, and the blur takes the hard line off
+     without disturbing the geometry.
+
+     It goes on the label rather than the button because the button is 32px tall
+     by definition, so a fill there has nowhere to breathe above and below. The
      caret is the label's sibling and stays outside the chip, uncoloured, like
      every other dropdown. */
   .at-home .pill-label {
+    position: relative;
+    /* Load-bearing. `position: relative` alone does not open a stacking
+       context, so the colour's negative z-index would drop it behind this
+       element's own black background and it would vanish. With one, negative-z
+       children paint above the background and below the text — exactly where
+       the colour belongs, and the text then needs no z-index of its own. */
+    isolation: isolate;
+    /* Clips the blur to the rounded corners, so the chip's outer edge stays
+       crisp while the colour inside stays soft. */
+    overflow: hidden;
     display: inline-flex;
     align-items: center;
     /* 13px of text plus 12px of padding lands at 25px — the same height as an
@@ -1978,16 +2001,7 @@
        rather than one looking undersized beside the other. */
     padding: 6px 9px;
     border-radius: 6px;
-    /* Ellipse rather than the icons' circle: those are square, this is a wide
-       chip, and a circle sized to it would darken both ends of a long book
-       name. Shaped to the box, the colour reads across "1 Thessalonians 5"
-       the same as across "Job 3". */
-    background: radial-gradient(
-      ellipse,
-      var(--home-color, #8a8f98) 0%,
-      var(--home-color, #8a8f98) 35%,
-      #000000 100%
-    );
+    background: #000000;
     /* White over a dark halo, the way the icon badges keep their glyph legible,
        so no hue needs a different answer. */
     color: #ffffff;
@@ -1995,23 +2009,16 @@
     font-weight: 600;
   }
 
-  .crumb-btn {
-    flex: 0 0 auto;
-    gap: 3px;
-    opacity: 0.85;
-  }
-
-  .crumb-btn:hover {
-    opacity: 1;
-  }
-
-  /* Chevrons between crumbs — quiet enough to read as punctuation. */
-  .crumb-sep {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    opacity: 0.35;
-    margin: 0 -1px;
+  .at-home .pill-label::before {
+    content: "";
+    position: absolute;
+    /* Inset and blur are tuned against each other: the band has to stay wide
+       enough for the blur to finish inside it rather than reaching the border. */
+    inset: 4px;
+    border-radius: 999px;
+    background: var(--home-color, #8a8f98);
+    filter: blur(3px);
+    z-index: -1;
   }
 
   .nav-dropdown.reference-dropdown-trigger.category-pentateuch .pill-btn-reference { color: #a67c52; }
