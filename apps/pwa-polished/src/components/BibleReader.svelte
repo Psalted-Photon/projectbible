@@ -6486,42 +6486,25 @@
      is the only thing that varies, which is what makes them read as one
      feature rather than six.
 
-     Position and band height are measured per verse in lib/verseHighlight.ts
-     rather than declared here. The old rules pinned the gradient to `center`,
-     which put it halfway down any verse that wrapped instead of on the first
-     line where reading starts, and sized the band `1em + 7px`, which ignored
-     the line-spacing setting entirely. Both are now taken from the real first
-     line box, so every typeface, size and spacing lands right with no tuning. */
-  :global(.vh-hl) {
-    isolation: isolate;
-    background-repeat: no-repeat;
-    background-size: 30ch var(--vh-h, calc(1em + 7px));
-    background-position: var(--vh-pos, 2em center);
-    border-radius: 3px;
-  }
+     Geometry is measured per verse in lib/verseHighlight.ts rather than
+     declared here. The old rules pinned the gradient to `center`, which put it
+     halfway down any verse that wrapped instead of on the first line where
+     reading starts, and sized the band `1em + 7px`, which ignored the
+     line-spacing setting. Both come from the real line boxes now.
 
-  :global(.vh-hl.vh-ltr) {
-    background-image: linear-gradient(to right, var(--vh-color, transparent), transparent);
-  }
-
-  /* A right-to-left verse begins at its right edge, so a left-to-right fade
-     would put the strongest colour on the last word read and trail off over the
-     first — backwards. The end-of-day bookmark is mirrored for the same reason:
-     it marks where reading stops. */
-  :global(.vh-hl.vh-rtl) {
-    background-image: linear-gradient(to left, var(--vh-color, transparent), transparent);
-  }
-
-  /* Paragraph layouts make a verse `display: inline`, and a gradient background
-     cannot be positioned on a multi-line inline box — the browser treats it as
-     one unbroken run and slices it across lines, which is why the mark used to
-     land somewhere arbitrary there. Those get this placed element instead, same
-     gradient, sat behind the text. */
+     The fade is drawn as one piece per line it covers, because a verse can
+     begin near the right margin with only a sliver of that line left — the
+     rest continues at the start of the next one, the way a selection wraps. A
+     CSS background cannot be split that way, which is why this is a placed
+     element and not a background on the verse. Position, width and the
+     gradient offset that keeps the pieces continuous are all set inline. */
   :global(.vh-overlay) {
     position: absolute;
-    width: 30ch;
     pointer-events: none;
+    background-repeat: no-repeat;
     border-radius: 3px;
+    /* Behind the text. Nothing between here and .text-container paints a
+       background, so the fade stays visible underneath the words. */
     z-index: -1;
   }
 
@@ -6529,6 +6512,10 @@
     background-image: linear-gradient(to right, var(--vh-color, transparent), transparent);
   }
 
+  /* A right-to-left verse begins at its right edge, so a left-to-right fade
+     would put the strongest colour on the last word read and trail off over
+     the first — backwards. The end-of-day bookmark is mirrored for the same
+     reason: it marks where reading stops. */
   :global(.vh-overlay.vh-rtl) {
     background-image: linear-gradient(to left, var(--vh-color, transparent), transparent);
   }

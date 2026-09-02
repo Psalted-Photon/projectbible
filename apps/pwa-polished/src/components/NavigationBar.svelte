@@ -671,21 +671,6 @@
     link: Graph,
   };
 
-  /**
-   * Black or white label for a filled pill, whichever the category colour can
-   * carry. Major Prophets is a deep purple and Eschaton a pale cyan, so a
-   * single hardcoded ink would be unreadable on one or the other.
-   */
-  function inkOn(hex: string): string {
-    const m = (hex || "").replace("#", "");
-    if (m.length < 6) return "#fff";
-    const r = parseInt(m.slice(0, 2), 16);
-    const g = parseInt(m.slice(2, 4), 16);
-    const b = parseInt(m.slice(4, 6), 16);
-    // Rec. 601 luma — close enough for a two-way choice.
-    return (r * 299 + g * 587 + b * 114) / 1000 > 140 ? "#111" : "#fff";
-  }
-
   /** "Ps 23:4" — abbreviated so a deep trail still fits on a phone. */
   function crumbLabel(c: { book: string; chapter: number; verse: number | null }): string {
     const ref = `${shortBookName(c.book)} ${c.chapter}`;
@@ -1089,7 +1074,7 @@
           bind:this={referenceButtonRef}
           class="pill-btn pill-btn-text pill-btn-reference"
           class:at-home={!$canGoBack}
-          style="--home-color: {getBookColor($navigationStore.book)}; --home-ink: {inkOn(getBookColor($navigationStore.book))};"
+          style="--home-color: {getBookColor($navigationStore.book)};"
           on:click={toggleReferenceDropdown}
           title="Bible Navigation"
         >
@@ -1978,13 +1963,36 @@
      comes from the book's category either way, so only the treatment changes.
      Declared before the per-category colour rules so those still set the text
      colour when away. */
-  .pill-btn-reference.at-home {
-    background: var(--home-color, #8a8f98);
-    border-radius: 999px;
-    padding: 0 10px;
-    /* The category colour is the fill now, so the label has to stop using it. */
-    color: var(--home-ink, #111) !important;
-    font-weight: 700;
+  /* Home wears the same badge as every other coloured thing in this bar:
+     6px corners, inset with padding all round, and a radial gradient out to
+     black for the edge — that dark rim is the gradient landing, not a border.
+     It goes on the label, not the button: the button is 32px tall by
+     definition, so a fill there has nowhere to breathe above and below. The
+     caret is the label's sibling and stays outside the chip, uncoloured, like
+     every other dropdown. */
+  .at-home .pill-label {
+    display: inline-flex;
+    align-items: center;
+    /* 13px of text plus 12px of padding lands at 25px — the same height as an
+       icon badge (an 18px glyph in 4px of padding), so the two sit level
+       rather than one looking undersized beside the other. */
+    padding: 6px 9px;
+    border-radius: 6px;
+    /* Ellipse rather than the icons' circle: those are square, this is a wide
+       chip, and a circle sized to it would darken both ends of a long book
+       name. Shaped to the box, the colour reads across "1 Thessalonians 5"
+       the same as across "Job 3". */
+    background: radial-gradient(
+      ellipse,
+      var(--home-color, #8a8f98) 0%,
+      var(--home-color, #8a8f98) 35%,
+      #000000 100%
+    );
+    /* White over a dark halo, the way the icon badges keep their glyph legible,
+       so no hue needs a different answer. */
+    color: #ffffff;
+    text-shadow: 0 0 2px #000000, 0 0 2px #000000;
+    font-weight: 600;
   }
 
   .crumb-btn {

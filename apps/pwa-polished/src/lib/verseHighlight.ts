@@ -82,14 +82,14 @@ interface Active {
   side: 'start' | 'end';
   rtl: boolean;
   verseEl: HTMLElement | null;
-  overlay: HTMLElement | null;
+  /** One drawn piece per line the fade wraps onto. */
+  overlays: HTMLElement[];
   observer: ResizeObserver | null;
   timers: number[];
 }
 
 const active = new Map<HighlightSlot, Active>();
 
-const HL_CLASS = 'vh-hl';
 const OVERLAY_CLASS = 'vh-overlay';
 const NEUTRAL = 'rgba(138, 143, 152, ';
 
@@ -159,49 +159,35 @@ export function findVerseEl(
 }
 
 /**
- * Measure one line of the verse's text, in coordinates relative to `origin`.
+ * Measure every line the verse's text occupies, relative to `origin`.
  *
  * A Range is used rather than the element box because a verse is frequently
  * several lines tall, and in paragraph layout it is an inline box whose own
- * rect is the union of every line it touches. The first client rect is the
- * line the verse actually begins on — the line the highlight is supposed to be
- * marking, whatever the typeface, size, spacing or wrapping.
+ * rect is the union of every line it touches. `getClientRects()` hands back one
+ * rect per line fragment, which is exactly the set of lines the fade has to be
+ * laid across — the first rect starts where the verse starts, whatever the
+ * typeface, size, spacing or wrapping.
  */
-function measureLine(
-  verseEl: HTMLElement,
-  origin: HTMLElement,
-  which: 'first' | 'last',
-): DOMRect | null {
+function measureLines(verseEl: HTMLElement, origin: HTMLElement): DOMRect[] {
   const textEl = verseEl.querySelector<HTMLElement>('.verse-text') ?? verseEl;
   const range = document.createRange();
-  let rect: DOMRect | null = null;
+  let raw: DOMRect[] = [];
   try {
     range.selectNodeContents(textEl);
-    const rects = range.getClientRects();
-    if (which === 'first') {
-      for (let i = 0; i < rects.length; i++) {
-        const r = rects[i];
-        if (r.width > 0 && r.height > 0) { rect = r; break; }
-      }
-    } else {
-      for (let i = rects.length - 1; i >= 0; i--) {
-        const r = rects[i];
-        if (r.width > 0 && r.height > 0) { rect = r; break; }
-      }
+    raw = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
+    if (raw.length === 0) {
+      const box = textEl.getBoundingClientRect();
+      if (box.height > 0) raw = [box];
     }
-    if (!rect) rect = textEl.getBoundingClientRect();
   } catch {
-    return null;
+    return [];
   } finally {
     range.detach?.();
   }
-  if (!rect || rect.height === 0) return null;
+  if (raw.length === 0) return [];
   const originRect = origin.getBoundingClientRect();
-  return new DOMRect(
-    rect.left - originRect.left,
-    rect.top - originRect.top,
-    rect.width,
-    rect.height,
+  return raw.map(
+    (r) => new DOMRect(r.left - originRect.left, r.top - originRect.top, r.width, r.height),
   );
 }
 
@@ -210,83 +196,138 @@ function textContainerOf(verseEl: HTMLElement): HTMLElement | null {
 }
 
 /**
- * A verse is a block in the default layout but `display: inline` in the two
- * paragraph layouts. A gradient background cannot be positioned on a multi-line
- * inline box — the browser treats it as one unbroken run and slices it across
- * lines — so those get a placed element instead. Same gradient either way.
+ * How long the fade runs, in pixels, for a given font.
+ *
+ * The design is 30ch — thirty zero-widths — which has to become a number
+ * before the fade can be split across lines and still read as one gradient.
+ * Cached per font, since it only changes when the typeface or size does.
  */
-function isInlineVerse(verseEl: HTMLElement): boolean {
-  return getComputedStyle(verseEl).display === 'inline';
+const fadeLengthCache = new Map<string, number>();
+
+function fadeLength(verseEl: HTMLElement): number {
+  const cs = getComputedStyle(verseEl);
+  const key = cs.fontFamily + '|' + cs.fontSize;
+  const cached = fadeLengthCache.get(key);
+  if (cached != null) return cached;
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;width:30ch;';
+  probe.style.fontFamily = cs.fontFamily;
+  probe.style.fontSize = cs.fontSize;
+  verseEl.appendChild(probe);
+  const width = probe.offsetWidth || 300;
+  probe.remove();
+  fadeLengthCache.set(key, width);
+  return width;
 }
 
-function stripBackground(el: HTMLElement): void {
-  el.classList.remove(HL_CLASS, 'vh-ltr', 'vh-rtl');
-  el.style.removeProperty('--vh-color');
-  el.style.removeProperty('--vh-h');
-  el.style.removeProperty('--vh-pos');
+/** One drawn piece of the fade: where it sits, and how far into the gradient. */
+interface Segment {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  /** Pixels of gradient already spent before this piece. */
+  consumed: number;
+}
+
+/**
+ * Lay the fade across the lines, wrapping when it reaches the edge.
+ *
+ * A verse that starts near the right margin only has a sliver of its first line
+ * to work with, so the rest continues at the start of the next one — the way a
+ * text selection wraps. Drawing a single band instead simply ran off the edge
+ * and lost the remainder, which was also silently clipping the tail on a narrow
+ * column or at a large font even when the verse began at the margin.
+ *
+ * A verse that ends mid-line just stops. The fade must never spill onto the
+ * next verse, which is not the one being marked.
+ */
+function planSegments(rects: DOMRect[], total: number, fromRight: boolean, reverse: boolean): Segment[] {
+  const ordered = reverse ? [...rects].reverse() : rects;
+  const segments: Segment[] = [];
+  let consumed = 0;
+  for (const r of ordered) {
+    if (consumed >= total) break;
+    const width = Math.min(total - consumed, r.width);
+    if (width <= 0) continue;
+    segments.push({
+      // Each line is filled from the edge reading starts at: the left for
+      // left-to-right text, the right for Hebrew and for the end-of-day mark.
+      left: fromRight ? r.left + r.width - width : r.left,
+      top: r.top,
+      width,
+      height: r.height,
+      consumed,
+    });
+    consumed += width;
+  }
+  return segments;
 }
 
 function place(a: Active): void {
   const verseEl = a.verseEl;
   if (!verseEl || !verseEl.isConnected) return;
 
+  const container = textContainerOf(verseEl);
+  if (!container) return;
+
   const wantEnd = a.side === 'end';
   const fromRight = a.rtl || wantEnd;
-  const inline = isInlineVerse(verseEl);
-  const container = textContainerOf(verseEl);
-  const origin = inline ? container : verseEl;
-  if (!origin) return;
 
-  const rect = measureLine(verseEl, origin, wantEnd ? 'last' : 'first');
-  if (!rect) return;
+  const rects = measureLines(verseEl, container);
+  if (rects.length === 0) return;
+
+  const total = fadeLength(verseEl);
+  // The end-of-day mark is anchored to the verse's last line and runs backwards
+  // through the text, so it walks the lines in reverse.
+  const segments = planSegments(rects, total, fromRight, wantEnd);
+  if (segments.length === 0) return;
 
   const rgba = hexToRgba(a.color, ALPHA);
   const dirClass = fromRight ? 'vh-rtl' : 'vh-ltr';
 
-  if (inline && container) {
-    // Placed element, prepended to the text container so it paints beneath the
-    // verses rather than over them.
-    let el = a.overlay;
-    if (!el || !el.isConnected) {
-      el = document.createElement('div');
-      el.className = OVERLAY_CLASS;
-      el.setAttribute('aria-hidden', 'true');
-      container.insertBefore(el, container.firstChild);
-      a.overlay = el;
-    }
+  syncOverlayCount(a, container, segments.length);
+
+  segments.forEach((seg, i) => {
+    const el = a.overlays[i];
     el.classList.remove('vh-ltr', 'vh-rtl');
     el.classList.add(dirClass);
     el.style.setProperty('--vh-color', rgba);
-    // Resolve the 30ch width against the verse's own font, so the gradient is
-    // the same visual length here as it is in the background version.
-    const cs = getComputedStyle(verseEl);
-    el.style.fontFamily = cs.fontFamily;
-    el.style.fontSize = cs.fontSize;
-    el.style.height = rect.height + 'px';
-    el.style.top = rect.top + 'px';
-    if (fromRight) {
-      el.style.left = 'auto';
-      el.style.right = Math.max(0, container.clientWidth - (rect.left + rect.width)) + 'px';
-    } else {
-      el.style.right = 'auto';
-      el.style.left = rect.left + 'px';
-    }
-    stripBackground(verseEl);
-    return;
-  }
+    el.style.left = seg.left + 'px';
+    el.style.top = seg.top + 'px';
+    el.style.width = seg.width + 'px';
+    el.style.height = seg.height + 'px';
+    // Every piece paints the whole gradient at its full length and slides it so
+    // the colour picks up where the last line left off. Without this each line
+    // would restart at full strength and read as stripes rather than one fade.
+    el.style.backgroundSize = total + 'px 100%';
+    el.style.backgroundPositionX = fromRight
+      ? seg.width + seg.consumed - total + 'px'
+      : -seg.consumed + 'px';
+  });
+}
 
-  // Block verse — the original approach, with the band measured, not guessed.
-  if (a.overlay) { a.overlay.remove(); a.overlay = null; }
-  verseEl.style.setProperty('--vh-color', rgba);
-  verseEl.style.setProperty('--vh-h', rect.height + 'px');
-  if (fromRight) {
-    const rightInset = Math.max(0, verseEl.clientWidth - (rect.left + rect.width));
-    verseEl.style.setProperty('--vh-pos', 'right ' + rightInset + 'px top ' + rect.top + 'px');
-  } else {
-    verseEl.style.setProperty('--vh-pos', rect.left + 'px ' + rect.top + 'px');
+/** Grow or shrink the pool of drawn pieces to match what this placement needs. */
+function syncOverlayCount(a: Active, container: HTMLElement, count: number): void {
+  while (a.overlays.length > count) {
+    a.overlays.pop()?.remove();
   }
-  verseEl.classList.remove('vh-ltr', 'vh-rtl');
-  verseEl.classList.add(HL_CLASS, dirClass);
+  while (a.overlays.length < count) {
+    const el = document.createElement('div');
+    el.className = OVERLAY_CLASS;
+    el.setAttribute('aria-hidden', 'true');
+    // Prepended so it paints beneath the verses rather than over them.
+    container.insertBefore(el, container.firstChild);
+    a.overlays.push(el);
+  }
+  for (const el of a.overlays) {
+    if (!el.isConnected) container.insertBefore(el, container.firstChild);
+  }
+}
+
+function removeOverlays(a: Active): void {
+  for (const el of a.overlays) el.remove();
+  a.overlays.length = 0;
 }
 
 /**
@@ -345,7 +386,7 @@ export function showVerseHighlight(
     side: options.side ?? 'start',
     rtl: options.rtl ?? false,
     verseEl,
-    overlay: null,
+    overlays: [],
     observer: null,
     timers: [],
   };
@@ -364,8 +405,7 @@ export function clearVerseHighlight(slot: HighlightSlot): void {
   a.observer = null;
   for (const t of a.timers) clearTimeout(t);
   a.timers.length = 0;
-  if (a.overlay) { a.overlay.remove(); a.overlay = null; }
-  if (a.verseEl) stripBackground(a.verseEl);
+  removeOverlays(a);
 }
 
 /** Remove every highlight belonging to one reader instance, as it tears down. */
@@ -401,7 +441,7 @@ export function reapplyVerseHighlights(
     const el = findVerseEl(reader, a.target.book, a.target.chapter, a.target.verse, a.target.last);
     if (!el) continue;
     if (el !== a.verseEl) {
-      if (a.verseEl) stripBackground(a.verseEl);
+      removeOverlays(a);
       a.verseEl = el;
     }
     a.reader = reader;
