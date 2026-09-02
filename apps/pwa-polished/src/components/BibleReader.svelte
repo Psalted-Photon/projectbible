@@ -463,6 +463,31 @@
     | { surface: 'annotation'; book: string; chapter: number; verse: number; tab: 'references' | 'commentary'; author: string }
     | { surface: 'bookIntro'; book: string };
 
+  /**
+   * Is this icon the one whose panel is currently open?
+   *
+   * Marking the verse on the way back was the wrong cue — the mark means "start
+   * reading here", and you were not being sent there to read. The icon itself
+   * breathing while its panel is up says "this is the one you tapped" without
+   * borrowing a signal that means something else.
+   */
+  function isOpenAnnotation(
+    book: string,
+    chapter: number,
+    verse: number,
+    tab: 'references' | 'commentary',
+    author = '',
+  ): boolean {
+    return (
+      annotationPanelOpen &&
+      annotationPanelBook === book &&
+      annotationPanelChapter === chapter &&
+      annotationPanelVerse === verse &&
+      annotationPanelTab === tab &&
+      annotationPanelTargetAuthor === author
+    );
+  }
+
   function handleAnnotationNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
     const origin: ReaderOrigin = {
@@ -5359,6 +5384,7 @@
                   {#each [...new Set(commentaryByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!.map((e) => e.author))] as author}
                     <span
                       class="anno-icon"
+                      class:anno-breathing={isOpenAnnotation(chapterData.book, chapterData.chapter, verse, 'commentary', author)}
                       style="background:radial-gradient(circle, {getAuthorColor(author)} 0%, {getAuthorColor(author)} 20%, #431407 100%)"
                       title={author}
                       role="button"
@@ -5371,6 +5397,7 @@
                 {#if showReferences && tskByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
                   <span
                     class="anno-ref"
+                    class:anno-breathing={isOpenAnnotation(chapterData.book, chapterData.chapter, verse, 'references')}
                     style="color:{TSK_COLOR}"
                     title="TSK Cross-References"
                     role="button"
@@ -5866,6 +5893,34 @@
     margin: 0 1px;
     vertical-align: super;
     user-select: none;
+    /* Plain inline boxes ignore transforms, and this one has to be able to
+       scale while its panel is open. */
+    display: inline-block;
+  }
+
+  /* ── The tapped icon, while its panel is open ─────────────────────────────
+     A slow scale in and out, so you can find your way back to the icon you
+     opened without the verse itself being marked — that mark means "start
+     reading here", which is not what happened. Matches the 2s ease-in-out
+     cadence of the anchor pill in the navbar. transform does not affect
+     layout, so the text around it never shifts. */
+  @keyframes anno-breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.28); }
+  }
+
+  .anno-breathing {
+    animation: anno-breathe 2s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* Hold the enlarged state rather than pulsing — the icon still stands out,
+       nothing moves. */
+    .anno-breathing {
+      animation: none;
+      transform: scale(1.28);
+    }
   }
 
   .art-icon {
