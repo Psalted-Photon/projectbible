@@ -161,7 +161,10 @@
           dayNumber: session.dayNumber,
           nextChapter: nextCh,
           isLastChapter: chapIdx === todayChapters.length - 1,
-          isSequentialNext: nextCh !== null && nextCh.book === book && nextCh.chapter === chapter + 1,
+          // Normalized on both sides: plan data carries plural forms ("Psalms")
+          // while `book` is already canonical, so a raw compare never matched
+          // and a Psalms day always showed the jump buttons.
+          isSequentialNext: nextCh !== null && normalizeBookName(nextCh.book) === book && nextCh.chapter === chapter + 1,
           todayChapters,
         });
       }
@@ -199,6 +202,8 @@
   let isLoadingNextChapter = false;
   let isLoadingPrevChapter = false;
   let lastNavigationKey = "";
+  /** Bumped by every loadChapter call so a slow one can tell it was overtaken. */
+  let loadChapterTicket = 0;
   let lastScrollTop = 0;
   let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
@@ -324,6 +329,26 @@
   // Commentary anchor verse-sync
   let verseObserver: IntersectionObserver | null = null;
   let anchorSyncDebounce: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Suppression window for the scroll write-back.
+   *
+   * The IntersectionObserver keeps the navbar in step by writing the visible
+   * chapter back into the store on a 150ms debounce. That write has no idea a
+   * deliberate navigation just happened, so a timer armed a moment before you
+   * tapped "continue" would fire afterwards and quietly put you back in the
+   * chapter you just left. Any intentional move now cancels the pending write
+   * and ignores anything the observer reports for a beat after.
+   */
+  let suppressScrollSyncUntil = 0;
+
+  /** Call before any deliberate navigation, so the scroll write-back can't undo it. */
+  function beginDeliberateNavigation(): void {
+    if (anchorSyncDebounce) {
+      clearTimeout(anchorSyncDebounce);
+      anchorSyncDebounce = null;
+    }
+    suppressScrollSyncUntil = Date.now() + 600;
+  }
   // Key: "book::chapter::verse" — prevents verse-number collisions across chapters in multi-chapter view
   const visibleVersePositions = new Map<string, { book: string; chapter: number; verse: number; top: number }>();
   // Cache of verse element → { book, chapter } resolved at observe-time (avoids repeated DOM walks)
@@ -998,6 +1023,7 @@
    * `false` for the highlight argument because the plan paints its own green.
    */
   function continueToChapter(next: { book: string; chapter: number }) {
+    beginDeliberateNavigation();
     clearReadingPlanHighlight();
     navigationStore.setReadingPlanActiveTarget(next.book, next.chapter, null, false);
     navigationStore.navigateTo(currentTranslation, next.book, next.chapter, null, false);
@@ -1069,6 +1095,12 @@
       // Capture previous translation BEFORE updating lastNavigationKey
       const prevTranslation = lastNavigationKey.split("-")[0];
       const translationChanged = !!(prevTranslation && prevTranslation !== currentTranslation);
+      // Claimed up front so this block can't re-enter and start the same load
+      // on every reactive tick. loadChapter then re-commits it to describe the
+      // chapter that actually landed, which is the part that was missing: if
+      // something moved the store while a load was in flight, the key used to
+      // keep describing where we were headed rather than where we ended up, so
+      // the mismatch was never noticed and never corrected.
       lastNavigationKey = navKey;
 
       if (!alreadyLoaded || translationChanged) {
@@ -1147,6 +1179,7 @@
     // navigation store — the scroll handler rewrites the store's book and
     // chapter as the user moves, so those can name a neighbour while the
     // chapter we want is still mounted and perfectly scrollable.
+    beginDeliberateNavigation();
     if (findVerseEl(readerElement, book, chapter, verse)) {
       void scrollToTarget(book, chapter, verse);
     } else {
@@ -1181,6 +1214,7 @@
     verse: number | null,
   ): Promise<void> {
     if (!readerElement) return;
+    beginDeliberateNavigation();
     await waitForTextToSettle();
     if (!readerElement) return;
     const el = findVerseEl(readerElement, book, chapter, verse);
@@ -1752,6 +1786,13 @@
       chapters.map((c) => `${c.book} ${c.chapter}`),
     );
 
+    // Ticket guard: this function awaits several times, so a newer call can
+    // overtake it. Without one, a slow load that started first could finish
+    // last and put its chapter on screen after the user had already moved on —
+    // which is how tapping a reading plan's "continue" could bounce you back to
+    // the chapter you just left. Same pattern as onSpokenVerseChanged.
+    const ticket = ++loadChapterTicket;
+
     loading = true;
     error = "";
     // Repeats are persistent/global — loadAndApplyHighlights re-applies them
@@ -1762,12 +1803,16 @@
         book,
         chapter,
       );
+      if (ticket !== loadChapterTicket) return; // overtaken while fetching
 
       console.log(`   Fetched ${chapterVerses?.length || 0} verses from DB`);
 
       if (!chapterVerses || chapterVerses.length === 0) {
         console.warn(`No verses found for ${translation} ${book} ${chapter}`);
         loading = false;
+        // The key stays committed on purpose. A pack with no verses for this
+        // chapter will fail identically every time, and clearing it here would
+        // have the reactive block retry the same load on every tick.
         return;
       }
 
@@ -1801,6 +1846,12 @@
 
       // Reset chapters array and scroll to top
       chapters = [{ book, chapter, verses: processedVerses }];
+      // Committed only now that a chapter has actually landed. Setting it
+      // before the load meant a load that bailed or lost a race left the key
+      // claiming this destination was handled, and nothing would retry it
+      // until you navigated somewhere else and back — the "works on the
+      // second tap" behaviour.
+      lastNavigationKey = `${translation}-${book}-${chapter}-${isChronologicalMode}`;
 
       console.log(
         "   Chapters array AFTER assignment:",
@@ -1812,6 +1863,7 @@
       // Load morphology cache if original language translation
       if (isOriginalLanguage(translation)) {
         await loadMorphologyCache(translation, book, chapter);
+        if (ticket !== loadChapterTicket) return; // overtaken while loading morphology
         // Pre-build interlinear HTML so toggling the view is instant (no reload).
         // Layer visibility is handled in CSS, so this is built once per load.
         chapters = chapters.map((c) => ({
@@ -1829,6 +1881,7 @@
 
       // Load annotation data (commentary + TSK references)
       await loadAnnotations(book, chapter);
+      if (ticket !== loadChapterTicket) return; // overtaken while loading annotations
 
       // Re-open annotation panel if user navigated back via the floating Back button
       if (_reopenAnnotationVerse !== null) {
@@ -1841,6 +1894,7 @@
 
       // Load and apply persisted highlights
       await loadAndApplyHighlights(book, chapter);
+      if (ticket !== loadChapterTicket) return; // overtaken while loading highlights
 
       if (resetScroll && readerElement) {
         // Set flag BEFORE tick so any clamp-induced scroll event is consumed
@@ -1870,12 +1924,18 @@
         reapplyVerseHighlights(readerElement, windowId);
       }
     } catch (err: unknown) {
+      if (ticket !== loadChapterTicket) return; // a newer load owns the screen
       console.error("Error loading chapter:", err);
       error = `Failed to load ${book} ${chapter}. Make sure you have packs installed.`;
       chapters = [];
     } finally {
-      loading = false;
-      if (chapters.length > 0) checkViewportFill();
+      // Only the newest load may clear the loading flag or top up the viewport.
+      // An overtaken one doing so would let the scroll handlers fire against a
+      // chapter that is on its way out.
+      if (ticket === loadChapterTicket) {
+        loading = false;
+        if (chapters.length > 0) checkViewportFill();
+      }
     }
   }
 
@@ -2507,6 +2567,10 @@
 
     try {
       const lastChapter = chapters[chapters.length - 1];
+      // Which array this append belongs to. loadChapter replaces `chapters`
+      // wholesale, so an append that started before a navigation would
+      // otherwise land on the new chapter and stitch the old book onto it.
+      const appendTicket = loadChapterTicket;
       let nextBook = lastChapter.book;
       let nextChapter = lastChapter.chapter + 1;
 
@@ -2623,6 +2687,7 @@
         });
 
         // Append without triggering navigation update
+        if (appendTicket !== loadChapterTicket) return; // a navigation replaced the list
         chapters = [
           ...chapters,
           { book: nextBook, chapter: nextChapter, verses: processedVerses },
@@ -2645,6 +2710,7 @@
 
     try {
       const firstChapter = chapters[0];
+      const appendTicket = loadChapterTicket;
       let prevBook = firstChapter.book;
       let prevChapter = firstChapter.chapter - 1;
 
@@ -2739,6 +2805,8 @@
             ...verseStructure(cleanText),
           };
         });
+
+        if (appendTicket !== loadChapterTicket) return; // a navigation replaced the list
 
         // Remember scroll position
         const oldScrollHeight = readerElement.scrollHeight;
@@ -4781,10 +4849,13 @@
         if (anchorSyncDebounce) clearTimeout(anchorSyncDebounce);
         const captured = { ...topEntry };
         anchorSyncDebounce = setTimeout(() => {
+          anchorSyncDebounce = null;
           // Always update navbar position — this is what keeps the navbar and
           // commentary in sync as the user scrolls through multiple chapters.
           // Window panes must NOT write back to global nav — they are isolated.
-          if (!windowId) {
+          // Skipped entirely just after a deliberate navigation, which this
+          // would otherwise undo.
+          if (!windowId && Date.now() >= suppressScrollSyncUntil) {
             navigationStore.setScrollPosition(captured.book, captured.chapter);
           }
 

@@ -1,4 +1,5 @@
 import { openDB, readTransaction, writeTransaction, batchWriteTransaction } from "../adapters/db";
+import { normalizeBookName } from "../lib/bibleData";
 
 export type ChapterActionType = "checked" | "unchecked";
 
@@ -78,8 +79,17 @@ function buildEntryId(planId: string, dayNumber: number): string {
   return `${planId}-${dayNumber}`;
 }
 
+/**
+ * Progress is keyed by book and chapter, so the book name has to be normalized
+ * first. Plan data is generated with plural forms — `reading-plan.ts` writes
+ * "Psalms" — while the reader canonicalises to "Psalm". Comparing them raw
+ * meant `Psalm::5` never matched `Psalms::5`, so ticking a chapter off added a
+ * second, orphaned row instead of updating the plan's own. Completion requires
+ * every row to be checked, and the orphan never could be, so a Psalms day could
+ * never be finished.
+ */
 function getChapterKey(book: string, chapter: number): string {
-  return `${book}::${chapter}`;
+  return `${normalizeBookName(book)}::${chapter}`;
 }
 
 function isChapterChecked(chapterProgress: ChapterProgress | undefined): boolean {
@@ -286,13 +296,43 @@ export class ReadingProgressStore {
     });
   }
 
+  /**
+   * Collapse rows saved before book names were normalized here.
+   *
+   * A day recorded under "Psalms" and later ticked under "Psalm" ended up with
+   * two rows for the same chapter, one of them permanently unticked — and
+   * completion requires every row ticked. Merging them on read repairs those
+   * days in place rather than stranding progress already on the device.
+   */
+  private healChapterKeys(entry: ReadingProgressEntry): ReadingProgressEntry {
+    const byKey = new Map<string, ChapterProgress>();
+    let changed = false;
+    for (const ch of entry.chaptersRead) {
+      const canonical = normalizeBookName(ch.book);
+      if (canonical !== ch.book) changed = true;
+      const key = getChapterKey(ch.book, ch.chapter);
+      const seen = byKey.get(key);
+      if (!seen) {
+        byKey.set(key, { ...ch, book: canonical, actions: [...ch.actions] });
+        continue;
+      }
+      changed = true;
+      seen.actions = [...seen.actions, ...ch.actions].sort((x, y) => x.timestamp - y.timestamp);
+    }
+    if (!changed) return entry;
+    entry.chaptersRead = [...byKey.values()];
+    recomputeCompletion(entry);
+    void writeTransaction("reading_progress", (store) => store.put(this.serialize(entry)));
+    return entry;
+  }
+
   async ensureDayProgress(
     planId: string,
     dayNumber: number,
     chapters: Array<{ book: string; chapter: number }>,
   ): Promise<ReadingProgressEntry> {
     const existing = await this.getDayProgress(planId, dayNumber);
-    if (existing) return existing;
+    if (existing) return this.healChapterKeys(existing);
 
     const createdAt = Date.now();
     const entry: ReadingProgressEntry = {
@@ -301,8 +341,10 @@ export class ReadingProgressStore {
       dayNumber,
       completed: false,
       createdAt,
+      // Canonical names on the way in, so a plan written with "Psalms" and a
+      // reader saying "Psalm" describe the same row.
       chaptersRead: chapters.map((ch) => ({
-        book: ch.book,
+        book: normalizeBookName(ch.book),
         chapter: ch.chapter,
         actions: [],
       })),
@@ -335,7 +377,7 @@ export class ReadingProgressStore {
     );
 
     if (!chapterProgress) {
-      chapterProgress = { book: target.book, chapter: target.chapter, actions: [] };
+      chapterProgress = { book: normalizeBookName(target.book), chapter: target.chapter, actions: [] };
       entry.chaptersRead.push(chapterProgress);
     }
 
