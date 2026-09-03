@@ -193,6 +193,10 @@ export interface UserSettings {
   wakeAlarm?: WakeAlarmSettings; // Wake alarm push schedule (needs internet at the set time)
   allowRotation?: boolean; // Allow screen to rotate to landscape (default false = portrait locked)
   autoCheckUpdates?: boolean; // Automatically check for updates on app open (default true)
+  // Pin the navigation bar so it stops hiding itself as you scroll down.
+  // Per-device for the same reason as the editor bars above — a phone wants the
+  // reading space back, a desktop usually does not care.
+  navBarPinned?: boolean; // default false = hides on scroll as before
 
   // Clock / timezone
   // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected
@@ -324,6 +328,16 @@ export function getEditorBarHidden(surface: EditorSurface): boolean {
 /** Remember whether this surface's toolbar is slid away. */
 export function setEditorBarHidden(surface: EditorSurface, hidden: boolean): void {
   updateSettings({ [EDITOR_BAR_KEY[surface]]: hidden });
+}
+
+/** Is the navigation bar pinned down? Defaults to hiding on scroll as before. */
+export function getNavBarPinned(): boolean {
+  return getSettings().navBarPinned ?? false;
+}
+
+/** Remember whether the navigation bar is pinned down. */
+export function setNavBarPinned(pinned: boolean): void {
+  updateSettings({ navBarPinned: pinned });
 }
 
 /**

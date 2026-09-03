@@ -79,6 +79,7 @@
   let verseLayout: "one-per-line" | "paragraph" | "paragraph-no-verse-numbers" = "one-per-line";
   let wordWrap: boolean = true;
   let allowRotation: boolean = false;
+  let navBarPinned: boolean = false;
   let showRedLetter: boolean = true;
   let themedTitles: boolean = true;
   let showArt: boolean = true;
@@ -147,6 +148,7 @@
       verseLayout,
       wordWrap,
       allowRotation,
+      navBarPinned,
       showRedLetter,
       themedTitles,
       showArt,
@@ -217,7 +219,9 @@
   };
 
   $: appearanceSummary = `${THEME_LABELS[theme] ?? theme} · ${fontSize}px`;
-  $: readerSummary = `${LAYOUT_LABELS[verseLayout] ?? verseLayout}${showRedLetter ? " · Red letters" : ""}`;
+  $: readerSummary =
+    `${LAYOUT_LABELS[verseLayout] ?? verseLayout}${showRedLetter ? " · Red letters" : ""}` +
+    `${navBarPinned ? " · Nav bar pinned" : ""}`;
   $: readAloudSummary =
     `${ttsVoices.find((v) => v.id === ttsVoice)?.label ?? ttsVoice} · ${ttsRate.toFixed(2)}×`;
   $: generalSummary =
@@ -255,6 +259,7 @@
     verseLayout = settings.verseLayout || "one-per-line";
     wordWrap = settings.wordWrap !== undefined ? settings.wordWrap : true;
     allowRotation = settings.allowRotation !== undefined ? settings.allowRotation : false;
+    navBarPinned = settings.navBarPinned === true;
     showRedLetter = settings.showRedLetter !== false;
     themedTitles = settings.themedTitles !== false;
     showArt = settings.showArt !== false;
@@ -472,6 +477,7 @@
     verseLayout;
     wordWrap;
     allowRotation;
+    navBarPinned;
     showRedLetter;
     themedTitles;
     showArt;
@@ -665,6 +671,13 @@
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={wordWrap} />
         <span class="label-text">Word Wrap (wrap long lines)</span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={navBarPinned} />
+        <span class="label-text">Keep the navigation bar visible (never hide on scroll)</span>
       </label>
     </div>
 

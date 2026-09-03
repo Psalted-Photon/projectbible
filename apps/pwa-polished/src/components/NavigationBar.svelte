@@ -79,7 +79,7 @@
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightScope } from "../stores/repeatBulkStore";
   import { REPEAT_COLORS } from "../lib/repeatColors";
-  import { getInterlinearSettings, updateInterlinearSettings } from "../adapters/settings";
+  import { getInterlinearSettings, updateInterlinearSettings, getNavBarPinned, setNavBarPinned } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
   import InterlinearControls from "./InterlinearControls.svelte";
 
@@ -960,16 +960,421 @@
     }
   }
 
+  // ── The bar's contoured underside ──────────────────────────────────────────
+  // The bottom edge is not a straight line. It is a membrane: it drapes to full
+  // depth over each pill group and relaxes up across the open space between
+  // them, so the empty middle reads as a bite taken out of the plank rather
+  // than as solid chrome. When something arrives in the middle — read-aloud,
+  // repeats, an expanded search — it pushes the membrane back down.
+  //
+  // Two things here are deliberately different curves. DEPTH, how far a gap
+  // relaxes, is linear in that gap's width; a smoothstep is far too flat at the
+  // low end and leaves narrow gaps with an invisible sub-pixel dip. SHAPE, the
+  // shoulder either side of a gap, is the smoothstep, and that is what keeps
+  // the edge off a square wave.
+  //
+  // Numbers came out of nav-contour-lab.html. `height` is the SVG's own height
+  // only — the bar's own box is deliberately left alone.
+  const CONTOUR = {
+    restPct: 0.17,
+    padX: 1.5,
+    padY: 1,
+    shoulderMax: 54,
+    dimpleStart: 14,
+    fullRelax: 68,
+    corner: 13,
+    height: 51,
+    shadowY: 8,
+    shadowBlur: 4.5,
+    shadowOpacity: 0.66,
+    tween: 0.28,
+    samples: 260,
+  };
+
+  // Every group is separated by a .nav-spacer (min-width 27px) plus the strip's
+  // 8px gap either side, so the narrowest gap between two of these is 43px —
+  // and because the pills never shrink, that floor holds however crowded the
+  // bar gets. It scrolls sideways instead of compressing.
+  const GROUP_SELECTOR =
+    ".nav-pill, .nav-interlinear, .nav-tts, .nav-repeat-pills";
+
+  let navContentEl: HTMLElement;
+  let membraneFill = "";
+  let membraneEdge = "";
+  let membraneW = 0;
+
+  let field: number[] | null = null; // the y values actually drawn
+  let targetField: number[] = [];
+  let sampleXs: number[] = [];
+  let membraneRaf = 0;
+  let membraneLastT = 0;
+  let membranePending = 0;
+  let membranePendingAnimate = false;
+  // Long enough to outlast the pill and spacer width transitions.
+  const MEMBRANE_SETTLE_MS = 400;
+  let membraneSettleUntil = 0;
+  let membraneResizeObs: ResizeObserver | undefined;
+  let membraneMutationObs: MutationObserver | undefined;
+
+  function smoothstep(t: number): number {
+    const c = t < 0 ? 0 : t > 1 ? 1 : t;
+    return c * c * (3 - 2 * c);
+  }
+
+  /** Live group rects in the bar's own space, merged only on real overlap. */
+  function measureGroups(): { spans: number[][]; hFull: number } {
+    if (!navContentEl || !navElement)
+      return { spans: [], hFull: CONTOUR.height };
+
+    const barRect = navElement.getBoundingClientRect();
+    const spans: number[][] = [];
+    let deepest = 0;
+
+    for (const el of navContentEl.querySelectorAll<HTMLElement>(
+      GROUP_SELECTOR,
+    )) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0) continue;
+      spans.push([r.left - barRect.left, r.right - barRect.left]);
+      deepest = Math.max(deepest, r.bottom - barRect.top);
+    }
+    if (!spans.length) return { spans: [], hFull: CONTOUR.height };
+
+    // Padding is applied later, so a tight gap survives as a crevice here
+    // rather than being swallowed by this merge.
+    spans.sort((a, b) => a[0] - b[0]);
+    const merged: number[][] = [[spans[0][0], spans[0][1]]];
+    for (let i = 1; i < spans.length; i++) {
+      const last = merged[merged.length - 1];
+      if (spans[i][0] <= last[1]) last[1] = Math.max(last[1], spans[i][1]);
+      else merged.push([spans[i][0], spans[i][1]]);
+    }
+
+    return {
+      spans: merged,
+      hFull: Math.min(CONTOUR.height, deepest + CONTOUR.padY),
+    };
+  }
+
+  /** Build y(x) for the bottom edge. */
+  function makeSampler(
+    spans: number[][],
+    W: number,
+    hFull: number,
+  ): (x: number) => number {
+    const hRest = hFull * CONTOUR.restPct;
+    const padded = spans.map((s) => [s[0] - CONTOUR.padX, s[1] + CONTOUR.padX]);
+
+    // The plank still has ends: wrap around the outermost sides rather than
+    // relaxing into the screen edge.
+    padded[0][0] = 0;
+    padded[padded.length - 1][1] = W;
+
+    const gaps: {
+      crevice: boolean;
+      a: number;
+      b: number;
+      m: number;
+      s: number;
+      yDip: number;
+    }[] = [];
+
+    for (let i = 0; i < spans.length - 1; i++) {
+      const rawW = spans[i + 1][0] - spans[i][1];
+      if (rawW <= 0) continue;
+
+      const range = Math.max(1, CONTOUR.fullRelax - CONTOUR.dimpleStart);
+      const relax = Math.max(
+        0,
+        Math.min(1, (rawW - CONTOUR.dimpleStart) / range),
+      );
+      const yDip = hFull - relax * (hFull - hRest);
+
+      const a = padded[i][1];
+      const b = padded[i + 1][0];
+
+      if (b - a > 1) {
+        gaps.push({
+          crevice: false,
+          a,
+          b,
+          m: 0,
+          s: Math.min(CONTOUR.shoulderMax, (b - a) / 2),
+          yDip,
+        });
+      } else {
+        // No room between the padded pills, so this dip's shoulders run
+        // underneath them. That is safe: the pills are opaque and paint above
+        // the membrane, so only the stretch spanning the real gap is ever seen.
+        gaps.push({
+          crevice: true,
+          a,
+          b,
+          m: (spans[i][1] + spans[i + 1][0]) / 2,
+          s: Math.max(2, CONTOUR.shoulderMax),
+          yDip,
+        });
+      }
+    }
+
+    // Overlapping influences combine by taking the deepest rise, never by
+    // summing — two neighbouring dips must not dig a trench between them.
+    return (x: number): number => {
+      let y = hFull;
+      for (const g of gaps) {
+        let inf: number;
+        if (g.crevice) {
+          const d = Math.abs(x - g.m);
+          if (d >= g.s) continue;
+          inf = smoothstep(1 - d / g.s);
+        } else {
+          if (x <= g.a || x >= g.b) continue;
+          if (g.s <= 0) inf = 1;
+          else if (x < g.a + g.s) inf = smoothstep((x - g.a) / g.s);
+          else if (x > g.b - g.s) inf = smoothstep((g.b - x) / g.s);
+          else inf = 1;
+        }
+        const yg = hFull + (g.yDip - hFull) * inf;
+        if (yg < y) y = yg;
+      }
+      return y;
+    };
+  }
+
+  /** Catmull-Rom through the samples, emitted as cubic Béziers. */
+  function bottomTail(xs: number[], ys: number[]): string {
+    let d = "";
+    for (let i = 0; i < xs.length - 1; i++) {
+      const x0 = xs[i - 1] ?? xs[i];
+      const y0 = ys[i - 1] ?? ys[i];
+      const x1 = xs[i];
+      const y1 = ys[i];
+      const x2 = xs[i + 1];
+      const y2 = ys[i + 1];
+      const x3 = xs[i + 2] ?? xs[i + 1];
+      const y3 = ys[i + 2] ?? ys[i + 1];
+      const c1x = x1 + (x2 - x0) / 6;
+      const c1y = y1 + (y2 - y0) / 6;
+      const c2x = x2 - (x3 - x1) / 6;
+      const c2y = y2 - (y3 - y1) / 6;
+      d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+    }
+    return d;
+  }
+
+  function drawMembrane(): void {
+    if (!field || !sampleXs.length) return;
+
+    const W = membraneW;
+    const r = Math.min(CONTOUR.corner, W / 2);
+    const yL = field[0];
+    const yR = field[field.length - 1];
+
+    const edge =
+      `M 0 ${(yL - r).toFixed(2)}` +
+      ` Q 0 ${yL.toFixed(2)} ${r.toFixed(2)} ${yL.toFixed(2)}` +
+      bottomTail(sampleXs, field) +
+      ` Q ${W} ${yR.toFixed(2)} ${W} ${(yR - r).toFixed(2)}`;
+
+    membraneEdge = edge;
+    membraneFill = `${edge} L ${W} 0 L 0 0 Z`;
+  }
+
+  /** Read the live geometry and turn it into a fresh set of sample heights. */
+  function computeTarget(): number[] | null {
+    if (!navElement) return null;
+    const W = navElement.clientWidth;
+    if (!W) return null;
+
+    const { spans, hFull } = measureGroups();
+    if (!spans.length) return null;
+
+    const n = CONTOUR.samples;
+    const r = Math.min(CONTOUR.corner, W / 2);
+    const sample = makeSampler(spans, W, hFull);
+
+    membraneW = W;
+    sampleXs = new Array(n);
+    for (let i = 0; i < n; i++) sampleXs[i] = r + ((W - 2 * r) * i) / (n - 1);
+
+    return sampleXs.map(sample);
+  }
+
+  function retargetMembrane(animate: boolean): void {
+    const next = computeTarget();
+    if (!next) return;
+
+    // Tween the samples, never the path string: two paths with different
+    // segment counts cannot be interpolated.
+    if (!field || field.length !== next.length || !animate) {
+      field = next;
+      targetField = next;
+      drawMembrane();
+      return;
+    }
+    targetField = next;
+    if (!membraneRaf) {
+      membraneLastT = performance.now();
+      membraneRaf = requestAnimationFrame(stepMembrane);
+    }
+  }
+
+  function stepMembrane(now: number): void {
+    if (!field) {
+      membraneRaf = 0;
+      return;
+    }
+    const dt = Math.min(64, now - membraneLastT);
+    membraneLastT = now;
+
+    // Pills can change width on a CSS transition — the search box expanding,
+    // the spacers easing their min-width — and a transition fires no further
+    // mutations, so a target captured when the class flipped would be the
+    // width from *before* it moved. While settling, re-read the live geometry
+    // every frame instead and let the membrane chase it.
+    if (now < membraneSettleUntil) {
+      const next = computeTarget();
+      if (next && next.length === field.length) targetField = next;
+    }
+
+    // Frame-rate independent approach to the target.
+    const k = 1 - Math.pow(1 - CONTOUR.tween, dt / 16.67);
+    let maxDelta = 0;
+    for (let i = 0; i < field.length; i++) {
+      const d = targetField[i] - field[i];
+      field[i] += d * k;
+      const ad = d < 0 ? -d : d;
+      if (ad > maxDelta) maxDelta = ad;
+    }
+
+    drawMembrane();
+    membraneRaf =
+      maxDelta > 0.05 || now < membraneSettleUntil
+        ? requestAnimationFrame(stepMembrane)
+        : 0;
+  }
+
+  // Measuring forces layout, so coalesce a burst of mutations into one pass.
+  function scheduleMembrane(animate: boolean): void {
+    membranePendingAnimate = membranePendingAnimate || animate;
+    if (animate) membraneSettleUntil = performance.now() + MEMBRANE_SETTLE_MS;
+    if (membranePending) return;
+    membranePending = requestAnimationFrame(() => {
+      membranePending = 0;
+      const a = membranePendingAnimate;
+      membranePendingAnimate = false;
+      retargetMembrane(a);
+    });
+  }
+
+  function onMembraneScroll(): void {
+    // The strip scrolls sideways under a fixed-width membrane, so the contour
+    // has to be re-derived or it drifts off its pills.
+    scheduleMembrane(false);
+  }
+
+  function observeMembrane(): void {
+    if (!navElement || !navContentEl) return;
+
+    membraneResizeObs = new ResizeObserver(() => scheduleMembrane(false));
+    membraneResizeObs.observe(navElement);
+
+    // Groups coming and going is the push into the membrane, so it animates.
+    // Attributes matter too: the search box expands by toggling a class, not by
+    // adding nodes, so childList alone would never see it.
+    membraneMutationObs = new MutationObserver(() => scheduleMembrane(true));
+    membraneMutationObs.observe(navContentEl, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    });
+
+    navContentEl.addEventListener("scroll", onMembraneScroll, {
+      passive: true,
+    });
+    retargetMembrane(false);
+  }
+
+  // ── Long-press to pin the bar ──────────────────────────────────────────────
+  // The press surface is the bar's own background — the padding and, mostly,
+  // the open middle of the contour. Anything interactive is excluded, and any
+  // real drag cancels, so this never fights the sideways scroll.
+  const PIN_PRESS_MS = 500;
+  const PIN_PRESS_SLOP = 10;
+
+  let pinTimer: ReturnType<typeof setTimeout> | undefined;
+  let pinStartX = 0;
+  let pinStartY = 0;
+  let pinNoticeText = "";
+  let pinNoticeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function cancelPinPress(): void {
+    if (pinTimer) clearTimeout(pinTimer);
+    pinTimer = undefined;
+  }
+
+  function onBarPointerDown(event: PointerEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (
+      target?.closest(
+        "button, input, select, textarea, a, [role='button'], .dropdown-menu, .search-results-dropdown",
+      )
+    ) {
+      return;
+    }
+
+    pinStartX = event.clientX;
+    pinStartY = event.clientY;
+    cancelPinPress();
+    pinTimer = setTimeout(togglePinned, PIN_PRESS_MS);
+  }
+
+  function onBarPointerMove(event: PointerEvent): void {
+    if (!pinTimer) return;
+    const dx = event.clientX - pinStartX;
+    const dy = event.clientY - pinStartY;
+    if (dx * dx + dy * dy > PIN_PRESS_SLOP * PIN_PRESS_SLOP) cancelPinPress();
+  }
+
+  function togglePinned(): void {
+    cancelPinPress();
+    const pinned = !getNavBarPinned();
+    setNavBarPinned(pinned);
+
+    // The reader owns the bar's offset, and it already listens for this.
+    window.dispatchEvent(new CustomEvent("settingsUpdated"));
+
+    navigator.vibrate?.(15);
+    pinNoticeText = pinned ? "Nav bar pinned" : "Nav bar unpinned";
+    if (pinNoticeTimer) clearTimeout(pinNoticeTimer);
+    pinNoticeTimer = setTimeout(() => (pinNoticeText = ""), 1400);
+  }
+
+  function teardownMembrane(): void {
+    membraneResizeObs?.disconnect();
+    membraneMutationObs?.disconnect();
+    navContentEl?.removeEventListener("scroll", onMembraneScroll);
+    if (membraneRaf) cancelAnimationFrame(membraneRaf);
+    if (membranePending) cancelAnimationFrame(membranePending);
+    membraneRaf = 0;
+    membranePending = 0;
+    cancelPinPress();
+    if (pinNoticeTimer) clearTimeout(pinNoticeTimer);
+  }
+
   onMount(() => {
     document.addEventListener("click", closeDropdowns);
     window.addEventListener("resize", updateDropdownPositions);
     window.addEventListener("settingsUpdated", onSettingsUpdated);
+    observeMembrane();
   });
 
   onDestroy(() => {
     document.removeEventListener("click", closeDropdowns);
     window.removeEventListener("resize", updateDropdownPositions);
     window.removeEventListener("settingsUpdated", onSettingsUpdated);
+    teardownMembrane();
   });
 
   // ── Read Aloud controls ────────────────────────────────────────────────────
@@ -1017,8 +1422,41 @@
   }
 </script>
 
-<div class="navigation-bar" {style} bind:this={navElement}>
-  <div class="nav-content">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="navigation-bar"
+  {style}
+  bind:this={navElement}
+  on:pointerdown={onBarPointerDown}
+  on:pointermove={onBarPointerMove}
+  on:pointerup={cancelPinPress}
+  on:pointercancel={cancelPinPress}
+  on:pointerleave={cancelPinPress}
+>
+  <!-- The bar's underside, drawn as one path so the shadow traces the real
+       contour rather than a rectangle. The filter belongs here and never on
+       .navigation-bar: filter makes an element a containing block, which would
+       strand the dropdowns that are rendered below to escape overflow. -->
+  <svg
+    class="nav-membrane"
+    width={membraneW}
+    height={CONTOUR.height}
+    viewBox="0 0 {membraneW} {CONTOUR.height}"
+    style="height: {CONTOUR.height}px; filter: drop-shadow(0 {CONTOUR.shadowY}px {CONTOUR.shadowBlur}px rgba(0, 0, 0, {CONTOUR.shadowOpacity}));"
+    aria-hidden="true"
+  >
+    <path d={membraneFill} fill="#252525" />
+    <path d={membraneEdge} fill="none" stroke="#323232" stroke-width="1" />
+  </svg>
+
+  <!-- Hangs off the bar rather than the viewport on purpose: the bar carries a
+       transform, so a fixed chip would resolve against it anyway, and the
+       feedback belongs next to the thing that was just pressed. -->
+  {#if pinNoticeText}
+    <div class="pin-notice" role="status">{pinNoticeText}</div>
+  {/if}
+
+  <div class="nav-content" bind:this={navContentEl}>
 
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 1: Navigation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-nav">
@@ -1573,9 +2011,9 @@
 
 
 <style>
+  /* No background and no bottom border: the membrane below is the whole bar,
+     and the open middle is meant to let the text through. */
   .navigation-bar {
-    background: #252525;
-    border-bottom: 1px solid #323232;
     position: sticky;
     top: 0;
     z-index: 1000;
@@ -1583,7 +2021,40 @@
     overflow: visible;
   }
 
+  /* Same recipe as the reader's floating notices. It cannot literally share
+     that class — Svelte scopes CSS per component — so the values are matched. */
+  .pin-notice {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10003;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: #1c1c1c;
+    border: 1px solid #3a3a3a;
+    color: #e0e0e0;
+    font-size: 13px;
+    line-height: 1.35;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Sits behind the pills, which are opaque and paint on top — that is what
+     lets a tight gap's shoulders run underneath them. */
+  .nav-membrane {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 0;
+  }
+
   .nav-content {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     gap: 8px;

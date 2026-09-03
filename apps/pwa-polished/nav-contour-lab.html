@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nav contour lab</title>
+<style>
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #151515;
+    color: #ddd;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+  }
+
+  body { display: flex; height: 100vh; overflow: hidden; }
+
+  /* ── Left: the stage ────────────────────────────────────────────────── */
+  .stage {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: #1a1a1a;
+  }
+
+  .stage-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #2a2a2a;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+
+  .stage-head h1 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 8px 0 0;
+    color: #888;
+    letter-spacing: 0.02em;
+  }
+
+  .arr-btn {
+    background: #232323;
+    border: 1px solid #383838;
+    color: #aaa;
+    border-radius: 6px;
+    padding: 5px 11px;
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .arr-btn:hover { background: #2b2b2b; color: #ddd; }
+  .arr-btn.active { background: #667eea; border-color: #667eea; color: #fff; }
+  .arr-btn.cycle { margin-left: auto; }
+  .arr-btn.cycle.running { background: #3a3a5a; border-color: #667eea; color: #cfd4ff; }
+
+  /* The scrolling reader, so text can pass under the bite */
+  .reader {
+    flex: 1;
+    overflow-y: auto;
+    position: relative;
+    padding-bottom: 60vh;
+  }
+
+  /* ── The bar under test ─────────────────────────────────────────────── */
+  .navigation-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    overflow: visible;
+    /* No background and no border-bottom: the SVG membrane is the whole bar. */
+  }
+
+  .membrane {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 0;
+  }
+
+  .nav-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    min-height: 58px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
+  .nav-content::-webkit-scrollbar { display: none; }
+
+  .nav-spacer { flex: 1; min-width: 27px; }
+
+  .nav-pill {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: #1c1c1c;
+    border: 1px solid #353535;
+    border-radius: 8px;
+    padding: 3px;
+    height: 38px;
+    flex-shrink: 0;
+  }
+
+  .pill-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 32px;
+    padding: 0 9px;
+    min-width: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: #888;
+    font-size: 13px;
+    font-family: inherit;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .pill-btn:hover { background: #252525; color: #ccc; }
+  .pill-divider { width: 1px; height: 16px; background: #353535; flex-shrink: 0; }
+
+  .pill-search {
+    height: 32px;
+    background: #252525;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    color: #ccc;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 0 10px;
+    width: 260px;
+  }
+
+  /* Fake verse text so the bite can be judged against real content */
+  .verses { padding: 18px 22px; max-width: 680px; }
+  .verses p {
+    margin: 0 0 13px;
+    line-height: 1.75;
+    color: #c8c8c8;
+    font-size: 16px;
+  }
+  .verses sup { color: #667eea; font-size: 11px; margin-right: 4px; }
+
+  /* ── Right: the controls ────────────────────────────────────────────── */
+  .panel {
+    width: 300px;
+    flex-shrink: 0;
+    background: #141414;
+    border-left: 1px solid #2a2a2a;
+    overflow-y: auto;
+    padding: 14px;
+  }
+
+  .panel h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #666;
+    margin: 18px 0 10px;
+    font-weight: 600;
+  }
+  .panel h2:first-child { margin-top: 0; }
+
+  .ctl { margin-bottom: 11px; }
+  .ctl-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 3px;
+  }
+  .ctl-row label { font-size: 12.5px; color: #aaa; }
+  .ctl-row output {
+    font-size: 12px;
+    color: #667eea;
+    font-variant-numeric: tabular-nums;
+  }
+  .ctl input[type="range"] { width: 100%; accent-color: #667eea; }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: #aaa;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+  .check input { accent-color: #667eea; width: 15px; height: 15px; cursor: pointer; }
+
+  .readout {
+    background: #0e0e0e;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 9px;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 11px;
+    color: #8a9;
+    white-space: pre;
+    overflow-x: auto;
+    line-height: 1.55;
+  }
+
+  .panel-btn {
+    width: 100%;
+    background: #232323;
+    border: 1px solid #383838;
+    color: #aaa;
+    border-radius: 6px;
+    padding: 7px;
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .panel-btn:hover { background: #2b2b2b; color: #ddd; }
+
+  .note {
+    font-size: 11.5px;
+    color: #666;
+    line-height: 1.5;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="stage-head">
+    <h1>ARRANGEMENT</h1>
+    <button class="arr-btn active" data-arr="empty">Empty</button>
+    <button class="arr-btn" data-arr="repeat">Repeat</button>
+    <button class="arr-btn" data-arr="tts">Read aloud</button>
+    <button class="arr-btn" data-arr="search">Search open</button>
+    <button class="arr-btn cycle" id="cycleBtn">Cycle ▶</button>
+  </div>
+
+  <div class="reader" id="reader">
+    <div class="navigation-bar" id="bar">
+      <svg class="membrane" id="membrane" xmlns="http://www.w3.org/2000/svg">
+        <path id="fillPath" fill="#252525" />
+        <path id="strokePath" fill="none" stroke="#3a3a3a" stroke-width="1" />
+      </svg>
+
+      <div class="nav-content" id="navContent">
+        <!-- Left: the navigation pill -->
+        <div class="nav-pill" data-group>
+          <button class="pill-btn">⌂</button>
+          <div class="pill-divider"></div>
+          <button class="pill-btn">KJV</button>
+          <button class="pill-btn">John 3</button>
+          <div class="pill-divider"></div>
+          <button class="pill-btn">⧉</button>
+          <button class="pill-btn">✦</button>
+        </div>
+
+        <div class="nav-spacer"></div>
+
+        <!-- Middle: the wildcard zone -->
+        <div class="nav-pill" data-group data-mid="repeat" hidden>
+          <button class="pill-btn">↻ 3</button>
+        </div>
+
+        <div class="nav-pill" data-group data-mid="tts" hidden>
+          <button class="pill-btn">⏮</button>
+          <button class="pill-btn">▶</button>
+          <button class="pill-btn">⏭</button>
+          <div class="pill-divider"></div>
+          <button class="pill-btn">1.0×</button>
+        </div>
+
+        <div class="nav-pill" data-group data-mid="search" hidden>
+          <input class="pill-search" placeholder="Search the text…" />
+        </div>
+
+        <div class="nav-spacer"></div>
+
+        <!-- Right: the tools pill -->
+        <div class="nav-pill" data-group>
+          <button class="pill-btn">⌕</button>
+          <button class="pill-btn">⌬</button>
+          <div class="pill-divider"></div>
+          <button class="pill-btn">☰</button>
+          <button class="pill-btn">⚙</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="verses" id="verses"></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Shape</h2>
+  <div id="shapeCtls"></div>
+
+  <h2>Elevation</h2>
+  <div id="elevCtls"></div>
+
+  <h2>Motion</h2>
+  <div id="motionCtls"></div>
+
+  <h2>Render</h2>
+  <label class="check"><input type="checkbox" id="optStroke" checked /> Edge stroke</label>
+  <label class="check"><input type="checkbox" id="optScrim" /> Soft scrim under edge</label>
+  <label class="check"><input type="checkbox" id="optGuides" /> Show sample points</label>
+
+  <h2>Frozen values</h2>
+  <div class="readout" id="readout"></div>
+  <button class="panel-btn" id="copyBtn">Copy</button>
+  <button class="panel-btn" id="resetBtn">Reset to defaults</button>
+
+  <p class="note">
+    Nothing here ships. Dial in the numbers, then they get lifted into
+    NavigationBar.svelte in phase 2.
+  </p>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────
+// Tunable parameters. These are exactly the numbers phase 2 needs.
+// ─────────────────────────────────────────────────────────────────────────
+const SPECS = {
+  shape: [
+    { key: 'restPct',     label: 'Rest height',   min: 0.10, max: 0.75, step: 0.01, def: 0.33, fmt: v => Math.round(v * 100) + '%' },
+    { key: 'padX',        label: 'Wrap padding X', min: 0,   max: 16,  step: 0.5, def: 5 },
+    { key: 'padY',        label: 'Wrap padding Y', min: 0,   max: 16,  step: 0.5, def: 6 },
+    { key: 'shoulderMax', label: 'Shoulder run',   min: 4,   max: 70,  step: 1,   def: 22 },
+    { key: 'dimpleStart', label: 'Ignore gaps under',    min: 0, max: 44, step: 1, def: 0 },
+    { key: 'fullRelax',   label: 'Full relax at gap',    min: 30, max: 200, step: 2, def: 90 },
+    { key: 'corner',      label: 'End corner radius',    min: 0,  max: 24, step: 0.5, def: 8 },
+    { key: 'barH',        label: 'Bar box height',       min: 44, max: 76, step: 1, def: 58 },
+  ],
+  elev: [
+    { key: 'shadowY',       label: 'Shadow drop',    min: 0, max: 16, step: 0.5, def: 2 },
+    { key: 'shadowBlur',    label: 'Shadow blur',    min: 0, max: 32, step: 0.5, def: 8 },
+    { key: 'shadowOpacity', label: 'Shadow opacity', min: 0, max: 1,  step: 0.02, def: 0.5, fmt: v => v.toFixed(2) },
+  ],
+  motion: [
+    { key: 'tween',   label: 'Tween rate',    min: 0.04, max: 0.60, step: 0.01, def: 0.18, fmt: v => v.toFixed(2) },
+    { key: 'samples', label: 'Sample points', min: 30,   max: 260,  step: 2,    def: 120 },
+  ],
+};
+
+const P = {};
+for (const group of Object.values(SPECS)) for (const s of group) P[s.key] = s.def;
+
+// ─────────────────────────────────────────────────────────────────────────
+// The membrane
+// ─────────────────────────────────────────────────────────────────────────
+const bar        = document.getElementById('bar');
+const navContent = document.getElementById('navContent');
+const svg        = document.getElementById('membrane');
+const fillPath   = document.getElementById('fillPath');
+const strokePath = document.getElementById('strokePath');
+
+let field   = null;   // current sampled y values (what is drawn)
+let target  = null;   // where the field is heading
+let xs      = null;   // sample x positions
+let raf     = 0;
+let lastT   = 0;
+let guides  = null;
+
+const smoothstep = t => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); };
+
+/**
+ * Measure the pill groups and turn them into padded, merged occupied
+ * intervals in the bar's own coordinate space. This is the measurement phase 2
+ * reuses verbatim — it reads live rects, so horizontal scroll is accounted for.
+ */
+function measureGroups() {
+  const barRect = bar.getBoundingClientRect();
+  const raw = [];
+  let deepest = 0;
+
+  for (const el of navContent.querySelectorAll('[data-group]')) {
+    if (el.hidden) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0) continue;
+    raw.push([r.left - barRect.left, r.right - barRect.left]);
+    deepest = Math.max(deepest, r.bottom - barRect.top);
+  }
+  if (!raw.length) return { raw: [], hFull: P.barH };
+
+  // Full depth is the deepest pill plus the vertical wrap padding.
+  const hFull = Math.min(P.barH, deepest + P.padY);
+
+  // Merge only on genuine overlap. Padding is applied later, so a tight
+  // between-pill gap survives as a crevice instead of being swallowed.
+  raw.sort((a, b) => a[0] - b[0]);
+  const merged = [raw[0].slice()];
+  for (let i = 1; i < raw.length; i++) {
+    const last = merged[merged.length - 1];
+    if (raw[i][0] <= last[1]) last[1] = Math.max(last[1], raw[i][1]);
+    else merged.push(raw[i].slice());
+  }
+
+  return { raw: merged, hFull };
+}
+
+/**
+ * Build y(x) for the bottom edge.
+ *
+ * Two things are deliberately separate here:
+ *
+ *  - DEPTH is a linear response to gap width. A smoothstep here is far too
+ *    flat at the low end — it gives an 8px between-pill gap a 0.8px dip, which
+ *    is invisible. Linear gives it ~3px, an actual little dimple.
+ *  - SHAPE is the smoothstep. That is the sine-like shoulder, and it is what
+ *    keeps the edge off a square wave.
+ *
+ * Gaps come in two kinds. A wide gap has room for both shoulders inside it,
+ * plus a flat run at the dip line. A crevice — where the padded pills would
+ * overlap — has no such room, so its shoulders overhang underneath the pills.
+ * That is safe because the pills are opaque and paint above the membrane, so
+ * only the part spanning the actual gap is ever seen.
+ */
+function makeSampler(raw, W, hFull) {
+  const hRest = hFull * P.restPct;
+  const padded = raw.map(([l, r]) => [l - P.padX, r + P.padX]);
+
+  // The plank still has ends: wrap around the outermost sides rather than
+  // relaxing into the screen edge.
+  padded[0][0] = 0;
+  padded[padded.length - 1][1] = W;
+
+  const gaps = [];
+  for (let i = 0; i < raw.length - 1; i++) {
+    const rawW = raw[i + 1][0] - raw[i][1];
+    if (rawW <= 0) continue;
+
+    const span  = Math.max(1, P.fullRelax - P.dimpleStart);
+    const relax = Math.max(0, Math.min(1, (rawW - P.dimpleStart) / span));
+    const yDip  = hFull - relax * (hFull - hRest);
+
+    const A = padded[i][1];
+    const B = padded[i + 1][0];
+
+    if (B - A > 1) {
+      gaps.push({ kind: 'wide', A, B, S: Math.min(P.shoulderMax, (B - A) / 2), yDip });
+    } else {
+      const m = (raw[i][1] + raw[i + 1][0]) / 2;
+      gaps.push({ kind: 'crevice', m, S: Math.max(2, P.shoulderMax), yDip });
+    }
+  }
+
+  // Overlapping influences combine by taking the deepest rise, never by
+  // summing — two adjacent crevices must not dig a trench between them.
+  return x => {
+    let y = hFull;
+    for (const g of gaps) {
+      let inf;
+      if (g.kind === 'wide') {
+        if (x <= g.A || x >= g.B) continue;
+        if (g.S <= 0) inf = 1;
+        else if (x < g.A + g.S) inf = smoothstep((x - g.A) / g.S);
+        else if (x > g.B - g.S) inf = smoothstep((g.B - x) / g.S);
+        else inf = 1;
+      } else {
+        const d = Math.abs(x - g.m);
+        if (d >= g.S) continue;
+        inf = smoothstep(1 - d / g.S);
+      }
+      const yg = hFull + (g.yDip - hFull) * inf;
+      if (yg < y) y = yg;
+    }
+    return y;
+  };
+}
+
+/** Catmull-Rom through the samples, emitted as cubic Béziers. */
+function bottomTail(pts) {
+  let d = '';
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || pts[i + 1];
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  }
+  return d;
+}
+
+function retarget(animate) {
+  const W = bar.clientWidth;
+  if (!W) return;
+
+  const n = Math.round(P.samples);
+  const r = Math.min(P.corner, W / 2);
+  const { raw, hFull } = measureGroups();
+  if (!raw.length) return;
+  const sample = makeSampler(raw, W, hFull);
+
+  // The bottom edge spans r → W-r; the corners attach outside it.
+  xs = new Array(n);
+  for (let i = 0; i < n; i++) xs[i] = r + (W - 2 * r) * (i / (n - 1));
+
+  const next = xs.map(sample);
+
+  if (!field || field.length !== n || !animate) {
+    field = next.slice();
+    target = next;
+    draw();
+    return;
+  }
+  target = next;
+  if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(step); }
+}
+
+function step(now) {
+  const dt = Math.min(64, now - lastT);
+  lastT = now;
+
+  // Frame-rate independent approach to the target.
+  const k = 1 - Math.pow(1 - P.tween, dt / 16.67);
+  let maxDelta = 0;
+  for (let i = 0; i < field.length; i++) {
+    const d = target[i] - field[i];
+    field[i] += d * k;
+    maxDelta = Math.max(maxDelta, Math.abs(d));
+  }
+
+  draw();
+  raf = maxDelta > 0.05 ? requestAnimationFrame(step) : 0;
+}
+
+function draw() {
+  const W = bar.clientWidth;
+  const H = P.barH;
+  if (!W || !field) return;
+
+  const r = Math.min(P.corner, W / 2);
+  const pts = xs.map((x, i) => ({ x, y: field[i] }));
+  const yL = pts[0].y;
+  const yR = pts[pts.length - 1].y;
+
+  const tail = bottomTail(pts);
+
+  // Bottom edge only — used for the stroke and shared by the fill.
+  const edge =
+    `M 0 ${(yL - r).toFixed(2)}` +
+    ` Q 0 ${yL.toFixed(2)} ${r.toFixed(2)} ${yL.toFixed(2)}` +
+    tail +
+    ` Q ${W} ${yR.toFixed(2)} ${W} ${(yR - r).toFixed(2)}`;
+
+  // Fill closes up the right side, across the straight top, and down the left.
+  fillPath.setAttribute('d', `${edge} L ${W} 0 L 0 0 Z`);
+  strokePath.setAttribute('d', edge);
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.style.height = H + 'px';
+
+  // The shadow traces the real silhouette, which is the whole point. It lives
+  // on the SVG layer alone — putting `filter` on .navigation-bar would make it
+  // a containing block and break the dropdowns that escape overflow clipping.
+  svg.style.filter =
+    `drop-shadow(0 ${P.shadowY}px ${P.shadowBlur}px rgba(0,0,0,${P.shadowOpacity}))`;
+
+  if (guides) drawGuides(pts);
+}
+
+function drawGuides(pts) {
+  const parts = pts.map(p => `M ${p.x.toFixed(1)} ${p.y.toFixed(1)} l 0 0.01`).join(' ');
+  guides.setAttribute('d', parts);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Arrangements
+// ─────────────────────────────────────────────────────────────────────────
+const ARRANGEMENTS = ['empty', 'repeat', 'tts', 'search'];
+let current = 'empty';
+
+function setArrangement(name, animate = true) {
+  current = name;
+  for (const el of navContent.querySelectorAll('[data-mid]')) {
+    el.hidden = el.dataset.mid !== name;
+  }
+  for (const b of document.querySelectorAll('.arr-btn[data-arr]')) {
+    b.classList.toggle('active', b.dataset.arr === name);
+  }
+  // Let flexbox settle before measuring.
+  requestAnimationFrame(() => retarget(animate));
+}
+
+document.querySelectorAll('.arr-btn[data-arr]').forEach(b => {
+  b.addEventListener('click', () => { stopCycle(); setArrangement(b.dataset.arr); });
+});
+
+let cycleTimer = 0;
+const cycleBtn = document.getElementById('cycleBtn');
+
+function stopCycle() {
+  clearInterval(cycleTimer);
+  cycleTimer = 0;
+  cycleBtn.classList.remove('running');
+  cycleBtn.textContent = 'Cycle ▶';
+}
+
+cycleBtn.addEventListener('click', () => {
+  if (cycleTimer) return stopCycle();
+  cycleBtn.classList.add('running');
+  cycleBtn.textContent = 'Cycle ■';
+  cycleTimer = setInterval(() => {
+    const i = ARRANGEMENTS.indexOf(current);
+    setArrangement(ARRANGEMENTS[(i + 1) % ARRANGEMENTS.length]);
+  }, 1400);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Controls
+// ─────────────────────────────────────────────────────────────────────────
+function buildControls(hostId, specs) {
+  const host = document.getElementById(hostId);
+  for (const s of specs) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ctl';
+    wrap.innerHTML =
+      `<div class="ctl-row"><label for="s_${s.key}">${s.label}</label>` +
+      `<output id="o_${s.key}"></output></div>` +
+      `<input type="range" id="s_${s.key}" min="${s.min}" max="${s.max}" step="${s.step}" value="${s.def}" />`;
+    host.appendChild(wrap);
+
+    const input = wrap.querySelector('input');
+    const out   = wrap.querySelector('output');
+    const show  = v => { out.textContent = s.fmt ? s.fmt(v) : (Math.round(v * 10) / 10) + 'px'; };
+    show(s.def);
+
+    input.addEventListener('input', () => {
+      P[s.key] = parseFloat(input.value);
+      show(P[s.key]);
+      if (s.key === 'barH') navContent.style.minHeight = P.barH + 'px';
+      retarget(false);
+      writeReadout();
+    });
+  }
+}
+
+buildControls('shapeCtls',  SPECS.shape);
+buildControls('elevCtls',   SPECS.elev);
+buildControls('motionCtls', SPECS.motion);
+
+document.getElementById('optStroke').addEventListener('change', e => {
+  strokePath.style.display = e.target.checked ? '' : 'none';
+});
+
+const scrim = document.createElement('div');
+scrim.style.cssText =
+  'position:absolute;left:0;right:0;height:26px;pointer-events:none;z-index:0;display:none;' +
+  'background:linear-gradient(to bottom, rgba(37,37,37,0.85), rgba(37,37,37,0));';
+bar.appendChild(scrim);
+
+document.getElementById('optScrim').addEventListener('change', e => {
+  scrim.style.display = e.target.checked ? 'block' : 'none';
+  scrim.style.top = '0px';
+  scrim.style.height = P.barH + 22 + 'px';
+});
+
+document.getElementById('optGuides').addEventListener('change', e => {
+  if (e.target.checked && !guides) {
+    guides = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    guides.setAttribute('stroke', '#ff5c8a');
+    guides.setAttribute('stroke-width', '2');
+    guides.setAttribute('stroke-linecap', 'round');
+    guides.setAttribute('fill', 'none');
+    svg.appendChild(guides);
+  }
+  if (guides) guides.style.display = e.target.checked ? '' : 'none';
+  draw();
+});
+
+function writeReadout() {
+  const lines = ['const CONTOUR = {'];
+  for (const group of Object.values(SPECS)) {
+    for (const s of group) {
+      const v = P[s.key];
+      lines.push(`  ${s.key}: ${Number.isInteger(v) ? v : v.toFixed(2)},`);
+    }
+  }
+  lines.push('};');
+  document.getElementById('readout').textContent = lines.join('\n');
+}
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  navigator.clipboard?.writeText(document.getElementById('readout').textContent);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  for (const group of Object.values(SPECS)) {
+    for (const s of group) {
+      P[s.key] = s.def;
+      const input = document.getElementById('s_' + s.key);
+      const out   = document.getElementById('o_' + s.key);
+      if (input) input.value = s.def;
+      if (out) out.textContent = s.fmt ? s.fmt(s.def) : (Math.round(s.def * 10) / 10) + 'px';
+    }
+  }
+  navContent.style.minHeight = P.barH + 'px';
+  retarget(false);
+  writeReadout();
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Filler text, so the bite can be judged against real content
+// ─────────────────────────────────────────────────────────────────────────
+const LINES = [
+  'In the beginning was the Word, and the Word was with God, and the Word was God.',
+  'The same was in the beginning with God.',
+  'All things were made by him; and without him was not any thing made that was made.',
+  'In him was life; and the life was the light of men.',
+  'And the light shineth in darkness; and the darkness comprehended it not.',
+  'There was a man sent from God, whose name was John.',
+  'The same came for a witness, to bear witness of the Light, that all men through him might believe.',
+  'He was not that Light, but was sent to bear witness of that Light.',
+  'That was the true Light, which lighteth every man that cometh into the world.',
+  'He was in the world, and the world was made by him, and the world knew him not.',
+];
+document.getElementById('verses').innerHTML =
+  LINES.concat(LINES, LINES)
+    .map((t, i) => `<p><sup>${(i % LINES.length) + 1}</sup>${t}</p>`)
+    .join('');
+
+// ─────────────────────────────────────────────────────────────────────────
+// Keep the membrane pinned to reality
+// ─────────────────────────────────────────────────────────────────────────
+new ResizeObserver(() => retarget(false)).observe(bar);
+navContent.addEventListener('scroll', () => retarget(false), { passive: true });
+
+navContent.style.minHeight = P.barH + 'px';
+writeReadout();
+setArrangement('empty', false);
+</script>
+</body>
+</html>

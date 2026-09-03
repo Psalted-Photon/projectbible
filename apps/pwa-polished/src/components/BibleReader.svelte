@@ -69,7 +69,7 @@
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading, verseStructure } from "../lib/verseRendering";
   import { BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData";
-  import { getSettings, getInterlinearSettings, getTtsSettings } from "../adapters/settings";
+  import { getSettings, getInterlinearSettings, getTtsSettings, getNavBarPinned } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
   import { ttsCurrentVerse } from "../stores/audioStore";
   import { getSharedTtsAudio } from "../adapters/tts";
@@ -206,7 +206,12 @@
   let loadChapterTicket = 0;
   let lastScrollTop = 0;
   let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
-  let navBarOffset = 0; // Track navbar Y offset (0 = visible, -68 = hidden)
+  // How far up the navbar travels to get out of the way. Slightly further than
+  // the bar is tall, so its shadow clears the top edge too.
+  const NAV_BAR_HIDDEN = -68;
+  let navBarOffset = 0; // Track navbar Y offset (0 = visible, NAV_BAR_HIDDEN = hidden)
+  // Pinned means the bar never hides, whatever the scrolling is doing.
+  let navBarPinned = getNavBarPinned();
   let readerClientWidth = 0;
   let readerLeft = 0;
   $: if (readerElement && ($windowStore, readerClientWidth)) {
@@ -884,6 +889,9 @@
   async function handleSettingsUpdate() {
     const prevRedLetter = showRedLetter;
     loadUserSettings();
+    // Also fires when the bar is pinned by long-press, which writes the setting.
+    navBarPinned = getNavBarPinned();
+    if (navBarPinned) navBarOffset = 0;
     if (prevRedLetter !== showRedLetter) {
       await reRenderRedLetter();
     }
@@ -1060,7 +1068,7 @@
     clearReadingPlanHighlight();
     navigationStore.setReadingPlanActiveTarget(next.book, next.chapter, null, false);
     navigationStore.navigateTo(currentTranslation, next.book, next.chapter, null, false);
-    navBarOffset = -68;
+    if (!navBarPinned) navBarOffset = NAV_BAR_HIDDEN;
   }
 
   async function handleMarkAndContinue(ctx: any, book: string, chapter: number) {
@@ -1287,7 +1295,7 @@
       }
       prev = prev.previousElementSibling as HTMLElement | null;
     }
-    navBarOffset = -68;
+    if (!navBarPinned) navBarOffset = NAV_BAR_HIDDEN;
     const containerRect = readerElement.getBoundingClientRect();
     const targetRect = scrollTarget.getBoundingClientRect();
     const newScrollTop = readerElement.scrollTop + (targetRect.top - containerRect.top) - 8;
@@ -2534,12 +2542,15 @@
       const scrollDelta = scrollTop - lastScrollTop;
 
       // Update navbar offset based on scroll - it moves with the content
-      if (scrollTop < 5) {
+      if (navBarPinned) {
+        // Pinned down: scrolling never moves it.
+        navBarOffset = 0;
+      } else if (scrollTop < 5) {
         // Near top - always fully visible
         navBarOffset = 0;
       } else if (scrollDelta > 0) {
         // Scrolling down - move navbar up (hide it)
-        navBarOffset = Math.max(-68, navBarOffset - scrollDelta);
+        navBarOffset = Math.max(NAV_BAR_HIDDEN, navBarOffset - scrollDelta);
       } else if (scrollDelta < 0) {
         // Scrolling up - move navbar down (show it)
         navBarOffset = Math.min(0, navBarOffset - scrollDelta);
