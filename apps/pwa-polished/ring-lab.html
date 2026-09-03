@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ring lab</title>
+<style>
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #151515;
+    color: #ddd;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+  }
+
+  body { display: flex; height: 100vh; overflow: hidden; }
+
+  /* ── Left: the stage ────────────────────────────────────────────────── */
+  .stage {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: #1a1a1a;
+  }
+
+  .stage-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #2a2a2a;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+
+  .stage-head h1 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 8px 0 0;
+    color: #888;
+    letter-spacing: 0.02em;
+  }
+
+  .stage-head .hint { font-size: 12px; color: #5f5f5f; }
+
+  .lab-btn {
+    background: #232323;
+    border: 1px solid #383838;
+    color: #aaa;
+    border-radius: 6px;
+    padding: 5px 11px;
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .lab-btn:hover { background: #2b2b2b; color: #ddd; }
+  .lab-btn.right { margin-left: auto; }
+
+  /* The scrolling reader. The ring has to be judged against real text, and the
+     nudge-scroll only means anything if the text can actually move. */
+  .reader {
+    flex: 1;
+    overflow-y: auto;
+    position: relative;
+  }
+
+  .verses { padding: 18px 22px 70vh; max-width: 680px; }
+  .verses h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: #5c5c5c;
+    font-weight: 600;
+    margin: 26px 0 10px;
+  }
+  .verses h3:first-child { margin-top: 0; }
+  .verses p {
+    margin: 0 0 13px;
+    line-height: 1.75;
+    color: #c8c8c8;
+    font-size: 16px;
+  }
+  .verses sup { color: #667eea; font-size: 0.7em; margin-right: 4px; }
+
+  .w { cursor: pointer; border-radius: 3px; }
+  .w:hover { background: rgba(102, 126, 234, 0.14); }
+  .w.sel { background: rgba(102, 126, 234, 0.38); color: #fff; }
+
+  /* ── The ring under test ────────────────────────────────────────────── */
+  .ring {
+    position: fixed;
+    z-index: 10000;
+    /* The ring is mostly hole. Only the buttons may take a press. */
+    pointer-events: none;
+  }
+
+  .seat {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--badge);
+    height: var(--badge);
+    transform: translate(-50%, -50%) translate(var(--dx), var(--dy));
+    pointer-events: auto;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(26, 26, 26, 0.96);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    color: #e0e0e0;
+    cursor: pointer;
+    transition: transform 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .seat:active { transform: translate(-50%, -50%) translate(var(--dx), var(--dy)) scale(0.94); }
+
+  .mode-seat {
+    width: calc(var(--badge) - 6px);
+    height: calc(var(--badge) - 6px);
+    font-weight: 600;
+    color: #8fa3f5;
+    font-size: 12px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    padding: 2px;
+    width: 26px;
+    height: 26px;
+    font-size: 15px;
+    line-height: 1;
+    color: #fff;
+    text-shadow: 0 0 2px #000, 0 0 2px #000;
+    background: radial-gradient(circle, var(--accent) 0%, var(--accent) 20%, #000000 100%);
+  }
+
+  .seat-label {
+    font-size: 9px;
+    line-height: 1.1;
+    letter-spacing: 0.01em;
+    max-width: 52px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── The pills under test ───────────────────────────────────────────── */
+  /* Body is a blur of the verse behind it. The tint sits near zero on purpose:
+     what is being judged is whether pure blur is legible enough on its own. */
+  .pill {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+    -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+    background: rgba(var(--tint-rgb), var(--tint-a));
+    border: 1px solid rgba(var(--edge-rgb), var(--edge-a));
+    border-radius: var(--pr);
+    box-shadow: 0 var(--sy) var(--sb) rgba(0, 0, 0, var(--sa));
+    color: var(--fg);
+    padding: var(--py) var(--px);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .pill-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.15;
+  }
+
+  /* Draws what the pill is up against: the seat circles, the clear inner
+     circle, and the band the slot is allowed to use at its current width. */
+  .guides {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    z-index: 9999;
+    overflow: visible;
+  }
+
+  /* ── Right: the controls ────────────────────────────────────────────── */
+  .panel {
+    width: 310px;
+    flex-shrink: 0;
+    background: #141414;
+    border-left: 1px solid #2a2a2a;
+    overflow-y: auto;
+    padding: 14px;
+  }
+
+  .panel h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #666;
+    margin: 18px 0 10px;
+    font-weight: 600;
+  }
+  .panel h2:first-child { margin-top: 0; }
+
+  .ctl { margin-bottom: 11px; }
+  .ctl-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 3px;
+  }
+  .ctl-row label { font-size: 12.5px; color: #aaa; }
+  .ctl-row output {
+    font-size: 12px;
+    color: #667eea;
+    font-variant-numeric: tabular-nums;
+  }
+  .ctl input[type="range"] { width: 100%; accent-color: #667eea; }
+
+  .pick {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 9px;
+    font-size: 12.5px;
+    color: #aaa;
+  }
+  .pick select {
+    background: #232323;
+    border: 1px solid #383838;
+    color: #ccc;
+    border-radius: 5px;
+    padding: 4px 6px;
+    font-family: inherit;
+    font-size: 12px;
+    max-width: 172px;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: #aaa;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+  .check input { accent-color: #667eea; width: 15px; height: 15px; cursor: pointer; }
+
+  .readout {
+    background: #0e0e0e;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 9px;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 11px;
+    color: #8a9;
+    white-space: pre;
+    overflow-x: auto;
+    line-height: 1.55;
+  }
+
+  .panel-btn {
+    width: 100%;
+    background: #232323;
+    border: 1px solid #383838;
+    color: #aaa;
+    border-radius: 6px;
+    padding: 7px;
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .panel-btn:hover { background: #2b2b2b; color: #ddd; }
+
+  .note {
+    font-size: 11.5px;
+    color: #666;
+    line-height: 1.5;
+    margin-top: 12px;
+  }
+
+  .warn { color: #e8896b; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="stage-head">
+    <h1>RING LAB</h1>
+    <span class="hint">Click any word to open the ring on it. Sliders keep it open.</span>
+    <button class="lab-btn right" id="replayBtn">Replay sweep ▶</button>
+    <button class="lab-btn" id="closeBtn">Close ring</button>
+  </div>
+
+  <div class="reader" id="reader">
+    <div class="verses" id="verses"></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Ring</h2>
+  <div id="ringCtls"></div>
+  <p class="note">
+    Radius is solved, not set: the innermost pair has to clear the line of text,
+    and the seats have to clear each other. <b>Radius nudge</b> is added on top of
+    whichever constraint won. <b>Text size</b> drives the line height, which is
+    what makes the ring grow with the reader's font.
+  </p>
+
+  <h2>Pill placement</h2>
+  <div class="pick">
+    <label for="topContent">Top slot</label>
+    <select id="topContent">
+      <option value="refShort">Ref — abbreviated</option>
+      <option value="refFull" selected>Ref — spelled out</option>
+      <option value="refChapter">Ref — chapter only</option>
+      <option value="strongs">Word + Strong's</option>
+      <option value="off">Off</option>
+    </select>
+  </div>
+  <div class="pick">
+    <label for="botContent">Bottom slot</label>
+    <select id="botContent">
+      <option value="off">Off</option>
+      <option value="refShort">Ref — abbreviated</option>
+      <option value="refFull">Ref — spelled out</option>
+      <option value="refChapter">Ref — chapter only</option>
+      <option value="strongs" selected>Word + Strong's</option>
+    </select>
+  </div>
+  <div id="placeCtls"></div>
+  <p class="note">
+    <b>Drift</b> slides the pill through its band: 0 hugs the word, 1 hugs the
+    arc. The band is measured against the seats that actually sit over the pill
+    at its width, so a wider pill gets a shorter band — past about 110px it
+    starts answering to the low seats either side of the gaps instead of the
+    high one at 12 o clock, and the room collapses. Watch the Fit block.
+    <b>Word + Strong's</b> is faked here from a short lemma table; in the app
+    only interlinear and Greek/Hebrew taps carry morphology, so on an English
+    word that pill does not render at all.
+  </p>
+
+  <h2>Pill body</h2>
+  <div id="bodyCtls"></div>
+  <label class="check"><input type="checkbox" id="optLightTint" /> Light tint instead of dark</label>
+  <label class="check"><input type="checkbox" id="optBookEdge" /> Hairline takes the book's colour</label>
+
+  <h2>Motion</h2>
+  <div id="motionCtls"></div>
+  <label class="check"><input type="checkbox" id="optPillsAfter" checked /> Pills arrive after the sweep</label>
+
+  <h2>Render</h2>
+  <label class="check"><input type="checkbox" id="optGuides" /> Show band and seat guides</label>
+  <label class="check"><input type="checkbox" id="optLongRef" /> Force the longest reference</label>
+  <label class="check"><input type="checkbox" id="optNudge" checked /> Nudge-scroll to make room</label>
+
+  <h2>Fit</h2>
+  <div class="readout" id="fitReadout"></div>
+
+  <h2>Frozen values</h2>
+  <div class="readout" id="readout"></div>
+  <button class="panel-btn" id="copyBtn">Copy</button>
+  <button class="panel-btn" id="resetBtn">Reset to defaults</button>
+
+  <p class="note">
+    Nothing here ships. Dial in the numbers, then they get lifted into
+    radialMenu.ts and RadialSelectionMenu.svelte in phase 2.
+  </p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const RAD = Math.PI / 180;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tunable parameters. These are exactly the numbers phase 2 needs.
+// ─────────────────────────────────────────────────────────────────────────
+// Ring defaults are what radialMenu.ts ships today, so the lab opens on the
+// current ring and every move is judged against it.
+const SPECS = {
+  ring: [
+    { key: 'badge',     label: 'Badge size',      min: 32,  max: 80, step: 1, def: 45 },
+    { key: 'phi',       label: 'Gap half-angle',  min: 10,  max: 60, step: 1, def: 34, fmt: v => v + '°' },
+    { key: 'minGap',    label: 'Min gap',         min: 0,   max: 24, step: 1, def: 7 },
+    { key: 'linePad',   label: 'Line clearance',  min: 0,   max: 24, step: 1, def: 6 },
+    { key: 'rNudge',    label: 'Radius nudge',    min: -30, max: 60, step: 1, def: 12,
+      fmt: v => (v > 0 ? '+' : '') + v + 'px' },
+    { key: 'count',     label: 'Buttons',         min: 3,   max: 8,  step: 1, def: 7, fmt: v => v + ' seats' },
+    { key: 'textSize',  label: 'Reader text',     min: 13,  max: 28, step: 0.5, def: 16 },
+  ],
+  place: [
+    { key: 'drift',    label: 'Drift word → arc', min: 0, max: 1,  step: 0.01, def: 0.3, fmt: v => v.toFixed(2) },
+    { key: 'gapWord',  label: 'Gap from word',    min: 0, max: 24, step: 0.5, def: 6 },
+    { key: 'gapArc',   label: 'Gap from arc',     min: 0, max: 24, step: 0.5, def: 3.5 },
+    { key: 'padX',     label: 'Padding X',        min: 2, max: 22, step: 0.5, def: 6.5 },
+    { key: 'padY',     label: 'Padding Y',        min: 0, max: 12, step: 0.5, def: 4.5 },
+    { key: 'pillR',    label: 'Corner radius',    min: 2, max: 20, step: 0.5, def: 6.5 },
+    { key: 'maxW',     label: 'Max width',        min: 60, max: 280, step: 2, def: 128 },
+    { key: 'fontSize', label: 'Text size',        min: 8,  max: 18, step: 0.5, def: 11.5 },
+    { key: 'weight',   label: 'Text weight',      min: 300, max: 800, step: 100, def: 600, fmt: v => String(v) },
+    { key: 'tracking', label: 'Letter spacing',   min: -0.02, max: 0.16, step: 0.005, def: 0.02,
+      fmt: v => v.toFixed(3) + 'em' },
+    { key: 'fgA',      label: 'Text opacity',     min: 0.3, max: 1, step: 0.02, def: 0.92, fmt: v => v.toFixed(2) },
+  ],
+  body: [
+    { key: 'blur',       label: 'Backdrop blur',   min: 0, max: 20, step: 0.5, def: 3 },
+    { key: 'sat',        label: 'Backdrop sat',    min: 0.4, max: 2.5, step: 0.05, def: 1.1, fmt: v => v.toFixed(2) + '×' },
+    { key: 'tintA',      label: 'Tint alpha',      min: 0, max: 0.9, step: 0.01, def: 0.06, fmt: v => v.toFixed(2) },
+    { key: 'edgeA',      label: 'Hairline alpha',  min: 0, max: 0.9, step: 0.01, def: 0.26, fmt: v => v.toFixed(2) },
+    { key: 'shadowY',    label: 'Shadow drop',     min: 0, max: 12, step: 0.5, def: 4.5 },
+    { key: 'shadowBlur', label: 'Shadow blur',     min: 0, max: 26, step: 0.5, def: 8 },
+    { key: 'shadowA',    label: 'Shadow opacity',  min: 0, max: 0.9, step: 0.02, def: 0.6, fmt: v => v.toFixed(2) },
+  ],
+  motion: [
+    { key: 'stagger', label: 'Stagger',      min: 0, max: 70, step: 1, def: 25, fmt: v => v + 'ms' },
+    { key: 'popMs',   label: 'Pop duration', min: 60, max: 320, step: 5, def: 120, fmt: v => v + 'ms' },
+    { key: 'reach',   label: 'Throw from',   min: 0.2, max: 1, step: 0.05, def: 0.65, fmt: v => Math.round(v * 100) + '%' },
+    { key: 'pillMs',  label: 'Pill fade',    min: 60, max: 400, step: 10, def: 150, fmt: v => v + 'ms' },
+  ],
+};
+
+const P = {};
+for (const group of Object.values(SPECS)) for (const s of group) P[s.key] = s.def;
+
+const OPT = {
+  lightTint: false,
+  bookEdge: true,
+  pillsAfter: true,
+  guides: false,
+  longRef: false,
+  nudge: true,
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Ring geometry — a plain-JS copy of radialMenu.ts, with every constant that
+// module freezes promoted to a slider. That is the whole point of the lab.
+// ─────────────────────────────────────────────────────────────────────────
+function ringRadius(lineHeight, count) {
+  const top = Math.ceil(count / 2);
+  const bottom = count - top;
+  const span = 180 - 2 * P.phi;
+
+  let r = (lineHeight / 2 + P.linePad + P.badge / 2) / Math.sin(P.phi * RAD);
+  for (const n of [top, bottom]) {
+    if (n < 2) continue;
+    r = Math.max(r, (P.badge + P.minGap) / ((span / (n - 1)) * RAD));
+  }
+  return Math.max(P.badge / 2, r + P.rNudge);
+}
+
+function outerRadius(lineHeight, count) {
+  return ringRadius(lineHeight, count) + P.badge / 2;
+}
+
+/** Degrees clockwise from 3 o'clock: the top arc right-tip to left-tip, then back. */
+function seatAngles(count) {
+  const top = Math.ceil(count / 2);
+  const bottom = count - top;
+  const spread = (n, from, to) => {
+    if (n <= 0) return [];
+    if (n === 1) return [from];
+    return Array.from({ length: n }, (_, i) => from + ((to - from) * i) / (n - 1));
+  };
+  return [
+    ...spread(top, 360 - P.phi, 180 + P.phi),
+    ...spread(bottom, 180 - P.phi, P.phi),
+  ];
+}
+
+const seatOffset = (deg, r) => ({ dx: r * Math.cos(deg * RAD), dy: r * Math.sin(deg * RAD) });
+
+// Sweep order, same as the real ring: lookup, map, speak, mark, notes, repeats,
+// extend, then the scope toggle on the seat beside the right-hand gap.
+const ACTIONS = [
+  { id: 'dissect',   label: 'Define',  glyph: '✦', accent: '#fb7185' },
+  { id: 'map',       label: 'Map',     glyph: '⌖', accent: '#f2893e' },
+  { id: 'speak',     label: 'Speak',   glyph: '♫', accent: '#34d399' },
+  { id: 'highlight', label: 'Mark',    glyph: '▨', accent: '#fde047' },
+  { id: 'notes',     label: 'Notes',   glyph: '✎', accent: '#d1e3f5' },
+  { id: 'repeats',   label: 'Repeats', glyph: '↻', accent: '#a78bfa' },
+  { id: 'extend',    label: 'Extend',  glyph: '↔', accent: '#9ca3af' },
+];
+
+const ringItems = count => [
+  ...ACTIONS.slice(0, Math.max(0, count - 1)),
+  { kind: 'mode', id: 'verse', label: 'Verse' },
+];
+
+// ─────────────────────────────────────────────────────────────────────────
+// Filler text, so the pill can be judged against a real reference
+// ─────────────────────────────────────────────────────────────────────────
+// Three books on purpose: "Ps 23:1" is the shortest reference the pill will
+// ever hold and "1 Thessalonians 5:23" close to the longest, so the fit is
+// visible without touching a slider. Colours are the category accents from
+// bibleData.ts.
+const PASSAGES = [
+  {
+    book: 'Psalm', short: 'Ps', chapter: 23, start: 1, color: '#f0c040',
+    lines: [
+      'The LORD is my shepherd; I shall not want.',
+      'He maketh me to lie down in green pastures: he leadeth me beside the still waters.',
+      'He restoreth my soul: he leadeth me in the paths of righteousness for his name\u2019s sake.',
+      'Yea, though I walk through the valley of the shadow of death, I will fear no evil: for thou art with me; thy rod and thy staff they comfort me.',
+      'Thou preparest a table before me in the presence of mine enemies: thou anointest my head with oil; my cup runneth over.',
+      'Surely goodness and mercy shall follow me all the days of my life: and I will dwell in the house of the LORD for ever.',
+    ],
+  },
+  {
+    book: 'John', short: 'John', chapter: 1, start: 1, color: '#fc345c',
+    lines: [
+      'In the beginning was the Word, and the Word was with God, and the Word was God.',
+      'The same was in the beginning with God.',
+      'All things were made by him; and without him was not any thing made that was made.',
+      'In him was life; and the life was the light of men.',
+      'And the light shineth in darkness; and the darkness comprehended it not.',
+      'There was a man sent from God, whose name was John.',
+      'The same came for a witness, to bear witness of the Light, that all men through him might believe.',
+      'He was not that Light, but was sent to bear witness of that Light.',
+      'That was the true Light, which lighteth every man that cometh into the world.',
+      'He was in the world, and the world was made by him, and the world knew him not.',
+    ],
+  },
+  {
+    book: '1 Thessalonians', short: '1 Thess', chapter: 5, start: 16, color: '#6048cc',
+    lines: [
+      'Rejoice evermore.',
+      'Pray without ceasing.',
+      'In every thing give thanks: for this is the will of God in Christ Jesus concerning you.',
+      'Quench not the Spirit.',
+      'Despise not prophesyings.',
+      'Prove all things; hold fast that which is good.',
+      'Abstain from all appearance of evil.',
+      'And the very God of peace sanctify you wholly; and I pray God your whole spirit and soul and body be preserved blameless unto the coming of our Lord Jesus Christ.',
+    ],
+  },
+];
+
+/** Just enough lemmas to see what a Strong's pill looks like on real words. */
+const LEMMAS = {
+  word: ['λόγος', 'G3056'], god: ['θεός', 'G2316'], life: ['ζωή', 'G2222'],
+  light: ['φῶς', 'G5457'], beginning: ['ἀρχή', 'G746'], man: ['ἄνθρωπος', 'G444'],
+  men: ['ἄνθρωπος', 'G444'], witness: ['μαρτυρία', 'G3141'], world: ['κόσμος', 'G2889'],
+  darkness: ['σκοτία', 'G4653'], john: ['Ἰωάννης', 'G2491'], name: ['ὄνομα', 'G3686'],
+  lord: ['יְהוָה', 'H3068'], shepherd: ['רָעָה', 'H7462'], soul: ['נֶפֶשׁ', 'H5315'],
+  house: ['בַּיִת', 'H1004'], evil: ['רַע', 'H7451'], mercy: ['חֶסֶד', 'H2617'],
+  spirit: ['πνεῦμα', 'G4151'], peace: ['εἰρήνη', 'G1515'], christ: ['Χριστός', 'G5547'],
+  jesus: ['Ἰησοῦς', 'G2424'], pray: ['προσεύχομαι', 'G4336'], good: ['καλός', 'G2570'],
+};
+
+const verses = $('verses');
+const reader = $('reader');
+
+verses.innerHTML = PASSAGES.map(p => {
+  const head = '<h3>' + p.book + ' ' + p.chapter + '</h3>';
+  const body = p.lines.map((line, i) => {
+    const words = line.split(' ').map(w => '<span class="w">' + w + '</span>').join(' ');
+    return '<p data-book="' + p.book + '" data-short="' + p.short + '" data-chapter="' + p.chapter +
+      '" data-verse="' + (p.start + i) + '" data-color="' + p.color + '">' +
+      '<sup>' + (p.start + i) + '</sup>' + words + '</p>';
+  }).join('');
+  return head + body;
+}).join('');
+
+/** What a slot shows. `off` returns null and the pill is not rendered at all. */
+function pillText(kind, a) {
+  if (kind === 'off' || !a) return null;
+  const ref = OPT.longRef
+    ? { book: '1 Thessalonians', short: '1 Thess', chapter: 5, verse: 23 }
+    : a;
+  switch (kind) {
+    case 'refShort':   return ref.short + ' ' + ref.chapter + ':' + ref.verse;
+    case 'refFull':    return ref.book + ' ' + ref.chapter + ':' + ref.verse;
+    case 'refChapter': return ref.short + ' ' + ref.chapter;
+    case 'strongs': {
+      const key = a.word.toLowerCase().replace(/[^a-z]/g, '');
+      const hit = LEMMAS[key];
+      return hit ? hit[0] + ' · ' + hit[1] : '“' + a.word + '” · —';
+    }
+    default: return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// The ring itself
+// ─────────────────────────────────────────────────────────────────────────
+const SVGNS = 'http://www.w3.org/2000/svg';
+const ringEl = document.createElement('div');
+ringEl.className = 'ring';
+ringEl.style.display = 'none';
+document.body.appendChild(ringEl);
+
+/** The tapped word, and everything the pills need to say about it. */
+let anchor = null;
+
+const lineHeightOf = el => {
+  const lh = parseFloat(getComputedStyle(el.parentElement).lineHeight);
+  return Number.isFinite(lh) ? lh : 24;
+};
+
+const hexToRgb = hex => {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(',');
+};
+
+/**
+ * The clear band a slot has to work in, on the side given by `slot`
+ * (-1 above the word, +1 below it).
+ *
+ * Only the seats that actually sit over the pill at its current width count,
+ * which is why this is measured rather than assumed. A narrow pill clears the
+ * seats flanking the two gaps and answers only to whatever sits near 12
+ * o clock, high up at the full radius. A wide one runs into those flanking
+ * seats instead, and they hang barely a line above the word — so widening the
+ * pill can close the band to nothing without the ring having moved at all.
+ */
+function bandFor(slot, halfW, r, angles) {
+  let limit = slot * (r + P.badge / 2);
+  for (const a of angles) {
+    const dx = r * Math.cos(a * RAD);
+    const dy = r * Math.sin(a * RAD);
+    if (slot < 0 ? dy >= 0 : dy <= 0) continue;
+    if (Math.abs(dx) > halfW + P.badge / 2) continue;
+    const edge = dy - slot * (P.badge / 2);
+    if (Math.abs(edge) < Math.abs(limit)) limit = edge;
+  }
+  return { limit };
+}
+
+function stylePill(el) {
+  const tint = OPT.lightTint ? '255,255,255' : '8,8,10';
+  const edge = OPT.bookEdge && anchor ? hexToRgb(anchor.color) : (OPT.lightTint ? '20,20,24' : '255,255,255');
+  el.style.setProperty('--blur', P.blur + 'px');
+  el.style.setProperty('--sat', P.sat);
+  el.style.setProperty('--tint-rgb', tint);
+  el.style.setProperty('--tint-a', P.tintA);
+  el.style.setProperty('--edge-rgb', edge);
+  el.style.setProperty('--edge-a', P.edgeA);
+  el.style.setProperty('--pr', P.pillR + 'px');
+  el.style.setProperty('--px', P.padX + 'px');
+  el.style.setProperty('--py', P.padY + 'px');
+  el.style.setProperty('--sy', P.shadowY + 'px');
+  el.style.setProperty('--sb', P.shadowBlur + 'px');
+  el.style.setProperty('--sa', P.shadowA);
+  el.style.setProperty('--fg', (OPT.lightTint ? 'rgba(14,14,18,' : 'rgba(255,255,255,') + P.fgA + ')');
+  el.style.fontSize = P.fontSize + 'px';
+  el.style.fontWeight = P.weight;
+  el.style.letterSpacing = P.tracking + 'em';
+  el.style.maxWidth = P.maxW + 'px';
+}
+
+function drawGuides(r, outer, angles, lh, slots) {
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('class', 'guides');
+  svg.setAttribute('width', outer * 2);
+  svg.setAttribute('height', outer * 2);
+  svg.setAttribute('viewBox', [-outer, -outer, outer * 2, outer * 2].join(' '));
+
+  const add = (tag, attrs) => {
+    const n = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    svg.appendChild(n);
+    return n;
+  };
+
+  add('circle', { cx: 0, cy: 0, r, fill: 'none', stroke: '#3f4a63', 'stroke-dasharray': '3 4' });
+  add('circle', { cx: 0, cy: 0, r: Math.max(0, r - P.badge / 2), fill: 'none', stroke: '#667eea',
+    'stroke-dasharray': '2 5', opacity: 0.55 });
+  for (const a of angles) {
+    add('circle', {
+      cx: (r * Math.cos(a * RAD)).toFixed(2), cy: (r * Math.sin(a * RAD)).toFixed(2),
+      r: P.badge / 2, fill: 'none', stroke: 'rgba(255,255,255,0.18)',
+    });
+  }
+  for (const y of [-lh / 2, lh / 2]) {
+    add('line', { x1: -outer, x2: outer, y1: y, y2: y, stroke: '#667eea', opacity: 0.4,
+      'stroke-dasharray': '5 6' });
+  }
+  for (const s of slots) {
+    if (!s.text) continue;
+    add('rect', {
+      x: (-s.w / 2).toFixed(2), y: Math.min(s.near, s.far).toFixed(2),
+      width: s.w.toFixed(2), height: Math.abs(s.far - s.near).toFixed(2),
+      fill: 'none', stroke: s.tight ? '#e8896b' : '#ff5c8a', 'stroke-dasharray': '4 3',
+    });
+  }
+  return svg;
+}
+
+/**
+ * Rebuild the whole ring. Cheap enough to run on every slider tick, and it
+ * means no stale seat is ever left behind when the count or the spread changes.
+ */
+function render(animate) {
+  if (!anchor || !anchor.el.isConnected) {
+    ringEl.style.display = 'none';
+    writeFit(null);
+    return;
+  }
+  ringEl.style.display = '';
+
+  const rect = anchor.el.getBoundingClientRect();
+  const lh = lineHeightOf(anchor.el);
+  const count = P.count;
+  const r = ringRadius(lh, count);
+  const outer = r + P.badge / 2;
+
+  // Slides sideways to fit, exactly as positionRadial does — the word simply
+  // ends up in the left or right gap. No vertical clamp: that is the nudge.
+  const b = reader.getBoundingClientRect();
+  const left = b.left + 8;
+  const right = b.right - 8;
+  const raw = rect.left + rect.width / 2;
+  const cx = right - left >= outer * 2
+    ? Math.min(Math.max(raw, left + outer), right - outer)
+    : (left + right) / 2;
+  const cy = rect.top + rect.height / 2;
+
+  ringEl.style.left = (cx - outer).toFixed(2) + 'px';
+  ringEl.style.top = (cy - outer).toFixed(2) + 'px';
+  ringEl.style.width = (outer * 2).toFixed(2) + 'px';
+  ringEl.style.height = (outer * 2).toFixed(2) + 'px';
+  ringEl.style.setProperty('--badge', P.badge + 'px');
+  ringEl.innerHTML = '';
+
+  const items = ringItems(count);
+  const angles = seatAngles(count);
+  const seats = angles.map(a => seatOffset(a, r));
+
+  // --- Pills ------------------------------------------------------------
+  // Measured before they are placed: the band a slot gets depends on how wide
+  // the text turned out, because a narrow pill can slip between two seats that
+  // a wide one would run into.
+  const slots = [
+    { slot: -1, kind: $('topContent').value },
+    { slot: 1, kind: $('botContent').value },
+  ];
+  const glyphPx = Math.max(11, Math.round(P.badge * 0.48));
+
+  for (const s of slots) {
+    s.text = pillText(s.kind, anchor);
+    if (!s.text) continue;
+
+    const pill = document.createElement('div');
+    pill.className = 'pill';
+    pill.innerHTML = '<span class="pill-text" style="min-width:0"></span>';
+    pill.firstChild.textContent = s.text;
+    stylePill(pill);
+    pill.style.visibility = 'hidden';
+    ringEl.appendChild(pill);
+
+    s.w = pill.offsetWidth;
+    s.h = pill.offsetHeight;
+    const { limit } = bandFor(s.slot, s.w / 2, r, angles);
+    s.near = s.slot * (lh / 2 + P.gapWord);
+    s.far = limit - s.slot * P.gapArc;
+    s.room = Math.abs(s.far - s.near);
+    s.tight = s.room < s.h;
+
+    const c0 = s.near + (s.slot * s.h) / 2;
+    const c1 = s.far - (s.slot * s.h) / 2;
+    s.y = c0 + (c1 - c0) * P.drift;
+
+    const inner = r - P.badge / 2;
+    s.clear = 2 * Math.sqrt(Math.max(0, inner * inner - s.y * s.y));
+
+    pill.style.visibility = '';
+    pill.style.transform = 'translate(-50%, -50%) translate(0px, ' + s.y.toFixed(2) + 'px)';
+    s.el = pill;
+  }
+
+  if (OPT.guides) ringEl.insertBefore(drawGuides(r, outer, angles, lh, slots), ringEl.firstChild);
+
+  // --- Seats ------------------------------------------------------------
+  items.forEach((item, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'seat' + (item.kind === 'mode' ? ' mode-seat' : '');
+    btn.style.setProperty('--dx', seats[i].dx.toFixed(2) + 'px');
+    btn.style.setProperty('--dy', seats[i].dy.toFixed(2) + 'px');
+    btn.style.setProperty('--accent', item.accent || '#3a3a3a');
+    btn.innerHTML = item.glyph
+      ? '<span class="badge" style="width:' + glyphPx + 'px;height:' + glyphPx +
+        'px;font-size:' + Math.round(glyphPx * 0.62) + 'px">' + item.glyph + '</span>' +
+        '<span class="seat-label">' + item.label + '</span>'
+      : '<span class="seat-label" style="font-size:12px">' + item.label + '</span>';
+    ringEl.appendChild(btn);
+
+    if (!animate) return;
+    const { dx, dy } = seats[i];
+    btn.animate(
+      [
+        { transform: 'translate(-50%, -50%) translate(' + (dx * P.reach).toFixed(2) + 'px, ' +
+          (dy * P.reach).toFixed(2) + 'px) scale(0.3)', opacity: 0 },
+        { transform: 'translate(-50%, -50%) translate(' + dx.toFixed(2) + 'px, ' +
+          dy.toFixed(2) + 'px) scale(1)', opacity: 1 },
+      ],
+      { delay: i * P.stagger, duration: P.popMs, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'backwards' },
+    );
+  });
+
+  if (animate) {
+    const wait = OPT.pillsAfter ? (items.length - 1) * P.stagger + P.popMs : P.stagger;
+    for (const s of slots) {
+      if (!s.el) continue;
+      s.el.animate(
+        [{ opacity: 0, filter: 'blur(2px)' }, { opacity: 1, filter: 'blur(0px)' }],
+        { delay: wait, duration: P.pillMs, easing: 'cubic-bezier(0.2, 0, 0.2, 1)', fill: 'backwards' },
+      );
+    }
+  }
+
+  writeFit({ r, outer, lh, count, slots });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Fit report — the numbers that decide whether a pill is legal
+// ─────────────────────────────────────────────────────────────────────────
+// `band` is the room the slot has between the word and the arc; `clear` is the
+// widest a pill could be at that height before the inner circle cuts it. A slot
+// whose pill is taller than its band is called out, because the collision is
+// not always obvious by eye at low blur.
+function writeFit(info) {
+  const out = $('fitReadout');
+  if (!info) {
+    out.textContent = 'click a word to open the ring';
+    return;
+  }
+  const pad = (s, n) => (s + '        ').slice(0, n);
+  const rows = [
+    'ring    r ' + Math.round(info.r) + '   outer ' + Math.round(info.outer) +
+      '   line ' + Math.round(info.lh) + '   seats ' + info.count,
+  ];
+  for (const s of info.slots) {
+    const name = s.slot < 0 ? 'top' : 'bottom';
+    if (!s.text) {
+      rows.push(pad(name, 8) + 'off');
+      continue;
+    }
+    rows.push(
+      pad(name, 8) + 'band ' + Math.round(s.room) +
+      '   pill ' + Math.round(s.w) + 'x' + Math.round(s.h) +
+      '   clear ' + Math.round(s.clear) +
+      (s.tight ? '   << taller than its band' : '') +
+      (s.w > s.clear ? '   << wider than the hole' : ''),
+    );
+  }
+  out.innerHTML = rows
+    .map(l => (l.includes('<<') ? '<span class="warn">' + l.replace(/</g, '&lt;') + '</span>' : l))
+    .join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Opening, closing, and following the word
+// ─────────────────────────────────────────────────────────────────────────
+function openAt(span) {
+  const p = span.closest('p');
+  document.querySelectorAll('.w.sel').forEach(n => n.classList.remove('sel'));
+  span.classList.add('sel');
+  anchor = {
+    el: span,
+    word: span.textContent.replace(/[^A-Za-z]/g, ''),
+    book: p.dataset.book,
+    short: p.dataset.short,
+    chapter: Number(p.dataset.chapter),
+    verse: Number(p.dataset.verse),
+    color: p.dataset.color,
+  };
+  render(true);
+  nudge();
+}
+
+function closeRing() {
+  anchor = null;
+  document.querySelectorAll('.w.sel').forEach(n => n.classList.remove('sel'));
+  render(false);
+}
+
+/**
+ * Scroll the reader just enough that a full ring fits above and below the word.
+ * The real one pre-shifts its anchor because it cannot re-place mid-scroll; here
+ * the scroll handler re-renders, so the ring simply rides the text into place —
+ * which is the more honest thing to watch.
+ */
+function nudge() {
+  if (!OPT.nudge || !anchor) return;
+  const rect = anchor.el.getBoundingClientRect();
+  const outer = outerRadius(lineHeightOf(anchor.el), P.count);
+  const b = reader.getBoundingClientRect();
+  const cy = rect.top + rect.height / 2;
+
+  const short = b.top + 8 - (cy - outer);
+  const over = cy + outer - (b.bottom - 8);
+  let shift = short > 0 ? short : over > 0 ? -over : 0;
+  if (!shift) return;
+
+  // Scrolling up moves the content down. Take only what the scroller has.
+  const room = shift > 0
+    ? reader.scrollTop
+    : reader.scrollHeight - reader.clientHeight - reader.scrollTop;
+  shift = Math.sign(shift) * Math.min(Math.abs(shift), Math.max(0, room));
+  if (!shift) return;
+
+  reader.scrollBy({ top: -shift, behavior: 'smooth' });
+}
+
+function applyText() {
+  verses.querySelectorAll('p').forEach(p => { p.style.fontSize = P.textSize + 'px'; });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Controls
+// ─────────────────────────────────────────────────────────────────────────
+function buildControls(hostId, specs) {
+  const host = $(hostId);
+  for (const s of specs) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ctl';
+    wrap.innerHTML =
+      '<div class="ctl-row"><label for="s_' + s.key + '">' + s.label + '</label>' +
+      '<output id="o_' + s.key + '"></output></div>' +
+      '<input type="range" id="s_' + s.key + '" min="' + s.min + '" max="' + s.max +
+      '" step="' + s.step + '" value="' + s.def + '" />';
+    host.appendChild(wrap);
+
+    const input = wrap.querySelector('input');
+    const out = wrap.querySelector('output');
+    const show = v => { out.textContent = s.fmt ? s.fmt(v) : (Math.round(v * 10) / 10) + 'px'; };
+    show(s.def);
+
+    input.addEventListener('input', () => {
+      P[s.key] = parseFloat(input.value);
+      show(P[s.key]);
+      if (s.key === 'textSize') applyText();
+      render(false);
+      writeReadout();
+    });
+  }
+}
+
+buildControls('ringCtls', SPECS.ring);
+buildControls('placeCtls', SPECS.place);
+buildControls('bodyCtls', SPECS.body);
+buildControls('motionCtls', SPECS.motion);
+
+const CHECKS = {
+  optLightTint: 'lightTint',
+  optBookEdge: 'bookEdge',
+  optPillsAfter: 'pillsAfter',
+  optGuides: 'guides',
+  optLongRef: 'longRef',
+  optNudge: 'nudge',
+};
+for (const id in CHECKS) {
+  const box = $(id);
+  box.checked = OPT[CHECKS[id]];
+  box.addEventListener('change', () => {
+    OPT[CHECKS[id]] = box.checked;
+    render(false);
+    writeReadout();
+  });
+}
+
+for (const id of ['topContent', 'botContent']) {
+  $(id).addEventListener('change', () => { render(false); writeReadout(); });
+}
+
+$('replayBtn').addEventListener('click', () => { if (anchor) render(true); });
+$('closeBtn').addEventListener('click', closeRing);
+
+reader.addEventListener('click', e => {
+  const word = e.target.closest('.w');
+  if (word) openAt(word);
+  else closeRing();
+});
+reader.addEventListener('scroll', () => render(false), { passive: true });
+window.addEventListener('resize', () => render(false));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRing(); });
+
+// ─────────────────────────────────────────────────────────────────────────
+// The readout phase 2 transcribes
+// ─────────────────────────────────────────────────────────────────────────
+// Seat count and reader text size are stage controls, not constants — the real
+// ring derives both — so they stay out of the block.
+const STAGE_ONLY = ['count', 'textSize'];
+const num = v => (Number.isInteger(v) ? v : parseFloat(v.toFixed(3)));
+
+function writeReadout() {
+  const lines = ['const RING = {'];
+  for (const s of SPECS.ring) {
+    if (STAGE_ONLY.includes(s.key)) continue;
+    lines.push('  ' + s.key + ': ' + num(P[s.key]) + ',');
+  }
+  lines.push('};', '', 'const PILL = {');
+  for (const s of [...SPECS.place, ...SPECS.body, ...SPECS.motion]) {
+    lines.push('  ' + s.key + ': ' + num(P[s.key]) + ',');
+  }
+  lines.push('  top: ' + JSON.stringify($('topContent').value) + ',');
+  lines.push('  bottom: ' + JSON.stringify($('botContent').value) + ',');
+  lines.push('  lightTint: ' + OPT.lightTint + ',');
+  lines.push('  bookEdge: ' + OPT.bookEdge + ',');
+  lines.push('  pillsAfter: ' + OPT.pillsAfter + ',');
+  lines.push('};');
+  $('readout').textContent = lines.join('\n');
+}
+
+$('copyBtn').addEventListener('click', () => {
+  navigator.clipboard?.writeText($('readout').textContent);
+});
+
+$('resetBtn').addEventListener('click', () => {
+  for (const group of Object.values(SPECS)) {
+    for (const s of group) {
+      P[s.key] = s.def;
+      const input = $('s_' + s.key);
+      const out = $('o_' + s.key);
+      if (input) input.value = s.def;
+      if (out) out.textContent = s.fmt ? s.fmt(s.def) : (Math.round(s.def * 10) / 10) + 'px';
+    }
+  }
+  OPT.lightTint = false;
+  OPT.bookEdge = true;
+  OPT.pillsAfter = true;
+  OPT.guides = false;
+  OPT.longRef = false;
+  OPT.nudge = true;
+  for (const id in CHECKS) $(id).checked = OPT[CHECKS[id]];
+  $('topContent').value = 'refFull';
+  $('botContent').value = 'strongs';
+  applyText();
+  render(false);
+  writeReadout();
+});
+
+applyText();
+writeReadout();
+writeFit(null);
+</script>
+</body>
+</html>

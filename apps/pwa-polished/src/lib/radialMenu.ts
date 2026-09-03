@@ -20,19 +20,27 @@
 const RAD = Math.PI / 180;
 
 /** Badge button diameter, and the smallest gap allowed between two of them. */
-export const BADGE = 54;
-const MIN_GAP = 6;
+export const BADGE = 45;
+const MIN_GAP = 7;
 
 /**
  * How far off horizontal a button must stay, in degrees. This is what carves the
  * two gaps: buttons live in [PHI, 180-PHI] and [180+PHI, 360-PHI], leaving the
  * horizontal channel through the middle clear for the line of text.
  */
-const PHI = 30;
+const PHI = 34;
 const ARC_SPAN = 180 - 2 * PHI;
 
 /** Breathing room between the text line and the nearest button edge. */
 const LINE_PAD = 6;
+
+/**
+ * Pushed out past whatever the constraints demand. The hole is not empty any
+ * more — it carries the reference pill above the word and the original-language
+ * pill below it — and a radius solved for the buttons alone left both of them
+ * pressed against the line of text.
+ */
+const RADIUS_NUDGE = 12;
 
 // ---------------------------------------------------------------------------
 // Geometry
@@ -42,10 +50,11 @@ const LINE_PAD = 6;
  * Radius of the circle the button centres sit on.
  *
  * Two constraints, whichever is larger: the buttons must not collide along their
- * arc, and the innermost pair must clear the line of text. At eight buttons or
- * fewer the line always wins, which is what makes the ring a fixed size for a
- * given text size no matter which buttons happen to be showing — it grows only
- * when the reader's font size does.
+ * arc, and the innermost pair must clear the line of text. The line wins at the
+ * reader's default text size and above, which is what makes the ring grow with
+ * the font; below it a full seven- or eight-button ring bottoms out on the arc
+ * instead and stops shrinking, which is the behaviour the pills want anyway —
+ * the hole stays wide enough to hold them at any text size.
  */
 export function ringRadius(lineHeight: number, count: number): number {
   const top = Math.ceil(count / 2);
@@ -56,7 +65,7 @@ export function ringRadius(lineHeight: number, count: number): number {
     if (n < 2) continue;
     r = Math.max(r, (BADGE + MIN_GAP) / ((ARC_SPAN / (n - 1)) * RAD));
   }
-  return r;
+  return r + RADIUS_NUDGE;
 }
 
 /** Half the menu's full extent, including the button bodies. */
@@ -93,6 +102,38 @@ export function seatOffset(angleDeg: number, radius: number): { dx: number; dy: 
     dx: radius * Math.cos(angleDeg * RAD),
     dy: radius * Math.sin(angleDeg * RAD),
   };
+}
+
+/**
+ * How close to the word the buttons come on one side of the line — the edge an
+ * info pill of the given half-width has to stop short of. `slot` is -1 for the
+ * space above the word and 1 for the space below it, and the answer carries that
+ * sign.
+ *
+ * Only the seats that actually sit over the pill count, which is why this has to
+ * be measured rather than assumed. A narrow pill clears the seats flanking the
+ * two gaps and answers only to whatever sits near 12 o'clock, high up at the
+ * full radius. A wide one runs into those flanking seats instead, and they hang
+ * barely a line above the word — so widening a pill can close its room to
+ * nothing without the ring having moved at all.
+ */
+export function slotLimit(
+  slot: -1 | 1,
+  halfWidth: number,
+  radius: number,
+  count: number,
+): number {
+  // Nothing overhead: the pill may go as far as the ring's own outer edge.
+  let limit = slot * (radius + BADGE / 2);
+
+  for (const angle of seatAngles(count)) {
+    const { dx, dy } = seatOffset(angle, radius);
+    if (slot < 0 ? dy >= 0 : dy <= 0) continue;
+    if (Math.abs(dx) > halfWidth + BADGE / 2) continue;
+    const edge = dy - slot * (BADGE / 2);
+    if (Math.abs(edge) < Math.abs(limit)) limit = edge;
+  }
+  return limit;
 }
 
 // ---------------------------------------------------------------------------

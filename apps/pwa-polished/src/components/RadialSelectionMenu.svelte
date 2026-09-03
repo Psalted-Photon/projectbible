@@ -16,9 +16,11 @@
     outerRadius,
     seatAngles,
     seatOffset,
+    slotLimit,
     radialItems,
     type RadialItem,
   } from '../lib/radialMenu';
+  import { normalizeBookName, getBookColor } from '../lib/bibleData';
 
   /** Viewport centre of the ring — the middle of the tapped word. */
   export let cx = 0;
@@ -40,6 +42,18 @@
   export let extendArmed = false;
   /** Greek/Hebrew selection Read Aloud can pronounce. */
   export let canSpeak = false;
+
+  /** The verse the tap landed in — the reference pill above the word. */
+  export let book = '';
+  export let chapter = 0;
+  export let verse: number | null = null;
+  /**
+   * The original-language word behind the tap, for the pill below it. Only
+   * interlinear and Greek/Hebrew taps carry morphology, so on an English word
+   * both of these are empty and that pill simply does not render.
+   */
+  export let lemma = '';
+  export let strongs = '';
   /**
    * Accepted for parity with SelectionToast, and deliberately unused. That
    * component hides itself for a frame while the caller measures it; the ring
@@ -105,6 +119,57 @@
   $: radius = ringRadius(lineHeight, shown.length);
   $: outer = outerRadius(lineHeight, shown.length);
   $: seats = seatAngles(shown.length).map((a) => seatOffset(a, radius));
+
+  // --- The info pills ------------------------------------------------------
+  //
+  // Two of them, in the room the radius nudge opened up: where you are above the
+  // word, and what the word is underneath it. Numbers frozen from ring-lab.html.
+  const PILL = { drift: 0.3, gapWord: 6, gapArc: 3.5 };
+
+  $: refLabel = verse != null && book ? `${normalizeBookName(book)} ${chapter}:${verse}` : '';
+  $: originLabel = [lemma, strongs].filter(Boolean).join(' · ');
+
+  /** The book's category colour, as an rgb triple for the pill's hairline. */
+  function bookRgb(name: string): string {
+    const n = parseInt(getBookColor(name).slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(', ');
+  }
+  $: edgeRgb = bookRgb(book);
+
+  let topW = 0;
+  let topH = 0;
+  let botW = 0;
+  let botH = 0;
+
+  /**
+   * Where a pill sits between the word and the arc, as a fraction of the room
+   * it has. The measured width is load-bearing: slotLimit hands back a nearer
+   * edge for a wider pill, because a wide one runs into the seats flanking the
+   * gaps and a narrow one passes between them.
+   *
+   * Everything is passed in rather than closed over so the statements below
+   * re-run when the ring resizes too, not only when the text reflows.
+   */
+  function pillY(
+    slot: -1 | 1,
+    w: number,
+    h: number,
+    r: number,
+    line: number,
+    count: number,
+  ): number {
+    if (!w || !h) return 0;
+    // clientWidth/clientHeight leave out the 1px hairline on each side.
+    const width = w + 2;
+    const height = h + 2;
+    const limit = slotLimit(slot, width / 2, r, count);
+    const atWord = slot * (line / 2 + PILL.gapWord) + (slot * height) / 2;
+    const atArc = limit - slot * PILL.gapArc - (slot * height) / 2;
+    return atWord + (atArc - atWord) * PILL.drift;
+  }
+
+  $: topY = pillY(-1, topW, topH, radius, lineHeight, shown.length);
+  $: botY = pillY(1, botW, botH, radius, lineHeight, shown.length);
 
   onMount(() => {
     if (settled) return;
@@ -179,6 +244,30 @@
       { inert: true },
     );
 
+  /**
+   * The pills are not part of the sweep. They wait for it to land and then fade
+   * up, so the ring reads as buttons first and detail second.
+   *
+   * Opacity and nothing else: an element `filter` on top of `backdrop-filter` is
+   * where blurred backdrops go wrong, and a transform here would fight the one
+   * placing the pill.
+   */
+  const pillIn = () =>
+    reduceMotion
+      ? { duration: 120, easing: cubicOut, css: (t: number) => `opacity: ${t};` }
+      : {
+          delay: (shown.length - 1) * STAGGER + POP_MS,
+          duration: 150,
+          easing: cubicOut,
+          css: (t: number) => `opacity: ${t};`,
+        };
+
+  const pillOut = () => ({
+    duration: POP_MS * 0.55,
+    easing: cubicOut,
+    css: (t: number) => `opacity: ${t};`,
+  });
+
   function activate(item: { kind: string; id: string }) {
     if (item.kind === 'mode') dispatch('modeChange', item.id);
     else dispatch('action', { action: item.id, text: selectedText });
@@ -196,6 +285,37 @@
   bind:this={rootEl}
   style="left: {cx - outer}px; top: {cy - outer}px; width: {outer * 2}px; height: {outer * 2}px; --badge: {BADGE}px;"
 >
+  <!--
+    Pills before the seats, so a seat paints over a pill corner rather than the
+    other way round — and so the pill's backdrop samples the verse behind it and
+    not the button beside it.
+  -->
+  {#if refLabel}
+    <div
+      class="pill"
+      style="--y: {topY}px; --edge: {edgeRgb};"
+      bind:clientWidth={topW}
+      bind:clientHeight={topH}
+      in:pillIn|global
+      out:pillOut|global
+    >
+      <span class="pill-text">{refLabel}</span>
+    </div>
+  {/if}
+
+  {#if originLabel}
+    <div
+      class="pill"
+      style="--y: {botY}px; --edge: {edgeRgb};"
+      bind:clientWidth={botW}
+      bind:clientHeight={botH}
+      in:pillIn|global
+      out:pillOut|global
+    >
+      <span class="pill-text">{originLabel}</span>
+    </div>
+  {/if}
+
   <!--
     |global on both directives is load-bearing, not decoration. Svelte 5 made
     transitions local by default, and a local transition only plays when the
@@ -332,6 +452,50 @@
     line-height: 1.1;
     letter-spacing: 0.01em;
     max-width: 52px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The pills in the hole. Numbers frozen from ring-lab.html.
+
+     The body is a blur of the verse behind it rather than a filled chip: the
+     tint is barely there, and what lifts the text off the page is the blur and
+     the drop shadow. Keeping the fill this light is the whole point — a solid
+     chip in the middle of the ring reads as a third kind of button.
+
+     No pointer-events of its own, so it inherits none from .toast: a tap in the
+     hole still has to reach the scrim and dismiss. */
+  .pill {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) translate(0, var(--y));
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 128px;
+    padding: 4.5px 6.5px;
+
+    border: 1px solid rgba(var(--edge), 0.26);
+    border-radius: 6.5px;
+    background: rgba(8, 8, 10, 0.06);
+    box-shadow: 0 4.5px 8px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(3px) saturate(1.1);
+    -webkit-backdrop-filter: blur(3px) saturate(1.1);
+
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .pill-text {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

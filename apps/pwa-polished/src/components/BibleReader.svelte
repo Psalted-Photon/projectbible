@@ -3239,6 +3239,7 @@
     selectedPersonPlaces = [];
     selectedIsbeKind = null;
     selectedContext = null;
+    selectedMorphology = null;
     selectionMode = "word";
 
     refreshSelectionFromPair();
@@ -3548,6 +3549,10 @@
       selectedVerseNumber = verseNumInt;
       // Capture neighbouring words so ISBE phrase expansion can rejoin "Red Sea".
       selectedContext = wordContext(text, wordBounds.start, wordBounds.end);
+      // An English word has no morphology. Only the original-language paths set
+      // this, and left standing it would caption this word with the last Greek
+      // one you tapped.
+      selectedMorphology = null;
 
       if (!selectedText) return;
 
@@ -4128,8 +4133,8 @@
    * Scroll the reader just enough that a full ring fits above and below the word,
    * and report how far the content moved so the caller can place against where
    * the word is about to be. Text starts about 80px from the top of the screen
-   * and the ring wants ~125px, so the first line or two of a screen need a nudge
-   * of around 50px. Returns 0 when there is already room, or when the scroller
+   * and the ring wants ~115px, so the first line or two of a screen need a nudge
+   * of around 40px. Returns 0 when there is already room, or when the scroller
    * has nothing left to give.
    */
   function nudgeRingIntoView(anchor: ToastAnchor): number {
@@ -5091,6 +5096,11 @@
       wordCount={selectedWordCount}
       {extendArmed}
       canSpeak={selectionCanSpeak}
+      book={currentBook}
+      chapter={currentChapter}
+      verse={selectedVerseNumber}
+      lemma={selectedMorphology?.lemma ?? ""}
+      strongs={selectedMorphology?.strongsId ?? ""}
       on:action={handleToastAction}
       on:modeChange={handleModeChange}
     />
