@@ -40,17 +40,18 @@
       };
     } else if (contentType === 'commentaries') {
       const navState = $navigationStore;
-      if (navState.commentaryAnchored) {
-        // Anchor ON: no pinned position — falls back to global nav immediately (stays synced)
-        contentState = { author: undefined };
-      } else {
-        // Anchor OFF: open at current Bible position (not hardcoded Genesis 1)
-        contentState = {
-          author: undefined,
-          book: navState.book,
-          chapter: navState.chapter,
-        };
-      }
+      // The first commentary window takes the anchor and follows the reader, so
+      // it opens with no pinned position. Any later one is a deliberate second
+      // view, so it opens frozen where the reader is now.
+      const isFirst = !get(windowStore).some(w => w.contentType === 'commentaries');
+      contentState = isFirst
+        ? { author: undefined, anchored: true }
+        : {
+            author: undefined,
+            anchored: false,
+            book: navState.book,
+            chapter: navState.chapter,
+          };
     } else if (contentType === 'map') {
       contentState = {
         center: [31.7683, 35.2137], // Jerusalem

@@ -1184,20 +1184,22 @@
     clearSearchHighlight();
   }
 
-  // Commentary anchor: drift = anchor ON but a commentary window is pinned to a different book/chapter
-  $: commCheckpointDrifted = ($navigationStore.commentaryAnchored === true) &&
-    $windowStore.some(w =>
-      w.contentType === 'commentaries' &&
-      w.contentState?.book !== undefined &&
-      (w.contentState.book !== $navigationStore.book || w.contentState.chapter !== $navigationStore.chapter)
-    );
+  // Commentary anchor: now per-window, carried by the oldest commentary window.
+  // Drift = that window is anchored but pinned to a different book/chapter.
+  $: anchoredCommWindow = $windowStore.find(
+    w => w.contentType === 'commentaries' && w.contentState?.anchored === true
+  );
+  $: commCheckpointDrifted = anchoredCommWindow !== undefined &&
+    anchoredCommWindow.contentState?.book !== undefined &&
+    (anchoredCommWindow.contentState.book !== $navigationStore.book ||
+      anchoredCommWindow.contentState.chapter !== $navigationStore.chapter);
 
   // Re-sync: when drift clears (user clicked anchor to re-sync), push lastAnchorVerse to all commentary
   // windows so they scroll to the current Bible verse once their entries have loaded
   $: {
     if (prevCommDrifted && !commCheckpointDrifted && lastAnchorVerse !== null) {
       get(windowStore)
-        .filter(w => w.contentType === 'commentaries')
+        .filter(w => w.contentType === 'commentaries' && w.contentState?.anchored === true)
         .forEach(w => windowStore.updateContentState(w.id, { highlightedVerse: lastAnchorVerse }));
     }
     prevCommDrifted = commCheckpointDrifted;
@@ -1211,7 +1213,7 @@
   )];
 
   // Apply/clear amber highlights whenever anchor state, drift, or checkpoints change
-  $: if ($navigationStore.commentaryAnchored && !commCheckpointDrifted && commCheckpoints.length > 0 && chapters.length > 0) {
+  $: if (anchoredCommWindow && !commCheckpointDrifted && commCheckpoints.length > 0 && chapters.length > 0) {
     applyAnchorHighlights(commCheckpoints);
   } else {
     clearAnchorHighlights();
@@ -4908,13 +4910,18 @@
             navigationStore.setScrollPosition(captured.book, captured.chapter);
           }
 
-          if (!(get(navigationStore).commentaryAnchored ?? false)) return;
+          // Only windows that asked to follow, which is at most the one holding
+          // the anchor — a window with its own position must not be dragged.
+          const following = get(windowStore).filter(
+            w => w.contentType === 'commentaries' && w.contentState?.anchored === true
+          );
+          if (following.length === 0) return;
           lastAnchorVerse = captured.verse;
           // Push directly to each commentary window's contentState — never touches
           // $navigationStore.highlightedVerse so applySearchHighlight never fires (no loop)
-          get(windowStore)
-            .filter(w => w.contentType === 'commentaries')
-            .forEach(w => windowStore.updateContentState(w.id, { highlightedVerse: captured.verse }));
+          following.forEach(w =>
+            windowStore.updateContentState(w.id, { highlightedVerse: captured.verse })
+          );
         }, 150);
       },
       {

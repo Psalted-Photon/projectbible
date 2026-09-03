@@ -23,7 +23,6 @@ export interface NavigationState {
   showCommentaries?: boolean;
   selectedCommentaryAuthors?: string[];
   readingPlanActiveTarget?: { book: string; chapter: number; verse: number | null; consecutiveDay: boolean; at: number } | null;
-  commentaryAnchored?: boolean;
 }
 
 // Available translations (will be populated from packs later)
@@ -57,8 +56,8 @@ function loadPersistedState(): NavigationState {
 
 function persistState(state: NavigationState): void {
   try {
-    const { translation, book, chapter, isChronologicalMode, showReferences, showCommentaries, selectedCommentaryAuthors, commentaryAnchored } = state;
-    localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ translation, book, chapter, isChronologicalMode, showReferences, showCommentaries, selectedCommentaryAuthors, commentaryAnchored }));
+    const { translation, book, chapter, isChronologicalMode, showReferences, showCommentaries, selectedCommentaryAuthors } = state;
+    localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ translation, book, chapter, isChronologicalMode, showReferences, showCommentaries, selectedCommentaryAuthors }));
   } catch {
     // ignore quota/private-browsing errors
   }
@@ -243,13 +242,6 @@ function createNavigationStore() {
     },
     clearReadingPlanActiveTarget: () => {
       update(state => ({ ...state, readingPlanActiveTarget: null }));
-    },
-    setCommentaryAnchored: (commentaryAnchored: boolean) => {
-      update(state => {
-        const next = { ...state, commentaryAnchored };
-        persistState(next);
-        return next;
-      });
     },
     // Lightweight nav update driven by BibleReader scroll — updates book/chapter in
     // the store (so navbar and commentary follow) without setting scrollTargetVerse

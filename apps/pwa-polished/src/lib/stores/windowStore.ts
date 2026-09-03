@@ -42,6 +42,13 @@ export interface WindowState {
     selectedCommentaryAuthors?: string[];
     // For Commentary windows
     author?: string;
+    /**
+     * Follow the main reader instead of holding a position of its own. Only the
+     * oldest open commentary window carries the toggle — see the "torch" in
+     * CommentaryNavigationBar — and anchoring works by clearing this window's
+     * own book/chapter so the bar's `?? $navigationStore` fallback takes over.
+     */
+    anchored?: boolean;
     // For Map windows
     center?: [number, number];
     zoom?: number;

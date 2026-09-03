@@ -64,7 +64,6 @@
     CaretRight,
     Graph,
     ChatText,
-    Anchor,
     MagnifyingGlass,
     Microscope,
     BookOpenText,
@@ -241,43 +240,6 @@
     ? (windowState?.contentState?.showReferences ?? false)
     : ($navigationStore.showReferences ?? false);
   $: currentBookCategory = BIBLE_BOOKS.find(b => b.name === currentBook)?.category || '';
-
-  // Anchor sync: true when anchor is ON but a commentary window has drifted from global nav
-  $: commentaryDrifted = ($navigationStore.commentaryAnchored === true) &&
-    $windowStore.some(w =>
-      w.contentType === 'commentaries' &&
-      w.contentState?.book !== undefined &&
-      (w.contentState.book !== $navigationStore.book || w.contentState.chapter !== $navigationStore.chapter)
-    );
-
-  function handleAnchorClick(event: MouseEvent) {
-    event.stopPropagation();
-    const anchored = $navigationStore.commentaryAnchored ?? false;
-    if (!anchored) {
-      // OFF Ã¢â€ â€™ ON/Synced: enable anchor, clear per-window pins so windows fall back to global nav
-      navigationStore.setCommentaryAnchored(true);
-      for (const w of $windowStore) {
-        if (w.contentType === 'commentaries') {
-          windowStore.updateContentState(w.id, { book: undefined, chapter: undefined, highlightedVerse: undefined });
-        }
-      }
-    } else if (commentaryDrifted) {
-      // ON/Drifted Ã¢â€ â€™ ON/Synced: re-sync, anchor stays ON
-      for (const w of $windowStore) {
-        if (w.contentType === 'commentaries') {
-          windowStore.updateContentState(w.id, { book: undefined, chapter: undefined, highlightedVerse: undefined });
-        }
-      }
-    } else {
-      // ON/Synced Ã¢â€ â€™ OFF: freeze commentary windows at current position
-      navigationStore.setCommentaryAnchored(false);
-      for (const w of $windowStore) {
-        if (w.contentType === 'commentaries') {
-          windowStore.updateContentState(w.id, { book: $navigationStore.book, chapter: $navigationStore.chapter });
-        }
-      }
-    }
-  }
 
   function toggleCommAuthor(author: string) {
     if (windowId) {
@@ -978,7 +940,7 @@
   const CONTOUR = {
     restPct: 0.17,
     padX: 1.5,
-    padY: 1,
+    padY: 4,
     shoulderMax: 54,
     dimpleStart: 14,
     fullRelax: 68,
@@ -1578,9 +1540,6 @@
         title="Filter commentary authors"
       >
         <span class="icon-badge icon-badge-comm"><ChatText size={18} weight="bold" /><span class="icon-overlay"><ChatText size={18} weight="thin" /></span></span>
-        {#if currentCommAuthors.length > 0}
-          <span class="comm-count">{currentCommAuthors.length}</span>
-        {/if}
         {#if commDropdownOpen}
           <CaretUp size={10} weight="bold" />
         {:else}
@@ -1588,24 +1547,6 @@
         {/if}
       </button>
 
-      {#if !isMinimal}
-      <div class="pill-divider"></div>
-
-      <button
-        class="pill-btn pill-anchor"
-        class:anchored={($navigationStore.commentaryAnchored ?? false) && !commentaryDrifted}
-        class:drifted={commentaryDrifted}
-        on:click={handleAnchorClick}
-        title={commentaryDrifted
-          ? 'Commentary drifted Ã¢â‚¬â€ click to re-sync'
-          : ($navigationStore.commentaryAnchored ?? false)
-            ? 'Commentary synced Ã¢â‚¬â€ click to unlock'
-            : 'Sync commentary to Bible position'}
-        aria-label="Commentary anchor sync"
-      >
-        <span class="icon-badge icon-badge-anchor"><Anchor size={18} weight="bold" /><span class="icon-overlay"><Anchor size={18} weight="thin" /></span></span>
-      </button>
-      {/if}
     </div>
 
     {#if !isMinimal}
@@ -2058,7 +1999,9 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 16px;
+    /* Top gap is 4.5px; the bottom pad is whatever keeps the content box exactly
+       one pill tall, so the 58px box (and the text below it) never moves. */
+    padding: 4.5px 16px 15.5px;
     overflow-x: auto;
     scrollbar-width: none;
     min-height: 58px;
@@ -2422,19 +2365,6 @@
     color: #667eea;
   }
 
-  /* Anchor states */
-  .icon-badge-anchor { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #000000 100%); }
-  .pill-anchor.anchored .icon-badge-anchor { background: radial-gradient(circle, #2dd4bf 0%, #2dd4bf 20%, #000000 100%); }
-  .pill-anchor.drifted .icon-badge-anchor {
-    background: radial-gradient(circle, #fde047 0%, #fde047 20%, #000000 100%);
-    animation: anchor-drift 2s ease-in-out infinite;
-  }
-
-  @keyframes anchor-drift {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-  }
-
   /* Reference button category colors (text tint only) */
   /* ── Home vs away ──────────────────────────────────────────────────────
      Home is a filled pill: you chose this chapter, you are settled. Away is
@@ -2671,20 +2601,6 @@
   }
 
   /* Comm dropdown */
-
-  .comm-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 4px;
-    background: radial-gradient(circle, #667eea 0%, #667eea 20%, #000000 100%);
-    border-radius: 9px;
-    font-size: 11px;
-    font-weight: 600;
-    color: #fff;
-  }
 
   .comm-dropdown {
     min-width: 240px;
@@ -3162,7 +3078,7 @@
   /* Mobile Ã¢â‚¬â€ pills stack or shrink on small screens */
   @media (max-width: 600px) {
     .nav-content {
-      padding: 8px 10px;
+      padding: 4.5px 10px 15.5px;
       gap: 6px;
     }
 

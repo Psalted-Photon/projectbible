@@ -3,7 +3,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { BIBLE_BOOKS } from "../lib/bibleData";
   import { onMount, onDestroy } from "svelte";
-  import { CaretDown, CaretRight, CaretUp } from "phosphor-svelte";
+  import { Anchor, CaretDown, CaretRight, CaretUp } from "phosphor-svelte";
   import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
   import { ENOCH_EDITIONS, isEnochAuthor, enochLabelFor, loadEnoch } from "../lib/enochBooks";
 
@@ -47,6 +47,55 @@
     ? `Enoch ${currentChapter}`
     : `${currentBook} ${currentChapter}`;
   $: currentBookCategory = BIBLE_BOOKS.find(b => b.name === currentBook)?.category || '';
+
+  // ── The anchor, and who carries it ─────────────────────────────────────────
+  // Only one anchor exists at a time, and it belongs to the oldest open
+  // commentary window. windowStore appends on create and filters on close, so
+  // the first commentary entry in store order is the oldest and the torch
+  // passes on its own when that window goes away.
+  $: torchId = $windowStore.find((w) => w.contentType === "commentaries")?.id;
+  $: hasTorch = windowId !== undefined && windowId === torchId;
+
+  $: anchored = windowState?.contentState?.anchored === true;
+
+  // Drifted: still anchored, but this window has been given a position of its
+  // own that no longer matches the reader.
+  $: drifted =
+    anchored &&
+    windowState?.contentState?.book !== undefined &&
+    (windowState.contentState.book !== $navigationStore.book ||
+      windowState.contentState.chapter !== $navigationStore.chapter);
+
+  function handleAnchorClick(event: MouseEvent) {
+    event.stopPropagation();
+    if (!windowId) return;
+
+    if (!anchored) {
+      // Off → on. Dropping this window's own position is what makes it follow:
+      // currentBook/currentChapter fall through to $navigationStore.
+      windowStore.updateContentState(windowId, {
+        anchored: true,
+        book: undefined,
+        chapter: undefined,
+        highlightedVerse: undefined,
+      });
+    } else if (drifted) {
+      // On but drifted → re-sync, staying anchored.
+      windowStore.updateContentState(windowId, {
+        book: undefined,
+        chapter: undefined,
+        highlightedVerse: undefined,
+      });
+    } else {
+      // On → off. Freeze it where the reader currently is, rather than
+      // snapping back to wherever it was before.
+      windowStore.updateContentState(windowId, {
+        anchored: false,
+        book: $navigationStore.book,
+        chapter: $navigationStore.chapter,
+      });
+    }
+  }
 
   // Load the active Enoch edition's chapter list for the reference picker
   $: if (isEnoch && currentAuthor && currentAuthor !== enochLoadedFor) {
@@ -293,6 +342,25 @@
         {/if}
       </button>
     </div>
+
+    <!-- Only the oldest commentary window carries the anchor. -->
+    {#if hasTorch}
+      <button
+        class="pill-btn pill-anchor"
+        class:anchored={anchored && !drifted}
+        class:drifted
+        on:click={handleAnchorClick}
+        title={drifted
+          ? "Drifted from the reader — click to re-sync"
+          : anchored
+            ? "Following the reader — click to unlock"
+            : "Follow the reader"}
+        aria-label="Follow the reader"
+        aria-pressed={anchored}
+      >
+        <span class="icon-badge icon-badge-anchor"><Anchor size={18} weight="bold" /><span class="icon-overlay"><Anchor size={18} weight="thin" /></span></span>
+      </button>
+    {/if}
   </div>
 
   <!-- Dropdowns rendered outside nav-content to avoid overflow clipping -->
@@ -494,6 +562,52 @@
     white-space: nowrap;
     flex-shrink: 0;
     touch-action: manipulation;
+  }
+
+  /* ── The anchor ────────────────────────────────────────────────────────────
+     Moved here from the main navbar, where it was always really about this
+     window. Grey is loose, teal is following the reader, amber is following but
+     drifted. The badge recipe mirrors NavigationBar.svelte — Svelte scopes CSS
+     per component, so it has to be restated rather than shared. */
+  .pill-anchor {
+    justify-content: center;
+    padding: 0 8px;
+  }
+  .pill-anchor:hover { background: #252525; }
+
+  .icon-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    padding: 4px;
+    line-height: 0;
+    color: #000000;
+    position: relative;
+  }
+  .icon-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    line-height: 0;
+  }
+  :global(.icon-badge > svg) {
+    filter: drop-shadow(0 0 2px #000000) drop-shadow(0 0 2px #000000);
+  }
+
+  .icon-badge-anchor { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #000000 100%); }
+  .pill-anchor.anchored .icon-badge-anchor { background: radial-gradient(circle, #2dd4bf 0%, #2dd4bf 20%, #000000 100%); }
+  .pill-anchor.drifted .icon-badge-anchor {
+    background: radial-gradient(circle, #fde047 0%, #fde047 20%, #000000 100%);
+    animation: anchor-drift 2s ease-in-out infinite;
+  }
+
+  @keyframes anchor-drift {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
   }
   .pill-btn:hover {
     background: #252525;

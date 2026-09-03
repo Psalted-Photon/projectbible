@@ -307,6 +307,20 @@
 </div>
 
 <div class="panel">
+  <h2>Vertical</h2>
+  <div id="verticalCtls"></div>
+  <div class="readout" id="boxReadout"></div>
+  <p class="note">
+    <b>Offset</b> slides the pill groups as one rigid unit — nothing reshapes,
+    and the contour rides along with them.
+    <b>Box height</b> is the layout space the bar reserves; change it and the
+    verse text below moves.
+    To lift the pills but leave the contour where it is, raise
+    <b>Wrap padding Y</b> under Shape by the same amount.
+    <b>Ceiling</b> hard-caps the contour, and below the pills' bottom edge they
+    start protruding through it.
+  </p>
+
   <h2>Shape</h2>
   <div id="shapeCtls"></div>
 
@@ -336,30 +350,79 @@
 // ─────────────────────────────────────────────────────────────────────────
 // Tunable parameters. These are exactly the numbers phase 2 needs.
 // ─────────────────────────────────────────────────────────────────────────
+// Shape and elevation are frozen at the values that shipped in 3f0243d7, so
+// only the vertical geometry is being re-judged this round.
 const SPECS = {
+  vertical: [
+    { key: 'pillOffset', label: 'Pill group offset', min: -20, max: 20, step: 0.5, def: -5.5,
+      fmt: v => (v > 0 ? '+' : '') + v + 'px' + (v < 0 ? ' (up)' : v > 0 ? ' (down)' : '') },
+    { key: 'pillH',      label: 'Pill height',       min: 24, max: 48, step: 1, def: 38 },
+    { key: 'boxH',       label: 'Bar box height',    min: 40, max: 76, step: 1, def: 58 },
+    { key: 'ceiling',    label: 'Contour ceiling',   min: 20, max: 76, step: 1, def: 51 },
+  ],
   shape: [
-    { key: 'restPct',     label: 'Rest height',   min: 0.10, max: 0.75, step: 0.01, def: 0.33, fmt: v => Math.round(v * 100) + '%' },
-    { key: 'padX',        label: 'Wrap padding X', min: 0,   max: 16,  step: 0.5, def: 5 },
-    { key: 'padY',        label: 'Wrap padding Y', min: 0,   max: 16,  step: 0.5, def: 6 },
-    { key: 'shoulderMax', label: 'Shoulder run',   min: 4,   max: 70,  step: 1,   def: 22 },
-    { key: 'dimpleStart', label: 'Ignore gaps under',    min: 0, max: 44, step: 1, def: 0 },
-    { key: 'fullRelax',   label: 'Full relax at gap',    min: 30, max: 200, step: 2, def: 90 },
-    { key: 'corner',      label: 'End corner radius',    min: 0,  max: 24, step: 0.5, def: 8 },
-    { key: 'barH',        label: 'Bar box height',       min: 44, max: 76, step: 1, def: 58 },
+    { key: 'restPct',     label: 'Rest height',   min: 0.10, max: 0.75, step: 0.01, def: 0.17, fmt: v => Math.round(v * 100) + '%' },
+    { key: 'padX',        label: 'Wrap padding X', min: 0,   max: 16,  step: 0.5, def: 1.5 },
+    { key: 'padY',        label: 'Wrap padding Y', min: 0,   max: 16,  step: 0.5, def: 4 },
+    { key: 'shoulderMax', label: 'Shoulder run',   min: 4,   max: 70,  step: 1,   def: 54 },
+    { key: 'dimpleStart', label: 'Ignore gaps under',    min: 0, max: 44, step: 1, def: 14 },
+    { key: 'fullRelax',   label: 'Full relax at gap',    min: 30, max: 200, step: 2, def: 68 },
+    { key: 'corner',      label: 'End corner radius',    min: 0,  max: 24, step: 0.5, def: 13 },
   ],
   elev: [
-    { key: 'shadowY',       label: 'Shadow drop',    min: 0, max: 16, step: 0.5, def: 2 },
-    { key: 'shadowBlur',    label: 'Shadow blur',    min: 0, max: 32, step: 0.5, def: 8 },
-    { key: 'shadowOpacity', label: 'Shadow opacity', min: 0, max: 1,  step: 0.02, def: 0.5, fmt: v => v.toFixed(2) },
+    { key: 'shadowY',       label: 'Shadow drop',    min: 0, max: 16, step: 0.5, def: 8 },
+    { key: 'shadowBlur',    label: 'Shadow blur',    min: 0, max: 32, step: 0.5, def: 4.5 },
+    { key: 'shadowOpacity', label: 'Shadow opacity', min: 0, max: 1,  step: 0.02, def: 0.66, fmt: v => v.toFixed(2) },
   ],
   motion: [
-    { key: 'tween',   label: 'Tween rate',    min: 0.04, max: 0.60, step: 0.01, def: 0.18, fmt: v => v.toFixed(2) },
-    { key: 'samples', label: 'Sample points', min: 30,   max: 260,  step: 2,    def: 120 },
+    { key: 'tween',   label: 'Tween rate',    min: 0.04, max: 0.60, step: 0.01, def: 0.28, fmt: v => v.toFixed(2) },
+    { key: 'samples', label: 'Sample points', min: 30,   max: 260,  step: 2,    def: 260 },
   ],
 };
 
 const P = {};
 for (const group of Object.values(SPECS)) for (const s of group) P[s.key] = s.def;
+
+const boxHeight = () => P.boxH;
+
+/**
+ * Push the vertical numbers onto the real CSS.
+ *
+ * Pill position and box height are deliberately independent. The box reserves
+ * the layout space (move it and the verse text below moves); the offset slides
+ * the pill groups inside that space as one rigid unit, reshaping nothing. The
+ * strip is already `position: relative`, so `top` shifts it visually while the
+ * box it occupies stays exactly where it was.
+ */
+function applyVertical() {
+  navContent.style.minHeight = P.boxH + 'px';
+  navContent.style.top = P.pillOffset + 'px';
+  for (const pill of navContent.querySelectorAll('.nav-pill')) {
+    pill.style.height = P.pillH + 'px';
+  }
+  updateBoxReadout();
+}
+
+/** Report the geometry as actually laid out, not as assumed. */
+function updateBoxReadout() {
+  const readout = document.getElementById('boxReadout');
+  if (!readout || !bar) return;
+  const pill = navContent.querySelector('.nav-pill');
+  if (!pill) return;
+
+  const barTop = bar.getBoundingClientRect().top;
+  const r = pill.getBoundingClientRect();
+  const top = r.top - barTop;
+  const bottom = r.bottom - barTop;
+  const hFull = Math.min(P.ceiling, bottom + P.padY);
+
+  readout.textContent =
+    `box ${P.boxH}px   pills ${top.toFixed(1)}–${bottom.toFixed(1)}px\n` +
+    `contour ${hFull.toFixed(1)}px  ` +
+    (hFull < bottom
+      ? `(${(bottom - hFull).toFixed(1)}px ABOVE pill bottom — pills protrude)`
+      : `(${(hFull - bottom).toFixed(1)}px below pill bottom)`);
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // The membrane
@@ -396,10 +459,10 @@ function measureGroups() {
     raw.push([r.left - barRect.left, r.right - barRect.left]);
     deepest = Math.max(deepest, r.bottom - barRect.top);
   }
-  if (!raw.length) return { raw: [], hFull: P.barH };
+  if (!raw.length) return { raw: [], hFull: P.ceiling };
 
   // Full depth is the deepest pill plus the vertical wrap padding.
-  const hFull = Math.min(P.barH, deepest + P.padY);
+  const hFull = Math.min(P.ceiling, deepest + P.padY);
 
   // Merge only on genuine overlap. Padding is applied later, so a tight
   // between-pill gap survives as a crevice instead of being swallowed.
@@ -544,7 +607,7 @@ function step(now) {
 
 function draw() {
   const W = bar.clientWidth;
-  const H = P.barH;
+  const H = boxHeight();
   if (!W || !field) return;
 
   const r = Math.min(P.corner, W / 2);
@@ -577,6 +640,7 @@ function draw() {
     `drop-shadow(0 ${P.shadowY}px ${P.shadowBlur}px rgba(0,0,0,${P.shadowOpacity}))`;
 
   if (guides) drawGuides(pts);
+  updateBoxReadout();
 }
 
 function drawGuides(pts) {
@@ -648,13 +712,14 @@ function buildControls(hostId, specs) {
     input.addEventListener('input', () => {
       P[s.key] = parseFloat(input.value);
       show(P[s.key]);
-      if (s.key === 'barH') navContent.style.minHeight = P.barH + 'px';
+      if (SPECS.vertical.some(v => v.key === s.key)) applyVertical();
       retarget(false);
       writeReadout();
     });
   }
 }
 
+buildControls('verticalCtls', SPECS.vertical);
 buildControls('shapeCtls',  SPECS.shape);
 buildControls('elevCtls',   SPECS.elev);
 buildControls('motionCtls', SPECS.motion);
@@ -672,7 +737,7 @@ bar.appendChild(scrim);
 document.getElementById('optScrim').addEventListener('change', e => {
   scrim.style.display = e.target.checked ? 'block' : 'none';
   scrim.style.top = '0px';
-  scrim.style.height = P.barH + 22 + 'px';
+  scrim.style.height = boxHeight() + 22 + 'px';
 });
 
 document.getElementById('optGuides').addEventListener('change', e => {
@@ -714,7 +779,7 @@ document.getElementById('resetBtn').addEventListener('click', () => {
       if (out) out.textContent = s.fmt ? s.fmt(s.def) : (Math.round(s.def * 10) / 10) + 'px';
     }
   }
-  navContent.style.minHeight = P.barH + 'px';
+  applyVertical();
   retarget(false);
   writeReadout();
 });
@@ -745,7 +810,7 @@ document.getElementById('verses').innerHTML =
 new ResizeObserver(() => retarget(false)).observe(bar);
 navContent.addEventListener('scroll', () => retarget(false), { passive: true });
 
-navContent.style.minHeight = P.barH + 'px';
+applyVertical();
 writeReadout();
 setArrangement('empty', false);
 </script>
