@@ -7,9 +7,29 @@
   import { parseRefString } from "../lib/parseRefString";
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
   import { navigationStore } from "../stores/navigationStore";
+  import { fixedOrigin } from "../lib/fixedOrigin";
 
   export let open = false;
   export let book = "";
+  /** The reader's box in viewport coordinates — same contract as AnnotationPanel,
+      so this sheet narrows with the text when a window is docked. */
+  export let panelLeft = 0;
+  export let panelWidth = 0;
+
+  // panelLeft is a viewport coordinate; `position: fixed` may not be. See lib/fixedOrigin.ts.
+  let sheetEl: HTMLDivElement;
+  let originLeft = 0;
+  // Re-measure whenever the reader moves or the sheet is shown; a theme change
+  // swaps the containing block out from under us, and opening is the first point
+  // at which that could have happened unnoticed.
+  $: if (sheetEl) {
+    void panelLeft; void panelWidth; void open;
+    originLeft = fixedOrigin(sheetEl).left;
+  }
+  $: sheetStyle =
+    panelWidth > 0
+      ? `left:${panelLeft - originLeft}px; width:${panelWidth}px; right:auto;`
+      : '';
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -111,7 +131,7 @@
   <div class="intro-backdrop" on:click={handleBackdropClick}></div>
 {/if}
 
-<div class="book-intro-panel" class:open>
+<div class="book-intro-panel" class:open bind:this={sheetEl} style={sheetStyle}>
   <!-- Header -->
   <div class="intro-header">
     {#if panelMode === "verseView"}
@@ -199,8 +219,10 @@
 <style>
   .intro-backdrop { position:fixed; inset:0; background:transparent; z-index:299; }
 
+  /* left/width are overridden inline once the reader is measured; `right` stays
+     out of it so the box is not over-constrained. */
   .book-intro-panel {
-    position: fixed; bottom: 0; left: 0; right: 0;
+    position: fixed; bottom: 0; left: 0; width: 100%;
     height: 70vh; min-height: 320px;
     background: #1e1e1e; color: #e0e0e0;
     border-radius: 16px 16px 0 0;

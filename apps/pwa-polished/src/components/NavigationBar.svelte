@@ -18,6 +18,7 @@
   } from "../lib/services/searchService";
   import { buildSearchTree } from "../lib/searchTree";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
+  import { fixedOrigin } from "../lib/fixedOrigin";
   import SearchResultsTree from "./SearchResultsTree.svelte";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
@@ -163,8 +164,14 @@
     const rect = interlinearGearRef?.getBoundingClientRect();
     if (rect) {
       const width = 300;
-      ilPopLeft = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
-      ilPopTop = rect.bottom + 6;
+      // The popover is `position: fixed`, which here resolves against the
+      // viewport in dark but against `.main-content` in light/sepia — so clamp
+      // within that box and rebase onto it. See lib/fixedOrigin.ts.
+      const origin = fixedOrigin(interlinearGearRef);
+      const maxLeft = origin.left + origin.width - width - 8;
+      const minLeft = origin.left + 8;
+      ilPopLeft = Math.max(minLeft, Math.min(rect.left, maxLeft)) - origin.left;
+      ilPopTop = rect.bottom + 6 - origin.top;
     }
   }
 
@@ -575,12 +582,16 @@
             ".search-results-dropdown",
           ) as HTMLElement;
           if (dropdown) {
-            const mainContent = document.querySelector('.main-content') as HTMLElement;
-            const leftOffset = mainContent?.getBoundingClientRect().left || 0;
+            // This used to subtract `.main-content`'s left unconditionally, which
+            // is only right when that element is the containing block — true in
+            // light/sepia, false in dark, where it pushed the dropdown off by the
+            // width of any left-docked window. Ask what the box really is, and
+            // correct `top` by it as well. See lib/fixedOrigin.ts.
+            const origin = fixedOrigin(dropdown);
             const rect = searchContainerRef.getBoundingClientRect();
-            dropdown.style.left = `${rect.left - leftOffset}px`;
-            dropdown.style.top = `${rect.bottom + 4}px`;
-            dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
+            dropdown.style.left = `${rect.left - origin.left}px`;
+            dropdown.style.top = `${rect.bottom + 4 - origin.top}px`;
+            dropdown.style.width = `${Math.min(rect.width, origin.width - 20)}px`;
           }
         });
       }

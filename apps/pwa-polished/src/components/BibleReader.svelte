@@ -94,6 +94,7 @@
   import { IndexedDBArtStore } from "../adapters/ArtStore";
   import type { ArtScene } from "@projectbible/core";
   import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
+  import { fixedOrigin } from "../lib/fixedOrigin";
   import type { CommentaryEntry } from "../adapters/CommentaryStore";
   import { IndexedDBTskReferenceStore } from "../adapters/TskReferenceStore";
   import type { TskEntry } from "../adapters/TskReferenceStore";
@@ -212,10 +213,21 @@
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, NAV_BAR_HIDDEN = hidden)
   // Pinned means the bar never hides, whatever the scrolling is doing.
   let navBarPinned = getNavBarPinned();
+  // The reader's box, handed to the bottom sheets so they narrow with the text
+  // instead of spanning the screen when a window is docked. readerClientWidth is
+  // only the change signal — it is a ResizeObserver under the hood, so it ticks
+  // every frame while .main-content animates its insets. The width the sheets get
+  // comes off the same rect as the left, because clientWidth excludes the
+  // reader's scrollbar and would leave the sheet short of its right edge.
   let readerClientWidth = 0;
   let readerLeft = 0;
+  let readerBoxWidth = 0;
   $: if (readerElement && ($windowStore, readerClientWidth)) {
-    requestAnimationFrame(() => { readerLeft = readerElement?.getBoundingClientRect().left ?? 0; });
+    requestAnimationFrame(() => {
+      const r = readerElement?.getBoundingClientRect();
+      readerLeft = r?.left ?? 0;
+      readerBoxWidth = r?.width ?? 0;
+    });
   }
 
   // Category → mascot color map (matches NavigationBar.svelte book dropdown colors)
@@ -2155,10 +2167,14 @@
       const raw = localStorage.getItem(key);
       if (raw) return JSON.parse(raw);
     } catch { /* ignore */ }
-    // Default: centered on screen
+    // Default: centred in the box the popup is actually placed in, which is not
+    // always the viewport (see lib/fixedOrigin.ts). Only this fallback needs the
+    // correction — a note the user has dragged is saved from its own left/top,
+    // so stored positions are already in the right space and must not be moved.
+    const origin = fixedOrigin(readerElement);
     return {
-      x: Math.max(0, Math.round((window.innerWidth - 320) / 2)),
-      y: Math.max(0, Math.round((window.innerHeight - 240) / 2)),
+      x: Math.max(0, Math.round((origin.width - 320) / 2)),
+      y: Math.max(0, Math.round((origin.height - 240) / 2)),
       w: 320,
       h: 240,
     };
@@ -4067,11 +4083,15 @@
       centerX = anchor.bottomCenterX;
     }
 
-    toastX = Math.min(
-      Math.max(centerX - w / 2, TOAST_MARGIN),
-      Math.max(TOAST_MARGIN, window.innerWidth - w - TOAST_MARGIN),
-    );
-    toastY = y;
+    // Everything above is in viewport coordinates, but toastX/toastY drive a
+    // `position: fixed` element, which does not always resolve against the
+    // viewport — see lib/fixedOrigin.ts. Clamp within the box we are actually
+    // placed in, then rebase onto it, both in one step here at the end.
+    const origin = fixedOrigin(readerElement);
+    const minX = origin.left + TOAST_MARGIN;
+    const maxX = origin.left + origin.width - w - TOAST_MARGIN;
+    toastX = Math.min(Math.max(centerX - w / 2, minX), Math.max(minX, maxX)) - origin.left;
+    toastY = y - origin.top;
     toastPlaced = true;
   }
 
@@ -4121,11 +4141,16 @@
     const right = (b?.right ?? window.innerWidth) - TOAST_MARGIN;
 
     radialLine = anchor.lineHeight;
-    radialCX =
+    const cx =
       right - left >= outer * 2
         ? Math.min(Math.max(anchor.centerX, left + outer), right - outer)
         : (left + right) / 2;
-    radialCY = anchor.centerY;
+    // The ring is `position: fixed` as well, so it needs the same rebase as the
+    // toast — clamped against the reader above, then moved into the coordinate
+    // space that fixed positioning actually uses here.
+    const origin = fixedOrigin(readerElement);
+    radialCX = cx - origin.left;
+    radialCY = anchor.centerY - origin.top;
     toastPlaced = true;
   }
 
@@ -5283,6 +5308,8 @@
 <BookIntroPanel
   open={bookIntroPanelOpen}
   book={bookIntroPanelBook}
+  panelLeft={readerLeft}
+  panelWidth={readerBoxWidth}
   on:close={() => (bookIntroPanelOpen = false)}
   on:navigateTo={handleBookIntroNavigateTo}
 />
@@ -5297,7 +5324,7 @@
   initialTab={annotationPanelTab}
   targetAuthor={annotationPanelTargetAuthor}
   panelLeft={readerLeft}
-  panelWidth={readerClientWidth}
+  panelWidth={readerBoxWidth}
   on:close={() => (annotationPanelOpen = false)}
   on:navigateTo={handleAnnotationNavigateTo}
 />

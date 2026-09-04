@@ -385,7 +385,19 @@
   .main-content {
     position: fixed;
     box-sizing: border-box;
-    overflow: auto;
+    /* `clip`, not `auto` or `hidden`. .bible-reader scrolls itself, so this box
+       never needs to — and when it *can* scroll, it breaks light and sepia. The
+       theme filter on .themed makes this element the containing block for the
+       reader's fixed overlays, so the annotation sheet parked off-screen at
+       translateY(100%) turns into ~52vh of real scrollable overflow in here. The
+       sheet's scrollIntoView (it jumps to the clicked author) then scrolls every
+       scrollable ancestor, including this one, dragging the reader and its sticky
+       navbar up out of view. `hidden` would not be enough: it still creates a
+       programmatically scrollable container that scrollIntoView can move. On a
+       browser too old for `clip` the first declaration still clips, which is a
+       far better fallback than dropping to the `visible` default. */
+    overflow: hidden;
+    overflow: clip;
     transition:
       left 0.3s ease,
       right 0.3s ease,

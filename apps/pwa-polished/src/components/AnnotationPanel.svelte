@@ -10,6 +10,7 @@
   import { getBookColor } from "../lib/bibleData";
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
   import { navigationStore } from "../stores/navigationStore";
+  import { fixedOrigin } from "../lib/fixedOrigin";
 
   export let open = false;
   export let book = "";
@@ -20,6 +21,29 @@
   export let initialTab: "references" | "commentary" = "references";
   // Which commentary author to scroll to when the panel opens ('' = scroll to top only)
   export let targetAuthor: string = '';
+  /** The reader's box in viewport coordinates, so the sheet tracks it instead of
+      spanning the whole screen when a window is docked left or right. */
+  export let panelLeft = 0;
+  export let panelWidth = 0;
+
+  // The sheet is `position: fixed`, but what that resolves against depends on the
+  // theme — see lib/fixedOrigin.ts. panelLeft arrives in viewport coordinates, so
+  // rebase it onto whatever box we are actually being placed in.
+  let sheetEl: HTMLDivElement;
+  let originLeft = 0;
+  // Re-measure whenever the reader moves or the sheet is shown; a theme change
+  // swaps the containing block out from under us, and opening is the first point
+  // at which that could have happened unnoticed.
+  $: if (sheetEl) {
+    void panelLeft; void panelWidth; void open;
+    originLeft = fixedOrigin(sheetEl).left;
+  }
+  // Until the reader has been measured, stay full-bleed rather than collapsing to
+  // zero width on the first paint.
+  $: sheetStyle =
+    panelWidth > 0
+      ? `left:${panelLeft - originLeft}px; width:${panelWidth}px; right:auto;`
+      : '';
 
   // ——— Internal display state (list mode) ———
   let displayBook = book;
@@ -250,7 +274,7 @@
   <div class="panel-backdrop" on:click={handleBackdropClick}></div>
 {/if}
 
-<div class="annotation-panel" class:open>
+<div class="annotation-panel" class:open bind:this={sheetEl} style={sheetStyle}>
   <!-- Header -->
   <div class="panel-header">
     {#if panelHistory.length > 0}
@@ -409,8 +433,11 @@
   .annotation-panel {
     position: fixed;
     bottom: 0;
+    /* left/width are overridden inline once the reader has been measured, so the
+       sheet narrows with the text when a window is docked. `right` stays out of
+       it — setting all three would over-constrain the box. */
     left: 0;
-    right: 0;
+    width: 100%;
     height: 52vh;
     min-height: 280px;
     background: #1e1e1e;
