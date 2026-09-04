@@ -32,7 +32,7 @@ export interface InterlinearSettings {
  */
 export interface TtsSettings {
   voiceId: string;      // installed Piper voice id (default en_US-lessac-medium)
-  rate: number;         // playback speed multiplier (0.8–1.5, default 1.0)
+  rate: number;         // playback speed multiplier (0.5–1.5, default 1.0)
   readHeadings: boolean; // speak section headings before their verse (default false)
   // The two follow-along effects are independent: either, both, or neither.
   highlightVerse: boolean; // tint the verse being read (default true)

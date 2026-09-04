@@ -17,6 +17,7 @@
     type SearchResult,
   } from "../lib/services/searchService";
   import { buildSearchTree } from "../lib/searchTree";
+  import { scrollBookItemToTop } from "../lib/bookPickerScroll";
   import SearchResultsTree from "./SearchResultsTree.svelte";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
@@ -368,9 +369,7 @@
           requestAnimationFrame(() => {
             const currentBookItem = dropdown.querySelector('.book-item .book-button.current')?.closest('.book-item') as HTMLElement;
             if (currentBookItem) {
-              const dropdownRect = dropdown.getBoundingClientRect();
-              const bookRect = currentBookItem.getBoundingClientRect();
-              dropdown.scrollTop = bookRect.top - dropdownRect.top + dropdown.scrollTop;
+              scrollBookItemToTop(dropdown, currentBookItem);
             }
           });
         }
@@ -402,12 +401,7 @@
         const bookItem = bookButton?.closest('.book-item') as HTMLElement;
         
         if (dropdown && bookItem) {
-          const dropdownRect = dropdown.getBoundingClientRect();
-          const bookRect = bookItem.getBoundingClientRect();
-          
-          // Calculate how much to scroll to put the book at the top of the dropdown
-          const scrollOffset = bookRect.top - dropdownRect.top + dropdown.scrollTop;
-          dropdown.scrollTop = scrollOffset;
+          scrollBookItemToTop(dropdown, bookItem);
         }
       });
     }

@@ -765,7 +765,28 @@
       </label>
       <label>
         <span class="label-text">Reading Speed: {ttsRate.toFixed(2)}×</span>
-        <input type="range" min="0.8" max="1.5" step="0.05" bind:value={ttsRate} />
+        <input
+          type="range"
+          min="0.5"
+          max="1.5"
+          step="0.05"
+          list="tts-rate-ticks"
+          bind:value={ttsRate}
+        />
+        <!-- 1.0 sits exactly in the middle of 0.5–1.5, so the centre tick is
+             normal speed and the slider reads as a balance either side of it. -->
+        <datalist id="tts-rate-ticks">
+          <option value="0.5"></option>
+          <option value="0.75"></option>
+          <option value="1"></option>
+          <option value="1.25"></option>
+          <option value="1.5"></option>
+        </datalist>
+        <span class="speed-ticks" aria-hidden="true">
+          <span>0.5×</span>
+          <span class="speed-normal">Normal</span>
+          <span>1.5×</span>
+        </span>
       </label>
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={ttsReadHeadings} />
@@ -943,6 +964,21 @@
   .label-text {
     font-size: 0.95rem;
     color: #ccc;
+    font-weight: 500;
+  }
+
+  /* Ends and centre of the reading-speed slider. The middle label is the point:
+     1.0 is the centre of the range, not a value buried off to one side. */
+  .speed-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: #888;
+  }
+
+  .speed-normal {
+    color: #aaa;
     font-weight: 500;
   }
 

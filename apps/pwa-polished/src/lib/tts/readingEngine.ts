@@ -19,6 +19,14 @@
  *
  * Segment length ramps up — the first is a single verse, so the time between
  * pressing play and hearing the first word is unchanged.
+ *
+ * **Generating is governed.** Kokoro runs on the graphics chip, which is the same
+ * chip the browser draws with, so generating flat out until the buffer was full
+ * meant long stretches where scrolling and speech fought over one piece of
+ * hardware — smooth with the screen off, stuttering the moment it was touched.
+ * Work is now paced against how fast audio is actually being consumed, and both
+ * the cushion and the segment length follow whether the screen is on. See the
+ * governor section below.
  */
 
 import { get, writable, derived } from 'svelte/store';
@@ -43,8 +51,26 @@ import { readWav, silencePcm, joinPcm, pcmSeconds } from './stitchAudio';
 
 // ── tuning dials ────────────────────────────────────────────────────────────
 
-/** Target length of a stitched segment. Long, so JS rarely has to wake. */
-const SEGMENT_SECONDS = 90;
+/**
+ * Target length of a stitched segment, and how much audio is kept ahead of the
+ * play position. Both follow the screen, because the two things they protect
+ * against happen in opposite conditions.
+ *
+ * With the screen ON, the danger is stutter: Kokoro runs on the graphics chip,
+ * which is the same chip the browser draws with, so generating and scrolling
+ * fight. A small cushion means less generating.
+ *
+ * With the screen OFF, the danger is a gap: JavaScript gets throttled, so we may
+ * not get to run often enough to keep up. A deep cushion and long segments mean
+ * fewer wakeups needed. Nothing is being drawn, so the generating is free.
+ *
+ * Segment length has to move WITH the cushion, not stay long. `starving()` below
+ * treats "one segment or fewer queued" as an emergency and cuts segments short —
+ * with a 45s cushion and 90s segments that would be true permanently, so every
+ * segment would come out short and the whole stitching design would be undone.
+ */
+const SEGMENT_SECONDS_VISIBLE = 30;
+const SEGMENT_SECONDS_HIDDEN = 90;
 
 /**
  * Audio banked before the first word, and the longest we will make the user wait
@@ -59,9 +85,41 @@ const SEGMENT_SECONDS = 90;
 const HEAD_START_SECONDS = 20;
 const HEAD_START_MAX_WAIT_MS = 6000;
 
-/** Audio kept ahead of the play position — the cushion for a throttled phone. */
-const BUFFER_AHEAD_SECONDS = 150;
+/** Audio kept ahead of the play position. See the note on segment length above. */
+const BUFFER_AHEAD_VISIBLE = 45;
+const BUFFER_AHEAD_HIDDEN = 150;
 const BUFFER_MAX_BYTES = 24 * 1024 * 1024;
+
+/**
+ * Below this much banked audio the governor stops holding back and generates at
+ * full power, whatever else is going on. Running dry is worse than a dropped
+ * frame, always — this is the line that is never crossed for the sake of
+ * smoothness.
+ */
+const BUFFER_FLOOR_SECONDS = 20;
+
+/**
+ * How much faster than playback to generate.
+ *
+ * The engine is not short of power — Kokoro makes roughly 1.65 seconds of audio
+ * per second and playback only consumes 1.0 — so running flat out until the
+ * buffer is full just means saturating the graphics chip in long blocks. Pacing
+ * to a small multiple of what is actually being consumed does the same total
+ * work, spread out, and the gaps between pieces are what let the screen redraw.
+ *
+ * Two speeds: cruise once the cushion is healthy, catch up while it is thin.
+ */
+const CRUISE_MARGIN = 1.15;
+const CATCH_UP_MARGIN = 1.6;
+
+/**
+ * Never rest longer than this in one go. A typical verse wants one to three
+ * seconds, so this is set above that — capping lower would quietly generate
+ * faster than the target and give back the smoothness we are paying for. A stop
+ * or a seek is still immediate: the audio element is paused synchronously and
+ * the generation check after the rest abandons the stale work.
+ */
+const MAX_REST_MS = 3000;
 
 /** Silence around an automatic chapter announcement, in seconds. */
 const GAP_BEFORE = 3;
@@ -220,6 +278,81 @@ function bufferedSecondsAhead(): number {
   let total = 0;
   for (let i = segmentIndex + 1; i < segments.length; i++) total += segments[i].seconds;
   return total;
+}
+
+// ── the governor ────────────────────────────────────────────────────────────
+// Generating used to run wide open until the buffer was full, then stop: about
+// 55 seconds of saturated graphics chip, 35 seconds idle, over and over. That is
+// why the phone stuttered whenever it was touched and was flawless with the
+// screen off. The work here is the same work, paced out.
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * True when nothing is being drawn — screen off, or the app in the background.
+ * Either way generating costs the screen nothing, which is what the callers
+ * below actually care about.
+ */
+function pageIsHidden(): boolean {
+  return typeof document !== 'undefined' && document.hidden;
+}
+
+function segmentSeconds(): number {
+  return pageIsHidden() ? SEGMENT_SECONDS_HIDDEN : SEGMENT_SECONDS_VISIBLE;
+}
+
+function bufferAheadTarget(): number {
+  return pageIsHidden() ? BUFFER_AHEAD_HIDDEN : BUFFER_AHEAD_VISIBLE;
+}
+
+/**
+ * Head start runs flat out. The user is watching a spinner with no audio yet, so
+ * there is nothing to protect and every millisecond is felt.
+ */
+let priming = false;
+
+/**
+ * Seconds of audio produced per second spent generating, smoothed.
+ *
+ * Never assumed. 1.65x is a cold-device figure; ten minutes of sustained load
+ * makes a phone throttle hard, and Piper on this same path is several times
+ * faster than Kokoro. Anything calibrated to a constant would misjudge exactly
+ * when it matters most.
+ */
+let observedRate = 0;
+const RATE_SMOOTHING = 0.25;
+
+function recordRate(audioSeconds: number, workMs: number): void {
+  if (audioSeconds <= 0 || workMs <= 0) return;
+  const rate = audioSeconds / (workMs / 1000);
+  observedRate = observedRate === 0 ? rate : observedRate + (rate - observedRate) * RATE_SMOOTHING;
+}
+
+/**
+ * Rest after generating a piece, so the chip is not held for long stretches.
+ *
+ * The budget is worked out from the audio just produced rather than from any
+ * assumed speed, which makes it self-correcting: when the phone is hot and a
+ * verse takes longer, the rest shrinks on its own and eventually disappears.
+ */
+async function pace(audioSeconds: number, workMs: number): Promise<void> {
+  if (priming || audioSeconds <= 0) return;
+
+  // The governor exists to protect the screen. With the screen off there is
+  // nothing to protect, and holding back would be actively worse: JavaScript can
+  // be throttled to occasional short slices out there, so every slice we do get
+  // should be used in full rather than slept through.
+  if (pageIsHidden()) return;
+
+  const ahead = bufferedSecondsAhead();
+  // The floor. Never hold back when there is little left to play.
+  if (ahead < BUFFER_FLOOR_SECONDS) return;
+
+  const margin = ahead < bufferAheadTarget() * 0.5 ? CATCH_UP_MARGIN : CRUISE_MARGIN;
+  // `rate` is the playback speed, so this is how fast audio is being consumed.
+  const wanted = Math.max(0.25, rate) * margin;
+  const restMs = (audioSeconds / wanted) * 1000 - workMs;
+  if (restMs > 0) await sleep(Math.min(restMs, MAX_REST_MS));
 }
 
 // ── loading text ────────────────────────────────────────────────────────────
@@ -423,6 +556,8 @@ async function renderUtterance(u: Utterance, gen: number): Promise<boolean> {
 async function buildSegment(gen: number): Promise<boolean> {
   const pieces: Uint8Array[] = [];
   const marks: Mark[] = [];
+  /** Chapters this segment reached into, so their offsets are redone once each. */
+  const touched = new Set<string>();
   let seconds = 0;
   // A segment is one WAV, so everything in it has to share a rate. Bilingual
   // reading can alternate voices that do not (the Compact English voice is
@@ -448,7 +583,14 @@ async function buildSegment(gen: number): Promise<boolean> {
 
     const u = queue[renderCursor];
     if (!u.pcm) {
+      const startedAt = Date.now();
       if (!(await renderUtterance(u, gen))) return false;
+      const workMs = Date.now() - startedAt;
+      recordRate(u.seconds ?? 0, workMs);
+      // Rest before the next one, so the graphics chip is handed back to the
+      // screen between pieces instead of being held for a solid minute.
+      await pace(u.seconds ?? 0, workMs);
+      if (gen !== generation) return false;
     }
 
     // Leave it for the next segment, rendered audio and all — the cursor does
@@ -471,13 +613,21 @@ async function buildSegment(gen: number): Promise<boolean> {
       seconds += u.seconds ?? 0;
     }
     renderCursor++;
+    touched.add(`${u.book}|${u.chapter}`);
 
-    recomputeChapterOffsets(u.book, u.chapter);
-
-    if (seconds >= SEGMENT_SECONDS) break;
+    if (seconds >= segmentSeconds()) break;
     // Playing the last thing we have: get this out now rather than making it
     // wait for ninety seconds of audio to finish generating.
     if (starving() && seconds > 0) break;
+  }
+
+  // Once per chapter touched, not once per verse. This walks the whole queue,
+  // so calling it inside the loop above made building a segment cost the square
+  // of the queue length — around a million steps with a few chapters banked.
+  // Nothing reads an offset mid-build, so the end is soon enough.
+  for (const key of touched) {
+    const cut = key.lastIndexOf('|');
+    recomputeChapterOffsets(key.slice(0, cut), Number(key.slice(cut + 1)));
   }
 
   if (marks.length === 0) return false;
@@ -515,7 +665,7 @@ function serialize<T>(task: () => Promise<T>): Promise<T> {
 /** Build segments until there is enough audio banked ahead. */
 async function fillLoop(gen: number): Promise<void> {
   while (gen === generation) {
-    if (bufferedSecondsAhead() >= BUFFER_AHEAD_SECONDS) break;
+    if (bufferedSecondsAhead() >= bufferAheadTarget()) break;
     if (bufferedBytes() >= BUFFER_MAX_BYTES) break;
     if (!(await buildSegment(gen))) break;
   }
@@ -545,14 +695,22 @@ function buildOne(gen: number): Promise<boolean> {
 async function buildHeadStart(gen: number): Promise<void> {
   const started = Date.now();
 
-  while (gen === generation) {
-    let ready = 0;
-    for (const segment of segments) ready += segment.seconds;
-    if (ready >= HEAD_START_SECONDS) break;
-    if (Date.now() - started >= HEAD_START_MAX_WAIT_MS) break;
-    // Build one at a time so the wall-clock cap is checked between them, and a
-    // build that yields nothing ends the wait instead of spinning.
-    if (!(await buildOne(gen))) break;
+  // Exempt from the governor: no audio exists yet, so there is nothing to
+  // protect, and every millisecond here is one the user spends watching a
+  // spinner. Cleared in a finally so an error cannot leave it stuck on.
+  priming = true;
+  try {
+    while (gen === generation) {
+      let ready = 0;
+      for (const segment of segments) ready += segment.seconds;
+      if (ready >= HEAD_START_SECONDS) break;
+      if (Date.now() - started >= HEAD_START_MAX_WAIT_MS) break;
+      // Build one at a time so the wall-clock cap is checked between them, and a
+      // build that yields nothing ends the wait instead of spinning.
+      if (!(await buildOne(gen))) break;
+    }
+  } finally {
+    priming = false;
   }
 
   // Whatever else happens, keep banking in the background.
@@ -578,6 +736,15 @@ async function playSegment(gen: number, seekSeconds = 0): Promise<void> {
     // only when a build genuinely produces nothing, which means there is nothing
     // left to read (end of a chapter with auto-advance off, say).
     waitingForAudio.set(true);
+    // Running dry with a measured rate below playback means the phone genuinely
+    // cannot generate this fast — usually 1.5x on a warm device, where there is
+    // no throttling headroom left at all. Worth saying out loud rather than
+    // looking like an unexplained stall.
+    if (observedRate > 0 && observedRate < rate) {
+      console.warn(
+        `🔊 Read Aloud is behind: generating ${observedRate.toFixed(2)}x against ${rate.toFixed(2)}x playback`
+      );
+    }
     try {
       while (gen === generation && segmentIndex >= segments.length) {
         if (!(await buildOne(gen))) break;
@@ -953,6 +1120,8 @@ export function stopReading(): void {
   lastVerseKey = '';
   measuredChars = 0;
   measuredSeconds = 0;
+  observedRate = 0;
+  priming = false;
 
   readingState.set('idle');
   readingError.set('');
@@ -974,6 +1143,14 @@ if (typeof window !== 'undefined') {
 
   audio.addEventListener('timeupdate', () => {
     if (get(readingState) === 'playing') updatePositionFromClock();
+  });
+
+  // Both the cushion and the segment length change with the screen, so the
+  // filler has to be woken to act on the new ones — going dark is the moment to
+  // start banking deep, and coming back is the moment to ease off.
+  document.addEventListener('visibilitychange', () => {
+    const state = get(readingState);
+    if (state === 'playing' || state === 'paused') kickFiller();
   });
 
   audio.addEventListener('pause', () => {
