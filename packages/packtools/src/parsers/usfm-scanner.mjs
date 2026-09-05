@@ -195,12 +195,17 @@ export function parseUSFM(content, options = {}) {
           });
         }
         
-        // Read verse number
+        // Read verse number. A verse may be published as a range -- \v 1-2 --
+        // where one block of text covers both; it is stored under the first
+        // number, and the rest of the token is dropped rather than left to
+        // land at the head of the text as a stray "-2". LXX has 49; BSB and
+        // NET have none.
         let vNum = '';
         while (i < content.length && /\d/.test(content[i])) {
           vNum += content[i];
           i++;
         }
+        while (i < content.length && /[-–\d]/.test(content[i])) i++;
         currentVerse = parseInt(vNum);
         verseText = '';
         
@@ -230,27 +235,50 @@ export function parseUSFM(content, options = {}) {
         continue;
       }
       
-      // Footnote marker: \f + \fr ref \ft text \f*
-      if (marker === 'f') {
+      // Note markers: \f + \fr ref \ft text \f* is a footnote, and \x + \xo ref
+      // \xt target \x* a cross-reference. Both are stored the same way, as a
+      // "+ …" run closed by \x01. LXX carries 298 cross-references that were
+      // lost while only \f was recognised; BSB has none, NET has none.
+      if (marker === 'f' || marker === 'x') {
+        const endMarker = '\\' + marker + '*';
         // Skip the + sign
         if (content[i] === '+') i++;
         while (i < content.length && content[i] === ' ') i++;
-        
+
         let footnoteText = '';
         let inFootnote = true;
-        
+        let trailingNoteSpace = false;
+
         while (i < content.length && inFootnote) {
           if (content[i] === '\\') {
-            // Check for end marker \f*
-            if (content.substring(i, i + 3) === '\\f*') {
+            // Check for the closing marker
+            if (content.substring(i, i + 3) === endMarker) {
               i += 3;
+              // A note must not be glued to the word after it: the stored text
+              // is what search and previews read. Where the source already has
+              // a space the main loop appends it; where it does not, one is
+              // added here.
+              if (preserveSpaceAfterCharClose && content[i] && !/[\s,.;:!?)]/.test(content[i])) {
+                trailingNoteSpace = true;
+              }
               inFootnote = false;
               break;
             }
-            // Skip \fr (footnote reference) and \ft (footnote text) markers
-            if (content.substring(i, i + 3) === '\\fr' || content.substring(i, i + 3) === '\\ft') {
-              i += 3;
-              while (i < content.length && content[i] === ' ') i++;
+            // Any other marker inside the note is structure, not words: \fr
+            // and \ft label the reference and the text, and a note can nest
+            // character markers (\+add …\+add*). Skip the marker itself and
+            // keep what it wraps -- but only collapse the space after an
+            // opening marker, since the space after a closing one is the gap
+            // between two words.
+            let j = i + 1;
+            if (content[j] === '+') j++;
+            let inner = '';
+            while (j < content.length && /[a-z0-9]/.test(content[j])) inner += content[j++];
+            if (inner) {
+              const innerClosing = content[j] === '*';
+              if (innerClosing) j++;
+              i = j;
+              if (!innerClosing) while (i < content.length && content[i] === ' ') i++;
               continue;
             }
           }
@@ -261,6 +289,7 @@ export function parseUSFM(content, options = {}) {
         // Add footnote as inline note (\x01 sentinel marks end of note unambiguously)
         if (footnoteText.trim()) {
           verseText += ` + ${footnoteText.trim()}\x01`;
+          if (trailingNoteSpace) verseText += ' ';
         }
         continue;
       }

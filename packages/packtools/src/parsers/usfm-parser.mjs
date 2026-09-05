@@ -14,6 +14,27 @@
 
 import fs from 'fs';
 import path from 'path';
+import { parseUSFM, processVerses, cleanUSFMMarkup } from './usfm-scanner.mjs';
+
+/**
+ * Parsing is the shared scanner's job; what stays here is the book map this
+ * collection needs for its deuterocanonical titles, and the pack writer.
+ *
+ * The scanner replaced a line-based parser that only recognised poetry on a
+ * bare \q1 and emitted no paragraph break at all, which is why the shipped
+ * LXX pack carries 2,466 poetic lines and exactly one paragraph break against
+ * 1,008 in its source.
+ *
+ * \add, \it, \em and \qt were all stored as <i> before and still are; the
+ * source is tagged word by word, so the space after a closing marker has to
+ * survive or the words run together.
+ */
+const LXX_OPTIONS = {
+  paragraphFromProseMarker: true,
+  legacySpacedMarkers: new Set(),
+  italicMarkers: new Set(['add', 'it', 'em', 'qt']),
+  preserveSpaceAfterCharClose: true,
+};
 
 /**
  * USFM book ID to standard name mapping
@@ -255,98 +276,22 @@ function tidy(text) {
  */
 export function parseUSFMFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8');
-  const lines = content.split('\n');
 
-  let bookId = null;
-  let bookName = null;
-  let currentChapter = null;
-  const verses = [];
+  // \id carries the book code; USFM_BOOK_MAP above is the only place that
+  // knows the deuterocanonical names this collection adds to the 66.
+  const idLine = content.match(/^\\id\s+(\S+)/m);
+  const bookId = idLine ? idLine[1] : null;
+  const bookName = bookId ? (USFM_BOOK_MAP[bookId] || bookId) : null;
+  if (!bookName) return { bookName: null, verses: [] };
 
-  // Structure that arrives before the verse it belongs to
-  let pendingPoetry = null;   // \q1/\q2 line opening a verse
-  let pendingStanza = false;  // \b blank line
-  let pendingTitle = null;    // \d psalm superscription
-
-  const pushVerse = (verse, text) => {
-    const finalText = tidy(text);
-    if (finalText) verses.push({ book: bookName, chapter: currentChapter, verse, text: finalText });
-  };
-
-  for (let raw of lines) {
-    const line = raw.trim();
-    if (!line) continue;
-    if (line[0] !== '\\') {
-      // Bare continuation text belongs to the verse in progress
-      if (verses.length > 0) verses[verses.length - 1].text = tidy(verses[verses.length - 1].text + ' ' + parseInlineText(line));
-      continue;
-    }
-
-    const { marker, next } = readMarker(line, 0);
-    const rest = line.slice(next).replace(/^ /, '');
-
-    if (marker === 'id') {
-      bookId = rest.trim().split(/\s+/)[0];
-      bookName = USFM_BOOK_MAP[bookId] || bookId;
-      continue;
-    }
-
-    if (marker === 'c') {
-      currentChapter = parseInt(rest.trim());
-      pendingPoetry = null;
-      pendingStanza = false;
-      pendingTitle = null;
-      continue;
-    }
-
-    if (marker === 'b') {
-      pendingStanza = true;
-      continue;
-    }
-
-    // Psalm superscription — Brenton prints it as an italic title above verse 1,
-    // and the pack has nowhere else to put it, so it leads that verse.
-    if (marker === 'd') {
-      const title = parseInlineText(rest).trim();
-      if (title) pendingTitle = `<i>${title}</i>`;
-      continue;
-    }
-
-    if (SKIP_LINE_MARKERS.has(marker)) continue;
-
-    const level = poetryLevel(marker);
-    if (level || marker === 'p' || marker === 'm' || marker === 'nb') {
-      const text = parseInlineText(rest).trim();
-      if (!text) {
-        // Bare \q1 before a \v — the verse itself starts this poetic line
-        if (level) pendingPoetry = level;
-        continue;
-      }
-      // Continuation text (LXX-only additions in 1–2 Kings, poetic lines)
-      if (verses.length > 0) {
-        const prev = verses[verses.length - 1];
-        prev.text = tidy(prev.text + ' ' + (level || '') + text);
-      }
-      continue;
-    }
-
-    if (marker === 'v') {
-      if (!bookName || currentChapter === null) continue;
-
-      const spaceIndex = rest.indexOf(' ');
-      const verseNum = parseInt(spaceIndex === -1 ? rest : rest.substring(0, spaceIndex));
-      if (!Number.isFinite(verseNum)) continue;
-
-      let text = spaceIndex === -1 ? '' : parseInlineText(rest.substring(spaceIndex + 1));
-      const lead = (pendingStanza ? STANZA : '') + (pendingPoetry || '');
-      if (pendingTitle) text = `${pendingTitle} ${text}`;
-      pendingPoetry = null;
-      pendingStanza = false;
-      pendingTitle = null;
-
-      pushVerse(verseNum, lead + text.trim());
-      continue;
-    }
-  }
+  const verses = processVerses(parseUSFM(content, LXX_OPTIONS))
+    .map((v) => ({
+      book: bookName,
+      chapter: v.chapter,
+      verse: v.verse,
+      text: cleanUSFMMarkup(v.text),
+    }))
+    .filter((v) => v.text);
 
   return { bookName, verses };
 }
