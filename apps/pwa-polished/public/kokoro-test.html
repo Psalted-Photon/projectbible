@@ -69,7 +69,7 @@
   </ol>
   <button id="endGo">Start 5-minute endurance test</button>
   <button id="endShow" class="sec">Show last results</button>
-  <button id="diagGo" class="sec">Diagnose the silence (about 1 minute)</button>
+  <button id="diagGo" class="sec">Sweep runtime versions (about 3 minutes)</button>
   <div id="endLive"></div>
   <div id="endSummary"></div>
   <div id="endLog" style="margin-top:8px"></div>
@@ -639,86 +639,106 @@ function runDiagnostic() {
   if (busy || endRunning) return;
   busy = true; setButtons(true);
   $('diagGo').disabled = true; $('endGo').disabled = true;
-  $('diagGo').textContent = 'Diagnosing...';
-  log('\n=== DIAGNOSTIC: fp16 vs fp32 on the graphics chip ===');
-  log('Every silent run has used fp16. The clip that played was fp32 — the Play');
-  log('button holds whichever ran last. Testing whether fp16 is the problem.');
+  $('diagGo').textContent = 'Sweeping versions...';
+  log('\n=== ONNX RUNTIME VERSION SWEEP (fp32, graphics chip) ===');
+  log('The working demo bundles 1.21.0-dev. We are muffled on 1.23.2 and 1.29.');
+  log('So the fault looks like a regression after 1.21. Scoring each version');
+  log('against the processor, which is known-good on this machine.');
 
-  const rounds = { 1: [], 2: [] };
-  const MODELS = { 1: { url: FP16, mb: 156, name: 'fp16' },
-                   2: { url: FP32, mb: 310, name: 'fp32' } };
+  // 1.22 is the oldest that still carries the extern-wasm export condition our
+  // build depends on; below that we would also need a build workaround.
+  const VERSIONS = ['1.21.0', '1.22.0', '1.23.2', '1.29.0'];
+  const results = [];
+  let reference = null;   // processor output, the yardstick
 
   const finish = () => {
     busy = false; setButtons(false);
     $('diagGo').disabled = false; $('endGo').disabled = false;
-    $('diagGo').textContent = 'Diagnose the silence (about 1 minute)';
+    $('diagGo').textContent = 'Sweep runtime versions (about 3 minutes)';
   };
 
-  const loud = arr => arr.filter(r => r.p > 0.01).length;
-
-  function conclude() {
-    const a = rounds[1], b = rounds[2];
-    log('\n  --- conclusion ---');
-    log('  fp16: ' + loud(a) + ' of ' + a.length + ' clips had sound');
-    log('  fp32: ' + loud(b) + ' of ' + b.length + ' clips had sound');
-    if (a.length && b.length && loud(a) === 0 && loud(b) === b.length) {
-      log('  CONFIRMED: fp16 is silent on this chip, fp32 works.');
-      log('  Ship fp32 (310 MB) - fp16 is not an option here.');
-    } else if (loud(a) === 0 && loud(b) === 0) {
-      log('  Both formats silent. The graphics chip is not producing audio at');
-      log('  all in this loop, and the whole WebGPU path is in doubt.');
-    } else if (loud(a) === a.length && loud(b) === b.length) {
-      log('  Both formats fine. The silence belongs to the endurance loop.');
-    } else {
-      const idleBroke = [a, b].some(r =>
-        r.length === 4 && r[0].p > 0.01 && r[1].p > 0.01 && r[2].p > 0.01 && r[3].p <= 0.01);
-      log(idleBroke
-        ? '  Sound until the 3s idle, silent after it. Idling is the cause.'
-        : '  Mixed and inconsistent — intermittent silent output from the chip.');
+  /** How closely two waveforms agree. 1.0 is identical; muffled scores low. */
+  function correlate(a, b) {
+    const n = Math.min(a.length, b.length);
+    if (!n) return 0;
+    let sa = 0, sb = 0;
+    for (let i = 0; i < n; i++) { sa += a[i]; sb += b[i]; }
+    const ma = sa / n, mb = sb / n;
+    let num = 0, da = 0, db = 0;
+    for (let i = 0; i < n; i++) {
+      const x = a[i] - ma, y = b[i] - mb;
+      num += x * y; da += x * x; db += y * y;
     }
-    finish();
+    const d = Math.sqrt(da * db);
+    return d === 0 ? 0 : num / d;
   }
 
-  // Each session: 3 clips back to back, a 3s idle, then one more. That covers
-  // the session-order theory and the idling theory in a single run.
-  function runSession(round, next) {
-    const M = MODELS[round];
-    log('\n  --- ' + M.name + ' (' + M.mb + ' MB), fresh worker ---');
-    const w = new Worker(workerUrl, { type: 'module' });
-    let n = 0;
-    const done = () => { try { w.terminate(); } catch (e) {} next(); };
+  function runOne(version, ep, label, next) {
+    log(`\n  --- ${label} ---`);
+    const cdn = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@' + version + '/dist/';
+    const src = WORKER_SRC
+      .replace('__VOCAB__', JSON.stringify(VOCAB))
+      .replace('__PHON__', JSON.stringify(PHON))
+      .split(CDN).join(cdn);
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    const w = new Worker(url, { type: 'module' });
+    let done = false;
+    const stop = (samples, err) => {
+      if (done) return; done = true;
+      try { w.terminate(); } catch (e) {}
+      URL.revokeObjectURL(url);
+      next(samples, err);
+    };
+    const timer = setTimeout(() => stop(null, 'timed out'), 4 * 60 * 1000);
     w.onmessage = (e) => {
       const d = e.data;
-      if (d.type === 'log') { log(d.m); return; }
+      if (d.type === 'log') { log('    ' + d.m); return; }
       if (d.type === 'progress') return;
-      if (d.type === 'error') { log('  ' + M.name + ' FAILED: ' + d.message); done(); return; }
+      if (d.type === 'error') { clearTimeout(timer); stop(null, d.message); return; }
       if (d.type === 'ready') { w.postMessage({ cmd: 'synth', diag: true }); return; }
-      if (d.type === 'clip') {
-        n++;
-        let p = 0;
-        for (let i = 0; i < d.samples.length; i++) {
-          const v = d.samples[i] < 0 ? -d.samples[i] : d.samples[i];
-          if (v > p) p = v;
-        }
-        rounds[round].push({ n: n, w: d.wpeak, p: p });
-        log('  ' + M.name + ' clip ' + n + (n === 4 ? ' (after idle)' : '') +
-            ': inWorker=' + d.wpeak.toFixed(4) + '  onPage=' + p.toFixed(4) +
-            '  len=' + d.samples.length);
-        if (n >= 4) { done(); return; }
-        if (n === 3) {
-          log('  --- idling 3s ---');
-          setTimeout(() => { try { w.postMessage({ cmd: 'synth', diag: true }); } catch (e) {} }, 3000);
-        } else {
-          w.postMessage({ cmd: 'synth', diag: true });
-        }
-      }
+      if (d.type === 'clip') { clearTimeout(timer); stop(d.samples, null); }
     };
-    w.onerror = (ev) => { log('  ' + M.name + ' WORKER ERROR: ' + (ev.message || '?')); done(); };
-    w.postMessage({ cmd: 'init', t: { url: M.url, mb: M.mb, ep: 'webgpu', threads: 1,
+    w.onerror = (ev) => { clearTimeout(timer); stop(null, ev.message || 'worker error'); };
+    w.postMessage({ cmd: 'init', t: { url: FP32, mb: 310, ep, threads: 1,
                                       kind: 'kokoro', styleUrl: STYLE_URL } });
   }
 
-  runSession(1, () => runSession(2, conclude));
+  // The processor on the newest runtime is the reference: this machine has
+  // always produced clean audio that way.
+  runOne('1.29.0', 'wasm', 'reference: processor, 1.29.0', (samples, err) => {
+    if (!samples) { log('  reference failed: ' + err); finish(); return; }
+    reference = samples;
+    let peak = 0; for (const v of samples) { const a = v < 0 ? -v : v; if (a > peak) peak = a; }
+    log(`  reference ready: ${(samples.length / 24000).toFixed(2)}s, peak ${peak.toFixed(3)}`);
+    step(0);
+  });
+
+  function step(i) {
+    if (i >= VERSIONS.length) {
+      log('\n  --- results ---');
+      results.forEach(r => log(`  ${r.v.padEnd(8)} ${r.score === null ? 'FAILED: ' + r.err : r.score.toFixed(4) + (r.score > 0.9 ? '  clean' : '  MUFFLED')}`));
+      const good = results.filter(r => r.score !== null && r.score > 0.9);
+      log(good.length
+        ? `\n  Use ${good[0].v}. ${good.length > 1 ? 'Also clean: ' + good.slice(1).map(r => r.v).join(', ') : ''}`
+        : '\n  No version matches the processor. The version is not the cause.');
+      finish();
+      return;
+    }
+    const v = VERSIONS[i];
+    runOne(v, 'webgpu', `graphics chip, ${v}`, (samples, err) => {
+      if (!samples) {
+        results.push({ v, score: null, err });
+        log(`    FAILED: ${err}`);
+      } else {
+        const score = correlate(reference, samples);
+        results.push({ v, score, err: null });
+        lastWav = makeWav(samples, 24000);
+        $('play').disabled = false;
+        log(`    correlation with processor: ${score.toFixed(4)} ${score > 0.9 ? '(clean)' : '(MUFFLED)'}`);
+      }
+      step(i + 1);
+    });
+  }
 }
 
 $('diagGo').onclick = runDiagnostic;
