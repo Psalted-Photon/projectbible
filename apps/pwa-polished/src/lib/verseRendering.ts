@@ -284,6 +284,11 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
     .replace(/\x11/g, '<br>')
     .replace(/\x12/g, '<br><span class="poetry-indent"></span>')
     .replace(/\x10/g, '')
+    // A pilcrow that is not the verse's own leading one — BibleReader consumes
+    // that into .para-start — is a paragraph mark the layout already carries.
+    // Preview, speech and TTS all drop it; the reader was the only path that
+    // did not, so older KJV packs showed it mid-verse as a stray glyph.
+    .replace(/¶\s*/g, '')
     // ⌃ marks a plural "you" in the LXX — a stray glyph mid-sentence unless it
     // is presented as what it is.
     .replace(/\x13/g, '<sup class="plural-marker" title="Plural &ldquo;you&rdquo;">[pl]</sup>');

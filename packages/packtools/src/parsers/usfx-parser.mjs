@@ -94,6 +94,12 @@ export function parseUSFX(filePath) {
 
   function append(chunk) {
     if (!chunk) return;
+    // KJV writes its traditional paragraph mark as a literal ¶ at the head of
+    // 2,970 verses, always just inside the <p> that already opens the
+    // paragraph. It is the same information twice, and the marker is the half
+    // the reader can lay out, so the glyph goes.
+    chunk = chunk.replace(/¶\s*/g, '');
+    if (!chunk) return;
     if (noteDepth > 0) noteText += chunk;
     else if (titleDepth > 0) titleText += chunk;
     else if (headingDepth > 0) headingText += chunk;

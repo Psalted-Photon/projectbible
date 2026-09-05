@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-09-05T05:25:14.963Z",
+  "createdAt": "2026-09-05T15:58:25.331Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -196,7 +196,7 @@
       "sha256": "3dbc698da339d9c3b0f8050e5ec0374b734c4ba57a85f4a7925b6af9a1fa9239",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-09-05T05:25:18.756Z"
+      "createdAt": "2026-09-05T15:58:30.036Z"
     },
     {
       "id": "dictionary-en",
@@ -211,7 +211,7 @@
       "sha256": "1bd67240913ebbbf4f78f70add13279e150a989f6abb55eaf001e816a0f3a50a",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-09-05T05:25:18.592Z"
+      "createdAt": "2026-09-05T15:58:29.790Z"
     },
     {
       "id": "encyclotopical",
@@ -226,7 +226,7 @@
       "sha256": "310058b1e7b0dfe240d311fb58728e11bba79dc834d874ab994acd106e393dba",
       "dependencies": [],
       "downloadUrl": "/api/packs/encyclotopical.sqlite",
-      "createdAt": "2026-09-05T05:25:18.836Z"
+      "createdAt": "2026-09-05T15:58:30.171Z"
     },
     {
       "id": "geonames-modern-places-v1",
@@ -271,7 +271,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-09-05T05:25:15.463Z"
+      "createdAt": "2026-09-05T15:58:25.849Z"
     },
     {
       "id": "section-headings",
@@ -286,7 +286,7 @@
       "sha256": "7a3436aaa587a3bfbac74405922fbd56a20f363c2282be1aa1c9b1d48feea71c",
       "dependencies": [],
       "downloadUrl": "/api/packs/section-headings.sqlite",
-      "createdAt": "2026-09-05T05:25:15.459Z"
+      "createdAt": "2026-09-05T15:58:25.846Z"
     },
     {
       "id": "study-tools",
@@ -311,12 +311,12 @@
       "version": "1.0.1",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 36798464,
-      "sizeMB": 35.09,
-      "sha256": "5853894d29b547566b84dfd2cbade28b5090d2aa60797b5a6c31c4d3b2b026f5",
+      "size": 36786176,
+      "sizeMB": 35.08,
+      "sha256": "a9a0c0c831d3089cd34c0648a3860623846ed333aa0cb071e790be14d18293f0",
       "dependencies": [],
       "downloadUrl": "/api/packs/translations.sqlite",
-      "createdAt": "2026-09-05T05:24:43.267Z"
+      "createdAt": "2026-09-05T15:58:23.941Z"
     },
     {
       "id": "tsk-references",
@@ -331,7 +331,7 @@
       "sha256": "c4541999b5170cfb5c2bf05cc512712e0e3b1e387226a331d2fb85db007238dc",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-09-05T05:25:15.403Z"
+      "createdAt": "2026-09-05T15:58:25.814Z"
     }
   ]
 }
