@@ -84,6 +84,16 @@
 <div id="verdict" class="verdict"></div>
 
 <div class="card">
+  <h2>Will the app survive multi-core mode?</h2>
+  <p style="font-size:.85rem;color:#bbb;margin:0 0 10px">
+    This page already runs with the security setting that multi-core needs. So it is
+    a free rehearsal: if the things the app loads from other websites arrive here,
+    they will arrive after the setting is switched on for real.
+  </p>
+  <div id="corsProbe"></div>
+</div>
+
+<div class="card">
   <h2>This device</h2>
   <div id="env"></div>
 </div>
@@ -157,6 +167,45 @@ if (gpuOK) {
       || 'available (no details)';
   }).catch(e => { $('adap').textContent = 'error: ' + e.message; });
 }
+
+
+// ── rehearsal: do the app's third-party resources survive this mode? ────────
+// The app pulls map tiles, the Leaflet stylesheet and Google Fonts from other
+// sites. Cross-origin isolation can block those, and it would apply to the phone
+// too — which currently works. Checking here costs nothing and risks nothing.
+(function probeCrossOrigin() {
+  const CHECKS = [
+    ['Map tile (ArcGIS)', 'image',
+     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/3/4'],
+    ['Map stylesheet (unpkg)', 'style', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'],
+    ['Google Fonts stylesheet', 'style',
+     'https://fonts.googleapis.com/css2?family=EB+Garamond&display=swap'],
+    ['Google Fonts file', 'font',
+     'https://fonts.gstatic.com/s/ebgaramond/v27/SlGDmQSNjdsmc35JDF1K5E55YMjF_7DPuGi-6_RUA4V-e6yHgQ.woff2'],
+  ];
+  const box = $('corsProbe');
+  box.innerHTML = envRow('Isolation active here', iso ? 'yes' : 'NO', iso ? 'yes' : 'no') +
+    CHECKS.map((c, i) => envRow(c[0], '<span id="cors' + i + '">testing…</span>')).join('');
+
+  CHECKS.forEach(([label, kind, url], i) => {
+    const cell = () => $('cors' + i);
+    const pass = () => { const e = cell(); e.textContent = 'loads'; e.className = 'yes'; };
+    const fail = (why) => { const e = cell(); e.textContent = 'BLOCKED' + (why ? ' — ' + why : ''); e.className = 'no'; };
+
+    if (kind === 'image') {
+      const img = new Image();
+      img.onload = pass;
+      img.onerror = () => fail('image did not load');
+      img.src = url + '?probe=' + Date.now();
+      return;
+    }
+    // Stylesheets and fonts are fetched no-cors, the same way the browser loads
+    // them from a <link>. An opaque response still proves it was not blocked.
+    fetch(url, { mode: 'no-cors', cache: 'no-store' })
+      .then(() => pass())
+      .catch((e) => fail(e.message.slice(0, 40)));
+  });
+})();
 
 $('tests').innerHTML = TESTS.map(t =>
   '<div class="test"><div class="test-head">' +
