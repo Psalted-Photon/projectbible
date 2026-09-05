@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voice Lab — Kokoro</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px 16px 64px;
+    background: #141414; color: #e6e6e6;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 1.15rem; margin: 0 0 2px; }
+  .sub { color: #888; font-size: 0.82rem; margin-bottom: 14px; }
+  .panel {
+    background: #1c1c1c; border: 1px solid #2f2f2f; border-radius: 10px;
+    padding: 12px; margin-bottom: 14px;
+  }
+  .panel h2 {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #8a8a8a; margin: 0 0 10px; font-weight: 600;
+  }
+  button {
+    font: inherit; color: #e6e6e6; background: #2a2a2a;
+    border: 1px solid #3d3d3d; border-radius: 7px;
+    padding: 7px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #333; border-color: #555; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.primary { background: #3b3169; border-color: #5b4da8; }
+  button.primary:hover:not(:disabled) { background: #473b80; }
+  textarea {
+    width: 100%; font: inherit; color: #e6e6e6;
+    background: #131313; border: 1px solid #3a3a3a;
+    border-radius: 7px; padding: 8px; resize: vertical;
+  }
+  input[type="range"] { width: 100%; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .grid {
+    display: grid; gap: 6px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+  .voice {
+    display: flex; align-items: center; gap: 6px;
+    background: #232323; border: 1px solid #343434;
+    border-radius: 7px; padding: 6px 8px; cursor: pointer;
+    text-align: left;
+  }
+  .voice:hover { background: #2c2c2c; }
+  .voice.playing { border-color: #7c6ad0; background: #2b2542; }
+  .voice .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .voice .star { color: #4a4a4a; font-size: 1rem; line-height: 1; }
+  .voice.starred .star { color: #e0b341; }
+  .tag {
+    font-size: 0.68rem; color: #8f8f8f; background: #2e2e2e;
+    border-radius: 4px; padding: 1px 5px;
+  }
+  .status { font-size: 0.85rem; color: #9a9a9a; min-height: 1.4em; }
+  .status.err { color: #f08a8a; }
+  .bar { height: 4px; background: #2a2a2a; border-radius: 2px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; width: 0; background: #7c6ad0; transition: width 0.15s; }
+  .recipe {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.8rem; color: #b9aee8; background: #1a1726;
+    border: 1px solid #332c52; border-radius: 6px; padding: 8px; margin-top: 10px;
+    word-break: break-all;
+  }
+  label.field { display: block; margin-bottom: 10px; }
+  label.field > span { display: block; font-size: 0.8rem; color: #9a9a9a; margin-bottom: 4px; }
+  .hint { font-size: 0.78rem; color: #777; margin-top: 6px; }
+  select { font: inherit; color: #e6e6e6; background: #131313; border: 1px solid #3a3a3a; border-radius: 6px; padding: 6px; }
+</style>
+</head>
+<body>
+
+<h1>Voice Lab</h1>
+<div class="sub" id="env">checking this device…</div>
+
+<div class="panel">
+  <h2>The model</h2>
+  <div class="status" id="modelStatus">not loaded</div>
+  <div class="bar"><i id="modelBar"></i></div>
+  <div class="row" style="margin-top:10px">
+    <button class="primary" id="loadBtn">Load model</button>
+    <span class="hint" id="modelHint"></span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>What they read</h2>
+  <label class="field">
+    <textarea id="sampleText" rows="2">In the beginning God created the heavens and the earth.</textarea>
+  </label>
+  <div class="row">
+    <select id="preset">
+      <option value="In the beginning God created the heavens and the earth.">Genesis 1:1</option>
+      <option value="The LORD is my shepherd; I shall not want. He makes me lie down in green pastures.">Psalm 23</option>
+      <option value="Jesus wept.">Shortest verse</option>
+      <option value="And he said unto them, Why are ye so fearful? How is it that ye have no faith?">A question</option>
+      <option value="For God so loved the world, that he gave his only begotten Son.">John 3:16</option>
+    </select>
+    <span class="hint">Same words for every voice, so they are actually comparable.</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Voices <span class="tag" id="voiceCount"></span></h2>
+  <div class="row" style="margin-bottom:10px">
+    <button id="starredOnly">Show starred only</button>
+    <span class="hint">Tap a voice to hear it. Tap its star to keep it.</span>
+  </div>
+  <div class="grid" id="voiceGrid"></div>
+</div>
+
+<div class="panel">
+  <h2>Blend two</h2>
+  <div class="row" style="margin-bottom:10px">
+    <select id="blendA"></select>
+    <select id="blendB"></select>
+  </div>
+  <label class="field">
+    <span id="blendLabel">Mix</span>
+    <input type="range" id="blendMix" min="0" max="100" step="5" value="50">
+  </label>
+  <label class="field">
+    <span id="speedLabel">Model speed — 1.00×</span>
+    <input type="range" id="speed" min="0.7" max="1.3" step="0.05" value="1">
+  </label>
+  <div class="row">
+    <button class="primary" id="playBlend">Hear the blend</button>
+    <button id="playA">Just A</button>
+    <button id="playB">Just B</button>
+  </div>
+  <div class="recipe" id="recipe">—</div>
+  <div class="hint">
+    A blend is the average of two style vectors, so it costs no download — the recipe
+    above is all that needs saving. Blend within the same accent for clean results.
+  </div>
+</div>
+
+<div class="status" id="status"></div>
+
+<script type="module">
+import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/ort.all.min.mjs';
+import { createPiperPhonemize } from '/tts/piper-phonemize.js';
+
+const ORT_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
+const HF = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/';
+const HF_API = 'https://huggingface.co/api/models/onnx-community/Kokoro-82M-v1.0-ONNX/tree/main/voices';
+const MODEL_URL = HF + 'onnx/model.onnx';
+const MODEL_MB = 310;
+
+// The app's own OPFS location. Sharing it means a model downloaded here also
+// equips Read Aloud, and one already downloaded there costs nothing here.
+const OPFS_DIR = 'kokoro';
+const OPFS_MODEL = 'kokoro-model.onnx';
+
+const SAMPLE_RATE = 24000;
+const STYLE_DIMS = 256;
+const TOKEN_LIMIT = 510;
+
+// Copied from src/lib/tts/kokoroTokens.ts and must stay identical to it. The
+// whole point of the lab is that what you hear is what the reader will say.
+const VOCAB = {
+  $: 0, ';': 1, ':': 2, ',': 3, '.': 4, '!': 5, '?': 6, '—': 9, '…': 10, '"': 11,
+  '(': 12, ')': 13, '“': 14, '”': 15, ' ': 16, '̃': 17, ʣ: 18, ʥ: 19, ʦ: 20,
+  ʨ: 21, ᵝ: 22, ꭧ: 23, A: 24, I: 25, O: 31, Q: 33, S: 35, T: 36, W: 39, Y: 41,
+  ᵊ: 42, a: 43, b: 44, c: 45, d: 46, e: 47, f: 48, h: 50, i: 51, j: 52, k: 53,
+  l: 54, m: 55, n: 56, o: 57, p: 58, q: 59, r: 60, s: 61, t: 62, u: 63, v: 64,
+  w: 65, x: 66, y: 67, z: 68, ɑ: 69, ɐ: 70, ɒ: 71, æ: 72, β: 75, ɔ: 76, ɕ: 77,
+  ç: 78, ɖ: 80, ð: 81, ʤ: 82, ə: 83, ɚ: 85, ɛ: 86, ɜ: 87, ɟ: 90, ɡ: 92, ɥ: 99,
+  ɨ: 101, ɪ: 102, ʝ: 103, ɯ: 110, ɰ: 111, ŋ: 112, ɳ: 113, ɲ: 114, ɴ: 115,
+  ø: 116, ɸ: 118, θ: 119, œ: 120, ɹ: 123, ɾ: 125, ɻ: 126, ʁ: 128, ɽ: 129,
+  ʂ: 130, ʃ: 131, ʈ: 132, ʧ: 133, ʊ: 135, ʋ: 136, ʌ: 138, ɣ: 139, ɤ: 140,
+  χ: 142, ʎ: 143, ʒ: 147, ʔ: 148, ˈ: 156, ˌ: 157, ː: 158, ʰ: 162, ʲ: 164,
+  '↓': 169, '→': 171, '↗': 172, '↘': 173, ᵻ: 177,
+};
+const FOLD = { ʲ: 'j', r: 'ɹ', x: 'k', ɬ: 'l' };
+
+const $ = (id) => document.getElementById(id);
+
+function say(msg, isErr) {
+  const el = $('status');
+  el.textContent = msg;
+  el.className = isErr ? 'status err' : 'status';
+  if (isErr) console.error(msg);
+}
+
+// ── device ──────────────────────────────────────────────────────────────────
+
+let backend = null;
+
+async function checkDevice() {
+  let adapter = null;
+  try {
+    adapter = navigator.gpu ? await navigator.gpu.requestAdapter() : null;
+  } catch (err) {
+    adapter = null;
+  }
+
+  const bits = [];
+  bits.push(navigator.hardwareConcurrency ? navigator.hardwareConcurrency + ' cores' : 'cores unknown');
+  if (adapter) {
+    const info = adapter.info || {};
+    const name = [info.vendor, info.architecture, info.description].filter(Boolean).join(' ');
+    bits.push('graphics chip available' + (name ? ' — ' + name : ''));
+  } else {
+    bits.push('NO graphics chip — this would run on the processor and be very slow');
+  }
+  $('env').textContent = bits.join(' · ');
+  return !!adapter;
+}
+
+// ── storage, shared with the app ────────────────────────────────────────────
+
+async function opfsDir() {
+  const root = await navigator.storage.getDirectory();
+  return root.getDirectoryHandle(OPFS_DIR, { create: true });
+}
+
+async function opfsRead(name) {
+  try {
+    const dir = await opfsDir();
+    const handle = await dir.getFileHandle(name);
+    return await handle.getFile();
+  } catch (err) {
+    return null;
+  }
+}
+
+async function opfsWrite(name, blob) {
+  const dir = await opfsDir();
+  const handle = await dir.getFileHandle(name, { create: true });
+  const w = await handle.createWritable();
+  await w.write(blob);
+  await w.close();
+}
+
+async function fetchWithProgress(url, onPct) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Download failed (' + res.status + ') for ' + url);
+  const total = +(res.headers.get('Content-Length') || 0);
+  const reader = res.body && res.body.getReader();
+  if (!reader) return res.blob();
+  const chunks = [];
+  let got = 0;
+  let last = -1;
+  for (;;) {
+    const step = await reader.read();
+    if (step.done) break;
+    chunks.push(step.value);
+    got += step.value.length;
+    const pct = total ? Math.floor((got / total) * 100) : 0;
+    if (pct !== last) { last = pct; onPct(pct); }
+  }
+  return new Blob(chunks);
+}
+
+// ── the model ───────────────────────────────────────────────────────────────
+
+let session = null;
+
+async function loadModel() {
+  $('loadBtn').disabled = true;
+  try {
+    let file = await opfsRead(OPFS_MODEL);
+    if (file) {
+      $('modelStatus').textContent =
+        'already on this device (' + (file.size / 1048576).toFixed(0) + ' MB) — nothing to download';
+      $('modelBar').style.width = '100%';
+    } else {
+      $('modelStatus').textContent = 'downloading ' + MODEL_MB + ' MB…';
+      const blob = await fetchWithProgress(MODEL_URL, (pct) => {
+        $('modelBar').style.width = pct + '%';
+        $('modelStatus').textContent = 'downloading ' + MODEL_MB + ' MB… ' + pct + '%';
+      });
+      await opfsWrite(OPFS_MODEL, blob);
+      file = blob;
+      $('modelStatus').textContent = 'downloaded and saved — Read Aloud can use it now too';
+    }
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    ort.env.wasm.wasmPaths = ORT_CDN;
+    ort.env.wasm.numThreads = 1;
+
+    $('modelStatus').textContent += ' · starting…';
+    const t0 = performance.now();
+    try {
+      session = await ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] });
+      backend = 'graphics chip';
+    } catch (err) {
+      console.warn('[lab] graphics chip unavailable, falling back to the processor:', err);
+      session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] });
+      backend = 'processor (slow)';
+    }
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    $('modelStatus').textContent = 'ready on the ' + backend + ' — started in ' + secs + 's';
+    $('modelHint').textContent = '';
+    say('Tap any voice to hear it.');
+  } catch (err) {
+    $('modelStatus').textContent = 'failed';
+    say(err.message || String(err), true);
+    $('loadBtn').disabled = false;
+  }
+}
+
+// ── voices ──────────────────────────────────────────────────────────────────
+
+// English only. Kokoro ships voices for eight other languages, but they have to
+// be phonemized with their own language's rules — auditioning them through the
+// English phonemizer would just mispronounce them.
+const ACCENTS = {
+  af: ['American', 'female', 'en-us'],
+  am: ['American', 'male', 'en-us'],
+  bf: ['British', 'female', 'en-gb-x-rp'],
+  bm: ['British', 'male', 'en-gb-x-rp'],
+};
+
+let voices = [];
+const styleCache = new Map();
+const starred = new Set(JSON.parse(localStorage.getItem('voicelab_starred') || '[]'));
+let showStarredOnly = false;
+
+async function loadVoiceList() {
+  const res = await fetch(HF_API);
+  if (!res.ok) throw new Error('Could not list the voices (' + res.status + ')');
+  const files = await res.json();
+  voices = files
+    .map((f) => f.path.split('/').pop())
+    .filter((n) => n.endsWith('.bin'))
+    .map((n) => n.slice(0, -4))
+    .filter((id) => id.includes('_') && ACCENTS[id.slice(0, 2)])
+    .sort();
+  $('voiceCount').textContent = voices.length + ' English';
+}
+
+async function getStyle(id) {
+  if (styleCache.has(id)) return styleCache.get(id);
+  const res = await fetch(HF + 'voices/' + id + '.bin');
+  if (!res.ok) throw new Error('Could not fetch the voice ' + id);
+  const vec = new Float32Array(await res.arrayBuffer());
+  styleCache.set(id, vec);
+  return vec;
+}
+
+function saveStars() {
+  localStorage.setItem('voicelab_starred', JSON.stringify([...starred]));
+}
+
+function renderVoices() {
+  const grid = $('voiceGrid');
+  grid.textContent = '';
+  for (const id of voices) {
+    if (showStarredOnly && !starred.has(id)) continue;
+    const meta = ACCENTS[id.slice(0, 2)];
+
+    const el = document.createElement('div');
+    el.className = 'voice' + (starred.has(id) ? ' starred' : '');
+
+    const star = document.createElement('span');
+    star.className = 'star';
+    star.textContent = starred.has(id) ? '★' : '☆';
+    star.title = 'Keep this one';
+    star.onclick = (e) => {
+      e.stopPropagation();
+      if (starred.has(id)) starred.delete(id);
+      else starred.add(id);
+      saveStars();
+      renderVoices();
+      fillBlendPickers();
+    };
+
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = id.slice(3).replace(/^./, (c) => c.toUpperCase());
+
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = meta[0][0] + '·' + meta[1][0];
+
+    el.append(star, nm, tag);
+    el.onclick = () => speakVoice(id, el);
+    grid.append(el);
+  }
+}
+
+function fillBlendPickers() {
+  const list = starred.size ? [...starred].sort() : voices;
+  for (const which of ['blendA', 'blendB']) {
+    const sel = $(which);
+    const keep = sel.value;
+    sel.textContent = '';
+    for (const id of list) {
+      const o = document.createElement('option');
+      o.value = id;
+      o.textContent = id;
+      sel.append(o);
+    }
+    if (keep && list.indexOf(keep) !== -1) sel.value = keep;
+  }
+  if ($('blendB').options.length > 1 && $('blendA').value === $('blendB').value) {
+    $('blendB').selectedIndex = 1;
+  }
+  updateRecipe();
+}
+
+// ── speaking ────────────────────────────────────────────────────────────────
+
+function phonemize(text, espeakVoice) {
+  return new Promise((resolve, reject) => {
+    createPiperPhonemize({
+      print: (msg) => {
+        try {
+          resolve(JSON.parse(msg).phonemes || []);
+        } catch (err) {
+          reject(new Error('Unexpected phonemizer output: ' + msg));
+        }
+      },
+      printErr: (msg) => reject(new Error('Phonemizer error: ' + msg)),
+      locateFile: (f) => '/tts/' + f,
+    })
+      .then((mod) =>
+        mod.callMain([
+          '-l', espeakVoice,
+          '--input', JSON.stringify([{ text: text.trim() }]),
+          '--espeak_data', '/espeak-ng-data',
+        ])
+      )
+      .catch(reject);
+  });
+}
+
+function toTokens(phonemes) {
+  const out = [];
+  for (const p of phonemes) {
+    for (const ch of p) {
+      const folded = FOLD[ch] !== undefined ? FOLD[ch] : ch;
+      const id = VOCAB[folded];
+      if (id !== undefined) out.push(id);
+    }
+  }
+  // The lab speaks one short sample, so anything past the limit is simply cut
+  // rather than split the way the reader does for whole verses.
+  return out.slice(0, TOKEN_LIMIT);
+}
+
+let audioCtx = null;
+let playing = null;
+
+async function run(styleVec, text, espeakVoice, speed) {
+  if (!session) throw new Error('Load the model first.');
+  const phonemes = await phonemize(text, espeakVoice);
+  const tokens = toTokens(phonemes);
+  if (tokens.length === 0) throw new Error('Nothing to say.');
+
+  // The style vector holds one row per possible length, picked by the unpadded
+  // token count — the same rule the reader uses.
+  const row = tokens.length;
+  if ((row + 1) * STYLE_DIMS > styleVec.length) {
+    throw new Error('That sample is too long for this voice vector — shorten it.');
+  }
+
+  const padded = [0].concat(tokens, [0]);
+  const res = await session.run({
+    input_ids: new ort.Tensor('int64', BigInt64Array.from(padded, (v) => BigInt(v)), [1, padded.length]),
+    style: new ort.Tensor('float32', styleVec.slice(row * STYLE_DIMS, (row + 1) * STYLE_DIMS), [1, STYLE_DIMS]),
+    speed: new ort.Tensor('float32', new Float32Array([speed]), [1]),
+  });
+  return res.waveform.data;
+}
+
+function play(samples) {
+  if (!audioCtx) audioCtx = new AudioContext();
+  const data = samples instanceof Float32Array ? samples : new Float32Array(samples);
+  const buf = audioCtx.createBuffer(1, data.length, SAMPLE_RATE);
+  buf.copyToChannel(data, 0);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioCtx.destination);
+  src.start();
+  return src;
+}
+
+async function speakWith(styleVec, label, espeakVoice, el) {
+  const text = $('sampleText').value.trim();
+  if (!text) {
+    say('Type something for them to read.', true);
+    return;
+  }
+  const nodes = document.querySelectorAll('.voice.playing');
+  for (const n of nodes) n.classList.remove('playing');
+  if (el) el.classList.add('playing');
+
+  say(label + ' — generating…');
+  try {
+    const t0 = performance.now();
+    const samples = await run(styleVec, text, espeakVoice, +$('speed').value);
+    const workSecs = (performance.now() - t0) / 1000;
+    const audioSecs = samples.length / SAMPLE_RATE;
+    if (playing) {
+      try { playing.stop(); } catch (err) { /* already finished */ }
+    }
+    playing = play(samples);
+    say(
+      label + ' — ' + audioSecs.toFixed(1) + 's of audio in ' + workSecs.toFixed(1) + 's (' +
+      (audioSecs / workSecs).toFixed(2) + '× realtime on the ' + backend + ')'
+    );
+  } catch (err) {
+    say(err.message || String(err), true);
+  } finally {
+    if (el) el.classList.remove('playing');
+  }
+}
+
+async function speakVoice(id, el) {
+  try {
+    await speakWith(await getStyle(id), id, ACCENTS[id.slice(0, 2)][2], el);
+  } catch (err) {
+    say(err.message || String(err), true);
+  }
+}
+
+function blendVectors(a, b, mix) {
+  const out = new Float32Array(a.length);
+  for (let i = 0; i < a.length; i++) out[i] = a[i] * (1 - mix) + b[i] * mix;
+  return out;
+}
+
+function updateRecipe() {
+  const a = $('blendA').value;
+  const b = $('blendB').value;
+  const mix = +$('blendMix').value / 100;
+  const speed = (+$('speed').value).toFixed(2);
+
+  $('blendLabel').textContent =
+    'Mix — ' + Math.round((1 - mix) * 100) + '% ' + (a || 'A') + ' / ' + Math.round(mix * 100) + '% ' + (b || 'B');
+  $('speedLabel').textContent = 'Model speed — ' + speed + '×';
+  $('recipe').textContent = a && b
+    ? (1 - mix).toFixed(2) + ' ' + a + ' + ' + mix.toFixed(2) + ' ' + b + '  @ speed ' + speed
+    : '—';
+}
+
+// ── wiring ──────────────────────────────────────────────────────────────────
+
+$('loadBtn').onclick = loadModel;
+$('preset').onchange = (e) => { $('sampleText').value = e.target.value; };
+$('blendMix').oninput = updateRecipe;
+$('speed').oninput = updateRecipe;
+$('blendA').onchange = updateRecipe;
+$('blendB').onchange = updateRecipe;
+
+$('starredOnly').onclick = () => {
+  showStarredOnly = !showStarredOnly;
+  $('starredOnly').textContent = showStarredOnly ? 'Show all' : 'Show starred only';
+  renderVoices();
+};
+
+$('playBlend').onclick = async () => {
+  const a = $('blendA').value;
+  const b = $('blendB').value;
+  if (!a || !b) {
+    say('Pick two voices first.', true);
+    return;
+  }
+  try {
+    const pair = await Promise.all([getStyle(a), getStyle(b)]);
+    const mix = +$('blendMix').value / 100;
+    // The espeak language follows whichever voice dominates: the two accents are
+    // phonemized differently and a blend has to commit to one of them.
+    const lead = mix > 0.5 ? b : a;
+    await speakWith(blendVectors(pair[0], pair[1], mix), 'blend', ACCENTS[lead.slice(0, 2)][2], null);
+  } catch (err) {
+    say(err.message || String(err), true);
+  }
+};
+$('playA').onclick = () => { if ($('blendA').value) speakVoice($('blendA').value, null); };
+$('playB').onclick = () => { if ($('blendB').value) speakVoice($('blendB').value, null); };
+
+(async function start() {
+  const hasGpu = await checkDevice();
+  $('modelHint').textContent = hasGpu
+    ? 'Shared with Read Aloud — if it is already downloaded there, this is instant.'
+    : 'Without a graphics chip this will be painfully slow.';
+  try {
+    await loadVoiceList();
+    renderVoices();
+    fillBlendPickers();
+    say('Load the model to start.');
+  } catch (err) {
+    say(err.message || String(err), true);
+  }
+})();
+</script>
+</body>
+</html>

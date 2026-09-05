@@ -16,6 +16,7 @@ data-sources/
 # Large build artifacts (dictionary pipeline)
 data/raw/
 data/processed/
+data/*.sqlite
 scripts/dictionary-parsers/*.ndjson
 scripts/dictionary-parsers/*.ndjson*
 scripts/dictionary-parsers/gcide-historic.ndjson

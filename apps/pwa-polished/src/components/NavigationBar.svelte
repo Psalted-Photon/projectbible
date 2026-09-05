@@ -24,6 +24,7 @@
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { navesModalStore } from "../stores/navesModalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
+  import { openWorkIndex } from "../lib/openWork";
   import { get } from "svelte/store";
   import {
     searchQuery as searchQueryStore,
@@ -879,6 +880,21 @@
     paneStore.openPane("settings", "right");
   }
 
+  /**
+   * The four reference works, without having to tap a word first.
+   *
+   * Lands on the encyclopedia's A–Z contents because that is the index the
+   * tabs can move you around from; the dictionary greys out there, having no
+   * contents list of its own, and lights up once you arrive from a word.
+   *
+   * Always the centred card, never the window — this pill also renders inside
+   * a docked window, and a lookup opened from it should sit over the app rather
+   * than replace what that window was holding.
+   */
+  function openWordStudy() {
+    openWorkIndex("encyclopedia", null);
+  }
+
   function updateDropdownPositions() {
     const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth };
     const navWidth = navElement?.offsetWidth ?? window.innerWidth;
@@ -948,7 +964,7 @@
     padY: 4,
     shoulderMax: 54,
     dimpleStart: 14,
-    fullRelax: 68,
+    fullRelax: 56,
     corner: 13,
     height: 51,
     shadowY: 8,
@@ -958,10 +974,13 @@
     samples: 260,
   };
 
-  // Every group is separated by a .nav-spacer (min-width 27px) plus the strip's
-  // 8px gap either side, so the narrowest gap between two of these is 43px —
-  // and because the pills never shrink, that floor holds however crowded the
-  // bar gets. It scrolls sideways instead of compressing.
+  // Every group is separated by a .nav-spacer plus the strip's own gap either
+  // side, and the spacer's min-width is set so that floor lands on fullRelax:
+  // 6 + 44 + 6 on a phone, 8 + 44 + 8 above 600px. So the narrowest the middle
+  // ever gets is still wide enough to relax all the way up — it used to bottom
+  // out at 39px there, which read as a dimple rather than a bite. Because the
+  // pills never shrink, that floor holds however crowded the bar gets: it
+  // scrolls sideways instead of compressing.
   const GROUP_SELECTOR =
     ".nav-pill, .nav-interlinear, .nav-tts, .nav-repeat-pills";
 
@@ -1552,10 +1571,25 @@
         {/if}
       </button>
 
+      <div class="pill-divider"></div>
+
+      <!-- Word study — the four reference works, opened on the encyclopedia's
+           contents. Offered here rather than in the tools pill because it is a
+           way of reading the passage, and because the tools pill is dropped
+           inside a docked window while this one is not. -->
+      <button
+        class="pill-btn pill-wordstudy"
+        on:click={openWordStudy}
+        title="Word study — Dictionary, Topical, Encyclopedia, People"
+        aria-label="Word study"
+      >
+        <span class="icon-badge icon-badge-wordstudy"><Books size={18} weight="bold" /><span class="icon-overlay"><Books size={18} weight="thin" /></span></span>
+      </button>
+
     </div>
 
     {#if !isMinimal}
-    <div class="nav-spacer" style="min-width: 27px"></div>
+    <div class="nav-spacer"></div>
     {#if isOriginalLanguage(currentTranslation)}
       <div class="nav-interlinear">
         <button
@@ -1576,7 +1610,7 @@
           {#if interlinearMenuOpen}<CaretUp size={10} weight="bold" />{:else}<CaretDown size={10} weight="bold" />{/if}
         </button>
       </div>
-      <div class="nav-spacer" style="min-width: 27px"></div>
+      <div class="nav-spacer"></div>
     {/if}
     <!-- ── Read Aloud controls (only while reading) ───────────────────────── -->
     {#if $isReadingActive}
@@ -1645,7 +1679,7 @@
           <option value="chapter">End of chapter</option>
         </select>
       </div>
-      <div class="nav-spacer" style="min-width: 27px"></div>
+      <div class="nav-spacer"></div>
     {/if}
     {#if $repeatsStore.length > 0}
       <div class="nav-repeat-pills">
@@ -1669,7 +1703,7 @@
           </button>
         {/each}
       </div>
-      <div class="nav-spacer" style="min-width: 27px"></div>
+      <div class="nav-spacer"></div>
     {/if}
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 2: Tools Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-tools">
@@ -2019,7 +2053,7 @@
 
   .nav-spacer {
     flex: 1;
-    min-width: 27px;
+    min-width: 44px;
     transition: min-width 0.15s ease;
   }
 
@@ -2184,7 +2218,7 @@
   .nav-pill {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 1px;
     background: #1c1c1c;
     border: 1px solid #353535;
     border-radius: 8px;
@@ -2200,7 +2234,7 @@
   .nav-interlinear {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 1px;
     background: #1c1c1c;
     border: 1px solid #353535;
     border-radius: 8px;
@@ -2309,7 +2343,7 @@
     width: 1px;
     height: 16px;
     background: #353535;
-    margin: 0 1px;
+    margin: 0;
     flex-shrink: 0;
   }
 
@@ -2318,9 +2352,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
+    gap: 4px;
     height: 32px;
-    padding: 0 9px;
+    padding: 0 6px;
     min-width: 32px;
     background: transparent;
     border: none;
@@ -2346,7 +2380,7 @@
   }
 
   .pill-btn-text {
-    padding: 0 10px;
+    padding: 0 7px;
   }
 
   .pill-label {
@@ -2404,7 +2438,7 @@
   .nav-locus {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 1px;
   }
 
   .nav-locus.away {
@@ -2508,6 +2542,7 @@
   }
   .icon-badge-refs        { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #000000 100%); }
   .icon-badge-comm        { background: radial-gradient(circle, #a3e635 0%, #a3e635 20%, #000000 100%); }
+  .icon-badge-wordstudy   { background: radial-gradient(circle, #c084fc 0%, #c084fc 20%, #000000 100%); }
   .icon-badge-search      { background: radial-gradient(circle, #fb7185 0%, #fb7185 20%, #000000 100%); }
   .icon-badge-powersearch { background: radial-gradient(circle, #f97316 0%, #f97316 20%, #000000 100%); }
   .icon-badge-readingplan { background: radial-gradient(circle, #60a5fa 0%, #60a5fa 20%, #000000 100%); }
@@ -2526,7 +2561,7 @@
 
   .pill-search-icon-btn {
     min-width: 32px;
-    padding: 0 8px;
+    padding: 0 6px;
   }
 
   .pill-search-expander {
