@@ -521,6 +521,7 @@ async function renderUtterance(u: Utterance, gen: number): Promise<boolean> {
       substitutions: u.substitutions,
     });
     if (gen !== generation) return false;
+    void reportBackendOnce();
     const wav = readWav(await blob.arrayBuffer());
     if (gen !== generation) return false;
 
@@ -670,6 +671,23 @@ function serialize<T>(task: () => Promise<T>): Promise<T> {
  * synthesized yet or the voice is a Piper one. Never throws — a diagnostic must
  * not be able to break playback.
  */
+let backendReported = false;
+
+/**
+ * Say which chip is in use, once per session, as soon as one clip exists.
+ *
+ * Previously this was only mentioned when generation fell behind — so a run
+ * that kept up said nothing at all, and there was no way to tell a working
+ * graphics chip from a working processor. That silence is what made a muffled
+ * graphics-chip run indistinguishable from an ordinary one.
+ */
+async function reportBackendOnce(): Promise<void> {
+  if (backendReported) return;
+  backendReported = true;
+  const where = await describeSpeechBackend();
+  if (where) console.log(`🔊 Read Aloud is running${where}`);
+}
+
 async function describeSpeechBackend(): Promise<string> {
   try {
     const info = getVoiceInfo(voiceId);
@@ -1128,6 +1146,7 @@ export function skipChapter(direction: 1 | -1): void {
 /** Stop, and release everything — nothing should linger in memory. */
 export function stopReading(): void {
   generation++;
+  backendReported = false;
   waitingForAudio.set(false);
 
   swapping = true;

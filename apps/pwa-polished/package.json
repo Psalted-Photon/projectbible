@@ -31,7 +31,7 @@
     "eruda": "^3.4.3",
     "leaflet": "^1.9.4",
     "lexical": "^0.40.0",
-    "onnxruntime-web": "1.23.2",
+    "onnxruntime-web": "1.29.0",
     "phosphor-svelte": "^3.1.0",
     "sql.js": "^1.12.0"
   }
