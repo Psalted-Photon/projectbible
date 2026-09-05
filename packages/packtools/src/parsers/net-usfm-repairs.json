@@ -1,0 +1,25 @@
+{
+  "_note": "Verses the eBible NET USFM drops text from, restored from the previously shipped NET pack (bolls.life text) which carries them in full.  The defect is systematic: each of these verses loses a span containing place names -- Matthew 2:1 ends at \"Bethlehem\" and jumps to verse 2; Joshua 7:2 reads \"men from Jericho ) and instructed\". Confirmed by reading the raw USFM, and each entry was checked against BSB for the same verse so a verse the old text had merged or bloated was not pulled in. Verses where the old pack merged two under (21:1)-style versification notes are deliberately excluded: the USFM versification is the correct one.  Structure markers still come from the USFM; only the wording is replaced. Regenerate by diffing a rebuilt pack against a known-good NET text.",
+  "verses": {
+    "Joshua 7:2": "Joshua sent men from Jericho to Ai (which is located near Beth Aven, east of Bethel ) and instructed them, “Go up and spy on the land.” So the men went up and spied on Ai.",
+    "Joshua 16:1": "The land allotted to Joseph’s descendants extended from the Jordan at Jericho to the waters of Jericho to the east, through the desert and on up from Jericho into the hill country of Bethel.",
+    "1 Kings 9:15": "Here are the details concerning the work crews King Solomon conscripted to build the LORD’s temple, his palace, the terrace, the wall of Jerusalem, and the cities of Hazor, Megiddo, and Gezer.",
+    "Nehemiah 8:1": "When the seventh month arrived and the Israelites were settled in their cities, all the people gathered together in the plaza which was in front of the Water Gate. They asked Ezra the scribe to bring the book of the law of Moses which the LORD had commanded Israel.",
+    "Ecclesiastes 2:1": "I thought to myself, “Come now, I will try self-indulgent pleasure to see if it is worthwhile.” But I found that it also is futile.",
+    "Jeremiah 25:22": "all the kings of Tyre, all the kings of Sidon; all the kings of the coastlands along the sea;",
+    "Jeremiah 27:3": "Use it to send messages to the kings of Edom, Moab, Ammon, Tyre, and Sidon. Send them through the envoys who have come to Jerusalem to King Zedekiah of Judah.",
+    "Jeremiah 41:5": "eighty men arrived from Shechem, Shiloh, and Samaria. They had shaved off their beards, torn their clothes, and cut themselves to show they were mourning. They were carrying grain offerings and incense to present at the temple of the LORD in Jerusalem.",
+    "Matthew 2:1": "After Jesus was born in Bethlehem in Judea, in the time of King Herod, wise men from the East came to Jerusalem",
+    "Matthew 4:13": "While in Galilee, he moved from Nazareth to make his home in Capernaum by the sea, in the region of Zebulun and Naphtali,",
+    "Mark 3:8": "Jerusalem, Idumea, beyond the Jordan River, and around Tyre and Sidon a great multitude came to him when they heard about the things he had done.",
+    "Mark 7:31": "Then Jesus went out again from the region of Tyre and came through Sidon to the Sea of Galilee in the region of the Decapolis.",
+    "Luke 2:4": "So Joseph also went up from the town of Nazareth in Galilee to Judea, to the city of David called Bethlehem, because he was of the house and family line of David.",
+    "Luke 6:17": "Then he came down with them and stood on a level place. And a large number of his disciples had gathered along with a vast multitude from all over Judea, from Jerusalem, and from the seacoast of Tyre and Sidon. They came to hear him and to be healed of their diseases,",
+    "John 4:46": "Now he came again to Cana in Galilee where he had made the water wine. In Capernaum there was a certain royal official whose son was sick.",
+    "Acts 14:21": "After they had proclaimed the good news in that city and made many disciples, they returned to Lystra, to Iconium, and to Antioch.",
+    "Acts 18:1": "After this Paul departed from Athens and went to Corinth.",
+    "Acts 19:1": "While Apollos was in Corinth, Paul went through the inland regions and came to Ephesus. He found some disciples there",
+    "Acts 20:4": "Paul was accompanied by Sopater son of Pyrrhus from Berea, Aristarchus and Secundus from Thessalonica, Gaius from Derbe, and Timothy, as well as Tychicus and Trophimus from the province of Asia.",
+    "2 Timothy 3:11": "as well as the persecutions and sufferings that happened to me in Antioch, in Iconium, and in Lystra. I endured these persecutions and the Lord delivered me from them all."
+  }
+}

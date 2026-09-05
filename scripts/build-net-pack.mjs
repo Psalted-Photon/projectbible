@@ -1,221 +1,121 @@
 #!/usr/bin/env node
 
 /**
- * Download and Build NET Bible Pack (New English Translation)
- * 
- * Downloads the text-only version from bible.org API and builds a SQLite pack.
- * 
- * NET Bible License: Creative Commons BY 4.0
- * Source: bible.org (Biblical Studies Press)
- * 
+ * Build the NET Bible pack (New English Translation) from USFM.
+ *
+ * This used to pull plain text from a JSON API, which is why the shipped NET
+ * pack had no poetry, no paragraphs and no headings -- there was never any
+ * structure in what it read. The full NET USFM has been sitting in the repo all
+ * along under data-sources/commentaries/raw/net-full-usfm (eBible.org build,
+ * 66 books) and carries 22,702 poetic lines and 6,730 paragraph breaks, so the
+ * pack is built from that instead and goes through the same scanner as BSB.
+ *
+ * NET Bible copyright (c) 1996-2016 Biblical Studies Press, L.L.C.
+ * See https://netbible.com/copyright/ for permissions.
+ *
  * Usage: node scripts/build-net-pack.mjs
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import {
+  parseUSFM,
+  processVerses,
+  cleanUSFMMarkup,
+} from '../packages/packtools/src/parsers/usfm-scanner.mjs';
+import { USFM_CODE_TO_BOOK } from '../packages/packtools/src/parsers/books.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const repoRoot = join(__dirname, '..');
 
-const DATA_DIR = join(repoRoot, 'data-sources');
-const CACHE_FILE = join(DATA_DIR, 'NET.json');
+const USFM_DIR = join(repoRoot, 'data-sources/commentaries/raw/net-full-usfm');
 const OUTPUT_PATH = join(repoRoot, 'packs/net.sqlite');
-
-// Bolls.life API endpoint for NET Bible (reliable JSON API)
-const BOLLS_API = 'https://bolls.life/get-chapter/NET';
-
-// All Bible books in canonical order
-const BIBLE_BOOKS = [
-  // Old Testament
-  { name: 'Genesis', abbr: 'Gen', testament: 'OT' },
-  { name: 'Exodus', abbr: 'Exod', testament: 'OT' },
-  { name: 'Leviticus', abbr: 'Lev', testament: 'OT' },
-  { name: 'Numbers', abbr: 'Num', testament: 'OT' },
-  { name: 'Deuteronomy', abbr: 'Deut', testament: 'OT' },
-  { name: 'Joshua', abbr: 'Josh', testament: 'OT' },
-  { name: 'Judges', abbr: 'Judg', testament: 'OT' },
-  { name: 'Ruth', abbr: 'Ruth', testament: 'OT' },
-  { name: '1 Samuel', abbr: '1Sam', testament: 'OT' },
-  { name: '2 Samuel', abbr: '2Sam', testament: 'OT' },
-  { name: '1 Kings', abbr: '1Kgs', testament: 'OT' },
-  { name: '2 Kings', abbr: '2Kgs', testament: 'OT' },
-  { name: '1 Chronicles', abbr: '1Chr', testament: 'OT' },
-  { name: '2 Chronicles', abbr: '2Chr', testament: 'OT' },
-  { name: 'Ezra', abbr: 'Ezra', testament: 'OT' },
-  { name: 'Nehemiah', abbr: 'Neh', testament: 'OT' },
-  { name: 'Esther', abbr: 'Esth', testament: 'OT' },
-  { name: 'Job', abbr: 'Job', testament: 'OT' },
-  { name: 'Psalms', abbr: 'Ps', testament: 'OT' },
-  { name: 'Proverbs', abbr: 'Prov', testament: 'OT' },
-  { name: 'Ecclesiastes', abbr: 'Eccl', testament: 'OT' },
-  { name: 'Song of Solomon', abbr: 'Song', testament: 'OT' },
-  { name: 'Isaiah', abbr: 'Isa', testament: 'OT' },
-  { name: 'Jeremiah', abbr: 'Jer', testament: 'OT' },
-  { name: 'Lamentations', abbr: 'Lam', testament: 'OT' },
-  { name: 'Ezekiel', abbr: 'Ezek', testament: 'OT' },
-  { name: 'Daniel', abbr: 'Dan', testament: 'OT' },
-  { name: 'Hosea', abbr: 'Hos', testament: 'OT' },
-  { name: 'Joel', abbr: 'Joel', testament: 'OT' },
-  { name: 'Amos', abbr: 'Amos', testament: 'OT' },
-  { name: 'Obadiah', abbr: 'Obad', testament: 'OT' },
-  { name: 'Jonah', abbr: 'Jonah', testament: 'OT' },
-  { name: 'Micah', abbr: 'Mic', testament: 'OT' },
-  { name: 'Nahum', abbr: 'Nah', testament: 'OT' },
-  { name: 'Habakkuk', abbr: 'Hab', testament: 'OT' },
-  { name: 'Zephaniah', abbr: 'Zeph', testament: 'OT' },
-  { name: 'Haggai', abbr: 'Hag', testament: 'OT' },
-  { name: 'Zechariah', abbr: 'Zech', testament: 'OT' },
-  { name: 'Malachi', abbr: 'Mal', testament: 'OT' },
-  // New Testament
-  { name: 'Matthew', abbr: 'Matt', testament: 'NT' },
-  { name: 'Mark', abbr: 'Mark', testament: 'NT' },
-  { name: 'Luke', abbr: 'Luke', testament: 'NT' },
-  { name: 'John', abbr: 'John', testament: 'NT' },
-  { name: 'Acts', abbr: 'Acts', testament: 'NT' },
-  { name: 'Romans', abbr: 'Rom', testament: 'NT' },
-  { name: '1 Corinthians', abbr: '1Cor', testament: 'NT' },
-  { name: '2 Corinthians', abbr: '2Cor', testament: 'NT' },
-  { name: 'Galatians', abbr: 'Gal', testament: 'NT' },
-  { name: 'Ephesians', abbr: 'Eph', testament: 'NT' },
-  { name: 'Philippians', abbr: 'Phil', testament: 'NT' },
-  { name: 'Colossians', abbr: 'Col', testament: 'NT' },
-  { name: '1 Thessalonians', abbr: '1Thess', testament: 'NT' },
-  { name: '2 Thessalonians', abbr: '2Thess', testament: 'NT' },
-  { name: '1 Timothy', abbr: '1Tim', testament: 'NT' },
-  { name: '2 Timothy', abbr: '2Tim', testament: 'NT' },
-  { name: 'Titus', abbr: 'Titus', testament: 'NT' },
-  { name: 'Philemon', abbr: 'Phlm', testament: 'NT' },
-  { name: 'Hebrews', abbr: 'Heb', testament: 'NT' },
-  { name: 'James', abbr: 'Jas', testament: 'NT' },
-  { name: '1 Peter', abbr: '1Pet', testament: 'NT' },
-  { name: '2 Peter', abbr: '2Pet', testament: 'NT' },
-  { name: '1 John', abbr: '1John', testament: 'NT' },
-  { name: '2 John', abbr: '2John', testament: 'NT' },
-  { name: '3 John', abbr: '3John', testament: 'NT' },
-  { name: 'Jude', abbr: 'Jude', testament: 'NT' },
-  { name: 'Revelation', abbr: 'Rev', testament: 'NT' }
-];
-
-// Chapter counts for each book
-const CHAPTER_COUNTS = [
-  50, 40, 27, 36, 34, 24, 21, 4, 31, 24, 22, 25, 29, 36, 10, 13, 10, 42, 150, 31, 12, 8, 66, 52, 5, 48, 12, 14, 3, 9, 1, 4, 7, 3, 3, 3, 2, 14, 4,
-  28, 16, 24, 21, 28, 16, 16, 13, 6, 6, 4, 4, 5, 3, 6, 4, 3, 1, 13, 5, 5, 3, 5, 1, 1, 1, 22
-];
+const REPAIRS_PATH = join(repoRoot, 'packages/packtools/src/parsers/net-usfm-repairs.json');
 
 /**
- * Download NET Bible text from bolls.life API
+ * The eBible NET USFM drops a span of text from 20 verses, always one carrying
+ * place names -- Matthew 2:1 ends at "Bethlehem" and jumps to verse 2. Those
+ * verses take their wording from the table instead; see its _note for how it
+ * was built and checked. Structure still comes from the USFM either way.
  */
-async function downloadNETBible() {
-  console.log('📥 Downloading NET Bible from bolls.life...\n');
-  
-  const bibleData = {
-    translation: 'NET',
-    fullName: 'New English Translation',
-    license: 'CC BY 4.0',
-    attribution: 'NET Bible® copyright ©1996-2017 by Biblical Studies Press, L.L.C. http://netbible.com All rights reserved.',
-    books: []
-  };
-  
-  let totalVerses = 0;
-  
-  for (let bookIndex = 0; bookIndex < BIBLE_BOOKS.length; bookIndex++) {
-    const book = BIBLE_BOOKS[bookIndex];
-    const bookNum = bookIndex + 1;
-    const chapterCount = CHAPTER_COUNTS[bookIndex];
-    
-    console.log(`Downloading ${book.name} (${chapterCount} chapters)...`);
-    
-    const verses = [];
-    
-    try {
-      for (let chapter = 1; chapter <= chapterCount; chapter++) {
-        // Bolls.life API: GET /get-chapter/{translation}/{book}/{chapter}/
-        const url = `${BOLLS_API}/${bookNum}/${chapter}/`;
-        
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-          console.error(`  ❌ Failed chapter ${chapter}: ${response.status}`);
-          continue;
-        }
-        
-        const data = await response.json();
-        
-        // Parse bolls.life format
-        const chapterVerses = parseBollsData(data, chapter);
-        verses.push(...chapterVerses);
-        
-        // Brief delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      
-      if (verses.length > 0) {
-        bibleData.books.push({
-          name: book.name,
-          testament: book.testament,
-          verses: verses
-        });
-        
-        totalVerses += verses.length;
-        console.log(`  ✓ ${verses.length} verses`);
-      }
-      
-    } catch (error) {
-      console.error(`  ❌ Error downloading ${book.name}:`, error.message);
-    }
-  }
-  
-  console.log(`\n✅ Downloaded ${totalVerses} verses from ${bibleData.books.length} books`);
-  
-  return bibleData;
+const REPAIRS = JSON.parse(readFileSync(REPAIRS_PATH, 'utf8')).verses;
+const LEADING_STRUCTURE = /^[\x10\x11\x12]+/;
+let repairsApplied = 0;
+
+function applyRepair(book, verse) {
+  const replacement = REPAIRS[`${book} ${verse.chapter}:${verse.verse}`];
+  if (!replacement) return verse.text;
+  repairsApplied++;
+  const structure = verse.text.match(LEADING_STRUCTURE)?.[0] ?? '';
+  return structure + replacement;
 }
 
-/**
- * Parse bolls.life JSON format
- */
-function parseBollsData(data, chapterNum) {
-  const verses = [];
-  
-  // Bolls format is an array of verse objects
-  if (Array.isArray(data)) {
-    for (const verse of data) {
-      if (verse.verse && verse.text) {
-        verses.push({
-          chapter: chapterNum,
-          verse: parseInt(verse.verse),
-          text: verse.text.trim()
-        });
-      }
-    }
-  }
-  
-  return verses;
-}
+/** File names look like 02-GENengnet.usfm; the middle group is the book code. */
+const FILE_PATTERN = /^\d+-([A-Z0-9]+)engnet\.usfm$/i;
 
 /**
- * Build SQLite pack from NET data
+ * NET differs from BSB in three ways.
+ *
+ * Its USFM has no \b at all -- paragraphs are bare \p, so those have to open a
+ * paragraph or every one of the 6,730 is lost. It has no shipped byte layout to
+ * protect, so markers are spaced only where a space is actually missing. And it
+ * marks OT quotations with \qt and emphasis with \bd, both of which the reader
+ * already renders from <b>.
  */
-function buildNETPack(data) {
-  console.log('\n💾 Building NET Bible pack...\n');
-  
-  // Remove old pack if exists
-  if (existsSync(OUTPUT_PATH)) {
-    console.log('Removing old pack...');
-    unlinkSync(OUTPUT_PATH);
+const NET_OPTIONS = {
+  paragraphFromProseMarker: true,
+  legacySpacedMarkers: new Set(),
+  italicMarkers: new Set(['it']),
+  boldMarkers: new Set(['qt', 'bd']),
+  preserveSpaceAfterCharClose: true,
+  smallCapsMarkers: new Set(['nd']),
+};
+
+function readBooks() {
+  if (!existsSync(USFM_DIR)) {
+    console.error(`❌ NET USFM not found: ${USFM_DIR}`);
+    process.exit(1);
   }
-  
+
+  const books = [];
+  const files = readdirSync(USFM_DIR).filter((f) => FILE_PATTERN.test(f)).sort();
+
+  for (const file of files) {
+    const code = file.match(FILE_PATTERN)[1].toUpperCase();
+    const name = USFM_CODE_TO_BOOK[code];
+    if (!name) {
+      console.error(`❌ Unknown book code ${code} in ${file}`);
+      process.exit(1);
+    }
+
+    const content = readFileSync(join(USFM_DIR, file), 'utf8');
+    const verses = processVerses(parseUSFM(content, NET_OPTIONS)).map((v) => ({
+      chapter: v.chapter,
+      verse: v.verse,
+      text: applyRepair(name, { ...v, text: cleanUSFMMarkup(v.text) }),
+    }));
+
+    books.push({ name, verses });
+    process.stdout.write(`  ${name.padEnd(16)} ${String(verses.length).padStart(5)} verses\n`);
+  }
+
+  return books;
+}
+
+function buildPack(books) {
+  if (existsSync(OUTPUT_PATH)) unlinkSync(OUTPUT_PATH);
+
   const db = new Database(OUTPUT_PATH);
-  
-  // Create schema
+
   db.exec(`
     CREATE TABLE metadata (
       key TEXT PRIMARY KEY,
       value TEXT
     );
-    
+
     CREATE TABLE verses (
       book TEXT NOT NULL,
       chapter INTEGER NOT NULL,
@@ -223,11 +123,10 @@ function buildNETPack(data) {
       text TEXT NOT NULL,
       PRIMARY KEY (book, chapter, verse)
     );
-    
+
     CREATE INDEX idx_verses_book_chapter ON verses(book, chapter);
   `);
-  
-  // Insert metadata
+
   const insertMeta = db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)');
   insertMeta.run('pack_id', 'net');
   insertMeta.run('packId', 'net');
@@ -237,71 +136,39 @@ function buildNETPack(data) {
   insertMeta.run('translationId', 'NET');
   insertMeta.run('translation_name', 'New English Translation');
   insertMeta.run('translationName', 'New English Translation');
-  insertMeta.run('license', 'CC BY 4.0');
-  insertMeta.run('attribution', data.attribution);
+  insertMeta.run('license', 'NET Bible copyright © 1996-2016 Biblical Studies Press, L.L.C.');
+  insertMeta.run('attribution', 'NET Bible® — https://netbible.com/copyright/');
   insertMeta.run('description', 'New English Translation (NET Bible) - Modern scholarly translation with extensive translator notes');
-  
-  console.log('✓ Metadata inserted');
-  
-  // Insert verses
+
   const insertVerse = db.prepare('INSERT INTO verses (book, chapter, verse, text) VALUES (?, ?, ?, ?)');
-  
-  let totalVerses = 0;
-  const insertTransaction = db.transaction((books) => {
-    for (const book of books) {
-      for (const verse of book.verses) {
-        insertVerse.run(book.name, verse.chapter, verse.verse, verse.text);
-        totalVerses++;
+  let total = 0;
+  const insertAll = db.transaction((all) => {
+    for (const book of all) {
+      for (const v of book.verses) {
+        insertVerse.run(book.name, v.chapter, v.verse, v.text);
+        total++;
       }
     }
   });
-  
-  insertTransaction(data.books);
-  
-  console.log(`✓ Inserted ${totalVerses.toLocaleString()} verses`);
-  
+  insertAll(books);
+
+  const structure = db
+    .prepare(
+      `SELECT
+         SUM(text LIKE '%' || char(16) || '%') AS paragraphs,
+         SUM(text LIKE '%' || char(17) || '%') AS poetry
+       FROM verses`
+    )
+    .get();
+
   db.close();
-  
-  console.log(`\n✅ NET Bible pack created: ${OUTPUT_PATH}`);
+
+  console.log(`\n✓ ${total.toLocaleString()} verses`);
+  console.log(`✓ ${repairsApplied} verses restored from the source-defect table`);
+  console.log(`✓ ${Number(structure.paragraphs).toLocaleString()} verses open a paragraph`);
+  console.log(`✓ ${Number(structure.poetry).toLocaleString()} verses carry a poetic line`);
+  console.log(`\n✅ NET pack built: ${OUTPUT_PATH}`);
 }
 
-/**
- * Main execution
- */
-async function main() {
-  console.log('📖 NET Bible Pack Builder\n');
-  console.log('='.repeat(50) + '\n');
-  
-  // Ensure data directory exists
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
-  }
-  
-  let netData;
-  
-  // Check if we have cached data
-  if (existsSync(CACHE_FILE)) {
-    console.log('📂 Using cached NET Bible data...\n');
-    netData = JSON.parse(readFileSync(CACHE_FILE, 'utf8'));
-  } else {
-    // Download fresh data
-    netData = await downloadNETBible();
-    
-    // Cache the data
-    console.log('\n💾 Caching NET Bible data...');
-    writeFileSync(CACHE_FILE, JSON.stringify(netData, null, 2));
-    console.log(`✓ Cached to ${CACHE_FILE}`);
-  }
-  
-  // Build the pack
-  buildNETPack(netData);
-  
-  console.log('\n' + '='.repeat(50));
-  console.log('✅ NET Bible pack built successfully!');
-  console.log(`\nImport URL: https://github.com/Psalted-Photon/projectbible/raw/main/packs/net.sqlite`);
-}
-
-main().catch(error => {
-  console.error('\n❌ Error:', error);
-  process.exit(1);
-});
+console.log('📖 Building NET Bible pack from USFM\n');
+buildPack(readBooks());
