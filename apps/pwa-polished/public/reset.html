@@ -95,6 +95,14 @@
     el.scrollTop = 1e9;
   }
 
+  // The speed-test page keeps the models it downloads in a cache of its own,
+  // which runs to several hundred megabytes. That is not one of the app's
+  // program files, and a button promising to clear those should not quietly
+  // cost a 310 MB download as well. Left alone, and said so in the log.
+  var KEEP = /^kokoro-test/;
+  function clearable(keys) { return keys.filter(function (k) { return !KEEP.test(k); }); }
+  function kept(keys) { return keys.filter(function (k) { return KEEP.test(k); }); }
+
   function set(id, text, ok) {
     var el = $(id);
     el.textContent = text;
@@ -122,8 +130,10 @@
 
   if (self.caches) {
     caches.keys().then(function (keys) {
-      set('cacheCount', keys.length === 0 ? 'none' : keys.length + ' caches');
-      if (keys.length) log('Caches: ' + keys.join(', '));
+      var go = clearable(keys), stay = kept(keys);
+      set('cacheCount', go.length === 0 ? 'none' : go.length + ' caches');
+      if (go.length) log('Will clear: ' + go.join(', '));
+      if (stay.length) log('Leaving alone (speed-test models): ' + stay.join(', '));
     }).catch(function (e) {
       set('cacheCount', 'could not check');
       log('Could not list caches: ' + e);
@@ -162,7 +172,7 @@
     var killCaches = killWorkers.then(function () {
       if (!self.caches) return;
       return caches.keys().then(function (keys) {
-        return Promise.all(keys.map(function (key) {
+        return Promise.all(clearable(keys).map(function (key) {
           return caches.delete(key).then(function (ok) {
             if (ok) deleted++;
             log('Deleted cache ' + key + ': ' + ok);
