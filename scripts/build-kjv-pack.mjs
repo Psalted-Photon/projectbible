@@ -1,75 +1,40 @@
 #!/usr/bin/env node
 
 /**
- * Build KJV Pack (King James Version)
- * 
- * Creates a standalone pack for the King James Version.
- * Note: If kjv-full.sqlite already exists with correct structure, just rename it.
- * 
+ * Build the KJV pack (King James Version) from USFX.
+ *
+ * This used to read a pre-parsed KJV.json whose only structure was the
+ * traditional pilcrow, carried inline as a bare ¶ at the head of 2,984 verses.
+ * eBible.org's USFX has been in the repo the whole time and carries 10,343
+ * real paragraphs and 2,461 poetic lines, so the pack is built from that and
+ * stores them the way every other translation does.
+ *
  * Usage: node scripts/build-kjv-pack.mjs
  */
 
-import Database from 'better-sqlite3';
-import { existsSync, copyFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { buildUSFXPack } from '../packages/packtools/src/parsers/build-usfx-pack.mjs';
 
-const SOURCE_PATH = 'packs/kjv-full.sqlite';
-const OUTPUT_PATH = 'packs/kjv.sqlite';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(__dirname, '..');
 
-function buildKJVPack() {
-  console.log('👑 Building KJV Pack\n');
-  
-  if (!existsSync(SOURCE_PATH)) {
-    console.error(`❌ Source pack not found: ${SOURCE_PATH}`);
-    console.log('\nPlease ensure kjv-full.sqlite exists.');
-    console.log('It should have been built by previous scripts.\n');
-    process.exit(1);
-  }
-  
-  // Check if source has correct structure
-  const sourceDb = new Database(SOURCE_PATH, { readonly: true });
-  
-  try {
-    // Verify it has verses
-    const count = sourceDb.prepare('SELECT COUNT(*) as count FROM verses').get();
-    console.log(`Found ${count.count.toLocaleString()} verses in source pack`);
-    
-    if (count.count === 0) {
-      console.error('❌ Source pack has no verses!');
-      process.exit(1);
-    }
-    
-    sourceDb.close();
-    
-    // Copy to new location
-    console.log(`\nCopying ${SOURCE_PATH} → ${OUTPUT_PATH}...`);
-    copyFileSync(SOURCE_PATH, OUTPUT_PATH);
-    
-    // Update metadata
-    const db = new Database(OUTPUT_PATH);
-    
-    try {
-      const update = db.prepare('UPDATE metadata SET value = ? WHERE key = ?');
-      update.run('kjv', 'pack_id');
-      update.run('KJV', 'translation_id');
-      update.run('King James Version', 'translation_name');
-      
-      const stats = db.prepare('SELECT COUNT(*) as count FROM verses').get();
-      const size = db.prepare('SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()').get();
-      
-      console.log('\n✨ KJV Pack Complete!\n');
-      console.log('📊 Summary:');
-      console.log(`   Total verses: ${stats.count.toLocaleString()}`);
-      console.log(`   File size: ${(size.size / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`   Output: ${OUTPUT_PATH}\n`);
-      
-    } finally {
-      db.close();
-    }
-    
-  } catch (error) {
-    console.error('\n❌ Error building KJV pack:', error);
-    throw error;
-  }
-}
+console.log('📖 Building King James Version pack from USFX\n');
 
-buildKJVPack();
+buildUSFXPack({
+  sourcePath: join(repoRoot, 'data-sources/kjv-usfx/eng-kjv_usfx.xml'),
+  outputPath: join(repoRoot, 'packs/kjv.sqlite'),
+  metadata: {
+    pack_id: 'kjv',
+    packId: 'kjv',
+    type: 'text',
+    version: '1.0.0',
+    translation_id: 'KJV',
+    translationId: 'KJV',
+    translation_name: 'King James Version',
+    translationName: 'King James Version',
+    license: 'Public Domain',
+    attribution: 'King James Version from eBible.org. Public Domain.',
+    description: 'King James Version (1611) - the classic English translation',
+  },
+});

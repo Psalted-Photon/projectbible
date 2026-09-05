@@ -1,75 +1,43 @@
 #!/usr/bin/env node
 
 /**
- * Build WEB Pack (World English Bible)
- * 
- * Creates a standalone pack for the World English Bible.
- * Note: If web-full.sqlite already exists with correct structure, just rename it.
- * 
+ * Build the WEB pack (World English Bible) from USFX.
+ *
+ * This used to copy a pre-built web-full.sqlite whose text had no structure at
+ * all. eBible.org's USFX for WEB has been in the repo the whole time and
+ * carries 10,094 first-level poetic lines, 13,237 second-level, and 9,254
+ * paragraphs, so the pack is built from that instead.
+ *
+ * Note this is the Yahweh edition: where the old pack read "the Lord" this
+ * reads "Yahweh", in roughly 6,000 verses. That is the WEB as its translators
+ * published it.
+ *
  * Usage: node scripts/build-web-pack.mjs
  */
 
-import Database from 'better-sqlite3';
-import { existsSync, copyFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { buildUSFXPack } from '../packages/packtools/src/parsers/build-usfx-pack.mjs';
 
-const SOURCE_PATH = 'packs/web-full.sqlite';
-const OUTPUT_PATH = 'packs/web.sqlite';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(__dirname, '..');
 
-function buildWebPack() {
-  console.log('📖 Building WEB Pack\n');
-  
-  if (!existsSync(SOURCE_PATH)) {
-    console.error(`❌ Source pack not found: ${SOURCE_PATH}`);
-    console.log('\nPlease ensure web-full.sqlite exists.');
-    console.log('It should have been built by previous scripts.\n');
-    process.exit(1);
-  }
-  
-  // Check if source has correct structure
-  const sourceDb = new Database(SOURCE_PATH, { readonly: true });
-  
-  try {
-    // Verify it has verses
-    const count = sourceDb.prepare('SELECT COUNT(*) as count FROM verses').get();
-    console.log(`Found ${count.count.toLocaleString()} verses in source pack`);
-    
-    if (count.count === 0) {
-      console.error('❌ Source pack has no verses!');
-      process.exit(1);
-    }
-    
-    sourceDb.close();
-    
-    // Copy to new location
-    console.log(`\nCopying ${SOURCE_PATH} → ${OUTPUT_PATH}...`);
-    copyFileSync(SOURCE_PATH, OUTPUT_PATH);
-    
-    // Update metadata
-    const db = new Database(OUTPUT_PATH);
-    
-    try {
-      const update = db.prepare('UPDATE metadata SET value = ? WHERE key = ?');
-      update.run('web', 'pack_id');
-      update.run('WEB', 'translation_id');
-      update.run('World English Bible', 'translation_name');
-      
-      const stats = db.prepare('SELECT COUNT(*) as count FROM verses').get();
-      const size = db.prepare('SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()').get();
-      
-      console.log('\n✨ WEB Pack Complete!\n');
-      console.log('📊 Summary:');
-      console.log(`   Total verses: ${stats.count.toLocaleString()}`);
-      console.log(`   File size: ${(size.size / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`   Output: ${OUTPUT_PATH}\n`);
-      
-    } finally {
-      db.close();
-    }
-    
-  } catch (error) {
-    console.error('\n❌ Error building WEB pack:', error);
-    throw error;
-  }
-}
+console.log('📖 Building World English Bible pack from USFX\n');
 
-buildWebPack();
+buildUSFXPack({
+  sourcePath: join(repoRoot, 'data-sources/web-usfx/eng-web_usfx.xml'),
+  outputPath: join(repoRoot, 'packs/web.sqlite'),
+  metadata: {
+    pack_id: 'web',
+    packId: 'web',
+    type: 'text',
+    version: '1.0.0',
+    translation_id: 'WEB',
+    translationId: 'WEB',
+    translation_name: 'World English Bible',
+    translationName: 'World English Bible',
+    license: 'Public Domain',
+    attribution: 'World English Bible from eBible.org. Public Domain.',
+    description: 'World English Bible - a modern public domain translation',
+  },
+});
