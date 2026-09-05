@@ -122,17 +122,56 @@ export async function removeSharedModel(): Promise<void> {
   await store.remove(KOKORO_MODEL_FILE);
   session = null;
   sessionBackend = null;
+  sessionFailure = null;
+  graphicsChipWorks = null;
 }
 
 // ─── the model ──────────────────────────────────────────────────────────────
 
 let session: ort.InferenceSession | null = null;
 let sessionBackend: 'webgpu' | 'wasm' | null = null;
+let graphicsChipWorks: boolean | null = null;
 const styles = new Map<string, Float32Array>();
 
-/** Which chip the loaded model is running on, or null before it is loaded. */
-export function backend(): 'webgpu' | 'wasm' | null {
-  return sessionBackend;
+let sessionFailure: string | null = null;
+
+/**
+ * Which chip the loaded model is running on, and why if it is not the fast one.
+ * Null before anything is loaded.
+ */
+export function backend(): { chip: 'webgpu' | 'wasm' | null; reason: string | null } {
+  return { chip: sessionBackend, reason: sessionFailure };
+}
+
+/**
+ * Whether this device can really run Kokoro on the graphics chip.
+ *
+ * Not the same question as "does an adapter exist". On an AMD laptop the
+ * adapter is there, `requestAdapter()` succeeds, and the voices get offered —
+ * then the runtime fails to build a WebGPU session and we quietly drop to the
+ * processor at roughly a third of the speed speech needs.
+ *
+ * Returns **null when it cannot tell**, which is the honest answer before the
+ * model is downloaded: the only way to know is to build a session, and that
+ * needs the 310 MB file. Answering `false` there would hide the voices forever
+ * on a machine that can run them perfectly well.
+ */
+export async function canRunOnGraphicsChip(): Promise<boolean | null> {
+  if (graphicsChipWorks !== null) return graphicsChipWorks;
+  if (!(navigator as any).gpu) {
+    graphicsChipWorks = false;
+    return false;
+  }
+  if (!(await hasSharedModel())) return null; // nothing to probe with yet
+  try {
+    await getSession();
+    graphicsChipWorks = sessionBackend === 'webgpu';
+  } catch {
+    // Could not build a session at all — a broken install, not a verdict on
+    // the chip, so it is not remembered.
+    return null;
+  }
+  return graphicsChipWorks;
 }
 
 async function getSession(): Promise<ort.InferenceSession> {
@@ -149,7 +188,11 @@ async function getSession(): Promise<ort.InferenceSession> {
     session = await ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] });
     sessionBackend = 'webgpu';
   } catch (err) {
+    // Kept for anyone reading the worker's own console, but the reason also
+    // travels out via backendReason() — a warning nobody can see is how a
+    // silent drop to an unusable speed went unexplained for a day.
     console.warn('[Kokoro] graphics chip unavailable, falling back to the processor:', err);
+    sessionFailure = err instanceof Error ? err.message : String(err);
     session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] });
     sessionBackend = 'wasm';
   }

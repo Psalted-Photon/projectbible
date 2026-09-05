@@ -40,6 +40,8 @@ import {
   unlockTtsAudio,
   isVoiceInstalled,
   greekSpeechRoute,
+  getVoiceInfo,
+  kokoroBackend,
 } from '../../adapters/tts';
 import { getMorphologyForChapter } from '../../adapters/db';
 import { originalSpeechText, canSpeakOriginal } from './originalText';
@@ -663,6 +665,26 @@ function serialize<T>(task: () => Promise<T>): Promise<T> {
 }
 
 /** Build segments until there is enough audio banked ahead. */
+/**
+ * " on the graphics chip" / " on the processor", or "" when nothing has been
+ * synthesized yet or the voice is a Piper one. Never throws — a diagnostic must
+ * not be able to break playback.
+ */
+async function describeSpeechBackend(): Promise<string> {
+  try {
+    const info = getVoiceInfo(voiceId);
+    if (!info || info.engine !== 'kokoro') return '';
+    const { chip, reason } = await kokoroBackend();
+    if (chip === 'webgpu') return ' on the graphics chip';
+    if (chip === 'wasm') {
+      return ` on the processor${reason ? ` (graphics chip unavailable: ${reason})` : ''}`;
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 async function fillLoop(gen: number): Promise<void> {
   while (gen === generation) {
     if (bufferedSecondsAhead() >= bufferAheadTarget()) break;
@@ -741,9 +763,16 @@ async function playSegment(gen: number, seekSeconds = 0): Promise<void> {
     // no throttling headroom left at all. Worth saying out loud rather than
     // looking like an unexplained stall.
     if (observedRate > 0 && observedRate < rate) {
-      console.warn(
-        `🔊 Read Aloud is behind: generating ${observedRate.toFixed(2)}x against ${rate.toFixed(2)}x playback`
-      );
+      // Name the chip. "Behind" on the processor means the fast path was never
+      // taken and the fix is elsewhere; "behind" on the graphics chip means it
+      // is genuinely this slow here. Without the distinction the two look the
+      // same, which is exactly how a silent fallback stayed invisible.
+      void describeSpeechBackend().then((where) => {
+        console.warn(
+          `🔊 Read Aloud is behind: generating ${observedRate.toFixed(2)}x` +
+            `${where} against ${rate.toFixed(2)}x playback`
+        );
+      });
     }
     try {
       while (gen === generation && segmentIndex >= segments.length) {

@@ -28,7 +28,9 @@ interface TtsRequest {
     | 'synthesize'
     | 'synthesizeWord'
     | 'hasKokoroModel'
-    | 'removeKokoroModel';
+    | 'removeKokoroModel'
+    | 'kokoroBackend'
+    | 'probeGraphicsChip';
   payload?: {
     voiceId?: string;
     text?: string;
@@ -97,6 +99,20 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
 
       case 'hasKokoroModel': {
         self.postMessage({ id, ok: true, result: await kokoro.hasSharedModel() });
+        break;
+      }
+
+      case 'kokoroBackend': {
+        // Which chip the engine actually ended up on. The engine knows, but it
+        // only ever said so in a console warning from inside this worker, which
+        // neither eruda nor a default DevTools console shows — so a silent drop
+        // to the processor looked like an unexplained stall.
+        self.postMessage({ id, ok: true, result: kokoro.backend() });
+        break;
+      }
+
+      case 'probeGraphicsChip': {
+        self.postMessage({ id, ok: true, result: await kokoro.canRunOnGraphicsChip() });
         break;
       }
 

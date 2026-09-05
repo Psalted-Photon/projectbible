@@ -99,9 +99,8 @@ export function getAllVoices(): TtsVoiceInfo[] {
 let graphicsChip: boolean | null = null;
 
 /**
- * Whether the graphics chip is actually usable, not merely present. Some
- * browsers expose the API but return no adapter, which would fail only at the
- * point of loading a 310 MB model.
+ * Whether a graphics chip is present at all. Cheap, and all we can know before
+ * the 310 MB model exists — see kokoroGraphicsChipWorks() for the real answer.
  */
 export async function canUseGraphicsChip(): Promise<boolean> {
   if (graphicsChip !== null) return graphicsChip;
@@ -112,6 +111,23 @@ export async function canUseGraphicsChip(): Promise<boolean> {
     graphicsChip = false;
   }
   return graphicsChip;
+}
+
+/**
+ * Which chip Kokoro actually ended up on, and why if it is the slow one.
+ * `chip` is null before anything has been synthesized.
+ */
+export function kokoroBackend(): Promise<{ chip: 'webgpu' | 'wasm' | null; reason: string | null }> {
+  return call('kokoroBackend');
+}
+
+/**
+ * The honest version of canUseGraphicsChip: asks the runtime to build a session
+ * rather than asking the browser whether an adapter exists. Returns null when it
+ * cannot tell yet, which is the case until the model is downloaded.
+ */
+export function kokoroGraphicsChipWorks(): Promise<boolean | null> {
+  return call('probeGraphicsChip');
 }
 
 /**
