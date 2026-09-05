@@ -1,6 +1,7 @@
 import type { SearchIndex, SearchResult } from '@projectbible/core';
 import { BIBLE_BOOKS } from '../lib/bibleData.js';
 import type { DBVerse } from './db.js';
+import { cleanVersePreviewText } from '../lib/verseRendering';
 
 export class IndexedDBSearchIndex implements SearchIndex {
   /**
@@ -53,24 +54,29 @@ export class IndexedDBSearchIndex implements SearchIndex {
               return;
             }
             
+            // Match against the text as it reads, not as it is stored. Stored
+            // text carries poetry and paragraph sentinels and inline footnote
+            // runs, so a phrase crossing a poetic line break never matched and
+            // a snippet could be cut through a control character.
+            const searchable = cleanVersePreviewText(verse.text);
+
             let matches = false;
-            
+
             if (regex) {
-              // Test regex against verse text
-              matches = regex.test(verse.text);
+              matches = regex.test(searchable);
               // Reset regex lastIndex for next test
               regex.lastIndex = 0;
             } else {
               // Check if all search terms are in the verse text
-              const lowerText = verse.text.toLowerCase();
+              const lowerText = searchable.toLowerCase();
               matches = searchTerms.every(term => lowerText.includes(term));
             }
-            
+
             if (matches) {
               // Create snippet with highlighted terms
-              const snippet = regex 
-                ? this.createSnippet(verse.text, [])
-                : this.createSnippet(verse.text, searchTerms);
+              const snippet = regex
+                ? this.createSnippet(searchable, [])
+                : this.createSnippet(searchable, searchTerms);
               
               results.push({
                 translation: verse.translationId,

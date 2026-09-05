@@ -273,11 +273,14 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
     .replace(/\x04([\s\S]*?)\x05/g, '<b>$1</b>')
     .replace(/\x06([\s\S]*?)\x07/g, '<i>$1</i>')
     .replace(/[\x02\x03\x04\x05\x06\x07]/g, '')
-    // Poetic lines. A leading marker is the verse's own indent and is applied to
-    // the verse element by verseStructure(), so only mid-verse breaks emit a
-    // <br> here. Neither adds a text character, which keeps saved highlights,
-    // TTS glow offsets and red-letter spans aligned.
-    .replace(/^[\x10\x11\x12]+/, '')
+    // Poetic lines. A leading marker opens the verse rather than breaking it,
+    // so it emits no <br> — but a second-level opener still needs its indent,
+    // and carrying it here rather than on the verse element means a line's
+    // depth comes from its own marker instead of from whichever verse it lands
+    // in. Nothing added is a text character, which keeps saved highlights, TTS
+    // glow offsets and red-letter spans aligned.
+    .replace(/^[\x10\x11\x12]+/, (lead) =>
+      lead.includes(LINE_2) ? '<span class="poetry-indent"></span>' : '')
     .replace(/\x11/g, '<br>')
     .replace(/\x12/g, '<br><span class="poetry-indent"></span>')
     .replace(/\x10/g, '')

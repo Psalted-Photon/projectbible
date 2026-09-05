@@ -5434,6 +5434,7 @@
                   $ttsCurrentVerse?.verse === verse}
                 data-verse={verse}
               >
+                <span class="verse-gutter">
                 <span class="verse-number">{verse}</span>
                 {#if showCommentaries && commentaryByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
                   {#each [...new Set(commentaryByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!.map((e) => e.author))] as author}
@@ -5472,6 +5473,8 @@
                     on:keypress|stopPropagation={(e) => e.key === 'Enter' && openArtWindow(artScene)}
                   >🖼️</span>
                 {/if}
+                </span>
+                <span class="verse-body">
                 <span class="verse-text"
                   class:interlinear={isInterlinearActive && !!interlinearHtml}
                   >{@html (isInterlinearActive && interlinearHtml) ? interlinearHtml : (html || renderVerseHtml(text))}</span
@@ -5486,6 +5489,7 @@
                     on:keypress|stopPropagation={(e) => e.key === 'Enter' && openNotePopup(verse, chapterData.book, chapterData.chapter)}
                   >✎</span>
                 {/if}
+                </span>
                 {#if hCtxsForVerse.length > 0}
                   {#each hCtxsForVerse as hCtx}
                     <div class="harmony-btn-row">
@@ -6295,7 +6299,11 @@
     margin-bottom: 0;
   }
 
-  .verses.paragraph-layout .verse.para-start {
+  /* A paragraph break has to open a block: these layouts make .verse inline,
+     and vertical margin does nothing on an inline box. .stanza-break carries
+     every BSB paragraph break, so without this it renders as nothing at all. */
+  .verses.paragraph-layout .verse.para-start,
+  .verses.paragraph-layout .verse.stanza-break {
     display: block;
     margin-top: 1em;
   }
@@ -6312,7 +6320,11 @@
     margin-bottom: 0;
   }
 
-  .verses.nonumber-layout .verse.para-start {
+  /* A paragraph break has to open a block: these layouts make .verse inline,
+     and vertical margin does nothing on an inline box. .stanza-break carries
+     every BSB paragraph break, so without this it renders as nothing at all. */
+  .verses.nonumber-layout .verse.para-start,
+  .verses.nonumber-layout .verse.stanza-break {
     display: block;
     margin-top: 1em;
   }
@@ -6338,31 +6350,58 @@
   }
 
   /* ── Poetry ───────────────────────────────────────────────────────────────
-     A verse that opens a poetic line is indented as a whole; breaks inside a
-     verse come through as <br> from renderVerseHtml, with .poetry-indent
-     carrying the second-level indent. The indent span holds no text, so verse
-     character offsets — highlights, TTS glow — are unaffected. */
+     A poetic verse lays out as two columns: the gutter — verse number and any
+     icons — and the text. The gutter is sized by its contents, so a verse with
+     several commentary icons keeps them beside its own text instead of
+     overflowing a fixed outdent and shoving the first line to the right.
+
+     Breaks inside a verse arrive as <br> from renderVerseHtml, and
+     .poetry-indent carries the second-level indent — on the first line too, so
+     a line's depth comes from its own marker rather than from whichever verse
+     it happens to fall in. The indent span holds no text, so verse character
+     offsets — highlights, TTS glow, red letters — are unaffected.
+
+     Poetry wins over paragraph flow: a poetic line is a line. Each layout is
+     listed so its own specificity beats that layout's inline rule. */
   .verse.poetry-1,
-  .verse.poetry-2 {
-    display: block;
-    text-indent: -1.4em;
-    padding-left: 1.4em;
-  }
-
-  .verse.poetry-2 {
-    padding-left: 3em;
-  }
-
-  .verse.stanza-break {
-    margin-top: 1em;
-  }
-
-  /* Poetry wins over paragraph flow: a poetic line is a line. */
+  .verse.poetry-2,
   .verses.paragraph-layout .verse.poetry-1,
   .verses.paragraph-layout .verse.poetry-2,
   .verses.nonumber-layout .verse.poetry-1,
   .verses.nonumber-layout .verse.poetry-2 {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 0.25em;
+  }
+
+  /* Transparent everywhere but the poetry grid, so inline paragraph flow,
+     no-numbers and interlinear lay out as they did before these wrappers. */
+  .verse-gutter,
+  .verse-body {
+    display: contents;
+  }
+
+  /* Interlinear forces .verse back to block, and blockifying the wrappers
+     inside that would stack the gutter above the text. Left alone there. */
+  .verses:not(.interlinear-active) .verse.poetry-1 > .verse-gutter,
+  .verses:not(.interlinear-active) .verse.poetry-2 > .verse-gutter {
     display: block;
+    white-space: nowrap;
+  }
+
+  .verses:not(.interlinear-active) .verse.poetry-1 > .verse-body,
+  .verses:not(.interlinear-active) .verse.poetry-2 > .verse-body {
+    display: block;
+  }
+
+  .verses:not(.interlinear-active) .verse.poetry-1 > .harmony-btn-row,
+  .verses:not(.interlinear-active) .verse.poetry-2 > .harmony-btn-row {
+    grid-column: 1 / -1;
+  }
+
+  .verse.stanza-break {
+    margin-top: 1em;
   }
 
   :global(.poetry-indent) {
