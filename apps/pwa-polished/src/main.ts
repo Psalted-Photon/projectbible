@@ -72,6 +72,17 @@ async function initApp() {
   // what marks the page as a media player, so the phone is far less willing to
   // throttle it once the screen goes off.
   initMediaSession();
+
+  // The speech runtime used to be cached under a name with no version in it.
+  // Its filenames never change between onnxruntime releases - only the contents
+  // do - and the cache is CacheFirst, so upgrading left devices serving an old
+  // binary to new JavaScript and both voices died with an unreadable error.
+  // The cache key now carries the version; this clears the poisoned one that
+  // predates that, which workbox's own cleanup does not touch.
+  void caches
+    ?.delete('tts-runtime')
+    .then((gone) => gone && console.log('🔊 Cleared the old unversioned speech-runtime cache'))
+    .catch(() => {});
   
   // In dev mode, skip bootstrap loading and mount immediately
   if (import.meta.env.DEV) {

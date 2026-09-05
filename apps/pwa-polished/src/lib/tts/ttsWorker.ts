@@ -149,10 +149,24 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
         self.postMessage({ id, ok: false, error: `Unknown TTS action: ${action satisfies never}` });
     }
   } catch (err: any) {
+    // Describe the failure properly rather than trusting it to have a message.
+    // `?? ` only falls through on null/undefined, so an Error with an empty
+    // message used to arrive as '' and print as a bare `Error {}` - which is
+    // what a mismatched emscripten runtime throws, and exactly when the detail
+    // matters most. onnxruntime also throws plain strings and numbers.
+    let error: string;
+    if (err instanceof Error) {
+      error = `${err.name || 'Error'}: ${err.message || '(no message)'}`;
+    } else if (typeof err === 'object' && err !== null) {
+      error = (err.message && String(err.message)) || JSON.stringify(err) || String(err);
+    } else {
+      error = String(err);
+    }
     self.postMessage({
       id,
       ok: false,
-      error: err?.message ?? String(err),
+      error,
+      stack: err instanceof Error ? err.stack : undefined,
       code: err instanceof TtsError ? err.code : undefined,
     });
   }

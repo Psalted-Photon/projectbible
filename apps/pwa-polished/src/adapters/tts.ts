@@ -185,7 +185,7 @@ function getWorker(): Worker {
   if (worker) return worker;
   worker = new Worker(new URL('../lib/tts/ttsWorker.ts', import.meta.url), { type: 'module' });
   worker.onmessage = (event) => {
-    const { id, ok, result, error, code, progress } = event.data ?? {};
+    const { id, ok, result, error, code, progress, stack } = event.data ?? {};
     const entry = pending.get(id);
     if (!entry) return;
     if (progress) {
@@ -197,8 +197,12 @@ function getWorker(): Worker {
     if (ok) {
       entry.resolve(result);
     } else {
-      const err = new Error(error ?? 'TTS worker error');
+      // Truthiness, not nullishness: an empty string here is exactly the case
+      // that used to surface as an unreadable `Error {}`.
+      const err = new Error(error || 'TTS worker failed without a message');
       (err as any).code = code;
+      if (stack) (err as any).workerStack = stack;
+      console.error('[TTS] worker error:', error || '(empty)', stack || '');
       entry.reject(err);
     }
   };
