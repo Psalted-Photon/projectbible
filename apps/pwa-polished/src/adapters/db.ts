@@ -19,7 +19,9 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
 
 export interface DBSectionHeading {
-  id: string;      // `${book}:${chapter}:${verse}`
+  id: string;      // `${translation}:${book}:${chapter}:${verse}`
+  /** Absent on packs built before headings were per-translation; those are BSB's. */
+  translation?: string;
   book: string;
   chapter: number;
   verse: number;

@@ -1875,7 +1875,7 @@
         return;
       }
 
-      const chapterHeadingMap = await headingsStore.getChapterHeadings(book, chapter);
+      const chapterHeadingMap = await headingsStore.getChapterHeadings(book, chapter, currentTranslation);
 
       // Load red-letter span data if needed
       if (showRedLetter && redLetterData === null) await loadRedLetterData();
@@ -2729,7 +2729,7 @@
       );
 
       if (nextVerses.length > 0) {
-        const nextHeadingMap = await headingsStore.getChapterHeadings(nextBook, nextChapter);
+        const nextHeadingMap = await headingsStore.getChapterHeadings(nextBook, nextChapter, currentTranslation);
         if (showRedLetter && redLetterData === null) await loadRedLetterData();
         const rlMap = showRedLetter ? getChapterRedLetterMap(currentTranslation, nextBook, nextChapter) : new Map();
         const nextMorph = isOriginalLanguage(currentTranslation)
@@ -2849,7 +2849,7 @@
       );
 
       if (prevVerses.length > 0) {
-        const prevHeadingMap = await headingsStore.getChapterHeadings(prevBook, prevChapter);
+        const prevHeadingMap = await headingsStore.getChapterHeadings(prevBook, prevChapter, currentTranslation);
         if (showRedLetter && redLetterData === null) await loadRedLetterData();
         const rlMap = showRedLetter ? getChapterRedLetterMap(currentTranslation, prevBook, prevChapter) : new Map();
         const prevMorph = isOriginalLanguage(currentTranslation)

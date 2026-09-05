@@ -302,17 +302,32 @@ export async function importPackFromBytes(
       // Import section headings (pericope titles) from standalone headings pack
       console.log('Importing section headings pack...');
 
-      const rows = db.exec('SELECT book, chapter, verse, heading, level FROM section_headings');
+      // Headings became per-translation; a pack built before that has no
+      // translation column and holds BSB's, which is what every translation
+      // used to show.
+      const headingColumns = (db.exec('PRAGMA table_info(section_headings)')[0]?.values ?? [])
+        .map((col: any) => String(col[1]));
+      const hasTranslation = headingColumns.includes('translation');
+
+      const rows = db.exec(
+        hasTranslation
+          ? 'SELECT translation, book, chapter, verse, heading, level FROM section_headings'
+          : "SELECT 'bsb' AS translation, book, chapter, verse, heading, level FROM section_headings"
+      );
 
       if (rows.length && rows[0].values.length) {
-        const entries = rows[0].values.map(([book, chapter, verse, heading, level]) => ({
-          id: `${book}:${chapter}:${verse}`,
-          book: book as string,
-          chapter: chapter as number,
-          verse: verse as number,
-          heading: heading as string,
-          level: (level as number) ?? 1,
-        }));
+        const entries = rows[0].values.map((row: any[]) => {
+          const [translation, book, chapter, verse, heading, level] = row;
+          return {
+            id: `${translation}:${book}:${chapter}:${verse}`,
+            translation: translation as string,
+            book: book as string,
+            chapter: chapter as number,
+            verse: verse as number,
+            heading: heading as string,
+            level: (level as number) ?? 1,
+          };
+        });
 
         console.log(`Importing ${entries.length} section headings...`);
 

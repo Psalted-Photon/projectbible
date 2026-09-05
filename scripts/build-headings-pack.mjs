@@ -1,32 +1,42 @@
 #!/usr/bin/env node
 
 /**
- * Build Section Headings Pack
+ * Build the section headings pack.
  *
- * Parses all 66 BSB USFM (.SFM) files and extracts \s, \s1, \s2 pericope/section
- * headings, keyed by (book, chapter, verse). Outputs packs/section-headings.sqlite.
+ * Headings are an overlay rather than a column on the verse tables, because the
+ * consolidated pack has no room for one. Each translation that writes its own
+ * gets its own rows: BSB has 3,097, NET 1,802, KJV 44 and WEB 5. A translation
+ * with none -- or a passage where it has none -- falls back to BSB's at read
+ * time, which is what the whole app did before this.
  *
- * These headings are CC0 / public domain (Berean Standard Bible) and serve as a
- * translation-agnostic overlay — any installed translation can display them.
+ * Levels: 1 and 2 are pericope titles, 3 is the acrostic stanza labels in
+ * Psalm 119 (ALEPH, BETH ...) which sit above the verse they open and would
+ * otherwise be welded to the end of the previous one.
  *
  * Usage: node scripts/build-headings-pack.mjs
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { parseUSFX } from '../packages/packtools/src/parsers/usfx-parser.mjs';
+import { USFM_CODE_TO_BOOK } from '../packages/packtools/src/parsers/books.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const repoRoot = join(__dirname, '..');
 
-const USFM_DIR = join(repoRoot, 'data-sources', 'bsb_usfm', 'bsb_usfm');
 const PACKS_DIR = join(repoRoot, 'packs');
 // Must be the name the manifest and PacksPane download (`section-headings.sqlite`).
-// This script used to write `headings.sqlite`, which nothing distributed — the
+// This script used to write `headings.sqlite`, which nothing distributed -- the
 // shipped pack silently stayed three months stale.
 const OUTPUT_PATH = join(PACKS_DIR, 'section-headings.sqlite');
+
+const BSB_USFM_DIR = join(repoRoot, 'data-sources', 'bsb_usfm', 'bsb_usfm');
+const NET_USFM_DIR = join(repoRoot, 'data-sources/commentaries/raw/net-full-usfm');
+const WEB_USFX = join(repoRoot, 'data-sources/web-usfx/eng-web_usfx.xml');
+const KJV_USFX = join(repoRoot, 'data-sources/kjv-usfx/eng-kjv_usfx.xml');
 
 if (!existsSync(PACKS_DIR)) mkdirSync(PACKS_DIR, { recursive: true });
 
@@ -101,7 +111,7 @@ const BIBLE_BOOKS = [
 ];
 
 /**
- * Parse a USFM .SFM file and extract section headings with their (chapter, verse).
+ * Parse a USFM file and extract section headings with their (chapter, verse).
  * Headings are attached to the next \v verse marker following them.
  */
 function parseUSFMHeadings(filePath, bookName) {
@@ -133,9 +143,7 @@ function parseUSFMHeadings(filePath, bookName) {
       continue;
     }
 
-    // Acrostic stanza labels (\qa ALEPH, BETH…) in Psalm 119. They sit above
-    // the verse they open — level 3 so the reader can style them apart from
-    // pericope titles. Without this they end up welded to the previous verse.
+    // Acrostic stanza labels (\qa ALEPH, BETH...) in Psalm 119.
     const qaMatch = line.match(/^\\qa\s+(.*)/);
     if (qaMatch && qaMatch[1].trim()) {
       pendingLevel = 3;
@@ -164,9 +172,56 @@ function parseUSFMHeadings(filePath, bookName) {
   return headings;
 }
 
-// ── Build ────────────────────────────────────────────────────────────────────
+/** BSB ships one .SFM per book, named in the table above. */
+function bsbHeadings() {
+  const rows = [];
+  for (const book of BIBLE_BOOKS) {
+    const filePath = join(BSB_USFM_DIR, book.file);
+    if (!existsSync(filePath)) {
+      console.warn(`  !  Missing: ${book.file} -- skipping ${book.name}`);
+      continue;
+    }
+    rows.push(...parseUSFMHeadings(filePath, book.name));
+  }
+  return rows;
+}
 
-console.log('Building section headings pack from BSB USFM...\n');
+/** NET ships one .usfm per book, named 02-GENengnet.usfm. */
+function netHeadings() {
+  const pattern = /^\d+-([A-Z0-9]+)engnet\.usfm$/i;
+  const rows = [];
+  if (!existsSync(NET_USFM_DIR)) return rows;
+  for (const file of readdirSync(NET_USFM_DIR).filter((f) => pattern.test(f)).sort()) {
+    const name = USFM_CODE_TO_BOOK[file.match(pattern)[1].toUpperCase()];
+    if (name) rows.push(...parseUSFMHeadings(join(NET_USFM_DIR, file), name));
+  }
+  return rows;
+}
+
+/** WEB and KJV are one USFX document each; the parser returns their headings. */
+function usfxHeadings(path) {
+  if (!existsSync(path)) return [];
+  const rows = [];
+  for (const book of parseUSFX(path).books) {
+    const name = USFM_CODE_TO_BOOK[book.code];
+    if (!name) continue;
+    for (const h of book.headings) {
+      rows.push({ book: name, chapter: h.chapter, verse: h.verse, heading: h.heading, level: h.level });
+    }
+  }
+  return rows;
+}
+
+const SOURCES = [
+  { id: 'bsb', label: 'Berean Standard Bible', read: bsbHeadings },
+  { id: 'net', label: 'New English Translation', read: netHeadings },
+  { id: 'web', label: 'World English Bible', read: () => usfxHeadings(WEB_USFX) },
+  { id: 'kjv', label: 'King James Version', read: () => usfxHeadings(KJV_USFX) },
+];
+
+// -- Build --------------------------------------------------------------------
+
+console.log('Building section headings pack\n');
 
 if (existsSync(OUTPUT_PATH)) {
   unlinkSync(OUTPUT_PATH);
@@ -182,53 +237,48 @@ db.exec(`
   );
 
   CREATE TABLE section_headings (
-    book    TEXT    NOT NULL,
-    chapter INTEGER NOT NULL,
-    verse   INTEGER NOT NULL,
-    heading TEXT    NOT NULL,
-    level   INTEGER NOT NULL DEFAULT 1,
-    PRIMARY KEY (book, chapter, verse)
+    translation TEXT    NOT NULL,
+    book        TEXT    NOT NULL,
+    chapter     INTEGER NOT NULL,
+    verse       INTEGER NOT NULL,
+    heading     TEXT    NOT NULL,
+    level       INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (translation, book, chapter, verse)
   );
 
-  CREATE INDEX idx_headings_book_chapter
-    ON section_headings (book, chapter);
+  CREATE INDEX idx_headings_lookup
+    ON section_headings (translation, book, chapter);
 `);
 
 const metaInsert = db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)');
 metaInsert.run('pack_id',      'section-headings');
 metaInsert.run('pack_type',    'headings');
 metaInsert.run('pack_version', '1.0');
-metaInsert.run('source',       'Berean Standard Bible (BSB)');
-metaInsert.run('license',      'CC0 / Public Domain');
-metaInsert.run('attribution',  'Berean Standard Bible – https://berean.bible');
+metaInsert.run('source',       'BSB, NET, WEB, KJV');
+metaInsert.run('license',      'BSB CC0; NET (c) Biblical Studies Press; WEB and KJV public domain');
+metaInsert.run('attribution',  'Berean Standard Bible - https://berean.bible; NET Bible - https://netbible.com; WEB and KJV via eBible.org');
 metaInsert.run('description',
-  'Section headings (pericope titles) for all 66 canonical books, sourced from ' +
-  'BSB USFM \\s1/\\s2 markers. Translation-agnostic overlay — works with any installed translation.'
+  'Section headings (pericope titles) per translation. A translation without ' +
+  'its own heading for a passage falls back to the BSB heading at read time.'
 );
 
 const insertHeading = db.prepare(`
-  INSERT OR IGNORE INTO section_headings (book, chapter, verse, heading, level)
-  VALUES (@book, @chapter, @verse, @heading, @level)
+  INSERT OR IGNORE INTO section_headings (translation, book, chapter, verse, heading, level)
+  VALUES (@translation, @book, @chapter, @verse, @heading, @level)
 `);
 const insertBatch = db.transaction((rows) => {
   for (const row of rows) insertHeading.run(row);
 });
 
-let totalHeadings = 0;
-
-for (const book of BIBLE_BOOKS) {
-  const filePath = join(USFM_DIR, book.file);
-  if (!existsSync(filePath)) {
-    console.warn(`  ⚠  Missing: ${book.file} — skipping ${book.name}`);
-    continue;
-  }
-  const headings = parseUSFMHeadings(filePath, book.name);
-  insertBatch(headings);
-  totalHeadings += headings.length;
-  console.log(`  ✓  ${book.name.padEnd(22)} ${headings.length} headings`);
+let total = 0;
+for (const source of SOURCES) {
+  const rows = source.read().map((r) => ({ ...r, translation: source.id }));
+  insertBatch(rows);
+  total += rows.length;
+  console.log(`  ${source.id.padEnd(4)} ${String(rows.length).padStart(5)} headings  ${source.label}`);
 }
 
 db.close();
 
-console.log(`\n✅ section-headings.sqlite built: ${totalHeadings} total headings`);
+console.log(`\n section-headings.sqlite built: ${total} headings across ${SOURCES.length} translations`);
 console.log(`   Output: ${OUTPUT_PATH}`);
