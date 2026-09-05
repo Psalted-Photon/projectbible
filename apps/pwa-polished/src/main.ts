@@ -13,6 +13,13 @@ import { dumpPreviousInstallLog } from './lib/install-log';
 
 console.log('🔥 IMPORTS LOADED');
 
+// Deliberately NOT behind the DEV guard: the point of this one is to be run on
+// the phone and on preview builds, both of which are production builds. Loaded
+// lazily so that naming it here does not drag the audio adapter into the
+// startup bundle.
+(window as any).__audioProbe = () =>
+  import('./adapters/audio').then((m) => m.probeAudioEngine());
+
 // Expose utilities for console debugging
 if (import.meta.env.DEV) {
   (window as any).removePack = removePack;

@@ -377,3 +377,26 @@ export async function clearAudioCache(): Promise<void> {
     tx.onerror = () => reject(tx.error);
   });
 }
+
+/**
+ * Loads the audio engine and registers its storage layer, without needing a
+ * pack installed.
+ *
+ * Everything else in this file needs 1.8 GB of audio pack before it can be
+ * exercised at all, which makes it untestable on a throwaway origin and
+ * unreasonable on a phone. But the half that browser-level settings can break
+ * is the half that runs here — importing the WASM build and registering the
+ * OPFS layer — and that needs no data at all.
+ *
+ * Reachable from the console as __audioProbe(). Returns rather than throws, so
+ * a failure reads as a message instead of an unhandled rejection.
+ */
+export async function probeAudioEngine(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await getSQLite();
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message || err.name : String(err);
+    return { ok: false, error: message || 'failed with no message' };
+  }
+}
