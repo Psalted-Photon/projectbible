@@ -47,6 +47,39 @@ interface TtsRequest {
   };
 }
 
+/**
+ * Inference runs strictly one at a time.
+ *
+ * onnxruntime keeps a single "a run is in progress" marker per WASM module,
+ * shared by every session it owns, and throws `Session already started` if a
+ * second run begins before the first has finished.
+ *
+ * On one thread that could never happen. The WASM call blocks this worker's
+ * only thread, so the next message could not even be read until the run was
+ * over — the ordering came for free and nothing here had to ask for it. Several
+ * threads hand the work off and leave this thread free to take the next
+ * message, so two clips arriving close together genuinely overlap and the
+ * second one throws.
+ *
+ * So this is not a threading bug: it is a missing queue that single-threading
+ * had been hiding. Requests still arrive in whatever order the reader sends
+ * them; they simply wait their turn here.
+ */
+let inferenceTail: Promise<unknown> = Promise.resolve();
+
+function queueInference<T>(work: () => Promise<T>): Promise<T> {
+  // Chained onto both outcomes: one failed clip must not wedge the queue for
+  // the rest of the session.
+  const run = inferenceTail.then(work, work);
+  // The tail deliberately swallows the result, so a rejection here is never an
+  // unhandled one, and finished clips are not kept alive by the chain.
+  inferenceTail = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
 self.onmessage = async (event: MessageEvent<TtsRequest>) => {
   const { id, action, payload } = event.data;
   const engine: TtsEngine = payload?.engine ?? 'piper';
@@ -112,7 +145,10 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
       }
 
       case 'probeGraphicsChip': {
-        self.postMessage({ id, ok: true, result: await kokoro.canRunOnGraphicsChip() });
+        // Queued with the rest: probing runs a real clip through the model, so
+        // it collides with a reader already speaking exactly like any other run.
+        const usable = await queueInference(() => kokoro.canRunOnGraphicsChip());
+        self.postMessage({ id, ok: true, result: usable });
         break;
       }
 
@@ -126,21 +162,25 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
         // Tapping a word is a Greek feature and stays on Piper. Kokoro has no
         // Greek voice, and the carrier-and-cut trick is tuned to Piper's output.
         if (isKokoro) throw new TtsError('UNKNOWN_VOICE', 'Single words are spoken by Piper only');
-        const clip = await piper.synthesizeWord(payload!.text!, payload!.voiceId!, {
-          espeakVoice: payload!.espeakVoice,
-          substitutions: payload!.substitutions,
-        });
+        const clip = await queueInference(() =>
+          piper.synthesizeWord(payload!.text!, payload!.voiceId!, {
+            espeakVoice: payload!.espeakVoice,
+            substitutions: payload!.substitutions,
+          })
+        );
         (self as unknown as Worker).postMessage({ id, ok: true, result: clip }, [clip]);
         break;
       }
 
       case 'synthesize': {
-        const wav = isKokoro
-          ? await kokoro.synthesize(payload!.text!, payload!.voiceId!, payload!.phonemeVoice!)
-          : await piper.synthesize(payload!.text!, payload!.voiceId!, {
-              espeakVoice: payload!.espeakVoice,
-              substitutions: payload!.substitutions,
-            });
+        const wav = await queueInference(() =>
+          isKokoro
+            ? kokoro.synthesize(payload!.text!, payload!.voiceId!, payload!.phonemeVoice!)
+            : piper.synthesize(payload!.text!, payload!.voiceId!, {
+                espeakVoice: payload!.espeakVoice,
+                substitutions: payload!.substitutions,
+              })
+        );
         (self as unknown as Worker).postMessage({ id, ok: true, result: wav }, [wav]);
         break;
       }
