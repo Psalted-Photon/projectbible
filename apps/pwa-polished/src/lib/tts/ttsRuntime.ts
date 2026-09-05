@@ -96,11 +96,26 @@ export async function fetchWithProgress(
 
 let ortConfigured = false;
 
+/**
+ * How many cores the processor path may use.
+ *
+ * One unless the page is cross-origin isolated — several cores need
+ * SharedArrayBuffer, which needs that. Measured on a Ryzen 9 6900HX: one thread
+ * gives 0.45x, seven give 1.81x, which is the difference between unusable and
+ * faster than the phone.
+ *
+ * Capped rather than taking every core: the browser still has a page to draw,
+ * and the last few cores buy little.
+ */
+export function processorThreads(): number {
+  if (typeof self === 'undefined' || !(self as any).crossOriginIsolated) return 1;
+  const cores = navigator.hardwareConcurrency || 1;
+  return Math.max(1, Math.min(7, cores - 1));
+}
+
 export function configureOrt(): void {
   if (ortConfigured) return;
-  // Single-threaded on purpose: the app is not cross-origin isolated, and a
-  // deterministic single .wasm keeps the offline cache small and predictable.
-  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.numThreads = processorThreads();
   ort.env.wasm.wasmPaths = `${ASSET_BASE}/`;
   ortConfigured = true;
 }
