@@ -118,6 +118,14 @@ const FP16 = HF + 'onnx/model_fp16.onnx';
 // speed, so everything real runs on fp32. Verified 28 Aug: fp16 0/4 clips with
 // sound, fp32 4/4.
 const FP32 = HF + 'onnx/model.onnx';
+// The small int8 model, 88 MB against 310. Quantised was written off early
+// because it appeared to hang — but that was on the graphics chip, where int8
+// is a known-bad pairing, and it says nothing about the processor. On a
+// processor int8 is the ordinary way to run this model and is usually two to
+// three times quicker than fp32. If this clears 1.0x on one core, the whole
+// cross-origin-isolation exercise becomes unnecessary. Listen before believing
+// the number: it is a smaller model and it can sound worse.
+const Q8 = HF + 'onnx/model_quantized.onnx';
 const TIMEOUT_MS = 5 * 60 * 1000;
 const ENDURANCE_MS = 5 * 60 * 1000;
 const LS_KEY = 'kokoro-endurance-log';
@@ -137,13 +145,19 @@ const cores = navigator.hardwareConcurrency || 1;
 const TESTS = [
   { id:'gpu16', label:'Graphics chip — fp16', note:'SILENT on this chip — kept for reference',
     url: FP16, mb:156, ep:'webgpu', threads:1, kind:'kokoro' },
-  { id:'gpu32', label:'Graphics chip — fp32', note:'the one that actually works here',
+  { id:'gpu32', label:'Graphics chip — fp32', note:'clean on the phone; returns garbage on the PC',
     url: FP32, mb:310, ep:'webgpu', threads:1, kind:'kokoro' },
   { id:'w1', label:'Processor, 1 core — fp32', note:'the clean-but-slow path',
     url: FP32, mb:310, ep:'wasm', threads:1, kind:'kokoro' },
   { id:'wn', label:'Processor, ' + Math.min(8, cores) + ' cores — fp32',
-    note:'never measured; the only path left on this PC',
+    note:'measured 1.81x on the PC, but needs several cores allowed',
     url: FP32, mb:310, ep:'wasm', threads:Math.min(8, cores), kind:'kokoro' },
+  { id:'q8w1', label:'Processor, 1 core — small model',
+    note:'if this clears 1.0x, no browser setting is needed at all',
+    url: Q8, mb:88, ep:'wasm', threads:1, kind:'kokoro' },
+  { id:'q8wn', label:'Processor, ' + Math.min(8, cores) + ' cores — small model',
+    note:'only means anything once several cores are allowed',
+    url: Q8, mb:88, ep:'wasm', threads:Math.min(8, cores), kind:'kokoro' },
   { id:'pp', label:'Piper, 1 core', note:'the voice you have now, for comparison',
     url: PIPER, mb:60, ep:'wasm', threads:1, kind:'piper' },
 ];
