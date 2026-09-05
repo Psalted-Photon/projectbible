@@ -1,7 +1,7 @@
 import { defineConfig, defaultClientConditions } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
-import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
 // Plugin to copy bootstrap pack to build output and public folder (for dev)
@@ -53,6 +53,32 @@ function copyBootstrapPack() {
 // Plugin to copy the TTS runtime (onnxruntime + phonemizer WASM, ~30 MB) to /tts/.
 // These are fetched lazily on first Read Aloud use and cached by the service
 // worker's runtime route — deliberately NOT precached (see workbox config).
+/**
+ * Version of the onnxruntime that is actually being copied.
+ *
+ * The runtime's filenames are identical in every version - only the contents
+ * change - and the service worker caches them CacheFirst. Without the version
+ * in the cache key, upgrading leaves a device serving the old binary to the new
+ * JavaScript, which breaks both speech engines with no clue as to why. That is
+ * exactly what happened going 1.23.2 -> 1.29.
+ */
+function ortVersion(): string {
+  for (const dir of [
+    resolve(__dirname, 'node_modules/onnxruntime-web'),
+    resolve(__dirname, '../../node_modules/onnxruntime-web'),
+  ]) {
+    const pkg = resolve(dir, 'package.json');
+    if (existsSync(pkg)) {
+      try {
+        return JSON.parse(readFileSync(pkg, 'utf8')).version ?? 'unknown';
+      } catch {
+        return 'unknown';
+      }
+    }
+  }
+  return 'unknown';
+}
+
 function copyTtsRuntime() {
   const nm = resolve(__dirname, '../../node_modules');
   // Look in the app's own node_modules before the root one. Another dependency
@@ -82,6 +108,11 @@ function copyTtsRuntime() {
     [resolve(ortDist, 'ort-wasm-simd-threaded.jsep.mjs'), 'ort-wasm-simd-threaded.jsep.mjs'],
     [resolve(nm, '@diffusionstudio/piper-wasm/build/piper_phonemize.wasm'), 'piper_phonemize.wasm'],
     [resolve(nm, '@diffusionstudio/piper-wasm/build/piper_phonemize.data'), 'piper_phonemize.data'],
+    // The ESM glue too, so voice-lab.html can phonemize with the very same
+    // espeak the app uses. A standalone page in public/ cannot import from src/,
+    // and a lab that guessed at pronunciation differently from the reader would
+    // audition voices you never actually get to hear.
+    [resolve(__dirname, 'src/lib/tts/vendor/piper-phonemize.js'), 'piper-phonemize.js'],
   ];
 
   function copyTo(targetDir: string, label: string) {
@@ -254,6 +285,9 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
+        // Drop caches from previous builds, so an abandoned runtime cache does
+        // not sit there holding ~30 MB forever.
+        cleanupOutdatedCaches: true,
         // Wake alarm push + notification-tap handling. Workbox still generates
         // the service worker; this is its documented slot for adding a push
         // listener, so the caching config below is unaffected.
@@ -267,8 +301,8 @@ export default defineConfig({
         // stored response, and the navigation fallback below would hand back
         // index.html instead — either way the cross-origin-isolation headers it
         // needs would not be the ones the browser sees.
-        globIgnores: ['**/tts/**', '**/kokoro-test.html'],
-        navigateFallbackDenylist: [/^\/kokoro-test\.html$/],
+        globIgnores: ['**/tts/**', '**/kokoro-test.html', '**/voice-lab.html'],
+        navigateFallbackDenylist: [/^\/kokoro-test\.html$/, /^\/voice-lab\.html$/],
         runtimeCaching: [
           {
             // .mjs included since onnxruntime 1.19: each .wasm now ships with a
@@ -277,7 +311,9 @@ export default defineConfig({
             urlPattern: /\/tts\/.+\.(wasm|data|mjs)$/,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'tts-runtime',
+              // Version in the key: same filenames every release, different
+              // bytes, and CacheFirst never re-checks. See ortVersion().
+              cacheName: `tts-runtime-${ortVersion()}`,
               cacheableResponse: { statuses: [0, 200] },
               expiration: { maxEntries: 8 }
             }
