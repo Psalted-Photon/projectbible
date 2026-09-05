@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reset Hexapla</title>
+<!--
+  Recovery page. Unregisters the service worker and empties the caches, so a
+  device stuck on a broken build can be fixed from the phone with no computer.
+
+  It must never delete a pack. Packs live in OPFS and IndexedDB and run to
+  ~1.8 GB; re-downloading them is a far worse outcome than whatever brought
+  someone here. Nothing on this page touches either.
+
+  It has to work when the app does not, so it must bypass the service worker
+  entirely — see globIgnores and navigateFallbackDenylist in vite.config.ts.
+  Without both, the worker would serve a cached copy of this page or hand back
+  index.html, and the one page that has to work when the worker is broken would
+  be served by the broken worker.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:20px 16px 60px; background:#111; color:#e0e0e0;
+         font:16px/1.55 system-ui, -apple-system, sans-serif;
+         max-width:620px; margin-inline:auto; }
+  h1 { font-size:1.3rem; margin:0 0 4px; }
+  .sub { color:#888; font-size:.85rem; margin-bottom:16px; }
+  .card { background:#1c1c1c; border:1px solid #2e2e2e; border-radius:10px;
+          padding:12px 14px; margin-bottom:12px; }
+  .card h2 { font-size:.78rem; text-transform:uppercase; letter-spacing:.06em;
+             color:#999; margin:0 0 8px; font-weight:600; }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:3px 0; font-size:.88rem; }
+  .row span:last-child { color:#fff; text-align:right; word-break:break-word; }
+  .yes { color:#4ade80 !important; } .no { color:#f87171 !important; }
+  button { width:100%; padding:14px; font-size:.95rem; font-weight:600;
+           border:0; border-radius:9px; background:#b91c1c; color:#fff; }
+  button:disabled { background:#2a2a2a; color:#666; }
+  button.sec { background:#333; margin-top:8px; }
+  .safe { background:#0e2a16; border:1px solid #1c5030; color:#86efac;
+          font-size:.85rem; padding:10px 12px; border-radius:8px; margin-bottom:12px; }
+  .done { background:#0b2545; border:1px solid #1d4ed8; color:#bfdbfe;
+          font-size:.9rem; padding:12px; border-radius:8px; margin-bottom:12px;
+          display:none; }
+  .done strong { display:block; margin-bottom:6px; color:#fff; }
+  #log { font:11.5px/1.45 ui-monospace, monospace; color:#9a9a9a;
+         white-space:pre-wrap; word-break:break-word; max-height:260px; overflow:auto; }
+  a { color:#7aa5f7; }
+</style>
+</head>
+<body>
+
+<h1>Reset Hexapla</h1>
+<div class="sub">For when the app will not start.</div>
+
+<div class="safe">
+  <strong>Your Bibles are safe.</strong>
+  This clears the app&rsquo;s program files so it downloads a fresh copy next
+  time. It does not touch packs, notes, highlights or settings.
+</div>
+
+<div class="card">
+  <h2>What is here now</h2>
+  <div id="state">
+    <div class="row"><span>Background worker</span><span id="swCount">checking&hellip;</span></div>
+    <div class="row"><span>Cached program files</span><span id="cacheCount">checking&hellip;</span></div>
+    <div class="row"><span>Several cores allowed</span><span id="iso">checking&hellip;</span></div>
+  </div>
+</div>
+
+<button id="go">Clear it and start fresh</button>
+<button id="home" class="sec">Just take me back to Hexapla</button>
+
+<div class="done" id="done">
+  <strong>Done.</strong>
+  <span id="doneMsg"></span>
+</div>
+
+<div class="card" style="margin-top:12px">
+  <h2>Log</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+// Deliberately a classic script with no imports and no dependencies. This page
+// is the last thing standing when everything else is broken, so it must not
+// need the bundler, the network, or anything from src/.
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  function log(msg) {
+    var el = $('log');
+    var d = new Date();
+    function p(n) { return String(n).padStart(2, '0'); }
+    el.textContent += p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '  ' + msg + '\n';
+    el.scrollTop = 1e9;
+  }
+
+  function set(id, text, ok) {
+    var el = $(id);
+    el.textContent = text;
+    if (ok === true) el.className = 'yes';
+    if (ok === false) el.className = 'no';
+  }
+
+  // ── what is here now ──────────────────────────────────────────────────────
+  // Read-only. Someone can open this page to look without changing anything.
+
+  set('iso', self.crossOriginIsolated === true ? 'yes' : 'no',
+      self.crossOriginIsolated === true);
+
+  if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+    navigator.serviceWorker.getRegistrations().then(function (regs) {
+      set('swCount', regs.length === 0 ? 'none' : regs.length + ' registered');
+      log('Service worker registrations: ' + regs.length);
+    }).catch(function (e) {
+      set('swCount', 'could not check');
+      log('Could not list service workers: ' + e);
+    });
+  } else {
+    set('swCount', 'not supported');
+  }
+
+  if (self.caches) {
+    caches.keys().then(function (keys) {
+      set('cacheCount', keys.length === 0 ? 'none' : keys.length + ' caches');
+      if (keys.length) log('Caches: ' + keys.join(', '));
+    }).catch(function (e) {
+      set('cacheCount', 'could not check');
+      log('Could not list caches: ' + e);
+    });
+  } else {
+    set('cacheCount', 'not supported');
+  }
+
+  // ── the reset ─────────────────────────────────────────────────────────────
+
+  $('home').addEventListener('click', function () { location.href = '/'; });
+
+  $('go').addEventListener('click', function () {
+    var btn = $('go');
+    btn.disabled = true;
+    btn.textContent = 'Clearing…';
+    log('Starting.');
+
+    var unregistered = 0;
+    var deleted = 0;
+
+    // Workers first. Deleting the caches while a worker is still installed
+    // leaves it able to re-populate them, and on a fast phone it sometimes
+    // does before the page has finished.
+    var killWorkers = (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
+      ? navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (reg) {
+            return reg.unregister().then(function (ok) {
+              if (ok) unregistered++;
+              log('Unregistered ' + (reg.scope || 'worker') + ': ' + ok);
+            }).catch(function (e) { log('Unregister failed: ' + e); });
+          }));
+        }).catch(function (e) { log('Could not list workers: ' + e); })
+      : Promise.resolve();
+
+    var killCaches = killWorkers.then(function () {
+      if (!self.caches) return;
+      return caches.keys().then(function (keys) {
+        return Promise.all(keys.map(function (key) {
+          return caches.delete(key).then(function (ok) {
+            if (ok) deleted++;
+            log('Deleted cache ' + key + ': ' + ok);
+          }).catch(function (e) { log('Delete failed for ' + key + ': ' + e); });
+        }));
+      });
+    });
+
+    killCaches.then(function () {
+      // Nothing below this line touches OPFS or IndexedDB. That is the whole
+      // point of the page — see the note at the top of the file.
+      log('Finished. Packs, notes and settings were not touched.');
+      set('swCount', 'none');
+      set('cacheCount', 'none');
+
+      $('doneMsg').textContent =
+        'Cleared ' + unregistered + ' background worker' + (unregistered === 1 ? '' : 's') +
+        ' and ' + deleted + ' cache' + (deleted === 1 ? '' : 's') + '. ' +
+        'Now close Hexapla completely — swipe it away, do not just go back — ' +
+        'then open it again. The first start will be slower while it downloads a fresh copy.';
+      $('done').style.display = 'block';
+
+      btn.textContent = 'Cleared';
+      $('home').textContent = 'Open Hexapla';
+    });
+  });
+})();
+</script>
+</body>
+</html>
