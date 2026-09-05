@@ -54,6 +54,21 @@ const STYLE_DIMS = 256;
  */
 const SILENCE_FLOOR = 0.01;
 
+/**
+ * Above this the model has not produced audio at all.
+ *
+ * Samples belong between -1 and 1. On an AMD Radeon 680M the graphics chip
+ * returns peaks near 700,000 — measured across onnxruntime 1.21, 1.22, 1.23 and
+ * 1.29, correlating ~0.000 with the same text through the processor, so it is
+ * garbage rather than degraded speech. encodeWav then clamps every sample to
+ * plus or minus one, turning it into a full-scale square wave: harsh noise with
+ * a vaguely vocal shape, which is how it reached the ear as "muffled".
+ *
+ * A little headroom above 1.0 rather than exactly 1.0, since a legitimately hot
+ * clip can brush the ceiling.
+ */
+const GARBAGE_CEILING = 1.5;
+
 const styleName = (voiceId: string) => `${voiceId}.bin`;
 
 // ─── installing ─────────────────────────────────────────────────────────────
@@ -131,6 +146,8 @@ export async function removeSharedModel(): Promise<void> {
 let session: ort.InferenceSession | null = null;
 let sessionBackend: 'webgpu' | 'wasm' | null = null;
 let graphicsChipWorks: boolean | null = null;
+/** Set once the graphics chip has been caught returning nonsense on this device. */
+let refuseGraphicsChip = false;
 const styles = new Map<string, Float32Array>();
 
 let sessionFailure: string | null = null;
@@ -177,6 +194,15 @@ export async function canRunOnGraphicsChip(): Promise<boolean | null> {
 async function getSession(): Promise<ort.InferenceSession> {
   if (session) return session;
   configureOrt();
+  if (refuseGraphicsChip) {
+    const file = await store.read(KOKORO_MODEL_FILE);
+    if (!file) throw new TtsError('VOICE_NOT_INSTALLED', 'The Kokoro model is not installed');
+    session = await ort.InferenceSession.create(new Uint8Array(await file.arrayBuffer()), {
+      executionProviders: ['wasm'],
+    });
+    sessionBackend = 'wasm';
+    return session;
+  }
   const file = await store.read(KOKORO_MODEL_FILE);
   if (!file) throw new TtsError('VOICE_NOT_INSTALLED', 'The Kokoro model is not installed');
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -244,12 +270,33 @@ export async function synthesize(
   const style = await getStyle(voiceId);
   const model = await getSession();
 
-  const rendered: Float32Array[] = [];
-  for (const piece of pieces) {
-    rendered.push(await speak(piece, style, model));
+  try {
+    return encodeWav(concat(await render(pieces, style, model)), KOKORO_SAMPLE_RATE);
+  } catch (err) {
+    // The graphics chip can return numbers that are not audio at all — see
+    // GARBAGE_CEILING. Noise is worse than slow, so drop to the processor for
+    // the rest of this session rather than reading a chapter as static.
+    if (sessionBackend !== 'webgpu' || !(err instanceof TtsError) || !/out-of-range/.test(err.message)) {
+      throw err;
+    }
+    console.warn('[Kokoro] graphics chip returned nonsense; using the processor from now on:', err.message);
+    refuseGraphicsChip = true;
+    graphicsChipWorks = false;
+    session = null;
+    sessionBackend = null;
+    const fallback = await getSession();
+    return encodeWav(concat(await render(pieces, style, fallback)), KOKORO_SAMPLE_RATE);
   }
+}
 
-  return encodeWav(concat(rendered), KOKORO_SAMPLE_RATE);
+async function render(
+  pieces: string[][],
+  style: Float32Array,
+  model: ort.InferenceSession
+): Promise<Float32Array[]> {
+  const out: Float32Array[] = [];
+  for (const piece of pieces) out.push(await speak(piece, style, model));
+  return out;
 }
 
 /** One pass through the model, for a run of sounds already known to fit. */
@@ -291,6 +338,13 @@ async function speak(
     throw new TtsError(
       'SYNTH_FAILED',
       `Model returned silence (peak ${peak.toFixed(4)}) on ${sessionBackend ?? 'unknown'}`
+    );
+  }
+  if (peak > GARBAGE_CEILING) {
+    throw new TtsError(
+      'SYNTH_FAILED',
+      `Model returned out-of-range values (peak ${peak.toFixed(0)}, expected at most 1) ` +
+        `on ${sessionBackend ?? 'unknown'}`
     );
   }
   return samples;
