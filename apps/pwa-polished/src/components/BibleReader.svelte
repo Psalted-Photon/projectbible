@@ -14,6 +14,8 @@
   import { profileModalStore } from "../stores/profileModalStore";
   import AnnotationPanel from "./AnnotationPanel.svelte";
   import HighlightModal from "./HighlightModal.svelte";
+  import ShareModal from "./ShareModal.svelte";
+  import type { ShareRef } from "../lib/shareText";
   import { IndexedDBUserDataStore } from "../adapters/UserDataStore";
   import { subscribeToHighlightRemoteChanges } from "../adapters/SyncedHighlightAdapter";
   import { subscribeToUserDataRemoteChanges } from "../adapters/SyncedUserDataStore";
@@ -695,6 +697,13 @@
 
   // Track selected verse number for commentary
   let selectedVerseNumber: number | null = null;
+
+  // Share state. Both are captured when Share is tapped and read only by the
+  // sheet — the ring closes and clearHighlights() runs before it opens, so
+  // nothing the sheet needs can still be read off the page by then.
+  let shareModalOpen = false;
+  let shareModalRef: ShareRef | null = null;
+  let shareModalPassage = '';
 
   // Highlight state
   const userDataStore = new IndexedDBUserDataStore();
@@ -4533,6 +4542,23 @@
     await refreshBookIntroPills();
   }
 
+  /**
+   * The plain text of a verse range out of the loaded chapters.
+   *
+   * Verse mode never rewrites selectedText — it only class-marks the verse
+   * element — so the text a share needs has to come from the chapter data
+   * rather than from the selection.
+   */
+  function verseTextRange(book: string, chapter: number, from: number, to: number): string {
+    const ch = chapters.find(c => c.book === book && c.chapter === chapter);
+    if (!ch) return '';
+    return ch.verses
+      .filter(v => v.verse >= from && v.verse <= to)
+      .map(v => v.text)
+      .join(' ')
+      .trim();
+  }
+
   async function handleToastAction(event: CustomEvent) {
     const { action, text } = event.detail;
     // Capture before any async gap — reactive var may be overwritten by a
@@ -4794,9 +4820,6 @@
         showToast = false;
         break;
       }
-      case "save":
-        alert(`Save verse: ${text}\n\n(Saved verses coming soon)`);
-        break;
       case "notes": {
         // Open note popup for selected verse (requires sign-in).
         // selectedVerseNumber is set in verse mode; in word mode derive it from the DOM.
@@ -4811,6 +4834,34 @@
         if (verseNumForNote !== null) {
           await openNotePopup(verseNumForNote, currentBook, currentChapter);
         }
+        showToast = false;
+        break;
+      }
+      case "share": {
+        // Which verses the selection touches. A phrase dragged across a verse
+        // boundary has one segment per verse, the same shape Highlight reads.
+        const shareVerses =
+          selectionMode === 'word' && selectedSegments.length > 0
+            ? selectedSegments.map(s => s.verse)
+            : selectedVerseNumber !== null
+              ? [selectedVerseNumber]
+              : [];
+        if (shareVerses.length === 0) break;
+
+        const startVerse = Math.min(...shareVerses);
+        const endVerse = Math.max(...shareVerses);
+
+        // A one-word quote is not something anyone sends, so a single tapped
+        // word widens to its verse. A phrase was deliberately chosen, so it is
+        // shared as chosen.
+        const isPhrase = selectionMode === 'word' && selectedWordCount > 1;
+        shareModalPassage = isPhrase
+          ? text
+          : verseTextRange(currentBook, currentChapter, startVerse, endVerse);
+        if (!shareModalPassage) break;
+
+        shareModalRef = { book: currentBook, chapter: currentChapter, startVerse, endVerse };
+        shareModalOpen = true;
         showToast = false;
         break;
       }
@@ -5163,6 +5214,15 @@
     on:close={() => (notePopupOpen = false)}
     on:noteSaved={handleNoteSaved}
     on:noteDeleted={handleNoteDeleted}
+  />
+{/if}
+
+{#if shareModalOpen && shareModalRef}
+  <ShareModal
+    reference={shareModalRef}
+    passage={shareModalPassage}
+    translation={currentTranslation}
+    on:close={() => (shareModalOpen = false)}
   />
 {/if}
 

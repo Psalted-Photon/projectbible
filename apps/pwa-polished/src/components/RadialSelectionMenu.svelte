@@ -10,6 +10,7 @@
   import User from 'phosphor-svelte/lib/User';
   import Article from 'phosphor-svelte/lib/Article';
   import SpeakerHigh from 'phosphor-svelte/lib/SpeakerHigh';
+  import ShareNetwork from 'phosphor-svelte/lib/ShareNetwork';
   import {
     BADGE,
     ringRadius,
@@ -79,6 +80,7 @@
     map: MapPin,
     highlight: Highlighter,
     notes: NotePencil,
+    share: ShareNetwork,
     repeats: Repeat,
     extend: ArrowsOutLineHorizontal,
     speak: SpeakerHigh,

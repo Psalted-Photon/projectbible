@@ -18,6 +18,8 @@
   import { readingPlanModalStore } from "./stores/readingPlanModalStore";  import { localDateStr } from './stores/clockStore';  import { todayStore } from './stores/clockStore';  import { checkAndShowDailyGreeting, dailyGreetingOpen, openDailyGreeting } from './stores/dailyGreetingStore';  import { get } from 'svelte/store';  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
   import "./adapters/SyncedHighlightAdapter"; // registers verse/word highlight pull handlers
   import { getSettings } from "./adapters/settings";
+  import { navigationStore } from "./stores/navigationStore";
+  import { parseRefString } from "./lib/parseRefString";
 
   let appReady = false;
   let showReadingPlanModal = false;
@@ -178,6 +180,39 @@
     // worker opened. A warm launch (app already running, notification tapped)
     // gets no navigation at all, so the service worker messages us instead.
     const openWakeAlarmStart = () => wakeAlarmStartOpen.set(true);
+
+    // ── Shared verse links ──────────────────────────────────────────────────
+    // ?ref=Genesis 1:1, the tail of a link the Share sheet built. The reader is
+    // gated behind appReady, which is only set after an await, so this lands
+    // while it is still unrendered — the verse is where it opens rather than
+    // somewhere it jumps to afterwards.
+    try {
+      const refParam = new URLSearchParams(window.location.search).get('ref');
+      if (refParam) {
+        const current = get(navigationStore);
+        const target = parseRefString(refParam, current.book, current.chapter);
+        if (target) {
+          navigationStore.navigateToVerse(
+            current.translation,
+            target.book,
+            target.chapter,
+            target.verse,
+          );
+        }
+        // Strip it either way. Left in place it would drag the reader back here
+        // on every reload, including the auto-update reload above.
+        const rest = new URLSearchParams(window.location.search);
+        rest.delete('ref');
+        const restQuery = rest.toString();
+        window.history.replaceState(
+          {},
+          '',
+          window.location.pathname + (restQuery ? `?${restQuery}` : ''),
+        );
+      }
+    } catch {
+      // A malformed ref must not stop the app from starting.
+    }
 
     try {
       const params = new URLSearchParams(window.location.search);

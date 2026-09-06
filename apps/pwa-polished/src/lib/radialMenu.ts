@@ -52,7 +52,7 @@ const RADIUS_NUDGE = 12;
  * Two constraints, whichever is larger: the buttons must not collide along their
  * arc, and the innermost pair must clear the line of text. The line wins at the
  * reader's default text size and above, which is what makes the ring grow with
- * the font; below it a full seven- or eight-button ring bottoms out on the arc
+ * the font; below it a full eight- or nine-button ring bottoms out on the arc
  * instead and stops shrinking, which is the behaviour the pills want anyway —
  * the hole stays wide enough to hold them at any text size.
  */
@@ -166,13 +166,14 @@ export interface RadialItemOpts {
 /**
  * The buttons, in sweep order, ready to be paired with seatAngles().
  *
- * The scope toggle trails, on the seat beside the right-hand gap. Search and
- * Save are deliberately absent — Search is a nav-bar button already, and Save
- * was never implemented. The classic toast still has both.
+ * The scope toggle trails, on the seat beside the right-hand gap. Search is
+ * deliberately absent — it is a nav-bar button already — and the classic toast
+ * still has it.
  *
  * Accents avoid stacking blues on top of each other: Notes owns the sticky
  * note's own baby blue, so Highlight takes the yellow it vacated, Define takes
  * the rose that dropping Search freed up, and Map moves off cyan to orange.
+ * Share sits beside Notes on a sky blue deep enough to read apart from it.
  */
 export function radialItems(o: RadialItemOpts): RadialItem[] {
   // Same rule as the classic toast: single-term lookups only make sense for one
@@ -199,6 +200,7 @@ export function radialItems(o: RadialItemOpts): RadialItem[] {
   }
   actions.push({ kind: 'action', id: 'highlight', label: 'Mark', icon: 'highlight', accent: '#fde047' });
   actions.push({ kind: 'action', id: 'notes', label: 'Notes', icon: 'notes', accent: '#d1e3f5' });
+  actions.push({ kind: 'action', id: 'share', label: 'Share', icon: 'share', accent: '#7dd3fc' });
   if (singleWord) {
     actions.push({ kind: 'action', id: 'repeats', label: 'Repeats', icon: 'repeats', accent: '#a78bfa' });
   }

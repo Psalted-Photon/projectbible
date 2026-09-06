@@ -94,8 +94,8 @@
       Highlight
     </button>
 
-    <button class="action-btn" on:click={() => handleAction('save')}>
-      Save
+    <button class="action-btn" on:click={() => handleAction('share')}>
+      Share
     </button>
 
     <button class="action-btn" on:click={() => handleAction('notes')}>
