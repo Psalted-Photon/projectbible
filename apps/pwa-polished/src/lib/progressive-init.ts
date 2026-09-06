@@ -40,6 +40,76 @@ function setProgressHandler(handler?: (progress: DownloadProgress) => void): voi
 }
 
 /**
+ * The text Hexapla ships with, rather than asks for.
+ *
+ * Served from the app's own origin (staged into public/ by
+ * scripts/ensure-starter-pack.mjs), so this is a plain fetch — no manifest, no
+ * PackLoader, no release round-trip.
+ */
+const STARTER_PACK_URL = '/starter.sqlite';
+
+/** The translation the starter carries, and the app's default. */
+const STARTER_TRANSLATION = 'NET';
+
+/**
+ * Whether the starter's translation is already readable on this device.
+ *
+ * Deliberately asks TextStore rather than looking for a pack row: an import
+ * writes its pack row *before* the verses and can be killed in between — a
+ * tab reclaimed under memory pressure, a webview hitting its quota — and a
+ * pack row with no verses behind it would read as "installed" forever.
+ * getTranslations() only counts a translation that actually has verses.
+ */
+async function hasStarterText(): Promise<boolean> {
+  try {
+    const { IndexedDBTextStore } = await import('../adapters/TextStore');
+    const installed = await new IndexedDBTextStore().getTranslations();
+    return installed.some((t) => t.id.toUpperCase() === STARTER_TRANSLATION);
+  } catch (error) {
+    // If the database cannot even be opened there is nothing to install into,
+    // and saying "already have it" is the answer that still reaches the reader.
+    console.warn('Could not check installed translations:', error);
+    return true;
+  }
+}
+
+/**
+ * Fetch and install the starter pack, unless this device already has NET.
+ *
+ * Gated on NET specifically, not on "any translation at all". A phone whose
+ * starter install failed and which then installed the English pack by hand
+ * would pass an any-translation check while still missing the one translation
+ * the app opens to by default.
+ *
+ * Never throws. An in-app browser that refuses IndexedDB, or runs out of quota
+ * partway, must still reach the reader — which shows its own message when there
+ * is nothing to read.
+ */
+async function ensureStarterText(
+  onProgress?: (message: string, percent: number) => void
+): Promise<void> {
+  try {
+    if (await hasStarterText()) return;
+
+    onProgress?.('Getting the text...', 60);
+
+    const response = await fetch(STARTER_PACK_URL);
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+
+    onProgress?.('Getting the text...', 80);
+    await importPackFromBytes(bytes, 'starter.sqlite');
+    onProgress?.('Getting the text...', 95);
+
+    console.log('Starter pack installed');
+  } catch (error) {
+    console.error('Starter pack install failed:', error);
+  }
+}
+
+/**
  * Initialize app with progressive loading
  */
 export async function initializeApp(
@@ -55,7 +125,6 @@ export async function initializeApp(
     // Step 2: In dev mode, we use bundled packs
     if (USE_BUNDLED_PACKS) {
       onProgress?.('Using bundled packs...', 50);
-      onProgress?.('Ready', 100);
     } else {
       // Production mode: preload manifest (non-blocking)
       onProgress?.('Checking pack manifest...', 50);
@@ -64,9 +133,15 @@ export async function initializeApp(
       } catch (error) {
         console.warn('Manifest fetch failed:', error);
       }
-      onProgress?.('Ready', 100);
     }
-    
+
+    // Step 3: make sure there is something to read. Last, so a device that
+    // already has text is not held up by a check it does not need, and so a
+    // failure here lands after everything else has already succeeded.
+    await ensureStarterText(onProgress);
+
+    onProgress?.('Ready', 100);
+
   } catch (error) {
     console.error('Initialization failed:', error);
     throw error;

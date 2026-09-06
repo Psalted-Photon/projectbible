@@ -53,3 +53,8 @@ apps/pwa-polished/public/packs/consolidated/encyclotopical.sqlite
 
 # TTS runtime WASM (copied from node_modules by vite copyTtsRuntime plugin)
 apps/pwa-polished/public/tts/
+
+# Starter pack staged into public/ by scripts/ensure-starter-pack.mjs on every
+# build. Committing it would put an LFS pointer in CI, which the origin would
+# then serve as a 130-byte file that looks like a valid download.
+apps/pwa-polished/public/starter.sqlite

@@ -43,18 +43,23 @@ export function formatShareRef(ref: ShareRef): string {
 }
 
 /**
- * A link that opens the reader on this verse.
+ * A link that opens the reader on this verse, in the translation it was read in.
  *
  * Built from the page's own origin *and* path rather than a baked-in domain,
  * because the same build is served from more than one host — and on a host that
  * serves the app from a subpath, dropping the path would point at the root.
  * The ref rides as a readable "Genesis 1:1" so the URL still says where it goes,
  * and parseRefString reads it back on the other end.
+ *
+ * The translation rides along because without it a link opens in whatever the
+ * *recipient* last read — so a verse sent in KJV would arrive as NET on a device
+ * that has only the starter pack. It is honoured only where it is installed.
  */
-export function buildShareUrl(ref: ShareRef): string {
+export function buildShareUrl(ref: ShareRef, translation?: string): string {
   if (typeof window === 'undefined') return '';
   const url = new URL(window.location.pathname, window.location.origin);
   url.searchParams.set('ref', formatShareRef(ref));
+  if (translation) url.searchParams.set('t', translation.toUpperCase());
   return url.toString();
 }
 
@@ -71,7 +76,7 @@ export function buildShareText(o: ShareTextOpts): string {
   const lines = [`"${passage}"`, '', `— ${formatShareRef(o.ref)}${tag}`];
 
   if (o.includeLink) {
-    const url = buildShareUrl(o.ref);
+    const url = buildShareUrl(o.ref, o.translation);
     if (url) lines.push('', url);
   }
 

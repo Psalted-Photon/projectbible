@@ -63,6 +63,61 @@
   // Initialize Eruda for mobile debugging
   onMount(() => {
     console.log("🚀 App mounted, initializing...");
+
+    /**
+     * Shared verse links: ?ref=Genesis 1:1&t=KJV, the tail of a link the Share
+     * sheet built.
+     *
+     * Awaited inside init() rather than run from the onMount body, because the
+     * translation can only be honoured after asking the database what is
+     * installed — and the answer has to arrive before appReady lets the reader
+     * render, or the verse becomes a jump instead of where it opened.
+     */
+    const openSharedLink = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const refParam = params.get('ref');
+      if (!refParam) return;
+
+      try {
+        const current = get(navigationStore);
+        const target = parseRefString(refParam, current.book, current.chapter);
+        if (target) {
+          // Honour the sender's translation only where the recipient has it.
+          // A cold device has the starter pack and nothing else, so a verse
+          // sent in KJV arrives in NET rather than as an empty chapter.
+          const wanted = params.get('t')?.toUpperCase();
+          let translation = current.translation;
+          if (wanted && wanted !== translation.toUpperCase()) {
+            const { IndexedDBTextStore } = await import('./adapters/TextStore');
+            const installed = await new IndexedDBTextStore().getTranslations();
+            if (installed.some((t) => t.id.toUpperCase() === wanted)) translation = wanted;
+          }
+
+          navigationStore.navigateToVerse(
+            translation,
+            target.book,
+            target.chapter,
+            target.verse,
+          );
+        }
+      } catch (error) {
+        // A malformed ref must not stop the app from starting.
+        console.warn('Could not open shared link:', error);
+      }
+
+      // Strip the params either way. Left in place they would drag the reader
+      // back here on every reload, including the auto-update reload.
+      const rest = new URLSearchParams(window.location.search);
+      rest.delete('ref');
+      rest.delete('t');
+      const restQuery = rest.toString();
+      window.history.replaceState(
+        {},
+        '',
+        window.location.pathname + (restQuery ? `?${restQuery}` : ''),
+      );
+    };
+
     const init = async () => {
       // Eruda stays on in production by choice -- it is how this app gets
       // debugged on a real phone. Do not gate it behind a flag.
@@ -79,6 +134,7 @@
         // main.ts runs before this and is therefore invisible on the phone.
         dumpPreviousInstallLog();
       }
+      await openSharedLink();
       appReady = true;
       console.log("✅ App ready (auto-update test build 2)");
     };
@@ -180,39 +236,6 @@
     // worker opened. A warm launch (app already running, notification tapped)
     // gets no navigation at all, so the service worker messages us instead.
     const openWakeAlarmStart = () => wakeAlarmStartOpen.set(true);
-
-    // ── Shared verse links ──────────────────────────────────────────────────
-    // ?ref=Genesis 1:1, the tail of a link the Share sheet built. The reader is
-    // gated behind appReady, which is only set after an await, so this lands
-    // while it is still unrendered — the verse is where it opens rather than
-    // somewhere it jumps to afterwards.
-    try {
-      const refParam = new URLSearchParams(window.location.search).get('ref');
-      if (refParam) {
-        const current = get(navigationStore);
-        const target = parseRefString(refParam, current.book, current.chapter);
-        if (target) {
-          navigationStore.navigateToVerse(
-            current.translation,
-            target.book,
-            target.chapter,
-            target.verse,
-          );
-        }
-        // Strip it either way. Left in place it would drag the reader back here
-        // on every reload, including the auto-update reload above.
-        const rest = new URLSearchParams(window.location.search);
-        rest.delete('ref');
-        const restQuery = rest.toString();
-        window.history.replaceState(
-          {},
-          '',
-          window.location.pathname + (restQuery ? `?${restQuery}` : ''),
-        );
-      }
-    } catch {
-      // A malformed ref must not stop the app from starting.
-    }
 
     try {
       const params = new URLSearchParams(window.location.search);

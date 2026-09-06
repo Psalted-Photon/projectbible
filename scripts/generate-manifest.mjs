@@ -31,7 +31,7 @@ const PACK_CONFIGS = {
     id: 'translations',
     type: 'translation',
     name: 'English Translations Pack',
-    description: 'KJV, WEB, BSB, NET, LXX2012 English translations',
+    description: 'KJV, WEB, BSB, LXX2012 English translations',
     dependencies: []
   },
   'ancient-languages.sqlite': {
@@ -68,14 +68,6 @@ const PACK_CONFIGS = {
     type: 'geonames',
     name: 'World Places (GeoNames)',
     description: 'Modern world geography: cities, states, countries. 172,000+ places worldwide. License: CC BY 4.0 — geonames.org',
-    dependencies: [],
-    sourceDir: 'packs'
-  },
-  'section-headings.sqlite': {
-    id: 'section-headings',
-    type: 'headings',
-    name: 'Section Headings',
-    description: 'Pericope titles for all 66 books — works with any installed translation',
     dependencies: [],
     sourceDir: 'packs'
   },

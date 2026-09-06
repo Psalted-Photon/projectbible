@@ -205,9 +205,9 @@
     {
       id: "translations",
       name: "English Translations",
-      description: "KJV, WEB, BSB, NET, LXX2012",
-      info: "Five complete English Bibles: the King James Version (1611), World English Bible, Berean Standard Bible, NET Bible, and LXX2012 — an English rendering of the Greek Septuagint.\n\nThis is the pack everything else builds on; without it there is nothing to read. Switch between the five from the translation picker in any reader window. All public domain or freely licensed.",
-      size: "34.55 MB",
+      description: "KJV, WEB, BSB, LXX2012",
+      info: "Four more English Bibles alongside the NET you already have: the King James Version (1611), World English Bible, Berean Standard Bible, and LXX2012 — an English rendering of the Greek Septuagint.\n\nSwitch between them from the translation picker in any reader window. All public domain or freely licensed.",
+      size: "28.21 MB",
       icon: "📖",
       url: `${BASE_URL}/translations.sqlite`,
     },
@@ -282,15 +282,6 @@
       size: "37.23 MB",
       icon: "🌍",
       url: `${BASE_URL}/geonames.sqlite`,
-    },
-    {
-      id: "section-headings",
-      name: "Section Headings",
-      description: "Pericope titles for all 66 books",
-      info: "The short headings that mark where one passage ends and the next begins — “The Beatitudes”, “Jesus Calms the Storm” — for all 66 books.\n\nThey render above the verse they introduce and work with whichever translation you are reading. Under a megabyte.",
-      size: "0.29 MB",
-      icon: "📑",
-      url: `${BASE_URL}/section-headings.sqlite`,
     },
     {
       id: "biblical-art",

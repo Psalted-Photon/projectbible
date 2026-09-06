@@ -248,6 +248,15 @@ export function getBookNames(): string[] {
   return BIBLE_BOOKS.map(b => b.name);
 }
 
+/**
+ * What the reader opens to, and the fallback wherever no translation is known.
+ *
+ * NET, because it is the one translation every copy of Hexapla has — it ships
+ * in the starter pack rather than being downloaded (scripts/build-starter-pack.mjs),
+ * so this can never name something the device does not have.
+ */
+export const DEFAULT_TRANSLATION = 'NET';
+
 // Display order for the translation dropdown: English first, then ancient languages.
 // Anything not listed here sorts to the end alphabetically.
 export const TRANSLATION_ORDER = [

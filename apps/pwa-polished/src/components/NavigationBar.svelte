@@ -9,7 +9,7 @@
     type CrumbKind,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { BIBLE_BOOKS, normalizeBookName, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import {
     searchService,
@@ -231,7 +231,7 @@
   $: isMinimal = !!windowId;
   // When windowId is set: use per-window contentState; never fall back to global nav
   $: currentTranslation = windowId
-    ? (windowState?.contentState?.translation ?? 'WEB')
+    ? (windowState?.contentState?.translation ?? DEFAULT_TRANSLATION)
     : $navigationStore.translation;
   $: currentBook = windowId
     ? (windowState?.contentState?.book ?? 'Genesis')

@@ -70,7 +70,7 @@
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVerseHtml, extractHeading, verseStructure } from "../lib/verseRendering";
-  import { BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { getSettings, getInterlinearSettings, getTtsSettings, getNavBarPinned } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
   import { ttsCurrentVerse } from "../stores/audioStore";
@@ -201,6 +201,8 @@
   }> = [];
   let loading = true;
   let error = "";
+  /** No Bible text on the device at all — see the empty state in the markup. */
+  let noTranslationsInstalled = false;
   let chronologicalData: any = null;
   let isLoadingNextChapter = false;
   let isLoadingPrevChapter = false;
@@ -930,7 +932,7 @@
     ? (windowState?.contentState?.chapter ?? 1)
     : $navigationStore.chapter;
   $: currentTranslation = windowId
-    ? (windowState?.contentState?.translation ?? 'WEB')
+    ? (windowState?.contentState?.translation ?? DEFAULT_TRANSLATION)
     : $navigationStore.translation;
   $: translationFontClass = getTranslationFontClass(currentTranslation);
   $: isInterlinearActive =
@@ -2371,6 +2373,9 @@
   async function loadAvailableTranslations() {
     try {
       const translations = await textStore.getTranslations();
+      // Drives the reader's empty state: an empty chapter means something very
+      // different when there is no Bible text on the device at all.
+      noTranslationsInstalled = translations.length === 0;
 
       if (translations.length > 0) {
         const translationIds = translations.map((t) => t.id);
@@ -2389,12 +2394,8 @@
         // NOTE: Auto-loading from /public is disabled
         // Users should install packs via the Packs pane (consolidated packs from GitHub Releases)
         
-        if (translations.length === 0) {
-          console.log("💡 No translations installed. Please use the Packs pane to install the 'English Translations' pack.");
-        }
       } else {
-        // No translations found
-        console.log("💡 No translations installed. Please use the Packs pane to install packs.");
+        console.log("💡 No translations installed — the starter pack did not land.");
       }
     } catch (err: unknown) {
       console.error("Error loading translations:", err);
@@ -5407,10 +5408,20 @@
       <div class="loading">Loading...</div>
     {:else if error}
       <div class="error">{error}</div>
-      <p class="error-hint">
-        To load Bible text, import a pack using the classic version at
-        <a href="/apps/pwa/" target="_blank">localhost:5173</a>
-      </p>
+    {:else if chapters.length === 0 && noTranslationsInstalled}
+      <!-- Nothing to read at all: the starter pack never landed. Most often
+           storage the browser would not give us — which is what happens in the
+           in-app browser inside Snapchat, Instagram or Facebook, where opening
+           the same link in the real browser works. -->
+      <div class="no-text">
+        <p class="no-text-title">Hexapla could not load its Bible text.</p>
+        <p class="no-text-body">
+          This usually means the browser blocked storage or ran out of room.
+          If you opened this link inside another app, try opening it in your
+          browser instead.
+        </p>
+        <button class="no-text-retry" on:click={() => location.reload()}>Try again</button>
+      </div>
     {:else if chapters.length === 0}
       <div class="no-content">No verses found for this chapter.</div>
     {:else}
@@ -6577,21 +6588,38 @@
     color: #ff6b6b;
   }
 
-  .error-hint {
+  .no-text {
     text-align: center;
+    padding: 48px 24px;
+    max-width: 34ch;
+    margin: 0 auto;
+  }
+
+  .no-text-title {
+    color: #ddd;
+    font-size: 1rem;
+    margin: 0 0 10px;
+  }
+
+  .no-text-body {
     color: #888;
-    font-size: 0.9rem;
-    margin-top: 10px;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    margin: 0 0 20px;
   }
 
-  .error-hint a {
-    color: #667eea;
-    text-decoration: none;
+  .no-text-retry {
+    padding: 9px 22px;
+    border-radius: 20px;
+    border: none;
+    background: #3b82f6;
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
   }
 
-  .error-hint a:hover {
-    text-decoration: underline;
-  }
+  .no-text-retry:hover { background: #2563eb; }
 
   /* Native momentum scrolling on iOS only — no scroll-behavior:smooth because CSS smooth
      overrides behavior:"auto" on programmatic scrolls, causing dozens of events during the

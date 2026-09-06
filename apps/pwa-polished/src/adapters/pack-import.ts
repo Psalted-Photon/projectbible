@@ -162,6 +162,66 @@ export async function importArtImageShard(
   }
 }
 
+/**
+ * Import a pack's section headings (pericope titles), if it carries any.
+ *
+ * Split out from the headings branch because headings no longer arrive only in
+ * a pack of their own — the starter pack carries them alongside its verses, and
+ * that pack imports as type 'text'. Whoever brings them, they land the same way.
+ *
+ * Note the clear: the store is replaced wholesale rather than merged, so exactly
+ * one installed pack should own headings at a time.
+ */
+async function importSectionHeadings(db: any): Promise<void> {
+  // Headings became per-translation; a pack built before that has no
+  // translation column and holds BSB's, which is what every translation
+  // used to show.
+  const headingColumns = (db.exec('PRAGMA table_info(section_headings)')[0]?.values ?? [])
+    .map((col: any) => String(col[1]));
+  if (headingColumns.length === 0) return;
+
+  const hasTranslation = headingColumns.includes('translation');
+
+  const rows = db.exec(
+    hasTranslation
+      ? 'SELECT translation, book, chapter, verse, heading, level FROM section_headings'
+      : "SELECT 'bsb' AS translation, book, chapter, verse, heading, level FROM section_headings"
+  );
+
+  if (!rows.length || !rows[0].values.length) return;
+
+  const entries = rows[0].values.map((row: any[]) => {
+    const [translation, book, chapter, verse, heading, level] = row;
+    return {
+      id: `${translation}:${book}:${chapter}:${verse}`,
+      translation: translation as string,
+      book: book as string,
+      chapter: chapter as number,
+      verse: verse as number,
+      heading: heading as string,
+      level: (level as number) ?? 1,
+    };
+  });
+
+  console.log(`Importing ${entries.length} section headings...`);
+
+  const idb = await openDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = idb.transaction('section_headings', 'readwrite');
+    const store = tx.objectStore('section_headings');
+    const clearReq = store.clear();
+    clearReq.onsuccess = () => {
+      for (const entry of entries) store.put(entry);
+    };
+    clearReq.onerror = () => reject(clearReq.error);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(new Error('section_headings transaction aborted'));
+  });
+
+  console.log(`✅ Section headings imported: ${entries.length} entries`);
+}
+
 export async function importPackFromBytes(
   bytes: Uint8Array,
   sourceName: string,
@@ -299,54 +359,7 @@ export async function importPackFromBytes(
 
     // Import pack-specific data based on type
     if (packInfo.type === 'headings') {
-      // Import section headings (pericope titles) from standalone headings pack
-      console.log('Importing section headings pack...');
-
-      // Headings became per-translation; a pack built before that has no
-      // translation column and holds BSB's, which is what every translation
-      // used to show.
-      const headingColumns = (db.exec('PRAGMA table_info(section_headings)')[0]?.values ?? [])
-        .map((col: any) => String(col[1]));
-      const hasTranslation = headingColumns.includes('translation');
-
-      const rows = db.exec(
-        hasTranslation
-          ? 'SELECT translation, book, chapter, verse, heading, level FROM section_headings'
-          : "SELECT 'bsb' AS translation, book, chapter, verse, heading, level FROM section_headings"
-      );
-
-      if (rows.length && rows[0].values.length) {
-        const entries = rows[0].values.map((row: any[]) => {
-          const [translation, book, chapter, verse, heading, level] = row;
-          return {
-            id: `${translation}:${book}:${chapter}:${verse}`,
-            translation: translation as string,
-            book: book as string,
-            chapter: chapter as number,
-            verse: verse as number,
-            heading: heading as string,
-            level: (level as number) ?? 1,
-          };
-        });
-
-        console.log(`Importing ${entries.length} section headings...`);
-
-        const idb = await openDB();
-        await new Promise<void>((resolve, reject) => {
-          const tx = idb.transaction('section_headings', 'readwrite');
-          const store = tx.objectStore('section_headings');
-          const clearReq = store.clear();
-          clearReq.onsuccess = () => {
-            for (const entry of entries) store.put(entry);
-          };
-          clearReq.onerror = () => reject(clearReq.error);
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-          tx.onabort = () => reject(new Error('section_headings transaction aborted'));
-        });
-
-        console.log(`✅ Section headings pack imported: ${entries.length} entries`);
-      }
+      await importSectionHeadings(db);
     } else if (packInfo.type === 'art') {
       // Import biblical-art scenes (famous paintings anchored to passages)
       console.log('Importing biblical art pack...');
@@ -645,6 +658,11 @@ export async function importPackFromBytes(
 
           console.log(`✅ Consolidated pack ${packInfo.id} imported: ${verses.length} verses`);
         }
+
+        // The starter pack carries its headings in the same file as its verses,
+        // so a text pack has to be asked for them too. A no-op for a pack
+        // without the table, which is every other translation pack.
+        await importSectionHeadings(db);
       } else if (hasEditions) {
         // Multi-edition pack (like greek.sqlite with LXX, Byzantine, TR, OpenGNT)
         console.log('Detected multi-edition pack, importing editions...');

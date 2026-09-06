@@ -9,7 +9,7 @@
  * - Future growth capacity
  * 
  * Creates 6 strategic bundles:
- * 1. translations.sqlite (~1.5GB) - All English translations
+ * 1. translations.sqlite (~1.5GB) - English translations (NET ships in the starter pack)
  * 2. ancient-languages.sqlite (~1.5GB) - Hebrew, Greek, LXX with morphology
  * 3. lexical.sqlite (~1.2GB) - Strong's + English lexical packs
  * 4. study-tools.sqlite (~300MB) - Maps, places, chronological, cross-refs
@@ -368,15 +368,19 @@ function mergeDatabases(sourcePacks, outputPath, packInfo) {
 }
 
 // Build 1: Translations Pack
+//
+// NET is deliberately absent. It ships in the starter pack that every copy of
+// Hexapla already has (scripts/build-starter-pack.mjs), so including it here
+// would download 31,102 verses a second time to overwrite themselves.
 mergeDatabases(
-  ['kjv.sqlite', 'web.sqlite', 'bsb.sqlite', 'net.sqlite', 'lxx2012-english.sqlite'],
+  ['kjv.sqlite', 'web.sqlite', 'bsb.sqlite', 'lxx2012-english.sqlite'],
   join(OUTPUT_DIR, 'translations.sqlite'),
   {
     id: 'translations',
     version: '1.0.0',
     type: 'translation',
     name: 'English Translations Pack',
-    description: 'KJV, WEB, BSB, NET, LXX2012 English translations'
+    description: 'KJV, WEB, BSB, LXX2012 English translations'
   }
 );
 

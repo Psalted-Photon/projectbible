@@ -4,6 +4,7 @@
   import { navigationStore } from "../stores/navigationStore";
   import { libraryPrefsStore, resumeTarget } from "../stores/libraryPrefsStore";
   import { localDateStr } from '../stores/clockStore';
+  import { DEFAULT_TRANSLATION } from "../lib/bibleData";
   import PanelIcon from "./icons/PanelIcon.svelte";
   import type { PanelIconName } from "./icons/PanelIcon.svelte";
 
@@ -34,7 +35,7 @@
 
     if (contentType === 'bible') {
       contentState = {
-        translation: 'WEB',
+        translation: DEFAULT_TRANSLATION,
         book: 'Genesis',
         chapter: 1,
       };

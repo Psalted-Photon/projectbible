@@ -1,5 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
-import { getBookChapters, normalizeBookName } from '../lib/bibleData';
+import { getBookChapters, normalizeBookName, DEFAULT_TRANSLATION } from '../lib/bibleData';
 
 export interface NavigationState {
   translation: string;
@@ -25,14 +25,17 @@ export interface NavigationState {
   readingPlanActiveTarget?: { book: string; chapter: number; verse: number | null; consecutiveDay: boolean; at: number } | null;
 }
 
-// Available translations (will be populated from packs later)
-export const availableTranslations = writable<string[]>(['WEB', 'KJV']);
+// Available translations. Seeded with the one the app ships with, and replaced
+// by the real list once BibleReader has asked the database what is installed.
+// It used to seed WEB and KJV, neither of which a new device had — which is why
+// the picker listed two translations that were not there.
+export const availableTranslations = writable<string[]>([DEFAULT_TRANSLATION]);
 
 const NAV_STORAGE_KEY = 'projectbible_nav';
 
 // Default used only on first ever launch per device
 const initialState: NavigationState = {
-  translation: 'WEB',
+  translation: DEFAULT_TRANSLATION,
   book: 'John',
   chapter: 1,
   highlightedVerse: null,
