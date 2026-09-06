@@ -25,9 +25,9 @@
   export let onSelect: (work: WorkKey) => void;
 
   const TABS: { key: WorkKey; label: string }[] = [
-    { key: "dictionary", label: "Dictionary" },
-    { key: "topical", label: "Topical" },
     { key: "encyclopedia", label: "Encyclopedia" },
+    { key: "topical", label: "Topical" },
+    { key: "dictionary", label: "Dictionary" },
     { key: "people", label: "People" },
   ];
 

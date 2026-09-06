@@ -2542,7 +2542,7 @@
   }
   .icon-badge-refs        { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #000000 100%); }
   .icon-badge-comm        { background: radial-gradient(circle, #a3e635 0%, #a3e635 20%, #000000 100%); }
-  .icon-badge-wordstudy   { background: radial-gradient(circle, #c084fc 0%, #c084fc 20%, #000000 100%); }
+  .icon-badge-wordstudy   { background: radial-gradient(circle, #a67c52 0%, #a67c52 20%, #000000 100%); }
   .icon-badge-search      { background: radial-gradient(circle, #fb7185 0%, #fb7185 20%, #000000 100%); }
   .icon-badge-powersearch { background: radial-gradient(circle, #f97316 0%, #f97316 20%, #000000 100%); }
   .icon-badge-readingplan { background: radial-gradient(circle, #60a5fa 0%, #60a5fa 20%, #000000 100%); }
