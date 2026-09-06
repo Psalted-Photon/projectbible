@@ -4,6 +4,7 @@
   import { syncedUserDataStore } from '../adapters/SyncedUserDataStore';
   import { getEditorTheme } from '../adapters/settings';
   import { editorThemeVars } from '../lib/editorTheme';
+  import { fixedOrigin } from '../lib/fixedOrigin';
 
   export let book: string;
   export let chapter: number;
@@ -27,16 +28,26 @@
   const MIN_W = 200;
   const MIN_H = 150;
 
+  /** How much of the note must stay on screen, so it can always be grabbed back. */
+  const KEEP_VISIBLE = 60;
+
+  let popupEl: HTMLDivElement;
+
   // Save state
   let currentNoteId: string | null = noteId;
   let currentContent = initialContent;
   let isDirty = false;
   let isSaving = false;
   let saveTimeout: number | null = null;
-  // Interaction state
-  type InteractMode = 'move' | 'resize-n' | 'resize-s' | 'resize-e' | 'resize-w' | null;
-  let interactMode: InteractMode = null;
-  let activeEdge: string | null = null;
+  // Interaction state.
+  //
+  // An edge is one letter, a corner is two — 'nw' both moves the top edge and
+  // the left edge — so one set of branches in onPointerMove covers both by
+  // asking whether the handle name contains each letter.
+  type Handle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
+  let interactMode: 'move' | 'resize' | null = null;
+  let activeHandle: Handle | null = null;
+  let gestureBounds: { width: number; height: number } | null = null;
   let pointerStartX = 0;
   let pointerStartY = 0;
   let startLeft = 0;
@@ -68,8 +79,13 @@
     window.addEventListener('editorSurfaceUpdated', refreshNoteTheme);
     window.addEventListener('settingsUpdated', refreshNoteTheme);
 
-    // Reset dirty flag after LexicalEditor initial content load settles
+    // A note saved off-screen — or saved on a wider screen, or before the phone
+    // was rotated — would otherwise open somewhere the user cannot reach it.
+    window.addEventListener('resize', clampIntoView);
     await tick();
+    clampIntoView();
+
+    // Reset dirty flag after LexicalEditor initial content load settles
     setTimeout(() => { isDirty = false; }, 150);
   });
 
@@ -78,6 +94,7 @@
     removeWindowListeners();
     window.removeEventListener('editorSurfaceUpdated', refreshNoteTheme);
     window.removeEventListener('settingsUpdated', refreshNoteTheme);
+    window.removeEventListener('resize', clampIntoView);
   });
 
   // ---- Auto-save logic ----
@@ -143,73 +160,130 @@
 
   function handleClose() {
     if (isDirty) saveNote();
+    // Also persist here: the mount clamp and a rotation can move the note
+    // without any pointerup to save it.
+    savePosition();
     dispatch('close');
   }
 
-  // ---- Drag-move (3 corners: top-left, bottom-left, bottom-right) ----
+  // ---- Geometry ----
 
-  function startMove(e: PointerEvent) {
-    e.preventDefault();
-    interactMode = 'move';
-    pointerStartX = e.clientX;
-    pointerStartY = e.clientY;
-    startLeft = left;
-    startTop = top;
-    addWindowListeners();
+  /**
+   * The box this note is laid out against — usually the viewport, but not when a
+   * filter on `.themed` makes an ancestor the containing block. See
+   * lib/fixedOrigin.ts. Only the size matters here: `left`/`top` are already
+   * expressed relative to this box, so no offset has to be subtracted.
+   */
+  function bounds(): { width: number; height: number } {
+    // Measured once per gesture: fixedOrigin walks ancestors reading computed
+    // styles, which is not something to do on every pointermove.
+    if (gestureBounds) return gestureBounds;
+    const origin = fixedOrigin(popupEl);
+    return { width: origin.width, height: origin.height };
   }
 
-  // ---- Resize (4 edges) ----
+  /**
+   * Keeps the note grabbable. The header is the only way to move it, so the top
+   * never goes negative, and a sliver of the note always stays inside each other
+   * edge — otherwise a note flicked off the screen is saved off the screen and
+   * is gone for good the next time that verse is opened.
+   */
+  function clampIntoView() {
+    const { width, height } = bounds();
+    w = Math.min(w, Math.max(MIN_W, width));
+    h = Math.min(h, Math.max(MIN_H, height));
+    left = Math.min(Math.max(left, KEEP_VISIBLE - w), Math.max(0, width - KEEP_VISIBLE));
+    top = Math.min(Math.max(top, 0), Math.max(0, height - KEEP_VISIBLE));
+  }
 
-  function startResize(e: PointerEvent, edge: 'n' | 's' | 'e' | 'w') {
+  // ---- Drag-move (header bar) ----
+
+  function startMove(e: PointerEvent) {
+    beginInteraction(e);
+    interactMode = 'move';
+  }
+
+  // ---- Resize (4 edges + 4 corners) ----
+
+  function startResize(e: PointerEvent, handle: Handle) {
+    beginInteraction(e);
+    interactMode = 'resize';
+    activeHandle = handle;
+  }
+
+  function beginInteraction(e: PointerEvent) {
     e.preventDefault();
-    interactMode = `resize-${edge}` as InteractMode;
-    activeEdge = edge;
+    const origin = fixedOrigin(popupEl);
+    gestureBounds = { width: origin.width, height: origin.height };
     pointerStartX = e.clientX;
     pointerStartY = e.clientY;
     startLeft = left;
     startTop = top;
     startW = w;
     startH = h;
+    // Capture keeps the gesture alive when the pointer outruns the handle, which
+    // it always does on a small target.
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* capture is a nicety — the window listeners below still work */
+    }
     addWindowListeners();
   }
 
   function addWindowListeners() {
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
   }
 
   function removeWindowListeners() {
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerUp);
   }
 
   function onPointerMove(e: PointerEvent) {
+    if (!interactMode) return;
     const dx = e.clientX - pointerStartX;
     const dy = e.clientY - pointerStartY;
 
     if (interactMode === 'move') {
       left = startLeft + dx;
       top = startTop + dy;
-    } else if (interactMode === 'resize-n') {
-      const newH = Math.max(MIN_H, startH - dy);
-      top = startTop + (startH - newH);
-      h = newH;
-    } else if (interactMode === 'resize-s') {
-      h = Math.max(MIN_H, startH + dy);
-    } else if (interactMode === 'resize-e') {
-      w = Math.max(MIN_W, startW + dx);
-    } else if (interactMode === 'resize-w') {
-      const newW = Math.max(MIN_W, startW - dx);
-      left = startLeft + (startW - newW);
-      w = newW;
+    } else if (activeHandle) {
+      const { width, height } = bounds();
+      // Each letter in the handle name is one edge that moves. A corner has two,
+      // so both axes change in a single gesture.
+      if (activeHandle.includes('n')) {
+        const newH = Math.min(Math.max(MIN_H, startH - dy), startTop + startH);
+        top = startTop + (startH - newH);
+        h = newH;
+      } else if (activeHandle.includes('s')) {
+        h = Math.min(Math.max(MIN_H, startH + dy), Math.max(MIN_H, height - startTop));
+      }
+      if (activeHandle.includes('w')) {
+        const newW = Math.min(Math.max(MIN_W, startW - dx), startLeft + startW);
+        left = startLeft + (startW - newW);
+        w = newW;
+      } else if (activeHandle.includes('e')) {
+        w = Math.min(Math.max(MIN_W, startW + dx), Math.max(MIN_W, width - startLeft));
+      }
     }
+
+    clampIntoView();
   }
 
   function onPointerUp() {
+    if (!interactMode) return;
     interactMode = null;
-    activeEdge = null;
+    activeHandle = null;
+    gestureBounds = null;
     removeWindowListeners();
-    // Persist position & size to localStorage
+    savePosition();
+  }
+
+  function savePosition() {
     try {
       localStorage.setItem(posKey, JSON.stringify({ x: left, y: top, w, h }));
     } catch { /* quota exceeded or private mode — ignore */ }
@@ -217,76 +291,54 @@
 </script>
 
 <div
+  bind:this={popupEl}
   class="note-popup"
   class:interacting={interactMode !== null}
   style="left:{left}px; top:{top}px; width:{w}px; height:{h}px; {noteTheme}"
 >
-  <!-- Edge resize strips (8px, inside the border) -->
-  <div
-    class="edge edge-n"
-    class:active={activeEdge === 'n'}
-    role="separator"
-    aria-label="Resize top"
-    on:pointerdown={(e) => startResize(e, 'n')}
-  ></div>
-  <div
-    class="edge edge-s"
-    class:active={activeEdge === 's'}
-    role="separator"
-    aria-label="Resize bottom"
-    on:pointerdown={(e) => startResize(e, 's')}
-  ></div>
-  <div
-    class="edge edge-e"
-    class:active={activeEdge === 'e'}
-    role="separator"
-    aria-label="Resize right"
-    on:pointerdown={(e) => startResize(e, 'e')}
-  ></div>
-  <div
-    class="edge edge-w"
-    class:active={activeEdge === 'w'}
-    role="separator"
-    aria-label="Resize left"
-    on:pointerdown={(e) => startResize(e, 'w')}
-  ></div>
+  <!-- Resize handles: four edges for one axis, four corners for both at once.
+       All of them are wider than they look, so a finger can land on them. -->
+  {#each ['n', 's', 'e', 'w'] as edge}
+    <div
+      class="edge edge-{edge}"
+      class:active={activeHandle === edge}
+      role="separator"
+      aria-label="Resize note"
+      on:pointerdown={(e) => startResize(e, edge as Handle)}
+    ></div>
+  {/each}
 
-  <!-- Corner drag handles (top-left, bottom-left, bottom-right → move entire note) -->
-  <div
-    class="corner corner-tl"
-    role="button"
-    tabindex="0"
-    aria-label="Drag to move note"
-    title="Drag to move"
-    on:pointerdown={startMove}
-    on:keydown={(e) => e.key === ' ' && e.preventDefault()}
-  ></div>
-  <div
-    class="corner corner-bl"
-    role="button"
-    tabindex="0"
-    aria-label="Drag to move note"
-    title="Drag to move"
-    on:pointerdown={startMove}
-    on:keydown={(e) => e.key === ' ' && e.preventDefault()}
-  ></div>
-  <div
-    class="corner corner-br"
-    role="button"
-    tabindex="0"
-    aria-label="Drag to move note"
-    title="Drag to move"
-    on:pointerdown={startMove}
-    on:keydown={(e) => e.key === ' ' && e.preventDefault()}
-  ></div>
+  <!-- No 'ne' corner: the close button owns the top-right, and a handle under
+       it would only ever cause an accidental close. The n and e edges cover
+       that side. -->
+  {#each ['nw', 'sw', 'se'] as corner}
+    <div
+      class="corner corner-{corner}"
+      class:active={activeHandle === corner}
+      role="separator"
+      aria-label="Resize note"
+      title="Drag to resize"
+      on:pointerdown={(e) => startResize(e, corner as Handle)}
+    ></div>
+  {/each}
 
   <!-- Top-right: close button only -->
   <button class="close-btn" on:click={handleClose} aria-label="Close note" title="Close">
     ✕
   </button>
 
-  <!-- Header bar -->
-  <div class="note-header" aria-label="Note header">
+  <!-- Header bar doubles as the drag handle — the obvious place to grab a
+       window is its title bar, and it is the one target big enough for a
+       thumb. No role here, matching Window.svelte's title bar, so the label
+       and status inside keep their own semantics. -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="note-header"
+    class:dragging={interactMode === 'move'}
+    title="Drag to move"
+    on:pointerdown={startMove}
+  >
+    <span class="drag-grip" aria-hidden="true"></span>
     <span class="note-label">{label}</span>
     {#if isSaving}
       <span class="save-status">Saving...</span>
@@ -299,6 +351,7 @@
   <div class="note-content">
     <RefAwareEditor
       bind:isDirty
+      autofocus
       surface="notes"
       surfaceLabel="Notes"
       value={initialContent}
@@ -322,57 +375,81 @@
     user-select: none;
   }
 
-  /* ── Edge resize strips ─────────────────────────────────── */
-  .edge {
-    position: absolute;
-    z-index: 10;
-    background: transparent;
-    transition: background 0.15s;
-  }
+  /* ── Resize handles ─────────────────────────────────────────
+     Sized for a fingertip, not a mouse cursor. The old 8px strips and 20px
+     corners were nearly impossible to hit on a phone, so these are 16px and
+     30px and hang a few px outside the frame — enough to grab, little enough
+     that the dead zone over the text behind the note stays small.
 
-  .edge:hover,
-  .edge.active {
-    background: rgba(102, 126, 234, 0.35);
-  }
-
-  /* Spans between corners (leave 20px on each end for corners) */
-  .edge-n { top: 0;    left: 20px;  right: 20px; height: 8px; cursor: ns-resize; }
-  .edge-s { bottom: 0; left: 20px;  right: 20px; height: 8px; cursor: ns-resize; }
-  .edge-e { top: 20px; right: 0;    bottom: 20px; width: 8px; cursor: ew-resize; }
-  .edge-w { top: 20px; left: 0;     bottom: 20px; width: 8px; cursor: ew-resize; }
-
-  /* ── Corner drag handles ────────────────────────────────── */
+     touch-action is the important part: preventDefault on pointerdown does
+     NOT stop a touch from scrolling the chapter underneath, only this does. */
+  .edge,
   .corner {
     position: absolute;
-    width: 20px;
-    height: 20px;
-    z-index: 11;
-    cursor: move;
     background: transparent;
+    touch-action: none;
     transition: background 0.15s;
   }
 
-  .corner:hover {
-    background: rgba(102, 126, 234, 0.25);
+  .edge { z-index: 10; }
+  .corner { z-index: 11; width: 30px; height: 30px; }
+
+  .edge:hover,
+  .edge.active,
+  .corner:hover,
+  .corner.active {
+    background: rgba(102, 126, 234, 0.3);
   }
 
-  .corner-tl { top: 0;    left: 0;  border-radius: 4px 0 0 0; }
-  .corner-bl { bottom: 0; left: 0;  border-radius: 0 0 0 4px; }
-  .corner-br { bottom: 0; right: 0; border-radius: 0 0 4px 0; }
+  /* Ends stop short of the corners so the two never fight over a pointer. */
+  .edge-n { top: -5px;    left: 26px;  right: 26px;  height: 16px; cursor: ns-resize; }
+  .edge-s { bottom: -5px; left: 26px;  right: 26px;  height: 16px; cursor: ns-resize; }
+  .edge-e { right: -5px;  top: 26px;   bottom: 26px; width: 16px;  cursor: ew-resize; }
+  .edge-w { left: -5px;   top: 26px;   bottom: 26px; width: 16px;  cursor: ew-resize; }
+
+  .corner-nw { top: -5px;    left: -5px;  cursor: nwse-resize; border-radius: 4px 0 0 0; }
+  .corner-sw { bottom: -5px; left: -5px;  cursor: nesw-resize; border-radius: 0 0 0 4px; }
+  .corner-se { bottom: -5px; right: -5px; cursor: nwse-resize; border-radius: 0 0 4px 0; }
+
+  /* The classic diagonal grip, so at least one corner announces itself. Drawn
+     on the handle rather than the frame so it moves with it. */
+  .corner-se::after {
+    content: '';
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    width: 9px;
+    height: 9px;
+    opacity: 0.55;
+    background:
+      linear-gradient(
+        135deg,
+        transparent 0 45%,
+        var(--placeholder-color, #5b8db8) 45% 60%,
+        transparent 60% 100%
+      ),
+      linear-gradient(
+        135deg,
+        transparent 0 70%,
+        var(--placeholder-color, #5b8db8) 70% 85%,
+        transparent 85% 100%
+      );
+  }
 
   /* ── Close button (top-right corner exclusively) ────────── */
   .close-btn {
     position: absolute;
     top: 0;
     right: 0;
-    width: 28px;
-    height: 28px;
+    width: 34px;
+    height: 34px;
     z-index: 12;
     background: transparent;
     border: none;
     color: #c0392b;
     font-size: 13px;
     cursor: pointer;
+    touch-action: manipulation;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -396,13 +473,42 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    /* left: clears corner handle; right: clears close button */
-    padding: 4px 32px 4px 24px;
+    /* left: clears the nw resize corner, so the grip dots are grabbable and do
+       not resize instead of moving; right: clears the close button */
+    padding: 4px 38px 4px 28px;
     background: var(--toolbar-bg, #d1e3f5);
     border-bottom: 1px solid var(--border-color, #bed5eb);
     flex-shrink: 0;
-    min-height: 28px;
+    /* Tall enough to be a thumb-sized drag target rather than a label. */
+    min-height: 34px;
     border-radius: 4px 4px 0 0;
+    cursor: grab;
+    /* Without this a finger drag scrolls the chapter instead of moving the
+       note. Same reason as Window.svelte's title bar. */
+    touch-action: none;
+  }
+
+  .note-header:focus {
+    outline: none;
+  }
+
+  .note-header.dragging {
+    cursor: grabbing;
+  }
+
+  /* Grip dots: two columns of three, the standard "this drags" mark. */
+  .drag-grip {
+    flex-shrink: 0;
+    width: 7px;
+    height: 15px;
+    opacity: 0.5;
+    background-image: radial-gradient(
+      circle,
+      var(--text-color, #2c5282) 1px,
+      transparent 1.2px
+    );
+    background-size: 4px 5px;
+    background-position: 0 0;
   }
 
   .note-label {

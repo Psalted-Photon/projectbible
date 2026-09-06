@@ -31,6 +31,15 @@
   export let surface: EditorSurface | null = null;
   /** Human name for the surface, used in the theme panel's heading. */
   export let surfaceLabel: string = '';
+  /**
+   * Put the caret in the editor as soon as it is ready, so a surface that opens
+   * for the sole purpose of writing (a verse sticky note) can be typed into
+   * without tapping it first.
+   *
+   * Focus has to happen here rather than in the host: Lexical is loaded by
+   * dynamic import, so the editor does not exist yet when the host mounts.
+   */
+  export let autofocus: boolean = false;
 
   const dispatch = createEventDispatcher();
 
@@ -359,6 +368,12 @@
           });
         })
       );
+
+      // Caret in, after the initial content is in place so 'rootEnd' lands
+      // past existing text rather than in an empty document.
+      if (autofocus) {
+        editor.focus(undefined, { defaultSelection: 'rootEnd' });
+      }
 
       // Expose commands for toolbar buttons
       (editor as any).__lexCmd = {

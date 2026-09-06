@@ -21,6 +21,8 @@
   /** Which writing surface this is — see LexicalEditor. */
   export let surface: EditorSurface | null = null;
   export let surfaceLabel: string = '';
+  /** Put the caret in as soon as the editor is ready — see LexicalEditor. */
+  export let autofocus: boolean = false;
 
   const textStore = new IndexedDBTextStore();
 
@@ -124,6 +126,7 @@
   {placeholder}
   {surface}
   {surfaceLabel}
+  {autofocus}
   on:change
   on:blur
   on:refClick={handleRefClick}
