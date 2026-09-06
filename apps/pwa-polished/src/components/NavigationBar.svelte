@@ -2547,7 +2547,7 @@
   .icon-badge-powersearch { background: radial-gradient(circle, #f97316 0%, #f97316 20%, #000000 100%); }
   .icon-badge-readingplan { background: radial-gradient(circle, #60a5fa 0%, #60a5fa 20%, #000000 100%); }
   .icon-badge-votd        { background: radial-gradient(circle, #fde047 0%, #fde047 20%, #000000 100%); }
-  .icon-badge-settings    { background: radial-gradient(circle, #7dd3fc 0%, #7dd3fc 20%, #000000 100%); }
+  .icon-badge-settings    { background: radial-gradient(circle, #c0c0c0 0%, #c0c0c0 20%, #000000 100%); }
   .icon-badge-profile     { background: radial-gradient(circle, #d1d5db 0%, #d1d5db 20%, #000000 100%); }
   .pill-refs:has(input:checked) .icon-badge-refs { background: radial-gradient(circle, #a78bfa 0%, #a78bfa 20%, #000000 100%); }
   .pill-profile.signed-in .icon-badge-profile    { background: radial-gradient(circle, #86efac 0%, #86efac 20%, #000000 100%); }
