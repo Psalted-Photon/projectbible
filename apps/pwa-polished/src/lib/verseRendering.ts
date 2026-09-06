@@ -16,45 +16,60 @@ function stripHtmlTags(text: string): string {
   return (text ?? '').replace(/<[^>]*>/g, '');
 }
 
-function isCrossReference(noteText: string): boolean {
-  const trimmed = noteText.trim();
-  
-  const footnoteStarters = [
-    /^Or\b/i,
-    /^Lit\b/i,
-    /^I\.e\./i,
-    /^That is/i,
-    /^Some manuscripts/i,
-    /^Gr\./i,
-    /^Gk\./i,
-    /^Heb\./i,
-    /^Aram\./i,
-    /^Lat\./i
-  ];
-  
-  for (const pattern of footnoteStarters) {
-    if (pattern.test(trimmed)) return false;
-  }
-  
-  return /\b\d+:\d+\b/.test(trimmed);
-}
-
 /** Poetic line / stanza markers written by the pack builders. */
 const STANZA = '\x10';
 const LINE_1 = '\x11';
 const LINE_2 = '\x12';
 
 /**
+ * Note sentinels, written by the pack builders -- the definitive list lives in
+ * packages/packtools/src/parsers/usfm-scanner.mjs.
+ *
+ * Which terminator closes a note says what kind of note it is. That used to be
+ * guessed back out of the prose here, and the guess was wrong often enough to
+ * see: 387 BSB footnotes opening "Literally ..." were styled as
+ * cross-references because the test for "Lit" would not match "Literally".
+ */
+const NOTE_END = '\x01';      // ends a footnote
+const XREF_END = '\x14';      // ends a cross-reference
+const PARALLEL_END = '\x15';  // ends a list of parallel passages
+const ANCHOR_SEP = '\x16';    // splits a note's own verse ref from what it says
+const REF_OPEN = '\x17';      // a reference the source resolved for us:
+const REF_SEP = '\x18';       //   REF_OPEN osis REF_SEP display REF_CLOSE
+const REF_CLOSE = '\x19';
+const NOTE_I_OPEN = '\x1A';   // italics inside a note
+const NOTE_I_CLOSE = '\x1B';
+
+const NOTE_ENDERS = NOTE_END + XREF_END + PARALLEL_END;
+
+/** Sentinels that only ever appear inside a note, for cleanup passes. */
+const NOTE_SENTINELS = new RegExp(
+  '[' + NOTE_ENDERS + ANCHOR_SEP + REF_OPEN + REF_SEP + REF_CLOSE + NOTE_I_OPEN + NOTE_I_CLOSE + ']',
+  'g',
+);
+
+export type NoteKind = 'footnote' | 'crossref' | 'parallel';
+
+function noteKindFor(terminator: string): NoteKind {
+  if (terminator === XREF_END) return 'crossref';
+  if (terminator === PARALLEL_END) return 'parallel';
+  return 'footnote';
+}
+
+/**
  * Given the position just after a "+" note marker (with whitespace and any
  * chapter:verse marker already skipped), find where the note's content ends.
  *
- * The pack builders terminate every note with a \x01 sentinel, so the boundary
- * is read, never guessed. Returns -1 when there is no terminator: the caller
- * then treats the "+" as ordinary text rather than inventing an end, which is
- * what used to swallow scripture in packs built before the sentinel existed.
+ * The pack builders terminate every note with a sentinel, so the boundary is
+ * read, never guessed. Returns -1 when there is no terminator: the caller then
+ * treats the "+" as ordinary text rather than inventing an end, which is what
+ * used to swallow scripture in packs built before the sentinel existed.
  */
 function findNoteEnd(source: string, j: number): number {
-  return source.indexOf('\x01', j);
+  for (let p = j; p < source.length; p++) {
+    if (NOTE_ENDERS.includes(source[p])) return p;
+  }
+  return -1;
 }
 
 /**
@@ -65,7 +80,7 @@ function findNoteEnd(source: string, j: number): number {
 function isNoteStart(source: string, idx: number): boolean {
   if (source[idx] !== '+') return false;
   let p = idx - 1;
-  while (p >= 0 && /[\x01-\x07\x0E\x0F\x10-\x12]/.test(source[p])) p--;
+  while (p >= 0 && /[\x01-\x07\x0E\x0F\x10-\x12\x14-\x1B]/.test(source[p])) p--;
   if (p < 0) return true;
   const prev = source[p];
   return prev === ' ' || prev === '\n' || prev === '\t';
@@ -106,32 +121,38 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
 
     // Emit text before note
     out += escapeHtml(source.slice(i, plusPos));
+    const kind = noteKindFor(source[noteEnd]);
 
-    // Optional leading chapter:verse marker (e.g. 53:1)
-    const markerMatch = source.slice(j).match(/^(\d+):(\d+)\s*/);
-    if (markerMatch) {
-      j += markerMatch[0].length;
+    // Structural markers never belong in a note's data attribute — leaving one
+    // there would let a later marker→markup pass rewrite the inside of it.
+    let body = source.slice(j, noteEnd).replace(/[\x10-\x13]/g, '');
+
+    // The note's own verse reference. Packs built since the separator exists
+    // keep it apart from what the note says; older ones have it at the head of
+    // the body in whichever form the source wrote it — "53:1", KJV's "1.4", or
+    // a range.
+    let anchor = '';
+    const sep = body.indexOf(ANCHOR_SEP);
+    if (sep !== -1) {
+      anchor = body.slice(0, sep).trim();
+      body = body.slice(sep + 1);
+    } else {
+      const legacy = body.match(/^(\d+[:.]\d+(?:[-–]\d+)?)\s*/);
+      if (legacy) {
+        anchor = legacy[1];
+        body = body.slice(legacy[0].length);
+      }
     }
+    body = body.trim();
 
-    const noteStart = j;
-    // Structural markers never belong in a note's tooltip or data attribute —
-    // and leaving one there would let a later marker→markup pass rewrite the
-    // inside of an attribute.
-    const rawNote = source.slice(noteStart, noteEnd).replace(/[\x10-\x13]/g, '').trim();
-    if (rawNote.length > 0) {
+    if (body.length > 0) {
       noteIndex++;
-      const encoded = encodeURIComponent(rawNote);
-      const title = rawNote.length > 80 ? rawNote.slice(0, 77) + '…' : rawNote;
-      const encodedTitle = escapeHtml(title);
-      
-      const isXref = isCrossReference(rawNote);
-      const noteColor = isXref ? '#ccc' : '#6699ff';
-      const noteType = isXref ? 'Cross-reference' : 'Footnote';
-      
-      out += `<sup class="inline-note ${isXref ? 'inline-xref' : 'inline-footnote'}" ` +
-        `data-note="${encoded}" data-note-index="${noteIndex}" ` +
-        `style="color:${noteColor}; cursor:pointer; font-size:11px; margin:0 2px;" ` +
-        `title="${noteType} ${noteIndex}: ${encodedTitle}">[${noteIndex}]</sup>`;
+      // No title attribute: that was the browser's own tooltip, which the
+      // footnote card replaces. Colour lives in the stylesheet, not here.
+      const anchorAttr = anchor ? ` data-note-ref="${escapeHtml(anchor)}"` : '';
+      out += `<sup class="inline-note ${kind === 'footnote' ? 'inline-footnote' : 'inline-xref'}" ` +
+        `data-note="${encodeURIComponent(body)}" data-note-index="${noteIndex}" ` +
+        `data-note-kind="${kind}"${anchorAttr}>[${noteIndex}]</sup>`;
     }
     // A note with no content after its reference has nothing to show, so it is
     // dropped outright — the same thing the preview and speech paths do.
@@ -164,7 +185,7 @@ function buildCleanToStoredMap(storedText: string): number[] {
       continue;
     }
     if (isNoteStart(storedText, i)) {
-      const end = storedText.indexOf('\x01', i + 1);
+      const end = findNoteEnd(storedText, i + 1);
       if (end >= 0) {
         i = end + 1; // skip footnote content entirely
         continue;
@@ -381,7 +402,7 @@ export function renderVersePreviewHtml(
   for (const { pos, ch } of insertions) work = work.slice(0, pos) + ch + work.slice(pos);
 
   work = dropInlineNotes(work)
-    .replace(/\x01/g, '')
+    .replace(NOTE_SENTINELS, '')
     .replace(/[\x10\x11\x12]/g, ' ')
     .replace(/[¶⌃]/g, '')
     .replace(/[ \t\n]+/g, ' ')
@@ -419,7 +440,7 @@ export function renderVersePreviewHtml(
 /** Preview text with no markup at all — for surfaces that render plain text. */
 export function cleanVersePreviewText(text: string): string {
   return dropInlineNotes(stripHtmlTags(text ?? ''))
-    .replace(/\x01/g, '')
+    .replace(NOTE_SENTINELS, '')
     .replace(/[\x10\x11\x12]/g, ' ')
     .replace(/[¶⌃]/g, '')
     .replace(/[ \t\n]+/g, ' ')
@@ -435,7 +456,7 @@ export function extractHeading(text: string): { heading: string | null; textWith
   // the old "+ Heading. " convention, which carries no terminator, is a heading.
   let lead = 0;
   while (lead < source.length && /[\s\x10\x11\x12]/.test(source[lead])) lead++;
-  if (source[lead] === '+' && source.indexOf('\x01', lead) !== -1) {
+  if (source[lead] === '+' && findNoteEnd(source, lead) !== -1) {
     return { heading: null, textWithoutHeading: source };
   }
 
@@ -496,7 +517,7 @@ export function extractSpeechText(text: string): string {
   }
 
   return out
-    .replace(/\x01/g, '')
+    .replace(NOTE_SENTINELS, '')
     .replace(/[\x10\x11\x12]/g, ' ')
     .replace(/[¶⌃]/g, '')
     .replace(/\s+/g, ' ')

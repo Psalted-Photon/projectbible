@@ -4,8 +4,9 @@
  * USFX is USFM expressed as XML, and eBible.org publishes WEB and KJV in it.
  * The markers are the same ones the USFM scanner reads, just spelled as
  * elements, so this produces the identical storage format: the same poetry and
- * paragraph sentinels, the same "+ note" runs closed by \x01, and the same
- * <b>/<i> spans.
+ * paragraph sentinels, the same "+ note" runs, and the same <b>/<i> spans.
+ * A note's terminator says which kind it is -- see the note sentinels in
+ * usfm-scanner.mjs.
  *
  *   <q style="q1">          a poetic line, level from the style or level attr
  *   <q level="2">           a second-level poetic line
@@ -23,9 +24,22 @@
 
 import fs from 'fs';
 import sax from 'sax';
-import { STANZA, LINE_1, LINE_2 } from './usfm-scanner.mjs';
+import {
+  STANZA, LINE_1, LINE_2,
+  NOTE_END, XREF_END, ANCHOR_SEP, REF_OPEN, REF_SEP, REF_CLOSE,
+  NOTE_I_OPEN, NOTE_I_CLOSE,
+} from './usfm-scanner.mjs';
 
-/** Elements whose text is dropped entirely -- titles, running heads, tables of contents. */
+/**
+ * Elements whose text is dropped entirely -- titles, running heads, tables of
+ * contents.
+ *
+ * <ref> is here for the ones in intro material, and the note branch runs
+ * before this so the ones inside a note survive. Skipping those cost WEB all
+ * 340 of its cross-references: they are built entirely out of <ref>, so
+ * dropping it left each note as a bare verse number that the empty-note guard
+ * below then deleted.
+ */
 const SKIP_ELEMENTS = new Set([
   'id', 'ide', 'h', 'toc', 'cl', 'rem', 'sts', 'restore', 'periph',
   'fig', 'ref', 'cp', 'ca', 'va', 'vp', 'milestone',
@@ -72,7 +86,10 @@ export function parseUSFX(filePath) {
   let smallCaps = 0;
   let skipDepth = 0;      // inside an element whose text is dropped
   let noteDepth = 0;      // inside <f>/<x>
+  let noteKind = 'f';     // which of the two opened it
   let noteText = '';
+  let noteAnchor = '';    // <fr>/<xo>, the note's own verse reference
+  let noteField = 'body'; // which of the two the text is flowing into
   let headingDepth = 0;   // inside <s>
   let headingText = '';
   let headingLevel = 1;
@@ -100,7 +117,7 @@ export function parseUSFX(filePath) {
     // the reader can lay out, so the glyph goes.
     chunk = chunk.replace(/¶\s*/g, '');
     if (!chunk) return;
-    if (noteDepth > 0) noteText += chunk;
+    if (noteDepth > 0) { if (noteField === 'anchor') noteAnchor += chunk; else noteText += chunk; }
     else if (titleDepth > 0) titleText += chunk;
     else if (headingDepth > 0) headingText += chunk;
     else if (verse !== null) text += smallCaps > 0 ? chunk.toUpperCase() : chunk;
@@ -118,6 +135,29 @@ export function parseUSFX(filePath) {
       chapter = 0;
       pendingPoetry = '';
       pendingStanza = false;
+      return;
+    }
+
+    // Notes are read before the skip list so a <ref> inside one survives.
+    if (noteDepth > 0) {
+      noteDepth++;
+      // <fr>/<xo> is the note's own verse reference, <fqa> the alternate
+      // wording a translation prints in italics, and <ref> a reference the
+      // source already resolved for us.
+      if (name === 'fr' || name === 'xo') noteField = 'anchor';
+      else if (name === 'fqa') noteText += NOTE_I_OPEN;
+      else if (name === 'ref') {
+        noteText += REF_OPEN + (node.attributes?.tgt || '') + REF_SEP;
+      }
+      return;
+    }
+
+    if (NOTE_ELEMENTS.has(name)) {
+      noteDepth = 1;
+      noteKind = name;
+      noteText = '';
+      noteAnchor = '';
+      noteField = 'body';
       return;
     }
 
@@ -185,9 +225,6 @@ export function parseUSFX(filePath) {
       return;
     }
 
-    if (NOTE_ELEMENTS.has(name)) { noteDepth = 1; noteText = ''; return; }
-    if (noteDepth > 0) { noteDepth++; return; }
-
     if (SMALL_CAPS_ELEMENTS.has(name)) { smallCaps++; return; }
     if (ITALIC_ELEMENTS.has(name)) { append('<i>'); return; }
     if (BOLD_ELEMENTS.has(name)) { append('<b>'); return; }
@@ -211,15 +248,25 @@ export function parseUSFX(filePath) {
     }
 
     if (noteDepth > 0) {
+      if (name === 'fr' || name === 'xo') noteField = 'body';
+      else if (name === 'fqa') noteText += NOTE_I_CLOSE;
+      else if (name === 'ref') noteText += REF_CLOSE;
       noteDepth--;
       if (noteDepth === 0) {
-        // A cross-reference whose targets are empty leaves just its own verse
-        // ref and a stray semicolon; there is nothing to show, so it is
-        // dropped rather than stored as "+ 5:3 ;".
+        const anchor = noteAnchor.replace(/\s+/g, ' ').trim();
         const note = noteText.replace(/\s+/g, ' ').trim().replace(/[\s;,]+$/, '');
-        const hasContent = /[A-Za-z-￿]/.test(note.replace(/^\d+[:.]\d+[a-z]?/, ''));
-        if (note && hasContent && verse !== null) text += ` + ${note}\x01 `;
+        // A cross-reference whose targets are empty leaves nothing but its own
+        // verse ref and a stray semicolon, so it is dropped rather than stored
+        // as "+ 5:3 ;". The anchor no longer sits inside the body, so this
+        // asks the body alone whether it says anything.
+        const hasContent = /[A-Za-z-￿]/.test(note);
+        const end = noteKind === 'x' ? XREF_END : NOTE_END;
+        if (note && hasContent && verse !== null) {
+          text += ` + ${anchor ? anchor + ANCHOR_SEP : ''}${note}${end} `;
+        }
         noteText = '';
+        noteAnchor = '';
+        noteField = 'body';
       }
       return;
     }

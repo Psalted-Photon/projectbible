@@ -36,7 +36,7 @@ export const BOOK_MAP: Record<string, string> = {
   // Judges
   jdg: 'Judges', jg: 'Judges', judg: 'Judges',
   // Ruth
-  ru: 'Ruth', rth: 'Ruth', ruth: 'Ruth',
+  ru: 'Ruth', rth: 'Ruth', rut: 'Ruth', ruth: 'Ruth',
   // 1–2 Samuel
   '1sa': '1 Samuel', '1s': '1 Samuel', '1sam': '1 Samuel',
   '2sa': '2 Samuel', '2s': '2 Samuel', '2sam': '2 Samuel',
@@ -62,6 +62,7 @@ export const BOOK_MAP: Record<string, string> = {
   ec: 'Ecclesiastes', ecc: 'Ecclesiastes', eccl: 'Ecclesiastes',
   // Song of Solomon
   song: 'Song of Solomon', so: 'Song of Solomon', sos: 'Song of Solomon',
+  sng: 'Song of Solomon',
   ca: 'Song of Solomon', cant: 'Song of Solomon',
   // Isaiah
   isa: 'Isaiah', is: 'Isaiah',
@@ -76,17 +77,17 @@ export const BOOK_MAP: Record<string, string> = {
   // Hosea
   ho: 'Hosea', hos: 'Hosea',
   // Joel
-  joe: 'Joel', joel: 'Joel', jl: 'Joel',
+  joe: 'Joel', joel: 'Joel', jl: 'Joel', jol: 'Joel',
   // Amos
   am: 'Amos', amo: 'Amos', amos: 'Amos',
   // Obadiah
-  ob: 'Obadiah', obad: 'Obadiah',
+  ob: 'Obadiah', obad: 'Obadiah', oba: 'Obadiah',
   // Jonah
   jon: 'Jonah', jonah: 'Jonah',
   // Micah
   mi: 'Micah', mic: 'Micah',
   // Nahum
-  na: 'Nahum', nah: 'Nahum', nahum: 'Nahum',
+  na: 'Nahum', nah: 'Nahum', nam: 'Nahum', nahum: 'Nahum',
   // Habakkuk
   hab: 'Habakkuk', hb: 'Habakkuk',
   // Zephaniah
@@ -100,11 +101,11 @@ export const BOOK_MAP: Record<string, string> = {
   // Matthew
   mt: 'Matthew', mat: 'Matthew', matt: 'Matthew',
   // Mark
-  mr: 'Mark', mk: 'Mark', mar: 'Mark', mark: 'Mark',
+  mr: 'Mark', mk: 'Mark', mar: 'Mark', mrk: 'Mark', mark: 'Mark',
   // Luke
   lu: 'Luke', lk: 'Luke', luc: 'Luke', luke: 'Luke', luk: 'Luke',
   // John (joh/jn preferred; jo kept for legacy TSK)
-  joh: 'John', jn: 'John', jo: 'John', john: 'John',
+  joh: 'John', jn: 'John', jo: 'John', jhn: 'John', john: 'John',
   // Acts
   ac: 'Acts', act: 'Acts', acts: 'Acts',
   // Romans

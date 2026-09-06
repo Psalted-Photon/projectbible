@@ -296,9 +296,9 @@
       "version": "1.0.1",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 29585408,
-      "sizeMB": 28.21,
-      "sha256": "47d28eedbdb2c2240764c644b11c2382ac76c906ddd13ae595edfd9b3aaafef9",
+      "size": 29630464,
+      "sizeMB": 28.26,
+      "sha256": "ec8ea811f97962640464cbc2547a5678b9c6285086a4d9453c4fcb995bb4377b",
       "dependencies": [],
       "downloadUrl": "/api/packs/translations.sqlite",
       "createdAt": "2026-09-05T15:58:23.941Z"

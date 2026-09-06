@@ -10,6 +10,8 @@
     type RadialItemOpts,
   } from "../lib/radialMenu";
   import NotePopup from "./NotePopup.svelte";
+  import FootnoteCard from "./FootnoteCard.svelte";
+  import type { NoteKind } from "../lib/verseRendering";
   import { userProfileStore } from "../stores/userProfileStore";
   import { profileModalStore } from "../stores/profileModalStore";
   import AnnotationPanel from "./AnnotationPanel.svelte";
@@ -69,7 +71,13 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { IndexedDBTextStore } from "../lib/adapters";
-  import { renderVerseHtml, extractHeading, verseStructure } from "../lib/verseRendering";
+  import {
+    renderVerseHtml,
+    renderVersePreviewHtml,
+    extractHeading,
+    verseStructure,
+  } from "../lib/verseRendering";
+  import { parseRefString } from "../lib/parseRefString";
   import { BIBLE_BOOKS, normalizeBookName, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { getSettings, getInterlinearSettings, getTtsSettings, getNavBarPinned } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
@@ -705,6 +713,72 @@
   // nothing the sheet needs can still be read off the page by then.
   let shareModalOpen = false;
   let shareModalRef: ShareRef | null = null;
+
+  /** The footnote card: which [n] is open, and which reference inside it. */
+  let footnoteHit: {
+    x: number;
+    y: number;
+    body: string;
+    noteRef: string;
+    kind: NoteKind;
+    index: number;
+    book: string;
+    chapter: number;
+  } | null = null;
+  let footnoteRef: string | null = null;
+  let footnoteText = '';
+  let footnoteBusy = false;
+  let footnoteUnavailable = false;
+
+  function closeFootnoteRef() {
+    footnoteRef = null;
+    footnoteText = '';
+    footnoteBusy = false;
+    footnoteUnavailable = false;
+  }
+
+  function closeFootnote() {
+    footnoteHit = null;
+    closeFootnoteRef();
+  }
+
+  /**
+   * Pull a referenced verse into the card. Reading a cross-reference should not
+   * cost you the verse you were reading, so it expands in place; "Go to" is
+   * there for when you do want to leave.
+   */
+  async function expandFootnoteRef(ref: string) {
+    const target = parseRefString(ref, footnoteHit?.book ?? currentBook, footnoteHit?.chapter ?? currentChapter);
+    if (!target) return;
+
+    footnoteRef = ref;
+    footnoteText = '';
+    footnoteUnavailable = false;
+    footnoteBusy = true;
+    try {
+      const translation = get(navigationStore).translation;
+      const text = await textStore.getVerse(translation, target.book, target.chapter, target.verse);
+      // Rendered the preview way: notes and structural markers out, so a note
+      // inside the quoted verse does not sprout markers of its own in here.
+      if (text) footnoteText = renderVersePreviewHtml(text);
+      else footnoteUnavailable = true;
+    } catch (err) {
+      console.error('[FootnoteCard] Could not load', ref, err);
+      footnoteUnavailable = true;
+    } finally {
+      footnoteBusy = false;
+    }
+  }
+
+  function gotoFootnoteRef(ref: string) {
+    const target = parseRefString(ref, footnoteHit?.book ?? currentBook, footnoteHit?.chapter ?? currentChapter);
+    if (!target) return;
+    const current = get(navigationStore);
+    // Record where we are, so the nav bar's Back arrow returns here.
+    navigationStore.pushHistory(current, 'crossref');
+    navigationStore.navigateToVerse(current.translation, target.book, target.chapter, target.verse);
+    closeFootnote();
+  }
   let shareModalPassage = '';
 
   // Highlight state
@@ -2931,6 +3005,7 @@
     if (!target) return true;
     return !!(
       target.closest(".inline-note") ||
+      target.closest(".footnote-card") ||
       target.closest(".navigation-bar") ||
       target.closest("button") ||
       target.closest(".nav-dropdown") ||
@@ -2992,6 +3067,10 @@
 
     // The toast's own buttons are the other half of "use it or dismiss it".
     if (target.closest(".toast")) return;
+
+    // The footnote card is its own thing: reading it, or opening a reference
+    // inside it, must not dismiss the selection underneath.
+    if (target.closest(".footnote-card")) return;
 
     // A bumper press is undecided at this point: a drag adjusts the selection,
     // a tap dismisses. stopDrag settles it on release.
@@ -5047,7 +5126,7 @@
       .then(({ warmIsbeLookup }) => warmIsbeLookup())
       .catch(() => {});
 
-    // Handle footnote/cross-ref clicks
+    // Tapping a [n] opens the footnote card, anchored to the marker.
     const handleNoteClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
@@ -5058,17 +5137,34 @@
       e.preventDefault();
       e.stopPropagation();
 
-      const encodedNote = noteEl.getAttribute("data-note") || "";
-      const noteIndex = noteEl.getAttribute("data-note-index") || "";
-      const noteText = decodeURIComponent(encodedNote);
-      const isXref = noteEl.classList.contains("inline-xref");
+      const section = noteEl.closest("[data-book][data-chapter]") as HTMLElement | null;
+      const box = noteEl.getBoundingClientRect();
 
-      alert(
-        `${isXref ? "Cross-reference" : "Footnote"} ${noteIndex}:\n\n${noteText}`,
-      );
+      footnoteHit = {
+        x: box.left + box.width / 2,
+        y: box.top,
+        body: decodeURIComponent(noteEl.getAttribute("data-note") || ""),
+        noteRef: noteEl.getAttribute("data-note-ref") || "",
+        kind: (noteEl.getAttribute("data-note-kind") as NoteKind) || "footnote",
+        index: Number(noteEl.getAttribute("data-note-index") || 1),
+        // Where the note sits, so a reference naming no book resolves.
+        book: section?.dataset.book || currentBook,
+        chapter: Number(section?.dataset.chapter) || currentChapter,
+      };
+      closeFootnoteRef();
     };
 
     readerElement?.addEventListener("click", handleNoteClick, true);
+
+    // Any press that isn't on the card or on a marker closes the card. It runs
+    // on pointerdown so the card is gone before whatever was pressed acts.
+    const handleFootnoteOutside = (e: PointerEvent) => {
+      if (!footnoteHit) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.(".footnote-card") || t?.closest?.(".inline-note")) return;
+      closeFootnote();
+    };
+    document.addEventListener("pointerdown", handleFootnoteOutside, true);
 
     // Text selection. Pointer events cover finger, pen and mouse in one path;
     // the extra non-passive touchmove exists only to stop the page scrolling
@@ -5125,6 +5221,7 @@
       clearVerseHighlightsFor(windowId);
       window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
+      document.removeEventListener("pointerdown", handleFootnoteOutside, true);
       readerElement?.removeEventListener("pointermove", handleMouseMove);
       document.removeEventListener("pointerdown", handleToastGuard, true);
       readerElement?.removeEventListener("pointerdown", handlePointerDown);
@@ -5215,6 +5312,27 @@
     on:close={() => (notePopupOpen = false)}
     on:noteSaved={handleNoteSaved}
     on:noteDeleted={handleNoteDeleted}
+  />
+{/if}
+
+{#if footnoteHit}
+  <FootnoteCard
+    x={footnoteHit.x}
+    y={footnoteHit.y}
+    body={footnoteHit.body}
+    noteRef={footnoteHit.noteRef}
+    kind={footnoteHit.kind}
+    index={footnoteHit.index}
+    book={footnoteHit.book}
+    chapter={footnoteHit.chapter}
+    openRef={footnoteRef}
+    openText={footnoteText}
+    openBusy={footnoteBusy}
+    openUnavailable={footnoteUnavailable}
+    on:expand={(e) => expandFootnoteRef(e.detail.ref)}
+    on:collapse={closeFootnoteRef}
+    on:goto={(e) => gotoFootnoteRef(e.detail.ref)}
+    on:close={closeFootnote}
   />
 {/if}
 

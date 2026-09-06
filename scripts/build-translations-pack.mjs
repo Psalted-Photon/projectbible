@@ -7,7 +7,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, statSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -27,16 +27,22 @@ if (!existsSync(OUTPUT_DIR)) {
 }
 
 // Source translations
+// NET is deliberately absent: it ships in the starter pack every copy of the
+// app already has (scripts/build-starter-pack.mjs), so carrying it here would
+// download 31,102 verses a second time to overwrite themselves. The shipped
+// pack has never contained it.
 const translations = [
   { file: 'kjv.sqlite', id: 'kjv', name: 'King James Version' },
   { file: 'web.sqlite', id: 'web', name: 'World English Bible' },
   { file: 'bsb.sqlite', id: 'bsb', name: 'Berean Study Bible' },
-  { file: 'net.sqlite', id: 'net', name: 'New English Translation' },
   { file: 'lxx2012-english.sqlite', id: 'lxx2012', name: 'LXX 2012 English' }
 ];
 
-// Create output database
+// Create output database. Start from scratch: this rebuilds the pack rather
+// than adding to it, and merging into a previous file would keep whichever
+// rows it already had.
 console.log('Creating output database...');
+if (existsSync(OUTPUT_FILE)) unlinkSync(OUTPUT_FILE);
 const output = new Database(OUTPUT_FILE);
 
 // Create schema
@@ -79,7 +85,7 @@ insertMeta.run('type', 'translation');
 insertMeta.run('schemaVersion', '1');
 insertMeta.run('minAppVersion', '1.0.0');
 insertMeta.run('name', 'English Translations Pack');
-insertMeta.run('description', 'KJV, WEB, BSB, NET, LXX2012 English translations');
+insertMeta.run('description', 'KJV, WEB, BSB, LXX2012 English translations');
 insertMeta.run('createdAt', new Date().toISOString());
 
 // Merge each translation

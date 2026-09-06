@@ -67,6 +67,9 @@ for (const [code, names] of Object.entries(USFM_TO_BOOK_NAMES)) {
   for (const n of names) BOOK_NAME_TO_USFM[n.toUpperCase()] = code;
 }
 
+/** Note terminators, matching packages/packtools/src/parsers/usfm-scanner.mjs. */
+const NOTE_ENDERS = '\x01\x14\x15';
+
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 /**
@@ -82,10 +85,15 @@ function stripFootnotes(text) {
     // Poetic line / stanza markers are structure, not text
     if (ch === '\x10' || ch === '\x11' || ch === '\x12') { i++; continue; }
     let p = i - 1;
-    while (p >= 0 && /[\x01-\x07\x0E\x0F\x10-\x12]/.test(text[p])) p--;
+    while (p >= 0 && /[\x01-\x07\x0E\x0F\x10-\x12\x14-\x1B]/.test(text[p])) p--;
     const prev = p >= 0 ? text[p] : ' ';
     if (ch === '+' && (prev === ' ' || prev === '\n' || prev === '\t' || p < 0)) {
-      const end = text.indexOf('\x01', i + 1);
+      // Any of the three note terminators: which one closes a note says
+      // what kind it is, and all three end it.
+      const end = NOTE_ENDERS.split('').reduce((best, ender) => {
+        const at = text.indexOf(ender, i + 1);
+        return at >= 0 && (best < 0 || at < best) ? at : best;
+      }, -1);
       if (end >= 0) { i = end + 1; continue; }
     }
     out += ch;

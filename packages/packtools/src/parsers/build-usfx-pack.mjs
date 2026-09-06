@@ -74,7 +74,8 @@ export function buildUSFXPack({ sourcePath, outputPath, metadata }) {
       `SELECT
          SUM(text LIKE '%' || char(16) || '%') AS paragraphs,
          SUM(text LIKE '%' || char(17) || '%') AS poetry,
-         SUM(text LIKE '%' || char(1) || '%')  AS notes
+         SUM(text LIKE '%' || char(1) || '%')  AS footnotes,
+         SUM(text LIKE '%' || char(20) || '%') AS crossrefs
        FROM verses`
     )
     .get();
@@ -86,7 +87,8 @@ export function buildUSFXPack({ sourcePath, outputPath, metadata }) {
     (skipped ? ` (${skipped} non-canonical books skipped)` : ''));
   console.log(`✓ ${Number(structure.paragraphs).toLocaleString()} verses open a paragraph`);
   console.log(`✓ ${Number(structure.poetry).toLocaleString()} verses carry a poetic line`);
-  console.log(`✓ ${Number(structure.notes).toLocaleString()} verses carry a note`);
+  console.log(`✓ ${Number(structure.footnotes).toLocaleString()} verses carry a footnote`);
+  console.log(`✓ ${Number(structure.crossrefs).toLocaleString()} verses carry a cross-reference`);
   console.log(`\n✅ Pack built: ${outputPath}`);
 
   return { rows, total };

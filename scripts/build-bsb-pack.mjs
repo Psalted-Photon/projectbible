@@ -21,6 +21,11 @@ import {
   processVerses,
   cleanUSFMMarkup,
 } from '../packages/packtools/src/parsers/usfm-scanner.mjs';
+import {
+  enrichNotes,
+  readUsjNotes,
+  usjCodeFor,
+} from '../packages/packtools/src/parsers/usj-notes.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -115,6 +120,7 @@ async function buildBSBPack() {
   console.log('📖 Building Berean Standard Bible Pack (with footnotes & cross-references)\n');
   
   const USFM_DIR = join(DATA_DIR, 'bsb_usfm', 'bsb_usfm');
+  const USJ_DIR = join(DATA_DIR, 'bsb-usj');
   
   if (!existsSync(USFM_DIR)) {
     console.error(`❌ USFM files not found: ${USFM_DIR}`);
@@ -169,6 +175,8 @@ async function buildBSBPack() {
     // Insert verses from USFM files
     const verseInsert = db.prepare('INSERT OR REPLACE INTO verses (book, chapter, verse, text, heading) VALUES (?, ?, ?, ?, ?)');
     let totalVerses = 0;
+    let enrichedTotal = 0;
+    let skippedTotal = 0;
     
     for (const book of BIBLE_BOOKS) {
       const filePath = join(USFM_DIR, book.file);
@@ -183,7 +191,18 @@ async function buildBSBPack() {
       const content = readFileSync(filePath, 'utf-8').replace(/\r/g, '');
       const rawVerses = parseUSFM(content);
       const verses = processVerses(rawVerses);
-      
+
+      // BSB also ships as USJ, which marks up the inside of each footnote:
+      // which words are the italicised alternate wording, and which are
+      // references the publisher already resolved to a target. The text
+      // stays the USFM edition's -- see usj-notes.mjs for why.
+      const usjPath = join(USJ_DIR, `${usjCodeFor(book.file)}.usj`);
+      if (existsSync(usjPath)) {
+        const graft = enrichNotes(verses, readUsjNotes(usjPath));
+        enrichedTotal += graft.enriched;
+        skippedTotal += graft.skipped;
+      }
+
       for (const verse of verses) {
         const cleanText = cleanUSFMMarkup(verse.text);
         verseInsert.run(book.name, verse.chapter, verse.verse, cleanText, verse.heading || null);
@@ -203,6 +222,7 @@ async function buildBSBPack() {
     console.log('\n✨ BSB Pack Complete!\n');
     console.log('📊 Summary:');
     console.log(`   Total verses: ${stats.count.toLocaleString()}`);
+    console.log(`   Footnotes enriched from USJ: ${enrichedTotal.toLocaleString()}` + ` (${skippedTotal.toLocaleString()} kept as the USFM edition wrote them)`);
     console.log(`   File size: ${(size.size / 1024 / 1024).toFixed(2)} MB`);
     console.log(`   Output: ${OUTPUT_PATH}`);
     console.log('\n� Features included:');

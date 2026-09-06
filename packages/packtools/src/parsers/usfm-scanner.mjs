@@ -11,13 +11,58 @@
  */
 
 /**
- * Storage sentinels. \x01 terminates a note run; the poetry markers below are
- * deliberately NOT \x0B/\x0C, which JavaScript treats as whitespace and would
- * silently eat in trim()/\s. See docs/FEATURES-REFERENCE.md.
+ * Storage sentinels. The poetry markers are deliberately NOT \x0B/\x0C, which
+ * JavaScript treats as whitespace and would silently eat in trim()/\s. See
+ * docs/FEATURES-REFERENCE.md.
  */
 export const STANZA = '\x10';   // stanza break (verse-initial only)
 export const LINE_1 = '\x11';   // new poetic line
 export const LINE_2 = '\x12';   // new poetic line, indented
+
+/**
+ * Note sentinels.
+ *
+ * A note is a " + …" run closed by one of three terminators, and which one it
+ * is says what kind of note it is. The sources have always drawn the
+ * distinction — \f is a footnote, \x a cross-reference, \r a list of parallel
+ * passages — and flattening all three into \x01 left the reader guessing the
+ * kind back out of the prose, which it got wrong.
+ *
+ * \x01 stays the footnote terminator so packs built before this still read
+ * correctly: nothing they contain means anything new, and a note with no
+ * ANCHOR_SEP has its anchor parsed out of the body the old way.
+ */
+export const NOTE_END = '\x01';      // ends a footnote (\f)
+export const XREF_END = '\x14';      // ends a cross-reference (\x)
+export const PARALLEL_END = '\x15';  // ends a parallel-passage list (\r)
+
+/** Splits a note's own anchor ("1:3") from its body, so it need not be guessed. */
+export const ANCHOR_SEP = '\x16';
+
+/**
+ * A reference the source tagged with a machine-readable target, stored as
+ * REF_OPEN + osis + REF_SEP + display text + REF_CLOSE. USFX writes these as
+ * <ref tgt="EXO.30.12">, USJ as {"type":"ref","loc":"EXO 30:12"} — the target is
+ * the source's own answer to "where does this point", and it beats re-deriving
+ * one from the prose.
+ */
+export const REF_OPEN = '\x17';
+export const REF_SEP = '\x18';
+export const REF_CLOSE = '\x19';
+
+/**
+ * Italics inside a note: the alternate wording a printed Bible sets in
+ * italics (\fqa). Verse-level italics are stored as literal <i> tags, but a
+ * note cannot use those -- the reader strips tags out of the verse before it
+ * reads notes, and its <b>/<i> span scanner measures offsets across the whole
+ * verse, so a tag inside a note would be eaten by the first and miscounted by
+ * the second. A sentinel is invisible to both.
+ */
+export const NOTE_I_OPEN = '\x1A';
+export const NOTE_I_CLOSE = '\x1B';
+
+/** Every terminator, for scanning to the end of a note of unknown kind. */
+export const NOTE_ENDERS = NOTE_END + XREF_END + PARALLEL_END;
 
 const POETRY_LEVEL = {
   q: LINE_1, q1: LINE_1, pi: LINE_1, pi1: LINE_1,
@@ -236,24 +281,37 @@ export function parseUSFM(content, options = {}) {
       }
       
       // Note markers: \f + \fr ref \ft text \f* is a footnote, and \x + \xo ref
-      // \xt target \x* a cross-reference. Both are stored the same way, as a
-      // "+ …" run closed by \x01. LXX carries 298 cross-references that were
-      // lost while only \f was recognised; BSB has none, NET has none.
+      // \xt target \x* a cross-reference. They are different things and are now
+      // stored as different things -- the terminator says which. LXX carries
+      // 298 cross-references that were lost while only \f was recognised; BSB
+      // has none, NET has none.
       if (marker === 'f' || marker === 'x') {
         const endMarker = '\\' + marker + '*';
+        const noteEnd = marker === 'x' ? XREF_END : NOTE_END;
         // Skip the + sign
         if (content[i] === '+') i++;
         while (i < content.length && content[i] === ' ') i++;
 
+        // A note's own verse reference (\fr, \xo) is not part of what the note
+        // says, so it is kept beside the body rather than glued to the front of
+        // it where the reader had to guess it back off with a regex.
+        let anchorText = '';
         let footnoteText = '';
+        let field = 'body';
+        let italic = false;
         let inFootnote = true;
         let trailingNoteSpace = false;
+
+        const closeItalic = () => {
+          if (italic) { footnoteText += NOTE_I_CLOSE; italic = false; }
+        };
 
         while (i < content.length && inFootnote) {
           if (content[i] === '\\') {
             // Check for the closing marker
             if (content.substring(i, i + 3) === endMarker) {
               i += 3;
+              closeItalic();
               // A note must not be glued to the word after it: the stored text
               // is what search and previews read. Where the source already has
               // a space the main loop appends it; where it does not, one is
@@ -264,12 +322,11 @@ export function parseUSFM(content, options = {}) {
               inFootnote = false;
               break;
             }
-            // Any other marker inside the note is structure, not words: \fr
-            // and \ft label the reference and the text, and a note can nest
-            // character markers (\+add …\+add*). Skip the marker itself and
-            // keep what it wraps -- but only collapse the space after an
-            // opening marker, since the space after a closing one is the gap
-            // between two words.
+            // Any other marker inside the note is structure, not words, and a
+            // note can nest character markers (\+add ...\+add*). Skip the
+            // marker itself and keep what it wraps -- but only collapse the
+            // space after an opening marker, since the space after a closing
+            // one is the gap between two words.
             let j = i + 1;
             if (content[j] === '+') j++;
             let inner = '';
@@ -279,16 +336,31 @@ export function parseUSFM(content, options = {}) {
               if (innerClosing) j++;
               i = j;
               if (!innerClosing) while (i < content.length && content[i] === ' ') i++;
+              // \fr and \xo carry the anchor; every other marker sends the text
+              // back to the body. \fqa is the alternate wording a translation
+              // prints in italics, and like the rest of these it is written
+              // unclosed: it runs until the next marker.
+              if (!innerClosing) {
+                closeItalic();
+                field = inner === 'fr' || inner === 'xo' ? 'anchor' : 'body';
+                if (inner === 'fqa') { footnoteText += NOTE_I_OPEN; italic = true; }
+              }
               continue;
             }
           }
-          footnoteText += content[i];
+          if (field === 'anchor') anchorText += content[i];
+          else footnoteText += content[i];
           i++;
         }
-        
-        // Add footnote as inline note (\x01 sentinel marks end of note unambiguously)
-        if (footnoteText.trim()) {
-          verseText += ` + ${footnoteText.trim()}\x01`;
+
+        const anchor = anchorText.trim();
+        const body = footnoteText.trim();
+        // An anchor with nothing after it is a note the source left empty --
+        // five of them in LXX. It is stored anyway, because whether a note was
+        // there is the source's statement to make, not this parser's; the
+        // reader is what decides there is nothing worth showing.
+        if (anchor || body) {
+          verseText += ` + ${anchor ? anchor + ANCHOR_SEP : ''}${body}${noteEnd}`;
           if (trailingNoteSpace) verseText += ' ';
         }
         continue;
@@ -416,9 +488,11 @@ export function parseUSFM(content, options = {}) {
         smallCaps > 0 && !afterApostrophe ? content[i].toUpperCase() : content[i];
     }
     
-    // Add cross-ref at end of verse text (before newline)
+    // A \r line lists the passages parallel to this section. It belongs to
+    // the section's first verse, and is a third kind of note -- neither a
+    // footnote nor a \x cross-reference.
     if (content[i] === '\n' && currentVerse !== null && pendingCrossRef && verseText.trim()) {
-      verseText += ` + ${pendingCrossRef}\x01`;
+      verseText += ` + ${pendingCrossRef}${PARALLEL_END}`;
       pendingCrossRef = '';
     }
     
