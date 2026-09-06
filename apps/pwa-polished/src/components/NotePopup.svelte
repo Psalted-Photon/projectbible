@@ -41,10 +41,12 @@
   let saveTimeout: number | null = null;
   // Interaction state.
   //
-  // An edge is one letter, a corner is two — 'nw' both moves the top edge and
-  // the left edge — so one set of branches in onPointerMove covers both by
+  // An edge is one letter, a corner is two — 'sw' both moves the bottom edge
+  // and the left edge — so one set of branches in onPointerMove covers both by
   // asking whether the handle name contains each letter.
-  type Handle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
+  //
+  // No 'n' anywhere: the top of the note is the drag bar and nothing else.
+  type Handle = 's' | 'e' | 'w' | 'sw' | 'se';
   let interactMode: 'move' | 'resize' | null = null;
   let activeHandle: Handle | null = null;
   let gestureBounds: { width: number; height: number } | null = null;
@@ -203,7 +205,7 @@
     interactMode = 'move';
   }
 
-  // ---- Resize (4 edges + 4 corners) ----
+  // ---- Resize (side + bottom edges, bottom corners) ----
 
   function startResize(e: PointerEvent, handle: Handle) {
     beginInteraction(e);
@@ -254,12 +256,9 @@
     } else if (activeHandle) {
       const { width, height } = bounds();
       // Each letter in the handle name is one edge that moves. A corner has two,
-      // so both axes change in a single gesture.
-      if (activeHandle.includes('n')) {
-        const newH = Math.min(Math.max(MIN_H, startH - dy), startTop + startH);
-        top = startTop + (startH - newH);
-        h = newH;
-      } else if (activeHandle.includes('s')) {
+      // so both axes change in a single gesture. The top edge never moves — see
+      // the Handle type.
+      if (activeHandle.includes('s')) {
         h = Math.min(Math.max(MIN_H, startH + dy), Math.max(MIN_H, height - startTop));
       }
       if (activeHandle.includes('w')) {
@@ -296,9 +295,10 @@
   class:interacting={interactMode !== null}
   style="left:{left}px; top:{top}px; width:{w}px; height:{h}px; {noteTheme}"
 >
-  <!-- Resize handles: four edges for one axis, four corners for both at once.
-       All of them are wider than they look, so a finger can land on them. -->
-  {#each ['n', 's', 'e', 'w'] as edge}
+  <!-- Resize handles: side and bottom edges for one axis, bottom corners for
+       both at once. All of them are wider than they look, so a finger can land
+       on them. -->
+  {#each ['s', 'e', 'w'] as edge}
     <div
       class="edge edge-{edge}"
       class:active={activeHandle === edge}
@@ -308,10 +308,10 @@
     ></div>
   {/each}
 
-  <!-- No 'ne' corner: the close button owns the top-right, and a handle under
-       it would only ever cause an accidental close. The n and e edges cover
-       that side. -->
-  {#each ['nw', 'sw', 'se'] as corner}
+  <!-- Bottom corners only. Nothing resizes along the top: that whole strip is
+       the drag bar, and a handle sharing it just means you grab the wrong one.
+       Move the note and resize from the bottom instead. -->
+  {#each ['sw', 'se'] as corner}
     <div
       class="corner corner-{corner}"
       class:active={activeHandle === corner}
@@ -401,13 +401,13 @@
     background: rgba(102, 126, 234, 0.3);
   }
 
-  /* Ends stop short of the corners so the two never fight over a pointer. */
-  .edge-n { top: -5px;    left: 26px;  right: 26px;  height: 16px; cursor: ns-resize; }
+  /* The side edges start below the header (35px incl. its border) so the drag
+     bar is never shared with a resize handle, and stop short of the bottom
+     corners so those two never fight over a pointer. */
   .edge-s { bottom: -5px; left: 26px;  right: 26px;  height: 16px; cursor: ns-resize; }
-  .edge-e { right: -5px;  top: 26px;   bottom: 26px; width: 16px;  cursor: ew-resize; }
-  .edge-w { left: -5px;   top: 26px;   bottom: 26px; width: 16px;  cursor: ew-resize; }
+  .edge-e { right: -5px;  top: 38px;   bottom: 26px; width: 16px;  cursor: ew-resize; }
+  .edge-w { left: -5px;   top: 38px;   bottom: 26px; width: 16px;  cursor: ew-resize; }
 
-  .corner-nw { top: -5px;    left: -5px;  cursor: nwse-resize; border-radius: 4px 0 0 0; }
   .corner-sw { bottom: -5px; left: -5px;  cursor: nesw-resize; border-radius: 0 0 0 4px; }
   .corner-se { bottom: -5px; right: -5px; cursor: nwse-resize; border-radius: 0 0 4px 0; }
 
@@ -473,9 +473,9 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    /* left: clears the nw resize corner, so the grip dots are grabbable and do
-       not resize instead of moving; right: clears the close button */
-    padding: 4px 38px 4px 28px;
+    /* Nothing to dodge on the left any more — no resize handle shares this bar.
+       Right clears the close button. */
+    padding: 4px 38px 4px 10px;
     background: var(--toolbar-bg, #d1e3f5);
     border-bottom: 1px solid var(--border-color, #bed5eb);
     flex-shrink: 0;
