@@ -74,6 +74,7 @@
   import {
     renderVerseHtml,
     renderVersePreviewHtml,
+    cleanVersePreviewText,
     extractHeading,
     verseStructure,
   } from "../lib/verseRendering";
@@ -4716,7 +4717,10 @@
     if (!ch) return '';
     return ch.verses
       .filter(v => v.verse >= from && v.verse <= to)
-      .map(v => v.text)
+      // Stored text carries the note runs and sentinels the reader turns into
+      // markup. Anything leaving the app as prose has to have them lifted out —
+      // the same thing search and read-aloud do.
+      .map(v => cleanVersePreviewText(v.text))
       .join(' ')
       .trim();
   }

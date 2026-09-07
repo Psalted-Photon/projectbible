@@ -285,6 +285,10 @@ function segmentText(seg: Segment): string {
     const parent = node.parentElement;
     const skip =
       !!parent?.closest('.inline-note') ||
+      // "[pl]", the reader's way of showing an LXX plural "you". A glyph the
+      // renderer added, not part of the verse, so it must not travel with a
+      // selection that is copied, shared or looked up.
+      !!parent?.closest('.plural-marker') ||
       // Inside an interlinear word, keep only the original-language layer.
       (!!parent?.closest('.il-word') && !parent?.closest('.il-orig'));
 
