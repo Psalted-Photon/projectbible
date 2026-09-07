@@ -12,7 +12,7 @@
    */
   import { createEventDispatcher } from 'svelte';
   import { getBookColor } from '../lib/bibleData';
-  import { linkifyNoteRefs, noteRefList } from '../lib/linkifyNoteRefs';
+  import { linkifyNoteRefs } from '../lib/linkifyNoteRefs';
   import type { NoteKind } from '../lib/verseRendering';
 
   export let x = 0;
@@ -56,11 +56,7 @@
     };
   }
 
-  // A cross-reference or a list of parallel passages is references and nothing
-  // else, so it reads better as a row of chips than as a sentence.
-  $: asChips = kind !== 'footnote';
-  $: chips = asChips ? noteRefList(body, book, chapter) : [];
-  $: prose = asChips ? '' : linkifyNoteRefs(body, book, chapter);
+  $: prose = linkifyNoteRefs(body, book, chapter);
 
   $: label =
     kind === 'parallel' ? 'Parallel passages' : kind === 'crossref' ? 'Cross-reference' : 'Footnote';
@@ -78,7 +74,7 @@
 
   function onBodyClick(e: MouseEvent | KeyboardEvent) {
     const target = e.target as HTMLElement | null;
-    const refEl = target?.closest?.('.note-ref, .note-chip') as HTMLElement | null;
+    const refEl = target?.closest?.('.note-ref') as HTMLElement | null;
     if (!refEl) return;
     if (e instanceof KeyboardEvent && e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
@@ -105,27 +101,7 @@
        is nothing to bind a handler to individually. -->
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
   <div class="fc-body" on:click={onBodyClick} on:keydown={onBodyClick}>
-    {#if asChips}
-      {#if chips.length}
-        <div class="fc-chips">
-          {#each chips as chip}
-            <span
-              class="note-chip"
-              class:open={chip.ref === openRef}
-              style="--ref-color:{getBookColor(chip.book)}"
-              data-ref={chip.ref}
-              tabindex="0"
-              role="link">{chip.label}</span
-            >
-          {/each}
-        </div>
-      {:else}
-        <!-- No reference resolved: show what the note says rather than nothing. -->
-        <p class="fc-prose">{body}</p>
-      {/if}
-    {:else}
-      <p class="fc-prose">{@html prose}</p>
-    {/if}
+    <p class="fc-prose">{@html prose}</p>
 
     {#if openRef}
       <div class="fc-expanded">
@@ -200,14 +176,8 @@
     line-height: 1.45;
   }
 
-  .fc-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-  }
-
-  /* Both reference forms read the same way: tinted by book, underlined so it is
-     clear they do something. */
+  /* Tinted by book and underlined, so it is clear it does something. The same
+     way a reference reads everywhere else in the app. */
   .fc-body :global(.note-ref) {
     color: var(--ref-color, #8fa3f5);
     cursor: pointer;
@@ -218,22 +188,6 @@
 
   .fc-body :global(.note-ref:hover) {
     text-decoration-color: var(--ref-color, #8fa3f5);
-  }
-
-  .note-chip {
-    padding: 3px 7px;
-    border: 1px solid color-mix(in srgb, var(--ref-color, #8fa3f5) 45%, transparent);
-    border-radius: 3px;
-    color: var(--ref-color, #8fa3f5);
-    cursor: pointer;
-    font-size: 0.78rem;
-    line-height: 1.3;
-    white-space: nowrap;
-  }
-
-  .note-chip:hover,
-  .note-chip.open {
-    background: color-mix(in srgb, var(--ref-color, #8fa3f5) 18%, transparent);
   }
 
   .fc-expanded {
