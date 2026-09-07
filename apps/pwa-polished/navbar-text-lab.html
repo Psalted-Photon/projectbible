@@ -209,8 +209,10 @@
 
   .ln { display: block; }
   .ln.hide { display: none; }
-  /* Any line whose bottom edge crosses the hypotenuse. */
-  .ln.over { color: #ff5c8a; }
+  /* The measured line. Kept inline on purpose: an inline box's rect hugs the
+     glyphs, where the block .ln's rect spans the whole slot and reaches down to
+     the line box rather than to the ink. */
+  .ink { display: inline; }
 
   /* Fake verse text so the bite can be judged against real content */
   .verses { padding: 18px 22px; max-width: 680px; }
@@ -359,11 +361,13 @@
         </svg>
 
         <div class="slot slot-left" id="slotL"><div class="slot-inner">
-          <span class="ln ln1"></span><span class="ln ln2"></span>
+          <span class="ln ln1"><span class="ink"></span></span
+          ><span class="ln ln2"><span class="ink"></span></span>
         </div></div>
 
         <div class="slot slot-right" id="slotR"><div class="slot-inner">
-          <span class="ln ln1"></span><span class="ln ln2"></span>
+          <span class="ln ln1"><span class="ink"></span></span
+          ><span class="ln ln2"><span class="ink"></span></span>
         </div></div>
 
         <div class="nav-content" id="navContent">
@@ -437,8 +441,8 @@
 
   <h2>Fit</h2>
   <div class="seg" id="crowdSeg">
-    <button data-crowd="fade" class="active">Fade out</button>
-    <button data-crowd="ride">Ride &amp; clip</button>
+    <button data-crowd="always" class="active">Always show</button>
+    <button data-crowd="fade">Fade out</button>
     <button data-crowd="shrink">One line</button>
   </div>
   <div id="fitCtls"></div>
@@ -453,7 +457,8 @@
 
   <h2>Clock</h2>
   <div class="seg" id="clockSeg">
-    <button data-clock="live" class="active">Live</button>
+    <button data-clock="worst" class="active">Worst case</button>
+    <button data-clock="live">Live</button>
     <button data-clock="frozen">Frozen</button>
   </div>
   <div id="clockCtls"></div>
@@ -461,9 +466,10 @@
   <button class="panel-btn" id="widestBtn">Jump to widest moment</button>
   <div class="readout" id="jitterReadout"></div>
   <p class="note">
-    Milonga is a display face, so its digits are not all the same width. Jitter
-    is how much the slot breathes as the clock ticks through every minute and
-    the date through a whole year.
+    <b>Worst case</b> shows the longest string each format can ever produce,
+    picked per line — so if it fits here it fits every minute of every day.
+    Jitter is how much the slot breathes between its narrowest and widest
+    moment; Milonga is a display face, so its digits are not all one width.
   </p>
 
   <h2>Stage width</h2>
@@ -567,10 +573,10 @@ const S = {
   leftSlot:   'time',    // which wedge the clock lives in
   timeFormat: 'h12-ap',
   dateFormat: 'sept-ord',
-  crowd:      'fade',
+  crowd:      'always',
   look:       'none',
   tabular:    false,
-  clockMode:  'live',
+  clockMode:  'worst',
   stageW:     0,
 };
 
@@ -587,6 +593,7 @@ const boxHeight = () => P.boxH;
 const MON_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MON_SEPT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sept','Oct','Nov','Dec'];
 const DAY_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DAY_4     = ['Sun','Mon','Tues','Wed','Thur','Fri','Sat'];
 
 function ord(n) {
   const t = n % 100;
@@ -603,28 +610,30 @@ function dayOfYear(i) {
 }
 
 const TIME_FORMATS = [
-  { id: 'h12-ap',    label: '9:47 / PM',    fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, d.getHours() < 12 ? 'AM' : 'PM'] },
-  { id: 'h12-aplc',  label: '9:47 / pm',    fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, d.getHours() < 12 ? 'am' : 'pm'] },
-  { id: 'h12-apdot', label: '9:47 / P.M.',  fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, d.getHours() < 12 ? 'A.M.' : 'P.M.'] },
-  { id: 'hh12-ap',   label: '09:47 / PM',   fn: d => [`${p2(h12(d))}:${p2(d.getMinutes())}`, d.getHours() < 12 ? 'AM' : 'PM'] },
-  { id: 'h12-dow',   label: '9:47 / Sat',   fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, DAY_SHORT[d.getDay()]] },
-  { id: 'h12-one',   label: '9:47 PM',      fn: d => [`${h12(d)}:${p2(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`, ''] },
-  { id: 'h12-bare',  label: '9:47',         fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, ''] },
-  { id: 'h24-one',   label: '21:47',        fn: d => [`${p2(d.getHours())}:${p2(d.getMinutes())}`, ''] },
-  { id: 'h24-dow',   label: '21:47 / Sat',  fn: d => [`${p2(d.getHours())}:${p2(d.getMinutes())}`, DAY_SHORT[d.getDay()]] },
+  { id: 'h12-ap',    label: '12:47 / PM',   fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, d.getHours() < 12 ? 'AM' : 'PM'] },
+  { id: 'h12-aplc',  label: '12:47 / pm',   fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, d.getHours() < 12 ? 'am' : 'pm'] },
+  { id: 'h12-apdot', label: '12:47 / P.M.', fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, d.getHours() < 12 ? 'A.M.' : 'P.M.'] },
+  { id: 'hh12-ap',   label: '12:47 / PM (padded)', fn: d => [`${p2(h12(d))}:${p2(d.getMinutes())}`, d.getHours() < 12 ? 'AM' : 'PM'] },
+  { id: 'h12-dow',   label: '12:47 / Wed',  fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, DAY_SHORT[d.getDay()]] },
+  { id: 'h12-dow4',  label: '12:47 / Thur', fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, DAY_4[d.getDay()]] },
+  { id: 'h12-one',   label: '12:47 PM',     fn: d => [`${h12(d)}:${p2(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`, ''] },
+  { id: 'h12-bare',  label: '12:47',        fn: d => [`${h12(d)}:${p2(d.getMinutes())}`, ''] },
+  { id: 'h24-one',   label: '23:47',        fn: d => [`${p2(d.getHours())}:${p2(d.getMinutes())}`, ''] },
+  { id: 'h24-dow',   label: '23:47 / Wed',  fn: d => [`${p2(d.getHours())}:${p2(d.getMinutes())}`, DAY_SHORT[d.getDay()]] },
 ];
 
 const DATE_FORMATS = [
-  { id: 'sept-ord', label: 'Sept 9th / 2026', fn: d => [`${MON_SEPT[d.getMonth()]} ${ord(d.getDate())}`, `${d.getFullYear()}`] },
-  { id: 'sept-num', label: 'Sept 9 / 2026',   fn: d => [`${MON_SEPT[d.getMonth()]} ${d.getDate()}`, `${d.getFullYear()}`] },
-  { id: 'sep-num',  label: 'Sep 9 / 2026',    fn: d => [`${MON_SHORT[d.getMonth()]} ${d.getDate()}`, `${d.getFullYear()}`] },
-  { id: 'd-mon',    label: '9 Sept / 2026',   fn: d => [`${d.getDate()} ${MON_SEPT[d.getMonth()]}`, `${d.getFullYear()}`] },
-  { id: 'dow-full', label: 'Sat Sep 9 / 2026',fn: d => [`${DAY_SHORT[d.getDay()]} ${MON_SHORT[d.getMonth()]} ${d.getDate()}`, `${d.getFullYear()}`] },
-  { id: 'dow-date', label: 'Sat / Sept 9',    fn: d => [DAY_SHORT[d.getDay()], `${MON_SEPT[d.getMonth()]} ${d.getDate()}`] },
-  { id: 'mon-ord',  label: 'Sept / 9th',      fn: d => [MON_SEPT[d.getMonth()], ord(d.getDate())] },
-  { id: 'ord-mon',  label: '9th / Sept',      fn: d => [ord(d.getDate()), MON_SEPT[d.getMonth()]] },
-  { id: 'dotted',   label: '09.09 / 2026',    fn: d => [`${p2(d.getMonth() + 1)}.${p2(d.getDate())}`, `${d.getFullYear()}`] },
-  { id: 'slash2',   label: '9/9 / 26',        fn: d => [`${d.getMonth() + 1}/${d.getDate()}`, `${d.getFullYear() % 100}`] },
+  { id: 'sept-ord', label: 'Sept 30th / 2026',   fn: d => [`${MON_SEPT[d.getMonth()]} ${ord(d.getDate())}`, `${d.getFullYear()}`] },
+  { id: 'sept-num', label: 'Sept 30 / 2026',     fn: d => [`${MON_SEPT[d.getMonth()]} ${d.getDate()}`, `${d.getFullYear()}`] },
+  { id: 'sep-num',  label: 'Sep 30 / 2026',      fn: d => [`${MON_SHORT[d.getMonth()]} ${d.getDate()}`, `${d.getFullYear()}`] },
+  { id: 'd-mon',    label: '30 Sept / 2026',     fn: d => [`${d.getDate()} ${MON_SEPT[d.getMonth()]}`, `${d.getFullYear()}`] },
+  { id: 'dow-full', label: 'Wed Sep 30 / 2026',  fn: d => [`${DAY_SHORT[d.getDay()]} ${MON_SHORT[d.getMonth()]} ${d.getDate()}`, `${d.getFullYear()}`] },
+  { id: 'dow-date', label: 'Wed / Sept 30',      fn: d => [DAY_SHORT[d.getDay()], `${MON_SEPT[d.getMonth()]} ${d.getDate()}`] },
+  { id: 'dow4-date',label: 'Thur / Sept 30',     fn: d => [DAY_4[d.getDay()], `${MON_SEPT[d.getMonth()]} ${d.getDate()}`] },
+  { id: 'mon-ord',  label: 'Sept / 30th',        fn: d => [MON_SEPT[d.getMonth()], ord(d.getDate())] },
+  { id: 'ord-mon',  label: '30th / Sept',        fn: d => [ord(d.getDate()), MON_SEPT[d.getMonth()]] },
+  { id: 'dotted',   label: '12.30 / 2026',       fn: d => [`${p2(d.getMonth() + 1)}.${p2(d.getDate())}`, `${d.getFullYear()}`] },
+  { id: 'slash2',   label: '12/30 / 26',         fn: d => [`${d.getMonth() + 1}/${d.getDate()}`, `${d.getFullYear() % 100}`] },
 ];
 
 const timeFmt = () => TIME_FORMATS.find(f => f.id === S.timeFormat) || TIME_FORMATS[0];
@@ -931,16 +940,18 @@ function drawGuides(pts) {
 // The wedge slots
 // ─────────────────────────────────────────────────────────────────────────
 
-/** Write the current instant into both slots, before any fitting is judged. */
+/** Write the text into both slots, before any fitting is judged. */
 function renderSlotText() {
   const d = nowInstant();
-  const forLeft  = S.leftSlot === 'time' ? timeFmt() : dateFmt();
-  const forRight = S.leftSlot === 'time' ? dateFmt() : timeFmt();
+  const leftKind  = S.leftSlot === 'time' ? 'time' : 'date';
+  const rightKind = S.leftSlot === 'time' ? 'date' : 'time';
+  const forLeft   = leftKind === 'time' ? timeFmt() : dateFmt();
+  const forRight  = rightKind === 'time' ? timeFmt() : dateFmt();
 
-  for (const [slot, fmt] of [[slotL, forLeft], [slotR, forRight]]) {
-    const [a, b] = fmt.fn(d);
-    slot.querySelector('.ln1').textContent = a;
-    slot.querySelector('.ln2').textContent = b;
+  for (const [slot, fmt, kind] of [[slotL, forLeft, leftKind], [slotR, forRight, rightKind]]) {
+    const [a, b] = S.clockMode === 'worst' ? worstStrings(fmt, kind) : fmt.fn(d);
+    slot.querySelector('.ln1 .ink').textContent = a;
+    slot.querySelector('.ln2 .ink').textContent = b;
     slot.querySelector('.ln2').classList.toggle('hide', !b);
   }
 }
@@ -1011,15 +1022,20 @@ function layoutSlots() {
 function judgeFit(slot) {
   const barRect = bar.getBoundingClientRect();
   const out = { lines: [], max: 0 };
+  const sizes = lineSizes();
+  let i = -1;
 
   for (const ln of slot.querySelectorAll('.ln')) {
+    i++;
     if (ln.classList.contains('hide')) { out.lines.push(null); continue; }
-    const r = ln.getBoundingClientRect();
-    if (!r.width) { out.lines.push(null); continue; }
+    const ink = ln.querySelector('.ink');
+    const text = ink.textContent;
+    const r = ink.getBoundingClientRect();
+    if (!r.width || !text) { out.lines.push(null); continue; }
 
     const left   = r.left - barRect.left;
     const right  = r.right - barRect.left;
-    const bottom = r.bottom - barRect.top;
+    const bottom = r.bottom - barRect.top - descentSlack(text, sizes[i] ?? P.fontSize);
 
     let over = -Infinity;
     for (let i = 0; i <= 10; i++) {
@@ -1033,49 +1049,32 @@ function judgeFit(slot) {
 }
 
 /**
- * The three answers to a crowded bar, so they can be compared side by side
- * against each arrangement rather than argued about.
+ * The three answers to a crowded bar. None of them recolour or clip the text —
+ * the readout says whether it fits, and the wedge outline says where the room
+ * runs out, so the type itself is left alone to be judged by eye.
  */
 function applyCrowdMode(worst) {
   for (const [slot, side] of [[slotL, 'left'], [slotR, 'right']]) {
     const fit = worst[side];
-    const l1 = slot.querySelector('.ln1');
     const l2 = slot.querySelector('.ln2');
-    const hasL2 = !!l2.textContent;
+    const hasL2 = !!l2.querySelector('.ink').textContent;
 
     // Reset whatever the previous mode did before re-deciding.
-    l1.classList.remove('over');
-    l2.classList.remove('over');
     l2.classList.toggle('hide', !hasL2);
-    slot.style.overflow = 'visible';
     slot.style.opacity = P.opacity;
-
     if (!fit) continue;
 
-    if (S.crowd === 'ride') {
-      // Stay glued to the pill and let the wedge clip whatever does not fit.
-      slot.style.overflow = 'hidden';
-      if ((fit.lines[0] ?? -1) > P.overflowTol) l1.classList.add('over');
-      if ((fit.lines[1] ?? -1) > P.overflowTol) l2.classList.add('over');
-    } else if (S.crowd === 'shrink') {
-      // Drop the second line first; only give up entirely if the first cannot
-      // fit either.
+    if (S.crowd === 'shrink') {
+      // Drop the second line when it no longer has room; the first line stays
+      // whatever happens, so the slot never blinks out entirely.
       if (hasL2 && (fit.lines[1] ?? -1) > P.overflowTol) l2.classList.add('hide');
-      const refit = judgeFit(slot);
-      if ((refit.lines[0] ?? -1) > P.overflowTol) {
-        slot.style.opacity = 0;
-      }
-      worst[side] = refit;
-    } else {
-      // Fade: opacity falls off with how far past tolerance the worst line is.
+      worst[side] = judgeFit(slot);
+    } else if (S.crowd === 'fade') {
       const over = fit.max - P.overflowTol;
       const t = Math.max(0, Math.min(1, over / Math.max(0.5, P.fadeOver)));
       slot.style.opacity = P.opacity * (1 - t);
-      if (over > 0) {
-        if ((fit.lines[0] ?? -1) > P.overflowTol) l1.classList.add('over');
-        if ((fit.lines[1] ?? -1) > P.overflowTol) l2.classList.add('over');
-      }
     }
+    // 'always': left exactly as typed.
   }
   drawWedgeOutline();
 }
@@ -1121,26 +1120,82 @@ function drawWedgeOutline() {
 // Width jitter — how much the slot breathes as the clock runs
 // ─────────────────────────────────────────────────────────────────────────
 let _ctx = null;
-function measureText(text) {
+function metrics(text, px) {
   if (!_ctx) _ctx = document.createElement('canvas').getContext('2d');
-  _ctx.font = `${P.fontSize}px Milonga, cursive`;
+  _ctx.font = `${px}px Milonga, cursive`;
   let extra = 0;
   if ('letterSpacing' in _ctx) _ctx.letterSpacing = P.letter + 'px';
   else extra = P.letter * text.length;
-  return _ctx.measureText(text).width + extra;
+  const m = _ctx.measureText(text);
+  return { m, width: m.width + extra };
+}
+
+function measureText(text, px) { return metrics(text, px ?? P.fontSize).width; }
+
+/**
+ * How much of the inline box below the baseline is empty.
+ *
+ * A span's rect reaches down to the font's declared descent, which is where a
+ * "p" or a "y" would land. "2026" has no descenders, so judging its bottom off
+ * the rect reports it as several pixels lower than its ink actually goes — and
+ * the smaller the line, the larger that lie is relative to the wedge.
+ */
+function descentSlack(text, px) {
+  if (!text) return 0;
+  const { m } = metrics(text, px);
+  const declared = m.fontBoundingBoxDescent;
+  const actual = m.actualBoundingBoxDescent;
+  if (declared == null || actual == null) return 0;
+  return Math.max(0, declared - actual);
+}
+
+/** The per-line font sizes, in the order the lines appear. */
+const lineSizes = () => [P.fontSize, P.fontSize * P.line2Scale];
+
+/**
+ * The longest string each line of a format can ever produce, scanned across the
+ * format's whole cycle — every minute of the day, or every day of the year.
+ *
+ * The two lines are picked independently and may come from different moments.
+ * That is the point: it is the worst case the layout has to survive, so if it
+ * fits here it fits always.
+ */
+function worstStrings(fmt, kind) {
+  const [s1, s2] = lineSizes();
+  const n = kind === 'time' ? 1440 : 366;
+  let bestA = '', bestB = '', wa = -1, wb = -1;
+
+  for (let i = 0; i < n; i++) {
+    let d;
+    if (kind === 'time') {
+      d = new Date(2026, 0, 1);
+      d.setHours(Math.floor(i / 60), i % 60, 0, 0);
+    } else {
+      d = dayOfYear(i);
+    }
+    const [a, b] = fmt.fn(d);
+    const wA = measureText(a, s1);
+    if (wA > wa) { wa = wA; bestA = a; }
+    if (b) {
+      const wB = measureText(b, s2);
+      if (wB > wb) { wb = wB; bestB = b; }
+    }
+  }
+  return [bestA, bestB];
 }
 
 /** Widest and narrowest rendering of a format across its whole cycle. */
 function scanFormat(fmt, kind) {
   let min = Infinity, max = -Infinity, argmax = null;
   const base = new Date(2026, 0, 1);
+  const [s1, s2] = lineSizes();
 
   if (kind === 'time') {
     for (let m = 0; m < 1440; m++) {
       const d = new Date(base);
       d.setHours(Math.floor(m / 60), m % 60, 0, 0);
       const [a, b] = fmt.fn(d);
-      const w = Math.max(measureText(a), measureText(b || ''));
+      const w = Math.max(measureText(a, s1), b ? measureText(b, s2) : 0);
       if (w < min) min = w;
       if (w > max) { max = w; argmax = m; }
     }
@@ -1148,7 +1203,7 @@ function scanFormat(fmt, kind) {
     for (let i = 0; i < 366; i++) {
       const d = dayOfYear(i);
       const [a, b] = fmt.fn(d);
-      const w = Math.max(measureText(a), measureText(b || ''));
+      const w = Math.max(measureText(a, s1), b ? measureText(b, s2) : 0);
       if (w < min) min = w;
       if (w > max) { max = w; argmax = i; }
     }
@@ -1231,7 +1286,8 @@ function buildControls(hostId, specs) {
       P[s.key] = parseFloat(input.value);
       show(P[s.key]);
       if (SPECS.vertical.some(v => v.key === s.key)) applyVertical();
-      if (SPECS.clock.some(v => v.key === s.key)) renderSlotText();
+      // Worst case is chosen by measurement, so the type sliders change it too.
+      renderSlotText();
       applyTextStyle();
       retarget(false);
       if (SPECS.text.some(v => v.key === s.key)) writeJitterReadout();
