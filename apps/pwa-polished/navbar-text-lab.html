@@ -116,8 +116,8 @@
   }
   .nav-content::-webkit-scrollbar { display: none; }
 
-  /* Matches the shipped bar: 6 + 44 + 6 on a phone is the floor that fullRelax
-     is tuned against, so the middle always relaxes all the way up. */
+  /* Matches the shipped bar: 6 + 44 + 6 on a phone is the narrowest the middle
+     ever gets, which is what the outer shoulder run has to be judged against. */
   .nav-spacer { flex: 1; min-width: 44px; }
 
   .nav-pill {
@@ -487,8 +487,12 @@
   <h2>Shape</h2>
   <div id="shapeCtls"></div>
   <p class="note">
-    <b>Shoulder run</b> is the wedge's width and <b>Rest height</b> its top edge,
-    so those two are what actually buy room for a second line.
+    <b>Outer</b> is the soft wide curve either side of the open middle — it is
+    the wedge's width, so it and <b>Rest height</b> are what buy room for a
+    second line. <b>Inner</b> is the sharp drop around anything in the middle.
+    Neither run changes with how crowded the bar is: the curves keep their shape
+    and simply meet sooner, so a squeezed middle gets a shallower bite rather
+    than a sharper one.
   </p>
 
   <h2>Elevation</h2>
@@ -552,9 +556,8 @@ const SPECS = {
     { key: 'restPct',     label: 'Rest height',   min: 0.10, max: 0.75, step: 0.01, def: 0.17, fmt: v => Math.round(v * 100) + '%' },
     { key: 'padX',        label: 'Wrap padding X', min: 0,   max: 16,  step: 0.5, def: 1.5 },
     { key: 'padY',        label: 'Wrap padding Y', min: 0,   max: 16,  step: 0.5, def: 4 },
-    { key: 'shoulderMax', label: 'Shoulder run',   min: 4,   max: 90,  step: 1,   def: 54 },
-    { key: 'dimpleStart', label: 'Ignore gaps under',    min: 0, max: 44, step: 1, def: 14 },
-    { key: 'fullRelax',   label: 'Full relax at gap',    min: 30, max: 200, step: 2, def: 56 },
+    { key: 'shoulderMax',   label: 'Shoulder run — outer', min: 4, max: 90, step: 1, def: 54 },
+    { key: 'shoulderSharp', label: 'Shoulder run — inner', min: 2, max: 60, step: 1, def: 14 },
     { key: 'corner',      label: 'End corner radius',    min: 0,  max: 24, step: 0.5, def: 13 },
   ],
   elev: [
@@ -747,16 +750,20 @@ function measureGroups() {
 /**
  * Build y(x) for the bottom edge, and record the outermost two shoulders.
  *
- * Two things are deliberately separate here:
+ * Every shoulder is a fixed shape. Think of them as cut out of paper: pushing
+ * two of them together does not make either curve sharper, it just means they
+ * meet sooner and the bite between them ends up shallower. So a shoulder's run
+ * never scales with the gap it sits in, and depth is not a response to gap
+ * width either — where the two flanks cross is what decides how deep the bite
+ * gets, and that falls out of the geometry on its own.
  *
- *  - DEPTH is a linear response to gap width. A smoothstep here is far too
- *    flat at the low end — it gives an 8px between-pill gap a 0.8px dip, which
- *    is invisible. Linear gives it ~3px, an actual little dimple.
- *  - SHAPE is the smoothstep. That is the sine-like shoulder, and it is what
- *    keeps the edge off a square wave.
+ * The runs come in two sizes, which is what makes the edge a hybrid:
  *
- * The wedges the text lives in are the first gap's left shoulder and the last
- * gap's right shoulder — the two that rise away from the outermost pills.
+ *  - OUTER shoulders rise away from the first and last pill groups. These are
+ *    the soft wide ones, and they are the wedges the time and date live in.
+ *  - INNER shoulders rise away from anything in the middle — read aloud, the
+ *    repeat pills, an expanded search. These are sharp, so a middle group drops
+ *    straight down to full depth and meets the soft curve coming the other way.
  */
 function makeSampler(raw, W, hFull) {
   const hRest = hFull * P.restPct;
@@ -772,27 +779,35 @@ function makeSampler(raw, W, hFull) {
     const rawW = raw[i + 1][0] - raw[i][1];
     if (rawW <= 0) continue;
 
-    const span  = Math.max(1, P.fullRelax - P.dimpleStart);
-    const relax = Math.max(0, Math.min(1, (rawW - P.dimpleStart) / span));
-    const yDip  = hFull - relax * (hFull - hRest);
+    // Fixed depth. A squeezed gap gets shallower because its flanks cross
+    // early, not because the curve was rewritten.
+    const yDip = hRest;
+
+    // Soft against the outermost pills, sharp against anything in the middle.
+    const sL = i === 0 ? P.shoulderMax : P.shoulderSharp;
+    const sR = i + 1 === raw.length - 1 ? P.shoulderMax : P.shoulderSharp;
 
     const A = padded[i][1];
     const B = padded[i + 1][0];
 
     if (B - A > 1) {
-      gaps.push({ kind: 'wide', A, B, S: Math.min(P.shoulderMax, (B - A) / 2), yDip });
+      gaps.push({ kind: 'wide', A, B, sL, sR, yDip });
     } else {
       const m = (raw[i][1] + raw[i + 1][0]) / 2;
-      gaps.push({ kind: 'crevice', m, S: Math.max(2, P.shoulderMax), yDip });
+      gaps.push({ kind: 'crevice', m, S: Math.max(2, Math.min(sL, sR)), yDip });
     }
   }
+
+  // Where a gap's two flanks meet. Past this point the other shoulder is the
+  // one holding the edge down, so it is where the wedge actually ends.
+  const cross = g => (g.A * g.sR + g.B * g.sL) / (g.sL + g.sR);
 
   const first = gaps.find(g => g.kind === 'wide');
   const last  = [...gaps].reverse().find(g => g.kind === 'wide');
   wedges = {
     hFull,
-    left:  first ? { x0: first.A, x1: first.A + first.S } : null,
-    right: last  ? { x0: last.B,  x1: last.B - last.S }   : null,
+    left:  first ? { x0: first.A, x1: Math.min(first.A + first.sL, cross(first)) } : null,
+    right: last  ? { x0: last.B,  x1: Math.max(last.B - last.sR, cross(last)) } : null,
   };
 
   // Overlapping influences combine by taking the deepest rise, never by
@@ -803,10 +818,12 @@ function makeSampler(raw, W, hFull) {
       let inf;
       if (g.kind === 'wide') {
         if (x <= g.A || x >= g.B) continue;
-        if (g.S <= 0) inf = 1;
-        else if (x < g.A + g.S) inf = smoothstep((x - g.A) / g.S);
-        else if (x > g.B - g.S) inf = smoothstep((g.B - x) / g.S);
-        else inf = 1;
+        // Both flanks hold the edge down. Where they overlap the lower one
+        // wins, which is two paper curves butting up rather than merging.
+        inf = Math.min(
+          g.sL > 0 ? smoothstep((x - g.A) / g.sL) : 1,
+          g.sR > 0 ? smoothstep((g.B - x) / g.sR) : 1,
+        );
       } else {
         const d = Math.abs(x - g.m);
         if (d >= g.S) continue;
