@@ -80,6 +80,20 @@
   let lastPropsKey = '';
   let lastTargetAuthor = '';
 
+  /**
+   * How far down the panel is scrolled, and how to put it back.
+   *
+   * A long commentary is read by scrolling, so a link tapped near the bottom of
+   * one should come back to that spot rather than to the top of the article.
+   */
+  export function bodyScrollTop(): number {
+    return viewBodyEl?.scrollTop ?? 0;
+  }
+
+  export function scrollBodyTo(top: number): void {
+    if (viewBodyEl) viewBodyEl.scrollTop = top;
+  }
+
   /** Scrolls the panel body to the top, then (if an author is given) into that author's section. */
   function scrollToTarget(author: string) {
     if (!viewBodyEl) return;

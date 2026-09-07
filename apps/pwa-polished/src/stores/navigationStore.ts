@@ -266,22 +266,42 @@ function createNavigationStore() {
       });
     },
     /**
-     * Record where you are before a link takes you somewhere else.
+     * Record where a link is, before it takes you somewhere else.
+     *
+     * `anchor` is where the link physically sits -- the verse its icon or
+     * marker is printed on. Pass it. Without one the crumb falls back to
+     * wherever the reader is standing, and that is not a place: the reader
+     * rewrites it as you scroll, and again every time it loads another chapter
+     * to fill the screen. Open a commentary in Genesis 2, scroll fifty chapters
+     * and tap a link in it, and the crumb had you at chapter 52. The link never
+     * moved, so the crumb should not either.
      *
      * Returns the new stack depth. Callers that want to come back to something
-     * when this exact step is undone keep the depth as a token — comparing
-     * book/chapter instead would break as soon as the reader's scroll handler
-     * nudges the store to a neighboring chapter.
+     * when this exact step is undone keep the depth as a token.
      */
-    pushHistory: (state: NavigationState, kind: CrumbKind = 'link', origin?: unknown) => {
+    pushHistory: (
+      state: NavigationState,
+      kind: CrumbKind = 'link',
+      origin?: unknown,
+      anchor?: { book: string; chapter: number; verse?: number | null },
+    ) => {
       let depth = 0;
       navigationHistory.update((history) => {
+        const book = anchor ? normalizeBookName(anchor.book) : state.book;
+        const chapter = anchor ? anchor.chapter : state.chapter;
+        const verse = anchor
+          ? anchor.verse ?? null
+          : state.linkHighlight?.verse ?? state.scrollTargetVerse ?? null;
         const crumb: TrailCrumb = {
-          nav: state,
+          // The state to restore is the reader as it was, but standing where
+          // the link was rather than wherever it had drifted to.
+          nav: anchor
+            ? { ...state, book, chapter, scrollTargetVerse: verse, linkHighlight: null }
+            : state,
           kind,
-          book: state.book,
-          chapter: state.chapter,
-          verse: state.linkHighlight?.verse ?? state.scrollTargetVerse ?? null,
+          book,
+          chapter,
+          verse,
           origin,
         };
         const next = [...history, crumb];

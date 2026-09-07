@@ -489,8 +489,20 @@
    * commentary links could never reach the first one again.
    */
   type ReaderOrigin =
-    | { surface: 'annotation'; book: string; chapter: number; verse: number; tab: 'references' | 'commentary'; author: string }
+    | {
+        surface: 'annotation';
+        book: string;
+        chapter: number;
+        verse: number;
+        tab: 'references' | 'commentary';
+        author: string;
+        /** How far down the panel was read, so it comes back at that spot. */
+        scrollTop: number;
+      }
     | { surface: 'bookIntro'; book: string };
+
+  let annotationPanelRef: AnnotationPanel | null = null;
+  let _reopenAnnotationScrollTop = 0;
 
   /**
    * Is this icon the one whose panel is currently open?
@@ -527,16 +539,21 @@
       tab: annotationPanelTab,
       // Kept so the badge you actually tapped can be identified on the way back.
       author: annotationPanelTargetAuthor,
+      scrollTop: annotationPanelRef?.bodyScrollTop() ?? 0,
     };
     annotationPanelOpen = false;
     if (windowId) {
       _windowScrollTarget = verse;
       windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
     } else {
+      // Anchored to the verse the panel was opened on. The panel stays open
+      // while the reader scrolls, so by the time a link inside it is tapped the
+      // reader can be a long way from the icon that opened it.
       navigationStore.pushHistory(
         get(navigationStore),
         annotationPanelTab === 'commentary' ? 'commentary' : 'crossref',
         origin,
+        { book: annotationPanelBook, chapter: annotationPanelChapter, verse: annotationPanelVerse },
       );
       navigationStore.navigateTo(currentTranslation, book, chapter, verse);
     }
@@ -557,6 +574,7 @@
     _reopenAnnotationVerse = origin.verse;
     _reopenAnnotationTab = origin.tab;
     _reopenAnnotationAuthor = origin.author;
+    _reopenAnnotationScrollTop = origin.scrollTop ?? 0;
   }
 
   $: {
@@ -575,7 +593,11 @@
       windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
     } else {
       const origin: ReaderOrigin = { surface: 'bookIntro', book: bookIntroPanelBook };
-      navigationStore.pushHistory(get(navigationStore), 'library', origin);
+      navigationStore.pushHistory(get(navigationStore), 'library', origin, {
+        book: bookIntroPanelBook,
+        chapter: 1,
+        verse: null,
+      });
       navigationStore.navigateTo(currentTranslation, book, chapter, verse);
     }
   }
@@ -724,11 +746,31 @@
     index: number;
     book: string;
     chapter: number;
+    verse: number | null;
+    /** The marker itself, so the card can stay attached to it while scrolling. */
+    el: HTMLElement;
   } | null = null;
   let footnoteRef: string | null = null;
   let footnoteText = '';
   let footnoteBusy = false;
   let footnoteUnavailable = false;
+
+  let footnoteFetchTicket = 0;
+
+  /**
+   * Keep the card attached to its marker, the way the selection toast stays
+   * with its selection. A marker that has scrolled out of the reader takes its
+   * card with it.
+   */
+  function repositionFootnoteCard() {
+    if (!footnoteHit) return;
+    if (!footnoteHit.el.isConnected) {
+      closeFootnote();
+      return;
+    }
+    const box = footnoteHit.el.getBoundingClientRect();
+    footnoteHit = { ...footnoteHit, x: box.left + box.width / 2, y: box.top };
+  }
 
   function closeFootnoteRef() {
     footnoteRef = null;
@@ -751,32 +793,50 @@
     const target = parseRefString(ref, footnoteHit?.book ?? currentBook, footnoteHit?.chapter ?? currentChapter);
     if (!target) return;
 
+    const ticket = ++footnoteFetchTicket;
     footnoteRef = ref;
     footnoteText = '';
     footnoteUnavailable = false;
     footnoteBusy = true;
     try {
-      const translation = get(navigationStore).translation;
-      const text = await textStore.getVerse(translation, target.book, target.chapter, target.verse);
+      const text = await textStore.getVerse(currentTranslation, target.book, target.chapter, target.verse);
+      if (ticket !== footnoteFetchTicket) return; // a newer reference owns the card
       // Rendered the preview way: notes and structural markers out, so a note
       // inside the quoted verse does not sprout markers of its own in here.
       if (text) footnoteText = renderVersePreviewHtml(text);
       else footnoteUnavailable = true;
     } catch (err) {
+      if (ticket !== footnoteFetchTicket) return;
       console.error('[FootnoteCard] Could not load', ref, err);
       footnoteUnavailable = true;
     } finally {
-      footnoteBusy = false;
+      if (ticket === footnoteFetchTicket) footnoteBusy = false;
     }
   }
 
   function gotoFootnoteRef(ref: string) {
-    const target = parseRefString(ref, footnoteHit?.book ?? currentBook, footnoteHit?.chapter ?? currentChapter);
+    const from = footnoteHit;
+    const target = parseRefString(ref, from?.book ?? currentBook, from?.chapter ?? currentChapter);
     if (!target) return;
-    const current = get(navigationStore);
-    // Record where we are, so the nav bar's Back arrow returns here.
-    navigationStore.pushHistory(current, 'crossref');
-    navigationStore.navigateToVerse(current.translation, target.book, target.chapter, target.verse);
+
+    if (windowId) {
+      _windowScrollTarget = target.verse;
+      windowStore.updateContentState(windowId, {
+        book: target.book,
+        chapter: target.chapter,
+        highlightedVerse: null,
+      });
+    } else {
+      // The crumb points at the marker we tapped, not at whatever chapter the
+      // reader had scrolled or auto-loaded its way to.
+      navigationStore.pushHistory(
+        get(navigationStore),
+        'crossref',
+        undefined,
+        from ? { book: from.book, chapter: from.chapter, verse: from.verse } : undefined,
+      );
+      navigationStore.navigateToVerse(currentTranslation, target.book, target.chapter, target.verse);
+    }
     closeFootnote();
   }
   let shareModalPassage = '';
@@ -1211,6 +1271,13 @@
     isChronologicalMode,
   });
 
+  // A card belongs to the marker it was opened on. Once the reader is showing
+  // something else, that marker is gone and the card would be answering for a
+  // chapter nobody is reading.
+  $: if (footnoteHit && (footnoteHit.book !== currentBook || footnoteHit.chapter !== currentChapter)) {
+    closeFootnote();
+  }
+
   // Load verses when navigation changes externally (not from our scroll loading)
   $: {
     const navKey = `${currentTranslation}-${currentBook}-${currentChapter}-${isChronologicalMode}`;
@@ -1263,9 +1330,7 @@
         // The author goes back too, so the badge you originally tapped is the
         // one identified again — the old return payload dropped it, which left
         // the panel scrolled to the top with no idea which author you meant.
-        openAnnotationPanel(_reopenAnnotationVerse, _reopenAnnotationTab, currentBook, currentChapter, _reopenAnnotationAuthor);
-        _reopenAnnotationVerse = null;
-        _reopenAnnotationAuthor = '';
+        void reopenAnnotationFromCrumb(currentBook, currentChapter);
       } else if (_reopenBookIntroPanel) {
         bookIntroPanelOpen = true;
         _reopenBookIntroPanel = false;
@@ -2029,9 +2094,7 @@
 
       // Re-open annotation panel if user navigated back via the floating Back button
       if (_reopenAnnotationVerse !== null) {
-        openAnnotationPanel(_reopenAnnotationVerse, _reopenAnnotationTab, book, chapter, _reopenAnnotationAuthor);
-        _reopenAnnotationVerse = null;
-        _reopenAnnotationAuthor = '';
+        void reopenAnnotationFromCrumb(book, chapter);
       } else if (_reopenBookIntroPanel) {
         bookIntroPanelOpen = true;
         _reopenBookIntroPanel = false;
@@ -2319,6 +2382,24 @@
       return 'translation-font-hebrew';
     }
     return '';
+  }
+
+  /**
+   * Reopen the panel a crumb came from, at the spot in it you had read to.
+   * The panel scrolls itself to the top (or to an author) as it opens, so the
+   * saved offset is applied after that has settled.
+   */
+  async function reopenAnnotationFromCrumb(book: string, chapter: number) {
+    const verse = _reopenAnnotationVerse;
+    if (verse === null) return;
+    const top = _reopenAnnotationScrollTop;
+    openAnnotationPanel(verse, _reopenAnnotationTab, book, chapter, _reopenAnnotationAuthor);
+    _reopenAnnotationVerse = null;
+    _reopenAnnotationAuthor = '';
+    _reopenAnnotationScrollTop = 0;
+    if (!top) return;
+    await tick();
+    annotationPanelRef?.scrollBodyTo(top);
   }
 
   function openAnnotationPanel(verse: number, tab: "references" | "commentary", book = currentBook, chapter = currentChapter, targetAuthor = '') {
@@ -2681,6 +2762,7 @@
       // The toast is position:fixed, so a scroll would leave it pointing at
       // nothing. Keep it over its selection, or drop it once that scrolls away.
       if (showToast) repositionToastToSelection();
+      repositionFootnoteCard();
 
       // Save scroll position after user stops scrolling (debounced)
       if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
@@ -5135,9 +5217,9 @@
       if (!noteEl) return;
 
       e.preventDefault();
-      e.stopPropagation();
 
       const section = noteEl.closest("[data-book][data-chapter]") as HTMLElement | null;
+      const verseEl = noteEl.closest(".verse[data-verse]") as HTMLElement | null;
       const box = noteEl.getBoundingClientRect();
 
       footnoteHit = {
@@ -5147,9 +5229,13 @@
         noteRef: noteEl.getAttribute("data-note-ref") || "",
         kind: (noteEl.getAttribute("data-note-kind") as NoteKind) || "footnote",
         index: Number(noteEl.getAttribute("data-note-index") || 1),
-        // Where the note sits, so a reference naming no book resolves.
+        // Where the note sits. Used to resolve a reference that names no
+        // book, and as the crumb's anchor -- this is where the marker is
+        // printed, and it does not move when the reader scrolls.
         book: section?.dataset.book || currentBook,
         chapter: Number(section?.dataset.chapter) || currentChapter,
+        verse: Number(verseEl?.dataset.verse) || null,
+        el: noteEl,
       };
       closeFootnoteRef();
     };
@@ -5494,6 +5580,7 @@
 />
 
 <AnnotationPanel
+  bind:this={annotationPanelRef}
   bind:open={annotationPanelOpen}
   book={annotationPanelBook}
   chapter={annotationPanelChapter}

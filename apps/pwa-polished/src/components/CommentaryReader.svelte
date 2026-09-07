@@ -115,13 +115,20 @@
     if (e instanceof KeyboardEvent && e.key !== "Enter" && e.key !== " ") return;
     e.preventDefault();
     const ref = target.dataset.ref;
-    if (ref) handleRefClick(ref);
+    // Which entry the link is printed in, so the crumb can point back at the
+    // verse it belongs to rather than at wherever the reader has drifted.
+    const entry = target.closest('.commentary-entry[data-verse-start]') as HTMLElement | null;
+    if (ref) handleRefClick(ref, Number(entry?.dataset.verseStart) || null);
   }
 
-  function handleRefClick(ref: string) {
+  function handleRefClick(ref: string, fromVerse: number | null = null) {
     const t = parseRefString(ref, currentBook, currentChapter);
     if (!t) return;
-    navigationStore.pushHistory(get(navigationStore), 'commentary');
+    navigationStore.pushHistory(get(navigationStore), 'commentary', undefined, {
+      book: currentBook,
+      chapter: currentChapter,
+      verse: fromVerse,
+    });
     navigationStore.navigateToVerse(
       $navigationStore.translation,
       t.book,
