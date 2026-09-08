@@ -708,7 +708,7 @@ let wedgeOutline = null;
 
 // Where the two shoulder wedges sit, captured at retarget time.
 // x0 is the deep end against the pill, x1 the tip pointing inward.
-let wedges = { left: null, right: null, hFull: 0 };
+let wedges = { left: null, right: null, hFull: 0, hRest: 0 };
 
 const smoothstep = t => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); };
 
@@ -806,6 +806,7 @@ function makeSampler(raw, W, hFull) {
   const last  = [...gaps].reverse().find(g => g.kind === 'wide');
   wedges = {
     hFull,
+    hRest,
     left:  first ? { x0: first.A, x1: Math.min(first.A + first.sL, cross(first)) } : null,
     right: last  ? { x0: last.B,  x1: Math.max(last.B - last.sR, cross(last)) } : null,
   };
@@ -1012,9 +1013,11 @@ function layoutSlots() {
 
     const x0 = Math.min(w.x0, w.x1);
     const x1 = Math.max(w.x0, w.x1);
-    // The tip is where the shoulder has finished rising, so the wedge's top
-    // edge is the curve's height there.
-    const top = curveAt(w.x1);
+    // Anchored to the rest line, not to the curve at the tip. A middle group
+    // narrows the gap, so the flanks cross earlier and the tip sits deeper —
+    // reading the curve there would walk the type down the bar every time
+    // read-aloud or a search box appeared. The rest line never moves.
+    const top = wedges.hRest;
 
     slot.style.left   = x0 + 'px';
     slot.style.width  = Math.max(0, x1 - x0) + 'px';
@@ -1105,7 +1108,7 @@ function writeFitReadout(worst) {
   for (const [label, w, side] of [['left ', wedges.left, 'left'], ['right', wedges.right, 'right']]) {
     if (!w) { lines.push(`${label}  no wedge`); continue; }
     const run = Math.abs(w.x1 - w.x0);
-    const top = curveAt(w.x1);
+    const top = wedges.hRest;
     const fit = worst[side];
     const over = fit ? fit.max : 0;
     const verdict = over > P.overflowTol
@@ -1126,7 +1129,7 @@ function drawWedgeOutline() {
     if (!w) continue;
     const x0 = Math.min(w.x0, w.x1);
     const x1 = Math.max(w.x0, w.x1);
-    const top = curveAt(w.x1);
+    const top = wedges.hRest;
     parts.push(`M ${x0.toFixed(1)} ${top.toFixed(1)} L ${x1.toFixed(1)} ${top.toFixed(1)}` +
                ` M ${w.x0.toFixed(1)} ${top.toFixed(1)} L ${w.x0.toFixed(1)} ${hFull.toFixed(1)}`);
   }
