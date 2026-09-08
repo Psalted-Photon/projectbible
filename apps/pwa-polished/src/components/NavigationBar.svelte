@@ -1644,10 +1644,12 @@
       class="nav-clock nav-clock-left"
       style="left: {wedgeL.x}px; width: {wedgeL.w}px; top: {wedgeTop}px; height: {wedgeH}px;"
     >
-      <span class="nav-clock-line" style="width: {clockW.l1}px;">{clockTime}</span>
-      <span class="nav-clock-line nav-clock-second" style="width: {clockW.l2}px;"
-        >{clockDay}</span
-      >
+      <span class="nav-clock-inner">
+        <span class="nav-clock-line" style="width: {clockW.l1}px;">{clockTime}</span>
+        <span class="nav-clock-line nav-clock-second" style="width: {clockW.l2}px;"
+          >{clockDay}</span
+        >
+      </span>
     </div>
   {/if}
 
@@ -1656,10 +1658,12 @@
       class="nav-clock nav-clock-right"
       style="left: {wedgeR.x}px; width: {wedgeR.w}px; top: {wedgeTop}px; height: {wedgeH}px;"
     >
-      <span class="nav-clock-line" style="width: {clockW.r1}px;">{clockDate}</span>
-      <span class="nav-clock-line nav-clock-second" style="width: {clockW.r2}px;"
-        >{clockMonth}</span
-      >
+      <span class="nav-clock-inner">
+        <span class="nav-clock-line" style="width: {clockW.r1}px;">{clockDate}</span>
+        <span class="nav-clock-line nav-clock-second" style="width: {clockW.r2}px;"
+          >{clockMonth}</span
+        >
+      </span>
     </div>
   {/if}
 
@@ -2281,13 +2285,30 @@
     white-space: nowrap;
   }
 
+  .nav-clock-inner {
+    display: block;
+    width: 100%;
+  }
+
+  .nav-clock-left .nav-clock-inner {
+    transform: translateX(-1.5px);
+  }
+
+  .nav-clock-right .nav-clock-inner {
+    transform: translateX(1.5px);
+  }
+
   /* Each line is centred in a box the width of the wedge at that line's own
-     depth, so both lines sit with an even gap either side and the stack narrows
-     with the taper instead of hugging one edge. The boxes are anchored to the
-     vertical side of the wedge, which is the side against the pill. */
+     depth, so a line with room to spare sits with an even gap either side and
+     the stack narrows with the taper. min-width is the floor that keeps this
+     honest: when a line is wider than the room, the box grows to the text
+     instead of centring it, so it stays flush against the pill rather than
+     being pushed out past the edge. The boxes anchor to the wedge's vertical
+     side, which is the side the pill is on. */
   .nav-clock-line {
     display: block;
     text-align: center;
+    min-width: max-content;
   }
 
   .nav-clock-right .nav-clock-line {
