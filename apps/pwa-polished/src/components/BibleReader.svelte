@@ -383,7 +383,6 @@
   // Cache of verse element → { book, chapter } resolved at observe-time (avoids repeated DOM walks)
   const verseElInfo = new WeakMap<Element, { book: string; chapter: number }>();
   let lastAnchorVerse: number | null = null; // last verse pushed to commentary windows
-  let anchorHighlightedElements: HTMLElement[] = []; // DOM elements with .comm-anchor-highlight
   let prevCommDrifted = false; // for detecting drift→sync transition
 
   // Note popup state
@@ -1366,20 +1365,6 @@
         .forEach(w => windowStore.updateContentState(w.id, { highlightedVerse: lastAnchorVerse }));
     }
     prevCommDrifted = commCheckpointDrifted;
-  }
-
-  // Union of all checkpoint verse numbers across all open commentary windows
-  $: commCheckpoints = [...new Set(
-    $windowStore.flatMap(w =>
-      w.contentType === 'commentaries' ? ((w.contentState?.checkpoints as number[]) ?? []) : []
-    )
-  )];
-
-  // Apply/clear amber highlights whenever anchor state, drift, or checkpoints change
-  $: if (anchoredCommWindow && !commCheckpointDrifted && commCheckpoints.length > 0 && chapters.length > 0) {
-    applyAnchorHighlights(commCheckpoints);
-  } else {
-    clearAnchorHighlights();
   }
 
   // Scroll helper: same-chapter → direct DOM scroll; different chapter → navigateTo sets
@@ -3893,30 +3878,6 @@
     if (!searchHighlightedElement) return;
     searchHighlightedElement = null;
     clearVerseHighlight(slotFor('nav', windowId));
-  }
-
-  // Commentary anchor: mark all checkpoint verses in BibleReader (no scrolling).
-  // Not a link navigation, so it keeps its own amber look rather than the book
-  // category color. Scoped to the chapter like everything else now — unscoped,
-  // it marked whichever loaded chapter happened to hold that verse number.
-  async function applyAnchorHighlights(checkpoints: number[]) {
-    clearAnchorHighlights();
-    await tick();
-    if (!readerElement) return;
-    for (const n of checkpoints) {
-      const el = findVerseEl(readerElement, currentBook, currentChapter, n);
-      if (el) {
-        el.classList.add('comm-anchor-highlight');
-        anchorHighlightedElements.push(el);
-      }
-    }
-  }
-
-  function clearAnchorHighlights() {
-    for (const el of anchorHighlightedElements) {
-      el.classList.remove('comm-anchor-highlight');
-    }
-    anchorHighlightedElements = [];
   }
 
   async function applySearchHighlight(verseNumber: number) {
@@ -6909,17 +6870,6 @@
      reason: it marks where reading stops. */
   :global(.vh-overlay.vh-rtl) {
     background-image: linear-gradient(to left, var(--vh-color, transparent), transparent);
-  }
-
-  /* Commentary anchor checkpoints — amber, half width, half opacity. Not a link
-     navigation, so the category-colour rule does not reach it. */
-  :global(.comm-anchor-highlight) {
-    isolation: isolate;
-    background: linear-gradient(to right, rgba(251, 146, 60, 0.20), transparent);
-    background-position: var(--rp-hl-left, 2em) center;
-    background-size: 15ch calc(1em + 7px);
-    background-repeat: no-repeat;
-    border-radius: 3px;
   }
 
   /* Floating drag handles for text selection */

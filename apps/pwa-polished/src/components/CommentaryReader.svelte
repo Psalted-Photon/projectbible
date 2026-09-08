@@ -98,14 +98,6 @@
     scrollToVerse(highlightVerse);
   }
 
-  // Emit checkpoint verse numbers to BibleReader via contentState for amber highlights
-  $: if (windowId) {
-    const checkpoints = isEnoch
-      ? []
-      : [...new Set(entries.filter(e => e.verseStart > 0).map(e => e.verseStart))];
-    windowStore.updateContentState(windowId, { checkpoints });
-  }
-
   // Cross-reference links: linkifyCommentaryRefs wraps detected Bible references
   // in <span class="commentary-ref" data-ref="..."> elements. Handle taps via
   // event delegation on the body and navigate to the referenced verse.
