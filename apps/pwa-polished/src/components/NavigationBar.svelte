@@ -1003,9 +1003,14 @@
   // the widest part of the wedge and the second line takes whatever the
   // hypotenuse leaves. Two lines is all that fits.
   //
-  // Type sizes are in the CSS below; only the vertical nudge is needed here.
-  // Everything came out of navbar-text-lab.html.
+  // Everything came out of navbar-text-lab.html. The three type numbers are
+  // mirrored in the CSS below and have to stay in step with it — they are here
+  // because the taper has to be solved against the same line boxes the browser
+  // is drawing.
   const CLOCK_NUDGE_Y = 1;
+  const CLOCK_FONT = 12;
+  const CLOCK_LINE_H = 15;
+  const CLOCK_LINE2_SCALE = 0.8;
 
   // Four letters where the shape asks for it. Thur is the widest of these, and
   // the lab was tuned against the widest string each format can ever produce.
@@ -1021,6 +1026,11 @@
   let wedgeH = 0;
 
   let showClock = getNavBarClock();
+  // How much room each line is centred in. The wedge is a triangle, so its
+  // width is not one number: the top line gets most of the run and the one
+  // below it gets whatever the hypotenuse has left by then.
+  let clockW = { l1: 0, l2: 0, r1: 0, r2: 0 };
+  let wedgeGeom = { hFull: 0, hRest: 0, sL: 0, sR: 0 };
   let clockTime = "";
   let clockDay = "";
   let clockDate = "";
@@ -1051,6 +1061,8 @@
     const [, month, day] = localDateStr(now).split("-");
     clockDate = ordinal(parseInt(day, 10));
     clockMonth = CLOCK_MONTHS[parseInt(month, 10) - 1] ?? "";
+
+    recomputeClockWidths();
   }
 
   let field: number[] | null = null; // the y values actually drawn
@@ -1069,6 +1081,34 @@
   function smoothstep(t: number): number {
     const c = t < 0 ? 0 : t > 1 ? 1 : t;
     return c * c * (3 - 2 * c);
+  }
+
+  /** How far along a shoulder you have to be for it to have risen this far. */
+  function unSmoothstep(v: number): number {
+    const c = v < 0 ? 0 : v > 1 ? 1 : v;
+    return 0.5 - Math.sin(Math.asin(1 - 2 * c) / 3);
+  }
+
+  // Canvas is the only way to ask where the ink in a line actually stops. A
+  // line box is taller than the glyphs sitting in it, and solving the taper
+  // against the box bottom would pull the type further inward than it has to
+  // go. It cannot be one constant either: "Sept" has a real descender and
+  // "9:47" has none.
+  let inkCtx: CanvasRenderingContext2D | null = null;
+
+  function inkBottom(text: string, px: number, boxTop: number): number {
+    if (!text) return boxTop;
+    if (!inkCtx) inkCtx = document.createElement("canvas").getContext("2d");
+    if (!inkCtx) return boxTop + CLOCK_LINE_H;
+
+    inkCtx.font = `${px}px Milonga, cursive`;
+    const m = inkCtx.measureText(text);
+    const asc = m.fontBoundingBoxAscent ?? px * 0.8;
+    const desc = m.fontBoundingBoxDescent ?? px * 0.2;
+    // Glyphs sit centred in the line box, so the baseline is the half-leading
+    // plus the font's own ascent below the top of that box.
+    const baseline = boxTop + (CLOCK_LINE_H - (asc + desc)) / 2 + asc;
+    return baseline + (m.actualBoundingBoxDescent ?? 0);
   }
 
   /** Live group rects in the bar's own space, merged only on real overlap. */
@@ -1232,6 +1272,51 @@
     } else {
       wedgeR = null;
     }
+
+    wedgeGeom = {
+      hFull,
+      hRest,
+      sL: first ? first.sL : 0,
+      sR: last ? last.sR : 0,
+    };
+    recomputeClockWidths();
+  }
+
+  /**
+   * How wide the wedge still is at the depth each line's ink reaches.
+   *
+   * Centre a line in that and it keeps the same gap either side without ever
+   * crossing the hypotenuse: the box it centres in *is* the room, so there is
+   * nothing to overflow into. The top line gets most of the run and the one
+   * below it gets whatever the taper has left by then, which is what makes the
+   * stack narrow the way the wedge does.
+   *
+   * Split out from recordWedges because the two do not change together — the
+   * geometry moves when the pills do, and the ink depth moves when the text
+   * does. A month with a descender in it is a different depth to one without.
+   */
+  function recomputeClockWidths(): void {
+    const { hFull, hRest, sL, sR } = wedgeGeom;
+    const swing = hFull - hRest;
+
+    const room = (run: number, cap: number, yBottom: number): number => {
+      if (swing <= 0 || run <= 0) return cap;
+      return Math.max(
+        0,
+        Math.min(cap, run * unSmoothstep((hFull - yBottom) / swing)),
+      );
+    };
+
+    const top = hRest + CLOCK_NUDGE_Y;
+    const belowTop = top + CLOCK_LINE_H;
+    const px2 = CLOCK_FONT * CLOCK_LINE2_SCALE;
+
+    clockW = {
+      l1: wedgeL ? room(sL, wedgeL.w, inkBottom(clockTime, CLOCK_FONT, top)) : 0,
+      l2: wedgeL ? room(sL, wedgeL.w, inkBottom(clockDay, px2, belowTop)) : 0,
+      r1: wedgeR ? room(sR, wedgeR.w, inkBottom(clockDate, CLOCK_FONT, top)) : 0,
+      r2: wedgeR ? room(sR, wedgeR.w, inkBottom(clockMonth, px2, belowTop)) : 0,
+    };
   }
 
   /** Catmull-Rom through the samples, emitted as cubic Béziers. */
@@ -1465,6 +1550,9 @@
     // The minute is the smallest thing on display, so a coarse tick is plenty;
     // it exists mostly to survive the browser throttling a background tab.
     clockTimer = setInterval(updateClock, 15_000);
+    // Milonga comes from the CDN after first paint, so the ink depths measured
+    // above were measured in whatever face was standing in for it.
+    document.fonts?.ready.then(() => recomputeClockWidths());
   });
 
   onDestroy(() => {
@@ -1556,10 +1644,10 @@
       class="nav-clock nav-clock-left"
       style="left: {wedgeL.x}px; width: {wedgeL.w}px; top: {wedgeTop}px; height: {wedgeH}px;"
     >
-      <span class="nav-clock-inner">
-        <span class="nav-clock-line">{clockTime}</span>
-        <span class="nav-clock-line nav-clock-second">{clockDay}</span>
-      </span>
+      <span class="nav-clock-line" style="width: {clockW.l1}px;">{clockTime}</span>
+      <span class="nav-clock-line nav-clock-second" style="width: {clockW.l2}px;"
+        >{clockDay}</span
+      >
     </div>
   {/if}
 
@@ -1568,10 +1656,10 @@
       class="nav-clock nav-clock-right"
       style="left: {wedgeR.x}px; width: {wedgeR.w}px; top: {wedgeTop}px; height: {wedgeH}px;"
     >
-      <span class="nav-clock-inner">
-        <span class="nav-clock-line">{clockDate}</span>
-        <span class="nav-clock-line nav-clock-second">{clockMonth}</span>
-      </span>
+      <span class="nav-clock-line" style="width: {clockW.r1}px;">{clockDate}</span>
+      <span class="nav-clock-line nav-clock-second" style="width: {clockW.r2}px;"
+        >{clockMonth}</span
+      >
     </div>
   {/if}
 
@@ -2179,11 +2267,11 @@
      pointer-events stays off so this can never swallow the long-press that pins
      the bar, and .nav-content comes after it in the DOM so an opaque pill wins
      if the two ever meet. */
+  /* These three have to stay in step with CLOCK_FONT, CLOCK_LINE_H and
+     CLOCK_LINE2_SCALE above, which solve the taper against these same boxes. */
   .nav-clock {
     position: absolute;
     z-index: 1;
-    display: flex;
-    align-items: flex-start;
     pointer-events: none;
     font-size: 12px;
     line-height: 15px;
@@ -2193,34 +2281,17 @@
     white-space: nowrap;
   }
 
-  /* Each slot's type stacks against the wedge's vertical side, so the top line
-     gets the full run and the one below it has less room as the hypotenuse
-     closes in. Right-aligning the date is what lands the month under the gap in
-     the line above rather than under its first letter. */
-  .nav-clock-left {
-    justify-content: flex-start;
-  }
-
-  .nav-clock-right {
-    justify-content: flex-end;
-  }
-
-  .nav-clock-inner {
-    display: inline-block;
-  }
-
-  .nav-clock-left .nav-clock-inner {
-    text-align: left;
-    transform: translateX(-1.5px);
-  }
-
-  .nav-clock-right .nav-clock-inner {
-    text-align: right;
-    transform: translateX(1.5px);
-  }
-
+  /* Each line is centred in a box the width of the wedge at that line's own
+     depth, so both lines sit with an even gap either side and the stack narrows
+     with the taper instead of hugging one edge. The boxes are anchored to the
+     vertical side of the wedge, which is the side against the pill. */
   .nav-clock-line {
     display: block;
+    text-align: center;
+  }
+
+  .nav-clock-right .nav-clock-line {
+    margin-left: auto;
   }
 
   .nav-clock-second {
