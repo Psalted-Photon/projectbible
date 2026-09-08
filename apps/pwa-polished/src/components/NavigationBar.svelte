@@ -81,7 +81,9 @@
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightScope } from "../stores/repeatBulkStore";
   import { REPEAT_COLORS } from "../lib/repeatColors";
-  import { getInterlinearSettings, updateInterlinearSettings, getNavBarPinned, setNavBarPinned } from "../adapters/settings";
+  import { getInterlinearSettings, updateInterlinearSettings, getNavBarPinned, setNavBarPinned, getNavBarClock, getSettings } from "../adapters/settings";
+  import { localDateStr } from "../stores/clockStore";
+  import { wallClockIn } from "../lib/alarm/alarmSchedule";
   import type { InterlinearSettings } from "../adapters/settings";
   import InterlinearControls from "./InterlinearControls.svelte";
 
@@ -184,6 +186,7 @@
 
   function onSettingsUpdated() {
     interlinearSettings = getInterlinearSettings();
+    showClock = getNavBarClock();
   }
 
   // Scroll nav-content instantly so the button is visible before we measure its position
@@ -950,21 +953,25 @@
   // than as solid chrome. When something arrives in the middle — read-aloud,
   // repeats, an expanded search — it pushes the membrane back down.
   //
-  // Two things here are deliberately different curves. DEPTH, how far a gap
-  // relaxes, is linear in that gap's width; a smoothstep is far too flat at the
-  // low end and leaves narrow gaps with an invisible sub-pixel dip. SHAPE, the
-  // shoulder either side of a gap, is the smoothstep, and that is what keeps
-  // the edge off a square wave.
+  // Every shoulder is a fixed shape. Think of them as cut out of paper: pushing
+  // two together does not make either curve sharper, it just means they meet
+  // sooner and the bite between them ends up shallower. So a run never scales
+  // with the gap it sits in, and depth is not a response to gap width either.
   //
-  // Numbers came out of nav-contour-lab.html. `height` is the SVG's own height
+  // The runs come in two sizes, which is what makes the edge a hybrid.
+  // `shoulderMax` is the soft wide curve rising away from the outermost pills —
+  // those are the wedges the clock lives in. `shoulderSharp` is everything in
+  // the middle, so read-aloud or the repeat pills drop straight to full depth
+  // and meet the soft curve coming the other way.
+  //
+  // Numbers came out of navbar-text-lab.html. `height` is the SVG's own height
   // only — the bar's own box is deliberately left alone.
   const CONTOUR = {
     restPct: 0.17,
     padX: 1.5,
     padY: 4,
     shoulderMax: 54,
-    dimpleStart: 14,
-    fullRelax: 56,
+    shoulderSharp: 14,
     corner: 13,
     height: 51,
     shadowY: 8,
@@ -975,12 +982,12 @@
   };
 
   // Every group is separated by a .nav-spacer plus the strip's own gap either
-  // side, and the spacer's min-width is set so that floor lands on fullRelax:
-  // 6 + 44 + 6 on a phone, 8 + 44 + 8 above 600px. So the narrowest the middle
-  // ever gets is still wide enough to relax all the way up — it used to bottom
-  // out at 39px there, which read as a dimple rather than a bite. Because the
-  // pills never shrink, that floor holds however crowded the bar gets: it
-  // scrolls sideways instead of compressing.
+  // side, so the narrowest the middle ever gets is 6 + 44 + 6 on a phone and
+  // 8 + 44 + 8 above 600px. Two 54px runs cannot both fit in that, so on a
+  // crowded phone the flanks cross early and the bite is shallower than it is
+  // on a desktop — shallower, never sharper. Because the pills never shrink,
+  // that floor holds however crowded the bar gets: it scrolls sideways instead
+  // of compressing.
   const GROUP_SELECTOR =
     ".nav-pill, .nav-interlinear, .nav-tts, .nav-repeat-pills";
 
@@ -988,6 +995,63 @@
   let membraneFill = "";
   let membraneEdge = "";
   let membraneW = 0;
+
+  // ── The wedge clock ────────────────────────────────────────────────────────
+  // The shoulders either side of the open middle are wedges of bar fill with
+  // nothing in them. The time goes in the left one and the date in the right,
+  // each aligned to the vertical side against its own pill so the top line gets
+  // the widest part of the wedge and the second line takes whatever the
+  // hypotenuse leaves. Two lines is all that fits.
+  //
+  // Type sizes are in the CSS below; only the vertical nudge is needed here.
+  // Everything came out of navbar-text-lab.html.
+  const CLOCK_NUDGE_Y = 1;
+
+  // Four letters where the shape asks for it. Thur is the widest of these, and
+  // the lab was tuned against the widest string each format can ever produce.
+  const CLOCK_DAYS = ["Sun", "Mon", "Tues", "Wed", "Thur", "Fri", "Sat"];
+  const CLOCK_MONTHS = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sept", "Oct", "Nov", "Dec",
+  ];
+
+  let wedgeL: { x: number; w: number } | null = null;
+  let wedgeR: { x: number; w: number } | null = null;
+  let wedgeTop = 0;
+  let wedgeH = 0;
+
+  let showClock = getNavBarClock();
+  let clockTime = "";
+  let clockDay = "";
+  let clockDate = "";
+  let clockMonth = "";
+  let clockTimer: ReturnType<typeof setInterval> | undefined;
+
+  function ordinal(n: number): string {
+    const t = n % 100;
+    if (t >= 11 && t <= 13) return `${n}th`;
+    return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
+  }
+
+  /**
+   * Both halves read the timezone the rest of the app runs on, not the device's
+   * — localDateStr is the same authority the reading plan and the journal use,
+   * so the date up here can never disagree with what they think today is.
+   */
+  function updateClock(): void {
+    const now = new Date();
+    const tz =
+      getSettings().timezone ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    const wall = wallClockIn(tz, now);
+    clockTime = `${wall.hour % 12 || 12}:${String(wall.minute).padStart(2, "0")}`;
+    clockDay = CLOCK_DAYS[wall.weekday] ?? "";
+
+    const [, month, day] = localDateStr(now).split("-");
+    clockDate = ordinal(parseInt(day, 10));
+    clockMonth = CLOCK_MONTHS[parseInt(month, 10) - 1] ?? "";
+  }
 
   let field: number[] | null = null; // the y values actually drawn
   let targetField: number[] = [];
@@ -1042,7 +1106,7 @@
     };
   }
 
-  /** Build y(x) for the bottom edge. */
+  /** Build y(x) for the bottom edge, and record the two clock wedges. */
   function makeSampler(
     spans: number[][],
     W: number,
@@ -1061,47 +1125,43 @@
       a: number;
       b: number;
       m: number;
-      s: number;
-      yDip: number;
+      sL: number;
+      sR: number;
     }[] = [];
 
     for (let i = 0; i < spans.length - 1; i++) {
       const rawW = spans[i + 1][0] - spans[i][1];
       if (rawW <= 0) continue;
 
-      const range = Math.max(1, CONTOUR.fullRelax - CONTOUR.dimpleStart);
-      const relax = Math.max(
-        0,
-        Math.min(1, (rawW - CONTOUR.dimpleStart) / range),
-      );
-      const yDip = hFull - relax * (hFull - hRest);
+      // Soft against the outermost pills, sharp against anything in between.
+      const sL = i === 0 ? CONTOUR.shoulderMax : CONTOUR.shoulderSharp;
+      const sR =
+        i + 1 === spans.length - 1
+          ? CONTOUR.shoulderMax
+          : CONTOUR.shoulderSharp;
 
       const a = padded[i][1];
       const b = padded[i + 1][0];
 
       if (b - a > 1) {
-        gaps.push({
-          crevice: false,
-          a,
-          b,
-          m: 0,
-          s: Math.min(CONTOUR.shoulderMax, (b - a) / 2),
-          yDip,
-        });
+        gaps.push({ crevice: false, a, b, m: 0, sL, sR });
       } else {
         // No room between the padded pills, so this dip's shoulders run
         // underneath them. That is safe: the pills are opaque and paint above
         // the membrane, so only the stretch spanning the real gap is ever seen.
+        const s = Math.max(2, Math.min(sL, sR));
         gaps.push({
           crevice: true,
           a,
           b,
           m: (spans[i][1] + spans[i + 1][0]) / 2,
-          s: Math.max(2, CONTOUR.shoulderMax),
-          yDip,
+          sL: s,
+          sR: s,
         });
       }
     }
+
+    recordWedges(gaps, hFull, hRest);
 
     // Overlapping influences combine by taking the deepest rise, never by
     // summing — two neighbouring dips must not dig a trench between them.
@@ -1111,20 +1171,67 @@
         let inf: number;
         if (g.crevice) {
           const d = Math.abs(x - g.m);
-          if (d >= g.s) continue;
-          inf = smoothstep(1 - d / g.s);
+          if (d >= g.sL) continue;
+          inf = smoothstep(1 - d / g.sL);
         } else {
           if (x <= g.a || x >= g.b) continue;
-          if (g.s <= 0) inf = 1;
-          else if (x < g.a + g.s) inf = smoothstep((x - g.a) / g.s);
-          else if (x > g.b - g.s) inf = smoothstep((g.b - x) / g.s);
-          else inf = 1;
+          // Both flanks hold the edge down, and where they overlap the lower
+          // one wins. That is two paper curves butting up rather than merging,
+          // and it is why a squeezed gap gets shallower instead of sharper.
+          inf = Math.min(
+            g.sL > 0 ? smoothstep((x - g.a) / g.sL) : 1,
+            g.sR > 0 ? smoothstep((g.b - x) / g.sR) : 1,
+          );
         }
-        const yg = hFull + (g.yDip - hFull) * inf;
+        const yg = hFull + (hRest - hFull) * inf;
         if (yg < y) y = yg;
       }
       return y;
     };
+  }
+
+  /**
+   * Where the clock sits.
+   *
+   * The outermost shoulders leave a wedge of bar fill with nothing in it:
+   * vertical side against its pill group, tip pointing inward at the rest line.
+   * The top is pinned to that rest line and not to the membrane's height at the
+   * tip — a middle group narrows the gap, the flanks cross earlier and the tip
+   * sits deeper, so reading the curve there would walk the type down the bar
+   * every time read-aloud or a search box appeared. hFull is the deepest pill
+   * plus the wrap padding and every group is the same height, so the rest line
+   * is the one thing in here that never moves.
+   */
+  function recordWedges(
+    gaps: { crevice: boolean; a: number; b: number; sL: number; sR: number }[],
+    hFull: number,
+    hRest: number,
+  ): void {
+    const wide = gaps.filter((g) => !g.crevice);
+    const first = wide[0];
+    const last = wide[wide.length - 1];
+
+    // Where a gap's two flanks meet: past this the other shoulder is the one
+    // holding the edge down, so it is where the wedge actually ends.
+    const cross = (g: { a: number; b: number; sL: number; sR: number }) =>
+      (g.a * g.sR + g.b * g.sL) / (g.sL + g.sR);
+
+    wedgeTop = hRest + CLOCK_NUDGE_Y;
+    wedgeH = Math.max(0, hFull - hRest);
+
+    if (first) {
+      const tip = Math.min(first.a + first.sL, cross(first));
+      wedgeL = { x: first.a, w: Math.max(0, tip - first.a) };
+    } else {
+      wedgeL = null;
+    }
+
+    if (last) {
+      const tip = Math.max(last.b - last.sR, cross(last));
+      wedgeR = { x: tip, w: Math.max(0, last.b - tip) };
+    } else {
+      wedgeR = null;
+    }
   }
 
   /** Catmull-Rom through the samples, emitted as cubic Béziers. */
@@ -1354,6 +1461,10 @@
     window.addEventListener("resize", updateDropdownPositions);
     window.addEventListener("settingsUpdated", onSettingsUpdated);
     observeMembrane();
+    updateClock();
+    // The minute is the smallest thing on display, so a coarse tick is plenty;
+    // it exists mostly to survive the browser throttling a background tab.
+    clockTimer = setInterval(updateClock, 15_000);
   });
 
   onDestroy(() => {
@@ -1361,6 +1472,7 @@
     window.removeEventListener("resize", updateDropdownPositions);
     window.removeEventListener("settingsUpdated", onSettingsUpdated);
     teardownMembrane();
+    if (clockTimer) clearInterval(clockTimer);
   });
 
   // ── Read Aloud controls ────────────────────────────────────────────────────
@@ -1434,6 +1546,34 @@
     <path d={membraneFill} fill="#252525" />
     <path d={membraneEdge} fill="none" stroke="#323232" stroke-width="1" />
   </svg>
+
+  <!-- The time and the date, tucked into the sloped shoulders either side of
+       the open middle. Outside .nav-content on purpose: in there they would be
+       flex items that push the pills around, and the mutation observer would
+       treat every tick of the clock as a reason to re-measure the membrane. -->
+  {#if showClock && wedgeL}
+    <div
+      class="nav-clock nav-clock-left"
+      style="left: {wedgeL.x}px; width: {wedgeL.w}px; top: {wedgeTop}px; height: {wedgeH}px;"
+    >
+      <span class="nav-clock-inner">
+        <span class="nav-clock-line">{clockTime}</span>
+        <span class="nav-clock-line nav-clock-second">{clockDay}</span>
+      </span>
+    </div>
+  {/if}
+
+  {#if showClock && wedgeR}
+    <div
+      class="nav-clock nav-clock-right"
+      style="left: {wedgeR.x}px; width: {wedgeR.w}px; top: {wedgeTop}px; height: {wedgeH}px;"
+    >
+      <span class="nav-clock-inner">
+        <span class="nav-clock-line">{clockDate}</span>
+        <span class="nav-clock-line nav-clock-second">{clockMonth}</span>
+      </span>
+    </div>
+  {/if}
 
   <!-- Hangs off the bar rather than the viewport on purpose: the bar carries a
        transform, so a fixed chip would resolve against it anyway, and the
@@ -2030,6 +2170,61 @@
     pointer-events: none;
     overflow: visible;
     z-index: 0;
+  }
+
+  /* ── The wedge clock ──────────────────────────────────────────────────────
+     Numbers came out of navbar-text-lab.html. Milonga is inherited from the
+     body, which is the whole reason the type sits right in here.
+
+     pointer-events stays off so this can never swallow the long-press that pins
+     the bar, and .nav-content comes after it in the DOM so an opaque pill wins
+     if the two ever meet. */
+  .nav-clock {
+    position: absolute;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    pointer-events: none;
+    font-size: 12px;
+    line-height: 15px;
+    letter-spacing: -0.15px;
+    color: #8e8e8e;
+    opacity: 0.62;
+    white-space: nowrap;
+  }
+
+  /* Each slot's type stacks against the wedge's vertical side, so the top line
+     gets the full run and the one below it has less room as the hypotenuse
+     closes in. Right-aligning the date is what lands the month under the gap in
+     the line above rather than under its first letter. */
+  .nav-clock-left {
+    justify-content: flex-start;
+  }
+
+  .nav-clock-right {
+    justify-content: flex-end;
+  }
+
+  .nav-clock-inner {
+    display: inline-block;
+  }
+
+  .nav-clock-left .nav-clock-inner {
+    text-align: left;
+    transform: translateX(-1.5px);
+  }
+
+  .nav-clock-right .nav-clock-inner {
+    text-align: right;
+    transform: translateX(1.5px);
+  }
+
+  .nav-clock-line {
+    display: block;
+  }
+
+  .nav-clock-second {
+    font-size: 0.8em;
   }
 
   .nav-content {

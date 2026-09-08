@@ -197,6 +197,10 @@ export interface UserSettings {
   // Per-device for the same reason as the editor bars above — a phone wants the
   // reading space back, a desktop usually does not care.
   navBarPinned?: boolean; // default false = hides on scroll as before
+  // The time and date tucked into the sloped shoulders either side of the bar's
+  // open middle. Per-device like the pin above: it is chrome, and what reads as
+  // a nice detail on a desktop can be clutter on a small phone.
+  navBarClock?: boolean; // default true
 
   // Clock / timezone
   // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected
@@ -338,6 +342,11 @@ export function getNavBarPinned(): boolean {
 /** Remember whether the navigation bar is pinned down. */
 export function setNavBarPinned(pinned: boolean): void {
   updateSettings({ navBarPinned: pinned });
+}
+
+/** Is the shoulder clock showing? Defaults to on. */
+export function getNavBarClock(): boolean {
+  return getSettings().navBarClock !== false;
 }
 
 /**

@@ -80,6 +80,7 @@
   let wordWrap: boolean = true;
   let allowRotation: boolean = false;
   let navBarPinned: boolean = false;
+  let navBarClock: boolean = true;
   let showRedLetter: boolean = true;
   let themedTitles: boolean = true;
   let showArt: boolean = true;
@@ -149,6 +150,7 @@
       wordWrap,
       allowRotation,
       navBarPinned,
+      navBarClock,
       showRedLetter,
       themedTitles,
       showArt,
@@ -221,7 +223,8 @@
   $: appearanceSummary = `${THEME_LABELS[theme] ?? theme} · ${fontSize}px`;
   $: readerSummary =
     `${LAYOUT_LABELS[verseLayout] ?? verseLayout}${showRedLetter ? " · Red letters" : ""}` +
-    `${navBarPinned ? " · Nav bar pinned" : ""}`;
+    `${navBarPinned ? " · Nav bar pinned" : ""}` +
+    `${navBarClock ? "" : " · No clock"}`;
   $: readAloudSummary =
     `${ttsVoices.find((v) => v.id === ttsVoice)?.label ?? ttsVoice} · ${ttsRate.toFixed(2)}×`;
   $: generalSummary =
@@ -260,6 +263,7 @@
     wordWrap = settings.wordWrap !== undefined ? settings.wordWrap : true;
     allowRotation = settings.allowRotation !== undefined ? settings.allowRotation : false;
     navBarPinned = settings.navBarPinned === true;
+    navBarClock = settings.navBarClock !== false;
     showRedLetter = settings.showRedLetter !== false;
     themedTitles = settings.themedTitles !== false;
     showArt = settings.showArt !== false;
@@ -478,6 +482,7 @@
     wordWrap;
     allowRotation;
     navBarPinned;
+    navBarClock;
     showRedLetter;
     themedTitles;
     showArt;
@@ -678,6 +683,13 @@
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={navBarPinned} />
         <span class="label-text">Keep the navigation bar visible (never hide on scroll)</span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={navBarClock} />
+        <span class="label-text">Show the time and date in the navigation bar</span>
       </label>
     </div>
 
