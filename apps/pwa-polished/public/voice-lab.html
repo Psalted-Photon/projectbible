@@ -71,6 +71,18 @@
   label.field > span { display: block; font-size: 0.8rem; color: #9a9a9a; margin-bottom: 4px; }
   .hint { font-size: 0.78rem; color: #777; margin-top: 6px; }
   select { font: inherit; color: #e6e6e6; background: #131313; border: 1px solid #3a3a3a; border-radius: 6px; padding: 6px; }
+  .slot {
+    display: grid; grid-template-columns: 1fr auto; gap: 6px 8px;
+    align-items: center; margin-bottom: 12px;
+  }
+  .slot select { width: 100%; min-width: 0; }
+  .slot .wrow { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
+  .slot .wrow input { flex: 1; }
+  .slot .pct {
+    font-variant-numeric: tabular-nums; font-size: 0.8rem;
+    color: #9a9a9a; min-width: 3.4em; text-align: right;
+  }
+  .slot.off { opacity: 0.45; }
 </style>
 </head>
 <body>
@@ -115,28 +127,22 @@
 </div>
 
 <div class="panel">
-  <h2>Blend two</h2>
-  <div class="row" style="margin-bottom:10px">
-    <select id="blendA"></select>
-    <select id="blendB"></select>
-  </div>
-  <label class="field">
-    <span id="blendLabel">Mix</span>
-    <input type="range" id="blendMix" min="0" max="100" step="5" value="50">
-  </label>
+  <h2>Blend up to four</h2>
+  <div id="slots"></div>
   <label class="field">
     <span id="speedLabel">Model speed — 1.00×</span>
     <input type="range" id="speed" min="0.7" max="1.3" step="0.05" value="1">
   </label>
   <div class="row">
     <button class="primary" id="playBlend">Hear the blend</button>
-    <button id="playA">Just A</button>
-    <button id="playB">Just B</button>
+    <button id="evenBlend">Even out</button>
   </div>
   <div class="recipe" id="recipe">—</div>
   <div class="hint">
-    A blend is the average of two style vectors, so it costs no download — the recipe
-    above is all that needs saving. Blend within the same accent for clean results.
+    A blend is the weighted average of the style vectors, so it costs no download — the
+    recipe above is all that needs saving. The sliders are relative, not a budget: whatever
+    you set is scaled to add up to 100%, shown beside each one. A slot left empty or at zero
+    sits the blend out. Blend within the same accent for clean results.
   </div>
 </div>
 
@@ -386,24 +392,100 @@ function renderVoices() {
   }
 }
 
+const SLOTS = ['A', 'B', 'C', 'D'];
+
+/** Weight a slot starts at — A and B on, so the panel opens on a real blend. */
+const startWeight = (key) => (key === 'A' || key === 'B' ? 50 : 0);
+
+/** The four mixer rows. Built once; only their options change afterwards. */
+function buildSlots() {
+  const host = $('slots');
+  host.textContent = '';
+  for (const key of SLOTS) {
+    const row = document.createElement('div');
+    row.className = 'slot';
+    row.id = 'slot' + key;
+
+    const sel = document.createElement('select');
+    sel.id = 'voice' + key;
+    sel.onchange = updateRecipe;
+
+    // Four ingredients is more than anyone can hold in their head, so each one
+    // stays auditionable on its own — this is what "Just A" used to be.
+    const solo = document.createElement('button');
+    solo.textContent = 'Solo';
+    solo.onclick = () => {
+      const id = sel.value;
+      if (id) speakVoice(id, null);
+      else say('Slot ' + key + ' is empty.', true);
+    };
+
+    const wrow = document.createElement('div');
+    wrow.className = 'wrow';
+    const weight = document.createElement('input');
+    weight.type = 'range';
+    weight.id = 'weight' + key;
+    weight.min = 0;
+    weight.max = 100;
+    weight.step = 5;
+    weight.value = startWeight(key);
+    weight.oninput = updateRecipe;
+    const pct = document.createElement('span');
+    pct.className = 'pct';
+    pct.id = 'pct' + key;
+    wrow.append(weight, pct);
+
+    row.append(sel, solo, wrow);
+    host.append(row);
+  }
+}
+
 function fillBlendPickers() {
   const list = starred.size ? [...starred].sort() : voices;
-  for (const which of ['blendA', 'blendB']) {
-    const sel = $(which);
+  for (const key of SLOTS) {
+    const sel = $('voice' + key);
     const keep = sel.value;
     sel.textContent = '';
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '— none —';
+    sel.append(none);
     for (const id of list) {
       const o = document.createElement('option');
       o.value = id;
       o.textContent = id;
       sel.append(o);
     }
-    if (keep && list.indexOf(keep) !== -1) sel.value = keep;
+    // Starring narrows the list, which can drop a slot's voice out from under
+    // it. Falling back to none is honest; silently keeping a voice that is no
+    // longer on offer is not.
+    sel.value = keep && list.indexOf(keep) !== -1 ? keep : '';
   }
-  if ($('blendB').options.length > 1 && $('blendA').value === $('blendB').value) {
-    $('blendB').selectedIndex = 1;
+  if (SLOTS.every((key) => !$('voice' + key).value) && list.length > 0) {
+    $('voiceA').value = list[0];
+    if (list.length > 1) $('voiceB').value = list[1];
   }
   updateRecipe();
+}
+
+/**
+ * The slots that actually contribute, each with its share of the blend.
+ *
+ * The sliders are relative rather than a hundred-point budget — dividing by
+ * their total means dragging one never forces you to go and correct the other
+ * three, and the shares still add up to exactly 1.
+ */
+function mixture() {
+  const picked = [];
+  let total = 0;
+  for (const key of SLOTS) {
+    const id = $('voice' + key).value;
+    const weight = +$('weight' + key).value;
+    if (!id || weight <= 0) continue;
+    picked.push({ key, id, weight });
+    total += weight;
+  }
+  return picked.map((p) => ({ key: p.key, id: p.id, share: p.weight / total }));
 }
 
 // ── speaking ────────────────────────────────────────────────────────────────
@@ -522,23 +604,29 @@ async function speakVoice(id, el) {
   }
 }
 
-function blendVectors(a, b, mix) {
-  const out = new Float32Array(a.length);
-  for (let i = 0; i < a.length; i++) out[i] = a[i] * (1 - mix) + b[i] * mix;
+/** Weighted average of any number of style vectors; shares add up to 1. */
+function blendVectors(parts) {
+  const out = new Float32Array(parts[0].vec.length);
+  for (const part of parts) {
+    for (let i = 0; i < out.length; i++) out[i] += part.vec[i] * part.share;
+  }
   return out;
 }
 
 function updateRecipe() {
-  const a = $('blendA').value;
-  const b = $('blendB').value;
-  const mix = +$('blendMix').value / 100;
+  const mix = mixture();
   const speed = (+$('speed').value).toFixed(2);
+  const share = new Map(mix.map((m) => [m.key, m.share]));
 
-  $('blendLabel').textContent =
-    'Mix — ' + Math.round((1 - mix) * 100) + '% ' + (a || 'A') + ' / ' + Math.round(mix * 100) + '% ' + (b || 'B');
+  for (const key of SLOTS) {
+    const s = share.get(key);
+    $('slot' + key).classList.toggle('off', s === undefined);
+    $('pct' + key).textContent = s === undefined ? '—' : Math.round(s * 100) + '%';
+  }
+
   $('speedLabel').textContent = 'Model speed — ' + speed + '×';
-  $('recipe').textContent = a && b
-    ? (1 - mix).toFixed(2) + ' ' + a + ' + ' + mix.toFixed(2) + ' ' + b + '  @ speed ' + speed
+  $('recipe').textContent = mix.length > 0
+    ? mix.map((m) => m.share.toFixed(2) + ' ' + m.id).join(' + ') + '  @ speed ' + speed
     : '—';
 }
 
@@ -546,10 +634,7 @@ function updateRecipe() {
 
 $('loadBtn').onclick = loadModel;
 $('preset').onchange = (e) => { $('sampleText').value = e.target.value; };
-$('blendMix').oninput = updateRecipe;
 $('speed').oninput = updateRecipe;
-$('blendA').onchange = updateRecipe;
-$('blendB').onchange = updateRecipe;
 
 $('starredOnly').onclick = () => {
   showStarredOnly = !showStarredOnly;
@@ -557,28 +642,37 @@ $('starredOnly').onclick = () => {
   renderVoices();
 };
 
+$('evenBlend').onclick = () => {
+  // Level the voices that are in play and leave the empty slots alone, so this
+  // is "balance what I picked" rather than "undo my picks".
+  const inPlay = SLOTS.filter((key) => $('voice' + key).value);
+  for (const key of SLOTS) {
+    $('weight' + key).value = inPlay.indexOf(key) !== -1 ? 50 : startWeight(key);
+  }
+  updateRecipe();
+};
+
 $('playBlend').onclick = async () => {
-  const a = $('blendA').value;
-  const b = $('blendB').value;
-  if (!a || !b) {
-    say('Pick two voices first.', true);
+  const mix = mixture();
+  if (mix.length === 0) {
+    say('Pick a voice and give it some weight first.', true);
     return;
   }
   try {
-    const pair = await Promise.all([getStyle(a), getStyle(b)]);
-    const mix = +$('blendMix').value / 100;
-    // The espeak language follows whichever voice dominates: the two accents are
-    // phonemized differently and a blend has to commit to one of them.
-    const lead = mix > 0.5 ? b : a;
-    await speakWith(blendVectors(pair[0], pair[1], mix), 'blend', ACCENTS[lead.slice(0, 2)][2], null);
+    const vecs = await Promise.all(mix.map((m) => getStyle(m.id)));
+    const parts = mix.map((m, i) => ({ vec: vecs[i], share: m.share }));
+    // The espeak language follows the heaviest voice: the accents are phonemized
+    // differently and a blend has to commit to one of them.
+    const lead = mix.reduce((best, m) => (m.share > best.share ? m : best));
+    const label = mix.length === 1 ? lead.id : 'blend of ' + mix.length;
+    await speakWith(blendVectors(parts), label, ACCENTS[lead.id.slice(0, 2)][2], null);
   } catch (err) {
     say(err.message || String(err), true);
   }
 };
-$('playA').onclick = () => { if ($('blendA').value) speakVoice($('blendA').value, null); };
-$('playB').onclick = () => { if ($('blendB').value) speakVoice($('blendB').value, null); };
 
 (async function start() {
+  buildSlots();
   const hasGpu = await checkDevice();
   $('modelHint').textContent = hasGpu
     ? 'Shared with Read Aloud — if it is already downloaded there, this is instant.'
