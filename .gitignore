@@ -51,6 +51,28 @@ packs/workbench/commentaries.sqlite
 packs/consolidated/encyclotopical.sqlite
 apps/pwa-polished/public/packs/consolidated/encyclotopical.sqlite
 
+# The Historical Map, on the same reasoning as Encyclotopical above: it ships
+# via the GitHub release, which is where production downloads it from, so
+# committing 34 MB through LFS on every rebuild buys nothing.
+packs/consolidated/atlas-map.sqlite
+packs/consolidated/atlas-map-*.sqlite
+packs/consolidated/atlas-places.sqlite
+apps/pwa-polished/public/packs/consolidated/atlas-map.sqlite
+apps/pwa-polished/public/packs/consolidated/atlas-map-*.sqlite
+apps/pwa-polished/public/packs/consolidated/atlas-places.sqlite
+
+# What the map is built FROM. Intermediates, not products: 162 MB that never
+# reaches a device, rebuilt by the scripts in scripts/atlas/ from Natural Earth,
+# OpenStreetMap, the Barrington Atlas and GeoNames.
+packs/atlas.sqlite
+packs/basemap.sqlite
+packs/gazetteer.sqlite
+
+# The atlas lab's data — 81 MB of GeoJSON written by scripts/atlas/export-lab-layers.mjs
+# for the dev-server lab page. Regenerated from the packs above, and the whole
+# lab goes away once the map is in the app.
+apps/pwa-polished/public/atlas/
+
 # TTS runtime WASM (copied from node_modules by vite copyTtsRuntime plugin)
 apps/pwa-polished/public/tts/
 

@@ -115,6 +115,14 @@ const REQUIRED_STORES_BY_TYPE: Record<string, string[]> = {
  * died anywhere leaves at least one of the later ones with nothing in it.
  */
 export async function packDataLooksComplete(packId: string, packType: string): Promise<boolean> {
+  // The Historical Map can do better than "not empty". Its core pack records
+  // how many drawn layers the shards are supposed to add up to, so a shard that
+  // stopped halfway is caught by counting rather than guessed at. The art pack
+  // taught the opposite lesson — treating a not-yet-installed shard store as
+  // damage re-downloads it on every launch forever — so this only fires once
+  // the core has told us what to expect.
+  if (packType === 'atlas-map') return atlasDataLooksComplete(packId);
+
   const required = REQUIRED_STORES_BY_TYPE[packType];
   if (!required) return true;
 
@@ -162,6 +170,19 @@ export async function removePack(packId: string): Promise<void> {
   );
 
   const packType = pack.type;
+
+  // The map's geometry shards and its place index register no row in `packs`,
+  // so they are not in allPackIds and step 4 would leave their downloaded files
+  // cached — 32 of the pack's 34 MB. Their names are worked out here, before
+  // step 2 clears the metadata that says how many shards there were.
+  const extraCachedIds: string[] = [];
+  if (packType === 'atlas-map') {
+    const shardCount = await readAtlasMetaNumber('geometry_shards');
+    for (let n = 1; n <= shardCount; n++) {
+      extraCachedIds.push(`atlas-map-${String(n).padStart(2, '0')}`);
+    }
+    extraCachedIds.push('atlas-map-places');
+  }
 
   // Step 2: Clear type-specific data stores. Every transaction goes through
   // withTx, which re-acquires the connection and rejects on abort — without
@@ -268,6 +289,10 @@ export async function removePack(packId: string): Promise<void> {
       art: ['art_scenes', 'art_images'],
       geonames: ['modern_places'],
       headings: ['section_headings'],
+      // Same shape as art: the geometry and the search index arrive in their
+      // own files, and deleting the map has to take them with it — they are
+      // 32 of its 34 MB.
+      'atlas-map': ATLAS_STORES,
     };
 
     // Only clear stores this database actually has — the list spans packs whose
@@ -295,11 +320,89 @@ export async function removePack(packId: string): Promise<void> {
   // reinstalling replays those bytes instead of fetching anything.
   try {
     const { getPackLoader } = await import('../lib/progressive-init');
-    await getPackLoader().removeCachedPack(packId);
+    const loader = getPackLoader();
+    await loader.removeCachedPack(packId);
+    for (const id of extraCachedIds) await loader.removeCachedPack(id);
   } catch (error) {
     // The blob is a cache; failing to clear it must not fail the removal.
     console.warn(`Could not clear cached file for ${packId}:`, error);
   }
+}
+
+/** One number out of the Historical Map's own metadata, or 0 if it isn't there. */
+async function readAtlasMetaNumber(key: string): Promise<number> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('atlas_meta')) return 0;
+  const row = await new Promise<{ value?: string } | undefined>((resolve) => {
+    const req = db.transaction('atlas_meta', 'readonly').objectStore('atlas_meta').get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(undefined);
+  });
+  return Number(row?.value ?? 0) || 0;
+}
+
+/** Every store the Historical Map writes into, core and shards alike. */
+const ATLAS_STORES = [
+  'atlas_meta',
+  'atlas_eras',
+  'atlas_layers',
+  'atlas_geometry',
+  'atlas_era_places',
+  'atlas_points',
+  'atlas_biblical_places',
+  'atlas_ancient_names',
+  'atlas_place_photos',
+  'atlas_place_index',
+];
+
+/**
+ * Did the whole map arrive — core, every geometry shard, and the place index?
+ *
+ * Counting rows against the core's own stated totals is the only test that
+ * catches the failure that matters here: a shard interrupted partway leaves the
+ * geometry store holding real layers, so it is neither empty nor complete, and
+ * the map would draw with a continent missing and no error anywhere.
+ */
+async function atlasDataLooksComplete(packId: string): Promise<boolean> {
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('atlas_meta')) return true; // schema is behind
+
+  const expected = await new Promise<{ value?: string } | undefined>((resolve) => {
+    const req = db.transaction('atlas_meta', 'readonly').objectStore('atlas_meta').get('geometry_layers');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(undefined);
+  });
+
+  // No core metadata means the core import never finished.
+  const wanted = Number(expected?.value ?? 0);
+  if (!wanted) {
+    console.warn(`[packs] ${packId}: the map pack has no layer count — the last install did not finish`);
+    return false;
+  }
+
+  const count = async (name: string) =>
+    db.objectStoreNames.contains(name)
+      ? new Promise<number>((resolve) => {
+          const req = db.transaction(name, 'readonly').objectStore(name).count();
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(0);
+        })
+      : 0;
+
+  const layers = await count('atlas_geometry');
+  if (layers !== wanted) {
+    console.warn(`[packs] ${packId}: ${layers} of ${wanted} map layers arrived — the last install did not finish`);
+    return false;
+  }
+
+  for (const name of ['atlas_eras', 'atlas_biblical_places', 'atlas_place_index']) {
+    if ((await count(name)) === 0) {
+      console.warn(`[packs] ${packId}: "${name}" is empty — the last install did not finish`);
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**

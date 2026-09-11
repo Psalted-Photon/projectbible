@@ -11,6 +11,7 @@
   "devDependencies": {
     "adm-zip": "^0.5.16",
     "concurrently": "^9.1.0",
+    "shapefile": "^0.6.6",
     "wait-on": "^8.0.1",
     "xml2js": "^0.6.2"
   },

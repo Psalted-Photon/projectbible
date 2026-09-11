@@ -9,7 +9,12 @@
 
 import { loadBootstrap } from './bootstrap-loader';
 import { APP_VERSION, PACK_MANIFEST_URL, USE_BUNDLED_PACKS, FEATURES } from '../config';
-import { importPackFromBytes, importArtImageShard } from '../adapters/pack-import';
+import {
+  importPackFromBytes,
+  importArtImageShard,
+  importAtlasGeometryShard,
+  importAtlasPlaceIndex,
+} from '../adapters/pack-import';
 import { listInstalledPacks as listInstalledPacksFromDb, removePack as removePackFromDb } from '../adapters/db-manager';
 import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
@@ -301,6 +306,69 @@ export async function installArtImageShards(
 
   logInstall('art-shards-done', { images: total });
   return total;
+}
+
+/** Manifest ids of the map's geometry shards, in install order. */
+const ATLAS_SHARD_PREFIX = 'atlas-map-';
+/** The place index is not a shard — it is its own file, installed last. */
+const ATLAS_PLACES_ID = 'atlas-map-places';
+
+/**
+ * Download and import everything the Historical Map needs beyond its core.
+ *
+ * atlas-map.sqlite carries the eras, the layer catalogue and the places; the
+ * drawn geometry arrives as ~10 MB shards and the place search index as one
+ * more file, so sql.js never holds the whole 34 MB at once. Each goes through
+ * PackLoader, so it keeps the retry and SHA-256 validation every other download
+ * gets, and its buffer is released before the next one starts.
+ */
+export async function installAtlasParts(
+  onProgress?: (message: string) => void
+): Promise<{ layers: number; columns: number }> {
+  const loader = getPackLoaderInstance();
+  const manifest = (await loader.fetchManifest()) as any;
+  const entries: Array<{ id: string }> = manifest?.packs ?? [];
+
+  const shards = entries
+    .filter(
+      (p: any) =>
+        typeof p?.id === 'string' &&
+        p.id.startsWith(ATLAS_SHARD_PREFIX) &&
+        /^atlas-map-\d+$/.test(p.id)
+    )
+    .sort((a: any, b: any) => a.id.localeCompare(b.id));
+
+  if (shards.length === 0) {
+    logInstall('atlas-shards-none');
+    return { layers: 0, columns: 0 };
+  }
+
+  logInstall('atlas-shards-begin', { count: shards.length });
+  let layers = 0;
+
+  for (let i = 0; i < shards.length; i++) {
+    const id = shards[i].id;
+    onProgress?.(`Installing map layers ${i + 1} of ${shards.length}…`);
+
+    let data: Uint8Array | null = await loader.downloadPack(id);
+    // Hand the bytes over and drop our reference before awaiting, so the shard
+    // is not pinned in two places while it imports.
+    const importing = importAtlasGeometryShard(data, { clearFirst: i === 0, label: id });
+    data = null;
+    layers += await importing;
+  }
+
+  let columns = 0;
+  if (entries.some((p: any) => p?.id === ATLAS_PLACES_ID)) {
+    onProgress?.('Installing place search…');
+    let data: Uint8Array | null = await loader.downloadPack(ATLAS_PLACES_ID);
+    const importing = importAtlasPlaceIndex(data);
+    data = null;
+    columns = await importing;
+  }
+
+  logInstall('atlas-shards-done', { layers, columns });
+  return { layers, columns };
 }
 
 /**

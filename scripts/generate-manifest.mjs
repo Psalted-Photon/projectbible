@@ -120,8 +120,42 @@ const PACK_CONFIGS = {
     name: 'Biblical Art',
     description: 'Famous public-domain paintings tied to Bible scenes. Tap the in-text art icon to view. Images bundled for offline viewing. Source: Wikimedia Commons (public domain)',
     dependencies: []
+  },
+  // The Historical Map. Type 'study' because that is a type every shipped build
+  // already accepts — see the note on the art shards below. What actually routes
+  // the import is the pack's own metadata, which says 'atlas-map'.
+  'atlas-map.sqlite': {
+    id: 'atlas-map',
+    type: 'study',
+    name: 'Historical Map',
+    description:
+      'A drawn world map that works offline, sixteen eras of the biblical world from the patriarchs to the later Roman empire, every place Scripture names with its verses, and 955 photographs. Sources: Natural Earth (public domain); Barrington Atlas / AWMC and OpenStreetMap (ODbL); Digital Atlas of the Roman Empire (CC BY-SA 3.0); OpenBible.info and GeoNames (CC BY 4.0)',
+    dependencies: []
+  },
+  'atlas-places.sqlite': {
+    id: 'atlas-map-places',
+    type: 'study',
+    name: 'Historical Map place search',
+    description: 'Place search index for the Historical Map pack.',
+    dependencies: []
   }
 };
+
+// The map's drawn layers ship as numbered shards, discovered the same way the
+// art images are, and for the same reason: sql.js holds a whole file in memory
+// to open it. Absent from the Packs pane — they install with the map itself.
+for (const filename of readdirSync(PACKS_DIR)
+  .filter((f) => /^atlas-map-\d+\.sqlite$/.test(f))
+  .sort()) {
+  const part = filename.match(/(\d+)/)[1];
+  PACK_CONFIGS[filename] = {
+    id: `atlas-map-${part}`,
+    type: 'study',
+    name: `Historical Map geometry (part ${Number(part)})`,
+    description: 'Drawn map layers for the Historical Map pack.',
+    dependencies: []
+  };
+}
 
 // The art pack ships its images as numbered shards rather than one file, so its
 // entries are discovered rather than listed. Each shard is a real manifest entry

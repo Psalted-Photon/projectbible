@@ -3,6 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
 import { resolve } from 'path';
+import { atlasSearch } from './vite-atlas-search';
 
 // Plugin to copy bootstrap pack to build output and public folder (for dev)
 // Bootstrap is a small (208KB) SQLite file with book metadata for instant startup
@@ -384,7 +385,8 @@ export default defineConfig({
     }),
     copyBootstrapPack(), // Always bundle bootstrap (208KB)
     copyPolishedPacks(), // Only in dev or when VITE_USE_BUNDLED_PACKS=true
-    copyTtsRuntime()     // Read Aloud engine WASM → /tts/ (lazy-cached)
+    copyTtsRuntime(),    // Read Aloud engine WASM → /tts/ (lazy-cached)
+    atlasSearch()        // dev-only place search over packs/gazetteer.sqlite
   ],
   server: {
     port: 5174,
@@ -419,3 +421,5 @@ export default defineConfig({
     copyPublicDir: true
   }
 });
+
+

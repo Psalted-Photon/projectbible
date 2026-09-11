@@ -7,9 +7,16 @@
     audioPackHasChapters,
     packDataLooksComplete,
   } from "../../adapters/db-manager";
-  import { importPackFromSQLite, importPackFromBytes, importArtImageShard } from "../../adapters/pack-import";
+  import {
+    importPackFromSQLite,
+    importPackFromBytes,
+    importArtImageShard,
+    importAtlasGeometryShard,
+    importAtlasPlaceIndex,
+    atlasPackSupported,
+  } from "../../adapters/pack-import";
   import { installAudioPackToOPFS, reindexAudioPack } from "../../adapters/audio";
-  import { loadPackOnDemand, installArtImageShards } from "../../lib/progressive-init";
+  import { loadPackOnDemand, installArtImageShards, installAtlasParts } from "../../lib/progressive-init";
   import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from "../../config";
   import {
     isTtsSupported,
@@ -284,6 +291,15 @@
       url: `${BASE_URL}/geonames.sqlite`,
     },
     {
+      id: "atlas-map",
+      name: "Historical Map",
+      description: "Offline world map + 16 eras of the biblical world",
+      info: "A drawn map of the world that works with no connection, and a timeline of sixteen eras over the top of it — from Abraham leaving Ur to the later Roman empire. Tap any place for the verses that name it, its encyclopedia article and a photograph.\n\nEvery place Scripture names is searchable, alongside 562,000 modern ones. Opens from the Map window, and from the Map tab on any place in the encyclopedia.\n\nNatural Earth (public domain); Barrington Atlas and OpenStreetMap (ODbL); Digital Atlas of the Roman Empire (CC BY-SA); OpenBible.info and GeoNames (CC BY 4.0).",
+      size: "33.78 MB",
+      icon: "🗺️",
+      url: `${BASE_URL}/atlas-map.sqlite`,
+    },
+    {
       id: "biblical-art",
       name: "Biblical Art",
       description: "Public-domain paintings of Bible scenes",
@@ -456,6 +472,18 @@
   }
 
   async function installConsolidatedPack(pack: (typeof CONSOLIDATED_PACKS)[0]) {
+    // The map's geometry is compressed inside the pack and inflated on read,
+    // which needs DecompressionStream. Checked here rather than mid-install:
+    // downloading 34 MB and then failing to unpack it would leave a half-built
+    // map that looks installed.
+    if (pack.id === "atlas-map" && !atlasPackSupported()) {
+      alert(
+        `${pack.name} needs a newer browser than this one.\n\n` +
+          "It works in Chrome 80 and later, Safari 16.4 and later, and Firefox 113 and later."
+      );
+      return;
+    }
+
     if (installedPacks.some((p) => p.id === pack.id)) {
       if (
         !confirm(`Pack "${pack.name}" is already installed. Re-download it?`)
@@ -522,6 +550,23 @@
             await importArtImageShard(shard, { clearFirst: n === 1, label: `art-images-${part}` });
           }
         }
+
+        if (pack.id === "atlas-map") {
+          // Same walk for the map's geometry shards, then its place index.
+          for (let n = 1; ; n++) {
+            const part = String(n).padStart(2, "0");
+            const res = await fetch(`${BASE_URL}/atlas-map-${part}.sqlite`);
+            if (!res.ok) break;
+            installProgress = `Installing map layers (part ${n})…`;
+            const shard = new Uint8Array(await res.arrayBuffer());
+            await importAtlasGeometryShard(shard, { clearFirst: n === 1, label: `atlas-map-${part}` });
+          }
+          const placesRes = await fetch(`${BASE_URL}/atlas-places.sqlite`);
+          if (placesRes.ok) {
+            installProgress = "Installing place search…";
+            await importAtlasPlaceIndex(new Uint8Array(await placesRes.arrayBuffer()));
+          }
+        }
       } else {
         await loadPackOnDemand(pack.id, (progress) => {
           const stageLabel = getStageLabel(progress.stage);
@@ -538,6 +583,15 @@
         // shards so sql.js never holds the whole pack at once.
         if (pack.id === "biblical-art") {
           await installArtImageShards((message) => {
+            installProgress = message;
+          });
+        }
+
+        // atlas-map.sqlite carries the eras and the places; the drawn geometry
+        // and the place search index arrive as separate files, for the same
+        // reason the paintings do.
+        if (pack.id === "atlas-map") {
+          await installAtlasParts((message) => {
             installProgress = message;
           });
         }
@@ -580,6 +634,13 @@ Free up space on your device, or remove a pack you are not using, then try again
     if (packId === "biblical-art") {
       for (const [id, bytes] of Object.entries(manifestBytes)) {
         if (id.startsWith("biblical-art-images-")) total += bytes;
+      }
+    }
+    // The map is split the same way: atlas-map.sqlite is under 2 MB, and the
+    // geometry shards and the place index are the other 32.
+    if (packId === "atlas-map") {
+      for (const [id, bytes] of Object.entries(manifestBytes)) {
+        if (id !== "atlas-map" && id.startsWith("atlas-map-")) total += bytes;
       }
     }
     return total;
@@ -654,6 +715,14 @@ Free up space on your device, or remove a pack you are not using, then try again
         0
       );
       if (artTotal > 0) sizes["biblical-art"] = formatBytes(artTotal);
+
+      // Same for the map: atlas-map.sqlite is under 2 MB on its own, and the
+      // card would be advertising a 34 MB download as a small one.
+      const atlasTotal = Object.entries(bytesById).reduce(
+        (sum, [id, bytes]) => (id === "atlas-map" || id.startsWith("atlas-map-") ? sum + bytes : sum),
+        0
+      );
+      if (atlasTotal > 0) sizes["atlas-map"] = formatBytes(atlasTotal);
 
       manifestSizes = sizes;
       manifestBytes = bytesById;

@@ -63,6 +63,25 @@ async function streamTable<T>(
 }
 
 /**
+ * Empty several stores in one transaction, skipping any this database has not
+ * got — the store list spans schema versions, and an older device may be a
+ * migration behind.
+ */
+async function clearStores(names: string[]): Promise<void> {
+  const idb = await openDB();
+  const present = names.filter((name) => idb.objectStoreNames.contains(name));
+  if (!present.length) return;
+
+  await new Promise<void>((resolve, reject) => {
+    const tx = idb.transaction(present, 'readwrite');
+    present.forEach((name) => tx.objectStore(name).clear());
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(new Error(`clear aborted for ${present.join(', ')}`));
+  });
+}
+
+/**
  * Import a pack from a SQLite File into IndexedDB.
  *
  * For callers that genuinely start with a File -- drag-and-drop, install-from-URL.
@@ -156,6 +175,135 @@ export async function importArtImageShard(
     }
 
     await logInstallFlush('shard-done', { label, wrote });
+    return wrote;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Can this browser install the Historical Map pack?
+ *
+ * Its geometry is gzipped inside the pack and inflated on read, which needs
+ * DecompressionStream — Chrome 80, Safari 16.4, Firefox 113. Everything else in
+ * the app works without it, so this is checked before the download starts
+ * rather than discovered halfway through an install that cannot finish.
+ */
+export function atlasPackSupported(): boolean {
+  return typeof DecompressionStream !== 'undefined';
+}
+
+/** Gzipped bytes from an atlas pack, as a Blob IndexedDB can file-back. */
+function gzipBlob(data: Uint8Array): Blob {
+  // slice(): sql.js hands back a view that the next step() invalidates.
+  return new Blob([data.slice() as unknown as BlobPart], { type: 'application/gzip' });
+}
+
+/**
+ * Import one shard of the Historical Map's geometry.
+ *
+ * The map's drawn layers live in numbered shards rather than in atlas-map.sqlite,
+ * so sql.js only ever holds ~10 MB at a time. Like the art shards, a shard is
+ * not a pack: it registers no row in `packs`, and only the first one clears the
+ * store. Returns how many layers it wrote.
+ */
+export async function importAtlasGeometryShard(
+  bytes: Uint8Array,
+  options: { clearFirst?: boolean; label?: string } = {}
+): Promise<number> {
+  const label = options.label ?? 'atlas-shard';
+  logInstall('atlas-shard-open-start', { label, bytes: bytes.length });
+
+  const sqlJsModule = await import('sql.js');
+  const initSqlJs = sqlJsModule.default || sqlJsModule;
+  const SQL = await initSqlJs({ locateFile: (file: string) => `/${file}` });
+
+  const db = new SQL.Database(bytes);
+  // sql.js has its own copy; let the download buffer go before the writes.
+  bytes = null as unknown as Uint8Array;
+  logInstall('atlas-shard-open-done', { label });
+
+  try {
+    if (options.clearFirst) {
+      const idb = await openDB();
+      await new Promise<void>((resolve, reject) => {
+        const tx = idb.transaction('atlas_geometry', 'readwrite');
+        tx.objectStore('atlas_geometry').clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(new Error('atlas_geometry clear aborted'));
+      });
+      logInstall('atlas-shard-cleared', { label });
+    }
+
+    let wrote = 0;
+    const stmt = db.prepare('SELECT id, encoding, raw_bytes, data FROM atlas_geometry');
+    try {
+      while (stmt.step()) {
+        const [id, encoding, rawBytes, data] = stmt.get() as [string, string, number, Uint8Array];
+        // One layer per transaction, each wrapped as a Blob so IndexedDB hands
+        // it to the file-backed blob store rather than cloning the bytes.
+        await batchWriteTransaction('atlas_geometry', (store) => {
+          store.put({ id, encoding, rawBytes, data: gzipBlob(data) });
+        });
+        wrote++;
+      }
+    } finally {
+      stmt.free();
+    }
+
+    await logInstallFlush('atlas-shard-done', { label, wrote });
+    return wrote;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Import the place search index.
+ *
+ * Thirteen gzipped columns covering all 562,524 places, rather than half a
+ * million rows. Also not a pack: no row in `packs`, and it always clears first
+ * because a mixture of columns from two builds would be read as one table and
+ * quietly answer wrong.
+ */
+export async function importAtlasPlaceIndex(bytes: Uint8Array): Promise<number> {
+  logInstall('atlas-places-open-start', { bytes: bytes.length });
+
+  const sqlJsModule = await import('sql.js');
+  const initSqlJs = sqlJsModule.default || sqlJsModule;
+  const SQL = await initSqlJs({ locateFile: (file: string) => `/${file}` });
+
+  const db = new SQL.Database(bytes);
+  bytes = null as unknown as Uint8Array;
+  logInstall('atlas-places-open-done');
+
+  try {
+    const idb = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = idb.transaction('atlas_place_index', 'readwrite');
+      tx.objectStore('atlas_place_index').clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(new Error('atlas_place_index clear aborted'));
+    });
+
+    let wrote = 0;
+    const stmt = db.prepare('SELECT name, kind, encoding, raw_bytes, data FROM atlas_place_columns');
+    try {
+      while (stmt.step()) {
+        const [name, kind, encoding, rawBytes, data] = stmt.get() as
+          [string, string, string, number, Uint8Array];
+        await batchWriteTransaction('atlas_place_index', (store) => {
+          store.put({ name, kind, encoding, rawBytes, data: gzipBlob(data) });
+        });
+        wrote++;
+      }
+    } finally {
+      stmt.free();
+    }
+
+    await logInstallFlush('atlas-places-done', { columns: wrote });
     return wrote;
   } finally {
     db.close();
@@ -314,7 +462,7 @@ export async function importPackFromBytes(
       // stored ID always matches the canonical manifest IDs used by the UI.
       id: rawId?.replace(/\.v\d+$/, '') ?? rawId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art',
+      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art' | 'atlas-map',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -455,6 +603,172 @@ export async function importPackFromBytes(
       } else {
         console.log('No art_images table in this pack — scenes imported without images');
       }
+    } else if (packInfo.type === 'atlas-map') {
+      // The Historical Map: sixteen eras, the catalogue of drawn layers, the
+      // places Scripture names, and the photographs. The geometry itself and
+      // the place search index arrive in their own files — see
+      // importAtlasGeometryShard and importAtlasPlaceIndex.
+      console.log('Importing the Historical Map pack…');
+
+      if (!atlasPackSupported()) {
+        throw new Error(
+          'This browser cannot read the Historical Map pack: it needs DecompressionStream ' +
+            '(Chrome 80+, Safari 16.4+, Firefox 113+).'
+        );
+      }
+
+      // A re-install must not leave rows from the previous one behind: a layer
+      // dropped between builds would otherwise stay in the catalogue for ever,
+      // pointing at geometry no shard carries.
+      await clearStores([
+        'atlas_meta',
+        'atlas_eras',
+        'atlas_layers',
+        'atlas_era_places',
+        'atlas_points',
+        'atlas_biblical_places',
+        'atlas_ancient_names',
+        'atlas_place_photos',
+      ]);
+
+      // The pack's own metadata, kept as-is. This is what a finished install is
+      // checked against: geometry_layers and place_rows say what the shards are
+      // supposed to add up to, and detail1_coverage says where the fine
+      // shorelines actually reach.
+      await batchWriteTransaction('atlas_meta', (store) => {
+        for (const [key, value] of Object.entries(metadata)) store.put({ key, value });
+      });
+
+      await streamTable(
+        db,
+        'SELECT id, title, subtitle, year_start, year_end, sort_order, confidence, blurb, dating_note, books FROM atlas_eras',
+        'atlas_eras',
+        ([id, title, subtitle, yearStart, yearEnd, sortOrder, confidence, blurb, datingNote, books]) => ({
+          id: id as string,
+          title: title as string,
+          subtitle: (subtitle as string) ?? null,
+          yearStart: yearStart as number,
+          yearEnd: yearEnd as number,
+          sortOrder: sortOrder as number,
+          confidence: confidence as string,
+          blurb: (blurb as string) ?? null,
+          datingNote: (datingNote as string) ?? null,
+          books: (books as string) ?? null,
+        }),
+        { label: 'atlas eras' }
+      );
+
+      await streamTable(
+        db,
+        'SELECT id, layer_group, kind, detail, era_id, title, source, confidence, sort_order, shard, raw_bytes FROM atlas_geometry_index',
+        'atlas_layers',
+        ([id, group, kind, detail, eraId, title, source, confidence, sortOrder, shard, rawBytes]) => ({
+          id: id as string,
+          group: group as string,
+          kind: kind as string,
+          // IndexedDB will not index a null, and the compound index on
+          // [group, kind, detail] is how the map asks for "coastline at 50".
+          // Overlays have no detail, so they take 0 and are never asked for
+          // that way.
+          detail: (detail as number) ?? 0,
+          eraId: (eraId as string) ?? null,
+          title: title as string,
+          source: (source as string) ?? null,
+          confidence: (confidence as string) ?? null,
+          sortOrder: (sortOrder as number) ?? 0,
+          shard: shard as number,
+          rawBytes: rawBytes as number,
+        }),
+        { label: 'atlas layers' }
+      );
+
+      await streamTable(
+        db,
+        'SELECT id, era_id, name, lat, lon, kind, verses FROM atlas_era_places',
+        'atlas_era_places',
+        ([placeId, eraId, name, lat, lon, kind, verses]) => ({
+          // A place appears in as many eras as name it, so neither column is a
+          // key on its own.
+          id: `${placeId}|${eraId}`,
+          placeId: placeId as string,
+          eraId: eraId as string,
+          name: name as string,
+          lat: lat as number,
+          lon: lon as number,
+          kind: (kind as string) ?? null,
+          verses: (verses as number) ?? 0,
+        }),
+        { label: 'era places' }
+      );
+
+      await streamTable(
+        db,
+        'SELECT id, kind, name, lat, lon, elevation, country, population, rank FROM atlas_points',
+        'atlas_points',
+        ([id, kind, name, lat, lon, elevation, country, population, rank]) => ({
+          id: id as number,
+          kind: kind as string,
+          name: name as string,
+          lat: lat as number,
+          lon: lon as number,
+          elevation: (elevation as number) ?? null,
+          country: (country as string) ?? null,
+          population: (population as number) ?? null,
+          rank: (rank as number) ?? null,
+        }),
+        { label: 'map points' }
+      );
+
+      await streamTable(
+        db,
+        'SELECT id, name, lat, lon, kind, modern, verses FROM atlas_biblical_places',
+        'atlas_biblical_places',
+        ([id, name, lat, lon, kind, modern, verses]) => ({
+          id: id as string,
+          name: name as string,
+          lat: lat as number,
+          lon: lon as number,
+          kind: (kind as string) ?? null,
+          modern: (modern as string) ?? null,
+          verses: (verses as string) ?? '[]',
+        }),
+        { label: 'biblical places' }
+      );
+
+      await streamTable(
+        db,
+        'SELECT id, name, kind, lat, lon, year_start, year_end FROM atlas_ancient_names',
+        'atlas_ancient_names',
+        ([id, name, kind, lat, lon, yearStart, yearEnd]) => ({
+          id: id as number,
+          name: name as string,
+          kind: (kind as string) ?? null,
+          lat: lat as number,
+          lon: lon as number,
+          yearStart: (yearStart as number) ?? null,
+          yearEnd: (yearEnd as number) ?? null,
+        }),
+        { label: 'ancient names' }
+      );
+
+      await streamTable(
+        db,
+        'SELECT place, thumb_url, full_url, author, license, page_url, caption, palette FROM atlas_place_photos',
+        'atlas_place_photos',
+        ([place, thumbUrl, fullUrl, author, license, pageUrl, caption, palette]) => ({
+          place: place as string,
+          thumbUrl: thumbUrl as string,
+          fullUrl: fullUrl as string,
+          author: (author as string) ?? null,
+          license: (license as string) ?? null,
+          pageUrl: (pageUrl as string) ?? null,
+          caption: (caption as string) ?? null,
+          palette: (palette as string) ?? null,
+        }),
+        { label: 'photographs' }
+      );
+
+      console.log(`✅ Historical Map pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'cross-references') {
       // Import cross-references
       const xrefRows = db.exec(`

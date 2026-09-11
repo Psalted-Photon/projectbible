@@ -1,0 +1,2531 @@
+[
+  [
+    "g3d49f6.isobands",
+    {
+      "place": "Pisgah",
+      "type": "mountain range",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g6799b6.geometry",
+    {
+      "place": "Abiezer",
+      "type": "people group",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gcf9fea.geometry",
+    {
+      "place": "Abiezer",
+      "type": "people group",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g24ded8.geometry",
+    {
+      "place": "Abiezer",
+      "type": "people group",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g12ff64.geometry",
+    {
+      "place": "Abiezer",
+      "type": "people group",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g14a526.geometry",
+    {
+      "place": "Abiezer",
+      "type": "people group",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g5fde71.geometry",
+    {
+      "place": "Abiezer",
+      "type": "people group",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g4cc9f0.geometry",
+    {
+      "place": "Abiezer",
+      "type": "people group",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge72c1b.isobands",
+    {
+      "place": "Abilene",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g6b9f35.geometry",
+    {
+      "place": "Achaia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g283820.geometry",
+    {
+      "place": "Adriatic Sea",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g3ccc7b.isobands",
+    {
+      "place": "Amalek",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g66ae51.geometry",
+    {
+      "place": "Harmon",
+      "type": "mountain ridge",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3750ec.geometry",
+    {
+      "place": "Amaw",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gadb142.isobands",
+    {
+      "place": "Ammon",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g333df2.geometry",
+    {
+      "place": "Arabah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g9ace11.simplified",
+    {
+      "place": "Havilah 3",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gc1086c.geometry",
+    {
+      "place": "Arabia 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g15edcb.isobands",
+    {
+      "place": "Syria 1",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g8c2014.isobands",
+    {
+      "place": "Paddan-aram",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g03ac48.isobands",
+    {
+      "place": "Ur 1",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g8a8940.isobands",
+    {
+      "place": "Argob",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g1758b2.geometry",
+    {
+      "place": "Valley of Jezreel",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gf811f0.geometry",
+    {
+      "place": "Valley of Jehoshaphat",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gd33034.geometry",
+    {
+      "place": "Scythia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g590ac2.isobands",
+    {
+      "place": "Asia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g76b6c9.isobands",
+    {
+      "place": "Nimrod",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g523915.isobands",
+    {
+      "place": "Shinar",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g76bdaf.isobands",
+    {
+      "place": "Bashan",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3e5460.isobands",
+    {
+      "place": "Beth-barah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3d355b.isobands",
+    {
+      "place": "Shur",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g5c0592.geometry",
+    {
+      "place": "Shur",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ga277ef.isobands",
+    {
+      "place": "Valley of Aven",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge8859c.isobands",
+    {
+      "place": "Beyond the River",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g933f6d.isobands",
+    {
+      "place": "Bithynia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g2e7540.geometry",
+    {
+      "place": "Salt Sea",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g0940e2.geometry",
+    {
+      "place": "Brook of the Willows",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gb51fc8.geometry",
+    {
+      "place": "Buz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g5d3abe.geometry",
+    {
+      "place": "Buz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gd257a0.geometry",
+    {
+      "place": "Buz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge980ef.isobands",
+    {
+      "place": "Cabul 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g7e51d1.isobands",
+    {
+      "place": "Canaan",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g353f30.simplified",
+    {
+      "place": "Crete",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gc82ef6.isobands",
+    {
+      "place": "Hilakku",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g6c0591.isobands",
+    {
+      "place": "Ellasar",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g017f10.simplified",
+    {
+      "place": "Tarshish 2",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g718bce.geometry",
+    {
+      "place": "Elishah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge8954f.simplified",
+    {
+      "place": "Caphtor",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g515500.simplified",
+    {
+      "place": "Cauda",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gae312e.isobands",
+    {
+      "place": "Leb-kamai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g64db35.geometry",
+    {
+      "place": "Umman Manda",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gdea47d.simplified",
+    {
+      "place": "Sea of Galilee",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g1324fb.simplified",
+    {
+      "place": "Chios",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gf61273.simplified",
+    {
+      "place": "Cos",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g4b4d59.isobands",
+    {
+      "place": "Cushan",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g4fc33f.isobands",
+    {
+      "place": "Midian",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g759c47.isobands",
+    {
+      "place": "Dalmatia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ga00ceb.isobands",
+    {
+      "place": "Decapolis",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g7ad983.isobands",
+    {
+      "place": "Uz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3833b7.geometry",
+    {
+      "place": "Dura",
+      "type": "natural area",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g357ac3.geometry",
+    {
+      "place": "East",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g40d263.isobands",
+    {
+      "place": "Ham 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g727b1f.isobands",
+    {
+      "place": "Elam",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0a25af.geometry",
+    {
+      "place": "Ezion-geber",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g776ba1.geometry",
+    {
+      "place": "Italy",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g15276c.simplified",
+    {
+      "place": "Elishah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g05e9e8.simplified",
+    {
+      "place": "Elishah",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gd87a62.geometry",
+    {
+      "place": "Greece",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ga08869.isobands",
+    {
+      "place": "Pontus",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g9a4100.geometry",
+    {
+      "place": "El-paran",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g5008cf.geometry",
+    {
+      "place": "Ziz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3fb3df.isobands",
+    {
+      "place": "Ephraim 3",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g80ab8b.isobands",
+    {
+      "place": "Ethiopia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0351db.geometry",
+    {
+      "place": "Tarshish 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ga2818f.isobands",
+    {
+      "place": "Galatia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g99a57f.isobands",
+    {
+      "place": "Goiim 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "geade1c.geometry",
+    {
+      "place": "Gebal 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g87ae9f.geometry",
+    {
+      "place": "Teman",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3029b0.geometry",
+    {
+      "place": "Valley of Salt",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g7a9a02.geometry",
+    {
+      "place": "Valley of Salt",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0e7a2e.geometry",
+    {
+      "place": "Gennesaret",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g307887.isobands",
+    {
+      "place": "Geshur",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g896059.geometry",
+    {
+      "place": "Giah",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge7afb2.isobands",
+    {
+      "place": "Gilead 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gcd335e.geometry",
+    {
+      "place": "Magog",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gfb335d.geometry",
+    {
+      "place": "Hatti",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gf33df0.geometry",
+    {
+      "place": "Harosheth-hagoyim",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gd41958.geometry",
+    {
+      "place": "Harosheth-hagoyim",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g1d7e26.geometry",
+    {
+      "place": "Gomer",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g9a0f06.isobands",
+    {
+      "place": "Goshen 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g64f331.geometry",
+    {
+      "place": "Goshen 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3afa7f.geometry",
+    {
+      "place": "Goshen 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g191121.geometry",
+    {
+      "place": "Goshen 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g13f1ae.geometry",
+    {
+      "place": "Goshen 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g06b051.geometry",
+    {
+      "place": "Goshen 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g23ec09.geometry",
+    {
+      "place": "Great Sea",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g06a14c.isobands",
+    {
+      "place": "Koa",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g7f0777.geometry",
+    {
+      "place": "Halah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gffb7d8.isobands",
+    {
+      "place": "Zobah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g8a3ada.geometry",
+    {
+      "place": "Hara",
+      "type": "mountain range",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g9d73e6.simplified",
+    {
+      "place": "Harhar",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g494f30.geometry",
+    {
+      "place": "Hara",
+      "type": "mountain range",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge10752.simplified",
+    {
+      "place": "Harmon",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g25b264.isobands",
+    {
+      "place": "Uz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g8a3a7f.geometry",
+    {
+      "place": "Havilah 3",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "geb656f.geometry",
+    {
+      "place": "Havilah 3",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge239b6.geometry",
+    {
+      "place": "Havilah 3",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g858c01.isobands",
+    {
+      "place": "Havvoth-jair",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g6e396e.geometry",
+    {
+      "place": "Hazor 5",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g9a278d.isobands",
+    {
+      "place": "Upu",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g5e98fb.geometry",
+    {
+      "place": "Idumea",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g857eea.isobands",
+    {
+      "place": "Illyricum",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g323d81.isobands",
+    {
+      "place": "India",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gb731f9.isobands",
+    {
+      "place": "Ituraea",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g8e7709.geometry",
+    {
+      "place": "Javan",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gf2ea0e.isobands",
+    {
+      "place": "Jeruel",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gffa031.isobands",
+    {
+      "place": "Jeshimon",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gda936b.geometry",
+    {
+      "place": "Jordan Valley",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g55ebd7.geometry",
+    {
+      "place": "Judea 1",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gb88bb1.isobands",
+    {
+      "place": "Judea 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g796d8b.geometry",
+    {
+      "place": "Karkor",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gd4e2eb.isobands",
+    {
+      "place": "Kedar",
+      "type": "people group",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g82affa.geometry",
+    {
+      "place": "Valley of Shaveh",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g35f425.geometry",
+    {
+      "place": "Valley of Shaveh",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g22657e.geometry",
+    {
+      "place": "Valley of Shaveh",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g899046.geometry",
+    {
+      "place": "Kir 1",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g79b65c.geometry",
+    {
+      "place": "Kir 1",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gf28449.geometry",
+    {
+      "place": "Kir 1",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gffff3d.geometry",
+    {
+      "place": "Kir 1",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ga93418.geometry",
+    {
+      "place": "Kir 1",
+      "type": "mountain range",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g196639.geometry",
+    {
+      "place": "Kir 1",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g830d01.isobands",
+    {
+      "place": "Kue",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g9ca219.isobands",
+    {
+      "place": "Nuhashe",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g528234.geometry",
+    {
+      "place": "Sharon 1",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g32a9d3.isobands",
+    {
+      "place": "Lebanon",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g47a69b.geometry",
+    {
+      "place": "Put",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gc455a8.geometry",
+    {
+      "place": "Lud 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gced2db.isobands",
+    {
+      "place": "Lycaonia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g58daff.geometry",
+    {
+      "place": "Lycia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge2a5b0.isobands",
+    {
+      "place": "Maacah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g1a6676.geometry",
+    {
+      "place": "Macedonia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge44c9e.simplified",
+    {
+      "place": "Malta",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g7c24d6.simplified",
+    {
+      "place": "Sea of Egypt",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g7bb3aa.geometry",
+    {
+      "place": "Mesha",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0bfc2d.geometry",
+    {
+      "place": "Mesha",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gc12324.geometry",
+    {
+      "place": "Meshech",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gb6fda5.geometry",
+    {
+      "place": "Migron 2",
+      "type": "settlement",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gc5c32e.geometry",
+    {
+      "place": "Minni",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gb459ad.geometry",
+    {
+      "place": "Valley of Mizpeh",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g2eb246.geometry",
+    {
+      "place": "Valley of Mizpeh",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g228665.isobands",
+    {
+      "place": "Moab 1",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g182eb5.isobands",
+    {
+      "place": "Moab 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gc73d90.geometry",
+    {
+      "place": "Moriah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gfc5561.geometry",
+    {
+      "place": "Moriah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gc97389.geometry",
+    {
+      "place": "Moriah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g80c72e.geometry",
+    {
+      "place": "Moriah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ga301a5.geometry",
+    {
+      "place": "Moriah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g26071d.geometry",
+    {
+      "place": "Moriah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gcbc186.geometry",
+    {
+      "place": "Moriah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gaa0aa9.geometry",
+    {
+      "place": "Moriah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g8e7c53.geometry",
+    {
+      "place": "Moriah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g4ddbf8.isobands",
+    {
+      "place": "Mount Ephraim",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0ed146.isobands",
+    {
+      "place": "Mount Seir 1",
+      "type": "mountain range",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g33eb5b.geometry",
+    {
+      "place": "Mount Seir 1",
+      "type": "mountain range",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g4f5a46.geometry",
+    {
+      "place": "Mount Lebanon",
+      "type": "mountain range",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3a5d8d.geometry",
+    {
+      "place": "Mysia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g718940.isobands",
+    {
+      "place": "South 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gaa7aa2.isobands",
+    {
+      "place": "Naphoth-dor",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g63a2ae.geometry",
+    {
+      "place": "Valley of Iphtahel",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gf328fd.isobands",
+    {
+      "place": "Uz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g044645.geometry",
+    {
+      "place": "North",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gdd394c.isobands",
+    {
+      "place": "Uphaz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g43da41.geometry",
+    {
+      "place": "Uphaz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gab6de1.simplified",
+    {
+      "place": "Uphaz",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g63cbe3.geometry",
+    {
+      "place": "Uphaz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g1ed0bd.simplified",
+    {
+      "place": "Uphaz",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge025e3.simplified",
+    {
+      "place": "Uphaz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0c3f61.geometry",
+    {
+      "place": "Pamphylia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0f45b2.isobands",
+    {
+      "place": "Paran",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g4f25ac.geometry",
+    {
+      "place": "Pathros",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gac481f.simplified",
+    {
+      "place": "Patmos",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gbb2516.isobands",
+    {
+      "place": "Pekod",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0e6b24.geometry",
+    {
+      "place": "Persia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g746ae5.isobands",
+    {
+      "place": "Philistia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g11a0a9.isobands",
+    {
+      "place": "Phoenicia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gbb47f1.geometry",
+    {
+      "place": "Phrygia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0bb20f.geometry",
+    {
+      "place": "Pi-hahiroth",
+      "type": "natural area",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gcacacb.simplified",
+    {
+      "place": "Pishon",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "gf10b01.isobands",
+    {
+      "place": "Pisidia",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g220ecf.simplified",
+    {
+      "place": "Sea of Egypt",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g5407d2.simplified",
+    {
+      "place": "Sea of Egypt",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g8f43c2.isobands",
+    {
+      "place": "Sea of Egypt",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g07ed9a.simplified",
+    {
+      "place": "Suphah",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "gea2e66.simplified",
+    {
+      "place": "Sea of Egypt",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g56ea72.simplified",
+    {
+      "place": "Sea of Egypt",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g1d0c70.simplified",
+    {
+      "place": "Tarshish 2",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gdfd7f3.geometry",
+    {
+      "place": "Salmone",
+      "type": "promontory",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gf5df80.isobands",
+    {
+      "place": "Samaria 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gf40806.simplified",
+    {
+      "place": "Samos",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0941fc.simplified",
+    {
+      "place": "Samothrace",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "geb09fe.geometry",
+    {
+      "place": "Shual",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g1f32da.geometry",
+    {
+      "place": "Shual",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g93b077.geometry",
+    {
+      "place": "Shaalim",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gbff450.geometry",
+    {
+      "place": "Shaalim",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gb336ef.geometry",
+    {
+      "place": "Shalishah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g12afb9.geometry",
+    {
+      "place": "Shalishah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gf09a97.geometry",
+    {
+      "place": "Shalishah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gddb477.geometry",
+    {
+      "place": "Shalishah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g0ebd19.geometry",
+    {
+      "place": "Sharon 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge85699.geometry",
+    {
+      "place": "Valley of Mizpeh",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g9764d8.isobands",
+    {
+      "place": "Shephelah",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g255167.geometry",
+    {
+      "place": "Shihor-libnath",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g50e9e7.geometry",
+    {
+      "place": "Sutu",
+      "type": "people group",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g49e180.geometry",
+    {
+      "place": "Sin",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g42f2b5.geometry",
+    {
+      "place": "Sin",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g8eff70.geometry",
+    {
+      "place": "Sin",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gd70643.geometry",
+    {
+      "place": "South 3",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g504a8f.geometry",
+    {
+      "place": "Spain",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g841f86.geometry",
+    {
+      "place": "Syria 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g6957e1.simplified",
+    {
+      "place": "Syrtis",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "g10a45a.simplified",
+    {
+      "place": "Tarshish 2",
+      "type": "island",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gb23fb1.geometry",
+    {
+      "place": "Trachonitis",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g8d00f0.geometry",
+    {
+      "place": "Trogyllium",
+      "type": "promontory",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g5e91ea.isobands",
+    {
+      "place": "Tubal",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gff53f7.geometry",
+    {
+      "place": "Uz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gd7e60e.geometry",
+    {
+      "place": "Uz",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gbd0c2f.simplified",
+    {
+      "place": "Uzal",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g681227.geometry",
+    {
+      "place": "Uzal",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g49f861.geometry",
+    {
+      "place": "Uzal",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g2d5fc3.geometry",
+    {
+      "place": "Valley of Achor",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g68cf68.isobands",
+    {
+      "place": "Valley of Aijalon",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g1ba10b.geometry",
+    {
+      "place": "Valley of Aven",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gccdbf2.geometry",
+    {
+      "place": "Valley of Rephaim",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g4a3ff9.geometry",
+    {
+      "place": "Valley of Beracah",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ge4f407.geometry",
+    {
+      "place": "Valley of Beracah",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g69fcde.geometry",
+    {
+      "place": "Valley of Zephathah",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g2174f7.geometry",
+    {
+      "place": "Valley of Eshcol",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g03dcc7.geometry",
+    {
+      "place": "Valley of Eshcol",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g1548f9.geometry",
+    {
+      "place": "Valley of Gerar",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g15d742.geometry",
+    {
+      "place": "Valley of Gerar",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gff7463.geometry",
+    {
+      "place": "Valley of Gerar",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g4579c7.geometry",
+    {
+      "place": "Valley of Gerar",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gd63223.geometry",
+    {
+      "place": "Valley of Gibeon",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g929ef9.geometry",
+    {
+      "place": "Valley of Hebron",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gf6cd5e.geometry",
+    {
+      "place": "Valley of Iphtahel",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g2f72cc.geometry",
+    {
+      "place": "Valley of Jericho",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g803e7e.geometry",
+    {
+      "place": "Valley of Lebanon",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3dac63.geometry",
+    {
+      "place": "Valley of Lebanon",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g6aba2e.geometry",
+    {
+      "place": "Valley of Mizpeh",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g4db1fc.geometry",
+    {
+      "place": "Valley of Mizpeh",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gda5ee3.geometry",
+    {
+      "place": "Valley of Mizpeh",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g7d98c6.geometry",
+    {
+      "place": "Valley of Salt",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g9db00b.geometry",
+    {
+      "place": "Valley of Siddim",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g00b3eb.geometry",
+    {
+      "place": "Valley of Succoth",
+      "type": "valley",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gb1a444.geometry",
+    {
+      "place": "Waters of Merom",
+      "type": "body of water",
+      "shape": "polygon",
+      "landOrWater": "water"
+    }
+  ],
+  [
+    "ga7e226.isobands",
+    {
+      "place": "Wilderness of Maon",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g233cfa.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3e8fde.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g464131.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g49ed72.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g7f4bb5.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g958254.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gc95f6e.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ga3e84b.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gae7719.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g5e2266.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3a0452.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gff50d9.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g02b0c6.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ga3dcf4.geometry",
+    {
+      "place": "Wilderness of Sinai",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "geafde0.isobands",
+    {
+      "place": "Wilderness of Ziph",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g074d43.geometry",
+    {
+      "place": "Zimri",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g6634e6.geometry",
+    {
+      "place": "Zimri",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g51b30d.isobands",
+    {
+      "place": "Zin 2",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ga81f57.geometry",
+    {
+      "place": "Zuph",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "gae65fa.geometry",
+    {
+      "place": "Zuph",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g6acff1.geometry",
+    {
+      "place": "Zuph",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g3f0d1c.geometry",
+    {
+      "place": "Zuph",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g368292.geometry",
+    {
+      "place": "Zuph",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "ga6d75e.geometry",
+    {
+      "place": "Zuph",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ],
+  [
+    "g64d134.geometry",
+    {
+      "place": "Zuph",
+      "type": "region",
+      "shape": "polygon",
+      "landOrWater": "land"
+    }
+  ]
+]

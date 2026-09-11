@@ -13,7 +13,7 @@ import { logInstallIfActive } from '../lib/install-log';
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 33; // Migration 33: add naves_* stores (Nave's Topical, in the Encyclotopical pack)
+const DB_VERSION = 34; // Migration 34: add atlas_* stores (the Historical Map pack)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -54,10 +54,134 @@ export interface DBArtImage {
   data: Blob | Uint8Array;
 }
 
+/** One of the Historical Map pack's self-description rows. */
+export interface DBAtlasMeta {
+  key: string;
+  value: string;
+}
+
+export interface DBAtlasEra {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  yearStart: number;
+  yearEnd: number;
+  sortOrder: number;
+  /** 'attested' where borders are surveyed, 'approximate' where they are not. */
+  confidence: string;
+  blurb?: string | null;
+  /** Set only where the dating itself is disputed, and shown on the era card. */
+  datingNote?: string | null;
+  /** JSON array: the biblical books that witness this era. */
+  books?: string | null;
+}
+
+/** A drawn layer's entry in the catalogue. The geometry lives in atlas_geometry. */
+export interface DBAtlasLayer {
+  id: string;
+  group: 'basemap' | 'overlay';
+  kind: string;
+  /** 110 | 50 | 10 | 1 for basemap layers, null for overlays. */
+  detail: number | null;
+  eraId: string | null;
+  title: string;
+  source?: string | null;
+  confidence?: string | null;
+  sortOrder: number;
+  shard: number;
+  rawBytes: number;
+}
+
+/**
+ * One layer's GeoJSON, gzipped.
+ *
+ * Kept compressed in storage and inflated with DecompressionStream on read:
+ * 67 MB of linework is 21 MB this way, and inflating one layer costs a few
+ * milliseconds against holding all of it expanded forever.
+ */
+export interface DBAtlasGeometry {
+  id: string;
+  encoding: 'gzip';
+  rawBytes: number;
+  data: Blob;
+}
+
+export interface DBAtlasEraPlace {
+  id: string;        // `${placeId}|${eraId}` — a place can appear in many eras
+  placeId: string;
+  eraId: string;
+  name: string;
+  lat: number;
+  lon: number;
+  kind?: string | null;
+  verses: number;
+}
+
+export interface DBAtlasPoint {
+  id: number;
+  kind: 'peak' | 'city';
+  name: string;
+  lat: number;
+  lon: number;
+  elevation?: number | null;
+  country?: string | null;
+  population?: number | null;
+  rank?: number | null;
+}
+
+export interface DBAtlasBiblicalPlace {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  kind?: string | null;
+  /** What the place is called today, where it is known. */
+  modern?: string | null;
+  /** JSON [[label, ref], …] — every verse that names this place. */
+  verses: string;
+}
+
+export interface DBAtlasAncientName {
+  id: number;
+  name: string;
+  kind?: string | null;
+  lat: number;
+  lon: number;
+  yearStart?: number | null;
+  yearEnd?: number | null;
+}
+
+export interface DBAtlasPlacePhoto {
+  place: string;
+  thumbUrl: string;
+  fullUrl: string;
+  author?: string | null;
+  license?: string | null;
+  /** The Wikimedia Commons page, offered as a link and never navigated to. */
+  pageUrl?: string | null;
+  caption?: string | null;
+  palette?: string | null;
+}
+
+/**
+ * One column of the place search index.
+ *
+ * 562,524 places stored as columns rather than rows: two text blobs (the
+ * searchable names and the display names, newline-delimited) and a set of typed
+ * arrays. Gzipped here, inflated once when search first opens.
+ */
+export interface DBAtlasPlaceColumn {
+  name: string;
+  kind: 'utf8' | 'int32' | 'uint32' | 'uint16' | 'uint8' | 'json';
+  encoding: 'gzip';
+  rawBytes: number;
+  data: Blob;
+}
+
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art' | 'atlas-map';
   translationId?: string;
   translationName?: string;
   license: string;
@@ -978,6 +1102,74 @@ export function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('naves_tokens')) {
         const navesTokens = db.createObjectStore('naves_tokens', { keyPath: 'id', autoIncrement: true });
         navesTokens.createIndex('token', 'token', { unique: false });
+      }
+
+      // ── The Historical Map pack ───────────────────────────────────────────
+      //
+      // Split by how the data is read rather than by where it came from. The
+      // two blob stores (atlas_geometry, atlas_place_index) hold a handful of
+      // large gzipped rows that are inflated on demand and never queried; the
+      // rest are small tables read whole when the map opens.
+
+      // What the pack knows about itself: layer and row counts to check a
+      // finished install against, the fine-water coverage boxes, attribution.
+      if (!db.objectStoreNames.contains('atlas_meta')) {
+        db.createObjectStore('atlas_meta', { keyPath: 'key' });
+      }
+
+      // The sixteen eras of the timeline.
+      if (!db.objectStoreNames.contains('atlas_eras')) {
+        const atlasEras = db.createObjectStore('atlas_eras', { keyPath: 'id' });
+        atlasEras.createIndex('sortOrder', 'sortOrder', { unique: false });
+      }
+
+      // The catalogue of drawn layers — what exists, and which shard the bytes
+      // came from. Carries no geometry itself.
+      if (!db.objectStoreNames.contains('atlas_layers')) {
+        const atlasLayers = db.createObjectStore('atlas_layers', { keyPath: 'id' });
+        atlasLayers.createIndex('eraId', 'eraId', { unique: false });
+        atlasLayers.createIndex('group_kind_detail', ['group', 'kind', 'detail'], { unique: false });
+      }
+
+      // One gzipped GeoJSON blob per layer. Blob-wrapped so Chrome stores it in
+      // its file-backed blob store rather than cloning 20 MB through memory.
+      if (!db.objectStoreNames.contains('atlas_geometry')) {
+        db.createObjectStore('atlas_geometry', { keyPath: 'id' });
+      }
+
+      // Places lettered on a particular era's map.
+      if (!db.objectStoreNames.contains('atlas_era_places')) {
+        const atlasEraPlaces = db.createObjectStore('atlas_era_places', { keyPath: 'id' });
+        atlasEraPlaces.createIndex('eraId', 'eraId', { unique: false });
+      }
+
+      // Modern cities and named peaks drawn on the parchment basemap.
+      if (!db.objectStoreNames.contains('atlas_points')) {
+        const atlasPoints = db.createObjectStore('atlas_points', { keyPath: 'id' });
+        atlasPoints.createIndex('kind', 'kind', { unique: false });
+      }
+
+      // The places Scripture names, each with every verse that names it.
+      if (!db.objectStoreNames.contains('atlas_biblical_places')) {
+        const atlasBiblical = db.createObjectStore('atlas_biblical_places', { keyPath: 'id' });
+        atlasBiblical.createIndex('name', 'name', { unique: false });
+      }
+
+      // Dated names off the Barrington regional linework.
+      if (!db.objectStoreNames.contains('atlas_ancient_names')) {
+        const atlasAncient = db.createObjectStore('atlas_ancient_names', { keyPath: 'id' });
+        atlasAncient.createIndex('name', 'name', { unique: false });
+      }
+
+      // One Wikimedia photograph per place, with its credit.
+      if (!db.objectStoreNames.contains('atlas_place_photos')) {
+        db.createObjectStore('atlas_place_photos', { keyPath: 'place' });
+      }
+
+      // The place search index: thirteen gzipped columns, not half a million
+      // rows. Read once when search first opens, released when the map closes.
+      if (!db.objectStoreNames.contains('atlas_place_index')) {
+        db.createObjectStore('atlas_place_index', { keyPath: 'name' });
       }
 
       // Modern world places store (GeoNames — cities, states, countries worldwide)
