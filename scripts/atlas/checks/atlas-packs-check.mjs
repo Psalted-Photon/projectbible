@@ -259,7 +259,23 @@ console.log('\nPlace index — columns rebuilt into rows and compared to the gaz
   const countries = JSON.parse(cols.get('countries').data.toString('utf8'));
   const admin1s = JSON.parse(cols.get('admin1s').data.toString('utf8'));
   const fcodes = JSON.parse(cols.get('fcodes').data.toString('utf8'));
+  const fclasses = JSON.parse(cols.get('fclasses').data.toString('utf8'));
   const popExceptions = JSON.parse(cols.get('population_exceptions').data.toString('utf8'));
+
+  // Search ranks on the feature class — a town above a lake above a mountain —
+  // and gets it from this table rather than a column of its own.
+  expect(fclasses.length === fcodes.length, 'every feature code carries its class',
+    `${fcodes.length} codes, ${fclasses.length} classes`);
+  {
+    const wrong = [];
+    for (let i = 0; i < fcodes.length; i++) {
+      const actual = srcGaz.prepare('SELECT fclass FROM places WHERE fcode = ? LIMIT 1').get(fcodes[i]);
+      if ((actual?.fclass ?? '') !== fclasses[i]) {
+        wrong.push(`${fcodes[i]}: pack says ${fclasses[i]}, gazetteer says ${actual?.fclass}`);
+      }
+    }
+    expect(wrong.length === 0, 'every feature class matches the gazetteer', wrong.slice(0, 3).join(' | '));
+  }
 
   for (const [label, arr] of [['lat', lat], ['lon', lon], ['population', pop],
     ['importance', importance], ['country', countryCol], ['admin1', admin1Col], ['fcode', fcodeCol]]) {

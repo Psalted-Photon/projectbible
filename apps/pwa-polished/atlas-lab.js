@@ -16,11 +16,11 @@
  */
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { OverlayHost, TimelineOverlay } from './atlas-overlays.js';
-import { LabelEngine } from './atlas-labels.js';
-import { PlaceSearch, ScriptureSearch } from './atlas-search.js';
-import { BiblicalPlaces, groupByBook, bookName, haversine } from './atlas-places.js';
-import { parsePassage, placesInPassage, eraForBook } from './atlas-reading.js';
+import { OverlayHost, TimelineOverlay } from './src/lib/atlas/overlays.js';
+import { LabelEngine } from './src/lib/atlas/labels.js';
+import { PlaceSearch, ScriptureSearch } from './src/lib/atlas/search.js';
+import { BiblicalPlaces, groupByBook, bookName, haversine } from './src/lib/atlas/places.js';
+import { parsePassage, placesInPassage, eraForBook } from './src/lib/atlas/reading.js';
 import { getBookColor } from './src/lib/bibleData.js';
 
 const ATLAS = '/atlas';

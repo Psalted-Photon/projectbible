@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-09-10T23:56:21.474Z",
+  "createdAt": "2026-09-11T23:02:47.795Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -28,10 +28,10 @@
       "minAppVersion": "1.0.0",
       "size": 1843200,
       "sizeMB": 1.76,
-      "sha256": "672525929f7b155aff1d3bace2c73e872b6f4526971d814a81dc190406f5cc3e",
+      "sha256": "889865643662fefae885788068cc0ed6c25e7a3dbfd9eb0e76589ade5cba6d55",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map.sqlite",
-      "createdAt": "2026-09-10T23:56:24.665Z"
+      "createdAt": "2026-09-11T23:02:52.307Z"
     },
     {
       "id": "atlas-map-01",
@@ -43,10 +43,10 @@
       "minAppVersion": "1.0.0",
       "size": 10932224,
       "sizeMB": 10.43,
-      "sha256": "1784086201d52c0f7e697e751f63825bc280005b911f0099ab454dcab7c019e4",
+      "sha256": "a35db30be59be653e6ffc0fca99f4e764461ef52bcbd1ddbeefaee2270bb7058",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map-01.sqlite",
-      "createdAt": "2026-09-10T23:56:24.685Z"
+      "createdAt": "2026-09-11T23:02:52.326Z"
     },
     {
       "id": "atlas-map-02",
@@ -58,10 +58,10 @@
       "minAppVersion": "1.0.0",
       "size": 10940416,
       "sizeMB": 10.43,
-      "sha256": "33ef3c4e515f16de63726042458f546442ca79a49e92568100ab5af64d3f3486",
+      "sha256": "66e628c4b27f74df3e87af52eb23210f2f720e541665173a5d56b9b2943accbd",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map-02.sqlite",
-      "createdAt": "2026-09-10T23:56:24.697Z"
+      "createdAt": "2026-09-11T23:02:52.335Z"
     },
     {
       "id": "atlas-map-places",
@@ -73,10 +73,10 @@
       "minAppVersion": "1.0.0",
       "size": 11706368,
       "sizeMB": 11.16,
-      "sha256": "db8929a1320c4e06f6bc4732c3bdf07c488b1a668422c76d7c9f3a15d0201f31",
+      "sha256": "d814bccc279bbb0b00c1a21e1ab6e0ef6b368358cb508649642536b71d9508d2",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-places.sqlite",
-      "createdAt": "2026-09-10T23:56:24.675Z"
+      "createdAt": "2026-09-11T23:02:52.317Z"
     },
     {
       "id": "biblical-art",
@@ -256,7 +256,7 @@
       "sha256": "3dbc698da339d9c3b0f8050e5ec0374b734c4ba57a85f4a7925b6af9a1fa9239",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-09-10T23:56:24.579Z"
+      "createdAt": "2026-09-11T23:02:52.181Z"
     },
     {
       "id": "dictionary-en",
@@ -271,7 +271,7 @@
       "sha256": "1bd67240913ebbbf4f78f70add13279e150a989f6abb55eaf001e816a0f3a50a",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-09-10T23:56:24.417Z"
+      "createdAt": "2026-09-11T23:02:51.961Z"
     },
     {
       "id": "encyclotopical",
@@ -286,7 +286,7 @@
       "sha256": "310058b1e7b0dfe240d311fb58728e11bba79dc834d874ab994acd106e393dba",
       "dependencies": [],
       "downloadUrl": "/api/packs/encyclotopical.sqlite",
-      "createdAt": "2026-09-10T23:56:24.661Z"
+      "createdAt": "2026-09-11T23:02:52.303Z"
     },
     {
       "id": "geonames-modern-places-v1",
@@ -331,7 +331,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-09-10T23:56:21.892Z"
+      "createdAt": "2026-09-11T23:02:48.417Z"
     },
     {
       "id": "study-tools",
@@ -376,7 +376,7 @@
       "sha256": "c4541999b5170cfb5c2bf05cc512712e0e3b1e387226a331d2fb85db007238dc",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-09-10T23:56:21.860Z"
+      "createdAt": "2026-09-11T23:02:48.350Z"
     }
   ]
 }

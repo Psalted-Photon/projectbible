@@ -260,6 +260,16 @@ function buildPlaceIndex(gazetteerDb) {
   const admin1Index = new Map();
   const fcodes = [];
   const fcodeIndex = new Map();
+  /**
+   * The feature class of each entry in `fcodes`, in the same order.
+   *
+   * Search ranks a town above a lake above a mountain, and "mount" in a query
+   * says a mountain is wanted — all of which needs the class, not the code.
+   * GeoNames gives every code exactly one class (verified: not one of the 68
+   * codes here spans two), so this is 68 letters rather than a column of
+   * 562,524.
+   */
+  const fclasses = [];
 
   const intern = (list, index, value) => {
     const key = value ?? '';
@@ -291,7 +301,7 @@ function buildPlaceIndex(gazetteerDb) {
 
   const rows = gazetteerDb
     .prepare(
-      'SELECT name, norm, lat, lon, fcode, country, admin1, population, importance FROM places ORDER BY population DESC, importance DESC, id ASC'
+      'SELECT name, norm, lat, lon, fclass, fcode, country, admin1, population, importance FROM places ORDER BY population DESC, importance DESC, id ASC'
     )
     .iterate();
 
@@ -313,7 +323,16 @@ function buildPlaceIndex(gazetteerDb) {
     importance[i] = Math.min(row.importance ?? 0, 0xffff);
     countryCol[i] = intern(countries, countryIndex, row.country);
     admin1Col[i] = intern(admin1s, admin1Index, row.admin1);
-    fcodeCol[i] = intern(fcodes, fcodeIndex, row.fcode);
+    const fcodeAt = intern(fcodes, fcodeIndex, row.fcode);
+    fcodeCol[i] = fcodeAt;
+    // First row to use a code fixes its class; a later row disagreeing would
+    // mean the one-to-one assumption above had quietly stopped being true.
+    if (fclasses[fcodeAt] === undefined) fclasses[fcodeAt] = row.fclass ?? '';
+    else if (fclasses[fcodeAt] !== (row.fclass ?? '')) {
+      throw new Error(
+        `Feature code "${row.fcode}" is both class ${fclasses[fcodeAt]} and ${row.fclass} — search ranks on class`
+      );
+    }
 
     normParts.push(row.norm);
     displayParts.push(row.name);
@@ -346,6 +365,7 @@ function buildPlaceIndex(gazetteerDb) {
       ['countries', 'json', Buffer.from(JSON.stringify(countries), 'utf8')],
       ['admin1s', 'json', Buffer.from(JSON.stringify(admin1s), 'utf8')],
       ['fcodes', 'json', Buffer.from(JSON.stringify(fcodes), 'utf8')],
+      ['fclasses', 'json', Buffer.from(JSON.stringify(fclasses), 'utf8')],
       ['population_exceptions', 'json', Buffer.from(JSON.stringify(popExceptions), 'utf8')],
     ],
   };

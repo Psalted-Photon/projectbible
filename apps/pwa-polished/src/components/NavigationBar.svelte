@@ -1,4 +1,5 @@
 ﻿<script lang="ts">
+  import { dragScroll } from "../lib/dragScroll";
   import {
     navigationStore,
     availableTranslations,
@@ -1674,7 +1675,7 @@
     <div class="pin-notice" role="status">{pinNoticeText}</div>
   {/if}
 
-  <div class="nav-content" bind:this={navContentEl}>
+  <div class="nav-content" bind:this={navContentEl} use:dragScroll>
 
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 1: Navigation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-nav">
@@ -2336,6 +2337,13 @@
 
   .nav-content::-webkit-scrollbar {
     display: none;
+  }
+
+  /* While a sideways drag is running. The cursor says the bar is being grabbed,
+     and selection is off so dragging across the pills highlights nothing. */
+  .nav-content.drag-scrolling {
+    cursor: grabbing;
+    user-select: none;
   }
 
   .nav-spacer {
