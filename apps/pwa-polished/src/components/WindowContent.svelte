@@ -2,7 +2,10 @@
   import type { WindowState } from "../lib/stores/windowStore";
   import WindowContentSelector from "./WindowContentSelector.svelte";
   import BibleReader from "./BibleReader.svelte";
-  import MapPane from "./MapPane.svelte";
+  // The map window's contents. MapPane.svelte is still on disk untouched, so
+  // reverting to the old map is this one import — see step 17 phase 5, which
+  // deletes it once this has been lived with.
+  import AtlasPane from "./AtlasPane.svelte";
   import CommentaryReader from "./CommentaryReader.svelte";
   import JournalWriter from "./JournalWriter.svelte";
   import NotesPane from "./NotesPane.svelte";
@@ -23,7 +26,7 @@
 {:else if panel.contentType === 'bible'}
   <BibleReader windowId={panel.id} />
 {:else if panel.contentType === 'map'}
-  <MapPane windowId={panel.id} />
+  <AtlasPane windowId={panel.id} />
 {:else if panel.contentType === 'commentaries'}
   <CommentaryReader windowId={panel.id} />
 {:else if panel.contentType === 'journal'}

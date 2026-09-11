@@ -99,6 +99,8 @@
 
   let mapEl: HTMLDivElement | null = null;
   let map: L.Map | null = null;
+  /** The drawn map, when the Historical Map pack is installed. */
+  let atlas: any = null;
   let mapObserver: ResizeObserver | null = null;
 
   // The scroll container — bound so a jump can remember where you were and the
@@ -500,13 +502,51 @@
     if (t === "map" && hasMap) renderMap();
   }
 
-  function renderMap() {
+  /**
+   * The bare map.
+   *
+   * Deliberately bare: one marker, pan and zoom, and nothing else. No style
+   * picker, no layers, no timeline, no search — the corner button is the only
+   * way out of it, and it hands the place to the full map window.
+   *
+   * Where the Historical Map pack is installed this runs on the same engine the
+   * map window uses, with the features switched off, so it draws from the pack
+   * and works with no connection. Without the pack it falls back to the Esri
+   * tiles it has always drawn: this tab worked before any pack existed and has
+   * to keep working.
+   */
+  async function renderMap() {
     if (!mapEl || !place || place.latitude == null || place.longitude == null) return;
     destroyMap();
-    map = L.map(mapEl, { attributionControl: true, zoomControl: true }).setView(
-      [place.latitude, place.longitude],
-      9,
-    );
+
+    const at: [number, number] = [place.latitude, place.longitude];
+
+    try {
+      const { atlasInstalled, loadAtlasIndex, getAtlasJson } = await import('../lib/atlas/data');
+      if (await atlasInstalled()) {
+        const { createAtlasMap } = await import('../lib/atlas/map.js');
+        const index = await loadAtlasIndex();
+        // The tab can be closed while the pack is still being read.
+        if (!mapEl) return;
+        atlas = createAtlasMap(mapEl, {
+          getJson: getAtlasJson,
+          index,
+          slim: true,
+          center: at,
+          zoom: 9,
+        });
+        await atlas.start();
+        atlas.markPlace(place.latitude, place.longitude, title);
+        watchMapSize();
+        return;
+      }
+    } catch (err) {
+      // A pack that fails to open is not a reason to show no map at all.
+      console.warn('[isbe] drawn map unavailable, falling back to tiles', err);
+      destroyMap();
+    }
+
+    map = L.map(mapEl, { attributionControl: true, zoomControl: true }).setView(at, 9);
     L.tileLayer(
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       { maxZoom: 18, attribution: "Esri" },
@@ -517,7 +557,7 @@
     ).addTo(map);
     // circleMarker avoids Leaflet's default PNG marker icons (which 404 with the
     // CDN stylesheet and offline).
-    L.circleMarker([place.latitude, place.longitude], {
+    L.circleMarker(at, {
       radius: 8,
       color: "#e2574a",
       weight: 2,
@@ -526,17 +566,30 @@
     })
       .addTo(map)
       .bindPopup(title);
-    // Leaflet never watches its own container, and docked that container resizes
-    // every time the window's handle is dragged. The observer also fires once on
-    // observe, which covers the initial "container just became visible" pass.
+    watchMapSize();
+  }
+
+  /**
+   * Leaflet never watches its own container, and docked that container resizes
+   * every time the window's handle is dragged. The observer also fires once on
+   * observe, which covers the initial "container just became visible" pass.
+   */
+  function watchMapSize() {
     mapObserver?.disconnect();
-    mapObserver = new ResizeObserver(() => map?.invalidateSize());
-    mapObserver.observe(mapEl);
+    mapObserver = new ResizeObserver(() => {
+      map?.invalidateSize();
+      atlas?.resize();
+    });
+    if (mapEl) mapObserver.observe(mapEl);
   }
 
   function destroyMap() {
     mapObserver?.disconnect();
     mapObserver = null;
+    if (atlas) {
+      atlas.destroy();
+      atlas = null;
+    }
     if (map) {
       map.remove();
       map = null;
