@@ -78,6 +78,7 @@ export type CrumbKind =
   | 'notes'
   | 'history'
   | 'plan'
+  | 'map'
   | 'link';
 
 /**

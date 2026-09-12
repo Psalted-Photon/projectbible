@@ -25,6 +25,10 @@
  */
 
 import L from 'leaflet';
+// The lettering's own styling. It ships with the engine because Leaflet builds
+// those elements itself, out of reach of any host component's styling, and
+// because both maps draw names — the docked one and the bare one.
+import './labels.css';
 import { OverlayHost, TimelineOverlay } from './overlays.js';
 import { LabelEngine } from './labels.js';
 import { BiblicalPlaces, haversine, bookName } from './places.js';
@@ -209,7 +213,8 @@ function centroid(geom) {
  * @param {object} options.index                            what exists
  * @param {(q: string, n: number) => Promise<any[]>} [options.searchModern]
  * @param {(b: object, o: object) => Promise<any[]>} [options.placesInBounds]
- * @param {boolean} [options.slim]  no overlays, dots or lettering — just the map
+ * @param {boolean} [options.slim]  the same map with nothing to operate: no
+ *   overlays, no timeline, and no taps. The drawing is identical.
  */
 export function createAtlasMap(container, options = {}) {
   const {
@@ -304,7 +309,17 @@ export function createAtlasMap(container, options = {}) {
   let basemapOpacity = 1;
   /** Lettering fades separately from the geography it sits on. */
   let basemapTextOpacity = 1;
-  let showLabels = !slim;
+  /**
+   * Slim takes the controls away, not the map.
+   *
+   * It first meant "no lettering, no places", which left the encyclopedia's map
+   * tab as a blank parchment world — the drawing without a single name on it.
+   * What it means is the same map with nothing to operate: no navbar above it,
+   * no overlays, no timeline, and nothing that answers back when tapped. So the
+   * lettering and the biblical places are on in both, exactly as they are in
+   * the window.
+   */
+  let showLabels = true;
   let tileLayer = null;
   const drawnLayers = new Map();   // "kind@detail" -> Leaflet layer
   let loadedDetail = null;
@@ -319,7 +334,7 @@ export function createAtlasMap(container, options = {}) {
   let ancientNames = null;
   let biblical = null;
   let photos = {};
-  let showBiblical = !slim;
+  let showBiblical = true;
 
   let townDots = null;
   let dotsToken = 0;
@@ -532,11 +547,15 @@ export function createAtlasMap(container, options = {}) {
       });
       const note = FEATURE_NOTE[r.fcode] ? ` (${FEATURE_NOTE[r.fcode]})` : '';
       dot.bindTooltip(r.name + note, { direction: 'top', offset: [0, -4] });
-      dot.bindPopup(
-        `<strong>${r.name}</strong>${note}<br>${[
-          r.admin1, r.country, r.population ? `${r.population.toLocaleString()} people` : null,
-        ].filter(Boolean).join('<br>')}`
-      );
+      // A popup is something to open and then dismiss, which the bare map has
+      // no business doing: there it names what you point at and stops.
+      if (!slim) {
+        dot.bindPopup(
+          `<strong>${r.name}</strong>${note}<br>${[
+            r.admin1, r.country, r.population ? `${r.population.toLocaleString()} people` : null,
+          ].filter(Boolean).join('<br>')}`
+        );
+      }
       townDots.addLayer(dot);
     }
   }
@@ -544,7 +563,6 @@ export function createAtlasMap(container, options = {}) {
   // ------------------------------------------------------------- lettering
 
   async function drawLabels() {
-    if (slim) return;
     labels.reset();
     if (!showLabels && !timeline?.enabled) { labels.render(); return; }
 
@@ -1015,7 +1033,23 @@ export function createAtlasMap(container, options = {}) {
 
   async function start() {
     await setBasemap('parchment');
-    if (slim) return api;
+
+    // The places Scripture names, in both maps: they are the reason the map
+    // exists, and a map of the Bible with Bethlehem unmarked is not the same map
+    // with fewer buttons. Slim leaves `onOpen` unwired, so they carry their name
+    // and nothing else happens when one is tapped.
+    const biblicalRows = await getJson(index.biblicalPlaces.file);
+    biblical = new BiblicalPlaces(map, { places: biblicalRows });
+    biblical.visible = showBiblical;
+
+    // Everything past here is machinery to operate the map, which is exactly
+    // what the bare one does without.
+    if (slim) {
+      await drawLabels();
+      return api;
+    }
+
+    biblical.onOpen = openPlace;
 
     // Any overlay appearing, vanishing or changing era reshuffles the lettering,
     // because all of it is laid out in one pass.
@@ -1024,11 +1058,6 @@ export function createAtlasMap(container, options = {}) {
       onChange: () => { drawLabels(); },
     });
     host.onLabelsChanged = () => { drawLabels(); };
-
-    const biblicalRows = await getJson(index.biblicalPlaces.file);
-    biblical = new BiblicalPlaces(map, { places: biblicalRows });
-    biblical.visible = showBiblical;
-    biblical.onOpen = openPlace;
 
     // A photograph for three quarters of the places Scripture names. Only URLs
     // — Wikimedia serves the pictures — so this is half a megabyte, not fifty.
@@ -1041,6 +1070,11 @@ export function createAtlasMap(container, options = {}) {
     const overlayPlaces = await getJson(index.overlayPlaces.file);
     timeline = host.register(new TimelineOverlay({ eras: index.eras, places: overlayPlaces }));
     timeline.onEraChange = (era) => emit.era(era);
+
+    // The basemap laid its lettering out before any of this existed, so the
+    // places Scripture names had nothing to appear in. One more pass now that
+    // they do — otherwise they turn up on the first pan rather than on opening.
+    await drawLabels();
 
     emit.layers();
     return api;

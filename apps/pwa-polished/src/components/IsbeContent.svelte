@@ -6,6 +6,7 @@
   import { isbeReturnStore, type IsbeReturn } from "../stores/isbeReturnStore";
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
+  import { createResizeFit } from "../lib/atlas/fit";
   import { openMapWindow } from "../lib/openMapWindow";
   import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
   import { IndexedDBTextStore } from "../adapters/TextStore";
@@ -102,6 +103,15 @@
   /** The drawn map, when the Historical Map pack is installed. */
   let atlas: any = null;
   let mapObserver: ResizeObserver | null = null;
+  /** Re-fitting the drawn map redraws the world, so it waits out a window drag. */
+  const mapFitter = createResizeFit(() => {
+    map?.invalidateSize();
+    atlas?.resize();
+  });
+
+  $: mapFitter.hold(
+    Boolean(windowId && $windowStore.find((w) => w.id === windowId)?.isResizing),
+  );
 
   // The scroll container — bound so a jump can remember where you were and the
   // article can be put back on the same line.
@@ -525,12 +535,16 @@
       const { atlasInstalled, loadAtlasIndex, getAtlasJson } = await import('../lib/atlas/data');
       if (await atlasInstalled()) {
         const { createAtlasMap } = await import('../lib/atlas/map.js');
+        const { placesInBounds } = await import('../lib/atlas/place-index');
         const index = await loadAtlasIndex();
         // The tab can be closed while the pack is still being read.
         if (!mapEl) return;
         atlas = createAtlasMap(mapEl, {
           getJson: getAtlasJson,
           index,
+          // Same map, no controls: it draws the towns and the names the window
+          // draws, so the two read as one map at two sizes.
+          placesInBounds,
           slim: true,
           center: at,
           zoom: 9,
@@ -576,19 +590,25 @@
    */
   function watchMapSize() {
     mapObserver?.disconnect();
-    mapObserver = new ResizeObserver(() => {
-      map?.invalidateSize();
-      atlas?.resize();
-    });
+    mapObserver = new ResizeObserver(() => mapFitter.request());
     if (mapEl) mapObserver.observe(mapEl);
   }
 
   function destroyMap() {
     mapObserver?.disconnect();
     mapObserver = null;
+    mapFitter.stop();
     if (atlas) {
       atlas.destroy();
       atlas = null;
+      // An article read once should not carry the map's geometry and its half
+      // million places for the rest of the session. Unless the map window is
+      // open, in which case they are its, and dropping them here would only
+      // make it read them all back on its next pan.
+      if (!get(windowStore).some((w) => w.contentType === 'map')) {
+        import('../lib/atlas/data').then((m) => m.releaseAtlas());
+        import('../lib/atlas/place-index').then((m) => m.releasePlaceIndex());
+      }
     }
     if (map) {
       map.remove();

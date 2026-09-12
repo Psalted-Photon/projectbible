@@ -100,7 +100,12 @@ function createWindowStore() {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        set(parsed);
+        // Nothing can be mid-drag at page load, but the flag is saved with the
+        // rest — so a reload during a resize brought it back stuck on. It only
+        // tinted the grip blue until the map started using it to decide when to
+        // hold still, at which point a stale one meant a map that never fitted
+        // itself to its window again.
+        set(parsed.map((w: WindowState) => ({ ...w, isResizing: false })));
       } catch (e) {
         console.error('Failed to load windows from localStorage:', e);
       }

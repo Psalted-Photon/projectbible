@@ -71,6 +71,7 @@
     MagnifyingGlass,
     Microscope,
     BookOpenText,
+    MapTrifold,
     Gear,
     User,
     X,
@@ -640,6 +641,7 @@
     notes: NotePencil,
     history: ClockCounterClockwise,
     plan: BookOpenText,
+    map: MapTrifold,
     link: Graph,
   };
 

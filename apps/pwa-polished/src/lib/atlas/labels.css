@@ -1,0 +1,129 @@
+/*
+ * Every name the map draws.
+ *
+ * This lives beside the engine rather than in the pane that hosts it, for two
+ * reasons. Leaflet builds these elements itself, so a component's scoped
+ * styling never reaches them — which is exactly how they went missing in the
+ * move and left every name in the app's near-white body colour on pale
+ * parchment. And there are two maps: the docked one and the bare one in the
+ * encyclopedia. Both draw lettering, so both need this, and neither should own
+ * it.
+ *
+ * The colours are the map's own, written out rather than taken from variables,
+ * so the lettering reads the same whatever is hosting it. Parchment is #ece1c8
+ * and the ink is #3d3427; the haloes are parchment glows that let a name sit on
+ * top of a coastline and still be read.
+ *
+ * The placement engine measures these exact metrics to test for overlap, so
+ * line-height, size and letter-spacing here decide how many names fit. Changing
+ * a number changes the map.
+ */
+
+.map-label {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  white-space: nowrap;
+  pointer-events: none;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  text-align: center;
+  line-height: 1.25;
+  overflow: visible;
+}
+
+.map-label.country {
+  font-size: 12px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #4a4032;
+  text-shadow: 0 0 3px #ece1c8, 0 0 7px #ece1c8;
+}
+
+/* The overlay's lands: the subject while the timeline is on, so a touch larger
+   than the modern country names underneath them. */
+.map-label.land {
+  font-size: 13px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #4a3418;
+  text-shadow: 0 0 3px #ece1c8, 0 0 6px #ece1c8, 0 0 10px #ece1c8;
+}
+
+.map-label.sea {
+  font-size: 11.5px;
+  font-style: italic;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: #3f6675;
+  text-shadow: 0 0 3px #a9c4cf, 0 0 7px #a9c4cf;
+}
+
+.map-label.city {
+  font-size: 11.5px;
+  color: #3d3427;
+  letter-spacing: .01em;
+  text-shadow: 0 0 3px #ece1c8, 0 0 6px #ece1c8;
+}
+
+/* Ancient regions and peoples, from the Barrington name linework. */
+.map-label.ancient {
+  font-size: 11.5px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: #6b4a22;
+  text-shadow: 0 0 3px #ece1c8, 0 0 7px #ece1c8;
+}
+
+.map-label.people {
+  font-size: 11px;
+  font-style: italic;
+  letter-spacing: .14em;
+  font-weight: 500;
+  color: #7a5c34;
+  text-shadow: 0 0 3px #ece1c8, 0 0 7px #ece1c8;
+}
+
+.map-label.terrain {
+  font-size: 10.5px;
+  font-style: italic;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: #8a7550;
+  text-shadow: 0 0 3px #ece1c8, 0 0 7px #ece1c8;
+}
+
+/* A named lake, creek or bay the drawn basemap is too coarse to show as a
+   shape — so the name is the only thing marking it. */
+.map-label.water-point {
+  font-size: 11px;
+  font-style: italic;
+  color: #3f6675;
+  letter-spacing: .02em;
+  text-shadow: 0 0 3px #ece1c8, 0 0 6px #ece1c8;
+}
+
+/* Places Scripture names — the reason the map exists, so they read first. */
+.map-label.biblical {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3f34;
+  letter-spacing: .03em;
+  text-shadow: 0 0 3px #ece1c8, 0 0 6px #ece1c8, 0 0 9px #ece1c8;
+}
+
+.map-label.peak {
+  font-size: 11px;
+  color: #6a5340;
+  letter-spacing: .02em;
+  text-shadow: 0 0 3px #ece1c8, 0 0 6px #ece1c8;
+}
+
+/* The overlay's label pane ignores pointer events so lettering never blocks the
+   map; a drawn mountain has to opt back in to be clickable. */
+.ridge {
+  pointer-events: auto !important;
+  cursor: pointer;
+}

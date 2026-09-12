@@ -9,11 +9,16 @@
    * wide inside a docked window, which is a thing the lab page never had to do.
    */
   import { onMount, onDestroy, tick } from 'svelte';
+  import { get } from 'svelte/store';
   import 'leaflet/dist/leaflet.css';
   import ArtViewer from './ArtViewer.svelte';
   import { dragScroll } from '../lib/dragScroll';
   import { windowStore, type MapTarget } from '../lib/stores/windowStore';
+  import { navigationStore } from '../stores/navigationStore';
+  import { IndexedDBTextStore } from '../adapters/TextStore';
+  import { renderVersePreviewHtml } from '../lib/verseRendering';
   import { createAtlasMap, TILE_BASEMAPS } from '../lib/atlas/map.js';
+  import { createResizeFit } from '../lib/atlas/fit';
   import { loadAtlasIndex, getAtlasJson, atlasInstalled, releaseAtlas } from '../lib/atlas/data';
   import { searchPlaces, placesInBounds, releasePlaceIndex } from '../lib/atlas/place-index';
   import { ScriptureSearch } from '../lib/atlas/search.js';
@@ -26,6 +31,7 @@
   let mapEl: HTMLDivElement;
   let atlas: any = null;
   let resizeObserver: ResizeObserver | null = null;
+  const fitter = createResizeFit(() => atlas?.resize());
 
   let loading = true;
   let missing = false;
@@ -64,6 +70,9 @@
   /** What the reader tapped. Null when the panel is closed. */
   let info: any = null;
   let openBooks: Record<string, boolean> = {};
+  /** The verse behind each reference, by OSIS id, in the reader's translation. */
+  let versePreviews: Record<string, string> = {};
+  const verseTextStore = new IndexedDBTextStore();
 
   /** The photograph being viewed full-screen, if any. */
   let viewing: any = null;
@@ -73,6 +82,10 @@
 
   $: windowState = windowId ? $windowStore.find((w) => w.id === windowId) : undefined;
   $: target = windowState?.contentState?.target as MapTarget | undefined;
+
+  // The window says when it is being dragged. While it is, the map holds still
+  // rather than redrawing the world under the pointer — see lib/atlas/fit.
+  $: fitter.hold(Boolean(windowState?.isResizing));
 
   // A handoff can arrive long after mount, because the reader reuses an open map
   // window rather than stacking a second one. Watching the seat here is what
@@ -114,6 +127,11 @@
         onPlace: (payload: any) => {
           info = payload;
           openBooks = {};
+          versePreviews = {};
+          // The first book opens by itself, so its verses are wanted straight
+          // away; the rest wait until their group is opened.
+          const first = versesByBook(payload.verses ?? [])[0];
+          if (first) loadBookText(first);
         },
         onPoint: (payload: any) => { info = payload; },
         onView: persistView,
@@ -137,7 +155,7 @@
 
       // Leaflet never watches its own container, and docked that container
       // resizes every time the window's handle is dragged.
-      resizeObserver = new ResizeObserver(() => atlas?.resize());
+      resizeObserver = new ResizeObserver(() => fitter.request());
       resizeObserver.observe(mapEl);
 
       loading = false;
@@ -155,6 +173,7 @@
     if (searchTimer) clearTimeout(searchTimer);
     resizeObserver?.disconnect();
     resizeObserver = null;
+    fitter.stop();
     atlas?.destroy();
     atlas = null;
     // A reader who opens the map once should not carry its geometry and its
@@ -395,9 +414,83 @@
   }
 
   /** `defaultOpen` is the first group, which starts open without being recorded. */
-  function toggleBook(book: string, defaultOpen = false) {
-    const current = openBooks[book] ?? defaultOpen;
-    openBooks = { ...openBooks, [book]: !current };
+  function toggleBook(group: any, defaultOpen = false) {
+    const current = openBooks[group.book] ?? defaultOpen;
+    const next = !current;
+    openBooks = { ...openBooks, [group.book]: next };
+    if (next) loadBookText(group);
+  }
+
+  /**
+   * The verse behind every reference in one book, in whatever translation the
+   * reader is on.
+   *
+   * A book at a time, as each group is opened: Jerusalem is named in 955 verses,
+   * and fetching all of them to draw a panel nobody has scrolled yet would cost
+   * far more than the panel is worth.
+   */
+  async function loadBookText(group: any) {
+    const translation = get(navigationStore).translation;
+    const loaded = await Promise.all(
+      (group.refs ?? []).map(async (ref: any) => {
+        if (versePreviews[ref.osis] !== undefined) {
+          return [ref.osis, versePreviews[ref.osis]] as const;
+        }
+        const [book, chapter, verse] = ref.osis.split('.');
+        const text =
+          (await verseTextStore.getVerse(
+            translation,
+            bookName(book),
+            Number(chapter),
+            Number(verse) || 1,
+          )) ?? '';
+        return [ref.osis, text] as const;
+      }),
+    );
+    versePreviews = { ...versePreviews, ...Object.fromEntries(loaded) };
+  }
+
+  /**
+   * The place's own name, marked wherever it appears in the verse.
+   *
+   * Same rule the encyclopedia uses: a separator in the name matches any
+   * separator or none, so Beth-shemesh, Beth Shemesh and Bethshemesh are one
+   * name across translations that punctuate it differently.
+   */
+  $: highlightRe = (() => {
+    const raw = info?.kind === 'place' ? String(info.place?.n ?? '') : '';
+    const bare = raw.replace(/\([^)]*\)/g, '').trim();
+    if (bare.length < 2) return null;
+    const pattern = bare
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/[\s\-‐-―']+/g, "[\\s\\-‐-―']*");
+    return new RegExp(`(${pattern})`, 'gi');
+  })();
+
+  /** Stored verse text carries markup a preview row must not show raw. */
+  function versePreview(osis: string): string {
+    const text = versePreviews[osis];
+    if (!text) return '';
+    return renderVersePreviewHtml(text, { highlight: highlightRe, maxLength: 150 });
+  }
+
+  /**
+   * Take the reader to this verse.
+   *
+   * The map is a docked window, so it stays open beside the passage — that is
+   * the point of reading with it. The crumb is what makes the trip returnable:
+   * the navbar's back arrow puts the reader back where it was standing, with
+   * the map still open on the same place.
+   */
+  function goToVerse(book: string, osis: string) {
+    const [, chapterText, verseText] = osis.split('.');
+    const chapter = Number(chapterText);
+    if (!chapter) return;
+    const verse = Number(verseText) || 1;
+
+    const current = get(navigationStore);
+    navigationStore.pushHistory(current, 'map');
+    navigationStore.navigateToVerse(current.translation, bookName(book), chapter, verse);
   }
 
   function openPhoto(photo: any, title: string) {
@@ -752,15 +845,23 @@
                 {@const colour = getBookColor(bookName(group.book))}
                 {@const open = openBooks[group.book] ?? i === 0}
                 <div class="vb-group" class:open>
-                  <button class="vb-header" on:click={() => toggleBook(group.book, i === 0)}>
+                  <button class="vb-header" on:click={() => toggleBook(group, i === 0)}>
                     <span class="vb-caret" style="color:{colour}">{open ? '▼' : '►'}</span>
                     <span class="vb-name" style="color:{colour}">{bookName(group.book)}</span>
                     <span class="vb-count">({group.refs.length})</span>
                   </button>
                   <div class="vb-refs">
                     {#each group.refs as ref}
-                      <button class="vb-ref" style="border-left-color:{colour}">
+                      <button
+                        class="vb-ref"
+                        style="border-left-color:{colour}"
+                        title="Read {ref.readable}"
+                        on:click={() => goToVerse(group.book, ref.osis)}
+                      >
                         <span class="vb-ref-label" style="color:{colour}">{ref.readable}</span>
+                        {#if versePreviews[ref.osis]}
+                          <span class="vb-ref-text">{@html versePreview(ref.osis)}</span>
+                        {/if}
                       </button>
                     {/each}
                   </div>
@@ -1108,9 +1209,11 @@
   /* Nothing floats on the map — the navbar owns every control. */
   .map-area :global(.leaflet-control-container .leaflet-top),
   .map-area :global(.leaflet-control-container .leaflet-bottom) { display: none; }
-  /* The overlay's label pane ignores pointer events so lettering never blocks
-     the map; a drawn mountain has to opt back in to be clickable. */
-  .map-area :global(.ridge) { pointer-events: auto !important; cursor: pointer; }
+  /* The lettering on the map — and the drawn mountains, which are the one thing
+     in the label pane that can be clicked — are styled by the engine's own
+     stylesheet, not here. Leaflet builds those elements itself, so a scoped rule
+     in this file never reaches them, and the encyclopedia's bare map needs the
+     same styling without going through this component at all. */
 
   .map-area :global(.atlas-grain) {
     background-image:
@@ -1226,6 +1329,14 @@
   .vb-ref-label { font-size: 12px; font-weight: 600; }
   .vb-ref-text {
     display: block; color: #c2c6cd; font-size: 12.5px; margin-top: 3px; line-height: 1.45;
+  }
+  /* The place's own name inside the verse, in the same amber the encyclopedia
+     marks it with — the two lists are the same list, so they read the same. */
+  .vb-ref-text :global(mark) {
+    background: rgba(249, 115, 22, 0.35);
+    color: #fdba74;
+    border-radius: 2px;
+    padding: 0 1px;
   }
 
   /* ---------------- timeline ---------------- */
