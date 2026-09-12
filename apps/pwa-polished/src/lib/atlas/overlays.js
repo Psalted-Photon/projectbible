@@ -12,6 +12,7 @@
  * overlay and whatever comes after drop in without touching the map.
  */
 import L from 'leaflet';
+import { assignColours, polityColour, fallbackColour } from './colours.js';
 
 /** @typedef {{ id:string, title:string, colour:string, opacity:number, enabled:boolean }} OverlayState */
 
@@ -105,14 +106,18 @@ class BaseOverlay {
   unmount() { this.clear(); }
 
   applyOpacity() {
+    const dim = (style) => ({
+      ...style,
+      opacity: (style.opacity ?? 1) * this.opacity,
+      fillOpacity: (style.fillOpacity ?? 0) * this.opacity,
+    });
     for (const layer of this.layers) {
       const base = layer.__styleFor;
       if (!base || !layer.setStyle) continue;
-      layer.setStyle({
-        ...base,
-        opacity: (base.opacity ?? 1) * this.opacity,
-        fillOpacity: (base.fillOpacity ?? 0) * this.opacity,
-      });
+      // A style can be a function of the feature, so each land keeps its own
+      // colour. Flattening one to a single object here once painted every land
+      // in the first one's style.
+      layer.setStyle(typeof base === 'function' ? (f) => dim(base(f)) : dim(base));
     }
   }
 
@@ -160,6 +165,21 @@ function ageStyle(t) {
 const MAX_LANDS = 22;
 
 /**
+ * The lands an era actually draws.
+ *
+ * Only lands we can also name: unlabelled probability bands read as random
+ * brush strokes, because the shape means nothing without the word. Shared by the
+ * drawing and the colouring, which have to agree on exactly which lands appear
+ * together.
+ */
+function landsIn(geojson) {
+  return geojson.features.filter((f) => f.properties?.name).slice(0, MAX_LANDS);
+}
+
+/** A sea, lake or river, lettered as water rather than as land. */
+const isWaterBody = (kind) => /water|sea|river|lake/i.test(kind || '');
+
+/**
  * The timeline overlay: a complete historical map for each era.
  *
  * It carries its own coastlines and lettering rather than borrowing the
@@ -173,9 +193,63 @@ export class TimelineOverlay extends BaseOverlay {
     this.index = 0;
     this.showAgeing = true;
     this.onEraChange = () => {};
+    /** name → palette entry, once the whole timeline has been coloured. */
+    this.colourMap = null;
+    this.colourJob = null;
   }
 
   get era() { return this.eras[this.index]; }
+
+  /** A land's or province's fill and ink. */
+  colourFor(name) {
+    return this.colourMap?.get(name) ?? fallbackColour(name);
+  }
+
+  /**
+   * Colour every land and province on the timeline, once.
+   *
+   * A land keeps its colour from era to era, so the choice can't be made one
+   * era at a time: it needs every era's lands in view at once. That means
+   * reading every era's layers on first mount — about a megabyte, which the
+   * slider would have read anyway — and the assignment itself takes a few
+   * milliseconds.
+   */
+  ensureColours() {
+    this.colourJob ??= (async () => {
+      const { getJson, index } = this.host;
+      const eras = await Promise.all(this.eras.map(async (era) => {
+        const layers = await Promise.all((index.overlays[era.id] ?? [])
+          .filter((l) => l.kind === 'region' || l.kind === 'territory')
+          .map((l) => getJson(l.file).then((g) => ({ kind: l.kind, geojson: g }), () => null)));
+
+        const lands = [];
+        const provinces = [];
+        let hasPolity = false;
+        for (const layer of layers) {
+          if (!layer?.geojson?.features) continue;
+          if (layer.kind === 'region') {
+            for (const f of landsIn(layer.geojson)) {
+              lands.push({ name: f.properties.name, kind: f.properties.kind, geometry: f.geometry });
+            }
+          } else {
+            for (const f of layer.geojson.features) {
+              if (f.properties?.name) provinces.push({ name: f.properties.name, geometry: f.geometry });
+              else hasPolity = true;
+            }
+          }
+        }
+        return { id: era.id, hasPolity, lands, provinces };
+      }));
+      try {
+        this.colourMap = assignColours(eras);
+      } catch {
+        // Every name still gets a steady colour of its own; only the promises
+        // about neighbours are lost.
+        this.colourMap = null;
+      }
+    })();
+    return this.colourJob;
+  }
 
   /** 0 at the oldest era, 1 at the newest — drives the ageing ramp. */
   get progress() {
@@ -228,7 +302,8 @@ export class TimelineOverlay extends BaseOverlay {
     // "Great Sea" sat over what looked like desert.
     const seaFile = index.basemap?.ocean?.[50]?.file ?? index.basemap?.ocean?.[110]?.file;
 
-    const [coast, water, sea, ...eraLayers] = await Promise.all([
+    const [, coast, water, sea, ...eraLayers] = await Promise.all([
+      this.ensureColours(),
       coastFile ? getJson(coastFile) : null,
       waterFile ? getJson(waterFile) : null,
       seaFile ? getJson(seaFile) : null,
@@ -261,9 +336,26 @@ export class TimelineOverlay extends BaseOverlay {
     // --- what changes era to era ---
     this.hitAreas = [];
     this.namedProvinces = [];
+
+    // The empire this era's unnamed territory belongs to. Where the era also
+    // names its provinces, the extent under them is only an outline: a wash of
+    // the empire's colour beneath would tint every province alike.
+    const realm = polityColour(era.id);
+    const namesProvinces = eraLayers.some((l) =>
+      l.kind === 'territory' && l.geojson.features.some((f) => f.properties?.name));
+
     for (const layer of eraLayers) {
       if (layer.kind === 'territory') {
-        const style = { fillColor: this.colour, fillOpacity: s.territoryFill, color: '#5e2f27', weight: 2.2, opacity: 0.95 };
+        const style = (f) => {
+          if (f.properties?.name) {
+            const c = this.colourFor(f.properties.name);
+            return { fillColor: c.fill, fillOpacity: s.territoryFill, color: c.ink, weight: 1.3, opacity: 0.9 };
+          }
+          return {
+            fillColor: realm.fill, fillOpacity: namesProvinces ? 0 : s.territoryFill,
+            color: realm.ink, weight: 2.2, opacity: 0.95,
+          };
+        };
         this.add(L.geoJSON(layer.geojson, {
           pane: 'overlay-fill', renderer: this.host.rendererFor('overlay-fill'), style, interactive: false,
         }), style);
@@ -287,27 +379,21 @@ export class TimelineOverlay extends BaseOverlay {
       }
 
       if (layer.kind === 'region') {
-        // Only draw lands we can also name. Unlabelled probability bands read as
-        // random brush strokes — the shape means nothing without the word.
-        const named = {
-          type: 'FeatureCollection',
-          features: layer.geojson.features
-            .filter((f) => f.properties.name)
-            .slice(0, MAX_LANDS),
-        };
+        const named = { type: 'FeatureCollection', features: landsIn(layer.geojson) };
 
-        // Bands are nested contours, so stacking them makes the middle densest.
-        // A soft edge on the outermost keeps each land reading as one shape
-        // rather than a smear, without claiming a border nobody knows.
-        const style = {
-          fillColor: '#b5762c', fillOpacity: s.bandFill,
-          color: '#8a5a20', weight: 0.6, opacity: 0.35,
+        // Each land in its own colour, its contours in the darker ink its name
+        // is lettered in. Bands are nested contours, so stacking them makes the
+        // middle densest; a faint line on each keeps the land reading as one
+        // shape rather than a smear, without claiming a border nobody knows.
+        // A land known only roughly, rather than in bands, gets a dashed edge.
+        const style = (f) => {
+          const c = this.colourFor(f.properties.name);
+          return f.properties.bands
+            ? { fillColor: c.fill, fillOpacity: s.bandFill, color: c.ink, weight: 0.7, opacity: 0.45 }
+            : { fillColor: c.fill, fillOpacity: s.bandFill + 0.06, color: c.ink, weight: 1.2, opacity: 0.85, dashArray: '4 3' };
         };
         this.add(L.geoJSON(named, {
-          pane: 'overlay-fill', renderer: this.host.rendererFor('overlay-fill'), interactive: false,
-          style: (f) => (f.properties.bands
-            ? style
-            : { fillColor: '#a8763f', fillOpacity: s.bandFill + 0.06, color: '#8a5a20', weight: 1, opacity: 0.5, dashArray: '4 3' }),
+          pane: 'overlay-fill', renderer: this.host.rendererFor('overlay-fill'), interactive: false, style,
         }), style);
 
         for (const f of named.features) {
@@ -345,22 +431,22 @@ export class TimelineOverlay extends BaseOverlay {
       out.push({
         lat: c[0], lon: c[1], text: f.properties.name,
         kind: 'land', pane: 'overlay-labels', shape: 'area',
-        priority: 120, colour: s.labelColour,
+        // In the ink of its own border, so the name says which shape it is.
+        priority: 120, colour: this.colourFor(f.properties.name).ink,
       });
     }
 
     for (const f of this.namedLands ?? []) {
       const c = centroid(f.geometry);
       if (!c || !inView(c[0], c[1])) continue;
-      const water = /sea|river|lake/i.test(f.properties.kind || '');
       out.push({
         lat: c[0], lon: c[1], text: f.properties.name,
-        kind: water ? 'sea' : 'land',
+        kind: isWaterBody(f.properties.kind) ? 'sea' : 'land',
         pane: 'overlay-labels', shape: 'area',
         // The overlay is the subject while it's on, so its lands outrank the
         // modern country names underneath.
         priority: 100 + Math.min(30, (f.properties.verses ?? 0) / 3),
-        colour: water ? '#3f6675' : s.labelColour,
+        colour: this.colourFor(f.properties.name).ink,
       });
     }
 

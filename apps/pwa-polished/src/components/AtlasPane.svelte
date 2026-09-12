@@ -1232,9 +1232,11 @@
     border-radius: 7px; padding: 5px 9px; backdrop-filter: blur(6px);
     cursor: help;
   }
+  /* Four of the lands' own colours side by side, because every land now has one. */
   .approx-key .key-band {
-    width: 15px; height: 9px; border-radius: 2px; flex: none;
-    background: #a8763f; border: 1px dashed #d7a35c; opacity: .85;
+    width: 20px; height: 9px; border-radius: 2px; flex: none; opacity: .9;
+    background: linear-gradient(90deg,
+      #7f7b33 0 25%, #c8702c 25% 50%, #7a9cc2 50% 75%, #8e5588 75% 100%);
   }
 
   .status {
