@@ -246,12 +246,35 @@ export function createAtlasMap(container, options = {}) {
     attributionControl: false,
     worldCopyJump: true,
     minZoom: 2,
-    maxZoom: 12,
+    // Deep enough to part a cluster of villages with a fingertip. At 12 the
+    // places around the Sea of Galilee still sat on top of one another; every
+    // tile basemap goes at least this far, and the drawn map simply gets larger.
+    maxZoom: 16,
     zoomSnap: 0.25,
+    // Half Leaflet's 60, so a wheel notch covers about twice the distance —
+    // otherwise the fourteen levels between the world and a street are a lot of
+    // scrolling.
+    wheelPxPerZoomLevel: 30,
     // Scroll wheel and pinch are how people zoom now; the +/- buttons are gone,
     // but Leaflet keeps the keyboard shortcuts working for anyone who needs them.
     keyboard: true,
   });
+
+  /**
+   * A pinch that travels further than the fingers do.
+   *
+   * Leaflet maps finger spread to zoom one-to-one, so crossing the whole range
+   * took a pinch after a pinch after a pinch. Leaflet has no option for this;
+   * its pinch handler asks the map to turn the spread into a zoom level, so
+   * that one question is answered with twice the change while a pinch is under
+   * way. Every other use of it — fitting bounds, flying — is left alone.
+   */
+  const PINCH_SPEED = 2;
+  const scaleZoom = map.getScaleZoom.bind(map);
+  map.getScaleZoom = (scale, fromZoom) => {
+    const z = scaleZoom(scale, fromZoom);
+    return map.touchZoom?._zooming ? fromZoom + (z - fromZoom) * PINCH_SPEED : z;
+  };
 
   for (const [name, z] of PANES) {
     map.createPane(name);
