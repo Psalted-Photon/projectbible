@@ -283,7 +283,7 @@ export function createAtlasMap(container, options = {}) {
   const grain = document.createElement('div');
   grain.className = 'atlas-grain';
   grain.style.cssText =
-    'position:absolute;inset:0;pointer-events:none;z-index:450;opacity:0;transition:opacity .4s ease';
+    'position:absolute;inset:0;pointer-events:none;z-index:450;opacity:0';
   container.appendChild(grain);
 
   const filterId = `ink-displace-${Math.random().toString(36).slice(2, 8)}`;

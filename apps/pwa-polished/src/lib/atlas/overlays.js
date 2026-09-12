@@ -72,17 +72,7 @@ export class OverlayHost {
   }
 }
 
-/**
- * How long an era takes to dissolve into the next.
- *
- * Short: the slider has to stay responsive under a dragging thumb. Out is
- * quicker than in, because a world arriving deserves a beat more than one
- * leaving.
- */
-const DISSOLVE_OUT_MS = 130;
-const DISSOLVE_IN_MS = 210;
-
-/** Shared plumbing: a bag of Leaflet layers that mounts, unmounts and fades. */
+/** Shared plumbing: a bag of Leaflet layers that mounts, unmounts and dims. */
 class BaseOverlay {
   constructor({ id, title, colour }) {
     this.id = id;
@@ -128,38 +118,7 @@ class BaseOverlay {
 
   /** The overlay's lettering, dimmed without touching its geography. */
   applyTextOpacity() {
-    if (this.labelPane) this.labelPane.style.opacity = String(this.textOpacity * this.fade);
-  }
-
-  /**
-   * How much of the overlay is showing during a transition, 0 to 1.
-   *
-   * Separate from the reader's opacity dial, which it multiplies rather than
-   * overwrites — a fade must not quietly reset a slider the reader has set.
-   */
-  fade = 1;
-
-  /** The panes this overlay paints into, which are what a fade acts on. */
-  static PANES = ['overlay-sea', 'overlay-fill', 'overlay-line', 'overlay-labels'];
-
-  /**
-   * Dissolve the overlay to a given level.
-   *
-   * Done on the panes rather than layer by layer: a canvas renderer redraws
-   * every shape when a style changes, so fading two hundred provinces through
-   * setStyle would stutter, while a pane's opacity is one composited property
-   * the browser animates for free.
-   */
-  fadeTo(level, ms) {
-    this.fade = level;
-    for (const name of BaseOverlay.PANES) {
-      const pane = this.map?.getPane(name);
-      if (!pane) continue;
-      pane.style.transition = ms ? `opacity ${ms}ms ease` : '';
-      // The lettering has a dial of its own, so the two multiply.
-      pane.style.opacity = String(name === 'overlay-labels' ? this.textOpacity * level : level);
-    }
-    return ms ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve();
+    if (this.labelPane) this.labelPane.style.opacity = String(this.textOpacity);
   }
 }
 
@@ -214,14 +173,6 @@ export class TimelineOverlay extends BaseOverlay {
     this.index = 0;
     this.showAgeing = true;
     this.onEraChange = () => {};
-    /**
-     * Which era change is the live one.
-     *
-     * Dragging the slider starts a new dissolve before the last has finished,
-     * and without this the slower one would finish last and paint an era the
-     * reader had already scrubbed past.
-     */
-    this.eraToken = 0;
   }
 
   get era() { return this.eras[this.index]; }
@@ -237,10 +188,6 @@ export class TimelineOverlay extends BaseOverlay {
 
   async mount() {
     this.labelPane = this.map.getPane('overlay-labels');
-    // Switching the overlay off part way through a dissolve leaves the panes
-    // dark; arriving must always start from fully shown, with no transition to
-    // animate away from whatever the last fade left behind.
-    await this.fadeTo(1, 0);
     this.applyTextOpacity();
     await this.draw();
   }
@@ -248,34 +195,20 @@ export class TimelineOverlay extends BaseOverlay {
   /**
    * Move to another era.
    *
-   * The change used to be a hard cut: one world vanished and the next appeared
-   * between two frames, which read as a glitch rather than as time passing.
-   * Now it dissolves — out through the parchment and back in — and the pause is
-   * short enough that dragging the slider still feels immediate.
-   *
-   * Dragging fast overtakes the fade, so each change checks that it is still
-   * the one the reader is waiting for before painting anything.
+   * A straight cut, the way an atlas turns a page. It used to dissolve out
+   * through the parchment and back in, which read as the map reloading rather
+   * than as the borders changing. The next era is fetched before the last one
+   * is cleared, so the cut never shows an empty map in between.
    */
   async setEra(i) {
     const next = Math.max(0, Math.min(this.eras.length - 1, i));
     if (next === this.index && this.layers.length) return;
 
     this.index = next;
-
-    // The caption moves with the thumb, not with the map. Waiting for the
-    // dissolve would leave the era name a beat behind a dragging finger, which
-    // reads as lag even though the map is keeping up.
     this.onEraChange(this.era);
     if (!this.enabled) return;
 
-    const token = ++this.eraToken;
-    await this.fadeTo(0, DISSOLVE_OUT_MS);
-    if (token !== this.eraToken) return;
-
     await this.draw();
-    if (token !== this.eraToken) return;
-
-    await this.fadeTo(1, DISSOLVE_IN_MS);
   }
 
   /** Everything the current era draws, in one pass. */
@@ -301,6 +234,11 @@ export class TimelineOverlay extends BaseOverlay {
       seaFile ? getJson(seaFile) : null,
       ...mine.map((l) => getJson(l.file).then((g) => ({ ...l, geojson: g }))),
     ]);
+
+    // Dragging the slider starts a new draw before a slow fetch has come back.
+    // Without this the slow one would land last and paint an era the reader had
+    // already scrubbed past; the draw for the era now showing will paint it.
+    if (era !== this.era || !this.enabled) return;
 
     this.clear();
 
