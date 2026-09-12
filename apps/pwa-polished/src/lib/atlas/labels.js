@@ -34,6 +34,10 @@ const SERIF = '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif'
 /** Breathing room between two labels, in pixels. */
 const GAP = 3;
 
+/** A place's dot, when the caller doesn't size it. */
+const DOT_RADIUS = 2.7;
+const DOT_STROKE = 1.1;
+
 /**
  * Where a label may sit relative to its anchor.
  *
@@ -56,6 +60,13 @@ export class LabelEngine {
     this.canvas = document.createElement('canvas').getContext('2d');
     this.groups = new Map();
     this.candidates = [];
+    /**
+     * Asked before a name with a dot is placed: would a dot this size here
+     * touch one that outranks it? If so the whole place is left off, since a
+     * name beside someone else's dot reads as a mislabel.
+     * @type {((lat: number, lon: number, radius: number) => boolean) | null}
+     */
+    this.avoid = null;
   }
 
   /** One Leaflet layer group per pane, reused across passes. */
@@ -152,6 +163,7 @@ export class LabelEngine {
     for (const c of ordered) {
       const pt = this.map.latLngToContainerPoint([c.lat, c.lon]);
       if (pt.x < -pad || pt.y < -pad || pt.x > size.x + pad || pt.y > size.y + pad) continue;
+      if (c.dot && this.avoid?.(c.lat, c.lon, (c.dot.radius ?? DOT_RADIUS) + DOT_STROKE / 2)) continue;
 
       const { w, h } = this.measure(c.text, c.kind);
       let chosen = null;
@@ -177,9 +189,9 @@ export class LabelEngine {
 
       if (c.dot) {
         group.addLayer(L.circleMarker([c.lat, c.lon], {
-          pane: c.pane, radius: c.dot.radius ?? 2.7,
+          pane: c.pane, radius: c.dot.radius ?? DOT_RADIUS,
           fillColor: c.dot.fill, fillOpacity: 0.9,
-          color: c.dot.stroke, weight: 1.1, interactive: false,
+          color: c.dot.stroke, weight: DOT_STROKE, interactive: false,
         }));
       }
 

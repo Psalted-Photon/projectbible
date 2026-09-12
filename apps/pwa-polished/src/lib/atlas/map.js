@@ -109,6 +109,19 @@ const FEATURE_NOTE = {
   PPLC: 'capital', PPLA: 'admin capital', RGN: 'region', PRK: 'park',
 };
 
+/** The gazetteer's dot outline, which counts toward how much room a dot takes. */
+const TOWN_STROKE = 0.9;
+
+/**
+ * How far past a dot's edge a tap still counts as hitting it, in pixels.
+ *
+ * A fingertip covers a good thirty pixels and lands somewhere inside that, so
+ * a tap has to reach well beyond the dot. A mouse pointer is exact, and a wide
+ * reach there would catch places the reader never meant.
+ */
+const TAP_SLOP_TOUCH = 12;
+const TAP_SLOP_MOUSE = 4;
+
 /**
  * Sources, and what each one actually asks for.
  *
@@ -349,6 +362,8 @@ export function createAtlasMap(container, options = {}) {
 
   /** Every name on the map goes through one placement pass. */
   const labels = new LabelEngine(map);
+  // The places Scripture names outrank every other dot, so the others make way.
+  labels.avoid = (lat, lon, radius) => biblical?.touches(lat, lon, radius) ?? false;
   /** How much lettering fitted, and how much had to be held back to stay legible. */
   let labelStats = { placed: 0, dropped: 0 };
 
@@ -362,6 +377,8 @@ export function createAtlasMap(container, options = {}) {
   let townDots = null;
   let dotsToken = 0;
   let townRows = [];
+  /** The towns actually drawn: every fetched row except those under a biblical dot. */
+  let townShown = [];
   let showEveryPlace = false;
 
   let ridgeLayer = null;
@@ -555,44 +572,85 @@ export function createAtlasMap(container, options = {}) {
       );
     } catch {
       townRows = [];
+      townShown = [];
       return;
     }
     if (token !== dotsToken || destroyed) return;          // the reader moved on
+    // Every row still counts for "nearest today", including the hidden ones.
     townRows = rows;
 
     if (townDots) map.removeLayer(townDots);
     townDots = L.layerGroup([], { pane: 'pins' }).addTo(map);
 
-    for (const r of rows) {
+    // A town under a biblical dot is dropped, name and all: the two mark the
+    // same spot, and a name beside a dot that isn't its own reads as a mislabel.
+    townShown = rows.filter((r) => !biblical?.touches(r.lat, r.lon, townRadius(r) + TOWN_STROKE / 2));
+
+    for (const r of townShown) {
       const water = r.fclass === 'H';
       const dot = L.circleMarker([r.lat, r.lon], {
-        pane: 'pins', radius: r.population > 100000 ? 3.4 : 2.2,
+        pane: 'pins', radius: townRadius(r),
         fillColor: water ? '#4a7286' : '#6b5a3e', fillOpacity: 0.75,
-        color: '#ece1c8', weight: 0.9, interactive: true, bubblingMouseEvents: false,
+        color: '#ece1c8', weight: TOWN_STROKE, interactive: true, bubblingMouseEvents: false,
       });
-      const note = FEATURE_NOTE[r.fcode] ? ` (${FEATURE_NOTE[r.fcode]})` : '';
-      dot.bindTooltip(r.name + note, { direction: 'top', offset: [0, -4] });
+      dot.bindTooltip(r.name + featureNote(r), { direction: 'top', offset: [0, -4] });
       // A popup is something to open and then dismiss, which the bare map has
       // no business doing: there it names what you point at and stops.
       if (!slim) {
-        dot.bindPopup(
-          `<strong>${r.name}</strong>${note}<br>${[
-            r.admin1, r.country, r.population ? `${r.population.toLocaleString()} people` : null,
-          ].filter(Boolean).join('<br>')}`
-        );
+        dot.on('click', (e) => {
+          L.DomEvent.stop(e);
+          if (!pickDotAt(e)) openTown(r);
+        });
       }
       townDots.addLayer(dot);
     }
+  }
+
+  function townRadius(r) {
+    return r.population > 100000 ? 3.4 : 2.2;
+  }
+
+  function featureNote(r) {
+    return FEATURE_NOTE[r.fcode] ? ` (${FEATURE_NOTE[r.fcode]})` : '';
+  }
+
+  function openTown(r) {
+    L.popup()
+      .setLatLng([r.lat, r.lon])
+      .setContent(
+        `<strong>${r.name}</strong>${featureNote(r)}<br>${[
+          r.admin1, r.country, r.population ? `${r.population.toLocaleString()} people` : null,
+        ].filter(Boolean).join('<br>')}`
+      )
+      .openOn(map);
   }
 
   // ------------------------------------------------------------- lettering
 
   async function drawLabels() {
     labels.reset();
-    if (!showLabels && !timeline?.enabled) { labels.render(); return; }
 
     const z = map.getZoom();
     const bounds = map.getBounds();
+
+    // Biblical dots are sized first, because every other dot on the map gets
+    // out of their way. Their names still go in last, below. This used to sit
+    // after the early return, so with names off the dots stayed where the last
+    // pass left them.
+    const shownBiblical = biblical?.draw(z, bounds) ?? [];
+
+    // Town dots belong to the drawn map with its names on, close in. Nothing
+    // took them away when that stopped being true, so zooming out or switching
+    // to tiles left the last batch standing — and answering taps.
+    if (!(showLabels && basemapKind === 'parchment' && z >= 6)) {
+      dotsToken++;
+      if (townDots) { map.removeLayer(townDots); townDots = null; }
+      townRows = [];
+      townShown = [];
+    }
+
+    if (!showLabels && !timeline?.enabled) { labels.render(); return; }
+
     const detail = detailFor(z);
     const pad = 0.35;
     const inView = (lat, lon) =>
@@ -661,7 +719,7 @@ export function createAtlasMap(container, options = {}) {
       if (z >= 6) {
         await drawTownDots(bounds, z);
         if (destroyed) return;
-        for (const r of townRows) {
+        for (const r of townShown) {
           if (!inView(r.lat, r.lon)) continue;
           const water = r.fclass === 'H';
           labels.add({
@@ -721,9 +779,8 @@ export function createAtlasMap(container, options = {}) {
       for (const c of ov.labelCandidates(z, inView)) labels.add(c);
     }
 
-    // Biblical places are drawn last so their markers sit above the basemap's
-    // dots, and they carry the taps that open Scripture.
-    const shownBiblical = biblical?.draw(z, bounds) ?? [];
+    // Biblical names go in last. Their dots, drawn at the top of the pass, sit
+    // in the pin pane above the basemap's and carry the taps that open Scripture.
     if (biblical?.visible) {
       for (const bp of shownBiblical) {
         labels.add({
@@ -893,6 +950,82 @@ export function createAtlasMap(container, options = {}) {
     });
   }
 
+  /**
+   * Answer a tap with the dot it meant, or ask which one when it could mean
+   * several.
+   *
+   * Every dot reaches further than it is drawn, so a fingertip that lands
+   * beside a village still gets the village. Where places crowd together that
+   * reach overlaps, and rather than guess, the map lists what was under the
+   * finger. Returns false when no dot was near enough, so the tap can fall
+   * through to "this spot".
+   */
+  function pickDotAt(e) {
+    const point = e.containerPoint;
+    if (!point) return false;
+    // A tap on a dot reports the dot's centre as its position, so the real one
+    // comes from the pointer.
+    const at = map.containerPointToLatLng(point);
+    const pointer = e.originalEvent?.pointerType;
+    const touch = pointer ? pointer !== 'mouse' : !!window.matchMedia?.('(pointer: coarse)').matches;
+    const slop = touch ? TAP_SLOP_TOUCH : TAP_SLOP_MOUSE;
+
+    const hits = [];
+    for (const { place, edge } of biblical?.near(at.lat, at.lng, slop) ?? []) {
+      const n = place.v.length;
+      hits.push({ edge, name: place.n, note: `${n} verse${n === 1 ? '' : 's'}`, open: () => openPlace(place) });
+    }
+    if (townDots && map.hasLayer(townDots)) {
+      for (const r of townShown) {
+        const edge = map.latLngToContainerPoint([r.lat, r.lon]).distanceTo(point) - townRadius(r) - TOWN_STROKE / 2;
+        if (edge > slop) continue;
+        hits.push({ edge, name: r.name, note: FEATURE_NOTE[r.fcode] ?? 'modern place', open: () => openTown(r) });
+      }
+    }
+    if (!hits.length) return false;
+
+    hits.sort((a, b) => a.edge - b.edge);
+    // A mouse landing inside a dot means that dot. A fingertip inside one may
+    // still have been aiming at the neighbour it also covered.
+    if (hits.length === 1 || (!touch && hits[0].edge <= 0)) {
+      hits[0].open();
+    } else {
+      showChooser(at, hits.slice(0, 8));
+    }
+    return true;
+  }
+
+  function showChooser(latlng, hits) {
+    const popup = L.popup({ closeButton: false, className: 'atlas-pick-popup', autoPanPadding: [16, 16] });
+    const list = document.createElement('div');
+    list.className = 'atlas-pick';
+
+    const head = document.createElement('div');
+    head.className = 'atlas-pick-head';
+    head.textContent = 'Which one?';
+    list.appendChild(head);
+
+    for (const hit of hits) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'atlas-pick-row';
+      const name = document.createElement('span');
+      name.className = 'atlas-pick-name';
+      name.textContent = hit.name;
+      const note = document.createElement('span');
+      note.className = 'atlas-pick-note';
+      note.textContent = hit.note;
+      row.append(name, note);
+      row.addEventListener('click', () => {
+        map.closePopup(popup);
+        hit.open();
+      });
+      list.appendChild(row);
+    }
+
+    popup.setLatLng(latlng).setContent(list).openOn(map);
+  }
+
   // -------------------------------------------------------------- movement
 
   function dropPin(lat, lon, popupHtml) {
@@ -1005,8 +1138,9 @@ export function createAtlasMap(container, options = {}) {
     redrawTimer = setTimeout(async () => {
       if (destroyed) return;
       emit.view();
-      // A tile basemap draws its own lettering; only the drawn map needs a pass.
-      if (basemapKind !== 'parchment' && !timeline?.enabled) return;
+      // Every basemap needs the pass. A tile basemap letters itself, but the
+      // biblical dots are the map's own on all of them: skipping it there left
+      // the dots sized for the last zoom and missing from anywhere panned to.
       const detail = detailFor(map.getZoom());
       // The timeline still needs its names laid out over a tile basemap, but the
       // parchment must not come with them. It used to: every zoom that crossed a
@@ -1022,7 +1156,7 @@ export function createAtlasMap(container, options = {}) {
     }, 160);
   }
   map.on('moveend zoomend', scheduleRedraw);
-  if (!slim) map.on('click', (e) => openPoint(e.latlng));
+  if (!slim) map.on('click', (e) => { if (!pickDotAt(e)) openPoint(e.latlng); });
 
   // ------------------------------------------------------------ the timeline
 
@@ -1079,6 +1213,7 @@ export function createAtlasMap(container, options = {}) {
     }
 
     biblical.onOpen = openPlace;
+    biblical.onTap = (e, place) => { if (!pickDotAt(e)) openPlace(place); };
 
     // Any overlay appearing, vanishing or changing era reshuffles the lettering,
     // because all of it is laid out in one pass.

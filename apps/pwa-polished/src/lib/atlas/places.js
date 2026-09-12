@@ -35,6 +35,36 @@ export function haversine(lat1, lon1, lat2, lon2) {
 }
 
 /**
+ * Dot size by weight of attestation, in seven even steps.
+ *
+ * The smallest step sits just above the largest of the map's other dots (the
+ * gazetteer's 3.4 for a city of a hundred thousand), so a place Scripture names
+ * never looks smaller than a modern one. The largest is not quite double.
+ *
+ * Where each step starts was read off the data rather than spaced evenly in
+ * verses. Of 1,278 places, 618 are named once and four more than two hundred
+ * times, so even spacing in verses would have put nearly every dot in the
+ * smallest step, and an even share of places per step would have drawn a
+ * village named in 22 verses the same size as Jerusalem. These give 618, 216,
+ * 169, 136, 88, 40 and 11 places, and the last step is the eleven places named
+ * a hundred times or more.
+ */
+const STEP_RADII = [3.5, 4, 4.5, 5, 5.5, 6, 6.5];
+const STEP_FROM = [1, 2, 3, 5, 10, 25, 100];
+const MIN_RADIUS = STEP_RADII[0];
+const STROKE = 1.2;
+/** Clear space between the edges of two dots, in pixels. */
+const DOT_GAP = 1;
+/** Neighbour lookups only ever need to reach one dot-pair away. */
+const CELL = Math.ceil(STEP_RADII[STEP_RADII.length - 1] * 2 + STROKE + DOT_GAP);
+
+function radiusFor(verses) {
+  let i = 0;
+  while (i + 1 < STEP_FROM.length && verses >= STEP_FROM[i + 1]) i++;
+  return STEP_RADII[i];
+}
+
+/**
  * The biblical places layer.
  *
  * Kept separate from the timeline so tapping works with no overlay switched on —
@@ -48,6 +78,16 @@ export class BiblicalPlaces {
     this.layer = null;
     this.visible = false;
     this.onOpen = () => {};
+    /** A tap on a dot. The full map swaps this for its chooser. */
+    this.onTap = (_e, place) => this.onOpen(place);
+    /**
+     * The dots as drawn, in world pixels at the zoom they were sized for. World
+     * pixels rather than screen ones because a pan moves the screen under them
+     * but leaves every distance between two dots exactly as it was.
+     */
+    this.dots = [];
+    this.dotZoom = 0;
+    this.grid = new Map();
   }
 
   /** Places worth drawing at this zoom, most-referenced first. */
@@ -64,30 +104,128 @@ export class BiblicalPlaces {
 
   draw(zoom, bounds) {
     if (this.layer) this.map.removeLayer(this.layer);
+    this.layer = null;
+    this.dots = [];
+    this.grid = new Map();
     if (!this.visible) return [];
 
     this.layer = L.layerGroup([], { pane: this.pane }).addTo(this.map);
     const shown = this.forZoom(zoom, bounds);
+    this.dotZoom = zoom;
+    this.fit(shown);
 
-    for (const p of shown) {
-      // Size carries weight of attestation: Jerusalem's 955 references should
-      // not look like a place mentioned once.
-      const r = p.v.length > 200 ? 5 : p.v.length > 40 ? 4 : p.v.length > 5 ? 3.2 : 2.6;
+    for (const dot of this.dots) {
+      const p = dot.place;
       const marker = L.circleMarker([p.y, p.x], {
-        pane: this.pane, radius: r,
+        pane: this.pane, radius: dot.r,
         fillColor: '#8c4a3f', fillOpacity: 0.85,
-        color: '#f4ecd8', weight: 1.2,
+        color: '#f4ecd8', weight: STROKE,
         interactive: true, bubblingMouseEvents: false,
       });
       marker.on('click', (e) => {
         L.DomEvent.stop(e);
-        this.onOpen(p);
+        this.onTap(e, p);
       });
       marker.bindTooltip(`${p.n} · ${p.v.length} verse${p.v.length === 1 ? '' : 's'}`,
         { direction: 'top', offset: [0, -5] });
       this.layer.addLayer(marker);
     }
     return shown;
+  }
+
+  /**
+   * Size every dot so none of them touches another.
+   *
+   * Places come most-referenced first, so each one is sized against the dots
+   * already down and shrinks to clear them. It also leaves room for every
+   * lesser neighbour still to come at the smallest size, so a well-attested
+   * place can never crowd a village off the map. Nothing goes below the
+   * smallest step: two places close enough to collide even then are a zoom
+   * away from coming apart.
+   */
+  fit(shown) {
+    const pts = shown.map((p) => this.map.project([p.y, p.x], this.dotZoom));
+
+    // Every place in view goes in the grid first, so a dot can see the lesser
+    // neighbours it has to leave room for as well as the ones already sized.
+    const grid = new Map();
+    pts.forEach((pt, i) => {
+      const k = `${Math.floor(pt.x / CELL)}:${Math.floor(pt.y / CELL)}`;
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(i);
+    });
+
+    const radii = new Array(shown.length);
+    shown.forEach((p, i) => {
+      let r = radiusFor(p.v.length);
+      const cx = Math.floor(pts[i].x / CELL);
+      const cy = Math.floor(pts[i].y / CELL);
+      for (let gx = cx - 1; gx <= cx + 1; gx++) {
+        for (let gy = cy - 1; gy <= cy + 1; gy++) {
+          for (const j of grid.get(`${gx}:${gy}`) ?? []) {
+            if (j === i) continue;
+            const d = pts[i].distanceTo(pts[j]);
+            const other = j < i ? radii[j] : MIN_RADIUS;
+            r = Math.min(r, d - other - STROKE - DOT_GAP);
+          }
+        }
+      }
+      radii[i] = Math.max(MIN_RADIUS, r);
+    });
+
+    this.dots = shown.map((place, i) => ({ place, x: pts[i].x, y: pts[i].y, r: radii[i] }));
+    this.grid = grid;
+  }
+
+  /** Dots near a world-pixel point, at the zoom they were sized for. */
+  *around(pt) {
+    const cx = Math.floor(pt.x / CELL);
+    const cy = Math.floor(pt.y / CELL);
+    for (let gx = cx - 1; gx <= cx + 1; gx++) {
+      for (let gy = cy - 1; gy <= cy + 1; gy++) {
+        for (const i of this.grid.get(`${gx}:${gy}`) ?? []) yield this.dots[i];
+      }
+    }
+  }
+
+  /**
+   * Would a dot of this radius here touch one of these?
+   *
+   * The map's other dots ask before they draw. A modern town sitting under a
+   * place Scripture names is the same spot twice, and the biblical dot is the
+   * one that answers a tap, so the other one steps aside.
+   */
+  touches(lat, lon, radius) {
+    if (!this.dots.length) return false;
+    const pt = this.map.project([lat, lon], this.dotZoom);
+    for (const dot of this.around(pt)) {
+      if (pt.distanceTo(dot) < dot.r + STROKE / 2 + radius + DOT_GAP) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Every dot within `slop` pixels of a point, measured from the dot's edge
+   * rather than its centre, so a big dot is as easy to hit as it looks.
+   * Nearest first.
+   */
+  near(lat, lon, slop) {
+    if (!this.dots.length) return [];
+    const pt = this.map.project([lat, lon], this.dotZoom);
+    const out = [];
+    const reach = Math.ceil(slop / CELL);
+    const cx = Math.floor(pt.x / CELL);
+    const cy = Math.floor(pt.y / CELL);
+    for (let gx = cx - 1 - reach; gx <= cx + 1 + reach; gx++) {
+      for (let gy = cy - 1 - reach; gy <= cy + 1 + reach; gy++) {
+        for (const i of this.grid.get(`${gx}:${gy}`) ?? []) {
+          const dot = this.dots[i];
+          const edge = pt.distanceTo(dot) - dot.r - STROKE / 2;
+          if (edge <= slop) out.push({ place: dot.place, edge });
+        }
+      }
+    }
+    return out.sort((a, b) => a.edge - b.edge || b.place.v.length - a.place.v.length);
   }
 
   /** Nearest biblical place to a point, if one is close enough to mean it. */

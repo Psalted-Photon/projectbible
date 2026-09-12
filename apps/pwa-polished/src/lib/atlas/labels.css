@@ -127,3 +127,62 @@
   pointer-events: auto !important;
   cursor: pointer;
 }
+
+/* "Which one?" — the list a tap opens when it lands among several dots. On
+   the map's own parchment, with rows tall enough to hit with a thumb. */
+.atlas-pick-popup .leaflet-popup-content-wrapper,
+.atlas-pick-popup .leaflet-popup-tip {
+  background: #f4ecd8;
+}
+
+.atlas-pick-popup .leaflet-popup-content {
+  margin: 6px;
+  min-width: 170px;
+}
+
+.atlas-pick {
+  display: flex;
+  flex-direction: column;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+}
+
+.atlas-pick-head {
+  padding: 4px 10px 6px;
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #8a7550;
+}
+
+.atlas-pick-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: #3d3427;
+  cursor: pointer;
+}
+
+.atlas-pick-row:hover,
+.atlas-pick-row:focus-visible {
+  background: #e6d9bb;
+  outline: none;
+}
+
+.atlas-pick-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.atlas-pick-note {
+  font-size: 12px;
+  color: #8a7550;
+  white-space: nowrap;
+}
