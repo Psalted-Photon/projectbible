@@ -409,6 +409,7 @@ export function createAtlasMap(container, options = {}) {
       const geojson = await getJson(entry.file);
       if (destroyed) return;
       if (wanted !== detailFor(map.getZoom())) return;   // reader moved on
+      if (basemapKind !== 'parchment') return;           // switched to tiles meanwhile
       built.push([kind, pane, geojson]);
     }
 
@@ -429,6 +430,7 @@ export function createAtlasMap(container, options = {}) {
     const grat = index.basemap.graticule?.[0];
     if (grat) {
       const geojson = await getJson(grat.file);
+      if (destroyed || basemapKind !== 'parchment') return;
       const layer = L.geoJSON(geojson, {
         pane: 'graticule', renderer: rendererFor('graticule'), interactive: false,
         style: { ...PARCHMENT.graticule, opacity: PARCHMENT.graticule.opacity * basemapOpacity },
@@ -983,7 +985,11 @@ export function createAtlasMap(container, options = {}) {
       // A tile basemap draws its own lettering; only the drawn map needs a pass.
       if (basemapKind !== 'parchment' && !timeline?.enabled) return;
       const detail = detailFor(map.getZoom());
-      if (detail !== loadedDetail) {
+      // The timeline still needs its names laid out over a tile basemap, but the
+      // parchment must not come with them. It used to: every zoom that crossed a
+      // detail level painted the drawn world over the tiles, and since the
+      // opacity dial dims both together, the tiles never showed again.
+      if (basemapKind === 'parchment' && detail !== loadedDetail) {
         emit.status(`detail ${detail}m…`, true);
         await drawParchment(detail);
         applyBasemapOpacity();
