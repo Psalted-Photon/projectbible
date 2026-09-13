@@ -178,6 +178,22 @@ export async function packInstallFinished(packId: string): Promise<boolean> {
   return true;
 }
 
+/** Delete a retired audio pack's file (and any journal beside it) from OPFS. */
+async function removeAudioPackFiles(packId: string): Promise<void> {
+  try {
+    if (!navigator.storage?.getDirectory) return;
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle('audio-packs');
+    const names: string[] = [];
+    for await (const name of (dir as any).keys() as AsyncIterable<string>) {
+      if (name.startsWith(packId)) names.push(name);
+    }
+    for (const name of names) await dir.removeEntry(name);
+  } catch {
+    // No audio-packs folder, or no file in it: nothing to free.
+  }
+}
+
 export async function removePack(packId: string): Promise<void> {
   // Step 1: Read all pack metadata to determine type and collect sub-pack IDs / translation IDs.
   // Virtual sub-packs (e.g. 'translations-consolidated-KJV') share the packId prefix.
@@ -266,7 +282,12 @@ export async function removePack(packId: string): Promise<void> {
     });
 
   } else if (packType === 'audio') {
-    await withTx(['audio_chapters'], 'readwrite', tx => {
+    // The retired BSB audio packs. Their chapter index lives here; the audio
+    // itself (1.7-1.8 GB each) was streamed into the origin's private file
+    // storage, which clearing IndexedDB never touches -- so it goes too, or
+    // removing the pack would free almost nothing.
+    await withTx(['audio_chapters', 'audio_cache'], 'readwrite', tx => {
+      tx.objectStore('audio_cache').clear();
       const cursor = tx.objectStore('audio_chapters').openCursor();
       cursor.onsuccess = (event) => {
         const c = (event.target as IDBRequest).result as IDBCursorWithValue | null;
@@ -279,6 +300,7 @@ export async function removePack(packId: string): Promise<void> {
         }
       };
     });
+    await removeAudioPackFiles(packId);
 
   } else if (packType === 'text') {
     // Both cursors run concurrently inside one transaction — IDB keeps it open

@@ -159,11 +159,9 @@
 - Drifting glow
 - Read section headings aloud
 
-## 17. Audio
-- Pre-recorded chapter audio
-- Play, pause, stop
-- Seek
-- Auto-advance
+## 17. Audio (retired)
+- The BSB chapter audio packs and their play button were removed on 2026-09-13
+- Read Aloud reads every chapter instead
 
 ## 18. Panes & Windows
 - Edge-drag to open a window, sized by drag distance

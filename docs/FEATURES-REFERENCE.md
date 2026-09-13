@@ -24,7 +24,7 @@ Features are named by **exported symbol and file path**, not by line number. Lin
 14. [Maps & Places](#14-maps--places)
 15. [Art](#15-art)
 16. [Read Aloud](#16-read-aloud-tts)
-17. [Audio](#17-audio)
+17. [Audio (retired)](#17-audio)
 18. [Panes & Windows](#18-panes--windows)
 19. [Content Packs](#19-content-packs)
 20. [Account & Sync](#20-account--sync)
@@ -828,11 +828,9 @@ Reader-side wiring at `BibleReader.svelte`, with a ticket guard because an `awai
 
 ## 17. Audio
 
-Pre-recorded chapter audio, distinct from [16. Read Aloud](#16-read-aloud-tts). Files: `src/components/AudioPlayer.svelte` (261), `src/adapters/audio.ts` (379), `src/stores/audioStore.ts`.
+Retired 2026-09-13. The BSB chapter audio packs, `AudioPlayer.svelte` and `adapters/audio.ts` are gone; [16. Read Aloud](#16-read-aloud-tts) reads every chapter instead. The importer refuses `bsb-audio-pt1` / `bsb-audio-pt2` by id before reading any bytes. A device that still has one lists it under Manage Packs → Other installed, and removing it there also deletes its file from OPFS (`audio-packs/`), which clearing IndexedDB alone never touched.
 
-`AudioPlayer` props: `book`, `chapter`. Controls: play/pause, seek slider, stop, continuous-play toggle, dismiss, loading spinner.
-
-`continuousPlay` is a shared store used by both the audio player and the TTS player, so auto-advance behaves the same either way.
+`continuousPlay` in `src/stores/audioStore.ts` stays: it is Read Aloud's auto-advance.
 
 ## 18. Panes & Windows
 
@@ -943,8 +941,8 @@ Imports `englishLexicalPackLoader` from `packages/core/src/search/englishLexical
 - `USE_BUNDLED_PACKS` — true in dev, or when `VITE_USE_BUNDLED_PACKS === 'true'`.
 - `BOOTSTRAP_PACK_URL = '/bootstrap.sqlite'` — always bundled with the app.
 - `FEATURES` — `lazyPackLoading`, `progressiveStartup`, `packUpdates` (all keyed off `!USE_BUNDLED_PACKS`), `persistentStorage`, and `ttsReadAloud` (a kill switch for Read Aloud).
-- `PACK_PRIORITY` — `essential: [bootstrap]`, `high: [translations]`, `medium: [study-tools, lexical]`, `low: [ancient-languages, bsb-audio-pt1, bsb-audio-pt2]`.
-- `PACK_TRIGGERS` — which user action loads which pack: `translations` on `reader-open`, `ancient-languages` on `hebrew-greek-toggle`, `lexical` on `word-study-open`, `study-tools` on `maps-open`, both audio packs on `audio-play`.
+- `PACK_PRIORITY` — `essential: [bootstrap]`, `high: [translations]`, `medium: [study-tools, lexical]`, `low: [ancient-languages]`.
+- `PACK_TRIGGERS` — which user action loads which pack: `translations` on `reader-open`, `ancient-languages` on `hebrew-greek-toggle`, `lexical` on `word-study-open`, `study-tools` on `maps-open`.
 - `UI` — `showProgressDuringDownload`, `allowPackRemoval`, `showStorageUsage`, `promptForPersistentStorage`.
 
 ### 19.7 Related docs

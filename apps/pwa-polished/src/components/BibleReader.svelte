@@ -47,7 +47,6 @@
   import { applyPlaceMarkersToAllSections, loadPlacePhrases } from "../lib/placeMarkerRenderer";
   import { repeatCountsStore } from "../stores/repeatCountsStore";
   import { countWordsInBook } from "../lib/repeatCounts";
-  import AudioPlayer from "./AudioPlayer.svelte";
   import TtsPlayer from "./TtsPlayer.svelte";
   import { FEATURES } from "../config";
   import {
@@ -1237,22 +1236,6 @@
 
   function handleContinueOnly(ctx: any) {
     if (ctx.nextChapter) continueToChapter(ctx.nextChapter);
-  }
-
-  function handleAudioNextChapter(event: CustomEvent<{ book: string; chapter: number }>) {
-    const { book, chapter } = event.detail;
-    let nextBook = book;
-    let nextChapter = chapter + 1;
-    const bookInfo = BIBLE_BOOKS.find(b => b.name === book);
-    if (bookInfo && nextChapter > bookInfo.chapters) {
-      const idx = BIBLE_BOOKS.findIndex(b => b.name === book);
-      nextBook = idx < BIBLE_BOOKS.length - 1 ? BIBLE_BOOKS[idx + 1].name : BIBLE_BOOKS[0].name;
-      nextChapter = 1;
-    }
-    if (nextBook !== book) {
-      navigationStore.setBook(nextBook);
-    }
-    navigationStore.setChapter(nextChapter);
   }
 
   async function handleStandardDayComplete(ctx: any) {
@@ -5640,7 +5623,6 @@
               {/each}
               </div>
             {/if}
-            <AudioPlayer book={chapterData.book} chapter={chapterData.chapter} on:nextchapter={handleAudioNextChapter} />
             {#if FEATURES.ttsReadAloud && (!isOriginalLanguage(currentTranslation) || canSpeakOriginal(currentTranslation))}
               <TtsPlayer translation={currentTranslation} book={chapterData.book} chapter={chapterData.chapter} />
             {/if}

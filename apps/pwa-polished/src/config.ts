@@ -35,7 +35,7 @@ export const PACK_PRIORITY = {
   essential: ['bootstrap'],
   high: ['translations'],
   medium: ['study-tools', 'lexical'],
-  low: ['ancient-languages', 'bsb-audio-pt1', 'bsb-audio-pt2']
+  low: ['ancient-languages']
 };
 
 // Pack loading triggers (when to load each pack)
@@ -43,9 +43,7 @@ export const PACK_TRIGGERS = {
   'translations': 'reader-open', // Load when user opens reader
   'ancient-languages': 'hebrew-greek-toggle', // Load when user switches to Hebrew/Greek
   'lexical': 'word-study-open', // Load when user opens word study panel
-  'study-tools': 'maps-open', // Load when user opens maps/chronology
-  'bsb-audio-pt1': 'audio-play', // Load when user clicks play (OT)
-  'bsb-audio-pt2': 'audio-play' // Load when user clicks play (NT)
+  'study-tools': 'maps-open' // Load when user opens maps/chronology
 };
 
 // UI Configuration

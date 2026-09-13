@@ -3,8 +3,14 @@ import { batchWriteTransaction, writeTransaction, openDB } from './db.js';
 import { logInstall, logInstallFlush, logInstallError } from '../lib/install-log';
 import { normalizeBookName } from '../lib/bibleData';
 
-/** Packs whose blobs are far too large to go through sql.js at all. */
+/**
+ * The BSB audio packs, retired now that Read Aloud reads every chapter. They
+ * are refused by id before anything is read: at 1.7-1.8 GB each, handing one
+ * to sql.js would try to hold the whole file in memory and kill the tab.
+ */
 const AUDIO_PACK_IDS = ['bsb-audio-pt1', 'bsb-audio-pt2'];
+const RETIRED_AUDIO_MESSAGE =
+  'BSB audio packs are no longer supported. Read Aloud reads every chapter instead.';
 
 /**
  * Copy one table into an IndexedDB store, a batch at a time.
@@ -91,17 +97,10 @@ async function clearStores(names: string[]): Promise<void> {
  * renderer killed mid-install.
  */
 export async function importPackFromSQLite(file: File): Promise<void> {
-  // Audio packs stream from the File straight to OPFS and never come through
-  // memory, so this has to happen before the bytes are read.
+  // Checked before the bytes are read -- see AUDIO_PACK_IDS.
   const packIdFromFilename = file.name.replace(/\.sqlite$/i, '');
   if (AUDIO_PACK_IDS.includes(packIdFromFilename)) {
-    console.log(`Detected audio pack "${packIdFromFilename}" — using OPFS streaming installer`);
-    const { installAudioPackFromFile } = await import('./audio.js');
-    await installAudioPackFromFile(file, packIdFromFilename, (loaded, total) => {
-      const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
-      if (pct % 10 === 0) console.log(`  Audio pack OPFS write: ${pct}%`);
-    });
-    return;
+    throw new Error(RETIRED_AUDIO_MESSAGE);
   }
 
   const arrayBuffer = await file.arrayBuffer();
@@ -382,16 +381,9 @@ export async function importPackFromBytes(
     hashed: !knownHash
   });
 
-  // Guard for an unusual caller reaching here with audio bytes. The normal audio
-  // routes (PacksPane and importPackFromSQLite) divert well before this point.
   const packIdFromName = sourceName.replace(/\.sqlite$/i, '');
   if (AUDIO_PACK_IDS.includes(packIdFromName)) {
-    const { installAudioPackFromFile } = await import('./audio.js');
-    const asFile = new File([bytes as unknown as BlobPart], `${packIdFromName}.sqlite`, {
-      type: 'application/x-sqlite3'
-    });
-    await installAudioPackFromFile(asFile, packIdFromName, () => {});
-    return;
+    throw new Error(RETIRED_AUDIO_MESSAGE);
   }
 
   logInstall('sqljs-loading');
@@ -2734,30 +2726,8 @@ export async function importPackFromBytes(
       
       console.log(`✅ Study tools pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'audio') {
-      // Audio packs are handled via the streaming OPFS installer (audio.ts).
-      // When a File is passed here (e.g. drag-and-drop), we write it to OPFS
-      // and index the metadata — the same end result as installAudioPackToOPFS.
-      console.log(`Audio pack detected (${packInfo.id}). Writing to OPFS for streaming access...`);
-
-      try {
-        const { installAudioPackFromFile } = await import('./audio.js');
-        // The installer streams from a File, and we hold bytes here, so this
-        // one wrap is unavoidable. Only reached when a pack declares itself
-        // audio in its own metadata rather than by id.
-        const audioFile = new File([bytes as unknown as BlobPart], `${packInfo.id}.sqlite`, {
-          type: 'application/x-sqlite3'
-        });
-        await installAudioPackFromFile(audioFile, packInfo.id, (loaded, total) => {
-          const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
-          if (pct % 10 === 0) console.log(`  Audio pack write: ${pct}%`);
-        });
-        console.log(`✅ Audio pack ${packInfo.id} installed to OPFS`);
-      } catch (audioErr) {
-        console.error('Audio pack OPFS install failed:', audioErr);
-        throw audioErr;
-      }
-      await markImportComplete();
-      return; // skip the generic sql.js processing below
+      // A pack that calls itself audio in its own metadata, under another name.
+      throw new Error(RETIRED_AUDIO_MESSAGE);
     }
 
     await markImportComplete();
@@ -2772,22 +2742,14 @@ export async function importPackFromBytes(
 
 /**
  * Import a pack from a URL.
- * Audio packs are streamed directly to OPFS to avoid loading 1-2 GB into memory.
  */
 export async function importPackFromUrl(url: string): Promise<void> {
   console.log(`Fetching pack from ${url}...`);
 
-  // Detect audio packs by URL before downloading anything
-  const AUDIO_PACK_IDS = ['bsb-audio-pt1', 'bsb-audio-pt2'];
+  // Refused before downloading 1.8 GB -- see AUDIO_PACK_IDS.
   const urlFilename = url.split('/').pop()?.replace(/\.sqlite$/i, '') ?? '';
   if (AUDIO_PACK_IDS.includes(urlFilename)) {
-    console.log(`Detected audio pack URL "${urlFilename}" — streaming to OPFS`);
-    const { installAudioPackToOPFS } = await import('./audio.js');
-    await installAudioPackToOPFS(url, urlFilename, (loaded, total) => {
-      const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
-      if (pct % 10 === 0) console.log(`  Audio pack download: ${pct}%`);
-    });
-    return;
+    throw new Error(RETIRED_AUDIO_MESSAGE);
   }
 
   const response = await fetch(url);

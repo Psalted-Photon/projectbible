@@ -111,7 +111,7 @@
     position: absolute;
     inset: 0;
     z-index: -1;
-    transform: translate(-0.045em, 0.06em);
+    transform: translate(-0.0225em, 0.03em);
     background: linear-gradient(
       180deg,
       var(--tut-gold-hi) 0%,

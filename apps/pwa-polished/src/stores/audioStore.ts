@@ -1,11 +1,7 @@
 import { writable } from 'svelte/store';
 
-/** Whether the user wants audio to automatically advance to the next chapter. */
+/** Whether Read Aloud carries on into the next chapter when one ends. */
 export const continuousPlay = writable<boolean>(false);
-
-/** One-shot flag: set by AudioPlayer when a chapter ends in continuous mode.
- *  The next AudioPlayer that mounts will read this, clear it, and auto-play. */
-export const autoplayNext = writable<boolean>(false);
 
 /* Read Aloud has no equivalent one-shot flag. It used to, and that was the bug:
  * an anonymous "play the next one" note could only be read by a brand-new

@@ -4,15 +4,12 @@
     listInstalledPacks,
     removePack,
     getDatabaseStats,
-    audioPackHasChapters,
     packDataLooksComplete,
   } from "../../adapters/db-manager";
   import { importPackFromSQLite, atlasPackSupported } from "../../adapters/pack-import";
-  import { reindexAudioPack } from "../../adapters/audio";
   import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from "../../config";
   import {
     PACK_CATALOG,
-    isAudioPack,
     downloadAndImportPack,
     installAll,
     installAllState,
@@ -49,7 +46,6 @@
   }
 
   let installedPacks: PackInfo[] = [];
-  let packsNeedingReindex = new Set<string>();
   /** Reference packs whose import was cut short — installed, but missing rows. */
   let packsIncomplete = new Set<string>();
   let isLoading = true;
@@ -225,14 +221,12 @@
   interface InstalledState {
     version: string;
     bytes: number;
-    needsReindex: boolean;
     incomplete: boolean;
   }
 
   /** Roll the installed rows up into one entry per catalog pack. */
   function mergeInstalled(
     rows: PackInfo[],
-    reindex: Set<string>,
     incomplete: Set<string>
   ): Map<string, InstalledState> {
     const merged = new Map<string, InstalledState>();
@@ -241,20 +235,19 @@
       if (!catalogId) continue;
       let state = merged.get(catalogId);
       if (!state) {
-        state = { version: "", bytes: 0, needsReindex: false, incomplete: false };
+        state = { version: "", bytes: 0, incomplete: false };
         merged.set(catalogId, state);
       }
       // Only the parent row carries the pack's own version -- the sub-rows get
       // whatever the import happened to stamp on them, which is not it.
       if (row.id === catalogId) state.version = row.version;
       state.bytes += row.size;
-      if (reindex.has(row.id)) state.needsReindex = true;
       if (incomplete.has(row.id)) state.incomplete = true;
     }
     return merged;
   }
 
-  $: installedById = mergeInstalled(installedPacks, packsNeedingReindex, packsIncomplete);
+  $: installedById = mergeInstalled(installedPacks, packsIncomplete);
   /**
    * The Bible the app ships with (the NET text and its headings). It is not in
    * the catalog, so without this it would be listed as an older pack with a
@@ -360,8 +353,7 @@
       // Remove the old copy first so the re-download actually happens —
       // loadPackOnDemand skips the download when the installed version matches
       // the manifest, and pack versions stay unchanged when their data updates.
-      // Audio packs skip this: they always re-stream and overwrite in OPFS.
-      if (reinstall && !isAudioPack(pack.id)) {
+      if (reinstall) {
         $installMessage = `Removing old ${pack.name}...`;
         await removePack(pack.id);
         await loadPacks();
@@ -574,24 +566,16 @@ Free up space on your device, or remove a pack you are not using, then try again
       installedPacks = await listInstalledPacks();
       console.log("Loaded packs:", installedPacks);
 
-      // Check each installed audio pack for a stale index (pack record exists
-      // but audio_chapters were evicted). Flag these for Re-index instead of
-      // forcing a full re-download.
-      const reindexSet = new Set<string>();
-      // And each reference pack for a cut-short import — a registry row over
+      // Check each reference pack for a cut-short import — a registry row over
       // stores that are partly or entirely empty. Nothing re-downloads these on
       // their own, so without a flag here the damage is invisible until you open
       // an article or a topic and find the page blank.
       const incompleteSet = new Set<string>();
       for (const pack of installedPacks) {
-        if (pack.type === 'audio') {
-          const hasChapters = await audioPackHasChapters(pack.id);
-          if (!hasChapters) reindexSet.add(pack.id);
-        } else if (!(await packDataLooksComplete(pack.id, pack.type))) {
+        if (!(await packDataLooksComplete(pack.id, pack.type))) {
           incompleteSet.add(pack.id);
         }
       }
-      packsNeedingReindex = reindexSet;
       packsIncomplete = incompleteSet;
     } catch (error) {
       console.error("Error loading packs:", error);
@@ -637,23 +621,6 @@ Free up space on your device, or remove a pack you are not using, then try again
     } catch (error) {
       console.error("Error removing pack:", error);
       alert(`Failed to remove pack: ${error}`);
-    } finally {
-      $installBusy = false;
-      $installMessage = "";
-    }
-  }
-
-  async function handleReindexPack(packId: string) {
-    $installBusy = true;
-    $installMessage = `Re-indexing ${packId}…`;
-    try {
-      await reindexAudioPack(packId);
-      await loadPacks();
-      await loadStats();
-      window.dispatchEvent(new CustomEvent("packsUpdated"));
-    } catch (error) {
-      console.error(`Error re-indexing ${packId}:`, error);
-      alert(`Re-index failed — the audio file may be missing. Try reinstalling the pack.\n\n${error}`);
     } finally {
       $installBusy = false;
       $installMessage = "";
@@ -829,15 +796,13 @@ Free up space on your device, or remove a pack you are not using, then try again
         <div
           class="pill stacked"
           class:installed={!!state}
-          class:flagged={state?.needsReindex || state?.incomplete}
+          class:flagged={state?.incomplete}
         >
           <div class="pill-text">
             <div class="pill-head">
               <span class="pill-icon emoji">{pack.icon}</span>
               <span class="pill-name">{pack.name}</span>
-              {#if state?.needsReindex}
-                <span class="pill-flag">index missing</span>
-              {:else if state?.incomplete}
+              {#if state?.incomplete}
                 <span class="pill-flag">install unfinished</span>
               {/if}
             </div>
@@ -849,14 +814,6 @@ Free up space on your device, or remove a pack you are not using, then try again
               title="About {pack.name}"
               aria-label="About {pack.name}">ⓘ</button
             >
-            {#if state?.needsReindex}
-              <button
-                class="text-btn"
-                on:click={() => handleReindexPack(pack.id)}
-                disabled={$installBusy}
-                title="Re-index audio chapters (no re-download needed)">Re-index</button
-              >
-            {/if}
             <button
               class="icon-btn"
               class:go={!state}
@@ -1242,23 +1199,6 @@ Free up space on your device, or remove a pack you are not using, then try again
     border-color: rgba(220, 38, 38, 0.5);
   }
 
-  .text-btn {
-    height: 34px;
-    padding: 0 0.6rem;
-    background: rgba(255, 165, 0, 0.15);
-    border: 1px solid rgba(255, 165, 0, 0.5);
-    border-radius: 6px;
-    color: #ffa500;
-    font-size: 0.72rem;
-    font-weight: 600;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .text-btn:hover:not(:disabled) {
-    background: rgba(255, 165, 0, 0.25);
-  }
-
   /* Narrow pane: give the name the whole first row and drop the buttons onto
      a second one, stretched edge to edge. Three 34px squares crammed at the
      right of a 300px pane left the name ~130px and nothing read in full.
@@ -1276,11 +1216,10 @@ Free up space on your device, or remove a pack you are not using, then try again
     }
 
     /* flex: 1 splits the row evenly however many buttons the pack has -- one
-       for an orphan, four for a flagged audio pack. A quarter shorter than
+       for an orphan, three for an installed pack. A quarter shorter than
        the 34px square, since the glyphs never needed that much headroom, and
        far wider, so still an easier target than the squares were. */
-    .pill.stacked .icon-btn,
-    .pill.stacked .text-btn {
+    .pill.stacked .icon-btn {
       flex: 1;
       width: auto;
       height: 25px;
@@ -1306,7 +1245,6 @@ Free up space on your device, or remove a pack you are not using, then try again
   }
 
   .icon-btn:disabled,
-  .text-btn:disabled,
   .small-btn:disabled,
   .install-btn:disabled {
     opacity: 0.45;

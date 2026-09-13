@@ -21,7 +21,6 @@ import {
   importAtlasPlaceIndex,
   atlasPackSupported,
 } from '../adapters/pack-import';
-import { installAudioPackToOPFS } from '../adapters/audio';
 import { packInstallFinished } from '../adapters/db-manager';
 import { loadPackOnDemand, installArtImageShards, installAtlasParts } from './progressive-init';
 import { USE_BUNDLED_PACKS } from '../config';
@@ -155,36 +154,13 @@ export const PACK_CATALOG: CatalogPack[] = [
     icon: "👤",
     url: `${PACK_BASE_URL}/people.sqlite`,
   },
-  {
-    id: "bsb-audio-pt1",
-    name: "BSB Audio Part 1",
-    description: "Genesis – Psalms",
-    info: "The Berean Standard Bible read aloud from Genesis through Psalms — a human narrator, not a synthetic voice.\n\nPlay it with the audio button in any chapter. Around 1.8 GB, stored outside the main database, which is why it can be re-indexed without downloading again. Free to use — bereanbible.com.",
-    size: "1.76 GB",
-    icon: "🎵",
-    url: `${PACK_BASE_URL}/bsb-audio-pt1.sqlite`,
-  },
-  {
-    id: "bsb-audio-pt2",
-    name: "BSB Audio Part 2",
-    description: "Proverbs – Revelation",
-    info: "The Berean Standard Bible read aloud from Proverbs through Revelation — a human narrator, not a synthetic voice.\n\nPlay it with the audio button in any chapter. Around 1.7 GB, stored outside the main database, which is why it can be re-indexed without downloading again. Free to use — bereanbible.com.",
-    size: "1.65 GB",
-    icon: "🎵",
-    url: `${PACK_BASE_URL}/bsb-audio-pt2.sqlite`,
-  },
 ];
-
-export function isAudioPack(packId: string): boolean {
-  return packId.startsWith('bsb-audio');
-}
 
 /**
  * What Install All installs, in the order it installs them: smallest first, so
  * a phone that gives out partway has already kept everything small. The two
  * big ones -- Commentaries (225 MB) and Lexical (373 MB) -- are the likeliest
- * to get the tab reclaimed under memory pressure, so they go last. BSB audio is
- * left out; Read Aloud has replaced it.
+ * to get the tab reclaimed under memory pressure, so they go last.
  */
 export const INSTALL_ALL_ORDER: string[] = [
   'people-biblical-v1',
@@ -248,16 +224,6 @@ export async function downloadAndImportPack(
   }
 
   onMessage(`Preparing ${pack.name}...`);
-
-  // Audio packs (1+ GB) must be streamed directly to OPFS — never loaded into memory
-  if (isAudioPack(pack.id)) {
-    await installAudioPackToOPFS(pack.url, pack.id, (loaded, total) => {
-      const loadedMB = (loaded / (1024 * 1024)).toFixed(0);
-      const totalMB = total > 0 ? (total / (1024 * 1024)).toFixed(0) : '?';
-      onMessage(`Downloading ${pack.name} (${loadedMB} MB / ${totalMB} MB)…`);
-    });
-    return;
-  }
 
   if (USE_BUNDLED_PACKS) {
     onMessage(`Loading ${pack.name} from local files...`);
@@ -403,7 +369,7 @@ export async function voicesStillToInstall(): Promise<TtsVoiceInfo[]> {
 }
 
 /**
- * Install every pack (except BSB audio) and every voice, one after another.
+ * Install every pack and every voice, one after another.
  *
  * Skips whatever already finished, so running it again after the phone
  * reclaimed the tab picks up where the last run stopped. A pack that fails is
