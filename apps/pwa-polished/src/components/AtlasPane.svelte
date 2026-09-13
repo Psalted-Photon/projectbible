@@ -117,6 +117,7 @@
   $: sources = atlas?.sources ?? [];
 
   onMount(async () => {
+    root.addEventListener('click', onClickCapture, true);
     try {
       if (!(await atlasInstalled())) {
         missing = true;
@@ -189,6 +190,7 @@
   });
 
   onDestroy(() => {
+    root?.removeEventListener('click', onClickCapture, true);
     if (playTimer) clearInterval(playTimer);
     playTimer = null;
     if (searchTimer) clearTimeout(searchTimer);
@@ -237,6 +239,9 @@
     openPanel = openPanel === which ? null : which;
   }
 
+  /** Set by a press that closed something on the map, for the click it makes. */
+  let swallowMapClick = false;
+
   /**
    * A tap anywhere but the controls closes whatever is open.
    *
@@ -244,13 +249,35 @@
    * be, or the navbar's own sideways scrolling would clip them — so the test
    * has to name them too. Checking only for `.nav` closed the layers panel on
    * the first switch you touched.
+   *
+   * And they have to be this map's own. The window around the map is a
+   * `.panel` as well, so an unscoped test found it above every tap on the map,
+   * counted the tap as inside, and nothing ever closed.
    */
   function onRootPointerDown(event: PointerEvent) {
-    const el = event.target as HTMLElement | null;
-    if (!el?.closest('.nav, .panel, .results')) {
-      openPanel = null;
-      resultsOpen = false;
-    }
+    const el = event.target as Element | null;
+    swallowMapClick = false;
+    const control = el?.closest('.nav, .panel, .results');
+    if (control && root?.contains(control)) return;
+
+    const wasOpen = openPanel !== null || resultsOpen;
+    openPanel = null;
+    resultsOpen = false;
+    // A tap that closes a dropdown is spent closing it. Left alone, its click
+    // went on to the map and opened "This spot" for wherever it happened to land.
+    swallowMapClick = wasOpen && Boolean(el && mapEl?.contains(el));
+  }
+
+  /**
+   * Runs in the capture phase on the map's root, so it sees the click before
+   * Leaflet does. Every press resets the flag, so a press that turned into a
+   * drag and made no click cannot eat the next real tap.
+   */
+  function onClickCapture(event: MouseEvent) {
+    if (!swallowMapClick) return;
+    swallowMapClick = false;
+    event.stopPropagation();
+    event.preventDefault();
   }
 
   async function chooseBasemap(kind: string) {
@@ -660,57 +687,59 @@
   </div>
 
   {#if openPanel === 'basemap'}
-    <div class="panel panel-left">
-      <h4>Basemap</h4>
+    <!-- Five choices and two dials. Headings, swatches, a note on every row and
+         a paragraph under them made this cover most of the map it was choosing
+         for, so it says each thing once and says it small. -->
+    <div class="panel panel-left styles-panel">
       <!-- A tick, not a switch. Picking a basemap is one choice out of several;
-           a switch would say each style could be on or off independently. -->
-      <button class="opt" class:on={basemapKind === 'parchment'} on:click={() => chooseBasemap('parchment')}>
-        <span class="swatch" style="background:#ece1c8"></span>Parchment
-        <span class="tickmark">✓</span>
+           a switch would say each style could be on or off independently.
+           The close-up warning is worth knowing before someone concludes the
+           map is broken, but as a tooltip rather than a paragraph. -->
+      <button
+        class="opt"
+        class:on={basemapKind === 'parchment'}
+        title="Drawn from world-scale data, so it thins out below about 5 km. For local streets, lakes and creeks, use Topographic or Satellite."
+        on:click={() => chooseBasemap('parchment')}
+      >
+        Parchment<span class="tickmark">✓</span>
       </button>
+      <div class="styles-divider" title="These styles need an internet connection">Online</div>
       {#each Object.entries(TILE_BASEMAPS) as [key, style]}
         <button class="opt" class:on={basemapKind === key} on:click={() => chooseBasemap(key)}>
-          <span class="swatch" style="background:#4a5560"></span>{style.label}
-          <span class="offline-note">needs internet</span>
-          <span class="tickmark">✓</span>
+          {style.label}<span class="tickmark">✓</span>
         </button>
       {/each}
-      <!-- Worth knowing before someone concludes the map is broken up close. -->
-      <div class="panel-note">
-        Parchment is drawn from world-scale data and thins out below about 5&nbsp;km.
-        For local streets, lakes and creeks, use Topographic or Satellite.
-      </div>
 
-      <!-- The basemap's own fade lives in the navbar; what's left to tune here
-           is how loud its lettering is over whatever sits on top. -->
-      <h4>Place names</h4>
-      <div class="row">
-        <label for="atlas-text-opacity">Text</label>
-        <input
-          id="atlas-text-opacity"
-          type="range"
-          min="0"
-          max="100"
-          value={textOpacity}
-          on:input={onTextOpacity}
-        />
-        <span class="val">{textOpacity}%</span>
-      </div>
+      <div class="styles-fades">
+        <!-- The basemap's own fade lives in the navbar; what's left to tune here
+             is how loud its lettering is over whatever sits on top. -->
+        <div class="row">
+          <label for="atlas-text-opacity">Names</label>
+          <input
+            id="atlas-text-opacity"
+            type="range"
+            min="0"
+            max="100"
+            value={textOpacity}
+            on:input={onTextOpacity}
+          />
+          <span class="val">{textOpacity}%</span>
+        </div>
 
-      <!-- Its own dial, so the parchment can be faded to nothing under an
-           ancient overlay and today's borders still show where things are. -->
-      <h4>Modern borders</h4>
-      <div class="row">
-        <label for="atlas-borders-opacity">Borders</label>
-        <input
-          id="atlas-borders-opacity"
-          type="range"
-          min="0"
-          max="100"
-          value={bordersOpacity}
-          on:input={onBordersOpacity}
-        />
-        <span class="val">{bordersOpacity}%</span>
+        <!-- Its own dial, so the parchment can be faded to nothing under an
+             ancient overlay and today's borders still show where things are. -->
+        <div class="row">
+          <label for="atlas-borders-opacity">Borders</label>
+          <input
+            id="atlas-borders-opacity"
+            type="range"
+            min="0"
+            max="100"
+            value={bordersOpacity}
+            on:input={onBordersOpacity}
+          />
+          <span class="val">{bordersOpacity}%</span>
+        </div>
       </div>
     </div>
   {/if}
@@ -1193,7 +1222,6 @@
   }
   .opt.on .switch { background: #4a2f38; border-color: var(--focus); }
   .opt.on .switch::after { background: var(--focus); transform: translateX(13px); }
-  .opt .offline-note { margin-left: auto; font-size: 10px; color: var(--faint); }
 
   .row {
     display: flex; align-items: center; gap: 9px; padding: 6px 8px; font-size: 12.5px;
@@ -1204,11 +1232,19 @@
   .row .val { width: 34px; text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
 
   .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-  .panel-note {
-    padding: 8px; margin-top: 4px; font-size: 11px; line-height: 1.45;
-    color: var(--faint); border-top: 1px solid var(--line);
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* The styles picker, kept small enough that the map stays in view under it. */
+  .styles-panel { min-width: 0; width: 200px; padding: 4px; }
+  .styles-panel .opt { padding: 4px 8px; font-size: 12.5px; line-height: 1.35; }
+  .styles-divider {
+    display: flex; align-items: center; gap: 6px; margin: 3px 8px 1px;
+    font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
   }
+  .styles-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  .styles-fades { margin-top: 4px; padding-top: 3px; border-top: 1px solid var(--line); }
+  .styles-panel .row { padding: 3px 8px; gap: 7px; font-size: 11.5px; }
+  .styles-panel .row label { width: 46px; }
+  .styles-panel .row .val { width: 30px; font-size: 11px; }
 
   .credit-item { padding: 7px 8px; font-size: 12px; line-height: 1.45; }
   .credit-item + .credit-item { border-top: 1px solid var(--line); }
