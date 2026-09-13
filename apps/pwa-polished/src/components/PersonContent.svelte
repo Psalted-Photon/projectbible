@@ -436,10 +436,15 @@
     const current = get(navigationStore);
     // Same as the other works: the bio rides the crumb so walking back reopens
     // it, family-tree trail and scroll offset included.
-    navigationStore.pushHistory(current, 'library', {
-      surface: 'person',
-      snapshot: viewSnapshot(),
-    });
+    //
+    // Docked there is nothing to reopen — the window stays up across the jump,
+    // so a snapshot would only put a second copy of the bio on top of it. The
+    // crumb itself still goes on: it walks the reader back either way.
+    navigationStore.pushHistory(
+      current,
+      'library',
+      docked ? undefined : { surface: 'person', snapshot: viewSnapshot() },
+    );
     navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     // A pinned bio stays open across the jump — reading the passage beside the
     // person is the whole point of pinning it.

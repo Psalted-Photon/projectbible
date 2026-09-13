@@ -249,10 +249,16 @@
     // The topic rides along on the crumb, so walking back reopens it where you
     // left it rather than dropping you on the passage with the card gone.
     // Captured before navigating, because closing tears the state down.
-    navigationStore.pushHistory(current, 'library', {
-      surface: 'naves',
-      snapshot: viewSnapshot(),
-    });
+    //
+    // Docked there is nothing to reopen — the window stays up across the jump,
+    // so a snapshot would only put a second copy of the topic on top of it.
+    // The crumb itself still goes on: it walks the reader back either way.
+    const snap = docked ? null : viewSnapshot();
+    navigationStore.pushHistory(
+      current,
+      'library',
+      snap ? { surface: 'naves', snapshot: snap } : undefined,
+    );
     navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     // A pinned topic stays open across the jump — reading the passage beside
     // the outline is the whole point of pinning it.

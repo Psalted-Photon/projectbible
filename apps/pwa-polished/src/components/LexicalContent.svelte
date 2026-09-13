@@ -468,7 +468,14 @@
   function handleVerseClick(use: VerseUse) {
     visitedRefs = new Set(visitedRefs).add(refKey(use));
     const current = get(navigationStore);
-    navigationStore.pushHistory(current, 'library', { surface: 'lexical', snapshot: viewSnapshot() });
+    // Docked there is nothing to reopen — the study stays up across the jump,
+    // so a snapshot would only put a second copy of the word on top of it. The
+    // crumb itself still goes on: it walks the reader back either way.
+    navigationStore.pushHistory(
+      current,
+      'library',
+      docked ? undefined : { surface: 'lexical', snapshot: viewSnapshot() },
+    );
     navigationStore.navigateToVerse(current.translation, use.book, use.chapter, use.verse);
     // Docked, the study stays put beside the passage you just jumped to.
     if (!docked) close();
@@ -663,7 +670,13 @@
     const parsed = parseOsisRef(osisRef);
     if (!parsed) return;
     const current = get(navigationStore);
-    navigationStore.pushHistory(current, 'library', { surface: 'lexical', snapshot: viewSnapshot() });
+    // Docked, same as the usage list: the study is still there to come back to,
+    // so the crumb carries no snapshot and no second copy gets opened.
+    navigationStore.pushHistory(
+      current,
+      'library',
+      docked ? undefined : { surface: 'lexical', snapshot: viewSnapshot() },
+    );
     // navigateToVerse, not navigateTo: a scripture reference followed out of a
     // definition should land with the same fade highlight every other verse link
     // in the app gives you.
