@@ -1213,15 +1213,8 @@
      in the label pane that can be clicked — are styled by the engine's own
      stylesheet, not here. Leaflet builds those elements itself, so a scoped rule
      in this file never reaches them, and the encyclopedia's bare map needs the
-     same styling without going through this component at all. */
-
-  .map-area :global(.atlas-grain) {
-    background-image:
-      radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0) 55%, rgba(88, 62, 26, .28) 100%),
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.5'/></svg>");
-    background-blend-mode: multiply;
-    mix-blend-mode: multiply;
-  }
+     same styling without going through this component at all. The old paper is
+     the same: the map builds and styles it itself, in paper.js. */
 
   /* ---------------- the key, the status chip ---------------- */
   .approx-key {

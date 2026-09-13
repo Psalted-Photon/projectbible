@@ -32,6 +32,7 @@ import './labels.css';
 import { OverlayHost, TimelineOverlay } from './overlays.js';
 import { LabelEngine } from './labels.js';
 import { BiblicalPlaces, haversine, bookName } from './places.js';
+import { Paper } from './paper.js';
 import { parsePassage, placesInPassage, eraForBook } from './reading.js';
 
 /** Draw order. Leaflet panes are the only reliable way to keep it. */
@@ -310,17 +311,13 @@ export function createAtlasMap(container, options = {}) {
   };
 
   /**
-   * The paper grain and the ink wobble.
+   * The old paper and the ink wobble.
    *
    * Both belong to the map rather than to whatever is hosting it, so both are
    * built here. The lab had them in its page, which is why they were the two
    * things that would have gone missing in the move.
    */
-  const grain = document.createElement('div');
-  grain.className = 'atlas-grain';
-  grain.style.cssText =
-    'position:absolute;inset:0;pointer-events:none;z-index:450;opacity:0';
-  container.appendChild(grain);
+  const paper = new Paper(map);
 
   const filterId = `ink-displace-${Math.random().toString(36).slice(2, 8)}`;
   const filterSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -835,7 +832,7 @@ export function createAtlasMap(container, options = {}) {
       if (!pane) continue;
       pane.style.filter = age > 0.05 ? pane.dataset.inkFilter : '';
     }
-    grain.style.opacity = (age * 0.55).toFixed(3);
+    paper.setStrength(age);
   }
 
   /**
@@ -1326,9 +1323,9 @@ export function createAtlasMap(container, options = {}) {
     destroy() {
       destroyed = true;
       clearTimeout(redrawTimer);
+      paper.destroy();
       map.off();
       map.remove();
-      grain.remove();
       filterSvg.remove();
       renderers.clear();
       drawnLayers.clear();
