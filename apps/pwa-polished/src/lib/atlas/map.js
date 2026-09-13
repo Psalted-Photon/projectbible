@@ -317,7 +317,7 @@ export function createAtlasMap(container, options = {}) {
    * built here. The lab had them in its page, which is why they were the two
    * things that would have gone missing in the move.
    */
-  const paper = new Paper(map);
+  const paper = new Paper(map, { getJson, index });
 
   const filterId = `ink-displace-${Math.random().toString(36).slice(2, 8)}`;
   const filterSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

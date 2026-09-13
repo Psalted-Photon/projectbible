@@ -1,30 +1,34 @@
 /**
- * Old paper, under the ink.
+ * Old paper on the land, engraved water on the sea.
  *
  * The first attempt was a fine speckle and a dark vignette laid over the whole
  * map. At the strength it ran, all it did was make the map slightly darker, and
  * because it was pinned to the window it read as a smudge on the glass rather
  * than as the sheet the map was drawn on.
  *
- * This is the sheet itself, built in layers the way old paper actually ages:
+ * The land is the sheet itself, built in layers the way old paper ages:
  *
- *   a warm yellowing over everything;
+ *   a warm yellowing;
  *   uneven tone — broad blotches where the sheet has browned more;
  *   fibres, some darker and some lighter than the paper around them;
- *   foxing, the rust-brown spots old paper grows, and a faint tide-line or two;
+ *   foxing, the rust-brown spots old paper grows;
  *   a fine grain and the odd fleck of dust;
  *   and worn, darker edges.
  *
- * Everything but the edges lives in panes inside the map, so it pans with the
- * map like a real sheet would. It sits above the historical drawing and below
- * the dots and the modern lettering, so the ancient world looks printed on the
- * paper while the things you tap stay crisp. The edges belong to the window —
- * they are where the sheet stops — so they stay put.
+ * The water is drawn the way engravers drew it: fine lines that follow every
+ * shore and island, spreading and fading as they go out, and across the open
+ * sea beyond them an even, slightly wavy hatching, all over a cool wash.
+ *
+ * Both live in one canvas inside the map, so they pan with it like a real sheet
+ * would. It sits above the historical drawing and below the dots and the modern
+ * lettering, so the ancient world looks printed on the paper while the things
+ * you tap stay crisp. Only the worn edges belong to the window — they are where
+ * the sheet stops — so they stay put.
  *
  * Every texture is drawn here in code from a fixed seed, so nothing is
- * downloaded or licensed and the paper looks the same every time. They are
- * built the first time the map is aged, not before, so the encyclopedia's bare
- * map, which is never aged, never pays for them.
+ * downloaded or licensed and the paper looks the same every time. Nothing is
+ * built until the first time the map is aged, so the encyclopedia's bare map,
+ * which is never aged, never pays for any of it.
  */
 
 import L from 'leaflet';
@@ -33,11 +37,30 @@ import L from 'leaflet';
 const INK_PANE = ['paper', 585];
 const LIGHT_PANE = ['paper-light', 586];
 
-/** How far the sheet reaches past each edge of the view, so a drag never outruns it. */
-const MARGIN = 384;
-
 /** Tile sizes on screen, in CSS pixels. Unrelated sizes keep the repeats from lining up. */
-const TILE = { mottle: 1024, spots: 1280, fibres: 512, grain: 256 };
+const TILE = { mottle: 1024, spots: 1280, fibres: 512, grain: 256, hatch: [240, 60] };
+
+/** The land's yellowing: a wash, not a colour, so nothing under it is hidden. */
+const LAND_TINT = 'rgba(226,188,122,0.32)';
+/** The sea's: cool and a little grey, so aged water still reads as water. */
+const WATER_TINT = 'rgba(168,190,192,0.22)';
+/** The engraver's ink for the water, a dark blue-grey. */
+const WATER_INK = '38,66,78';
+
+/**
+ * The ripples along a shore: how far out each line runs, in pixels, and how
+ * dark it is. Spacing grows and ink thins going out, the way an engraver's did.
+ */
+const RIPPLES = [
+  { reach: 2.5, alpha: 0.55 },
+  { reach: 6, alpha: 0.44 },
+  { reach: 10.5, alpha: 0.34 },
+  { reach: 16, alpha: 0.25 },
+  { reach: 23, alpha: 0.17 },
+];
+const RIPPLE_WIDTH = 0.8;
+/** Where the hatching of the open sea begins, clear of the last ripple. */
+const HATCH_FROM = 30;
 
 // ------------------------------------------------------------------ textures
 
@@ -58,6 +81,9 @@ function canvasOf(w, h) {
   c.height = h;
   return c;
 }
+
+/** Fine textures are drawn at screen resolution, capped where it stops showing. */
+const sharpness = () => Math.min(2, window.devicePixelRatio || 1);
 
 /**
  * Smooth noise that repeats exactly at the edges of the tile.
@@ -94,19 +120,19 @@ function tilingNoise(size, baseCells, octaves, rand) {
   return out;
 }
 
-/** Broad browned patches. Drawn small and stretched, since blotches have no fine detail. */
-function mottle() {
+/** Broad uneven patches in one colour. Drawn small and stretched, since blotches have no fine detail. */
+function mottle(seed, [r, g, b], strength) {
   const size = 256;
-  const noise = tilingNoise(size, 2, 6, seeded(11));
+  const noise = tilingNoise(size, 2, 6, seeded(seed));
   const c = canvasOf(size, size);
   const ctx = c.getContext('2d');
   const img = ctx.createImageData(size, size);
   for (let i = 0; i < noise.length; i++) {
     const t = Math.min(1, Math.max(0, (noise[i] - 0.42) / 0.45));
-    img.data[i * 4] = 128;
-    img.data[i * 4 + 1] = 88;
-    img.data[i * 4 + 2] = 40;
-    img.data[i * 4 + 3] = Math.round(t ** 1.4 * 0.4 * 255);
+    img.data[i * 4] = r;
+    img.data[i * 4 + 1] = g;
+    img.data[i * 4 + 2] = b;
+    img.data[i * 4 + 3] = Math.round(t ** 1.4 * strength * 255);
   }
   ctx.putImageData(img, 0, 0);
   return c;
@@ -127,7 +153,7 @@ function wrapped(size, x, y, reach, fn) {
   }
 }
 
-/** Foxing, dust and a faint tide-line or two. Soft shapes, so half resolution is plenty. */
+/** Foxing and dust. Soft shapes, so half resolution is plenty. */
 function spots() {
   const css = TILE.spots;
   const scale = 0.5;
@@ -135,34 +161,6 @@ function spots() {
   const rand = seeded(23);
   const c = canvasOf(size, size);
   const ctx = c.getContext('2d');
-
-  // Tide-lines: the edge a spill dried to, an uneven ring barely darker than
-  // the paper, with a faint wash inside it.
-  for (let n = 0; n < 2; n++) {
-    const cx = rand() * size;
-    const cy = rand() * size;
-    const r = (100 + rand() * 120) * scale;
-    const wobble = [rand() * 6, rand() * 6, rand() * 6];
-    const ring = (x, y) => {
-      ctx.beginPath();
-      for (let a = 0; a <= 64; a++) {
-        const th = (a / 64) * Math.PI * 2;
-        const rr = r * (1 + 0.05 * Math.sin(3 * th + wobble[0]) + 0.03 * Math.sin(5 * th + wobble[1]) + 0.02 * Math.sin(9 * th + wobble[2]));
-        const px = x + Math.cos(th) * rr;
-        const py = y + Math.sin(th) * rr;
-        a ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(168,124,62,0.05)';
-      ctx.fill();
-      for (const [w, alpha] of [[5, 0.03], [2.6, 0.06], [1.2, 0.09]]) {
-        ctx.lineWidth = w * scale * 2;
-        ctx.strokeStyle = `rgba(130,88,40,${alpha})`;
-        ctx.stroke();
-      }
-    };
-    wrapped(size, cx, cy, r * 1.2, ring);
-  }
 
   // Foxing: rust-brown spots, darkest at the core, some with a speck or two
   // beside them the way mould spreads.
@@ -201,10 +199,10 @@ function spots() {
   return c;
 }
 
-/** Fibres: short curved strands, dark or light. Fine detail, so drawn at screen resolution. */
+/** Fibres: short curved strands, dark or light. */
 function fibres(light) {
   const css = TILE.fibres;
-  const res = Math.min(2, window.devicePixelRatio || 1);
+  const res = sharpness();
   const rand = seeded(light ? 41 : 37);
   const c = canvasOf(css * res, css * res);
   const ctx = c.getContext('2d');
@@ -239,9 +237,7 @@ function fibres(light) {
 
 /** The grain of the sheet: a per-pixel unevenness too fine to see as anything but texture. */
 function grain() {
-  const css = TILE.grain;
-  const res = Math.min(2, window.devicePixelRatio || 1);
-  const size = css * res;
+  const size = TILE.grain * sharpness();
   const rand = seeded(53);
   const c = canvasOf(size, size);
   const ctx = c.getContext('2d');
@@ -256,41 +252,286 @@ function grain() {
   return c;
 }
 
-function urlOf(canvas) {
-  return new Promise((resolve) => {
-    if (canvas.toBlob) {
-      canvas.toBlob((blob) => resolve(blob ? URL.createObjectURL(blob) : canvas.toDataURL()), 'image/png');
-    } else {
-      resolve(canvas.toDataURL());
+/**
+ * The open sea's hatching: close, slightly wavy horizontal lines, each a little
+ * darker or lighter than the next the way a burin's pressure varied. Every wave
+ * repeats a whole number of times across the tile, so the lines join up.
+ */
+function hatch() {
+  const [w, h] = TILE.hatch;
+  const res = sharpness();
+  const rand = seeded(61);
+  const c = canvasOf(w * res, h * res);
+  const ctx = c.getContext('2d');
+  ctx.scale(res, res);
+  ctx.lineWidth = 0.55;
+  const gap = 6;
+  for (let row = 0; row < h / gap; row++) {
+    const y0 = gap / 2 + row * gap;
+    const phase = rand() * Math.PI * 2;
+    ctx.strokeStyle = `rgba(${WATER_INK},${0.14 + rand() * 0.12})`;
+    ctx.beginPath();
+    for (let x = -2; x <= w + 2; x += 2) {
+      const y = y0 + Math.sin((x / w) * Math.PI * 4) * 0.7 + Math.sin((x / w) * Math.PI * 12 + phase) * 0.3;
+      x < 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
-  });
+    ctx.stroke();
+  }
+  return c;
 }
 
 /** Built once per page and shared by every map on it. */
 let textures = null;
 function paperTextures() {
-  textures ??= (async () => {
-    const [m, s, fd, fl, g] = await Promise.all([mottle(), spots(), fibres(false), fibres(true), grain()].map(urlOf));
-    return { mottle: m, spots: s, fibresDark: fd, fibresLight: fl, grain: g };
-  })();
+  textures ??= new Promise((resolve) => {
+    // A frame's grace, so switching the timeline on paints before this runs.
+    requestAnimationFrame(() => {
+      const landMottle = mottle(11, [128, 88, 40], 0.4);
+      const t = {
+        landMottle,
+        waterMottle: mottle(17, [52, 84, 96], 0.3),
+        spots: spots(),
+        fibresDark: fibres(false),
+        fibresLight: fibres(true),
+        grain: grain(),
+        hatch: hatch(),
+        edgeUrl: landMottle.toDataURL(),
+      };
+      resolve(t);
+    });
+  });
   return textures;
+}
+
+// ------------------------------------------------------------------ renderer
+
+/**
+ * A canvas renderer that draws the sheet instead of its paths.
+ *
+ * Leaflet already knows how to keep a canvas under the view, move it with a
+ * drag, scale it through a zoom and project and clip shapes to it; this reuses
+ * all of that. Its only shapes are the water, and it never strokes or fills
+ * them as shapes: it paints the paper across the whole canvas, then uses the
+ * water to cut the paper away and lay the engraved water in its place.
+ *
+ * The light fibres need a normal blend while everything else multiplies, so a
+ * second canvas rides along in its own pane, sized, moved and scaled in step.
+ */
+const PaperRenderer = L.Canvas.extend({
+  options: { padding: 0.3 },
+
+  setTextures(t) {
+    const pattern = (canvas, cssWidth) => {
+      const p = this._ctx.createPattern(canvas, 'repeat');
+      // Textures drawn at a higher resolution are scaled back to their size on screen.
+      p.setTransform?.(new DOMMatrix().scaleSelf(cssWidth / canvas.width));
+      return p;
+    };
+    this._patterns = {
+      landMottle: pattern(t.landMottle, TILE.mottle),
+      waterMottle: pattern(t.waterMottle, TILE.mottle),
+      spots: pattern(t.spots, TILE.spots),
+      fibresDark: pattern(t.fibresDark, TILE.fibres),
+      fibresLight: pattern(t.fibresLight, TILE.fibres),
+      grain: pattern(t.grain, TILE.grain),
+      hatch: pattern(t.hatch, TILE.hatch[0]),
+    };
+    if (this._map) this._redrawRequest ||= L.Util.requestAnimFrame(this._redraw, this);
+  },
+
+  _initContainer() {
+    L.Canvas.prototype._initContainer.call(this);
+    this._light = L.DomUtil.create('canvas', 'leaflet-zoom-animated', this._map.getPane(LIGHT_PANE[0]));
+    this._lightCtx = this._light.getContext('2d');
+    this._scratch = document.createElement('canvas');
+  },
+
+  _destroyContainer() {
+    L.Canvas.prototype._destroyContainer.call(this);
+    L.DomUtil.remove(this._light);
+  },
+
+  /** Leaflet's own, with the light canvas kept in step before anything draws. */
+  _update() {
+    if (this._map._animatingZoom && this._bounds) return;
+    L.Renderer.prototype._update.call(this);
+
+    const b = this._bounds;
+    const size = b.getSize();
+    const m = L.Browser.retina ? 2 : 1;
+    for (const [canvas, ctx] of [[this._container, this._ctx], [this._light, this._lightCtx]]) {
+      L.DomUtil.setPosition(canvas, b.min);
+      canvas.width = m * size.x;
+      canvas.height = m * size.y;
+      canvas.style.width = `${size.x}px`;
+      canvas.style.height = `${size.y}px`;
+      ctx.setTransform(m, 0, 0, m, 0, 0);
+      ctx.translate(-b.min.x, -b.min.y);
+    }
+    this.fire('update');
+  },
+
+  _updateTransform(center, zoom) {
+    L.Canvas.prototype._updateTransform.call(this, center, zoom);
+    if (this._light) this._light.style.transform = this._container.style.transform;
+  },
+
+  /** Always the whole canvas: the paper covers all of it, not just where shapes changed. */
+  _redraw() {
+    this._redrawBounds = null;
+    L.Canvas.prototype._redraw.call(this);
+  },
+
+  _draw() {
+    const pat = this._patterns;
+    const b = this._bounds;
+    if (!pat || !b || !this._ctx) return;
+    const ctx = this._ctx;
+    const light = this._lightCtx;
+    const x = b.min.x, y = b.min.y, w = b.max.x - x, h = b.max.y - y;
+
+    light.save();
+    light.setTransform(1, 0, 0, 1, 0, 0);
+    light.clearRect(0, 0, this._light.width, this._light.height);
+    light.restore();
+
+    // The paper, everywhere.
+    ctx.fillStyle = LAND_TINT;
+    ctx.fillRect(x, y, w, h);
+    for (const p of [pat.landMottle, pat.fibresDark, pat.grain, pat.spots]) {
+      ctx.fillStyle = p;
+      ctx.fillRect(x, y, w, h);
+    }
+    light.fillStyle = pat.fibresLight;
+    light.fillRect(x, y, w, h);
+
+    const shapes = this._waterShapes();
+    if (!shapes.length) return;
+
+    // Then the water cut out of it and engraved in its place. The sea and the
+    // inland water are cut separately: each needs its own even-odd fill for its
+    // islands, and where the two overlap, cutting twice and laying the same
+    // water twice changes nothing.
+    const water = this._engrave(b, shapes);
+    for (const path of shapes) {
+      ctx.save();
+      ctx.clip(path, 'evenodd');
+      ctx.clearRect(x, y, w, h);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(water, 0, 0);
+      ctx.restore();
+
+      light.save();
+      light.clip(path, 'evenodd');
+      light.clearRect(x, y, w, h);
+      light.restore();
+    }
+    // A full-size scratch canvas is a lot of memory to hold between redraws.
+    water.width = 0;
+    water.height = 0;
+  },
+
+  /** The water's outlines, already projected and clipped to the canvas by Leaflet. */
+  _waterShapes() {
+    const shapes = [];
+    for (let order = this._drawFirst; order; order = order.next) {
+      const parts = order.layer._parts;
+      if (!parts?.length) continue;
+      const path = new Path2D();
+      for (const ring of parts) {
+        if (ring.length < 3) continue;
+        path.moveTo(ring[0].x, ring[0].y);
+        for (let i = 1; i < ring.length; i++) path.lineTo(ring[i].x, ring[i].y);
+        path.closePath();
+      }
+      shapes.push(path);
+    }
+    return shapes;
+  },
+
+  /**
+   * The engraved water, on a scratch canvas the size of this one.
+   *
+   * Every line is a stroke of the shoreline itself, which is what makes the
+   * ripples follow every cape and island. A ripple is drawn as a wide band of
+   * ink out from the shore with a slightly narrower band erased from inside it,
+   * leaving one thin line at that distance. Working from the outermost ripple
+   * in, each erase only ever takes out what lies nearer the shore, so the lines
+   * already drawn further out survive — and in a strait narrower than the
+   * ripples, the nearer shore's lines win, as an engraver's would.
+   */
+  _engrave(b, shapes) {
+    const pat = this._patterns;
+    const canvas = this._scratch;
+    canvas.width = this._container.width;
+    canvas.height = this._container.height;
+    const g = canvas.getContext('2d');
+    const m = L.Browser.retina ? 2 : 1;
+    const x = b.min.x, y = b.min.y, w = b.max.x - x, h = b.max.y - y;
+    g.setTransform(m, 0, 0, m, 0, 0);
+    g.translate(-x, -y);
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+
+    // Hatching across the open sea, cleared back from every shore with a
+    // feathered edge so it gives way to the ripples gradually.
+    g.fillStyle = pat.hatch;
+    g.fillRect(x, y, w, h);
+    g.globalCompositeOperation = 'destination-out';
+    for (const [reach, alpha] of [[HATCH_FROM + 24, 0.3], [HATCH_FROM + 12, 0.5], [HATCH_FROM, 1]]) {
+      g.strokeStyle = `rgba(0,0,0,${alpha})`;
+      g.lineWidth = reach * 2;
+      for (const p of shapes) g.stroke(p);
+    }
+
+    // The ripples, outermost first.
+    for (let i = RIPPLES.length - 1; i >= 0; i--) {
+      const { reach, alpha } = RIPPLES[i];
+      g.globalCompositeOperation = 'source-over';
+      g.strokeStyle = `rgba(${WATER_INK},${alpha})`;
+      g.lineWidth = reach * 2 + RIPPLE_WIDTH;
+      for (const p of shapes) g.stroke(p);
+      g.globalCompositeOperation = 'destination-out';
+      g.strokeStyle = '#000';
+      g.lineWidth = Math.max(0.01, reach * 2 - RIPPLE_WIDTH);
+      for (const p of shapes) g.stroke(p);
+    }
+
+    // The wash and its unevenness go underneath everything drawn so far.
+    g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = pat.waterMottle;
+    g.fillRect(x, y, w, h);
+    g.fillStyle = WATER_TINT;
+    g.fillRect(x, y, w, h);
+    g.globalCompositeOperation = 'source-over';
+    return canvas;
+  },
+});
+
+/** Every polygon in a collection as one shape, so Leaflet tracks one layer, not thousands. */
+function asOneShape(fc) {
+  const polygons = [];
+  for (const f of fc?.features ?? []) {
+    const geom = f.geometry;
+    if (geom?.type === 'Polygon') polygons.push(geom.coordinates);
+    else if (geom?.type === 'MultiPolygon') for (const p of geom.coordinates) polygons.push(p);
+  }
+  return { type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: polygons } };
 }
 
 // --------------------------------------------------------------------- sheet
 
-const mod = (v, t) => ((v % t) + t) % t;
-
 export class Paper {
-  /** @param {L.Map} map */
-  constructor(map) {
+  /**
+   * @param {L.Map} map
+   * @param {{ getJson: (key: string) => Promise<any>, index: any }} data
+   */
+  constructor(map, data) {
     this.map = map;
+    this.data = data;
     this.strength = 0;
     this.built = false;
     this.destroyed = false;
-    this.origin = null;
-    this.size = null;
-    this.onMove = () => this.place(false);
-    this.onReset = () => this.place(true);
   }
 
   /**
@@ -327,25 +568,17 @@ export class Paper {
       // context, so a blend set on anything inside it would only see the empty
       // pane and never the map beneath.
       if (blend) p.style.mixBlendMode = blend;
-      const sheet = L.DomUtil.create('div', '', p);
-      sheet.style.position = 'absolute';
-      return { p, sheet };
+      return p;
     };
+    this.inkPane = pane(INK_PANE, 'multiply');
+    this.lightPane = pane(LIGHT_PANE, null);
 
-    const ink = pane(INK_PANE, 'multiply');
-    const light = pane(LIGHT_PANE, null);
-    this.inkPane = ink.p;
-    this.inkSheet = ink.sheet;
-    this.lightPane = light.p;
-    this.lightSheet = light.sheet;
-    // The yellowing. A wash, not a colour: at full age it turns the parchment
-    // toward old newsprint without hiding anything under it.
-    this.inkSheet.style.backgroundColor = 'rgba(226,188,122,0.32)';
+    this.renderer = new PaperRenderer({ pane: INK_PANE[0] });
+    map.addLayer(this.renderer);
 
     // Worn edges, fixed to the window. A darkening rim, broken up by the same
     // blotches as the sheet so the edge looks handled rather than airbrushed.
-    const container = map.getContainer();
-    this.edges = L.DomUtil.create('div', '', container);
+    this.edges = L.DomUtil.create('div', '', map.getContainer());
     Object.assign(this.edges.style, {
       position: 'absolute', inset: '0', pointerEvents: 'none', zIndex: '450',
       mixBlendMode: 'multiply', opacity: '0',
@@ -354,64 +587,30 @@ export class Paper {
     this.edges.style.webkitMaskImage = edgeMask;
     this.edges.style.maskImage = edgeMask;
 
-    map.on('move', this.onMove);
-    map.on('moveend zoomend viewreset resize', this.onReset);
+    // The water the paper gives way to: the same sea the timeline paints, and
+    // its lakes and rivers.
+    const { getJson, index } = this.data;
+    const seaFile = index?.basemap?.ocean?.[50]?.file ?? index?.basemap?.ocean?.[110]?.file;
+    const inlandFile = (index?.overlays?._always ?? []).find((l) => l.kind === 'water')?.file;
+    for (const file of [seaFile, inlandFile]) {
+      if (!file) continue;
+      getJson(file).then((fc) => {
+        if (this.destroyed) return;
+        L.geoJSON(asOneShape(fc), { renderer: this.renderer, pane: INK_PANE[0], interactive: false }).addTo(map);
+      }, () => {});
+    }
 
     paperTextures().then((t) => {
       if (this.destroyed) return;
-      this.inkSheet.style.backgroundImage = [t.spots, t.fibresDark, t.grain, t.mottle].map((u) => `url("${u}")`).join(',');
-      this.inkSheet.style.backgroundSize = [TILE.spots, TILE.fibres, TILE.grain, TILE.mottle].map((n) => `${n}px ${n}px`).join(',');
-      this.lightSheet.style.backgroundImage = `url("${t.fibresLight}")`;
-      this.lightSheet.style.backgroundSize = `${TILE.fibres}px ${TILE.fibres}px`;
+      this.renderer.setTextures(t);
       this.edges.style.backgroundImage =
-        `radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 40%, rgba(88,56,20,.55) 100%), url("${t.mottle}")`;
+        `radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 40%, rgba(88,56,20,.55) 100%), url("${t.edgeUrl}")`;
       this.edges.style.backgroundSize = `100% 100%, ${TILE.mottle / 2}px ${TILE.mottle / 2}px`;
-      this.place(true);
     });
-    this.place(true);
-  }
-
-  /**
-   * Keep the sheet under the view.
-   *
-   * The sheet sits in the map's own coordinates, so a drag carries it along
-   * for free. It is only moved when the view gets near its edge, and then its
-   * texture is shifted by exactly the distance it moved, so the fibres stay
-   * where they were on the map and the jump never shows.
-   */
-  place(force) {
-    if (!this.built || this.destroyed) return;
-    const map = this.map;
-    const view = map.getSize();
-    const tl = map.containerPointToLayerPoint([0, 0]);
-
-    const o = this.origin;
-    const sz = this.size;
-    const covered = o && sz &&
-      tl.x >= o.x + 32 && tl.y >= o.y + 32 &&
-      tl.x + view.x <= o.x + sz.x - 32 && tl.y + view.y <= o.y + sz.y - 32;
-    if (covered && !force) return;
-
-    const origin = L.point(Math.floor(tl.x - MARGIN), Math.floor(tl.y - MARGIN));
-    const size = L.point(view.x + MARGIN * 2, view.y + MARGIN * 2);
-    this.origin = origin;
-    this.size = size;
-
-    const positions = [TILE.spots, TILE.fibres, TILE.grain, TILE.mottle]
-      .map((t) => `${-mod(origin.x, t)}px ${-mod(origin.y, t)}px`).join(',');
-    for (const sheet of [this.inkSheet, this.lightSheet]) {
-      L.DomUtil.setPosition(sheet, origin);
-      sheet.style.width = `${size.x}px`;
-      sheet.style.height = `${size.y}px`;
-    }
-    this.inkSheet.style.backgroundPosition = positions;
-    this.lightSheet.style.backgroundPosition = `${-mod(origin.x, TILE.fibres)}px ${-mod(origin.y, TILE.fibres)}px`;
   }
 
   destroy() {
     this.destroyed = true;
-    this.map.off('move', this.onMove);
-    this.map.off('moveend zoomend viewreset resize', this.onReset);
     this.edges?.remove();
   }
 }
