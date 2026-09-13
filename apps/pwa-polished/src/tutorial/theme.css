@@ -56,6 +56,12 @@
   --tut-board: #000000;
   --tut-chalk: #f1eee4;
 
+  /* The logo's gold, sampled from Logo.png, highlight to shadow. */
+  --tut-gold-hi: #fef189;
+  --tut-gold-light: #fdce30;
+  --tut-gold: #e9b405;
+  --tut-gold-deep: #d38a00;
+
   --tut-font: 'TutChakraPetch', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --tut-display: 'TutFredericka', 'TutChakraPetch', Georgia, serif;
 

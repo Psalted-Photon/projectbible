@@ -36,7 +36,7 @@
 >
   <div class="board">
     <img class="gem" src="/Logo.png" alt="" draggable="false" />
-    <h1 class="name">{APP_NAME}</h1>
+    <h1 class="name" data-text={APP_NAME}>{APP_NAME}</h1>
     {#if TAGLINE}
       <p class="tagline">{TAGLINE}</p>
     {/if}
@@ -86,6 +86,9 @@
   }
 
   .name {
+    position: relative;
+    /* Keeps the gold layer's negative z-index above the black board. */
+    isolation: isolate;
     margin: 0;
     font-family: var(--tut-display);
     font-weight: 400;
@@ -98,6 +101,29 @@
       0 0 1px rgba(241, 238, 228, 0.55),
       0 0 14px rgba(241, 238, 228, 0.1);
     animation: rise 0.9s 0.15s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  /* The same word again in the gem's gold, set underneath the chalk and nudged
+     down and to the left so it shows along those edges. Shaded top to bottom
+     like the gem's facets. */
+  .name::before {
+    content: attr(data-text);
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    transform: translate(-0.045em, 0.06em);
+    background: linear-gradient(
+      180deg,
+      var(--tut-gold-hi) 0%,
+      var(--tut-gold-light) 30%,
+      var(--tut-gold) 62%,
+      var(--tut-gold-deep) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: none;
+    pointer-events: none;
   }
 
   .tagline {
