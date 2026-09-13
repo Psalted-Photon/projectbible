@@ -289,20 +289,22 @@
     flex-shrink: 0;
   }
 
+  /* The inner edge: a faint indigo seam rather than a solid stripe, to match
+     the glass header. Still 2px so the edge you grab stays findable. */
   .panel-left {
-    border-right: 2px solid #667eea;
+    border-right: 2px solid rgba(102, 126, 234, 0.26);
   }
 
   .panel-right {
-    border-left: 2px solid #667eea;
+    border-left: 2px solid rgba(102, 126, 234, 0.26);
   }
 
   .panel-top {
-    border-bottom: 2px solid #667eea;
+    border-bottom: 2px solid rgba(102, 126, 234, 0.26);
   }
 
   .panel-bottom {
-    border-top: 2px solid #667eea;
+    border-top: 2px solid rgba(102, 126, 234, 0.26);
   }
 
   .resize-handle {
@@ -314,7 +316,7 @@
 
   .resize-handle:hover,
   .panel.resizing .resize-handle {
-    background: rgba(102, 126, 234, 0.3);
+    background: rgba(102, 126, 234, 0.15);
   }
 
   /* Scoped under .panel.resizing to outrank the blue tint above it. As plain
@@ -367,9 +369,17 @@
      the handle nearest the buttons and leaving only the few pixels overhanging
      outside the panel to grab; now the whole bar drags. `touch-action: none`
      stands in for the preventDefault that touchstart can't have without
-     killing the buttons — see handleHeaderDragStart. */
+     killing the buttons — see handleHeaderDragStart.
+
+     The look is the ring's reference pill (RadialSelectionMenu .pill): a tint
+     that's barely there, a blur, an edge line in the accent at about a quarter
+     strength, and a drop shadow to lift it off the content below. */
   .panel-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: rgba(8, 8, 10, 0.06);
+    border-bottom: 1px solid rgba(102, 126, 234, 0.26);
+    box-shadow: 0 4.5px 8px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(3px) saturate(1.1);
+    -webkit-backdrop-filter: blur(3px) saturate(1.1);
     padding: 0 2px;
     display: flex;
     justify-content: space-between;
@@ -395,9 +405,15 @@
   }
 
   /* Same warning the edge handle gives, on the surface actually being dragged.
-     Releasing here closes the panel. */
+     Releasing here closes the panel.
+
+     Blur off while it shows: on light and sepia the rule below puts a `filter`
+     on this same element, and a filter on top of a backdrop-filter is where
+     blurred backdrops go wrong. */
   .panel-header.close-zone {
     background: rgba(220, 38, 38, 0.8);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   /* The other half of why the warning was never seen: on light and sepia the
