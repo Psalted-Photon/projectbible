@@ -49,6 +49,12 @@
 
   let chapterRows: LibraryRow[] | null = null;
   let chapterLoading = false;
+  /** The chapter last sent off to fetch, e.g. "Genesis 6". */
+  let chapterAsked = "";
+  /** The chapter chapterRows actually holds — lags chapterAsked while a fetch is out. */
+  let chapterHeld = "";
+  /** Bumped on every fetch and on close, so only the newest result ever lands. */
+  let chapterRequest = 0;
 
   let showStarred = false;
   let showRecent = false;
@@ -76,6 +82,13 @@
   $: shownRows = filteredRows.slice(0, visibleCount);
   $: browsing = !searchResults && !chapterRows;
 
+  // The pill's label follows the reader live, so the list under it has to as
+  // well — scrolling a docked window into the next chapter swaps its rows in
+  // rather than leaving the last chapter's up under the new name.
+  $: if (chapterRows && `${nav.book} ${nav.chapter}` !== chapterAsked) {
+    loadChapter(nav.book, nav.chapter);
+  }
+
   onMount(async () => {
     letterCounts = await source.getLetterCounts();
     const first = Object.keys(letterCounts)[0] ?? "A";
@@ -97,7 +110,7 @@
     letter = next;
     visibleCount = CHUNK;
     clearSearch();
-    chapterRows = null;
+    closeChapter();
 
     const loaded = await source.getRowsForLetter(next);
     // A slower letter's rows must not land after you've already moved on.
@@ -182,19 +195,40 @@
   }
 
   // --- In this chapter ---------------------------------------------------
-  async function toggleChapter() {
-    if (chapterRows) {
-      chapterRows = null;
+  function toggleChapter() {
+    // A tap while the first fetch is still out counts as turning it off too.
+    if (chapterRows || chapterLoading) {
+      closeChapter();
       return;
     }
     if (!source.getRowsInChapter) return;
-    chapterLoading = true;
     searchBar?.collapse();
-    const found = await source.getRowsInChapter(nav.book, nav.chapter);
+    loadChapter(nav.book, nav.chapter);
+  }
+
+  async function loadChapter(book: string, chapter: number) {
+    if (!source.getRowsInChapter) return;
+    const request = ++chapterRequest;
+    const key = `${book} ${chapter}`;
+    chapterAsked = key;
+    chapterLoading = true;
+    const found = await source.getRowsInChapter(book, chapter);
+    // Scrolling on through chapters, or turning the pill off, while this was
+    // out means a newer answer (or none) is wanted — drop this one.
+    if (request !== chapterRequest) return;
     chapterRows = found;
+    chapterHeld = key;
     visibleCount = CHUNK;
     chapterLoading = false;
     if (listEl) listEl.scrollTop = 0;
+  }
+
+  function closeChapter() {
+    chapterRequest++;
+    chapterRows = null;
+    chapterAsked = "";
+    chapterHeld = "";
+    chapterLoading = false;
   }
 
   // --- Type to jump ------------------------------------------------------
@@ -394,7 +428,7 @@
         {#if searchResults}
           {filteredRows.length} result{filteredRows.length === 1 ? "" : "s"}
         {:else if chapterRows}
-          {filteredRows.length} in {nav.book} {nav.chapter}
+          {filteredRows.length} in {chapterHeld}
         {:else}
           {letter}<span class="count">({filteredRows.length})</span>
         {/if}
