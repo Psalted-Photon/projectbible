@@ -3,7 +3,6 @@
   import { get } from "svelte/store";
   import { paneStore, pendingCloseEdge, type PaneState } from "../stores/paneStore";
   import SettingsPane from "./panes/SettingsPane.svelte";
-  import MapPane from "./panes/MapPane.svelte";
   import PacksPane from "./panes/PacksPane.svelte";
   import SearchPane from "./panes/SearchPane.svelte";
   import WakeAlarmPane from "./panes/WakeAlarmPane.svelte";
@@ -106,8 +105,7 @@
 
 <!-- Pane -->
 <div
-  class="pane {pane.position} pane-{pane.type}"
-  class:themed={pane.type !== "map"}
+  class="pane themed {pane.position} pane-{pane.type}"
   style={paneStyle}
   transition:fly={transitionConfig}
 >
@@ -133,8 +131,6 @@
   <div class="pane-content">
     {#if pane.type === "settings"}
       <SettingsPane bind:clearBackdrop />
-    {:else if pane.type === "map"}
-      <MapPane />
     {:else if pane.type === "packs"}
       <PacksPane />
     {:else if pane.type === "search"}

@@ -146,6 +146,38 @@ export async function packDataLooksComplete(packId: string, packType: string): P
   return true;
 }
 
+/**
+ * Did this pack's last install run all the way to the end?
+ *
+ * The registry row is written before any data and stamped with its contentHash
+ * only once the import finishes, so a row without a hash is an install that
+ * was cut short. The stores are checked too, for the kills the hash can't see.
+ * The art pack's paintings arrive in shards after that stamp, so an art row
+ * also needs at least one painting behind it.
+ *
+ * Reads the raw row: listInstalledPacks leaves contentHash out.
+ */
+export async function packInstallFinished(packId: string): Promise<boolean> {
+  const db = await openDB();
+  const row = await new Promise<{ type?: string; contentHash?: string } | undefined>((resolve) => {
+    const req = db.transaction('packs', 'readonly').objectStore('packs').get(packId);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(undefined);
+  });
+  if (!row?.contentHash) return false;
+  if (!(await packDataLooksComplete(packId, row.type ?? ''))) return false;
+
+  if (row.type === 'art' && db.objectStoreNames.contains('art_images')) {
+    const images = await new Promise<number>((resolve) => {
+      const req = db.transaction('art_images', 'readonly').objectStore('art_images').count();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(0);
+    });
+    if (images === 0) return false;
+  }
+  return true;
+}
+
 export async function removePack(packId: string): Promise<void> {
   // Step 1: Read all pack metadata to determine type and collect sub-pack IDs / translation IDs.
   // Virtual sub-packs (e.g. 'translations-consolidated-KJV') share the packId prefix.

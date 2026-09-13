@@ -2747,10 +2747,8 @@
      which is what being off home is.
 
      The ring is currentColor so it always matches the label it surrounds. The
-     bar keeps its own per-category colours further down this file, and four of
-     them have drifted from CATEGORY_COLORS — historical, wisdom, acts and
-     general — so drawing the border from the shared palette would have shown a
-     mismatched ring on exactly those books.
+     label's per-category colours further down this file match CATEGORY_COLORS
+     in lib/bibleData.ts; keep them in step if that palette changes.
 
      A pixel comes off the padding to pay for the border, so the pill is the
      same size filled or ringed and does not jump when you leave home. */
@@ -2804,14 +2802,14 @@
   }
 
   .nav-dropdown.reference-dropdown-trigger.category-pentateuch .pill-btn-reference { color: #a67c52; }
-  .nav-dropdown.reference-dropdown-trigger.category-historical .pill-btn-reference { color: #6496c8; }
-  .nav-dropdown.reference-dropdown-trigger.category-wisdom .pill-btn-reference { color: #daa520; }
+  .nav-dropdown.reference-dropdown-trigger.category-historical .pill-btn-reference { color: #6ca0dc; }
+  .nav-dropdown.reference-dropdown-trigger.category-wisdom .pill-btn-reference { color: #f0c040; }
   .nav-dropdown.reference-dropdown-trigger.category-major-prophets .pill-btn-reference { color: #5c1e99; }
   .nav-dropdown.reference-dropdown-trigger.category-minor-prophets .pill-btn-reference { color: #a45be9; }
   .nav-dropdown.reference-dropdown-trigger.category-gospels .pill-btn-reference { color: #fc345c; }
-  .nav-dropdown.reference-dropdown-trigger.category-acts .pill-btn-reference { color: #ff6030; }
+  .nav-dropdown.reference-dropdown-trigger.category-acts .pill-btn-reference { color: #ff6520; }
   .nav-dropdown.reference-dropdown-trigger.category-pauline .pill-btn-reference { color: #6048cc; }
-  .nav-dropdown.reference-dropdown-trigger.category-general .pill-btn-reference { color: #d2691e; }
+  .nav-dropdown.reference-dropdown-trigger.category-general .pill-btn-reference { color: #f2893e; }
   .nav-dropdown.reference-dropdown-trigger.category-revelation .pill-btn-reference { color: #61f1ff; }
 
   /* Ã¢â€â‚¬Ã¢â€â‚¬ Icon badges (brown bold icon on radial gradient splash) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */

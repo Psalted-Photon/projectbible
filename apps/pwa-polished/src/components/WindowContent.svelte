@@ -2,9 +2,7 @@
   import type { WindowState } from "../lib/stores/windowStore";
   import WindowContentSelector from "./WindowContentSelector.svelte";
   import BibleReader from "./BibleReader.svelte";
-  // The map window's contents. MapPane.svelte is still on disk untouched, so
-  // reverting to the old map is this one import — see step 17 phase 5, which
-  // deletes it once this has been lived with.
+  // The map window's contents.
   import AtlasPane from "./AtlasPane.svelte";
   import CommentaryReader from "./CommentaryReader.svelte";
   import JournalWriter from "./JournalWriter.svelte";

@@ -7,17 +7,21 @@
     audioPackHasChapters,
     packDataLooksComplete,
   } from "../../adapters/db-manager";
-  import {
-    importPackFromSQLite,
-    importPackFromBytes,
-    importArtImageShard,
-    importAtlasGeometryShard,
-    importAtlasPlaceIndex,
-    atlasPackSupported,
-  } from "../../adapters/pack-import";
-  import { installAudioPackToOPFS, reindexAudioPack } from "../../adapters/audio";
-  import { loadPackOnDemand, installArtImageShards, installAtlasParts } from "../../lib/progressive-init";
+  import { importPackFromSQLite, atlasPackSupported } from "../../adapters/pack-import";
+  import { reindexAudioPack } from "../../adapters/audio";
   import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from "../../config";
+  import {
+    PACK_CATALOG,
+    isAudioPack,
+    downloadAndImportPack,
+    installAll,
+    installAllState,
+    installBusy,
+    installMessage,
+    restartNeeded,
+    packsStillToInstall,
+    voicesStillToInstall,
+  } from "../../lib/packInstaller";
   import {
     isTtsSupported,
     storedVoices,
@@ -56,8 +60,6 @@
   };
   let showInstallUrl = false;
   let installUrl = "";
-  let isInstalling = false;
-  let installProgress = "";
 
   // Live pack sizes, keyed by pack id. The hardcoded `size` strings below are
   // only a fallback for when the manifest cannot be fetched -- they drift every
@@ -91,24 +93,24 @@
 
   async function installTtsVoice(voiceId: string) {
     const voice = getVoiceInfo(voiceId);
-    if (!voice || isInstalling) return;
-    isInstalling = true;
-    installProgress = `Preparing ${voice.label}...`;
+    if (!voice || $installBusy) return;
+    $installBusy = true;
+    $installMessage = `Preparing ${voice.label}...`;
     try {
       await downloadVoice(voiceId, ({ loaded, total }) => {
         const loadedMB = (loaded / 1024 / 1024).toFixed(0);
         const totalMB = total > 0 ? (total / 1024 / 1024).toFixed(0) : "?";
-        installProgress = `Downloading ${voice.label} (${loadedMB} MB / ${totalMB} MB)…`;
+        $installMessage = `Downloading ${voice.label} (${loadedMB} MB / ${totalMB} MB)…`;
       });
-      installProgress = "Complete!";
+      $installMessage = "Complete!";
       await refreshVoices();
-      setTimeout(() => (installProgress = ""), 2000);
+      setTimeout(() => ($installMessage = ""), 2000);
     } catch (err: any) {
       console.error("[Packs] Voice install failed:", err);
-      installProgress = `Voice download failed: ${err?.message ?? err}`;
-      setTimeout(() => (installProgress = ""), 6000);
+      $installMessage = `Voice download failed: ${err?.message ?? err}`;
+      setTimeout(() => ($installMessage = ""), 6000);
     } finally {
-      isInstalling = false;
+      $installBusy = false;
     }
   }
 
@@ -181,161 +183,25 @@
       return;
     }
 
-    isInstalling = true;
-    installProgress = `Installing ${model.name}...`;
+    $installBusy = true;
+    $installMessage = `Installing ${model.name}...`;
     try {
       const id = await installVoiceFromFiles(model, config);
-      installProgress = "Voice installed!";
+      $installMessage = "Voice installed!";
       await refreshVoices();
-      setTimeout(() => (installProgress = ""), 2500);
+      setTimeout(() => ($installMessage = ""), 2500);
       console.log(`[Packs] Installed custom voice: ${id}`);
     } catch (err: any) {
       console.error("[Packs] Custom voice install failed:", err);
-      installProgress = `Voice install failed: ${err?.message ?? err}`;
-      setTimeout(() => (installProgress = ""), 6000);
+      $installMessage = `Voice install failed: ${err?.message ?? err}`;
+      setTimeout(() => ($installMessage = ""), 6000);
     } finally {
-      isInstalling = false;
+      $installBusy = false;
     }
   }
 
-  // Use bundled packs in dev mode
-  const USE_BUNDLED = USE_BUNDLED_PACKS;
-  // Base URL depends on environment
-  const BASE_URL = USE_BUNDLED ? "/packs/consolidated" : "/api/packs";
-  // Consolidated pack definitions
-  // Each pack carries two descriptions, and both open with the (i) button:
-  // `description` is the one-line summary that heads the info card, and `info`
-  // is the body under it -- author lists, licence terms, where the pack
-  // actually shows up in the app. The pill itself shows only the name, because
-  // on a phone that is all there is room to read.
-  const CONSOLIDATED_PACKS = [
-    {
-      id: "translations",
-      name: "English Translations",
-      description: "KJV, WEB, BSB, LXX2012",
-      info: "Four more English Bibles alongside the NET you already have: the King James Version (1611), World English Bible, Berean Standard Bible, and LXX2012 — an English rendering of the Greek Septuagint.\n\nSwitch between them from the translation picker in any reader window. All public domain or freely licensed.",
-      size: "28.21 MB",
-      icon: "📖",
-      url: `${BASE_URL}/translations.sqlite`,
-    },
-    {
-      id: "dictionary-en",
-      name: "English Dictionary",
-      description: "Modern + Webster 1913 definitions",
-      info: "Two English dictionaries in one: a modern definition set, and Webster’s 1913 unabridged — which is what the KJV’s older vocabulary actually meant to the people reading it.\n\nTap any English word in the reader and choose Define. Public domain.",
-      size: "48.67 MB",
-      icon: "📖",
-      url: `${BASE_URL}/dictionary-en.sqlite`,
-    },
-    {
-      id: "commentaries",
-      name: "Commentaries",
-      description: "Henry, Clarke, Calvin, Spurgeon + 14 more",
-      info: "Eighteen commentary sets working through the text a verse at a time: Matthew Henry, Adam Clarke, John Calvin, Charles Spurgeon, John Wesley, Albert Barnes, A.T. Robertson, Martin Luther, Thomas Aquinas (Catena Aurea), Jamieson-Fausset-Brown, E.W. Bullinger, John Lightfoot, Abbott, KingComments, Family Bible Notes, NET Bible Notes, Quotations & Allusions, and the Treasury of Scripture Knowledge.\n\nOpen the Commentary window, or tap a verse and choose Commentary, to read what each one said about where you are. Public domain or free for personal use, via the CrossWire Sword Project and Plano Bible Chapel.",
-      size: "224.84 MB",
-      icon: "💭",
-      url: `${BASE_URL}/commentaries.sqlite`,
-    },
-    {
-      id: "tsk-references",
-      name: "TSK References",
-      description: "43,000+ cross-references by keyword",
-      info: "The Treasury of Scripture Knowledge: over 43,000 entries linking each verse to the other passages that echo it, organised by the specific word in the verse that triggers the link.\n\nCross-references show beside the verse you are reading and in the Cross-References window. Public domain (1830s).",
-      size: "6.21 MB",
-      icon: "🔗",
-      url: `${BASE_URL}/tsk-references.sqlite`,
-    },
-    {
-      id: "ancient-languages",
-      name: "Ancient Languages",
-      description: "Hebrew + Greek with morphology",
-      info: "The Hebrew Old Testament and Greek New Testament in their original words, with every word tagged for grammar — tense, case, person and number.\n\nPowers the interlinear view and Greek read-aloud. Turn it on with the interlinear controls in the reader. Public domain.",
-      size: "105.31 MB",
-      icon: "📜",
-      url: `${BASE_URL}/ancient-languages.sqlite`,
-    },
-    {
-      id: "lexical",
-      name: "Lexical Resources",
-      description: "Strong’s + English dictionaries",
-      info: "Strong’s Hebrew and Greek lexicons plus supporting English dictionaries — root meanings, definitions, and every place a given original word appears in scripture.\n\nTap a Greek or Hebrew word in the interlinear to see its Strong’s entry and full verse list. The largest reference pack at around 370 MB. Public domain.",
-      size: "372.67 MB",
-      icon: "📚",
-      url: `${BASE_URL}/lexical.sqlite`,
-    },
-    {
-      id: "study-tools",
-      name: "Study Tools",
-      description: "Biblical places, map layers, reading order",
-      info: "Biblical and ancient place locations, historical map layers running from the Old Testament through the Roman era, and a chronological reading order that puts the books in the sequence the events happened.\n\nFeeds the Map window and the chronological plan under Reading Plans. Public domain; place data CC BY 4.0 (OpenBible.info).",
-      size: "13.82 MB",
-      icon: "🗺️",
-      url: `${BASE_URL}/study-tools.sqlite`,
-    },
-    {
-      id: "encyclotopical",
-      name: "Encyclotopical",
-      description: "Bible encyclopedia + Nave’s topical index",
-      info: "Two classic references in one pack. The International Standard Bible Encyclopedia (ISBE, 1915) — 9,380 scholarly articles on people, places, customs, plants and doctrine. And Nave’s Topical Bible — 5,322 topics indexing over 100,000 verse references, so looking up “mercy” or “fasting” gives you every passage on it.\n\nBrowse either A–Z from the Encyclopedia and Topical windows, or tap a word in the reader and choose More Info. Public domain; place data CC BY 4.0 (OpenBible.info).",
-      size: "77.52 MB",
-      icon: "📕",
-      url: `${BASE_URL}/encyclotopical.sqlite`,
-    },
-    {
-      id: "geonames-modern-places-v1",
-      name: "World Places",
-      description: "172,000+ modern cities, states, countries",
-      info: "A gazetteer of over 172,000 modern places worldwide — cities, states, provinces and countries — so you can find somewhere by its present-day name rather than its biblical one.\n\nUsed by the Map window’s search. Entirely optional: the biblical places in Study Tools work without it. CC BY 4.0 — geonames.org.",
-      size: "37.23 MB",
-      icon: "🌍",
-      url: `${BASE_URL}/geonames.sqlite`,
-    },
-    {
-      id: "atlas-map",
-      name: "Historical Map",
-      description: "Offline world map + 16 eras of the biblical world",
-      info: "A drawn map of the world that works with no connection, and a timeline of sixteen eras over the top of it — from Abraham leaving Ur to the later Roman empire. Tap any place for the verses that name it, its encyclopedia article and a photograph.\n\nEvery place Scripture names is searchable, alongside 562,000 modern ones. Opens from the Map window, and from the Map tab on any place in the encyclopedia.\n\nNatural Earth (public domain); Barrington Atlas and OpenStreetMap (ODbL); Digital Atlas of the Roman Empire (CC BY-SA); OpenBible.info and GeoNames (CC BY 4.0).",
-      size: "33.78 MB",
-      icon: "🗺️",
-      url: `${BASE_URL}/atlas-map.sqlite`,
-    },
-    {
-      id: "biblical-art",
-      name: "Biblical Art",
-      description: "Public-domain paintings of Bible scenes",
-      info: "Famous paintings by the old masters, matched to the passages they depict. The images ship inside the pack, so they display with no connection.\n\nA small art icon appears in the text wherever a painting exists — tap it to view full screen. Public domain — Wikimedia Commons.",
-      size: "83.45 MB",
-      icon: "🖼️",
-      url: `${BASE_URL}/art.sqlite`,
-    },
-    {
-      id: "people-biblical-v1",
-      name: "Biblical Characters",
-      description: "Every named person: family, dates, verses",
-      info: "Every named person in scripture: what their name means, roughly when and where they lived, their family relationships, and every verse they appear in.\n\nTap a name in the reader and choose Bio. CC BY-SA 4.0 (Theographic); name meanings from Hitchcock’s (public domain).",
-      size: "3.82 MB",
-      icon: "👤",
-      url: `${BASE_URL}/people.sqlite`,
-    },
-    {
-      id: "bsb-audio-pt1",
-      name: "BSB Audio Part 1",
-      description: "Genesis – Psalms",
-      info: "The Berean Standard Bible read aloud from Genesis through Psalms — a human narrator, not a synthetic voice.\n\nPlay it with the audio button in any chapter. Around 1.8 GB, stored outside the main database, which is why it can be re-indexed without downloading again. Free to use — bereanbible.com.",
-      size: "1.76 GB",
-      icon: "🎵",
-      url: `${BASE_URL}/bsb-audio-pt1.sqlite`,
-    },
-    {
-      id: "bsb-audio-pt2",
-      name: "BSB Audio Part 2",
-      description: "Proverbs – Revelation",
-      info: "The Berean Standard Bible read aloud from Proverbs through Revelation — a human narrator, not a synthetic voice.\n\nPlay it with the audio button in any chapter. Around 1.7 GB, stored outside the main database, which is why it can be re-indexed without downloading again. Free to use — bereanbible.com.",
-      size: "1.65 GB",
-      icon: "🎵",
-      url: `${BASE_URL}/bsb-audio-pt2.sqlite`,
-    },
-  ];
+  // The catalog lives with the installer, so Install All can reach it too.
+  const CONSOLIDATED_PACKS = PACK_CATALOG;
 
   const CATALOG_IDS = CONSOLIDATED_PACKS.map((p) => p.id);
 
@@ -389,7 +255,18 @@
   }
 
   $: installedById = mergeInstalled(installedPacks, packsNeedingReindex, packsIncomplete);
-  $: orphanPacks = installedPacks.filter((p) => catalogIdFor(p.id) === null);
+  /**
+   * The Bible the app ships with (the NET text and its headings). It is not in
+   * the catalog, so without this it would be listed as an older pack with a
+   * delete button -- and deleting it leaves a new user with nothing to read.
+   */
+  function isStarterRow(rowId: string): boolean {
+    return rowId === "starter" || rowId.startsWith("starter-");
+  }
+
+  $: orphanPacks = installedPacks.filter(
+    (p) => catalogIdFor(p.id) === null && !isStarterRow(p.id)
+  );
   // Count what is on screen. getDatabaseStats() counts rows, so on its own it
   // reports every sub-row this list folds away.
   $: packCount = installedById.size + orphanPacks.length;
@@ -454,150 +331,49 @@
     if (event.key === "Escape" && infoCard) closeInfo();
   }
 
-  function getStageLabel(stage: string): string {
-    switch (stage) {
-      case "downloading":
-        return "Downloading";
-      case "validating":
-        return "Validating";
-      case "extracting":
-        return "Extracting";
-      case "caching":
-        return "Caching";
-      case "complete":
-        return "Complete";
-      default:
-        return "Working";
-    }
-  }
-
   async function installConsolidatedPack(pack: (typeof CONSOLIDATED_PACKS)[0]) {
+    // Closing the pane mid-install and reopening it must not start a second
+    // one: the lock is app-wide now, not this component's.
+    if ($installBusy) return;
+
     // The map's geometry is compressed inside the pack and inflated on read,
     // which needs DecompressionStream. Checked here rather than mid-install:
     // downloading 34 MB and then failing to unpack it would leave a half-built
     // map that looks installed.
     if (pack.id === "atlas-map" && !atlasPackSupported()) {
       alert(
-        `${pack.name} needs a newer browser than this one.\n\n` +
+        `${pack.name} needs a newer browser than this one.
+
+` +
           "It works in Chrome 80 and later, Safari 16.4 and later, and Firefox 113 and later."
       );
       return;
     }
 
-    if (installedPacks.some((p) => p.id === pack.id)) {
-      if (
-        !confirm(`Pack "${pack.name}" is already installed. Re-download it?`)
-      ) {
-        return;
-      }
+    const reinstall = installedPacks.some((p) => p.id === pack.id);
+    if (reinstall && !confirm(`Pack "${pack.name}" is already installed. Re-download it?`)) {
+      return;
+    }
+
+    $installBusy = true;
+    try {
       // Remove the old copy first so the re-download actually happens —
       // loadPackOnDemand skips the download when the installed version matches
       // the manifest, and pack versions stay unchanged when their data updates.
       // Audio packs skip this: they always re-stream and overwrite in OPFS.
-      if (!pack.id.startsWith("bsb-audio")) {
-        installProgress = `Removing old ${pack.name}...`;
+      if (reinstall && !isAudioPack(pack.id)) {
+        $installMessage = `Removing old ${pack.name}...`;
         await removePack(pack.id);
         await loadPacks();
         await loadStats();
       }
-    }
 
-    if (!(await hasRoomFor(pack))) return;
+      if (!(await hasRoomFor(pack))) return;
 
-    isInstalling = true;
-    installProgress = `Preparing ${pack.name}...`;
+      await downloadAndImportPack(pack, (message) => ($installMessage = message));
 
-    try {
-      // Audio packs (1+ GB) must be streamed directly to OPFS — never loaded into memory
-      const isAudioPack = pack.id.startsWith('bsb-audio');
-
-      if (isAudioPack) {
-        await installAudioPackToOPFS(pack.url, pack.id, (loaded, total) => {
-          const loadedMB = (loaded / (1024 * 1024)).toFixed(0);
-          const totalMB = total > 0 ? (total / (1024 * 1024)).toFixed(0) : '?';
-          installProgress = `Downloading ${pack.name} (${loadedMB} MB / ${totalMB} MB)…`;
-        });
-      } else if (USE_BUNDLED) {
-        installProgress = `Loading ${pack.name} from local files...`;
-
-        console.log("Pack object:", pack);
-        console.log("Pack URL:", pack.url);
-        console.log("BASE_URL:", BASE_URL);
-
-        // Fetch from local bundle (already copied by Vite plugin in dev mode)
-        const response = await fetch(pack.url); // pack.url already has correct BASE_URL
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const buffer = await response.arrayBuffer();
-
-        installProgress = `Installing ${pack.name}...`;
-        // No File wrapper: it would copy the whole pack into blob storage
-        // just to be read straight back out again.
-        await importPackFromBytes(new Uint8Array(buffer), `${pack.id}.sqlite`);
-
-        if (pack.id === "biblical-art") {
-          // Bundled mode has no manifest to enumerate, so walk the numbered
-          // shards until one is missing.
-          for (let n = 1; ; n++) {
-            const part = String(n).padStart(2, "0");
-            const res = await fetch(`${BASE_URL}/art-images-${part}.sqlite`);
-            if (!res.ok) break;
-            installProgress = `Installing artwork (part ${n})…`;
-            const shard = new Uint8Array(await res.arrayBuffer());
-            await importArtImageShard(shard, { clearFirst: n === 1, label: `art-images-${part}` });
-          }
-        }
-
-        if (pack.id === "atlas-map") {
-          // Same walk for the map's geometry shards, then its place index.
-          for (let n = 1; ; n++) {
-            const part = String(n).padStart(2, "0");
-            const res = await fetch(`${BASE_URL}/atlas-map-${part}.sqlite`);
-            if (!res.ok) break;
-            installProgress = `Installing map layers (part ${n})…`;
-            const shard = new Uint8Array(await res.arrayBuffer());
-            await importAtlasGeometryShard(shard, { clearFirst: n === 1, label: `atlas-map-${part}` });
-          }
-          const placesRes = await fetch(`${BASE_URL}/atlas-places.sqlite`);
-          if (placesRes.ok) {
-            installProgress = "Installing place search…";
-            await importAtlasPlaceIndex(new Uint8Array(await placesRes.arrayBuffer()));
-          }
-        }
-      } else {
-        await loadPackOnDemand(pack.id, (progress) => {
-          const stageLabel = getStageLabel(progress.stage);
-          if (progress.stage === "downloading") {
-            const loadedMB = (progress.loaded / (1024 * 1024)).toFixed(1);
-            const totalMB = (progress.total / (1024 * 1024)).toFixed(1);
-            installProgress = `${stageLabel} ${pack.name} (${loadedMB} MB / ${totalMB} MB)...`;
-          } else {
-            installProgress = `${stageLabel} ${pack.name}...`;
-          }
-        });
-
-        // art.sqlite carries only the scenes; the paintings arrive as small
-        // shards so sql.js never holds the whole pack at once.
-        if (pack.id === "biblical-art") {
-          await installArtImageShards((message) => {
-            installProgress = message;
-          });
-        }
-
-        // atlas-map.sqlite carries the eras and the places; the drawn geometry
-        // and the place search index arrive as separate files, for the same
-        // reason the paintings do.
-        if (pack.id === "atlas-map") {
-          await installAtlasParts((message) => {
-            installProgress = message;
-          });
-        }
-      }
-
-      installProgress = "Complete!";
+      $installMessage = "Complete!";
+      $restartNeeded = true;
       alert(`${pack.name} installed successfully!`);
 
       await loadPacks();
@@ -617,8 +393,8 @@ Free up space on your device, or remove a pack you are not using, then try again
           : `Failed to install ${pack.name}: ${error}`
       );
     } finally {
-      isInstalling = false;
-      installProgress = "";
+      $installBusy = false;
+      $installMessage = "";
     }
   }
 
@@ -656,7 +432,10 @@ Free up space on your device, or remove a pack you are not using, then try again
    * block would be wrong.
    */
   async function hasRoomFor(pack: (typeof CONSOLIDATED_PACKS)[0]): Promise<boolean> {
-    const needed = installBytesFor(pack.id);
+    return hasRoomForBytes(pack.name, installBytesFor(pack.id));
+  }
+
+  async function hasRoomForBytes(name: string, needed: number): Promise<boolean> {
     if (!needed || !navigator.storage?.estimate) return true;
 
     try {
@@ -673,7 +452,7 @@ Free up space on your device, or remove a pack you are not using, then try again
       if (available >= needed * 2) return true;
 
       return confirm(
-        `${pack.name} needs about ${formatBytes(needed * 2)} to install, ` +
+        `${name} needs about ${formatBytes(needed * 2)} to install, ` +
           `but only ${formatBytes(Math.max(available, 0))} looks available on this device.
 
 ` +
@@ -684,11 +463,68 @@ Free up space on your device, or remove a pack you are not using, then try again
     }
   }
 
+  // ── Install All ──────────────────────────────────────────────────────────
+
+  /** What Install All would still do, and roughly what it would download. */
+  let remainingCount = 0;
+  let remainingBytes = 0;
+
+  /**
+   * Count what is left and estimate its size. The natural voices all share one
+   * 310 MB engine, and each of their own sizes includes it while it is missing,
+   * so the engine is counted once rather than once per voice.
+   */
+  async function refreshRemaining() {
+    try {
+      const [packs, voices] = await Promise.all([packsStillToInstall(), voicesStillToInstall()]);
+      const MB = 1024 * 1024;
+      let bytes = packs.reduce(
+        (sum, pack) => sum + (installBytesFor(pack.id) || parseFloat(pack.size) * MB || 0),
+        0
+      );
+      const standard = voices.filter((v) => v.engine !== "kokoro");
+      const natural = voices.filter((v) => v.engine === "kokoro");
+      bytes += standard.reduce((sum, v) => sum + (voiceSizes[v.id] ?? v.approxSizeMB) * MB, 0);
+      if (natural.length > 0) {
+        const largest = Math.max(...natural.map((v) => voiceSizes[v.id] ?? v.approxSizeMB));
+        bytes += (largest + (natural.length - 1)) * MB;
+      }
+      remainingCount = packs.length + voices.length;
+      remainingBytes = bytes;
+    } catch (error) {
+      console.warn("[Packs] Could not work out what is left to install:", error);
+    }
+  }
+
+  async function handleInstallAll() {
+    if ($installBusy) return;
+    if (!(await hasRoomForBytes("Everything left to install", remainingBytes))) return;
+    await installAll();
+  }
+
+  /**
+   * Refresh the lists once an Install All run ends -- including one this pane
+   * did not start, because the pane was closed and reopened while it ran.
+   */
+  let installAllWasRunning = $installAllState.running;
+  $: if (installAllWasRunning !== $installAllState.running) {
+    installAllWasRunning = $installAllState.running;
+    if (!installAllWasRunning) void refreshAfterInstallAll();
+  }
+
+  async function refreshAfterInstallAll() {
+    await loadPacks();
+    await loadStats();
+    await refreshVoices();
+    await refreshRemaining();
+  }
+
   onMount(async () => {
     await loadManifestSizes();
     await loadPacks();
     await loadStats();
     await refreshVoices();
+    await refreshRemaining();
   });
 
   async function loadManifestSizes() {
@@ -788,8 +624,8 @@ Free up space on your device, or remove a pack you are not using, then try again
 
     // Clearing a large pack takes a while. Without a busy state the pane just
     // sits there, which looks exactly like the delete having died.
-    isInstalling = true;
-    installProgress = `Removing ${packId}…`;
+    $installBusy = true;
+    $installMessage = `Removing ${packId}…`;
     try {
       await removePack(packId);
       alert(`Pack "${packId}" removed successfully`);
@@ -802,14 +638,14 @@ Free up space on your device, or remove a pack you are not using, then try again
       console.error("Error removing pack:", error);
       alert(`Failed to remove pack: ${error}`);
     } finally {
-      isInstalling = false;
-      installProgress = "";
+      $installBusy = false;
+      $installMessage = "";
     }
   }
 
   async function handleReindexPack(packId: string) {
-    isInstalling = true;
-    installProgress = `Re-indexing ${packId}…`;
+    $installBusy = true;
+    $installMessage = `Re-indexing ${packId}…`;
     try {
       await reindexAudioPack(packId);
       await loadPacks();
@@ -819,8 +655,8 @@ Free up space on your device, or remove a pack you are not using, then try again
       console.error(`Error re-indexing ${packId}:`, error);
       alert(`Re-index failed — the audio file may be missing. Try reinstalling the pack.\n\n${error}`);
     } finally {
-      isInstalling = false;
-      installProgress = "";
+      $installBusy = false;
+      $installMessage = "";
     }
   }
 
@@ -830,8 +666,8 @@ Free up space on your device, or remove a pack you are not using, then try again
       return;
     }
 
-    isInstalling = true;
-    installProgress = "Downloading pack...";
+    $installBusy = true;
+    $installMessage = "Downloading pack...";
 
     try {
       const response = await fetch(installUrl);
@@ -844,10 +680,10 @@ Free up space on your device, or remove a pack you are not using, then try again
         type: "application/x-sqlite3",
       });
 
-      installProgress = "Installing pack...";
+      $installMessage = "Installing pack...";
       await importPackFromSQLite(file);
 
-      installProgress = "Complete!";
+      $installMessage = "Complete!";
       alert("Pack installed successfully!");
 
       installUrl = "";
@@ -861,8 +697,8 @@ Free up space on your device, or remove a pack you are not using, then try again
       console.error("Error installing pack from URL:", error);
       alert(`Failed to install pack: ${error}`);
     } finally {
-      isInstalling = false;
-      installProgress = "";
+      $installBusy = false;
+      $installMessage = "";
     }
   }
 
@@ -876,13 +712,13 @@ Free up space on your device, or remove a pack you are not using, then try again
 
     if (!file) return;
 
-    isInstalling = true;
-    installProgress = `Installing ${file.name}...`;
+    $installBusy = true;
+    $installMessage = `Installing ${file.name}...`;
 
     try {
       await importPackFromSQLite(file);
 
-      installProgress = "Complete!";
+      $installMessage = "Complete!";
       alert("Pack installed successfully!");
 
       await loadPacks();
@@ -894,8 +730,8 @@ Free up space on your device, or remove a pack you are not using, then try again
       console.error("Error installing pack from file:", error);
       alert(`Failed to install pack: ${error}`);
     } finally {
-      isInstalling = false;
-      installProgress = "";
+      $installBusy = false;
+      $installMessage = "";
       target.value = ""; // Reset file input
     }
   }
@@ -917,8 +753,6 @@ Free up space on your device, or remove a pack you are not using, then try again
         return "📚";
       case "places":
         return "📍";
-      case "geonames":
-        return "🌍";
       case "map":
         return "🗺️";
       case "cross-references":
@@ -945,9 +779,46 @@ Free up space on your device, or remove a pack you are not using, then try again
 
   <!-- Sticky: an install started from the top of the list has to stay visible
        once you scroll down to watch something else. -->
-  {#if installProgress}
-    <div class="progress-message">{installProgress}</div>
+  {#if $installMessage}
+    <div class="progress-message">{$installMessage}</div>
   {/if}
+
+  {#if $restartNeeded && !$installBusy}
+    <div class="restart-bar">
+      <span>New packs switch on after a restart.</span>
+      <button class="restart-btn" on:click={() => window.location.reload()}>Restart</button>
+    </div>
+  {/if}
+
+  <div class="install-all">
+    {#if $installAllState.running}
+      <p class="ia-note">
+        Installing everything — {$installAllState.step} of {$installAllState.total}. It keeps
+        going if you close this pane.
+      </p>
+    {:else if remainingCount > 0}
+      <button class="install-all-btn" on:click={handleInstallAll} disabled={$installBusy}>
+        <span class="emoji">⬇️</span> Install all
+      </button>
+      <p class="ia-note">
+        {remainingCount} left · about {formatBytes(remainingBytes)} · Wi-Fi recommended
+      </p>
+    {:else if !isLoading}
+      <p class="ia-note">Every pack and voice is installed.</p>
+    {/if}
+
+    {#if !$installAllState.running && $installAllState.outOfSpace}
+      <p class="ia-warn">
+        Stopped: this device ran out of storage. Free up some space, then tap Install all to
+        carry on.
+      </p>
+    {:else if !$installAllState.running && $installAllState.failed.length > 0}
+      <p class="ia-warn">
+        {$installAllState.failed.length === 1 ? "One didn't" : `${$installAllState.failed.length} didn't`}
+        finish: {$installAllState.failed.join(", ")}. Tap Install all to try again.
+      </p>
+    {/if}
+  </div>
 
   {#if isLoading}
     <div class="loading">Loading packs…</div>
@@ -982,7 +853,7 @@ Free up space on your device, or remove a pack you are not using, then try again
               <button
                 class="text-btn"
                 on:click={() => handleReindexPack(pack.id)}
-                disabled={isInstalling}
+                disabled={$installBusy}
                 title="Re-index audio chapters (no re-download needed)">Re-index</button
               >
             {/if}
@@ -990,7 +861,7 @@ Free up space on your device, or remove a pack you are not using, then try again
               class="icon-btn"
               class:go={!state}
               on:click={() => installConsolidatedPack(pack)}
-              disabled={isInstalling}
+              disabled={$installBusy}
               title={state ? `Re-download ${pack.name}` : `Install ${pack.name}`}
               aria-label={state ? `Re-download ${pack.name}` : `Install ${pack.name}`}
               >{state ? "↻" : "↓"}</button
@@ -999,7 +870,7 @@ Free up space on your device, or remove a pack you are not using, then try again
               <button
                 class="icon-btn danger"
                 on:click={() => handleRemovePack(pack.id)}
-                disabled={isInstalling}
+                disabled={$installBusy}
                 title="Remove {pack.name}"
                 aria-label="Remove {pack.name}"><span class="emoji">🗑️</span></button
               >
@@ -1032,7 +903,7 @@ Free up space on your device, or remove a pack you are not using, then try again
               <button
                 class="icon-btn danger"
                 on:click={() => handleRemovePack(pack.id)}
-                disabled={isInstalling}
+                disabled={$installBusy}
                 title="Remove {pack.id}"
                 aria-label="Remove {pack.id}"><span class="emoji">🗑️</span></button
               >
@@ -1048,11 +919,11 @@ Free up space on your device, or remove a pack you are not using, then try again
     <button
       class="small-btn"
       on:click={() => (showInstallUrl = !showInstallUrl)}
-      disabled={isInstalling}
+      disabled={$installBusy}
     >
       <span class="emoji">🌐</span> From URL
     </button>
-    <button class="small-btn" on:click={handleInstallFromFileClick} disabled={isInstalling}>
+    <button class="small-btn" on:click={handleInstallFromFileClick} disabled={$installBusy}>
       <span class="emoji">📁</span> From File
     </button>
   </div>
@@ -1063,12 +934,12 @@ Free up space on your device, or remove a pack you are not using, then try again
         type="text"
         bind:value={installUrl}
         placeholder="https://example.com/pack.sqlite"
-        disabled={isInstalling}
+        disabled={$installBusy}
       />
       <button
         class="install-btn"
         on:click={handleInstallFromUrl}
-        disabled={isInstalling || !installUrl.trim()}
+        disabled={$installBusy || !installUrl.trim()}
       >
         Install
       </button>
@@ -1133,7 +1004,7 @@ Free up space on your device, or remove a pack you are not using, then try again
               <button
                 class="icon-btn danger"
                 on:click={() => removeTtsVoice(voice.id)}
-                disabled={isInstalling || (!isVoiceInstalled && !canDownload)}
+                disabled={$installBusy || (!isVoiceInstalled && !canDownload)}
                 title="Remove {voice.label}"
                 aria-label="Remove {voice.label}"><span class="emoji">🗑️</span></button
               >
@@ -1141,7 +1012,7 @@ Free up space on your device, or remove a pack you are not using, then try again
               <button
                 class="icon-btn go"
                 on:click={() => installTtsVoice(voice.id)}
-                disabled={isInstalling}
+                disabled={$installBusy}
                 title="Install {voice.label}"
                 aria-label="Install {voice.label}">↓</button
               >
@@ -1151,7 +1022,7 @@ Free up space on your device, or remove a pack you are not using, then try again
       {/each}
     </div>
 
-    <button class="small-btn" on:click={triggerVoiceFilePicker} disabled={isInstalling}>
+    <button class="small-btn" on:click={triggerVoiceFilePicker} disabled={$installBusy}>
       <span class="emoji">🎙</span> Install voice from file
     </button>
     <p class="hint">
@@ -1515,6 +1386,72 @@ Free up space on your device, or remove a pack you are not using, then try again
     color: #8fa3f5;
     font-size: 0.8rem;
     font-weight: 500;
+  }
+
+  .restart-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    margin-bottom: 0.7rem;
+    padding: 0.5rem 0.7rem;
+    background: #1c2033;
+    border-left: 3px solid #667eea;
+    border-radius: 4px;
+    color: #c9d3fb;
+    font-size: 0.8rem;
+  }
+
+  .restart-btn {
+    flex-shrink: 0;
+    padding: 0.35rem 0.8rem;
+    background: #667eea;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .install-all {
+    margin-bottom: 1rem;
+  }
+
+  .install-all-btn {
+    width: 100%;
+    padding: 0.65rem 0.8rem;
+    background: rgba(102, 126, 234, 0.15);
+    border: 1px solid rgba(102, 126, 234, 0.45);
+    border-radius: 8px;
+    color: #8fa3f5;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .install-all-btn:hover:not(:disabled) {
+    background: rgba(102, 126, 234, 0.25);
+  }
+
+  .install-all-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ia-note {
+    margin: 0.4rem 0 0;
+    color: #9a9a9a;
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+
+  .ia-warn {
+    margin: 0.4rem 0 0;
+    color: #f0b35a;
+    font-size: 0.78rem;
+    line-height: 1.45;
   }
 
   .info-backdrop {
