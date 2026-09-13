@@ -1,0 +1,128 @@
+/*
+ * Tutorial Mode's look. Everything tutorial reads from here, so the lime or
+ * the typeface changes in one place.
+ *
+ * One colour, electric lime, marks everything that belongs to the tutorial —
+ * dots, rings, card edges, buttons — and nothing else in the app uses it. The
+ * app's own greens are the muted success colours (#4caf50, #8bc34a); the
+ * nearest bright ones are the highlight swatches, which only ever appear as
+ * flat marker fills on text, never as a glowing ring.
+ *
+ * The tutorial ignores the app's Dark, Light, Sepia and Custom themes: it draws
+ * outside the reader's colour-flipping filter and paints its own colours.
+ *
+ * Fonts are self-hosted beside the app's other faces, so the service worker's
+ * existing /fonts/ rule caches them for offline use. Both are OFL.
+ */
+
+@font-face {
+  font-family: 'TutChakraPetch';
+  src: url('/fonts/tutorial/chakra-petch-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TutChakraPetch';
+  src: url('/fonts/tutorial/chakra-petch-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TutFredericka';
+  src: url('/fonts/tutorial/fredericka-the-great-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.tut-root {
+  /* The tutorial colour, and its glow. */
+  --tut-lime: #c6ff00;
+  --tut-lime-soft: rgba(198, 255, 0, 0.35);
+  --tut-lime-faint: rgba(198, 255, 0, 0.12);
+  --tut-glow: 0 0 0 1px rgba(198, 255, 0, 0.9), 0 0 18px rgba(198, 255, 0, 0.45);
+
+  /* Text on lime, card ground, and card text. */
+  --tut-ink: #0b0f00;
+  --tut-card: #0d100a;
+  --tut-text: #f3f6ea;
+  --tut-muted: #a8b29a;
+
+  /* The splash: a chalkboard black, and chalk. */
+  --tut-board: #000000;
+  --tut-chalk: #f1eee4;
+
+  --tut-font: 'TutChakraPetch', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --tut-display: 'TutFredericka', 'TutChakraPetch', Georgia, serif;
+
+  /* Above everything the app draws (its highest layer is 10051), and below
+     eruda's console, which stays reachable. */
+  --tut-z: 100000;
+
+  font-family: var(--tut-font);
+  color: var(--tut-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.tut-root *,
+.tut-root *::before,
+.tut-root *::after {
+  box-sizing: border-box;
+}
+
+/* The primary tutorial button: lime, black text. */
+.tut-root .tut-btn {
+  appearance: none;
+  border: none;
+  border-radius: 10px;
+  padding: 0.8rem 1.6rem;
+  background: var(--tut-lime);
+  color: var(--tut-ink);
+  font-family: var(--tut-font);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 0 22px rgba(198, 255, 0, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
+}
+
+.tut-root .tut-btn:hover {
+  box-shadow: 0 0 30px rgba(198, 255, 0, 0.55);
+}
+
+.tut-root .tut-btn:active {
+  transform: scale(0.97);
+}
+
+/* The quiet tutorial button: lime text, no fill. */
+.tut-root .tut-btn-ghost {
+  appearance: none;
+  border: 1px solid var(--tut-lime-soft);
+  border-radius: 10px;
+  padding: 0.55rem 1.2rem;
+  background: transparent;
+  color: var(--tut-lime);
+  font-family: var(--tut-font);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tut-root .tut-btn-ghost:hover {
+  background: var(--tut-lime-faint);
+}
+
+.tut-root .tut-btn:focus-visible,
+.tut-root .tut-btn-ghost:focus-visible {
+  outline: 2px solid var(--tut-lime);
+  outline-offset: 3px;
+}

@@ -16,6 +16,7 @@
   import ColorField from "../ColorField.svelte";
   import FontField from "../FontField.svelte";
   import { contrastRatio, isLowContrast, isValidHex, redLetterFor } from "../../lib/themeColors";
+  import { tutorial } from "../../tutorial/state";
 
   /**
    * Appearance changes land on the reader live, so the pane asks its shell to
@@ -833,6 +834,19 @@
 
   <SettingsSection title="General" summary={generalSummary} bind:open={openSections.general}>
     <span slot="icon"><Globe size={16} weight="bold" /></span>
+
+    <!-- Tutorial Mode keeps its own on/off (tutorial/state.ts), outside the
+         settings payload, so it never syncs between devices. -->
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input
+          type="checkbox"
+          checked={$tutorial.on}
+          on:change={(e) => tutorial.setOn(e.currentTarget.checked)}
+        />
+        <span class="label-text">Tutorial Mode</span>
+      </label>
+    </div>
 
     <div class="setting-group">
       <label>

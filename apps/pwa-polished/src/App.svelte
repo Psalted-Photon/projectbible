@@ -6,6 +6,7 @@
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
+  import TutorialLayer from "./tutorial/TutorialLayer.svelte";
   import { wakeAlarmStartOpen } from "./stores/wakeAlarmStore";
   import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
@@ -359,6 +360,9 @@
 
     <!-- Wake alarm start screen — shown when opened from an alarm notification -->
     <WakeAlarmStart />
+
+    <!-- Tutorial Mode — draws nothing and loads nothing while it is off -->
+    <TutorialLayer />
   {/if}
 </div>
 
