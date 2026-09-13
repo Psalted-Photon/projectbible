@@ -87,6 +87,25 @@
   // rather than redrawing the world under the pointer — see lib/atlas/fit.
   $: fitter.hold(Boolean(windowState?.isResizing));
 
+  /**
+   * The window's resize grip lies over this map along its inner edge, and it
+   * takes every press in that band. The drawn map is meant to run under it — a
+   * press there is a resize, which is the point — but a button half under it
+   * starts a resize instead of pressing. So the chrome is inset clear of the
+   * grip on whichever side it is on; the map itself is not.
+   *
+   * 26px is the inset Window.svelte gives the reference works for the same
+   * reason. A bottom-docked window's grip lies along its own header, which is
+   * already above it, so there is nothing to clear.
+   */
+  const GRIP_PX = 26;
+  $: edge = windowState?.edge;
+  $: gripStyle = [
+    `--grip-l:${edge === 'right' ? GRIP_PX : 0}px`,
+    `--grip-r:${edge === 'left' ? GRIP_PX : 0}px`,
+    `--grip-b:${edge === 'top' ? GRIP_PX : 0}px`,
+  ].join(';');
+
   // A handoff can arrive long after mount, because the reader reuses an open map
   // window rather than stacking a second one. Watching the seat here is what
   // makes the second and third handoff work as well as the first.
@@ -502,7 +521,7 @@
 
 <svelte:window on:pointerdown={onRootPointerDown} />
 
-<div class="atlas" bind:this={root}>
+<div class="atlas" style={gripStyle} bind:this={root}>
   {#if missing}
     <div class="gate">
       <div class="gate-card">
@@ -790,7 +809,7 @@
     </div>
   {/if}
 
-  <div class="map-area">
+  <div class="map-area" class:above-timeline={timelineOn && era}>
     <div class="map" bind:this={mapEl}></div>
 
     <!-- Only while an era is showing lands rather than borders. Quiet on
@@ -992,6 +1011,11 @@
        a display face and a paragraph of it is unreadable — so this is chrome
        only: the navbar, panel headings, captions and names. */
     --display: 'Milonga', cursive;
+    /* Room left for the window's resize grip, set per side from the script.
+       Zero until the map is known to be docked. */
+    --grip-l: 0px;
+    --grip-r: 0px;
+    --grip-b: 0px;
 
     position: relative;
     height: 100%;
@@ -1018,7 +1042,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 0 8px;
+    padding: 0 calc(8px + var(--grip-r)) 0 calc(8px + var(--grip-l));
     background: var(--chrome);
     border-bottom: 1px solid var(--line);
     position: relative;
@@ -1111,8 +1135,8 @@
     max-height: 70%; overflow-y: auto;
     font-family: var(--display);
   }
-  .panel-left { left: 8px; }
-  .panel-right { right: 8px; }
+  .panel-left { left: calc(8px + var(--grip-l)); }
+  .panel-right { right: calc(8px + var(--grip-r)); }
   .credit-panel { width: 300px; }
   .panel h4 {
     margin: 6px 4px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
@@ -1172,8 +1196,9 @@
 
   /* ---------------- search results ---------------- */
   .results {
-    position: absolute; top: calc(var(--nav-h) - 4px); left: 8px; z-index: 1300;
-    width: 320px; max-width: calc(100% - 16px); max-height: 60%; overflow-y: auto;
+    position: absolute; top: calc(var(--nav-h) - 4px); left: calc(8px + var(--grip-l)); z-index: 1300;
+    width: 320px; max-width: calc(100% - 16px - var(--grip-l) - var(--grip-r));
+    max-height: 60%; overflow-y: auto;
     background: var(--chrome-2); border: 1px solid var(--line-2); border-radius: 9px;
     padding: 6px; box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
   }
@@ -1205,6 +1230,9 @@
   /* The ground behind everything. Fade both the basemap and the overlay out and
      this is what remains, so it is parchment rather than a void. */
   .map-area { position: relative; flex: 1; min-height: 0; display: flex; }
+  /* Docked to the top, the grip runs along the window's bottom. With the
+     timeline showing, that is the timeline's edge and not the map's. */
+  .map-area.above-timeline { --grip-b: 0px; }
   .map { flex: 1; min-height: 0; background: var(--ground); }
   .map-area :global(.leaflet-container) {
     background: var(--ground);
@@ -1223,7 +1251,7 @@
 
   /* ---------------- the key, the status chip ---------------- */
   .approx-key {
-    position: absolute; left: 10px; bottom: 42px; z-index: 900;
+    position: absolute; left: calc(10px + var(--grip-l)); bottom: calc(42px + var(--grip-b)); z-index: 900;
     display: flex; align-items: center; gap: 7px;
     font-family: var(--display); font-size: 11px; color: #b3a68a;
     background: rgba(26, 26, 26, .86); border: 1px solid var(--line);
@@ -1238,8 +1266,9 @@
   }
 
   .status {
-    position: absolute; left: 10px; bottom: 10px; z-index: 900; display: flex; gap: 8px;
-    pointer-events: none; max-width: calc(100% - 20px);
+    position: absolute; left: calc(10px + var(--grip-l)); bottom: calc(10px + var(--grip-b));
+    z-index: 900; display: flex; gap: 8px;
+    pointer-events: none; max-width: calc(100% - 20px - var(--grip-l) - var(--grip-r));
     align-items: center; font-size: 11px; color: var(--dim);
     background: rgba(26, 26, 26, .86); border: 1px solid var(--line);
     border-radius: 7px; padding: 5px 9px; backdrop-filter: blur(6px);
@@ -1249,8 +1278,9 @@
 
   /* ---------------- what you tapped ---------------- */
   .info {
-    position: absolute; top: 10px; right: 10px; bottom: 10px; width: 330px;
-    max-width: calc(100% - 20px); z-index: 950;
+    position: absolute; top: 10px; right: calc(10px + var(--grip-r));
+    bottom: calc(10px + var(--grip-b)); width: 330px;
+    max-width: calc(100% - 20px - var(--grip-l) - var(--grip-r)); z-index: 950;
     background: rgba(26, 26, 26, .95); border: 1px solid var(--line-2); border-radius: 11px;
     box-shadow: 0 16px 40px rgba(0, 0, 0, .5); backdrop-filter: blur(8px);
     display: flex; flex-direction: column; overflow: hidden;
@@ -1344,7 +1374,8 @@
      detail lives in a hover card so the bar doesn't eat the map. */
   .timeline-bar {
     flex: none; background: #151515; border-top: 1px solid var(--line);
-    padding: 6px 14px calc(6px + env(safe-area-inset-bottom));
+    padding: 6px calc(14px + var(--grip-r))
+      calc(6px + env(safe-area-inset-bottom) + var(--grip-b)) calc(14px + var(--grip-l));
     display: flex; gap: 14px; align-items: center;
     font-family: var(--display);
   }
