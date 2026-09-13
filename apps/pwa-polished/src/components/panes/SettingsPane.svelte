@@ -223,12 +223,12 @@
   $: appearanceSummary = `${THEME_LABELS[theme] ?? theme} · ${fontSize}px`;
   $: readerSummary =
     `${LAYOUT_LABELS[verseLayout] ?? verseLayout}${showRedLetter ? " · Red letters" : ""}` +
-    `${navBarPinned ? " · Nav bar pinned" : ""}` +
-    `${navBarClock ? "" : " · No clock"}`;
+    `${navBarPinned ? " · Nav bar pinned" : ""}`;
   $: readAloudSummary =
     `${ttsVoices.find((v) => v.id === ttsVoice)?.label ?? ttsVoice} · ${ttsRate.toFixed(2)}×`;
   $: generalSummary =
     `${TIMEZONE_OPTIONS.find((o) => o.value === timezone)?.label.replace(/ \(.*\)$/, "") ?? timezone}` +
+    `${navBarClock ? "" : " · No clock"}` +
     ` · Rotation ${allowRotation ? "on" : "off"}`;
   $: storageSummary = `Packs · Cache · Updates${autoCheckUpdates ? "" : " (manual)"}`;
 
@@ -688,13 +688,6 @@
 
     <div class="setting-group">
       <label class="checkbox-label">
-        <input type="checkbox" bind:checked={navBarClock} />
-        <span class="label-text">Show the time and date in the navigation bar</span>
-      </label>
-    </div>
-
-    <div class="setting-group">
-      <label class="checkbox-label">
         <input type="checkbox" bind:checked={showRedLetter} />
         <span class="label-text">Words of Jesus in red letters</span>
       </label>
@@ -849,6 +842,13 @@
             <option value={opt.value}>{opt.label}</option>
           {/each}
         </select>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={navBarClock} />
+        <span class="label-text">Show the time and date in the navigation bar</span>
       </label>
     </div>
 

@@ -12,6 +12,7 @@
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
   import WorkTabs from "./WorkTabs.svelte";
+  import NavesPointRefs, { navesRefKey } from "./library/NavesPointRefs.svelte";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../lib/openWork";
   import { navesSource } from "../lib/library/source";
   import {
@@ -23,6 +24,7 @@
     libraryLetterOf,
     type NavesTopicRecord,
     type NavesPoint,
+    type NavesRef,
     type NavesLink,
     type WorksResolution,
     type VerseRef,
@@ -107,6 +109,9 @@
 
     // Reopen where we left off — same tab, same points open, same scroll spot.
     expanded = { ...initialExpanded };
+    // Reference lists that were open come back open, so their text has to come
+    // back with them or they reopen as bare labels.
+    if (record) await loadRestoredRefs(record.points);
     if (initialExpandedBooks.length) expandedBooks = new Set(initialExpandedBooks);
     if (initialTab) {
       activeTab = initialTab;
@@ -159,14 +164,16 @@
   // line with no references of its own is a heading for the lines beneath it.
   type Section = { point: NavesPoint; children: NavesPoint[] };
 
-  $: sections = (() => {
+  function sectionsOf(points: NavesPoint[]): Section[] {
     const out: Section[] = [];
-    for (const p of topic?.points ?? []) {
+    for (const p of points) {
       if (p.depth === 0 || !out.length) out.push({ point: p, children: [] });
       else out[out.length - 1].children.push(p);
     }
     return out;
-  })();
+  }
+
+  $: sections = sectionsOf(topic?.points ?? []);
 
   $: allExpanded = sections.length > 0 && sections.every((s, i) => !s.children.length || expanded[`${i}`]);
 
@@ -176,16 +183,64 @@
   }
 
   function toggleAll() {
-    if (allExpanded) {
-      expanded = {};
-    } else {
-      const next: Record<string, boolean> = {};
+    // Headings only. The button's label is worked out from the headings alone,
+    // so sweeping open reference lists shut as a side effect would be a change
+    // nothing on screen warned you about.
+    const next: Record<string, boolean> = {};
+    for (const [key, open] of Object.entries(expanded)) {
+      if (key.startsWith("r")) next[key] = open;
+    }
+    if (!allExpanded) {
       sections.forEach((s, i) => {
         if (s.children.length) next[`${i}`] = true;
       });
-      expanded = next;
     }
+    expanded = next;
     persistView();
+  }
+
+  // A point's reference list shares `expanded` with the headings, so it is
+  // saved, restored and popped out by everything that already carries that.
+  // Headings key on the section index ("3"); reference lists on an "r" in front
+  // of the point's place — "r3" for the section's own line, "r3.1" for its
+  // second sub-point.
+  async function toggleRefs(key: string, refs: NavesRef[]) {
+    const opening = !expanded[key];
+    expanded = { ...expanded, [key]: opening };
+    persistView();
+    if (opening) await loadRefText(refs);
+  }
+
+  /** Verse text for a point's citations, into the cache the Verses tab reads. */
+  async function loadRefText(refs: NavesRef[]) {
+    const translation = get(navigationStore).translation;
+    const wanted = new Map<string, { book: string; chapter: number; verse: number }>();
+    for (const r of refs) {
+      const key = navesRefKey(r.osis);
+      const target = parseOsisRef(r.osis);
+      if (!key || !target || versePreviews[key] !== undefined) continue;
+      wanted.set(key, { book: target.book, chapter: target.chapter, verse: target.verse ?? 1 });
+    }
+    if (!wanted.size) return;
+    const loaded = await Promise.all(
+      [...wanted].map(async ([key, t]) => {
+        const text = (await verseTextStore.getVerse(translation, t.book, t.chapter, t.verse)) ?? "";
+        return [key, text] as const;
+      }),
+    );
+    versePreviews = { ...versePreviews, ...Object.fromEntries(loaded) };
+  }
+
+  /** Text for whichever reference lists a restored view reopens with. */
+  async function loadRestoredRefs(points: NavesPoint[]) {
+    const wanted: NavesRef[] = [];
+    sectionsOf(points).forEach((s, i) => {
+      if (expanded[`r${i}`]) wanted.push(...s.point.refs);
+      s.children.forEach((c, j) => {
+        if (expanded[`r${i}.${j}`]) wanted.push(...c.refs);
+      });
+    });
+    await loadRefText(wanted);
   }
 
   async function selectTab(t: Tab) {
@@ -265,32 +320,11 @@
     if (!docked) onClose?.();
   }
 
-  /** A scripture chip. Ranges land on their first verse. */
+  /** A scripture reference. Ranges land on their first verse. */
   function openRef(osis: string) {
     const target = parseOsisRef(osis);
     if (!target) return;
     navigateToVerse(target.book, target.chapter, target.verse ?? 1);
-  }
-
-  /**
-   * The colour of the book a chip points at — the same palette the Verses tab
-   * and the nav bar's reference dropdown use. A ref we can't read falls through
-   * to getBookColor's own neutral grey.
-   */
-  function refColor(osis: string): string {
-    return getBookColor(parseOsisRef(osis)?.book ?? "");
-  }
-
-  /**
-   * Can we actually go where this reference points?
-   *
-   * Nave's cites the Prayer of Azariah and the Wisdom of Solomon a handful of
-   * times — apocrypha, which this app doesn't carry. Those are still worth
-   * printing, because they say what the author had in mind, but not as
-   * something that looks tappable and then does nothing.
-   */
-  function refIsLive(osis: string): boolean {
-    return parseOsisRef(osis) !== null;
   }
 
   function openTopic(id: number, name: string) {
@@ -557,47 +591,30 @@
                 <span class="sec-title">{section.point.text}</span>
                 <span class="sec-count">({section.children.length})</span>
               </button>
-              {#if section.point.refs.length || section.point.links.length}
-                <div class="chips indent">
-                  {#each section.point.refs as r}
-                    {#if refIsLive(r.osis)}
-                      <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
-                    {:else}
-                      <span class="ref-dead" title="Nave's cites a book this app doesn't carry">{r.label}</span>
-                    {/if}
-                  {/each}
-                  {#each section.point.links as l}
-                    {#if l.topicId != null}
-                      <button class="link-chip" on:click={() => followLink(l)}>{l.name}</button>
-                    {:else}
-                      <span class="link-dead" title="Nave's names this topic but the module has no entry for it">{l.name}</span>
-                    {/if}
-                  {/each}
-                </div>
-              {/if}
+              <NavesPointRefs
+                indent
+                refs={section.point.refs}
+                links={section.point.links}
+                open={!!expanded[`r${i}`]}
+                previews={versePreviews}
+                onToggle={() => toggleRefs(`r${i}`, section.point.refs)}
+                onRef={openRef}
+                onLink={followLink}
+              />
               {#if expanded[`${i}`]}
                 <div class="sec-body">
-                  {#each section.children as child}
+                  {#each section.children as child, j}
                     <div class="point">
                       {#if child.text}<div class="point-text">{child.text}</div>{/if}
-                      {#if child.refs.length || child.links.length}
-                        <div class="chips">
-                          {#each child.refs as r}
-                            {#if refIsLive(r.osis)}
-                      <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
-                    {:else}
-                      <span class="ref-dead" title="Nave's cites a book this app doesn't carry">{r.label}</span>
-                    {/if}
-                          {/each}
-                          {#each child.links as l}
-                            {#if l.topicId != null}
-                              <button class="link-chip" on:click={() => followLink(l)}>{l.name}</button>
-                            {:else}
-                              <span class="link-dead">{l.name}</span>
-                            {/if}
-                          {/each}
-                        </div>
-                      {/if}
+                      <NavesPointRefs
+                        refs={child.refs}
+                        links={child.links}
+                        open={!!expanded[`r${i}.${j}`]}
+                        previews={versePreviews}
+                        onToggle={() => toggleRefs(`r${i}.${j}`, child.refs)}
+                        onRef={openRef}
+                        onLink={followLink}
+                      />
                     </div>
                   {/each}
                 </div>
@@ -607,24 +624,15 @@
                    dressed up as a collapsible heading. -->
               <div class="point top">
                 {#if section.point.text}<div class="point-text">{section.point.text}</div>{/if}
-                {#if section.point.refs.length || section.point.links.length}
-                  <div class="chips">
-                    {#each section.point.refs as r}
-                      {#if refIsLive(r.osis)}
-                      <button class="ref-chip" style="color:{refColor(r.osis)}" on:click={() => openRef(r.osis)}>{r.label}</button>
-                    {:else}
-                      <span class="ref-dead" title="Nave's cites a book this app doesn't carry">{r.label}</span>
-                    {/if}
-                    {/each}
-                    {#each section.point.links as l}
-                      {#if l.topicId != null}
-                        <button class="link-chip" on:click={() => followLink(l)}>{l.name}</button>
-                      {:else}
-                        <span class="link-dead">{l.name}</span>
-                      {/if}
-                    {/each}
-                  </div>
-                {/if}
+                <NavesPointRefs
+                  refs={section.point.refs}
+                  links={section.point.links}
+                  open={!!expanded[`r${i}`]}
+                  previews={versePreviews}
+                  onToggle={() => toggleRefs(`r${i}`, section.point.refs)}
+                  onRef={openRef}
+                  onLink={followLink}
+                />
               </div>
             {/if}
           </div>
@@ -895,59 +903,6 @@
     font-size: 13.5px;
     line-height: 1.5;
     color: var(--text-color, #e8e8e8);
-  }
-
-  /* Reference chips wrap under their line rather than stretching it, so a
-     point citing thirty verses stays one readable sentence. */
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 4px;
-  }
-  .chips.indent {
-    padding-left: 17px;
-    margin-bottom: 4px;
-  }
-  .ref-chip,
-  .link-chip {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    /* Scripture chips carry an inline colour for the book they point at, the
-       same way the Verses tab colours its rows. This is only the fallback for a
-       ref whose book we couldn't read, and matches getBookColor's own. */
-    color: #8a8f98;
-    font-family: inherit;
-    font-size: 11.5px;
-    padding: 2px 7px;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  /* Follows whichever book colour the chip is wearing. */
-  .ref-chip:hover {
-    background: rgba(255, 255, 255, 0.1);
-    background: color-mix(in srgb, currentColor 15%, transparent);
-    border-color: currentColor;
-  }
-  .link-chip {
-    color: var(--color-primary, #4a90e2);
-  }
-  .link-chip:hover {
-    background: rgba(74, 144, 226, 0.15);
-    border-color: var(--color-primary, #4a90e2);
-  }
-  /* Nave's points at a few hundred topics the module never carried. They are
-     still worth printing — they say what the author had in mind — but not as
-     something that looks tappable. */
-  .link-dead,
-  .ref-dead {
-    border: 1px dashed rgba(255, 255, 255, 0.12);
-    border-radius: 4px;
-    color: var(--text-muted, #888);
-    font-size: 11.5px;
-    padding: 2px 7px;
-    white-space: nowrap;
   }
 
   .vb-group {
