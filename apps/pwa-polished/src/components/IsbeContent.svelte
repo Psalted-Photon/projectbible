@@ -1595,6 +1595,10 @@
     display: flex;
     flex-direction: column;
     position: relative;
+    /* Leaflet's panes are 400 and up. Without this they stack against the
+       window's resize grip at 100 and cover it — docked to the top, the grip
+       runs along the bottom of this tab. */
+    isolation: isolate;
   }
   /* Over the tiles, top right. Leaflet's own zoom control sits top left, so the
      two don't collide, and z-index clears Leaflet's control panes at 800. */

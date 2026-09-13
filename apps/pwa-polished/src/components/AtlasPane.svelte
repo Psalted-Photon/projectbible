@@ -1004,6 +1004,11 @@
        can be 380px wide inside a 1600px screen. */
     container-type: inline-size;
     overflow: hidden;
+    /* Keeps every layer number in here counted against this map only. Leaflet's
+       panes sit at 400 and up and the navbar at 1200; left loose, those were
+       compared against the window's resize grip at 100 and drew straight over
+       it, so the grip vanished the moment the map finished drawing. */
+    isolation: isolate;
   }
 
   /* ---------------- the map's own navbar ---------------- */
