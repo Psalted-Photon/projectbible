@@ -46,12 +46,31 @@ const LAYERS = [
   { kind: 'terrain',   file: 'geography_regions_polys',          title: 'Ranges & deserts', props: ['NAME', 'FEATURECLA'] },
   { kind: 'marine',    file: 'geography_marine_polys',           title: 'Seas',             props: ['name'] },
   { kind: 'countries', file: 'admin_0_countries',                title: 'Countries',        props: ['NAME', 'ADMIN', 'CONTINENT'] },
+  // Land borders only. The country polygons above would draw every coastline a
+  // second time. Leases and overlay limits are left out: they are not borders
+  // between countries, and a dash-dot line round Guantánamo reads as one.
+  { kind: 'borders',   file: 'admin_0_boundary_lines_land',      title: 'Modern borders',   props: ['FEATURECLA'],
+    keep: (p) => !['Lease limit', 'Overlay limit', 'Unrecognized'].includes(p.FEATURECLA) },
 ];
 
-if (fs.existsSync(OUT)) fs.unlinkSync(OUT);
+/**
+ * `--only=borders` writes just the named layers into the existing pack.
+ *
+ * A full build starts the file over, which also throws away the fine
+ * shorelines build-osm-water.mjs adds afterwards and the coverage it records.
+ * Adding one layer should not mean harvesting OpenStreetMap again.
+ */
+const only = process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length).split(',');
+if (only) {
+  const unknown = only.filter((k) => !LAYERS.some((l) => l.kind === k));
+  if (unknown.length) throw new Error(`No such layer: ${unknown.join(', ')}`);
+  if (!fs.existsSync(OUT)) throw new Error(`--only adds to ${OUT}, which does not exist yet`);
+}
+
+if (!only && fs.existsSync(OUT)) fs.unlinkSync(OUT);
 const db = new Database(OUT);
 db.pragma('journal_mode = OFF');
-db.exec(`
+if (!only) db.exec(`
   CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT);
 
   CREATE TABLE basemap_layers (
@@ -78,7 +97,7 @@ db.exec(`
   CREATE INDEX idx_pts_name ON basemap_points(name);
 `);
 
-const insLayer = db.prepare('INSERT INTO basemap_layers (id, kind, detail, title, geojson) VALUES (?,?,?,?,?)');
+const insLayer = db.prepare('INSERT OR REPLACE INTO basemap_layers (id, kind, detail, title, geojson) VALUES (?,?,?,?,?)');
 const insPoint = db.prepare('INSERT INTO basemap_points (kind, name, lat, lon, elevation, country, population, rank) VALUES (?,?,?,?,?,?,?,?)');
 
 /** The .dbf carries UTF-8; without saying so, Mälaren arrives as MÃ¤laren. */
@@ -101,9 +120,11 @@ let total = 0;
 for (const detail of [110, 50, 10]) {
   log(`\n── ${detail}m ──`);
   for (const layer of LAYERS) {
+    if (only && !only.includes(layer.kind)) continue;
     const fc = await readShape(`ne_${detail}m_${layer.file}`);
     if (!fc) { log(`  ${layer.kind.padEnd(10)} (absent)`); continue; }
 
+    if (layer.keep) fc.features = fc.features.filter((f) => layer.keep(f.properties ?? {}));
     for (const f of fc.features) {
       for (const k of Object.keys(f.properties ?? {})) f.properties[k] = clean(f.properties[k]);
     }
@@ -114,6 +135,14 @@ for (const detail of [110, 50, 10]) {
     insLayer.run(`${layer.kind}@${detail}`, layer.kind, detail, layer.title, json);
     log(`  ${layer.kind.padEnd(10)} ${String(out.features.length).padStart(6)} feats  ${String(countPoints(out).toLocaleString()).padStart(10)} pts  ${mb(json.length)}`);
   }
+}
+
+// The rest of the pack is already there, and so are the metadata rows the
+// full build would otherwise try to insert a second time.
+if (only) {
+  db.close();
+  log(`\nadded ${only.join(', ')}: ${mb(total)} of geojson  ->  ${OUT}`);
+  process.exit(0);
 }
 
 // The graticule is drawn, not generalised — one set of lines serves every zoom.

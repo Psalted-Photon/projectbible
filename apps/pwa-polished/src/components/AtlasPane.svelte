@@ -45,6 +45,8 @@
   let layerOpacity = 100;
   /** Lettering fades separately from the geography it sits on. */
   let textOpacity = 100;
+  /** And today's borders separately from both. */
+  let bordersOpacity = 100;
   let ageing = true;
   let playTimer: ReturnType<typeof setInterval> | null = null;
   let timelineOn = false;
@@ -271,6 +273,11 @@
   function onTextOpacity(event: Event) {
     textOpacity = Number((event.currentTarget as HTMLInputElement).value);
     atlas?.setBasemapTextOpacity(textOpacity / 100);
+  }
+
+  function onBordersOpacity(event: Event) {
+    bordersOpacity = Number((event.currentTarget as HTMLInputElement).value);
+    atlas?.setBordersOpacity(bordersOpacity / 100);
   }
 
   function onOverlayText(ov: any, event: Event) {
@@ -688,6 +695,22 @@
           on:input={onTextOpacity}
         />
         <span class="val">{textOpacity}%</span>
+      </div>
+
+      <!-- Its own dial, so the parchment can be faded to nothing under an
+           ancient overlay and today's borders still show where things are. -->
+      <h4>Modern borders</h4>
+      <div class="row">
+        <label for="atlas-borders-opacity">Borders</label>
+        <input
+          id="atlas-borders-opacity"
+          type="range"
+          min="0"
+          max="100"
+          value={bordersOpacity}
+          on:input={onBordersOpacity}
+        />
+        <span class="val">{bordersOpacity}%</span>
       </div>
     </div>
   {/if}

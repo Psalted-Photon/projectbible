@@ -38,7 +38,9 @@ import { parsePassage, placesInPassage, eraForBook } from './reading.js';
 /** Draw order. Leaflet panes are the only reliable way to keep it. */
 const PANES = [
   ['ocean', 300], ['land', 320], ['terrain', 340], ['lakes', 360],
-  ['rivers', 380], ['coast', 400], ['graticule', 420],
+  // Borders have a pane of their own because they have a fade of their own:
+  // above the land they divide, below every ancient border laid over them.
+  ['rivers', 380], ['coast', 400], ['borders', 410], ['graticule', 420],
   ['overlay-sea', 480], ['overlay-fill', 500], ['overlay-line', 520],
   // The overlay letters into its own pane. Sharing one with the basemap's
   // labels would mean two owners of a single opacity, so fading the basemap
@@ -57,7 +59,19 @@ const PARCHMENT = {
   // competing with borders — and they get named, so no blob is unexplained.
   terrain:   { fillColor: '#ddcca6', fillOpacity: 0.28, color: '#ccb896', weight: 0 },
   graticule: { color: '#8a7a5c', weight: 0.4, opacity: 0.28, fill: false, dashArray: '3 4' },
+  // Today's borders in the atlas's dash-dot, inked like the country names, so
+  // no one mistakes one for a river, a coast or a frontier from the timeline.
+  borders:   { color: '#4a4032', weight: 0.9, opacity: 0.85, fill: false, dashArray: '7 3 1.5 3' },
+  // Disputed, indefinite and ceasefire lines: the same ink, fainter and finer,
+  // so the map doesn't settle what the world hasn't.
+  bordersUnsettled: { color: '#4a4032', weight: 0.7, opacity: 0.55, fill: false, dashArray: '2 3' },
 };
+
+/** Natural Earth marks every settled border this way and every other kind otherwise. */
+const borderStyle = (feature) =>
+  feature?.properties?.FEATURECLA === 'International boundary (verify)'
+    ? PARCHMENT.borders
+    : PARCHMENT.bordersUnsettled;
 
 export const TILE_BASEMAPS = {
   satellite: {
@@ -89,6 +103,8 @@ export const TILE_BASEMAPS = {
 const DRAWN_ORDER = [
   ['ocean', 'ocean'], ['land', 'land'], ['terrain', 'terrain'],
   ['lakes', 'lakes'], ['rivers', 'rivers'], ['coastline', 'coast'],
+  // A pack installed before borders were added simply has none to draw.
+  ['borders', 'borders'],
 ];
 
 /** At the finest level these are not drawn at all; see sourceFor. */
@@ -343,6 +359,11 @@ export function createAtlasMap(container, options = {}) {
   /** Lettering fades separately from the geography it sits on. */
   let basemapTextOpacity = 1;
   /**
+   * So do today's borders. The point of them is to be read against an ancient
+   * overlay with the parchment faded down, so the Map dial leaves them alone.
+   */
+  let bordersOpacity = 1;
+  /**
    * Slim takes the controls away, not the map.
    *
    * It first meant "no lettering, no places", which left the encyclopedia's map
@@ -452,6 +473,15 @@ export function createAtlasMap(container, options = {}) {
 
     clearDrawn();
     for (const [kind, pane, geojson] of built) {
+      // Borders are styled line by line and faded by their pane, so the
+      // basemap's opacity is not pressed onto them.
+      if (kind === 'borders') {
+        const layer = L.geoJSON(geojson, {
+          pane, renderer: rendererFor(pane), style: borderStyle, interactive: false,
+        }).addTo(map);
+        drawnLayers.set(`${kind}@${detail}`, layer);
+        continue;
+      }
       const layer = L.geoJSON(geojson, {
         pane, renderer: rendererFor(pane), style: PARCHMENT[kind], interactive: false,
       });
@@ -493,6 +523,8 @@ export function createAtlasMap(container, options = {}) {
     }
     for (const [key, layer] of drawnLayers) {
       const kind = key.split('@')[0];
+      // Borders answer to their own dial; see applyBordersOpacity.
+      if (kind === 'borders') continue;
       const base = kind === 'graticule' ? PARCHMENT.graticule : PARCHMENT[kind];
       if (!base) continue;
       layer.setStyle({
@@ -506,6 +538,11 @@ export function createAtlasMap(container, options = {}) {
   /** Basemap lettering, faded independently of the map under it. */
   function applyBasemapTextOpacity() {
     map.getPane('labels').style.opacity = String(basemapTextOpacity);
+  }
+
+  /** Today's borders, faded independently of the parchment they are drawn on. */
+  function applyBordersOpacity() {
+    map.getPane('borders').style.opacity = String(bordersOpacity);
   }
 
   async function setBasemap(kind) {
@@ -1250,6 +1287,7 @@ export function createAtlasMap(container, options = {}) {
     get basemapKind() { return basemapKind; },
     get basemapOpacity() { return basemapOpacity; },
     get basemapTextOpacity() { return basemapTextOpacity; },
+    get bordersOpacity() { return bordersOpacity; },
     get showLabels() { return showLabels; },
     get showBiblical() { return showBiblical; },
     get showEveryPlace() { return showEveryPlace; },
@@ -1270,6 +1308,10 @@ export function createAtlasMap(container, options = {}) {
     setBasemapTextOpacity(value) {
       basemapTextOpacity = value;
       applyBasemapTextOpacity();
+    },
+    setBordersOpacity(value) {
+      bordersOpacity = Math.max(0, Math.min(1, value));
+      applyBordersOpacity();
     },
     setLayerOpacity(value) {
       if (!host || !timeline) return;
