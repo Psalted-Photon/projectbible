@@ -12,12 +12,22 @@ import { NAVBAR_TIPS } from './navbar';
 import { READER_TIPS } from './reader';
 import { PANE_TIPS } from './panes';
 import { WINDOW_TIPS } from './windows';
+import { COMMENTARY_TIPS } from './commentary';
+import { MAP_TIPS } from './map';
+import { WRITING_TIPS } from './writing';
+import { LIBRARY_TIPS } from './library';
+import { ART_TIPS } from './art';
 
 export const ALL_TIPS: Tip[] = [
   ...POPUP_TIPS,
   ...SELECTION_TIPS,
   ...PANE_TIPS,
   ...WINDOW_TIPS,
+  ...COMMENTARY_TIPS,
+  ...MAP_TIPS,
+  ...WRITING_TIPS,
+  ...LIBRARY_TIPS,
+  ...ART_TIPS,
   ...NAVBAR_TIPS,
   ...READER_TIPS,
 ];
