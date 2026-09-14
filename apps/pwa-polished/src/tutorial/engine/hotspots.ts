@@ -39,8 +39,8 @@ export function candidates(tip: Tip): Element[] {
   const matches = all.filter((el) => {
     if (inTutorial(el)) return false;
     if (!needles) return true;
-    const label = (el.textContent ?? '').toLowerCase();
-    return needles.some((n) => label.includes(n));
+    const label = (el.textContent ?? '').trim().toLowerCase();
+    return needles.some((n) => (tip.exact ? label === n : label.includes(n)));
   });
   const main = matches.filter((el) => el.closest('.main-content'));
   return main.length === matches.length
@@ -72,8 +72,8 @@ export function uncovered(el: Element, box: Box): boolean {
 function dotAt(box: Box, corner: DotCorner = 'top-right'): { x: number; y: number } {
   const right = corner.endsWith('right');
   const bottom = corner.startsWith('bottom');
-  const x = right ? box.left + box.width - 2 : box.left + 2;
-  const y = bottom ? box.top + box.height - 2 : box.top + 2;
+  const x = corner === 'center' ? box.left + box.width / 2 : right ? box.left + box.width - 2 : box.left + 2;
+  const y = corner === 'center' ? box.top + box.height / 2 : bottom ? box.top + box.height - 2 : box.top + 2;
   return {
     x: Math.min(Math.max(x, SCREEN_MARGIN), window.innerWidth - SCREEN_MARGIN),
     y: Math.min(Math.max(y, SCREEN_MARGIN), window.innerHeight - SCREEN_MARGIN),

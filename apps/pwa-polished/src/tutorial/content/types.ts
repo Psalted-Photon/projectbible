@@ -97,7 +97,7 @@ export interface TourStep {
 }
 
 /** Where on its target a dot sits. */
-export type DotCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+export type DotCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'center';
 
 /**
  * One lime dot: a thing in the app worth knowing about, and what to say.
@@ -118,6 +118,8 @@ export interface Tip {
   target: string;
   /** Only matches whose text contains one of these (buttons told apart by label). */
   text?: string | string[];
+  /** The text has to be the whole label, not part of it ("Theme", not "Theme colors…"). */
+  exact?: boolean;
   /** The pack it needs (a PACK_CATALOG id). Without it the card offers the pack instead. */
   needs?: string;
   /** Default top-right. */
