@@ -99,7 +99,9 @@ export const POPUP_TIPS: Tip[] = [
   {
     id: 'sheet-tabs',
     area,
-    target: '.annotation-panel.open .panel-tabs',
+    // The last tab itself: the tab row stretches across the whole header, so its
+    // own corner sits out by the verse title.
+    target: '.annotation-panel.open .panel-tabs .tab-btn:last-child',
     title: 'Two tabs',
     body: 'Switch between cross-references and commentary for this verse.',
   },
