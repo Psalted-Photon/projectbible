@@ -8,9 +8,13 @@
   const families = (Object.keys(CATEGORY_COLORS) as Array<keyof typeof CATEGORY_COLORS>).map(
     (key) => ({ key, color: CATEGORY_COLORS[key], label: CATEGORY_LABELS[key] })
   );
+
+  // Read down the first column, then down the second: the Old Testament
+  // families on the left, the New on the right, in Bible order.
+  const rows = Math.ceil(families.length / 2);
 </script>
 
-<ul class="legend" aria-label="Book families">
+<ul class="legend" aria-label="Book families" style="--rows:{rows}">
   {#each families as f (f.key)}
     <li>
       <span class="swatch" style="--swatch:{f.color}"></span>
@@ -26,6 +30,8 @@
     padding: 0;
     display: grid;
     grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(var(--rows), auto);
+    grid-auto-flow: column;
     gap: 0.35rem 0.8rem;
   }
 
