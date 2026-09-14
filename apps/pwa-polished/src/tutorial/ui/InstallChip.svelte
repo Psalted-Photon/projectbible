@@ -60,7 +60,7 @@
       <button class="tut-btn chip-btn" on:click={() => window.location.reload()}>Restart</button>
     {:else if remaining !== null && remaining > 0}
       <span class="text">
-        {$installAllState.outOfSpace ? "Out of storage" : "Some packs didn't finish"}
+        {$installAllState.outOfSpace ? "Out of storage" : "Some packs didn’t finish"}
       </span>
       <button class="tut-btn-ghost chip-btn" on:click={() => dispatch("done")}>Skip</button>
       <button class="tut-btn chip-btn" on:click={() => void installAll()}>Resume</button>

@@ -8,6 +8,9 @@
    * A tip that needs a pack the device doesn't have offers the pack instead of
    * "Show me".
    *
+   * Dots that would crowd each other (a row of buttons, the word ring) share
+   * one numbered dot, which opens a short list of what's there.
+   *
    * Dots are worked out again whenever the screen changes, at most a few times
    * a second, and hidden while anything scrolls: a dot left behind by a moving
    * page would point at the wrong thing.
@@ -21,9 +24,9 @@
   import { ALL_TIPS, EDGE_TIP } from "../content/tips";
   import { TURN_OFF } from "../content/turn-off";
   import { slideOutWindowStep } from "../content/steps";
-  import { locateAll, locateTip, type Spot } from "../engine/hotspots";
+  import { locateAll, locateTip, clusterSpots, type Spot, type Cluster } from "../engine/hotspots";
   import { edgeLane, freeEdges, freeEdge, LANE_DEPTH } from "../engine/edges";
-  import { boxOf, hasSize, padBox, type Box } from "../engine/targets";
+  import { boxOf, hasSize, padBox, unionBoxes, type Box } from "../engine/targets";
   import { appQuiet, anyPaneOpen, overlayOpen } from "../engine/watch";
   import { paneStore } from "../../stores/paneStore";
   import { windowStore } from "../../lib/stores/windowStore";
@@ -41,12 +44,13 @@
 
   type Mode =
     | { kind: "dots" }
+    | { kind: "list"; spots: Spot[] }
     | { kind: "card"; tip: Tip; el: Element | null }
     | { kind: "show"; steps: TourStep[] }
     | { kind: "turn-off" };
 
   let mode: Mode = { kind: "dots" };
-  let spots: Spot[] = [];
+  let clusters: Cluster[] = [];
   let lanes: EdgeLane[] = [];
   let edgeDot: { x: number; y: number } | null = null;
   let scrolling = false;
@@ -58,9 +62,13 @@
   // ── Where the dots go ────────────────────────────────────────────────────
 
   function clearDots() {
-    spots = [];
+    clusters = [];
     lanes = [];
     edgeDot = null;
+  }
+
+  function isLaidOut(el: Element | null): el is Element {
+    return !!el && el.isConnected && hasSize(el);
   }
 
   /** The reader is what sits under this point: no window, pane or popup over it. */
@@ -98,13 +106,24 @@
         const edge = freeEdge();
         cardBox = edge ? padBox(edgeLane(edge).box, 2) : null;
       } else if (el) {
-        if (!el.isConnected || !hasSize(el)) {
-          mode = { kind: "dots" };
-          compute();
+        if (!isLaidOut(el)) {
+          backToDots();
           return;
         }
         cardBox = padBox(boxOf(el), 4);
       }
+      return;
+    }
+
+    if (mode.kind === "list") {
+      clearDots();
+      const live = mode.spots.filter((s) => isLaidOut(s.el));
+      if (live.length === 0) {
+        backToDots();
+        return;
+      }
+      const union = unionBoxes(live.map((s) => boxOf(s.el)));
+      cardBox = union ? padBox(union, 4) : null;
       return;
     }
 
@@ -113,7 +132,7 @@
       return;
     }
 
-    if (!scrolling) spots = locateAll(ALL_TIPS);
+    if (!scrolling) clusters = clusterSpots(locateAll(ALL_TIPS));
 
     // The top edge is left out: the navbar lives there, and a glow over it is noise.
     const plain = get(appQuiet) && !anyPaneOpen() && !overlayOpen() && !document.querySelector(".toast");
@@ -144,7 +163,7 @@
   function handleScroll() {
     if (!scrolling) {
       scrolling = true;
-      spots = [];
+      clusters = [];
     }
     window.clearTimeout(scrollTimer);
     scrollTimer = window.setTimeout(() => {
@@ -152,7 +171,7 @@
       schedule();
     }, SCROLL_SETTLE_MS);
     // An open card follows its target as the page moves.
-    if (mode.kind === "card") schedule();
+    if (mode.kind === "card" || mode.kind === "list") schedule();
   }
 
   function outsideTutorial(node: Node): boolean {
@@ -226,6 +245,22 @@
     schedule();
   }
 
+  function openDot(cluster: Cluster) {
+    if (cluster.spots.length === 1) {
+      void openCard(cluster.spots[0].tip, cluster.spots[0].el);
+    } else {
+      mode = { kind: "list", spots: cluster.spots };
+      compute();
+    }
+  }
+
+  /** The ripple on each dot starts at its own moment, so a screenful doesn't pulse in step. */
+  function rippleDelay(id: string): number {
+    let hash = 0;
+    for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+    return (Math.abs(hash) % 22) / 10;
+  }
+
   function getPack() {
     paneStore.openPane("packs", "right");
     backToDots();
@@ -268,7 +303,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape" && mode.kind === "card") backToDots();
+    if (event.key === "Escape" && (mode.kind === "card" || mode.kind === "list")) backToDots();
   }
 </script>
 
@@ -292,14 +327,43 @@
     ></button>
   {/if}
 
-  {#each spots as spot (spot.tip.id)}
+  {#each clusters as cluster (cluster.spots[0].tip.id)}
+    {@const count = cluster.spots.length}
     <button
       class="dot no-edge-gesture"
-      style="left:{spot.x}px; top:{spot.y}px;"
-      aria-label="Tip: {spot.tip.title}"
-      on:click={() => openCard(spot.tip, spot.el)}
-    ></button>
+      class:many={count > 1}
+      style="left:{cluster.x}px; top:{cluster.y}px; --ripple-delay:{rippleDelay(cluster.spots[0].tip.id)}s;"
+      aria-label={count > 1 ? `${count} tips here` : `Tip: ${cluster.spots[0].tip.title}`}
+      on:click={() => openDot(cluster)}
+    >
+      {#if count > 1}<span class="count">{count}</span>{/if}
+    </button>
   {/each}
+{:else if mode.kind === "list"}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="catch no-edge-gesture" on:click={backToDots} aria-hidden="true"></div>
+  {#if cardBox}
+    <div
+      class="focus"
+      style="left:{cardBox.left}px; top:{cardBox.top}px; width:{cardBox.width}px; height:{cardBox.height}px;"
+      aria-hidden="true"
+    ></div>
+  {/if}
+  <TipCard title="{mode.spots.length} things here" body="Pick one to see what it does." box={cardBox}>
+    <ul class="tip-list">
+      {#each mode.spots as spot (spot.tip.id)}
+        <li>
+          <button class="tip-item" on:click={() => openCard(spot.tip, spot.el)}>{spot.tip.title}</button>
+        </li>
+      {/each}
+    </ul>
+    <svelte:fragment slot="buttons">
+      <button class="tut-btn-ghost small" on:click={backToDots}>Got it</button>
+    </svelte:fragment>
+    <svelte:fragment slot="footer">
+      <button class="off-link" on:click={turnOff}>Turn off Tutorial Mode</button>
+    </svelte:fragment>
+  </TipCard>
 {:else if mode.kind === "card"}
   <!-- A tap anywhere else just closes the card. -->
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -328,7 +392,7 @@
       {/if}
     </svelte:fragment>
     <svelte:fragment slot="footer">
-      <button class="off-link" on:click={turnOff}>Turn off tutorial</button>
+      <button class="off-link" on:click={turnOff}>Turn off Tutorial Mode</button>
     </svelte:fragment>
   </TipCard>
 {:else if mode.kind === "show"}
@@ -338,12 +402,14 @@
 {/if}
 
 <style>
+  /* The tap area is kept small: dots sit on the corners of buttons, and a big
+     one would take taps meant for the button. */
   .dot {
     position: fixed;
     z-index: var(--tut-z);
-    width: 26px;
-    height: 26px;
-    margin: -13px 0 0 -13px;
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
     padding: 0;
     border: 0;
     border-radius: 50%;
@@ -379,20 +445,86 @@
     box-sizing: border-box;
     border: 2px solid var(--tut-lime);
     animation: ping 2.2s ease-out infinite;
+    animation-delay: var(--ripple-delay, 0s);
+  }
+
+  /* Several tips in one spot: a bigger dot with the count on it. */
+  .dot.many::before,
+  .dot.many::after {
+    width: 17px;
+    height: 17px;
+    margin: -8.5px 0 0 -8.5px;
+  }
+
+  .count {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--tut-ink);
+    font-family: var(--tut-font);
+    font-size: 0.64rem;
+    font-weight: 600;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .tip-list {
+    list-style: none;
+    margin: 0.7rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .tip-item {
+    appearance: none;
+    width: 100%;
+    padding: 0.5rem 0.7rem;
+    text-align: left;
+    background: var(--tut-lime-faint);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: var(--tut-text);
+    font-family: var(--tut-font);
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .tip-item::before {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin: 0 0.55rem 0.1rem 0;
+    border-radius: 50%;
+    background: var(--tut-lime);
+  }
+
+  .tip-item:hover,
+  .tip-item:focus-visible {
+    border-color: var(--tut-lime);
+    outline: none;
   }
 
   .strip {
     position: fixed;
     z-index: var(--tut-z);
     pointer-events: none;
-    opacity: 0.55;
+    opacity: 0.6;
   }
 
+  /* A lime line with a faint dark edge, so it reads on light pages too. */
   .strip::before {
     content: "";
     position: absolute;
     background: linear-gradient(var(--dir), transparent, var(--tut-lime), transparent);
-    box-shadow: 0 0 12px 2px rgba(198, 255, 0, 0.35);
+    box-shadow:
+      0 0 0 1px rgba(11, 15, 0, 0.25),
+      0 0 12px 2px rgba(198, 255, 0, 0.35);
   }
 
   .strip-right::before {
@@ -424,6 +556,8 @@
     pointer-events: auto;
   }
 
+  /* No dimming behind a dot's card, so the ring carries a dark edge of its own
+     to stay visible on the light and sepia themes. */
   .focus {
     position: fixed;
     z-index: calc(var(--tut-z) + 1);
@@ -431,6 +565,7 @@
     pointer-events: none;
     box-shadow:
       0 0 0 2px var(--tut-lime),
+      0 0 0 3.5px rgba(11, 15, 0, 0.75),
       0 0 18px 3px rgba(198, 255, 0, 0.45);
   }
 

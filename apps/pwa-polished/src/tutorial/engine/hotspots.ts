@@ -93,19 +93,51 @@ export function locateTip(tip: Tip): Spot | null {
   return null;
 }
 
-/** Two dots closer than this would read as one; the later tip waits its turn. */
-const MIN_DOT_GAP = 14;
-
 /** Every dot for the current screen, one per tip. */
 export function locateAll(tips: Tip[]): Spot[] {
   const spots: Spot[] = [];
   for (const tip of tips) {
     const spot = locateTip(tip);
-    if (!spot) continue;
-    if (spots.some((s) => Math.hypot(s.x - spot.x, s.y - spot.y) < MIN_DOT_GAP)) continue;
-    spots.push(spot);
+    if (spot) spots.push(spot);
   }
   return spots;
+}
+
+/** Dots at least this close to one another (centre to centre) share one dot. */
+const CLUSTER_GAP = 44;
+
+/** Several tips close together, drawn as one numbered dot. */
+export interface Cluster {
+  /** In reading order: top to bottom, then left to right. */
+  spots: Spot[];
+  x: number;
+  y: number;
+}
+
+function readingOrder(a: Spot, b: Spot): number {
+  return Math.abs(a.y - b.y) > 8 ? a.y - b.y : a.x - b.x;
+}
+
+/**
+ * Gather dots that sit close together.
+ *
+ * A row of buttons a finger-width apart -- the top bar on a phone, the seats
+ * of the word ring -- would otherwise wear a row of dots, each one's tap area
+ * eating into the button beside it. Close dots chain: if A is near B and B is
+ * near C, all three share one dot, placed where the first of them would be.
+ */
+export function clusterSpots(spots: Spot[]): Cluster[] {
+  const groups: Spot[][] = [];
+  for (const spot of spots) {
+    const near = groups.filter((g) => g.some((o) => Math.hypot(o.x - spot.x, o.y - spot.y) < CLUSTER_GAP));
+    const merged = [...near.flat(), spot];
+    for (const g of near) groups.splice(groups.indexOf(g), 1);
+    groups.push(merged);
+  }
+  return groups.map((group) => {
+    const ordered = [...group].sort(readingOrder);
+    return { spots: ordered, x: ordered[0].x, y: ordered[0].y };
+  });
 }
 
 /** One row per tip, for `__tutorial.tips()` in the console. */

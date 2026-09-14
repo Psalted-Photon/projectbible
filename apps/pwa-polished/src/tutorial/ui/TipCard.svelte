@@ -12,6 +12,7 @@
    */
   import { createEventDispatcher } from "svelte";
   import type { Box } from "../engine/targets";
+  import { safeInsets } from "../engine/safe-area";
   import ColorLegend from "./ColorLegend.svelte";
 
   export let title: string;
@@ -40,8 +41,14 @@
     if (!b || !w || !h) {
       return { centered: true, left: 0, top: 0 };
     }
-    const below = screenH - (b.top + b.height) - GAP - MARGIN;
-    const above = b.top - GAP - MARGIN;
+    // Clear of a notch, the status bar and the home indicator, not just the
+    // screen's edge.
+    const inset = safeInsets();
+    const minTop = MARGIN + inset.top;
+    const maxBottom = screenH - MARGIN - inset.bottom;
+
+    const below = maxBottom - (b.top + b.height) - GAP;
+    const above = b.top - GAP - minTop;
     let top: number;
     if (below >= h) {
       top = b.top + b.height + GAP;
@@ -50,11 +57,16 @@
     } else {
       // No room either side: dock to the far end of the screen.
       const targetMiddle = b.top + b.height / 2;
-      top = targetMiddle > screenH / 2 ? MARGIN : screenH - h - MARGIN;
+      top = targetMiddle > screenH / 2 ? minTop : maxBottom - h;
     }
     const middle = b.left + b.width / 2;
-    const left = Math.min(Math.max(middle - w / 2, MARGIN), screenW - w - MARGIN);
-    return { centered: false, left, top: Math.max(MARGIN, top) };
+    const left = Math.min(
+      Math.max(middle - w / 2, MARGIN + inset.left),
+      screenW - w - MARGIN - inset.right,
+    );
+    // A card taller than the room it has (a short landscape phone) starts at
+    // the top and scrolls inside itself rather than running off the screen.
+    return { centered: false, left, top: Math.max(minTop, Math.min(top, maxBottom - h)) };
   }
 </script>
 
@@ -75,6 +87,8 @@
   {#if note}
     <p class="note">{note}</p>
   {/if}
+
+  <slot />
 
   {#if extra === "colors"}
     <ColorLegend />
@@ -102,6 +116,10 @@
     position: fixed;
     z-index: calc(var(--tut-z) + 2);
     width: min(340px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 1rem 1.05rem 0.85rem;
     background: var(--tut-card);
     border: 1px solid var(--tut-lime);
