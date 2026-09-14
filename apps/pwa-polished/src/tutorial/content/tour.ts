@@ -8,11 +8,11 @@
  */
 
 import { get } from 'svelte/store';
-import type { TourStep, StepContext, EdgeLane } from './types';
+import type { TourStep, StepContext } from './types';
+import { slideOutWindowStep } from './steps';
 import { find, inMainReader } from '../engine/targets';
 import { paneOpen, anyPaneOpen } from '../engine/watch';
-import { windowStore, type WindowEdge } from '../../lib/stores/windowStore';
-import { dockEdge } from '../../lib/dockEdge';
+import { windowStore } from '../../lib/stores/windowStore';
 import { navigationStore } from '../../stores/navigationStore';
 import { BIBLE_BOOKS, CATEGORY_LABELS, normalizeBookName } from '../../lib/bibleData';
 import {
@@ -20,40 +20,6 @@ import {
   packsStillToInstall,
   voicesStillToInstall,
 } from '../../lib/packInstaller';
-
-/** The app's edge-swipe lane is 40px deep (EdgeGestureDetector). */
-const LANE_DEPTH = 40;
-
-const MAX_WINDOWS = 6;
-
-function edgeLane(edge: WindowEdge): EdgeLane {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  switch (edge) {
-    case 'right':
-      return { edge, box: { left: w - LANE_DEPTH, top: h * 0.3, width: LANE_DEPTH, height: h * 0.4 } };
-    case 'left':
-      return { edge, box: { left: 0, top: h * 0.3, width: LANE_DEPTH, height: h * 0.4 } };
-    case 'top':
-      return { edge, box: { left: w * 0.3, top: 0, width: w * 0.4, height: LANE_DEPTH } };
-    case 'bottom':
-    default:
-      // Left of the middle: the centre of the bottom edge is kept free for the
-      // phone's own home gesture and never opens a window.
-      return { edge: 'bottom', box: { left: w * 0.12, top: h - LANE_DEPTH, width: w * 0.26, height: LANE_DEPTH } };
-  }
-}
-
-/**
- * The edge a new window should come from: the app's own choice (under the text
- * in portrait, beside it in landscape), unless a window already sits there --
- * an open window covers its own edge's lane.
- */
-function freeEdge(): WindowEdge | null {
-  const taken = new Set(get(windowStore).map((w) => w.edge));
-  const order: WindowEdge[] = [dockEdge(), 'right', 'left', 'bottom', 'top'];
-  return order.find((e) => !taken.has(e)) ?? null;
-}
 
 /** The on-screen element of a docked window, found from its id. */
 function windowElement(id: string | undefined): HTMLElement | null {
@@ -65,10 +31,6 @@ function windowElement(id: string | undefined): HTMLElement | null {
   const index = sameEdge.findIndex((w) => w.id === id);
   const panels = document.querySelectorAll<HTMLElement>(`.panel-container-${win.edge} > .panel`);
   return panels[index] ?? null;
-}
-
-function dirWord(edge: WindowEdge): string {
-  return { right: 'left', left: 'right', bottom: 'up', top: 'down' }[edge];
 }
 
 function currentBookFamily(): { book: string; family: string } {
@@ -261,24 +223,7 @@ export const PART_ONE: TourStep[] = [
   },
 
   // ── Windows ──────────────────────────────────────────────────────────────
-  {
-    id: 'edge-window',
-    checkpoint: true,
-    skipIf: () => get(windowStore).length >= MAX_WINDOWS || !freeEdge(),
-    onEnter: (ctx) => {
-      ctx.tour.windowEdge = freeEdge();
-      ctx.tour.windowIdsBefore = get(windowStore).map((w) => w.id);
-    },
-    lane: (ctx) => (ctx.tour.windowEdge ? edgeLane(ctx.tour.windowEdge) : null),
-    doneWhen: (ctx) => {
-      const added = get(windowStore).find((w) => !ctx.tour.windowIdsBefore.includes(w.id));
-      if (added) ctx.tour.windowId = added.id;
-      return !!added;
-    },
-    title: 'Slide out a window',
-    body: (ctx) =>
-      `Put your finger on the glowing edge and drag ${dirWord(ctx.tour.windowEdge ?? 'right')}. A window slides out: a second Bible, notes, a map, commentary and more.`,
-  },
+  { ...slideOutWindowStep('edge-window'), checkpoint: true },
   {
     id: 'window-tiles',
     target: (ctx) => windowElement(ctx.tour.windowId),

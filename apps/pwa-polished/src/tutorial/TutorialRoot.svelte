@@ -17,17 +17,33 @@
   import { installAllState, restartNeeded } from "../lib/packInstaller";
   import { PART_ONE } from "./content/tour";
   import { PART_TWO } from "./content/tour-part-two";
+  import { ALL_TIPS } from "./content/tips";
+  import { diagnose } from "./engine/hotspots";
   import Splash from "./ui/Splash.svelte";
   import Tour from "./ui/Tour.svelte";
   import InstallChip from "./ui/InstallChip.svelte";
+  import Hotspots from "./ui/Hotspots.svelte";
 
   let root: HTMLElement;
   let removeShield: (() => void) | null = null;
 
   onMount(() => {
     removeShield = installShield(root);
+    // For eruda: which tips match on this screen, and which have a dot.
+    (window as any).__tutorial = {
+      tips: () => {
+        const rows = diagnose(ALL_TIPS);
+        console.table(rows);
+        return rows;
+      },
+      dots: () => diagnose(ALL_TIPS).filter((row) => row.dot).map((row) => row.id),
+      state: () => get(tutorial),
+    };
   });
-  onDestroy(() => removeShield?.());
+  onDestroy(() => {
+    removeShield?.();
+    delete (window as any).__tutorial;
+  });
 
   // The wake alarm's start screen is somebody being woken up, so it goes first.
   // And switching the tutorial on from Settings waits for Settings to close,
@@ -75,5 +91,7 @@
       on:finish={() => tutorial.setStage("done")}
       on:skip={() => tutorial.setStage("done")}
     />
+  {:else if $tutorial.stage === "done"}
+    <Hotspots />
   {/if}
 </div>

@@ -6,6 +6,9 @@
    * not -- and when neither side has room (a book picker filling a phone
    * screen) it docks to whichever screen edge is further from the target.
    * With no target it sits in the middle of the screen.
+   *
+   * The buttons and the footer are slots: the tour fills them with Skip and
+   * Next by default, and a dot's card brings its own.
    */
   import { createEventDispatcher } from "svelte";
   import type { Box } from "../engine/targets";
@@ -17,6 +20,9 @@
   export let nextLabel = "Next";
   export let altLabel: string | null = null;
   export let extra: "colors" | undefined = undefined;
+  export let skipLabel: string | null = "Skip tour";
+  /** A line under the body, set apart: "Needs the … pack". */
+  export let note: string | null = null;
 
   const dispatch = createEventDispatcher<{ next: void; alt: void; skip: void }>();
 
@@ -66,20 +72,29 @@
 >
   <h2 class="title">{title}</h2>
   <p class="body">{body}</p>
+  {#if note}
+    <p class="note">{note}</p>
+  {/if}
 
   {#if extra === "colors"}
     <ColorLegend />
   {/if}
 
   <div class="buttons">
-    <button class="skip" on:click={() => dispatch("skip")}>Skip tour</button>
-    <span class="spacer"></span>
-    {#if altLabel}
-      <button class="tut-btn-ghost small" on:click={() => dispatch("alt")}>{altLabel}</button>
-    {/if}
-    <button class="tut-btn small" on:click={() => dispatch("next")}>{nextLabel}</button>
+    <slot name="buttons">
+      {#if skipLabel}
+        <button class="skip" on:click={() => dispatch("skip")}>{skipLabel}</button>
+      {/if}
+      <span class="spacer"></span>
+      {#if altLabel}
+        <button class="tut-btn-ghost small" on:click={() => dispatch("alt")}>{altLabel}</button>
+      {/if}
+      <button class="tut-btn small" on:click={() => dispatch("next")}>{nextLabel}</button>
+    </slot>
   </div>
-  <p class="off-hint">Turn off Tutorial Mode in Settings → General</p>
+  <slot name="footer">
+    <p class="off-hint">Turn off Tutorial Mode in Settings → General</p>
+  </slot>
 </div>
 
 <style>
@@ -121,6 +136,13 @@
     color: var(--tut-text);
   }
 
+  .note {
+    margin: 0.5rem 0 0;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--tut-lime);
+  }
+
   .buttons {
     display: flex;
     align-items: center;
@@ -128,7 +150,7 @@
     margin-top: 0.9rem;
   }
 
-  .spacer {
+  .card :global(.spacer) {
     flex: 1;
   }
 

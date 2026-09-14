@@ -23,6 +23,8 @@
   export let steps: TourStep[];
   /** A checkpoint step to start from, when resuming after a restart. */
   export let startAt: string | null = null;
+  /** The card's way out of the whole list; null for none. */
+  export let skipLabel: string | null = "Skip tour";
 
   const dispatch = createEventDispatcher<{
     finish: Record<string, any>;
@@ -94,7 +96,10 @@
     if (!step || moving) return;
     const s = step;
 
-    if (!get(appQuiet) || overlayOpen(s.allowOverlay) || (!s.allowPanes && anyPaneOpen())) {
+    if (
+      !s.anywhere &&
+      (!get(appQuiet) || overlayOpen(s.allowOverlay) || (!s.allowPanes && anyPaneOpen()))
+    ) {
       showing = false;
       return;
     }
@@ -171,6 +176,7 @@
       box={lane ? null : box}
       nextLabel={step.nextLabel ?? "Next"}
       {altLabel}
+      {skipLabel}
       extra={step.extra}
       on:next={next}
       on:alt={() => step?.alt?.run(ctx)}

@@ -75,6 +75,12 @@ export interface TourStep {
   allowPanes?: boolean;
 
   /**
+   * Shows whatever else is open: a step pointing at something the person is
+   * already looking at, wherever that is (a dot's "Show me").
+   */
+  anywhere?: boolean;
+
+  /**
    * The one popup this step lives in (a selector from `OVERLAYS` in
    * engine/watch). Any other popup hides the tour until it closes.
    */
@@ -88,4 +94,32 @@ export interface TourStep {
 
   /** Extra content inside the card. */
   extra?: 'colors';
+}
+
+/** Where on its target a dot sits. */
+export type DotCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+
+/**
+ * One lime dot: a thing in the app worth knowing about, and what to say.
+ *
+ * While Tutorial Mode is on and the tour is over, every tip whose target is on
+ * screen and not covered by something else gets a dot, on the first such match.
+ */
+export interface Tip {
+  id: string;
+  /** Which tip file it belongs to, for the `__tutorial` listing. */
+  area: string;
+  title: string;
+  body: string;
+  /**
+   * What the dot marks, as a CSS selector. Matches in the main reader come
+   * before matches in docked windows.
+   */
+  target: string;
+  /** Only matches whose text contains one of these (buttons told apart by label). */
+  text?: string | string[];
+  /** The pack it needs (a PACK_CATALOG id). Without it the card offers the pack instead. */
+  needs?: string;
+  /** Default top-right. */
+  corner?: DotCorner;
 }
