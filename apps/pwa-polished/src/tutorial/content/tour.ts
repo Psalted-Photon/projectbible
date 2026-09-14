@@ -237,12 +237,33 @@ export const PART_ONE: TourStep[] = [
     body: 'Tap any tile.',
   },
   {
+    id: 'window-resize',
+    // The grip runs along the window's inner edge, whichever side that is. Only
+    // on a window docked at the bottom does it lie along the title bar.
+    target: (ctx) => windowElement(ctx.tour.windowId)?.querySelector(':scope > .resize-handle') ?? null,
+    skipIf: (ctx) => !windowElement(ctx.tour.windowId),
+    title: 'Resize it',
+    body: (ctx) => {
+      const edge = get(windowStore).find((w) => w.id === ctx.tour.windowId)?.edge;
+      switch (edge) {
+        case 'bottom':
+          return 'Drag the bar along its top up or down to make the window taller or shorter.';
+        case 'top':
+          return 'Drag its bottom edge up or down to make the window taller or shorter.';
+        case 'left':
+          return 'Drag its right edge sideways to make the window wider or narrower.';
+        default:
+          return 'Drag its left edge sideways to make the window wider or narrower.';
+      }
+    },
+  },
+  {
     id: 'window-header',
     target: (ctx) => windowElement(ctx.tour.windowId)?.querySelector('.panel-header') ?? null,
     skipIf: (ctx) => !windowElement(ctx.tour.windowId),
     passThrough: false,
-    title: 'Resize, move, close',
-    body: 'Drag this bar to resize the window. The arrows dock it to another edge, and × closes it.',
+    title: 'Move it, close it',
+    body: 'The arrows dock the window to another side of the screen, and × closes it.',
   },
 
   // ── Tools ────────────────────────────────────────────────────────────────
