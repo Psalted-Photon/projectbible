@@ -1,6 +1,6 @@
 /**
  * Dots on the word ring (and the classic toolbar, for people who picked it in
- * Settings), and on the handles that stretch a selection.
+ * Settings).
  *
  * The ring's seats are told apart only by their labels. The two layouts share
  * most of them; where they differ ("Mark" and "Highlight"), both are listed.
@@ -102,7 +102,7 @@ export const SELECTION_TIPS: Tip[] = [
     target: BUTTONS,
     text: ['Extend', 'Tap'],
     title: 'Extend',
-    body: 'Tap this, then tap another word, and the selection stretches to it.',
+    body: 'Tap this, then tap another word, and the selection stretches to it. You can also press and drag across words before the ring comes up.',
   },
   {
     id: 'ring-word-or-verse',
@@ -110,12 +110,5 @@ export const SELECTION_TIPS: Tip[] = [
     target: '.toast .mode-seat, .toast .toggle-btn',
     title: 'Word or verse',
     body: 'Switch between the words you picked and the whole verse.',
-  },
-  {
-    id: 'selection-handles',
-    area,
-    target: '.drag-handle-float',
-    title: 'Stretch it',
-    body: 'Drag a handle to take in more words.',
   },
 ];

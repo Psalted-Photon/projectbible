@@ -12,7 +12,7 @@ export const READER_TIPS: Tip[] = [
     area,
     target: '.verse-text',
     title: 'Tap a word',
-    body: 'Tap any word to look it up, highlight it, add a note or share the verse.',
+    body: 'Tap any word to look it up, highlight it, add a note or share the verse. To pick several words, press and drag across them, or tap one and then Extend.',
   },
   {
     id: 'reader-book-intro',
