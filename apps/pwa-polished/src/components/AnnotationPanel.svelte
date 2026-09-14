@@ -52,29 +52,14 @@
   let displayTskEntries: TskEntry[] = tskEntries;
   let displayCommentaryEntries: CommentaryEntry[] = commentaryEntries;
 
-  // ——— Verse-view mode state ———
-  type VerseItem = { book: string; chapter: number; verse: number; text: string; heading?: string | null };
-  type PanelMode = 'list' | 'verseView';
-  let panelMode: PanelMode = 'list';
-  let viewVerses: VerseItem[] = [];
-  let viewBook = '';
-  let viewChapter = 0;
-  let viewTargetVerse = 0;
-  let viewBodyEl: HTMLDivElement | null = null;
+  let bodyEl: HTMLDivElement | null = null;
 
-  interface HistoryEntry {
-    mode: 'list';
-    book: string;
-    chapter: number;
-    verse: number;
-    tskEntries: TskEntry[];
-    commentaryEntries: CommentaryEntry[];
-    tab: 'references' | 'commentary';
-  }
-  let panelHistory: HistoryEntry[] = [];
-
-  // Single-verse pill popup (shown before expanding to full verseView)
-  let pillPreview: { book: string; chapter: number; verse: number; text: string; allVerses: VerseItem[] } | null = null;
+  /**
+   * A tapped reference's verse, shown over the bottom of the sheet. Tapping it
+   * goes there in the reader itself, with the usual start-here mark and a crumb
+   * back, rather than into a cut-down copy of the chapter inside the sheet.
+   */
+  let pillPreview: { book: string; chapter: number; verse: number; text: string } | null = null;
 
   let panelLoading = false;
   let lastPropsKey = '';
@@ -87,20 +72,20 @@
    * one should come back to that spot rather than to the top of the article.
    */
   export function bodyScrollTop(): number {
-    return viewBodyEl?.scrollTop ?? 0;
+    return bodyEl?.scrollTop ?? 0;
   }
 
   export function scrollBodyTo(top: number): void {
-    if (viewBodyEl) viewBodyEl.scrollTop = top;
+    if (bodyEl) bodyEl.scrollTop = top;
   }
 
   /** Scrolls the panel body to the top, then (if an author is given) into that author's section. */
   function scrollToTarget(author: string) {
-    if (!viewBodyEl) return;
-    viewBodyEl.scrollTop = 0;
+    if (!bodyEl) return;
+    bodyEl.scrollTop = 0;
     if (!author) return;
     const id = authorToId(author);
-    const el = viewBodyEl.querySelector(`#${id}`) as HTMLElement | null;
+    const el = bodyEl.querySelector(`#${id}`) as HTMLElement | null;
     el?.scrollIntoView({ block: 'start' });
   }
 
@@ -110,8 +95,6 @@
     if (open && key !== lastPropsKey) {
       lastPropsKey = key;
       lastTargetAuthor = targetAuthor; // capture so secondary block doesn't double-fire
-      panelHistory = [];
-      panelMode = 'list';
       pillPreview = null;
       displayBook = book;
       displayChapter = chapter;
@@ -123,24 +106,14 @@
     } else if (!open && lastPropsKey !== '') {
       lastPropsKey = '';
       lastTargetAuthor = '';
-      panelHistory = [];
-      panelMode = 'list';
       pillPreview = null;
     }
   }
 
   // Secondary reactive: same verse but a different author icon was clicked
-  $: if (open && panelMode === 'list' && targetAuthor !== lastTargetAuthor) {
+  $: if (open && targetAuthor !== lastTargetAuthor) {
     lastTargetAuthor = targetAuthor;
     tick().then(() => scrollToTarget(targetAuthor));
-  }
-
-  // Auto-scroll highlighted verse into view after verseView renders.
-  $: if (panelMode === 'verseView' && viewVerses.length > 0) {
-    setTimeout(() => {
-      const el = viewBodyEl?.querySelector('.view-verse.highlighted') as HTMLElement | null;
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 60);
   }
 
   const textStore = new IndexedDBTextStore();
@@ -161,7 +134,7 @@
   async function handleRefClick(ref: string) {
     const target = parseRefString(ref, displayBook, displayChapter);
     if (!target) return;
-    const savedScrollTop = viewBodyEl?.scrollTop ?? 0;
+    const savedScrollTop = bodyEl?.scrollTop ?? 0;
     panelLoading = true;
     const translation = get(navigationStore).translation;
     const verses = await textStore.getChapter(translation, target.book, target.chapter);
@@ -171,52 +144,22 @@
       chapter: target.chapter,
       verse: target.verse,
       text: targetVerse?.text ?? '',
-      allVerses: verses,
     };
     panelLoading = false;
     await tick();
-    if (viewBodyEl) viewBodyEl.scrollTop = savedScrollTop;
+    if (bodyEl) bodyEl.scrollTop = savedScrollTop;
   }
 
+  /** Go to the previewed verse in the reader. The reader closes the sheet and leaves a crumb. */
   function handlePillClick() {
     if (!pillPreview) return;
-    panelHistory = [...panelHistory, {
-      mode: 'list',
-      book: displayBook,
-      chapter: displayChapter,
-      verse: displayVerse,
-      tskEntries: displayTskEntries,
-      commentaryEntries: displayCommentaryEntries,
-      tab: activeTab,
-    }];
-    viewVerses = pillPreview.allVerses;
-    viewBook = pillPreview.book;
-    viewChapter = pillPreview.chapter;
-    viewTargetVerse = pillPreview.verse;
+    const { book: toBook, chapter: toChapter, verse: toVerse } = pillPreview;
     pillPreview = null;
-    panelMode = 'verseView';
+    dispatch('navigateTo', { book: toBook, chapter: toChapter, verse: toVerse });
   }
 
   function dismissPill() {
     pillPreview = null;
-  }
-
-  function handlePanelBack() {
-    const prev = panelHistory[panelHistory.length - 1];
-    if (!prev) return;
-    panelHistory = panelHistory.slice(0, -1);
-    panelMode = 'list';
-    displayBook = prev.book;
-    displayChapter = prev.chapter;
-    displayVerse = prev.verse;
-    displayTskEntries = prev.tskEntries;
-    displayCommentaryEntries = prev.commentaryEntries;
-    activeTab = prev.tab;
-  }
-
-  function handleViewVerseClick(v: VerseItem) {
-    dispatch('navigateTo', { book: v.book, chapter: v.chapter, verse: v.verse });
-    close();
   }
 
   // Event delegation for commentary-ref spans injected by linkifyCommentaryRefs.
@@ -272,9 +215,6 @@
   }
 
   function verseLabel(): string {
-    if (panelMode === 'verseView') {
-      return viewBook ? `${viewBook} ${viewChapter}` : '';
-    }
     if (!displayBook) return '';
     return displayVerse
       ? `${displayBook} ${displayChapter}:${displayVerse}`
@@ -291,64 +231,37 @@
 <div class="annotation-panel" class:open bind:this={sheetEl} style={sheetStyle}>
   <!-- Header -->
   <div class="panel-header">
-    {#if panelHistory.length > 0}
-      <button class="panel-back-btn" on:click={handlePanelBack}>← Back</button>
-    {/if}
-    {#if panelMode === 'list'}
-      <div class="panel-tabs">
-        <button
-          class="tab-btn"
-          class:active={activeTab === "references"}
-          on:click={() => (activeTab = "references")}
-        >
-          ◆ References
-          {#if displayTskEntries.length > 0}
-            <span class="badge" style="background:{TSK_COLOR}">{displayTskEntries.length}</span>
-          {/if}
-        </button>
-        <button
-          class="tab-btn"
-          class:active={activeTab === "commentary"}
-          on:click={() => (activeTab = "commentary")}
-        >
-          ● Commentaries
-          {#if displayCommentaryEntries.length > 0}
-            <span class="badge" style="background:#666">{displayCommentaryEntries.length}</span>
-          {/if}
-        </button>
-      </div>
-    {/if}
+    <div class="panel-tabs">
+      <button
+        class="tab-btn"
+        class:active={activeTab === "references"}
+        on:click={() => (activeTab = "references")}
+      >
+        ◆ References
+        {#if displayTskEntries.length > 0}
+          <span class="badge" style="background:{TSK_COLOR}">{displayTskEntries.length}</span>
+        {/if}
+      </button>
+      <button
+        class="tab-btn"
+        class:active={activeTab === "commentary"}
+        on:click={() => (activeTab = "commentary")}
+      >
+        ● Commentaries
+        {#if displayCommentaryEntries.length > 0}
+          <span class="badge" style="background:#666">{displayCommentaryEntries.length}</span>
+        {/if}
+      </button>
+    </div>
     <div class="panel-title">{verseLabel()}</div>
     <button class="close-btn" on:click={close} aria-label="Close">✕</button>
   </div>
 
   <!-- Content -->
-  <div class="panel-body" bind:this={viewBodyEl}>
+  <div class="panel-body" bind:this={bodyEl}>
     {#if panelLoading}
       <div class="panel-loading">Loading…</div>
-    {:else if panelMode === 'verseView'}
-      <!-- ——— Full chapter reader ——— -->
-      <div class="view-chapter-header">{viewBook} {viewChapter}</div>
-      {#each viewVerses as v (v.verse)}
-        {#if v.heading}
-          <div class="view-heading">{v.heading}</div>
-        {/if}
-        <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-        <div
-          class="view-verse"
-          class:highlighted={v.verse === viewTargetVerse}
-          style={v.verse === viewTargetVerse ? 'cursor:pointer' : ''}
-          on:click={() => { if (v.verse === viewTargetVerse) handleViewVerseClick(v); }}
-        >
-          <span class="view-verse-num">{v.verse}</span>
-          <span class="view-verse-text">{@html renderVersePreviewHtml(v.text)}</span>
-        </div>
-      {/each}
-      {#if viewVerses.length === 0}
-        <p class="empty-msg">No text found for {viewBook} {viewChapter}.<br/><span class="hint">Make sure a Bible translation pack is installed.</span></p>
-      {/if}
     {:else}
-      <!-- ——— List mode: tabs ——— -->
       {#if activeTab === "references"}
         {#if displayTskEntries.length === 0}
           <p class="empty-msg">No TSK cross-references for this verse.<br/><span class="hint">Import the <em>tsk-references.sqlite</em> pack to enable them.</span></p>
@@ -429,7 +342,7 @@
             <span class="hint">Verse text not available.</span>
           {/if}
         </div>
-        <div class="pill-hint">Tap to expand chapter</div>
+        <div class="pill-hint">Tap to go there</div>
       </div>
     </div>
   {/if}
@@ -660,24 +573,6 @@
     color: #555;
   }
 
-  /* ——— Panel back button ——— */
-  .panel-back-btn {
-    background: none;
-    border: 1px solid #444;
-    color: #aaa;
-    font-size: 12px;
-    padding: 3px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-
-  .panel-back-btn:hover {
-    color: #e0e0e0;
-    border-color: #667eea;
-  }
-
   /* ——— Clickable ref link buttons ——— */
   .ref-link-btn {
     background: none;
@@ -708,61 +603,6 @@
     font-size: 12px;
     padding: 8px 0 4px;
     text-align: center;
-  }
-
-  /* ——— Verse-view full chapter reader ——— */
-  .view-chapter-header {
-    font-size: 15px;
-    font-weight: 700;
-    color: #ccc;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #2a2a2a;
-  }
-
-  .view-heading {
-    font-size: 12px;
-    font-weight: 600;
-    color: #777;
-    margin: 10px 0 4px;
-    font-style: italic;
-  }
-
-  .view-verse {
-    display: flex;
-    gap: 8px;
-    padding: 4px 6px;
-    border-radius: 4px;
-    margin-bottom: 2px;
-    line-height: 1.7;
-  }
-
-  .view-verse.highlighted {
-    background: rgba(255, 215, 0, 0.1);
-    border-left: 3px solid rgba(255, 215, 0, 0.6);
-    padding-left: 8px;
-  }
-
-  .view-verse.highlighted:hover {
-    background: rgba(255, 215, 0, 0.18);
-  }
-
-  .view-verse-num {
-    font-size: 10px;
-    color: #555;
-    flex-shrink: 0;
-    padding-top: 4px;
-    min-width: 18px;
-    text-align: right;
-  }
-
-  .view-verse.highlighted .view-verse-num {
-    color: rgba(255, 215, 0, 0.7);
-  }
-
-  .view-verse-text {
-    font-size: 14px;
-    color: #d8d8d8;
   }
 
   /* ——— Single-verse pill popup ——— */

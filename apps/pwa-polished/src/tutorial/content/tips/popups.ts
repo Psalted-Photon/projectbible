@@ -110,14 +110,15 @@ export const POPUP_TIPS: Tip[] = [
     area,
     target: '.annotation-panel.open .ref-link-btn',
     title: 'A linked passage',
-    body: 'Tap to preview it, and tap the preview to read the whole chapter here.',
+    body: 'Tap to preview the verse at the bottom of the sheet.',
   },
   {
-    id: 'sheet-back',
+    // The preview in both the cross-reference and the book introduction sheets.
+    id: 'sheet-preview',
     area,
-    target: '.panel-back-btn',
-    title: 'Back',
-    body: 'Returns to where you were in this sheet.',
+    target: '.pill-card .pill-verse-text',
+    title: 'Go there',
+    body: 'Tap the preview to open this passage in the reader. The trail in the top bar brings you back to this sheet.',
   },
 
   // Interlinear layers

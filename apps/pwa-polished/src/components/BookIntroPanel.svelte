@@ -38,39 +38,24 @@
 
   const textStore = new IndexedDBTextStore();
 
-  type VerseItem = { book: string; chapter: number; verse: number; text: string; heading?: string | null };
-  type PanelMode = "intro" | "verseView";
-  let panelMode: PanelMode = "intro";
-  let viewVerses: VerseItem[] = [];
-  let viewBook = "";
-  let viewChapter = 0;
-  let viewTargetVerse = 0;
-  let viewBodyEl: HTMLDivElement | null = null;
-
-  type PillPreview = { book: string; chapter: number; verse: number; text: string; allVerses: VerseItem[] } | null;
+  /**
+   * A tapped reference's verse, shown over the bottom of the sheet. Tapping it
+   * goes there in the reader, with the start-here mark and a crumb back to this
+   * introduction -- the same as the cross-reference sheet.
+   */
+  type PillPreview = { book: string; chapter: number; verse: number; text: string } | null;
   let pillPreview: PillPreview = null;
   let panelLoading = false;
 
   // Reset state when panel closes
   $: if (!open) {
-    panelMode = "intro";
     pillPreview = null;
-    viewVerses = [];
-  }
-
-  // Auto-scroll highlighted verse into view after verseView renders
-  $: if (panelMode === "verseView" && viewVerses.length > 0) {
-    setTimeout(() => {
-      const el = viewBodyEl?.querySelector(".view-verse.highlighted") as HTMLElement | null;
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 60);
   }
 
   $: introHtml = (bookIntroductions as Record<string, string>)[book] ?? "";
   $: processedHtml = open && book ? linkifyCommentaryRefs(introHtml, book, 1) : introHtml;
 
   function close() {
-    panelMode = "intro";
     pillPreview = null;
     dispatch("close");
   }
@@ -89,33 +74,19 @@
       chapter: target.chapter,
       verse: target.verse,
       text: targetVerse?.text ?? "",
-      allVerses: verses,
     };
     panelLoading = false;
   }
 
+  /** Go to the previewed verse in the reader, which closes the sheet and leaves a crumb. */
   function handlePillClick() {
     if (!pillPreview) return;
-    viewVerses = pillPreview.allVerses;
-    viewBook = pillPreview.book;
-    viewChapter = pillPreview.chapter;
-    viewTargetVerse = pillPreview.verse;
+    const { book: toBook, chapter: toChapter, verse: toVerse } = pillPreview;
     pillPreview = null;
-    panelMode = "verseView";
+    dispatch("navigateTo", { book: toBook, chapter: toChapter, verse: toVerse });
   }
 
   function dismissPill() { pillPreview = null; }
-
-  function handlePanelBack() {
-    panelMode = "intro";
-    pillPreview = null;
-    viewVerses = [];
-  }
-
-  function handleViewVerseClick(v: VerseItem) {
-    dispatch("navigateTo", { book: v.book, chapter: v.chapter, verse: v.verse });
-    close();
-  }
 
   function handleCommentaryBodyClick(e: MouseEvent | KeyboardEvent) {
     const target = e.target as HTMLElement;
@@ -134,50 +105,20 @@
 <div class="book-intro-panel" class:open bind:this={sheetEl} style={sheetStyle}>
   <!-- Header -->
   <div class="intro-header">
-    {#if panelMode === "verseView"}
-      <button class="panel-back-btn" on:click={handlePanelBack}>← Back</button>
-    {/if}
     <div class="intro-title">
-      {#if panelMode === "verseView"}
-        {viewBook} {viewChapter}
-      {:else}
-        <span class="intro-icon">📖</span>
-        Introduction to {book}
-      {/if}
+      <span class="intro-icon">📖</span>
+      Introduction to {book}
     </div>
     <button class="close-btn" on:click={close} aria-label="Close">✕</button>
   </div>
 
-  <!-- Source attribution (intro mode only) -->
-  {#if panelMode === "intro"}
-    <div class="intro-source">KingComments Commentary</div>
-  {/if}
+  <!-- Source attribution -->
+  <div class="intro-source">KingComments Commentary</div>
 
   <!-- Body -->
-  <div class="intro-body" bind:this={viewBodyEl}>
+  <div class="intro-body">
     {#if panelLoading}
       <div class="panel-loading">Loading…</div>
-    {:else if panelMode === "verseView"}
-      <!-- Full chapter reader — identical behaviour to AnnotationPanel -->
-      <div class="view-chapter-header">{viewBook} {viewChapter}</div>
-      {#each viewVerses as v (v.verse)}
-        {#if v.heading}
-          <div class="view-heading">{v.heading}</div>
-        {/if}
-        <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-        <div
-          class="view-verse"
-          class:highlighted={v.verse === viewTargetVerse}
-          style={v.verse === viewTargetVerse ? "cursor:pointer" : ""}
-          on:click={() => { if (v.verse === viewTargetVerse) handleViewVerseClick(v); }}
-        >
-          <span class="view-verse-num">{v.verse}</span>
-          <span class="view-verse-text">{@html renderVersePreviewHtml(v.text)}</span>
-        </div>
-      {/each}
-      {#if viewVerses.length === 0}
-        <p class="empty-msg">No text found for {viewBook} {viewChapter}.</p>
-      {/if}
     {:else}
       <!-- Intro content -->
       {#if introHtml}
@@ -210,7 +151,7 @@
             <span class="hint">Verse text not available.</span>
           {/if}
         </div>
-        <div class="pill-hint">Tap to expand chapter</div>
+        <div class="pill-hint">Tap to go there</div>
       </div>
     </div>
   {/if}
@@ -250,14 +191,6 @@
 
   .intro-icon { font-size: 1.1rem; }
 
-  .panel-back-btn {
-    background: none; border: none; color: #8ab4f8;
-    font-size: .9rem; cursor: pointer;
-    padding: 4px 8px 4px 0; border-radius: 6px;
-    white-space: nowrap; flex-shrink: 0;
-  }
-  .panel-back-btn:hover { color: #c0d8ff; }
-
   .intro-source {
     padding: 4px 16px 6px; font-size: .72rem; color: #888;
     letter-spacing: .03em; text-transform: uppercase;
@@ -279,18 +212,6 @@
   }
 
   .panel-loading { color: #888; font-size: .9rem; text-align: center; margin-top: 3rem; }
-
-  /* verseView */
-  .view-chapter-header {
-    font-size: .8rem; font-weight: 700; color: #666;
-    text-transform: uppercase; letter-spacing: .08em; padding: 0 0 12px;
-  }
-  .view-heading { font-size: .82rem; font-weight: 600; color: #9ab; margin: 1.2em 0 .4em; font-style: italic; }
-  .view-verse { display: flex; gap: 10px; padding: 5px 0; border-radius: 6px; transition: background .12s; }
-  .view-verse.highlighted { background: rgba(138,180,248,.12); padding: 8px 10px; margin: 0 -10px; border-left: 3px solid #8ab4f8; }
-  .view-verse-num { font-size: .72rem; color: #666; font-weight: 600; min-width: 22px; padding-top: 3px; flex-shrink: 0; }
-  .view-verse-text { font-size: .95rem; line-height: 1.7; color: #d8d8d8; }
-  .view-verse.highlighted .view-verse-text { color: #f0f0f0; }
 
   /* Intro typography */
   .intro-content :global(h3) {

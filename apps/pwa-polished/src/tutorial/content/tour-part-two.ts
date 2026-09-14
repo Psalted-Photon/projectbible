@@ -282,7 +282,7 @@ export const PART_TWO: TourStep[] = [
     skipIf: () => !annotationPanel(),
     doneWhen: () => !annotationPanel(),
     title: 'Linked passages',
-    body: 'Tap one to preview it without losing your place. Tap ✕ to close.',
+    body: 'Tap one to preview it, then tap the preview to go there. The trail in the top bar brings you back. Tap ✕ to close.',
   },
 
   // ── Read Aloud ───────────────────────────────────────────────────────────
