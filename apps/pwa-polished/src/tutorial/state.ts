@@ -7,6 +7,10 @@
  * not remember which tips someone has seen: while the tutorial is on, every tip
  * shows, and turning it off and on again replays the tour from the start.
  *
+ * Within each half of the tour it keeps one bookmark: the start of the last
+ * section the tour reached. A restart picks the tour up there instead of
+ * starting that half over.
+ *
  * On by default for everyone. No key yet means nobody has turned it off.
  */
 
@@ -27,10 +31,12 @@ export type TourStage = 'start' | 'part1' | 'waiting' | 'part2' | 'done';
 export interface TutorialState {
   on: boolean;
   stage: TourStage;
+  /** The tour section to resume at within this stage (a step id). */
+  checkpoint: string | null;
 }
 
 const STAGES: TourStage[] = ['start', 'part1', 'waiting', 'part2', 'done'];
-const DEFAULT_STATE: TutorialState = { on: true, stage: 'start' };
+const DEFAULT_STATE: TutorialState = { on: true, stage: 'start', checkpoint: null };
 
 function load(): TutorialState {
   try {
@@ -40,6 +46,7 @@ function load(): TutorialState {
     return {
       on: parsed?.on !== false,
       stage: STAGES.includes(parsed?.stage) ? parsed.stage : 'start',
+      checkpoint: typeof parsed?.checkpoint === 'string' ? parsed.checkpoint : null,
     };
   } catch {
     // Unreadable or blocked storage: behave like a first visit.
@@ -70,11 +77,23 @@ function createTutorialStore() {
 
     /** The Settings toggle. Switching on replays the tour from the splash. */
     setOn(on: boolean) {
-      commit((s) => (on ? { on: true, stage: s.on ? s.stage : 'start' } : { ...s, on: false }));
+      commit((s) =>
+        on
+          ? s.on
+            ? s
+            : { on: true, stage: 'start', checkpoint: null }
+          : { ...s, on: false },
+      );
     },
 
+    /** Moving to another stage starts it from its beginning. */
     setStage(stage: TourStage) {
-      commit((s) => ({ ...s, stage }));
+      commit((s) => ({ ...s, stage, checkpoint: null }));
+    },
+
+    /** Bookmark the section the tour has reached. */
+    setCheckpoint(checkpoint: string) {
+      commit((s) => (s.checkpoint === checkpoint ? s : { ...s, checkpoint }));
     },
   };
 }

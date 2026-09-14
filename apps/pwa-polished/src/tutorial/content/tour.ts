@@ -104,6 +104,7 @@ export const PART_ONE: TourStep[] = [
   // ── Packs ────────────────────────────────────────────────────────────────
   {
     id: 'packs-ready',
+    checkpoint: true,
     // Decides for every pack step below: nothing to walk through when it is
     // all installed already, or already on its way.
     skipIf: async (ctx) => {
@@ -201,6 +202,7 @@ export const PART_ONE: TourStep[] = [
   // ── Books and their colours ──────────────────────────────────────────────
   {
     id: 'book-picker',
+    checkpoint: true,
     target: () => inMainReader('.pill-btn-reference'),
     reveal: true,
     doneWhen: () => !!referenceDropdown(),
@@ -261,6 +263,7 @@ export const PART_ONE: TourStep[] = [
   // ── Windows ──────────────────────────────────────────────────────────────
   {
     id: 'edge-window',
+    checkpoint: true,
     skipIf: () => get(windowStore).length >= MAX_WINDOWS || !freeEdge(),
     onEnter: (ctx) => {
       ctx.tour.windowEdge = freeEdge();
@@ -300,6 +303,7 @@ export const PART_ONE: TourStep[] = [
   // ── Tools ────────────────────────────────────────────────────────────────
   {
     id: 'tool-search',
+    checkpoint: true,
     target: () => inMainReader('.pill-search-icon-btn'),
     reveal: true,
     passThrough: false,

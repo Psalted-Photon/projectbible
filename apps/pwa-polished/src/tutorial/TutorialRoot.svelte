@@ -16,6 +16,7 @@
   import { paneStore } from "../stores/paneStore";
   import { installAllState, restartNeeded } from "../lib/packInstaller";
   import { PART_ONE } from "./content/tour";
+  import { PART_TWO } from "./content/tour-part-two";
   import Splash from "./ui/Splash.svelte";
   import Tour from "./ui/Tour.svelte";
   import InstallChip from "./ui/InstallChip.svelte";
@@ -45,7 +46,9 @@
 </script>
 
 <!-- The shield stops presses on anything in here reaching the app's
-     tap-outside-to-close handlers. The edge-drag strip inside is exempt. -->
+     tap-outside-to-close handlers. The edge-drag strip inside is exempt.
+     Each half of the tour reads its bookmark once, as it mounts, to pick up
+     where a restart left it. -->
 <div class="tut-root" bind:this={root}>
   {#if $tutorial.stage === "start"}
     {#if showSplash}
@@ -57,10 +60,20 @@
   {:else if $tutorial.stage === "part1"}
     <Tour
       steps={PART_ONE}
+      startAt={$tutorial.checkpoint}
+      on:checkpoint={(e) => tutorial.setCheckpoint(e.detail)}
       on:finish={finishPartOne}
       on:skip={() => tutorial.setStage("done")}
     />
   {:else if $tutorial.stage === "waiting"}
     <InstallChip on:done={() => tutorial.setStage("part2")} />
+  {:else if $tutorial.stage === "part2"}
+    <Tour
+      steps={PART_TWO}
+      startAt={$tutorial.checkpoint}
+      on:checkpoint={(e) => tutorial.setCheckpoint(e.detail)}
+      on:finish={() => tutorial.setStage("done")}
+      on:skip={() => tutorial.setStage("done")}
+    />
   {/if}
 </div>

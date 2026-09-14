@@ -44,7 +44,7 @@ export function padBox(box: Box, pad: number): Box {
   };
 }
 
-function hasSize(el: Element): boolean {
+export function hasSize(el: Element): boolean {
   const r = el.getBoundingClientRect();
   return r.width > 0 && r.height > 0;
 }
@@ -95,18 +95,41 @@ function fullyOnScreen(box: Box): boolean {
  * of the bar can undo -- the reader has to scroll up a little, the same signal
  * a person gives it to bring the bar back.
  */
-export function reveal(el: HTMLElement): void {
+export function reveal(el: HTMLElement, block: 'nearest' | 'center' = 'nearest'): void {
   const navbar = el.closest('.navigation-bar');
   if (navbar && navbar.getBoundingClientRect().bottom <= 8) {
     const reader = navbar.closest('.main-content')?.querySelector<HTMLElement>('.bible-reader');
     reader?.scrollBy({ top: -120, behavior: 'auto' });
   }
-  if (!fullyOnScreen(boxOf(el))) {
-    el.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'auto' });
+  if (block === 'center' ? !comfortablyOnScreen(boxOf(el)) : !fullyOnScreen(boxOf(el))) {
+    el.scrollIntoView({ block, inline: 'center', behavior: 'auto' });
   }
 }
 
 /** The main reader's copy of something, not a copy inside a docked Bible window. */
 export function inMainReader(selector: string, text?: string): HTMLElement | null {
   return find(`.main-content ${selector}`, text);
+}
+
+/** Space kept clear at the top and bottom of the screen: the navbar, and a thumb. */
+const EDGE_ROOM = 72;
+
+/** On screen with room to spare above and below. */
+export function comfortablyOnScreen(box: Box): boolean {
+  return box.top >= EDGE_ROOM && box.top + box.height <= window.innerHeight - EDGE_ROOM;
+}
+
+/**
+ * The main reader's copy of something closest to where the person is reading:
+ * the first one comfortably on screen, else the next one further down, else
+ * the last one above. For things scattered through the text, like verse badges.
+ */
+export function nearestInMainReader(selector: string): HTMLElement | null {
+  const all = Array.from(document.querySelectorAll<HTMLElement>(`.main-content ${selector}`)).filter(hasSize);
+  if (all.length === 0) return null;
+  return (
+    all.find((el) => comfortablyOnScreen(boxOf(el))) ??
+    all.find((el) => boxOf(el).top >= EDGE_ROOM) ??
+    all[all.length - 1]
+  );
 }

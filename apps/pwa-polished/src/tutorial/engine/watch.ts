@@ -10,6 +10,7 @@ import { lookupStore } from '../../stores/lookupStore';
 import { profileModalStore } from '../../stores/profileModalStore';
 import { readingPlanModalStore } from '../../stores/readingPlanModalStore';
 import { paneStore } from '../../stores/paneStore';
+import { hasSize } from './targets';
 
 /**
  * Nothing is covering the app that the tutorial should wait behind: the Verse
@@ -29,6 +30,36 @@ export const appQuiet = derived(
   ([greeting, alarm, progress, lookup, profile, plan]) =>
     !greeting && !alarm && !progress && lookup === null && !profile && !plan,
 );
+
+/**
+ * Popups with no store to watch, found by their markup: the highlight, share
+ * and note popups, the footnote and reference cards, the annotation and book
+ * introduction sheets, the lookup and search modals, the art viewer and the
+ * pack info card. The tour would sit on top of these and swallow every tap
+ * meant for them, so it steps aside while one is up.
+ */
+export const OVERLAYS = [
+  '.modal-backdrop',
+  '.modal-overlay',
+  '.hl-modal-backdrop',
+  '.sh-modal-backdrop',
+  '.help-backdrop',
+  '.panel-backdrop',
+  '.intro-backdrop',
+  '.note-popup',
+  '.footnote-card',
+  '.ref-popover',
+  '.art-viewer',
+  '.info-card',
+];
+
+/** Some popup is showing, other than the one named in `allow`. */
+export function overlayOpen(allow?: string): boolean {
+  return OVERLAYS.some(
+    (selector) =>
+      selector !== allow && Array.from(document.querySelectorAll(selector)).some(hasSize),
+  );
+}
 
 export function anyPaneOpen(): boolean {
   return get(paneStore).some((p) => p.isOpen);
