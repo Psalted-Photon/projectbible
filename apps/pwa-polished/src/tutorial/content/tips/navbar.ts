@@ -20,13 +20,14 @@ export const NAVBAR_TIPS: Tip[] = [
     target: '.pill-btn-reference',
     title: 'Books and chapters',
     body: 'Jump to any book and chapter. The books come in ten color families, and each keeps its color all through the app.',
+    extra: 'colors',
   },
   {
     id: 'nav-trail',
     area,
     target: '.crumb-btn',
     title: 'Your trail',
-    body: 'Every place you jumped from on the way here. Tap one to go back to it; the first is where you started.',
+    body: 'Every place you jumped from on the way here, each in its book’s color. Tap one to go back to it; the first is where you started.',
   },
   {
     id: 'nav-split',

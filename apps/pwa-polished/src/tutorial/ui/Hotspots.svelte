@@ -315,6 +315,7 @@
     title={mode.tip.title}
     body={mode.tip.body}
     box={cardBox}
+    extra={mode.tip.extra}
     note={missingPack ? `Needs the ${missingPack} pack.` : null}
   >
     <svelte:fragment slot="buttons">

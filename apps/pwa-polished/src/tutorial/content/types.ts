@@ -124,4 +124,6 @@ export interface Tip {
   needs?: string;
   /** Default top-right. */
   corner?: DotCorner;
+  /** Extra content inside the card: the book color legend, on anything colored by book. */
+  extra?: 'colors';
 }

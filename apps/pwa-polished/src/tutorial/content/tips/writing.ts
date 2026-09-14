@@ -41,11 +41,11 @@ export const WRITING_TIPS: Tip[] = [
 
   // Notes
   {
-    id: 'notes-sign-in',
+    id: 'sign-in-first',
     area,
-    target: '.notes-pane .auth-wall-btn',
+    target: '.auth-wall-btn',
     title: 'Sign in first',
-    body: 'Notes are kept with your account, so they follow you from device to device.',
+    body: 'This is kept with your account, so it follows you from device to device.',
   },
   {
     id: 'notes-new',

@@ -115,6 +115,7 @@ export const LIBRARY_TIPS: Tip[] = [
     target: '.vb-header, .cv-book-header',
     title: 'Verses by book',
     body: 'Every verse, grouped by book and shown in each book’s family color. Tap a book to open its verses.',
+    extra: 'colors',
   },
   {
     id: 'entry-all-verses',

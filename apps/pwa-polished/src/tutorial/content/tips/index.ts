@@ -17,9 +17,11 @@ import { MAP_TIPS } from './map';
 import { WRITING_TIPS } from './writing';
 import { LIBRARY_TIPS } from './library';
 import { ART_TIPS } from './art';
+import { MODAL_TIPS } from './modals';
 
 export const ALL_TIPS: Tip[] = [
   ...POPUP_TIPS,
+  ...MODAL_TIPS,
   ...SELECTION_TIPS,
   ...PANE_TIPS,
   ...WINDOW_TIPS,
