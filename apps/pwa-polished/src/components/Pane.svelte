@@ -45,15 +45,19 @@
 
     const pos = "touches" in e ? e.touches[0] : e;
     const currentPos = pane.position === "bottom" ? pos.clientY : pos.clientX;
+    // Positive when the pointer has moved up or to the left.
     const delta = resizeStartPos - currentPos;
 
     const screenSize =
       pane.position === "bottom" ? window.innerHeight : window.innerWidth;
     const deltaPercent = (delta / screenSize) * 100;
 
+    // The grip is on the pane's inner edge, so moving it away from the pane's
+    // own side of the screen makes the pane bigger: leftwards for a right-hand
+    // pane, upwards for a bottom one, rightwards for a left-hand one.
     let newSize =
       resizeStartSize +
-      (pane.position === "right" ? -deltaPercent : deltaPercent);
+      (pane.position === "left" ? -deltaPercent : deltaPercent);
 
     paneStore.resizePane(pane.id, newSize);
 
