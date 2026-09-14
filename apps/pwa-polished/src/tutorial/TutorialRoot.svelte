@@ -8,25 +8,59 @@
    * happens.
    */
   import "./theme.css";
+  import { onDestroy, onMount } from "svelte";
+  import { get } from "svelte/store";
   import { tutorial } from "./state";
+  import { installShield } from "./engine/shield";
   import { wakeAlarmStartOpen } from "../stores/wakeAlarmStore";
   import { paneStore } from "../stores/paneStore";
+  import { installAllState, restartNeeded } from "../lib/packInstaller";
+  import { PART_ONE } from "./content/tour";
   import Splash from "./ui/Splash.svelte";
+  import Tour from "./ui/Tour.svelte";
+  import InstallChip from "./ui/InstallChip.svelte";
+
+  let root: HTMLElement;
+  let removeShield: (() => void) | null = null;
+
+  onMount(() => {
+    removeShield = installShield(root);
+  });
+  onDestroy(() => removeShield?.());
 
   // The wake alarm's start screen is somebody being woken up, so it goes first.
   // And switching the tutorial on from Settings waits for Settings to close,
   // rather than throwing the splash over the pane mid-tap.
   $: paneOpen = $paneStore.some((p) => p.isOpen);
   $: showSplash = $tutorial.stage === "start" && !$wakeAlarmStartOpen && !paneOpen;
+
+  /**
+   * After the first half: wait for packs that are still arriving (or need a
+   * restart to switch on), otherwise go straight on to the second half.
+   */
+  function finishPartOne() {
+    const waiting = get(installAllState).running || get(restartNeeded);
+    tutorial.setStage(waiting ? "waiting" : "part2");
+  }
 </script>
 
-<!-- no-edge-gesture: a tap on a tutorial screen near the edge of the phone must
-     not start the app's drag-out-a-window gesture underneath it. -->
-<div class="tut-root no-edge-gesture">
-  {#if showSplash}
-    <Splash
-      on:start={() => tutorial.setStage("part1")}
+<!-- The shield stops presses on anything in here reaching the app's
+     tap-outside-to-close handlers. The edge-drag strip inside is exempt. -->
+<div class="tut-root" bind:this={root}>
+  {#if $tutorial.stage === "start"}
+    {#if showSplash}
+      <Splash
+        on:start={() => tutorial.setStage("part1")}
+        on:skip={() => tutorial.setStage("done")}
+      />
+    {/if}
+  {:else if $tutorial.stage === "part1"}
+    <Tour
+      steps={PART_ONE}
+      on:finish={finishPartOne}
       on:skip={() => tutorial.setStage("done")}
     />
+  {:else if $tutorial.stage === "waiting"}
+    <InstallChip on:done={() => tutorial.setStage("part2")} />
   {/if}
 </div>

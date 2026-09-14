@@ -28,7 +28,7 @@
 <svelte:window on:keydown={handleKeydown} />
 
 <div
-  class="splash"
+  class="splash no-edge-gesture"
   role="dialog"
   aria-modal="true"
   aria-label="Welcome to {APP_NAME}"
