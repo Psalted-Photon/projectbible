@@ -30,8 +30,12 @@ export type PasskeyProblem =
   | 'failed';
 
 export class PasskeyError extends Error {
-  constructor(readonly problem: PasskeyProblem, message?: string) {
-    super(message ?? problem);
+  /**
+   * `detail` is what the browser itself said ("SecurityError: …"), kept so a
+   * failure on a real phone can be read off the screen or eruda.
+   */
+  constructor(readonly problem: PasskeyProblem, readonly detail = '') {
+    super(detail ? `${problem} (${detail})` : problem);
     this.name = 'PasskeyError';
   }
 }
@@ -97,10 +101,12 @@ export function describeThisDevice(): string {
 function asProblem(err: unknown, fallback: PasskeyProblem = 'failed'): PasskeyError {
   if (err instanceof PasskeyError) return err;
   const name = (err as { name?: string })?.name;
-  if (name === 'NotAllowedError' || name === 'AbortError') return new PasskeyError('cancelled');
-  if (name === 'InvalidStateError') return new PasskeyError('already-added');
-  if (name === 'NotSupportedError') return new PasskeyError('unsupported');
-  return new PasskeyError(fallback, (err as Error)?.message);
+  const message = (err as { message?: string })?.message;
+  const detail = [name, message].filter(Boolean).join(': ') || String(err);
+  if (name === 'NotAllowedError' || name === 'AbortError') return new PasskeyError('cancelled', detail);
+  if (name === 'InvalidStateError') return new PasskeyError('already-added', detail);
+  if (name === 'NotSupportedError') return new PasskeyError('unsupported', detail);
+  return new PasskeyError(fallback, detail);
 }
 
 /**
@@ -245,8 +251,17 @@ export async function openWithPasskey(
   const usable = usablePasskeySlots(slots, keyId);
   if (usable.length === 0) throw new PasskeyError('no-match');
 
-  const evalByCredential: Record<string, { first: Uint8Array<ArrayBuffer> }> = {};
-  for (const slot of usable) evalByCredential[slot.credentialId!] = { first: fromBase64Url(slot.salt) };
+  // One passkey (the usual case): ask the same plain way setup did, which has
+  // already worked on this device. Only several passkeys, each with its own
+  // salt, need the per-passkey form, which not every browser handles.
+  let prf: AuthenticationExtensionsPRFInputs;
+  if (usable.length === 1) {
+    prf = { eval: { first: fromBase64Url(usable[0].salt) } };
+  } else {
+    const evalByCredential: Record<string, { first: Uint8Array<ArrayBuffer> }> = {};
+    for (const slot of usable) evalByCredential[slot.credentialId!] = { first: fromBase64Url(slot.salt) };
+    prf = { evalByCredential };
+  }
 
   let credential: PublicKeyCredential | null;
   try {
@@ -257,7 +272,7 @@ export async function openWithPasskey(
         allowCredentials: usable.map((s) => ({ type: 'public-key' as const, id: fromBase64Url(s.credentialId!) })),
         userVerification: 'required',
         timeout: PROMPT_TIMEOUT_MS,
-        extensions: { prf: { evalByCredential } },
+        extensions: { prf },
       },
     })) as PublicKeyCredential | null;
   } catch (err) {
@@ -266,15 +281,15 @@ export async function openWithPasskey(
   if (!credential) throw new PasskeyError('cancelled');
 
   const slot = usable.find((s) => s.credentialId === toBase64Url(credential!.rawId));
-  if (!slot) throw new PasskeyError('no-match');
+  if (!slot) throw new PasskeyError('no-match', 'a different passkey answered');
   const secret = prfFirst(credential);
-  if (!secret) throw new PasskeyError('unsupported');
+  if (!secret) throw new PasskeyError('unsupported', 'the passkey gave no secret');
 
   try {
     const slotKey = await deriveSlotKey(secret, 'passkey');
     const journalKey = await unwrapJournalKey(slotKey, slot.id, 'passkey', slot.wrappedKey);
     return { journalKey, slot };
-  } catch {
-    throw new PasskeyError('no-match');
+  } catch (err) {
+    throw new PasskeyError('no-match', `the secret didn't open the slot: ${(err as Error)?.name ?? err}`);
   }
 }

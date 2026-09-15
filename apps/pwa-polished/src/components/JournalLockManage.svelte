@@ -52,6 +52,8 @@
           'no-match': 'Something went wrong. Try again.',
           failed: 'Something went wrong. Try again.',
         }[err.problem];
+        if (err.detail && err.problem !== 'cancelled' && err.problem !== 'already-added') error += ` (${err.detail})`;
+        console.warn(`[JournalLock] Adding a fingerprint failed: ${err.problem}${err.detail ? ` — ${err.detail}` : ''}`);
       } else if (err instanceof JournalLockError) {
         error = err.message;
       } else {

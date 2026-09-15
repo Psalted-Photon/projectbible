@@ -83,9 +83,11 @@
         fingerprintUnavailable = true;
         return 'This browser can’t use a fingerprint for the journal.';
       }
+      console.error(`[JournalLock] Step failed: ${err.problem}${err.detail ? ` — ${err.detail}` : ''}`);
+      return `Something went wrong. Try again.${err.detail ? ` (${err.detail})` : ''}`;
     }
     console.error('[JournalLock] Step failed:', err);
-    return 'Something went wrong. Try again.';
+    return `Something went wrong. Try again.${(err as Error)?.message ? ` (${(err as Error).message})` : ''}`;
   }
 
   // ── Turning on ──

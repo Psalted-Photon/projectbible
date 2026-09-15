@@ -43,6 +43,7 @@
       await unlockWithFingerprint();
     } catch (err) {
       const problem = err instanceof PasskeyError ? err.problem : 'failed';
+      const detail = err instanceof PasskeyError ? err.detail : String((err as Error)?.message ?? err);
       error = {
         cancelled: 'Fingerprint cancelled. Tap the button to try again.',
         unsupported: 'This browser can’t use a fingerprint for the journal. Use your recovery code instead.',
@@ -50,7 +51,9 @@
         'no-match': 'That passkey doesn’t open this journal. Try another, or use your recovery code.',
         failed: 'Something went wrong. Try again, or use your recovery code.',
       }[problem];
-      console.warn('[JournalLock] Fingerprint unlock failed:', err);
+      // What the browser said, on screen, so a phone failure can be reported.
+      if (detail && problem !== 'cancelled') error += ` (${detail})`;
+      console.warn(`[JournalLock] Fingerprint unlock failed: ${problem}${detail ? ` — ${detail}` : ''}`);
     } finally {
       busy = false;
     }
