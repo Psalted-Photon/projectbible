@@ -4,7 +4,6 @@
   import { paneStore, pendingCloseEdge, type PaneState } from "../stores/paneStore";
   import SettingsPane from "./panes/SettingsPane.svelte";
   import PacksPane from "./panes/PacksPane.svelte";
-  import SearchPane from "./panes/SearchPane.svelte";
   import WakeAlarmPane from "./panes/WakeAlarmPane.svelte";
 
 
@@ -137,8 +136,6 @@
       <SettingsPane bind:clearBackdrop />
     {:else if pane.type === "packs"}
       <PacksPane />
-    {:else if pane.type === "search"}
-      <SearchPane />
     {:else if pane.type === "wakealarm"}
       <WakeAlarmPane />
     {/if}

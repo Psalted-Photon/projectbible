@@ -359,7 +359,7 @@ Files: `src/adapters/TskReferenceStore.ts`, `src/adapters/CrossReferenceStore.ts
 
 ## 9. Search
 
-Files: `src/lib/services/searchService.ts` (579), `src/components/PowerSearchModal.svelte` (1,370), `src/components/UnifiedSearch.svelte`, `src/components/panes/SearchPane.svelte`, `src/components/SearchResultsTree.svelte`, `src/lib/searchTree.ts`, `src/adapters/SearchIndex.ts`, `src/stores/searchStore.ts`, `src/components/HelpModal.svelte`.
+Files: `src/lib/services/searchService.ts` (579), `src/components/PowerSearchModal.svelte` (1,370), `src/components/UnifiedSearch.svelte`, `src/components/SearchResultsTree.svelte`, `src/lib/searchTree.ts`, `src/adapters/SearchIndex.ts`, `src/stores/searchStore.ts`, `src/components/HelpModal.svelte`.
 
 ### 9.1 Unified search service
 
@@ -645,41 +645,9 @@ Two strategies, `ReadingPlanModal.svelte`: `spread` (Even spread) and `dedicated
 
 ## 14. Maps & Places
 
-Files: `src/components/MapPane.svelte` (833), `src/components/panes/MapPane.svelte`, `src/adapters/MapStore.ts`, `src/adapters/PlaceStore.ts` (234). Uses Leaflet.
+Files: `src/components/AtlasPane.svelte`. Uses Leaflet.
 
-### 14.1 Map store
-
-`IndexedDBMapStore`, `MapStore.ts`:
-
-| Method | Line |
-|---|---|
-| `getBaseTiles(zoom, bounds)` | 5 |
-| `getTile(zoom, x, y)` | 40 |
-| `getHistoricalLayer(layerId)` | 62 |
-| `getTimePeriods()` | 78 |
-| `getLayersForPeriod(period)` | 105 |
-| `getLayersForYear(year)` | 131 |
-| `hasOfflineData()` | 145 |
-
-Tiles are stored in IndexedDB, so the map works fully offline. See `docs/OFFLINE-MAP-TILES.md`.
-
-### 14.2 Place store
-
-`IndexedDBPlaceStore`, `PlaceStore.ts`:
-
-| Method | Line |
-|---|---|
-| `getPlace(placeId)` | 15 |
-| `getPlacesForVerse(reference)` | 30 |
-| `searchPlaces(query)` | 59 |
-| `getPlaceByName(name, period?)` | 108 |
-| `getPlacesInBounds(bounds)` | 143 |
-| `getPlacesByType(type)` | 167 |
-| `getPlaceAppearance(placeId, period)` | 197 |
-
-`getPlaceByName` and `getPlaceAppearance` are period-aware — the same name can resolve to different locations in different eras.
-
-### 14.3 Encyclopedia link
+### 14.1 Encyclopedia link
 
 The ISBE modal's Map tab renders a Leaflet pin bound to a popup with the entry title (`IsbeModal.svelte`), shown only when coordinates exist. See [6.2](#62-tabs).
 
@@ -881,7 +849,7 @@ Touch and mouse paths are separate, with a `usingTouch` flag so mouse events are
 - `closePane(id)` sets `isOpen: false` rather than removing the record
 - `pendingCloseEdge` is consumed by `EdgeGestureDetector` for close animations
 
-Pane components: `src/components/panes/SettingsPane.svelte`, `PacksPane.svelte`, `SearchPane.svelte`, `MapPane.svelte`, `WakeAlarmPane.svelte`; container `src/components/PaneContainer.svelte`. The Notes pane is `src/components/NotesPane.svelte` — see [26](#26-notes--notebooks).
+Pane components: `src/components/panes/SettingsPane.svelte`, `PacksPane.svelte`, `WakeAlarmPane.svelte`; container `src/components/PaneContainer.svelte`. The Notes pane is `src/components/NotesPane.svelte` — see [26](#26-notes--notebooks).
 
 While the Settings pane is open the reader stays visible behind it rather than being covered, so a change to font size or theme can be judged against real text.
 
@@ -928,13 +896,7 @@ Pack `type` values, from `src/adapters/db.ts`: `text`, `lexicon`, `dictionary`, 
 
 **`encyclotopical`** is the ISBE encyclopedia and Nave's Topical Bible in one pack — it supersedes the standalone `isbe` pack, and its import path fills both the `isbe_*` and `naves_*` stores. `isbe` is still recognised so an already-installed encyclopedia keeps working. See [24](#24-naves-topical-bible).
 
-### 19.5 English lexical packs
-
-`src/components/EnglishLexicalPacksModal.svelte` (325). A dedicated loader for the English dictionary/thesaurus packs, separate from the general pack flow.
-
-Imports `englishLexicalPackLoader` from `packages/core/src/search/englishLexicalPackLoader` — note this reaches across the monorepo by relative path (`../../../../packages/core/src/...`), so it is one of the places where the app depends on `@projectbible/core` source rather than its built `dist`. Loads from `/packs/polished`, reports per-pack `LoadProgress`, and checks `arePacksLoaded()` on mount so it can show a ready state instead of re-downloading.
-
-### 19.6 Configuration
+### 19.5 Configuration
 
 `src/config.ts`. `APP_VERSION = '1.0.0'`.
 
@@ -946,7 +908,7 @@ Imports `englishLexicalPackLoader` from `packages/core/src/search/englishLexical
 - `PACK_TRIGGERS` — which user action loads which pack: `translations` on `reader-open`, `ancient-languages` on `hebrew-greek-toggle`, `lexical` on `word-study-open`, `study-tools` on `maps-open`.
 - `UI` — `showProgressDuringDownload`, `allowPackRemoval`, `showStorageUsage`, `promptForPersistentStorage`.
 
-### 19.7 Related docs
+### 19.6 Related docs
 
 `docs/PACK-STANDARD-V1.md`, `docs/PACK-MANAGEMENT.md`, `docs/PACK-SYSTEM-IMPLEMENTATION.md`, `docs/CONSOLIDATED-PACKS-IMPLEMENTATION.md`.
 

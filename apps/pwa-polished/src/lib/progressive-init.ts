@@ -8,14 +8,14 @@
  */
 
 import { loadBootstrap } from './bootstrap-loader';
-import { APP_VERSION, PACK_MANIFEST_URL, USE_BUNDLED_PACKS, FEATURES } from '../config';
+import { APP_VERSION, PACK_MANIFEST_URL, USE_BUNDLED_PACKS } from '../config';
 import {
   importPackFromBytes,
   importArtImageShard,
   importAtlasGeometryShard,
   importAtlasPlaceIndex,
 } from '../adapters/pack-import';
-import { listInstalledPacks as listInstalledPacksFromDb, removePack as removePackFromDb } from '../adapters/db-manager';
+import { listInstalledPacks as listInstalledPacksFromDb } from '../adapters/db-manager';
 import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
 import { startInstallLog, logInstall, logInstallError, endInstallLog } from './install-log';
@@ -154,7 +154,7 @@ export async function initializeApp(
 }
 
 /**
- * Get the pack loader instance (not implemented yet)
+ * Get the pack loader instance
  */
 export function getPackLoader(): PackLoader {
   return getPackLoaderInstance();
@@ -168,7 +168,7 @@ export function isBootstrapLoaded(): boolean {
 }
 
 /**
- * Load a pack on-demand (not implemented yet)
+ * Load a pack on-demand
  */
 export async function loadPackOnDemand(
   packId: string,
@@ -369,19 +369,4 @@ export async function installAtlasParts(
 
   logInstall('atlas-shards-done', { layers, columns });
   return { layers, columns };
-}
-
-/**
- * Get list of installed packs (not implemented yet)
- */
-export async function getInstalledPacks(): Promise<string[]> {
-  const installed = await listInstalledPacksFromDb();
-  return installed.map((pack) => pack.id);
-}
-
-/**
- * Remove a cached pack (not implemented yet)
- */
-export async function removePack(packId: string): Promise<void> {
-  await removePackFromDb(packId);
 }

@@ -15,7 +15,7 @@ Live site: **projectbible.vercel.app** — every git push triggers a Vercel depl
 ## Tech Stack
 
 - **Svelte 5** + TypeScript + Vite
-- **wa-sqlite** / **PowerSync** — local SQLite in-browser
+- **sql.js** + **IndexedDB** — packs and local data in-browser
 - **Supabase** — auth + sync backend
 - **Vercel** — hosting (auto-deploy on push)
 

@@ -418,11 +418,7 @@ Optionally have section headings spoken before their verse. Off by default.
 
 ## 17. Audio
 
-Separate from Read Aloud: playback of pre-recorded chapter audio, where a pack provides it.
-
-- Play, pause, stop.
-- Seek within the chapter.
-- Auto-advance to the next chapter.
+Retired. The BSB chapter audio packs and their play button were removed on 2026-09-13; Read Aloud reads every chapter instead.
 
 ## 18. Panes & Windows
 

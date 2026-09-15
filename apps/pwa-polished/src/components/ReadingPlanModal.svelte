@@ -400,7 +400,6 @@
       dayProgressMap.set(entry.dayNumber, entry);
     }
     await persistCatchUpAdjustment('spread', suggestions);
-    // PowerSync will automatically sync the local writes
   }
 
   function applyDedicatedCatchUp() {
@@ -408,7 +407,6 @@
     saveCatchUpDays(days);
     if (currentPlanId) {
       void persistCatchUpAdjustment('dedicated', days);
-      // PowerSync will automatically sync the local writes
     }
   }
 

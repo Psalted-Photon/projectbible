@@ -20,8 +20,6 @@ export { SyncedJournalStore } from './SyncedJournalStore.js';
 export { SyncedNotebookStore } from './SyncedNotebookStore.js';
 export { IndexedDBCrossReferenceStore } from './CrossReferenceStore.js';
 export { IndexedDBLexiconStore } from './LexiconStore.js';
-export { IndexedDBPlaceStore } from './PlaceStore.js';
-export { IndexedDBMapStore } from './MapStore.js';
 export { IndexedDBReadingHistoryStore } from './ReadingHistoryStore.js';
 export { importPackFromSQLite, importPackFromBytes, exportPackToSQLite } from './pack-import.js';
 
@@ -49,11 +47,9 @@ export type {
   MorphologyInfo,
   MorphologyParsing,
   WordOccurrence,
-  PlaceStore,
   PlaceInfo,
   PlaceHistoricalName,
   PlaceAppearance,
-  MapStore,
   MapTile,
   HistoricalMapLayer,
   BoundingBox,

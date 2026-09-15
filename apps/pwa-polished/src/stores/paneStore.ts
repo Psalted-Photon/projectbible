@@ -1,6 +1,6 @@
 import { writable, derived } from 'svelte/store';
 
-export type PaneType = 'settings' | 'packs' | 'search' | 'notes' | 'commentaries' | 'wakealarm';
+export type PaneType = 'settings' | 'packs' | 'notes' | 'commentaries' | 'wakealarm';
 
 export interface PaneState {
   id: string;

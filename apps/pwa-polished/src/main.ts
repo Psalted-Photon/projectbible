@@ -4,21 +4,12 @@ import { mount } from 'svelte';
 import App from './App.svelte';
 import { initializeApp, isBootstrapLoaded } from './lib/progressive-init';
 import { applyTheme, getSettings } from './adapters/settings';
-import { removePack } from './lib/progressive-init';
-import { loadPackOnDemand, getInstalledPacks } from './lib/progressive-init';
 import { FEATURES } from './config';
 import './adapters/tts'; // Read Aloud engine client (registers __tts dev hook; worker starts lazily)
 import { initMediaSession } from './lib/tts/mediaSession';
 import { dumpPreviousInstallLog } from './lib/install-log';
 
 console.log('🔥 IMPORTS LOADED');
-
-// Expose utilities for console debugging
-if (import.meta.env.DEV) {
-  (window as any).removePack = removePack;
-  (window as any).loadPack = loadPackOnDemand;
-  (window as any).getInstalledPacks = getInstalledPacks;
-}
 
 console.log('🔥 GETTING APP ELEMENT');
 

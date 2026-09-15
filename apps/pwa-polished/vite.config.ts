@@ -293,7 +293,7 @@ export default defineConfig({
         // the service worker; this is its documented slot for adding a push
         // listener, so the caching config below is unaffected.
         importScripts: ['/push-handler.js'],
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MB (covers wa-sqlite-async.wasm at 2.28 MB)
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MB
         // TTS runtime files (~30 MB) are cached on first Read Aloud use, not
         // precached — users who never use TTS never pay the download. The
         // voice model itself lives in OPFS, managed by src/lib/tts/.
