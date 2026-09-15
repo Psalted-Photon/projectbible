@@ -3,6 +3,7 @@
   import { profileModalStore } from '../stores/profileModalStore';
   import { userProfileStore } from '../stores/userProfileStore';
   import { supabaseAuthService } from '../services/SupabaseAuthService';
+  import { passwordRecovery, authLinkError, finishPasswordRecovery } from '../stores/passwordRecoveryStore';
   import { readingPlanModalStore } from '../stores/readingPlanModalStore';
   import { navigationStore, availableTranslations } from '../stores/navigationStore';
   import { translationLabel } from '../lib/bibleData';
@@ -39,6 +40,11 @@
   let passwordError = '';
   let nameMessage = '';
   let nameError = '';
+  let recoveryPassword = '';
+  let recoveryPasswordConfirm = '';
+  let recoveryError = '';
+  let recoveryDone = false;
+  let recoverySaving = false;
 
   let profileName: string | null = null;
   let profileEmail: string | null = null;
@@ -120,6 +126,15 @@
   }
 
   $: passwordsMatch = newPassword.length > 0 && newPassword === newPasswordConfirm;
+  $: recoveryMatch = recoveryPassword.length > 0 && recoveryPassword === recoveryPasswordConfirm;
+
+  // An expired reset link: show why on the sign-in panel, once.
+  $: if ($authLinkError) {
+    authMode = 'login';
+    authMessage = '';
+    authError = $authLinkError;
+    authLinkError.set('');
+  }
 
   function close() {
     profileModalStore.close();
@@ -232,6 +247,30 @@
     } catch (error) {
       console.error(error);
       passwordError = 'Password update failed.';
+    }
+  }
+
+  // The reset link already signed them in, so no current password is asked for.
+  async function handleSetRecoveryPassword() {
+    recoveryError = '';
+    if (!recoveryMatch) {
+      recoveryError = 'Passwords do not match.';
+      return;
+    }
+    recoverySaving = true;
+    try {
+      await supabaseAuthService.updatePassword(recoveryPassword);
+      finishPasswordRecovery();
+      recoveryDone = true;
+      recoveryPassword = '';
+      recoveryPasswordConfirm = '';
+    } catch (error) {
+      console.error(error);
+      // Supabase's own wording is the useful part here ("at least 6 characters",
+      // "should be different from the old password").
+      recoveryError = error instanceof Error && error.message ? error.message : 'Password update failed.';
+    } finally {
+      recoverySaving = false;
     }
   }
 
@@ -468,7 +507,42 @@
       </div>
 
       <div class="tab-content">
-        {#if !isSignedIn}
+        {#if isSignedIn && ($passwordRecovery || recoveryDone)}
+          <div class="auth-panel">
+            {#if recoveryDone}
+              <h3>Password saved</h3>
+              <div class="auth-message">Your new password is set, and you're signed in.</div>
+              <button class="primary-btn" on:click={() => (recoveryDone = false)}>Continue</button>
+            {:else}
+              <h3>Choose a new password</h3>
+              <input
+                class={`auth-input ${recoveryPassword.length > 0 ? (recoveryMatch ? 'match-ok' : 'match-error') : ''}`}
+                type="password"
+                placeholder="New password"
+                autocomplete="new-password"
+                bind:value={recoveryPassword}
+              />
+              <input
+                class={`auth-input ${recoveryPasswordConfirm.length > 0 ? (recoveryMatch ? 'match-ok' : 'match-error') : ''}`}
+                type="password"
+                placeholder="Confirm new password"
+                autocomplete="new-password"
+                bind:value={recoveryPasswordConfirm}
+              />
+              <div class={`password-match ${recoveryPassword.length > 0 || recoveryPasswordConfirm.length > 0 ? (recoveryMatch ? 'ok' : 'error') : ''}`}>
+                {#if recoveryPassword.length > 0 || recoveryPasswordConfirm.length > 0}
+                  {recoveryMatch ? 'Passwords match' : 'Passwords do not match'}
+                {/if}
+              </div>
+              <button class="primary-btn" on:click={handleSetRecoveryPassword} disabled={!recoveryMatch || recoverySaving}>
+                {recoverySaving ? 'Saving…' : 'Save new password'}
+              </button>
+              {#if recoveryError}
+                <div class="auth-error">{recoveryError}</div>
+              {/if}
+            {/if}
+          </div>
+        {:else if !isSignedIn}
           <div class="auth-panel">
             {#if authMode === 'login'}
               <h3>Log in</h3>
