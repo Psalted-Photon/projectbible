@@ -1,13 +1,12 @@
 /**
- * Progressive App Initialization
- * 
- * New initialization strategy:
- * 1. Load bootstrap pack (instant, 208KB bundled)
- * 2. Mount app immediately with basic navigation
- * 3. Lazy load packs on-demand from GitHub Releases
+ * App startup and pack loading.
+ *
+ * Launch waits on one thing only: that the starter text is on the device. A
+ * device that has it mounts straight away; everything else, the pack list
+ * included, loads after the app is on screen. Packs download on demand from
+ * GitHub Releases.
  */
 
-import { loadBootstrap } from './bootstrap-loader';
 import { APP_VERSION, PACK_MANIFEST_URL, USE_BUNDLED_PACKS } from '../config';
 import {
   importPackFromBytes,
@@ -20,7 +19,6 @@ import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
 import { startInstallLog, logInstall, logInstallError, endInstallLog } from './install-log';
 
-let bootstrapLoaded = false;
 let packLoader: PackLoader | null = null;
 let progressHandler: ((progress: DownloadProgress) => void) | null = null;
 
@@ -65,7 +63,7 @@ const STARTER_TRANSLATION = 'NET';
  * pack row with no verses behind it would read as "installed" forever.
  * getTranslations() only counts a translation that actually has verses.
  */
-async function hasStarterText(): Promise<boolean> {
+export async function hasStarterText(): Promise<boolean> {
   try {
     const { IndexedDBTextStore } = await import('../adapters/TextStore');
     const installed = await new IndexedDBTextStore().getTranslations();
@@ -79,7 +77,7 @@ async function hasStarterText(): Promise<boolean> {
 }
 
 /**
- * Fetch and install the starter pack, unless this device already has NET.
+ * Fetch and install the starter pack. Call only when hasStarterText() said no.
  *
  * Gated on NET specifically, not on "any translation at all". A phone whose
  * starter install failed and which then installed the English pack by hand
@@ -90,13 +88,11 @@ async function hasStarterText(): Promise<boolean> {
  * partway, must still reach the reader — which shows its own message when there
  * is nothing to read.
  */
-async function ensureStarterText(
+export async function installStarterText(
   onProgress?: (message: string, percent: number) => void
 ): Promise<void> {
   try {
-    if (await hasStarterText()) return;
-
-    onProgress?.('Getting the text...', 60);
+    onProgress?.('Getting the text...', 20);
 
     const response = await fetch(STARTER_PACK_URL);
     if (!response.ok) {
@@ -104,9 +100,9 @@ async function ensureStarterText(
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
 
-    onProgress?.('Getting the text...', 80);
+    onProgress?.('Getting the text...', 60);
     await importPackFromBytes(bytes, 'starter.sqlite');
-    onProgress?.('Getting the text...', 95);
+    onProgress?.('Ready', 100);
 
     console.log('Starter pack installed');
   } catch (error) {
@@ -115,42 +111,18 @@ async function ensureStarterText(
 }
 
 /**
- * Initialize app with progressive loading
+ * Fetch the pack list in the background, so the Packs screen has it ready.
+ *
+ * Deliberately not awaited by startup. It is a network round trip through the
+ * proxy to GitHub Releases with no time limit, and on a weak signal waiting for
+ * it held the app behind the loading screen. Anything that needs the list
+ * fetches it for itself if this has not finished.
  */
-export async function initializeApp(
-  onProgress?: (message: string, percent: number) => void
-): Promise<void> {
-  try {
-    // Step 1: Load bootstrap (instant)
-    onProgress?.('Loading bootstrap...', 10);
-    await loadBootstrap();
-    bootstrapLoaded = true;
-    onProgress?.('Bootstrap loaded', 20);
-    
-    // Step 2: In dev mode, we use bundled packs
-    if (USE_BUNDLED_PACKS) {
-      onProgress?.('Using bundled packs...', 50);
-    } else {
-      // Production mode: preload manifest (non-blocking)
-      onProgress?.('Checking pack manifest...', 50);
-      try {
-        await getPackLoaderInstance().fetchManifest();
-      } catch (error) {
-        console.warn('Manifest fetch failed:', error);
-      }
-    }
-
-    // Step 3: make sure there is something to read. Last, so a device that
-    // already has text is not held up by a check it does not need, and so a
-    // failure here lands after everything else has already succeeded.
-    await ensureStarterText(onProgress);
-
-    onProgress?.('Ready', 100);
-
-  } catch (error) {
-    console.error('Initialization failed:', error);
-    throw error;
-  }
+export function warmPackManifest(): void {
+  if (USE_BUNDLED_PACKS) return;
+  getPackLoaderInstance()
+    .fetchManifest()
+    .catch((error) => console.warn('Manifest fetch failed:', error));
 }
 
 /**
@@ -158,13 +130,6 @@ export async function initializeApp(
  */
 export function getPackLoader(): PackLoader {
   return getPackLoaderInstance();
-}
-
-/**
- * Check if bootstrap is loaded
- */
-export function isBootstrapLoaded(): boolean {
-  return bootstrapLoaded;
 }
 
 /**

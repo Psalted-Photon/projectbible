@@ -18,14 +18,10 @@ export const PACK_MANIFEST_URL =
 // Whether to use bundled packs (local development) or download from CDN
 export const USE_BUNDLED_PACKS = import.meta.env.DEV || import.meta.env.VITE_USE_BUNDLED_PACKS === 'true';
 
-// Bootstrap pack location (always bundled with app)
-export const BOOTSTRAP_PACK_URL = '/bootstrap.sqlite';
-
 // Feature flags
 export const FEATURES = {
   lazyPackLoading: !USE_BUNDLED_PACKS,
   persistentStorage: true,
-  progressiveStartup: !USE_BUNDLED_PACKS,
   packUpdates: !USE_BUNDLED_PACKS,
   ttsReadAloud: true // Read Aloud with on-device AI voice (kill switch)
 };

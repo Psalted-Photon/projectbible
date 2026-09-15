@@ -122,8 +122,17 @@
     };
 
     const init = async () => {
+      await openSharedLink();
+      appReady = true;
+      console.log("✅ App ready (auto-update test build 2)");
+
       // Eruda stays on in production by choice -- it is how this app gets
       // debugged on a real phone. Do not gate it behind a flag.
+      //
+      // Loaded after the reader is on screen, not before: it is half a megabyte
+      // and used to be the last thing the "Loading App..." screen waited for.
+      // The price is that whatever is logged during launch happens before there
+      // is an eruda console to catch it, so it is missing from its Console tab.
       if (typeof window !== "undefined") {
         const eruda = await import("eruda");
         eruda.default.init();
@@ -137,9 +146,6 @@
         // main.ts runs before this and is therefore invisible on the phone.
         dumpPreviousInstallLog();
       }
-      await openSharedLink();
-      appReady = true;
-      console.log("✅ App ready (auto-update test build 2)");
     };
 
     const handleVisibility = () => {

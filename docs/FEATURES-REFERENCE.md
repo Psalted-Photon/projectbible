@@ -865,7 +865,7 @@ Re-applied on visibility resume to handle tablet app-switching and whenever sett
 
 ## 19. Content Packs
 
-Files: `src/components/panes/PacksPane.svelte` (1,238), `src/adapters/PackManager.ts`, `src/adapters/pack-import.ts` (2,116), `src/lib/pack-init.ts` (497), `src/lib/pack-triggers.ts`, `src/lib/progressive-init.ts`, `src/lib/bootstrap-loader.ts`, `src/components/ProgressModal.svelte`, `src/adapters/db-manager.ts` (339).
+Files: `src/components/panes/PacksPane.svelte` (1,238), `src/adapters/PackManager.ts`, `src/adapters/pack-import.ts` (2,116), `src/lib/pack-init.ts` (497), `src/lib/pack-triggers.ts`, `src/lib/progressive-init.ts`, `src/components/ProgressModal.svelte`, `src/adapters/db-manager.ts` (339).
 
 ### 19.1 Pack manager
 
@@ -904,8 +904,7 @@ Pack `type` values, from `src/adapters/db.ts`: `text`, `lexicon`, `dictionary`, 
 
 - `PACK_MANIFEST_URL` — `/api/packs/manifest.json` in production (proxied to GitHub Releases), `/packs/consolidated/manifest.json` in dev.
 - `USE_BUNDLED_PACKS` — true in dev, or when `VITE_USE_BUNDLED_PACKS === 'true'`.
-- `BOOTSTRAP_PACK_URL = '/bootstrap.sqlite'` — always bundled with the app.
-- `FEATURES` — `lazyPackLoading`, `progressiveStartup`, `packUpdates` (all keyed off `!USE_BUNDLED_PACKS`), `persistentStorage`, and `ttsReadAloud` (a kill switch for Read Aloud).
+- `FEATURES` — `lazyPackLoading`, `packUpdates` (both keyed off `!USE_BUNDLED_PACKS`), `persistentStorage`, and `ttsReadAloud` (a kill switch for Read Aloud).
 - `PACK_PRIORITY` — `essential: [bootstrap]`, `high: [translations]`, `medium: [study-tools, lexical]`, `low: [ancient-languages]`.
 - `PACK_TRIGGERS` — which user action loads which pack: `translations` on `reader-open`, `ancient-languages` on `hebrew-greek-toggle`, `lexical` on `word-study-open`, `study-tools` on `maps-open`.
 - `UI` — `showProgressDuringDownload`, `allowPackRemoval`, `showStorageUsage`, `promptForPersistentStorage`.
@@ -1159,7 +1158,7 @@ Triggered from `App.svelte`: 800 ms after mount, and again on every `todayStore`
 
 ### 21.10 Debug tooling
 
-Eruda is initialized on every mount (`App.svelte`), positioned 60 px from the bottom-right corner. This is a mobile debug console and ships in the current build — worth removing or gating before a public release.
+Eruda is initialized on every mount (`App.svelte`), positioned 60 px from the bottom-right corner. It is a mobile debug console and ships in production on purpose — it is how this app gets debugged on a real phone, so do not gate it behind a flag. It loads *after* `appReady`, because its half-megabyte chunk was the last thing the "Loading App…" screen waited for; the cost is that messages logged during launch predate its console and so are missing from its Console tab.
 
 ## 22. Wake Alarm
 
@@ -1430,9 +1429,8 @@ Row types are declared as `DB*` interfaces in the same file (`DBVerse`, `DBUserN
 
 ### A.4 Startup
 
-- `src/main.ts` — Svelte mount point.
-- `src/lib/bootstrap-loader.ts` — loads `bootstrap.sqlite`, the always-bundled minimum pack.
-- `src/lib/progressive-init.ts` — staged startup, gated by the `progressiveStartup` feature flag.
+- `src/main.ts` — Svelte mount point. Launch waits on one thing: `hasStarterText()`, a single IndexedDB check. Only a device with no text draws the progress screen and waits for `installStarterText()`; every other launch mounts straight away.
+- `src/lib/progressive-init.ts` — the starter-text check and install, `warmPackManifest()` (the pack list, fetched after mount rather than before it), and on-demand pack loading.
 - `src/adapters/pack-import.ts` (2,116) — the SQLite → IndexedDB import pipeline; the largest non-component file in the app.
 
 ### A.5 Type declarations

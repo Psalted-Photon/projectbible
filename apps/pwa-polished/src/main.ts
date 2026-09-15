@@ -2,7 +2,7 @@ console.log('🔥 MAIN.TS LOADING...');
 
 import { mount } from 'svelte';
 import App from './App.svelte';
-import { initializeApp, isBootstrapLoaded } from './lib/progressive-init';
+import { hasStarterText, installStarterText, warmPackManifest } from './lib/progressive-init';
 import { applyTheme, getSettings } from './adapters/settings';
 import { FEATURES } from './config';
 import './adapters/tts'; // Read Aloud engine client (registers __tts dev hook; worker starts lazily)
@@ -79,7 +79,7 @@ async function initApp() {
     .then((gone) => gone && console.log('🔊 Cleared the old unversioned speech-runtime cache'))
     .catch(() => {});
   
-  // In dev mode, skip bootstrap loading and mount immediately
+  // In dev mode the packs are bundled, so mount immediately
   if (import.meta.env.DEV) {
     console.log('✅ Dev mode - mounting app immediately');
     const app = mount(App, {
@@ -87,65 +87,49 @@ async function initApp() {
     });
     return app;
   }
-  
-  // Production mode - progressive startup
-  const needsInit = !isBootstrapLoaded();
-  
-  if (needsInit || FEATURES.progressiveStartup) {
-    // Show loading screen during initialization
+
+  // The one thing launch waits for: that there is something to read. On every
+  // launch after the first this is a single database check and nothing is
+  // drawn, so the app goes straight up. Only a device with no text — a first
+  // launch, or one whose starter install failed — sees the screen below.
+  if (!(await hasStarterText())) {
     appElement.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; font-family: 'Milonga', cursive;">
         <h1 style="margin-bottom: 20px;">Hexapla</h1>
         <div style="width: 300px; background: #333; border-radius: 8px; padding: 20px;">
-          <div id="init-message" style="margin-bottom: 10px; text-align: center;">Loading bootstrap...</div>
+          <div id="init-message" style="margin-bottom: 10px; text-align: center;">Getting the text...</div>
           <div style="width: 100%; height: 6px; background: #555; border-radius: 3px; overflow: hidden;">
             <div id="init-progress" style="width: 0%; height: 100%; background: linear-gradient(90deg, #4CAF50, #8BC34A); transition: width 0.3s;"></div>
           </div>
           <div id="init-percent" style="margin-top: 10px; text-align: center; font-size: 12px; color: #888;">0%</div>
         </div>
-        ${FEATURES.progressiveStartup ? '<p style="margin-top: 20px; font-size: 12px; color: #666;">Progressive startup enabled</p>' : ''}
       </div>
     `;
-    
-    try {
-      await initializeApp((message, percent) => {
-        const messageEl = document.getElementById('init-message');
-        const progressEl = document.getElementById('init-progress');
-        const percentEl = document.getElementById('init-percent');
-        
-        if (messageEl) messageEl.textContent = message;
-        if (progressEl) progressEl.style.width = `${percent}%`;
-        if (percentEl) percentEl.textContent = `${percent}%`;
-      });
-      
-      // Clear loading screen
-      appElement.innerHTML = '';
-      
-    } catch (error) {
-      console.error('Failed to initialize app:', error);
-      appElement.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; font-family: 'Milonga', cursive;">
-          <h1 style="color: #f44336; margin-bottom: 20px;">Initialization Failed</h1>
-          <p style="max-width: 400px; text-align: center; color: #888;">
-            Could not initialize the app. Please check your internet connection and refresh the page.
-          </p>
-          <p style="margin-top: 20px; font-size: 12px; color: #666;">
-            Error: ${(error as Error).message}
-          </p>
-          <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
-            Retry
-          </button>
-        </div>
-      `;
-      return;
-    }
+
+    // Never throws: a device that could not get the text still reaches the
+    // reader, which says so itself rather than leaving a dead loading bar.
+    await installStarterText((message, percent) => {
+      const messageEl = document.getElementById('init-message');
+      const progressEl = document.getElementById('init-progress');
+      const percentEl = document.getElementById('init-percent');
+
+      if (messageEl) messageEl.textContent = message;
+      if (progressEl) progressEl.style.width = `${percent}%`;
+      if (percentEl) percentEl.textContent = `${percent}%`;
+    });
+
+    appElement.innerHTML = '';
   }
-  
+
   // Mount the main app
   const app = mount(App, {
     target: appElement
   });
-  
+
+  // Everything that does not have to happen first happens here, with the app
+  // already on screen behind it.
+  warmPackManifest();
+
   return app;
 }
 
