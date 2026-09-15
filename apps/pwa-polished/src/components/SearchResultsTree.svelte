@@ -53,12 +53,13 @@
 
   /**
    * Verse subtitles are raw stored text — BSB footnotes, KJV pilcrows, NET
-   * <b> marking Old Testament quotations. Route them through the shared preview
-   * renderer so none of that shows and the bold survives; everything else
-   * (notes, journal, commentary, Strong's) keeps the plain escape-then-mark.
+   * <b> marking Old Testament quotations. Route them, and saved verses, through
+   * the shared preview renderer so none of that shows and the bold survives;
+   * everything else (notes, journal, commentary, Strong's) keeps the plain
+   * escape-then-mark.
    */
   function subtitleHtml(result: SearchResult): string {
-    return result.type === "verse"
+    return result.type === "verse" || result.type === "saved"
       ? renderVersePreviewHtml(result.subtitle || "", { highlight: queryRe, maxLength: 150 })
       : highlight(result.subtitle || "");
   }

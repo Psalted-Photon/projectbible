@@ -59,7 +59,7 @@ export function groupResultsByBook(parentKey: string, results: SearchResult[]): 
  */
 export function buildSearchTree(categories: SearchCategory[]): SearchTreeNode[] {
   return categories
-    .filter((category) => category.count > 0 || category.alwaysShow)
+    .filter((category) => category.count > 0)
     .map((category) => {
       const key = category.key;
 

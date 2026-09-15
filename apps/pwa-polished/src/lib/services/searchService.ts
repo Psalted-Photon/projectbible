@@ -1,9 +1,13 @@
+import { get } from 'svelte/store';
 import { IndexedDBSearchIndex } from '../../adapters/SearchIndex';
-import { normalizeBookName } from '../bibleData';
+import { BIBLE_BOOKS, normalizeBookName } from '../bibleData';
 import { openDB } from '../../adapters/db';
 import { IndexedDBUserDataStore } from '../../adapters/UserDataStore';
+import { IndexedDBTextStore } from '../../adapters/TextStore';
 import { syncedJournalStore } from '../../adapters/SyncedJournalStore';
 import { currentLockView } from '../journalLock/lockState';
+import { navigationStore } from '../../stores/navigationStore';
+import { cleanVersePreviewText } from '../verseRendering';
 
 export type SearchCategoryKey =
   | 'bible'
@@ -32,8 +36,6 @@ export interface SearchCategory {
   name: string;
   count: number;
   results: SearchResult[];
-  /** Render the group even at zero results (Saved Verses, until that ships). */
-  alwaysShow?: boolean;
   /** Results were capped — the count is what we're showing, not what exists. */
   truncated?: boolean;
 }
@@ -52,6 +54,9 @@ export interface SearchOptions {
 const CATEGORY_LIMIT = 200;
 const COMMENTARY_SCAN_LIMIT = 400;
 const STRONGS_VERSE_LIMIT = 500;
+
+/** Canonical Genesis → Revelation position, for ordering saved verses. */
+const bookOrder = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
 
 /** Matches G26, g0026, H430 — a Strong's number typed straight into the box. */
 const STRONGS_QUERY = /^([GgHh])\s*0*(\d{1,4})$/;
@@ -100,6 +105,7 @@ export class UnifiedSearchService {
   private static instance: UnifiedSearchService;
   private searchIndex: IndexedDBSearchIndex;
   private userData = new IndexedDBUserDataStore();
+  private textStore = new IndexedDBTextStore();
 
   private constructor() {
     this.searchIndex = new IndexedDBSearchIndex();
@@ -130,11 +136,12 @@ export class UnifiedSearchService {
 
     // Every category is independent, so fetch them together rather than
     // serially — the slowest one sets the pace instead of their sum.
-    const [verses, strongs, notes, journal, characters, encyclopedia, topical, commentaries] = await Promise.all([
+    const [verses, strongs, notes, journal, saved, characters, encyclopedia, topical, commentaries] = await Promise.all([
       this.searchVerses(normalizedQuery, options.limit),
       this.searchStrongs(normalizedQuery),
       this.searchNotes(normalizedQuery),
       this.searchJournal(normalizedQuery),
+      this.searchSaved(normalizedQuery),
       this.searchCharacters(normalizedQuery),
       this.searchEncyclopedia(normalizedQuery, !!options.deep),
       this.searchTopical(normalizedQuery, !!options.deep),
@@ -146,15 +153,14 @@ export class UnifiedSearchService {
       { key: 'strongs', name: "Strong's", count: strongs.length, results: strongs },
       { key: 'notes', name: 'Notes', count: notes.length, results: notes },
       { key: 'journal', name: 'Journal', count: journal.length, results: journal },
-      // Saved verses aren't built yet — the group shows 0 and lights up on its own.
-      { key: 'saved', name: 'Saved Verses', count: 0, results: [], alwaysShow: true },
+      { key: 'saved', name: 'Saved Verses', count: saved.length, results: saved },
       { key: 'characters', name: 'Biblical Characters', count: characters.length, results: characters },
       { key: 'encyclopedia', name: 'Encyclopedia (ISBE)', count: encyclopedia.length, results: encyclopedia },
       { key: 'topical', name: "Topical (Nave's)", count: topical.length, results: topical },
       { key: 'commentaries', name: 'Commentaries', count: commentaries.length, results: commentaries },
     ];
 
-    return categories.filter((c) => c.count > 0 || c.alwaysShow);
+    return categories.filter((c) => c.count > 0);
   }
 
   // ── Bible ────────────────────────────────────────────────────────────────
@@ -392,6 +398,69 @@ export class UnifiedSearchService {
         }));
     } catch (error) {
       console.error('Error searching journal:', error);
+      return [];
+    }
+  }
+
+  // ── Saved verses ─────────────────────────────────────────────────────────
+
+  /**
+   * The same verses Profile lists as Saved Verses: every verse carrying a
+   * highlight or underline, whole-verse or single-word. Matched against their
+   * text in the translation the reader is showing, since that's the text the
+   * list in Profile shows too.
+   */
+  private async searchSaved(query: string): Promise<SearchResult[]> {
+    try {
+      const term = query.toLowerCase();
+      const [highlights, wordHighlights] = await Promise.all([
+        this.userData.getHighlights(),
+        this.userData.getWordHighlights(),
+      ]);
+
+      // One entry per verse, however many highlights sit on it.
+      const refs = new Map<string, { book: string; chapter: number; verse: number }>();
+      for (const { reference } of [...highlights, ...wordHighlights]) {
+        const book = normalizeBookName(reference.book);
+        refs.set(`${book}|${reference.chapter}|${reference.verse}`, {
+          book,
+          chapter: reference.chapter,
+          verse: reference.verse,
+        });
+      }
+      if (!refs.size) return [];
+
+      const translation = get(navigationStore).translation;
+      const verses = await Promise.all(
+        [...refs.values()].map(async (ref) => ({
+          ...ref,
+          text: await this.textStore.getVerse(translation, ref.book, ref.chapter, ref.verse),
+        })),
+      );
+
+      return verses
+        .filter((v) => v.text && cleanVersePreviewText(v.text).toLowerCase().includes(term))
+        .sort(
+          (a, b) =>
+            (bookOrder.get(a.book) ?? 999) - (bookOrder.get(b.book) ?? 999) ||
+            a.chapter - b.chapter ||
+            a.verse - b.verse,
+        )
+        .slice(0, CATEGORY_LIMIT)
+        .map((v) => {
+          const ref = `${v.book} ${v.chapter}:${v.verse}`;
+          return {
+            type: 'saved' as const,
+            title: ref,
+            // Raw stored text, like Bible results — the tree cleans it for display.
+            subtitle: v.text!,
+            reference: ref,
+            data: { book: v.book, chapter: v.chapter, verse: v.verse },
+            score: 1,
+          };
+        });
+    } catch (error) {
+      console.error('Error searching saved verses:', error);
       return [];
     }
   }

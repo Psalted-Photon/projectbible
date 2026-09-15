@@ -359,7 +359,7 @@ Files: `src/adapters/TskReferenceStore.ts`, `src/adapters/CrossReferenceStore.ts
 
 ## 9. Search
 
-Files: `src/lib/services/searchService.ts` (579), `src/components/PowerSearchModal.svelte` (1,370), `src/components/UnifiedSearch.svelte`, `src/components/SearchResultsTree.svelte`, `src/lib/searchTree.ts`, `src/adapters/SearchIndex.ts`, `src/stores/searchStore.ts`, `src/components/HelpModal.svelte`.
+Files: `src/lib/services/searchService.ts` (579), `src/components/PowerSearchModal.svelte` (1,370), `src/components/SearchResultsTree.svelte`, `src/lib/searchTree.ts`, `src/adapters/SearchIndex.ts`, `src/stores/searchStore.ts`, `src/components/HelpModal.svelte`.
 
 ### 9.1 Unified search service
 
@@ -367,7 +367,9 @@ Files: `src/lib/services/searchService.ts` (579), `src/components/PowerSearchMod
 
 Eight categories (`SearchCategoryKey`): `bible`, `strongs`, `notes`, `journal`, `saved`, `characters`, `encyclopedia`, `commentaries`. Result types (`SearchResult`) mirror these one-to-one.
 
-`SearchCategory` carries `alwaysShow` (render the group even at zero results — used by Saved Verses until that ships) and `truncated` (the count shown is what's displayed, not what exists).
+`SearchCategory` carries `truncated` (the count shown is what's displayed, not what exists). A category with no results is left out.
+
+**Saved Verses** — `searchSaved()`: every verse carrying a verse or word highlight (the same set Profile's Saved Verses lists), one entry per verse, matched against its text in the reader's current translation and listed in Bible order. Tapping one opens the verse in the reader.
 
 **Caps** — deliberately per-category so one huge category can't bury the others:
 
