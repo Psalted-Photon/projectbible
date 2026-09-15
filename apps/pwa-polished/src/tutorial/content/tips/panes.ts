@@ -40,6 +40,7 @@ export const PANE_TIPS: Tip[] = [
   section('Interlinear (Greek & Hebrew)', 'Which layers show under each Greek or Hebrew word.'),
   section('Read Aloud (AI voice)', 'The voice, its speed, and what gets read and lit up as it reads. The Wake Alarm is here too.'),
   section('General', 'Tutorial Mode, your time zone, the clock in the top bar, and screen rotation.'),
+  section('Privacy', 'The journal lock: your fingerprint or face before the Journal opens, with your journal scrambled on this device and in the cloud.'),
   section('Storage & Updates', 'Manage Packs, check for a new version, or clear everything out if the app gets stuck.'),
 
   setting('settings-theme', 'Theme', 'Theme', 'Auto follows your device. Sepia and Light are easier in daylight; Custom is yours to set.', true),

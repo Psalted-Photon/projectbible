@@ -101,6 +101,10 @@
 - Calendar view
 - Searchable
 - Keyboard shortcut: J
+- Journal lock: fingerprint or face before it opens, scrambled on the device and in the cloud
+- Recovery code backup; other devices on the same Apple or Google account unlock straight away
+- Hidden from the Profile tab and search while locked; relocks after 0, 1, 5 or 15 minutes away, or on sign-out
+- Manage fingerprint devices, new recovery code, double-confirmed turn-off
 
 ## 13. Reading Plans & Progress
 - Bible in 1 Year
@@ -188,7 +192,7 @@
 ## 20. Account & Sync
 - Optional account
 - Sign up, change name, change password, reset password, delete account
-- Syncs: notes, notebooks, verse and word highlights, saved verses, journal, reading plans, reading progress
+- Syncs: notes, notebooks, verse and word highlights, saved verses, journal, journal lock, reading plans, reading progress
 - Syncs settings: theme, custom theme, Notes and Journal themes, timezone, default translations, interlinear, red-letter, section headings, art icons, themed titles
 - Does not sync: font size, line spacing, verse layout, word wrap, rotation, update checks, tap-word menu style
 - Offline change queue
@@ -200,7 +204,7 @@
 - Profile tabs: Reading Plan, Saved Verses/Notes, Journal, Settings
 
 ## 21. App Settings & Appearance
-- Five collapsible sections with live summaries
+- Six collapsible sections with live summaries
 - No Save button — changes apply instantly
 - Themes: Dark, Light, Sepia, Auto, Custom
 - Per-theme red-letter tuning

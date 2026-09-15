@@ -130,4 +130,11 @@ export const WRITING_TIPS: Tip[] = [
     title: 'A title',
     body: 'Give the day’s entry a title, if you like.',
   },
+  {
+    id: 'journal-lock',
+    area,
+    target: '.jl-card .jl-header',
+    title: 'A locked journal',
+    body: 'Your journal is scrambled until you unlock it with your fingerprint or face. On a device without it, use your recovery code. The lock is in Settings, under Privacy.',
+  },
 ];

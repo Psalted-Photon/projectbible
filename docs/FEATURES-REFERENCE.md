@@ -533,8 +533,9 @@ Files: `src/components/JournalWriter.svelte` (251), `src/components/JournalCalen
 | Calendar | `JournalCalendar.svelte`; also `src/components/CalendarView.svelte` (349). |
 | Keyboard shortcut | **J** opens today's entry in a right-edge window at 50% width. Suppressed while typing in an `input`, `textarea`, or `contenteditable`, and ignored with Ctrl/Meta/Alt held. `src/App.svelte` |
 | Date handling | Uses `localDateStr()` from `src/stores/clockStore.ts`, which respects the `timezone` setting rather than the raw browser timezone. |
-| Search | Journal is one of the eight unified-search categories; `searchService` reads it via `IndexedDBJournalStore` directly. |
+| Search | Journal is one of the eight unified-search categories; `searchService` reads it through `syncedJournalStore` (unscrambled text) and returns nothing while the journal is locked. |
 | Sync | `SyncedJournalStore.ts` — see [20. Account & Sync](#20-account--sync). |
+| Lock | `src/lib/journalLock/`: `crypto.ts` (AES-256-GCM fields tagged `pbj1:`, bound to entry id, date and field), `passkey.ts` (WebAuthn PRF, rp id `hexapla.app`), `recoveryCode.ts` (6×4 base32, PBKDF2), `slotStore.ts` (IndexedDB `journal_lock` / `journal_key_slots`, DB version 35, and Supabase), `lockState.ts` (key in memory, relock timer, `pb_journal_relock_ms`), `sweep.ts` (scramble/unscramble pass after unlock), `actions.ts` (turn on, manage, turn off), `sync.ts` (pull + its own realtime channel). UI: `JournalLockScreen.svelte` (in `WindowContent` and `JournalCalendar`), `JournalLockDialog.svelte`, `JournalLockManage.svelte`, Settings → Privacy. Cloud: `supabase/migrations/011_journal_lock.sql`, including a trigger that refuses readable journal text while the lock is on. |
 
 ## 13. Reading Plans & Progress
 

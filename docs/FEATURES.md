@@ -295,6 +295,23 @@ The repeat colors are deliberately softer and more translucent than the saved-hi
 - **Searchable** — journal entries appear in the main search results.
 - **Keyboard shortcut** — press **J** anywhere in the app to open today's entry in a side pane.
 
+### 12.1 Journal lock
+
+Turn it on in Settings → Privacy, and your fingerprint or face is needed before the Journal opens.
+
+- **Real scrambling, not just a screen.** Every title and entry is scrambled before it's saved on your device or sent to the cloud. The cloud only ever holds scrambled text.
+- **Your phone's own fingerprint or face.** A passkey saved in iCloud Keychain or Google Password Manager unlocks it, with no server deciding whether it was really you.
+- **A recovery code as the backup.** Shown once at setup, for a new device or a browser without fingerprint support.
+- **Your other devices.** An iPad or Mac on the same Apple account, or another Android on the same Google account, unlocks with a fingerprint straight away. A device on another platform uses the recovery code once, then adds its own fingerprint.
+- **Everywhere the journal shows up.** The Journal window, the Profile Journal tab and search all stay hidden while it's locked.
+- **Locks again on its own** after the time you choose (immediately, 1, 5 or 15 minutes away from the app), when you sign out, and whenever the app closes or updates. Unsaved typing is saved first.
+- **Works offline.** Unlocking needs no connection. Turning the lock on or off does, so every entry is safely swapped in the cloud.
+- **Manage it** — see your fingerprint devices and remove one, add this device's fingerprint, or make a new recovery code, which retires the old one.
+- **Turning it off** asks twice, unscrambles everything, and deletes nothing until the readable copies are safely in the cloud.
+- **If the passkey and the recovery code are both lost, the journal is gone for good.** Setup says so and asks you to confirm twice.
+- **Where the fingerprint works:** iPhone on iOS 18.4 or later, Android Chrome and Samsung Internet, Mac, and Windows 11. Firefox on Android and older iPhones use the recovery code. Passkeys belong to hexapla.app, so install the home-screen app from there.
+- **Still visible to the cloud:** which days have an entry, roughly how long each is, and when it was edited.
+
 ## 13. Reading Plans & Progress
 
 ### 13.1 Ready-made plans
@@ -462,6 +479,7 @@ Signing in syncs your personal data across devices:
 - Verse highlights and word highlights
 - Saved verses
 - Journal entries
+- The journal lock and its locked key copies (never the key itself)
 - Reading plans
 - Reading progress
 
@@ -488,7 +506,7 @@ Your profile has four tabs — Reading Plan, Saved Verses/Notes, Journal, and Se
 
 ## 21. App Settings & Appearance
 
-Settings are grouped into five sections you can fold away — Appearance, Reader, Read Aloud, General, and Storage & Updates. Each shows a one-line summary of its own contents while closed, so you can find what you're after without opening all five.
+Settings are grouped into six sections you can fold away — Appearance, Reader, Read Aloud, General, Privacy, and Storage & Updates. Each shows a one-line summary of its own contents while closed, so you can find what you're after without opening all six.
 
 **There's no Save button.** Every change takes effect the moment you make it.
 
