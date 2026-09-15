@@ -12,6 +12,7 @@
  */
 
 import { supabase } from '../supabase/client';
+import { isInstalledApp, isIOS } from '../device';
 
 const VAPID_PUBLIC_KEY: string = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '';
 
@@ -33,25 +34,6 @@ export type PushSetupResult =
         | 'error';
       message: string;
     };
-
-/** True when running as an installed app rather than a browser tab. */
-export function isInstalledApp(): boolean {
-  if (typeof window === 'undefined') return false;
-  // iOS Safari's own flag; the manifest uses display:fullscreen, so check that too.
-  if ((window.navigator as any).standalone === true) return true;
-  return ['standalone', 'fullscreen', 'minimal-ui'].some(
-    (mode) => window.matchMedia(`(display-mode: ${mode})`).matches
-  );
-}
-
-function isIOS(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  // iPadOS 13+ reports as Macintosh, so also look for a touch-capable "Mac".
-  return (
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.userAgent.includes('Macintosh') && navigator.maxTouchPoints > 1)
-  );
-}
 
 /**
  * Whether this browser could ever receive an alarm. Used to explain the

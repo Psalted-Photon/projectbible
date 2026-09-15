@@ -16,6 +16,7 @@
   import { localDateStr } from '../stores/clockStore';
   import SavedVersesPanel from './SavedVersesPanel.svelte';
   import JournalCalendar from './JournalCalendar.svelte';
+  import YourDataPanel from './YourDataPanel.svelte';
   import BrandSpinner from './BrandSpinner.svelte';
   import { User } from 'phosphor-svelte';
 
@@ -710,6 +711,7 @@
                   <div class="auth-error">{passwordError}</div>
                 {/if}
               </div>
+              <YourDataPanel />
               <div class="setting-group danger">
                 <p class="setting-label">Delete Account</p>
                 <button class="danger-btn" on:click={() => (showDeleteConfirm = !showDeleteConfirm)}>
