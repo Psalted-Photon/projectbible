@@ -14,7 +14,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../supabase/client';
 import { syncService } from '../sync/SyncService';
-import { applyRemoteLock, lockJournal } from './lockState';
+import { applyRemoteLock, lockGeneration, lockJournal, onLocalLockChangeSettled } from './lockState';
 import { fetchRemoteLock, fetchRemoteSlots } from './slotStore';
 import type { DBJournalKeySlot } from '../../adapters/db';
 
@@ -23,23 +23,22 @@ async function signedInUserId(): Promise<string | null> {
   return data.session?.user?.id ?? null;
 }
 
-async function applyPulled(userId: string, lockRow: any | null): Promise<void> {
+/** Re-read the lock and slots from the cloud. Throws when that can't be done. */
+export async function refreshLockFromCloud(): Promise<void> {
+  const userId = await signedInUserId();
+  if (!userId) return;
+  const fetchedAt = lockGeneration();
+  const row = await fetchRemoteLock(userId);
   let slots: DBJournalKeySlot[] | null = null;
   try {
     slots = await fetchRemoteSlots(userId);
   } catch (err) {
     console.warn('[JournalLock] Could not fetch key slots; keeping this device\'s copies:', err);
   }
-  await applyRemoteLock(userId, lockRow, slots);
+  await applyRemoteLock(userId, row, slots, fetchedAt);
 }
 
-/** Re-read the lock and slots from the cloud. Throws when that can't be done. */
-export async function refreshLockFromCloud(): Promise<void> {
-  const userId = await signedInUserId();
-  if (!userId) return;
-  const row = await fetchRemoteLock(userId);
-  await applyPulled(userId, row);
-}
+onLocalLockChangeSettled(() => refreshLockFromCloud());
 
 class JournalLockSync {
   private channel: RealtimeChannel | null = null;
@@ -83,8 +82,8 @@ class JournalLockSync {
 }
 
 syncService.registerSyncStore(new JournalLockSync());
-syncService.registerApplyFn('journal_lock', async (rows) => {
-  const userId = await signedInUserId();
-  if (!userId) return;
-  await applyPulled(userId, rows.find((r) => r.user_id === userId) ?? null);
-});
+// Every sync pass pulls journal_lock; the lock re-reads itself rather than
+// using those rows, so a pull that raced one of this device's own lock
+// changes is never applied.
+syncService.registerApplyFn('journal_lock', () =>
+  refreshLockFromCloud().catch((err) => console.warn('[JournalLock] Refresh failed:', err)));

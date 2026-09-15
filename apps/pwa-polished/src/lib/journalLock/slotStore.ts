@@ -65,7 +65,7 @@ export function lockFromRow(row: any, userId: string): DBJournalLock {
     userId,
     state,
     keyId: state === 'off' ? null : (row?.key_id ?? null),
-    updatedAt: row?.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+    updatedAt: row?.updated_at ? new Date(row.updated_at).getTime() : 0,
   };
 }
 

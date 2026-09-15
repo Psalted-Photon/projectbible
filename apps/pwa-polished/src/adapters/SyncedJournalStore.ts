@@ -18,7 +18,7 @@ import { shouldApplyRemoteChange, nowISO } from '../lib/sync/conflictResolver';
 import { reconcileDeletedRows } from '../lib/sync/reconcileDeletes';
 import { generateId, openDB, writeTransaction } from './db';
 import type { DBJournalEntry } from './db';
-import { scramblesWrites } from '../lib/journalLock/lockState';
+import { releaseSlotsIfDone, scramblesWrites } from '../lib/journalLock/lockState';
 import {
   entryIsScrambled, JournalLockedError, openEntry, sealFields, type OpenedJournalEntry,
 } from '../lib/journalLock/entryCrypto';
@@ -43,6 +43,13 @@ export async function applyRemoteJournalEntries(
   rows: any[],
   opts: { fullPull?: boolean } = {},
 ): Promise<void> {
+  await applyRows(rows, opts);
+  // The lock was turned off elsewhere and the readable copies just arrived:
+  // this device no longer needs its key slots.
+  await releaseSlotsIfDone().catch(() => {});
+}
+
+async function applyRows(rows: any[], opts: { fullPull?: boolean }): Promise<void> {
   // Full pulls only: remove entries deleted on another device while this one
   // was offline (pending un-uploaded entries are protected inside).
   if (opts.fullPull) {

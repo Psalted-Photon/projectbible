@@ -21,7 +21,7 @@ import type { SyncOperation } from '../sync/types';
 import { isScrambled } from './crypto';
 import { entryIsScrambled, openEntry, sealFields } from './entryCrypto';
 import {
-  adoptLock, currentLockView, getContentKey, onUnlocked, setJournalWork,
+  currentLockView, getContentKey, onLockChangedWhileUnlocked, onUnlocked, releaseSlotsIfDone, setJournalWork,
 } from './lockState';
 
 export interface SweepResult {
@@ -90,8 +90,7 @@ async function scrubReadableUploads(): Promise<void> {
 }
 
 async function runSweep(): Promise<SweepResult> {
-  const startMode = currentLockView().mode;
-  const target = targetFor(startMode);
+  const target = targetFor(currentLockView().mode);
   const result: SweepResult = { target, changed: 0, failed: 0 };
   if (!getContentKey()) return result;
 
@@ -138,13 +137,7 @@ async function runSweep(): Promise<SweepResult> {
 
   // Lock fully off and nothing scrambled left here: the device's copies of
   // the key slots have done their job.
-  const view = currentLockView();
-  if (view.mode === 'off' && view.slots.length > 0 && result.failed === 0 && getContentKey()) {
-    const stillScrambled = (await local.getEntries()).some(entryIsScrambled);
-    if (!stillScrambled && view.userId) {
-      await adoptLock({ userId: view.userId, state: 'off', keyId: null, updatedAt: Date.now() }, []);
-    }
-  }
+  if (result.failed === 0) await releaseSlotsIfDone();
 
   return result;
 }
@@ -170,6 +163,9 @@ export function sweepJournal(): Promise<SweepResult> {
   return queued;
 }
 
-onUnlocked(() => {
+function sweepInBackground(): void {
   sweepJournal().catch((err) => console.error('[JournalLock] Sweep failed:', err));
-});
+}
+
+onUnlocked(sweepInBackground);
+onLockChangedWhileUnlocked(sweepInBackground);

@@ -217,12 +217,16 @@
   // Lives in lib/journalLock, outside the settings payload: the lock itself
   // syncs with the account, and the relock time stays with each device.
   let relockMs = getRelockAfterMs();
-  let lockDialogOpen = false;
+  let lockDialog: 'turn-on' | 'turn-off' | 'new-code' | null = null;
 
   $: journalLockOn = $journalLock.mode !== 'off';
 
   function toggleJournalLock() {
-    if (!journalLockOn && $userProfileStore.isSignedIn) lockDialogOpen = true;
+    if (!journalLockOn) {
+      if ($userProfileStore.isSignedIn) lockDialog = 'turn-on';
+    } else if ($journalLock.unlocked) {
+      lockDialog = 'turn-off';
+    }
   }
 
   $: clearBackdrop = openSections.appearance;
@@ -902,7 +906,7 @@
         <input
           type="checkbox"
           checked={journalLockOn}
-          disabled={journalLockOn || !$userProfileStore.isSignedIn}
+          disabled={journalLockOn ? !$journalLock.unlocked : !$userProfileStore.isSignedIn}
           on:click|preventDefault={toggleJournalLock}
         />
         <span class="label-text">Journal lock</span>
@@ -929,13 +933,13 @@
       </div>
 
       <div class="setting-group">
-        <JournalLockManage />
+        <JournalLockManage on:dialog={(e) => (lockDialog = e.detail)} />
       </div>
     {/if}
   </SettingsSection>
 
-  {#if lockDialogOpen}
-    <JournalLockDialog on:close={() => (lockDialogOpen = false)} />
+  {#if lockDialog}
+    <JournalLockDialog kind={lockDialog} on:close={() => (lockDialog = null)} />
   {/if}
 
   <SettingsSection title="Storage &amp; Updates" summary={storageSummary} bind:open={openSections.storage}>

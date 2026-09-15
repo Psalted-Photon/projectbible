@@ -1,34 +1,51 @@
 <script lang="ts">
   /**
-   * The step-by-step dialog for turning the journal lock on.
+   * The step-by-step dialogs for the journal lock: turning it on, making a
+   * new recovery code, and turning it off.
    *
-   * Nothing is saved until the last step: cancelling before then forgets the
-   * new key and the passkey it made. Setup says plainly that losing both the
-   * passkey and the recovery code loses the journal, and asks twice — once
-   * up front, and again on the button that turns it on.
+   * Turning on saves nothing until the last step: cancelling before then
+   * forgets the new key and the passkey it made. It says plainly that losing
+   * both the passkey and the recovery code loses the journal, and asks twice —
+   * once up front, and again on the button that turns it on. Turning off also
+   * asks twice.
    */
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { LockSimple, Fingerprint, Copy, Check, Warning } from 'phosphor-svelte';
+  import { LockSimple, LockSimpleOpen, Key, Fingerprint, Copy, Check, Warning } from 'phosphor-svelte';
   import { journalLock } from '../lib/journalLock/lockState';
   import {
-    addFingerprintToDraft, discardDraft, finishTurnOn, JournalLockError, startTurnOn, type LockDraft,
+    addFingerprintToDraft, discardDraft, finishTurnOn, JournalLockError, replaceRecoveryCode,
+    startTurnOn, turnOffJournalLock, UnreadableEntriesError, type LockDraft,
   } from '../lib/journalLock/actions';
   import { fingerprintSupport, PasskeyError } from '../lib/journalLock/passkey';
-  import { lastGroupOf } from '../lib/journalLock/recoveryCode';
+  import { generateRecoveryCode, lastGroupOf } from '../lib/journalLock/recoveryCode';
+
+  export let kind: 'turn-on' | 'new-code' | 'turn-off' = 'turn-on';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
-  type Step = 'intro' | 'preparing' | 'fingerprint' | 'code' | 'confirm' | 'working' | 'done';
+  type Step =
+    | 'intro' | 'preparing' | 'fingerprint' | 'code' | 'confirm'
+    | 'off-confirm' | 'unreadable'
+    | 'working' | 'done';
 
-  let step: Step = 'intro';
+  const TITLES = {
+    'turn-on': 'Lock your journal',
+    'new-code': 'New recovery code',
+    'turn-off': 'Turn off the journal lock',
+  };
+
+  let step: Step = kind === 'new-code' ? 'code' : 'intro';
   let understood = false;
   let draft: LockDraft | null = null;
+  /** The new code, for 'new-code'. Turning on keeps its code in the draft. */
+  let newCode = kind === 'new-code' ? generateRecoveryCode() : '';
   let error = '';
   let busy = false;
   let fingerprintUnavailable = false;
   let copied = false;
   let typedGroup = '';
-  let scrambledTotal = 0;
+  let workedTotal = 0;
+  let unreadableCount = 0;
 
   onMount(() => {
     fingerprintSupport().then((s) => (fingerprintUnavailable = s === 'no'));
@@ -37,6 +54,7 @@
   onDestroy(() => {
     // Closed partway: nothing was saved, so leave nothing behind.
     if (draft && step !== 'working' && step !== 'done') discardDraft(draft);
+    newCode = '';
   });
 
   function portal(node: HTMLElement) {
@@ -44,12 +62,13 @@
     return { destroy: () => node.remove() };
   }
 
-  $: code = draft?.recoveryCode ?? '';
+  $: code = kind === 'new-code' ? newCode : (draft?.recoveryCode ?? '');
   // Read the typed group the way a recovery code is read: any case, and the
   // look-alike letters as the digits they resemble.
   $: typedNormal = typedGroup.toUpperCase().replace(/\s/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
   $: groupMatches = !!code && typedNormal === lastGroupOf(code);
   $: canClose = step !== 'working' && step !== 'preparing';
+  $: if ($journalLock.work) workedTotal = $journalLock.work.total;
 
   function close() {
     if (!canClose) return;
@@ -65,9 +84,11 @@
         return 'This browser can’t use a fingerprint for the journal.';
       }
     }
-    console.error('[JournalLock] Setup step failed:', err);
+    console.error('[JournalLock] Step failed:', err);
     return 'Something went wrong. Try again.';
   }
+
+  // ── Turning on ──
 
   async function prepare() {
     step = 'preparing';
@@ -110,13 +131,19 @@
     }
   }
 
-  async function turnOn() {
-    if (!draft || !groupMatches) return;
+  /** The recovery code was typed back: turn the lock on, or save the new code. */
+  async function saveCode() {
+    if (!groupMatches) return;
     error = '';
     step = 'working';
     try {
-      await finishTurnOn(draft);
-      draft = null;
+      if (kind === 'new-code') {
+        await replaceRecoveryCode(newCode);
+        newCode = '';
+      } else if (draft) {
+        await finishTurnOn(draft);
+        draft = null;
+      }
       step = 'done';
     } catch (err) {
       error = problemText(err);
@@ -124,20 +151,58 @@
     }
   }
 
-  $: if ($journalLock.work) scrambledTotal = $journalLock.work.total;
+  // ── Turning off ──
+
+  async function turnOff(leaveUnreadable = false) {
+    error = '';
+    step = 'working';
+    try {
+      await turnOffJournalLock({ leaveUnreadable });
+      step = 'done';
+    } catch (err) {
+      if (err instanceof UnreadableEntriesError) {
+        unreadableCount = err.count;
+        step = 'unreadable';
+      } else {
+        error = problemText(err);
+        step = 'off-confirm';
+      }
+    }
+  }
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="ld-overlay" use:portal on:click={close}>
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="ld-card" on:click|stopPropagation role="dialog" aria-modal="true" aria-label="Lock your journal" tabindex="-1">
+  <div class="ld-card" on:click|stopPropagation role="dialog" aria-modal="true" aria-label={TITLES[kind]} tabindex="-1">
     <div class="ld-header">
-      <span class="ld-icon"><LockSimple size={18} weight="bold" /><span class="icon-overlay"><LockSimple size={18} weight="thin" /></span></span>
-      <span class="ld-title">Lock your journal</span>
+      <span class="ld-icon">
+        {#if kind === 'turn-off'}
+          <LockSimpleOpen size={18} weight="bold" /><span class="icon-overlay"><LockSimpleOpen size={18} weight="thin" /></span>
+        {:else if kind === 'new-code'}
+          <Key size={18} weight="bold" /><span class="icon-overlay"><Key size={18} weight="thin" /></span>
+        {:else}
+          <LockSimple size={18} weight="bold" /><span class="icon-overlay"><LockSimple size={18} weight="thin" /></span>
+        {/if}
+      </span>
+      <span class="ld-title">{TITLES[kind]}</span>
     </div>
 
     <div class="ld-body">
-      {#if step === 'intro' || step === 'preparing'}
+      {#if kind === 'turn-off' && step === 'intro'}
+        <p>Your journal will be unscrambled, on this device and in the cloud, and the Journal will open without your fingerprint.</p>
+        <p class="ld-quiet">Nothing is deleted until the readable copies are safely in the cloud. Keep the app open and connected until it finishes.</p>
+      {:else if step === 'off-confirm'}
+        <div class="ld-warn">
+          <Warning size={18} weight="bold" />
+          <span>Are you sure? Anyone who can open the app on your devices will be able to read your journal.</span>
+        </div>
+      {:else if step === 'unreadable'}
+        <div class="ld-warn">
+          <Warning size={18} weight="bold" />
+          <span>{unreadableCount} journal {unreadableCount === 1 ? 'entry' : 'entries'} couldn’t be opened. If you turn the lock off anyway, {unreadableCount === 1 ? 'it stays' : 'they stay'} scrambled for good.</span>
+        </div>
+      {:else if step === 'intro' || step === 'preparing'}
         <p>Your fingerprint or face will be needed before the Journal opens.</p>
         <p>Every title and entry gets scrambled, on this device and in the cloud. Only your own devices can unscramble them.</p>
         <p>You’ll also get a recovery code as a backup, for a new device or if the fingerprint ever stops working.</p>
@@ -158,7 +223,11 @@
           <p class="ld-quiet">A passkey called “Hexapla journal lock” gets saved in your password manager. Don’t delete it.</p>
         {/if}
       {:else if step === 'code'}
-        <p>This is your recovery code. It’s shown only this once.</p>
+        {#if kind === 'new-code'}
+          <p>This is your new recovery code. It’s shown only this once. Your old code stops working as soon as this one is saved.</p>
+        {:else}
+          <p>This is your recovery code. It’s shown only this once.</p>
+        {/if}
         <div class="ld-code" aria-label="Recovery code">{code}</div>
         <button class="ld-btn-secondary ld-copy" on:click={copyCode}>
           {#if copied}<Check size={16} weight="bold" /> Copied{:else}<Copy size={16} weight="bold" /> Copy{/if}
@@ -176,25 +245,40 @@
           autocapitalize="characters"
           spellcheck="false"
         />
-        <div class="ld-warn">
-          <Warning size={18} weight="bold" />
-          <span>Last check: without your fingerprint or this code, your journal can’t be opened.</span>
-        </div>
+        {#if kind === 'turn-on'}
+          <div class="ld-warn">
+            <Warning size={18} weight="bold" />
+            <span>Last check: without your fingerprint or this code, your journal can’t be opened.</span>
+          </div>
+        {/if}
       {:else if step === 'working'}
         {#if $journalLock.work}
-          <p>Scrambling your journal… {$journalLock.work.done} of {$journalLock.work.total}</p>
+          <p>{$journalLock.work.kind === 'scramble' ? 'Scrambling' : 'Unscrambling'} your journal… {$journalLock.work.done} of {$journalLock.work.total}</p>
           <div class="ld-bar"><div style="width: {Math.round(($journalLock.work.done / Math.max(1, $journalLock.work.total)) * 100)}%"></div></div>
         {:else}
-          <p>Saving your lock…</p>
+          <p>{kind === 'turn-off' ? 'Making sure the cloud has the readable copies…' : 'Saving…'}</p>
           <div class="ld-bar indeterminate"><div></div></div>
         {/if}
-        <p class="ld-quiet">Keep the app open until this finishes. If it’s interrupted, it picks up where it stopped next time you unlock.</p>
+        <p class="ld-quiet">
+          Keep the app open until this finishes.
+          {#if kind === 'turn-on'}If it’s interrupted, it picks up where it stopped next time you unlock.{/if}
+          {#if kind === 'turn-off'}If it’s interrupted, turn the lock off again and it carries on.{/if}
+        </p>
       {:else if step === 'done'}
-        <p>Your journal is locked.</p>
-        {#if scrambledTotal > 0}
-          <p class="ld-quiet">{scrambledTotal} {scrambledTotal === 1 ? 'entry was' : 'entries were'} scrambled.</p>
+        {#if kind === 'turn-off'}
+          <p>The journal lock is off.</p>
+          {#if workedTotal > 0}
+            <p class="ld-quiet">{workedTotal} {workedTotal === 1 ? 'entry was' : 'entries were'} unscrambled.</p>
+          {/if}
+        {:else if kind === 'new-code'}
+          <p>Your new recovery code is saved. The old one no longer works.</p>
+        {:else}
+          <p>Your journal is locked.</p>
+          {#if workedTotal > 0}
+            <p class="ld-quiet">{workedTotal} {workedTotal === 1 ? 'entry was' : 'entries were'} scrambled.</p>
+          {/if}
+          <p class="ld-quiet">It locks again when you leave the app for longer than the time set in Settings → Privacy.</p>
         {/if}
-        <p class="ld-quiet">It locks again when you leave the app for longer than the time set in Settings → Privacy.</p>
       {/if}
 
       {#if error}
@@ -203,7 +287,16 @@
     </div>
 
     <div class="ld-actions">
-      {#if step === 'intro' || step === 'preparing'}
+      {#if kind === 'turn-off' && step === 'intro'}
+        <button class="ld-btn-secondary" on:click={close}>Cancel</button>
+        <button class="ld-btn-primary" on:click={() => { error = ''; step = 'off-confirm'; }}>Continue</button>
+      {:else if step === 'off-confirm'}
+        <button class="ld-btn-secondary" on:click={close}>Cancel</button>
+        <button class="ld-btn-danger" on:click={() => turnOff(false)}>Turn off the lock</button>
+      {:else if step === 'unreadable'}
+        <button class="ld-btn-secondary" on:click={close}>Cancel</button>
+        <button class="ld-btn-danger" on:click={() => turnOff(true)}>Turn off anyway</button>
+      {:else if step === 'intro' || step === 'preparing'}
         <button class="ld-btn-secondary" on:click={close} disabled={step === 'preparing'}>Cancel</button>
         <button class="ld-btn-primary" on:click={prepare} disabled={!understood || step === 'preparing'}>
           {step === 'preparing' ? 'Finishing your sync…' : 'Continue'}
@@ -222,7 +315,11 @@
         <button class="ld-btn-primary" on:click={() => { error = ''; step = 'confirm'; }}>I’ve saved it</button>
       {:else if step === 'confirm'}
         <button class="ld-btn-secondary" on:click={() => { error = ''; step = 'code'; }}>Show the code again</button>
-        <button class="ld-btn-danger" on:click={turnOn} disabled={!groupMatches}>Turn on the lock</button>
+        {#if kind === 'new-code'}
+          <button class="ld-btn-primary" on:click={saveCode} disabled={!groupMatches}>Save the new code</button>
+        {:else}
+          <button class="ld-btn-danger" on:click={saveCode} disabled={!groupMatches}>Turn on the lock</button>
+        {/if}
       {:else if step === 'done'}
         <button class="ld-btn-primary" on:click={close}>Done</button>
       {/if}

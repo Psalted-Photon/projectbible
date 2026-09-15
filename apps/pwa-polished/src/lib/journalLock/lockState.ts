@@ -121,6 +121,14 @@ export function noteScrambledSeen(): void {
 type Hook = () => void | Promise<void>;
 const beforeLockHooks = new Set<Hook>();
 const unlockedHooks = new Set<Hook>();
+const lockChangedHooks = new Set<Hook>();
+const settledHooks = new Set<Hook>();
+
+function fire(hooks: Set<Hook>, label: string): void {
+  for (const fn of [...hooks]) {
+    void Promise.resolve().then(fn).catch((err) => console.error(`[JournalLock] ${label} task failed:`, err));
+  }
+}
 
 /** Runs before the key is dropped — the journal writer saves unsaved typing here. */
 export function onBeforeLock(fn: Hook): () => void {
@@ -132,6 +140,45 @@ export function onBeforeLock(fn: Hook): () => void {
 export function onUnlocked(fn: Hook): () => void {
   unlockedHooks.add(fn);
   return () => unlockedHooks.delete(fn);
+}
+
+/** Runs when another device turns the lock on, off or turning off while this one is unlocked. */
+export function onLockChangedWhileUnlocked(fn: Hook): () => void {
+  lockChangedHooks.add(fn);
+  return () => lockChangedHooks.delete(fn);
+}
+
+/** Runs when this device's own lock change has finished — the cloud gets re-read then. */
+export function onLocalLockChangeSettled(fn: Hook): () => void {
+  settledHooks.add(fn);
+  return () => settledHooks.delete(fn);
+}
+
+// ── Local changes versus cloud refreshes ──────────────────────────────────
+//
+// While this device is changing the lock (turning it on or off, adding a
+// fingerprint), what the cloud says is mid-change and must not be applied: a
+// refresh fetched between two of its writes would flip the lock back. Cloud
+// state is ignored while a change runs, and any refresh that started before a
+// change began or ended is dropped; a fresh one runs once the change settles.
+
+let localChanges = 0;
+let generation = 0;
+
+export function lockGeneration(): number {
+  return generation;
+}
+
+export async function withLocalLockChange<T>(fn: () => Promise<T>): Promise<T> {
+  localChanges++;
+  generation++;
+  try {
+    return await fn();
+  } finally {
+    localChanges--;
+    generation++;
+    if (localChanges === 0) fire(settledHooks, 'after-change');
+  }
 }
 
 async function runBeforeLockHooks(): Promise<void> {
@@ -156,9 +203,7 @@ export async function unlockWith(key: Uint8Array<ArrayBuffer>): Promise<void> {
   journalKey = key;
   unlockedKeyId = id;
   publish({});
-  for (const fn of [...unlockedHooks]) {
-    void Promise.resolve().then(fn).catch((err) => console.error('[JournalLock] after-unlock task failed:', err));
-  }
+  fire(unlockedHooks, 'after-unlock');
 }
 
 function dropKey(): void {
@@ -264,6 +309,7 @@ async function hasScrambledEntries(): Promise<boolean> {
 export async function adoptLock(lock: DBJournalLock, slots: DBJournalKeySlot[]): Promise<void> {
   await writeLocalLock(lock);
   await replaceLocalSlots(slots);
+  cloudChecked = true;
   if (lock.state === 'off' && slots.length === 0) scrambledSeen = false;
   publish({ userId: lock.userId, mode: lock.state, keyId: lock.keyId, slots });
 }
@@ -271,8 +317,16 @@ export async function adoptLock(lock: DBJournalLock, slots: DBJournalKeySlot[]):
 /**
  * What the cloud says, for the signed-in account. `slots` is null when they
  * couldn't be fetched, in which case the device's copies are kept.
+ * `fetchedAt` is lockGeneration() from before the fetch; a stale answer is
+ * dropped (see withLocalLockChange).
  */
-export async function applyRemoteLock(userId: string, row: any | null, slots: DBJournalKeySlot[] | null): Promise<void> {
+export async function applyRemoteLock(
+  userId: string,
+  row: any | null,
+  slots: DBJournalKeySlot[] | null,
+  fetchedAt: number,
+): Promise<void> {
+  if (localChanges > 0 || fetchedAt !== generation) return;
   const lock = lockFromRow(row, userId);
   const before = get(store);
   const local = before.userId === userId ? before.slots : [];
@@ -297,12 +351,30 @@ export async function applyRemoteLock(userId: string, row: any | null, slots: DB
   if (lock.state === 'off' && nextSlots.length === 0) scrambledSeen = false;
 
   // The lock was turned off and on again elsewhere: the key in memory is stale.
-  if (contentKey && lock.state === 'on' && lock.keyId && unlockedKeyId !== lock.keyId) {
+  if (contentKey && lock.state !== 'off' && lock.keyId && unlockedKeyId !== lock.keyId) {
     await runBeforeLockHooks();
     dropKey();
   }
 
   publish({ userId, mode: lock.state, keyId: lock.keyId, slots: nextSlots });
+
+  // Turned on or off elsewhere while this device holds the key: bring this
+  // device's copies in line.
+  if (contentKey && before.mode !== lock.state) fire(lockChangedHooks, 'lock-changed');
+}
+
+/**
+ * With the lock off, the device keeps its key slots only while scrambled
+ * text remains here. Called after unscrambled entries arrive from the cloud,
+ * and after this device's own unscramble pass.
+ */
+export async function releaseSlotsIfDone(): Promise<void> {
+  const view = get(store);
+  if (view.mode !== 'off' || view.slots.length === 0) return;
+  if (await hasScrambledEntries()) return;
+  await replaceLocalSlots([]);
+  scrambledSeen = false;
+  publish({ slots: [] });
 }
 
 async function loadLocal(): Promise<void> {
