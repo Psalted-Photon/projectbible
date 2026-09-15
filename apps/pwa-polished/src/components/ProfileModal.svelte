@@ -42,7 +42,6 @@
 
   let profileName: string | null = null;
   let profileEmail: string | null = null;
-  let userId: string | null = null;
   let isSignedIn = false;
   let passwordsMatch = false;
 
@@ -79,7 +78,6 @@
     const unsubscribeProfile = userProfileStore.subscribe((profile) => {
       profileName = profile.name;
       profileEmail = profile.email;
-      userId = profile.userId;
       isSignedIn = profile.isSignedIn;
       if (profile.name && nameUpdate.trim() === '') {
         nameUpdate = profile.name;
@@ -394,7 +392,7 @@
     // Going through navigateTo makes history behave like every other link, and
     // the mark goes on verse 1 without a scroll target so the chapter title
     // stays in view.
-    navigationStore.pushHistory(get(navigationStore), 'history');
+    navigationStore.pushHistory($navigationStore, 'history');
     navigationStore.navigateTo($navigationStore.translation, book, chapter);
     navigationStore.setLinkHighlight(book, chapter, 1);
     profileModalStore.close();

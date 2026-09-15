@@ -1,5 +1,5 @@
 import type { PackManager, PackInfo } from '@projectbible/core';
-import { readTransaction, writeTransaction, batchWriteTransaction, type DBPack, type DBVerse } from './db.js';
+import { readTransaction, writeTransaction, type DBPack } from './db.js';
 
 export class IndexedDBPackManager implements PackManager {
   async listInstalled(): Promise<PackInfo[]> {
@@ -16,7 +16,7 @@ export class IndexedDBPackManager implements PackManager {
           const packs: PackInfo[] = dbPacks.map(p => ({
             id: p.id,
             version: p.version,
-            type: p.type,
+            type: p.type as PackInfo['type'],
             translationId: p.translationId,
             translationName: p.translationName,
             license: p.license,

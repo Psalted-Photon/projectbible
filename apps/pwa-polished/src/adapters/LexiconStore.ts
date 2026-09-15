@@ -5,7 +5,7 @@ import type {
   WordOccurrence,
   Pronunciation
 } from '@projectbible/core';
-import { openDB, readTransaction, writeTransaction, batchWriteTransaction } from './db';
+import { openDB, readTransaction } from './db';
 import type { DBStrongEntry, DBPronunciation, DBMorphology, DBWordOccurrence } from './db';
 
 /**
@@ -198,7 +198,7 @@ export class IndexedDBLexiconStore implements LexiconStore {
     }
     
     return {
-      word: db.text || db.word,
+      word: db.text || db.word || '',
       lemma: db.lemma,
       strongsId: db.strongsId,
       parsing,

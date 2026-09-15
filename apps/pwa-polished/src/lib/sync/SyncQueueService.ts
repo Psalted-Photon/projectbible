@@ -137,7 +137,8 @@ class SyncQueueService {
       } else { // UPDATE
         if (type === 'DELETE') continue; // row is gone — nothing to update
         if (data) {
-          data = { ...data, ...op.data };
+          const earlier: Record<string, any> = data;
+          data = { ...earlier, ...op.data };
         } else {
           type = 'UPDATE';
           data = { ...op.data };
@@ -321,19 +322,20 @@ class SyncQueueService {
           // Use server-side merge RPC so chapters_read is union-merged rather
           // than overwritten. No progress is ever lost when two devices sync
           // at different times — the Postgres function handles the merge atomically.
+          const row = op.data!; // an INSERT always carries its row
           const { error } = await supabase.rpc('upsert_reading_progress', {
-            p_id:                  op.data.id,
+            p_id:                  row.id,
             p_user_id:             userId,
-            p_plan_id:             op.data.plan_id,
-            p_day_number:          op.data.day_number,
-            p_completed:           op.data.completed,
-            p_created_at:          op.data.created_at,
-            p_completed_at:        op.data.completed_at ?? null,
-            p_started_reading_at:  op.data.started_reading_at ?? null,
-            p_chapters_read:       op.data.chapters_read,
-            p_catch_up_adjustment: op.data.catch_up_adjustment ?? null,
-            p_updated_at:          op.data.updated_at,
-            p_harmony_sections:    op.data.harmony_sections ?? null,
+            p_plan_id:             row.plan_id,
+            p_day_number:          row.day_number,
+            p_completed:           row.completed,
+            p_created_at:          row.created_at,
+            p_completed_at:        row.completed_at ?? null,
+            p_started_reading_at:  row.started_reading_at ?? null,
+            p_chapters_read:       row.chapters_read,
+            p_catch_up_adjustment: row.catch_up_adjustment ?? null,
+            p_updated_at:          row.updated_at,
+            p_harmony_sections:    row.harmony_sections ?? null,
           });
           if (error) throw error;
         } else {

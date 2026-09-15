@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable } from 'svelte/store';
 
 export type PaneType = 'settings' | 'packs' | 'notes' | 'commentaries' | 'wakealarm';
 
@@ -13,7 +13,7 @@ export interface PaneState {
 }
 
 function createPaneStore() {
-  const { subscribe, set, update } = writable<PaneState[]>([]);
+  const { subscribe, update } = writable<PaneState[]>([]);
 
   return {
     subscribe,

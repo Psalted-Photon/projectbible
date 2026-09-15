@@ -81,7 +81,7 @@ export async function fetchWithProgress(
   if (!reader) return response.blob();
 
   let loaded = 0;
-  const chunks: Uint8Array[] = [];
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;

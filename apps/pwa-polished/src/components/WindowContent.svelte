@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ComponentProps } from "svelte";
   import type { WindowState } from "../lib/stores/windowStore";
   import WindowContentSelector from "./WindowContentSelector.svelte";
   import BibleReader from "./BibleReader.svelte";
@@ -19,6 +20,12 @@
   // these per docked window; keeping the list here means a new content type is
   // added once rather than copied into all four edge containers.
   export let panel: WindowState;
+
+  // contentState is one loose shape shared by every window type. Each branch
+  // below knows which work it holds, so it narrows the fields it passes on.
+  type IsbeProps = ComponentProps<typeof IsbeContent>;
+  type PersonProps = ComponentProps<typeof PersonContent>;
+  type NavesProps = ComponentProps<typeof NavesContent>;
 </script>
 
 {#if panel.contentType === 'selector'}
@@ -51,29 +58,29 @@
     entryId={panel.contentState?.entryId ?? null}
     placeId={panel.contentState?.placeId ?? null}
     primaryName={panel.contentState?.primaryName ?? ''}
-    initialTab={panel.contentState?.tab ?? null}
+    initialTab={(panel.contentState?.tab ?? null) as IsbeProps['initialTab']}
     initialExpanded={panel.contentState?.expanded ?? {}}
     initialExpandedBooks={panel.contentState?.expandedBooks ?? []}
     initialVisited={panel.contentState?.visited ?? []}
     initialScrollTop={panel.contentState?.scrollTop ?? 0}
-    initialTrail={panel.contentState?.trail ?? []}
+    initialTrail={(panel.contentState?.trail ?? []) as IsbeProps['initialTrail']}
   />
 {:else if panel.contentType === 'person'}
   <PersonContent
     windowId={panel.id}
     personId={panel.contentState?.personId ?? null}
-    initialTrail={panel.contentState?.trail ?? []}
+    initialTrail={(panel.contentState?.trail ?? []) as PersonProps['initialTrail']}
   />
 {:else if panel.contentType === 'naves'}
   <NavesContent
     windowId={panel.id}
     topicId={panel.contentState?.topicId ?? null}
     primaryName={panel.contentState?.primaryName ?? ''}
-    initialTab={panel.contentState?.tab ?? null}
+    initialTab={(panel.contentState?.tab ?? null) as NavesProps['initialTab']}
     initialExpanded={panel.contentState?.expanded ?? {}}
     initialExpandedBooks={panel.contentState?.expandedBooks ?? []}
     initialScrollTop={panel.contentState?.scrollTop ?? 0}
-    initialTrail={panel.contentState?.trail ?? []}
+    initialTrail={(panel.contentState?.trail ?? []) as NavesProps['initialTrail']}
   />
 {:else if panel.contentType === 'notes'}
   <NotesPane windowId={panel.id} contentState={panel.contentState} edge={panel.edge} />

@@ -118,7 +118,6 @@ export class IndexedDBReadingHistoryStore implements ReadingHistoryStore {
     // Count consecutive days from today
     let streak = 0;
     const today = new Date();
-    const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
     
     for (let i = 0; i < uniqueDays.length; i++) {
       const expectedDate = new Date(today);

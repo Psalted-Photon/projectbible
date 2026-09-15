@@ -1133,7 +1133,7 @@
       <div class="facts">
         {#if place?.type}<div><span class="k">Type</span><span>{titleCaseType(place.type)}</span></div>{/if}
         {#if place?.modernName}<div><span class="k">Modern</span><span>{place.modernName}</span></div>{/if}
-        {#if hasMap}<div><span class="k">Coordinates</span><span>{place.latitude?.toFixed(4)}, {place.longitude?.toFixed(4)}</span></div>{/if}
+        {#if hasMap}<div><span class="k">Coordinates</span><span>{place?.latitude?.toFixed(4)}, {place?.longitude?.toFixed(4)}</span></div>{/if}
         {#if hasVerses}<div><span class="k">Appears in</span><span>{verses.length} verse{verses.length === 1 ? "" : "s"}</span></div>{/if}
       </div>
       {#if entry?.lead}
@@ -1264,7 +1264,7 @@
       <div class="turn">
         {#if neighbors.prev}
           {@const prev = neighbors.prev}
-          <button class="turn-btn" on:click={() => jumpToEntry(prev.id, prev.name)} title="Previous entry">
+          <button class="turn-btn" on:click={() => jumpToEntry(Number(prev.id), prev.name)} title="Previous entry">
             ← <span class="turn-name">{prev.name}</span>
           </button>
         {:else}
@@ -1272,7 +1272,7 @@
         {/if}
         {#if neighbors.next}
           {@const next = neighbors.next}
-          <button class="turn-btn next" on:click={() => jumpToEntry(next.id, next.name)} title="Next entry">
+          <button class="turn-btn next" on:click={() => jumpToEntry(Number(next.id), next.name)} title="Next entry">
             <span class="turn-name">{next.name}</span> →
           </button>
         {/if}

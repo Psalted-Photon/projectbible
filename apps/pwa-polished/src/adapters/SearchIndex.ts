@@ -116,7 +116,7 @@ export class IndexedDBSearchIndex implements SearchIndex {
    * Search for verses containing a Strong's number
    * Note: This requires morphology data which may not be in all packs
    */
-  async searchStrong(strongId: string): Promise<SearchResult[]> {
+  async searchStrong(_strongId: string): Promise<SearchResult[]> {
     // TODO: Implement when morphology packs are available
     // For now, return empty array
     console.warn('Strong\'s search not yet implemented - requires morphology data');

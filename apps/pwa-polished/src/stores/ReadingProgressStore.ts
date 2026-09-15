@@ -1,4 +1,4 @@
-import { openDB, readTransaction, writeTransaction, batchWriteTransaction } from "../adapters/db";
+import { openDB, readTransaction, writeTransaction } from "../adapters/db";
 import { normalizeBookName } from "../lib/bibleData";
 
 export type ChapterActionType = "checked" | "unchecked";

@@ -526,7 +526,7 @@ export class PackLoader {
     await sqliteWorker.openDatabase(packId, data);
     
     // Extract data based on pack type
-    const extractedData = await sqliteWorker.extractPack(packId, pack.type);
+    await sqliteWorker.extractPack(packId, pack.type);
     
     // Store extracted data in app's IndexedDB
     // (This would integrate with existing databaseService)

@@ -1,5 +1,4 @@
 import type { BCV } from '@projectbible/core';
-import { readTransaction } from './db.js';
 import type { DBCommentaryEntry } from './db.js';
 
 // Maps canonical app book names to the names stored in IndexedDB packs

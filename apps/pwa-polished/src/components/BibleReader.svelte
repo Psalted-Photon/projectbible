@@ -111,7 +111,6 @@
   import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
   import { readingSessionStore } from "../stores/readingSessionStore";
   import { readingProgressStore } from "../stores/ReadingProgressStore";
-  import { localDateStr } from "../stores/clockStore";
   import type { HarmonyPassage, HarmonySection } from "@projectbible/core";
 
   const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans';
@@ -4832,7 +4831,6 @@
           } catch (error) {
             console.error('Lexicon lookup error:', error);
             lexicalModalStore.open({
-              characterData,
               selectedText: text,
               strongsId: undefined,
               morphologyData: capturedMorphology,

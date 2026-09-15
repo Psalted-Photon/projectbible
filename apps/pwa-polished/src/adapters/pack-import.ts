@@ -979,7 +979,7 @@ export async function importPackFromBytes(
         }
 
         // Import each edition as a separate virtual pack
-        for (const [editionId, editionName, testament, description] of editionsRows[0].values) {
+        for (const [editionId, editionName, , description] of editionsRows[0].values) {
           const editionPackId = `${packInfo.id}-${editionId}`;
 
           // Create a pack entry for this edition
@@ -2763,9 +2763,3 @@ export async function importPackFromUrl(url: string): Promise<void> {
   await importPackFromSQLite(file);
 }
 
-/**
- * Export pack data from IndexedDB to SQLite file (future feature)
- */
-export async function exportPackToSQLite(packId: string): Promise<Blob> {
-  throw new Error('Pack export not yet implemented');
-}

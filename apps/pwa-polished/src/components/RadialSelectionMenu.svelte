@@ -254,7 +254,7 @@
    * where blurred backdrops go wrong, and a transform here would fight the one
    * placing the pill.
    */
-  const pillIn = () =>
+  const pillIn = (_node: Element) =>
     reduceMotion
       ? { duration: 120, easing: cubicOut, css: (t: number) => `opacity: ${t};` }
       : {
@@ -264,7 +264,7 @@
           css: (t: number) => `opacity: ${t};`,
         };
 
-  const pillOut = () => ({
+  const pillOut = (_node: Element) => ({
     duration: POP_MS * 0.55,
     easing: cubicOut,
     css: (t: number) => `opacity: ${t};`,

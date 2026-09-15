@@ -13,12 +13,16 @@ console.log('🔥 IMPORTS LOADED');
 
 console.log('🔥 GETTING APP ELEMENT');
 
-const appElement = document.getElementById('app');
-
-if (!appElement) {
-  console.error('❌ NO APP ELEMENT FOUND!');
-  throw new Error('No #app element found');
+function getAppElement(): HTMLElement {
+  const element = document.getElementById('app');
+  if (!element) {
+    console.error('❌ NO APP ELEMENT FOUND!');
+    throw new Error('No #app element found');
+  }
+  return element;
 }
+
+const appElement = getAppElement();
 
 console.log('🔥 APP ELEMENT FOUND:', appElement);
 

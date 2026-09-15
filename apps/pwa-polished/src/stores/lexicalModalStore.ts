@@ -15,7 +15,7 @@ export interface LexicalModalState {
 }
 
 function createLexicalModalStore() {
-  const { subscribe, set, update } = writable<LexicalModalState>({
+  const { subscribe, set } = writable<LexicalModalState>({
     isOpen: false,
     selectedText: '',
     strongsId: undefined,

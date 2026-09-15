@@ -1,8 +1,13 @@
 // Type declarations for sql.js
 declare module 'sql.js' {
+  export interface QueryExecResult {
+    columns: string[];
+    values: any[][];
+  }
+
   export interface Database {
     run(sql: string, params?: any[]): void;
-    exec(sql: string): any[];
+    exec(sql: string, params?: any[]): QueryExecResult[];
     prepare(sql: string): Statement;
     export(): Uint8Array;
     close(): void;

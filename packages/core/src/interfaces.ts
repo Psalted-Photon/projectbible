@@ -63,6 +63,7 @@ export interface MorphologyInfo {
   strongsId?: string; // Link to Strong's
   parsing: MorphologyParsing;
   gloss?: string; // English gloss
+  transliteration?: string; // Romanized form
   language: 'greek' | 'hebrew' | 'aramaic';
 }
 

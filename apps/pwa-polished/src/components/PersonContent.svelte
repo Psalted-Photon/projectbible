@@ -6,7 +6,6 @@
   import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { navesModalStore } from "../stores/navesModalStore";
   import { personModalStore } from "../stores/personModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import IndexList from "./library/IndexList.svelte";

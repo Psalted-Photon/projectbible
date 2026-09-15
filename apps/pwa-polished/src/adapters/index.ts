@@ -21,7 +21,7 @@ export { SyncedNotebookStore } from './SyncedNotebookStore.js';
 export { IndexedDBCrossReferenceStore } from './CrossReferenceStore.js';
 export { IndexedDBLexiconStore } from './LexiconStore.js';
 export { IndexedDBReadingHistoryStore } from './ReadingHistoryStore.js';
-export { importPackFromSQLite, importPackFromBytes, exportPackToSQLite } from './pack-import.js';
+export { importPackFromSQLite, importPackFromBytes } from './pack-import.js';
 
 export {
   getSettings,

@@ -253,7 +253,6 @@
           strongsId={lexical.strongsId}
           morphologyData={lexical.morphologyData}
           lexicalEntries={lexical.lexicalEntries}
-          characterData={lexical.characterData ?? null}
           initialTab={saved.dictionary?.tab ?? null}
           initialScrollTop={saved.dictionary?.scrollTop ?? 0}
           onSnapshot={(snap) => remember("dictionary", snap)}

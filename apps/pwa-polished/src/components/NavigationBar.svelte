@@ -10,7 +10,7 @@
     type CrumbKind,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { BIBLE_BOOKS, normalizeBookName, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
+  import { BIBLE_BOOKS, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import {
     searchService,
@@ -58,7 +58,6 @@
   } from "../lib/tts/sleepTimer";
   import { COMMENTARY_AUTHORS } from "../lib/annotationConfig";
   import {
-    ArrowLeft,
     ArrowsOutSimple,
     Books,
     ClockCounterClockwise,
@@ -657,7 +656,7 @@
    */
   function goToCrumb(depth: number) {
     const ret = get(isbeReturnStore);
-    // Checked before the pop, like goBack: a crumb at position N undoes the
+    // Checked before the pop: a crumb at position N undoes the
     // step that was recorded at depth N. Reading the depth afterwards would
     // always be one short and never match.
     const undoingTheJump = !!ret && depth === ret.depth;
@@ -676,22 +675,6 @@
         book: $navigationStore.book,
         chapter: $navigationStore.chapter,
       });
-    }
-  }
-
-  function goBack() {
-    const ret = get(isbeReturnStore);
-    const undoingTheJump = !!ret && get(historyDepth) === ret.depth;
-
-    navigationStore.goBack();
-
-    if (undoingTheJump) {
-      // Left set for the modal to consume — it restores the rest of the context.
-      isbeModalStore.open(ret!.modal);
-    } else if (ret && get(historyDepth) < ret.depth) {
-      // Past it without ever landing on it — the context can't come back.
-      // Deeper than it is fine: keep walking back and we'll reach it.
-      isbeReturnStore.set(null);
     }
   }
 
@@ -824,23 +807,6 @@
     showResults = false;
     searchQuery = "";
     searchResults = [];
-  }
-
-  function highlightText(text: string, query: string): string {
-    if (!query || !text) return text;
-
-    const terms = query.toLowerCase().trim().split(/\s+/);
-    let highlighted = text;
-
-    terms.forEach((term) => {
-      if (term.length < 2) return; // Skip very short terms
-
-      // Create a case-insensitive regex to find the term
-      const regex = new RegExp(`(${term})`, "gi");
-      highlighted = highlighted.replace(regex, "<mark>$1</mark>");
-    });
-
-    return highlighted;
   }
 
   function toggleSearchNode(key: string) {

@@ -32,7 +32,6 @@
   let isSearching = false;
   let searchResults: SearchCategory[] = [];
   let totalResultCount = 0;
-  let displayedResultCount = 0;
 
   /** Expand state for the shared results tree, keyed by node path. */
   let expandedResultNodes = new Set<string>();
@@ -127,7 +126,6 @@
       // Power Search is always an explicit search, so run the deep categories too.
       searchResults = await searchService.search(query.regex.source, { limit: -1, deep: true });
       totalResultCount = searchResults.reduce((sum, cat) => sum + cat.count, 0);
-      displayedResultCount = totalResultCount;
 
       // Open the Bible group so results are visible without a first click.
       const hasBible = searchResults.some((c) => c.key === 'bible' && c.count > 0);
@@ -147,7 +145,6 @@
     searchResults = [];
     expandedResultNodes = new Set();
     totalResultCount = 0;
-    displayedResultCount = 0;
   }
 
   async function handleResultClick(result: SearchResult) {

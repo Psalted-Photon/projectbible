@@ -6,7 +6,7 @@
   import { IndexedDBTextStore } from '../lib/adapters';
   import { renderVersePreviewHtml } from '../lib/verseRendering';
   import { BIBLE_BOOKS } from '@projectbible/core';
-  import type { UserHighlight, UserWordHighlight, UserNote } from '@projectbible/core';
+  import type { UserNote } from '@projectbible/core';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 

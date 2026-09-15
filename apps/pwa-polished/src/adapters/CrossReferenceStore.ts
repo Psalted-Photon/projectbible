@@ -1,5 +1,5 @@
 import type { CrossReferenceStore, CrossReference, BCV } from '@projectbible/core';
-import { generateId, readTransaction, writeTransaction } from './db.js';
+import { generateId, writeTransaction } from './db.js';
 import type { DBCrossReference } from './db.js';
 
 export class IndexedDBCrossReferenceStore implements CrossReferenceStore {
