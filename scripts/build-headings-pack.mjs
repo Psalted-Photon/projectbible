@@ -22,6 +22,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { parseUSFX } from '../packages/packtools/src/parsers/usfx-parser.mjs';
 import { USFM_CODE_TO_BOOK } from '../packages/packtools/src/parsers/books.mjs';
+import { cleanUSFMMarkup } from '../packages/packtools/src/parsers/usfm-scanner.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -139,7 +140,9 @@ function parseUSFMHeadings(filePath, bookName) {
     const sMatch = line.match(/^\\s(1|2)?\s+(.*)/);
     if (sMatch) {
       pendingLevel = sMatch[1] === '2' ? 2 : 1;
-      pendingHeading = sMatch[2].trim();
+      // NET wraps some headings word-by-word in \w word|strong="..."\w* --
+      // the same inline markup verse text already gets cleaned of.
+      pendingHeading = cleanUSFMMarkup(sMatch[2].trim());
       continue;
     }
 
@@ -147,7 +150,7 @@ function parseUSFMHeadings(filePath, bookName) {
     const qaMatch = line.match(/^\\qa\s+(.*)/);
     if (qaMatch && qaMatch[1].trim()) {
       pendingLevel = 3;
-      pendingHeading = qaMatch[1].trim();
+      pendingHeading = cleanUSFMMarkup(qaMatch[1].trim());
       continue;
     }
 

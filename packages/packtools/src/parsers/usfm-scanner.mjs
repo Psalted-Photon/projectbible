@@ -210,7 +210,10 @@ export function parseUSFM(content, options = {}) {
       if (marker === 's1' || marker === 's2') {
         const lineEnd = content.indexOf('\n', i);
         if (lineEnd > i) {
-          pendingHeading = content.substring(i, lineEnd).trim();
+          // The line can itself carry inline markup -- NET wraps every word of
+          // some headings in \w ...|strong="..."\w* -- so it needs the same
+          // cleanup verse text gets, not a raw substring.
+          pendingHeading = cleanUSFMMarkup(content.substring(i, lineEnd).trim());
           i = lineEnd;
         }
         continue;
@@ -552,6 +555,11 @@ export function cleanUSFMMarkup(text) {
   return text
     .replace(/\\f \+.*?\\f\*/g, '') // Remove footnotes
     .replace(/\\x \+.*?\\x\*/g, '') // Remove cross-refs in \\x format
+    // \w word|strong="H1234"\w* (NET's word-level Strong's tagging, also
+    // written \+w when nested) -> word. Must run before the generic marker
+    // strip below, which would otherwise leave the |strong="..." metadata
+    // behind instead of dropping it with the wrapper.
+    .replace(/\\\+?w\s+([^\\|]*?)\|[^\\]*?\\\+?w\*/g, '$1')
     .replace(/\\+[a-z]{1,3}\s/g, '') // Remove other markers
     .replace(/\\+[a-z]{1,3}\*/g, '')
     .replace(/â€"/g, '—') // Fix em-dash encoding
