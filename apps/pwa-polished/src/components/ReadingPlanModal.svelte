@@ -16,7 +16,7 @@
   import { syncService, formatSyncLabel, isSyncRunning, SYNC_SCOPE_TOOLTIP, type SyncState } from '../lib/sync';
   import { normalizeBookName, getBookColor, shortBookName } from '../lib/bibleData';
   import { syncQueue } from '../lib/sync/SyncQueueService';
-  import { serializePlanData, getRemotePlanStatuses } from '../adapters/SyncedReadingAdapter';
+  import { serializePlanData, getRemotePlanStatuses, planUploadOp } from '../adapters/SyncedReadingAdapter';
   import { userProfileStore } from '../stores/userProfileStore';
   import { readingProgressVersion } from '../stores/readingProgressVersionStore';
   import CalendarView from './CalendarView.svelte';
@@ -439,31 +439,7 @@
       const known = remoteStatus[entry.id];
       if (known === 'archived' || known === 'completed' || known === 'deleted') continue;
       try {
-        const cfg = entry.plan.config;
-        // Plan IDs are "plan_<epoch-ms>" — use that as the canonical creation time.
-        const createdMs = parseInt(entry.id.replace('plan_', ''), 10) || Date.now();
-        await syncQueue.enqueue({
-          type: 'INSERT',
-          table: 'reading_plans',
-          id: entry.id,
-          data: {
-            id: entry.id,
-            name: cfg.name || `${entry.plan.totalDays}-day reading plan`,
-            config: JSON.stringify({
-              ...cfg,
-              // Ensure Date objects are serialised as ISO strings
-              startDate: cfg.startDate instanceof Date ? cfg.startDate.toISOString() : cfg.startDate,
-              endDate:   cfg.endDate   instanceof Date ? cfg.endDate.toISOString()   : cfg.endDate,
-            }),
-            plan_data: serializePlanData(entry.plan),
-            current_day_number: 1,
-            status: 'active',
-            activated_at: createdMs,                     // BIGINT column — epoch ms
-            started_at:   createdMs,                     // BIGINT column — epoch ms
-            created_at:   new Date(createdMs).toISOString(), // TIMESTAMPTZ
-            updated_at:   new Date().toISOString(),          // TIMESTAMPTZ
-          },
-        });
+        await syncQueue.enqueue(planUploadOp(entry.id, entry.plan));
       } catch (err) {
         console.warn('[ReadingPlan] Failed to queue plan re-sync:', entry.id, err);
       }

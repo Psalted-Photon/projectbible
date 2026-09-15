@@ -13,6 +13,7 @@ import { generateReadingPlan, planDayDateStr } from '@projectbible/core';
 import { readingProgressStore, registerProgressSyncHook } from '../stores/ReadingProgressStore';
 import type { ReadingProgressEntry } from '../stores/ReadingProgressStore';
 import { syncQueue } from '../lib/sync/SyncQueueService';
+import type { SyncOperation } from '../lib/sync/types';
 
 const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan'; // legacy key
 const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans'; // new multi-plan key
@@ -40,6 +41,39 @@ export function serializePlanData(plan: any): string {
     }
   }
   return JSON.stringify(clone);
+}
+
+/**
+ * A plan's whole reading_plans row, as an upload. Plan ids are
+ * "plan_<epoch-ms>", which doubles as the creation time. Pass `archivedAt`
+ * for a plan that belongs in history rather than the active list.
+ */
+export function planUploadOp(id: string, plan: any, archivedAt?: number): SyncOperation {
+  const cfg = plan.config;
+  const createdMs = parseInt(id.replace('plan_', ''), 10) || Date.now();
+  return {
+    type: 'INSERT',
+    table: 'reading_plans',
+    id,
+    data: {
+      id,
+      name: cfg.name || `${plan.totalDays}-day reading plan`,
+      config: JSON.stringify({
+        ...cfg,
+        // Ensure Date objects are serialised as ISO strings
+        startDate: cfg.startDate instanceof Date ? cfg.startDate.toISOString() : cfg.startDate,
+        endDate:   cfg.endDate   instanceof Date ? cfg.endDate.toISOString()   : cfg.endDate,
+      }),
+      plan_data: serializePlanData(plan),
+      current_day_number: 1,
+      status: archivedAt ? 'archived' : 'active',
+      ...(archivedAt ? { archived_at: archivedAt } : {}), // BIGINT column — epoch ms
+      activated_at: createdMs,                     // BIGINT column — epoch ms
+      started_at:   createdMs,                     // BIGINT column — epoch ms
+      created_at:   new Date(createdMs).toISOString(), // TIMESTAMPTZ
+      updated_at:   new Date().toISOString(),          // TIMESTAMPTZ
+    },
+  };
 }
 
 /** Parse a plan_data payload back into a live plan object for this device. */
@@ -81,6 +115,19 @@ function rememberRemotePlanStatuses(rows: any[]): void {
     for (const r of rows ?? []) {
       if (r?.id && r?.status) map[r.id] = r.status;
     }
+    localStorage.setItem(STORAGE_REMOTE_PLAN_STATUS, JSON.stringify(map));
+  } catch { /* best-effort */ }
+}
+
+/**
+ * Forget what the server last said about these plans, so a plan brought back
+ * from a backup isn't refused re-upload as "archived" or "deleted". The next
+ * pull records their status again.
+ */
+export function forgetRemotePlanStatuses(ids: string[]): void {
+  try {
+    const map = getRemotePlanStatuses();
+    for (const id of ids) delete map[id];
     localStorage.setItem(STORAGE_REMOTE_PLAN_STATUS, JSON.stringify(map));
   } catch { /* best-effort */ }
 }

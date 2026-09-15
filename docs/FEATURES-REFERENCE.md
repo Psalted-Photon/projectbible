@@ -1008,6 +1008,22 @@ Everything else stays per-device by design — font size, line spacing, verse la
 
 `ProfileModal.svelte`. Header greets by name when set. Four tabs: Reading Plan, Saved Verses/Notes, Journal, Settings. Auth views: Log in, Create Account, Reset Password. Today's reading with tappable chapter links. Inline settings: Theme, Default OT Translation, Default NT Translation.
 
+### 20.10 Backup file
+
+`src/lib/backup/` — `backupFile.ts` (`prepareBackup`), `restoreFile.ts` (`readBackupFile`, `backupContents`, `restoreBackup`), `saveFile.ts` (`saveFile`); UI in `src/components/YourDataPanel.svelte`, shown in the Profile Settings tab above Delete Account. Signed-in only.
+
+- **Format.** `hexapla-backup-YYYY-MM-DD.json`: `{ app: 'hexapla', kind: 'backup', format: 1, exportedAt, data }`. `data` holds device rows exactly as stored (`user_notes`, `user_highlights`, `user_word_highlights`, `user_bookmarks`, `notebooks`, `notebook_pages`, `plan_metadata`, `reading_progress`), the `projectbible_repeats`, active-plan, plan-history and catch-up-day localStorage values, and `projectbible_settings`. The journal is the exception: read through `syncedJournalStore` so it's readable (a scrambled field only opens under the key it was made with); entries still locked or unreadable are counted and left out. Journal lock keys, window layout and other device-only state are not included. A file with a higher `format` is refused.
+- **Saving.** Two taps: `prepareBackup` runs `forceSync` and builds the `File`; the save tap calls `saveFile`, which uses `navigator.share({ files })` on iOS/Android when `canShare` allows it (Android Chrome doesn't share `.json`, so it downloads) and an `<a download>` link otherwise, revoking the URL after 10 s. The share sheet needs a fresh user tap, hence building first.
+- **Restore rules.** `forceSync`, restore the ticked parts, `forceSync` again. Nothing is deleted.
+  - Notes, notebooks, pages, journal: newer `updatedAt` wins by id. A new id on a verse that already has a note, or a date that already has an entry, is skipped (the reader uses `notes[0]`; `journal_entries.date` is a unique index).
+  - Verse highlights, word highlights, bookmarks: added only if the id is missing and the verse (or exact word range) isn't already taken. Repeat groups go through `repeatsStore.add`.
+  - Journal: re-sealed with `sealFields` while `scramblesWrites()`; the panel shows `JournalLockScreen` first if the key isn't in memory.
+  - Reading plans: added only if the id isn't in the active list or history (plans have no edit date); active plans get an in-progress history shadow; uploads use `planUploadOp` (`SyncedReadingAdapter.ts`, shared with the plan modal's re-upsert) and `forgetRemotePlanStatuses` clears any archived/deleted mark. Catch-up days and `plan_metadata` rows come back for added plans only.
+  - Reading progress: every day with real progress for a plan on the device goes through `readingProgressStore.upsertEntries` (union merge); days that changed are queued with `queueProgressEntry`.
+  - Settings: `updateSettings`, `applyTheme`, `settingsUpdated` event, `flushSettingsPush()` (`settingsSync.ts`) so the push isn't lost to the reload, then `pushAlarm()` if the file has a wake alarm.
+- **Why every row is queued.** Each restored row is written locally and enqueued as a full-row `INSERT` with its original timestamps. A local-only write would be removed by `reconcileDeletedRows` on the next full pull.
+- **Done** calls `location.reload()` so every store re-reads.
+
 ## 21. App Settings & Appearance
 
 Files: `src/components/panes/SettingsPane.svelte` (860), `src/adapters/settings.ts`, `src/App.svelte`, `src/stores/clockStore.ts`, `src/lib/dailyGreeting.ts`, `src/components/DailyGreetingModal.svelte` (284), `src/components/UpdateNotice.svelte`.

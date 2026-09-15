@@ -18,6 +18,8 @@ import type {
 } from '../../adapters/db';
 import { writeTransaction } from '../../adapters/db';
 import { applyTheme, getSettings, updateSettings, type UserSettings } from '../../adapters/settings';
+import { forgetRemotePlanStatuses, planUploadOp, queueProgressEntry } from '../../adapters/SyncedReadingAdapter';
+import { readingProgressStore, type ReadingProgressEntry } from '../../stores/ReadingProgressStore';
 import { repeatsStore } from '../../stores/repeatsStore';
 import { pushAlarm } from '../alarm/alarmSync';
 import { JournalLockedError, sealFields } from '../journalLock/entryCrypto';
@@ -25,9 +27,12 @@ import { getContentKey, scramblesWrites } from '../journalLock/lockState';
 import { syncQueue, syncService } from '../sync';
 import { flushSettingsPush } from '../sync/settingsSync';
 import type { SyncOperation } from '../sync/types';
-import { allRows, BACKUP_APP, BACKUP_FORMAT, BACKUP_KIND, type BackupData, type BackupFile } from './backupFile';
+import {
+  ACTIVE_PLANS_KEY, allRows, BACKUP_APP, BACKUP_FORMAT, BACKUP_KIND, CATCHUP_PREFIX, PLAN_HISTORY_KEY, readJson,
+  type BackupData, type BackupFile,
+} from './backupFile';
 
-export type RestorePart = 'notes' | 'notebooks' | 'highlights' | 'journal' | 'settings';
+export type RestorePart = 'notes' | 'notebooks' | 'highlights' | 'journal' | 'readingPlans' | 'settings';
 
 export interface PartResult {
   added: number;
@@ -37,7 +42,9 @@ export interface PartResult {
 }
 
 export interface RestoreSummary {
-  results: Partial<Record<Exclude<RestorePart, 'settings'>, PartResult>>;
+  results: Partial<Record<Exclude<RestorePart, 'settings' | 'readingPlans'>, PartResult>>;
+  /** Plans added, and days whose progress changed. Null when plans weren't restored. */
+  readingPlans: { added: number; progressDays: number } | null;
   settingsApplied: boolean;
   /** Set when the restored wake alarm couldn't be armed. */
   alarmProblem: string | null;
@@ -103,6 +110,37 @@ function goodJournal(data: BackupData): DBJournalEntry[] {
   return list<DBJournalEntry>(data.journal).filter((r) =>
     isRow(r, { id: 'string', date: 'string', text: 'string', createdAt: 'number', updatedAt: 'number' }));
 }
+interface StoredPlan {
+  id: string;
+  plan: any;
+}
+
+interface HistoryEntry extends StoredPlan {
+  createdAt?: string;
+  completedAt: string | null;
+}
+
+function isPlan(entry: unknown): entry is StoredPlan {
+  const e = entry as StoredPlan | null;
+  return !!e && typeof e.id === 'string' && !!e.plan && typeof e.plan.config === 'object' && Array.isArray(e.plan.days);
+}
+
+function isHistoryEntry(entry: unknown): entry is HistoryEntry {
+  if (!isPlan(entry)) return false;
+  const completedAt = (entry as HistoryEntry).completedAt;
+  return completedAt === null || typeof completedAt === 'string';
+}
+
+function goodPlans(data: BackupData): { active: StoredPlan[]; archived: HistoryEntry[]; history: HistoryEntry[] } {
+  const plans = data.readingPlans;
+  const active = list<unknown>(plans?.active).filter(isPlan);
+  const history = list<unknown>(plans?.history).filter(isHistoryEntry);
+  const activeIds = new Set(active.map((p) => p.id));
+  // Finished or archived plans. In-progress history entries are shadows of active plans.
+  const archived = history.filter((h) => h.completedAt !== null && !activeIds.has(h.id));
+  return { active, archived, history };
+}
+
 function goodSettings(data: BackupData): Record<string, unknown> | null {
   const s = data.settings;
   return s && typeof s === 'object' && !Array.isArray(s) && Object.keys(s).length > 0 ? (s as Record<string, unknown>) : null;
@@ -116,6 +154,7 @@ export function backupContents(backup: BackupFile): Record<RestorePart, number> 
     notebooks: goodPages(d).length,
     highlights: goodHighlights(d).length + goodWordHighlights(d).length,
     journal: goodJournal(d).length,
+    readingPlans: goodPlans(d).active.length + goodPlans(d).archived.length,
     settings: goodSettings(d) ? 1 : 0,
   };
 }
@@ -342,6 +381,135 @@ async function restoreJournal(data: BackupData): Promise<PartResult> {
   return result;
 }
 
+/**
+ * Plans have no edit date, so a plan already on this device, active or in
+ * history, is left as it is; only missing ones are added. Each added plan is
+ * uploaded whole, so the next pull doesn't drop it from the active list.
+ */
+async function restorePlans(data: BackupData): Promise<string[]> {
+  const active = readJson<StoredPlan[]>(ACTIVE_PLANS_KEY, []);
+  const history = readJson<HistoryEntry[]>(PLAN_HISTORY_KEY, []);
+  const onDevice = new Set([...active, ...history].map((p) => p?.id));
+  const file = goodPlans(data);
+  const shadows = new Map(file.history.map((h) => [h.id, h]));
+  const added: string[] = [];
+
+  for (const entry of file.active) {
+    if (onDevice.has(entry.id)) continue;
+    await syncQueue.enqueue(planUploadOp(entry.id, entry.plan));
+    active.push({ id: entry.id, plan: entry.plan });
+    // The plan screen keeps an in-progress history entry beside every active plan.
+    history.unshift({
+      id: entry.id,
+      plan: entry.plan,
+      createdAt: shadows.get(entry.id)?.createdAt ?? new Date().toISOString(),
+      completedAt: null,
+    });
+    onDevice.add(entry.id);
+    added.push(entry.id);
+  }
+
+  for (const entry of file.archived) {
+    if (onDevice.has(entry.id)) continue;
+    const archivedMs = new Date(entry.completedAt as string).getTime();
+    await syncQueue.enqueue(planUploadOp(entry.id, entry.plan, Number.isFinite(archivedMs) ? archivedMs : Date.now()));
+    history.push(entry);
+    onDevice.add(entry.id);
+    added.push(entry.id);
+  }
+
+  if (added.length === 0) return added;
+
+  localStorage.setItem(ACTIVE_PLANS_KEY, JSON.stringify(active));
+  localStorage.setItem(PLAN_HISTORY_KEY, JSON.stringify(history));
+  forgetRemotePlanStatuses(added);
+
+  // Their catch-up days and plan details come back too, unless already here.
+  const addedIds = new Set(added);
+  const catchUpDays = data.readingPlans?.catchUpDays;
+  if (catchUpDays && typeof catchUpDays === 'object') {
+    for (const [planId, days] of Object.entries(catchUpDays)) {
+      const key = CATCHUP_PREFIX + planId;
+      if (addedIds.has(planId) && days != null && localStorage.getItem(key) === null) {
+        localStorage.setItem(key, JSON.stringify(days));
+      }
+    }
+  }
+  const localDetails = new Set((await allRows<{ planId: string }>('plan_metadata')).map((r) => r.planId));
+  for (const row of list<Record<string, unknown>>(data.readingPlans?.metadata)) {
+    if (!isRow(row, { planId: 'string' })) continue;
+    const planId = row.planId as string;
+    if (addedIds.has(planId) && !localDetails.has(planId)) {
+      await writeTransaction('plan_metadata', (store) => store.put(row));
+    }
+  }
+
+  return added;
+}
+
+function parseJsonField<T>(value: unknown, fallback: T): T {
+  if (typeof value !== 'string') return (value ?? fallback) as T;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+const optionalNumber = (value: unknown) => (typeof value === 'number' ? value : undefined);
+
+/** A progress row as the device stores it (JSON fields as strings) back into an entry. */
+function progressEntryFrom(row: Record<string, unknown>): ReadingProgressEntry {
+  return {
+    id: row.id as string,
+    planId: row.planId as string,
+    dayNumber: row.dayNumber as number,
+    completed: Boolean(row.completed),
+    createdAt: optionalNumber(row.createdAt) ?? Date.now(),
+    completedAt: optionalNumber(row.completedAt),
+    startedReadingAt: optionalNumber(row.startedReadingAt),
+    chaptersRead: parseJsonField(row.chaptersRead, []),
+    catchUpAdjustment: row.catchUpAdjustment ? parseJsonField(row.catchUpAdjustment, undefined) : undefined,
+    harmonySections: row.harmonySections ? parseJsonField(row.harmonySections, undefined) : undefined,
+  };
+}
+
+function hasProgress(entry: ReadingProgressEntry): boolean {
+  return entry.completed
+    || (entry.chaptersRead ?? []).some((ch) => (ch.actions ?? []).length > 0)
+    || (entry.harmonySections?.length ?? 0) > 0;
+}
+
+function progressFingerprint(entry: ReadingProgressEntry | undefined): string {
+  return entry ? JSON.stringify([entry.completed, entry.chaptersRead ?? [], entry.harmonySections ?? []]) : '';
+}
+
+/**
+ * Progress merges tick by tick, the same way sync does, so nothing is lost on
+ * either side: the latest tick or untick on each chapter wins. Only days
+ * belonging to a plan on this device are restored.
+ */
+async function restoreProgress(data: BackupData): Promise<number> {
+  const planIds = new Set(
+    [...readJson<StoredPlan[]>(ACTIVE_PLANS_KEY, []), ...readJson<HistoryEntry[]>(PLAN_HISTORY_KEY, [])].map((p) => p?.id),
+  );
+  let changedDays = 0;
+  for (const row of list<Record<string, unknown>>(data.readingProgress)) {
+    if (!isRow(row, { id: 'string', planId: 'string', dayNumber: 'number' })) continue;
+    if (!planIds.has(row.planId as string)) continue;
+    const incoming = progressEntryFrom(row);
+    if (!hasProgress(incoming)) continue;
+
+    const before = await readingProgressStore.getDayProgress(incoming.planId, incoming.dayNumber);
+    await readingProgressStore.upsertEntries([incoming]);
+    const after = await readingProgressStore.getDayProgress(incoming.planId, incoming.dayNumber);
+    if (!after || progressFingerprint(before) === progressFingerprint(after)) continue;
+    await queueProgressEntry(after);
+    changedDays++;
+  }
+  return changedDays;
+}
+
 async function restoreSettings(data: BackupData): Promise<{ applied: boolean; alarmProblem: string | null }> {
   const settings = goodSettings(data);
   if (!settings) return { applied: false, alarmProblem: null };
@@ -369,11 +537,15 @@ export async function restoreBackup(backup: BackupFile, parts: Set<RestorePart>)
 
   await syncService.forceSync();
 
-  const summary: RestoreSummary = { results: {}, settingsApplied: false, alarmProblem: null };
+  const summary: RestoreSummary = { results: {}, readingPlans: null, settingsApplied: false, alarmProblem: null };
   if (parts.has('notebooks')) summary.results.notebooks = await restoreNotebooks(data);
   if (parts.has('notes')) summary.results.notes = await restoreNotes(data);
   if (parts.has('highlights')) summary.results.highlights = await restoreHighlights(data);
   if (parts.has('journal')) summary.results.journal = await restoreJournal(data);
+  if (parts.has('readingPlans')) {
+    const added = await restorePlans(data);
+    summary.readingPlans = { added: added.length, progressDays: await restoreProgress(data) };
+  }
   if (parts.has('settings')) {
     const s = await restoreSettings(data);
     summary.settingsApplied = s.applied;

@@ -27,9 +27,9 @@ export const BACKUP_KIND = 'backup';
 export const BACKUP_FORMAT = 1;
 
 const REPEATS_KEY = 'projectbible_repeats';
-const ACTIVE_PLANS_KEY = 'projectbible_active_reading_plans';
-const PLAN_HISTORY_KEY = 'projectbible_reading_plan_history';
-const CATCHUP_PREFIX = 'projectbible_catchup_days_';
+export const ACTIVE_PLANS_KEY = 'projectbible_active_reading_plans';
+export const PLAN_HISTORY_KEY = 'projectbible_reading_plan_history';
+export const CATCHUP_PREFIX = 'projectbible_catchup_days_';
 
 export interface BackupData {
   notes: DBUserNote[];
@@ -84,7 +84,7 @@ export async function allRows<T>(storeName: string): Promise<T[]> {
   });
 }
 
-function readJson<T>(key: string, fallback: T): T {
+export function readJson<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : fallback;

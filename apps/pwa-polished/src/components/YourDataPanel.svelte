@@ -100,10 +100,10 @@
   let fileInput: HTMLInputElement;
   let backup: BackupFile | null = null;
   let contents: Record<RestorePart, number> | null = null;
-  let chosen: Record<RestorePart, boolean> = { notes: true, notebooks: true, highlights: true, journal: true, settings: true };
+  let chosen: Record<RestorePart, boolean> = { notes: true, notebooks: true, highlights: true, journal: true, readingPlans: true, settings: true };
   let result: RestoreSummary | null = null;
 
-  const PART_ORDER: RestorePart[] = ['notes', 'notebooks', 'highlights', 'journal', 'settings'];
+  const PART_ORDER: RestorePart[] = ['notes', 'notebooks', 'highlights', 'journal', 'readingPlans', 'settings'];
 
   function partLabel(part: RestorePart, n: number): string {
     switch (part) {
@@ -111,11 +111,12 @@
       case 'notebooks': return plural(n, 'notebook page', 'notebook pages');
       case 'highlights': return plural(n, 'highlight', 'highlights');
       case 'journal': return plural(n, 'journal entry', 'journal entries');
+      case 'readingPlans': return `${plural(n, 'reading plan', 'reading plans')} and their progress`;
       case 'settings': return 'Settings';
     }
   }
 
-  const PART_NAMES: Record<Exclude<RestorePart, 'settings'>, string> = {
+  const PART_NAMES: Record<Exclude<RestorePart, 'settings' | 'readingPlans'>, string> = {
     notes: 'Verse notes',
     notebooks: 'Notebook pages',
     highlights: 'Highlights',
@@ -146,9 +147,16 @@
   function describeResult(r: RestoreSummary): string[] {
     const lines: string[] = [];
     for (const part of PART_ORDER) {
-      if (part === 'settings') continue;
+      if (part === 'settings' || part === 'readingPlans') continue;
       const partResult = r.results[part];
       if (partResult) lines.push(`${PART_NAMES[part]}: ${describePart(partResult)}`);
+    }
+    if (r.readingPlans) {
+      const { added, progressDays } = r.readingPlans;
+      const bits: string[] = [];
+      if (added) bits.push(`${added} added`);
+      if (progressDays) bits.push(`progress brought back on ${plural(progressDays, 'day', 'days')}`);
+      lines.push(`Reading plans: ${bits.length ? bits.join(', ') : 'already up to date'}`);
     }
     if (r.settingsApplied) lines.push('Settings: restored');
     if (r.alarmProblem) lines.push(`Wake alarm: ${r.alarmProblem}`);
@@ -176,7 +184,7 @@
       }
       backup = read;
       contents = counts;
-      chosen = { notes: true, notebooks: true, highlights: true, journal: true, settings: true };
+      chosen = { notes: true, notebooks: true, highlights: true, journal: true, readingPlans: true, settings: true };
       restoreStep = 'preview';
     } catch (err) {
       showNotice(errorText(err), 'error');

@@ -500,6 +500,17 @@ Font size, line spacing, verse layout, word wrap, screen rotation, and update ch
 
 Your profile has four tabs — Reading Plan, Saved Verses/Notes, Journal, and Settings — plus today's reading, ready to tap.
 
+### 20.6 Backup and restore
+
+Profile's Settings tab has a **Your Data** block for signed-in accounts.
+
+- **Download my data** saves one file with your notes, notebooks, verse and word highlights, journal, reading plans and progress, and settings. It syncs first, so the file holds the latest from every device. On a phone the share sheet opens (Save to Files, Drive, email); on a computer it downloads.
+- **A locked journal is unlocked first** and goes in the file as readable text — anyone who opens the file can read it, so keep it somewhere private. "Leave the journal out this time" skips it.
+- **Restore from file** shows what's in the backup, with a tickbox for each kind, before anything changes.
+- **Restore only adds and updates.** Nothing on the device is deleted. When something is on both sides, the copy edited last is kept, so anything deleted after the backup was made comes back. A verse that already has a different note or highlight, or a day that already has a different journal entry, keeps its own and the file's copy is left out.
+- **Restored journal entries are locked again** when the journal lock is on, and reading progress merges tick by tick like sync does.
+- Everything restored uploads to your account, and **Done** reloads the app so every screen shows it.
+
 ## 21. App Settings & Appearance
 
 Settings are grouped into six sections you can fold away — Appearance, Reader, Read Aloud, General, Privacy, and Storage & Updates. Each shows a one-line summary of its own contents while closed, so you can find what you're after without opening all six.
