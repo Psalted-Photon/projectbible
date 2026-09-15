@@ -87,6 +87,15 @@ async function pushSettingsNow(): Promise<void> {
   }
 }
 
+/** Push a waiting settings change now instead of after the debounce, e.g. before a reload. */
+export async function flushSettingsPush(): Promise<void> {
+  if (pushTimer) {
+    clearTimeout(pushTimer);
+    pushTimer = null;
+  }
+  await pushSettingsNow();
+}
+
 /**
  * Pull the account's synced settings and apply them when newer than what
  * this device last saw. Called from SyncService on sign-in and forceSync.

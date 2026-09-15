@@ -74,7 +74,8 @@ export interface PreparedBackup {
   journalLeftOut: number;
 }
 
-async function allRows<T>(storeName: string): Promise<T[]> {
+/** Every row in one of the device's stores, exactly as stored. */
+export async function allRows<T>(storeName: string): Promise<T[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const request = db.transaction(storeName, 'readonly').objectStore(storeName).getAll();
