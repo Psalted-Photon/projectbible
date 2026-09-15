@@ -5,6 +5,7 @@
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
+  import AppNotice from "./components/AppNotice.svelte";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
   import TutorialLayer from "./tutorial/TutorialLayer.svelte";
   import { wakeAlarmStartOpen } from "./stores/wakeAlarmStore";
@@ -361,6 +362,9 @@
 
     <!-- "Running Latest Version" toast after an auto-update reload -->
     <UpdateNotice />
+
+    <!-- In-app messages (installs, removals, errors) in place of alert() -->
+    <AppNotice />
 
     <!-- Wake alarm start screen — shown when opened from an alarm notification -->
     <WakeAlarmStart />

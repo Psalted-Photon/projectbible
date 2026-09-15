@@ -21,6 +21,7 @@
   import { userProfileStore } from "../../stores/userProfileStore";
   import JournalLockManage from "../JournalLockManage.svelte";
   import JournalLockDialog from "../JournalLockDialog.svelte";
+  import { showNotice } from "../../stores/noticeStore";
 
   /**
    * Appearance changes land on the reader live, so the pane asks its shell to
@@ -355,7 +356,7 @@
 
   async function checkForUpdates() {
     if (!('serviceWorker' in navigator)) {
-      alert('Service worker not supported in this browser.');
+      showNotice("This browser can't check for app updates.", 'error');
       return;
     }
     checkingUpdate = true;
@@ -369,7 +370,7 @@
       window.location.reload();
     } catch (err) {
       console.error('Update check failed:', err);
-      alert('Could not check for updates. Try again later.');
+      showNotice("Couldn't check for updates. Try again later.", 'error');
       checkingUpdate = false;
     }
   }
@@ -410,10 +411,11 @@
         const failures = (await Promise.all([...namesToDelete].map(deleteIndexedDbDatabase)))
           .filter((reason): reason is string => reason !== null);
         if (failures.length) {
-          alert(
-            'Could not clear everything:\n\n' +
+          showNotice(
+            "Couldn't clear everything:\n" +
             failures.join('\n') +
-            '\n\nClose any other tabs running the app, then try again.'
+            '\nClose any other tabs running the app, then try again.',
+            'error'
           );
           clearing = false;
           return;
@@ -455,7 +457,7 @@
       }, 500);
     } catch (error) {
       console.error('Error clearing cache:', error);
-      alert('Error clearing cache. Check console for details.');
+      showNotice("Couldn't clear the cache. Try again, or restart the app first.", 'error');
       clearing = false;
     }
   }

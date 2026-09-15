@@ -33,6 +33,7 @@
     voiceIsDownloadable,
     type TtsVoiceInfo,
   } from "../../adapters/tts";
+  import { showNotice, errorText } from "../../stores/noticeStore";
 
   console.log("DEV:", import.meta.env.DEV);
   console.log("PROD:", import.meta.env.PROD);
@@ -136,7 +137,7 @@
       await refreshVoices();
     } catch (err: any) {
       console.error("[Packs] Could not free the shared voice engine:", err);
-      alert(`Could not free the shared engine: ${err?.message ?? err}`);
+      showNotice(`Couldn't free up the shared voice engine: ${errorText(err)}`, "error");
     }
   }
 
@@ -156,7 +157,7 @@
       await offerToFreeSharedModel(voice);
     } catch (err: any) {
       console.error("[Packs] Voice removal failed:", err);
-      alert(`Could not remove voice: ${err?.message ?? err}`);
+      showNotice(`Couldn't remove the voice: ${errorText(err)}`, "error");
     }
   }
 
@@ -173,8 +174,9 @@
     const model = files.find((f) => f.name.toLowerCase().endsWith(".onnx"));
     const config = files.find((f) => f.name.toLowerCase().endsWith(".json"));
     if (!model || !config) {
-      alert(
-        "Please select BOTH files for the voice: the model (.onnx) and its settings (.onnx.json)."
+      showNotice(
+        "Pick both files for the voice: the model (.onnx) and its settings (.onnx.json).",
+        "error"
       );
       return;
     }
@@ -334,11 +336,10 @@
     // downloading 34 MB and then failing to unpack it would leave a half-built
     // map that looks installed.
     if (pack.id === "atlas-map" && !atlasPackSupported()) {
-      alert(
-        `${pack.name} needs a newer browser than this one.
-
-` +
-          "It works in Chrome 80 and later, Safari 16.4 and later, and Firefox 113 and later."
+      showNotice(
+        `${pack.name} needs a newer browser than this one.\n` +
+          "It works in Chrome 80 and later, Safari 16.4 and later, and Firefox 113 and later.",
+        "error"
       );
       return;
     }
@@ -366,7 +367,7 @@
 
       $installMessage = "Complete!";
       $restartNeeded = true;
-      alert(`${pack.name} installed successfully!`);
+      showNotice(`${pack.name} installed`);
 
       await loadPacks();
       await loadStats();
@@ -377,12 +378,12 @@
       const isQuota =
         error instanceof DOMException &&
         (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED");
-      alert(
+      showNotice(
         isQuota
-          ? `Not enough storage to install ${pack.name}.
-
-Free up space on your device, or remove a pack you are not using, then try again.`
-          : `Failed to install ${pack.name}: ${error}`
+          ? `Not enough storage to install ${pack.name}.\n` +
+              "Free up space on your device, or remove a pack you are not using, then try again."
+          : `Couldn't install ${pack.name}: ${errorText(error)}`,
+        "error"
       );
     } finally {
       $installBusy = false;
@@ -579,7 +580,7 @@ Free up space on your device, or remove a pack you are not using, then try again
       packsIncomplete = incompleteSet;
     } catch (error) {
       console.error("Error loading packs:", error);
-      alert(`Failed to load packs: ${error}`);
+      showNotice(`Couldn't load your packs: ${errorText(error)}`, "error");
     } finally {
       isLoading = false;
     }
@@ -612,7 +613,7 @@ Free up space on your device, or remove a pack you are not using, then try again
     $installMessage = `Removing ${packId}…`;
     try {
       await removePack(packId);
-      alert(`Pack "${packId}" removed successfully`);
+      showNotice(`${CONSOLIDATED_PACKS.find((p) => p.id === packId)?.name ?? packId} removed`);
       await loadPacks();
       await loadStats();
 
@@ -620,7 +621,7 @@ Free up space on your device, or remove a pack you are not using, then try again
       window.dispatchEvent(new CustomEvent("packsUpdated"));
     } catch (error) {
       console.error("Error removing pack:", error);
-      alert(`Failed to remove pack: ${error}`);
+      showNotice(`Couldn't remove the pack: ${errorText(error)}`, "error");
     } finally {
       $installBusy = false;
       $installMessage = "";
@@ -629,7 +630,7 @@ Free up space on your device, or remove a pack you are not using, then try again
 
   async function handleInstallFromUrl() {
     if (!installUrl.trim()) {
-      alert("Please enter a URL");
+      showNotice("Enter a link to the pack first", "error");
       return;
     }
 
@@ -651,7 +652,7 @@ Free up space on your device, or remove a pack you are not using, then try again
       await importPackFromSQLite(file);
 
       $installMessage = "Complete!";
-      alert("Pack installed successfully!");
+      showNotice("Pack installed");
 
       installUrl = "";
       showInstallUrl = false;
@@ -662,7 +663,7 @@ Free up space on your device, or remove a pack you are not using, then try again
       window.dispatchEvent(new CustomEvent("packsUpdated"));
     } catch (error) {
       console.error("Error installing pack from URL:", error);
-      alert(`Failed to install pack: ${error}`);
+      showNotice(`Couldn't install the pack: ${errorText(error)}`, "error");
     } finally {
       $installBusy = false;
       $installMessage = "";
@@ -686,7 +687,7 @@ Free up space on your device, or remove a pack you are not using, then try again
       await importPackFromSQLite(file);
 
       $installMessage = "Complete!";
-      alert("Pack installed successfully!");
+      showNotice(`${file.name} installed`);
 
       await loadPacks();
       await loadStats();
@@ -695,7 +696,7 @@ Free up space on your device, or remove a pack you are not using, then try again
       window.dispatchEvent(new CustomEvent("packsUpdated"));
     } catch (error) {
       console.error("Error installing pack from file:", error);
-      alert(`Failed to install pack: ${error}`);
+      showNotice(`Couldn't install ${file.name}: ${errorText(error)}`, "error");
     } finally {
       $installBusy = false;
       $installMessage = "";
