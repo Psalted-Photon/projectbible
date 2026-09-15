@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-09-13T14:34:22.586Z",
+  "createdAt": "2026-09-15T16:34:30.793Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -214,36 +214,6 @@
       "createdAt": "2026-07-27T00:02:33.295Z"
     },
     {
-      "id": "bsb-audio-pt1",
-      "type": "audio",
-      "name": "BSB Audio Part 1",
-      "description": "Genesis through Psalms audio narration",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 1890091008,
-      "sizeMB": 1802.53,
-      "sha256": "b8bd9620e1474c3ff9edb6a9ebcf7d8dc959546b2ded28059496cd99d6db1baa",
-      "dependencies": [],
-      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/bsb-audio-pt1.sqlite",
-      "createdAt": "2026-01-21T00:17:19.752Z"
-    },
-    {
-      "id": "bsb-audio-pt2",
-      "type": "audio",
-      "name": "BSB Audio Part 2",
-      "description": "Proverbs through Revelation audio narration",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 1776627712,
-      "sizeMB": 1694.32,
-      "sha256": "41f31fd18ee1d429f209fc0626ea1658e6c6bd5da55bcf265a3e57551944bce9",
-      "dependencies": [],
-      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/bsb-audio-pt2.sqlite",
-      "createdAt": "2026-01-21T00:17:49.803Z"
-    },
-    {
       "id": "commentaries",
       "type": "study",
       "name": "Multi-Author Commentaries",
@@ -287,21 +257,6 @@
       "dependencies": [],
       "downloadUrl": "/api/packs/encyclotopical.sqlite",
       "createdAt": "2026-09-13T14:34:27.782Z"
-    },
-    {
-      "id": "geonames-modern-places-v1",
-      "type": "geonames",
-      "name": "World Places (GeoNames)",
-      "description": "Modern world geography: cities, states, countries. 172,000+ places worldwide. License: CC BY 4.0 — geonames.org",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 39038976,
-      "sizeMB": 37.23,
-      "sha256": "4ea4d1bea107e4b4753235c166cb202842d8b471cda9351be74904454e35a4ca",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/geonames.sqlite",
-      "createdAt": "2026-04-25T00:13:01.091Z"
     },
     {
       "id": "lexical",

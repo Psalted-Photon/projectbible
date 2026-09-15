@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-08-24T23:12:22.620Z",
+  "createdAt": "2026-09-15T16:34:30.793Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -17,6 +17,66 @@
       "dependencies": [],
       "downloadUrl": "/api/packs/ancient-languages.sqlite",
       "createdAt": "2026-08-21T02:22:43.370Z"
+    },
+    {
+      "id": "atlas-map",
+      "type": "study",
+      "name": "Historical Map",
+      "description": "A drawn world map that works offline, sixteen eras of the biblical world from the patriarchs to the later Roman empire, every place Scripture names with its verses, and 955 photographs. Sources: Natural Earth (public domain); Barrington Atlas / AWMC and OpenStreetMap (ODbL); Digital Atlas of the Roman Empire (CC BY-SA 3.0); OpenBible.info and GeoNames (CC BY 4.0)",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 1843200,
+      "sizeMB": 1.76,
+      "sha256": "fe61db6b8e215e6cbd5f3419d3741df11c831619792c9beda122259aa823329b",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/atlas-map.sqlite",
+      "createdAt": "2026-09-13T14:34:27.786Z"
+    },
+    {
+      "id": "atlas-map-01",
+      "type": "study",
+      "name": "Historical Map geometry (part 1)",
+      "description": "Drawn map layers for the Historical Map pack.",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 11206656,
+      "sizeMB": 10.69,
+      "sha256": "4555c95103229e8d38c5c7f1578069f9dc1d7e7fc7b552fbf5cd15d516faf2c3",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/atlas-map-01.sqlite",
+      "createdAt": "2026-09-13T14:34:27.806Z"
+    },
+    {
+      "id": "atlas-map-02",
+      "type": "study",
+      "name": "Historical Map geometry (part 2)",
+      "description": "Drawn map layers for the Historical Map pack.",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 11206656,
+      "sizeMB": 10.69,
+      "sha256": "6f1f17dd55d250730d7444f9d4ca7f27630878b97f135f27d6a01e3e74ff8477",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/atlas-map-02.sqlite",
+      "createdAt": "2026-09-13T14:34:27.816Z"
+    },
+    {
+      "id": "atlas-map-places",
+      "type": "study",
+      "name": "Historical Map place search",
+      "description": "Place search index for the Historical Map pack.",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 11706368,
+      "sizeMB": 11.16,
+      "sha256": "1df8a46cff7f7be6c84e905dbd0d026158e24aaaa1a60a146501b432649fcba7",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/atlas-places.sqlite",
+      "createdAt": "2026-09-13T14:34:27.796Z"
     },
     {
       "id": "biblical-art",
@@ -154,36 +214,6 @@
       "createdAt": "2026-07-27T00:02:33.295Z"
     },
     {
-      "id": "bsb-audio-pt1",
-      "type": "audio",
-      "name": "BSB Audio Part 1",
-      "description": "Genesis through Psalms audio narration",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 1890091008,
-      "sizeMB": 1802.53,
-      "sha256": "b8bd9620e1474c3ff9edb6a9ebcf7d8dc959546b2ded28059496cd99d6db1baa",
-      "dependencies": [],
-      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/bsb-audio-pt1.sqlite",
-      "createdAt": "2026-01-21T00:17:19.752Z"
-    },
-    {
-      "id": "bsb-audio-pt2",
-      "type": "audio",
-      "name": "BSB Audio Part 2",
-      "description": "Proverbs through Revelation audio narration",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 1776627712,
-      "sizeMB": 1694.32,
-      "sha256": "41f31fd18ee1d429f209fc0626ea1658e6c6bd5da55bcf265a3e57551944bce9",
-      "dependencies": [],
-      "downloadUrl": "https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/bsb-audio-pt2.sqlite",
-      "createdAt": "2026-01-21T00:17:49.803Z"
-    },
-    {
       "id": "commentaries",
       "type": "study",
       "name": "Multi-Author Commentaries",
@@ -196,7 +226,7 @@
       "sha256": "3dbc698da339d9c3b0f8050e5ec0374b734c4ba57a85f4a7925b6af9a1fa9239",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-08-24T23:12:27.391Z"
+      "createdAt": "2026-09-13T14:34:27.648Z"
     },
     {
       "id": "dictionary-en",
@@ -211,7 +241,7 @@
       "sha256": "1bd67240913ebbbf4f78f70add13279e150a989f6abb55eaf001e816a0f3a50a",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-08-24T23:12:27.161Z"
+      "createdAt": "2026-09-13T14:34:27.394Z"
     },
     {
       "id": "encyclotopical",
@@ -226,22 +256,7 @@
       "sha256": "310058b1e7b0dfe240d311fb58728e11bba79dc834d874ab994acd106e393dba",
       "dependencies": [],
       "downloadUrl": "/api/packs/encyclotopical.sqlite",
-      "createdAt": "2026-08-24T23:12:27.503Z"
-    },
-    {
-      "id": "geonames-modern-places-v1",
-      "type": "geonames",
-      "name": "World Places (GeoNames)",
-      "description": "Modern world geography: cities, states, countries. 172,000+ places worldwide. License: CC BY 4.0 — geonames.org",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 39038976,
-      "sizeMB": 37.23,
-      "sha256": "4ea4d1bea107e4b4753235c166cb202842d8b471cda9351be74904454e35a4ca",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/geonames.sqlite",
-      "createdAt": "2026-04-25T00:13:01.091Z"
+      "createdAt": "2026-09-13T14:34:27.782Z"
     },
     {
       "id": "lexical",
@@ -271,22 +286,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-08-24T23:12:23.431Z"
-    },
-    {
-      "id": "section-headings",
-      "type": "headings",
-      "name": "Section Headings",
-      "description": "Pericope titles for all 66 books — works with any installed translation",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 303104,
-      "sizeMB": 0.29,
-      "sha256": "730855faa5fa34cc9920d4cd9d8c310181c6977d10831caeebcaed1d8bf2296d",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/section-headings.sqlite",
-      "createdAt": "2026-08-24T23:12:23.423Z"
+      "createdAt": "2026-09-13T14:34:23.136Z"
     },
     {
       "id": "study-tools",
@@ -307,16 +307,16 @@
       "id": "translations",
       "type": "translation",
       "name": "English Translations Pack",
-      "description": "KJV, WEB, BSB, NET, LXX2012 English translations",
+      "description": "KJV, WEB, BSB, LXX2012 English translations",
       "version": "1.0.1",
       "schemaVersion": "1",
       "minAppVersion": "1.0.0",
-      "size": 36229120,
-      "sizeMB": 34.55,
-      "sha256": "6703347376bec1d3c06782f7d160dab0f358e95545d75decbe05df7084c06e32",
+      "size": 29630464,
+      "sizeMB": 28.26,
+      "sha256": "ec8ea811f97962640464cbc2547a5678b9c6285086a4d9453c4fcb995bb4377b",
       "dependencies": [],
       "downloadUrl": "/api/packs/translations.sqlite",
-      "createdAt": "2026-07-29T03:17:37.496Z"
+      "createdAt": "2026-09-06T23:35:14.185Z"
     },
     {
       "id": "tsk-references",
@@ -331,7 +331,7 @@
       "sha256": "c4541999b5170cfb5c2bf05cc512712e0e3b1e387226a331d2fb85db007238dc",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-08-24T23:12:23.363Z"
+      "createdAt": "2026-09-13T14:34:23.072Z"
     }
   ]
 }

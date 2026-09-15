@@ -23,9 +23,6 @@ const repoRoot = join(__dirname, '..');
 const PACKS_DIR = join(repoRoot, 'packs/consolidated');
 const OUTPUT_PATH = join(PACKS_DIR, 'manifest.json');
 
-// GitHub Release URL pattern
-const GITHUB_RELEASE_BASE = 'https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0';
-
 const PACK_CONFIGS = {
   'translations.sqlite': {
     id: 'translations',
@@ -62,34 +59,11 @@ const PACK_CONFIGS = {
     description: 'Treasury of Scripture Knowledge — 47,800+ cross-reference entries by keyword, all 66 books',
     dependencies: []
   },
-  // These two live in packs/ rather than packs/consolidated/
-  'geonames.sqlite': {
-    id: 'geonames-modern-places-v1',
-    type: 'geonames',
-    name: 'World Places (GeoNames)',
-    description: 'Modern world geography: cities, states, countries. 172,000+ places worldwide. License: CC BY 4.0 — geonames.org',
-    dependencies: [],
-    sourceDir: 'packs'
-  },
   'people.sqlite': {
     id: 'people-biblical-v1',
     type: 'people',
     name: 'Biblical Characters',
     description: "Every named person in the Bible: dates, places, family, name meaning, and verse appearances. License: CC BY-SA 4.0 — Theographic Bible Metadata; name meanings from Hitchcock's (public domain)",
-    dependencies: []
-  },
-  'bsb-audio-pt1.sqlite': {
-    id: 'bsb-audio-pt1',
-    type: 'audio',
-    name: 'BSB Audio Part 1',
-    description: 'Genesis through Psalms audio narration',
-    dependencies: []
-  },
-  'bsb-audio-pt2.sqlite': {
-    id: 'bsb-audio-pt2',
-    type: 'audio',
-    name: 'BSB Audio Part 2',
-    description: 'Proverbs through Revelation audio narration',
     dependencies: []
   },
   'dictionary-en.sqlite': {
@@ -223,9 +197,7 @@ const manifest = {
 };
 
 for (const [filename, config] of Object.entries(PACK_CONFIGS)) {
-  const packPath = config.sourceDir
-    ? join(repoRoot, config.sourceDir, filename)
-    : join(PACKS_DIR, filename);
+  const packPath = join(PACKS_DIR, filename);
 
   if (!existsSync(packPath)) {
     console.warn(`⚠️  Pack not found: ${filename} — its manifest entry will be DROPPED, breaking its downloads!`);
@@ -247,12 +219,8 @@ for (const [filename, config] of Object.entries(PACK_CONFIGS)) {
   const dbMetadata = getPackMetadata(packPath);
   
   // Build pack entry
-  // Use /api/packs/ proxy for all packs except large audio files (>50MB Vercel limit)
-  // Audio packs use direct GitHub URLs to avoid Vercel serverless function size limits
-  const useDirectGitHub = config.type === 'audio';
-  const downloadUrl = useDirectGitHub
-    ? `${GITHUB_RELEASE_BASE}/${filename}`
-    : `/api/packs/${filename}`;
+  // Every pack downloads through the /api/packs/ proxy to GitHub Releases
+  const downloadUrl = `/api/packs/${filename}`;
   
   const packEntry = {
     id: config.id,
