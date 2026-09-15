@@ -2,7 +2,8 @@ import { IndexedDBSearchIndex } from '../../adapters/SearchIndex';
 import { normalizeBookName } from '../bibleData';
 import { openDB } from '../../adapters/db';
 import { IndexedDBUserDataStore } from '../../adapters/UserDataStore';
-import { IndexedDBJournalStore } from '../../adapters/JournalStore';
+import { syncedJournalStore } from '../../adapters/SyncedJournalStore';
+import { currentLockView } from '../journalLock/lockState';
 
 export type SearchCategoryKey =
   | 'bible'
@@ -99,7 +100,6 @@ export class UnifiedSearchService {
   private static instance: UnifiedSearchService;
   private searchIndex: IndexedDBSearchIndex;
   private userData = new IndexedDBUserDataStore();
-  private journal = new IndexedDBJournalStore();
 
   private constructor() {
     this.searchIndex = new IndexedDBSearchIndex();
@@ -371,10 +371,14 @@ export class UnifiedSearchService {
 
   private async searchJournal(query: string): Promise<SearchResult[]> {
     try {
+      // A locked journal isn't searched at all — not even which days match.
+      if (currentLockView().needsUnlock) return [];
       const term = query.toLowerCase();
-      const entries = await this.journal.getEntries();
+      // The synced store hands back unscrambled text while unlocked.
+      const entries = await syncedJournalStore.getEntries();
       return entries
         .filter((entry) => {
+          if (entry.locked || entry.unreadable) return false;
           const haystack = `${entry.title || ''} ${stripHtml(entry.text)}`.toLowerCase();
           return haystack.includes(term);
         })

@@ -6,6 +6,8 @@
   import AtlasPane from "./AtlasPane.svelte";
   import CommentaryReader from "./CommentaryReader.svelte";
   import JournalWriter from "./JournalWriter.svelte";
+  import JournalLockScreen from "./JournalLockScreen.svelte";
+  import { journalLock } from "../lib/journalLock/lockState";
   import NotesPane from "./NotesPane.svelte";
   import ArtPane from "./ArtPane.svelte";
   import IsbeContent from "./IsbeContent.svelte";
@@ -28,7 +30,13 @@
 {:else if panel.contentType === 'commentaries'}
   <CommentaryReader windowId={panel.id} />
 {:else if panel.contentType === 'journal'}
-  <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
+  <!-- Every way into the journal (J key, search, the calendar, a window
+       restored on launch) arrives here, so the lock only has to guard this. -->
+  {#if $journalLock.needsUnlock}
+    <JournalLockScreen />
+  {:else if $journalLock.ready}
+    <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
+  {/if}
 {:else if panel.contentType === 'art'}
   <ArtPane
     sceneId={panel.contentState?.sceneId}

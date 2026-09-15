@@ -63,13 +63,24 @@ let contentKey: CryptoKey | null = null;
 let unlockedKeyId: string | null = null;
 /** Scrambled text turned up on this device before the lock row did. */
 let scrambledSeen = false;
+/**
+ * The cloud has answered at least once this session. Until it has, scrambled
+ * text on a fresh device is taken to mean a lock is coming; after, with the
+ * lock off and no slots, such an entry is just one that can't be opened.
+ */
+let cloudChecked = false;
 
 function publish(patch: Partial<JournalLockView>): void {
   store.update((s) => {
     const next = { ...s, ...patch, unlocked: contentKey !== null };
-    next.needsUnlock = !next.unlocked && (next.mode !== 'off' || next.slots.length > 0 || scrambledSeen);
+    next.needsUnlock = !next.unlocked
+      && (next.mode !== 'off' || next.slots.length > 0 || (scrambledSeen && !cloudChecked));
     return next;
   });
+}
+
+export function setJournalWork(work: JournalWork | null): void {
+  publish({ work });
 }
 
 export function getContentKey(): CryptoKey | null {
@@ -160,6 +171,11 @@ function dropKey(): void {
   publish({});
 }
 
+/** Forget the key without saving first — the lock was just turned off. */
+export function forgetJournalKey(): void {
+  dropKey();
+}
+
 /** Lock now, saving any unsaved journal typing first. */
 export async function lockJournal(): Promise<void> {
   if (!contentKey) return;
@@ -171,9 +187,9 @@ export async function lockJournal(): Promise<void> {
 
 export const RELOCK_OPTIONS: { label: string; ms: number }[] = [
   { label: 'Immediately', ms: 0 },
-  { label: 'After 1 minute', ms: 60_000 },
-  { label: 'After 5 minutes', ms: 5 * 60_000 },
-  { label: 'After 15 minutes', ms: 15 * 60_000 },
+  { label: '1 minute', ms: 60_000 },
+  { label: '5 minutes', ms: 5 * 60_000 },
+  { label: '15 minutes', ms: 15 * 60_000 },
 ];
 
 const RELOCK_KEY = 'pb_journal_relock_ms';
@@ -277,6 +293,7 @@ export async function applyRemoteLock(userId: string, row: any | null, slots: DB
 
   await writeLocalLock(lock);
   await replaceLocalSlots(nextSlots);
+  cloudChecked = true;
   if (lock.state === 'off' && nextSlots.length === 0) scrambledSeen = false;
 
   // The lock was turned off and on again elsewhere: the key in memory is stale.

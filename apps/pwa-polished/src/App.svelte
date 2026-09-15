@@ -21,6 +21,7 @@
   import { getSettings } from "./adapters/settings";
   import { navigationStore } from "./stores/navigationStore";
   import { parseRefString } from "./lib/parseRefString";
+  import { journalLockVisibilityChanged } from "./lib/journalLock/lockState";
 
   let appReady = false;
   let showReadingPlanModal = false;
@@ -141,6 +142,9 @@
     };
 
     const handleVisibility = () => {
+      // The journal lock's relock clock starts when the app is left and is
+      // checked on the way back, before anything else runs.
+      journalLockVisibilityChanged(document.hidden);
       if (document.hidden) return;
       // Re-sync when the user switches back to this tab so progress written
       // on another device is pulled into IndexedDB. Throttled to at most

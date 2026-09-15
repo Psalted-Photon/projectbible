@@ -7,7 +7,7 @@
   import { formatDays, formatTime12h } from "../../lib/alarm/alarmSchedule";
   import { getAllVoices, getSelectableVoices, type TtsVoiceInfo } from "../../adapters/tts";
   import { paneStore } from "../../stores/paneStore";
-  import { Gear, Palette, BookOpenText, SpeakerHigh, Globe, Package } from 'phosphor-svelte';
+  import { Gear, Palette, BookOpenText, SpeakerHigh, Globe, Package, LockSimple } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
   import SettingsSection from "../SettingsSection.svelte";
   import { getInterlinearSettings } from "../../adapters/settings";
@@ -17,6 +17,10 @@
   import FontField from "../FontField.svelte";
   import { contrastRatio, isLowContrast, isValidHex, redLetterFor } from "../../lib/themeColors";
   import { tutorial } from "../../tutorial/state";
+  import { journalLock, getRelockAfterMs, setRelockAfterMs, RELOCK_OPTIONS } from "../../lib/journalLock/lockState";
+  import { userProfileStore } from "../../stores/userProfileStore";
+  import JournalLockManage from "../JournalLockManage.svelte";
+  import JournalLockDialog from "../JournalLockDialog.svelte";
 
   /**
    * Appearance changes land on the reader live, so the pane asks its shell to
@@ -205,8 +209,21 @@
     interlinear: false,
     readAloud: false,
     general: false,
+    privacy: false,
     storage: false,
   };
+
+  // ── Journal lock ────────────────────────────────────────────────────────
+  // Lives in lib/journalLock, outside the settings payload: the lock itself
+  // syncs with the account, and the relock time stays with each device.
+  let relockMs = getRelockAfterMs();
+  let lockDialogOpen = false;
+
+  $: journalLockOn = $journalLock.mode !== 'off';
+
+  function toggleJournalLock() {
+    if (!journalLockOn && $userProfileStore.isSignedIn) lockDialogOpen = true;
+  }
 
   $: clearBackdrop = openSections.appearance;
 
@@ -232,6 +249,9 @@
     `${navBarClock ? "" : " · No clock"}` +
     ` · Rotation ${allowRotation ? "on" : "off"}`;
   $: storageSummary = `Packs · Cache · Updates${autoCheckUpdates ? "" : " (manual)"}`;
+  $: privacySummary = journalLockOn
+    ? `Journal lock on · ${relockMs === 0 ? "relocks immediately" : `relocks after ${RELOCK_OPTIONS.find((o) => o.ms === relockMs)?.label ?? ""}`}`
+    : "Journal lock off";
 
   // Interlinear owns its own storage (InterlinearControls persists directly),
   // so its summary is read back rather than derived from a local variable.
@@ -873,6 +893,50 @@
       </label>
     </div>
   </SettingsSection>
+
+  <SettingsSection title="Privacy" summary={privacySummary} bind:open={openSections.privacy}>
+    <span slot="icon"><LockSimple size={16} weight="bold" /></span>
+
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input
+          type="checkbox"
+          checked={journalLockOn}
+          disabled={journalLockOn || !$userProfileStore.isSignedIn}
+          on:click|preventDefault={toggleJournalLock}
+        />
+        <span class="label-text">Journal lock</span>
+      </label>
+      <p class="section-description il-hint">
+        Asks for your fingerprint or face before the Journal opens, and scrambles
+        your journal on this device and in the cloud.
+        {#if !journalLockOn && !$userProfileStore.isSignedIn}
+          Sign in to turn it on; the lock is kept with your account.
+        {/if}
+      </p>
+    </div>
+
+    {#if journalLockOn}
+      <div class="setting-group">
+        <label>
+          <span class="label-text">Lock again after</span>
+          <select bind:value={relockMs} on:change={() => setRelockAfterMs(relockMs)}>
+            {#each RELOCK_OPTIONS as opt}
+              <option value={opt.ms}>{opt.label}</option>
+            {/each}
+          </select>
+        </label>
+      </div>
+
+      <div class="setting-group">
+        <JournalLockManage />
+      </div>
+    {/if}
+  </SettingsSection>
+
+  {#if lockDialogOpen}
+    <JournalLockDialog on:close={() => (lockDialogOpen = false)} />
+  {/if}
 
   <SettingsSection title="Storage &amp; Updates" summary={storageSummary} bind:open={openSections.storage}>
     <span slot="icon"><Package size={16} weight="bold" /></span>

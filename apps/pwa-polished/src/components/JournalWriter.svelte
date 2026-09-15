@@ -4,6 +4,7 @@
   import JournalNavigationBar from './JournalNavigationBar.svelte';
   import { syncedJournalStore, subscribeToJournalRemoteChanges } from '../adapters/SyncedJournalStore';
   import { localDateStr } from '../stores/clockStore';
+  import { onBeforeLock } from '../lib/journalLock/lockState';
   import type { JournalEntry } from '@projectbible/core';
   
   export let windowId: string | undefined = undefined;
@@ -25,9 +26,14 @@
   let blocked: 'locked' | 'unreadable' | null = null;
 
   let remoteChangeUnsub: (() => void) | null = null;
+  let beforeLockUnsub: (() => void) | null = null;
   
   onMount(() => {
     loadEntry(currentDate);
+
+    // The journal is about to lock: save unsaved typing while the key is
+    // still in memory, so the 2-second autosave can't lose words.
+    beforeLockUnsub = onBeforeLock(flushTyping);
     
     // Re-load when a remote sync change arrives
     remoteChangeUnsub = subscribeToJournalRemoteChanges(() => {
@@ -42,7 +48,20 @@
   onDestroy(() => {
     // Unsubscribe from remote-change signal
     remoteChangeUnsub?.();
+    beforeLockUnsub?.();
   });
+
+  async function flushTyping() {
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+      saveTimeout = null;
+    }
+    // A save already under way may have started before the last keystrokes.
+    for (let i = 0; i < 40 && isSaving; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (isDirty) await saveEntry();
+  }
   
   async function loadEntry(date: string) {
     console.log('[JournalWriter] Loading entry for date:', date);

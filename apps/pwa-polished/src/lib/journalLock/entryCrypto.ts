@@ -8,7 +8,7 @@
 
 import type { JournalEntry } from '@projectbible/core';
 import { isScrambled, scrambleField, unscrambleField } from './crypto';
-import { getContentKey, noteScrambledSeen } from './lockState';
+import { currentLockView, getContentKey, noteScrambledSeen } from './lockState';
 
 export interface OpenedJournalEntry extends JournalEntry {
   /** Scrambled, and the journal is locked. Title and text are left empty. */
@@ -33,7 +33,11 @@ export async function openEntry(entry: JournalEntry): Promise<OpenedJournalEntry
   const key = getContentKey();
   if (!key) {
     noteScrambledSeen();
-    return { ...entry, title: undefined, text: '', locked: true };
+    // Locked if unlocking is possible; otherwise (lock off, no slots left)
+    // it's simply an entry that can't be opened.
+    return currentLockView().needsUnlock
+      ? { ...entry, title: undefined, text: '', locked: true }
+      : { ...entry, title: undefined, text: '', unreadable: true };
   }
   try {
     const title = await unscrambleField(key, entry.id, entry.date, 'title', entry.title);

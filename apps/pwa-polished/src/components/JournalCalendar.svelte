@@ -3,6 +3,8 @@
   import { localDateStr } from '../stores/clockStore';
   import { syncedJournalStore } from '../adapters/SyncedJournalStore';
   import { windowStore } from '../lib/stores/windowStore';
+  import { journalLock } from '../lib/journalLock/lockState';
+  import JournalLockScreen from './JournalLockScreen.svelte';
   import type { JournalEntry } from '@projectbible/core';
 
   const dispatch = createEventDispatcher<{ close: void }>();
@@ -37,6 +39,18 @@
   }
 
   onMount(() => { loadEntries(); });
+
+  // Unlocking (or the lock turning off elsewhere) reveals what was hidden.
+  let wasLocked = false;
+  $: {
+    if (wasLocked && !$journalLock.needsUnlock) loadEntries();
+    if ($journalLock.needsUnlock) {
+      // Locking drops the previews too, not just the view of them.
+      entryMap = new Map();
+      selectedCell = null;
+    }
+    wasLocked = $journalLock.needsUnlock;
+  }
 
   // ─── Month navigation ─────────────────────────────────────────────────────────
   function prevMonth() {
@@ -174,6 +188,9 @@
 
 <svelte:window on:pointerdown={handleWindowPointerdown} on:keydown={handleWindowKeydown} />
 
+{#if $journalLock.needsUnlock}
+  <JournalLockScreen compact />
+{:else}
 <div class="jc-root">
   <div class="jc-top">
     <button class="today-btn" on:click={goToToday}>Today</button>
@@ -217,8 +234,9 @@
     <div class="jc-loading">Loading…</div>
   {/if}
 </div>
+{/if}
 
-{#if selectedCell}
+{#if selectedCell && !$journalLock.needsUnlock}
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
   <div
     class="jc-popover"
