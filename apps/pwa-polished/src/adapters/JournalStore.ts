@@ -1,5 +1,5 @@
 import type { JournalStore, JournalEntry } from '@projectbible/core';
-import { generateId, writeTransaction } from './db.js';
+import { generateId, readTransaction, writeTransaction } from './db.js';
 import type { DBJournalEntry } from './db.js';
 
 export class IndexedDBJournalStore implements JournalStore {
@@ -91,9 +91,25 @@ export class IndexedDBJournalStore implements JournalStore {
     }
   }
   
-  async saveEntry(entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<JournalEntry> {
+  async getEntryById(id: string): Promise<JournalEntry | null> {
+    const dbEntry = await readTransaction<DBJournalEntry | undefined>('journal_entries', (store) => store.get(id));
+    if (!dbEntry) return null;
+    return {
+      id: dbEntry.id,
+      date: dbEntry.date,
+      title: dbEntry.title,
+      text: dbEntry.text,
+      createdAt: new Date(dbEntry.createdAt),
+      updatedAt: new Date(dbEntry.updatedAt)
+    };
+  }
+
+  /**
+   * `id` lets the caller make the id first — the journal lock ties each
+   * scrambled field to its entry id, so it has to exist before scrambling.
+   */
+  async saveEntry(entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'>, id: string = generateId()): Promise<JournalEntry> {
     const now = Date.now();
-    const id = generateId();
     
     const dbEntry: DBJournalEntry = {
       id,
@@ -159,6 +175,34 @@ export class IndexedDBJournalStore implements JournalStore {
     }
   }
   
+  /**
+   * Overwrite title and text together, clearing the title when it's
+   * undefined. Used when the journal lock scrambles or unscrambles an entry,
+   * where both fields always move as a pair.
+   */
+  async replaceFields(id: string, fields: { title: string | undefined; text: string; updatedAt: number }): Promise<void> {
+    const db = await import('./db.js').then(m => m.openDB());
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction('journal_entries', 'readwrite');
+      const store = transaction.objectStore('journal_entries');
+      const getRequest = store.get(id);
+      getRequest.onsuccess = () => {
+        const entry = getRequest.result as DBJournalEntry | undefined;
+        if (!entry) {
+          reject(new Error(`Journal entry ${id} not found`));
+          return;
+        }
+        entry.title = fields.title;
+        entry.text = fields.text;
+        entry.updatedAt = fields.updatedAt;
+        const putRequest = store.put(entry);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = () => reject(putRequest.error);
+      };
+      getRequest.onerror = () => reject(getRequest.error);
+    });
+  }
+
   async deleteEntry(id: string): Promise<void> {
     await writeTransaction('journal_entries', (store) => store.delete(id));
   }

@@ -415,8 +415,9 @@ class SyncService {
     // The empty-rows gate protects tables whose apply fns reconcile deletions
     // (e.g. user_notes would wipe local data on an empty server). reading_progress
     // must run even with zero remote rows so its reconciliation can push local
-    // progress up to a fresh/empty server.
-    if (data && (data.length > 0 || table === 'reading_progress')) {
+    // progress up to a fresh/empty server. journal_lock must too: no row means
+    // the lock is off, which a device that saw it on needs to hear.
+    if (data && (data.length > 0 || table === 'reading_progress' || table === 'journal_lock')) {
       await applyFn(data);
     }
   }

@@ -10,10 +10,11 @@ import { logInstallIfActive } from '../lib/install-log';
  * - user_highlights: user highlights
  * - user_bookmarks: user bookmarks
  * - journal_entries: daily journal entries
+ * - journal_lock / journal_key_slots: the journal lock and its locked key copies
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 34; // Migration 34: add atlas_* stores (the Historical Map pack)
+const DB_VERSION = 35; // Migration 35: add journal_lock + journal_key_slots (the journal lock)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -265,6 +266,34 @@ export interface DBJournalEntry {
   text: string; // Raw HTML from Lexical
   createdAt: number; // Unix timestamp
   updatedAt: number; // Unix timestamp
+}
+
+/**
+ * The journal lock as this device last heard it from the cloud. One row, for
+ * whichever account last signed in here. Holds no secret.
+ */
+export interface DBJournalLock {
+  userId: string;
+  state: 'off' | 'on' | 'turning_off';
+  keyId: string | null;
+  updatedAt: number;
+}
+
+/**
+ * A locked copy of the journal key. Kept on the device so unlocking works
+ * offline; useless without the passkey or recovery code that opens it.
+ */
+export interface DBJournalKeySlot {
+  id: string;
+  userId: string;
+  kind: 'passkey' | 'recovery';
+  keyId: string;
+  label: string;
+  credentialId: string | null;
+  rpId: string | null;
+  salt: string;
+  wrappedKey: string;
+  createdAt: number;
 }
 
 /** A named folder of free-form notes. Created and renamed by the user. */
@@ -694,6 +723,15 @@ export function openDB(): Promise<IDBDatabase> {
         journalStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
       
+      // The journal lock, and the locked copies of the journal key
+      if (!db.objectStoreNames.contains('journal_lock')) {
+        db.createObjectStore('journal_lock', { keyPath: 'userId' });
+      }
+      if (!db.objectStoreNames.contains('journal_key_slots')) {
+        const slotStore = db.createObjectStore('journal_key_slots', { keyPath: 'id' });
+        slotStore.createIndex('userId', 'userId', { unique: false });
+      }
+
       // Notebooks store (named folders for free-form notes)
       if (!db.objectStoreNames.contains('notebooks')) {
         const notebookStore = db.createObjectStore('notebooks', { keyPath: 'id' });

@@ -17,6 +17,12 @@
   let isDirty = false;
   let isSaving = false;
   let saveTimeout: number | null = null;
+  /**
+   * Set when the day's entry is scrambled and can't be shown: 'locked' while
+   * the journal key isn't in memory, 'unreadable' when the key can't open it.
+   * Either way nothing may be saved over it.
+   */
+  let blocked: 'locked' | 'unreadable' | null = null;
 
   let remoteChangeUnsub: (() => void) | null = null;
   
@@ -42,6 +48,7 @@
     console.log('[JournalWriter] Loading entry for date:', date);
     try {
       const entry = await syncedJournalStore.getEntryByDate(date);
+      blocked = entry?.locked ? 'locked' : entry?.unreadable ? 'unreadable' : null;
       if (entry) {
         console.log('[JournalWriter] Found entry:', entry.id);
         currentEntry = entry;
@@ -79,7 +86,7 @@
   }
   
   async function saveEntry() {
-    if (isSaving) return;
+    if (isSaving || blocked) return;
     isSaving = true;
     
     try {
@@ -109,12 +116,14 @@
   }
   
   function handleTextChange(event: CustomEvent<string>) {
+    if (blocked) return;
     text = event.detail;
     isDirty = true;
     debouncedSave();
   }
   
   function handleTitleChange(event: CustomEvent<string>) {
+    if (blocked) return;
     title = event.detail;
     isDirty = true;
     debouncedSave();
@@ -173,6 +182,17 @@
       on:change={handleTextChange}
       on:blur={handleBlur}
     />
+    {#if blocked}
+      <div class="entry-blocked" role="status">
+        {#if blocked === 'locked'}
+          <p class="blocked-title">This entry is locked</p>
+          <p>Unlock the journal to read it.</p>
+        {:else}
+          <p class="blocked-title">This entry couldn’t be opened</p>
+          <p>It may have been scrambled with an older journal key, or damaged. It’s been left exactly as it is, and it can’t be written over.</p>
+        {/if}
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -191,5 +211,32 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    position: relative;
+  }
+
+  /* Covers the editor so nothing can be typed over an entry that didn't open. */
+  .entry-blocked {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 24px;
+    text-align: center;
+    background: #1c1c1e;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .entry-blocked p {
+    margin: 0;
+    max-width: 340px;
+  }
+  .entry-blocked .blocked-title {
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.88);
   }
 </style>

@@ -20,7 +20,8 @@ export type SyncTable =
   | 'notebooks'
   | 'notebook_pages'
   | 'reading_plans'
-  | 'reading_progress';
+  | 'reading_progress'
+  | 'journal_lock';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
 
