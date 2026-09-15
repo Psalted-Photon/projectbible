@@ -44,7 +44,7 @@ The **private key** is deliberately not in this repo. It is in the scratchpad
 file `vapid-keys.txt` from the session that generated it. It must never go into
 a `VITE_` variable or any file under `apps/`, because those ship to browsers.
 
-The public key is already in `apps/pwa-polished/.env.local` and baked into the
+The public key is already in `apps/pwa-polished/.env` and baked into the
 build — that one is safe to publish.
 
 ## 4. Schedule it

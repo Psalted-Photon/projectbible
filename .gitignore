@@ -80,3 +80,7 @@ apps/pwa-polished/public/tts/
 # build. Committing it would put an LFS pointer in CI, which the origin would
 # then serve as a 130-byte file that looks like a valid download.
 apps/pwa-polished/public/starter.sqlite
+
+# Local env files. Public build settings live in apps/pwa-polished/.env, which is
+# committed; anything secret goes in a .local file so it never reaches git.
+.env*.local
