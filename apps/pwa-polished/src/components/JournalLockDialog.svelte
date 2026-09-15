@@ -16,7 +16,7 @@
     addFingerprintToDraft, discardDraft, finishTurnOn, JournalLockError, replaceRecoveryCode,
     startTurnOn, turnOffJournalLock, UnreadableEntriesError, type LockDraft,
   } from '../lib/journalLock/actions';
-  import { fingerprintSupport, PasskeyError } from '../lib/journalLock/passkey';
+  import { cancelPasskeyPrompt, fingerprintSupport, PasskeyError } from '../lib/journalLock/passkey';
   import { generateRecoveryCode, lastGroupOf } from '../lib/journalLock/recoveryCode';
 
   export let kind: 'turn-on' | 'new-code' | 'turn-off' = 'turn-on';
@@ -52,6 +52,7 @@
   });
 
   onDestroy(() => {
+    if (busy) cancelPasskeyPrompt();
     // Closed partway: nothing was saved, so leave nothing behind.
     if (draft && step !== 'working' && step !== 'done') discardDraft(draft);
     newCode = '';

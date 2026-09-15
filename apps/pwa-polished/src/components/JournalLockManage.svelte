@@ -7,11 +7,11 @@
    * fingerprint, a new recovery code, and finishing a turn-off that stopped
    * partway. The dialogs themselves belong to SettingsPane.
    */
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { Fingerprint, Plus, Key, Trash } from 'phosphor-svelte';
   import { journalLock } from '../lib/journalLock/lockState';
   import { addThisDeviceFingerprint, JournalLockError, removeFingerprint } from '../lib/journalLock/actions';
-  import { currentRpId, fingerprintSupport, PasskeyError } from '../lib/journalLock/passkey';
+  import { cancelPasskeyPrompt, currentRpId, fingerprintSupport, PasskeyError } from '../lib/journalLock/passkey';
   import type { DBJournalKeySlot } from '../adapters/db';
   import JournalLockScreen from './JournalLockScreen.svelte';
 
@@ -26,6 +26,10 @@
 
   onMount(() => {
     fingerprintSupport().then((s) => (support = s));
+  });
+
+  onDestroy(() => {
+    if (busy) cancelPasskeyPrompt();
   });
 
   $: passkeys = $journalLock.slots

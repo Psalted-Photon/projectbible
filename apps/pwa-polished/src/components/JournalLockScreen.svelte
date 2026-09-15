@@ -7,11 +7,11 @@
    * sits inside the window rather than over the app, so the window frame
    * stays usable (closing, docking, the tutorial's dots).
    */
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { LockSimple, Fingerprint } from 'phosphor-svelte';
   import { journalLock } from '../lib/journalLock/lockState';
   import { unlockWithFingerprint, unlockWithRecoveryCode } from '../lib/journalLock/actions';
-  import { fingerprintSupport, PasskeyError, usablePasskeySlots } from '../lib/journalLock/passkey';
+  import { cancelPasskeyPrompt, fingerprintSupport, PasskeyError, usablePasskeySlots } from '../lib/journalLock/passkey';
   import { refreshLockFromCloud } from '../lib/journalLock/sync';
   import { userProfileStore } from '../stores/userProfileStore';
 
@@ -28,6 +28,12 @@
 
   onMount(() => {
     fingerprintSupport().then((s) => (support = s));
+  });
+
+  // Closing the journal closes a fingerprint request that never showed, so
+  // it can't block the next try.
+  onDestroy(() => {
+    if (busy && !usingCode) cancelPasskeyPrompt();
   });
 
   $: usable = usablePasskeySlots($journalLock.slots, $journalLock.keyId);
@@ -149,8 +155,10 @@
         {:else if hasPasskeys && support === 'no'}
           <p class="jl-note">This browser can’t use a fingerprint for the journal. Use your recovery code.</p>
         {/if}
-        {#if hasRecovery}
-          <button class="jl-link" on:click={openCodeEntry} disabled={busy}>Use recovery code</button>
+        {#if busy}
+          <button class="jl-link" on:click={cancelPasskeyPrompt}>Cancel</button>
+        {:else if hasRecovery}
+          <button class="jl-link" on:click={openCodeEntry}>Use recovery code</button>
         {/if}
       {/if}
 

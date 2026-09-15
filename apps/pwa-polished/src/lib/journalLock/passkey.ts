@@ -125,6 +125,45 @@ export function forgetPasskey(rpId: string, credentialId: string): void {
   }
 }
 
+/**
+ * The fingerprint request this app has open. A request the phone never shows
+ * stays open until it times out, and while it does the phone refuses every
+ * new one ("A request is already pending"), so it has to be closable.
+ */
+let openPrompt: AbortController | null = null;
+
+/** Close a fingerprint request that's still open. */
+export function cancelPasskeyPrompt(): void {
+  openPrompt?.abort();
+  openPrompt = null;
+}
+
+/**
+ * Run one passkey request, closing any still-open one first. `run` is called
+ * straight away, not after an await, so the tap that started it still counts
+ * as the tap (iPhones insist).
+ */
+async function withPrompt<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const closedOne = openPrompt !== null;
+  cancelPasskeyPrompt();
+  const controller = new AbortController();
+  openPrompt = controller;
+  try {
+    try {
+      return await run(controller.signal);
+    } catch (err) {
+      // The phone can take a moment to let go of the request just closed.
+      if (closedOne && (err as { name?: string })?.name === 'OperationError' && !controller.signal.aborted) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return await run(controller.signal);
+      }
+      throw err;
+    }
+  } finally {
+    if (openPrompt === controller) openPrompt = null;
+  }
+}
+
 function prfFirst(credential: PublicKeyCredential): Uint8Array<ArrayBuffer> | null {
   const first = credential.getClientExtensionResults().prf?.results?.first;
   if (!first) return null;
@@ -141,6 +180,10 @@ function prfFirst(credential: PublicKeyCredential): Uint8Array<ArrayBuffer> | nu
  * Make a new passkey on this device and a slot it opens. The person may be
  * asked for their fingerprint twice: some phones only hand over the secret
  * when the new passkey is used, not when it is made.
+ *
+ * `sharedSalt` is the salt the lock's other passkeys already use. Sharing one
+ * is safe (each passkey turns the same salt into its own, unrelated secret)
+ * and lets unlocking ask all of them with a single plain request.
  */
 export async function createPasskeySlot(
   journalKey: Uint8Array<ArrayBuffer>,
@@ -148,13 +191,15 @@ export async function createPasskeySlot(
   userId: string,
   accountName: string,
   existingCredentialIds: string[],
+  sharedSalt?: Uint8Array<ArrayBuffer>,
 ): Promise<DBJournalKeySlot> {
   const rpId = currentRpId();
-  const salt = randomBytes(32);
+  const salt = sharedSalt ?? randomBytes(32);
 
   let created: PublicKeyCredential | null;
   try {
-    created = (await navigator.credentials.create({
+    created = (await withPrompt((signal) => navigator.credentials.create({
+      signal,
       publicKey: {
         rp: { id: rpId, name: 'Hexapla' },
         // A fresh random handle per passkey, so adding a second device never
@@ -177,7 +222,7 @@ export async function createPasskeySlot(
         timeout: PROMPT_TIMEOUT_MS,
         extensions: { prf: { eval: { first: salt } } },
       },
-    })) as PublicKeyCredential | null;
+    }))) as PublicKeyCredential | null;
   } catch (err) {
     throw asProblem(err);
   }
@@ -193,7 +238,8 @@ export async function createPasskeySlot(
       // Made, but the secret only comes when it's used. Use it once.
       let used: PublicKeyCredential | null;
       try {
-        used = (await navigator.credentials.get({
+        used = (await withPrompt((signal) => navigator.credentials.get({
+          signal,
           publicKey: {
             rpId,
             challenge: randomBytes(32),
@@ -202,7 +248,7 @@ export async function createPasskeySlot(
             timeout: PROMPT_TIMEOUT_MS,
             extensions: { prf: { eval: { first: salt } } },
           },
-        })) as PublicKeyCredential | null;
+        }))) as PublicKeyCredential | null;
       } catch (err) {
         throw asProblem(err);
       }
@@ -251,37 +297,45 @@ export async function openWithPasskey(
   const usable = usablePasskeySlots(slots, keyId);
   if (usable.length === 0) throw new PasskeyError('no-match');
 
-  // One passkey (the usual case): ask the same plain way setup did, which has
-  // already worked on this device. Only several passkeys, each with its own
-  // salt, need the per-passkey form, which not every browser handles.
-  let prf: AuthenticationExtensionsPRFInputs;
-  if (usable.length === 1) {
-    prf = { eval: { first: fromBase64Url(usable[0].salt) } };
+  // When the passkeys share a salt (always, for one passkey), ask without
+  // naming them: the phone shows its own passkey picker, the same route that
+  // made the passkey. Naming passkeys by id takes a different route on
+  // Android that, in the installed app, stalls without ever showing a prompt.
+  // Only passkeys with different salts still need to be named.
+  const shared = new Set(usable.map((s) => s.salt)).size === 1;
+  let request: PublicKeyCredentialRequestOptions;
+  if (shared) {
+    request = {
+      rpId: currentRpId(),
+      challenge: randomBytes(32),
+      userVerification: 'required',
+      timeout: PROMPT_TIMEOUT_MS,
+      extensions: { prf: { eval: { first: fromBase64Url(usable[0].salt) } } },
+    };
   } else {
     const evalByCredential: Record<string, { first: Uint8Array<ArrayBuffer> }> = {};
     for (const slot of usable) evalByCredential[slot.credentialId!] = { first: fromBase64Url(slot.salt) };
-    prf = { evalByCredential };
+    request = {
+      rpId: currentRpId(),
+      challenge: randomBytes(32),
+      allowCredentials: usable.map((s) => ({ type: 'public-key' as const, id: fromBase64Url(s.credentialId!) })),
+      userVerification: 'required',
+      timeout: PROMPT_TIMEOUT_MS,
+      extensions: { prf: { evalByCredential } },
+    };
   }
 
   let credential: PublicKeyCredential | null;
   try {
-    credential = (await navigator.credentials.get({
-      publicKey: {
-        rpId: currentRpId(),
-        challenge: randomBytes(32),
-        allowCredentials: usable.map((s) => ({ type: 'public-key' as const, id: fromBase64Url(s.credentialId!) })),
-        userVerification: 'required',
-        timeout: PROMPT_TIMEOUT_MS,
-        extensions: { prf },
-      },
-    })) as PublicKeyCredential | null;
+    credential = (await withPrompt((signal) =>
+      navigator.credentials.get({ signal, publicKey: request }))) as PublicKeyCredential | null;
   } catch (err) {
     throw asProblem(err);
   }
   if (!credential) throw new PasskeyError('cancelled');
 
   const slot = usable.find((s) => s.credentialId === toBase64Url(credential!.rawId));
-  if (!slot) throw new PasskeyError('no-match', 'a different passkey answered');
+  if (!slot) throw new PasskeyError('no-match', 'that passkey isn’t one of this lock’s');
   const secret = prfFirst(credential);
   if (!secret) throw new PasskeyError('unsupported', 'the passkey gave no secret');
 

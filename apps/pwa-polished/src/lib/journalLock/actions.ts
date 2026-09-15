@@ -14,7 +14,7 @@ import { supabase } from '../supabase/client';
 import { syncService } from '../sync/SyncService';
 import { syncQueue } from '../sync/SyncQueueService';
 import type { SyncOperation } from '../sync/types';
-import { generateJournalKey, keyIdFor } from './crypto';
+import { fromBase64Url, generateJournalKey, keyIdFor } from './crypto';
 import type { DBJournalLock } from '../../adapters/db';
 import {
   adoptLock, currentLockView, forgetJournalKey, getJournalKey, unlockWith, withLocalLockChange,
@@ -255,7 +255,12 @@ export async function addThisDeviceFingerprint(): Promise<void> {
     .filter((s) => s.kind === 'passkey' && s.rpId === currentRpId() && s.credentialId)
     .map((s) => s.credentialId!);
 
-  const slot = await createPasskeySlot(journalKey, keyId, account.userId, account.email, existing);
+  // Share the salt the lock's other passkeys use, so one request asks them all.
+  const sibling = view.slots.find((s) => s.kind === 'passkey' && s.keyId === keyId);
+  const slot = await createPasskeySlot(
+    journalKey, keyId, account.userId, account.email, existing,
+    sibling ? fromBase64Url(sibling.salt) : undefined,
+  );
   await withLocalLockChange(async () => {
     try {
       await uploadSlots([slot]);
