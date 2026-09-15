@@ -297,21 +297,17 @@ export default defineConfig({
         // TTS runtime files (~30 MB) are cached on first Read Aloud use, not
         // precached — users who never use TTS never pay the download. The
         // voice model itself lives in OPFS, managed by src/lib/tts/.
-        // Three standalone pages must bypass the service worker entirely:
+        // Two standalone pages must bypass the service worker entirely:
         // precaching would replay a stored response, and the navigation
         // fallback below would hand back index.html instead. Both entries are
         // needed — globIgnores keeps the page out of the precache, the denylist
         // keeps the fallback off it — and missing either one is silent.
-        //   kokoro-test.html  throwaway speed diagnostic (remove when done);
-        //                     its cross-origin-isolation headers have to be the
-        //                     ones the browser actually sees.
         //   voice-lab.html    voice auditioning.
         //   reset.html        the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
-        globIgnores: ['**/tts/**', '**/kokoro-test.html', '**/voice-lab.html', '**/reset.html'],
+        globIgnores: ['**/tts/**', '**/voice-lab.html', '**/reset.html'],
         navigateFallbackDenylist: [
-          /^\/kokoro-test\.html$/,
           /^\/voice-lab\.html$/,
           /^\/reset\.html$/,
         ],
