@@ -471,7 +471,7 @@ Create an account with an email and password. You can also change your name, cha
 Signing in syncs your personal data across devices:
 
 - Notes
-- Notebooks and their pages
+- Notebooks and their pages — shared notebooks too, though those travel by a route of their own ([26.3](#263-notebooks-you-keep-with-other-people))
 - Verse highlights and word highlights
 - Saved verses
 - Journal entries
@@ -632,12 +632,13 @@ Biographies of the people of the Bible.
 
 ## 26. Notes & Notebooks
 
-A desk for everything you write, in its own panel.
+A desk for everything you write, in its own panel, with a **Local / Shared** switch at the top: Local is yours, Shared is the notebooks you keep with other people.
 
-### 26.1 Two kinds of notes
+### 26.1 Three kinds of notes
 
 - **Verse notes** — everything you've attached to a verse, organised in a book-by-book tree.
 - **Notebooks** — folders you name yourself, holding free-form pages that aren't tied to any verse.
+- **Shared notebooks** — the same thing, kept with other people. [26.3](#263-notebooks-you-keep-with-other-people).
 
 Tap to open, edit full-width, and use Back to return to the list. The same shape works whether the panel is a narrow sliver or half the screen.
 
@@ -650,4 +651,20 @@ Write "Romans 8:28" in a note and it becomes a link.
 - **Print the verse inline** — expand a reference to show the verse text with it. The printed verse can't be edited, because a verse printed in a note should be the verse. Delete the reference and the verse goes with it.
 - **Tap a link** to open a menu: go there, expand, or collapse.
 
-Notes and notebooks sync to your account like everything else.
+### 26.3 Notebooks you keep with other people
+
+A shared notebook is one a group writes in together — a study group, a class, a family.
+
+- **Make one and hand out its code.** Eight characters, with none of the letters that get misread. The same invitation is also a link and a QR code: read the code aloud across a room, paste the link, or hold one phone up to another.
+- **Two kinds.** *Everyone writes*, or *only you write* and any number read.
+- **Private or public.** A private notebook shows nothing at all to anyone who isn't in it. A public one can be read by anyone holding the link, with no account at all — reading only. Writing always needs an account.
+- **Everybody gets a badge** — two letters and a colour, the same badge commentators wear in the reader. Yours is chosen for you when you join, and you can change it, differently in each notebook.
+- **You can tell who wrote which line.** Every paragraph carries the badges of everyone who has written in it, in a margin beside it.
+- **One person writes a page at a time.** You can see who else is in the notebook and who is in the page you have open. While somebody is writing, you're told so rather than handed a pencil that would lose — and after a minute of quiet you can take over.
+- **Nothing is overwritten and nothing is merged behind your back.** If two versions of a page collide, you're never asked to pick a winner: yours is kept as a page of its own, beside theirs.
+- **Write with no signal.** A page written offline is saved on your device and marked as waiting, and goes to the notebook by itself when you're back online.
+- **Pages can cross the line, as copies.** Send one of your own pages to a shared notebook, or keep a copy of a shared page in your own. Both are copies — whatever either side writes afterwards stays where it was written.
+- **Run your own notebook.** See who's in it, change what each person can do, take somebody out (and choose separately whether their pages go with them), close joining, or issue a new code — which kills every old link and QR at once.
+- **If you're taken out of one**, your copy stays on your device to read. It isn't deleted out from under you, and it's yours to throw away when you want to.
+
+Notes and notebooks sync to your account like everything else. Shared notebooks have plumbing of their own — they belong to a group rather than to you — but they work the same way from where you sit.

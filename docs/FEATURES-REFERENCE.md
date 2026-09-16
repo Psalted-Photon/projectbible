@@ -1322,12 +1322,13 @@ A bio can be **pinned beside the reader** rather than covering it, and links fam
 
 ## 26. Notes & Notebooks
 
-`src/components/NotesPane.svelte` — the desk. Two things live here, both signed-in only:
+`src/components/NotesPane.svelte` — the desk, behind a **Local / Shared** toggle. Three things live here, all signed-in only:
 
 1. Every verse note, in the same book dropdown the search results use.
 2. Notebooks the user names themselves, each holding free-form pages.
+3. Shared notebooks — the same thing kept with other people ([26.7](#267-shared-notebooks) onwards).
 
-Layout is a **drill-down**: list → tap → full-panel editor → ‹ Back. One shape at every panel width, so a 20%-wide sliver and a 50/50 split both work.
+Layout is a **drill-down**: list → tap → full-panel editor → ‹ Back. One shape at every panel width, so a 20%-wide sliver and a 50/50 split both work. A shared page opens in a reader rather than an editor ([26.14](#2614-badges-and-the-pill-gutter)), because the default there is reading somebody else's work.
 
 ### 26.1 Notebooks
 
@@ -1376,6 +1377,231 @@ The matching itself was lifted from `linkifyCommentaryRefs` so commentary keeps 
 
 That is backwards. **A global handler should excuse text entry itself**, so a new field works the moment it is added rather than after someone remembers to defend it. `isTextEntry()` is the one test they all share, using `closest` rather than a tag check so it also covers a click landing inside a `contenteditable`.
 
+### 26.7 Shared notebooks
+
+A shared notebook is one that several accounts read and write. Same desk, same drill-down, same editor — what changes is that the rows belong to a group rather than to one person, and nearly everything underneath changes with it.
+
+The browse header carries a **Local / Shared** toggle. Local is verse notes and your own notebooks ([26.1](#261-notebooks)); Shared is the ones you keep with other people. Both halves are drawn by one component — `NotebookList.svelte`, which took the notebook and page rows out of `NotesPane.svelte` so the two sides cannot drift into two layouts — handed different accents (`LOCAL_ACCENT` `#667eea`, `SHARED_ACCENT` `#2dd4bf`), different capability flags (`canAddPage`, `canInvite`, `canEditBadge`, `pageDeleteWord="Remove"`) and different rows. Open/closed keys are namespaced by `keyPrefix`, so a row left unfolded on one side does not unfold anything on the other.
+
+Two axes, both the owner's, both switchable afterwards ([26.17](#2617-running-a-notebook)):
+
+| Column | Values |
+|---|---|
+| `kind` | **group** — everyone who may write, writes. **broadcast** — a handful write, any number read. |
+| `visibility` | **private** — signed in and a member, or there is nothing to see at all. **public** — anyone holding the link may read; writing always needs an account. |
+
+Three roles live on the member row — `admin`, `writer`, `reader` — and are shown throughout as **Runs it**, **Writes** and **Reads**. A writer in a Broadcast notebook is drawn as "Reads", because that is what they can do (`roleWord()`, `SharedNotebookAdmin.svelte`).
+
+The feature by file:
+
+| File | What it holds |
+|---|---|
+| `supabase/migrations/012_shared_notebooks.sql` | three tables, ten policies, the guard, every RPC — [26.8](#268-the-server-migration-012) |
+| `src/adapters/SharedNotebookStore.ts` | the store, the pull, and every write — [26.9](#269-sharednotebookstore) |
+| `src/lib/shared/sanitizeNoteHtml.ts` | the allowlist every page passes through twice — [26.10](#2610-the-sanitiser) |
+| `src/lib/shared/ids.ts`, `joinCode.ts` | UUIDs for shared rows; the code, its link, its QR — [26.11](#2611-ids-and-join-codes) |
+| `src/lib/shared/sharedPermissions.ts` | one function per rule, each mirroring a policy — [26.13](#2613-permissions) |
+| `src/lib/shared/memberIdentity.ts`, `paragraphStamp.ts` | badges, and who wrote which line — [26.14](#2614-badges-and-the-pill-gutter) |
+| `src/lib/shared/sharedRealtime.ts` | the channel, presence and the lock — [26.15](#2615-live-presence-and-the-one-writer-lock) |
+| `src/lib/shared/sharedOutbox.ts` | what you wrote with no signal — [26.18](#2618-offline) |
+| Components | `SharedNotebookCreate`, `SharedNotebookJoin`, `SharedJoinLayer`, `PublicNotebookReader`, `SharedPageView`, `SharedLiveBar`, `SharedNotebookAdmin`, `MemberPillPicker`, `CopyPageSheet`, `QrCode`, `AuthorPill`, `NotebookList` |
+
+### 26.8 The server: migration 012
+
+`supabase/migrations/012_shared_notebooks.sql` — 819 lines, idempotent, and the only SQL the feature ever needed. Everything from the third phase on was client work against functions already sitting in here.
+
+**Tables.** All three take a `TEXT` primary key holding a UUID the app made ([26.11](#2611-ids-and-join-codes)), and all three have row-level security on.
+
+| Table | Notable columns |
+|---|---|
+| `shared_notebooks` | `owner_id`, `name`, `kind`, `visibility`, `join_code` (unique), `join_open`, `rev` |
+| `shared_notebook_members` | `notebook_id`, `user_id`, `role`, `display_name`, `initials`, `color`; unique on `(notebook_id, user_id)` |
+| `shared_notebook_pages` | `notebook_id`, `author_id`, `title`, `text`, `edit_mode`, `pinned`, `sort_order`, `rev`, `deleted_at`, `updated_by` |
+
+Two revision counters, both bumped by `shared_page_bump_rev()` on every page write and every delete. The page's own `rev` is what a conflict is measured against; the notebook's is what a signed-out reader polls, one number instead of a held-open connection. `deleted_at` is a soft delete, so a device that was offline when a page was taken out learns about it on its next pull instead of quietly uploading the page again.
+
+**Membership helpers**, all `SECURITY DEFINER` on purpose: the policies below call them, and a policy on `shared_notebook_members` that read `shared_notebook_members` through RLS would call itself. `is_shared_notebook_member()`, `shared_notebook_role()`, `can_write_shared_notebook()`, `owns_shared_notebook()` — each answers only about the caller, so none can be turned on somebody else's membership.
+
+**Ten policies**, three of which carry the whole shape of the feature: *Writers can add shared pages*; *Authors, and open pages, can be edited*; *Authors and the owner can delete shared pages*. Reading is by membership; changing the notebook itself, and writing anybody's member row, is the owner's.
+
+**`shared_page_guard()`**, a `BEFORE INSERT OR UPDATE` trigger — the cheap second line behind the client sanitiser, refusing the handful of things the editor can never legitimately produce:
+
+- over 200,000 characters (`MAX_PAGE_CHARS` client-side is the same number)
+- raw markup — `<script>`, `<iframe>`, `<style>`, `<svg>`, or any `on…=`, `href=`, `src=` attribute. A `<` typed as prose arrives escaped, so a live tag in stored text was never something a person typed.
+- more than 1,000 live pages in a notebook, or more than 30 new ones a minute from one author
+- `pinned` set by anyone but the notebook's owner: quietly dropped on insert, because an older client could send it meaning nothing by it, and refused outright on update
+
+**The functions the app calls.** Everything that writes goes through one of these rather than through a plain insert:
+
+| Function | Notes |
+|---|---|
+| `create_shared_notebook(p_id, p_member_id, p_name, p_kind, p_visibility, p_display_name, p_initials, p_color)` | makes the notebook and the owner's member row in one statement |
+| `join_shared_notebook(p_code, p_member_id, p_display_name, p_initials, p_color)` | the only function that reads a notebook by code |
+| `reset_shared_notebook_code(p_notebook_id)` | owner only; returns the new code |
+| `save_shared_page(p_id, p_notebook_id, p_title, p_text, p_base_rev, p_edit_mode, p_pinned, p_created_at)` | returns `JSONB` — `{status, page}` with a status of `saved`, `conflict` or `deleted` |
+| `remove_shared_page(p_id)` | sets `deleted_at` and nothing else, so there is no path here by which an owner puts words into somebody else's page |
+| `read_public_shared_notebook(p_code)` / `public_shared_notebook_rev(p_code)` | the signed-out pair — [26.12](#2612-joining-inviting-and-reading-signed-out) |
+| `new_shared_notebook_code()` | the generator; alphabet without `0 O 1 I L U` |
+
+`delete_account()` is re-created at the end of the migration with the three new tables swept: a notebook the leaver owned goes with them and cascades, and their membership of other people's notebooks — and the pages they wrote there — go too.
+
+The last statement is a self-check. A correct run reports the three tables true, `functions_ready` 12, `policies_ready` 10, `triggers_ready` 3 and `realtime_tables` 3 — the three tables being in the `supabase_realtime` publication is what [26.15](#2615-live-presence-and-the-one-writer-lock) rides on.
+
+### 26.9 SharedNotebookStore
+
+`src/adapters/SharedNotebookStore.ts` (1,530) — deliberately separate plumbing from `SyncedNotebookStore`, and it has to stay that way.
+
+**Why it is not in the sync engine.** The single-user engine injects `user_id` into every write, scopes every pull to the signed-in account, and then has `reconcileDeletedRows` delete any local row that pull did not return. Every one of those is right for a table holding one person's rows and wrong for a table holding everybody's — aimed here, the last would wipe other people's pages off this device the first time it ran. So the shared tables stay out of the `SyncTable` union and out of `RealtimeService`'s list, and get their own pull, their own reconciliation and their own outbox.
+
+**What makes reconciliation safe here** is that the pull is scoped by *membership* rather than authorship. What comes back is exactly the set of rows this account may see, so a row missing from it really is gone.
+
+`pull({force})` in order: `flushOutbox()` first — up before down, or a pull would replace the page written on a train with the older one the server still has; then all three tables at once, with any one of them erroring abandoning the whole reconciliation rather than acting on a half-answer; then `replaceAll` per store. Un-forced pulls are rate-limited to one per 10 seconds, and an offline device returns without trying.
+
+**Two exceptions to "a row missing from the pull is gone".**
+
+1. A whole notebook that stops coming back is kept and stamped `removedAt` (`markMissingNotebooksRemoved()`), and its members and pages are spared with it. Being removed from a study group should not make the evening you spent writing in it vanish off your phone without a word. The copy left behind is inert — see `isReadOnlyCopy()` in [26.13](#2613-permissions) — and `forgetNotebook()` is the one thing its holder can still do. `removedAt` is local only; the server has no such column, so re-joining clears it.
+2. A page with writing still in the outbox is left exactly as it is, both ways round: the server's older copy does not replace it, and a page started offline — which the server has never heard of, so it is missing by definition — is not mistaken for one that was removed.
+
+Shapes: `SharedNotebook`, `SharedNotebookMember`, `SharedNotebookPage`, `SharedPageSaveResult`, `PublicSharedNotebook`. `subscribeToSharedNotebookChanges()` fires whenever a pull changed anything, and is what the pane redraws from.
+
+The singleton is `sharedNotebookStore`. Reads: `getNotebooks()`, `getNotebook()`, `getMembers()`, `getAllMembers()`, `getMyMembership()`, `getPages()`, `getAllPages()`, `getPage()`, `pendingPages()`. Writes: `createNotebook()`, `joinByCode()`, `createPage()`, `savePage()`, `removePage()`, `updateMyBadge()`, `updateNotebook()`, `resetJoinCode()`, `setMemberRole()`, `removeMember()`, `leaveNotebook()`, `forgetNotebook()`. Signed-out: `readPublic()`, `publicRev()`. Housekeeping: `pull()`, `flushOutbox()`, `clear()`.
+
+`SharedPageSaveResult.status` is `saved` | `conflict` | `deleted` | `queued` — none of the four is an error, which is why it is a returned value. A *refusal* (a reader writing, a closed page) is a different thing and throws.
+
+### 26.10 The sanitiser
+
+`src/lib/shared/sanitizeNoteHtml.ts`. A local note is HTML this device wrote and only this device reads back. A shared page is HTML somebody else wrote, parsed into the DOM here. So it runs at both ends — before upload, so this device never publishes something odd it picked up from a paste, and again on the way in, because neither side should have to trust the other. A page that was clean when written and one tampered with in between look identical from here.
+
+What survives is exactly what the editor can produce:
+
+| | |
+|---|---|
+| Tags | `p`, `br`, `span`, `strong`, `b`, `em`, `i`, `u`, `s`, `strike`, `del`, `sub`, `sup` |
+| Classes | the seven `editor-*` theme classes, plus `bible-ref`, `is-expanded`, `is-pending` |
+| Styles | `font-size` (bounded to 3 digits of px), `text-align`, `white-space`, `--ref-color` — each checked against its own pattern, not just its name |
+| Attributes | `class`, `style`, `dir` anywhere; `data-ref`, `data-book`, `data-chapter`, `data-verse`, `data-expanded`, `role` on a verse reference; `data-pid` and `data-pills` on a paragraph |
+
+Everything else goes: every link, image, script, event attribute and id, and every style that could paint or position anything. Colour is the point of the exercise — a shared page carries structure, and how it looks comes from the reader's own settings, exactly as a local note does. Tags in `DROP_ENTIRELY` lose their text with them; everything else unknown is unwrapped instead, because a stray `<div>` round a paragraph is clutter whereas the text inside a `<script>` is the attack.
+
+`sanitizeNoteHtml()` returns `''` for anything that isn't a string, so a malformed row renders as an empty page rather than throwing on the way in. `sharedPagePreviewText()` sanitises before reading text out, so previews and emptiness checks never touch raw markup. `isPageWithinSizeLimit()` checks `MAX_PAGE_CHARS` (200,000) before upload, so the writer is told plainly rather than meeting the database's refusal as a sync failure.
+
+### 26.11 Ids and join codes
+
+`src/lib/shared/ids.ts`. The single-user tables use `generateId()` — the clock plus a short random tail — which is fine when one device is making the row. Two people on two devices inserting into the same table is a different situation, and a collision there does not lose a draft, it overwrites somebody's page. So every shared row gets a real v4 UUID from `sharedId()`, falling back from `crypto.randomUUID()` to `getRandomValues()` for the one case that isn't a secure context: a plain `http://` dev server reached over the LAN.
+
+`paragraphId()` is deliberately *not* a UUID. There is one per paragraph and they are written into the page's own HTML, so a 200-paragraph page would carry 7 KB of ids alone; 11 random characters is far more room than "unique within one page" needs.
+
+`src/lib/shared/joinCode.ts`. A shared notebook is found by its code and by nothing else — only the anon key ever reaches this app and no policy grants a stranger so much as a listing, so you either hold the code or you do not.
+
+`JOIN_CODE_ALPHABET` is `ABCDEFGHJKMNPQRSTVWXYZ23456789` and `JOIN_CODE_LENGTH` is 8 — no `0 O 1 I L U`, so a code survives being read aloud across a room or copied off a screen at arm's length. The alphabet is repeated here rather than imported from the migration, because the two halves are checked in different places and a code this side rejected would never reach the function that made it.
+
+`normalizeJoinCode()` drops case, whitespace and the hyphen; it guesses nothing else. Mapping a typed `O` to `0` is tempting and wrong — the confusable characters are exactly the ones the alphabet leaves out, so there is no correct letter to map them *to*, and silently substituting a plausible one produces a code that is wrong in a way nobody can see. `isJoinCode()` says so instead. `formatJoinCode()` prints `ABCD-EFGH`, presentation only. `buildJoinUrl()` builds from the page's own origin and path, exactly as `buildShareUrl` does and for the same reason: the same build is served from more than one host. `JOIN_PARAM` is `join`.
+
+### 26.12 Joining, inviting, and reading signed out
+
+**`SharedNotebookCreate.svelte`** — a name, and the two choices that are awkward to change later, both in plain words rather than named: "Everyone writes" / "Only you write", private by default, with the warning on the public option because that is the one that cannot be taken back from anybody already holding the link.
+
+**`SharedNotebookJoin.svelte`** — both ends of a code in one sheet. `invite` mode shows the code, the link built from it, and that link as a QR; `join` mode takes a code and puts you in. They are together on purpose: one code read from one side or the other, and keeping them in one file is what stops the two halves disagreeing about what a code looks like. The invite side reuses `canShare`/`copyText`/`shareText` from `src/lib/clipboard.ts` — the same handling behind [the share sheet](#20-account--sync). An NFC tag later needs no work at all: a tag holds a URL, and the link is already the whole of it.
+
+**`QrCode.svelte`** — draws only, never scans; phone cameras open a QR link by themselves, so showing one is the whole feature. `qrcode-generator` is 20 KB and wanted on exactly one sheet, so it is `import()`ed on demand the way Lexical is. Rendered as SVG rather than canvas so it stays sharp and survives the screenshot people inevitably take of it, with the spec's four-module `QUIET` zone — a scanner finds the code by its quiet zone, and one pressed flush to the edge of a dark card is one many phones simply will not see.
+
+**`src/stores/sharedJoinStore.ts`** — `pendingJoinCode`, `requestJoin()`, `clearJoin()`. The app has no router, so `?join=` is read once at launch by `openSharedLink()` in `App.svelte` and stripped from the address bar, exactly as `?ref=` is. A code cannot act on itself — it arrives before anything is on screen, before the session is known, possibly on a device with no account — so it is parked in the store and picked up once there is an app to answer in. The Shared tab's "type a code" route sets the same store, so both ways in land on the same sheet.
+
+**`SharedJoinLayer.svelte`** — what a code turns into, decided by who is holding it: signed in, the join sheet with the code filled in (a link should never silently add you to somebody's notebook, so there is always a confirmation); signed out with a public notebook, the read-only reader; signed out with a private one, a refusal that deliberately does not explain much. It draws nothing at all until a code arrives.
+
+**`PublicNotebookReader.svelte`** — the whole of what a signed-out reader gets, and a deliberate dead end: no editor, no button that writes, no way to reach another notebook from it. It is not a member either — nothing is written to IndexedDB, nothing syncs, and no realtime connection is held. The pages are read once by `readPublic()` and kept in memory, and `publicRev()` — one number — is what says whether to read them again. That is what lets a great many people read one notebook at once without a socket each.
+
+### 26.13 Permissions
+
+`src/lib/shared/sharedPermissions.ts` — one function per rule, each mirroring a policy in 012. The server is the authority and refuses on its own; these exist so the app never offers a button the database is going to turn down, which is a far worse way to find out you are a reader than simply not being shown a pencil. Add to this file rather than inlining a check in a component: the header, the row menu and the save path must not be able to disagree.
+
+| Function | The rule |
+|---|---|
+| `isReadOnlyCopy()` | a notebook this account has been put out of. **Asked first in every other rule** — the stale member row kept alongside it would otherwise still answer "writer" |
+| `canManageNotebook()` | the owner, and nobody else. 012 draws the same line in the UPDATE policy and in `reset_shared_notebook_code()`. An admin may write in a notebook; running it is a different thing |
+| `canLeaveNotebook()` | anybody but the owner — every rule that runs a notebook is written as "the owner", so one walking out leaves a notebook nobody can run |
+| `canWriteInNotebook()` | what `can_write_shared_notebook()` says: an admin always, a writer in a Group notebook, nobody else. A writer in a Broadcast notebook is deliberately shut out — that is how an owner quietens a notebook without removing anybody |
+| `canEditPage()` | the author always, whatever else is true. Anyone else needs both: the author left the page open, and the notebook lets them write |
+| `canRemovePage()` | the author, and the notebook's owner over anybody's page — removing is moderation, rewriting is not, which is why these are two questions |
+| `canSetEditMode()` | opening and closing a page is its author's, and only its author's — closed means closed, so the switch cannot belong to anyone who could then be talked into opening it |
+| `canPinPage()` | both at once: you own the notebook *and* you wrote the page. Owning it makes the top of the list yours to arrange; writing it stops that from being a way to move somebody else's work about. The guard trigger refuses the other combinations, so this is the app agreeing rather than deciding |
+
+Each takes what it needs and nothing more, so they can be asked about a notebook that isn't open and a page that isn't loaded. A missing membership is a "no" rather than a crash.
+
+There is still **no delete-the-whole-notebook**, and an owner cannot leave — the deliberate gap, and the one to close if a way out for an owner is wanted.
+
+### 26.14 Badges and the pill gutter
+
+**`AuthorPill.svelte`** — two letters on a coloured disc. Written three times before it existed once: BibleReader's verse gutter, AnnotationPanel's header, and now a notebook's members. There is no logic in it on purpose — which colour and which letters belong to whom has two different answers (`annotationConfig` for a commentator, the member row for a person) and neither is the component's business. Two shapes, both exactly as they were: `gutter` 20×14 for a margin, `round` 22×22 for a heading. `breathing` is the slow pulse marking the pill whose panel is open; `extraClass` is kept because the tutorial looks for `.anno-icon`.
+
+**`src/lib/shared/memberIdentity.ts`** — the defaults a join can work out without reading a roster it is not yet in. `defaultInitials()` gives initials from two words and the first two letters from one; `defaultMemberColor()` derives from the user id rather than picking at random, so a phone and a laptop agree. `MEMBER_COLORS` is the commentary palette in a fixed order — fixed because a palette that reordered itself would give the same person a different colour on a different device.
+
+A colour is *identity*, not appearance: unlike the typeface and the page colours, which are each reader's own, it is stored on the member row and looks the same to everybody. Deriving it can therefore land on one somebody already wears, which is a collision in a badge and not in data. **`MemberPillPicker.svelte`** is where that is settled — per notebook, because the colour's whole job is telling people apart inside one group, and the same person can be teal in one and amber in another. Colours already taken are marked, not refused.
+
+**`src/lib/shared/paragraphStamp.ts`** — who worked on which line. On every save the stored version and the one being saved are lined up paragraph by paragraph: unchanged text keeps its id and its pills exactly; a rewritten paragraph keeps its id and gains the saver; a new one gets a new id and starts with just them; one that has gone, goes. `MAX_PILLS` is 16, and past it the earliest names are kept — the first author most of all — with the person who just typed taking the last place, because the gutter must not lie about the line in front of them.
+
+**The ids are deliberately not carried through Lexical.** Its `ParagraphNode` has a fixed set of attributes and drops every other one when HTML is parsed in, so a round-tripped `data-pid` comes back missing and every paragraph looks brand-new. Teaching it otherwise means a node replacement inside an editor four other surfaces share, to hold data only this one uses. So the stored page is the only place the ids live, and the lining-up above is what stands in for matching on them: anchoring the unchanged lines first means editing one line in the middle of a page touches exactly one paragraph — the answer an id match would have given. **Do not "fix" this by adding a Lexical node.**
+
+Pills are keyed on **user id**, not member-row id, so leaving and rejoining does not orphan them. `stampParagraphs()`, `splitPageBlocks()`, `stripStamps()`; the type is `PageBlock`.
+
+**The gutter is drawn in `SharedPageView.svelte`**, not in the editor. It renders a shared page block at a time rather than as one lump of HTML, because each paragraph has a gutter of its own carrying the pills of everybody who has written in that line, in the order they first did — the same arrangement several commentators get on one verse in the reader, and the same badge. A page nobody has stamped yet draws no gutter at all and reads exactly as it did before any of this existed. The HTML goes through the allowlist again here even though the store already cleaned it on the way in: the cost is nothing, and it means no path exists by which unchecked markup reaches `innerHTML`.
+
+Verse references keep working in a shared page — they survive as spans carrying the attributes `BibleRefNode` writes, so a tap opens the same menu ([26.2](#262-bible-references-in-the-editor)). Expanding one works **on the screen only** and is gone when the page is reopened: writing it into the page would edit everybody's copy, bump the revision, and count as a save nobody asked to make. In the editor the same gesture goes through `RefAwareEditor` and is saved, which is the right place for it.
+
+**The honest limit:** all of the stamping happens on the writer's device, so it is a record of who worked on a line rather than proof of it. Which account created a page and which saved it last come from the server and can be trusted. Within a study group that is the right trade, and it is worth knowing before it is relied on for anything weightier.
+
+### 26.15 Live: presence and the one-writer lock
+
+`src/lib/shared/sharedRealtime.ts` — one channel named after the notebook, carrying two things:
+
+1. **Postgres changes** on the three shared tables, filtered to that notebook. What arrives is only ever a *nudge*: the payload is thrown away and `SharedNotebookStore.pull({force:true})` fetches the row, so IndexedDB still has exactly one writer and a payload that arrived out of order cannot become the copy this device keeps. This device's own saves are filtered out by `updated_by`. A burst — a save touches the page and the notebook — is debounced into one nudge at `CHANGE_DEBOUNCE_MS` 250 ms.
+2. **Presence**, new to this app: each device says which page it has open and whether it is writing in it. That is the whole of the lock, and it is deliberately not a row anybody has to remember to clear — presence disappears by itself when the app closes or the signal goes, so a lock can never get stuck with nobody holding it.
+
+Kept out of `RealtimeService` for the same reason the store is kept out of the sync engine: that channel is filtered to one account's own rows and everything hanging off it assumes so.
+
+**One notebook at a time** — the one whose page is open, or the one last unfolded in the list. A device only ever looks at one, and a socket per notebook somebody happens to be a member of would spend the realtime allowance on notebooks nobody is reading. A **reader of a Broadcast notebook holds no socket at all**: `mode: 'poll'`, the same nudge arriving every `POLL_MS` 45 seconds, and no presence because there is no channel to carry it. That is what makes a public notebook with a thousand readers possible. A notebook kept after removal opens neither.
+
+The store is `sharedLive` (`notebookId`, `mode: 'off' | 'live' | 'poll'`, `connected`, `people: LivePerson[]`). Control: `openSharedLive()`, `closeSharedLive()`, `setLivePage()`, `setLiveWriting()`, `pingLiveTyping()`. Reading the room: `writerOfPage()` takes the earliest claim, breaking a tie on the lower user id so every device sorts the same list the same way without asking the server who was first; `isIdleWriter()` against `WRITER_IDLE_MS` 60 s. Typing re-announces the claim at most once every `TYPING_PING_MS` 15 s — it is a keystroke handler. `liveClock` ticks every 10 s and fetches nothing: "they stopped a minute ago" has to be able to become true on its own, and a writer going quiet is exactly the case where no presence event arrives.
+
+**`SharedLiveBar.svelte`** is the thin strip under the header, in both the reader and the editor, because the answer matters in both: reading, the page may move under you; writing, somebody else is in it and one of you is going to be asked to keep theirs separately. Everybody is drawn as the badge they already wear, so the strip needs no legend; somebody on this very page gets a ring. It draws nothing when there is nobody else about. Once idle, anyone who could edit anyway is offered **Take over**.
+
+In the editor the strip is a warning rather than a lock. The revision check is what actually protects the prose — presence is advisory on top of it.
+
+### 26.16 Across the line
+
+`CopyPageSheet.svelte` — a page of your own sent to a shared notebook, and a page in a shared notebook kept in one of your own. Both directions are a **copy, never a link**: what you send goes on being your page here, what you keep goes on being their page there, and anything written on either side afterwards stays where it was written. The sheet says that in those words rather than leaving it to be discovered by surprise.
+
+One sheet for both, doing the copy itself the way the create and join sheets do, so the busy state and a refusal have somewhere to be shown; `NotesPane` works out the destinations (`CopyDestination`) and leaves off any shared notebook this account may only read, rather than offering it and then being refused.
+
+Sending goes through the ordinary `createPage()`, so the copy is sanitised and stamped on arrival and every paragraph starts out credited to whoever sent it — in that notebook it is their page. Coming the other way, `stripStamps()` takes the pids and pills off, because a paragraph id and its pills only mean anything beside the roster they were stamped against. Keeping a copy asks nothing of the notebook, so it sits on the page menu for everyone, a Broadcast reader included; an account that has never made a notebook of its own gets Quick Notes made for it rather than an empty list.
+
+### 26.17 Running a notebook
+
+`SharedNotebookAdmin.svelte` (862) — one sheet off every shared notebook's row menu, for two quite different readers. Anybody in the notebook sees the roster — each person as the badge they wear, with what they may do and how many pages are theirs — and can leave. Its owner sees the same list with controls on it and the notebook's own settings underneath. Together rather than apart because every one of those decisions is about the same thing, and somebody who has just realised a person should not be writing in their notebook should not have to guess which of two screens to look on.
+
+The owner can move somebody between **Reads / Writes / Runs it**, or take them out — which asks *separately* whether their pages go with them, because a group usually wants to keep the notes and lose the access. Joining can be closed, leaving everyone already in where they are, and a new code issued, which kills every old link, QR and written-down code at once. Group/Broadcast and private/public are switchable here rather than settled at creation.
+
+Nothing on the sheet decides anything the database does not decide again — the owner-only half is the owner-only half of 012. What it adds is that a member who may not do a thing is not shown it.
+
+The third state is the sad one: a notebook this account has been removed from. Its rows are kept rather than deleted ([26.9](#269-sharednotebookstore)), so the evening somebody spent writing in it is still there to read — the row says you are no longer in it, the byline on every page says it too, no channel or presence is opened, and every permission answers no. All the sheet can offer is the plain sentence and `forgetNotebook()`, which takes the copy off this device.
+
+### 26.18 Offline
+
+`src/lib/shared/sharedOutbox.ts` plus the IndexedDB store `shared_outbox` (schema 36 → 37). A page written on a train cannot go to the server, must not be thrown away, and must not be treated as though it had arrived. So it is written into the local copy — which is what the reader draws — and a note of it is put in the outbox. On reconnect it goes through the same `save_shared_page` every online edit goes through, revision check included.
+
+**Keyed on `pageId`**, so one row per page rather than one per autosave: twenty minutes offline means "send what I end up with", not "replay every keystroke on the way there". A later edit folds into the waiting one and keeps its `baseRev` and `createdAt` — the oldest `baseRev` because that is still the newest version of everybody else's work this device has seen, and the original `createdAt` so a page begun offline is still *created* rather than updated.
+
+**Stamped and sanitised when queued, not when sent.** The pills are worked out against the stored page, and while offline the stored page is the only one there is; stamping at the door means the gutter is right on the device straight away and the text that eventually goes up is the text that was on screen. `flushOutbox()` therefore sends it as-is rather than stamping twice.
+
+**The flush runs at the top of `pull()`** — up before down — and on the browser's own `online` event, so coming out of aeroplane mode is enough on its own; a **Try now** button is there for anyone who would rather press something. What the flush finds decides what happens to the item: delivered, and it goes; **refused, and it goes too**, with the database's own sentence shown and the words still in the local copy, because retrying a refusal only produces the refusal again; never arrived — `isOffline(err)`, a `TypeError` from a fetch that never left the building — and it stays.
+
+**A conflict forks.** A page somebody else wrote in meanwhile is not merged and not chosen between: it becomes "… (your version)" in the same notebook, saved through `save()` with `previousText === text` so every paragraph anchors and the stamps cross with it — the fork keeps the record of who wrote which line instead of crediting all of it to whoever was offline. That is the same fork the bar offers when a conflict happens with somebody watching (**Keep mine as a new page**, never a silently chosen winner). Removing a page queues the same way, and a page both created and removed offline simply goes rather than being created a moment before being deleted.
+
+Functions: `queueWrite()`, `pendingWrites()`, `pendingFor()`, `pendingPageIds()`, `dropWrite()`, `markAttempt()`, `dropNotebookWrites()` (leaving a notebook, and throwing away a removed copy — neither should leave a write behind that goes on trying), `clearOutbox()`, `isOffline()`, `subscribeToOutboxChanges()`. The outbox **holds no permission of its own**: what may be written is decided by `sharedPermissions` before anything reaches it and by the policies in 012 when it leaves.
+
+In the pane, a waiting page is marked on its row (`ListPage.waiting`) and gets a quiet strip in both the reader and the editor — *"Saved here. It goes to the notebook when you are back online."* Not a warning and not an error: nothing has gone wrong and nothing needs doing, and it is there so that writing on a train is never mistaken for writing everyone can already see.
+
+Everything else in a shared notebook — joining, the code, roles, badges — asks the server a question it cannot answer offline, so those say so in one sentence through `requireOnline()` rather than pretending.
 ---
 
 ## Appendix A — Data layer
@@ -1384,21 +1610,22 @@ Not user-facing features, but every feature above sits on these.
 
 ### A.1 IndexedDB
 
-`src/adapters/db.ts`. Database `projectbible`, **schema version 33** — migration 31 added `art_images` for bundled painting blobs, 32 added the notebook stores, and 33 added the `naves_*` stores that carry Nave's Topical Bible.
+`src/adapters/db.ts`. Database `projectbible`, **schema version 37** — 32 added the notebook stores, 33 the `naves_*` stores that carry Nave's Topical Bible, 34 the `atlas_*` stores behind the Historical Map pack, 35 `journal_lock` and `journal_key_slots`, 36 the three `shared_notebook_*` stores, and 37 `shared_outbox` ([26.18](#2618-offline)).
 
 Object stores, grouped by what they serve:
 
 | Group | Stores |
 |---|---|
 | Packs & text | `packs`, `verses`, `art_images` |
-| User data | `user_notes`, `user_highlights`, `user_word_highlights`, `user_bookmarks`, `journal_entries`, `notebooks`, `notebook_pages` |
+| User data | `user_notes`, `user_highlights`, `user_word_highlights`, `user_bookmarks`, `journal_entries`, `journal_lock`, `journal_key_slots`, `notebooks`, `notebook_pages` |
+| Shared notebooks | `shared_notebooks`, `shared_notebook_members`, `shared_notebook_pages`, `shared_outbox` |
 | Topical | `naves_topics`, `naves_names`, `naves_points`, `naves_verses`, `naves_tokens` |
 | Study | `cross_references`, `strongs_entries`, `greek_strongs_entries`, `hebrew_strongs_entries`, `lexicon_entries`, `pronunciations`, `morphology`, `word_occurrences`, `tsk_references`, `commentary_entries` |
 | English lexical | `english_words`, `english_synonyms`, `thesaurus_synonyms`, `thesaurus_antonyms`, `english_grammar`, `english_definitions_modern`, `english_definitions_historic`, `english_definitions_wordset`, `word_mapping` |
 | Places & maps | `places`, `place_name_links`, `map_tiles`, `historical_layers`, `pleiades_places`, `modern_places` |
 | Reading | `reading_history`, `reading_plans`, `reading_plan_days`, `reading_progress`, `plan_metadata`, `chronological_order` |
 | Audio | `audio_chapters`, `audio_cache` |
-| Sync | `sync_queue`, `sync_operations` |
+| Sync | `sync_queue`, `sync_operations` — the shared tables are deliberately **not** in this engine ([26.9](#269-sharednotebookstore)) |
 
 `word_mapping` is keyed on `lemma` rather than an id — it is the lookup that makes English definitions resolve off lemma rather than surface text (see [5.3](#53-english-word-lookup)).
 
