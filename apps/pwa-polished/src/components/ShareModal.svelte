@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { buildShareText, formatShareRef, type ShareRef } from '../lib/shareText';
+  import { canShare, copyText, shareText as shareViaSheet } from '../lib/clipboard';
 
   export let reference: ShareRef;
   /** The verse, or the phrase that was selected out of it. */
@@ -20,44 +21,13 @@
     includeLink,
   });
 
-  /**
-   * Firefox on the desktop has no share sheet, so the button would open nothing
-   * at all — better to drop it and leave Copy as the single obvious way out.
-   * Checked once: nothing about it changes while the sheet is open.
-   */
-  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
-
   // ── Copy ───────────────────────────────────────────────────────────────────
 
   let copyState: 'idle' | 'done' | 'failed' = 'idle';
   let copyTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Pre-clipboard-API fallback, so the button is never simply dead. */
-  function legacyCopy(text: string): boolean {
-    const el = document.createElement('textarea');
-    el.value = text;
-    el.setAttribute('readonly', '');
-    el.style.cssText = 'position:fixed;top:-9999px;opacity:0';
-    document.body.appendChild(el);
-    el.select();
-    let ok = false;
-    try {
-      ok = document.execCommand('copy');
-    } catch {
-      ok = false;
-    }
-    document.body.removeChild(el);
-    return ok;
-  }
-
   async function handleCopy() {
-    let ok = false;
-    try {
-      await navigator.clipboard.writeText(shareText);
-      ok = true;
-    } catch {
-      ok = legacyCopy(shareText);
-    }
+    const ok = await copyText(shareText);
     // There is no snackbar anywhere in the app, so the button says it itself.
     copyState = ok ? 'done' : 'failed';
     if (copyTimer) clearTimeout(copyTimer);
@@ -67,18 +37,10 @@
   // ── Share ──────────────────────────────────────────────────────────────────
 
   async function handleShare() {
-    try {
-      // Text only, no separate `url` field: the link is already the last line,
-      // and targets that accept both tend to paste the URL a second time.
-      await navigator.share({ text: shareText });
-      dispatch('close');
-    } catch (err) {
-      // Dismissing the sheet rejects with AbortError. That is not a failure,
-      // and the sheet stays open so the choice can be made again.
-      if ((err as Error)?.name !== 'AbortError') {
-        console.error('Share failed:', err);
-      }
-    }
+    // Text only, no separate `url` field: the link is already the last line,
+    // and targets that accept both tend to paste the URL a second time.
+    // Dismissing the sheet leaves this one open so the choice can be made again.
+    if (await shareViaSheet(shareText)) dispatch('close');
   }
 
   // ── Keyboard / backdrop ────────────────────────────────────────────────────

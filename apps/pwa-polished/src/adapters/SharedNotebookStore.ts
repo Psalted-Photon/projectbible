@@ -18,7 +18,7 @@
  * page was taken out — and deleting the local copy is the correct answer
  * rather than a data loss.
  *
- * Phase 1 reads. Writing arrives in phase 3.
+ * Phase 1 reads. Phase 2 makes one and joins one. Writing arrives in phase 3.
  */
 
 import { supabase } from '../lib/supabase/client';
@@ -29,6 +29,9 @@ import type {
   DBSharedNotebookPage,
 } from './db';
 import { sanitizeNoteHtml } from '../lib/shared/sanitizeNoteHtml';
+import { sharedId } from '../lib/shared/ids';
+import { normalizeJoinCode } from '../lib/shared/joinCode';
+import { defaultMemberIdentity } from '../lib/shared/memberIdentity';
 
 // ─── Shapes the app works in ─────────────────────────────────────────────────
 
@@ -72,6 +75,21 @@ export interface SharedNotebookPage {
   createdAt: Date;
   updatedAt: Date;
   updatedBy: string | null;
+}
+
+/**
+ * What a signed-out reader gets back: the notebook, who is in it, and the
+ * pages — and nothing that could be written to.
+ *
+ * Kept apart from the types above because it never reaches IndexedDB. There is
+ * no account here to scope a pull to, nothing to reconcile it against, and
+ * nothing to sync; it is read once from one function call and held in memory
+ * for as long as the reader has it open.
+ */
+export interface PublicSharedNotebook {
+  notebook: SharedNotebook;
+  members: SharedNotebookMember[];
+  pages: SharedNotebookPage[];
 }
 
 // ─── Row mapping ─────────────────────────────────────────────────────────────
@@ -403,6 +421,176 @@ export class SharedNotebookStoreImpl {
     } finally {
       this.pulling = false;
     }
+  }
+
+  // ── Making one, and joining one ──────────────────────────────────────────
+
+  /**
+   * The name and badge to put on a new member row.
+   *
+   * Taken from the account rather than asked for, because a join should be one
+   * tap. What it produces is a default — phase 4's picker is where anyone who
+   * wants different letters or a different colour changes them.
+   */
+  private async identity(): Promise<{
+    userId: string;
+    displayName: string;
+    initials: string;
+    color: string;
+  }> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error('You have to be signed in for that');
+
+    // The name people chose, or the part of their address before the @ — which
+    // is at least theirs, and is better than a notebook full of "Someone".
+    const named = (user.user_metadata?.name ?? '').toString().trim();
+    const fromEmail = (user.email ?? '').split('@')[0] ?? '';
+    return { userId: user.id, ...defaultMemberIdentity(named || fromEmail, user.id) };
+  }
+
+  /**
+   * Make a shared notebook. You become its owner and its first member.
+   *
+   * Both rows are made by the same SECURITY DEFINER function, in one
+   * transaction, because they have to be: there is no INSERT policy on either
+   * table, and an owner without a member row could not read back the notebook
+   * they had just made.
+   *
+   * The ids are made here rather than by the database so that this device
+   * knows them without a round trip, and they are UUIDs — see ids.ts for why a
+   * timestamp is not good enough once two accounts write to one table.
+   */
+  async createNotebook(opts: {
+    name: string;
+    kind: 'group' | 'broadcast';
+    visibility: 'private' | 'public';
+  }): Promise<SharedNotebook> {
+    const me = await this.identity();
+
+    const { data, error } = await supabase.rpc('create_shared_notebook', {
+      p_id: sharedId(),
+      p_member_id: sharedId(),
+      p_name: opts.name.trim(),
+      p_kind: opts.kind,
+      p_visibility: opts.visibility,
+      p_display_name: me.displayName,
+      p_initials: me.initials,
+      p_color: me.color,
+    });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('The notebook was not created');
+
+    // Force past the throttle: the whole point of the next screen is that the
+    // notebook is on it.
+    await this.pull({ force: true });
+    return toNotebook(rowToDBNotebook(data));
+  }
+
+  /**
+   * Join by code.
+   *
+   * Joining one you are already in is not an error — it hands back the same
+   * notebook — so a re-tapped link, a second scan, or a code typed twice all
+   * do the right thing rather than complaining.
+   *
+   * The code is never looked up from here. There is no read access that would
+   * let it be: this is a function call that either adds you or refuses, and a
+   * stranger guessing codes learns nothing from the difference.
+   */
+  async joinByCode(code: string): Promise<SharedNotebook> {
+    const clean = normalizeJoinCode(code);
+    if (!clean) throw new Error('Enter the code you were given');
+
+    const me = await this.identity();
+
+    const { data, error } = await supabase.rpc('join_shared_notebook', {
+      p_code: clean,
+      p_member_id: sharedId(),
+      p_display_name: me.displayName,
+      p_initials: me.initials,
+      p_color: me.color,
+    });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('No shared notebook has that code');
+
+    await this.pull({ force: true });
+    return toNotebook(rowToDBNotebook(data));
+  }
+
+  /**
+   * Read a public notebook with no account at all.
+   *
+   * The one way in for a signed-out reader, and deliberately a dead end: the
+   * function returns a notebook and its pages and accepts nothing back, it
+   * only answers for a notebook whose owner marked it public, and it cannot be
+   * used to list anything — you have to already hold the code.
+   *
+   * Nothing here is written to IndexedDB. There is no account to scope it to
+   * and no sync to feed, so it is held in memory by whoever asked for it and
+   * forgotten when they close it.
+   */
+  async readPublic(code: string): Promise<PublicSharedNotebook> {
+    const clean = normalizeJoinCode(code);
+    if (!clean) throw new Error('Enter the code you were given');
+
+    const { data, error } = await supabase.rpc('read_public_shared_notebook', {
+      p_code: clean,
+    });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('No notebook is being shared with that code');
+
+    const payload = data as {
+      notebook: any;
+      members: any[];
+      pages: any[];
+    };
+
+    const row = payload.notebook ?? {};
+    const notebook: SharedNotebook = {
+      id: row.id,
+      // The function returns neither of these, on purpose. A reader with no
+      // account has no business knowing who owns a notebook, and the code they
+      // already hold is the only code there is to show them.
+      ownerId: '',
+      name: row.name ?? '',
+      kind: row.kind === 'broadcast' ? 'broadcast' : 'group',
+      visibility: 'public',
+      joinCode: clean,
+      joinOpen: false,
+      rev: Number(row.rev ?? 1),
+      createdAt: new Date(ms(row.created_at)),
+      updatedAt: new Date(ms(row.updated_at)),
+    };
+
+    return {
+      notebook,
+      members: (payload.members ?? []).map((m) =>
+        toMember(rowToDBMember({ ...m, notebook_id: notebook.id })),
+      ),
+      // Sanitised on arrival like every other page — this is the one path where
+      // the markup has not been near the allowlist before, so it matters most.
+      pages: (payload.pages ?? []).map((pg) => toPage(rowToDBPage(pg))),
+    };
+  }
+
+  /**
+   * Has anything changed in a public notebook?
+   *
+   * A signed-out reader is not a member and holds no realtime connection, so
+   * this single number is how they find out — a few hundred bytes, and the
+   * pages are only fetched again when it has moved.
+   */
+  async publicRev(code: string): Promise<number | null> {
+    const { data, error } = await supabase.rpc('public_shared_notebook_rev', {
+      p_code: normalizeJoinCode(code),
+    });
+    if (error) {
+      console.error('[SharedNotebooks] rev check failed:', error.message);
+      return null;
+    }
+    return data == null ? null : Number(data);
   }
 
   /** Throw away every shared row. Called on sign-out — none of it is ours. */

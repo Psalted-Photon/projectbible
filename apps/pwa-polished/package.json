@@ -33,6 +33,7 @@
     "lexical": "^0.40.0",
     "onnxruntime-web": "1.29.0",
     "phosphor-svelte": "^3.1.0",
+    "qrcode-generator": "^2.0.4",
     "sql.js": "^1.12.0"
   }
 }

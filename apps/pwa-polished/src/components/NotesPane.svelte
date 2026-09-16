@@ -22,6 +22,8 @@
   import NotebookList from './NotebookList.svelte';
   import type { ListNotebook } from './NotebookList.svelte';
   import SharedPageView from './SharedPageView.svelte';
+  import SharedNotebookCreate from './SharedNotebookCreate.svelte';
+  import SharedNotebookJoin from './SharedNotebookJoin.svelte';
   import { sharedNotebookStore, subscribeToSharedNotebookChanges } from '../adapters/SharedNotebookStore';
   import type {
     SharedNotebook,
@@ -33,6 +35,7 @@
   import { get } from 'svelte/store';
   import { navigationStore } from '../stores/navigationStore';
   import { windowStore } from '../lib/stores/windowStore';
+  import { showNotice } from '../stores/noticeStore';
 
   export let windowId: string | undefined = undefined;
   export let contentState: any = {};
@@ -70,6 +73,13 @@
   const SHARED_ACCENT = '#2dd4bf';
   const SHARED_PAGE_ACCENT = '#5eead4';
 
+  /**
+   * Namespaces the shared side's open/closed keys — see NotebookList. Named
+   * here rather than written out twice, because the pane also builds one of
+   * these by hand to open a notebook it has just joined.
+   */
+  const SHARED_KEY_PREFIX = 'snb';
+
   // ─── Browse data ────────────────────────────────────────────────────────────
   let verseNotes: { id: string; book: string; chapter: number; verse: number; text: string }[] = [];
   let notebooks: Notebook[] = [];
@@ -90,6 +100,16 @@
   // ─── Inline row state ───────────────────────────────────────────────────────
   let creatingNotebook = false;
   let newNotebookName = '';
+
+  // ─── Shared sheets ──────────────────────────────────────────────────────────
+  // A shared notebook takes more than a name — who writes in it and who can see
+  // it are both decided at the start — so it gets a sheet where a local one
+  // gets an inline field. Joining and inviting are the two ends of the same
+  // code and share one sheet; `inviteNotebook` is which notebook is being
+  // handed out, and null means the sheet is closed.
+  let creatingShared = false;
+  let joiningShared = false;
+  let inviteNotebook: SharedNotebook | null = null;
 
   // ─── Editor state ───────────────────────────────────────────────────────────
   let editorTitle = '';
@@ -405,6 +425,35 @@
     mode = next;
     persistState();
     if (next === 'shared') void loadShared();
+  }
+
+  /**
+   * A notebook made here is opened here: the list redraws around it and the
+   * invite sheet follows straight on, because a shared notebook with nobody in
+   * it is not yet doing anything.
+   */
+  async function sharedCreated(notebook: SharedNotebook) {
+    creatingShared = false;
+    showNotice(`Created “${notebook.name}”`);
+    await loadShared({ force: true });
+    inviteNotebook = notebook;
+  }
+
+  async function sharedJoined(notebook: SharedNotebook) {
+    joiningShared = false;
+    showNotice(`Joined “${notebook.name || 'the notebook'}”`);
+    // The row has to be on screen before the notice goes, or joining looks
+    // like it did nothing.
+    await loadShared({ force: true });
+    // Open it, so the pages are the next thing seen rather than a closed row.
+    expanded.add(`${SHARED_KEY_PREFIX}::${notebook.id}`);
+    expanded = expanded;
+    persistState();
+  }
+
+  /** Hand out a notebook's code. Its own row knows which one. */
+  function openInvite(notebookId: string) {
+    inviteNotebook = sharedNotebooks.find((n) => n.id === notebookId) ?? null;
   }
 
   async function openSharedPage(notebookId: string, pageId: string) {
@@ -795,6 +844,10 @@
       </div>
       {#if mode === 'local'}
         <button class="primary-btn" on:click={newQuickNote}>+ New note</button>
+      {:else}
+        <button class="primary-btn shared" on:click={() => (creatingShared = true)}>
+          + New
+        </button>
       {/if}
     </div>
 
@@ -887,21 +940,27 @@
             <p class="muted small">Looking…</p>
           {:else if sharedNotebooks.length === 0}
             <p class="muted small">
-              Notebooks you share with other people show up here. Joining one comes next —
-              for now, a notebook someone adds you to will appear after a refresh.
+              Notebooks you keep with other people live here. Make one and hand out its code, or
+              join one you have been given the code for.
             </p>
           {:else}
             <NotebookList
               notebooks={sharedList}
               {expanded}
-              keyPrefix="snb"
+              keyPrefix={SHARED_KEY_PREFIX}
               accent={SHARED_ACCENT}
               pageAccent={SHARED_PAGE_ACCENT}
               emptyPagesText="Nothing written here yet."
+              canInvite
               on:toggle={(e) => toggleNode(e.detail)}
               on:openPage={(e) => openSharedPage(e.detail.notebookId, e.detail.pageId)}
+              on:invite={(e) => openInvite(e.detail)}
             />
           {/if}
+
+          <button class="ghost-btn shared" on:click={() => (joiningShared = true)}>
+            + Join with a code
+          </button>
 
           <button class="ghost-btn shared" on:click={() => loadShared({ force: true })}>
             ↻ Check for changes
@@ -911,6 +970,29 @@
     </div>
   {/if}
 </div>
+
+{#if creatingShared}
+  <SharedNotebookCreate
+    on:created={(e) => sharedCreated(e.detail)}
+    on:close={() => (creatingShared = false)}
+  />
+{/if}
+
+{#if joiningShared}
+  <SharedNotebookJoin
+    mode="join"
+    on:joined={(e) => sharedJoined(e.detail)}
+    on:close={() => (joiningShared = false)}
+  />
+{/if}
+
+{#if inviteNotebook}
+  <SharedNotebookJoin
+    mode="invite"
+    notebook={inviteNotebook}
+    on:close={() => (inviteNotebook = null)}
+  />
+{/if}
 
 <style>
   .notes-pane {
@@ -987,6 +1069,12 @@
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
+  }
+
+  /* Same button, the Shared side's accent — so which half of the pane you are
+     on is legible from the one control on it. */
+  .primary-btn.shared {
+    background: #0d9488;
   }
 
   .primary-btn:hover {

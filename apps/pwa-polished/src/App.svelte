@@ -8,6 +8,7 @@
   import AppNotice from "./components/AppNotice.svelte";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
   import TutorialLayer from "./tutorial/TutorialLayer.svelte";
+  import SharedJoinLayer from "./components/SharedJoinLayer.svelte";
   import { wakeAlarmStartOpen } from "./stores/wakeAlarmStore";
   import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
@@ -22,6 +23,8 @@
   import { getSettings } from "./adapters/settings";
   import { navigationStore } from "./stores/navigationStore";
   import { parseRefString } from "./lib/parseRefString";
+  import { JOIN_PARAM, normalizeJoinCode } from "./lib/shared/joinCode";
+  import { requestJoin } from "./stores/sharedJoinStore";
   import { journalLockVisibilityChanged } from "./lib/journalLock/lockState";
 
   let appReady = false;
@@ -68,8 +71,10 @@
     console.log("🚀 App mounted, initializing...");
 
     /**
-     * Shared verse links: ?ref=Genesis 1:1&t=KJV, the tail of a link the Share
-     * sheet built.
+     * Links that arrive with something to open.
+     *
+     *   ?ref=Genesis 1:1&t=KJV   the tail of a link the Share sheet built.
+     *   ?join=ABCDEFGH           an invitation to a shared notebook.
      *
      * Awaited inside init() rather than run from the onMount body, because the
      * translation can only be honoured after asking the database what is
@@ -79,11 +84,22 @@
     const openSharedLink = async () => {
       const params = new URLSearchParams(window.location.search);
       const refParam = params.get('ref');
-      if (!refParam) return;
+      const joinParam = params.get(JOIN_PARAM);
+      if (!refParam && !joinParam) return;
+
+      /*
+       * A join code is parked rather than acted on. There is nothing on screen
+       * yet to show a sheet in, the session is not necessarily known, and what
+       * the code means depends on whether there is an account at all —
+       * SharedJoinLayer picks it up once there is an app to answer in.
+       */
+      if (joinParam) requestJoin(normalizeJoinCode(joinParam));
 
       try {
         const current = get(navigationStore);
-        const target = parseRefString(refParam, current.book, current.chapter);
+        const target = refParam
+          ? parseRefString(refParam, current.book, current.chapter)
+          : null;
         if (target) {
           // Honour the sender's translation only where the recipient has it.
           // A cold device has the starter pack and nothing else, so a verse
@@ -109,10 +125,12 @@
       }
 
       // Strip the params either way. Left in place they would drag the reader
-      // back here on every reload, including the auto-update reload.
+      // back here on every reload, including the auto-update reload — and a
+      // join code left in the address bar would re-open the sheet every time.
       const rest = new URLSearchParams(window.location.search);
       rest.delete('ref');
       rest.delete('t');
+      rest.delete(JOIN_PARAM);
       const restQuery = rest.toString();
       window.history.replaceState(
         {},
@@ -377,6 +395,10 @@
 
     <!-- Tutorial Mode — draws nothing and loads nothing while it is off -->
     <TutorialLayer />
+
+    <!-- A ?join= link, or a code typed into the Shared tab. Draws nothing
+         until one arrives. -->
+    <SharedJoinLayer />
   {/if}
 </div>
 

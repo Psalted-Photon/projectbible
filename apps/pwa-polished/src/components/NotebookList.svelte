@@ -57,6 +57,8 @@
   export let canRenameNotebook = false;
   export let canDeleteNotebook = false;
   export let canDeletePage = false;
+  /** Hand this notebook's join code out. Shared notebooks only. */
+  export let canInvite = false;
 
   export let emptyPagesText = 'No pages yet.';
 
@@ -67,6 +69,7 @@
     rename: { id: string; name: string };
     deleteNotebook: string;
     deletePage: { notebookId: string; pageId: string };
+    invite: string;
   }>();
 
   let renamingId: string | null = null;
@@ -75,7 +78,7 @@
   let confirmDeleteNotebookId: string | null = null;
   let confirmDeletePageId: string | null = null;
 
-  $: hasRowMenu = canRenameNotebook || canDeleteNotebook;
+  $: hasRowMenu = canRenameNotebook || canDeleteNotebook || canInvite;
 
   function keyFor(id: string): string {
     return `${keyPrefix}::${id}`;
@@ -194,6 +197,14 @@
 
       {#if openMenuId === notebook.id}
         <div class="row-menu">
+          {#if canInvite}
+            <button
+              on:click={() => {
+                openMenuId = null;
+                dispatch('invite', notebook.id);
+              }}>Invite people</button
+            >
+          {/if}
           {#if canRenameNotebook}
             <button on:click={() => startRename(notebook)}>Rename</button>
           {/if}
