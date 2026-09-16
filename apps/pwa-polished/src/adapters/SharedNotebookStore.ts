@@ -18,7 +18,7 @@
  * page was taken out — and deleting the local copy is the correct answer
  * rather than a data loss.
  *
- * Phase 1 reads. Phase 2 makes one and joins one. Writing arrives in phase 3.
+ * Phase 1 reads. Phase 2 makes one and joins one. Phase 3 writes in one.
  */
 
 import { supabase } from '../lib/supabase/client';
@@ -28,7 +28,7 @@ import type {
   DBSharedNotebookMember,
   DBSharedNotebookPage,
 } from './db';
-import { sanitizeNoteHtml } from '../lib/shared/sanitizeNoteHtml';
+import { sanitizeNoteHtml, MAX_PAGE_CHARS } from '../lib/shared/sanitizeNoteHtml';
 import { sharedId } from '../lib/shared/ids';
 import { normalizeJoinCode } from '../lib/shared/joinCode';
 import { defaultMemberIdentity } from '../lib/shared/memberIdentity';
@@ -75,6 +75,21 @@ export interface SharedNotebookPage {
   createdAt: Date;
   updatedAt: Date;
   updatedBy: string | null;
+}
+
+/**
+ * What came of a save.
+ *
+ * 'saved' is the ordinary answer. 'conflict' means somebody else got there
+ * first and nothing was written — the caller still holds the text, and phase 8
+ * is where it becomes a copy. 'deleted' means the page was taken out of the
+ * notebook while it was open. None of the three is an error, which is why this
+ * is a returned value rather than an exception; a refusal — a reader trying to
+ * write, or a closed page — is a different thing and does throw.
+ */
+export interface SharedPageSaveResult {
+  status: 'saved' | 'conflict' | 'deleted';
+  page: SharedNotebookPage | null;
 }
 
 /**
@@ -591,6 +606,174 @@ export class SharedNotebookStoreImpl {
       return null;
     }
     return data == null ? null : Number(data);
+  }
+
+  // ── Writing ──────────────────────────────────────────────────────────────
+
+  /**
+   * Put one row the server just handed back into IndexedDB.
+   *
+   * Every write below ends here rather than calling pull(): the row that comes
+   * back from save_shared_page is the authoritative one, complete with the
+   * revision the trigger gave it, so a round trip to fetch what we are already
+   * holding would only add a wait. The pull still runs on its own schedule and
+   * will agree with this.
+   */
+  private async storePage(row: any): Promise<SharedNotebookPage> {
+    const dbRow = rowToDBPage(row);
+    await writeTransaction('shared_notebook_pages', (store) => store.put(dbRow));
+    announce();
+    return toPage(dbRow);
+  }
+
+  /**
+   * Turn a database refusal into something worth reading.
+   *
+   * The functions in migration 012 raise plain sentences and those are passed
+   * through untouched. What needs translating is the one refusal Postgres
+   * words itself: a policy turning down an INSERT, which is what a reader
+   * adding a page hits, and which otherwise reaches the screen as "new row
+   * violates row-level security policy for table …".
+   */
+  private plainError(message: string): Error {
+    if (/row-level security/i.test(message)) {
+      return new Error('You do not have permission to write in this notebook');
+    }
+    return new Error(message);
+  }
+
+  /**
+   * Save a page, without writing over anybody else's work.
+   *
+   * `baseRev` is the revision this device started from. The server compares it
+   * with the row's current one and, if somebody has saved in between, changes
+   * nothing and says so — which is why this returns a status rather than
+   * throwing. Phase 8 turns a conflict into a copy of your version; until then
+   * the caller's job is simply to say so rather than lose either side.
+   *
+   * 'deleted' is the third answer: the page was taken out of the notebook
+   * while it was open. Also not an error, and also not something to retry.
+   */
+  private async save(args: {
+    id: string;
+    notebookId: string;
+    title: string;
+    text: string;
+    baseRev: number | null;
+    editMode?: 'anyone' | 'author';
+    pinned?: boolean;
+    createdAt?: Date;
+  }): Promise<SharedPageSaveResult> {
+    // Sanitised before it leaves this device as well as when it arrives. The
+    // page is about to be somebody else's to read, and nothing the editor can
+    // legitimately produce is lost by passing it through the allowlist twice.
+    const text = sanitizeNoteHtml(args.text);
+    if (text.length > MAX_PAGE_CHARS) {
+      throw new Error('That page is too long to save');
+    }
+
+    const { data, error } = await supabase.rpc('save_shared_page', {
+      p_id: args.id,
+      p_notebook_id: args.notebookId,
+      p_title: args.title.trim() || null,
+      p_text: text,
+      p_base_rev: args.baseRev,
+      p_edit_mode: args.editMode ?? null,
+      p_pinned: args.pinned ?? null,
+      p_created_at: args.createdAt ? args.createdAt.toISOString() : null,
+    });
+    if (error) throw this.plainError(error.message);
+
+    const payload = (data ?? {}) as { status?: string; page?: any };
+    const status = payload.status === 'conflict' || payload.status === 'deleted'
+      ? payload.status
+      : 'saved';
+
+    if (status === 'deleted') {
+      // Keep the local copy in step with the removal rather than leaving a row
+      // the list would go on offering.
+      await this.markRemoved(args.id);
+      return { status, page: null };
+    }
+
+    if (!payload.page) throw new Error('The page was not saved');
+    return { status, page: await this.storePage(payload.page) };
+  }
+
+  /**
+   * Add a page to a shared notebook.
+   *
+   * There is no separate insert: save_shared_page creates a page it has not
+   * seen before, so a new page and the hundredth edit of an old one take the
+   * same path and cannot drift apart. The id is a UUID made here — see ids.ts
+   * for why a timestamp is not enough once two accounts write to one table.
+   */
+  async createPage(opts: {
+    notebookId: string;
+    title?: string;
+    text?: string;
+    /** Closed by default: a new page belongs to whoever started it. */
+    editMode?: 'anyone' | 'author';
+  }): Promise<SharedNotebookPage> {
+    const result = await this.save({
+      id: sharedId(),
+      notebookId: opts.notebookId,
+      title: opts.title ?? '',
+      text: opts.text ?? '',
+      baseRev: null,
+      editMode: opts.editMode ?? 'author',
+      createdAt: new Date(),
+    });
+    if (!result.page) throw new Error('The page was not created');
+    return result.page;
+  }
+
+  /**
+   * Rewrite a page that is already there.
+   *
+   * Everything not named is left as it is — the function coalesces each of
+   * edit_mode and pinned against the stored value — so saving prose cannot
+   * quietly reopen a page its author closed, and closing a page cannot revert
+   * the paragraph somebody was midway through.
+   */
+  async savePage(
+    page: SharedNotebookPage,
+    changes: {
+      title?: string;
+      text?: string;
+      editMode?: 'anyone' | 'author';
+      pinned?: boolean;
+    },
+  ): Promise<SharedPageSaveResult> {
+    return this.save({
+      id: page.id,
+      notebookId: page.notebookId,
+      title: changes.title ?? page.title ?? '',
+      text: changes.text ?? page.text,
+      baseRev: page.baseRev,
+      editMode: changes.editMode,
+      pinned: changes.pinned,
+    });
+  }
+
+  /**
+   * Take a page out of the notebook.
+   *
+   * A soft delete on the server, so a device that was offline when it happened
+   * finds out on its next pull instead of quietly uploading the page again.
+   * Locally the row goes altogether: every read here already skips a row with
+   * deletedAt set, and the next pull — which asks only for undeleted rows —
+   * would drop it anyway.
+   */
+  async removePage(id: string): Promise<void> {
+    const { error } = await supabase.rpc('remove_shared_page', { p_id: id });
+    if (error) throw this.plainError(error.message);
+    await this.markRemoved(id);
+  }
+
+  private async markRemoved(id: string): Promise<void> {
+    await writeTransaction('shared_notebook_pages', (store) => store.delete(id));
+    announce();
   }
 
   /** Throw away every shared row. Called on sign-out — none of it is ours. */

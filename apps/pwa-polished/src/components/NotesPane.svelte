@@ -25,6 +25,13 @@
   import SharedNotebookCreate from './SharedNotebookCreate.svelte';
   import SharedNotebookJoin from './SharedNotebookJoin.svelte';
   import { sharedNotebookStore, subscribeToSharedNotebookChanges } from '../adapters/SharedNotebookStore';
+  import {
+    canWriteInNotebook,
+    canEditPage,
+    canRemovePage,
+    canSetEditMode,
+    canPinPage,
+  } from '../lib/shared/sharedPermissions';
   import type {
     SharedNotebook,
     SharedNotebookMember,
@@ -96,6 +103,17 @@
   /** The page open in the reader. Held whole so its text survives a redraw. */
   let readerPage: SharedNotebookPage | null = null;
   let readerNotebook: SharedNotebook | null = null;
+  /** This account's own place in that notebook — what every "may I?" asks. */
+  let readerMember: SharedNotebookMember | null = null;
+  /** The page's own ⋯ menu: pin, open or close, remove. */
+  let sharedMenuOpen = false;
+  /**
+   * Why this page cannot be saved right now, in words for the person holding
+   * it. Set when a save comes back refused rather than written — somebody else
+   * got there first, or the page has been taken out of the notebook — and it
+   * stops the autosave retrying into the same wall every two seconds.
+   */
+  let sharedBlocked: string | null = null;
 
   // ─── Inline row state ───────────────────────────────────────────────────────
   let creatingNotebook = false;
@@ -121,6 +139,24 @@
   let settling = false; // editor is loading its initial content, not being edited
 
   $: isSignedIn = $userProfileStore.isSignedIn;
+  $: myUserId = $userProfileStore.userId;
+
+  // What this account may do to the page that is open. Worked out here rather
+  // than in the markup so the header, the menu and the save path cannot end up
+  // disagreeing about it — and every one of them mirrors a rule the database
+  // enforces anyway, so the worst a stale answer costs is a button that is
+  // offered and then refused.
+  $: canEditOpenPage = canEditPage(readerPage, readerNotebook, readerMember, myUserId);
+  $: canPinOpenPage = canPinPage(readerPage, readerNotebook, myUserId);
+  $: canRemoveOpenPage = canRemovePage(readerPage, readerNotebook, myUserId);
+  $: canCloseOpenPage = canSetEditMode(readerPage, myUserId);
+  $: hasSharedMenu = canPinOpenPage || canRemoveOpenPage || canCloseOpenPage;
+  /**
+   * Whether the blocked bar can offer a way out. It can wherever this account
+   * may add a page to the notebook, which is the same permission a brand-new
+   * page needs — the copy is a new page, not an edit of the one in the way.
+   */
+  $: canKeepAsCopy = !!sharedBlocked && canWriteInNotebook(readerNotebook, readerMember);
 
   // ─── Verse-note tree ────────────────────────────────────────────────────────
   // Shaped as SearchResults so SearchResultsTree renders it unchanged — the
@@ -154,7 +190,12 @@
   // is only responsible for saying what its rows read like.
 
   $: localList = buildLocalList(notebooks, pagesByNotebook);
-  $: sharedList = buildSharedList(sharedNotebooks, sharedPagesByNotebook, sharedMembersByNotebook);
+  $: sharedList = buildSharedList(
+    sharedNotebooks,
+    sharedPagesByNotebook,
+    sharedMembersByNotebook,
+    myUserId,
+  );
 
   function buildLocalList(
     books: Notebook[],
@@ -175,20 +216,25 @@
     books: SharedNotebook[],
     pages: Map<string, SharedNotebookPage[]>,
     members: Map<string, SharedNotebookMember[]>,
+    userId: string | null,
   ): ListNotebook[] {
     return books.map((notebook) => {
       const roster = members.get(notebook.id) ?? [];
-      const nameFor = (userId: string) => {
-        const name = (roster.find((m) => m.userId === userId)?.displayName ?? '').trim();
+      const nameFor = (id: string) => {
+        const name = (roster.find((m) => m.userId === id)?.displayName ?? '').trim();
         return name || 'Someone';
       };
       const kind = notebook.kind === 'broadcast' ? 'Broadcast' : 'Group';
       const who = roster.length === 1 ? '1 person' : `${roster.length} people`;
+      // Asked per notebook rather than once for the list: you can run one of
+      // these and only be allowed to read the next.
+      const me = roster.find((m) => m.userId === userId) ?? null;
 
       return {
         id: notebook.id,
         name: notebook.name || 'Untitled notebook',
         meta: `${kind} · ${who}`,
+        canAddPage: canWriteInNotebook(notebook, me),
         pages: (pages.get(notebook.id) ?? []).map((page) => ({
           id: page.id,
           label: sharedPageLabel(page),
@@ -197,6 +243,7 @@
           // A page only its author may rewrite. Worth showing on the row so it
           // isn't a surprise on opening it.
           closed: page.editMode === 'author',
+          canDelete: canRemovePage(page, notebook, userId),
         })),
       };
     });
@@ -295,8 +342,26 @@
       // somebody else while it was open.
       if (readerPage) {
         const fresh = pages.find((p) => p.id === readerPage!.id) ?? null;
-        if (fresh) readerPage = fresh;
-        else if (view === 'reader') backToBrowse();
+        if (!fresh) {
+          // Gone. Reading it, there is nothing to stay for; editing it, the
+          // text on screen is still the writer's and is not thrown away for
+          // them — the bar says what happened and offers to keep it.
+          if (view === 'reader') backToBrowse();
+          else if (view === 'editor' && target?.kind === 'shared') {
+            sharedBlocked = 'This page has been taken out of the notebook.';
+          }
+        } else if (view !== 'editor') {
+          readerPage = fresh;
+        }
+        // Left alone in the editor on purpose. readerPage carries the revision
+        // the save will be measured against, and quietly advancing it to
+        // whatever somebody else just wrote is exactly how their paragraph
+        // would disappear: the save would look up to date and write over it.
+      }
+      if (readerNotebook) {
+        readerNotebook = books.find((n) => n.id === readerNotebook!.id) ?? readerNotebook;
+        readerMember =
+          members.find((m) => m.notebookId === readerNotebook!.id && m.userId === myUserId) ?? null;
       }
     } catch (err) {
       console.error('[NotesPane] shared load error:', err);
@@ -357,15 +422,11 @@
     if ((savedView !== 'editor' && savedView !== 'reader') || !saved) return;
 
     if (saved.kind === 'shared') {
-      // The reader, not the editor — reopened straight from the local copy so
-      // it is on screen before the pull that refreshes it comes back.
-      const page = await sharedNotebookStore.getPage(saved.pageId);
-      if (!page) return;
-      readerPage = page;
-      readerNotebook = await sharedNotebookStore.getNotebook(saved.notebookId);
-      target = saved;
-      view = 'reader';
-      persistState();
+      // Straight from the local copy, so it is on screen before the pull that
+      // refreshes it comes back. Whether it lands in the editor or the reader
+      // is openShared's decision, not this one — a page that was open for
+      // editing when the panel closed may have been closed to you since.
+      await openShared(saved.notebookId, saved.pageId, savedView === 'editor');
       return;
     }
 
@@ -456,14 +517,160 @@
     inviteNotebook = sharedNotebooks.find((n) => n.id === notebookId) ?? null;
   }
 
-  async function openSharedPage(notebookId: string, pageId: string) {
+  /**
+   * Put a shared page on screen.
+   *
+   * One way in for all three callers — a tap in the list, a page just created,
+   * and a panel reopening where it left off — because each of them needs the
+   * same three things fetched before anything can be decided: the page, the
+   * notebook it is in, and this account's place in that notebook.
+   *
+   * `wantEditor` is a request, not an instruction. A page you may only read
+   * opens in the reader whatever was asked for, which is what makes it safe
+   * for the restore path to ask for the editor without checking first.
+   */
+  async function openShared(notebookId: string, pageId: string, wantEditor = false) {
     const page = await sharedNotebookStore.getPage(pageId);
-    if (!page) return;
+    if (!page) return false;
+
     readerPage = page;
-    readerNotebook = sharedNotebooks.find((n) => n.id === notebookId) ?? null;
+    readerNotebook =
+      sharedNotebooks.find((n) => n.id === notebookId) ??
+      (await sharedNotebookStore.getNotebook(notebookId));
+    readerMember = myUserId
+      ? await sharedNotebookStore.getMyMembership(notebookId, myUserId)
+      : null;
+    sharedMenuOpen = false;
+    sharedBlocked = null;
     target = { kind: 'shared', pageId, notebookId };
-    view = 'reader';
-    persistState();
+
+    if (wantEditor && canEditPage(page, readerNotebook, readerMember, myUserId)) {
+      editorTitle = page.title ?? '';
+      editorText = page.text;
+      openEditor();
+    } else {
+      view = 'reader';
+      persistState();
+    }
+    return true;
+  }
+
+  /**
+   * A shared page opens as something to read, even when you could write in it.
+   * A local note is always yours, so it opens in the editor; a shared page is
+   * usually somebody else's, and landing in a live editor on somebody else's
+   * work is how a stray keystroke becomes an edit everyone can see.
+   */
+  function editSharedPage() {
+    if (!readerPage || !canEditOpenPage) return;
+    sharedMenuOpen = false;
+    sharedBlocked = null;
+    editorTitle = readerPage.title ?? '';
+    editorText = readerPage.text;
+    openEditor();
+  }
+
+  /** Start a page in a shared notebook, and go straight into writing it. */
+  async function newSharedPage(notebookId: string) {
+    try {
+      const page = await sharedNotebookStore.createPage({ notebookId });
+      expanded.add(`${SHARED_KEY_PREFIX}::${notebookId}`);
+      expanded = expanded;
+      await loadShared({ force: true });
+      await openShared(notebookId, page.id, true);
+    } catch (err) {
+      console.error('[NotesPane] shared page create failed:', err);
+      showNotice((err as Error)?.message || 'That page could not be added', 'error');
+    }
+  }
+
+  /**
+   * Change something about the page that isn't its prose — whether others may
+   * edit it, whether it sits at the top.
+   *
+   * These go through the same save as the text does, with the same revision
+   * check, so a flag flipped against a copy of the page that has since moved on
+   * is refused rather than taking the stale text along with it.
+   */
+  async function applySharedChange(
+    changes: { editMode?: 'anyone' | 'author'; pinned?: boolean },
+    done: string,
+  ) {
+    if (!readerPage) return;
+    sharedMenuOpen = false;
+    try {
+      const result = await sharedNotebookStore.savePage(readerPage, changes);
+      if (result.status === 'saved' && result.page) {
+        readerPage = result.page;
+        showNotice(done);
+        await loadShared({ force: true });
+      } else if (result.status === 'conflict') {
+        showNotice('Somebody else changed this page just now — try again', 'error');
+        await loadShared({ force: true });
+      } else {
+        showNotice('That page has been taken out of the notebook', 'error');
+        await backToBrowse();
+      }
+    } catch (err) {
+      console.error('[NotesPane] shared change failed:', err);
+      showNotice((err as Error)?.message || 'That could not be changed', 'error');
+    }
+  }
+
+  function toggleSharedEditMode() {
+    if (!readerPage) return;
+    const next = readerPage.editMode === 'anyone' ? 'author' : 'anyone';
+    void applySharedChange(
+      { editMode: next },
+      next === 'anyone'
+        ? 'Anyone in this notebook can edit this page'
+        : 'Only you can edit this page now',
+    );
+  }
+
+  function toggleSharedPinned() {
+    if (!readerPage) return;
+    const next = !readerPage.pinned;
+    void applySharedChange({ pinned: next }, next ? 'Pinned to the top' : 'Unpinned');
+  }
+
+  /** Take a page out of the notebook from its row, without opening it first. */
+  async function removeSharedPageById(pageId: string) {
+    try {
+      await sharedNotebookStore.removePage(pageId);
+      await loadShared({ force: true });
+    } catch (err) {
+      console.error('[NotesPane] shared page remove failed:', err);
+      showNotice((err as Error)?.message || 'That page could not be removed', 'error');
+    }
+  }
+
+  /**
+   * Keep what is in the editor as a page of its own.
+   *
+   * The way out of a save that was refused, and the reason a conflict here
+   * costs nobody a paragraph: yours becomes a new page beside theirs instead of
+   * one of the two being chosen over the other. Phase 8 generalises this to
+   * edits made with no signal at all, which arrive at the same fork much later.
+   */
+  async function keepAsNewPage() {
+    if (!readerPage) return;
+    const base = editorTitle.trim() || sharedPageLabel(readerPage);
+    try {
+      const page = await sharedNotebookStore.createPage({
+        notebookId: readerPage.notebookId,
+        title: `${base} (your version)`,
+        text: editorText,
+      });
+      sharedBlocked = null;
+      isDirty = false;
+      showNotice('Kept as a page of your own');
+      await loadShared({ force: true });
+      await openShared(page.notebookId, page.id, true);
+    } catch (err) {
+      console.error('[NotesPane] keep-as-copy failed:', err);
+      showNotice((err as Error)?.message || 'That could not be kept', 'error');
+    }
   }
 
   function openEditor() {
@@ -484,12 +691,28 @@
   }
 
   async function backToBrowse() {
+    // Leaving the shared editor goes back to the page, not all the way out to
+    // the list: the trip was made to change the page, so the changed page is
+    // the thing worth landing on.
+    if (view === 'editor' && target?.kind === 'shared' && !sharedBlocked) {
+      if (isDirty) await save();
+      sharedMenuOpen = false;
+      confirmDeleteOpen = false;
+      view = 'reader';
+      persistState();
+      await loadShared();
+      return;
+    }
+
     const wasReading = view === 'reader';
     if (isDirty) await save();
     view = 'browse';
     target = null;
     readerPage = null;
     readerNotebook = null;
+    readerMember = null;
+    sharedMenuOpen = false;
+    sharedBlocked = null;
     confirmDeleteOpen = false;
     // Coming back from a shared page, the local lists haven't moved — asking
     // the database for all of them again would be work for nothing.
@@ -589,11 +812,20 @@
 
   function debouncedSave() {
     if (saveTimeout) clearTimeout(saveTimeout);
-    saveTimeout = window.setTimeout(() => void save(), 2000);
+    // A shared page waits longer. Every save of one bumps the page's revision
+    // and the notebook's, and from phase 5 wakes everybody else looking at it,
+    // so saving mid-sentence is a cost other people pay. Both still flush on
+    // blur and on the way out, so nothing rides on the timer.
+    const wait = target?.kind === 'shared' ? 4000 : 2000;
+    saveTimeout = window.setTimeout(() => void save(), wait);
   }
 
   async function save() {
     if (isSaving || !target) return;
+    // A save that came back refused stays refused until the writer decides
+    // what to do about it. Retrying every few seconds would only pile up the
+    // same answer and bury the bar that is asking them.
+    if (sharedBlocked) return;
     isSaving = true;
     const wasDirty = isDirty;
     isDirty = false;
@@ -622,6 +854,28 @@
           });
           target = { ...target, noteId: saved.id };
         }
+      } else if (target.kind === 'shared') {
+        // Nothing is written if somebody else has saved since this copy was
+        // taken. What comes back then is a status, not an exception, because
+        // neither answer is a failure — see the bar below, which is where the
+        // writer chooses what happens to their version.
+        if (!readerPage) {
+          isDirty = wasDirty;
+          return;
+        }
+        const result = await sharedNotebookStore.savePage(readerPage, {
+          title: editorTitle.trim(),
+          text: editorText,
+        });
+        if (result.status === 'saved' && result.page) {
+          readerPage = result.page;
+        } else {
+          isDirty = wasDirty;
+          sharedBlocked =
+            result.status === 'conflict'
+              ? 'Somebody else saved this page while you were writing, so yours has not been sent.'
+              : 'This page has been taken out of the notebook.';
+        }
       } else {
         // Pages are never auto-deleted: a titled page the user emptied on
         // purpose should still be there tomorrow. Deleting is explicit.
@@ -634,6 +888,12 @@
     } catch (err) {
       console.error('[NotesPane] save error:', err);
       isDirty = wasDirty;
+      // A refusal from the database — a reader writing, or a page its author
+      // has closed since this was opened — arrives here. Its own wording is
+      // already a plain sentence, so it is shown rather than replaced.
+      if (target?.kind === 'shared') {
+        sharedBlocked = (err as Error)?.message || 'That could not be saved.';
+      }
     } finally {
       isSaving = false;
     }
@@ -650,15 +910,25 @@
     try {
       if (target.kind === 'verse') {
         if (target.noteId) await syncedUserDataStore.deleteNote(target.noteId);
+      } else if (target.kind === 'shared') {
+        await sharedNotebookStore.removePage(target.pageId);
       } else {
         await syncedNotebookStore.deletePage(target.pageId);
       }
     } catch (err) {
       console.error('[NotesPane] delete error:', err);
+      showNotice((err as Error)?.message || 'That could not be removed', 'error');
     }
+    const wasShared = target.kind === 'shared';
     view = 'browse';
     target = null;
-    await loadAll();
+    readerPage = null;
+    readerNotebook = null;
+    readerMember = null;
+    sharedMenuOpen = false;
+    sharedBlocked = null;
+    if (wasShared) await loadShared({ force: true });
+    else await loadAll();
     persistState();
   }
 
@@ -741,13 +1011,13 @@
     </div>
   {:else if view === 'editor'}
     <!-- ── Editor ──────────────────────────────────────────────────────────── -->
-    <div class="editor-header">
+    <div class="editor-header" class:shared={target?.kind === 'shared'}>
       <button class="back-btn" on:click={backToBrowse}>
         <ArrowLeft size={14} weight="duotone" />
         <span>Back</span>
       </button>
 
-      {#if target?.kind === 'page'}
+      {#if target?.kind === 'page' || target?.kind === 'shared'}
         <input
           class="title-input"
           placeholder="Untitled"
@@ -772,18 +1042,41 @@
         <button class="icon-btn" title="Go to this verse" on:click={jumpToVerse}>↗</button>
       {/if}
 
-      <button
-        class="icon-btn"
-        title="Delete"
-        on:click={() => (confirmDeleteOpen = !confirmDeleteOpen)}>⋯</button
-      >
+      <!-- A shared page you may write in but not remove — somebody else's page,
+           left open to the notebook — gets no ⋯ at all, rather than one that
+           offers nothing. -->
+      {#if target?.kind !== 'shared' || canRemoveOpenPage}
+        <button
+          class="icon-btn"
+          title={target?.kind === 'shared' ? 'Remove from the notebook' : 'Delete'}
+          on:click={() => (confirmDeleteOpen = !confirmDeleteOpen)}>⋯</button
+        >
+      {/if}
     </div>
 
     {#if confirmDeleteOpen}
       <div class="confirm-bar">
-        <span>Delete this {target?.kind === 'verse' ? 'note' : 'page'}?</span>
-        <button class="confirm-yes" on:click={deleteCurrent}>Delete</button>
+        {#if target?.kind === 'shared'}
+          <span>Take this page out of the notebook?</span>
+          <button class="confirm-yes" on:click={deleteCurrent}>Remove</button>
+        {:else}
+          <span>Delete this {target?.kind === 'verse' ? 'note' : 'page'}?</span>
+          <button class="confirm-yes" on:click={deleteCurrent}>Delete</button>
+        {/if}
         <button class="confirm-no" on:click={() => (confirmDeleteOpen = false)}>Cancel</button>
+      </div>
+    {/if}
+
+    {#if sharedBlocked}
+      <!-- The one thing this must never do is quietly choose between the two
+           versions. It says what happened, leaves the writing on screen, and
+           offers to keep it beside the other rather than instead of it. -->
+      <div class="blocked-bar">
+        <span>{sharedBlocked}</span>
+        {#if canKeepAsCopy}
+          <button class="blocked-keep" on:click={keepAsNewPage}>Keep mine as a new page</button>
+        {/if}
+        <button class="blocked-back" on:click={() => backToBrowse()}>Leave it</button>
       </div>
     {/if}
 
@@ -806,6 +1099,17 @@
         <span>Back</span>
       </button>
       <span class="title-static">{readerPage ? sharedPageLabel(readerPage) : ''}</span>
+
+      {#if canEditOpenPage}
+        <button class="icon-btn" title="Edit this page" on:click={editSharedPage}>✎</button>
+      {/if}
+      {#if hasSharedMenu}
+        <button
+          class="icon-btn"
+          title="Page options"
+          on:click={() => (sharedMenuOpen = !sharedMenuOpen)}>⋯</button
+        >
+      {/if}
     </div>
 
     {#if readerPage}
@@ -817,6 +1121,50 @@
           <span class="byline-sep">·</span>
           <span>{readerNotebook.name || 'Untitled notebook'}</span>
         {/if}
+        <span class="byline-sep">·</span>
+        <!-- Said plainly rather than left to the padlock on the list row: this
+             is where somebody finds out why there is no pencil. -->
+        <span>
+          {#if readerPage.editMode === 'anyone'}
+            Anyone here can edit
+          {:else if readerPage.authorId === myUserId}
+            Only you can edit
+          {:else}
+            Only its author can edit
+          {/if}
+        </span>
+      </div>
+    {/if}
+
+    {#if sharedMenuOpen}
+      <div class="shared-menu">
+        {#if canCloseOpenPage}
+          <button on:click={toggleSharedEditMode}>
+            {readerPage?.editMode === 'anyone' ? 'Close to others' : 'Let others edit'}
+          </button>
+        {/if}
+        {#if canPinOpenPage}
+          <button on:click={toggleSharedPinned}>
+            {readerPage?.pinned ? 'Unpin' : 'Pin to top'}
+          </button>
+        {/if}
+        {#if canRemoveOpenPage}
+          <button
+            class="danger"
+            on:click={() => {
+              sharedMenuOpen = false;
+              confirmDeleteOpen = true;
+            }}>Remove page</button
+          >
+        {/if}
+      </div>
+    {/if}
+
+    {#if confirmDeleteOpen}
+      <div class="confirm-bar">
+        <span>Take this page out of the notebook?</span>
+        <button class="confirm-yes" on:click={deleteCurrent}>Remove</button>
+        <button class="confirm-no" on:click={() => (confirmDeleteOpen = false)}>Cancel</button>
       </div>
     {/if}
 
@@ -952,8 +1300,11 @@
               pageAccent={SHARED_PAGE_ACCENT}
               emptyPagesText="Nothing written here yet."
               canInvite
+              pageDeleteWord="Remove"
               on:toggle={(e) => toggleNode(e.detail)}
-              on:openPage={(e) => openSharedPage(e.detail.notebookId, e.detail.pageId)}
+              on:openPage={(e) => openShared(e.detail.notebookId, e.detail.pageId)}
+              on:newPage={(e) => newSharedPage(e.detail)}
+              on:deletePage={(e) => removeSharedPageById(e.detail.pageId)}
               on:invite={(e) => openInvite(e.detail)}
             />
           {/if}
@@ -1324,6 +1675,81 @@
 
   .byline-sep {
     color: #555;
+  }
+
+  /* ── The open page's own menu ───────────────────────────── */
+  /* Same row of small buttons NotebookList uses, so the two menus in the pane
+     read as one thing rather than two. */
+  .shared-menu {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 12px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+
+  .shared-menu button {
+    background: #262626;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    color: #ccc;
+    font-size: 0.75rem;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+
+  .shared-menu button:hover {
+    background: #333;
+  }
+
+  .shared-menu button.danger {
+    color: #f08a7a;
+    border-color: #5a3230;
+  }
+
+  /* ── A save that was refused ────────────────────────────── */
+  /* Amber rather than red: nothing has gone wrong and nothing is lost — there
+     are simply two versions and a choice to make between keeping both and
+     walking away from one. */
+  .blocked-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 6px 10px;
+    padding: 8px 10px;
+    background: rgba(217, 160, 60, 0.12);
+    border: 1px solid #6a5325;
+    border-radius: 5px;
+    color: #e8d3a8;
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+
+  .blocked-bar span {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .blocked-keep,
+  .blocked-back {
+    border: none;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    padding: 5px 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .blocked-keep {
+    background: #2dd4bf;
+    color: #0b3b36;
+    font-weight: 600;
+  }
+
+  .blocked-back {
+    background: #333;
+    color: #ccc;
   }
 
   /* ── Confirm bar ────────────────────────────────────────── */

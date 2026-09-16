@@ -9,6 +9,13 @@
     pinned?: boolean;
     /** Marks a page nobody but its author may rewrite. */
     closed?: boolean;
+    /**
+     * Overrides `canDeletePage` for this row alone. Local notebooks are all
+     * yours so the list-wide flag settles it; in a shared notebook the answer
+     * changes page by page — your own pages, plus anybody's if you own the
+     * notebook.
+     */
+    canDelete?: boolean;
   }
 
   /** One notebook, with its pages already loaded. */
@@ -18,6 +25,12 @@
     pages: ListPage[];
     /** A quiet second line on the notebook row — "Group · 4 people" and such. */
     meta?: string;
+    /**
+     * Overrides `canAddPage` for this notebook alone. You can be an admin of
+     * one shared notebook and a reader of the next, so the list-wide flag
+     * cannot answer for both.
+     */
+    canAddPage?: boolean;
   }
 </script>
 
@@ -53,6 +66,10 @@
   /** Page titles. Distinct from the accent so a row still reads as a link. */
   export let pageAccent = '#60a5fa';
 
+  /**
+   * The list-wide answers. A notebook or a page may override its own with the
+   * fields above; these are what applies when it doesn't.
+   */
   export let canAddPage = false;
   export let canRenameNotebook = false;
   export let canDeleteNotebook = false;
@@ -61,6 +78,12 @@
   export let canInvite = false;
 
   export let emptyPagesText = 'No pages yet.';
+  /**
+   * What taking a page away is called. Deleting a local page destroys it;
+   * taking a shared page out of a notebook is a different act and saying
+   * "Delete" for both would misdescribe one of them.
+   */
+  export let pageDeleteWord = 'Delete';
 
   const dispatch = createEventDispatcher<{
     toggle: string;
@@ -175,7 +198,7 @@
             </span>
           </button>
 
-          {#if canAddPage}
+          {#if notebook.canAddPage ?? canAddPage}
             <button
               class="row-btn"
               title="New page"
@@ -260,11 +283,11 @@
                 </span>
                 <span class="page-sub">{page.sub}</span>
               </button>
-              {#if canDeletePage}
+              {#if page.canDelete ?? canDeletePage}
                 <button
                   class="row-btn trash-btn"
-                  title="Delete page"
-                  aria-label="Delete page"
+                  title="{pageDeleteWord} page"
+                  aria-label="{pageDeleteWord} page"
                   on:click={() =>
                     (confirmDeletePageId = confirmDeletePageId === page.id ? null : page.id)}
                 >
@@ -275,10 +298,10 @@
 
             {#if confirmDeletePageId === page.id}
               <div class="confirm-bar">
-                <span>Delete “{pageLabel(page)}”?</span>
+                <span>{pageDeleteWord} “{pageLabel(page)}”?</span>
                 <button
                   class="confirm-yes"
-                  on:click={() => confirmDeletePage(notebook.id, page.id)}>Delete</button
+                  on:click={() => confirmDeletePage(notebook.id, page.id)}>{pageDeleteWord}</button
                 >
                 <button class="confirm-no" on:click={() => (confirmDeletePageId = null)}>
                   Cancel

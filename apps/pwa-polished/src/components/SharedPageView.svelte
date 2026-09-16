@@ -13,9 +13,14 @@
    * unchecked markup reaches innerHTML. And verse references have to keep
    * working: they survive as spans carrying the same data attributes
    * BibleRefNode writes, so a tap opens the same menu it opens in a note.
-   * Expanding a reference works here too, but only on the screen. There is no
-   * write path for a shared page until phase 3, so the printed verse is put
-   * straight into the DOM and is gone again the next time the page is opened.
+   * Expanding a reference works here too, but only on the screen: the printed
+   * verse is put straight into the DOM and is gone again the next time the page
+   * is opened. That stays true now there is a write path, and deliberately.
+   * This is where you read what other people wrote, and expanding a reference
+   * is a reader's convenience — writing it into the page would edit everybody's
+   * copy, bump the revision, and count as a save somebody never asked to make.
+   * In the editor the same gesture goes through RefAwareEditor and is saved,
+   * which is the right place for it.
    */
   import { onDestroy } from 'svelte';
   import { get } from 'svelte/store';
@@ -98,10 +103,11 @@
    * Print the verse inside the reference, exactly as a note does.
    *
    * The editor's version of this edits the Lexical tree and the note is saved.
-   * Here there is nothing to save into yet, so the span is changed in place and
-   * the change lasts only as long as the page stays on screen — a pull, or
-   * closing and reopening the page, redraws it from the stored HTML and the
-   * verse is gone. Phase 3 brings the write path that makes it stick.
+   * Here the span is changed in place instead, and the change lasts only as
+   * long as the page stays on screen — a pull, or closing and reopening the
+   * page, redraws it from the stored HTML and the verse is gone. Making it
+   * stick means opening the page for editing, where it becomes an edit with
+   * your name on it rather than something the page did by itself.
    */
   async function expand() {
     if (!hit || busy) return;
