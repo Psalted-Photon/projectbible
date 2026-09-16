@@ -26,7 +26,19 @@
   import SharedNotebookJoin from './SharedNotebookJoin.svelte';
   import MemberPillPicker from './MemberPillPicker.svelte';
   import AuthorPill from './AuthorPill.svelte';
+  import SharedLiveBar from './SharedLiveBar.svelte';
   import { sharedNotebookStore, subscribeToSharedNotebookChanges } from '../adapters/SharedNotebookStore';
+  import {
+    sharedLive,
+    liveClock,
+    openSharedLive,
+    closeSharedLive,
+    setLivePage,
+    setLiveWriting,
+    pingLiveTyping,
+    writerOfPage,
+    isIdleWriter,
+  } from '../lib/shared/sharedRealtime';
   import {
     canWriteInNotebook,
     canEditPage,
@@ -116,6 +128,13 @@
    * stops the autosave retrying into the same wall every two seconds.
    */
   let sharedBlocked: string | null = null;
+  /**
+   * The notebook this device is live in while nothing is open — the last one
+   * unfolded in the list. One notebook at a time on purpose: a socket for every
+   * notebook somebody is a member of would spend the realtime allowance on
+   * notebooks nobody is looking at.
+   */
+  let browsingNotebookId: string | null = null;
 
   // ─── Inline row state ───────────────────────────────────────────────────────
   let creatingNotebook = false;
@@ -166,6 +185,45 @@
   $: readerRoster = readerNotebook
     ? sharedMembersByNotebook.get(readerNotebook.id) ?? []
     : [];
+
+  // ─── Live ───────────────────────────────────────────────────────────────────
+  // Which notebook this device follows: the one whose page is open, or — with
+  // nothing open — the one last unfolded in the list, so a page somebody else
+  // adds appears in it without the ↻ button. Nothing at all on the Local side.
+  $: liveNotebookId =
+    !isSignedIn || mode !== 'shared'
+      ? null
+      : view !== 'browse'
+        ? readerNotebook?.id ?? null
+        : browsingNotebookId;
+
+  // Called on every redraw; opening the notebook that is already open only
+  // swaps in the newer callback, so this costs nothing when nothing has moved.
+  // The roster is a dependency rather than something read inside: whether this
+  // account holds a socket or polls depends on its role, and on the restore
+  // path the role arrives after the notebook does.
+  $: followNotebook(liveNotebookId, myUserId, sharedNotebooks, sharedMembersByNotebook);
+
+  // What this device tells everybody else: which page it has open, and whether
+  // it is in the editor on it. Both say nothing on a local note — a presence
+  // entry is only ever about a shared page.
+  $: setLivePage(view !== 'browse' && target?.kind === 'shared' ? target.pageId : null);
+  $: setLiveWriting(view === 'editor' && target?.kind === 'shared');
+
+  $: liveOthers = $sharedLive.people.filter((p) => p.userId !== myUserId);
+  $: openSharedPageId = target?.kind === 'shared' ? target.pageId : null;
+  /** Somebody else in the editor on the page this device has open. */
+  $: liveWriter = writerOfPage(liveOthers, openSharedPageId);
+  /** Their claim, with nothing typed under it for a minute. */
+  $: liveWriterIdle = !!liveWriter && isIdleWriter(liveWriter, $liveClock);
+  /**
+   * The lock, and all it is: while somebody else is actively writing a page,
+   * nobody else is offered the pencil. It is advisory — the revision check on
+   * the server is what actually keeps a paragraph from being written over —
+   * but it is the difference between two people taking turns and two people
+   * finding out afterwards that one of them wasted ten minutes.
+   */
+  $: lockedByOther = !!liveWriter && !liveWriterIdle;
   $: readerAuthor = readerPage
     ? readerRoster.find((m) => m.userId === readerPage!.authorId) ?? null
     : null;
@@ -386,6 +444,46 @@
   }
 
   /**
+   * Follow a notebook's changes as they happen.
+   *
+   * A reader of a Broadcast notebook is given no socket — that is the whole
+   * point of a Broadcast one, and it is what lets a public notebook have more
+   * readers than the realtime allowance has connections. They are handed the
+   * same nudge on a timer instead.
+   */
+  function followNotebook(
+    notebookId: string | null,
+    userId: string | null,
+    books: SharedNotebook[],
+    members: Map<string, SharedNotebookMember[]>,
+  ) {
+    if (!notebookId || !userId) {
+      closeSharedLive();
+      return;
+    }
+    const notebook =
+      books.find((n) => n.id === notebookId) ??
+      (readerNotebook?.id === notebookId ? readerNotebook : null);
+    const me = (members.get(notebookId) ?? []).find((m) => m.userId === userId);
+    const live = notebook?.kind !== 'broadcast' || canWriteInNotebook(notebook, me ?? null);
+    openSharedLive({ notebookId, userId, live, onChange: remoteSharedChange });
+  }
+
+  /**
+   * Somebody else changed something in the notebook being followed.
+   *
+   * Only ever a nudge to go and read: the row itself comes through the store's
+   * own pull, forced past its throttle because the whole point of the channel
+   * is that this arrives now rather than within ten seconds. Unsaved writing is
+   * left strictly alone — loadShared will not touch a page under an open
+   * editor, and while there is anything unsaved it is not called at all.
+   */
+  function remoteSharedChange() {
+    if (isDirty) return;
+    void loadShared({ force: true });
+  }
+
+  /**
    * A member as the badge the list draws.
    *
    * Undefined for somebody who is not on the roster — a page written by
@@ -441,6 +539,9 @@
     // The panel can be closed by dragging it off the edge — flush before we go.
     if (isDirty) void save();
     if (saveTimeout) clearTimeout(saveTimeout);
+    // And take this device out of the room, rather than leaving a badge behind
+    // on a page nobody has open.
+    closeSharedLive();
   });
 
   /** Reopen whatever the panel was showing before a reload or an edge change. */
@@ -487,7 +588,14 @@
 
   function toggleNode(key: string) {
     if (expanded.has(key)) expanded.delete(key);
-    else expanded.add(key);
+    else {
+      expanded.add(key);
+      // Unfolding a shared notebook is what says which one you are looking at,
+      // and so which one this device should be following while nothing is open.
+      if (key.startsWith(`${SHARED_KEY_PREFIX}::`)) {
+        browsingNotebookId = key.slice(SHARED_KEY_PREFIX.length + 2);
+      }
+    }
     expanded = expanded;
     persistState();
   }
@@ -537,6 +645,7 @@
     // Open it, so the pages are the next thing seen rather than a closed row.
     expanded.add(`${SHARED_KEY_PREFIX}::${notebook.id}`);
     expanded = expanded;
+    browsingNotebookId = notebook.id;
     persistState();
   }
 
@@ -604,6 +713,13 @@
    */
   function editSharedPage() {
     if (!readerPage || !canEditOpenPage) return;
+    // One writer at a time. The pencil is already hidden while somebody else
+    // is in the page, so this is the second door — a stale list, or the Take
+    // over button pressed the instant they started typing again.
+    if (lockedByOther) {
+      showNotice(`${authorName(readerPage.notebookId, liveWriter!.userId)} is writing this page`, 'error');
+      return;
+    }
     sharedMenuOpen = false;
     sharedBlocked = null;
     editorTitle = readerPage.title ?? '';
@@ -839,6 +955,10 @@
     editorText = e.detail;
     if (settling) return;
     isDirty = true;
+    // Typing is what keeps the claim on a shared page alive; a writer who has
+    // typed nothing for a minute is one anybody else may take over from. The
+    // service itself throttles this to once every fifteen seconds.
+    if (target?.kind === 'shared') pingLiveTyping();
     debouncedSave();
   }
 
@@ -1095,6 +1215,19 @@
       {/if}
     </div>
 
+    {#if target?.kind === 'shared'}
+      <!-- Writing, the same strip is a warning: somebody else is in this page
+           too, and whichever of you saves second will be asked to keep theirs
+           beside the other. No Take over here — you already have it open. -->
+      <SharedLiveBar
+        people={liveOthers}
+        members={readerRoster}
+        pageId={openSharedPageId}
+        writer={liveWriter}
+        writerIdle={liveWriterIdle}
+      />
+    {/if}
+
     {#if confirmDeleteOpen}
       <div class="confirm-bar">
         {#if target?.kind === 'shared'}
@@ -1141,7 +1274,9 @@
       </button>
       <span class="title-static">{readerPage ? sharedPageLabel(readerPage) : ''}</span>
 
-      {#if canEditOpenPage}
+      <!-- No pencil while somebody else is in the page. The strip below says
+           who, and offers to take it from them once they have gone quiet. -->
+      {#if canEditOpenPage && !lockedByOther}
         <button class="icon-btn" title="Edit this page" on:click={editSharedPage}>✎</button>
       {/if}
       {#if hasSharedMenu}
@@ -1185,6 +1320,16 @@
         </span>
       </div>
     {/if}
+
+    <SharedLiveBar
+      people={liveOthers}
+      members={readerRoster}
+      pageId={openSharedPageId}
+      writer={liveWriter}
+      writerIdle={liveWriterIdle}
+      canTakeOver={canEditOpenPage}
+      on:takeover={editSharedPage}
+    />
 
     {#if sharedMenuOpen}
       <div class="shared-menu">
