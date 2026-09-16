@@ -10,7 +10,7 @@
    * at every panel width, so a 20%-wide sliver and a 50/50 split both work.
    */
   import { onMount, onDestroy, tick } from 'svelte';
-  import { ArrowLeft, UsersThree } from 'phosphor-svelte';
+  import { ArrowLeft, UsersThree, CloudArrowUp } from 'phosphor-svelte';
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import SearchResultsTree from './SearchResultsTree.svelte';
   import { groupResultsByBook } from '../lib/searchTree';
@@ -134,6 +134,14 @@
    */
   let sharedBlocked: string | null = null;
   /**
+   * The shared pages with writing that has not reached the notebook yet.
+   *
+   * Read from the outbox rather than worked out here, so the mark on the row,
+   * the line in the reader and the pull that spares the page are all answering
+   * the same question from the same place.
+   */
+  let pendingPages = new Set<string>();
+  /**
    * The notebook this device is live in while nothing is open — the last one
    * unfolded in the list. One notebook at a time on purpose: a socket for every
    * notebook somebody is a member of would spend the realtime allowance on
@@ -210,6 +218,9 @@
 
   /** The page on screen belongs to a notebook this account is out of. */
   $: readerRemoved = isReadOnlyCopy(readerNotebook);
+
+  /** The page on screen has writing in it that has not gone up yet. */
+  $: readerWaiting = !!readerPage && pendingPages.has(readerPage.id);
 
   /** The roster of the notebook on screen, for the byline and the gutter. */
   $: readerRoster = readerNotebook
@@ -297,6 +308,7 @@
     sharedPagesByNotebook,
     sharedMembersByNotebook,
     myUserId,
+    pendingPages,
   );
 
   function buildLocalList(
@@ -319,6 +331,7 @@
     pages: Map<string, SharedNotebookPage[]>,
     members: Map<string, SharedNotebookMember[]>,
     userId: string | null,
+    waiting: Set<string>,
   ): ListNotebook[] {
     return books.map((notebook) => {
       const roster = members.get(notebook.id) ?? [];
@@ -360,6 +373,10 @@
           // A page only its author may rewrite. Worth showing on the row so it
           // isn't a surprise on opening it.
           closed: page.editMode === 'author',
+          // Written with no signal and not up yet. Shown because the row is
+          // otherwise indistinguishable from one everybody else can already
+          // see, and knowing which is which is the whole point of saying so.
+          waiting: waiting.has(page.id),
           canDelete: canRemovePage(page, notebook, userId),
         })),
       };
@@ -423,11 +440,14 @@
     sharedLoading = sharedNotebooks.length === 0;
     try {
       await sharedNotebookStore.pull(opts);
-      const [books, pages, members] = await Promise.all([
+      const [books, pages, members, waiting] = await Promise.all([
         sharedNotebookStore.getNotebooks(),
         sharedNotebookStore.getAllPages(),
         sharedNotebookStore.getAllMembers(),
+        sharedNotebookStore.pendingPages(),
       ]);
+
+      pendingPages = waiting;
 
       sharedNotebooks = books;
 
@@ -852,6 +872,14 @@
         readerPage = result.page;
         showNotice(done);
         await loadShared({ force: true });
+      } else if (result.status === 'queued' && result.page) {
+        // Done as far as this device is concerned, and it will be done for
+        // everybody else when there is a signal. Said plainly rather than
+        // silently, because pinning something nobody else can see yet is
+        // exactly the sort of thing that looks broken when it isn't.
+        readerPage = result.page;
+        showNotice(`${done} — it will reach the notebook when you are back online`);
+        await loadShared();
       } else if (result.status === 'conflict') {
         showNotice('Somebody else changed this page just now — try again', 'error');
         await loadShared({ force: true });
@@ -890,6 +918,23 @@
     } catch (err) {
       console.error('[NotesPane] shared page remove failed:', err);
       showNotice((err as Error)?.message || 'That page could not be removed', 'error');
+    }
+  }
+
+  /**
+   * Try the outbox again now, rather than waiting to be back online.
+   *
+   * The flush happens on its own — on the browser's 'online' event, and at the
+   * top of every pull — so this exists for the moment somebody is looking at
+   * the bar and would rather press something than trust it. A signal that is
+   * still not there says so and changes nothing.
+   */
+  async function sendPending() {
+    const waitingFor = readerPage?.id ?? null;
+    await sharedNotebookStore.flushOutbox();
+    await loadShared({ force: true });
+    if (waitingFor && pendingPages.has(waitingFor)) {
+      showNotice('Still no signal. It is safe here and will go up on its own.', 'error');
     }
   }
 
@@ -1017,7 +1062,15 @@
     const mode = copying?.mode;
     copying = null;
     if (mode === 'to-shared') {
-      showNotice(`Copied to “${destinationName}”`);
+      // Sending a copy with no signal works like any other write — it is in
+      // the notebook's local copy and in the outbox — but saying "Copied to
+      // Romans Group" would have somebody expecting the group to have it.
+      const offline = typeof navigator !== 'undefined' && !navigator.onLine;
+      showNotice(
+        offline
+          ? `Copied to “${destinationName}” — it reaches them when you are back online`
+          : `Copied to “${destinationName}”`,
+      );
       await loadShared({ force: true });
     } else {
       showNotice(`Kept in “${destinationName}”`);
@@ -1225,6 +1278,13 @@
         });
         if (result.status === 'saved' && result.page) {
           readerPage = result.page;
+        } else if (result.status === 'queued' && result.page) {
+          // Nothing to say and nothing to stop: the words are in the local
+          // copy, the outbox has them, and the strip above the editor says so
+          // for as long as that is true. Autosave carries on as normal — each
+          // pass simply replaces what is queued rather than sending anything.
+          readerPage = result.page;
+          pendingPages = new Set(pendingPages).add(result.page.id);
         } else {
           isDirty = wasDirty;
           sharedBlocked =
@@ -1436,6 +1496,17 @@
       />
     {/if}
 
+    {#if readerWaiting}
+      <!-- Not a warning and not an error — nothing has gone wrong and nothing
+           needs doing. It is here so that writing on a train is never mistaken
+           for writing everyone can already see. -->
+      <div class="waiting-bar">
+        <CloudArrowUp size={13} weight="fill" />
+        <span>Saved here. It goes to the notebook when you are back online.</span>
+        <button class="waiting-send" on:click={sendPending}>Try now</button>
+      </div>
+    {/if}
+
     {#if confirmDeleteOpen}
       <div class="confirm-bar">
         {#if target?.kind === 'shared'}
@@ -1542,6 +1613,14 @@
       canTakeOver={canEditOpenPage}
       on:takeover={editSharedPage}
     />
+
+    {#if readerWaiting}
+      <div class="waiting-bar">
+        <CloudArrowUp size={13} weight="fill" />
+        <span>This is your copy. It goes to the notebook when you are back online.</span>
+        <button class="waiting-send" on:click={sendPending}>Try now</button>
+      </div>
+    {/if}
 
     {#if sharedMenuOpen}
       <div class="shared-menu">
@@ -2208,6 +2287,40 @@
   .blocked-back {
     background: #333;
     color: #ccc;
+  }
+
+  /* ── Waiting to go up ───────────────────────────────────────
+     Quieter than the blocked bar on purpose: that one is a decision waiting to
+     be made, this one is a fact about where the words are. */
+  .waiting-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 4px 10px;
+    padding: 6px 10px;
+    background: rgba(224, 176, 96, 0.08);
+    border: 1px solid #4a3c22;
+    border-radius: 5px;
+    color: #cbb489;
+    font-size: 0.74rem;
+    line-height: 1.4;
+  }
+
+  .waiting-bar span {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .waiting-send {
+    flex-shrink: 0;
+    border: 1px solid #5a4a2a;
+    border-radius: 4px;
+    background: transparent;
+    color: #e0b060;
+    font-size: 0.72rem;
+    padding: 4px 9px;
+    cursor: pointer;
   }
 
   /* ── Confirm bar ────────────────────────────────────────── */

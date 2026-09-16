@@ -29,6 +29,10 @@
  * Phase 4 stamps each save with who wrote which paragraph, and lets a member
  * change the badge they are known by. Phase 7 runs one: the roster, roles,
  * removing somebody, the code, and switching what kind of notebook it is.
+ * Phase 8 lets you write in one with no signal: the words go into the local
+ * copy and into sharedOutbox, the pull sends them before it fetches anything,
+ * and a page somebody else has moved on in the meantime is forked rather than
+ * either version being chosen over the other.
  */
 
 import { supabase } from '../lib/supabase/client';
@@ -43,6 +47,20 @@ import { sharedId } from '../lib/shared/ids';
 import { normalizeJoinCode } from '../lib/shared/joinCode';
 import { defaultMemberIdentity } from '../lib/shared/memberIdentity';
 import { stampParagraphs } from '../lib/shared/paragraphStamp';
+import {
+  clearOutbox,
+  dropNotebookWrites,
+  dropWrite,
+  isOffline,
+  markAttempt,
+  pendingFor,
+  pendingPageIds,
+  pendingWrites,
+  queueWrite,
+  subscribeToOutboxChanges,
+} from '../lib/shared/sharedOutbox';
+import type { DBSharedOutboxItem } from '../lib/shared/sharedOutbox';
+import { showNotice } from '../stores/noticeStore';
 
 // ─── Shapes the app works in ─────────────────────────────────────────────────
 
@@ -99,14 +117,19 @@ export interface SharedNotebookPage {
  * What came of a save.
  *
  * 'saved' is the ordinary answer. 'conflict' means somebody else got there
- * first and nothing was written — the caller still holds the text, and phase 8
- * is where it becomes a copy. 'deleted' means the page was taken out of the
- * notebook while it was open. None of the three is an error, which is why this
- * is a returned value rather than an exception; a refusal — a reader trying to
- * write, or a closed page — is a different thing and does throw.
+ * first and nothing was written — the caller still holds the text, and the bar
+ * in NotesPane is where it becomes a copy. 'deleted' means the page was taken
+ * out of the notebook while it was open. 'queued' means there was no signal:
+ * the words are in the local copy and in the outbox, and they will go up on
+ * their own — the page that comes back with it is the local one, so the reader
+ * draws what was just written rather than what the server last had.
+ *
+ * None of the four is an error, which is why this is a returned value rather
+ * than an exception; a refusal — a reader trying to write, or a closed page —
+ * is a different thing and does throw.
  */
 export interface SharedPageSaveResult {
-  status: 'saved' | 'conflict' | 'deleted';
+  status: 'saved' | 'conflict' | 'deleted' | 'queued';
   page: SharedNotebookPage | null;
 }
 
@@ -257,6 +280,11 @@ function announce(): void {
   });
 }
 
+// Something queued, sent or given up on is a change to what the list should be
+// drawing — the mark on a row saying it has not gone up yet appears and
+// disappears with it. Bridged here so a component only has to subscribe once.
+subscribeToOutboxChanges(announce);
+
 // ─── Local reads ─────────────────────────────────────────────────────────────
 
 function getAll<T>(storeName: string): Promise<T[]> {
@@ -329,6 +357,7 @@ async function replaceAll(
 
 export class SharedNotebookStoreImpl {
   private pulling = false;
+  private flushing = false;
   private lastPullAt = 0;
 
   // ── Reads ────────────────────────────────────────────────────────────────
@@ -416,6 +445,11 @@ export class SharedNotebookStoreImpl {
     // Opening and closing the Shared tab should not mean a round trip each time.
     if (!opts.force && Date.now() - this.lastPullAt < 10_000) return false;
 
+    // Up before down. A pull that ran first would replace the page somebody
+    // wrote on a train with the older one the server still has, and the words
+    // would be gone before the outbox got its turn.
+    await this.flushOutbox();
+
     this.pulling = true;
     try {
       const {
@@ -449,14 +483,27 @@ export class SharedNotebookStoreImpl {
       const stillIn = new Set(notebooks.map((n) => n.id));
       const gone = await this.markMissingNotebooksRemoved(stillIn);
 
+      // A page with writing still waiting to go up is left exactly as it is,
+      // both ways round: the server's older copy does not replace it, and a
+      // page started offline — which the server has never heard of, so it is
+      // missing from the pull by definition — is not taken for one that has
+      // been removed. Anything still here after the flush is here because the
+      // flush could not reach the server, and the words on screen are the
+      // newest version of it that exists anywhere.
+      const waiting = await pendingPageIds();
+      const fresh = waiting.size ? pages.filter((row) => !waiting.has(row.id)) : pages;
+
       let changed = gone.size > 0;
       changed = (await replaceAll('shared_notebooks', notebooks, () => false)) || changed;
       changed =
         (await replaceAll('shared_notebook_members', members, (row) => !gone.has(row.notebookId))) ||
         changed;
       changed =
-        (await replaceAll('shared_notebook_pages', pages, (row) => !gone.has(row.notebookId))) ||
-        changed;
+        (await replaceAll(
+          'shared_notebook_pages',
+          fresh,
+          (row) => !gone.has(row.notebookId) && !waiting.has(row.id),
+        )) || changed;
 
       this.lastPullAt = Date.now();
       if (changed) announce();
@@ -559,6 +606,7 @@ export class SharedNotebookStoreImpl {
     kind: 'group' | 'broadcast';
     visibility: 'private' | 'public';
   }): Promise<SharedNotebook> {
+    this.requireOnline();
     const me = await this.identity();
 
     const { data, error } = await supabase.rpc('create_shared_notebook', {
@@ -592,6 +640,7 @@ export class SharedNotebookStoreImpl {
    * stranger guessing codes learns nothing from the difference.
    */
   async joinByCode(code: string): Promise<SharedNotebook> {
+    this.requireOnline();
     const clean = normalizeJoinCode(code);
     if (!clean) throw new Error('Enter the code you were given');
 
@@ -730,16 +779,39 @@ export class SharedNotebookStoreImpl {
   }
 
   /**
+   * The same sentence for every action that simply cannot be done with no
+   * signal — joining, changing the code, moving somebody's role.
+   *
+   * Writing in a page is the exception rather than the rule here: it is the
+   * only thing anybody does at length, so it is the only thing worth keeping
+   * in an outbox. The rest are single taps that are no trouble to repeat once
+   * there is a connection, and each of them needs an answer from the server —
+   * a join has nothing to show until the notebook comes back — so pretending
+   * they had worked would be a lie with nothing behind it.
+   */
+  private requireOnline(): void {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('You are offline — try that again when you have a signal');
+    }
+  }
+
+  /**
    * Save a page, without writing over anybody else's work.
    *
    * `baseRev` is the revision this device started from. The server compares it
    * with the row's current one and, if somebody has saved in between, changes
    * nothing and says so — which is why this returns a status rather than
-   * throwing. Phase 8 turns a conflict into a copy of your version; until then
-   * the caller's job is simply to say so rather than lose either side.
+   * throwing. The bar in NotesPane then offers to keep your version as a page
+   * of its own beside theirs, rather than either being chosen over the other.
    *
    * 'deleted' is the third answer: the page was taken out of the notebook
    * while it was open. Also not an error, and also not something to retry.
+   *
+   * 'queued' is the fourth, and the whole of phase 8: there was no signal, so
+   * the words went into the local copy and into the outbox. The same four
+   * answers come back later when the outbox is flushed, and a conflict there
+   * forks exactly as one here does — the only difference being that nobody is
+   * looking, so the fork is made for them and they are told.
    */
   private async save(args: {
     id: string;
@@ -769,32 +841,123 @@ export class SharedNotebookStoreImpl {
       throw new Error('That page is too long to save');
     }
 
-    const { data, error } = await supabase.rpc('save_shared_page', {
-      p_id: args.id,
-      p_notebook_id: args.notebookId,
-      p_title: args.title.trim() || null,
-      p_text: text,
-      p_base_rev: args.baseRev,
-      p_edit_mode: args.editMode ?? null,
-      p_pinned: args.pinned ?? null,
-      p_created_at: args.createdAt ? args.createdAt.toISOString() : null,
-    });
-    if (error) throw this.plainError(error.message);
-
-    const payload = (data ?? {}) as { status?: string; page?: any };
-    const status = payload.status === 'conflict' || payload.status === 'deleted'
-      ? payload.status
-      : 'saved';
-
-    if (status === 'deleted') {
-      // Keep the local copy in step with the removal rather than leaving a row
-      // the list would go on offering.
-      await this.markRemoved(args.id);
-      return { status, page: null };
+    // No signal: into the local copy and into the outbox, before a round trip
+    // is even attempted. Checked here rather than left to the fetch failing
+    // because a save on a dead connection can hang for half a minute, and the
+    // writer would spend it watching a page that had already been dealt with.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return { status: 'queued', page: await this.queueSave(args, text) };
     }
 
-    if (!payload.page) throw new Error('The page was not saved');
-    return { status, page: await this.storePage(payload.page) };
+    try {
+      const { data, error } = await supabase.rpc('save_shared_page', {
+        p_id: args.id,
+        p_notebook_id: args.notebookId,
+        p_title: args.title.trim() || null,
+        p_text: text,
+        p_base_rev: args.baseRev,
+        p_edit_mode: args.editMode ?? null,
+        p_pinned: args.pinned ?? null,
+        p_created_at: args.createdAt ? args.createdAt.toISOString() : null,
+      });
+      if (error) throw this.plainError(error.message);
+
+      const payload = (data ?? {}) as { status?: string; page?: any };
+      const status = payload.status === 'conflict' || payload.status === 'deleted'
+        ? payload.status
+        : 'saved';
+
+      if (status === 'deleted') {
+        // Keep the local copy in step with the removal rather than leaving a
+        // row the list would go on offering.
+        await this.markRemoved(args.id);
+        return { status, page: null };
+      }
+
+      if (!payload.page) throw new Error('The page was not saved');
+      return { status, page: await this.storePage(payload.page) };
+    } catch (err) {
+      // A connection that dropped part way through, or a browser still
+      // claiming to be online in a lift. The same answer as having known it
+      // beforehand: queue it. Anything the server actually said no to is a
+      // refusal and is passed on.
+      if (isOffline(err)) {
+        return { status: 'queued', page: await this.queueSave(args, text) };
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Write an edit into the local copy and leave a note of it for later.
+   *
+   * The local row is what the reader and the list draw, so it has to carry the
+   * new words immediately — an offline save that left the old text on screen
+   * would look exactly like one that had failed. Its `rev` is deliberately not
+   * moved: the revision belongs to the server, and inventing one here would
+   * make the flush measure the edit against a version that never existed.
+   */
+  private async queueSave(
+    args: {
+      id: string;
+      notebookId: string;
+      title: string;
+      baseRev: number | null;
+      editMode?: 'anyone' | 'author';
+      pinned?: boolean;
+      createdAt?: Date;
+    },
+    text: string,
+  ): Promise<SharedNotebookPage> {
+    const existing = await getOne<DBSharedNotebookPage>('shared_notebook_pages', args.id);
+    const now = Date.now();
+    const me = await this.saverId();
+    const title = args.title.trim() || undefined;
+
+    const row: DBSharedNotebookPage = existing
+      ? {
+          ...existing,
+          title,
+          text,
+          editMode: args.editMode ?? existing.editMode,
+          pinned: args.pinned ?? existing.pinned,
+          updatedAt: now,
+          updatedBy: me || existing.updatedBy,
+        }
+      : {
+          id: args.id,
+          notebookId: args.notebookId,
+          authorId: me,
+          title,
+          text,
+          editMode: args.editMode ?? 'author',
+          pinned: args.pinned ?? false,
+          sortOrder: 0,
+          // Nothing the server has ever seen, so there is no revision yet.
+          rev: 0,
+          baseRev: 0,
+          deletedAt: null,
+          createdAt: args.createdAt ? args.createdAt.getTime() : now,
+          updatedAt: now,
+          updatedBy: me,
+        };
+
+    await writeTransaction('shared_notebook_pages', (store) => store.put(row));
+    await queueWrite({
+      pageId: args.id,
+      notebookId: args.notebookId,
+      kind: 'save',
+      title: args.title,
+      text,
+      baseRev: args.baseRev,
+      editMode: args.editMode ?? null,
+      pinned: args.pinned ?? null,
+      // Only a page the server has never seen needs its creation date sent;
+      // queueWrite carries it forward through every later edit of that page.
+      createdAt: existing ? null : row.createdAt,
+    });
+    announce();
+    return toPage(row);
   }
 
   /**
@@ -870,14 +1033,218 @@ export class SharedNotebookStoreImpl {
    * would drop it anyway.
    */
   async removePage(id: string): Promise<void> {
-    const { error } = await supabase.rpc('remove_shared_page', { p_id: id });
-    if (error) throw this.plainError(error.message);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await this.queueRemove(id);
+      return;
+    }
+    try {
+      const { error } = await supabase.rpc('remove_shared_page', { p_id: id });
+      if (error) throw this.plainError(error.message);
+    } catch (err) {
+      if (!isOffline(err)) throw err;
+      await this.queueRemove(id);
+      return;
+    }
+    await dropWrite(id);
+    await this.markRemoved(id);
+  }
+
+  /**
+   * Take a page out with no signal.
+   *
+   * A page that was also started with no signal is the easy case: the server
+   * has never heard of it, so there is nothing to tell it. The queued write is
+   * dropped and that is the end of the page — otherwise the flush would create
+   * it a moment before removing it again.
+   */
+  private async queueRemove(id: string): Promise<void> {
+    const page = await getOne<DBSharedNotebookPage>('shared_notebook_pages', id);
+    const waiting = await pendingFor(id);
+
+    if (waiting?.kind === 'save' && waiting.createdAt !== null) {
+      await dropWrite(id);
+      await this.markRemoved(id);
+      return;
+    }
+
+    await queueWrite({
+      pageId: id,
+      notebookId: page?.notebookId ?? waiting?.notebookId ?? '',
+      kind: 'remove',
+      title: '',
+      text: '',
+      baseRev: null,
+      editMode: null,
+      pinned: null,
+      createdAt: null,
+    });
     await this.markRemoved(id);
   }
 
   private async markRemoved(id: string): Promise<void> {
     await writeTransaction('shared_notebook_pages', (store) => store.delete(id));
     announce();
+  }
+
+  // ── The outbox ───────────────────────────────────────────────────────────
+
+  /**
+   * Send everything that was written with no signal.
+   *
+   * Run at the top of every pull, so uploading always comes before
+   * downloading — the alternative is a pull that overwrites the local copy
+   * with the older server one and then sends it straight back up. Also run on
+   * the browser's 'online' event, which is what makes coming out of aeroplane
+   * mode enough on its own.
+   *
+   * The drain stops at the first item that could not be delivered rather than
+   * working through the rest: if one write cannot reach the server the next
+   * one will not either, and nothing here is so urgent that it is worth a
+   * dozen timeouts to find that out again.
+   */
+  async flushOutbox(): Promise<number> {
+    if (this.flushing) return 0;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return 0;
+
+    const items = await pendingWrites();
+    if (items.length === 0) return 0;
+
+    this.flushing = true;
+    let sent = 0;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      // Signed out with writing still waiting: leave it where it is. Signing
+      // back in on the same device should still send it.
+      if (!user) return 0;
+
+      for (const item of items) {
+        const outcome = await this.flushOne(item);
+        if (outcome === 'offline') break;
+        if (outcome === 'sent') sent++;
+      }
+    } catch (err) {
+      console.error('[SharedNotebooks] flush threw:', err);
+    } finally {
+      this.flushing = false;
+    }
+
+    if (sent > 0) announce();
+    return sent;
+  }
+
+  /**
+   * One queued write, and what became of it.
+   *
+   * Three endings, and which one it is decides whether the item is kept:
+   * delivered, so it goes; refused by the server, so it also goes — retrying a
+   * refusal only produces the same refusal, and the words are still in the
+   * local copy for whoever wrote them; or it never arrived, so it stays.
+   */
+  private async flushOne(item: DBSharedOutboxItem): Promise<'sent' | 'dropped' | 'offline'> {
+    try {
+      if (item.kind === 'remove') {
+        const { error } = await supabase.rpc('remove_shared_page', { p_id: item.pageId });
+        if (error) throw this.plainError(error.message);
+        await dropWrite(item.pageId);
+        return 'sent';
+      }
+
+      const { data, error } = await supabase.rpc('save_shared_page', {
+        p_id: item.pageId,
+        p_notebook_id: item.notebookId,
+        p_title: item.title.trim() || null,
+        // Sanitised and stamped when it was queued, so it goes as it is. Doing
+        // either again would be measuring it against a stored page that has
+        // moved on since, which is the one thing that must not happen to it.
+        p_text: item.text,
+        p_base_rev: item.baseRev,
+        p_edit_mode: item.editMode,
+        p_pinned: item.pinned,
+        p_created_at: item.createdAt ? new Date(item.createdAt).toISOString() : null,
+      });
+      if (error) throw this.plainError(error.message);
+
+      const payload = (data ?? {}) as { status?: string; page?: any };
+      if (payload.status === 'conflict' || payload.status === 'deleted') {
+        await this.forkQueued(item, payload.status);
+        return 'sent';
+      }
+
+      if (payload.page) await this.storePage(payload.page);
+      await dropWrite(item.pageId);
+      return 'sent';
+    } catch (err) {
+      if (isOffline(err)) {
+        await markAttempt(item);
+        return 'offline';
+      }
+      // The server thought about it and said no — the notebook has been left
+      // since, or the page closed, or a role changed. The item goes, and the
+      // sentence the database wrote is the one shown, because it is already
+      // the reason.
+      await dropWrite(item.pageId);
+      showNotice(
+        `${this.queuedPageLabel(item)} could not be sent: ${
+          (err as Error)?.message || 'the notebook would not take it'
+        }. Your copy on this device still has it.`,
+        'error',
+      );
+      return 'dropped';
+    }
+  }
+
+  /**
+   * Somebody else wrote in the page first. Keep both.
+   *
+   * The plain answer to the one problem an outbox creates, and the same one
+   * the bar offers when a conflict happens with somebody watching: the version
+   * written offline becomes a page of its own in the same notebook, called
+   * "… (your version)", and the notebook's own copy is left exactly as the
+   * others left it. Nothing is merged, nothing is chosen, nothing is lost.
+   *
+   * The text goes across already stamped, and is passed as its own previous
+   * version so that every paragraph anchors — the fork keeps the record of who
+   * wrote which line instead of crediting all of it to whoever was offline.
+   */
+  private async forkQueued(item: DBSharedOutboxItem, reason: 'conflict' | 'deleted'): Promise<void> {
+    const name = this.queuedPageLabel(item);
+    await this.save({
+      id: sharedId(),
+      notebookId: item.notebookId,
+      title: `${name} (your version)`,
+      text: item.text,
+      previousText: item.text,
+      baseRev: null,
+      // Closed, like any new page: it is one person's account of something,
+      // sitting beside the notebook's, and it is theirs to open if they want.
+      editMode: 'author',
+      createdAt: new Date(),
+    });
+
+    await dropWrite(item.pageId);
+    // The local copy still holds what was written offline. It is not the
+    // notebook's copy any more, and the pull that follows will put the real
+    // one back; the words themselves are safe in the page just made.
+    showNotice(
+      reason === 'conflict'
+        ? `Somebody else wrote in “${name}” while you were offline, so what you wrote has been kept beside it as “${name} (your version)”.`
+        : `“${name}” was taken out of the notebook while you were offline, so what you wrote has been kept as “${name} (your version)”.`,
+    );
+  }
+
+  /** What to call a queued page in a message. Its title, or something plain. */
+  private queuedPageLabel(item: DBSharedOutboxItem): string {
+    const title = item.title.trim();
+    if (title) return title;
+    const text = item.text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    return text ? `${text.slice(0, 40)}${text.length > 40 ? '…' : ''}` : 'A page';
+  }
+
+  /** The pages with writing still waiting to go up. Drawn as a mark on the row. */
+  async pendingPages(): Promise<Set<string>> {
+    return pendingPageIds();
   }
 
   // ── Your badge ───────────────────────────────────────────────────────────
@@ -899,6 +1266,7 @@ export class SharedNotebookStoreImpl {
     notebookId: string,
     changes: { displayName?: string; initials?: string; color?: string },
   ): Promise<SharedNotebookMember> {
+    this.requireOnline();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -950,6 +1318,7 @@ export class SharedNotebookStoreImpl {
       joinOpen?: boolean;
     },
   ): Promise<SharedNotebook> {
+    this.requireOnline();
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (changes.name !== undefined) patch.name = changes.name.trim();
     if (changes.kind !== undefined) patch.kind = changes.kind;
@@ -977,6 +1346,7 @@ export class SharedNotebookStoreImpl {
    * has nothing to do with the code they arrived by.
    */
   async resetJoinCode(notebookId: string): Promise<string> {
+    this.requireOnline();
     const { data, error } = await supabase.rpc('reset_shared_notebook_code', {
       p_notebook_id: notebookId,
     });
@@ -1007,6 +1377,7 @@ export class SharedNotebookStoreImpl {
     memberId: string,
     role: 'admin' | 'writer' | 'reader',
   ): Promise<SharedNotebookMember> {
+    this.requireOnline();
     const { data, error } = await supabase
       .from('shared_notebook_members')
       .update({ role, updated_at: new Date().toISOString() })
@@ -1040,6 +1411,7 @@ export class SharedNotebookStoreImpl {
     member: SharedNotebookMember,
     opts: { alsoRemovePages?: boolean } = {},
   ): Promise<void> {
+    this.requireOnline();
     if (opts.alsoRemovePages) {
       const pages = await this.getPages(member.notebookId);
       for (const page of pages) {
@@ -1067,6 +1439,7 @@ export class SharedNotebookStoreImpl {
    * softened the way being removed does.
    */
   async leaveNotebook(notebookId: string, userId: string): Promise<void> {
+    this.requireOnline();
     const mine = await this.getMyMembership(notebookId, userId);
     if (mine) {
       const { error } = await supabase
@@ -1106,6 +1479,10 @@ export class SharedNotebookStoreImpl {
     }
 
     await writeTransaction('shared_notebooks', (store) => store.delete(notebookId));
+    // Anything still queued for it has nowhere to go: the pages it belonged to
+    // are not on this device any more, and a write that went up now would put
+    // a page back into a notebook this account has just walked out of.
+    await dropNotebookWrites(notebookId);
     announce();
   }
 
@@ -1126,6 +1503,9 @@ export class SharedNotebookStoreImpl {
     ]) {
       await writeTransaction(storeName, (store) => store.clear());
     }
+    // The queue goes with them. It is keyed on pages that are no longer here,
+    // and the account that wrote them is signing out.
+    await clearOutbox();
     this.lastPullAt = 0;
     announce();
   }
@@ -1133,3 +1513,18 @@ export class SharedNotebookStoreImpl {
 
 /** Singleton — import this rather than constructing the class. */
 export const sharedNotebookStore = new SharedNotebookStoreImpl();
+
+/**
+ * Coming back into signal is enough on its own.
+ *
+ * Nobody should have to open the Notes pane for what they wrote in a tunnel to
+ * arrive, so the browser's own event does it. A force pull follows the flush
+ * rather than the throttled one, because the last pull may well have been ten
+ * seconds before the signal went and the app could otherwise sit on stale
+ * pages for as long as anybody left it alone.
+ */
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    void sharedNotebookStore.pull({ force: true });
+  });
+}

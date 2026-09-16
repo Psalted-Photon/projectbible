@@ -14,7 +14,7 @@ import { logInstallIfActive } from '../lib/install-log';
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 36; // Migration 36: add the three shared_notebook_* stores (shared notebooks)
+const DB_VERSION = 37; // Migration 37: add shared_outbox (edits made with no signal)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -382,6 +382,41 @@ export interface DBSharedNotebookPage {
   createdAt: number;
   updatedAt: number;
   updatedBy: string | null;
+}
+
+/**
+ * One write to a shared notebook that has not reached the server yet.
+ *
+ * Keyed on the page rather than on an id of its own, so a second edit of the
+ * same page replaces the first instead of queueing behind it — which is what
+ * anybody writing offline actually means: send what I end up with, not each
+ * keystroke on the way there. `baseRev` therefore stays at whatever the first
+ * queued edit was measured against, because that is still the last version
+ * this device has seen of everybody else's work.
+ *
+ * Kept apart from 'sync_queue' for the same reason the three tables above are
+ * kept apart from their single-user cousins: that queue speaks in table/row
+ * upserts against rows belonging to one account, and these rows belong to
+ * everybody in the notebook and go through save_shared_page, which can refuse.
+ */
+export interface DBSharedOutboxItem {
+  /** The page this is waiting to do something to. Also the key. */
+  pageId: string;
+  notebookId: string;
+  /** 'save' covers both a new page and the hundredth edit of an old one. */
+  kind: 'save' | 'remove';
+  title: string;
+  /** Sanitised and already stamped, so the pills are right while offline too. */
+  text: string;
+  /** The revision this edit was measured against. Null for a new page. */
+  baseRev: number | null;
+  editMode: 'anyone' | 'author' | null;
+  pinned: boolean | null;
+  /** Set only for a page started offline, which the server has never seen. */
+  createdAt: number | null;
+  queuedAt: number;
+  attempts: number;
+  lastAttemptAt: number | null;
 }
 
 export interface DBCrossReference {
@@ -837,6 +872,13 @@ export function openDB(): Promise<IDBDatabase> {
         const sharedPageStore = db.createObjectStore('shared_notebook_pages', { keyPath: 'id' });
         sharedPageStore.createIndex('notebookId', 'notebookId', { unique: false });
         sharedPageStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+
+      // Writes made with no signal. One row per page — see DBSharedOutboxItem.
+      if (!db.objectStoreNames.contains('shared_outbox')) {
+        const outboxStore = db.createObjectStore('shared_outbox', { keyPath: 'pageId' });
+        outboxStore.createIndex('notebookId', 'notebookId', { unique: false });
+        outboxStore.createIndex('queuedAt', 'queuedAt', { unique: false });
       }
 
       // Cross-references store

@@ -20,6 +20,13 @@
     pinned?: boolean;
     /** Marks a page nobody but its author may rewrite. */
     closed?: boolean;
+    /**
+     * Marks a shared page written with no signal, still waiting to go up. The
+     * words are on this device and nowhere else yet, which is worth a mark:
+     * the row otherwise looks exactly like one the whole group can already
+     * read.
+     */
+    waiting?: boolean;
     /** Whoever wrote it, as their badge. Local pages are all yours, so none. */
     pill?: ListPill;
     /**
@@ -81,7 +88,7 @@
    * extraction from just moving the same clutter somewhere else.
    */
   import { createEventDispatcher } from 'svelte';
-  import { CaretDown, CaretRight, Trash, PushPin, Lock } from 'phosphor-svelte';
+  import { CaretDown, CaretRight, Trash, PushPin, Lock, CloudArrowUp } from 'phosphor-svelte';
   import AuthorPill from './AuthorPill.svelte';
 
   export let notebooks: ListNotebook[] = [];
@@ -350,6 +357,11 @@
                       <Lock size={11} weight="fill" />
                     </span>
                   {/if}
+                  {#if page.waiting}
+                    <span class="page-flag waiting" title="Waiting to go to the notebook">
+                      <CloudArrowUp size={12} weight="fill" />
+                    </span>
+                  {/if}
                   {pageLabel(page)}
                 </span>
                 <span class="page-sub">
@@ -611,6 +623,12 @@
     vertical-align: baseline;
     margin-right: 3px;
     color: #9a9a9a;
+  }
+
+  /* Warm rather than grey: a page still on this device is not a fault, but it
+     is the one thing on the row worth noticing. */
+  .page-flag.waiting {
+    color: #e0b060;
   }
 
   /* A flex row so the author's badge sits on the line rather than above it.
