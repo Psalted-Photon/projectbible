@@ -20,10 +20,12 @@
   import { syncedNotebookStore, subscribeToNotebookRemoteChanges } from '../adapters/SyncedNotebookStore';
   import type { Notebook, NotebookPage } from '../adapters/NotebookStore';
   import NotebookList from './NotebookList.svelte';
-  import type { ListNotebook } from './NotebookList.svelte';
+  import type { ListNotebook, ListPill } from './NotebookList.svelte';
   import SharedPageView from './SharedPageView.svelte';
   import SharedNotebookCreate from './SharedNotebookCreate.svelte';
   import SharedNotebookJoin from './SharedNotebookJoin.svelte';
+  import MemberPillPicker from './MemberPillPicker.svelte';
+  import AuthorPill from './AuthorPill.svelte';
   import { sharedNotebookStore, subscribeToSharedNotebookChanges } from '../adapters/SharedNotebookStore';
   import {
     canWriteInNotebook,
@@ -128,6 +130,8 @@
   let creatingShared = false;
   let joiningShared = false;
   let inviteNotebook: SharedNotebook | null = null;
+  /** Which notebook's badge is being changed. Null means the picker is closed. */
+  let badgeNotebook: SharedNotebook | null = null;
 
   // ─── Editor state ───────────────────────────────────────────────────────────
   let editorTitle = '';
@@ -157,6 +161,14 @@
    * page needs — the copy is a new page, not an edit of the one in the way.
    */
   $: canKeepAsCopy = !!sharedBlocked && canWriteInNotebook(readerNotebook, readerMember);
+
+  /** The roster of the notebook on screen, for the byline and the gutter. */
+  $: readerRoster = readerNotebook
+    ? sharedMembersByNotebook.get(readerNotebook.id) ?? []
+    : [];
+  $: readerAuthor = readerPage
+    ? readerRoster.find((m) => m.userId === readerPage!.authorId) ?? null
+    : null;
 
   // ─── Verse-note tree ────────────────────────────────────────────────────────
   // Shaped as SearchResults so SearchResultsTree renders it unchanged — the
@@ -220,8 +232,9 @@
   ): ListNotebook[] {
     return books.map((notebook) => {
       const roster = members.get(notebook.id) ?? [];
+      const memberFor = (id: string) => roster.find((m) => m.userId === id) ?? null;
       const nameFor = (id: string) => {
-        const name = (roster.find((m) => m.userId === id)?.displayName ?? '').trim();
+        const name = (memberFor(id)?.displayName ?? '').trim();
         return name || 'Someone';
       };
       const kind = notebook.kind === 'broadcast' ? 'Broadcast' : 'Group';
@@ -235,10 +248,12 @@
         name: notebook.name || 'Untitled notebook',
         meta: `${kind} · ${who}`,
         canAddPage: canWriteInNotebook(notebook, me),
+        pill: me ? pillFor(me, 'You') : undefined,
         pages: (pages.get(notebook.id) ?? []).map((page) => ({
           id: page.id,
           label: sharedPageLabel(page),
           sub: `${nameFor(page.authorId)} · ${formatDate(page.updatedAt)}`,
+          pill: pillFor(memberFor(page.authorId), nameFor(page.authorId)),
           pinned: page.pinned,
           // A page only its author may rewrite. Worth showing on the row so it
           // isn't a surprise on opening it.
@@ -368,6 +383,19 @@
     } finally {
       sharedLoading = false;
     }
+  }
+
+  /**
+   * A member as the badge the list draws.
+   *
+   * Undefined for somebody who is not on the roster — a page written by
+   * a person who has since left the notebook. The row still names them from
+   * the page's author id; it simply has no colour to draw them in, and an
+   * invented one would be a different person's badge next week.
+   */
+  function pillFor(member: SharedNotebookMember | null, title: string): ListPill | undefined {
+    if (!member) return undefined;
+    return { color: member.color, initials: member.initials || '··', title };
   }
 
   /** Whoever wrote a page, as their display name — "Someone" until we know. */
@@ -515,6 +543,19 @@
   /** Hand out a notebook's code. Its own row knows which one. */
   function openInvite(notebookId: string) {
     inviteNotebook = sharedNotebooks.find((n) => n.id === notebookId) ?? null;
+  }
+
+  /** Change the two letters and the colour you are known by in one notebook. */
+  function openBadgePicker(notebookId: string) {
+    badgeNotebook = sharedNotebooks.find((n) => n.id === notebookId) ?? null;
+  }
+
+  async function badgeSaved() {
+    badgeNotebook = null;
+    showNotice('Your badge has been changed');
+    // Every row that draws it — the notebook, its pages, and the gutter of
+    // anything open — comes from the roster, so the list has to be rebuilt.
+    await loadShared({ force: true });
   }
 
   /**
@@ -1114,6 +1155,15 @@
 
     {#if readerPage}
       <div class="reader-byline">
+        {#if readerAuthor}
+          <AuthorPill
+            variant="round"
+            size={18}
+            color={readerAuthor.color}
+            initials={readerAuthor.initials || '··'}
+            title={authorName(readerPage.notebookId, readerPage.authorId)}
+          />
+        {/if}
         <span class="byline-who">{authorName(readerPage.notebookId, readerPage.authorId)}</span>
         <span class="byline-sep">·</span>
         <span>{formatDate(readerPage.updatedAt)}</span>
@@ -1169,7 +1219,9 @@
     {/if}
 
     <div class="editor-body">
-      <SharedPageView html={readerPage?.text ?? ''} />
+      <!-- The roster goes in so each paragraph's gutter can name the people
+           stamped on it. Without it the pills have nobody to be. -->
+      <SharedPageView html={readerPage?.text ?? ''} members={readerRoster} />
     </div>
   {:else}
     <!-- ── Browse ──────────────────────────────────────────────────────────── -->
@@ -1300,12 +1352,14 @@
               pageAccent={SHARED_PAGE_ACCENT}
               emptyPagesText="Nothing written here yet."
               canInvite
+              canEditBadge
               pageDeleteWord="Remove"
               on:toggle={(e) => toggleNode(e.detail)}
               on:openPage={(e) => openShared(e.detail.notebookId, e.detail.pageId)}
               on:newPage={(e) => newSharedPage(e.detail)}
               on:deletePage={(e) => removeSharedPageById(e.detail.pageId)}
               on:invite={(e) => openInvite(e.detail)}
+              on:editBadge={(e) => openBadgePicker(e.detail)}
             />
           {/if}
 
@@ -1343,6 +1397,20 @@
     notebook={inviteNotebook}
     on:close={() => (inviteNotebook = null)}
   />
+{/if}
+
+{#if badgeNotebook && myUserId}
+  {@const roster = sharedMembersByNotebook.get(badgeNotebook.id) ?? []}
+  {@const mine = roster.find((m) => m.userId === myUserId)}
+  {#if mine}
+    <MemberPillPicker
+      notebook={badgeNotebook}
+      member={mine}
+      others={roster}
+      on:saved={badgeSaved}
+      on:close={() => (badgeNotebook = null)}
+    />
+  {/if}
 {/if}
 
 <style>

@@ -15,6 +15,7 @@
   import { userProfileStore } from "../stores/userProfileStore";
   import { profileModalStore } from "../stores/profileModalStore";
   import AnnotationPanel from "./AnnotationPanel.svelte";
+  import AuthorPill from "./AuthorPill.svelte";
   import HighlightModal from "./HighlightModal.svelte";
   import ShareModal from "./ShareModal.svelte";
   import type { ShareRef } from "../lib/shareText";
@@ -5659,16 +5660,15 @@
                 <span class="verse-number">{verse}</span>
                 {#if showCommentaries && commentaryByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
                   {#each [...new Set(commentaryByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!.map((e) => e.author))] as author}
-                    <span
-                      class="anno-icon"
-                      class:anno-breathing={isOpenAnnotation(chapterData.book, chapterData.chapter, verse, 'commentary', author)}
-                      style="background:radial-gradient(circle, {getAuthorColor(author)} 0%, {getAuthorColor(author)} 20%, #431407 100%)"
+                    <AuthorPill
+                      extraClass="anno-icon"
+                      color={getAuthorColor(author)}
+                      initials={getAuthorInitials(author)}
                       title={author}
-                      role="button"
-                      tabindex="0"
-                      on:click|stopPropagation={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter, author)}
-                      on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter, author)}
-                    >{getAuthorInitials(author)}</span>
+                      interactive
+                      breathing={isOpenAnnotation(chapterData.book, chapterData.chapter, verse, 'commentary', author)}
+                      on:select={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter, author)}
+                    />
                   {/each}
                 {/if}
                 {#if showReferences && tskByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
@@ -6148,24 +6148,6 @@
     font-family: var(--reader-font);
   }
 
-  .anno-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 14px;
-    border-radius: 9px;
-    font-size: 7px;
-    font-weight: 700;
-    color: #fff;
-    cursor: pointer;
-    margin: 0 1px;
-    vertical-align: super;
-    line-height: 1;
-    user-select: none;
-    flex-shrink: 0;
-  }
-
   .anno-ref {
     color: #D97706; /* amber/gold for TSK diamonds */
     font-size: 10px;
@@ -6178,12 +6160,13 @@
     display: inline-block;
   }
 
-  /* ── The tapped icon, while its panel is open ─────────────────────────────
+  /* ── The tapped cross-reference diamond, while its panel is open ─────────
      A slow scale in and out, so you can find your way back to the icon you
      opened without the verse itself being marked — that mark means "start
      reading here", which is not what happened. Matches the 2s ease-in-out
      cadence of the anchor pill in the navbar. transform does not affect
-     layout, so the text around it never shifts. */
+     layout, so the text around it never shifts. The commentary pill has the
+     same cadence from AuthorPill's own copy, which travelled with it. */
   @keyframes anno-breathe {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.28); }
@@ -6554,7 +6537,9 @@
     display: none;
   }
 
-  .verses.nonumber-layout .anno-icon {
+  /* The pill is AuthorPill's element now, so Svelte's scoping cannot see it
+     from here — :global is what still reaches it. */
+  .verses.nonumber-layout :global(.anno-icon) {
     display: none;
   }
 

@@ -21,6 +21,15 @@
    * copy, bump the revision, and count as a save somebody never asked to make.
    * In the editor the same gesture goes through RefAwareEditor and is saved,
    * which is the right place for it.
+   *
+   * The page is drawn a block at a time rather than as one lump of HTML,
+   * because each paragraph has a gutter of its own: the pills of everybody who
+   * has written in that line, in the order they first did. That is the same
+   * arrangement several commentators get on one verse in the reader, and the
+   * same badge — see paragraphStamp.ts for how the list is kept, and for what
+   * it is and is not evidence of. A page nobody has stamped yet has no pills
+   * on any line, and then no gutter is drawn at all and it reads exactly as it
+   * did before this existed.
    */
   import { onDestroy } from 'svelte';
   import { get } from 'svelte/store';
@@ -29,10 +38,22 @@
   import { IndexedDBTextStore } from '../adapters/TextStore';
   import { formatVerseSuffix, VERSE_SUFFIX_RE } from '../lib/lexical/bibleRefTransforms';
   import { sanitizeNoteHtml } from '../lib/shared/sanitizeNoteHtml';
+  import { splitPageBlocks } from '../lib/shared/paragraphStamp';
+  import AuthorPill from './AuthorPill.svelte';
+  import type { SharedNotebookMember } from '../adapters/SharedNotebookStore';
 
   export let html: string = '';
   /** Shown in place of the page when there is nothing in it yet. */
   export let placeholder: string = 'This page is empty.';
+  /**
+   * The notebook's roster, for turning the ids stamped on a paragraph into
+   * badges. Left empty — a page read with no roster to hand — the gutter
+   * simply does not appear, rather than a column of anonymous discs.
+   */
+  export let members: SharedNotebookMember[] = [];
+
+  /** Past this many on one line, the rest become a count. */
+  const MAX_SHOWN = 4;
 
   const textStore = new IndexedDBTextStore();
 
@@ -57,6 +78,25 @@
   // page can be replaced under us by a pull while it is open.
   $: clean = sanitizeNoteHtml(html);
   $: isEmpty = clean.replace(/<[^>]*>/g, '').trim() === '';
+
+  $: byUserId = new Map(members.map((m) => [m.userId, m]));
+  $: blocks = splitPageBlocks(clean).map((block) => {
+    // An id stamped by somebody who has since left the notebook has nobody to
+    // draw. Dropped rather than drawn grey: the line was written by the people
+    // still named beside it plus somebody who is gone, and a blank disc would
+    // only invite the question without answering it.
+    const known = block.pills.map((id) => byUserId.get(id)).filter((m): m is SharedNotebookMember => !!m);
+    return {
+      html: block.html,
+      // Three and a count rather than four and a count — the "+2" takes the
+      // fourth place, so the column is never wider than four badges.
+      shown: known.length > MAX_SHOWN ? known.slice(0, MAX_SHOWN - 1) : known,
+      more: known.length > MAX_SHOWN ? known.length - (MAX_SHOWN - 1) : 0,
+      /** Everybody on the line, for the tooltip on the count. */
+      all: known,
+    };
+  });
+  $: hasGutter = blocks.some((b) => b.all.length > 0);
 
   function handleClick(e: MouseEvent) {
     const el = (e.target as HTMLElement | null)?.closest?.('.bible-ref') as HTMLElement | null;
@@ -166,11 +206,35 @@
      and the window handler below, so this is not a keyboard trap. -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <!-- svelte-ignore a11y-click-events-have-key-events -->
-<div class="shared-page" on:click={handleClick}>
+<div class="shared-page" class:with-gutter={hasGutter} on:click={handleClick}>
   {#if isEmpty}
     <p class="empty">{placeholder}</p>
-  {:else}
+  {:else if !hasGutter}
+    <!-- Nothing has been stamped, so there is nothing to make room for. One
+         lump of HTML, exactly as it was drawn before the gutter existed. -->
     {@html clean}
+  {:else}
+    {#each blocks as block, i (i)}
+      <div class="blk">
+        <span class="blk-pills">
+          {#each block.shown as who (who.userId)}
+            <AuthorPill
+              color={who.color}
+              initials={who.initials}
+              title="{who.displayName || 'Someone'} wrote in this paragraph"
+            />
+          {/each}
+          {#if block.more}
+            <span
+              class="blk-more"
+              title={block.all.map((m) => m.displayName || 'Someone').join(', ')}
+              >+{block.more}</span
+            >
+          {/if}
+        </span>
+        <div class="blk-body">{@html block.html}</div>
+      </div>
+    {/each}
   {/if}
 </div>
 
@@ -201,10 +265,55 @@
     height: 100%;
   }
 
+  /* The gutter takes 32px off the left of every line, so the page gives some
+     of its own padding back and the prose stays roughly where it was. On a
+     20%-wide sliver that difference is the sentence fitting or not. */
+  .shared-page.with-gutter {
+    padding-left: 6px;
+  }
+
   .empty {
     color: #777;
     font-style: italic;
     margin: 0;
+  }
+
+  /* ── The pill gutter ──────────────────────────────────────────────────────
+     One row per block: a narrow column for the badges, then the paragraph.
+     Laid out with grid rather than a float or an absolute position so the
+     column can never overlap the prose, whatever the reader's typeface and
+     leading are — and those are each reader's own, so it has to hold for all
+     of them. */
+  .blk {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    column-gap: 6px;
+    align-items: start;
+  }
+
+  .blk-pills {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 1px;
+    /* Nudged down to sit on the first line of the paragraph rather than above
+       it — the badge is 14px tall against a line box of roughly 26px. */
+    padding-top: 0.35em;
+  }
+
+  .blk-more {
+    font-size: 8px;
+    font-weight: 700;
+    color: #888;
+    line-height: 1;
+    padding-top: 3px;
+    user-select: none;
+  }
+
+  /* The paragraph's own bottom margin does the spacing between rows, so the
+     row itself adds none. */
+  .blk-body {
+    min-width: 0;
   }
 
   /* The page's own markup, which Svelte's scoping cannot reach through

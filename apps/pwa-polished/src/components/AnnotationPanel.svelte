@@ -11,6 +11,7 @@
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
   import { navigationStore } from "../stores/navigationStore";
   import { fixedOrigin } from "../lib/fixedOrigin";
+  import AuthorPill from "./AuthorPill.svelte";
 
   export let open = false;
   export let book = "";
@@ -302,11 +303,12 @@
                 class="commentary-author-header"
                 style="border-left: 4px solid {getAuthorColor(group.author)}"
               >
-                <span
-                  class="author-badge"
-                  style="background:radial-gradient(circle, {getAuthorColor(group.author)} 0%, {getAuthorColor(group.author)} 20%, #431407 100%)"
+                <AuthorPill
+                  variant="round"
+                  color={getAuthorColor(group.author)}
+                  initials={getAuthorInitials(group.author)}
                   title={group.author}
-                >{getAuthorInitials(group.author)}</span>
+                />
                 <span class="author-name">{group.author}</span>
               </div>
               {#each group.entries as entry}
@@ -522,19 +524,6 @@
     gap: 8px;
     margin-bottom: 8px;
     padding-left: 8px;
-  }
-
-  .author-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    font-size: 10px;
-    font-weight: 700;
-    color: #fff;
-    flex-shrink: 0;
   }
 
   .author-name {

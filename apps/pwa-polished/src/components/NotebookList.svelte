@@ -1,4 +1,15 @@
 <script lang="ts" context="module">
+  /**
+   * A badge on a row: two letters and a colour, drawn by AuthorPill. The list
+   * is handed one already worked out — whose badge it is, and where the colour
+   * came from, is the caller's business.
+   */
+  export interface ListPill {
+    color: string;
+    initials: string;
+    title: string;
+  }
+
   /** One page as a row. Whoever supplies it has already worked out the wording. */
   export interface ListPage {
     id: string;
@@ -9,6 +20,8 @@
     pinned?: boolean;
     /** Marks a page nobody but its author may rewrite. */
     closed?: boolean;
+    /** Whoever wrote it, as their badge. Local pages are all yours, so none. */
+    pill?: ListPill;
     /**
      * Overrides `canDeletePage` for this row alone. Local notebooks are all
      * yours so the list-wide flag settles it; in a shared notebook the answer
@@ -25,6 +38,8 @@
     pages: ListPage[];
     /** A quiet second line on the notebook row — "Group · 4 people" and such. */
     meta?: string;
+    /** Your own badge in this notebook, which is also how the picker is found. */
+    pill?: ListPill;
     /**
      * Overrides `canAddPage` for this notebook alone. You can be an admin of
      * one shared notebook and a reader of the next, so the list-wide flag
@@ -51,6 +66,7 @@
    */
   import { createEventDispatcher } from 'svelte';
   import { CaretDown, CaretRight, Trash, PushPin, Lock } from 'phosphor-svelte';
+  import AuthorPill from './AuthorPill.svelte';
 
   export let notebooks: ListNotebook[] = [];
   /** Which rows are open. Owned by the parent so it survives a panel reload. */
@@ -76,6 +92,11 @@
   export let canDeletePage = false;
   /** Hand this notebook's join code out. Shared notebooks only. */
   export let canInvite = false;
+  /**
+   * Offer the badge picker. Shared notebooks only, and only where the row
+   * carries a badge to change — a notebook you are not a member of has none.
+   */
+  export let canEditBadge = false;
 
   export let emptyPagesText = 'No pages yet.';
   /**
@@ -93,6 +114,7 @@
     deleteNotebook: string;
     deletePage: { notebookId: string; pageId: string };
     invite: string;
+    editBadge: string;
   }>();
 
   let renamingId: string | null = null;
@@ -101,7 +123,7 @@
   let confirmDeleteNotebookId: string | null = null;
   let confirmDeletePageId: string | null = null;
 
-  $: hasRowMenu = canRenameNotebook || canDeleteNotebook || canInvite;
+  $: hasRowMenu = canRenameNotebook || canDeleteNotebook || canInvite || canEditBadge;
 
   function keyFor(id: string): string {
     return `${keyPrefix}::${id}`;
@@ -187,6 +209,17 @@
                 <CaretRight size={11} weight="bold" />
               {/if}
             </span>
+            {#if notebook.pill}
+              <!-- Your own badge in this notebook, on the row that opens it.
+                   It is also the only place it is visible before you have
+                   written anything, which is what makes the picker in the ⋯
+                   menu findable rather than a setting nobody meets. -->
+              <AuthorPill
+                color={notebook.pill.color}
+                initials={notebook.pill.initials}
+                title={notebook.pill.title}
+              />
+            {/if}
             <span class="nb-text">
               <span class="nb-line">
                 <span class="nb-label">{notebook.name}</span>
@@ -226,6 +259,14 @@
                 openMenuId = null;
                 dispatch('invite', notebook.id);
               }}>Invite people</button
+            >
+          {/if}
+          {#if canEditBadge && notebook.pill}
+            <button
+              on:click={() => {
+                openMenuId = null;
+                dispatch('editBadge', notebook.id);
+              }}>Your badge</button
             >
           {/if}
           {#if canRenameNotebook}
@@ -281,7 +322,16 @@
                   {/if}
                   {pageLabel(page)}
                 </span>
-                <span class="page-sub">{page.sub}</span>
+                <span class="page-sub">
+                  {#if page.pill}
+                    <AuthorPill
+                      color={page.pill.color}
+                      initials={page.pill.initials}
+                      title={page.pill.title}
+                    />
+                  {/if}
+                  <span class="page-sub-text">{page.sub}</span>
+                </span>
               </button>
               {#if page.canDelete ?? canDeletePage}
                 <button
@@ -533,7 +583,17 @@
     color: #9a9a9a;
   }
 
+  /* A flex row so the author's badge sits on the line rather than above it.
+     The truncation moves onto the text inside, which is the part that has to
+     give way when the panel is narrow — the badge never does. */
   .page-sub {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .page-sub-text {
     font-size: 0.8rem;
     line-height: 1.45;
     color: #999;

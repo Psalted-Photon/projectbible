@@ -19,6 +19,8 @@
  * rather than a data loss.
  *
  * Phase 1 reads. Phase 2 makes one and joins one. Phase 3 writes in one.
+ * Phase 4 stamps each save with who wrote which paragraph, and lets a member
+ * change the badge they are known by.
  */
 
 import { supabase } from '../lib/supabase/client';
@@ -32,6 +34,7 @@ import { sanitizeNoteHtml, MAX_PAGE_CHARS } from '../lib/shared/sanitizeNoteHtml
 import { sharedId } from '../lib/shared/ids';
 import { normalizeJoinCode } from '../lib/shared/joinCode';
 import { defaultMemberIdentity } from '../lib/shared/memberIdentity';
+import { stampParagraphs } from '../lib/shared/paragraphStamp';
 
 // ─── Shapes the app works in ─────────────────────────────────────────────────
 
@@ -441,6 +444,27 @@ export class SharedNotebookStoreImpl {
   // ── Making one, and joining one ──────────────────────────────────────────
 
   /**
+   * The signed-in account, from the session this device already holds.
+   *
+   * Deliberately getSession() rather than getUser(): this is only ever used to
+   * write a pill onto a paragraph, and the server decides author_id and
+   * updated_by for itself whatever this says. Paying a round trip on every
+   * autosave to re-validate a token, so a badge can be drawn, would be the
+   * wrong trade — and an answer of null simply means the paragraph goes
+   * unstamped rather than anything breaking.
+   */
+  private async saverId(): Promise<string> {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      return session?.user?.id ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
    * The name and badge to put on a new member row.
    *
    * Taken from the account rather than asked for, because a join should be one
@@ -659,6 +683,8 @@ export class SharedNotebookStoreImpl {
     notebookId: string;
     title: string;
     text: string;
+    /** The stored version, which carries the paragraph ids. '' for a new page. */
+    previousText: string;
     baseRev: number | null;
     editMode?: 'anyone' | 'author';
     pinned?: boolean;
@@ -667,7 +693,15 @@ export class SharedNotebookStoreImpl {
     // Sanitised before it leaves this device as well as when it arrives. The
     // page is about to be somebody else's to read, and nothing the editor can
     // legitimately produce is lost by passing it through the allowlist twice.
-    const text = sanitizeNoteHtml(args.text);
+    const clean = sanitizeNoteHtml(args.text);
+
+    // Then stamped, so each paragraph carries its id and the people who have
+    // written in it. After the allowlist rather than before, because the
+    // stamping reads the stored version's ids and writes the new version's,
+    // and it should be looking at the same markup everybody else will see.
+    // The attributes it adds are two the allowlist already permits, so the
+    // sanitiser at the other end leaves them alone.
+    const text = stampParagraphs(args.previousText, clean, await this.saverId());
     if (text.length > MAX_PAGE_CHARS) {
       throw new Error('That page is too long to save');
     }
@@ -720,6 +754,8 @@ export class SharedNotebookStoreImpl {
       notebookId: opts.notebookId,
       title: opts.title ?? '',
       text: opts.text ?? '',
+      // Nothing came before it, so every paragraph in it is this person's.
+      previousText: '',
       baseRev: null,
       editMode: opts.editMode ?? 'author',
       createdAt: new Date(),
@@ -750,6 +786,11 @@ export class SharedNotebookStoreImpl {
       notebookId: page.notebookId,
       title: changes.title ?? page.title ?? '',
       text: changes.text ?? page.text,
+      // The copy this edit was measured against, which is where the paragraph
+      // ids come from. Saving a flag without touching the prose passes the
+      // same text on both sides, so every paragraph anchors and nobody is
+      // credited with an edit they did not make.
+      previousText: page.text,
       baseRev: page.baseRev,
       editMode: changes.editMode,
       pinned: changes.pinned,
@@ -774,6 +815,53 @@ export class SharedNotebookStoreImpl {
   private async markRemoved(id: string): Promise<void> {
     await writeTransaction('shared_notebook_pages', (store) => store.delete(id));
     announce();
+  }
+
+  // ── Your badge ───────────────────────────────────────────────────────────
+
+  /**
+   * Change the two letters and the colour you are known by in one notebook.
+   *
+   * A plain UPDATE rather than another function: the policy on the members
+   * table already says a member may change their own row and nobody else's,
+   * so there is nothing here a SECURITY DEFINER would add except a place for
+   * the rule to be written down twice and drift.
+   *
+   * Per notebook on purpose. The colour is meant to tell people apart inside
+   * one group, so it has to be able to move when the group you are in already
+   * has somebody wearing it — one badge across every notebook would make that
+   * impossible to resolve.
+   */
+  async updateMyBadge(
+    notebookId: string,
+    changes: { displayName?: string; initials?: string; color?: string },
+  ): Promise<SharedNotebookMember> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error('You have to be signed in for that');
+
+    const patch: Record<string, string> = { updated_at: new Date().toISOString() };
+    if (changes.displayName !== undefined) patch.display_name = changes.displayName.trim();
+    // Two characters, because the badge is 20px wide and a third would not fit
+    // inside it — it would sit over the edge of the disc.
+    if (changes.initials !== undefined) patch.initials = changes.initials.trim().slice(0, 2);
+    if (changes.color !== undefined) patch.color = changes.color;
+
+    const { data, error } = await supabase
+      .from('shared_notebook_members')
+      .update(patch)
+      .eq('notebook_id', notebookId)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+    if (error) throw this.plainError(error.message);
+    if (!data) throw new Error('You are not in that notebook');
+
+    const row = rowToDBMember(data);
+    await writeTransaction('shared_notebook_members', (store) => store.put(row));
+    announce();
+    return toMember(row);
   }
 
   /** Throw away every shared row. Called on sign-out — none of it is ours. */

@@ -17,6 +17,7 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { ArrowLeft } from 'phosphor-svelte';
   import SharedPageView from './SharedPageView.svelte';
+  import AuthorPill from './AuthorPill.svelte';
   import { sharedNotebookStore } from '../adapters/SharedNotebookStore';
   import type { PublicSharedNotebook, SharedNotebookPage } from '../adapters/SharedNotebookStore';
   import { profileModalStore } from '../stores/profileModalStore';
@@ -36,8 +37,12 @@
   $: notebook = data.notebook;
   $: pages = data.pages;
 
+  function memberFor(userId: string) {
+    return data.members.find((m) => m.userId === userId) ?? null;
+  }
+
   function nameFor(userId: string): string {
-    const name = (data.members.find((m) => m.userId === userId)?.displayName ?? '').trim();
+    const name = (memberFor(userId)?.displayName ?? '').trim();
     return name || 'Someone';
   }
 
@@ -115,12 +120,25 @@
 
   {#if open}
     <div class="pn-byline">
+      {#if memberFor(open.authorId)}
+        {@const who = memberFor(open.authorId)}
+        <AuthorPill
+          variant="round"
+          size={18}
+          color={who?.color ?? '#888888'}
+          initials={who?.initials ?? '··'}
+          title={nameFor(open.authorId)}
+        />
+      {/if}
       <span class="pn-who">{nameFor(open.authorId)}</span>
       <span class="pn-sep">·</span>
       <span>{formatDate(open.updatedAt)}</span>
     </div>
     <div class="pn-body">
-      <SharedPageView html={open.text} />
+      <!-- The roster goes in so the paragraph gutter can name people. A
+           signed-out reader gets the pills like anybody else: they say who
+           wrote which line, which is the point of reading it. -->
+      <SharedPageView html={open.text} members={data.members} />
     </div>
   {:else}
     <div class="pn-body pn-list-body">
@@ -146,7 +164,17 @@
                 {#if page.pinned}<span class="pn-pin">📌</span>{/if}
                 {pageLabel(page)}
               </span>
-              <span class="pn-page-sub">{nameFor(page.authorId)} · {formatDate(page.updatedAt)}</span>
+              <span class="pn-page-sub">
+                {#if memberFor(page.authorId)}
+                  {@const who = memberFor(page.authorId)}
+                  <AuthorPill
+                    color={who?.color ?? '#888888'}
+                    initials={who?.initials ?? '··'}
+                    title={nameFor(page.authorId)}
+                  />
+                {/if}
+                {nameFor(page.authorId)} · {formatDate(page.updatedAt)}
+              </span>
             </button>
           {/each}
         </div>
@@ -319,6 +347,11 @@
   .pn-page-sub {
     font-size: 0.6875rem;
     color: #777;
+    /* The author's badge rides on this line, so it has to be a flex row for
+       the disc to sit on the text's baseline rather than above it. */
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .pn-refresh {
