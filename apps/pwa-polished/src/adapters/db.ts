@@ -14,7 +14,7 @@ import { logInstallIfActive } from '../lib/install-log';
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 35; // Migration 35: add journal_lock + journal_key_slots (the journal lock)
+const DB_VERSION = 36; // Migration 36: add the three shared_notebook_* stores (shared notebooks)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -314,6 +314,65 @@ export interface DBNotebookPage {
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * A notebook more than one person reads and writes. Mirrors the
+ * shared_notebooks row in migration 012, with the timestamps kept as epoch
+ * milliseconds the way every other store here does.
+ */
+export interface DBSharedNotebook {
+  id: string;
+  ownerId: string;
+  name: string;
+  /** 'group' — everyone writes. 'broadcast' — only the owner does. */
+  kind: 'group' | 'broadcast';
+  /** 'private' — members only. 'public' — anyone holding the link may read. */
+  visibility: 'private' | 'public';
+  joinCode: string;
+  joinOpen: boolean;
+  /** Moves on every page change anywhere in the notebook. */
+  rev: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** One person's place in a shared notebook, and the pill that stands for them. */
+export interface DBSharedNotebookMember {
+  id: string;
+  notebookId: string;
+  userId: string;
+  role: 'admin' | 'writer' | 'reader';
+  displayName: string;
+  initials: string;
+  color: string;
+  joinedAt: number;
+  updatedAt: number;
+}
+
+/** One page of a shared notebook. */
+export interface DBSharedNotebookPage {
+  id: string;
+  notebookId: string;
+  authorId: string;
+  title?: string;
+  text: string; // Sanitised HTML — never rendered without passing sanitizeNoteHtml
+  /** 'author' means closed: nobody but the author may rewrite it. */
+  editMode: 'anyone' | 'author';
+  pinned: boolean;
+  sortOrder: number;
+  rev: number;
+  /**
+   * The revision this device last saw from the server. An edit uploads with
+   * this attached, so a save made with no signal can be told apart from one
+   * made on top of what everybody else can see.
+   */
+  baseRev: number;
+  /** Set when the page has been taken out of the notebook. */
+  deletedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+  updatedBy: string | null;
 }
 
 export interface DBCrossReference {
@@ -744,6 +803,31 @@ export function openDB(): Promise<IDBDatabase> {
         const pageStore = db.createObjectStore('notebook_pages', { keyPath: 'id' });
         pageStore.createIndex('notebookId', 'notebookId', { unique: false });
         pageStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+
+      // ── Shared notebooks ──────────────────────────────────────────────────
+      // Kept apart from 'notebooks'/'notebook_pages' rather than sharing them.
+      // Those hold one account's rows and are reconciled against a pull scoped
+      // to that account; these hold other people's rows too, and putting the
+      // two in one store would let the single-user reconciler delete somebody
+      // else's work off this device.
+      if (!db.objectStoreNames.contains('shared_notebooks')) {
+        const sharedStore = db.createObjectStore('shared_notebooks', { keyPath: 'id' });
+        sharedStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('shared_notebook_members')) {
+        const memberStore = db.createObjectStore('shared_notebook_members', { keyPath: 'id' });
+        memberStore.createIndex('notebookId', 'notebookId', { unique: false });
+        // Finding "my own member row in this notebook" is the commonest lookup
+        // of the lot — it decides what the whole pane is allowed to offer.
+        memberStore.createIndex('notebookUser', ['notebookId', 'userId'], { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('shared_notebook_pages')) {
+        const sharedPageStore = db.createObjectStore('shared_notebook_pages', { keyPath: 'id' });
+        sharedPageStore.createIndex('notebookId', 'notebookId', { unique: false });
+        sharedPageStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
 
       // Cross-references store

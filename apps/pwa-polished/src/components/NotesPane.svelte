@@ -10,7 +10,7 @@
    * at every panel width, so a 20%-wide sliver and a 50/50 split both work.
    */
   import { onMount, onDestroy, tick } from 'svelte';
-  import { CaretDown, CaretRight, ArrowLeft, Trash } from 'phosphor-svelte';
+  import { ArrowLeft } from 'phosphor-svelte';
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import SearchResultsTree from './SearchResultsTree.svelte';
   import { groupResultsByBook } from '../lib/searchTree';
@@ -19,6 +19,15 @@
   import { syncedUserDataStore, subscribeToUserDataRemoteChanges } from '../adapters/SyncedUserDataStore';
   import { syncedNotebookStore, subscribeToNotebookRemoteChanges } from '../adapters/SyncedNotebookStore';
   import type { Notebook, NotebookPage } from '../adapters/NotebookStore';
+  import NotebookList from './NotebookList.svelte';
+  import type { ListNotebook } from './NotebookList.svelte';
+  import SharedPageView from './SharedPageView.svelte';
+  import { sharedNotebookStore, subscribeToSharedNotebookChanges } from '../adapters/SharedNotebookStore';
+  import type {
+    SharedNotebook,
+    SharedNotebookMember,
+    SharedNotebookPage,
+  } from '../adapters/SharedNotebookStore';
   import { userProfileStore } from '../stores/userProfileStore';
   import { profileModalStore } from '../stores/profileModalStore';
   import { get } from 'svelte/store';
@@ -43,10 +52,23 @@
 
   type Target =
     | { kind: 'verse'; noteId: string | null; book: string; chapter: number; verse: number }
-    | { kind: 'page'; pageId: string; notebookId: string };
+    | { kind: 'page'; pageId: string; notebookId: string }
+    | { kind: 'shared'; pageId: string; notebookId: string };
 
-  let view: 'browse' | 'editor' = 'browse';
+  let view: 'browse' | 'editor' | 'reader' = 'browse';
   let target: Target | null = null;
+
+  /**
+   * Which half of the pane you are looking at. Local is your own notebooks;
+   * Shared is the ones you are in with other people. Same layout, different
+   * accent, and a different set of things you are allowed to do.
+   */
+  let mode: 'local' | 'shared' = contentState?.mode === 'shared' ? 'shared' : 'local';
+
+  const LOCAL_ACCENT = '#667eea';
+  const LOCAL_PAGE_ACCENT = '#60a5fa';
+  const SHARED_ACCENT = '#2dd4bf';
+  const SHARED_PAGE_ACCENT = '#5eead4';
 
   // ─── Browse data ────────────────────────────────────────────────────────────
   let verseNotes: { id: string; book: string; chapter: number; verse: number; text: string }[] = [];
@@ -56,14 +78,18 @@
   let expanded = new Set<string>(contentState?.expanded ?? ['versenotes']);
   let loading = true;
 
+  // ─── Shared browse data ─────────────────────────────────────────────────────
+  let sharedNotebooks: SharedNotebook[] = [];
+  let sharedPagesByNotebook = new Map<string, SharedNotebookPage[]>();
+  let sharedMembersByNotebook = new Map<string, SharedNotebookMember[]>();
+  let sharedLoading = false;
+  /** The page open in the reader. Held whole so its text survives a redraw. */
+  let readerPage: SharedNotebookPage | null = null;
+  let readerNotebook: SharedNotebook | null = null;
+
   // ─── Inline row state ───────────────────────────────────────────────────────
   let creatingNotebook = false;
   let newNotebookName = '';
-  let renamingId: string | null = null;
-  let renameValue = '';
-  let confirmDeleteNotebookId: string | null = null;
-  let confirmDeletePageId: string | null = null;
-  let openMenuId: string | null = null;
 
   // ─── Editor state ───────────────────────────────────────────────────────────
   let editorTitle = '';
@@ -101,6 +127,59 @@
         children: groupResultsByBook('versenotes', results),
       },
     ];
+  }
+
+  // ─── List shapes ────────────────────────────────────────────────────────────
+  // Both halves of the pane draw through the same list component, so each side
+  // is only responsible for saying what its rows read like.
+
+  $: localList = buildLocalList(notebooks, pagesByNotebook);
+  $: sharedList = buildSharedList(sharedNotebooks, sharedPagesByNotebook, sharedMembersByNotebook);
+
+  function buildLocalList(
+    books: Notebook[],
+    pages: Map<string, NotebookPage[]>,
+  ): ListNotebook[] {
+    return books.map((notebook) => ({
+      id: notebook.id,
+      name: notebook.name,
+      pages: (pages.get(notebook.id) ?? []).map((page) => ({
+        id: page.id,
+        label: pageLabel(page),
+        sub: `${preview(page.text) || 'Empty'} · ${formatDate(page.updatedAt)}`,
+      })),
+    }));
+  }
+
+  function buildSharedList(
+    books: SharedNotebook[],
+    pages: Map<string, SharedNotebookPage[]>,
+    members: Map<string, SharedNotebookMember[]>,
+  ): ListNotebook[] {
+    return books.map((notebook) => {
+      const roster = members.get(notebook.id) ?? [];
+      const nameFor = (userId: string) => {
+        const name = (roster.find((m) => m.userId === userId)?.displayName ?? '').trim();
+        return name || 'Someone';
+      };
+      const kind = notebook.kind === 'broadcast' ? 'Broadcast' : 'Group';
+      const who = roster.length === 1 ? '1 person' : `${roster.length} people`;
+
+      return {
+        id: notebook.id,
+        name: notebook.name || 'Untitled notebook',
+        meta: `${kind} · ${who}`,
+        pages: (pages.get(notebook.id) ?? []).map((page) => ({
+          id: page.id,
+          label: sharedPageLabel(page),
+          sub: `${nameFor(page.authorId)} · ${formatDate(page.updatedAt)}`,
+          pinned: page.pinned,
+          // A page only its author may rewrite. Worth showing on the row so it
+          // isn't a surprise on opening it.
+          closed: page.editMode === 'author',
+        })),
+      };
+    });
   }
 
   // ─── Loading ────────────────────────────────────────────────────────────────
@@ -145,12 +224,91 @@
     }
   }
 
+  /**
+   * Read every shared notebook this account is in.
+   *
+   * The pull is its own thing — see SharedNotebookStore for why it must never
+   * go through the single-user sync engine. It throttles itself, so calling
+   * this every time the Shared tab is shown costs nothing.
+   */
+  async function loadShared(opts: { force?: boolean } = {}) {
+    if (!isSignedIn) {
+      sharedNotebooks = [];
+      return;
+    }
+    sharedLoading = sharedNotebooks.length === 0;
+    try {
+      await sharedNotebookStore.pull(opts);
+      const [books, pages, members] = await Promise.all([
+        sharedNotebookStore.getNotebooks(),
+        sharedNotebookStore.getAllPages(),
+        sharedNotebookStore.getAllMembers(),
+      ]);
+
+      sharedNotebooks = books;
+
+      const pageBuckets = new Map<string, SharedNotebookPage[]>();
+      for (const page of pages) {
+        const bucket = pageBuckets.get(page.notebookId);
+        if (bucket) bucket.push(page);
+        else pageBuckets.set(page.notebookId, [page]);
+      }
+      // getAllPages doesn't sort — the per-notebook order is pinned first,
+      // then most recently written, the same as getPages returns.
+      for (const bucket of pageBuckets.values()) {
+        bucket.sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          return b.updatedAt.getTime() - a.updatedAt.getTime();
+        });
+      }
+      sharedPagesByNotebook = pageBuckets;
+
+      const memberBuckets = new Map<string, SharedNotebookMember[]>();
+      for (const member of members) {
+        const bucket = memberBuckets.get(member.notebookId);
+        if (bucket) bucket.push(member);
+        else memberBuckets.set(member.notebookId, [member]);
+      }
+      sharedMembersByNotebook = memberBuckets;
+
+      // The page in the reader may have been rewritten or taken out by
+      // somebody else while it was open.
+      if (readerPage) {
+        const fresh = pages.find((p) => p.id === readerPage!.id) ?? null;
+        if (fresh) readerPage = fresh;
+        else if (view === 'reader') backToBrowse();
+      }
+    } catch (err) {
+      console.error('[NotesPane] shared load error:', err);
+    } finally {
+      sharedLoading = false;
+    }
+  }
+
+  /** Whoever wrote a page, as their display name — "Someone" until we know. */
+  function authorName(notebookId: string, userId: string): string {
+    const member = (sharedMembersByNotebook.get(notebookId) ?? []).find(
+      (m) => m.userId === userId,
+    );
+    const name = (member?.displayName ?? '').trim();
+    return name || 'Someone';
+  }
+
+  function sharedPageLabel(page: SharedNotebookPage): string {
+    const title = (page.title ?? '').trim();
+    if (title) return title;
+    const body = stripHtml(page.text);
+    return body ? body.slice(0, 40) : 'Untitled';
+  }
+
   let unsubUserData: (() => void) | null = null;
   let unsubNotebooks: (() => void) | null = null;
+  let unsubShared: (() => void) | null = null;
 
   onMount(async () => {
     await loadAll();
     await restoreFromContentState();
+    if (mode === 'shared') void loadShared();
 
     const reload = () => {
       // Never clobber unsaved edits with a remote pull.
@@ -158,11 +316,15 @@
     };
     unsubUserData = subscribeToUserDataRemoteChanges(reload);
     unsubNotebooks = subscribeToNotebookRemoteChanges(reload);
+    unsubShared = subscribeToSharedNotebookChanges(() => {
+      if (!isDirty) void loadShared();
+    });
   });
 
   onDestroy(() => {
     unsubUserData?.();
     unsubNotebooks?.();
+    unsubShared?.();
     // The panel can be closed by dragging it off the edge — flush before we go.
     if (isDirty) void save();
     if (saveTimeout) clearTimeout(saveTimeout);
@@ -171,7 +333,21 @@
   /** Reopen whatever the panel was showing before a reload or an edge change. */
   async function restoreFromContentState() {
     const saved = contentState?.target as Target | undefined;
-    if (contentState?.view !== 'editor' || !saved) return;
+    const savedView = contentState?.view;
+    if ((savedView !== 'editor' && savedView !== 'reader') || !saved) return;
+
+    if (saved.kind === 'shared') {
+      // The reader, not the editor — reopened straight from the local copy so
+      // it is on screen before the pull that refreshes it comes back.
+      const page = await sharedNotebookStore.getPage(saved.pageId);
+      if (!page) return;
+      readerPage = page;
+      readerNotebook = await sharedNotebookStore.getNotebook(saved.notebookId);
+      target = saved;
+      view = 'reader';
+      persistState();
+      return;
+    }
 
     if (saved.kind === 'page') {
       const page = await syncedNotebookStore.getPage(saved.pageId);
@@ -193,6 +369,7 @@
     windowStore.updateContentState(windowId, {
       view,
       target,
+      mode,
       expanded: [...expanded],
     });
   }
@@ -222,6 +399,24 @@
     openEditor();
   }
 
+  /** Switch between your own notebooks and the ones you share. */
+  function setMode(next: 'local' | 'shared') {
+    if (mode === next) return;
+    mode = next;
+    persistState();
+    if (next === 'shared') void loadShared();
+  }
+
+  async function openSharedPage(notebookId: string, pageId: string) {
+    const page = await sharedNotebookStore.getPage(pageId);
+    if (!page) return;
+    readerPage = page;
+    readerNotebook = sharedNotebooks.find((n) => n.id === notebookId) ?? null;
+    target = { kind: 'shared', pageId, notebookId };
+    view = 'reader';
+    persistState();
+  }
+
   function openEditor() {
     isDirty = false;
     confirmDeleteOpen = false;
@@ -240,11 +435,17 @@
   }
 
   async function backToBrowse() {
+    const wasReading = view === 'reader';
     if (isDirty) await save();
     view = 'browse';
     target = null;
+    readerPage = null;
+    readerNotebook = null;
     confirmDeleteOpen = false;
-    await loadAll();
+    // Coming back from a shared page, the local lists haven't moved — asking
+    // the database for all of them again would be work for nothing.
+    if (wasReading) await loadShared();
+    else await loadAll();
     persistState();
   }
 
@@ -288,24 +489,12 @@
     persistState();
   }
 
-  function startRename(notebook: Notebook) {
-    openMenuId = null;
-    renamingId = notebook.id;
-    renameValue = notebook.name;
-  }
-
-  async function commitRename() {
-    const id = renamingId;
-    const name = renameValue.trim();
-    renamingId = null;
-    if (!id || !name) return;
+  async function renameNotebook(id: string, name: string) {
     await syncedNotebookStore.renameNotebook(id, name);
     notebooks = notebooks.map((n) => (n.id === id ? { ...n, name } : n));
   }
 
   async function deleteNotebook(id: string) {
-    confirmDeleteNotebookId = null;
-    openMenuId = null;
     await syncedNotebookStore.deleteNotebook(id);
     notebooks = notebooks.filter((n) => n.id !== id);
     pagesByNotebook.delete(id);
@@ -313,12 +502,22 @@
   }
 
   /** Delete a page straight from the list, without opening it first. */
-  async function deletePage(page: NotebookPage) {
-    confirmDeletePageId = null;
-    await syncedNotebookStore.deletePage(page.id);
-    const remaining = pagesFor(page.notebookId).filter((p) => p.id !== page.id);
-    pagesByNotebook.set(page.notebookId, remaining);
+  async function deletePageById(notebookId: string, pageId: string) {
+    await syncedNotebookStore.deletePage(pageId);
+    const remaining = pagesFor(notebookId).filter((p) => p.id !== pageId);
+    pagesByNotebook.set(notebookId, remaining);
     pagesByNotebook = pagesByNotebook;
+  }
+
+  /** The list hands back an id; the page itself is already in hand. */
+  function openLocalPageById(pageId: string) {
+    for (const bucket of pagesByNotebook.values()) {
+      const page = bucket.find((p) => p.id === pageId);
+      if (page) {
+        void openPage(page);
+        return;
+      }
+    }
   }
 
   // ─── Editor ─────────────────────────────────────────────────────────────────
@@ -550,176 +749,163 @@
         on:blur={handleBlur}
       />
     </div>
+  {:else if view === 'reader'}
+    <!-- ── Reading a shared page ───────────────────────────────────────────── -->
+    <div class="editor-header shared">
+      <button class="back-btn" on:click={backToBrowse}>
+        <ArrowLeft size={14} weight="duotone" />
+        <span>Back</span>
+      </button>
+      <span class="title-static">{readerPage ? sharedPageLabel(readerPage) : ''}</span>
+    </div>
+
+    {#if readerPage}
+      <div class="reader-byline">
+        <span class="byline-who">{authorName(readerPage.notebookId, readerPage.authorId)}</span>
+        <span class="byline-sep">·</span>
+        <span>{formatDate(readerPage.updatedAt)}</span>
+        {#if readerNotebook}
+          <span class="byline-sep">·</span>
+          <span>{readerNotebook.name || 'Untitled notebook'}</span>
+        {/if}
+      </div>
+    {/if}
+
+    <div class="editor-body">
+      <SharedPageView html={readerPage?.text ?? ''} />
+    </div>
   {:else}
     <!-- ── Browse ──────────────────────────────────────────────────────────── -->
     <div class="browse-header">
-      <span class="browse-title">Notes</span>
-      <button class="primary-btn" on:click={newQuickNote}>+ New note</button>
+      <div class="mode-toggle" role="tablist" aria-label="Which notebooks">
+        <button
+          role="tab"
+          aria-selected={mode === 'local'}
+          class="mode-btn"
+          class:active={mode === 'local'}
+          on:click={() => setMode('local')}>Local</button
+        >
+        <button
+          role="tab"
+          aria-selected={mode === 'shared'}
+          class="mode-btn shared"
+          class:active={mode === 'shared'}
+          on:click={() => setMode('shared')}>Shared</button
+        >
+      </div>
+      {#if mode === 'local'}
+        <button class="primary-btn" on:click={newQuickNote}>+ New note</button>
+      {/if}
     </div>
 
     <div class="browse-body">
-      {#if loading}
-        <p class="muted">Loading…</p>
-      {:else}
-        <!-- Verse notes: the same book dropdown the search results use -->
-        <section class="section">
-          {#if verseNotes.length === 0}
-            <div class="section-head">
-              <span class="section-label">Verse Notes</span>
-              <span class="section-count">(0)</span>
-            </div>
-            <p class="muted small">
-              Select a verse while reading and choose Notes — anything you write there shows up here.
-            </p>
-          {:else}
-            <SearchResultsTree
-              nodes={verseTree}
-              {expanded}
-              onToggle={toggleNode}
-              onSelect={openVerseNote}
-            />
-          {/if}
-        </section>
+      {#if mode === 'local'}
+        {#if loading}
+          <p class="muted">Loading…</p>
+        {:else}
+          <!-- Verse notes: the same book dropdown the search results use -->
+          <section class="section">
+            {#if verseNotes.length === 0}
+              <div class="section-head">
+                <span class="section-label">Verse Notes</span>
+                <span class="section-count">(0)</span>
+              </div>
+              <p class="muted small">
+                Select a verse while reading and choose Notes — anything you write there shows up here.
+              </p>
+            {:else}
+              <SearchResultsTree
+                nodes={verseTree}
+                {expanded}
+                onToggle={toggleNode}
+                onSelect={openVerseNote}
+              />
+            {/if}
+          </section>
 
-        <!-- Notebooks -->
+          <!-- Notebooks -->
+          <section class="section">
+            <div class="section-head">
+              <span class="section-label">Notebooks</span>
+              <span class="section-count">({notebooks.length})</span>
+            </div>
+
+            {#if notebooks.length === 0 && !creatingNotebook}
+              <p class="muted small">Create a notebook and start taking notes.</p>
+            {/if}
+
+            <NotebookList
+              notebooks={localList}
+              {expanded}
+              keyPrefix="nb"
+              accent={LOCAL_ACCENT}
+              pageAccent={LOCAL_PAGE_ACCENT}
+              canAddPage
+              canRenameNotebook
+              canDeleteNotebook
+              canDeletePage
+              on:toggle={(e) => toggleNode(e.detail)}
+              on:openPage={(e) => openLocalPageById(e.detail.pageId)}
+              on:newPage={(e) => newPage(e.detail)}
+              on:rename={(e) => renameNotebook(e.detail.id, e.detail.name)}
+              on:deleteNotebook={(e) => deleteNotebook(e.detail)}
+              on:deletePage={(e) => deletePageById(e.detail.notebookId, e.detail.pageId)}
+            />
+
+            {#if creatingNotebook}
+              <input
+                class="new-nb-input"
+                placeholder="Notebook name…"
+                bind:value={newNotebookName}
+                use:focusOnMount
+                on:mousedown={guardPointer}
+                on:touchstart={guardPointer}
+                on:click={guardPointer}
+                on:blur={commitNewNotebook}
+                on:keydown={(e) => {
+                  if (e.key === 'Enter') commitNewNotebook();
+                  if (e.key === 'Escape') {
+                    creatingNotebook = false;
+                    newNotebookName = '';
+                  }
+                }}
+              />
+            {:else}
+              <button class="ghost-btn" on:click={() => (creatingNotebook = true)}>+ New notebook</button>
+            {/if}
+          </section>
+        {/if}
+      {:else}
+        <!-- ── Shared ────────────────────────────────────────────────────── -->
         <section class="section">
           <div class="section-head">
-            <span class="section-label">Notebooks</span>
-            <span class="section-count">({notebooks.length})</span>
+            <span class="section-label shared">Shared Notebooks</span>
+            <span class="section-count">({sharedNotebooks.length})</span>
           </div>
 
-          {#if notebooks.length === 0 && !creatingNotebook}
-            <p class="muted small">Create a notebook and start taking notes.</p>
-          {/if}
-
-          {#each notebooks as notebook (notebook.id)}
-            {@const pages = pagesFor(notebook.id)}
-            {@const key = `nb::${notebook.id}`}
-            <div class="nb">
-              <div class="nb-row">
-                {#if renamingId === notebook.id}
-                  <!-- The field REPLACES the row button. Nesting an input inside
-                       a button is invalid and the browser yanks focus back to
-                       the button, which is what ate the caret. -->
-                  <input
-                    class="nb-rename"
-                    bind:value={renameValue}
-                    use:focusOnMount
-                    on:mousedown={guardPointer}
-                    on:touchstart={guardPointer}
-                    on:click={guardPointer}
-                    on:blur={commitRename}
-                    on:keydown={(e) => {
-                      if (e.key === 'Enter') commitRename();
-                      if (e.key === 'Escape') renamingId = null;
-                    }}
-                  />
-                {:else}
-                  <button class="nb-header" on:click={() => toggleNode(key)}>
-                    <span class="nb-caret">
-                      {#if expanded.has(key)}
-                        <CaretDown size={11} weight="bold" />
-                      {:else}
-                        <CaretRight size={11} weight="bold" />
-                      {/if}
-                    </span>
-                    <span class="nb-label">{notebook.name}</span>
-                    <span class="nb-count">({pages.length})</span>
-                  </button>
-
-                  <button class="row-btn" title="New page" on:click={() => newPage(notebook.id)}>+</button>
-                  <button
-                    class="row-btn"
-                    title="Notebook options"
-                    on:click={() => (openMenuId = openMenuId === notebook.id ? null : notebook.id)}
-                    >⋯</button
-                  >
-                {/if}
-              </div>
-
-              {#if openMenuId === notebook.id}
-                <div class="row-menu">
-                  <button on:click={() => startRename(notebook)}>Rename</button>
-                  <button
-                    class="danger"
-                    on:click={() => {
-                      openMenuId = null;
-                      confirmDeleteNotebookId = notebook.id;
-                    }}>Delete notebook</button
-                  >
-                </div>
-              {/if}
-
-              {#if confirmDeleteNotebookId === notebook.id}
-                <div class="confirm-bar">
-                  <span>
-                    Delete “{notebook.name}”{pages.length
-                      ? ` and its ${pages.length} page${pages.length === 1 ? '' : 's'}`
-                      : ''}?
-                  </span>
-                  <button class="confirm-yes" on:click={() => deleteNotebook(notebook.id)}>Delete</button>
-                  <button class="confirm-no" on:click={() => (confirmDeleteNotebookId = null)}>Cancel</button>
-                </div>
-              {/if}
-
-              {#if expanded.has(key)}
-                <div class="nb-pages">
-                  {#if pages.length === 0}
-                    <p class="muted small indent">No pages yet.</p>
-                  {/if}
-                  {#each pages as page (page.id)}
-                    <div class="page-row-wrap">
-                      <button class="page-row" on:click={() => openPage(page)}>
-                        <span class="page-title">{pageLabel(page)}</span>
-                        <span class="page-sub">
-                          {preview(page.text) || 'Empty'} · {formatDate(page.updatedAt)}
-                        </span>
-                      </button>
-                      <button
-                        class="row-btn trash-btn"
-                        title="Delete page"
-                        aria-label="Delete page"
-                        on:click={() => (confirmDeletePageId =
-                          confirmDeletePageId === page.id ? null : page.id)}
-                      >
-                        <Trash size={14} weight="bold" />
-                      </button>
-                    </div>
-
-                    {#if confirmDeletePageId === page.id}
-                      <div class="confirm-bar">
-                        <span>Delete “{pageLabel(page)}”?</span>
-                        <button class="confirm-yes" on:click={() => deletePage(page)}>Delete</button>
-                        <button class="confirm-no" on:click={() => (confirmDeletePageId = null)}>Cancel</button>
-                      </div>
-                    {/if}
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/each}
-
-          {#if creatingNotebook}
-            <input
-              class="new-nb-input"
-              placeholder="Notebook name…"
-              bind:value={newNotebookName}
-              use:focusOnMount
-              on:mousedown={guardPointer}
-              on:touchstart={guardPointer}
-              on:click={guardPointer}
-              on:blur={commitNewNotebook}
-              on:keydown={(e) => {
-                if (e.key === 'Enter') commitNewNotebook();
-                if (e.key === 'Escape') {
-                  creatingNotebook = false;
-                  newNotebookName = '';
-                }
-              }}
-            />
+          {#if sharedLoading}
+            <p class="muted small">Looking…</p>
+          {:else if sharedNotebooks.length === 0}
+            <p class="muted small">
+              Notebooks you share with other people show up here. Joining one comes next —
+              for now, a notebook someone adds you to will appear after a refresh.
+            </p>
           {:else}
-            <button class="ghost-btn" on:click={() => (creatingNotebook = true)}>+ New notebook</button>
+            <NotebookList
+              notebooks={sharedList}
+              {expanded}
+              keyPrefix="snb"
+              accent={SHARED_ACCENT}
+              pageAccent={SHARED_PAGE_ACCENT}
+              emptyPagesText="Nothing written here yet."
+              on:toggle={(e) => toggleNode(e.detail)}
+              on:openPage={(e) => openSharedPage(e.detail.notebookId, e.detail.pageId)}
+            />
           {/if}
+
+          <button class="ghost-btn shared" on:click={() => loadShared({ force: true })}>
+            ↻ Check for changes
+          </button>
         </section>
       {/if}
     </div>
@@ -790,11 +976,6 @@
     padding-right: var(--gut-r);
   }
 
-  .browse-title {
-    flex: 1;
-    font-size: 0.95rem;
-    font-weight: 600;
-  }
 
   .primary-btn {
     padding: 5px 12px;
@@ -946,67 +1127,11 @@
     line-height: 1.5;
   }
 
-  .indent {
-    padding-left: 26px;
-  }
 
-  /* ── Notebook rows ──────────────────────────────────────── */
-  .nb-row {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .nb-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex: 1;
-    min-width: 0;
-    padding: 7px 10px;
-    background: transparent;
-    border: none;
-    border-radius: 4px;
-    color: #e0e0e0;
-    cursor: pointer;
-    text-align: left;
-    font-size: 0.9rem;
-    font-weight: 600;
-  }
-
-  .nb-header:hover {
-    background: rgba(255, 255, 255, 0.06);
-  }
-
-  .nb-caret {
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-    color: #888;
-  }
-
-  /* Label sizes to its text and the count sits right beside it; the leftover
-     space goes after the pair, so they stay married at any panel width. */
-  .nb-label {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .nb-count {
-    flex-shrink: 0;
-    margin-right: auto;
-    color: #888;
-    font-size: 0.8em;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .nb-rename,
+  /* The new-notebook field. Its sibling rename field moved to NotebookList. */
   .new-nb-input {
-    flex: 1;
-    min-width: 0;
+    width: calc(100% - 20px);
+    margin: 4px 10px;
     background: #262626;
     border: 1px solid #667eea;
     border-radius: 4px;
@@ -1017,66 +1142,8 @@
     padding: 5px 8px;
   }
 
-  .nb-rename:focus,
   .new-nb-input:focus {
     outline: none;
-  }
-
-  .new-nb-input {
-    width: calc(100% - 20px);
-    margin: 4px 10px;
-  }
-
-  .row-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    color: #888;
-    font-size: 0.95rem;
-    line-height: 1;
-    min-width: 34px;
-    min-height: 38px;
-    padding: 6px 7px;
-    border-radius: 4px;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .row-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
-  }
-
-  .trash-btn:hover {
-    background: rgba(192, 57, 43, 0.18);
-    color: #f08a7a;
-  }
-
-  .row-menu {
-    display: flex;
-    gap: 4px;
-    padding: 2px 10px 6px 26px;
-  }
-
-  .row-menu button {
-    background: #262626;
-    border: 1px solid #3a3a3a;
-    border-radius: 4px;
-    color: #ccc;
-    font-size: 0.75rem;
-    padding: 4px 10px;
-    cursor: pointer;
-  }
-
-  .row-menu button:hover {
-    background: #333;
-  }
-
-  .row-menu button.danger {
-    color: #f08a7a;
-    border-color: #5a3230;
   }
 
   .ghost-btn {
@@ -1098,59 +1165,77 @@
     color: #ccc;
   }
 
-  /* ── Page rows ──────────────────────────────────────────── */
-  .nb-pages {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    margin: 3px 0 6px;
-    padding-left: 26px;
-    padding-right: 4px;
+  .ghost-btn.shared:hover {
+    border-color: #2dd4bf;
   }
 
-  .page-row-wrap {
+  /* ── Local / Shared toggle ──────────────────────────────── */
+  .mode-toggle {
     display: flex;
-    align-items: stretch;
     gap: 2px;
+    padding: 2px;
+    background: #222;
+    border: 1px solid #333;
+    border-radius: 6px;
   }
 
-  .page-row {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
-    min-width: 0;
-    padding: 7px 10px;
-    background: rgba(255, 255, 255, 0.03);
+  .mode-btn {
+    background: transparent;
     border: none;
-    border-left: 2px solid #444;
-    border-radius: 0 4px 4px 0;
-    color: #ddd;
-    cursor: pointer;
-    text-align: left;
-    flex: 1;
-  }
-
-  .page-row:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .page-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #60a5fa;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .page-sub {
-    font-size: 0.8rem;
-    line-height: 1.45;
+    border-radius: 4px;
     color: #999;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 5px 12px;
+    min-height: 30px;
+  }
+
+  .mode-btn:hover {
+    color: #ddd;
+  }
+
+  /* The accent is the whole point of the pair: which half you are in should be
+     readable at a glance, not worked out from which word is brighter. */
+  .mode-btn.active {
+    background: rgba(102, 126, 234, 0.18);
+    color: #a5b4fc;
+    box-shadow: inset 0 0 0 1px rgba(102, 126, 234, 0.45);
+  }
+
+  .mode-btn.shared.active {
+    background: rgba(45, 212, 191, 0.16);
+    color: #5eead4;
+    box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.45);
+  }
+
+  .section-label.shared {
+    color: #5eead4;
+  }
+
+  .editor-header.shared {
+    border-bottom-color: rgba(45, 212, 191, 0.35);
+  }
+
+  /* ── Shared page byline ─────────────────────────────────── */
+  .reader-byline {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 6px 12px;
+    border-bottom: 1px solid #2a2a2a;
+    color: #888;
+    font-size: 0.74rem;
+  }
+
+  .byline-who {
+    color: #5eead4;
+    font-weight: 600;
+  }
+
+  .byline-sep {
+    color: #555;
   }
 
   /* ── Confirm bar ────────────────────────────────────────── */
@@ -1198,8 +1283,7 @@
       padding: 6px 8px;
     }
 
-    .section-head,
-    .nb-header {
+    .section-head {
       font-size: 0.8rem;
     }
   }
