@@ -13,29 +13,40 @@
    * unchecked markup reaches innerHTML. And verse references have to keep
    * working: they survive as spans carrying the same data attributes
    * BibleRefNode writes, so a tap opens the same menu it opens in a note.
-   * Expanding is not offered, because that would write into a page this
-   * reader may not be allowed to change.
+   * Expanding a reference works here too, but only on the screen. There is no
+   * write path for a shared page until phase 3, so the printed verse is put
+   * straight into the DOM and is gone again the next time the page is opened.
    */
   import { onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import BibleRefPopover from './BibleRefPopover.svelte';
   import { navigationStore } from '../stores/navigationStore';
+  import { IndexedDBTextStore } from '../adapters/TextStore';
+  import { formatVerseSuffix, VERSE_SUFFIX_RE } from '../lib/lexical/bibleRefTransforms';
   import { sanitizeNoteHtml } from '../lib/shared/sanitizeNoteHtml';
 
   export let html: string = '';
   /** Shown in place of the page when there is nothing in it yet. */
   export let placeholder: string = 'This page is empty.';
 
+  const textStore = new IndexedDBTextStore();
+
   type RefHit = {
+    /** The reference's own span, which expanding writes the verse into. */
+    el: HTMLElement;
     ref: string;
     book: string;
     chapter: number;
     verse: number;
+    expanded: boolean;
     x: number;
     y: number;
   };
 
   let hit: RefHit | null = null;
+  let busy = false;
+  /** Set when the verse text couldn't be fetched, so the menu can say so. */
+  let unavailable = false;
 
   // Run through the allowlist on every change rather than once on mount: the
   // page can be replaced under us by a pull while it is open.
@@ -54,11 +65,15 @@
 
     e.preventDefault();
     const rect = el.getBoundingClientRect();
+    busy = false;
+    unavailable = false;
     hit = {
+      el,
       ref,
       book,
       chapter: parseInt(el.getAttribute('data-chapter') ?? '1', 10),
       verse: parseInt(el.getAttribute('data-verse') ?? '1', 10),
+      expanded: el.getAttribute('data-expanded') === 'true',
       x: rect.left + rect.width / 2,
       y: rect.top,
     };
@@ -66,6 +81,7 @@
 
   function close() {
     hit = null;
+    unavailable = false;
   }
 
   function goTo() {
@@ -75,6 +91,53 @@
     // the same two-step a reference in a note takes.
     navigationStore.pushHistory(current, 'notes');
     navigationStore.navigateToVerse(current.translation, hit.book, hit.chapter, hit.verse);
+    close();
+  }
+
+  /**
+   * Print the verse inside the reference, exactly as a note does.
+   *
+   * The editor's version of this edits the Lexical tree and the note is saved.
+   * Here there is nothing to save into yet, so the span is changed in place and
+   * the change lasts only as long as the page stays on screen — a pull, or
+   * closing and reopening the page, redraws it from the stored HTML and the
+   * verse is gone. Phase 3 brings the write path that makes it stick.
+   */
+  async function expand() {
+    if (!hit || busy) return;
+    busy = true;
+    unavailable = false;
+    try {
+      // Whatever the reader is on — expanding copies what you're looking at.
+      const translation = get(navigationStore).translation;
+      const text = await textStore.getVerse(translation, hit.book, hit.chapter, hit.verse);
+      if (text) {
+        const verse = document.createElement('span');
+        verse.textContent = formatVerseSuffix(text);
+        hit.el.appendChild(verse);
+        hit.el.classList.add('is-expanded');
+        hit.el.setAttribute('data-expanded', 'true');
+        close();
+      } else {
+        // Pack not installed for this book, or no such verse in it. Say so and
+        // leave the menu open so Go to is still available.
+        console.warn('[SharedPageView] No verse text for', hit.ref, 'in', translation);
+        unavailable = true;
+      }
+    } catch (err) {
+      console.error('[SharedPageView] Expand failed:', err);
+      unavailable = true;
+    }
+    busy = false;
+  }
+
+  /** Strip the printed verse back off, leaving the reference as it was. */
+  function collapse() {
+    if (!hit) return;
+    const last = hit.el.lastElementChild;
+    if (last && VERSE_SUFFIX_RE.test(last.textContent ?? '')) last.remove();
+    hit.el.classList.remove('is-expanded');
+    hit.el.removeAttribute('data-expanded');
     close();
   }
 
@@ -111,8 +174,12 @@
     y={hit.y}
     refLabel={hit.ref}
     book={hit.book}
-    canExpand={false}
+    expanded={hit.expanded}
+    {busy}
+    {unavailable}
     on:goto={goTo}
+    on:expand={expand}
+    on:collapse={collapse}
     on:close={close}
   />
 {/if}
@@ -156,6 +223,17 @@
     color: var(--ref-color, #c0392b);
     border-bottom: 1px dotted currentColor;
     cursor: pointer;
+  }
+
+  /* Expanded: the verse text rides along in italic, one shade quieter — the
+     same two rules LexicalEditor gives it. */
+  .shared-page :global(.bible-ref.is-expanded) {
+    border-bottom: none;
+    font-style: italic;
+  }
+
+  .shared-page :global(.bible-ref.is-expanded > span:last-child) {
+    font-style: italic;
   }
 
   /* A reference whose target the allowlist rejected. It keeps the colour so

@@ -76,7 +76,7 @@ export function formatVerseSuffix(text: string): string {
  * Used to tell which half is left when an expanded link loses a child: the
  * reference, or the scripture. They are treated very differently.
  */
-const VERSE_SUFFIX_RE = /^\s*—\s*“/;
+export const VERSE_SUFFIX_RE = /^\s*—\s*“/;
 
 // ---------------------------------------------------------------------------
 // 1. Plain text → reference

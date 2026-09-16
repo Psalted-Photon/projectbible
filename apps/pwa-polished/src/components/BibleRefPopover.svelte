@@ -17,19 +17,12 @@
   export let busy = false;
   /** The verse text couldn't be fetched — say so instead of failing silently. */
   export let unavailable = false;
-  /**
-   * Expanding writes the verse into the page, so it is offered only where the
-   * reader may actually write there. On a shared page somebody else wrote,
-   * Go to is the whole menu.
-   */
-  export let canExpand = true;
 
   const dispatch = createEventDispatcher();
 
   const WIDTH = 210;
-  // Two action rows, no title — or one where expanding isn't on offer, so the
-  // menu still sits against the reference instead of floating clear of it.
-  $: HEIGHT = canExpand ? 84 : 46;
+  // Two action rows, no title.
+  const HEIGHT = 84;
 
   /**
    * Move the popover to the end of <body>.
@@ -65,9 +58,7 @@
     Go to {refLabel}
   </button>
 
-  {#if !canExpand}
-    <!-- Nothing else: the one action is the one this reader may take. -->
-  {:else if expanded}
+  {#if expanded}
     <button class="ref-action" on:click={() => dispatch('collapse')}>Collapse</button>
   {:else if unavailable}
     <span class="ref-note">Verse text unavailable</span>
