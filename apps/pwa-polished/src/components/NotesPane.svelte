@@ -10,7 +10,7 @@
    * at every panel width, so a 20%-wide sliver and a 50/50 split both work.
    */
   import { onMount, onDestroy, tick } from 'svelte';
-  import { ArrowLeft } from 'phosphor-svelte';
+  import { ArrowLeft, UsersThree } from 'phosphor-svelte';
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import SearchResultsTree from './SearchResultsTree.svelte';
   import { groupResultsByBook } from '../lib/searchTree';
@@ -25,6 +25,8 @@
   import SharedNotebookCreate from './SharedNotebookCreate.svelte';
   import SharedNotebookJoin from './SharedNotebookJoin.svelte';
   import MemberPillPicker from './MemberPillPicker.svelte';
+  import CopyPageSheet from './CopyPageSheet.svelte';
+  import type { CopyDestination } from './CopyPageSheet.svelte';
   import AuthorPill from './AuthorPill.svelte';
   import SharedLiveBar from './SharedLiveBar.svelte';
   import { sharedNotebookStore, subscribeToSharedNotebookChanges } from '../adapters/SharedNotebookStore';
@@ -151,6 +153,15 @@
   let inviteNotebook: SharedNotebook | null = null;
   /** Which notebook's badge is being changed. Null means the picker is closed. */
   let badgeNotebook: SharedNotebook | null = null;
+  /**
+   * The page waiting to be copied across the line between your own notebooks
+   * and the shared ones, and which way it is going. Null means the sheet is
+   * closed. Held whole rather than as an id because the page being sent may be
+   * one that is open in the editor and not yet on the list.
+   */
+  let copying:
+    | { mode: 'to-shared' | 'to-local'; title: string; label: string; text: string }
+    | null = null;
 
   // ─── Editor state ───────────────────────────────────────────────────────────
   let editorTitle = '';
@@ -173,7 +184,14 @@
   $: canPinOpenPage = canPinPage(readerPage, readerNotebook, myUserId);
   $: canRemoveOpenPage = canRemovePage(readerPage, readerNotebook, myUserId);
   $: canCloseOpenPage = canSetEditMode(readerPage, myUserId);
-  $: hasSharedMenu = canPinOpenPage || canRemoveOpenPage || canCloseOpenPage;
+  /**
+   * Keeping a copy asks nothing of the notebook — it only writes to notebooks
+   * of your own — so anybody who can read the page may do it, including a
+   * reader of a Broadcast notebook who is offered nothing else on this menu.
+   */
+  $: canCopyOpenPage = !!readerPage;
+  $: hasSharedMenu =
+    canCopyOpenPage || canPinOpenPage || canRemoveOpenPage || canCloseOpenPage;
   /**
    * Whether the blocked bar can offer a way out. It can wherever this account
    * may add a page to the notebook, which is the same permission a brand-new
@@ -830,6 +848,110 @@
     }
   }
 
+  // ─── Across ─────────────────────────────────────────────────────────────────
+  // The line between your own notebooks and the shared ones is crossed by
+  // copying, in both directions and never by linking. A page sent to a study
+  // group goes on being yours here; a page kept from one goes on being theirs
+  // there. Nothing written on either side afterwards reaches the other.
+
+  $: copyDestinations = buildCopyDestinations(
+    copying,
+    notebooks,
+    pagesByNotebook,
+    sharedNotebooks,
+    sharedMembersByNotebook,
+    myUserId,
+  );
+
+  function buildCopyDestinations(
+    job: typeof copying,
+    localBooks: Notebook[],
+    localPages: Map<string, NotebookPage[]>,
+    sharedBooks: SharedNotebook[],
+    members: Map<string, SharedNotebookMember[]>,
+    userId: string | null,
+  ): CopyDestination[] {
+    if (!job) return [];
+
+    if (job.mode === 'to-local') {
+      return localBooks.map((notebook) => {
+        const count = localPages.get(notebook.id)?.length ?? 0;
+        return {
+          id: notebook.id,
+          name: notebook.name,
+          meta: count === 1 ? '1 page' : `${count} pages`,
+        };
+      });
+    }
+
+    // Only the ones this account may actually add a page to — a notebook you
+    // are only reading is not a place a copy can go, and offering it would be
+    // a refusal waiting to happen.
+    return sharedBooks
+      .filter((notebook) => {
+        const me = (members.get(notebook.id) ?? []).find((m) => m.userId === userId) ?? null;
+        return canWriteInNotebook(notebook, me);
+      })
+      .map((notebook) => {
+        const roster = members.get(notebook.id) ?? [];
+        return {
+          id: notebook.id,
+          name: notebook.name || 'Untitled notebook',
+          meta: roster.length === 1 ? '1 person' : `${roster.length} people`,
+        };
+      });
+  }
+
+  /** Send the page in the editor to a shared notebook as a page of its own. */
+  async function sendPageToShared() {
+    if (target?.kind !== 'page') return;
+    // What is on screen is what gets sent, so the original had better be
+    // holding the same words before it goes.
+    if (isDirty) await save();
+    confirmDeleteOpen = false;
+    // This panel may have been on the Local side since it opened, in which
+    // case there is no shared list yet to choose from.
+    await loadShared();
+    const title = editorTitle.trim();
+    copying = {
+      mode: 'to-shared',
+      title,
+      label: title || stripHtml(editorText).slice(0, 40) || 'Untitled',
+      text: editorText,
+    };
+  }
+
+  /** Keep the shared page on screen as a page in one of your own notebooks. */
+  async function keepSharedPageLocally() {
+    if (!readerPage) return;
+    sharedMenuOpen = false;
+    // Somewhere to put it. Anybody who has never made a notebook of their own
+    // would otherwise be handed an empty list and no way to fill it from here.
+    if (notebooks.length === 0) await ensureQuickNotes();
+    copying = {
+      mode: 'to-local',
+      title: (readerPage.title ?? '').trim(),
+      label: sharedPageLabel(readerPage),
+      text: readerPage.text,
+    };
+  }
+
+  /**
+   * The copy landed. Say where, and rebuild the side it landed on — the other
+   * side has not moved, which is the point of the whole thing.
+   */
+  async function pageCopied(destinationName: string) {
+    const mode = copying?.mode;
+    copying = null;
+    if (mode === 'to-shared') {
+      showNotice(`Copied to “${destinationName}”`);
+      await loadShared({ force: true });
+    } else {
+      showNotice(`Kept in “${destinationName}”`);
+      await loadAll();
+    }
+  }
+
   function openEditor() {
     isDirty = false;
     confirmDeleteOpen = false;
@@ -1203,6 +1325,19 @@
         <button class="icon-btn" title="Go to this verse" on:click={jumpToVerse}>↗</button>
       {/if}
 
+      <!-- A page of your own can be sent to a notebook you share with other
+           people. A copy: this one stays here, and stays yours. -->
+      {#if target?.kind === 'page'}
+        <button
+          class="icon-btn"
+          title="Send a copy to a shared notebook"
+          aria-label="Send a copy to a shared notebook"
+          on:click={sendPageToShared}
+        >
+          <UsersThree size={16} weight="duotone" />
+        </button>
+      {/if}
+
       <!-- A shared page you may write in but not remove — somebody else's page,
            left open to the notebook — gets no ⋯ at all, rather than one that
            offers nothing. -->
@@ -1333,6 +1468,9 @@
 
     {#if sharedMenuOpen}
       <div class="shared-menu">
+        {#if canCopyOpenPage}
+          <button on:click={keepSharedPageLocally}>Keep a copy in my notebooks</button>
+        {/if}
         {#if canCloseOpenPage}
           <button on:click={toggleSharedEditMode}>
             {readerPage?.editMode === 'anyone' ? 'Close to others' : 'Let others edit'}
@@ -1544,6 +1682,18 @@
   />
 {/if}
 
+{#if copying}
+  <CopyPageSheet
+    mode={copying.mode}
+    title={copying.title}
+    label={copying.label}
+    text={copying.text}
+    destinations={copyDestinations}
+    on:copied={(e) => pageCopied(e.detail.name)}
+    on:close={() => (copying = null)}
+  />
+{/if}
+
 {#if badgeNotebook && myUserId}
   {@const roster = sharedMembersByNotebook.get(badgeNotebook.id) ?? []}
   {@const mine = roster.find((m) => m.userId === myUserId)}
@@ -1655,6 +1805,11 @@
     border-radius: 4px;
     cursor: pointer;
     flex-shrink: 0;
+    /* Some of these are a glyph and one is an icon — centre both the same way
+       rather than letting the icon sit on the text baseline. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .icon-btn:hover {

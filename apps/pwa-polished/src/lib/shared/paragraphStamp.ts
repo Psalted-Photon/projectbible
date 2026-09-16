@@ -234,3 +234,25 @@ export function splitPageBlocks(html: string): PageBlock[] {
   }
   return blocks;
 }
+
+/**
+ * Take the stamps off a page that is leaving the notebook it was written in.
+ *
+ * A paragraph id and its list of pills only mean anything beside the roster
+ * they were stamped against. Copied into somebody's own notebook they are
+ * ids for people that copy can never look up, so they come off — what is
+ * left is the prose, which is the part being kept.
+ */
+export function stripStamps(html: string): string {
+  if (typeof html !== 'string' || html === '') return '';
+  if (typeof DOMParser === 'undefined') return html;
+
+  const body = new DOMParser().parseFromString(html, 'text/html').body;
+  if (!body) return html;
+
+  for (const el of Array.from(body.querySelectorAll('[data-pid], [data-pills]'))) {
+    el.removeAttribute('data-pid');
+    el.removeAttribute('data-pills');
+  }
+  return body.innerHTML;
+}
