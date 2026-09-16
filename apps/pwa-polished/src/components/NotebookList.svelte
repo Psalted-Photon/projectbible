@@ -46,6 +46,22 @@
      * cannot answer for both.
      */
     canAddPage?: boolean;
+    /**
+     * The same overrides for handing the code out and for changing your badge.
+     * Both are ordinarily true of every shared notebook and false of every
+     * local one, and both are false for a notebook you have been removed
+     * from — its code is not yours to give and its roster is not yours to
+     * write to any more.
+     */
+    canInvite?: boolean;
+    canEditBadge?: boolean;
+    /**
+     * The wording for the row menu's entry into whatever runs this notebook,
+     * and — by being there at all — whether it has one. A label rather than a
+     * flag because what it opens reads differently depending on who you are:
+     * its owner manages the notebook, everybody else looks at who is in it.
+     */
+    manageLabel?: string;
   }
 </script>
 
@@ -115,6 +131,7 @@
     deletePage: { notebookId: string; pageId: string };
     invite: string;
     editBadge: string;
+    manage: string;
   }>();
 
   let renamingId: string | null = null;
@@ -123,7 +140,12 @@
   let confirmDeleteNotebookId: string | null = null;
   let confirmDeletePageId: string | null = null;
 
-  $: hasRowMenu = canRenameNotebook || canDeleteNotebook || canInvite || canEditBadge;
+  $: hasRowMenu = (notebook: ListNotebook) =>
+    canRenameNotebook ||
+    canDeleteNotebook ||
+    (notebook.canInvite ?? canInvite) ||
+    ((notebook.canEditBadge ?? canEditBadge) && !!notebook.pill) ||
+    !!notebook.manageLabel;
 
   function keyFor(id: string): string {
     return `${keyPrefix}::${id}`;
@@ -239,7 +261,7 @@
               on:click={() => dispatch('newPage', notebook.id)}>+</button
             >
           {/if}
-          {#if hasRowMenu}
+          {#if hasRowMenu(notebook)}
             <button
               class="row-btn"
               title="Notebook options"
@@ -253,7 +275,7 @@
 
       {#if openMenuId === notebook.id}
         <div class="row-menu">
-          {#if canInvite}
+          {#if notebook.canInvite ?? canInvite}
             <button
               on:click={() => {
                 openMenuId = null;
@@ -261,7 +283,15 @@
               }}>Invite people</button
             >
           {/if}
-          {#if canEditBadge && notebook.pill}
+          {#if notebook.manageLabel}
+            <button
+              on:click={() => {
+                openMenuId = null;
+                dispatch('manage', notebook.id);
+              }}>{notebook.manageLabel}</button
+            >
+          {/if}
+          {#if (notebook.canEditBadge ?? canEditBadge) && notebook.pill}
             <button
               on:click={() => {
                 openMenuId = null;

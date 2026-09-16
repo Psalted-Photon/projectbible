@@ -24,6 +24,7 @@
   import SharedPageView from './SharedPageView.svelte';
   import SharedNotebookCreate from './SharedNotebookCreate.svelte';
   import SharedNotebookJoin from './SharedNotebookJoin.svelte';
+  import SharedNotebookAdmin from './SharedNotebookAdmin.svelte';
   import MemberPillPicker from './MemberPillPicker.svelte';
   import CopyPageSheet from './CopyPageSheet.svelte';
   import type { CopyDestination } from './CopyPageSheet.svelte';
@@ -47,6 +48,8 @@
     canRemovePage,
     canSetEditMode,
     canPinPage,
+    canManageNotebook,
+    isReadOnlyCopy,
   } from '../lib/shared/sharedPermissions';
   import type {
     SharedNotebook,
@@ -154,6 +157,12 @@
   /** Which notebook's badge is being changed. Null means the picker is closed. */
   let badgeNotebook: SharedNotebook | null = null;
   /**
+   * Which notebook's roster and settings are open. Null means the sheet is
+   * closed. Everyone in a notebook can open it; what is on it depends on
+   * whether they own the thing.
+   */
+  let managingNotebook: SharedNotebook | null = null;
+  /**
    * The page waiting to be copied across the line between your own notebooks
    * and the shared ones, and which way it is going. Null means the sheet is
    * closed. Held whole rather than as an id because the page being sent may be
@@ -183,7 +192,7 @@
   $: canEditOpenPage = canEditPage(readerPage, readerNotebook, readerMember, myUserId);
   $: canPinOpenPage = canPinPage(readerPage, readerNotebook, myUserId);
   $: canRemoveOpenPage = canRemovePage(readerPage, readerNotebook, myUserId);
-  $: canCloseOpenPage = canSetEditMode(readerPage, myUserId);
+  $: canCloseOpenPage = canSetEditMode(readerPage, readerNotebook, myUserId);
   /**
    * Keeping a copy asks nothing of the notebook — it only writes to notebooks
    * of your own — so anybody who can read the page may do it, including a
@@ -199,6 +208,9 @@
    */
   $: canKeepAsCopy = !!sharedBlocked && canWriteInNotebook(readerNotebook, readerMember);
 
+  /** The page on screen belongs to a notebook this account is out of. */
+  $: readerRemoved = isReadOnlyCopy(readerNotebook);
+
   /** The roster of the notebook on screen, for the byline and the gutter. */
   $: readerRoster = readerNotebook
     ? sharedMembersByNotebook.get(readerNotebook.id) ?? []
@@ -212,7 +224,9 @@
     !isSignedIn || mode !== 'shared'
       ? null
       : view !== 'browse'
-        ? readerNotebook?.id ?? null
+        ? readerNotebook && !isReadOnlyCopy(readerNotebook)
+          ? readerNotebook.id
+          : null
         : browsingNotebookId;
 
   // Called on every redraw; opening the notebook that is already open only
@@ -318,12 +332,24 @@
       // Asked per notebook rather than once for the list: you can run one of
       // these and only be allowed to read the next.
       const me = roster.find((m) => m.userId === userId) ?? null;
+      // A notebook this account has been put out of. Its pages are still here
+      // to read and nothing in it can be touched, which is the one thing its
+      // row has to say — so it says that instead of the kind and the count,
+      // neither of which is true of it any more.
+      const removed = isReadOnlyCopy(notebook);
 
       return {
         id: notebook.id,
         name: notebook.name || 'Untitled notebook',
-        meta: `${kind} · ${who}`,
+        meta: removed ? 'You are no longer in this' : `${kind} · ${who}`,
         canAddPage: canWriteInNotebook(notebook, me),
+        canInvite: !removed,
+        canEditBadge: !removed,
+        manageLabel: removed
+          ? 'Your copy'
+          : canManageNotebook(notebook, userId)
+            ? 'Manage notebook'
+            : 'Who is in it',
         pill: me ? pillFor(me, 'You') : undefined,
         pages: (pages.get(notebook.id) ?? []).map((page) => ({
           id: page.id,
@@ -482,6 +508,14 @@
     const notebook =
       books.find((n) => n.id === notebookId) ??
       (readerNotebook?.id === notebookId ? readerNotebook : null);
+    // A notebook this account has been removed from is kept on the device but
+    // is nothing to do with the server any more: a channel filtered to it
+    // would carry nothing, and a presence entry in it would be announcing
+    // somebody who is not there.
+    if (isReadOnlyCopy(notebook)) {
+      closeSharedLive();
+      return;
+    }
     const me = (members.get(notebookId) ?? []).find((m) => m.userId === userId);
     const live = notebook?.kind !== 'broadcast' || canWriteInNotebook(notebook, me ?? null);
     openSharedLive({ notebookId, userId, live, onChange: remoteSharedChange });
@@ -675,6 +709,45 @@
   /** Change the two letters and the colour you are known by in one notebook. */
   function openBadgePicker(notebookId: string) {
     badgeNotebook = sharedNotebooks.find((n) => n.id === notebookId) ?? null;
+  }
+
+  /**
+   * Open the roster, and — for whoever owns the notebook — everything that
+   * runs it. The same entry for both, because a member wanting to know who
+   * else is here and an owner wanting to remove one of them are looking for
+   * the same list.
+   */
+  function openManage(notebookId: string) {
+    managingNotebook = sharedNotebooks.find((n) => n.id === notebookId) ?? null;
+  }
+
+  /**
+   * Something in that sheet changed on the server. Force past the pull's
+   * throttle — a role that has just been changed has to be the one on screen,
+   * and the sheet stays open on top of the redrawn list.
+   */
+  async function manageChanged() {
+    const id = managingNotebook?.id ?? null;
+    await loadShared({ force: true });
+    if (id) managingNotebook = sharedNotebooks.find((n) => n.id === id) ?? null;
+  }
+
+  /**
+   * The notebook is gone from this device — left, or a removed copy thrown
+   * away. Anything of it that was on screen goes with it.
+   */
+  async function manageGone(message: string) {
+    const id = managingNotebook?.id ?? null;
+    managingNotebook = null;
+    showNotice(message);
+    if (id) {
+      if (browsingNotebookId === id) browsingNotebookId = null;
+      if (readerNotebook?.id === id) backToBrowse();
+      expanded.delete(`${SHARED_KEY_PREFIX}::${id}`);
+      expanded = expanded;
+      persistState();
+    }
+    await loadShared({ force: true });
   }
 
   async function badgeSaved() {
@@ -1443,9 +1516,13 @@
         {/if}
         <span class="byline-sep">·</span>
         <!-- Said plainly rather than left to the padlock on the list row: this
-             is where somebody finds out why there is no pencil. -->
-        <span>
-          {#if readerPage.editMode === 'anyone'}
+             is where somebody finds out why there is no pencil. Being out of
+             the notebook altogether comes first, because it is the answer that
+             overrides the page's own. -->
+        <span class:byline-removed={readerRemoved}>
+          {#if readerRemoved}
+            You are no longer in this notebook
+          {:else if readerPage.editMode === 'anyone'}
             Anyone here can edit
           {:else if readerPage.authorId === myUserId}
             Only you can edit
@@ -1643,6 +1720,7 @@
               on:deletePage={(e) => removeSharedPageById(e.detail.pageId)}
               on:invite={(e) => openInvite(e.detail)}
               on:editBadge={(e) => openBadgePicker(e.detail)}
+              on:manage={(e) => openManage(e.detail)}
             />
           {/if}
 
@@ -1691,6 +1769,18 @@
     destinations={copyDestinations}
     on:copied={(e) => pageCopied(e.detail.name)}
     on:close={() => (copying = null)}
+  />
+{/if}
+
+{#if managingNotebook}
+  <SharedNotebookAdmin
+    notebook={managingNotebook}
+    members={sharedMembersByNotebook.get(managingNotebook.id) ?? []}
+    pages={sharedPagesByNotebook.get(managingNotebook.id) ?? []}
+    userId={myUserId}
+    on:changed={manageChanged}
+    on:gone={(e) => manageGone(e.detail)}
+    on:close={() => (managingNotebook = null)}
   />
 {/if}
 

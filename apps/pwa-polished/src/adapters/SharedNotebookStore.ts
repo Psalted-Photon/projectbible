@@ -18,9 +18,17 @@
  * page was taken out — and deleting the local copy is the correct answer
  * rather than a data loss.
  *
+ * With one exception, added in phase 7: a whole notebook that stops coming
+ * back is kept and marked `removedAt` instead of being deleted, along with its
+ * members and its pages. Being removed from a study group should not make the
+ * evening you spent writing in it vanish off your phone without a word. The
+ * copy left behind is inert — every permission answers no for it — and its
+ * owner can throw it away whenever they like.
+ *
  * Phase 1 reads. Phase 2 makes one and joins one. Phase 3 writes in one.
  * Phase 4 stamps each save with who wrote which paragraph, and lets a member
- * change the badge they are known by.
+ * change the badge they are known by. Phase 7 runs one: the roster, roles,
+ * removing somebody, the code, and switching what kind of notebook it is.
  */
 
 import { supabase } from '../lib/supabase/client';
@@ -49,6 +57,13 @@ export interface SharedNotebook {
   rev: number;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * Set once this account is no longer in the notebook — removed, or the
+   * notebook deleted. Null for every notebook you are actually in. A notebook
+   * carrying a date here is a read-only keepsake: see sharedPermissions, where
+   * it is the first thing every rule asks about.
+   */
+  removedAt: Date | null;
 }
 
 export interface SharedNotebookMember {
@@ -124,6 +139,7 @@ function toNotebook(row: DBSharedNotebook): SharedNotebook {
     rev: row.rev,
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
+    removedAt: row.removedAt ? new Date(row.removedAt) : null,
   };
 }
 
@@ -426,9 +442,21 @@ export class SharedNotebookStoreImpl {
       const members = (membersRes.data ?? []).map(rowToDBMember);
       const pages = (pagesRes.data ?? []).map(rowToDBPage);
 
-      let changed = await replaceAll('shared_notebooks', notebooks, () => true);
-      changed = (await replaceAll('shared_notebook_members', members, () => true)) || changed;
-      changed = (await replaceAll('shared_notebook_pages', pages, () => true)) || changed;
+      // A notebook that has stopped coming back is one this account is no
+      // longer in. Its rows stay — see the note at the top of this file — and
+      // the rows underneath it stay with it, because a notebook kept as
+      // something to read needs its pages and the badges that go on them.
+      const stillIn = new Set(notebooks.map((n) => n.id));
+      const gone = await this.markMissingNotebooksRemoved(stillIn);
+
+      let changed = gone.size > 0;
+      changed = (await replaceAll('shared_notebooks', notebooks, () => false)) || changed;
+      changed =
+        (await replaceAll('shared_notebook_members', members, (row) => !gone.has(row.notebookId))) ||
+        changed;
+      changed =
+        (await replaceAll('shared_notebook_pages', pages, (row) => !gone.has(row.notebookId))) ||
+        changed;
 
       this.lastPullAt = Date.now();
       if (changed) announce();
@@ -439,6 +467,31 @@ export class SharedNotebookStoreImpl {
     } finally {
       this.pulling = false;
     }
+  }
+
+  /**
+   * Mark every local notebook the pull did not return, and say which they are.
+   *
+   * Called with the ids that did come back, so it answers both questions at
+   * once: which notebooks have gone, and — through the returned set — which
+   * members and pages must be spared by the reconciliation that follows.
+   *
+   * Stamped once. A notebook already carrying a date keeps the one it has, so
+   * the line the person reads goes on saying when it happened rather than
+   * quietly becoming "just now" on every pull.
+   */
+  private async markMissingNotebooksRemoved(stillIn: Set<string>): Promise<Set<string>> {
+    const gone = new Set<string>();
+    const local = await getAll<DBSharedNotebook>('shared_notebooks');
+    for (const row of local) {
+      if (stillIn.has(row.id)) continue;
+      gone.add(row.id);
+      if (row.removedAt) continue;
+      await writeTransaction('shared_notebooks', (store) =>
+        store.put({ ...row, removedAt: Date.now() }),
+      );
+    }
+    return gone;
   }
 
   // ── Making one, and joining one ──────────────────────────────────────────
@@ -601,6 +654,9 @@ export class SharedNotebookStoreImpl {
       rev: Number(row.rev ?? 1),
       createdAt: new Date(ms(row.created_at)),
       updatedAt: new Date(ms(row.updated_at)),
+      // Nothing to be removed from: a signed-out reader was never a member,
+      // and this copy is held in memory for as long as they have it open.
+      removedAt: null,
     };
 
     return {
@@ -662,6 +718,13 @@ export class SharedNotebookStoreImpl {
   private plainError(message: string): Error {
     if (/row-level security/i.test(message)) {
       return new Error('You do not have permission to write in this notebook');
+    }
+    // What PostgREST says when an update matched no row. Every update here
+    // asks for the row back, so a policy that refuses one reads as "nothing
+    // came back" rather than as a refusal — the same sentence either way, and
+    // not one to show anybody.
+    if (/multiple \(or no\) rows returned/i.test(message)) {
+      return new Error('You do not have permission to change that');
     }
     return new Error(message);
   }
@@ -862,6 +925,196 @@ export class SharedNotebookStoreImpl {
     await writeTransaction('shared_notebook_members', (store) => store.put(row));
     announce();
     return toMember(row);
+  }
+
+  // ── Running one ──────────────────────────────────────────────────────────
+
+  /**
+   * Change how the notebook itself works: its name, its kind, who may see it,
+   * and whether the code still lets anybody in.
+   *
+   * A plain UPDATE, because the policy on shared_notebooks already says the
+   * owner and only the owner may write to the row. Anything here that matters
+   * to somebody else is enforced again where it counts —
+   * `can_write_shared_notebook()` reads `kind`, `join_shared_notebook()` reads
+   * `join_open`, `read_public_shared_notebook()` reads `visibility` — so this
+   * changes one row and the rules follow from it rather than being reapplied
+   * in half a dozen places.
+   */
+  async updateNotebook(
+    notebookId: string,
+    changes: {
+      name?: string;
+      kind?: 'group' | 'broadcast';
+      visibility?: 'private' | 'public';
+      joinOpen?: boolean;
+    },
+  ): Promise<SharedNotebook> {
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (changes.name !== undefined) patch.name = changes.name.trim();
+    if (changes.kind !== undefined) patch.kind = changes.kind;
+    if (changes.visibility !== undefined) patch.visibility = changes.visibility;
+    if (changes.joinOpen !== undefined) patch.join_open = changes.joinOpen;
+
+    const { data, error } = await supabase
+      .from('shared_notebooks')
+      .update(patch)
+      .eq('id', notebookId)
+      .select()
+      .single();
+    if (error) throw this.plainError(error.message);
+    if (!data) throw new Error('Only the owner can change this notebook');
+
+    return toNotebook(await this.storeNotebook(data));
+  }
+
+  /**
+   * Issue a new join code, and throw the old one away.
+   *
+   * The way out of a link that has gone further than it was meant to: every
+   * old link, QR code and written-down code stops working the moment this
+   * returns. Nobody already in is affected — they are members, and membership
+   * has nothing to do with the code they arrived by.
+   */
+  async resetJoinCode(notebookId: string): Promise<string> {
+    const { data, error } = await supabase.rpc('reset_shared_notebook_code', {
+      p_notebook_id: notebookId,
+    });
+    if (error) throw this.plainError(error.message);
+    const code = (data ?? '').toString();
+    if (!code) throw new Error('The code was not changed');
+
+    const row = await getOne<DBSharedNotebook>('shared_notebooks', notebookId);
+    if (row) {
+      await writeTransaction('shared_notebooks', (store) =>
+        store.put({ ...row, joinCode: code, updatedAt: Date.now() }),
+      );
+      announce();
+    }
+    return code;
+  }
+
+  /**
+   * Change what somebody may do here.
+   *
+   * The owner's to decide — the policy on the members table lets you write
+   * your own row and lets the owner write anybody's — and the commonest use is
+   * quietening one person rather than removing them: a reader keeps everything
+   * they have written and goes on reading, and simply stops being offered a
+   * pencil.
+   */
+  async setMemberRole(
+    memberId: string,
+    role: 'admin' | 'writer' | 'reader',
+  ): Promise<SharedNotebookMember> {
+    const { data, error } = await supabase
+      .from('shared_notebook_members')
+      .update({ role, updated_at: new Date().toISOString() })
+      .eq('id', memberId)
+      .select()
+      .single();
+    if (error) throw this.plainError(error.message);
+    if (!data) throw new Error('Only the owner can change what people may do');
+
+    const row = rowToDBMember(data);
+    await writeTransaction('shared_notebook_members', (store) => store.put(row));
+    announce();
+    return toMember(row);
+  }
+
+  /**
+   * Take somebody out of the notebook, and decide what happens to their pages.
+   *
+   * The two are asked separately on purpose. Removing a person and deleting
+   * what they wrote are different acts — a group usually wants to keep the
+   * notes and lose the access — so `alsoRemovePages` is a choice made at the
+   * time rather than a consequence of the first one.
+   *
+   * Their pages go first. The order matters: `remove_shared_page` lets the
+   * notebook's owner take out anybody's page, but the roster is what the
+   * server reads to know who the owner is, and a page removed after the person
+   * has gone would be fine while a member row removed first is not recoverable
+   * if the page removal then fails.
+   */
+  async removeMember(
+    member: SharedNotebookMember,
+    opts: { alsoRemovePages?: boolean } = {},
+  ): Promise<void> {
+    if (opts.alsoRemovePages) {
+      const pages = await this.getPages(member.notebookId);
+      for (const page of pages) {
+        if (page.authorId === member.userId) await this.removePage(page.id);
+      }
+    }
+
+    const { error } = await supabase
+      .from('shared_notebook_members')
+      .delete()
+      .eq('id', member.id);
+    if (error) throw this.plainError(error.message);
+
+    await writeTransaction('shared_notebook_members', (store) => store.delete(member.id));
+    announce();
+  }
+
+  /**
+   * Leave a notebook somebody else runs.
+   *
+   * The same DELETE the owner uses, under the half of the policy that says you
+   * may always remove yourself. What you wrote stays — it belongs to the
+   * notebook now — and the local copy goes altogether rather than becoming a
+   * read-only keepsake, because leaving is a decision and does not need to be
+   * softened the way being removed does.
+   */
+  async leaveNotebook(notebookId: string, userId: string): Promise<void> {
+    const mine = await this.getMyMembership(notebookId, userId);
+    if (mine) {
+      const { error } = await supabase
+        .from('shared_notebook_members')
+        .delete()
+        .eq('id', mine.id);
+      if (error) throw this.plainError(error.message);
+    }
+    await this.forgetNotebook(notebookId);
+  }
+
+  /**
+   * Take a notebook off this device, without touching the server.
+   *
+   * What clears away a read-only copy of a notebook this account is no longer
+   * in. It is purely local: a notebook you are still a member of would simply
+   * come back on the next pull, which is the honest behaviour — this is not a
+   * way to leave.
+   */
+  async forgetNotebook(notebookId: string): Promise<void> {
+    const members = await getByIndex<DBSharedNotebookMember>(
+      'shared_notebook_members',
+      'notebookId',
+      notebookId,
+    );
+    for (const row of members) {
+      await writeTransaction('shared_notebook_members', (store) => store.delete(row.id));
+    }
+
+    const pages = await getByIndex<DBSharedNotebookPage>(
+      'shared_notebook_pages',
+      'notebookId',
+      notebookId,
+    );
+    for (const row of pages) {
+      await writeTransaction('shared_notebook_pages', (store) => store.delete(row.id));
+    }
+
+    await writeTransaction('shared_notebooks', (store) => store.delete(notebookId));
+    announce();
+  }
+
+  /** Put a notebook row from the server into IndexedDB, and say so. */
+  private async storeNotebook(row: any): Promise<DBSharedNotebook> {
+    const mapped = rowToDBNotebook(row);
+    await writeTransaction('shared_notebooks', (store) => store.put(mapped));
+    announce();
+    return mapped;
   }
 
   /** Throw away every shared row. Called on sign-out — none of it is ours. */

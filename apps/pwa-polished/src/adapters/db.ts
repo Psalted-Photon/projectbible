@@ -335,6 +335,15 @@ export interface DBSharedNotebook {
   rev: number;
   createdAt: number;
   updatedAt: number;
+  /**
+   * When this device noticed the notebook had stopped coming back from the
+   * pull — you were removed, or the owner deleted it. Local only; the server
+   * has no such column and never sends one, so re-joining clears it by simply
+   * writing the row again. A notebook carrying this is kept as a read-only
+   * copy rather than deleted, which is the one exception to the rule at the
+   * top of SharedNotebookStore.
+   */
+  removedAt?: number | null;
 }
 
 /** One person's place in a shared notebook, and the pill that stands for them. */

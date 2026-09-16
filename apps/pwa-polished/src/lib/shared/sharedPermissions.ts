@@ -21,6 +21,54 @@ import type {
 } from '../../adapters/SharedNotebookStore';
 
 /**
+ * Is this a notebook this account has been put out of?
+ *
+ * The pull keeps such a notebook rather than deleting it, so its pages are
+ * still there to read — and its member rows are still there too, this
+ * account's own among them. That stale row would answer "writer" to every
+ * question below, which is why this is asked first in all of them: what the
+ * server would now refuse, the app must not offer.
+ */
+export function isReadOnlyCopy(notebook: SharedNotebook | null): boolean {
+  return !!notebook?.removedAt;
+}
+
+/**
+ * May this account run the notebook — the roster, the code, what kind of
+ * notebook it is?
+ *
+ * The owner, and nobody else. Migration 012 draws the same line: the UPDATE
+ * policy on shared_notebooks is `owner_id = auth.uid()`, the members table
+ * lets the owner write anybody's row, and `reset_shared_notebook_code()`
+ * refuses everyone else outright. An admin may write in the notebook; running
+ * it is a different thing.
+ */
+export function canManageNotebook(
+  notebook: SharedNotebook | null,
+  userId: string | null,
+): boolean {
+  if (!notebook || !userId || isReadOnlyCopy(notebook)) return false;
+  return notebook.ownerId === userId;
+}
+
+/**
+ * May this account walk out of the notebook?
+ *
+ * Anybody but its owner. Every rule that runs a notebook is written as "the
+ * owner", so an owner who walked out would leave a notebook whose roster,
+ * code and settings nobody at all could change — and the policies in 012
+ * would go on refusing everyone for as long as it existed.
+ */
+export function canLeaveNotebook(
+  notebook: SharedNotebook | null,
+  me: SharedNotebookMember | null,
+  userId: string | null,
+): boolean {
+  if (!notebook || !me || !userId || isReadOnlyCopy(notebook)) return false;
+  return notebook.ownerId !== userId;
+}
+
+/**
  * May this account add a page here, or edit an open one?
  *
  * The same answer `can_write_shared_notebook()` gives: an admin always may, a
@@ -32,7 +80,7 @@ export function canWriteInNotebook(
   notebook: SharedNotebook | null,
   me: SharedNotebookMember | null,
 ): boolean {
-  if (!notebook || !me) return false;
+  if (!notebook || !me || isReadOnlyCopy(notebook)) return false;
   if (me.role === 'admin') return true;
   return me.role === 'writer' && notebook.kind === 'group';
 }
@@ -51,7 +99,7 @@ export function canEditPage(
   me: SharedNotebookMember | null,
   userId: string | null,
 ): boolean {
-  if (!page || !userId) return false;
+  if (!page || !userId || isReadOnlyCopy(notebook)) return false;
   if (page.authorId === userId) return true;
   return page.editMode === 'anyone' && canWriteInNotebook(notebook, me);
 }
@@ -68,7 +116,7 @@ export function canRemovePage(
   notebook: SharedNotebook | null,
   userId: string | null,
 ): boolean {
-  if (!page || !userId) return false;
+  if (!page || !userId || isReadOnlyCopy(notebook)) return false;
   return page.authorId === userId || notebook?.ownerId === userId;
 }
 
@@ -80,8 +128,10 @@ export function canRemovePage(
  */
 export function canSetEditMode(
   page: SharedNotebookPage | null,
+  notebook: SharedNotebook | null,
   userId: string | null,
 ): boolean {
+  if (isReadOnlyCopy(notebook)) return false;
   return !!page && !!userId && page.authorId === userId;
 }
 
@@ -99,6 +149,6 @@ export function canPinPage(
   notebook: SharedNotebook | null,
   userId: string | null,
 ): boolean {
-  if (!page || !notebook || !userId) return false;
+  if (!page || !notebook || !userId || isReadOnlyCopy(notebook)) return false;
   return notebook.ownerId === userId && page.authorId === userId;
 }
