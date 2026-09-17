@@ -12,6 +12,12 @@ import type { DBSyncQueueItem } from '../../adapters/db';
 import { supabase } from '../supabase/client';
 import type { SyncOperation } from './types';
 
+/**
+ * Which account the pending queue was built for. Read before every upload pass
+ * to stop one account's un-uploaded work being written to another's rows.
+ */
+const QUEUE_OWNER_KEY = 'projectbible_queue_owner';
+
 const MAX_RETRIES = 5;
 const RETRY_BASE_MS = 5_000;
 const RETRY_MAX_MS = 15 * 60_000;
@@ -63,6 +69,12 @@ class SyncQueueService {
     let failed = 0;
 
     try {
+      // Nothing goes up until the queue is known to belong to the account that
+      // is signed in now. Every upload path reaches Supabase through here.
+      if (!(await this.guardOwnership())) {
+        return { success: 0, failed: 0 };
+      }
+
       const attemptedKeys = new Set<string>();
       for (;;) {
         const pending = await this.getPendingItems();
@@ -100,6 +112,73 @@ class SyncQueueService {
     }
 
     return { success, failed };
+  }
+
+  /**
+   * Refuse to upload one account's work to another account.
+   *
+   * Nothing in the local stores records who wrote a row, and the queue is kept
+   * across sign-out on purpose so work in flight is not lost. But executeOperation
+   * stamps `user_id` from whoever is signed in at the moment it runs, not from
+   * whoever made the change — so a queue left behind by account A would be
+   * written to the server as account B's data, and there is no getting it back.
+   *
+   * So the device remembers which account it was last queueing for. On a match,
+   * or on a device that has never queued anything, the pass goes ahead. On a
+   * mismatch the queue is dropped: those operations belong to an account that is
+   * not here, and the rows they describe are still in the local stores, so
+   * signing back into A re-uploads them from there. Dropping is recoverable;
+   * uploading to the wrong account is not.
+   *
+   * Only the queue is touched. Clearing the stores themselves is phase 3.
+   *
+   * @returns whether this pass may upload.
+   */
+  private async guardOwnership(): Promise<boolean> {
+    let user: any;
+    try {
+      const { data } = await supabase.auth.getUser();
+      user = data.user;
+    } catch (err: any) {
+      // Supabase aborts auth requests on tab-visibility changes. Transient —
+      // leave the queue alone and let the next pass decide.
+      if (err?.name === 'AbortError') return false;
+      throw err;
+    }
+    // Signed out. processItem would skip every item anyway; stopping here keeps
+    // the queue intact for the next sign-in.
+    if (!user) return false;
+
+    if (typeof localStorage === 'undefined') return true;
+
+    let previous: string | null = null;
+    try {
+      previous = localStorage.getItem(QUEUE_OWNER_KEY);
+    } catch {
+      // Private mode, or storage blocked. Without a reliable record of the
+      // previous account there is no safe way to tell whose queue this is, so
+      // drop it rather than risk uploading it to the wrong one.
+      await this.clear();
+      return false;
+    }
+
+    if (previous === user.id) return true;
+
+    if (previous !== null) {
+      const dropped = await this.getPendingCount();
+      await this.clear();
+      console.warn(
+        `[SyncQueue] Queue belonged to a different account — dropped ${dropped} pending operation(s) rather than uploading them to ${user.id.slice(0, 8)}...`,
+      );
+    }
+    try {
+      localStorage.setItem(QUEUE_OWNER_KEY, user.id);
+    } catch {
+      // Nothing to do — the next pass takes the unreadable-storage path above.
+    }
+    // Either the queue was just dropped, or this device has never queued for
+    // anyone and there was nothing to protect. Both are safe to continue from.
+    return true;
   }
 
   /** Has this item's backoff window elapsed? Fresh items are always ready. */
