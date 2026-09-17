@@ -29,6 +29,11 @@
  * Nothing here is recoverable from the device afterwards. The caller checks
  * `pendingWork()` first and asks, because rows that reached the server come
  * back on the next sign-in and rows that did not are simply gone.
+ *
+ * What brings them back is onSignIn: the applyFn pipeline for the personal
+ * tables, refreshLockFromCloud for the lock and its key slots, and a forced
+ * sharedNotebookStore.pull for the four shared stores. Reading history is the
+ * exception — see HISTORY_STORES below.
  */
 
 import { openDB } from '../../adapters/db';
@@ -61,6 +66,12 @@ const PERSONAL_STORES = [
  * Where this account has been reading. Personal, and not in the backup file —
  * it is a trail rather than something written on purpose — but it would still
  * be the previous account's trail if it stayed.
+ *
+ * Unlike everything else here, this one does not come back. There is no
+ * reading_history table on the server, so nothing was ever uploaded and the
+ * sign-in restore has nothing to fetch. Clearing it is still right — the
+ * alternative is showing account B where account A has been — but it is the
+ * one store where signing out is genuinely a loss rather than a round trip.
  */
 const HISTORY_STORES = ['reading_history'];
 

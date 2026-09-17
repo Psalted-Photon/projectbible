@@ -14,6 +14,7 @@ import { clearPersonalData } from './clearPersonalData';
 import { syncQueue } from './SyncQueueService';
 import { realtimeService } from './RealtimeService';
 import { pullSettings } from './settingsSync';
+import { sharedNotebookStore } from '../../adapters/SharedNotebookStore';
 import { pullAlarmIfUnset } from '../alarm/alarmSync';
 import type { SyncState, SyncTable } from './types';
 
@@ -327,6 +328,32 @@ class SyncService {
       if (navigator.onLine) {
         void syncQueue.processQueue();
       }
+
+      // Bring the shared notebooks back down.
+      //
+      // They are not in the applyFn pipeline and must not be: the shared
+      // tables have no user_id to filter on, the policies in migration 012
+      // decide what comes back, and the reconciliation has to spare pages
+      // whose writing is still in the outbox. So this is its own call.
+      //
+      // Until now nothing pulled them on sign-in — only opening the Shared
+      // tab did, and the back-online listener. That was survivable while
+      // sign-out left them in place; phase 3 clears all four stores, so
+      // without this the Shared tab stays empty after a sign-in until
+      // somebody happens to look at it.
+      //
+      // Not awaited, and outside the timeout above: the pull flushes the
+      // outbox before it reads, so it can take a while, and a sign-in should
+      // not wait on it or fail because of it. The store announces itself when
+      // rows land, which is what the pane already listens to. Forced, because
+      // `clear()` zeroes `lastPullAt` but a sign-in on a device that never
+      // signed out would otherwise fall inside the ten-second window.
+      if (navigator.onLine) {
+        void sharedNotebookStore.pull({ force: true }).catch((err) => {
+          console.warn('[SyncService] Shared notebook pull failed on sign-in:', err);
+        });
+      }
+
       this.signingIn = false;
     }
   }
@@ -342,6 +369,19 @@ class SyncService {
       store.dispose();
     }
     
+    // A sign-out ends the run of sign-ins the throttle was counting.
+    //
+    // `lastSignInSyncAt` exists because Supabase fires SIGNED_IN on every
+    // token refresh, and pulling everything each time a tab regains
+    // visibility would be wasteful. Skipping a pull used to cost nothing: the
+    // rows were still on the device either way. Since phase 3 they are not —
+    // sign-out empties thirteen stores — so a sign-out followed by a sign-in
+    // inside the window would skip the pull and leave somebody looking at an
+    // app with no notes, no journal and no highlights. Forgetting the
+    // timestamp here keeps the refresh throttle and drops the part of it that
+    // had become a way to lose sight of your own work.
+    this.lastSignInSyncAt = 0;
+
     // Take this account's work off the device: the personal stores, the
     // journal lock, the shared notebooks, and the queue along with them.
     //
