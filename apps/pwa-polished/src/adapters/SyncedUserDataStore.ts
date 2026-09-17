@@ -29,6 +29,19 @@ export function subscribeToUserDataRemoteChanges(fn: () => void): () => void {
 }
 
 /**
+ * Tell the subscribers the user data underneath them has changed.
+ *
+ * The apply paths below fire the listeners inline, because they already know
+ * they have written something. This is for the callers that change the stores
+ * without going through them — clearPersonalData empties the tables directly
+ * on sign-out, and until it said so the note icons stayed on screen until the
+ * next reload.
+ */
+export function notifyUserDataChange(): void {
+  userDataChangeListeners.forEach((fn) => fn());
+}
+
+/**
  * Apply remote notes to local IndexedDB
  * Called by SyncService on initial pull
  */

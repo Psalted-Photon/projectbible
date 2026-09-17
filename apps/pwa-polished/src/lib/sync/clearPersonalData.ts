@@ -251,6 +251,29 @@ export async function clearPersonalData(reason: ClearReason = 'sign-out'): Promi
   clearAccountKeys();
   clearDeviceOwner();
 
+  // Tell the screen. Everything above writes to IndexedDB directly, which the
+  // open components have no way of noticing: they load on mount and then wait
+  // to be told. Until this was here, signing out emptied the database and left
+  // the previous account's work on display — the note icons went only because
+  // something else happened to re-render them, and the highlights stayed put
+  // until a manual reload, because they are painted spans rather than reactive
+  // state and clearing the rows does not remove paint already on the page.
+  //
+  // Imported here rather than at the top of the file: the adapters import
+  // SyncService, which imports this module, and they self-register at the
+  // bottom of their own files specifically to keep that cycle from forming.
+  // Guarded, because a sign-out should not fail over a repaint.
+  try {
+    const [{ notifyHighlightChange }, { notifyUserDataChange }] = await Promise.all([
+      import('../../adapters/SyncedHighlightAdapter'),
+      import('../../adapters/SyncedUserDataStore'),
+    ]);
+    notifyHighlightChange();
+    notifyUserDataChange();
+  } catch (err) {
+    console.warn('[ClearData] Could not tell the UI the data is gone:', err);
+  }
+
   console.log(
     reason === 'account-switch'
       ? `[ClearData] Cleared ${cleared} store(s) — a different account signed in`

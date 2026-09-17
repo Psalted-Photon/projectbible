@@ -481,7 +481,17 @@ async function handleRealtimeProgressChange(change: any): Promise<void> {
 import { syncService } from '../lib/sync/SyncService';
 import { realtimeService } from '../lib/sync/RealtimeService';
 import { bumpReadingProgressVersion } from '../stores/readingProgressVersionStore';
-syncService.registerApplyFn('reading_plans', applyRemoteReadingPlans);
+// The bump is here rather than inside applyRemoteReadingPlans because that
+// function returns early on an empty pull, and an empty pull is exactly the
+// case the watchers need to hear about: a device that just signed in has no
+// plan on screen and is waiting to be told whether one is coming. Progress
+// has announced itself since it was written; the plan list never did, so
+// signing in restored the plan to localStorage and left the profile screen
+// still saying there was no reading today until it was reopened.
+syncService.registerApplyFn('reading_plans', async (rows) => {
+  await applyRemoteReadingPlans(rows);
+  bumpReadingProgressVersion();
+});
 syncService.registerApplyFn('reading_progress', (rows) =>
   applyRemoteReadingProgress(rows, { fullPull: true }));
 realtimeService.onTableChange('reading_progress', handleRealtimeProgressChange);

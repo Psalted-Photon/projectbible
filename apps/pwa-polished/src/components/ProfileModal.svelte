@@ -8,6 +8,7 @@
   import { navigationStore, availableTranslations } from '../stores/navigationStore';
   import { translationLabel } from '../lib/bibleData';
   import { readingProgressStore } from '../stores/ReadingProgressStore';
+  import { readingProgressVersion } from '../stores/readingProgressVersionStore';
   import { getDaysAheadBehind, calculateStreak, planDayDateStr } from '@projectbible/core';
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
   import { applyTheme, getSettings, updateSettings } from '../adapters/settings';
@@ -106,7 +107,14 @@
     const authSubscription = supabaseAuthService.onAuthStateChange((event, session) => {
       userProfileStore.setFromSession(session);
       if (event === 'SIGNED_IN' && session?.user?.id) {
-        // SyncService pulls settings + data on sign-in; refresh the widget.
+        // A first look, not the answer. This handler and SyncService's are two
+        // subscribers to the same Supabase emitter, so they run together rather
+        // than in order: the pull that writes the plan into localStorage has
+        // usually not finished when this fires, and reading it here found
+        // nothing and said there was no reading today. The reactive block below
+        // is what settles it once the plan actually lands. This call stays for
+        // the case where the plan was already on the device and no pull is
+        // coming — a sign-in on a device that never signed out.
         void loadReadingPlan();
       }
     });
@@ -127,6 +135,15 @@
   });
 
   $: if (isOpen && currentTab === 'reading') {
+    void loadReadingPlan();
+  }
+
+  // Re-read when a remote pull lands a plan or its progress. ReadingPlanModal
+  // has watched this for the same reason; the profile screen's today-card read
+  // localStorage once and then waited, which is why the plan only appeared
+  // after a manual refresh. Guarded on > 0 so the initial store value does not
+  // count as a change and duplicate the load in onMount.
+  $: if ($readingProgressVersion > 0) {
     void loadReadingPlan();
   }
 
