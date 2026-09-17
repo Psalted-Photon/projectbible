@@ -159,7 +159,6 @@
   // gets an inline field. Joining and inviting are the two ends of the same
   // code and share one sheet; `inviteNotebook` is which notebook is being
   // handed out, and null means the sheet is closed.
-  let creatingShared = false;
   let joiningShared = false;
   let inviteNotebook: SharedNotebook | null = null;
   /** Which notebook's badge is being changed. Null means the picker is closed. */
@@ -178,6 +177,19 @@
    */
   let copying:
     | { mode: 'to-shared' | 'to-local'; title: string; label: string; text: string }
+    | null = null;
+  /**
+   * What the create sheet is being opened for. A shared notebook made from the
+   * + button is just itself; one made from a local notebook's ⋯ menu is about
+   * to be filled with that notebook's pages; one made from the copy sheet is
+   * somewhere for the page already waiting in `copying` to land. The sheet is
+   * the same three questions either way — see SharedNotebookCreate — so this
+   * says what happens once they have been answered rather than what is asked.
+   */
+  let creatingSharedFor:
+    | { kind: 'plain' }
+    | { kind: 'notebook'; notebook: Notebook }
+    | { kind: 'page' }
     | null = null;
 
   // ─── Editor state ───────────────────────────────────────────────────────────
@@ -697,12 +709,27 @@
   }
 
   /**
-   * A notebook made here is opened here: the list redraws around it and the
-   * invite sheet follows straight on, because a shared notebook with nobody in
-   * it is not yet doing anything.
+   * A notebook has been made. What happens next is whatever it was made for.
+   *
+   * Made on its own, the invite sheet follows straight on, because a shared
+   * notebook with nobody in it is not yet doing anything. Made to hold
+   * something, the copying comes first — the notebook is not what was asked
+   * for, it is where the thing that was asked for is going.
    */
   async function sharedCreated(notebook: SharedNotebook) {
-    creatingShared = false;
+    const job = creatingSharedFor;
+    creatingSharedFor = null;
+
+    if (job?.kind === 'notebook') {
+      await copyNotebookInto(job.notebook, notebook);
+      return;
+    }
+
+    if (job?.kind === 'page') {
+      await copyWaitingPageInto(notebook);
+      return;
+    }
+
     showNotice(`Created “${notebook.name}”`);
     await loadShared({ force: true });
     inviteNotebook = notebook;
@@ -1076,6 +1103,103 @@
       showNotice(`Kept in “${destinationName}”`);
       await loadAll();
     }
+  }
+
+  /**
+   * Hand a whole notebook of your own to a group.
+   *
+   * The destination does not exist yet, so this is the create sheet and then
+   * the pages: the same three questions a shared notebook always asks, with the
+   * name carried over and a line saying the local one stays where it is.
+   */
+  async function copyNotebookToShared(notebookId: string) {
+    const notebook = notebooks.find((n) => n.id === notebookId);
+    if (!notebook) return;
+    // The pages are needed to copy, and the Local side may have been loaded
+    // before any of them were written.
+    if (!pagesByNotebook.has(notebookId)) await loadAll();
+    creatingSharedFor = { kind: 'notebook', notebook };
+  }
+
+  /**
+   * The notebook has been made; now fill it.
+   *
+   * One page at a time, in the order the list shows them — each is its own row
+   * and its own stamp, and there is no call that takes a batch. A failure part
+   * of the way through leaves the notebook made and the pages that landed in
+   * it, which is why the notice says how many went rather than claiming the
+   * whole thing. An empty local notebook makes an empty shared one, which is
+   * what asking for it should do.
+   */
+  async function copyNotebookInto(source: Notebook, destination: SharedNotebook) {
+    const pages = pagesFor(source.id);
+    let sent = 0;
+    let problem: string | null = null;
+
+    for (const page of pages) {
+      try {
+        await sharedNotebookStore.createPage({
+          notebookId: destination.id,
+          title: (page.title ?? '').trim(),
+          text: page.text,
+        });
+        sent += 1;
+      } catch (err) {
+        console.error('[NotesPane] notebook copy failed:', err);
+        problem = (err as Error)?.message || 'Some pages could not be copied';
+        break;
+      }
+    }
+
+    await loadShared({ force: true });
+
+    if (problem) {
+      showNotice(
+        sent === 0
+          ? `“${destination.name}” was made, but no pages could be copied. ${problem}`
+          : `“${destination.name}” was made with ${countPages(sent)} of ${pages.length}. ${problem}`,
+        'error',
+      );
+    } else if (pages.length === 0) {
+      showNotice(`Copied “${source.name}” — it had no pages`);
+    } else {
+      showNotice(`Copied “${source.name}” with ${countPages(sent)}`);
+    }
+
+    // Open the roster rather than the invite sheet: the notebook has just been
+    // filled, and who is in it is the next thing worth deciding — the code is
+    // on that sheet anyway.
+    expanded.add(`${SHARED_KEY_PREFIX}::${destination.id}`);
+    expanded = expanded;
+    browsingNotebookId = destination.id;
+    persistState();
+    openManage(destination.id);
+  }
+
+  /** The page that was waiting on the copy sheet, into the notebook just made. */
+  async function copyWaitingPageInto(destination: SharedNotebook) {
+    const job = copying;
+    if (!job) return;
+    try {
+      await sharedNotebookStore.createPage({
+        notebookId: destination.id,
+        title: job.title,
+        text: job.text,
+      });
+      await pageCopied(destination.name);
+    } catch (err) {
+      console.error('[NotesPane] page copy into new notebook failed:', err);
+      copying = null;
+      showNotice(
+        `“${destination.name}” was made, but the page could not be copied into it`,
+        'error',
+      );
+      await loadShared({ force: true });
+    }
+  }
+
+  function countPages(n: number): string {
+    return n === 1 ? '1 page' : `${n} pages`;
   }
 
   function openEditor() {
@@ -1684,7 +1808,7 @@
       {#if mode === 'local'}
         <button class="primary-btn" on:click={newQuickNote}>+ New note</button>
       {:else}
-        <button class="primary-btn shared" on:click={() => (creatingShared = true)}>
+        <button class="primary-btn shared" on:click={() => (creatingSharedFor = { kind: 'plain' })}>
           + New
         </button>
       {/if}
@@ -1736,7 +1860,9 @@
               canRenameNotebook
               canDeleteNotebook
               canDeletePage
+              canCopyNotebookToShared={isSignedIn}
               on:toggle={(e) => toggleNode(e.detail)}
+              on:copyToShared={(e) => copyNotebookToShared(e.detail)}
               on:openPage={(e) => openLocalPageById(e.detail.pageId)}
               on:newPage={(e) => newPage(e.detail)}
               on:rename={(e) => renameNotebook(e.detail.id, e.detail.name)}
@@ -1816,10 +1942,21 @@
   {/if}
 </div>
 
-{#if creatingShared}
+{#if creatingSharedFor}
+  <!-- One sheet for all three: the two awkward-to-change choices have to be
+       made whatever the notebook is being made for, so only the words change. -->
   <SharedNotebookCreate
+    heading={creatingSharedFor.kind === 'plain' ? 'New shared notebook' : 'Copy to a shared notebook'}
+    confirmLabel={creatingSharedFor.kind === 'plain' ? 'Create' : 'Copy'}
+    busyLabel={creatingSharedFor.kind === 'plain' ? 'Creating…' : 'Copying…'}
+    initialName={creatingSharedFor.kind === 'notebook' ? creatingSharedFor.notebook.name : ''}
+    note={creatingSharedFor.kind === 'notebook'
+      ? 'A copy. Your own notebook stays exactly where it is, and later changes on either side stay where they are made.'
+      : creatingSharedFor.kind === 'page'
+        ? 'A copy of this page goes into the notebook once it is made.'
+        : ''}
     on:created={(e) => sharedCreated(e.detail)}
-    on:close={() => (creatingShared = false)}
+    on:close={() => (creatingSharedFor = null)}
   />
 {/if}
 
@@ -1839,7 +1976,9 @@
   />
 {/if}
 
-{#if copying}
+<!-- Out of the way, not closed, while the create sheet is up: the page it is
+     holding is what that notebook is being made for. -->
+{#if copying && !creatingSharedFor}
   <CopyPageSheet
     mode={copying.mode}
     title={copying.title}
@@ -1847,6 +1986,7 @@
     text={copying.text}
     destinations={copyDestinations}
     on:copied={(e) => pageCopied(e.detail.name)}
+    on:createNew={() => (creatingSharedFor = { kind: 'page' })}
     on:close={() => (copying = null)}
   />
 {/if}

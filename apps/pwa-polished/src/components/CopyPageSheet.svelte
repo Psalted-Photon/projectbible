@@ -41,15 +41,18 @@
   const dispatch = createEventDispatcher<{
     close: void;
     copied: { id: string; name: string };
+    createNew: void;
   }>();
 
   let busy = false;
   let problem = '';
 
   $: heading = mode === 'to-shared' ? 'Send a copy to' : 'Keep a copy in';
+  // No longer a dead end in `to-shared` mode: the choice above the list is the
+  // answer to not being in one yet, so this only says where things stand.
   $: emptyText =
     mode === 'to-shared'
-      ? 'You are not in a shared notebook you can write in. Make one, or join one with a code.'
+      ? 'You are not in a shared notebook you can write in yet.'
       : 'You have no notebooks of your own yet.';
 
   async function copyTo(destination: CopyDestination) {
@@ -113,6 +116,19 @@
         side stay where they are made.
       </span>
     </p>
+
+    {#if mode === 'to-shared'}
+      <!-- The destination might not exist yet, which is the commonest case the
+           first time anybody opens this. It dispatches rather than doing the
+           work: the create sheet is the caller's to open, and stacking one
+           sheet inside another is worse than swapping them. -->
+      <div class="cp-list cp-list-new">
+        <button class="cp-choice cp-choice-new" disabled={busy} on:click={() => dispatch('createNew')}>
+          <span class="cp-choice-name">New shared notebook</span>
+          <span class="cp-choice-note">Make one, and this page goes in it.</span>
+        </button>
+      </div>
+    {/if}
 
     {#if destinations.length === 0}
       <p class="cp-empty">{emptyText}</p>
@@ -238,6 +254,23 @@
   .cp-choice:disabled {
     opacity: 0.5;
     cursor: default;
+  }
+
+  /* Sits above the destinations rather than among them: a dashed edge so it
+     reads as "somewhere new" beside the solid rows of places that exist. */
+  .cp-list-new {
+    margin-bottom: 10px;
+  }
+
+  .cp-choice-new {
+    border-style: dashed;
+    border-color: #3a3a3a;
+  }
+  .cp-choice-new:hover:not(:disabled) {
+    border-color: #2dd4bf;
+  }
+  .cp-choice-new .cp-choice-name {
+    color: #5eead4;
   }
 
   .cp-choice-name {

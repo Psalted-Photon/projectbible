@@ -17,7 +17,22 @@
 
   const dispatch = createEventDispatcher<{ close: void; created: SharedNotebook }>();
 
-  let name = '';
+  /**
+   * The wording. The sheet is also how a notebook of your own is handed to a
+   * group and how a single page finds somewhere to land, and in both of those
+   * "New shared notebook" / "Create" would describe the smaller half of what is
+   * about to happen. The choices underneath are the same either way, which is
+   * why this is a rewording rather than a second form.
+   */
+  export let heading = 'New shared notebook';
+  export let confirmLabel = 'Create';
+  export let busyLabel = 'Creating…';
+  /** A line under the name saying what else is about to happen, if anything. */
+  export let note = '';
+  /** What the name starts as — the local notebook's, where there is one. */
+  export let initialName = '';
+
+  let name = initialName;
   let kind: 'group' | 'broadcast' = 'group';
   let visibility: 'private' | 'public' = 'private';
   let busy = false;
@@ -55,9 +70,16 @@
     if (e.key === 'Escape') close();
   }
 
-  /** The name is the only thing that has to be filled in — start the caret there. */
-  function focusOnMount(node: HTMLElement) {
-    setTimeout(() => node.focus(), 50);
+  /**
+   * The name is the only thing that has to be filled in — start the caret
+   * there. A name carried over from a local notebook is selected as well, so
+   * typing replaces it rather than landing on the end of it.
+   */
+  function focusOnMount(node: HTMLInputElement) {
+    setTimeout(() => {
+      node.focus();
+      if (initialName) node.select();
+    }, 50);
   }
 
   onMount(() => window.addEventListener('keydown', handleKeydown));
@@ -67,11 +89,15 @@
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="sn-backdrop" on:click={handleBackdropClick}>
-  <div class="sn-sheet" role="dialog" aria-modal="true" aria-label="New shared notebook">
+  <div class="sn-sheet" role="dialog" aria-modal="true" aria-label={heading}>
     <div class="sn-head">
-      <span class="sn-title">New shared notebook</span>
+      <span class="sn-title">{heading}</span>
       <button class="sn-close" on:click={close} aria-label="Close">✕</button>
     </div>
+
+    {#if note}
+      <p class="sn-note">{note}</p>
+    {/if}
 
     <label class="sn-field">
       <span class="sn-label">Name</span>
@@ -143,7 +169,7 @@
     <div class="sn-actions">
       <button class="sn-btn sn-btn-quiet" on:click={close} disabled={busy}>Cancel</button>
       <button class="sn-btn sn-btn-go" on:click={create} disabled={!canCreate}>
-        {busy ? 'Creating…' : 'Create'}
+        {busy ? busyLabel : confirmLabel}
       </button>
     </div>
   </div>
@@ -198,6 +224,13 @@
   }
   .sn-close:hover {
     color: #ccc;
+  }
+
+  .sn-note {
+    margin: -6px 0 16px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: #888;
   }
 
   .sn-field {

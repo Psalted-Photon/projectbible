@@ -63,6 +63,13 @@
     canInvite?: boolean;
     canEditBadge?: boolean;
     /**
+     * Overrides `canCopyNotebookToShared` for this notebook alone. Handing a
+     * notebook of your own to a group is a local-side act, so the list-wide
+     * flag ordinarily settles it; the override is here for the same reason the
+     * others are, so one row can differ without a second list.
+     */
+    canCopyToShared?: boolean;
+    /**
      * The wording for the row menu's entry into whatever runs this notebook,
      * and — by being there at all — whether it has one. A label rather than a
      * flag because what it opens reads differently depending on who you are:
@@ -120,6 +127,11 @@
    * carries a badge to change — a notebook you are not a member of has none.
    */
   export let canEditBadge = false;
+  /**
+   * Offer to copy this whole notebook into a shared one. Local notebooks only,
+   * and only signed in — making a shared notebook is a thing the server does.
+   */
+  export let canCopyNotebookToShared = false;
 
   export let emptyPagesText = 'No pages yet.';
   /**
@@ -139,6 +151,7 @@
     invite: string;
     editBadge: string;
     manage: string;
+    copyToShared: string;
   }>();
 
   let renamingId: string | null = null;
@@ -152,6 +165,7 @@
     canDeleteNotebook ||
     (notebook.canInvite ?? canInvite) ||
     ((notebook.canEditBadge ?? canEditBadge) && !!notebook.pill) ||
+    (notebook.canCopyToShared ?? canCopyNotebookToShared) ||
     !!notebook.manageLabel;
 
   function keyFor(id: string): string {
@@ -304,6 +318,14 @@
                 openMenuId = null;
                 dispatch('editBadge', notebook.id);
               }}>Your badge</button
+            >
+          {/if}
+          {#if notebook.canCopyToShared ?? canCopyNotebookToShared}
+            <button
+              on:click={() => {
+                openMenuId = null;
+                dispatch('copyToShared', notebook.id);
+              }}>Copy to shared</button
             >
           {/if}
           {#if canRenameNotebook}
@@ -547,8 +569,11 @@
     color: #f08a7a;
   }
 
+  /* Wraps: a local notebook now offers four things, and a narrow panel would
+     otherwise squeeze them all onto one line until none of them reads. */
   .row-menu {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
     padding: 2px 10px 6px 26px;
   }
