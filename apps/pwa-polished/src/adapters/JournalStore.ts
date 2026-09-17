@@ -1,5 +1,5 @@
 import type { JournalStore, JournalEntry } from '@projectbible/core';
-import { generateId, readTransaction, writeTransaction } from './db.js';
+import { generateId, readTransaction, withOwner, writeTransaction } from './db.js';
 import type { DBJournalEntry } from './db.js';
 
 export class IndexedDBJournalStore implements JournalStore {
@@ -160,8 +160,12 @@ export class IndexedDBJournalStore implements JournalStore {
 
           // Always update timestamp
           entry.updatedAt = Date.now();
-          
-          const putRequest = store.put(entry);
+
+          // Own transaction, so the stamping wrapper in db.ts is not in play.
+          // An entry written before ownership existed, or while signed out,
+          // is claimed here by whoever is editing it; one already stamped is
+          // left alone.
+          const putRequest = store.put(withOwner(entry));
           
           putRequest.onsuccess = () => resolve();
           putRequest.onerror = () => reject(putRequest.error);
@@ -195,7 +199,7 @@ export class IndexedDBJournalStore implements JournalStore {
         entry.title = fields.title;
         entry.text = fields.text;
         entry.updatedAt = fields.updatedAt;
-        const putRequest = store.put(entry);
+        const putRequest = store.put(withOwner(entry));
         putRequest.onsuccess = () => resolve();
         putRequest.onerror = () => reject(putRequest.error);
       };

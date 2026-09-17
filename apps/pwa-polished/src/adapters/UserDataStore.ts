@@ -1,5 +1,5 @@
 import type { UserDataStore, UserNote, UserHighlight, UserWordHighlight, UserBookmark, BCV, HighlightStyle } from '@projectbible/core';
-import { generateId, readTransaction, writeTransaction } from './db.js';
+import { generateId, readTransaction, withOwner, writeTransaction } from './db.js';
 import type { DBUserNote, DBUserHighlight, DBUserWordHighlight, DBUserBookmark } from './db.js';
 
 // ---------------------------------------------------------------------------
@@ -153,8 +153,10 @@ export class IndexedDBUserDataStore implements UserDataStore {
           
           note.text = text;
           note.updatedAt = Date.now();
-          
-          const putRequest = store.put(note);
+
+          // Own transaction, so the stamping wrapper in db.ts is not in play —
+          // stamp by hand. A note already naming an owner keeps it.
+          const putRequest = store.put(withOwner(note));
           
           putRequest.onsuccess = () => resolve();
           putRequest.onerror = () => reject(putRequest.error);

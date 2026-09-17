@@ -1,4 +1,4 @@
-import { openDB, readTransaction, writeTransaction } from "../adapters/db";
+import { openDB, readTransaction, withOwner, writeTransaction } from "../adapters/db";
 import { normalizeBookName } from "../lib/bibleData";
 
 export type ChapterActionType = "checked" | "unchecked";
@@ -54,6 +54,13 @@ export interface ReadingProgressEntry {
   catchUpAdjustment?: CatchUpAdjustment;
   /** Harmony plans: verse-range + section level progress */
   harmonySections?: HarmonySectionProgress[];
+  /**
+   * The account this row belongs to. Carried through serialize/deserialize
+   * rather than left to the stamping wrapper in db.ts, because serialize
+   * rebuilds the record field by field and would otherwise drop an existing
+   * owner on every rewrite. See PERSONAL_STORES.
+   */
+  ownerId?: string;
 }
 
 /**
@@ -270,6 +277,9 @@ export class ReadingProgressStore {
             );
             winner = {
               ...incoming,
+              // The row on the device already names an account; a pulled row
+              // does not, so the existing stamp is the one that survives.
+              ownerId: existing.ownerId ?? incoming.ownerId,
               chaptersRead: mergedChapters,
               harmonySections: mergedSections,
               completed,
@@ -280,13 +290,16 @@ export class ReadingProgressStore {
             // Re-derive completed flag from merged chapter state
             winner = recomputeCompletion(winner);
           }
-          store.put(this.serialize(winner));
+          // Own transaction, so the stamping wrapper in db.ts is not in play —
+          // stamp by hand. The merged winner keeps the existing row's owner
+          // where there was one.
+          store.put(withOwner(this.serialize(winner)));
           pending--;
           if (pending === 0) resolve();
         };
         getReq.onerror = () => {
           // On read error, just write the incoming entry
-          store.put(this.serialize(incoming));
+          store.put(withOwner(this.serialize(incoming)));
           pending--;
           if (pending === 0) resolve();
         };
@@ -567,6 +580,7 @@ export class ReadingProgressStore {
       chaptersRead: JSON.stringify(entry.chaptersRead),
       catchUpAdjustment: entry.catchUpAdjustment ? JSON.stringify(entry.catchUpAdjustment) : undefined,
       harmonySections: entry.harmonySections ? JSON.stringify(entry.harmonySections) : undefined,
+      ownerId: entry.ownerId,
     };
   }
 
@@ -586,6 +600,7 @@ export class ReadingProgressStore {
       harmonySections: record.harmonySections
         ? JSON.parse(record.harmonySections)
         : undefined,
+      ownerId: record.ownerId ?? undefined,
     };
   }
 }

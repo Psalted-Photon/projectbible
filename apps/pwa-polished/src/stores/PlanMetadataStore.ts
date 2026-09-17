@@ -12,6 +12,13 @@ export interface PlanMetadata {
   lastSyncedAt?: number;
   syncConflicts?: any[];
   catchUpAdjustment?: any;
+  /**
+   * The account this row belongs to. Carried through serialize/deserialize
+   * rather than left to the stamping wrapper in db.ts, because serialize
+   * rebuilds the record field by field and would otherwise drop an existing
+   * owner on every rewrite. See PERSONAL_STORES.
+   */
+  ownerId?: string;
 }
 
 export class PlanMetadataStore {
@@ -80,6 +87,7 @@ export class PlanMetadataStore {
       catchUpAdjustment: metadata.catchUpAdjustment
         ? JSON.stringify(metadata.catchUpAdjustment)
         : undefined,
+      ownerId: metadata.ownerId,
     };
   }
 
@@ -96,6 +104,7 @@ export class PlanMetadataStore {
       catchUpAdjustment: record.catchUpAdjustment
         ? JSON.parse(record.catchUpAdjustment)
         : undefined,
+      ownerId: record.ownerId ?? undefined,
     };
   }
 }

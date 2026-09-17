@@ -9,6 +9,7 @@
  */
 
 import { supabase } from '../supabase/client';
+import { adoptUnownedRows } from './adoptOwnership';
 import { syncQueue } from './SyncQueueService';
 import { realtimeService } from './RealtimeService';
 import { pullSettings } from './settingsSync';
@@ -257,6 +258,23 @@ class SyncService {
     const skipPull = Date.now() - this.lastSignInSyncAt < 60_000;
 
     this.updateState({ status: 'syncing', activity: 'checking' });
+
+    // Settle who this device is keeping rows for, before anything is written
+    // or pulled. This compares the account signing in against the one the
+    // device was last queueing for — dropping that queue on a mismatch — and
+    // then records the new one, which is what stamps every row saved from
+    // here on. Then the rows that were already here when ownership arrived
+    // are claimed, once per device.
+    //
+    // Both sit outside the timeout and ahead of the throttle: neither touches
+    // the network, and a sign-in that skips the pull still needs to know
+    // whose rows it is writing.
+    // Guarded: a sign-in is not worth failing over this. Left unsettled, the
+    // first upload pass settles it instead, exactly as before phase 2.
+    await syncQueue.settleOwnership(userId).catch((err) => {
+      console.warn('[SyncService] Could not settle device ownership:', err);
+    });
+    await adoptUnownedRows(userId);
 
     try {
       await withTimeout((async () => {

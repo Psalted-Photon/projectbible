@@ -8,7 +8,7 @@
  * sync — components should import that singleton, not this class.
  */
 
-import { generateId, writeTransaction } from './db.js';
+import { generateId, withOwner, writeTransaction } from './db.js';
 import type { DBNotebook, DBNotebookPage } from './db.js';
 
 export interface Notebook {
@@ -113,7 +113,9 @@ export class IndexedDBNotebookStore {
         }
         row.name = name;
         row.updatedAt = Date.now();
-        const putRequest = store.put(row);
+        // Own transaction, so the stamping wrapper in db.ts is not in play —
+        // stamp by hand. A notebook already naming an owner keeps it.
+        const putRequest = store.put(withOwner(row));
         putRequest.onsuccess = () => resolve();
         putRequest.onerror = () => reject(putRequest.error);
       };
@@ -228,7 +230,9 @@ export class IndexedDBNotebookStore {
         if (updates.notebookId !== undefined) row.notebookId = updates.notebookId;
         if (updates.sortOrder !== undefined) row.sortOrder = updates.sortOrder;
         row.updatedAt = Date.now();
-        const putRequest = store.put(row);
+        // Own transaction, so the stamping wrapper in db.ts is not in play —
+        // stamp by hand. A page already naming an owner keeps it.
+        const putRequest = store.put(withOwner(row));
         putRequest.onsuccess = () => resolve();
         putRequest.onerror = () => reject(putRequest.error);
       };

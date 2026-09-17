@@ -173,8 +173,25 @@ function styleForUpload(style: string | undefined): unknown {
   }
 }
 
+/**
+ * Drop the owner a backed-up row was carrying when it left its own device.
+ *
+ * Restoring a backup into an account makes those rows that account's — that
+ * is what restoring means. Left in place, a stamp naming somebody else would
+ * survive the write (the stamping wrapper in db.ts keeps an owner it finds),
+ * and the rows would sit in the stores belonging to an account that is not
+ * signed in. Removing it lets the wrapper claim them for whoever is restoring.
+ */
+function unowned<T extends object>(row: T): T {
+  if ('ownerId' in row) {
+    const { ownerId: _dropped, ...rest } = row as Record<string, unknown>;
+    return rest as T;
+  }
+  return row;
+}
+
 async function putAndQueue(storeName: string, row: object, op: SyncOperation): Promise<void> {
-  await writeTransaction(storeName, (store) => store.put(row));
+  await writeTransaction(storeName, (store) => store.put(unowned(row)));
   await syncQueue.enqueue(op);
 }
 
@@ -440,7 +457,7 @@ async function restorePlans(data: BackupData): Promise<string[]> {
     if (!isRow(row, { planId: 'string' })) continue;
     const planId = row.planId as string;
     if (addedIds.has(planId) && !localDetails.has(planId)) {
-      await writeTransaction('plan_metadata', (store) => store.put(row));
+      await writeTransaction('plan_metadata', (store) => store.put(unowned(row)));
     }
   }
 

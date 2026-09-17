@@ -1,4 +1,5 @@
 import { logInstallIfActive } from '../lib/install-log';
+import { getDeviceOwner } from '../lib/sync/deviceOwner';
 /**
  * IndexedDB schema and utilities for PWA storage
  * 
@@ -14,7 +15,7 @@ import { logInstallIfActive } from '../lib/install-log';
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 37; // Migration 37: add shared_outbox (edits made with no signal)
+const DB_VERSION = 38; // Migration 38: ownerId on the personal stores (see PERSONAL_STORES)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -226,6 +227,12 @@ export interface DBUserNote {
   text: string;
   createdAt: number;
   updatedAt: number;
+  /**
+   * The account this row belongs to. Absent on rows written before ownership
+   * was recorded, and on rows written while signed out; both are adopted by
+   * the next account to sign in. See PERSONAL_STORES.
+   */
+  ownerId?: string;
 }
 
 export interface DBUserHighlight {
@@ -237,6 +244,12 @@ export interface DBUserHighlight {
   /** JSON-serialized HighlightStyle. Falls back to deriving from `color` when absent. */
   style?: string;
   createdAt: number;
+  /**
+   * The account this row belongs to. Absent on rows written before ownership
+   * was recorded, and on rows written while signed out; both are adopted by
+   * the next account to sign in. See PERSONAL_STORES.
+   */
+  ownerId?: string;
 }
 
 export interface DBUserWordHighlight {
@@ -249,6 +262,12 @@ export interface DBUserWordHighlight {
   wordLength: number;
   style: string; // JSON-serialized HighlightStyle
   createdAt: number;
+  /**
+   * The account this row belongs to. Absent on rows written before ownership
+   * was recorded, and on rows written while signed out; both are adopted by
+   * the next account to sign in. See PERSONAL_STORES.
+   */
+  ownerId?: string;
 }
 
 export interface DBUserBookmark {
@@ -258,6 +277,12 @@ export interface DBUserBookmark {
   verse: number;
   label?: string;
   createdAt: number;
+  /**
+   * The account this row belongs to. Absent on rows written before ownership
+   * was recorded, and on rows written while signed out; both are adopted by
+   * the next account to sign in. See PERSONAL_STORES.
+   */
+  ownerId?: string;
 }
 
 export interface DBJournalEntry {
@@ -267,6 +292,12 @@ export interface DBJournalEntry {
   text: string; // Raw HTML from Lexical
   createdAt: number; // Unix timestamp
   updatedAt: number; // Unix timestamp
+  /**
+   * The account this row belongs to. Absent on rows written before ownership
+   * was recorded, and on rows written while signed out; both are adopted by
+   * the next account to sign in. See PERSONAL_STORES.
+   */
+  ownerId?: string;
 }
 
 /**
@@ -303,6 +334,12 @@ export interface DBNotebook {
   name: string;
   createdAt: number;
   updatedAt: number;
+  /**
+   * The account this row belongs to. Absent on rows written before ownership
+   * was recorded, and on rows written while signed out; both are adopted by
+   * the next account to sign in. See PERSONAL_STORES.
+   */
+  ownerId?: string;
 }
 
 /** One free-form note. Always belongs to a notebook. */
@@ -314,6 +351,12 @@ export interface DBNotebookPage {
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
+  /**
+   * The account this row belongs to. Absent on rows written before ownership
+   * was recorded, and on rows written while signed out; both are adopted by
+   * the next account to sign in. See PERSONAL_STORES.
+   */
+  ownerId?: string;
 }
 
 /**
@@ -1362,6 +1405,90 @@ export function openDB(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
+// ─── Ownership stamping ────────────────────────────────────────────────────
+//
+// The stores below hold one person's own work, and each of their rows carries
+// an `ownerId` naming the account it belongs to. Stamping happens here rather
+// than at the thirty-odd call sites that write them, because a call site
+// missed is a row that silently cannot answer whose it is — and phases 3 to 5
+// decide what to keep and what to clear from exactly that answer.
+//
+// Not listed here: the shared notebook stores, which hold other people's rows
+// and already carry an authorId of their own; the pack and reference stores,
+// which are the same for everybody; and the sync queue, which phase 1 guards
+// separately.
+
+const PERSONAL_STORES = new Set([
+  'user_notes',
+  'user_highlights',
+  'user_word_highlights',
+  'user_bookmarks',
+  'journal_entries',
+  'notebooks',
+  'notebook_pages',
+  'reading_progress',
+  'plan_metadata',
+]);
+
+/** Whether rows written to this store should carry an `ownerId`. */
+export function isPersonalStore(storeName: string): boolean {
+  return PERSONAL_STORES.has(storeName);
+}
+
+/**
+ * Stamp a personal-store record by hand.
+ *
+ * For the handful of places that open their own readwrite transaction rather
+ * than going through writeTransaction — a read-modify-write needs the live
+ * store object to call `get` on it, which the helpers do not hand back. Most
+ * of those put back a row that was already stamped when it was created; this
+ * is for the ones that build a record from scratch.
+ */
+export function withOwner<T extends Record<string, any>>(record: T): T {
+  if (record && typeof record === 'object' && !record.ownerId) {
+    const owner = getDeviceOwner();
+    if (owner) return { ...record, ownerId: owner };
+  }
+  return record;
+}
+
+/**
+ * Wrap a personal store so every record put through it is stamped.
+ *
+ * A row that already names an owner keeps it: the apply functions stamp from
+ * the account the pull was made against, and a read-modify-write puts back a
+ * row that was stamped when it was created. Signed out, nothing is stamped —
+ * the row stays unowned and is adopted by the next account to sign in, which
+ * is the same treatment rows written before this change receive.
+ *
+ * Only `put` and `add` are wrapped. Everything else — `get`, `delete`,
+ * `index`, the cursor methods — is handed through untouched, so the object
+ * behaves exactly like the store it stands for.
+ */
+function stampingStore(store: IDBObjectStore): IDBObjectStore {
+  const owner = getDeviceOwner();
+  if (!owner) return store;
+
+  const stamp = (value: any): any => {
+    if (!value || typeof value !== 'object') return value;
+    if (value.ownerId) return value;
+    return { ...value, ownerId: owner };
+  };
+
+  return new Proxy(store, {
+    get(target, prop) {
+      if (prop === 'put' || prop === 'add') {
+        return (value: any, key?: IDBValidKey) =>
+          key === undefined
+            ? (target as any)[prop](stamp(value))
+            : (target as any)[prop](stamp(value), key);
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 /**
  * Helper to execute a read transaction
  */
@@ -1421,7 +1548,8 @@ export async function writeTransaction<T>(
   logInstallIfActive('tx-db-ready', { store: storeName });
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, 'readwrite');
-    const store = transaction.objectStore(storeName);
+    const raw = transaction.objectStore(storeName);
+    const store = PERSONAL_STORES.has(storeName) ? stampingStore(raw) : raw;
     logInstallIfActive('tx-created', { store: storeName });
     const request = callback(store);
     logInstallIfActive('tx-request-issued', { store: storeName });
@@ -1446,8 +1574,9 @@ export async function batchWriteTransaction(
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, 'readwrite');
-    const store = transaction.objectStore(storeName);
-    
+    const raw = transaction.objectStore(storeName);
+    const store = PERSONAL_STORES.has(storeName) ? stampingStore(raw) : raw;
+
     operations(store);
     
     transaction.oncomplete = () => resolve();

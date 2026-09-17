@@ -10,13 +10,8 @@
 import { openDB, writeTransaction } from '../../adapters/db';
 import type { DBSyncQueueItem } from '../../adapters/db';
 import { supabase } from '../supabase/client';
+import { clearDeviceOwner, getDeviceOwner, isOwnerReadable, setDeviceOwner } from './deviceOwner';
 import type { SyncOperation } from './types';
-
-/**
- * Which account the pending queue was built for. Read before every upload pass
- * to stop one account's un-uploaded work being written to another's rows.
- */
-const QUEUE_OWNER_KEY = 'projectbible_queue_owner';
 
 const MAX_RETRIES = 5;
 const RETRY_BASE_MS = 5_000;
@@ -71,7 +66,7 @@ class SyncQueueService {
     try {
       // Nothing goes up until the queue is known to belong to the account that
       // is signed in now. Every upload path reaches Supabase through here.
-      if (!(await this.guardOwnership())) {
+      if (!(await this.settleOwnership())) {
         return { success: 0, failed: 0 };
       }
 
@@ -132,50 +127,55 @@ class SyncQueueService {
    *
    * Only the queue is touched. Clearing the stores themselves is phase 3.
    *
+   * This is also where the device's record of its account is advanced, and
+   * that record is what stamps `ownerId` onto rows as they are written — so
+   * the queue and the stores it describes can never disagree about whose work
+   * they are. It is public because sign-in calls it directly, before any row
+   * is written, rather than waiting for the first upload pass to settle the
+   * question.
+   *
+   * @param knownUserId the account signing in, where the caller already has
+   *   it. Saves an auth round-trip; otherwise Supabase is asked.
    * @returns whether this pass may upload.
    */
-  private async guardOwnership(): Promise<boolean> {
-    let user: any;
-    try {
-      const { data } = await supabase.auth.getUser();
-      user = data.user;
-    } catch (err: any) {
-      // Supabase aborts auth requests on tab-visibility changes. Transient —
-      // leave the queue alone and let the next pass decide.
-      if (err?.name === 'AbortError') return false;
-      throw err;
+  async settleOwnership(knownUserId?: string): Promise<boolean> {
+    let userId: string | undefined = knownUserId;
+    if (!userId) {
+      try {
+        const { data } = await supabase.auth.getUser();
+        userId = data.user?.id;
+      } catch (err: any) {
+        // Supabase aborts auth requests on tab-visibility changes. Transient —
+        // leave the queue alone and let the next pass decide.
+        if (err?.name === 'AbortError') return false;
+        throw err;
+      }
     }
     // Signed out. processItem would skip every item anyway; stopping here keeps
     // the queue intact for the next sign-in.
-    if (!user) return false;
+    if (!userId) return false;
 
-    if (typeof localStorage === 'undefined') return true;
+    const previous = getDeviceOwner();
 
-    let previous: string | null = null;
-    try {
-      previous = localStorage.getItem(QUEUE_OWNER_KEY);
-    } catch {
+    if (!isOwnerReadable()) {
       // Private mode, or storage blocked. Without a reliable record of the
       // previous account there is no safe way to tell whose queue this is, so
       // drop it rather than risk uploading it to the wrong one.
       await this.clear();
+      clearDeviceOwner();
       return false;
     }
 
-    if (previous === user.id) return true;
+    if (previous === userId) return true;
 
     if (previous !== null) {
       const dropped = await this.getPendingCount();
       await this.clear();
       console.warn(
-        `[SyncQueue] Queue belonged to a different account — dropped ${dropped} pending operation(s) rather than uploading them to ${user.id.slice(0, 8)}...`,
+        `[SyncQueue] Queue belonged to a different account — dropped ${dropped} pending operation(s) rather than uploading them to ${userId.slice(0, 8)}...`,
       );
     }
-    try {
-      localStorage.setItem(QUEUE_OWNER_KEY, user.id);
-    } catch {
-      // Nothing to do — the next pass takes the unreadable-storage path above.
-    }
+    setDeviceOwner(userId);
     // Either the queue was just dropped, or this device has never queued for
     // anyone and there was nothing to protect. Both are safe to continue from.
     return true;
