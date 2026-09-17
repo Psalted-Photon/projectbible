@@ -483,12 +483,38 @@ class SyncService {
     }
     
     console.log(`[SyncService] Pulled ${data?.length ?? 0} rows from ${table}`);
-    // The empty-rows gate protects tables whose apply fns reconcile deletions
-    // (e.g. user_notes would wipe local data on an empty server). reading_progress
-    // must run even with zero remote rows so its reconciliation can push local
-    // progress up to a fresh/empty server. journal_lock must too: no row means
-    // the lock is off, which a device that saw it on needs to hear.
-    if (data && (data.length > 0 || table === 'reading_progress' || table === 'journal_lock')) {
+
+    // Every table applies, including an empty one.
+    //
+    // There used to be a gate here that skipped applyFn on zero rows, with
+    // reading_progress and journal_lock named as exceptions. It was there
+    // because these apply fns reconcile deletions — reconcileDeletedRows
+    // removes any local row the snapshot does not contain — so an empty
+    // result would delete everything local. While sign-out left the stores
+    // in place that was a real danger and the gate was the right answer.
+    //
+    // Phase 3 changed the meaning of an empty answer. A device that has just
+    // signed out holds no personal rows, so a signing-in account whose server
+    // copy is genuinely empty should end with empty stores: that is the
+    // correct outcome, not a loss. Meanwhile the gate had become the reason a
+    // cleared device could not fully restore — a table reconciling to nothing
+    // never ran at all, so nothing downstream of it ran either.
+    //
+    // Nothing is silently wiped on a populated device, for three reasons
+    // worth keeping together:
+    //
+    //   A failed request returns `error` and bails above, so a network or
+    //   policy failure can never arrive here disguised as an empty table.
+    //
+    //   reconcileDeletedRows spares every id with a pending queue op, so
+    //   rows made or restored offline are not mistaken for remote deletions.
+    //   That is what makes restoreBackup safe: it enqueues everything it
+    //   writes, and runSyncPass pushes the queue up before it pulls.
+    //
+    //   A row already uploaded and then missing from the snapshot really was
+    //   deleted elsewhere, which is the ghost this reconciliation exists to
+    //   clear.
+    if (data) {
       await applyFn(data);
     }
   }
