@@ -10,6 +10,7 @@
 
 import { supabase } from '../supabase/client';
 import { adoptUnownedRows } from './adoptOwnership';
+import { clearPersonalData } from './clearPersonalData';
 import { syncQueue } from './SyncQueueService';
 import { realtimeService } from './RealtimeService';
 import { pullSettings } from './settingsSync';
@@ -341,10 +342,22 @@ class SyncService {
       store.dispose();
     }
     
-    // Do NOT clear the sync queue — pending writes are user-scoped and will
-    // be retried on the next sign-in. Clearing them here causes progress
-    // to be silently lost when the user logs out before a write reaches Supabase.
-    
+    // Take this account's work off the device: the personal stores, the
+    // journal lock, the shared notebooks, and the queue along with them.
+    //
+    // The queue used to be kept here, on the reasoning that pending writes
+    // are user-scoped and would be retried on the next sign-in. They are
+    // user-scoped, but nothing recorded which user — which is the hole phase
+    // 1 closed by refusing to upload a queue left by another account. Now
+    // that the stores those writes refer to are emptied on the way out,
+    // keeping the queue would only mean offering the server rows this device
+    // no longer has, and phase 1 would refuse them anyway.
+    //
+    // Whoever calls sign-out has already tried to send this work and asked
+    // about anything that would not go — see `pendingWork` in
+    // clearPersonalData.ts. By the time it gets here the answer is in.
+    await clearPersonalData();
+
     this.updateState({
       status: 'idle',
       pendingCount: 0,

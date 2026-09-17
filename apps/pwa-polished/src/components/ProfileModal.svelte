@@ -13,6 +13,7 @@
   import { applyTheme, getSettings, updateSettings } from '../adapters/settings';
   import { paneStore } from '../stores/paneStore';
   import { syncService, formatSyncLabel, isSyncRunning, SYNC_SCOPE_TOOLTIP, type SyncState } from '../lib/sync';
+  import { pendingWork, type PendingWork } from '../lib/sync/clearPersonalData';
   import { localDateStr } from '../stores/clockStore';
   import SavedVersesPanel from './SavedVersesPanel.svelte';
   import JournalCalendar from './JournalCalendar.svelte';
@@ -77,6 +78,9 @@
 
   let showDeleteConfirm = false;
   let showFinalDeleteConfirm = false;
+  /** Set when sign-out found unsent work and is waiting to be told to go on. */
+  let signOutPending: PendingWork | null = null;
+  let signingOut = false;
   let deleteConfirmText = '';
   let deleteError = '';
   let deleteMessage = '';
@@ -212,15 +216,71 @@
     }
   }
 
+  /**
+   * Signing out now empties this account's work off the device, so that the
+   * next person to sign in here does not find the previous one's notes.
+   * Anything that has reached the server comes back on the next sign-in;
+   * anything that has not is gone. So this tries to send it first, and only
+   * asks a second time about what would not go.
+   */
   async function handleSignOut() {
     authMessage = '';
     authError = '';
+    signOutPending = null;
+    signingOut = true;
     try {
+      // Best effort: offline, or with the server refusing, this changes
+      // nothing and the count below reports what is still waiting.
+      if (navigator.onLine) {
+        await syncService.forceSync().catch(() => {});
+      }
+
+      const pending = await pendingWork();
+      if (pending.total > 0) {
+        // Stop and put the number in front of them rather than wiping and
+        // reporting it afterwards.
+        signOutPending = pending;
+        return;
+      }
+
       await supabaseAuthService.signOut();
     } catch (error) {
       console.error(error);
       authError = 'Sign out failed.';
+    } finally {
+      signingOut = false;
     }
+  }
+
+  /** They have seen the count and still want to sign out. */
+  async function confirmSignOutAnyway() {
+    authError = '';
+    signingOut = true;
+    try {
+      await supabaseAuthService.signOut();
+      signOutPending = null;
+    } catch (error) {
+      console.error(error);
+      authError = 'Sign out failed.';
+    } finally {
+      signingOut = false;
+    }
+  }
+
+  function cancelSignOut() {
+    signOutPending = null;
+  }
+
+  /** "3 notes and 1 shared page", or whichever halves are non-zero. */
+  function describePending(pending: PendingWork): string {
+    const parts: string[] = [];
+    if (pending.queued > 0) {
+      parts.push(`${pending.queued} ${pending.queued === 1 ? 'change' : 'changes'}`);
+    }
+    if (pending.outbox > 0) {
+      parts.push(`${pending.outbox} shared ${pending.outbox === 1 ? 'page' : 'pages'}`);
+    }
+    return parts.join(' and ');
   }
 
   async function handleChangePassword() {
@@ -494,11 +554,34 @@
             {/if}
           </div>
           {#if isSignedIn}
-            <button class="secondary-btn" on:click={handleSignOut}>Sign Out</button>
+            <button class="secondary-btn" on:click={handleSignOut} disabled={signingOut}>
+              {signingOut ? 'Signing out…' : 'Sign Out'}
+            </button>
           {/if}
           <button class="close-btn" on:click={close}>&times;</button>
         </div>
       </div>
+
+      {#if signOutPending}
+        <div class="signout-confirm">
+          <p class="signout-warning">
+            {describePending(signOutPending)}
+            {signOutPending.total === 1 ? 'has' : 'have'} not reached the server yet.
+          </p>
+          <p>
+            Signing out takes your work off this device, so the next person to sign in
+            here doesn't find it. Anything already saved to your account comes back when
+            you sign in again — but {signOutPending.total === 1 ? 'this one' : 'these'}
+            never got there, and will be lost.
+          </p>
+          <button class="danger-btn" on:click={confirmSignOutAnyway} disabled={signingOut}>
+            Sign out anyway
+          </button>
+          <button class="secondary-btn" on:click={cancelSignOut} disabled={signingOut}>
+            Stay signed in
+          </button>
+        </div>
+      {/if}
 
       <div class="tabs">
         <button class:active={currentTab === 'reading'} on:click={() => (currentTab = 'reading')}>Reading Plan</button>
@@ -1086,6 +1169,26 @@
     flex-direction: column;
     gap: 8px;
     margin-top: 8px;
+  }
+  /* Sits between the header and the tabs, so it is the first thing read. */
+  .signout-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 16px 0;
+    padding: 12px;
+    border: 1px solid #b91c1c;
+    border-radius: 8px;
+    background: rgba(185, 28, 28, 0.08);
+  }
+  .signout-confirm p {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  .signout-warning {
+    color: #f87171;
+    font-weight: 700;
   }
 
   .delete-final {
