@@ -10,7 +10,8 @@
 
 import { supabase } from '../supabase/client';
 import { adoptUnownedRows } from './adoptOwnership';
-import { clearPersonalData } from './clearPersonalData';
+import { clearPersonalData, pendingWork } from './clearPersonalData';
+import { getDeviceOwner, isOwnerReadable } from './deviceOwner';
 import { syncQueue } from './SyncQueueService';
 import { realtimeService } from './RealtimeService';
 import { pullSettings } from './settingsSync';
@@ -250,14 +251,92 @@ class SyncService {
   
   // ========== Private ==========
   
+  /**
+   * A different account has signed in on a device still holding the last
+   * one's work. Empty it before anything is pulled.
+   *
+   * Phases 3 and 4 handle the orderly case: sign out, the device is emptied,
+   * sign in, it fills back up. This is the case where the first half never
+   * happened. A session that expired rather than ended, an app reinstalled
+   * over an IndexedDB that survived it, a device restored from a backup —
+   * in all of them account A's notes, journal, highlights and notebooks are
+   * still in the thirteen stores when B arrives, and nothing so far would
+   * take them out. B's pull lands on top of them and the two stay merged,
+   * which is the symptom this whole roadmap started from.
+   *
+   * The check is phase 2's ownership rather than a guess: the device records
+   * one account id, and a real previous owner that is not the one signing in
+   * is the only condition that clears. A match is the ordinary case and does
+   * nothing. No recorded owner is a device that has never signed anybody in,
+   * where the rows are either genuinely nobody's — adoptUnownedRows is about
+   * to claim them — or were already cleared by a sign-out.
+   *
+   * Unreadable storage does nothing here, which is the opposite of what the
+   * queue does with it. Phase 1 drops a queue it cannot attribute because
+   * uploading to the wrong account is permanent and dropping is not. Here the
+   * asymmetry runs the other way: the rows on a device whose storage is
+   * blocked are most likely the same person's, and wiping them on a wrong
+   * guess destroys work that may never have reached the server. Refusing to
+   * act leaves at worst the pre-phase-5 behaviour.
+   *
+   * Nothing asks before clearing. By the time this runs Supabase has already
+   * changed who is signed in, so there is no longer anybody to put the
+   * question to: the person at the screen is the incoming account, who does
+   * not know what the outgoing one had unsent and cannot answer for it. What
+   * reached the server comes back on that account's next sign-in; what did
+   * not was already unsendable, because phase 1's check would have refused to
+   * upload that queue under this account in any case. The count is logged.
+   */
+  private async switchAccounts(userId: string): Promise<boolean> {
+    if (!isOwnerReadable()) return false;
+
+    const previous = getDeviceOwner();
+    if (previous === null || previous === userId) return false;
+
+    console.warn(
+      `[SyncService] A different account signed in — clearing ${previous.slice(0, 8)}...'s work before pulling ${userId.slice(0, 8)}...`,
+    );
+
+    // Said before the sweep, because the sweep is what empties them.
+    const pending = await pendingWork().catch(() => null);
+    if (pending && pending.total > 0) {
+      console.warn(
+        `[SyncService] ${pending.total} unsent change(s) from the previous account went with it (${pending.queued} queued, ${pending.outbox} in the shared outbox) — they could not have been uploaded under this account anyway`,
+      );
+    }
+
+    await clearPersonalData('account-switch');
+
+    // The timestamp belonged to the account that just left, and the device it
+    // was describing no longer exists. `skipPull` ignores it on this pass
+    // anyway, but if this pass then fails the next one would read it and skip
+    // a pull on a device that has nothing in it. Sign-out clears it for the
+    // same reason.
+    this.lastSignInSyncAt = 0;
+
+    // The stores are empty and the previous owner is forgotten. Ownership is
+    // settled a moment later in onSignIn, which is what records the incoming
+    // account; leaving it to that one call keeps a single place that writes it.
+    return true;
+  }
+
   private async onSignIn(userId: string): Promise<void> {
     if (this.signingIn) return;
     this.signingIn = true;
     console.log('[SyncService] User signed in:', userId.slice(0, 8) + '...');
     
+    // Is this a different account than the one whose rows are on the device?
+    // Asked before settleOwnership, which is what overwrites the answer.
+    const switched = await this.switchAccounts(userId);
+
     // Supabase fires SIGNED_IN on every token refresh (triggered by tab visibility
     // changes). Throttle the expensive pull to at most once per 60 seconds.
-    const skipPull = Date.now() - this.lastSignInSyncAt < 60_000;
+    //
+    // A switch is never throttled. The device has just been emptied, so
+    // skipping the pull would leave the incoming account looking at an app
+    // with nothing in it — the same trap phase 3 hit on sign-out, arrived at
+    // from the other side.
+    const skipPull = !switched && Date.now() - this.lastSignInSyncAt < 60_000;
 
     this.updateState({ status: 'syncing', activity: 'checking' });
 

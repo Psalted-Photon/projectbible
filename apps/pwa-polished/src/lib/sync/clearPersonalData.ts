@@ -199,6 +199,13 @@ function clearAccountKeys(): void {
 }
 
 /**
+ * Why the device is being emptied. Only the log line differs — the sweep is
+ * the same either way, because what has to come off the device does not
+ * depend on whether the previous account left on purpose.
+ */
+export type ClearReason = 'sign-out' | 'account-switch';
+
+/**
  * Take this account's work off the device.
  *
  * Returns how many stores were emptied, which is what the sign-out path logs.
@@ -208,8 +215,13 @@ function clearAccountKeys(): void {
  * The device owner is forgotten last, so that anything writing during the
  * sweep is stamped for the account that is on its way out rather than left
  * unowned for the next one to adopt.
+ *
+ * Called from two places. A sign-out, where the user has already been asked
+ * about anything unsent; and an account switch (phase 5), where they have
+ * not, because by then Supabase has changed who is signed in and there is
+ * nobody left to ask — see the note on `switchAccounts` in SyncService.
  */
-export async function clearPersonalData(): Promise<number> {
+export async function clearPersonalData(reason: ClearReason = 'sign-out'): Promise<number> {
   let cleared = 0;
 
   try {
@@ -239,6 +251,10 @@ export async function clearPersonalData(): Promise<number> {
   clearAccountKeys();
   clearDeviceOwner();
 
-  console.log(`[ClearData] Cleared ${cleared} store(s) on sign-out`);
+  console.log(
+    reason === 'account-switch'
+      ? `[ClearData] Cleared ${cleared} store(s) — a different account signed in`
+      : `[ClearData] Cleared ${cleared} store(s) on sign-out`,
+  );
   return cleared;
 }
