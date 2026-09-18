@@ -1343,13 +1343,12 @@
     clearReadingPlanEndHighlight();
   }
 
-  // DEBUG: Log when reactive values change
-  $: console.log("📖 REACTIVE UPDATE:", {
-    currentTranslation,
-    currentBook,
-    currentChapter,
-    isChronologicalMode,
-  });
+  // A debug log lived here, firing on every change of translation, book,
+  // chapter or chronological mode. Removed rather than gated on windowId,
+  // because eruda stays on in production — so this was not a no-op call into a
+  // closed console but an object built and a row appended to a live DOM panel,
+  // and in a harmony each of the four readers appended its own as the panes
+  // crossed chapters together.
 
   // A card belongs to the marker it was opened on. Once the reader is showing
   // something else, that marker is gone and the card would be answering for a
@@ -5137,8 +5136,14 @@
     }
   }
 
-  // Commentary anchor: re-observe verses after each chapter load
-  $: if (chapters.length > 0 && readerElement) {
+  // Commentary anchor: re-observe verses after each chapter load.
+  //
+  // navMode is in the dependencies deliberately. A harmony follower observes
+  // nothing (see below), so when "make me master" swaps the roles the new
+  // master has no observer at all and would drive nobody — the feature would
+  // simply stop working, with no error to find it by. Naming it here means the
+  // swap rebuilds both readers' observers within a tick.
+  $: if ((navMode, chapters.length > 0) && readerElement) {
     tick().then(setupVerseObserver);
   }
 
@@ -5149,6 +5154,28 @@
     }
     visibleVersePositions.clear();
     if (!readerElement) return;
+
+    // A harmony follower's observer output is used by nothing, so it is never
+    // built rather than being built and returned from early. Everything this
+    // callback produces is consumed in one of three places, and a follower can
+    // reach none of them: the navigation store write is already gated on
+    // !windowId, masterMoved is by definition the master's, and the commentary
+    // push needs a window with contentType 'commentaries', which a pane is not.
+    //
+    // Not observing beats returning early because the cost is not in the tail.
+    // Every scroll of a follower — and the tween scrolls it constantly — fires
+    // the callback with a batch of entries, and before any early return could
+    // sit, the loop has already resolved each entry's verse, built a string
+    // key and written the map, then scanned every visible verse twice looking
+    // for the one nearest the top. With three followers tweening at once that
+    // is the one piece of per-frame work in this view that buys nothing at all.
+    //
+    // Placed below the disconnect and the map clear, not above them: this runs
+    // again when a master is demoted by "make me master", and that pane must
+    // lose the observer it already has rather than merely decline to build a
+    // second one. Returning any earlier would leave the old master observing
+    // for the rest of the view's life, which is the exact cost this removes.
+    if (navMode === 'follower') return;
 
     verseObserver = new IntersectionObserver(
       (entries) => {
