@@ -271,6 +271,24 @@
 
   export let windowId: string | undefined = undefined;
 
+  /**
+   * Which navbar this reader wears, for the harmony view.
+   *
+   * Derived here rather than passed down from ParallelView, because the master
+   * role can move without the view re-rendering its panes: pressing the wheel in
+   * a follower changes one field in the store, and a prop threaded through the
+   * {#each} would only be re-evaluated if the pane list itself changed. Reading
+   * the store means the two bars swap the moment the role does.
+   *
+   * 'auto' for everything else, which is every reader outside this view, so the
+   * navbar keeps inferring the mode from windowId exactly as it always has.
+   */
+  let navMode: 'auto' | 'master' | 'follower' = 'auto';
+  $: navMode =
+    windowId && $parallelStore.active && $parallelStore.panes.some((p) => p.paneId === windowId)
+      ? ($parallelStore.masterId === windowId ? 'master' : 'follower')
+      : 'auto';
+
   let readerElement: HTMLDivElement;
   let textStore: IndexedDBTextStore;
   const headingsStore = new HeadingsStore();
@@ -5644,6 +5662,7 @@
 >
   <NavigationBar
     {windowId}
+    {navMode}
     style="transform: translateY({navBarOffset}px); transition: transform 0.25s ease;"
   />
 

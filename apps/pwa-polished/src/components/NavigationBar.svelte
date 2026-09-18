@@ -58,6 +58,7 @@
   } from "../lib/tts/sleepTimer";
   import { COMMENTARY_AUTHORS } from "../lib/annotationConfig";
   import {
+    Anchor,
     ArrowsOutSimple,
     Books,
     ClockCounterClockwise,
@@ -72,6 +73,7 @@
     BookOpenText,
     MapTrifold,
     Gear,
+    SteeringWheel,
     User,
     X,
     Sun,
@@ -87,10 +89,24 @@
   import { wallClockIn } from "../lib/alarm/alarmSchedule";
   import type { InterlinearSettings } from "../adapters/settings";
   import InterlinearControls from "./InterlinearControls.svelte";
+  import { parallelStore } from "../stores/parallelStore";
+  import * as parallelSync from "../lib/parallelSync";
 
   export let windowId: string | undefined = undefined;
   export const visible: boolean = true;
   export let style: string = "";
+
+  /**
+   * Which bar this is. Left alone, it is inferred from `windowId` exactly as it
+   * always was — a docked pane gets the half bar, the main reader gets the whole
+   * one — so every existing call site is unaffected by this prop existing.
+   *
+   * The harmony view passes it explicitly, because there the windowId no longer
+   * answers the question: all four panes are windows, and the master needs the
+   * full bar precisely because it is the one navigating. 'follower' is the same
+   * thing the old boolean meant, named.
+   */
+  export let navMode: 'auto' | 'master' | 'follower' = 'auto';
 
   /* The reference dropdown is two side-by-side columns, OT then NT. Splitting the
      list here (rather than flowing one list into CSS columns) keeps each column
@@ -231,8 +247,75 @@
   $: windowState = windowId
     ? $windowStore.find((w) => w.id === windowId)
     : null;
-  // Minimal mode: window panes show only translation, ref, ref-toggle, and comm
-  $: isMinimal = !!windowId;
+  /**
+   * Minimal mode: the bar keeps its left half only — translation, ref,
+   * ref-toggle, commentary and word study — and everything past the gate below
+   * is dropped, settings and profile among it.
+   *
+   * Still `!!windowId` wherever the mode is left to be inferred, which is every
+   * caller but the harmony view, so this means precisely what it meant before.
+   * A harmony master is a window that is nonetheless driving the reading, so it
+   * asks for the whole bar; a harmony follower asks for the half explicitly
+   * rather than relying on the inference, so the two are symmetrical at the call
+   * site and neither depends on what `windowId` happens to imply.
+   */
+  $: isMinimal = navMode === 'auto' ? !!windowId : navMode === 'follower';
+
+  /**
+   * The master's bar carries the anchor, so it needs to know it is one. Kept
+   * separate from `!isMinimal` rather than folded into it: the main reader is
+   * also `!isMinimal` and must not grow an anchor button.
+   */
+  $: isHarmonyMaster = navMode === 'master';
+
+  /**
+   * The anchor, in a harmony master's bar.
+   *
+   * On, the followers are driven; off, they are ordinary readers wearing half a
+   * navbar, free to be navigated independently. That is the whole meaning of the
+   * switch, and it is the same one the commentary window's anchor has — which is
+   * why it is the same icon in the same two colours, grey loose and teal
+   * following. There is no drifted state here: a follower the user has scrolled
+   * rejoins on the master's next move by itself, so there is nothing to tell
+   * them about and nothing to press.
+   */
+  $: harmonyAnchorOn = $parallelStore.anchorOn;
+
+  function toggleHarmonyAnchor() {
+    const next = !$parallelStore.anchorOn;
+    parallelStore.setAnchor(next);
+    if (next) {
+      // Re-align straight away rather than waiting for the master to move: the
+      // moment you switch it on is the moment the feature has to show it works.
+      parallelSync.realignFromMaster();
+    } else {
+      parallelSync.freezeFollowers();
+    }
+  }
+
+  /**
+   * Taking over as master, from a follower's bar.
+   *
+   * The roles swap and everyone re-aligns from the new master, which is the
+   * pane the user has just said they are reading. The old master is not moved —
+   * it keeps its position and simply stops driving, so taking over never yanks
+   * the pane you were looking at a second ago.
+   *
+   * Only offered while the anchor is on. With it off there is nothing to be
+   * master of, and a button that swapped an inert role would be a puzzle.
+   */
+  $: canTakeMaster =
+    navMode === 'follower' &&
+    $parallelStore.active &&
+    $parallelStore.anchorOn &&
+    !!windowId &&
+    $parallelStore.masterId !== windowId;
+
+  function takeMaster() {
+    if (!windowId) return;
+    parallelStore.setMaster(windowId);
+    parallelSync.realignFromMaster();
+  }
   // When windowId is set: use per-window contentState; never fall back to global nav
   $: currentTranslation = windowId
     ? (windowState?.contentState?.translation ?? DEFAULT_TRANSLATION)
@@ -991,6 +1074,18 @@
   let wedgeH = 0;
 
   let showClock = getNavBarClock();
+  /**
+   * A harmony follower never shows the time, whatever the setting says.
+   *
+   * Three followers would mean three more copies of the same clock all reading
+   * the same minute, and in a harmony the panes are one reading rather than four
+   * places — the time belongs to the screen, so the master carries it for
+   * everyone. Conditioned on the explicit follower mode rather than on
+   * `isMinimal`, so an ordinary docked window keeps whatever it does today;
+   * that is not this phase's question. Layered over `showClock` so the user's
+   * setting still decides whether there is a clock at all.
+   */
+  $: clockVisible = showClock && navMode !== 'follower';
   // How much room each line is centred in. The wedge is a triangle, so its
   // width is not one number: the top line gets most of the run and the one
   // below it gets whatever the hypotenuse has left by then.
@@ -1604,7 +1699,7 @@
        the open middle. Outside .nav-content on purpose: in there they would be
        flex items that push the pills around, and the mutation observer would
        treat every tick of the clock as a reason to re-measure the membrane. -->
-  {#if showClock && wedgeL}
+  {#if clockVisible && wedgeL}
     <div
       class="nav-clock nav-clock-left"
       style="left: {wedgeL.x}px; width: {wedgeL.w}px; top: {wedgeTop}px; height: {wedgeH}px;"
@@ -1618,7 +1713,7 @@
     </div>
   {/if}
 
-  {#if showClock && wedgeR}
+  {#if clockVisible && wedgeR}
     <div
       class="nav-clock nav-clock-right"
       style="left: {wedgeR.x}px; width: {wedgeR.w}px; top: {wedgeTop}px; height: {wedgeH}px;"
@@ -1782,6 +1877,43 @@
       >
         <span class="icon-badge icon-badge-wordstudy"><Books size={18} weight="bold" /><span class="icon-overlay"><Books size={18} weight="thin" /></span></span>
       </button>
+
+      <!-- ── The harmony controls ───────────────────────────────────────────
+           Both live at the end of the first pill rather than out in the right
+           half, because the follower has no right half — and putting the two
+           halves of one idea in two different places would mean the master's
+           switch and the follower's answer to it never appeared together on the
+           same screen. This is also the only pill a pane is guaranteed to have,
+           so the controls cannot scroll out of reach on a phone. -->
+      {#if isHarmonyMaster}
+        <div class="pill-divider"></div>
+
+        <button
+          class="pill-btn pill-anchor"
+          class:anchored={harmonyAnchorOn}
+          on:click={toggleHarmonyAnchor}
+          title={harmonyAnchorOn
+            ? "The other panes are following this one — click to set them loose"
+            : "The other panes are reading on their own — click to make them follow"}
+          aria-label="Followers track this pane"
+          aria-pressed={harmonyAnchorOn}
+        >
+          <span class="icon-badge icon-badge-anchor"><Anchor size={18} weight="bold" /><span class="icon-overlay"><Anchor size={18} weight="thin" /></span></span>
+        </button>
+      {/if}
+
+      {#if canTakeMaster}
+        <div class="pill-divider"></div>
+
+        <button
+          class="pill-btn pill-takemaster"
+          on:click={takeMaster}
+          title="Drive from this pane — the others follow it instead"
+          aria-label="Drive from this pane"
+        >
+          <span class="icon-badge icon-badge-takemaster"><SteeringWheel size={18} weight="bold" /><span class="icon-overlay"><SteeringWheel size={18} weight="thin" /></span></span>
+        </button>
+      {/if}
 
     </div>
 
@@ -2808,6 +2940,16 @@
   .icon-badge-profile     { background: radial-gradient(circle, #d1d5db 0%, #d1d5db 20%, #000000 100%); }
   .pill-refs:has(input:checked) .icon-badge-refs { background: radial-gradient(circle, #a78bfa 0%, #a78bfa 20%, #000000 100%); }
   .pill-profile.signed-in .icon-badge-profile    { background: radial-gradient(circle, #86efac 0%, #86efac 20%, #000000 100%); }
+
+  /* ── The harmony controls ──────────────────────────────────────────────────
+     Grey loose, teal following — the same two states in the same two colours as
+     the commentary window's anchor, because it is the same idea and a user who
+     has met one should not have to learn the other. The wheel stays one colour:
+     it is an action rather than a state, and nothing about this pane is on or
+     off while you are looking at it. */
+  .icon-badge-anchor      { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #000000 100%); }
+  .pill-anchor.anchored .icon-badge-anchor { background: radial-gradient(circle, #2dd4bf 0%, #2dd4bf 20%, #000000 100%); }
+  .icon-badge-takemaster  { background: radial-gradient(circle, #4a9ec9 0%, #4a9ec9 20%, #000000 100%); }
 
   /* Search expand */
   .pill-search-area {

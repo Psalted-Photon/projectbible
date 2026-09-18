@@ -102,11 +102,26 @@ function createParallelStore() {
      * never yanks the pane you were reading.
      */
     setMaster: (paneId: string) =>
-      update((s) =>
-        s.panes.some((p) => p.paneId === paneId)
-          ? { ...s, masterId: paneId, currentGroupId: null }
-          : s,
-      ),
+      update((s) => {
+        if (!s.panes.some((p) => p.paneId === paneId)) return s;
+        return {
+          ...s,
+          masterId: paneId,
+          currentGroupId: null,
+          // Every dim is cleared, not just the new master's. A dim says "the
+          // master is somewhere this pane does not go", and the master has just
+          // changed, so every one of those statements is about a question
+          // nobody asked any more. The next tick re-dims whatever still
+          // deserves it, within one debounce — whereas a stale dim left up
+          // would be a pane faded for a reason that no longer exists, which is
+          // indistinguishable from a bug. The new master's own dim must go
+          // regardless: the engine skips the master, so nothing would ever
+          // clear it.
+          panes: s.panes.map((p) =>
+            p.dim ? { ...p, dim: false, dimReason: null } : p,
+          ),
+        };
+      }),
 
     setAnchor: (on: boolean) => update((s) => ({ ...s, anchorOn: on })),
 

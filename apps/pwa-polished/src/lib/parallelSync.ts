@@ -170,7 +170,99 @@ export function realign(book: string, chapter: number, verse: number): void {
   tickTimer = null;
   pending = null;
   for (const rt of runtime.values()) rt.aimedAt = null;
+
+  // The master's own tween is killed first. When the role has just moved, the
+  // new master may still be gliding towards a target it was given while it was
+  // a follower — and the engine never touches the master again, so nothing else
+  // would ever stop it. It would glide on, driving everyone else from a
+  // position the user did not choose.
+  const masterId = parallelStore.snapshot().masterId;
+  if (masterId) freeze(masterId);
+
   tick(book, chapter, verse);
+}
+
+/**
+ * Re-align from wherever the master is standing right now.
+ *
+ * The anchor being switched on, and the master role moving, both need the
+ * master's position at a moment when nothing has scrolled — and the position
+ * only otherwise arrives as an argument to `masterMoved`, from inside the
+ * reader's scroll observer. Waiting for the next scroll would mean turning the
+ * anchor on appears to do nothing until you move, which is the one moment the
+ * feature has to prove it is working.
+ *
+ * So the position is read off the master's own DOM instead of being remembered.
+ * Remembering it would mean a second copy of the truth kept in step with a
+ * reader this feature deliberately does not touch, and it would be stale in
+ * exactly the case that matters: the master pane scrolled while the anchor was
+ * off, which is the whole point of switching it off.
+ */
+export function realignFromMaster(): void {
+  const at = masterPosition();
+  if (at) realign(at.book, at.chapter, at.verse);
+}
+
+/**
+ * The master's current verse, read from the DOM: the first verse whose top edge
+ * has not yet passed above the reading line.
+ *
+ * The reading line is a fifth of the way down rather than the very top, which is
+ * what the reader's own observer effectively reports — a verse is "where you
+ * are" once it is properly on screen, not the instant its first pixel appears.
+ * Verses are walked in document order and the first match wins, so a long verse
+ * spanning the line is the answer rather than the one after it.
+ */
+function masterPosition(): { book: string; chapter: number; verse: number } | null {
+  const state = parallelStore.snapshot();
+  if (!state.masterId || !container) return null;
+
+  const pane = paneElement(state.masterId);
+  const scroller = scrollerOf(state.masterId);
+  if (!pane || !scroller) return null;
+
+  const line = scroller.getBoundingClientRect().top + scroller.clientHeight * 0.2;
+
+  for (const verseEl of pane.querySelectorAll<HTMLElement>('.verse[data-verse]')) {
+    const rect = verseEl.getBoundingClientRect();
+    if (rect.bottom <= line) continue;
+
+    // The book and chapter come from the enclosing section rather than from the
+    // pane's window state: the reader appends chapters as it scrolls, so the
+    // verse on screen is often not in the chapter the state still names.
+    const section = verseEl.closest<HTMLElement>('[data-book][data-chapter]');
+    const book = section?.dataset.book;
+    const chapter = Number(section?.dataset.chapter);
+    const verse = Number(verseEl.dataset.verse);
+    if (!book || !Number.isFinite(chapter) || !Number.isFinite(verse)) continue;
+
+    return { book, chapter, verse };
+  }
+
+  return null;
+}
+
+/**
+ * Stop every follower where it stands, and clear the dimming with it.
+ *
+ * This is the anchor going off. The followers become ordinary readers, so the
+ * dim has to go too — a fade that meant "there is no parallel here" says nothing
+ * once nothing is being followed, and a pane left dimmed with no explanation is
+ * indistinguishable from a bug. Positions are untouched: switching the anchor
+ * off is not a reason to move anything.
+ */
+export function freezeFollowers(): void {
+  if (tickTimer) clearTimeout(tickTimer);
+  tickTimer = null;
+  pending = null;
+
+  const state = parallelStore.snapshot();
+  for (const pane of state.panes) {
+    if (pane.paneId === state.masterId) continue;
+    freeze(pane.paneId);
+    parallelStore.setDim(pane.paneId, false);
+  }
+  parallelStore.setCurrentGroup(null);
 }
 
 // ---------------------------------------------------------------------------

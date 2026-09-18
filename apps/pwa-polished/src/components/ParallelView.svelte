@@ -43,6 +43,27 @@
   $: masterId = $parallelStore.masterId;
 
   /**
+   * Keep each pane's recorded book in step with the reader inside it.
+   *
+   * The picker sets the book when the view opens, but a pane is a real reader
+   * and can be navigated by hand — with the anchor off (phase 7) that is the
+   * whole point of it. The engine asks the group for a passage in `pane.book`,
+   * so a pane showing Luke while the store still says Mark would be driven to
+   * Mark's verses inside Luke's chapter, or dimmed for a book it is no longer
+   * displaying.
+   *
+   * Watched here rather than written from the reader: the window state is
+   * already the reader's own record of where it is, so this follows the truth
+   * instead of adding a second place that has to be told. setPaneBook bails when
+   * nothing changed, so this costs a comparison per pane on window-state writes.
+   */
+  $: for (const w of $windowStore) {
+    if (w.edge === 'harmony' && w.contentState?.book) {
+      parallelStore.setPaneBook(w.id, w.contentState.book);
+    }
+  }
+
+  /**
    * The layout actually used, which is the user's choice unless the screen
    * cannot take it.
    *
