@@ -55,25 +55,54 @@ const STARTER_PACK_URL = '/starter.sqlite';
 const STARTER_TRANSLATION = 'NET';
 
 /**
- * Whether the starter's translation is already readable on this device.
+ * Whether the starter pack's contents are already on this device.
  *
  * Deliberately asks TextStore rather than looking for a pack row: an import
  * writes its pack row *before* the verses and can be killed in between — a
  * tab reclaimed under memory pressure, a webview hitting its quota — and a
  * pack row with no verses behind it would read as "installed" forever.
  * getTranslations() only counts a translation that actually has verses.
+ *
+ * Headings are asked for separately because the starter carries both and this
+ * is the only thing that ever re-fetches it. Asking about the verses alone
+ * left an install that had lost its headings — to a text pack's wholesale
+ * clear, or to a removal — with no way back: NET was present, so this said
+ * yes, so the starter was never fetched again, and the standalone headings
+ * pack is retired from the manifest. Headings simply never returned. Counting
+ * them here makes that install heal itself on the next launch.
  */
 export async function hasStarterText(): Promise<boolean> {
   try {
     const { IndexedDBTextStore } = await import('../adapters/TextStore');
     const installed = await new IndexedDBTextStore().getTranslations();
-    return installed.some((t) => t.id.toUpperCase() === STARTER_TRANSLATION);
+    if (!installed.some((t) => t.id.toUpperCase() === STARTER_TRANSLATION)) return false;
+    return await hasSectionHeadings();
   } catch (error) {
     // If the database cannot even be opened there is nothing to install into,
     // and saying "already have it" is the answer that still reaches the reader.
     console.warn('Could not check installed translations:', error);
     return true;
   }
+}
+
+/**
+ * Whether any section headings are on the device.
+ *
+ * A count rather than a read: this runs on every launch, ahead of the app
+ * being drawn, and the answer only turns on whether the store is empty.
+ * An older database that predates the store has none, which is the truth.
+ */
+async function hasSectionHeadings(): Promise<boolean> {
+  const { openDB } = await import('../adapters/db');
+  const db = await openDB();
+  if (!db.objectStoreNames.contains('section_headings')) return false;
+
+  return await new Promise<boolean>((resolve, reject) => {
+    const tx = db.transaction('section_headings', 'readonly');
+    const request = tx.objectStore('section_headings').count();
+    request.onsuccess = () => resolve(request.result > 0);
+    request.onerror = () => reject(request.error);
+  });
 }
 
 /**

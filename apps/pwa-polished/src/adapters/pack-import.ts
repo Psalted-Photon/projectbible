@@ -316,8 +316,13 @@ export async function importAtlasPlaceIndex(bytes: Uint8Array): Promise<number> 
  * a pack of their own — the starter pack carries them alongside its verses, and
  * that pack imports as type 'text'. Whoever brings them, they land the same way.
  *
- * Note the clear: the store is replaced wholesale rather than merged, so exactly
- * one installed pack should own headings at a time.
+ * Only the translations this pack carries are replaced. The store used to be
+ * cleared wholesale, on the assumption that exactly one installed pack owns
+ * headings — but every text pack runs this, so any text pack shipping even a
+ * partial section_headings table replaced the starter's whole set with its own,
+ * and nothing re-fetched the starter afterwards. Replacing per translation
+ * keeps a reinstall of the starter idempotent without letting one pack speak
+ * for translations it does not carry.
  */
 async function importSectionHeadings(db: any): Promise<void> {
   // Headings became per-translation; a pack built before that has no
@@ -352,15 +357,31 @@ async function importSectionHeadings(db: any): Promise<void> {
 
   console.log(`Importing ${entries.length} section headings...`);
 
+  const incoming = new Set(entries.map((entry: { translation: string }) => entry.translation));
+
   const idb = await openDB();
   await new Promise<void>((resolve, reject) => {
     const tx = idb.transaction('section_headings', 'readwrite');
     const store = tx.objectStore('section_headings');
-    const clearReq = store.clear();
-    clearReq.onsuccess = () => {
+
+    // Drop this pack's translations first, so a rebuild that moved or removed
+    // a heading does not leave the old row behind — the ids are positional, so
+    // a heading that shifted a verse would otherwise appear twice. Everyone
+    // else's headings are left where they are.
+    const cursorReq = store.openCursor();
+    cursorReq.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest).result as IDBCursorWithValue | null;
+      if (cursor) {
+        if (incoming.has(cursor.value.translation)) cursor.delete();
+        cursor.continue();
+        return;
+      }
+      // Writing only once the sweep is done keeps it from deleting what it
+      // has just put, since both run in this one transaction.
       for (const entry of entries) store.put(entry);
     };
-    clearReq.onerror = () => reject(clearReq.error);
+    cursorReq.onerror = () => reject(cursorReq.error);
+
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(new Error('section_headings transaction aborted'));

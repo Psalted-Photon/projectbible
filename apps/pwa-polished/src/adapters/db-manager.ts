@@ -342,6 +342,12 @@ export async function removePack(packId: string): Promise<void> {
       // arrive in shard packs, but deleting art should still take them with it.
       art: ['art_scenes', 'art_images'],
       geonames: ['modern_places'],
+      // Kept although the standalone headings pack is retired from the
+      // manifest: a device that installed one before it was retired still has
+      // its registry row, and this is the only branch that would clean up
+      // after it. No current pack imports as this type, so it cannot fire on
+      // the starter's headings — those belong to a 'text' pack, whose branch
+      // deliberately leaves the store alone.
       headings: ['section_headings'],
       // Same shape as art: the geometry and the search index arrive in their
       // own files, and deleting the map has to take them with it — they are
