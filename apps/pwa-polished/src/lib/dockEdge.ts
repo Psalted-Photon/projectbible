@@ -14,12 +14,12 @@
  * operands the other way round. One copy, so the reader learns one behaviour.
  */
 
-import type { WindowEdge } from './stores/windowStore';
+import type { DockEdge } from './stores/windowStore';
 
 /** Half the screen: what every caller has always asked for. */
 export const DOCK_SIZE = 50;
 
-export function dockEdge(): WindowEdge {
+export function dockEdge(): DockEdge {
   if (typeof globalThis.window === 'undefined') return 'right';
   return globalThis.window.innerHeight > globalThis.window.innerWidth ? 'bottom' : 'right';
 }

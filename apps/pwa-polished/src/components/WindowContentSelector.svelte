@@ -7,13 +7,20 @@
   import { DEFAULT_TRANSLATION } from "../lib/bibleData";
   import PanelIcon from "./icons/PanelIcon.svelte";
   import type { PanelIconName } from "./icons/PanelIcon.svelte";
+  import HarmonyPicker from "./HarmonyPicker.svelte";
+  import { parallelStore } from "../stores/parallelStore";
 
   export let windowId: string;
 
-  type ContentType = 'bible' | 'map' | 'notes' | 'isbe' | 'person' | 'naves' | 'commentaries' | 'journal' | 'art';
+  /**
+   * `harmony` is not a WindowContentType and never becomes one: it is the one
+   * tile that does not fill this window. Kept in the same union so the tile grid
+   * stays one list, and separated out at the top of handleContentSelect.
+   */
+  type ContentType = 'bible' | 'map' | 'notes' | 'isbe' | 'person' | 'naves' | 'commentaries' | 'journal' | 'art' | 'harmony';
 
   /**
-   * The nine tiles. Accents are borrowed from colors the app already uses — the
+   * The ten tiles. Accents are borrowed from colors the app already uses — the
    * book-category ramp in bibleData.ts and the nav bar's badge palette — so the
    * picker reads as part of the same app rather than a new color scheme.
    */
@@ -27,9 +34,51 @@
     { type: 'naves',        icon: 'topical',      label: 'Topical',      accent: '#a78bfa' },
     { type: 'person',       icon: 'people',       label: 'People',       accent: '#2dd4bf' },
     { type: 'art',          icon: 'art',          label: 'Art',          accent: '#fb7185' },
+    { type: 'harmony',      icon: 'harmony',      label: 'Harmonies',    accent: '#4a9ec9' },
   ];
 
+  /** The set picker, open over this window until a set is chosen or dismissed. */
+  let showHarmonyPicker = false;
+
+  /**
+   * Open the harmony view, and take this window down on the way.
+   *
+   * Every other tile fills the window the user just slid open and leaves it
+   * docked. This one is the odd one out: it opens a fullscreen view instead, so
+   * the window that launched it has to go — otherwise closing the harmony later
+   * reveals an empty docked panel sitting behind it that the user never asked
+   * for and does not remember opening.
+   *
+   * The panes are made before the store is told, because parallelStore.open is
+   * what mounts the view, and the view renders a pane per entry in that list —
+   * telling it first would mount readers for windowIds that do not exist yet.
+   */
+  function openHarmony(e: CustomEvent<{ panes: Array<{ book: string; chapter: number }>; label: string }>) {
+    const { panes, label } = e.detail;
+    showHarmonyPicker = false;
+    if (panes.length === 0) return;
+
+    const translation = $navigationStore.translation;
+    const ids = windowStore.createHarmonyPanes(
+      panes.map(p => ({ ...p, translation })),
+    );
+
+    windowStore.closeWindow(windowId);
+    parallelStore.open(
+      ids.map((paneId, i) => ({ paneId, book: panes[i].book })),
+      { setLabel: label },
+    );
+  }
+
   function handleContentSelect(contentType: ContentType) {
+    // Harmonies never reaches the setWindowContent at the bottom of this
+    // function — it has no window content to set. It asks which harmony first,
+    // and openHarmony closes this window rather than filling it.
+    if (contentType === 'harmony') {
+      showHarmonyPicker = true;
+      return;
+    }
+
     // Set initial content state based on type
     let contentState = {};
 
@@ -106,6 +155,13 @@
 
   <p class="instruction">Select a content type to fill this window</p>
 </div>
+
+{#if showHarmonyPicker}
+  <HarmonyPicker
+    on:choose={openHarmony}
+    on:close={() => (showHarmonyPicker = false)}
+  />
+{/if}
 
 <style>
   /* The grid and the caption each take an auto margin on their outer edge, so

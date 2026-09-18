@@ -1,6 +1,7 @@
 <script lang="ts">
   import { dumpPreviousInstallLog } from "./lib/install-log";
   import BibleReader from "./components/BibleReader.svelte";
+  import ParallelView from "./components/ParallelView.svelte";
   import LookupModal from "./components/LookupModal.svelte";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
@@ -22,6 +23,7 @@
   import "./adapters/SyncedHighlightAdapter"; // registers verse/word highlight pull handlers
   import { getSettings } from "./adapters/settings";
   import { navigationStore } from "./stores/navigationStore";
+  import { parallelStore } from "./stores/parallelStore";
   import { parseRefString } from "./lib/parseRefString";
   import { JOIN_PARAM, normalizeJoinCode } from "./lib/shared/joinCode";
   import { requestJoin } from "./stores/sharedJoinStore";
@@ -399,6 +401,15 @@
     <!-- A ?join= link, or a code typed into the Shared tab. Draws nothing
          until one arrives. -->
     <SharedJoinLayer />
+
+    <!-- Parallel accounts. Not a docked window: it covers the reader whole, and
+         mounting it behind the {#if} rather than hiding it is what guarantees
+         four readers cost nothing while it is closed. Last in the list so it
+         sits over the window layer without needing a z-index above the modals,
+         which still open on top of it. -->
+    {#if $parallelStore.active}
+      <ParallelView />
+    {/if}
   {/if}
 </div>
 

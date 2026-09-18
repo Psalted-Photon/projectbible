@@ -1,5 +1,5 @@
 import type { Box } from '../engine/targets';
-import type { WindowEdge } from '../../lib/stores/windowStore';
+import type { DockEdge } from '../../lib/stores/windowStore';
 
 /** What a step can read and do while it runs. */
 export interface StepContext {
@@ -13,7 +13,7 @@ export interface StepContext {
 
 /** An invisible strip over a screen edge that a drag can start from. */
 export interface EdgeLane {
-  edge: WindowEdge;
+  edge: DockEdge;
   box: Box;
 }
 

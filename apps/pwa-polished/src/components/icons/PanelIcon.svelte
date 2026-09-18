@@ -1,7 +1,7 @@
 <script lang="ts" context="module">
   export type PanelIconName =
     | 'bible' | 'map' | 'commentary' | 'notes' | 'journal'
-    | 'encyclopedia' | 'topical' | 'people' | 'art';
+    | 'encyclopedia' | 'topical' | 'people' | 'art' | 'harmony';
 
   /**
    * Line art drawn for the window picker — one entry per panel type, each a list
@@ -83,6 +83,16 @@
       'M3.8 4.8h16.4v14.4H3.8z',
       'M5.6 17.6l4-4.8 2.8 3.2 2.2-2.4 3.8 4',
       'M16.6 9.6a1.3 1.3 0 11-2.6 0 1.3 1.3 0 012.6 0z',
+    ],
+    // Two columns of text side by side, with three rules running across both —
+    // the lines that line up are the whole idea, so they are what the drawing
+    // is of rather than the frames around them.
+    harmony: [
+      'M4 4.6h6.6v14.8H4z',
+      'M13.4 4.6H20v14.8h-6.6z',
+      'M5.6 8.6h3.4M14.8 8.6h3.4',
+      'M5.6 12h3.4M14.8 12h3.4',
+      'M5.6 15.4h3.4M14.8 15.4h3.4',
     ],
   };
 </script>

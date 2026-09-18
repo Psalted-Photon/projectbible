@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ComponentProps } from "svelte";
-  import type { WindowState } from "../lib/stores/windowStore";
+  import type { DockEdge, WindowState } from "../lib/stores/windowStore";
   import WindowContentSelector from "./WindowContentSelector.svelte";
   import BibleReader from "./BibleReader.svelte";
   // The map window's contents.
@@ -83,7 +83,10 @@
     initialTrail={(panel.contentState?.trail ?? []) as NavesProps['initialTrail']}
   />
 {:else if panel.contentType === 'notes'}
-  <NotesPane windowId={panel.id} contentState={panel.contentState} edge={panel.edge} />
+  <!-- Cast rather than widened: this component is only ever reached from the
+       four docked containers in WindowContainer, so panel.edge cannot be
+       'harmony' here even though the type allows it in general. -->
+  <NotesPane windowId={panel.id} contentState={panel.contentState} edge={panel.edge as DockEdge} />
 {:else if panel.contentType === 'wordstudy'}
   <LexicalContent
     windowId={panel.id}

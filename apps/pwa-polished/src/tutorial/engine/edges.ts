@@ -4,7 +4,7 @@
 
 import { get } from 'svelte/store';
 import type { EdgeLane } from '../content/types';
-import { windowStore, type WindowEdge } from '../../lib/stores/windowStore';
+import { windowStore, type DockEdge } from '../../lib/stores/windowStore';
 import { dockEdge } from '../../lib/dockEdge';
 
 /** The app's edge-swipe lane is 40px deep (EdgeGestureDetector). */
@@ -13,7 +13,7 @@ export const LANE_DEPTH = 40;
 /** The app opens no more than this many windows at once. */
 export const MAX_WINDOWS = 6;
 
-export function edgeLane(edge: WindowEdge): EdgeLane {
+export function edgeLane(edge: DockEdge): EdgeLane {
   const w = window.innerWidth;
   const h = window.innerHeight;
   switch (edge) {
@@ -36,18 +36,21 @@ export function edgeLane(edge: WindowEdge): EdgeLane {
  * the text in portrait, beside it in landscape), then the rest. An edge with a
  * window already docked is left out -- that window covers its lane.
  */
-export function freeEdges(): WindowEdge[] {
-  if (get(windowStore).length >= MAX_WINDOWS) return [];
-  const taken = new Set(get(windowStore).map((w) => w.edge));
-  const order: WindowEdge[] = [dockEdge(), 'right', 'left', 'bottom', 'top'];
+export function freeEdges(): DockEdge[] {
+  // Docked windows only. A harmony view's panes are neither counted against the
+  // six nor able to take an edge, since they are not docked to one.
+  const docked = get(windowStore).filter((w) => !w.transient);
+  if (docked.length >= MAX_WINDOWS) return [];
+  const taken = new Set(docked.map((w) => w.edge));
+  const order: DockEdge[] = [dockEdge(), 'right', 'left', 'bottom', 'top'];
   return order.filter((e, i) => !taken.has(e) && order.indexOf(e) === i);
 }
 
-export function freeEdge(): WindowEdge | null {
+export function freeEdge(): DockEdge | null {
   return freeEdges()[0] ?? null;
 }
 
-/** Which way a drag from this edge goes. */
-export function dirWord(edge: WindowEdge): string {
+/** Which way a drag from this edge goes. Only docked edges are ever dragged. */
+export function dirWord(edge: DockEdge): string {
   return { right: 'left', left: 'right', bottom: 'up', top: 'down' }[edge];
 }

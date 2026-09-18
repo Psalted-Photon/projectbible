@@ -2,7 +2,32 @@ import { writable, get } from 'svelte/store';
 import { libraryPrefsStore, type LibrarySource } from '../../stores/libraryPrefsStore';
 
 export type WindowContentType = 'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves';
-export type WindowEdge = 'top' | 'left' | 'right' | 'bottom';
+/**
+ * Which edge a window is docked to — plus `harmony`, which is not an edge at
+ * all.
+ *
+ * A harmony pane is one of the readers inside the parallel-accounts view. It is
+ * registered here so that everything the reader already keys off `windowId` —
+ * its content state, its chapter, its translation chip — works with no change
+ * at all. But it is not docked to anything, and the two places that draw docked
+ * windows both filter by the four real edges (`App.svelte`'s inset maths and
+ * `WindowContainer.svelte`'s four containers), so a harmony pane is invisible to
+ * both: never rendered as a panel, never counted in the reader's insets.
+ */
+export type WindowEdge = 'top' | 'left' | 'right' | 'bottom' | 'harmony';
+
+/** The edges that are real docking positions, for the code that draws them. */
+export const DOCK_EDGES = ['top', 'left', 'right', 'bottom'] as const;
+
+/**
+ * An edge a window can actually be dragged out from and docked to.
+ *
+ * Distinct from WindowEdge, which also covers `harmony`. Code about the edge
+ * gesture, the four panel containers or a panel's drag direction wants this
+ * one — a harmony pane has no edge to be dragged from, so widening those to
+ * WindowEdge would only mean handling a case that cannot arise.
+ */
+export type DockEdge = (typeof DOCK_EDGES)[number];
 
 /** One pin handed to the map window. */
 export interface MapMarker {
@@ -32,6 +57,16 @@ export interface WindowState {
   edge: WindowEdge; // which edge it's docked to
   size: number; // percentage of screen (0-100)
   isResizing: boolean;
+  /**
+   * Never written to localStorage. Set on harmony panes, which belong to a view
+   * that is itself not restored: without this a reload brings back four windows
+   * on an edge nothing renders and nothing can close, since the × that would
+   * have closed them is drawn by the view that is no longer there. That is the
+   * one way this feature could leave the app properly stuck, so the flag is on
+   * the window rather than inferred from the edge — a window is transient
+   * because it was created transient, not because of where it happens to sit.
+   */
+  transient?: boolean;
   contentState?: {
     // For Bible windows
     translation?: string;
@@ -115,7 +150,10 @@ function createWindowStore() {
   // Save to localStorage whenever state changes
   function persist(windows: WindowState[]) {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(windows));
+      // Transient windows are dropped on the way out rather than filtered on the
+      // way back in, so an older build's storage cannot resurrect them either.
+      const keep = windows.filter((w) => !w.transient);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(keep));
     }
   }
 
@@ -124,13 +162,17 @@ function createWindowStore() {
     
     createWindow: (fromEdge: WindowEdge, sizePercent?: number): string | null => {
       const windows = get({ subscribe });
-      
-      if (windows.length >= MAX_WINDOWS) {
+      // Harmony panes do not count against the six. They are not docked windows
+      // and the user did not open them one at a time — a harmony view up would
+      // otherwise eat four of the budget and refuse the next real panel.
+      const docked = windows.filter(w => !w.transient);
+
+      if (docked.length >= MAX_WINDOWS) {
         console.warn('⚠️ Cannot create window: at limit (6)');
         return null; // At limit
       }
 
-      const windowNumber = windows.length + 1;
+      const windowNumber = docked.length + 1;
       const id = `window-${windowNumber}-${Date.now()}`;
 
       // Use provided size or default to 50%
@@ -159,6 +201,65 @@ function createWindowStore() {
       });
 
       return id;
+    },
+
+    /**
+     * Create the readers for a harmony view, all at once.
+     *
+     * Separate from `createWindow` for three reasons, each of which would be a
+     * bug if this went through it. That one takes a real edge and defaults to
+     * 50% of the screen, neither of which means anything here — the view's grid
+     * sizes the panes. It returns null at MAX_WINDOWS, and a harmony view must
+     * not be refused because the user happens to have six panels open, nor eat
+     * that budget while it is up. And it creates one window per call, which for
+     * four panes would persist four times and, worse, hand back ids derived from
+     * a length that changes under it.
+     *
+     * Made in one update so the readers mount together, which is what lets the
+     * shared loads from phase 1 collapse: four panes asking for the translation
+     * list in the same tick await one promise rather than four.
+     */
+    createHarmonyPanes: (specs: Array<{ book: string; chapter: number; translation?: string }>): string[] => {
+      const stamp = Date.now();
+      const made: WindowState[] = specs.map((spec, i) => ({
+        // The index rather than the store's length: these ids have to be unique
+        // among themselves, and four windows created in the same millisecond off
+        // a length that has not been written yet would all be `window-N-<stamp>`.
+        id: `harmony-${i + 1}-${stamp}`,
+        contentType: 'bible',
+        edge: 'harmony',
+        size: 100,
+        isResizing: false,
+        transient: true,
+        contentState: {
+          book: spec.book,
+          chapter: spec.chapter,
+          ...(spec.translation ? { translation: spec.translation } : {}),
+        },
+      }));
+
+      update(wins => {
+        const updated = [...wins, ...made];
+        persist(updated);
+        return updated;
+      });
+
+      return made.map(w => w.id);
+    },
+
+    /**
+     * Take down every harmony pane.
+     *
+     * Closes by edge rather than by a list of ids the caller kept, so it is also
+     * the way out of a state where the view lost track of its own panes — a
+     * failed mount, a reload mid-open. Nothing else is ever on this edge.
+     */
+    closeHarmonyPanes: () => {
+      update(wins => {
+        const updated = wins.filter(w => w.edge !== 'harmony');
+        persist(updated);
+        return updated;
+      });
     },
 
     closeWindow: (id: string) => {

@@ -60,13 +60,15 @@
   import { profileModalStore } from '../stores/profileModalStore';
   import { get } from 'svelte/store';
   import { navigationStore } from '../stores/navigationStore';
-  import { windowStore } from '../lib/stores/windowStore';
+  import { windowStore, type DockEdge } from '../lib/stores/windowStore';
   import { showNotice } from '../stores/noticeStore';
 
   export let windowId: string | undefined = undefined;
   export let contentState: any = {};
   /** Which screen edge this panel is docked to — drives the resize-grip gutter below. */
-  export let edge: 'left' | 'right' | 'top' | 'bottom' = 'right';
+  // Only ever drawn as a docked panel, so the four real edges rather than
+  // WindowEdge, which also covers the harmony view's panes.
+  export let edge: DockEdge = 'right';
 
   const QUICK_NOTES = 'Quick Notes';
 
