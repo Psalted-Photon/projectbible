@@ -19,9 +19,10 @@
  * a pane the user has touched inside the last GRACE_MS is skipped whole: not
  * moved, not dimmed, not retargeted.
  *
- * Phase 4 moves followers with a direct scroll assignment. Phase 5 replaces the
- * body of `moveTo` with the re-aimable rAF tween; nothing else in this file
- * changes, which is why the seam exists.
+ * All motion goes through `moveTo`, which hands the target to the re-aimable
+ * tween in smoothScrollTo. That one seam is why the 90ms tick is safe to fire
+ * as often as it does: a target arriving while a follower is still gliding
+ * re-aims it rather than restarting it.
  */
 
 import { get } from 'svelte/store';
@@ -34,6 +35,7 @@ import {
   type HeadingVerses,
   type ParallelGroup,
 } from './parallelIndex';
+import { cancelSmoothScroll, smoothScrollTo } from './smoothScrollTo';
 
 /** How long a pane stays the user's after they touch it. */
 const GRACE_MS = 1200;
@@ -47,6 +49,20 @@ const LOAD_TIMEOUT_MS = 800;
 /** How often to look for the verse element while a chapter is loading. */
 const LOAD_POLL_MS = 60;
 
+/**
+ * How long after a move to look again and correct the landing.
+ *
+ * The reader injects repeat markers, place markers and note icons after the
+ * verses themselves are on screen, so a target measured before they land is a
+ * few pixels stale by the time the tween gets there. The reader does the same
+ * correction for its own navigation at ~360ms; this is a little later because
+ * the tween is still gliding at that point and there is nothing yet to correct.
+ */
+const SETTLE_MS = 400;
+
+/** Landing error, in px, worth correcting. Below this nobody can see it. */
+const SETTLE_TOLERANCE_PX = 4;
+
 interface PaneRuntime {
   /** Wall-clock time the user last touched this pane. */
   touchedAt: number;
@@ -54,6 +70,8 @@ interface PaneRuntime {
   cancelPendingLoad: (() => void) | null;
   /** Where the tween is currently headed, so an identical target is a no-op. */
   aimedAt: string | null;
+  /** Cancels the pending settle check for this pane's last move. */
+  cancelSettle: (() => void) | null;
 }
 
 let container: HTMLElement | null = null;
@@ -95,7 +113,14 @@ export function detach(): void {
   if (tickTimer) clearTimeout(tickTimer);
   tickTimer = null;
   pending = null;
-  for (const rt of runtime.values()) rt.cancelPendingLoad?.();
+  for (const rt of runtime.values()) {
+    rt.cancelPendingLoad?.();
+    rt.cancelSettle?.();
+  }
+  // Stop every follower mid-glide. A tween holds its own rAF handle, so a view
+  // torn down while one is running would otherwise keep scrolling a detached
+  // pane until it happened to arrive.
+  for (const scroller of trackedScrollers()) cancelSmoothScroll(scroller);
   runtime.clear();
   container = null;
 }
@@ -109,7 +134,7 @@ function onUserTouch(event: Event): void {
 function runtimeFor(paneId: string): PaneRuntime {
   let rt = runtime.get(paneId);
   if (!rt) {
-    rt = { touchedAt: 0, cancelPendingLoad: null, aimedAt: null };
+    rt = { touchedAt: 0, cancelPendingLoad: null, aimedAt: null, cancelSettle: null };
     runtime.set(paneId, rt);
   }
   return rt;
@@ -376,17 +401,16 @@ function headingsFor(paneId: string): HeadingVerses {
 }
 
 // ---------------------------------------------------------------------------
-// Motion — the seam phase 5 replaces
+// Motion
 // ---------------------------------------------------------------------------
 
 /**
- * Put a verse at the top of a pane.
+ * Put a verse at the top of a pane, easing.
  *
- * Phase 4 assigns scrollTop directly, which is correct but abrupt. Phase 5
- * replaces the inside of this function with a re-aimable rAF tween; everything
- * above stays as it is, which is the point of routing all motion through one
- * call. `freeze` is the other half of that seam — phase 5 cancels the running
- * tween there, where today there is nothing to cancel.
+ * Every follower movement in the feature comes through here, which is what lets
+ * the tick fire as often as it likes: smoothScrollTo re-aims a tween already in
+ * flight instead of starting a second one, so a master scrolling steadily
+ * produces one continuous glide rather than a new animation every 90ms.
  *
  * The heading walk mirrors scrollToVerseEl in BibleReader.svelte (~line 1491):
  * a section heading within 55% of the screen above the verse is pulled in, so a
@@ -398,20 +422,93 @@ function moveTo(paneId: string, verseEl: HTMLElement): void {
   const scroller = scrollerOf(paneId);
   if (!scroller) return;
 
-  const target = withHeading(verseEl);
-  const top =
-    scroller.scrollTop +
-    (target.getBoundingClientRect().top - scroller.getBoundingClientRect().top) -
-    8;
-  scroller.scrollTop = Math.max(0, top);
+  smoothScrollTo(scroller, targetTopFor(scroller, verseEl));
+  scheduleSettle(paneId, verseEl);
 }
 
-/** Stop a follower where it is. Never scrolls it back to anything. */
+/**
+ * Where the scroller has to sit for this element to be at its top.
+ *
+ * Recomputed on every retarget rather than cached, because getBoundingClientRect
+ * is relative to the current scroll: a rect measured one tick ago describes a
+ * pane that has since moved, and reusing it would aim the tween at a position
+ * off by however far it has travelled in between.
+ */
+function targetTopFor(scroller: HTMLElement, verseEl: HTMLElement): number {
+  const target = withHeading(verseEl);
+  return Math.max(
+    0,
+    scroller.scrollTop +
+      (target.getBoundingClientRect().top - scroller.getBoundingClientRect().top) -
+      8,
+  );
+}
+
+/**
+ * Look again once the dust settles, and correct the landing if it is off.
+ *
+ * Two things move the ground under a tween. The reader injects markers and icons
+ * into verses after they render, which shifts everything below them; and a
+ * follower that loaded a chapter is still measuring web fonts when the tween is
+ * aimed. Both leave the verse a few pixels from the top of the pane.
+ *
+ * The correction goes through smoothScrollTo like everything else, so it reads
+ * as the tail of the same movement rather than a separate hop. It is abandoned
+ * if the user has touched the pane, if the element is gone, or if the engine has
+ * since aimed this pane somewhere else — in that last case there is a newer
+ * tween in flight and correcting the old target would drag it backwards.
+ */
+function scheduleSettle(paneId: string, verseEl: HTMLElement): void {
+  const rt = runtimeFor(paneId);
+  rt.cancelSettle?.();
+
+  const aimed = rt.aimedAt;
+  const timer = setTimeout(() => {
+    rt.cancelSettle = null;
+    if (rt.aimedAt !== aimed) return;
+    if (Date.now() - rt.touchedAt < GRACE_MS) return;
+    if (!verseEl.isConnected) return;
+
+    const scroller = scrollerOf(paneId);
+    if (!scroller) return;
+
+    const want = targetTopFor(scroller, verseEl);
+    if (Math.abs(want - scroller.scrollTop) > SETTLE_TOLERANCE_PX) {
+      smoothScrollTo(scroller, want);
+    }
+  }, SETTLE_MS);
+
+  rt.cancelSettle = () => {
+    clearTimeout(timer);
+    rt.cancelSettle = null;
+  };
+}
+
+/**
+ * Stop a follower where it is.
+ *
+ * Never scrolls it back to anything: the tween is killed at whatever position it
+ * had reached, because losing the parallel is not a reason to undo the reading
+ * already on screen. The settle check goes too — it would otherwise fire 400ms
+ * later and pull a frozen pane to a target that no longer applies.
+ */
 function freeze(paneId: string): void {
   const rt = runtimeFor(paneId);
   rt.cancelPendingLoad?.();
   rt.cancelPendingLoad = null;
+  rt.cancelSettle?.();
+  cancelSmoothScroll(scrollerOf(paneId));
   rt.aimedAt = null;
+}
+
+/** Every pane scroller the engine currently knows about, for teardown. */
+function trackedScrollers(): HTMLElement[] {
+  const found: HTMLElement[] = [];
+  for (const paneId of runtime.keys()) {
+    const scroller = scrollerOf(paneId);
+    if (scroller) found.push(scroller);
+  }
+  return found;
 }
 
 function withHeading(verseEl: HTMLElement): HTMLElement {
