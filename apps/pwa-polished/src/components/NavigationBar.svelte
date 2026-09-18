@@ -289,7 +289,7 @@
     await tick();
 
     requestAnimationFrame(() => {
-      const dropdown = document.querySelector('.comm-dropdown') as HTMLElement;
+      const dropdown = (navElement?.querySelector('.comm-dropdown') ?? document.querySelector('.comm-dropdown')) as HTMLElement;
       if (dropdown && commButtonRef) {
         const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth };
         const rect = commButtonRef.getBoundingClientRect();
@@ -323,7 +323,7 @@
     await tick(); // let Svelte render the dropdown element
 
     requestAnimationFrame(() => {
-      const dropdown = document.querySelector('.translation-dropdown') as HTMLElement;
+      const dropdown = (navElement?.querySelector('.translation-dropdown') ?? document.querySelector('.translation-dropdown')) as HTMLElement;
       if (dropdown && translationButtonRef) {
         const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth };
         const rect = translationButtonRef.getBoundingClientRect();
@@ -362,7 +362,7 @@
     await tick(); // let Svelte render the dropdown element
 
     requestAnimationFrame(() => {
-      const dropdown = document.querySelector('.reference-dropdown') as HTMLElement;
+      const dropdown = (navElement?.querySelector('.reference-dropdown') ?? document.querySelector('.reference-dropdown')) as HTMLElement;
       if (dropdown && referenceButtonRef) {
         // Clear any inline width that may have been stamped by updateDropdownPositions
         // firing during the async tick (e.g. triggered by the nav-scroll macrotask).
@@ -408,7 +408,7 @@
     // Auto-scroll to show the expanded book at the top of visible area
     if (isExpanding && event) {
       requestAnimationFrame(() => {
-        const dropdown = document.querySelector('.reference-dropdown') as HTMLElement;
+        const dropdown = (navElement?.querySelector('.reference-dropdown') ?? document.querySelector('.reference-dropdown')) as HTMLElement;
         const bookButton = event.target as HTMLElement;
         const bookItem = bookButton?.closest('.book-item') as HTMLElement;
         
@@ -493,7 +493,7 @@
 
   function positionRepeatDropdown() {
     requestAnimationFrame(() => {
-      const dropdown = document.querySelector('.repeat-dropdown') as HTMLElement;
+      const dropdown = (navElement?.querySelector('.repeat-dropdown') ?? document.querySelector('.repeat-dropdown')) as HTMLElement;
       if (dropdown && repeatPillButtonRef) {
         const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0 };
         const rect = repeatPillButtonRef.getBoundingClientRect();
@@ -583,9 +583,8 @@
       // Position search results dropdown
       if (searchContainerRef) {
         requestAnimationFrame(() => {
-          const dropdown = document.querySelector(
-            ".search-results-dropdown",
-          ) as HTMLElement;
+          const dropdown = (navElement?.querySelector(".search-results-dropdown") ??
+            document.querySelector(".search-results-dropdown")) as HTMLElement;
           if (dropdown) {
             // This used to subtract `.main-content`'s left unconditionally, which
             // is only right when that element is the containing block — true in
@@ -872,9 +871,8 @@
     const navWidth = navElement?.offsetWidth ?? window.innerWidth;
 
     if (translationDropdownOpen) {
-      const dropdown = document.querySelector(
-        ".translation-dropdown",
-      ) as HTMLElement;
+      const dropdown = (navElement?.querySelector(".translation-dropdown") ??
+        document.querySelector(".translation-dropdown")) as HTMLElement;
       if (dropdown && translationButtonRef) {
         const rect = translationButtonRef.getBoundingClientRect();
         dropdown.style.left = `${rect.left - navRect.left}px`;
@@ -883,9 +881,8 @@
       }
     }
     if (referenceDropdownOpen && referenceDropdownPositioned) {
-      const dropdown = document.querySelector(
-        ".reference-dropdown",
-      ) as HTMLElement;
+      const dropdown = (navElement?.querySelector(".reference-dropdown") ??
+        document.querySelector(".reference-dropdown")) as HTMLElement;
       if (dropdown && referenceButtonRef) {
         const rect = referenceButtonRef.getBoundingClientRect();
         dropdown.style.left = `${rect.left - navRect.left}px`;
@@ -893,7 +890,7 @@
       }
     }
     if (commDropdownOpen && commDropdownPositioned) {
-      const dropdown = document.querySelector('.comm-dropdown') as HTMLElement;
+      const dropdown = (navElement?.querySelector('.comm-dropdown') ?? document.querySelector('.comm-dropdown')) as HTMLElement;
       if (dropdown && commButtonRef) {
         const rect = commButtonRef.getBoundingClientRect();
         const naturalLeft = rect.left - navRect.left;
@@ -903,9 +900,8 @@
       }
     }
     if (showResults) {
-      const dropdown = document.querySelector(
-        ".search-results-dropdown",
-      ) as HTMLElement;
+      const dropdown = (navElement?.querySelector(".search-results-dropdown") ??
+        document.querySelector(".search-results-dropdown")) as HTMLElement;
       if (dropdown && searchContainerRef) {
         const rect = searchContainerRef.getBoundingClientRect();
         dropdown.style.left = `${rect.left - navRect.left}px`;
