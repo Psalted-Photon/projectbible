@@ -1,4 +1,85 @@
-﻿<script lang="ts">
+﻿<script context="module" lang="ts">
+  import { IndexedDBTextStore as SharedTextStore } from "../lib/adapters";
+
+  // Work that is identical for every reader on the page lives here rather than
+  // in the instance script below, so the harmony view's four panes pay for it
+  // once. Both caches are module-level promises, not results: the second pane
+  // to ask arrives while the first request is still open, and awaiting the same
+  // promise is what collapses the duplicates — caching only the finished value
+  // would still let four simultaneous mounts fire four requests.
+
+  /** The red-letter spans JSON — one file, one fetch, shared by every reader. */
+  let redLetterPromise:
+    | Promise<Record<string, Record<string, { s: number; e: number }[]>> | null>
+    | null = null;
+
+  function sharedRedLetterData(): Promise<Record<
+    string,
+    Record<string, { s: number; e: number }[]>
+  > | null> {
+    if (!redLetterPromise) {
+      redLetterPromise = (async () => {
+        try {
+          const res = await fetch("/red-letter-spans.json");
+          if (res.ok) return await res.json();
+        } catch {
+          // Network failure — red-letter simply won't display
+        }
+        // A failure is not cached: clearing the promise lets the next reader
+        // that needs red-letter try again rather than the page giving up for
+        // good on one bad request.
+        redLetterPromise = null;
+        return null;
+      })();
+    }
+    return redLetterPromise;
+  }
+
+  /**
+   * The installed-translation scan, which counts rows in every pack. Shared the
+   * same way, but with a short life: installing a pack has to become visible
+   * without a reload, so the cache is dropped after TRANSLATIONS_TTL_MS and the
+   * next caller does the real scan again.
+   */
+  const TRANSLATIONS_TTL_MS = 30_000;
+  let translationsPromise: Promise<Array<{ id: string; name: string }>> | null = null;
+  let translationsFetchedAt = 0;
+
+  function sharedTranslations(): Promise<Array<{ id: string; name: string }>> {
+    const now = Date.now();
+    if (!translationsPromise || now - translationsFetchedAt > TRANSLATIONS_TTL_MS) {
+      translationsFetchedAt = now;
+      translationsPromise = (async () => {
+        try {
+          // A store of its own rather than a reader's: the scan is a plain read,
+          // and App.svelte and progressive-init already call it this way.
+          return await new SharedTextStore().getTranslations();
+        } catch (err) {
+          // Same reasoning as above: a thrown scan is not worth remembering for
+          // 30 seconds, so the next caller retries. The error still propagates
+          // to this caller, whose own catch already handles it.
+          translationsPromise = null;
+          throw err;
+        }
+      })();
+    }
+    return translationsPromise;
+  }
+
+  /**
+   * Installing or removing a pack changes the answer, and the TTL alone would
+   * leave the reader showing the old list for up to half a minute. The packs
+   * pane and the installer both already announce themselves; one listener here
+   * covers every reader on the page, so the next scan after an install is real.
+   */
+  if (typeof window !== "undefined") {
+    window.addEventListener("packsUpdated", () => {
+      translationsPromise = null;
+    });
+  }
+</script>
+
+<script lang="ts">
   import { onMount, tick } from "svelte";
   import { get } from "svelte/store";
   import NavigationBar from "./NavigationBar.svelte";
@@ -275,20 +356,16 @@
   // Red-letter span data loaded lazily from /red-letter-spans.json
   // Format: { [transId]: { ["BOOK:CH:V"]: [{s,e}] } }
   let redLetterData: Record<string, Record<string, { s: number; e: number }[]>> | null = null;
-  let redLetterLoading = false;
 
-  /** Load the red-letter spans JSON once and cache it. */
+  /**
+   * Load the red-letter spans JSON once per document, not once per reader. The
+   * file is identical for every instance, so the fetch is held at module level
+   * and each reader copies the result into its own field — callers and every
+   * reader of redLetterData are unchanged, and four panes cost one request.
+   */
   async function loadRedLetterData(): Promise<void> {
-    if (redLetterData !== null || redLetterLoading) return;
-    redLetterLoading = true;
-    try {
-      const res = await fetch('/red-letter-spans.json');
-      if (res.ok) redLetterData = await res.json();
-    } catch {
-      // Network failure — red-letter simply won't display
-    } finally {
-      redLetterLoading = false;
-    }
+    if (redLetterData !== null) return;
+    redLetterData = await sharedRedLetterData();
   }
 
   /** USFM 3-letter book code lookup (handles both numeric and Roman-numeral pack variants). */
@@ -2496,7 +2573,7 @@
 
   async function loadAvailableTranslations() {
     try {
-      const translations = await textStore.getTranslations();
+      const translations = await sharedTranslations();
       // Drives the reader's empty state: an empty chapter means something very
       // different when there is no Bible text on the device at all.
       noTranslationsInstalled = translations.length === 0;
@@ -5143,7 +5220,10 @@
 
     (async () => {
       await loadAvailableTranslations();
-      await loadChronologicalPack();
+      // A full getAll() of ~31k chronological rows, and already dead for panes:
+      // isChronologicalMode is forced false whenever windowId is set, so a
+      // harmony view's four readers would each pay for a table nothing reads.
+      if (!windowId) await loadChronologicalPack();
     })();
 
     // Open the ISBE indexes now rather than on the first tapped word. The ring
