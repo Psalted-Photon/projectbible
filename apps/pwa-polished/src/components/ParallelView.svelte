@@ -25,6 +25,7 @@
   import { parallelStore, type ParallelLayout } from '../stores/parallelStore';
   import { navigationStore } from '../stores/navigationStore';
   import * as parallelSync from '../lib/parallelSync';
+  import { groupById, stepSection } from '../lib/parallelIndex';
 
   /**
    * Below this width the panes are stacked whatever the user chose.
@@ -234,13 +235,95 @@
     if (reason.kind === 'no-passage') return `Not in ${reason.book}`;
     return `${reason.book} ${reason.chapter} not loaded`;
   }
+
+  // ── Stepping by Robertson section ─────────────────────────────────────────
+
+  /**
+   * The section the strip names, and what the arrows step from.
+   *
+   * Read straight out of the store: the engine works it out on each tick from
+   * the master position it already has, so this costs a lookup by id and no DOM
+   * access at all. Deriving it here from `currentGroupId` instead would not
+   * work — that is whatever `bestParallel` chose, and in the Gospels it is a
+   * BSB marker with no place in Robertson's sequence about two times in three.
+   */
+  $: section =
+    $parallelStore.currentSectionId !== null
+      ? groupById($parallelStore.currentSectionId)
+      : null;
+
+  /**
+   * The arrows are an anchored-only control.
+   *
+   * A step moves the whole harmony to the same event in every pane, which is
+   * precisely what switching the anchor off says you do not want — with it off
+   * the panes are ordinary readers and there is no "whole harmony" to move. The
+   * store's section is also frozen at wherever the master was when the anchor
+   * went off, since nothing ticks to update it, so an arrow that still worked
+   * would step from a stale place. Disabled rather than hidden, for the same
+   * reason the end-of-harmony arrows are.
+   */
+  $: canStep = $parallelStore.anchorOn && section !== null;
+
+  /**
+   * Whether an arrow can go anywhere, worked out from the section rather than
+   * attempted and discovered. A disabled arrow is how the ends of the harmony
+   * are shown — see the note on stepSection about not wrapping.
+   */
+  $: canStepBack = canStep && section !== null && stepSection(section.id, -1) !== null;
+  $: canStepFwd = canStep && section !== null && stepSection(section.id, 1) !== null;
+
+  /** What the strip calls where the master is, when it is in a named section. */
+  $: sectionLabel = section
+    ? `§${section.robertsonSection} · ${section.title ?? ''}`.replace(/ · $/, '')
+    : '';
+
+  /**
+   * Only this Gospel carries the section the master is in.
+   *
+   * Shown in the strip as well as tinting the pane, because in the harmony the
+   * three empty panes already say something is missing — what the strip adds is
+   * which Gospel it is that has it, which is the actual insight.
+   */
+  $: soloBook =
+    section?.soloRobertson === true ? (section.passages[0]?.book ?? null) : null;
+
+  function step(delta: 1 | -1) {
+    if (!section) return;
+    const next = stepSection(section.id, delta);
+    if (next) parallelSync.goToSection(next);
+  }
 </script>
 
 <svelte:window on:resize={onResize} on:popstate={onPopState} on:keydown={onKeydown} />
 
 <div class="pv-root">
   <div class="pv-strip">
-    <span class="pv-set">{$parallelStore.setLabel ?? 'Harmony'}</span>
+    <!-- The arrows move by Robertson section rather than by chapter, which is
+         the unit a harmony is actually built from: a chapter boundary means
+         four different things in four Gospels, whereas a section is the same
+         event in all of them. -->
+    <button
+      class="pv-step"
+      on:click={() => step(-1)}
+      disabled={!canStepBack}
+      aria-label="Previous section"
+      title="Previous section">‹</button>
+    <button
+      class="pv-step"
+      on:click={() => step(1)}
+      disabled={!canStepFwd}
+      aria-label="Next section"
+      title="Next section">›</button>
+
+    <span class="pv-set">
+      {$parallelStore.setLabel ?? 'Harmony'}
+      {#if sectionLabel}<span class="pv-section">{sectionLabel}</span>{/if}
+    </span>
+
+    {#if soloBook}
+      <span class="pv-solo">Only in {soloBook}</span>
+    {/if}
     {#if demoted}
       <!-- Said out loud rather than silently overriding: the user picked a
            layout and is getting a different one, and a screen that quietly
@@ -300,6 +383,54 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* The section number and title, after the set name. Dimmer than the set and
+     allowed to be clipped by the set's own ellipsis, because on a phone the
+     title is often long and the set name is the part that must survive. */
+  .pv-section {
+    color: #9a9a9a;
+    font-weight: 400;
+  }
+
+  .pv-step {
+    background: none;
+    border: none;
+    color: #bbb;
+    font-size: 17px;
+    line-height: 1;
+    /* A 28px box round a small glyph: the arrows are the one control here that
+       gets pressed repeatedly, and at strip height there is no room to make the
+       glyph itself bigger. */
+    min-width: 28px;
+    height: 28px;
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .pv-step:hover:not(:disabled) {
+    color: #fff;
+  }
+
+  .pv-step:disabled {
+    /* Kept visible rather than hidden: an arrow that vanishes at the end of the
+       harmony shifts everything beside it, and the gap reads as a glitch rather
+       than as "there is nothing further this way". */
+    opacity: 0.25;
+    cursor: default;
+  }
+
+  .pv-solo {
+    font-size: 10px;
+    font-weight: 600;
+    color: #d9b06a;
+    border: 1px solid #5a4523;
+    background: #2a2116;
+    border-radius: 3px;
+    padding: 2px 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .pv-note {

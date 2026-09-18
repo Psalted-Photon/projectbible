@@ -52,6 +52,19 @@ export interface ParallelState {
   panes: ParallelPane[];
   /** The group the master is currently inside, for the strip. */
   currentGroupId: number | null;
+  /**
+   * The Robertson section the master is inside, which is a different question
+   * from currentGroupId and cannot be derived from it.
+   *
+   * `bestParallel` prefers a titled section but legitimately returns a BSB
+   * marker when no section covers the same ground, and in the Gospels the BSB
+   * entries outnumber Robertson's roughly two to one — so the group is often
+   * not a section at all. The strip's arrows step along Robertson's sequence
+   * and need the section regardless, and the engine is the only place that
+   * already has the master's position to work it out from without reading the
+   * DOM again.
+   */
+  currentSectionId: number | null;
   /** What the strip calls this set, e.g. "Gospels". */
   setLabel: string | null;
 }
@@ -63,6 +76,7 @@ const EMPTY: ParallelState = {
   anchorOn: true,
   panes: [],
   currentGroupId: null,
+  currentSectionId: null,
   setLabel: null,
 };
 
@@ -89,6 +103,7 @@ function createParallelStore() {
         anchorOn: true,
         panes: panes.map((p) => ({ ...p, dim: false, dimReason: null })),
         currentGroupId: null,
+        currentSectionId: null,
         setLabel: opts.setLabel ?? null,
       });
     },
@@ -108,6 +123,7 @@ function createParallelStore() {
           ...s,
           masterId: paneId,
           currentGroupId: null,
+          currentSectionId: null,
           // Every dim is cleared, not just the new master's. A dim says "the
           // master is somewhere this pane does not go", and the master has just
           // changed, so every one of those statements is about a question
@@ -161,6 +177,10 @@ function createParallelStore() {
 
     setCurrentGroup: (id: number | null) =>
       update((s) => (s.currentGroupId === id ? s : { ...s, currentGroupId: id })),
+
+    /** Bails when unchanged, for the same reason setDim does. */
+    setCurrentSection: (id: number | null) =>
+      update((s) => (s.currentSectionId === id ? s : { ...s, currentSectionId: id })),
 
     /** Read without subscribing — what the engine does on every tick. */
     snapshot: (): ParallelState => get({ subscribe }),

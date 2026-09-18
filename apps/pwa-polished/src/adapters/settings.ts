@@ -183,6 +183,7 @@ export interface UserSettings {
   showArt?: boolean; // Show in-text art icons on scenes that have paintings (default true)
   showRedLetter?: boolean; // Show Jesus' words in red (default true)
   showPlaceMarkers?: boolean; // Dotted underline under multi-word place names (default false; needs ISBE pack)
+  showSoloMarking?: boolean; // Mark the passages only one Gospel carries (default true)
   // Which menu a tapped word opens. 'radial' is a ring around the word, so the
   // word itself stays readable; 'classic' is the older popup above or below it.
   selectionMenu?: 'classic' | 'radial'; // default 'radial'

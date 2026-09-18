@@ -91,6 +91,7 @@
   let themedTitles: boolean = true;
   let showArt: boolean = true;
   let showPlaceMarkers: boolean = false;
+  let showSoloMarking: boolean = true;
   let selectionMenu: 'classic' | 'radial' = 'radial';
   let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -161,6 +162,7 @@
       themedTitles,
       showArt,
       showPlaceMarkers,
+      showSoloMarking,
       selectionMenu,
       timezone: timezone || undefined,
       autoCheckUpdates,
@@ -294,6 +296,7 @@
     themedTitles = settings.themedTitles !== false;
     showArt = settings.showArt !== false;
     showPlaceMarkers = settings.showPlaceMarkers === true;
+    showSoloMarking = settings.showSoloMarking !== false;
     selectionMenu = settings.selectionMenu === 'classic' ? 'classic' : 'radial';
     timezone = settings.timezone || '';
     autoCheckUpdates = settings.autoCheckUpdates !== false; // default true
@@ -514,6 +517,7 @@
     themedTitles;
     showArt;
     showPlaceMarkers;
+    showSoloMarking;
     selectionMenu;
     timezone;
     autoCheckUpdates;
@@ -738,6 +742,13 @@
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={showPlaceMarkers} />
         <span class="label-text">Underline multi-word place names (needs Encyclopedia pack)</span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={showSoloMarking} />
+        <span class="label-text">Mark passages only one Gospel tells</span>
       </label>
     </div>
 

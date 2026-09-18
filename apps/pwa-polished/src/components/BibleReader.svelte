@@ -149,6 +149,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { parallelStore } from "../stores/parallelStore";
   import * as parallelSync from "../lib/parallelSync";
+  import { soloRunsIn } from "../lib/parallelIndex";
   import { openMapWindow } from "../lib/openMapWindow";
   import { searchQuery, triggerSearch } from "../stores/searchStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
@@ -368,6 +369,8 @@
   let showRedLetter = true;
   /** Dotted underline under multi-word place names (opt-in, needs ISBE pack). */
   let showPlaceMarkers = false;
+  /** Tint and label the passages only one Gospel carries. */
+  let showSoloMarking = true;
   /** Flips true once the place-name gazetteer has loaded, to re-trigger a repaint. */
   let placePhrasesLoaded = false;
   let themedTitles = true;
@@ -1033,6 +1036,10 @@
     showArt = settings.showArt !== false; // default true
     showRedLetter = settings.showRedLetter !== false; // default true
     showPlaceMarkers = settings.showPlaceMarkers === true; // default false
+    // Default on. It marks 78 passages in four books and is silent everywhere
+    // else, and the fact it reports — that only Luke tells this — is the sort
+    // of thing a reader wants pointed out rather than has to go looking for.
+    showSoloMarking = settings.showSoloMarking !== false;
     selectionMenu = settings.selectionMenu === "classic" ? "classic" : "radial";
     if (showPlaceMarkers && !placePhrasesLoaded) {
       void loadPlacePhrases().then(() => { placePhrasesLoaded = true; });
@@ -5719,6 +5726,12 @@
         {@const chPlanCtxs = computeAllPlanContexts(chapterData.book, chapterData.chapter, $readingSessionStore)}
         {@const chHarmCtxs = chPlanCtxs.filter((c) => c.type === 'harmony')}
         {@const chStdCtxs = chPlanCtxs.filter((c) => c.type === 'standard')}
+        <!-- Material only this Gospel carries. Asked once per rendered chapter
+             and then tested per verse: the alternative, asking per verse, would
+             run 78 range tests for every verse on screen in every pane. Empty
+             for the whole of the Old Testament and for most Gospel chapters,
+             so the per-verse test below is against an empty array by default. -->
+        {@const chSoloRuns = showSoloMarking ? soloRunsIn(chapterData.book, chapterData.chapter) : []}
         <div class="chapter-section" class:flat-titles={!themedTitles} data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
           <div class="chapter-header">
             <h1 style="--title-shadow:{getBookColor(chapterData.book)}">{chapterData.book} {chapterData.chapter}</h1>
@@ -5779,11 +5792,22 @@
           >
             {#each chapterData.verses as { verse, text, html, interlinearHtml, heading, headingLevel, paraStart, poetryLevel, stanzaBreak }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
               {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
+              {@const soloRun = chSoloRuns.find((r) => verse >= r.from && verse <= r.to) ?? null}
               {#if heading && showSectionHeadings}
                 <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
               {/if}
+              {#if soloRun && verse === soloRun.from}
+                <!-- Named once, at the verse the run starts on, rather than on
+                     every verse it covers: the tint already carries the run's
+                     extent, so repeating the label would be the same sentence
+                     several times down a chapter. -->
+                <div class="solo-label" title="Robertson §{soloRun.section} — {soloRun.title}">
+                  Only in {chapterData.book}
+                </div>
+              {/if}
               <div
                 class="verse"
+                class:solo-only={soloRun !== null}
                 class:para-start={paraStart}
                 class:poetry-1={poetryLevel === 1}
                 class:poetry-2={poetryLevel === 2}
@@ -6775,6 +6799,33 @@
     .verse-number {
       font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) * 0.5);
     }
+  }
+
+  /* ── "Only in Luke" ───────────────────────────────────────────────────────
+     Material one Gospel alone carries. The tint is deliberately very faint and
+     applied as a left edge rather than a background wash: it has to survive
+     every theme and every font setting, and sit under highlights, repeat
+     markers and the interlinear without competing with any of them — all of
+     which own the verse's background or its text colour already.
+
+     currentColor is not used anywhere here. The marking means one specific
+     thing, so it keeps one colour rather than inheriting whatever the theme
+     has made the text. */
+  .verse.solo-only {
+    box-shadow: inset 2px 0 0 var(--solo-edge, #b8924e66);
+    padding-left: 10px;
+  }
+
+  .solo-label {
+    font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) * 0.62);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--solo-text, #b8924e);
+    margin: 14px 0 4px 0;
+    /* Follows the verse's own indent so the label and the edge it introduces
+       line up, whatever the font scale does to the padding above. */
+    padding-left: 10px;
   }
 
   /* Remove verse-level hover - we'll handle word-level in JS */

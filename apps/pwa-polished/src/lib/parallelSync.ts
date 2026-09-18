@@ -32,6 +32,7 @@ import {
   bestParallel,
   followerTarget,
   passageFor,
+  robertsonSectionAt,
   type HeadingVerses,
   type ParallelGroup,
 } from './parallelIndex';
@@ -243,6 +244,105 @@ function masterPosition(): { book: string; chapter: number; verse: number } | nu
 }
 
 /**
+ * Move the whole harmony to a Robertson section.
+ *
+ * Only the master is moved. Every follower then arrives through the ordinary
+ * tick, which is the point: a step is not a special kind of motion, it is the
+ * master being somewhere new, and routing it through the same path means the
+ * followers snap to headings and dim for a missing Gospel exactly as they do
+ * when the master is scrolled by hand. A version that positioned all four
+ * directly would be a second alignment implementation to keep in step with the
+ * first.
+ *
+ * The master's own passage in the section is where it goes. For a solo section
+ * that is the one Gospel that has it, and if the master is not that Gospel the
+ * step still lands — the master is navigated to the book the section is in,
+ * because a step that refused to move because the master happened to be in
+ * Matthew would make most of the harmony unreachable by arrow.
+ */
+export function goToSection(group: ParallelGroup): void {
+  const state = parallelStore.snapshot();
+  const masterId = state.masterId;
+  if (!masterId) return;
+
+  const masterBook = state.panes.find((p) => p.paneId === masterId)?.book;
+  const passage =
+    (masterBook ? passageFor(group, masterBook) : null) ?? group.passages[0];
+  if (!passage) return;
+
+  // The master may be changing book, so the store's record of which book this
+  // pane shows has to change with it or the next tick would look up the
+  // master's parallels under the book it used to be in.
+  parallelStore.setPaneBook(masterId, passage.book);
+
+  // Every follower's aim is cleared first. `aimedAt` exists to stop a pane
+  // being re-driven to a target it is already heading for, and after a step the
+  // whole harmony has moved — a follower that happens to be aimed at the same
+  // verse it was before would otherwise sit still while the others moved.
+  for (const pane of state.panes) runtimeFor(pane.paneId).aimedAt = null;
+
+  parallelStore.setCurrentGroup(group.id);
+  // Set now rather than waiting for the master's scroll to report back, so the
+  // arrows and the section name in the strip update on the press instead of a
+  // beat later — pressing next twice quickly must step two sections, not aim
+  // at the same one twice because the strip had not caught up.
+  parallelStore.setCurrentSection(group.id);
+  moveMasterTo(masterId, passage.book, passage.startChapter, passage.startVerse);
+}
+
+/**
+ * Scroll the master to a verse, loading the chapter first if it has not got it.
+ *
+ * This is `awaitChapter` for the one pane that function deliberately never
+ * touches. The master is normally moved by the user's own finger, so the engine
+ * has no path to it at all; a step is the single case where the master is moved
+ * for them, and it needs the same load-then-poll treatment because a section
+ * can be several chapters away from where the reader is sitting.
+ *
+ * The followers are not driven from here. Once the master's scroll lands, its
+ * own observer reports the new position through `masterMoved` exactly as it
+ * would after any other movement, and the ordinary tick takes it from there.
+ */
+function moveMasterTo(
+  paneId: string,
+  book: string,
+  chapter: number,
+  verse: number,
+): void {
+  const rt = runtimeFor(paneId);
+  rt.cancelPendingLoad?.();
+
+  const el = verseElement(paneId, book, chapter, verse);
+  if (el) {
+    rt.cancelPendingLoad = null;
+    moveTo(paneId, el);
+    return;
+  }
+
+  const current = get(windowStore).find((w) => w.id === paneId)?.contentState;
+  if (current?.book !== book || current?.chapter !== chapter) {
+    windowStore.updateContentState(paneId, { book, chapter, highlightedVerse: null });
+  }
+
+  const deadline = Date.now() + LOAD_TIMEOUT_MS;
+  const timer = setInterval(() => {
+    const found = verseElement(paneId, book, chapter, verse);
+    if (found) {
+      stop();
+      moveTo(paneId, found);
+      return;
+    }
+    if (Date.now() > deadline) stop();
+  }, LOAD_POLL_MS);
+
+  function stop() {
+    clearInterval(timer);
+    rt.cancelPendingLoad = null;
+  }
+  rt.cancelPendingLoad = stop;
+}
+
+/**
  * Stop every follower where it stands, and clear the dimming with it.
  *
  * This is the anchor going off. The followers become ordinary readers, so the
@@ -263,6 +363,11 @@ export function freezeFollowers(): void {
     parallelStore.setDim(pane.paneId, false);
   }
   parallelStore.setCurrentGroup(null);
+  // Cleared with the group. Nothing ticks while the anchor is off, so a section
+  // left here would sit frozen at wherever the master happened to be when it
+  // was switched off, and the strip would go on naming that section however far
+  // the master was afterwards scrolled away from it.
+  parallelStore.setCurrentSection(null);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,6 +380,10 @@ function tick(book: string, chapter: number, verse: number): void {
 
   const group = bestParallel(book, chapter, verse);
   parallelStore.setCurrentGroup(group?.id ?? null);
+  // Worked out here rather than by the strip, which would otherwise have to
+  // read the master's position back out of the DOM on every tick just to find
+  // out something this function already knows the inputs for.
+  parallelStore.setCurrentSection(robertsonSectionAt(book, chapter, verse)?.id ?? null);
 
   for (const pane of state.panes) {
     if (pane.paneId === state.masterId) continue;

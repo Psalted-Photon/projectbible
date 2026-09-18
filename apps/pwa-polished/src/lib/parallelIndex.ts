@@ -223,6 +223,137 @@ export function groupById(id: number): ParallelGroup | null {
 }
 
 // ---------------------------------------------------------------------------
+// Robertson's sections as a sequence
+// ---------------------------------------------------------------------------
+
+/**
+ * The 185 Robertson sections in his own order, solo ones included.
+ *
+ * This is the spine the strip's arrows step along. It is built once at module
+ * load from the index's own ordering, which the build script emits in section
+ * order — verified rather than assumed, and re-sorted here anyway so a future
+ * change to the script's emit order cannot silently scramble the arrows.
+ *
+ * The solo sections stay in. They are 78 of the 185, and skipping them would
+ * mean stepping through the harmony jumped over most of Luke's infancy
+ * narrative and all of John's prologue — the arrows are a way of reading
+ * through the life of Jesus, and "only Luke tells this" is part of that
+ * reading rather than a gap in it.
+ */
+export const robertsonSequence: readonly ParallelGroup[] = index.groups
+  .filter((g) => g.source === 'robertson')
+  .slice()
+  .sort((a, b) => sectionNumber(a) - sectionNumber(b));
+
+/**
+ * A section number as something sortable.
+ *
+ * Robertson's numbering is mostly integers but carries a handful of letter
+ * suffixes, so it is parsed leniently rather than coerced: parseFloat takes the
+ * leading digits and ignores the rest, which keeps 42a and 42b adjacent and in
+ * the order the data lists them, since the sort is stable.
+ */
+function sectionNumber(group: ParallelGroup): number {
+  const raw = group.robertsonSection;
+  if (typeof raw === 'number') return raw;
+  const n = parseFloat(String(raw ?? ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Where a group sits in the sequence, or -1 if it is not a Robertson section. */
+export function sequenceIndexOf(groupId: number): number {
+  return robertsonSequence.findIndex((g) => g.id === groupId);
+}
+
+/**
+ * The section before or after this one, or null at either end.
+ *
+ * Deliberately does not wrap. Stepping off the end of the harmony and landing
+ * back at Luke's preface would look like the arrow had gone the wrong way; a
+ * disabled arrow says "this is the end" without the user having to work it out
+ * from where they ended up.
+ */
+export function stepSection(groupId: number, delta: 1 | -1): ParallelGroup | null {
+  const at = sequenceIndexOf(groupId);
+  if (at < 0) return null;
+  return robertsonSequence[at + delta] ?? null;
+}
+
+/**
+ * The Robertson section a reference falls in, for starting a step from a
+ * position rather than from a known section.
+ *
+ * Needed because the strip's arrows have to work from the moment the view
+ * opens, and currentGroupId is null until the first scroll tick has run — and
+ * also whenever the master is sitting in a BSB-only parallel, which has no
+ * place in the sequence at all. Narrowest wins, so a verse inside both a long
+ * section and a short one steps from the short one, which is the one the
+ * reader is actually in.
+ */
+export function robertsonSectionAt(
+  book: string,
+  chapter: number,
+  verse: number,
+): ParallelGroup | null {
+  const matches = lookupParallels(book, chapter, verse);
+  return matches.find((g) => g.source === 'robertson') ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// "Only in Luke" — material one Gospel alone carries
+// ---------------------------------------------------------------------------
+
+/** A stretch of a chapter that only this Gospel tells. */
+export interface SoloRun {
+  /** First and last verse of the run within this chapter. */
+  from: number;
+  to: number;
+  title: string;
+  section: number | string;
+}
+
+/**
+ * The solo Robertson sections touching one chapter, as verse runs.
+ *
+ * Returned per chapter rather than per verse because the ordinary reader asks
+ * once per rendered chapter and then tests verses against the result — 78 solo
+ * sections tested against every verse of every chapter on screen would be the
+ * kind of per-verse work the reader cannot afford with four panes up.
+ *
+ * Runs are clipped to the chapter asked for, so a section spanning a chapter
+ * break yields a run in each of them and the marking does not stop dead at the
+ * boundary. The array is almost always empty or a single entry, and callers can
+ * treat an empty array as the common case.
+ */
+export function soloRunsIn(book: string, chapter: number): SoloRun[] {
+  const ids = index.byChapter[`${book}|${chapter}`];
+  if (!ids) return [];
+
+  const runs: SoloRun[] = [];
+  for (const id of ids) {
+    const group = groupsById[id];
+    if (!group?.soloRobertson) continue;
+
+    const passage = passageFor(group, book);
+    if (!passage) continue;
+
+    const from = chapter === passage.startChapter ? passage.startVerse : 1;
+    // Infinity rather than a chapter-length lookup: the caller is walking the
+    // verses it actually has, so an open-ended top clips itself against real
+    // data instead of against a table this module would have to carry.
+    const to = chapter === passage.endChapter ? passage.endVerse : Infinity;
+
+    runs.push({
+      from,
+      to,
+      title: group.title ?? `Section ${group.robertsonSection}`,
+      section: group.robertsonSection ?? group.id,
+    });
+  }
+  return runs;
+}
+
+// ---------------------------------------------------------------------------
 // Targeting — where inside its own passage a follower should sit
 // ---------------------------------------------------------------------------
 
