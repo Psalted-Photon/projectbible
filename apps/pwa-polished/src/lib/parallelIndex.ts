@@ -221,3 +221,163 @@ function totalSpan(group: ParallelGroup): number {
 export function groupById(id: number): ParallelGroup | null {
   return groupsById[id] ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Targeting — where inside its own passage a follower should sit
+// ---------------------------------------------------------------------------
+
+/**
+ * How close to an end a target has to be, in verses, before it snaps there.
+ *
+ * Deliberately a verse count and not a fraction. The plan specified fixed
+ * fractions (below 0.12 snap to the start, above 0.88 to the end), which is
+ * right for the median 7-verse passage but inverts on the long ones: passages
+ * run from 1 verse to 805, and at 805 a 0.12 threshold is 97 verses, so the
+ * follower would sit frozen at the passage start for the first ninety-seven
+ * verses of Genesis 27 — exactly the lurching this phase exists to remove. The
+ * Sermon on the Mount (111 verses) and the Olivet Discourse (97) are the
+ * reachable Gospel cases; there are 12 passages of 60 verses or more.
+ *
+ * Converted per passage, this holds the snap zone at a near-constant ~3 verses
+ * whatever the length, which is what "entering and leaving should feel
+ * decisive" actually meant.
+ */
+const EDGE_VERSES = 2;
+
+/**
+ * The ceiling on that conversion, as a fraction of the passage.
+ *
+ * Without it the rule runs the other way on the short end: at 3 verses, 2
+ * verses of edge is the entire passage and the middle verse can never be a
+ * target. Passages of 5 verses or fewer are 37% of the data, so this is the
+ * common case, not the corner. At the cap a 3-verse passage keeps its middle.
+ */
+const EDGE_MAX_FRACTION = 0.2;
+
+/** How far from the computed target a heading may sit and still win, in verses. */
+const HEADING_SNAP_VERSES = 2;
+
+export interface ParallelTarget {
+  chapter: number;
+  verse: number;
+  /** Why this verse, for the dim-reason strip and for debugging the feel. */
+  reason: 'start' | 'end' | 'heading' | 'proportional';
+}
+
+/**
+ * A heading lookup for the follower's book: the verse numbers that open a
+ * section, by chapter.
+ *
+ * Passed in rather than read here, because headings are per translation and
+ * live in IndexedDB behind an async read, while everything in this module is
+ * pure and runs on every scroll tick. The caller hands over whatever it already
+ * has in memory for the chapters on screen; a chapter it has no entry for is
+ * treated as having no headings, which costs only the refinement.
+ */
+export type HeadingVerses = (chapter: number) => ReadonlySet<number> | undefined;
+
+/**
+ * Where a follower should sit, given how far the master is through its own
+ * passage.
+ *
+ * Proportional first — the master's fraction read off the follower's passage,
+ * which is what lets Matthew's compressed telling track Luke's expanded one —
+ * then refined, because the raw fraction lands mid-pericope as often as not:
+ *
+ *  - Within EDGE_VERSES of either end, snap to that end.
+ *  - Otherwise, if a section heading sits within HEADING_SNAP_VERSES, take the
+ *    heading: it is where the eye rests and where the text itself says a new
+ *    thing starts.
+ *
+ * The ends are tested before headings on purpose. A heading often sits a verse
+ * or two inside a passage, and letting it win at the edges would mean entering
+ * a parallel never quite reaching its first verse.
+ *
+ * Later upgrade, not built now: weight the fraction by rendered verse height
+ * rather than verse count. Verse length varies enough between translations that
+ * height tracks the eye better than index does — but it needs measured DOM from
+ * a pane that may not have the chapter rendered yet, so it cannot live in a pure
+ * function and is not worth the machinery until the count version is proven.
+ */
+export function targetWithin(
+  passage: ParallelPassage,
+  fraction: number,
+  headings?: HeadingVerses,
+): ParallelTarget {
+  const span = spanOf(passage) - 1;
+
+  // A single-verse passage has nowhere to interpolate to.
+  if (span <= 0) {
+    return { chapter: passage.startChapter, verse: passage.startVerse, reason: 'start' };
+  }
+
+  const f = clamp01(fraction);
+  const edge = Math.min(EDGE_VERSES / span, EDGE_MAX_FRACTION);
+
+  if (f <= edge) {
+    return { chapter: passage.startChapter, verse: passage.startVerse, reason: 'start' };
+  }
+  if (f >= 1 - edge) {
+    return { chapter: passage.endChapter, verse: passage.endVerse, reason: 'end' };
+  }
+
+  const at = verseAtFraction(passage, f);
+  const heading = headings && nearestHeading(passage, at, headings);
+  return heading
+    ? { ...heading, reason: 'heading' }
+    : { ...at, reason: 'proportional' };
+}
+
+/**
+ * The nearest section heading to a target, within HEADING_SNAP_VERSES and
+ * inside the passage.
+ *
+ * Searches outward from the target so the closest wins, and prefers the heading
+ * above on a tie: a heading belongs to the text that follows it, so when the
+ * target sits midway between two, the one already governing the verse is the
+ * one the reader is under.
+ *
+ * Only the target's own chapter is searched. A heading two verses away across a
+ * chapter break would have to be found by walking into the neighbouring
+ * chapter's verse numbering, and the 20 passages in the whole index that cross
+ * a break do not justify it — they fall through to the proportional target,
+ * which is correct, just unrefined.
+ */
+function nearestHeading(
+  passage: ParallelPassage,
+  at: { chapter: number; verse: number },
+  headings: HeadingVerses,
+): { chapter: number; verse: number } | null {
+  const inChapter = headings(at.chapter);
+  if (!inChapter || inChapter.size === 0) return null;
+
+  for (let d = 0; d <= HEADING_SNAP_VERSES; d++) {
+    for (const verse of d === 0 ? [at.verse] : [at.verse - d, at.verse + d]) {
+      if (inChapter.has(verse) && passageContains(passage, at.chapter, verse)) {
+        return { chapter: at.chapter, verse };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * The whole journey in one call: where the master is, where the follower goes.
+ * Returns null when the group has nothing for that book — the caller dims that
+ * pane rather than scrolling it.
+ */
+export function followerTarget(
+  group: ParallelGroup,
+  masterBook: string,
+  masterChapter: number,
+  masterVerse: number,
+  followerBook: string,
+  headings?: HeadingVerses,
+): ParallelTarget | null {
+  const from = passageFor(group, masterBook);
+  const to = passageFor(group, followerBook);
+  if (!from || !to) return null;
+
+  return targetWithin(to, fractionWithin(from, masterChapter, masterVerse), headings);
+}
