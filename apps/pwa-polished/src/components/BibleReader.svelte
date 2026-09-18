@@ -147,6 +147,8 @@
     pendingRestore,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
+  import { parallelStore } from "../stores/parallelStore";
+  import * as parallelSync from "../lib/parallelSync";
   import { openMapWindow } from "../lib/openMapWindow";
   import { searchQuery, triggerSearch } from "../stores/searchStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
@@ -5175,6 +5177,16 @@
           // would otherwise undo.
           if (!windowId && Date.now() >= suppressScrollSyncUntil) {
             navigationStore.setScrollPosition(captured.book, captured.chapter);
+          }
+
+          // Parallel accounts: the master pane drives its followers. This sits
+          // above the `following` lookup deliberately — that lookup is followed
+          // by an early return for the commentary path, and a hook placed after
+          // it would only ever fire when a commentary window happened to be
+          // anchored, which would read as an intermittent bug.
+          if (windowId && $parallelStore.active && $parallelStore.anchorOn
+              && $parallelStore.masterId === windowId) {
+            parallelSync.masterMoved(captured.book, captured.chapter, captured.verse);
           }
 
           // Only windows that asked to follow, which is at most the one holding
