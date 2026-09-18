@@ -96,13 +96,24 @@ function parseRefs(refStr, book) {
   // e.g. "26:57, 26:59-68"
   const parts = refStr.split(',').map(s => s.trim()).filter(Boolean);
 
+  // A sub-range after a comma usually drops the chapter and carries the
+  // previous one: "22:14-16,24-30" is verses 24-30 of chapter 22, not chapters
+  // 24 to 30. Parsing each sub-part in isolation read those bare numbers as a
+  // chapter range, which put eleven passages in the harmony outside their own
+  // book — Luke 24-30 in a book with 24 chapters. The chapter carries forward.
+  let carriedChapter = null;
+
   for (const part of parts) {
     // Match: ch:v-ch:v  or  ch:v-v  or  ch:v  or  ch-ch  or  ch
     const m = part.match(/^(\d+)(?::(\d+))?(?:\s*[-–]\s*(\d+)(?::(\d+))?)?$/);
     if (!m) continue;
 
-    const startChapter = parseInt(m[1]);
-    const startVerse = m[2] ? parseInt(m[2]) : 1;
+    // Only a leading sub-part can introduce a chapter of its own; once one has,
+    // a later bare "24-30" is verses within it.
+    const bare = m[2] === undefined && carriedChapter !== null;
+    const startChapter = bare ? carriedChapter : parseInt(m[1]);
+    const startVerse = bare ? parseInt(m[1]) : (m[2] ? parseInt(m[2]) : 1);
+    carriedChapter = startChapter;
     let endChapter, endVerse;
 
     if (m[3] !== undefined) {
@@ -113,8 +124,8 @@ function parseRefs(refStr, book) {
         endVerse = parseInt(m[4]);
       } else {
         // Could be ch:v-v (same chapter) or ch-ch (chapter range)
-        if (m[2] !== undefined) {
-          // Had startVerse, so this is ch:v-v
+        if (m[2] !== undefined || bare) {
+          // Had a start verse, whether written or carried: this is ch:v-v
           endChapter = startChapter;
           endVerse = parseInt(m[3]);
         } else {
@@ -125,12 +136,15 @@ function parseRefs(refStr, book) {
       }
     } else {
       endChapter = startChapter;
-      endVerse = m[2] ? startVerse : null; // single verse or whole chapter
+      endVerse = (m[2] !== undefined || bare) ? startVerse : null; // single verse or whole chapter
     }
 
-    // Build label
+    // Build label. A carried chapter counts as having a verse, the same as a
+    // written one, or "22:24-30" would print itself back as "Luke 22".
+    const hasVerse = m[2] !== undefined || bare;
+
     let label = `${bookAbbr(book)} ${startChapter}`;
-    if (m[2]) label += `:${startVerse}`;
+    if (hasVerse) label += `:${startVerse}`;
     if (m[3] !== undefined) {
       label += '-';
       if (endChapter !== startChapter) label += `${endChapter}:`;
@@ -138,7 +152,7 @@ function parseRefs(refStr, book) {
       else if (endChapter !== startChapter) label = label.replace(/-$/, ''); // ch-ch
     }
 
-    results.push({ label, book, startChapter, startVerse: m[2] ? startVerse : 1, endChapter, endVerse });
+    results.push({ label, book, startChapter, startVerse: hasVerse ? startVerse : 1, endChapter, endVerse });
   }
 
   return results;

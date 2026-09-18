@@ -2018,12 +2018,12 @@
         "endVerse": 18
       },
       {
-        "label": "Matt 23-27:",
+        "label": "Matt 8:23-27",
         "book": "Matthew",
-        "startChapter": 23,
-        "startVerse": 1,
-        "endChapter": 27,
-        "endVerse": null
+        "startChapter": 8,
+        "startVerse": 23,
+        "endChapter": 8,
+        "endVerse": 27
       },
       {
         "label": "Luke 8:22-25",
@@ -2042,26 +2042,6 @@
       {
         "book": "Matthew",
         "chapter": 8
-      },
-      {
-        "book": "Matthew",
-        "chapter": 23
-      },
-      {
-        "book": "Matthew",
-        "chapter": 24
-      },
-      {
-        "book": "Matthew",
-        "chapter": 25
-      },
-      {
-        "book": "Matthew",
-        "chapter": 26
-      },
-      {
-        "book": "Matthew",
-        "chapter": 27
       },
       {
         "book": "Luke",
@@ -4146,12 +4126,12 @@
         "endVerse": 11
       },
       {
-        "label": "Matt 14-17:",
+        "label": "Matt 21:14-17",
         "book": "Matthew",
-        "startChapter": 14,
-        "startVerse": 1,
-        "endChapter": 17,
-        "endVerse": null
+        "startChapter": 21,
+        "startVerse": 14,
+        "endChapter": 21,
+        "endVerse": 17
       },
       {
         "label": "Luke 19:29-44",
@@ -4178,22 +4158,6 @@
       {
         "book": "Matthew",
         "chapter": 21
-      },
-      {
-        "book": "Matthew",
-        "chapter": 14
-      },
-      {
-        "book": "Matthew",
-        "chapter": 15
-      },
-      {
-        "book": "Matthew",
-        "chapter": 16
-      },
-      {
-        "book": "Matthew",
-        "chapter": 17
       },
       {
         "book": "Luke",
@@ -4228,12 +4192,12 @@
         "endVerse": 19
       },
       {
-        "label": "Matt 12-13:",
+        "label": "Matt 21:12-13",
         "book": "Matthew",
-        "startChapter": 12,
-        "startVerse": 1,
-        "endChapter": 13,
-        "endVerse": null
+        "startChapter": 21,
+        "startVerse": 12,
+        "endChapter": 21,
+        "endVerse": 13
       },
       {
         "label": "Luke 19:45-48",
@@ -4252,14 +4216,6 @@
       {
         "book": "Matthew",
         "chapter": 21
-      },
-      {
-        "book": "Matthew",
-        "chapter": 12
-      },
-      {
-        "book": "Matthew",
-        "chapter": 13
       },
       {
         "book": "Luke",
@@ -4906,12 +4862,12 @@
         "endVerse": 16
       },
       {
-        "label": "Luke 24-30:",
+        "label": "Luke 22:24-30",
         "book": "Luke",
-        "startChapter": 24,
-        "startVerse": 1,
-        "endChapter": 30,
-        "endVerse": null
+        "startChapter": 22,
+        "startVerse": 24,
+        "endChapter": 22,
+        "endVerse": 30
       }
     ],
     "chapter_refs": [
@@ -4926,34 +4882,6 @@
       {
         "book": "Luke",
         "chapter": 22
-      },
-      {
-        "book": "Luke",
-        "chapter": 24
-      },
-      {
-        "book": "Luke",
-        "chapter": 25
-      },
-      {
-        "book": "Luke",
-        "chapter": 26
-      },
-      {
-        "book": "Luke",
-        "chapter": 27
-      },
-      {
-        "book": "Luke",
-        "chapter": 28
-      },
-      {
-        "book": "Luke",
-        "chapter": 29
-      },
-      {
-        "book": "Luke",
-        "chapter": 30
       }
     ]
   },
@@ -5238,12 +5166,12 @@
         "endVerse": 26
       },
       {
-        "label": "Mark 32-42:",
+        "label": "Mark 14:32-42",
         "book": "Mark",
-        "startChapter": 32,
-        "startVerse": 1,
-        "endChapter": 42,
-        "endVerse": null
+        "startChapter": 14,
+        "startVerse": 32,
+        "endChapter": 14,
+        "endVerse": 42
       },
       {
         "label": "Matt 26:30",
@@ -5254,12 +5182,12 @@
         "endVerse": 30
       },
       {
-        "label": "Matt 36-46:",
+        "label": "Matt 26:36-46",
         "book": "Matthew",
-        "startChapter": 36,
-        "startVerse": 1,
-        "endChapter": 46,
-        "endVerse": null
+        "startChapter": 26,
+        "startVerse": 36,
+        "endChapter": 26,
+        "endVerse": 46
       },
       {
         "label": "Luke 22:39-46",
@@ -5284,96 +5212,8 @@
         "chapter": 14
       },
       {
-        "book": "Mark",
-        "chapter": 32
-      },
-      {
-        "book": "Mark",
-        "chapter": 33
-      },
-      {
-        "book": "Mark",
-        "chapter": 34
-      },
-      {
-        "book": "Mark",
-        "chapter": 35
-      },
-      {
-        "book": "Mark",
-        "chapter": 36
-      },
-      {
-        "book": "Mark",
-        "chapter": 37
-      },
-      {
-        "book": "Mark",
-        "chapter": 38
-      },
-      {
-        "book": "Mark",
-        "chapter": 39
-      },
-      {
-        "book": "Mark",
-        "chapter": 40
-      },
-      {
-        "book": "Mark",
-        "chapter": 41
-      },
-      {
-        "book": "Mark",
-        "chapter": 42
-      },
-      {
         "book": "Matthew",
         "chapter": 26
-      },
-      {
-        "book": "Matthew",
-        "chapter": 36
-      },
-      {
-        "book": "Matthew",
-        "chapter": 37
-      },
-      {
-        "book": "Matthew",
-        "chapter": 38
-      },
-      {
-        "book": "Matthew",
-        "chapter": 39
-      },
-      {
-        "book": "Matthew",
-        "chapter": 40
-      },
-      {
-        "book": "Matthew",
-        "chapter": 41
-      },
-      {
-        "book": "Matthew",
-        "chapter": 42
-      },
-      {
-        "book": "Matthew",
-        "chapter": 43
-      },
-      {
-        "book": "Matthew",
-        "chapter": 44
-      },
-      {
-        "book": "Matthew",
-        "chapter": 45
-      },
-      {
-        "book": "Matthew",
-        "chapter": 46
       },
       {
         "book": "Luke",
@@ -5458,38 +5298,18 @@
         "endVerse": 14
       },
       {
-        "label": "John 19-23:",
+        "label": "John 18:19-23",
         "book": "John",
-        "startChapter": 19,
-        "startVerse": 1,
-        "endChapter": 23,
-        "endVerse": null
+        "startChapter": 18,
+        "startVerse": 19,
+        "endChapter": 18,
+        "endVerse": 23
       }
     ],
     "chapter_refs": [
       {
         "book": "John",
         "chapter": 18
-      },
-      {
-        "book": "John",
-        "chapter": 19
-      },
-      {
-        "book": "John",
-        "chapter": 20
-      },
-      {
-        "book": "John",
-        "chapter": 21
-      },
-      {
-        "book": "John",
-        "chapter": 22
-      },
-      {
-        "book": "John",
-        "chapter": 23
       }
     ]
   },
@@ -5508,12 +5328,12 @@
         "endVerse": 53
       },
       {
-        "label": "Mark 55-65:",
+        "label": "Mark 14:55-65",
         "book": "Mark",
-        "startChapter": 55,
-        "startVerse": 1,
-        "endChapter": 65,
-        "endVerse": null
+        "startChapter": 14,
+        "startVerse": 55,
+        "endChapter": 14,
+        "endVerse": 65
       },
       {
         "label": "Matt 26:57",
@@ -5524,12 +5344,12 @@
         "endVerse": 57
       },
       {
-        "label": "Matt 59-68:",
+        "label": "Matt 26:59-68",
         "book": "Matthew",
-        "startChapter": 59,
-        "startVerse": 1,
-        "endChapter": 68,
-        "endVerse": null
+        "startChapter": 26,
+        "startVerse": 59,
+        "endChapter": 26,
+        "endVerse": 68
       },
       {
         "label": "Luke 22:54",
@@ -5540,12 +5360,12 @@
         "endVerse": 54
       },
       {
-        "label": "Luke 63-65:",
+        "label": "Luke 22:63-65",
         "book": "Luke",
-        "startChapter": 63,
-        "startVerse": 1,
-        "endChapter": 65,
-        "endVerse": null
+        "startChapter": 22,
+        "startVerse": 63,
+        "endChapter": 22,
+        "endVerse": 65
       },
       {
         "label": "John 18:24",
@@ -5562,108 +5382,12 @@
         "chapter": 14
       },
       {
-        "book": "Mark",
-        "chapter": 55
-      },
-      {
-        "book": "Mark",
-        "chapter": 56
-      },
-      {
-        "book": "Mark",
-        "chapter": 57
-      },
-      {
-        "book": "Mark",
-        "chapter": 58
-      },
-      {
-        "book": "Mark",
-        "chapter": 59
-      },
-      {
-        "book": "Mark",
-        "chapter": 60
-      },
-      {
-        "book": "Mark",
-        "chapter": 61
-      },
-      {
-        "book": "Mark",
-        "chapter": 62
-      },
-      {
-        "book": "Mark",
-        "chapter": 63
-      },
-      {
-        "book": "Mark",
-        "chapter": 64
-      },
-      {
-        "book": "Mark",
-        "chapter": 65
-      },
-      {
         "book": "Matthew",
         "chapter": 26
       },
       {
-        "book": "Matthew",
-        "chapter": 59
-      },
-      {
-        "book": "Matthew",
-        "chapter": 60
-      },
-      {
-        "book": "Matthew",
-        "chapter": 61
-      },
-      {
-        "book": "Matthew",
-        "chapter": 62
-      },
-      {
-        "book": "Matthew",
-        "chapter": 63
-      },
-      {
-        "book": "Matthew",
-        "chapter": 64
-      },
-      {
-        "book": "Matthew",
-        "chapter": 65
-      },
-      {
-        "book": "Matthew",
-        "chapter": 66
-      },
-      {
-        "book": "Matthew",
-        "chapter": 67
-      },
-      {
-        "book": "Matthew",
-        "chapter": 68
-      },
-      {
         "book": "Luke",
         "chapter": 22
-      },
-      {
-        "book": "Luke",
-        "chapter": 63
-      },
-      {
-        "book": "Luke",
-        "chapter": 64
-      },
-      {
-        "book": "Luke",
-        "chapter": 65
       },
       {
         "book": "John",
@@ -5686,12 +5410,12 @@
         "endVerse": 54
       },
       {
-        "label": "Mark 66-72:",
+        "label": "Mark 14:66-72",
         "book": "Mark",
-        "startChapter": 66,
-        "startVerse": 1,
-        "endChapter": 72,
-        "endVerse": null
+        "startChapter": 14,
+        "startVerse": 66,
+        "endChapter": 14,
+        "endVerse": 72
       },
       {
         "label": "Matt 26:58",
@@ -5702,12 +5426,12 @@
         "endVerse": 58
       },
       {
-        "label": "Matt 69-75:",
+        "label": "Matt 26:69-75",
         "book": "Matthew",
-        "startChapter": 69,
-        "startVerse": 1,
-        "endChapter": 75,
-        "endVerse": null
+        "startChapter": 26,
+        "startVerse": 69,
+        "endChapter": 26,
+        "endVerse": 75
       },
       {
         "label": "Luke 22:54-62",
@@ -5726,12 +5450,12 @@
         "endVerse": 18
       },
       {
-        "label": "John 25-27:",
+        "label": "John 18:25-27",
         "book": "John",
-        "startChapter": 25,
-        "startVerse": 1,
-        "endChapter": 27,
-        "endVerse": null
+        "startChapter": 18,
+        "startVerse": 25,
+        "endChapter": 18,
+        "endVerse": 27
       }
     ],
     "chapter_refs": [
@@ -5740,64 +5464,8 @@
         "chapter": 14
       },
       {
-        "book": "Mark",
-        "chapter": 66
-      },
-      {
-        "book": "Mark",
-        "chapter": 67
-      },
-      {
-        "book": "Mark",
-        "chapter": 68
-      },
-      {
-        "book": "Mark",
-        "chapter": 69
-      },
-      {
-        "book": "Mark",
-        "chapter": 70
-      },
-      {
-        "book": "Mark",
-        "chapter": 71
-      },
-      {
-        "book": "Mark",
-        "chapter": 72
-      },
-      {
         "book": "Matthew",
         "chapter": 26
-      },
-      {
-        "book": "Matthew",
-        "chapter": 69
-      },
-      {
-        "book": "Matthew",
-        "chapter": 70
-      },
-      {
-        "book": "Matthew",
-        "chapter": 71
-      },
-      {
-        "book": "Matthew",
-        "chapter": 72
-      },
-      {
-        "book": "Matthew",
-        "chapter": 73
-      },
-      {
-        "book": "Matthew",
-        "chapter": 74
-      },
-      {
-        "book": "Matthew",
-        "chapter": 75
       },
       {
         "book": "Luke",
@@ -5806,18 +5474,6 @@
       {
         "book": "John",
         "chapter": 18
-      },
-      {
-        "book": "John",
-        "chapter": 25
-      },
-      {
-        "book": "John",
-        "chapter": 26
-      },
-      {
-        "book": "John",
-        "chapter": 27
       }
     ]
   },
@@ -5924,12 +5580,12 @@
         "endVerse": 2
       },
       {
-        "label": "Matt 11-14:",
+        "label": "Matt 27:11-14",
         "book": "Matthew",
-        "startChapter": 11,
-        "startVerse": 1,
-        "endChapter": 14,
-        "endVerse": null
+        "startChapter": 27,
+        "startVerse": 11,
+        "endChapter": 27,
+        "endVerse": 14
       },
       {
         "label": "Luke 23:1-5",
@@ -5956,22 +5612,6 @@
       {
         "book": "Matthew",
         "chapter": 27
-      },
-      {
-        "book": "Matthew",
-        "chapter": 11
-      },
-      {
-        "book": "Matthew",
-        "chapter": 12
-      },
-      {
-        "book": "Matthew",
-        "chapter": 13
-      },
-      {
-        "book": "Matthew",
-        "chapter": 14
       },
       {
         "book": "Luke",
@@ -6306,12 +5946,12 @@
         "endVerse": 45
       },
       {
-        "label": "Luke 47-49:",
+        "label": "Luke 23:47-49",
         "book": "Luke",
-        "startChapter": 47,
-        "startVerse": 1,
-        "endChapter": 49,
-        "endVerse": null
+        "startChapter": 23,
+        "startVerse": 47,
+        "endChapter": 23,
+        "endVerse": 49
       }
     ],
     "chapter_refs": [
@@ -6326,18 +5966,6 @@
       {
         "book": "Luke",
         "chapter": 23
-      },
-      {
-        "book": "Luke",
-        "chapter": 47
-      },
-      {
-        "book": "Luke",
-        "chapter": 48
-      },
-      {
-        "book": "Luke",
-        "chapter": 49
       }
     ]
   },
