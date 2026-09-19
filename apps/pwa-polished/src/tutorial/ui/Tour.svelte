@@ -25,11 +25,17 @@
   export let startAt: string | null = null;
   /** The card's way out of the whole list; null for none. */
   export let skipLabel: string | null = "Skip tour";
+  /**
+   * Whether the cards offer the walk to the off switch. False for the walk
+   * itself, and for a dot's "Show me", which has its own way back.
+   */
+  export let offerTurnOff = true;
 
   const dispatch = createEventDispatcher<{
     finish: Record<string, any>;
     skip: void;
     checkpoint: string;
+    turnOff: void;
   }>();
 
   /** How long a missing target is waited for before its card shows without a spotlight. */
@@ -55,6 +61,7 @@
   let dragging = false;
   let title = "";
   let body = "";
+  let nextLabel = "Next";
   let altLabel: string | null = null;
 
   function text(value: string | ((c: StepContext) => string)): string {
@@ -91,6 +98,13 @@
     if (!moving && step) void enter(index + 1);
   }
 
+  /** The Next button, as opposed to a step finishing by itself. */
+  function pressedNext() {
+    if (moving || !step) return;
+    step.onNext?.(ctx);
+    next();
+  }
+
   /** Look at the screen again: is the step's moment here, done, or blocked? */
   function update() {
     if (!step || moving) return;
@@ -111,6 +125,7 @@
 
     title = text(s.title);
     body = text(s.body);
+    nextLabel = text(s.nextLabel ?? "Next");
     altLabel = s.alt && (!s.alt.when || s.alt.when(ctx)) ? s.alt.label : null;
     dragging = !!document.querySelector(".drag-preview");
 
@@ -174,13 +189,15 @@
       {title}
       {body}
       box={lane ? null : box}
-      nextLabel={step.nextLabel ?? "Next"}
+      {nextLabel}
       {altLabel}
       {skipLabel}
       extra={step.extra}
-      on:next={next}
+      {offerTurnOff}
+      on:next={pressedNext}
       on:alt={() => step?.alt?.run(ctx)}
       on:skip={() => dispatch("skip")}
+      on:turnOff={() => dispatch("turnOff")}
     />
   {/if}
 {/if}

@@ -8,6 +8,13 @@ import { FEATURES } from './config';
 import './adapters/tts'; // Read Aloud engine client (registers __tts dev hook; worker starts lazily)
 import { initMediaSession } from './lib/tts/mediaSession';
 import { dumpPreviousInstallLog } from './lib/install-log';
+import { watchForInstallPrompt } from './lib/installPrompt';
+
+// Before anything that awaits: the browser fires beforeinstallprompt early and
+// only once, and initApp() below can sit waiting on the starter text download
+// for a while on a first launch. Miss the event and the tutorial's install step
+// has nothing to offer.
+watchForInstallPrompt();
 
 console.log('🔥 IMPORTS LOADED');
 

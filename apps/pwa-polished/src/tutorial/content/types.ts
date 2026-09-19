@@ -87,7 +87,14 @@ export interface TourStep {
   allowOverlay?: string;
 
   /** Label for the Next button. */
-  nextLabel?: string;
+  nextLabel?: string | ((ctx: StepContext) => string);
+
+  /**
+   * Runs when the person taps Next, before moving on. For a step whose button
+   * does something as well as advancing. Unlike `onLeave` this does not fire
+   * when the step ends any other way -- Skip, the alt button, or `doneWhen`.
+   */
+  onNext?: (ctx: StepContext) => void;
 
   /** A second button beside Next, shown only while `when` holds. */
   alt?: { label: string; run: (ctx: StepContext) => void; when?: (ctx: StepContext) => boolean };

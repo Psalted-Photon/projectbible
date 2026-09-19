@@ -9,6 +9,10 @@
    *
    * The buttons and the footer are slots: the tour fills them with Skip and
    * Next by default, and a dot's card brings its own.
+   *
+   * The footer's default is the way out of Tutorial Mode, on every card rather
+   * than said once at the start -- it is the thing people most need to find
+   * again later, and the hardest to go looking for.
    */
   import { createEventDispatcher } from "svelte";
   import type { Box } from "../engine/targets";
@@ -24,8 +28,13 @@
   export let skipLabel: string | null = "Skip tour";
   /** A line under the body, set apart: "Needs the … pack". */
   export let note: string | null = null;
+  /**
+   * False inside the walk to the off switch itself, which is already there:
+   * it shows the plain line instead, so the button can't lead back into it.
+   */
+  export let offerTurnOff = true;
 
-  const dispatch = createEventDispatcher<{ next: void; alt: void; skip: void }>();
+  const dispatch = createEventDispatcher<{ next: void; alt: void; skip: void; turnOff: void }>();
 
   const GAP = 14;
   const MARGIN = 12;
@@ -107,7 +116,11 @@
     </slot>
   </div>
   <slot name="footer">
-    <p class="off-hint">Turn off Tutorial Mode in Settings → General</p>
+    {#if offerTurnOff}
+      <button class="off-link" on:click={() => dispatch("turnOff")}>Turn off Tutorial Mode</button>
+    {:else}
+      <p class="off-hint">Turn off Tutorial Mode in Settings → General</p>
+    {/if}
   </slot>
 </div>
 

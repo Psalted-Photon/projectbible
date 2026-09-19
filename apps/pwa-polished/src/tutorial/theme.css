@@ -132,3 +132,31 @@
   outline: 2px solid var(--tut-lime);
   outline-offset: 3px;
 }
+
+/* The way out, in the footer of every card: quiet, but a button, not a
+   sentence. Shared by the tour's cards and the lime dots' cards. */
+.tut-root .off-link {
+  appearance: none;
+  display: block;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--tut-muted);
+  font-family: var(--tut-font);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.tut-root .off-link:hover {
+  color: var(--tut-text);
+}
+
+.tut-root .off-link:focus-visible {
+  outline: 2px solid var(--tut-lime);
+  outline-offset: 3px;
+}

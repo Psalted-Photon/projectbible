@@ -20,6 +20,8 @@ import {
   packsStillToInstall,
   voicesStillToInstall,
 } from '../../lib/packInstaller';
+import { isInstalledApp, isIOS, isPhoneOrTablet } from '../../lib/device';
+import { canInstall, promptInstall } from '../../lib/installPrompt';
 
 /** The on-screen element of a docked window, found from its id. */
 function windowElement(id: string | undefined): HTMLElement | null {
@@ -43,6 +45,21 @@ function referenceDropdown(): HTMLElement | null {
   return inMainReader('.reference-dropdown.positioned');
 }
 
+/**
+ * How this device can put Hexapla on its home screen.
+ * - 'prompt'  Chrome handed us its install event; one tap does it.
+ * - 'ios'     Safari never offers one; it is Share -> Add to Home Screen.
+ * - 'menu'    An Android browser with no event: it is in the browser menu.
+ * - 'none'    Already installed, or a desktop browser that will not offer it.
+ */
+function installRoute(): 'prompt' | 'ios' | 'menu' | 'none' {
+  if (isInstalledApp()) return 'none';
+  if (get(canInstall)) return 'prompt';
+  if (isIOS()) return 'ios';
+  // A desktop browser with no offer has nothing worth saying; a phone does.
+  return isPhoneOrTablet() ? 'menu' : 'none';
+}
+
 async function remainingInstalls(ctx: StepContext): Promise<number> {
   if (ctx.tour.remaining === undefined) {
     const [packs, voices] = await Promise.all([packsStillToInstall(), voicesStillToInstall()]);
@@ -61,6 +78,42 @@ export const PART_ONE: TourStep[] = [
     body:
       'Lime dots will mark things worth trying as you go. You can turn Tutorial Mode off any time in Settings → General.',
     nextLabel: 'Got it',
+  },
+
+  // ── Onto the home screen ─────────────────────────────────────
+  // Before the packs, so a gigabyte of them lands in the installed app rather
+  // than in a browser tab the person then abandons.
+  {
+    id: 'install-app',
+    // Asked fresh each time rather than remembered in ctx.tour: the offer can
+    // arrive or disappear while the step is up, and ctx.tour does not survive
+    // a reload anyway.
+    skipIf: () => installRoute() === 'none',
+    title: 'Keep Hexapla on your screen',
+    body: () => {
+      const opening =
+        'Hexapla can live on your home screen like any other app: it opens full screen, with no browser bar, and still works with no signal.';
+      switch (installRoute()) {
+        case 'ios':
+          return `${opening} Tap the Share button at the bottom of Safari, then Add to Home Screen.`;
+        case 'menu':
+          return `${opening} Open your browser’s menu, then tap Install app or Add to Home screen.`;
+        default:
+          return opening;
+      }
+    },
+    nextLabel: () => (installRoute() === 'prompt' ? 'Install' : 'Got it'),
+    // The browser draws its own dialog over us and never says in time what was
+    // chosen, so the tour moves on either way. An accepted install reopens in
+    // the app window, where the tour resumes past this step -- which is right.
+    onNext: () => {
+      if (installRoute() === 'prompt') void promptInstall();
+    },
+    alt: {
+      label: 'Not now',
+      when: () => installRoute() === 'prompt',
+      run: (ctx) => ctx.goTo('packs-ready'),
+    },
   },
 
   // ── Packs ────────────────────────────────────────────────────────────────

@@ -17,6 +17,7 @@
   import { installAllState, restartNeeded } from "../lib/packInstaller";
   import { PART_ONE } from "./content/tour";
   import { PART_TWO } from "./content/tour-part-two";
+  import { TURN_OFF } from "./content/turn-off";
   import { ALL_TIPS } from "./content/tips";
   import { diagnose } from "./engine/hotspots";
   import Splash from "./ui/Splash.svelte";
@@ -59,6 +60,15 @@
     const waiting = get(installAllState).running || get(restartNeeded);
     tutorial.setStage(waiting ? "waiting" : "part2");
   }
+
+  /**
+   * The walk to the off switch lives here rather than inside a Tour, because
+   * running it inside one would put a tour inside a tour and lose the place of
+   * the tour that launched it. Only one is ever on screen. Coming back, the
+   * tour half remounts and resumes from its bookmark -- the start of the
+   * section it was in, the same as after a restart.
+   */
+  let leaving = false;
 </script>
 
 <!-- The shield stops presses on anything in here reaching the app's
@@ -73,6 +83,14 @@
         on:skip={() => tutorial.setStage("done")}
       />
     {/if}
+  {:else if leaving}
+    <Tour
+      steps={TURN_OFF}
+      skipLabel="Cancel"
+      offerTurnOff={false}
+      on:finish={() => (leaving = false)}
+      on:skip={() => (leaving = false)}
+    />
   {:else if $tutorial.stage === "part1"}
     <Tour
       steps={PART_ONE}
@@ -80,6 +98,7 @@
       on:checkpoint={(e) => tutorial.setCheckpoint(e.detail)}
       on:finish={finishPartOne}
       on:skip={() => tutorial.setStage("done")}
+      on:turnOff={() => (leaving = true)}
     />
   {:else if $tutorial.stage === "waiting"}
     <InstallChip on:done={() => tutorial.setStage("part2")} />
@@ -90,6 +109,7 @@
       on:checkpoint={(e) => tutorial.setCheckpoint(e.detail)}
       on:finish={() => tutorial.setStage("done")}
       on:skip={() => tutorial.setStage("done")}
+      on:turnOff={() => (leaving = true)}
     />
   {:else if $tutorial.stage === "done"}
     <Hotspots />

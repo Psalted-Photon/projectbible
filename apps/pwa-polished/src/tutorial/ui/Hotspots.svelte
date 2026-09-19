@@ -396,9 +396,23 @@
     </svelte:fragment>
   </TipCard>
 {:else if mode.kind === "show"}
-  <Tour steps={mode.steps} skipLabel={null} on:finish={backToDots} on:skip={backToDots} />
+  <!-- These cards bring their own footer link back to the dots, so they do not
+       also carry the tour's turn-off button. -->
+  <Tour
+    steps={mode.steps}
+    skipLabel={null}
+    offerTurnOff={false}
+    on:finish={backToDots}
+    on:skip={backToDots}
+  />
 {:else if mode.kind === "turn-off"}
-  <Tour steps={TURN_OFF} skipLabel="Cancel" on:finish={backToDots} on:skip={backToDots} />
+  <Tour
+    steps={TURN_OFF}
+    skipLabel="Cancel"
+    offerTurnOff={false}
+    on:finish={backToDots}
+    on:skip={backToDots}
+  />
 {/if}
 
 <style>
@@ -567,25 +581,6 @@
       0 0 0 2px var(--tut-lime),
       0 0 0 3.5px rgba(11, 15, 0, 0.75),
       0 0 18px 3px rgba(198, 255, 0, 0.45);
-  }
-
-  .off-link {
-    appearance: none;
-    margin: 0.6rem 0 0;
-    padding: 0;
-    background: none;
-    border: none;
-    color: var(--tut-muted);
-    font-family: var(--tut-font);
-    font-size: 0.72rem;
-    letter-spacing: 0.02em;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    cursor: pointer;
-  }
-
-  .off-link:hover {
-    color: var(--tut-text);
   }
 
   @keyframes appear {
