@@ -659,6 +659,21 @@ export class JourneysOverlay extends BaseOverlay {
     // overlay nobody has connected simply does nothing on a tap.
     this.onOpenStop = () => {};
     this.textFollowsOpacity = true;
+    /** The place whose panel is open, so the stop standing for it can show it. */
+    this.selectedId = null;
+  }
+
+  /**
+   * Mark a stop's dot as the chosen one.
+   *
+   * Unlike the biblical dots, this overlay does not rebuild itself on a pan, so
+   * the class has to be re-applied by asking for a draw. Ignored when nothing
+   * is showing — a redraw would only rebuild an empty map.
+   */
+  markSelected(placeId) {
+    if (this.selectedId === placeId) return;
+    this.selectedId = placeId;
+    if (this.enabled) this.draw();
   }
 
   get shown() {
@@ -1003,6 +1018,7 @@ export class JourneysOverlay extends BaseOverlay {
       color: first ? START_COLOUR : last ? END_COLOUR : route.colour,
       weight: first || last ? 2.8 : 2.2,
       interactive: true, bubblingMouseEvents: false,
+      className: this.selectedId != null && stop.placeId === this.selectedId ? 'dot-chosen' : '',
     });
 
     // The tap opens the app's own info panel rather than a Leaflet bubble, so a

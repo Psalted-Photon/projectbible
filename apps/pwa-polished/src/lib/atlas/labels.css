@@ -186,3 +186,39 @@
   color: #8a7550;
   white-space: nowrap;
 }
+
+/* ---------------- the dot whose panel is open ----------------
+
+   A pulse rather than a colour change, because these dots are already
+   colour-coded — red for a place Scripture names, the route's own colour for a
+   journey stop — and repainting one would say something about the place rather
+   than about the panel.
+
+   The halo is a drop-shadow on the path itself. A second marker would be
+   another thing to build, move and throw away on every redraw, and growing the
+   stroke instead would change the size the collision fitting measured, pushing
+   the neighbouring dots around whenever one was tapped.
+
+   transform-box: fill-box makes the scale happen about the dot rather than
+   about the SVG's own origin, which is somewhere off in the corner of the
+   world. */
+.dot-chosen {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: atlas-chosen 2s ease-in-out infinite;
+}
+
+@keyframes atlas-chosen {
+  0%   { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(255, 244, 214, .85)); }
+  50%  { transform: scale(1.32); filter: drop-shadow(0 0 7px rgba(255, 244, 214, .55)); }
+  100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(255, 244, 214, .85)); }
+}
+
+/* Movement off, but the dot still has to be findable, so the halo stays and
+   only stops breathing. */
+@media (prefers-reduced-motion: reduce) {
+  .dot-chosen {
+    animation: none;
+    filter: drop-shadow(0 0 5px rgba(255, 244, 214, .8));
+  }
+}

@@ -263,7 +263,9 @@ export function createAtlasMap(container, options = {}) {
     era: (era) => options.onEra?.(era),
     layers: () => options.onLayers?.(),
     place: (info) => options.onPlace?.(info),
-    point: (info) => options.onPoint?.(info),
+    // A spot, a peak or an ancient name is not one of the dots, so whatever was
+    // marked as chosen stops being chosen when one of these takes the panel.
+    point: (info) => { markSelected(null); options.onPoint?.(info); },
     view: () => options.onView?.(map.getCenter(), map.getZoom()),
   };
 
@@ -406,6 +408,19 @@ export function createAtlasMap(container, options = {}) {
   let timeline = null;
   let journeys = null;
   let destroyed = false;
+
+  /**
+   * How much of the container something else is sitting on top of.
+   *
+   * Leaflet has no idea the info panel exists, so its idea of the centre is the
+   * middle of the whole container — a strip of which is underneath the panel.
+   * The host measures its own furniture and reports it here; the engine never
+   * reaches into the DOM to find out.
+   */
+  const reserved = { right: 0 };
+
+  /** The place whose panel is open, by id, so its dot can be drawn as chosen. */
+  let selectedId = null;
 
   // ---------------------------------------------------------- which detail
 
@@ -672,7 +687,7 @@ export function createAtlasMap(container, options = {}) {
     // out of their way. Their names still go in last, below. This used to sit
     // after the early return, so with names off the dots stayed where the last
     // pass left them.
-    const shownBiblical = biblical?.draw(z, bounds) ?? [];
+    const shownBiblical = biblical?.draw(z, bounds, selectedId) ?? [];
 
     // Town dots belong to the drawn map with its names on, close in. Nothing
     // took them away when that stopped being true, so zooming out or switching
@@ -939,7 +954,8 @@ export function createAtlasMap(container, options = {}) {
    * photo, the colour-coded references, the crumb back to the map — is the
    * same code path either way.
    */
-  function openPlaceWith(place, journey) {
+  function openPlaceWith(place, journey, { force = false } = {}) {
+    markSelected(place.id);
     emit.place({
       kind: 'place',
       place,
@@ -947,6 +963,32 @@ export function createAtlasMap(container, options = {}) {
       verses: place.v ?? [],
       ...(journey ? { journey } : {}),
     });
+    // A tap moves the map only when it has to, so a city already in clear space
+    // stays where the reader put it. An arrow always moves — see openJourneyStop.
+    //
+    // Two frames later, because on the first tap the panel does not exist yet
+    // and the host cannot have reported its width; centring now would aim at
+    // the whole container and let the panel open over the answer. Two rather
+    // than one because the host measures through a resize observer, which
+    // reports after the frame the panel was painted in.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!destroyed) centreInView(place.y, place.x, { force });
+    }));
+  }
+
+  /**
+   * Mark which dot is the chosen one, and redraw so it shows.
+   *
+   * Held as an id rather than as a marker because every biblical dot is thrown
+   * away and rebuilt on any pan or zoom — a reference would die on the first
+   * pan, while an id is read fresh by each rebuild. The journeys overlay does
+   * not redraw itself on a pan, so it is asked directly.
+   */
+  function markSelected(id) {
+    if (selectedId === id) return;
+    selectedId = id;
+    journeys?.markSelected?.(id);
+    if (biblical?.visible) drawLabels();
   }
 
   /**
@@ -1122,6 +1164,46 @@ export function createAtlasMap(container, options = {}) {
   }
 
   // -------------------------------------------------------------- movement
+
+  /** How close to an edge a point may sit before it is worth moving inward. */
+  const EDGE_MARGIN = 60;
+  /** Below this, a move would be a jiggle rather than a journey. */
+  const CENTRE_SLOP = 8;
+
+  /**
+   * Put a point in the middle of the space actually visible.
+   *
+   * With the info panel open the clear space is the container minus the strip
+   * the panel covers, so centring on the container would park the city behind
+   * the very panel describing it. This aims at the centre of what is left.
+   *
+   * Without `force` it only moves when it has to — the point is behind the
+   * panel, or close enough to an edge to be awkward — so tapping a city already
+   * sitting in clear space leaves the map where the reader put it.
+   */
+  function centreInView(lat, lon, { force = false } = {}) {
+    const size = map.getSize();
+    // A panel squeezed to nearly the whole width leaves no meaningful space to
+    // aim at, so fall back to plain centring rather than at a sliver.
+    const strip = reserved.right < size.x * 0.55 ? reserved.right : 0;
+    const visibleW = size.x - strip;
+    const target = L.point(visibleW / 2, size.y / 2);
+    const at = map.latLngToContainerPoint([lat, lon]);
+
+    if (!force) {
+      const inside =
+        at.x >= EDGE_MARGIN && at.x <= visibleW - EDGE_MARGIN &&
+        at.y >= EDGE_MARGIN && at.y <= size.y - EDGE_MARGIN;
+      if (inside) return;
+    }
+    if (Math.abs(at.x - target.x) < CENTRE_SLOP && Math.abs(at.y - target.y) < CENTRE_SLOP) return;
+
+    // The latlng that would end up under the visible centre: take the pixel
+    // delta from there to the city and apply it to the current centre.
+    const centre = map.latLngToContainerPoint(map.getCenter());
+    const moved = centre.add(at.subtract(target));
+    map.flyTo(map.containerPointToLatLng(moved), map.getZoom(), { duration: 1.1 });
+  }
 
   function dropPin(lat, lon, popupHtml) {
     if (searchPin) map.removeLayer(searchPin);
@@ -1450,23 +1532,39 @@ export function createAtlasMap(container, options = {}) {
     openPlace,
 
     /**
+     * The host says how much of the container its own furniture covers, in
+     * pixels from the right edge. Measured rather than assumed, because the
+     * panel's width is a max-width that shrinks on a narrow window.
+     */
+    setReserved({ right = 0 } = {}) {
+      reserved.right = Math.max(0, right || 0);
+    },
+
+    /** The panel closed: nothing is the chosen dot any more. */
+    clearSelection() {
+      markSelected(null);
+    },
+
+    /**
      * Open a stop by its position in a journey, which is what the panel's
      * previous/next arrows call.
      *
-     * The map pans to it: following an arrow to a stop that is off-screen
-     * should take you there, and a panel that changed while the map sat still
-     * would read as the arrow having done nothing. Panning only when the stop
-     * is actually outside the view keeps a step between two visible stops from
-     * lurching the map for no reason.
+     * The map always recentres: following an arrow should visibly take you
+     * somewhere, and a panel that changed while the map sat still reads as the
+     * arrow having done nothing. It used to move only when the stop fell
+     * outside the bounds, but the bounds include the strip the panel covers, so
+     * a stop hidden behind the panel counted as already in view.
      */
     openJourneyStop(routeId, i) {
       const route = journeys?.routes?.find((r) => r.id === routeId);
       const stop = route?.stops?.[i];
       if (!stop) return;
       const place = biblicalPlaceById(stop.placeId);
-      if (!map.getBounds().contains([stop.y, stop.x])) map.panTo([stop.y, stop.x]);
-      if (!place) return openPoint({ lat: stop.y, lng: stop.x });
-      openPlaceWith(place, journeyContext(stop, route, i));
+      if (!place) {
+        centreInView(stop.y, stop.x, { force: true });
+        return openPoint({ lat: stop.y, lng: stop.x });
+      }
+      openPlaceWith(place, journeyContext(stop, route, i), { force: true });
     },
     wholeWorld,
     followPassage,

@@ -133,7 +133,15 @@ export class BiblicalPlaces {
     return out;
   }
 
-  draw(zoom, bounds) {
+  /**
+   * Every dot, rebuilt.
+   *
+   * `selected` is read fresh on each pass rather than held as a marker, because
+   * this throws away the whole layer group and builds it again — on every pan
+   * and every zoom. A class set here therefore survives panning for free, where
+   * a reference to the chosen marker would not survive the first one.
+   */
+  draw(zoom, bounds, selected = null) {
     if (this.layer) this.map.removeLayer(this.layer);
     this.layer = null;
     this.dots = [];
@@ -152,6 +160,7 @@ export class BiblicalPlaces {
         fillColor: '#8c4a3f', fillOpacity: 0.85,
         color: '#f4ecd8', weight: STROKE,
         interactive: true, bubblingMouseEvents: false,
+        className: selected != null && p.id === selected ? 'dot-chosen' : '',
       });
       marker.on('click', (e) => {
         L.DomEvent.stop(e);

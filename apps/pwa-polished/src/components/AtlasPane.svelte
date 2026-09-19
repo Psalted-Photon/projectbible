@@ -71,6 +71,14 @@
 
   /** What the reader tapped. Null when the panel is closed. */
   let info: any = null;
+  /**
+   * How wide the info panel actually is.
+   *
+   * Measured rather than taken from the stylesheet's 330px, because its
+   * max-width squeezes it on a narrow window — and the map needs to know how
+   * much of itself is covered, not how much it would be covered on a wide one.
+   */
+  let infoW = 0;
   let openBooks: Record<string, boolean> = {};
   /** The verse behind each reference, by OSIS id, in the reader's translation. */
   let versePreviews: Record<string, string> = {};
@@ -115,6 +123,14 @@
 
   $: approximate = timelineOn && era && era.confidence !== 'attested';
   $: sources = atlas?.sources ?? [];
+
+  // Tell the map how much of itself the info panel is covering, so it can put
+  // the city it just opened in the space that is left rather than underneath
+  // the panel describing it. The panel's own offset from the edge goes in too,
+  // and closing it reports zero without anything having to say so.
+  $: atlas?.setReserved({
+    right: info && infoW ? infoW + 10 + (edge === 'left' ? GRIP_PX : 0) + 14 : 0,
+  });
 
   // The nav's Layer dial fades every overlay that is on, so it appears whenever
   // there is one to fade rather than only for the timeline it was written for.
@@ -968,8 +984,12 @@
     </div>
 
     {#if info}
-      <aside class="info" aria-live="polite">
-        <button class="info-close" aria-label="Close" on:click={() => (info = null)}>✕</button>
+      <aside class="info" aria-live="polite" bind:clientWidth={infoW}>
+        <button
+          class="info-close"
+          aria-label="Close"
+          on:click={() => { info = null; atlas?.clearSelection(); }}
+        >✕</button>
         <div class="info-body">
           {#if info.kind === 'place'}
             <div class="info-name">{info.place.n}</div>
