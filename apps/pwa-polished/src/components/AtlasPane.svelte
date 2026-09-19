@@ -116,6 +116,10 @@
   $: approximate = timelineOn && era && era.confidence !== 'attested';
   $: sources = atlas?.sources ?? [];
 
+  // The nav's Layer dial fades every overlay that is on, so it appears whenever
+  // there is one to fade rather than only for the timeline it was written for.
+  $: anyOverlayOn = overlays.some((ov) => ov.enabled);
+
   onMount(async () => {
     root.addEventListener('click', onClickCapture, true);
     try {
@@ -651,7 +655,7 @@
 
       <!-- The overlay's fade lives with the control that turns it on, so the
            thing you just enabled and the dial that tunes it sit together. -->
-      {#if timelineOn}
+      {#if anyOverlayOn}
         <div class="nav-fade">
           <label for="atlas-layer-opacity">Layer</label>
           <input
@@ -782,7 +786,10 @@
         >
           <span class="swatch" style="background:{ov.colour}"></span>{ov.title}<span class="switch"></span>
         </button>
-        {#if ov.enabled}
+        <!-- An overlay whose one dial already governs its lettering says so, and
+             gets no second slider — two controls over one value would disagree
+             the moment either moved. -->
+        {#if ov.enabled && !ov.textFollowsOpacity}
           <div class="row">
             <label for="atlas-text-{ov.id}">Text</label>
             <input

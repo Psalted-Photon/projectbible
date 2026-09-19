@@ -13,6 +13,11 @@
  */
 import L from 'leaflet';
 import { assignColours, polityColour, fallbackColour } from './colours.js';
+// The journey popups group a stop's verses the way every other verse list in the
+// app is grouped, so one reads the same wherever you meet it. `haversine` is not
+// taken from there: this module exports its own, and importing the twin would be
+// two names for one formula.
+import { groupByBook, bookName as bookLabel } from './places.js';
 
 /** @typedef {{ id:string, title:string, colour:string, opacity:number, enabled:boolean }} OverlayState */
 
@@ -82,6 +87,13 @@ class BaseOverlay {
     this.opacity = 1;
     /** Lettering fades separately from what it names. */
     this.textOpacity = 1;
+    /**
+     * Whether this overlay's lettering follows its layer opacity instead of
+     * having a dial of its own. The panel reads it to decide whether to offer a
+     * second slider, so the overlay owns the answer rather than the panel
+     * knowing which overlay is which.
+     */
+    this.textFollowsOpacity = false;
     this.enabled = false;
     this.layers = [];
     this.host = null;
@@ -101,6 +113,7 @@ class BaseOverlay {
     this.layers = [];
     this.namedLands = [];
     this.towns = [];
+    this.dotGroups = [];
   }
 
   unmount() { this.clear(); }
@@ -550,6 +563,92 @@ export function haversine(lat1, lon1, lat2, lon2) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Journey stops carry a verse list as long as their place is famous.
+ *
+ * The gazetteer records where a place is *named*, not which of those mentions
+ * belong to this journey, and nothing in the data can tell them apart. So a
+ * stop at Jerusalem arrives with 955 references, and one bullet each would be a
+ * popup nobody can reach the bottom of. Grouped by book and counted, the same
+ * shape the word study and the encyclopedia use, it reads as what it is — where
+ * Scripture names this place — in a few lines instead of hundreds.
+ *
+ * Books beyond the first few are summed rather than listed, because the point
+ * of the list is the passages a reader would turn to, and a stop mentioned in
+ * nineteen books is telling you something different from a stop mentioned in
+ * two.
+ */
+const POPUP_BOOKS = 4;
+const POPUP_REFS_PER_BOOK = 6;
+
+/**
+ * Where a journey starts and where it ends.
+ *
+ * Fixed rather than derived from the route's colour: they have to mean the same
+ * thing on all seventeen, and a green that shifted per journey would say
+ * "journey" rather than "start".
+ *
+ * Both are darker and more saturated than any route colour, which is the
+ * constraint rather than a preference — a ring the colour of the line it sits on
+ * marks nothing. The first red tried here was #b0463f, which is exactly the Last
+ * Journey to Jerusalem's own colour and 15 from Elijah's, so that journey's
+ * arrival at Jerusalem would have been invisible. The check asserts the gap now
+ * rather than trusting the next pair of eyes.
+ */
+const START_COLOUR = '#1f7a34';
+const END_COLOUR = '#8f1d16';
+
+/**
+ * Past this, a stop is not on the drawn line at all.
+ *
+ * The builder already refuses anything over 120 km unless the index exempts it,
+ * so this only ever catches the two stops that are exempt on purpose. Well
+ * above the ~25 km a legitimately-drawn stop sits from its road, so a route
+ * whose survey is merely coarse does not sprout dotted lines.
+ */
+const UNREACHED_KM = 120;
+
+/**
+ * A `#rrggbb` faded to an alpha, for somewhere only a colour can be given.
+ *
+ * The journey colours are all six-digit hex out of the index, and the gate
+ * asserts it, so anything else returning unchanged is the right failure: a
+ * colour that renders at full strength is a missed fade, not a broken label.
+ */
+function withAlpha(hex, alpha) {
+  if (alpha >= 1) return hex;
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex ?? '');
+  if (!m) return hex;
+  const [r, g, b] = m.slice(1).map((h) => parseInt(h, 16));
+  return `rgba(${r},${g},${b},${Math.max(0, alpha).toFixed(2)})`;
+}
+
+function versesForPopup(events) {
+  if (!events.length) return [];
+  const groups = groupByBook(events.map((e) => [e.what, e.ref]));
+  const lines = [];
+
+  for (const { book, refs } of groups.slice(0, POPUP_BOOKS)) {
+    const shown = refs.slice(0, POPUP_REFS_PER_BOOK).map((r) => r.readable);
+    const rest = refs.length - shown.length;
+    lines.push(
+      `<em>${bookLabel(book)}</em> ${shown.join(', ')}${rest > 0 ? ` +${rest}` : ''}`
+    );
+  }
+
+  // Not "…and 15 more verses" — the count a reader can act on is how many other
+  // books to look in, which is also the honest summary of what was left out.
+  const restBooks = groups.length - Math.min(groups.length, POPUP_BOOKS);
+  if (restBooks > 0) {
+    const restRefs = groups.slice(POPUP_BOOKS).reduce((n, g) => n + g.refs.length, 0);
+    lines.push(
+      `<em>and ${restBooks} more book${restBooks === 1 ? '' : 's'}</em> ` +
+      `(${restRefs} reference${restRefs === 1 ? '' : 's'})`
+    );
+  }
+  return lines;
+}
+
+/**
  * The journeys overlay — the second tenant of the overlay system.
  *
  * Its real job is proving the system isn't secretly the timeline wearing a
@@ -557,12 +656,9 @@ export function haversine(lat1, lon1, lat2, lon2) {
  * the same placement pass, and answers taps the same way, while drawing
  * something completely different.
  *
- * PARKED: deliberately not registered by the lab. The routes it has are a thin
- * seed — three of them, no dates, no distances, and not one of the thirty
- * events carries a verse — and a half-finished journey reads worse than none.
- * It comes back when the routes are authored properly, with a verse on every
- * stop, its own colour per journey, and green and red ends. The class is kept
- * working so that day is wiring, not a rebuild.
+ * Each route brings its own colour, so unlike the timeline this overlay's
+ * `colour` is only what the Layers panel puts in its swatch — nothing drawn
+ * uses it.
  */
 export class JourneysOverlay extends BaseOverlay {
   constructor({ routes }) {
@@ -570,6 +666,7 @@ export class JourneysOverlay extends BaseOverlay {
     this.routes = routes;
     this.selected = routes.map((r) => r.id);   // all on until told otherwise
     this.onRoutesChanged = () => {};
+    this.textFollowsOpacity = true;
   }
 
   get shown() {
@@ -585,55 +682,218 @@ export class JourneysOverlay extends BaseOverlay {
   }
 
   async mount() {
-    this.labelPane = this.map.getPane('overlay-labels');
-    this.applyTextOpacity();
+    // No labelPane here, unlike the timeline: this overlay's lettering fades
+    // through its own colour rather than through the pane, which it shares. The
+    // placement pass runs on the host's change anyway, so mounting does not have
+    // to ask for one.
     this.draw();
   }
 
   draw() {
+    // clear() empties dotGroups along with the layers — the dots it holds are
+    // the ones just removed from the map.
     this.clear();
 
     for (const route of this.shown) {
-      const pts = route.stops.map((s) => [s.y, s.x]);
-
-      // Sea legs are dashed and land legs solid, because "he sailed" and "he
-      // walked" are different claims and the map should not blur them.
-      for (let i = 1; i < route.stops.length; i++) {
-        const bySea = /ship|sail|sea|boat/i.test(route.stops[i].by);
-        const style = {
-          color: this.colour,
-          weight: bySea ? 2 : 2.8,
-          opacity: 0.9,
-          dashArray: bySea ? '7 6' : null,
-          fill: false,
-        };
-        this.add(L.polyline([pts[i - 1], pts[i]], {
-          pane: 'overlay-line', renderer: this.host.rendererFor('overlay-line'),
-          ...style, interactive: false,
-        }), style);
-      }
-
-      const dots = L.layerGroup([], { pane: 'overlay-labels' });
-      route.stops.forEach((stop, i) => {
-        const first = i === 0;
-        const last = i === route.stops.length - 1;
-        const marker = L.circleMarker([stop.y, stop.x], {
-          pane: 'overlay-labels', radius: first || last ? 5.5 : 4,
-          fillColor: first ? '#f4ecd8' : this.colour,
-          fillOpacity: 1, color: this.colour, weight: 2.2,
-          interactive: true, bubblingMouseEvents: false,
-        });
-        const lines = [
-          `<strong>${i + 1}. ${stop.n}</strong>`,
-          stop.km ? `${Math.round(stop.km)} km by ${stop.by}` : `by ${stop.by}`,
-          ...stop.events.map((e) => `• ${e.what}${e.ref ? ` (${e.ref})` : ''}`),
-        ];
-        marker.bindPopup(`<div style="min-width:190px">${lines.join('<br>')}</div>`);
-        marker.bindTooltip(`${i + 1}. ${stop.n}`, { direction: 'top', offset: [0, -5] });
-        dots.addLayer(marker);
-      });
-      this.add(dots, null);
+      this.drawRoute(route);
     }
+    // A redraw replaces the markers the last fade was applied to, so the fade has
+    // to be re-applied or toggling one journey off would bring the rest back to
+    // full strength.
+    if (this.opacity < 1) this.applyOpacity();
+  }
+
+  /**
+   * One journey: its line, then its stops on top.
+   *
+   * The colour comes from the route rather than the overlay, because seventeen
+   * journeys crossing the same country in one teal are seventeen journeys a
+   * reader cannot tell apart.
+   */
+  drawRoute(route) {
+    const drawn = route.legs?.length
+      ? this.drawGeometry(route)
+      : this.drawStraight(route);
+
+    // Stops last, so a dot is never buried under the line of the journey after
+    // it. One group per route rather than per stop: `clear()` walks this list on
+    // every toggle, and 111 stops would make it 111 entries long.
+    //
+    // Added with no style bag, because the base class dims a group by flattening
+    // one style over all its children — which is right for a coastline and wrong
+    // here, where the start ring, the end ring and the stops between are three
+    // different colours. applyOpacity dims them one at a time instead.
+    const dots = L.layerGroup([], { pane: 'overlay-labels' });
+    route.stops.forEach((stop, i) => {
+      dots.addLayer(this.stopMarker(route, stop, i));
+    });
+    this.add(dots, null);
+    this.dotGroups.push(dots);
+    return drawn;
+  }
+
+  /**
+   * The drawn route: the real surveyed line, one polyline per leg.
+   *
+   * The legs are deliberately not joined into one path. Where a journey crosses
+   * open water the source drew nothing — Paul's Second Journey has a 309 km gap
+   * and the Third 370 km — so joining them would invent a coastline-ignoring
+   * straight line and present it as surveyed. Separate strokes say "and then he
+   * was there", which is what the source actually claims.
+   *
+   * Sea or land is a property of the stop a leg arrives at, and legs and stops
+   * are different counts — fourteen stops and eight legs on Paul's Second — so
+   * each leg has to be matched to the stops it runs between before it can be
+   * styled. It is matched to a consecutive *pair*, both endpoints at once, and
+   * scored in both orientations, because the stored direction is unreliable:
+   * several source lines are drawn against their own name.
+   *
+   * Asking only which stop a leg ends nearest is the version that looks
+   * reasonable and is wrong. On Paul's First Journey it matched the Seleucia →
+   * Salamis crossing to Seleucia, which is the stop it left, so the one leg that
+   * had to be dashed came out solid — and the same for Paphos → Perga. All three
+   * of that journey's sea legs drew as roads.
+   */
+  drawGeometry(route) {
+    for (const leg of route.legs) {
+      if (leg.length < 2) continue;
+      // Stored [lon,lat]; Leaflet wants [lat,lon].
+      const latlngs = leg.map(([lon, lat]) => [lat, lon]);
+      const style = this.legStyle(route, this.methodForLeg(route, leg));
+      this.add(L.polyline(latlngs, {
+        pane: 'overlay-line', renderer: this.host.rendererFor('overlay-line'),
+        ...style, interactive: false,
+      }), style);
+    }
+
+    // A stop the line never reaches, joined to the route by a faint straight
+    // line. Two journeys need this and both are the point rather than a defect:
+    // the Egypt line stops at the border, and nobody ever drew Jonah's Atlantic
+    // leg, because that voyage is the thing he did not complete. Drawn thin and
+    // dotted so it reads as a claim about direction rather than a surveyed road.
+    for (let i = 1; i < route.stops.length; i++) {
+      const stop = route.stops[i];
+      if (this.nearestLegKm(route, stop.y, stop.x) <= UNREACHED_KM) continue;
+      const from = route.stops[i - 1];
+      const style = {
+        color: route.colour, weight: 1.4, opacity: 0.55,
+        dashArray: '2 7', fill: false,
+      };
+      this.add(L.polyline([[from.y, from.x], [stop.y, stop.x]], {
+        pane: 'overlay-line', renderer: this.host.rendererFor('overlay-line'),
+        ...style, interactive: false,
+      }), style);
+    }
+    return 'geometry';
+  }
+
+  /** No surveyed line for this journey: stop to stop, the honest approximation. */
+  drawStraight(route) {
+    for (let i = 1; i < route.stops.length; i++) {
+      const style = this.legStyle(route, route.stops[i].by);
+      this.add(L.polyline([
+        [route.stops[i - 1].y, route.stops[i - 1].x],
+        [route.stops[i].y, route.stops[i].x],
+      ], {
+        pane: 'overlay-line', renderer: this.host.rendererFor('overlay-line'),
+        ...style, interactive: false,
+      }), style);
+    }
+    return 'straight';
+  }
+
+  /**
+   * Sea legs dashed and land legs solid, because "he sailed" and "he walked" are
+   * different claims and the map should not blur them.
+   */
+  legStyle(route, method) {
+    const bySea = /ship|sail|sea|boat/i.test(method ?? '');
+    return {
+      color: route.colour,
+      weight: bySea ? 2 : 2.8,
+      opacity: 0.9,
+      dashArray: bySea ? '7 6' : null,
+      fill: false,
+    };
+  }
+
+  /**
+   * How the traveller covered this leg.
+   *
+   * The leg is matched to the consecutive pair of stops its two ends sit closest
+   * to, scoring both orientations and keeping the cheaper, and the method is then
+   * the arriving stop's — which is what `travel_method` records. Matching the
+   * pair rather than one endpoint is what keeps a crossing from being credited to
+   * the port it sailed from.
+   */
+  methodForLeg(route, leg) {
+    const a = leg[0];
+    const b = leg[leg.length - 1];
+    let best = null;
+    for (let i = 1; i < route.stops.length; i++) {
+      const from = route.stops[i - 1];
+      const to = route.stops[i];
+      const fwd = haversine(a[1], a[0], from.y, from.x) + haversine(b[1], b[0], to.y, to.x);
+      const rev = haversine(a[1], a[0], to.y, to.x) + haversine(b[1], b[0], from.y, from.x);
+      const cost = Math.min(fwd, rev);
+      // Ties keep the earlier pair, so a journey that visits one place twice
+      // credits the leg to the first passage rather than to whichever comparison
+      // happened to run last.
+      if (!best || cost < best.cost) best = { cost, by: to.by };
+    }
+    return best?.by ?? '';
+  }
+
+  /** How far this point sits from the nearest drawn coordinate. */
+  nearestLegKm(route, lat, lon) {
+    let best = Infinity;
+    for (const leg of route.legs ?? []) {
+      for (const [lon2, lat2] of leg) {
+        const km = haversine(lat, lon, lat2, lon2);
+        if (km < best) best = km;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * A stop's dot: green where the journey starts, red where it ends.
+   *
+   * The ends are the one thing a route drawn in a single colour cannot say for
+   * itself — a line has two ends and no direction — so they are marked in
+   * colours that mean the same thing on every journey rather than in the
+   * route's own.
+   */
+  stopMarker(route, stop, i) {
+    const first = i === 0;
+    const last = i === route.stops.length - 1;
+    const marker = L.circleMarker([stop.y, stop.x], {
+      pane: 'overlay-labels',
+      radius: first || last ? 5.5 : 4,
+      // The first stop stays hollow — it is where the journey has not happened
+      // yet — while the last is filled, because it is where it arrived.
+      fillColor: first ? '#f4ecd8' : last ? END_COLOUR : route.colour,
+      fillOpacity: 1,
+      color: first ? START_COLOUR : last ? END_COLOUR : route.colour,
+      weight: first || last ? 2.8 : 2.2,
+      interactive: true, bubblingMouseEvents: false,
+    });
+
+    const lines = [
+      `<strong>${i + 1}. ${stop.n}</strong>`,
+      // The first stop was not travelled to, so "0 km by foot" would be a claim
+      // about a journey that had not started.
+      first
+        ? `<span style="opacity:.75">${route.name} begins here</span>`
+        : stop.km
+          ? `${Math.round(stop.km)} km by ${stop.by}`
+          : `by ${stop.by}`,
+      ...(stop.note ? [`<span style="opacity:.75">${stop.note}</span>`] : []),
+      ...versesForPopup(stop.events),
+    ];
+    marker.bindPopup(`<div style="min-width:190px;max-width:260px">${lines.join('<br>')}</div>`);
+    marker.bindTooltip(`${i + 1}. ${stop.n}`, { direction: 'top', offset: [0, -5] });
+    return marker;
   }
 
   /** Stop names, offered to the shared placement pass like any other lettering. */
@@ -641,16 +901,58 @@ export class JourneysOverlay extends BaseOverlay {
     if (zoom < 5) return [];
     const out = [];
     for (const route of this.shown) {
+      // Lettered in the journey's own colour, so a numbered name belongs to a
+      // visible line rather than floating between two of them. The fade is baked
+      // into the colour because the pass renders it as an inline `color:` — see
+      // applyTextOpacity for why it cannot be done with the pane.
+      const colour = withAlpha(route.colour, this.textOpacity);
       route.stops.forEach((stop, i) => {
         if (!inView(stop.y, stop.x)) return;
         out.push({
           lat: stop.y, lon: stop.x, text: `${i + 1}. ${stop.n}`,
           kind: 'journey', pane: 'overlay-labels', shape: 'point',
-          priority: 90,
+          priority: 90, colour,
         });
       });
     }
     return out;
+  }
+
+  /**
+   * One dial for the whole layer — the deliberate departure from the timeline.
+   *
+   * A journey is a line, its dots and its numbered names saying one thing
+   * together; fading the line while the numbers stayed put would leave a column
+   * of floating numerals. So the layer opacity drives the lettering too, and the
+   * separate text dial the panel offers is kept in step rather than independent.
+   */
+  applyOpacity() {
+    super.applyOpacity();
+
+    // Each dot keeps the colour it was drawn in — the start ring, the end ring
+    // and the route's own are three different answers — so they fade one at a
+    // time rather than under one flattened style.
+    for (const group of this.dotGroups ?? []) {
+      group.eachLayer((marker) => {
+        marker.setStyle?.({ opacity: this.opacity, fillOpacity: this.opacity });
+      });
+    }
+
+    this.textOpacity = this.opacity;
+    this.applyTextOpacity();
+  }
+
+  /**
+   * Journey lettering fades through its own colour, not through the pane.
+   *
+   * `overlay-labels` is shared with the timeline, so setting its opacity here
+   * would dim the timeline's land and sea names as well — one overlay reaching
+   * into another's lettering. The names carry their alpha in the colour instead,
+   * which means a redraw rather than a style tweak; the placement pass has to run
+   * anyway for a colour change to reach the page.
+   */
+  applyTextOpacity() {
+    this.host?.onLabelsChanged?.();
   }
 
   /** What a tap near a journey means. */

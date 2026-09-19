@@ -29,7 +29,7 @@ import L from 'leaflet';
 // those elements itself, out of reach of any host component's styling, and
 // because both maps draw names — the docked one and the bare one.
 import './labels.css';
-import { OverlayHost, TimelineOverlay } from './overlays.js';
+import { OverlayHost, TimelineOverlay, JourneysOverlay } from './overlays.js';
 import { LabelEngine } from './labels.js';
 import { BiblicalPlaces, haversine, bookName } from './places.js';
 import { Paper } from './paper.js';
@@ -404,6 +404,7 @@ export function createAtlasMap(container, options = {}) {
   let readingLayer = null;
   let host = null;
   let timeline = null;
+  let journeys = null;
   let destroyed = false;
 
   // ---------------------------------------------------------- which detail
@@ -1269,6 +1270,24 @@ export function createAtlasMap(container, options = {}) {
     timeline = host.register(new TimelineOverlay({ eras: index.eras, places: overlayPlaces }));
     timeline.onEraChange = (era) => emit.era(era);
 
+    // Journeys, registered beside the timeline and independent of it: they do not
+    // belong to an era and must not vanish when the slider moves, which would
+    // read as a bug rather than as a date.
+    //
+    // A pack built before the journey tables existed has nothing to read, and a
+    // map without journeys is still a map, so a failure here leaves the overlay
+    // unregistered instead of stopping the map from opening. The Layers panel
+    // loops what is registered, so it simply does not offer the toggle.
+    try {
+      const routes = await getJson(index.journeys.file);
+      if (routes?.length) {
+        journeys = host.register(new JourneysOverlay({ routes }));
+        journeys.onRoutesChanged = () => emit.layers();
+      }
+    } catch {
+      journeys = null;
+    }
+
     // The basemap laid its lettering out before any of this existed, so the
     // places Scripture names had nothing to appear in. One more pass now that
     // they do — otherwise they turn up on the first pan rather than on opening.
@@ -1292,6 +1311,7 @@ export function createAtlasMap(container, options = {}) {
     get showBiblical() { return showBiblical; },
     get showEveryPlace() { return showEveryPlace; },
     get timeline() { return timeline; },
+    get journeys() { return journeys; },
     get host() { return host; },
     get overlays() { return host?.list() ?? []; },
     get biblicalPlaces() { return biblical?.places ?? []; },
@@ -1313,13 +1333,20 @@ export function createAtlasMap(container, options = {}) {
       bordersOpacity = Math.max(0, Math.min(1, value));
       applyBordersOpacity();
     },
+    // The nav's one Layer dial, which fades whichever overlays are on rather
+    // than the timeline it was written for. Naming 'timeline' here meant the
+    // dial silently did nothing to any second layer — and each overlay decides
+    // what its own opacity governs, so journeys taking its lettering with it is
+    // the overlay's business rather than a case handled out here.
     setLayerOpacity(value) {
-      if (!host || !timeline) return;
-      host.setOpacity('timeline', Math.max(0, Math.min(1, value)));
+      if (!host) return;
+      const v = Math.max(0, Math.min(1, value));
+      for (const ov of host.list()) if (ov.enabled) host.setOpacity(ov.id, v);
     },
     setLayerTextOpacity(value) {
-      if (!host || !timeline) return;
-      host.setTextOpacity('timeline', Math.max(0, Math.min(1, value)));
+      if (!host) return;
+      const v = Math.max(0, Math.min(1, value));
+      for (const ov of host.list()) if (ov.enabled) host.setTextOpacity(ov.id, v);
     },
     async setShowLabels(on) {
       showLabels = on;

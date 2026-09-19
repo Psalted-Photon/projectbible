@@ -60,6 +60,7 @@ export interface AtlasIndex {
   biblicalPlaces: { file: string; count: number };
   ancientNames: { file: string; count: number };
   placePhotos: { file: string; count: number };
+  journeys: { file: string; count: number };
 }
 
 /**
@@ -210,6 +211,7 @@ export async function loadAtlasIndex(): Promise<AtlasIndex> {
       biblicalPlaces: { file: BIBLICAL_PLACES, count: 0 },
       ancientNames: { file: ANCIENT_NAMES, count: 0 },
       placePhotos: { file: PLACE_PHOTOS, count: 0 },
+      journeys: { file: JOURNEYS, count: 0 },
     };
   })();
 
