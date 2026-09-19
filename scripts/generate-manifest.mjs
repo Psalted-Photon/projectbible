@@ -103,7 +103,7 @@ const PACK_CONFIGS = {
     type: 'study',
     name: 'Historical Map',
     description:
-      'A drawn world map that works offline, sixteen eras of the biblical world from the patriarchs to the later Roman empire, every place Scripture names with its verses, and 955 photographs. Sources: Natural Earth (public domain); Barrington Atlas / AWMC and OpenStreetMap (ODbL); Digital Atlas of the Roman Empire (CC BY-SA 3.0); OpenBible.info and GeoNames (CC BY 4.0)',
+      'A drawn world map that works offline, sixteen eras of the biblical world from the patriarchs to the later Roman empire, every place Scripture names with its verses, seventeen journeys from the Exodus to the voyage to Rome, and 955 photographs. Sources: Natural Earth (public domain); Barrington Atlas / AWMC and OpenStreetMap (ODbL); Digital Atlas of the Roman Empire (CC BY-SA 3.0); OpenBible.info and GeoNames (CC BY 4.0); journey routes from United Bible Societies (Project MARBLE), drawn by Dr. Leen Ritmeyer (CC BY-SA 4.0)',
     dependencies: []
   },
   'atlas-places.sqlite': {

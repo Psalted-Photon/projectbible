@@ -19,6 +19,7 @@
 import Database from 'better-sqlite3';
 import { gunzipSync } from 'zlib';
 import { existsSync, readFileSync, readdirSync } from 'fs';
+import { createHash } from 'crypto';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -518,6 +519,32 @@ console.log('\nImport — every query the app runs against these packs');
     const wrongType = wanted.filter((id) => byId.get(id) && byId.get(id).type !== 'study');
     expect(wrongType.length === 0, 'every atlas entry ships as type "study"',
       wrongType.map((id) => `${id}=${byId.get(id).type}`).join(', '));
+
+    // A stale sha256 is the one manifest error that cannot be recovered on the
+    // device: PackLoader hashes what it downloaded, finds a mismatch and throws
+    // the file away, so the pack is not merely wrong but uninstallable. Rebuild
+    // the packs without regenerating the manifest and this is exactly what
+    // ships, which is why it is asserted rather than remembered.
+    const stale = [];
+    for (const id of wanted) {
+      const entry = byId.get(id);
+      if (!entry) continue;
+      const file = join(OUT, entry.downloadUrl.split('/').pop());
+      if (!existsSync(file)) continue;
+      const bytes = readFileSync(file);
+      const sha = createHash('sha256').update(bytes).digest('hex');
+      if (sha !== entry.sha256) stale.push(`${id}: manifest ${entry.sha256.slice(0, 12)} vs file ${sha.slice(0, 12)}`);
+      else if (bytes.length !== entry.size) stale.push(`${id}: size ${entry.size} vs ${bytes.length}`);
+    }
+    expect(stale.length === 0, 'every atlas sha256 matches the file on disk',
+      stale.join('; ') + ' — run scripts/generate-manifest.mjs');
+
+    // BY-SA obliges attribution where the work is offered, and the manifest
+    // description is what a reader actually sees on the pack card.
+    const desc = byId.get('atlas-map')?.description ?? '';
+    expect(desc.includes('United Bible Societies') && desc.includes('CC BY-SA 4.0'),
+      'the manifest credits UBS for the journey routes',
+      'atlas-map description is missing the Project MARBLE credit');
 
     const totalMB = wanted.reduce((n, id) => n + (byId.get(id)?.size ?? 0), 0);
     ok('one card, one tap', `${wanted.length} files, ${mb(totalMB)}`);
