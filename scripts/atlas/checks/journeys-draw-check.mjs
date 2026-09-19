@@ -82,12 +82,15 @@ function constFromSource(name, pattern) {
 }
 
 const UNREACHED_KM = Number(constFromSource('UNREACHED_KM', '(\\d+)'));
+const ANCHOR_KM = Number(constFromSource('ANCHOR_KM', '(\\d+)'));
+const JOINT_KM = Number(constFromSource('JOINT_KM', '(\\d+)'));
 const START_COLOUR = constFromSource('START_COLOUR', "'(#[0-9a-f]{6})'");
 const END_COLOUR = constFromSource('END_COLOUR', "'(#[0-9a-f]{6})'");
 const SEA_RE = /ship|sail|sea|boat/i;
 
 console.log(
   `\nRead from overlays.js: UNREACHED_KM=${UNREACHED_KM}, ` +
+  `ANCHOR_KM=${ANCHOR_KM}, JOINT_KM=${JOINT_KM}, ` +
   `start=${START_COLOUR}, end=${END_COLOUR}`
 );
 
@@ -412,6 +415,133 @@ expect(
   'a full-strength fade returns the hex unchanged',
   'the common case must not become an rgba() string for no reason'
 );
+
+
+// ── Bridging: the line reaches the dots ───────────────────────────────────
+//
+// The user's complaint, asserted. Two coordinate systems meet at every stop —
+// the dot is the gazetteer's city, the line is a traced road — and the overlay
+// closes the residual gap so they touch. This reproduces that pass rather than
+// importing it, the same reason methodForLeg is reproduced above.
+
+console.log('\nBridging');
+
+function bridgeOf(r) {
+  const legs = r.legs.filter((leg) => leg.length >= 2);
+  if (!legs.length) return { anchors: [], joints: [], skipped: [] };
+
+  const ends = [];
+  for (const leg of legs) ends.push({ leg, point: leg[0] }, { leg, point: leg[leg.length - 1] });
+
+  const anchors = [];
+  const skipped = [];
+  for (const stop of [r.stops[0], r.stops[r.stops.length - 1]]) {
+    if (!stop) continue;
+    let best = Infinity;
+    for (const e of ends) {
+      const km = haversine(stop.lat, stop.lon, e.point[1], e.point[0]);
+      if (km < best) best = km;
+    }
+    if (best > ANCHOR_KM) skipped.push({ name: stop.name, km: best });
+    else if (best >= 0.05) anchors.push({ name: stop.name, km: best });
+  }
+
+  const candidates = [];
+  for (let i = 0; i < ends.length; i++) {
+    for (let j = i + 1; j < ends.length; j++) {
+      if (ends[i].leg === ends[j].leg) continue;
+      const km = haversine(ends[i].point[1], ends[i].point[0], ends[j].point[1], ends[j].point[0]);
+      if (km > JOINT_KM || km < 0.05) continue;
+      candidates.push({ km, i, j });
+    }
+  }
+  candidates.sort((a, b) => a.km - b.km);
+  const spent = new Set();
+  const pairs = new Set();
+  const joints = [];
+  for (const c of candidates) {
+    if (spent.has(c.i) || spent.has(c.j)) continue;
+    const pair = `${legs.indexOf(ends[c.i].leg)}:${legs.indexOf(ends[c.j].leg)}`;
+    if (pairs.has(pair)) continue;
+    spent.add(c.i);
+    spent.add(c.j);
+    pairs.add(pair);
+    joints.push(c.km);
+  }
+  return { anchors, joints, skipped };
+}
+
+const bridges = new Map(drawn.map((r) => [r.id, bridgeOf(r)]));
+
+// Every journey's first and last stop is reached, bar the one the index exempts
+// by name. This is the literal complaint: the line must touch the green ring.
+const unanchored = drawn.flatMap((r) =>
+  bridges.get(r.id).skipped.map((s) => `${r.id}/${s.name} ${s.km.toFixed(0)}km`)
+);
+expect(
+  unanchored.length === 1 && unanchored[0].startsWith('joseph-to-dothan/Egypt'),
+  'every journey end is bridged to its line, bar Joseph\'s exempt Egypt',
+  `unanchored: ${unanchored.join(', ') || 'none'}`
+);
+
+// A bridge is survey coarseness closed, not a road invented across water. The
+// widest one drawn has to stay far below the narrowest gap left alone.
+const widest = Math.max(0, ...drawn.flatMap((r) => [
+  ...bridges.get(r.id).anchors.map((a) => a.km),
+  ...bridges.get(r.id).joints,
+]));
+expect(
+  widest <= ANCHOR_KM,
+  `the widest bridge drawn is ${widest.toFixed(0)} km, within the anchor limit`,
+  `something is bridging further than ANCHOR_KM=${ANCHOR_KM}`
+);
+
+// The Aegean and Adriatic crossings are the ones that must never be bridged:
+// the source drew them as separate strokes because they are open water.
+for (const id of ['pauls-second-journey', 'pauls-third-journey']) {
+  const r = drawn.find((x) => x.id === id);
+  if (!r) continue;
+  const legs = r.legs.filter((l) => l.length >= 2);
+  const ends = [];
+  for (const leg of legs) ends.push({ leg, point: leg[0] }, { leg, point: leg[leg.length - 1] });
+  let narrowestLeft = Infinity;
+  for (let i = 0; i < ends.length; i++) {
+    for (let j = i + 1; j < ends.length; j++) {
+      if (ends[i].leg === ends[j].leg) continue;
+      const km = haversine(ends[i].point[1], ends[i].point[0], ends[j].point[1], ends[j].point[0]);
+      if (km > JOINT_KM && km < narrowestLeft) narrowestLeft = km;
+    }
+  }
+  expect(
+    narrowestLeft > JOINT_KM,
+    `${id}: its open-water gaps stay unbridged (narrowest left alone ${narrowestLeft.toFixed(0)} km)`,
+    'a joint limit this high would draw a road across the Aegean'
+  );
+}
+
+// A journey drawn in n connected strokes needs n-1 joints. More than that means
+// endpoints are being joined to more than one partner, which draws a web rather
+// than a line — Elisha's six legs around the Jordan valley are the case that
+// first showed it, at fifteen joints for five real gaps.
+const overJoined = drawn.filter((r) => {
+  const legs = r.legs.filter((l) => l.length >= 2).length;
+  return bridges.get(r.id).joints.length > Math.max(0, legs - 1);
+});
+expect(
+  overJoined.length === 0,
+  'no journey draws more joints than it has gaps between its legs',
+  `over-joined: ${overJoined.map((r) => r.id).join(', ')}`
+);
+
+for (const r of drawn) {
+  const b = bridges.get(r.id);
+  if (!b.anchors.length && !b.joints.length) continue;
+  console.log(
+    `  ${r.id.padEnd(26)} ${String(b.anchors.length)} anchor${b.anchors.length === 1 ? ' ' : 's'}` +
+    `  ${String(b.joints.length).padStart(2)} joint${b.joints.length === 1 ? '' : 's'}` +
+    `  widest ${Math.max(0, ...b.anchors.map((a) => a.km), ...b.joints).toFixed(1)} km`
+  );
+}
 
 console.log('\n' + '─'.repeat(78));
 console.log(`${checks} checks, ${failures} failed`);

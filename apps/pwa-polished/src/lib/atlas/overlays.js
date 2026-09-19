@@ -589,6 +589,39 @@ const END_COLOUR = '#8f1d16';
 const UNREACHED_KM = 120;
 
 /**
+ * How far a drawn line may stop short of a journey's first or last stop and
+ * still be bridged to it.
+ *
+ * The complaint this answers is that the lines do not touch the dots. Two
+ * independent sources meet at every stop — the dot is the gazetteer's city
+ * coordinate, the line is Ritmeyer's traced road — and they were only ever
+ * checked for proximity, never joined. Measured against the shipped pack, the
+ * end gaps run 1 km at best and 113 km at worst, with 23 of 34 already under
+ * 10 km; the ones that stand out are land journeys on foot whose survey simply
+ * stops short of the terminal city (Capernaum 113, Paul's Third at Jerusalem
+ * 87, Abram at Hebron 80).
+ *
+ * 120 is deliberately the same as UNREACHED_KM rather than a second opinion
+ * about the same thing: above it a stop is already drawn its own dotted
+ * connector, so a higher limit here would draw both and a lower one would
+ * leave a band of stops with neither. The smallest genuine water gap is 309 km
+ * (Paul's Second) and the next 370 (his Third), so nothing here can bridge an
+ * open-water crossing.
+ */
+const ANCHOR_KM = 120;
+
+/**
+ * How far one leg's end may sit from the next leg's start and still be joined.
+ *
+ * Lower than the anchor limit, and for a different reason: an anchor closes a
+ * known gap between a line and the city it was drawn for, while a joint claims
+ * two separate strokes are one continuous road. That is the claim that goes
+ * wrong if it is made too freely, so it keeps a wide margin below the 309 km
+ * Aegean crossing.
+ */
+const JOINT_KM = 60;
+
+/**
  * A `#rrggbb` faded to an alpha, for somewhere only a colour can be given.
  *
  * The journey colours are all six-digit hex out of the index, and the gate
@@ -741,8 +774,8 @@ export class JourneysOverlay extends BaseOverlay {
    * of that journey's sea legs drew as roads.
    */
   drawGeometry(route) {
-    for (const leg of route.legs) {
-      if (leg.length < 2) continue;
+    const legs = route.legs.filter((leg) => leg.length >= 2);
+    for (const leg of legs) {
       // Stored [lon,lat]; Leaflet wants [lat,lon].
       const latlngs = leg.map(([lon, lat]) => [lat, lon]);
       const style = this.legStyle(route, this.methodForLeg(route, leg));
@@ -751,6 +784,7 @@ export class JourneysOverlay extends BaseOverlay {
         ...style, interactive: false,
       }), style);
     }
+    this.bridge(route, legs);
 
     // A stop the line never reaches, joined to the route by a faint straight
     // line. Two journeys need this and both are the point rather than a defect:
@@ -771,6 +805,112 @@ export class JourneysOverlay extends BaseOverlay {
       }), style);
     }
     return 'geometry';
+  }
+
+  /**
+   * Close the gaps between the drawn line and the dots it was drawn for.
+   *
+   * Two coordinate systems meet at every stop: the dot is the gazetteer's city
+   * coordinate, the line is a traced road, and nothing ever joined them. The
+   * result is the visible gap at the green ring — the line starts near Antioch
+   * rather than at it.
+   *
+   * Three cases, and the distinction between them is what keeps this honest:
+   *
+   *   anchor  the journey's first stop to the nearest end of the line, and the
+   *           last stop to its nearest end. Drawn in the adjacent leg's own
+   *           style, because this is survey coarseness rather than a separate
+   *           claim about how he travelled.
+   *   joint   one leg's end to another leg's start, where they nearly meet.
+   *           Also the adjacent leg's style, for the same reason.
+   *   neither anything wider is left alone. Open water is not a road, and the
+   *           existing dotted connector already speaks for stops the line
+   *           genuinely never reaches.
+   *
+   * The anchor ends at the exact `[stop.y, stop.x]` that stopMarker() uses, so
+   * the line and the dot cannot disagree about where the city is.
+   *
+   * Which leg is nearest is measured rather than assumed. The stored leg order
+   * is unreliable — several source lines are drawn against their own name, and
+   * the order does not follow travel order — so taking legs[0] as the start
+   * would anchor the wrong end of the wrong leg on about a third of these.
+   */
+  bridge(route, legs) {
+    if (!legs.length) return;
+
+    // Every leg endpoint, each remembering the leg it belongs to so the bridge
+    // can borrow that leg's styling.
+    const ends = [];
+    for (const leg of legs) {
+      ends.push({ leg, point: leg[0] }, { leg, point: leg[leg.length - 1] });
+    }
+
+    const draw = (from, to, leg) => {
+      const style = this.legStyle(route, this.methodForLeg(route, leg));
+      this.add(L.polyline([from, to], {
+        pane: 'overlay-line', renderer: this.host.rendererFor('overlay-line'),
+        ...style, interactive: false,
+      }), style);
+    };
+
+    // Anchors: the two ends of the journey.
+    for (const stop of [route.stops[0], route.stops[route.stops.length - 1]]) {
+      if (!stop) continue;
+      let best = null;
+      for (const end of ends) {
+        const km = haversine(stop.y, stop.x, end.point[1], end.point[0]);
+        if (!best || km < best.km) best = { km, end };
+      }
+      // Zero-length lines are not worth drawing, and a gap this wide is a stop
+      // the line never reached — the dotted connector's business, not this.
+      if (!best || best.km > ANCHOR_KM || best.km < 0.05) continue;
+      draw([stop.y, stop.x], [best.end.point[1], best.end.point[0]], best.end.leg);
+    }
+
+    // Joints: a free leg end to the nearest free end of another leg.
+    //
+    // Endpoint to endpoint, not leg to leg, and each endpoint is spent once.
+    // Elisha's Ministry is why: six short legs around the Jordan valley, where
+    // every one of the fifteen leg pairs comes within 60 km of another, and
+    // joining pairs drew a scribble across the same few miles. An endpoint,
+    // though, is one loose thread — a leg has two, a line drawn in two strokes
+    // has one apiece where they meet — so matching the closest free pair and
+    // spending both joins each visible gap exactly once.
+    //
+    // Nearest-first, so the obvious joins are made before the marginal ones can
+    // claim an endpoint they have a weaker claim on.
+    const candidates = [];
+    for (let i = 0; i < ends.length; i++) {
+      for (let j = i + 1; j < ends.length; j++) {
+        if (ends[i].leg === ends[j].leg) continue;
+        const km = haversine(
+          ends[i].point[1], ends[i].point[0],
+          ends[j].point[1], ends[j].point[0]
+        );
+        if (km > JOINT_KM || km < 0.05) continue;
+        candidates.push({ km, i, j });
+      }
+    }
+    candidates.sort((a, b) => a.km - b.km);
+
+    // One joint per endpoint, and one per pair of legs: two strokes meet in one
+    // place, not two. The pair rule is what stops a closed loop from being
+    // bridged twice — Jesus' Galilee ministry draws its second leg as a circuit
+    // whose start and end are the same point, so both of its ends sit the same
+    // distance from the other leg and each would otherwise claim a partner.
+    const spent = new Set();
+    const pairs = new Set();
+    for (const c of candidates) {
+      if (spent.has(c.i) || spent.has(c.j)) continue;
+      const a = ends[c.i];
+      const b = ends[c.j];
+      const pair = `${legs.indexOf(a.leg)}:${legs.indexOf(b.leg)}`;
+      if (pairs.has(pair)) continue;
+      spent.add(c.i);
+      spent.add(c.j);
+      pairs.add(pair);
+      draw([a.point[1], a.point[0]], [b.point[1], b.point[0]], b.leg);
+    }
   }
 
   /** No surveyed line for this journey: stop to stop, the honest approximation. */
