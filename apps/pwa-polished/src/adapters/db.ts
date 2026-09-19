@@ -15,7 +15,7 @@ import { getDeviceOwner } from '../lib/sync/deviceOwner';
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 38; // Migration 38: ownerId on the personal stores (see PERSONAL_STORES)
+const DB_VERSION = 39; // Migration 39: the three journey stores (see atlas_journeys)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -1387,6 +1387,29 @@ export function openDB(): Promise<IDBDatabase> {
       // rows. Read once when search first opens, released when the map closes.
       if (!db.objectStoreNames.contains('atlas_place_index')) {
         db.createObjectStore('atlas_place_index', { keyPath: 'name' });
+      }
+
+      // The journeys a reader can follow: who travelled, when, and in what
+      // colour. Ours, not the route source's.
+      if (!db.objectStoreNames.contains('atlas_journeys')) {
+        const atlasJourneys = db.createObjectStore('atlas_journeys', { keyPath: 'id' });
+        atlasJourneys.createIndex('sortOrder', 'sortOrder', { unique: false });
+      }
+
+      // Every stop on every journey. `journeyId|seq` because a place is a stop
+      // on as many journeys as pass through it, and twice on some of them.
+      // placeId points into atlas_biblical_places, which is where the verses
+      // live — a stop never carries its own copy of them.
+      if (!db.objectStoreNames.contains('atlas_journey_stops')) {
+        const atlasStops = db.createObjectStore('atlas_journey_stops', { keyPath: 'id' });
+        atlasStops.createIndex('journeyId', 'journeyId', { unique: false });
+      }
+
+      // The drawn lines, gzipped, one row per journey: coordinates and nothing
+      // else. This store is the CC BY-SA boundary — every name a reader sees
+      // comes from the two stores above, so keep it that way.
+      if (!db.objectStoreNames.contains('atlas_journey_geometry')) {
+        db.createObjectStore('atlas_journey_geometry', { keyPath: 'id' });
       }
 
       // Modern world places store (GeoNames — cities, states, countries worldwide)

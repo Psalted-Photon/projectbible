@@ -75,11 +75,12 @@ const BIBLICAL_PLACES = 'biblical-places';
 const ANCIENT_NAMES = 'ancient-names';
 const PLACE_PHOTOS = 'place-photos';
 const OVERLAY_PLACES = 'overlay-places';
+const JOURNEYS = 'journeys';
 const DETAIL1_COVERAGE = 'base-detail1-coverage.json';
 
 const DERIVED = new Set([
   POINTS_CITY, POINTS_PEAK, BIBLICAL_PLACES, ANCIENT_NAMES,
-  PLACE_PHOTOS, OVERLAY_PLACES, DETAIL1_COVERAGE,
+  PLACE_PHOTOS, OVERLAY_PLACES, JOURNEYS, DETAIL1_COVERAGE,
 ]);
 
 /** Parsed layers are immutable, so one cache serves every redraw. */
@@ -316,6 +317,99 @@ async function buildDerived(key: string): Promise<any> {
         kind: r.kind ?? null,
         verses: r.verses ?? 0,
       }));
+    }
+
+    case JOURNEYS: {
+      // Three stores into the shape the overlay reads. The column names are
+      // deliberately not the overlay's names — the table says `traveller`,
+      // which is the correct spelling, and the overlay says `traveler`, which
+      // is what it was written with. This is where the two meet.
+      const [journeyRows, stopRows, geometryRows] = await Promise.all([
+        all<any>('atlas_journeys'),
+        all<any>('atlas_journey_stops'),
+        all<any>('atlas_journey_geometry'),
+      ]);
+      if (!journeyRows.length) return [];
+
+      // Every stop's verses come from its gazetteer row, so a verse is recorded
+      // once and a journey cannot drift from the place it passes through.
+      // Fetched by key rather than by reading all 1,278 places: a hundred-odd
+      // stops name far fewer places than the gazetteer holds.
+      const placeIds = [...new Set<string>(stopRows.map((s) => s.placeId))];
+      const places = new Map<string, any>(
+        (await Promise.all(
+          placeIds.map((id) =>
+            readTransaction<any>('atlas_biblical_places', (store) => store.get(id))
+          )
+        ))
+          .filter(Boolean)
+          .map((p) => [p.id, p])
+      );
+
+      // Inflated up front rather than per journey: all seventeen legs together
+      // are 23 KB, and the overlay draws every shown route in one pass.
+      const legs = new Map<string, number[][][]>();
+      for (const row of geometryRows) {
+        const data: Blob = row.data instanceof Blob ? row.data : new Blob([row.data]);
+        legs.set(row.id, safeParse(await inflate(data), [] as number[][][]));
+      }
+
+      const byJourney = new Map<string, any[]>();
+      for (const stop of stopRows) {
+        if (!byJourney.has(stop.journeyId)) byJourney.set(stop.journeyId, []);
+        byJourney.get(stop.journeyId)!.push(stop);
+      }
+
+      // sortOrder restarts at 1 in each testament — it is a position within a
+      // group, not a rank across all seventeen — so testament sorts first, or
+      // the two halves interleave.
+      return journeyRows
+        .sort((a, b) =>
+          (a.testament === b.testament ? 0 : a.testament === 'old' ? -1 : 1) ||
+          (a.sortOrder - b.sortOrder) ||
+          a.id.localeCompare(b.id)
+        )
+        .map((j) => ({
+          id: j.id,
+          name: j.name,
+          traveler: j.traveller,
+          dates: j.dates,
+          description: j.description ?? null,
+          km: j.km,
+          colour: j.colour,
+          testament: j.testament,
+          // One array per leg, already in travel order. Not joined into one
+          // path: the gaps are open water the source never drew, so phase 5
+          // draws each leg separately.
+          legs: legs.get(j.id) ?? [],
+          stops: (byJourney.get(j.id) ?? [])
+            .sort((a, b) => a.seq - b.seq)
+            .map((s) => {
+              const place = places.get(s.placeId);
+              // [label, osisRef] pairs. The label is what a reader sees; the
+              // ref is OSIS, so a stop can hand off into the reader.
+              //
+              // Every verse the place is named in, not a chosen few: the
+              // gazetteer records where a place is mentioned, not which
+              // mentions belong to this journey, and there is nothing here
+              // that could tell them apart. That makes the count wildly
+              // uneven — a median of 7, but 955 for Jerusalem and 658 for
+              // Egypt — so whatever draws these has to cut them down. That
+              // decision is the popup's, in phase 5, and this hands it
+              // everything rather than choosing on its behalf.
+              const verses: [string, string][] = place ? safeParse(place.verses, []) : [];
+              return {
+                n: s.name,
+                y: s.lat,
+                x: s.lon,
+                by: s.travelMethod,
+                km: s.kmFromPrevious ?? 0,
+                placeId: s.placeId,
+                note: s.note ?? null,
+                events: verses.map(([what, ref]) => ({ what, ref })),
+              };
+            }),
+        }));
     }
 
     default:

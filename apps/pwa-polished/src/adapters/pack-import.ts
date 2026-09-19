@@ -642,6 +642,9 @@ export async function importPackFromBytes(
         'atlas_biblical_places',
         'atlas_ancient_names',
         'atlas_place_photos',
+        'atlas_journeys',
+        'atlas_journey_stops',
+        'atlas_journey_geometry',
       ]);
 
       // The pack's own metadata, kept as-is. This is what a finished install is
@@ -780,6 +783,77 @@ export async function importPackFromBytes(
         }),
         { label: 'photographs' }
       );
+
+      // The journeys. An older pack has none of these three tables, and a map
+      // without journeys is a map — so their absence skips the layer rather
+      // than failing the install.
+      const journeysTable = db.exec(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='atlas_journeys'"
+      );
+
+      if (journeysTable.length && journeysTable[0].values.length) {
+        await streamTable(
+          db,
+          'SELECT id, name, traveller, dates, description, colour, testament, sort_order, km FROM atlas_journeys',
+          'atlas_journeys',
+          ([id, name, traveller, dates, description, colour, testament, sortOrder, km]) => ({
+            id: id as string,
+            name: name as string,
+            traveller: traveller as string,
+            dates: dates as string,
+            description: (description as string) ?? null,
+            colour: colour as string,
+            testament: testament as string,
+            sortOrder: (sortOrder as number) ?? 0,
+            km: (km as number) ?? 0,
+          }),
+          { label: 'journeys' }
+        );
+
+        await streamTable(
+          db,
+          'SELECT journey_id, seq, place_id, name, lat, lon, travel_method, km_from_previous, note FROM atlas_journey_stops',
+          'atlas_journey_stops',
+          ([journeyId, seq, placeId, name, lat, lon, travelMethod, kmFromPrevious, note]) => ({
+            // A place is a stop on as many journeys as pass through it, so
+            // neither column keys a row on its own.
+            id: `${journeyId}|${seq}`,
+            journeyId: journeyId as string,
+            seq: seq as number,
+            placeId: placeId as string,
+            name: name as string,
+            lat: lat as number,
+            lon: lon as number,
+            travelMethod: travelMethod as string,
+            kmFromPrevious: (kmFromPrevious as number) ?? null,
+            note: (note as string) ?? null,
+          }),
+          { label: 'journey stops' }
+        );
+
+        // Blob-wrapped like the other gzipped geometry, though 23 KB for all
+        // seventeen never needed the file-backed store — it is the shape the
+        // inflate path already reads.
+        let geometryRows = 0;
+        const geometryStmt = db.prepare(
+          'SELECT journey_id, encoding, raw_bytes, data FROM atlas_journey_geometry'
+        );
+        try {
+          while (geometryStmt.step()) {
+            const [id, encoding, rawBytes, data] = geometryStmt.get() as
+              [string, string, number, Uint8Array];
+            await batchWriteTransaction('atlas_journey_geometry', (store) => {
+              store.put({ id, encoding, rawBytes, data: gzipBlob(data) });
+            });
+            geometryRows++;
+          }
+        } finally {
+          geometryStmt.free();
+        }
+        console.log(`✅ Imported ${geometryRows} journey routes`);
+      } else {
+        console.log('No journey tables in this pack — the map imports without that layer');
+      }
 
       console.log(`✅ Historical Map pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'cross-references') {
