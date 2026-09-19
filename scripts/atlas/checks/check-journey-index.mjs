@@ -16,7 +16,11 @@ const ROOT = path.resolve(
   '../../..'
 );
 const DIR = path.join(ROOT, 'data-sources/maps/journeys');
-const PACK = path.join(ROOT, 'apps/pwa-polished/public/packs/consolidated/atlas-map.sqlite');
+// packs/consolidated, the same file its five sibling checks read. This alone
+// read the app's copy, which is written by `rewrite-journey-tables --app` and
+// not by the builder — so a rebuild without that flag left this validating a
+// stale pack while everything else validated the new one.
+const PACK = path.join(ROOT, 'packs/consolidated/atlas-map.sqlite');
 
 const index = JSON.parse(fs.readFileSync(path.join(DIR, 'journey-index.json'), 'utf8'));
 const db = new Database(PACK, { readonly: true });

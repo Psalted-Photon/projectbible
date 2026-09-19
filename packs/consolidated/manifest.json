@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-09-19T01:47:48.663Z",
+  "createdAt": "2026-09-19T16:33:04.383Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -28,10 +28,10 @@
       "minAppVersion": "1.0.0",
       "size": 1929216,
       "sizeMB": 1.84,
-      "sha256": "41aedb584327a0b44609fbb1877078321b17f5b5765782f6ec1fd6b2110189a0",
+      "sha256": "7a10b55932fabbaae1855e16b77c40b4531fe312fb11f60d8ed89df774bb32d1",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map.sqlite",
-      "createdAt": "2026-09-19T01:47:49.565Z"
+      "createdAt": "2026-09-19T16:33:05.045Z"
     },
     {
       "id": "atlas-map-01",
@@ -46,7 +46,7 @@
       "sha256": "2de681fd98d2b5202446f3ec468461c912ade9a8fcfd7f378ed91630376f7bfd",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map-01.sqlite",
-      "createdAt": "2026-09-19T01:47:49.582Z"
+      "createdAt": "2026-09-19T16:33:05.061Z"
     },
     {
       "id": "atlas-map-02",
@@ -61,7 +61,7 @@
       "sha256": "61b2b9f6ce5671fefed269357f23e2c6ee288c68f79e282cf03baccc97516185",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map-02.sqlite",
-      "createdAt": "2026-09-19T01:47:49.590Z"
+      "createdAt": "2026-09-19T16:33:05.069Z"
     },
     {
       "id": "atlas-map-places",
@@ -76,7 +76,7 @@
       "sha256": "f2761d1ffd5e8c672fe4a07a92cc64c4646284940d97ef43e388db19ea1d6966",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-places.sqlite",
-      "createdAt": "2026-09-19T01:47:49.573Z"
+      "createdAt": "2026-09-19T16:33:05.053Z"
     },
     {
       "id": "biblical-art",
@@ -226,7 +226,7 @@
       "sha256": "3dbc698da339d9c3b0f8050e5ec0374b734c4ba57a85f4a7925b6af9a1fa9239",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-09-19T01:47:49.443Z"
+      "createdAt": "2026-09-19T16:33:04.978Z"
     },
     {
       "id": "dictionary-en",
@@ -241,7 +241,7 @@
       "sha256": "1bd67240913ebbbf4f78f70add13279e150a989f6abb55eaf001e816a0f3a50a",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-09-19T01:47:49.201Z"
+      "createdAt": "2026-09-19T16:33:04.822Z"
     },
     {
       "id": "encyclotopical",
@@ -256,7 +256,7 @@
       "sha256": "310058b1e7b0dfe240d311fb58728e11bba79dc834d874ab994acd106e393dba",
       "dependencies": [],
       "downloadUrl": "/api/packs/encyclotopical.sqlite",
-      "createdAt": "2026-09-19T01:47:49.562Z"
+      "createdAt": "2026-09-19T16:33:05.041Z"
     },
     {
       "id": "lexical",
@@ -286,7 +286,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-09-19T01:47:49.129Z"
+      "createdAt": "2026-09-19T16:33:04.788Z"
     },
     {
       "id": "study-tools",
@@ -331,7 +331,7 @@
       "sha256": "c4541999b5170cfb5c2bf05cc512712e0e3b1e387226a331d2fb85db007238dc",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-09-19T01:47:49.125Z"
+      "createdAt": "2026-09-19T16:33:04.784Z"
     }
   ]
 }

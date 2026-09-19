@@ -22,6 +22,7 @@
  */
 
 import Database from 'better-sqlite3';
+import { orientLegs } from './journey-geometry.mjs';
 import { gzipSync } from 'zlib';
 import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
@@ -100,6 +101,39 @@ function buildGeometry(journey) {
   }
   if (!legs.length) throw new Error(`${journey.id}: no geometry`);
   return legs;
+}
+
+/**
+ * Reverse the legs that are stored backwards, measured against the stops.
+ *
+ * `reverse[]` in the index is hand-maintained and incomplete, and it is kept:
+ * it encodes editorial knowledge about source files, and six of these journeys
+ * are only right because of it. This runs after it and catches what it missed.
+ *
+ * Only a leg whose stops descend *strictly* through the journey's sequence is
+ * reversed. Paul's First leg 5 meets Derbe, Lystra, Iconium and Antioch in that
+ * order against a travel order of 6, 7, 8, 9, so it is drawn against its own
+ * direction and that is a fact about the data rather than a reading of it.
+ * A leg that zigzags — David's flight meets its stops 5, 6, 1, 2, 7, 3, 4 —
+ * has no one direction to be wrong about, and reversing it on a majority vote
+ * would swap one arbitrary order for another. Those are left exactly as the
+ * index states them.
+ *
+ * Measured across all 17 journeys: six legs reverse, five ambiguous ones are
+ * left alone, and no journey's drawn line gets worse. Reversing the ambiguous
+ * ones too makes five journeys worse, which is why the line is drawn here.
+ */
+function orientGeometry(journey, legs, stops) {
+  const decided = orientLegs(legs, stops);
+  const flipped = [];
+  const mixed = [];
+  const out = legs.map((leg, i) => {
+    if (decided[i].mixed) mixed.push(i + 1);
+    if (!decided[i].flip) return leg;
+    flipped.push(i + 1);
+    return leg.slice().reverse();
+  });
+  return { legs: out, flipped, mixed };
 }
 
 const round5 = (n) => Math.round(n * 1e5) / 1e5;
@@ -253,12 +287,18 @@ export function buildJourneyTables(db, { log = console.log } = {}) {
       throw new Error(`${journey.id}: testament "${journey.testament}" is not old or new`);
     }
 
-    const legs = buildGeometry(journey);
-    const stops = resolveStops(journey, places, legs);
+    // Stops are resolved against the unoriented legs on purpose: resolveStops
+    // measures each stop's distance to the nearest drawn point, which is the
+    // same set of points whichever way the leg runs. Orienting first would
+    // change nothing it measures and would hide a missing-file error behind a
+    // derivation error.
+    const rawLegs = buildGeometry(journey);
+    const stops = resolveStops(journey, places, rawLegs);
+    const { legs, flipped, mixed } = orientGeometry(journey, rawLegs, stops);
     const raw = Buffer.from(JSON.stringify(legs), 'utf8');
     const blob = gzipSync(raw, { level: 9 });
 
-    built.push({ journey, stops, legs, raw: raw.length, gz: blob.length });
+    built.push({ journey, stops, legs, flipped, mixed, raw: raw.length, gz: blob.length });
 
     insertJourney.run(
       journey.id,
@@ -290,7 +330,9 @@ export function buildJourneyTables(db, { log = console.log } = {}) {
     log(
       `  ${b.journey.testament === 'old' ? 'OT' : 'NT'}${b.journey.sort_order} ` +
         `${b.journey.name}: ${b.stops.length} stops, ${b.legs.length} legs, ` +
-        `${b.legs.flat().length} pts, ${totalKm(b.stops)} km, furthest stop ${far.toFixed(0)} km`
+        `${b.legs.flat().length} pts, ${totalKm(b.stops)} km, furthest stop ${far.toFixed(0)} km` +
+        (b.flipped.length ? `, reversed leg ${b.flipped.join(', ')}` : '') +
+        (b.mixed.length ? `, leg ${b.mixed.join(', ')} ambiguous (left as indexed)` : '')
     );
   }
 
