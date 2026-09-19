@@ -674,10 +674,37 @@ export class JourneysOverlay extends BaseOverlay {
   }
 
   toggleRoute(id) {
-    this.selected = this.selected.includes(id)
-      ? this.selected.filter((x) => x !== id)
-      : [...this.selected, id];
-    if (this.enabled) this.draw();
+    this.setRoutes(
+      this.selected.includes(id)
+        ? this.selected.filter((x) => x !== id)
+        : [...this.selected, id]
+    );
+  }
+
+  /**
+   * The whole selection at once.
+   *
+   * `toggleRoute` redraws, and a redraw rebuilds every shown journey's line and
+   * all of its stops — so "show all" written as seventeen toggles is seventeen
+   * full rebuilds, each one throwing away the markers the last had just made.
+   * Setting the list and drawing once is the same end state for one pass.
+   *
+   * Filtered against the routes actually held, so a stale id — from a panel
+   * that outlived a pack change — cannot sit in `selected` forever counting
+   * towards "all on".
+   */
+  setRoutes(ids) {
+    const known = new Set(this.routes.map((r) => r.id));
+    this.selected = ids.filter((id) => known.has(id));
+    if (this.enabled) {
+      this.draw();
+      // The names are placed by the shared pass, not by draw(), so a journey
+      // switched off keeps its lettering on the map until something else asks
+      // for a pass — a pan, or another layer changing. Ask here. This only
+      // began to matter with per-journey switches: turning the whole layer off
+      // goes through the host, which runs the pass itself.
+      this.host?.onLabelsChanged?.();
+    }
     this.onRoutesChanged();
   }
 

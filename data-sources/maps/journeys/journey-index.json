@@ -9,7 +9,7 @@
       "traveller": "Abram",
       "dates": "c. 2091 BC",
       "testament": "old",
-      "colour": "#c8862f",
+      "colour": "#d99a2b",
       "sort_order": 1,
       "description": "Called out of Ur, up the Euphrates to Haran, then south into the land he was promised.",
       "source": [
@@ -68,7 +68,7 @@
       "traveller": "Jacob and his household",
       "dates": "c. 1876 BC",
       "testament": "old",
-      "colour": "#9c6b3f",
+      "colour": "#8a5524",
       "sort_order": 2,
       "description": "Seventy people go down into Egypt to the son they thought was dead.",
       "source": [
@@ -106,7 +106,7 @@
       "traveller": "Joseph",
       "dates": "c. 1898 BC",
       "testament": "old",
-      "colour": "#b4793d",
+      "colour": "#c96a1e",
       "sort_order": 3,
       "description": "Sent to find his brothers, sold to a caravan, and carried down to Egypt.",
       "source": [
@@ -256,7 +256,7 @@
       "traveller": "David",
       "dates": "c. 1013–1010 BC",
       "testament": "old",
-      "colour": "#5f7fa8",
+      "colour": "#4a6c8f",
       "sort_order": 6,
       "description": "Years in the wilderness, moving between caves, strongholds and Philistine towns.",
       "source": [
@@ -313,7 +313,7 @@
       "traveller": "Elijah",
       "dates": "c. 860 BC",
       "testament": "old",
-      "colour": "#b5543d",
+      "colour": "#e0b33a",
       "sort_order": 7,
       "description": "From the triumph on Carmel to a cave on the mountain of God, forty days south.",
       "source": [
@@ -418,7 +418,7 @@
       "traveller": "Jonah",
       "dates": "c. 760 BC",
       "testament": "old",
-      "colour": "#6b7fb8",
+      "colour": "#79b6d9",
       "sort_order": 9,
       "description": "Sent east to Nineveh, he takes ship west for Tarshish, and arrives where he was sent anyway.",
       "source": [
@@ -504,7 +504,7 @@
       "traveller": "Joseph, Mary and the child",
       "dates": "c. 5–4 BC",
       "testament": "new",
-      "colour": "#c9843f",
+      "colour": "#9c7bd4",
       "sort_order": 1,
       "description": "Warned in a dream, they leave by night for Egypt, and return to Nazareth after Herod dies.",
       "source": [
@@ -615,7 +615,7 @@
       "traveller": "Jesus",
       "dates": "AD 30",
       "testament": "new",
-      "colour": "#b0463f",
+      "colour": "#a3324f",
       "sort_order": 3,
       "description": "He sets his face to go to Jerusalem, down the Jordan valley and up from Jericho.",
       "source": [
@@ -852,7 +852,7 @@
       "traveller": "Paul",
       "dates": "AD 53–57",
       "testament": "new",
-      "colour": "#8f6bb5",
+      "colour": "#c95fa8",
       "sort_order": 6,
       "description": "Three years in Ephesus, back through Greece, and a farewell at Miletus.",
       "source": [
@@ -932,7 +932,7 @@
       "traveller": "Paul, under guard",
       "dates": "AD 59–60",
       "testament": "new",
-      "colour": "#b5763f",
+      "colour": "#5c5ec4",
       "sort_order": 7,
       "description": "A prisoner appealing to Caesar, a winter storm, a shipwreck off Malta, and the road up to Rome.",
       "source": [

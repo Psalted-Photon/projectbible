@@ -317,6 +317,55 @@
     overlays = atlas?.overlays ?? [];
   }
 
+  /**
+   * An overlay's own routes, split into the groups the sub-list draws.
+   *
+   * Asked of any overlay rather than of the journeys one by name: an overlay
+   * that carries a list of named, individually toggleable things gets the
+   * sub-list, and one that does not gets nothing. The same reasoning as
+   * `textFollowsOpacity` — the panel reads what an overlay offers rather than
+   * knowing which overlay it is talking to.
+   *
+   * Grouped by testament, old before new, because seventeen journeys in one
+   * flat list is a list you scroll rather than read. The order inside each
+   * group is left exactly as it arrives: `buildDerived` already sorted them,
+   * and re-sorting here would quietly disagree with the drawing order.
+   */
+  function routeGroups(ov: any): { label: string; routes: any[] }[] {
+    if (!Array.isArray(ov?.routes) || typeof ov.toggleRoute !== 'function') return [];
+    const old = ov.routes.filter((r: any) => r.testament !== 'new');
+    const knew = ov.routes.filter((r: any) => r.testament === 'new');
+    return [
+      { label: 'Old Testament', routes: old },
+      { label: 'New Testament', routes: knew },
+    ].filter((g) => g.routes.length > 0);
+  }
+
+  function toggleRoute(ov: any, id: string) {
+    ov.toggleRoute(id);
+    // `selected` is a plain array on a class the compiler knows nothing about,
+    // so the list is re-read rather than trusted to invalidate itself. The
+    // overlay's own `onRoutesChanged` does this too; doing it here as well
+    // keeps the switch honest if that hook is ever unwired.
+    overlays = atlas?.overlays ?? [];
+  }
+
+  /**
+   * Every journey on, or every journey off.
+   *
+   * Seventeen taps to see one route alone is not a control, so the pair exists
+   * to make "just this one" two taps: None, then the one wanted. Turning them
+   * all off leaves the layer enabled and empty rather than switching it off —
+   * the difference matters, because the reader can then turn one back on
+   * without going up a level.
+   */
+  function setAllRoutes(ov: any, on: boolean) {
+    // One call rather than a loop of toggles: each toggle redraws every shown
+    // journey, so seventeen of them would rebuild the layer seventeen times.
+    ov.setRoutes(on ? ov.routes.map((r: any) => r.id) : []);
+    overlays = atlas?.overlays ?? [];
+  }
+
   async function toggleOverlay(ov: any) {
     statusText = 'drawing…';
     statusBusy = true;
@@ -803,6 +852,37 @@
             <span class="val">{Math.round((ov.textOpacity ?? 1) * 100)}%</span>
           </div>
         {/if}
+        <!-- An overlay that draws several named things lists them, so a reader
+             can follow one route without the other sixteen crossing it. Only
+             while the layer is on: rows that change nothing visible are rows
+             that look broken. -->
+        {#if ov.enabled}
+          {@const groups = routeGroups(ov)}
+          {#if groups.length}
+            <div class="sublist">
+              <div class="sub-actions">
+                <button class="sub-action" on:click={() => setAllRoutes(ov, true)}>All</button>
+                <button class="sub-action" on:click={() => setAllRoutes(ov, false)}>None</button>
+              </div>
+              {#each groups as group}
+                <div class="sub-divider">{group.label}</div>
+                {#each group.routes as route}
+                  <button
+                    class="opt sub-opt"
+                    class:on={ov.selected.includes(route.id)}
+                    aria-pressed={ov.selected.includes(route.id)}
+                    title={route.traveler ? `${route.traveler} · ${route.dates}` : route.dates}
+                    on:click={() => toggleRoute(ov, route.id)}
+                  >
+                    <span class="swatch" style="background:{route.colour}"></span>
+                    <span class="sub-name">{route.name}</span>
+                    <span class="switch"></span>
+                  </button>
+                {/each}
+              {/each}
+            </div>
+          {/if}
+        {/if}
       {/each}
 
       {#if timelineOn && atlas?.timeline}
@@ -1239,6 +1319,34 @@
   .row .val { width: 34px; text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
 
   .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  /* The per-journey list, indented under the layer it belongs to and ruled off
+     on the left, so seventeen switches read as one layer's contents rather than
+     as seventeen more layers. */
+  .sublist {
+    margin: 2px 0 6px 10px; padding-left: 8px;
+    border-left: 1px solid var(--line);
+  }
+  .sub-divider {
+    margin: 5px 4px 1px; font-size: 9.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--faint);
+  }
+  .sub-divider:first-child { margin-top: 2px; }
+  .opt.sub-opt { padding: 4px 6px; font-size: 12px; gap: 7px; }
+  /* The name takes the room and the switch keeps its size: a long journey name
+     would otherwise squeeze the switch until it stopped reading as one. */
+  .sub-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .opt.sub-opt .switch { margin-left: 0; width: 26px; height: 15px; }
+  .opt.sub-opt .switch::after { width: 9px; height: 9px; }
+  .opt.sub-opt.on .switch::after { transform: translateX(11px); }
+
+  .sub-actions { display: flex; gap: 6px; padding: 2px 6px 0; }
+  .sub-action {
+    background: none; border: 1px solid var(--line-2); border-radius: 5px;
+    color: var(--dim); font: inherit; font-size: 10.5px; letter-spacing: .06em;
+    text-transform: uppercase; padding: 2px 8px; cursor: pointer;
+  }
+  .sub-action:hover { background: #2b2b2b; color: var(--text); }
 
   /* The styles picker, kept small enough that the map stays in view under it. */
   .styles-panel { min-width: 0; width: 200px; padding: 4px; }
