@@ -1005,7 +1005,68 @@
               {/if}
             </div>
 
-            {#if info.journey}
+            <!-- Several journeys pass through this place and the reader tapped
+                 the place rather than one of them, so the panel asks which he
+                 means. It used to guess — at Kadesh-barnea always the Twelve
+                 Spies — which quietly moved anyone following the Exodus onto a
+                 different journey. Each choice says what the place is *to* that
+                 journey, because "begins here" and "ends here" is the whole
+                 difference between the two at Kadesh. -->
+            {#if info.journey?.choosing}
+              <div class="jx jx-pick">
+                <div class="jx-pick-head">
+                  {#if info.journey.visits.length > 1}
+                    {info.journey.visits.length} journeys pass through here
+                  {:else}
+                    This journey calls here twice
+                  {/if}
+                </div>
+                {#each info.journey.visits as v}
+                  <button
+                    class="jx-pick-one"
+                    style="border-left-color:{v.colour}"
+                    on:click={() => atlas?.openJourneyStop(v.routeId, v.i)}
+                  >
+                    <span class="jx-dot" style="background:{v.colour}"></span>
+                    <span class="jx-pick-t">
+                      <b>{v.name}</b>
+                      <em>
+                        <!-- A journey that both begins and ends here says both:
+                             Antioch is where Paul set out and where he came
+                             home, and "begins here" alone would lose the half
+                             of it the reader may have come for. -->
+                        {#if v.first && v.last}
+                          begins and ends here &middot; stops {v.calls.join(' & ')} of {v.total}
+                        {:else if v.first}
+                          begins here &middot; stop 1 of {v.total}
+                        {:else if v.last}
+                          ends here &middot; stop {v.stop} of {v.total}
+                        {:else if v.calls.length > 1}
+                          passes through twice &middot; stops {v.calls.join(' & ')} of {v.total}
+                        {:else}
+                          passes through &middot; stop {v.stop} of {v.total}
+                        {/if}
+                      </em>
+                    </span>
+                    <span class="jx-arrow">→</span>
+                  </button>
+
+                  <!-- The later calls, each its own way in. The row above opens
+                       the first, which is right for reading in order and wrong
+                       for the reader who came for the homecoming. -->
+                  {#if v.again}
+                    {#each v.again as n}
+                      <button
+                        class="jx-pick-again"
+                        on:click={() => atlas?.openJourneyStop(v.routeId, n)}
+                      >
+                        ↳ or its stop {n + 1}, later in the same journey
+                      </button>
+                    {/each}
+                  {/if}
+                {/each}
+              </div>
+            {:else if info.journey}
               <div class="jx" style="border-left-color:{info.journey.colour}">
                 <div class="jx-top">
                   <span class="jx-dot" style="background:{info.journey.colour}"></span>
@@ -1060,6 +1121,26 @@
 
                 {#if info.journey.km}
                   <div class="jx-total">{approxMiles(info.journey.km)} in all</div>
+                {/if}
+
+                <!-- The other journeys through this place, offered rather than
+                     asked about: the reader arrived here following one journey,
+                     so switching him would be the same overruling the chooser
+                     exists to prevent. Named with what the place is to them, so
+                     the line is worth reading before it is tapped. -->
+                {#if info.journey.others}
+                  <div class="jx-also">
+                    {#each info.journey.others as v}
+                      <button
+                        class="jx-also-one"
+                        title="Follow {v.name} from here"
+                        on:click={() => atlas?.openJourneyStop(v.routeId, v.i)}
+                      >
+                        <span class="jx-dot jx-dot-sm" style="background:{v.colour}"></span>
+                        Also in <b>{v.name}</b>{#if v.first}, which begins here{:else if v.last}, which ends here{/if}
+                      </button>
+                    {/each}
+                  </div>
                 {/if}
               </div>
             {/if}
@@ -1614,6 +1695,54 @@
     letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
   }
   .jx-total { font-size: 11px; color: var(--faint); margin-top: 7px; }
+
+  /* The chooser, for a place several journeys pass through. No coloured rule
+     down its left edge, unlike every other .jx: the rule states which journey
+     the block belongs to, and the whole point here is that it belongs to none
+     of them yet. Each row carries its own colour instead. */
+  .jx-pick { border-left-color: var(--line-2); padding-left: 0; border-left-width: 0; }
+  .jx-pick-head {
+    font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--faint); margin-bottom: 6px;
+  }
+  .jx-pick-one {
+    display: flex; align-items: center; gap: 7px; width: 100%;
+    margin-bottom: 5px; padding: 7px 8px;
+    background: rgba(255, 255, 255, .04);
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-left: 2px solid;
+    border-radius: 5px; cursor: pointer; text-align: left;
+    font-family: inherit; color: inherit;
+  }
+  .jx-pick-one:hover { background: rgba(255, 255, 255, .09); }
+  .jx-pick-t { min-width: 0; flex: 1 1 auto; }
+  .jx-pick-t b { display: block; font-size: 12px; font-weight: 600; }
+  /* What the place is to this journey — begins, ends, passes through — which is
+     the difference the reader is actually choosing between. */
+  .jx-pick-t em { display: block; font-style: normal; font-size: 11px; color: var(--dim); }
+
+  /* A later call at the same place, indented under the journey it belongs to
+     rather than standing as a choice of its own — it is the same journey, at a
+     different point in it. */
+  .jx-pick-again {
+    display: block; width: 100%; margin: -2px 0 5px 20px;
+    padding: 2px 0; background: none; border: 0; cursor: pointer;
+    text-align: left; font-family: inherit; font-size: 11px; color: var(--faint);
+  }
+  .jx-pick-again:hover { color: var(--text); }
+
+  /* The other journeys through a place, under one already being followed. Quiet
+     on purpose: it is an aside, not a second chooser competing with the arrows
+     directly above it. */
+  .jx-also { margin-top: 7px; }
+  .jx-also-one {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    padding: 3px 0; background: none; border: 0; cursor: pointer;
+    text-align: left; font-family: inherit; font-size: 11px; color: var(--dim);
+  }
+  .jx-also-one:hover { color: var(--text); }
+  .jx-also-one b { font-weight: 600; }
+  .jx-dot-sm { width: 6px; height: 6px; }
 
   .info-h {
     margin: 15px 0 7px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;

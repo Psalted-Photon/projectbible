@@ -1000,12 +1000,23 @@ export function createAtlasMap(container, options = {}) {
    * and they are null at the ends rather than wrapping, because a journey is
    * not a loop even when it returns to where it started.
    */
-  function journeyContext(stop, route, i) {
+  function journeyContext(stop, route, i, visits = null) {
     const at = (n) => {
       const s2 = route.stops[n];
       return s2 ? { n: s2.n, i: n } : null;
     };
+    // The journeys sharing this place other than the one being shown. Kept
+    // separate from `visits` so the panel can say "also in" without having to
+    // filter the journey it is already displaying back out of the list.
+    //
+    // Matched on the journey rather than on the stop: the row for this journey
+    // comes out whichever of its calls is open, so Antioch under Paul's First
+    // does not offer "also in Paul's First".
+    const others = (visits ?? []).filter((v) => v.routeId !== route.id);
     return {
+      /** Every journey through this place, so a tap can offer the choice. */
+      visits: visits ?? null,
+      others: others.length ? others : null,
       id: route.id,
       name: route.name,
       colour: route.colour,
@@ -1022,6 +1033,51 @@ export function createAtlasMap(container, options = {}) {
       prev: at(i - 1),
       next: at(i + 1),
     };
+  }
+
+  /**
+   * Every journey through a stop's place, in the shape the panel reads.
+   *
+   * Asked of the routes rather than of the drawn dots, because an arrow can
+   * land on a place whose dot is not on screen — and because the overlay's own
+   * index only covers the journeys currently switched on, which is right for
+   * drawing and wrong here: the reader following an arrow should be told the
+   * other journey exists even if he has its line turned off.
+   */
+  function visitsFor(stop) {
+    const key = stop.placeId;
+    const out = [];
+    for (const route of journeys?.routes ?? []) {
+      // One row per journey, however many times it calls. Antioch is the case:
+      // Paul's First sets out from it and comes home to it, so listing visits
+      // would offer "Paul's First Missionary Journey" twice with nothing on the
+      // row to say which of the two was which.
+      const calls = [];
+      route.stops.forEach((s2, n) => {
+        const same = key != null
+          ? s2.placeId === key
+          : Math.abs(s2.y - stop.y) < 1e-4 && Math.abs(s2.x - stop.x) < 1e-4;
+        if (same) calls.push(n);
+      });
+      if (!calls.length) continue;
+
+      const last = route.stops.length - 1;
+      out.push({
+        routeId: route.id, name: route.name, colour: route.colour,
+        // The stop the row opens: the first call, because a journey read in
+        // order reaches that one first.
+        i: calls[0], stop: calls[0] + 1, total: route.stops.length,
+        first: calls.includes(0),
+        last: calls.includes(last),
+        // Every call, so a row can say "stops 1 and 11" rather than implying
+        // the journey passed through once.
+        calls: calls.map((n) => n + 1),
+        // The return leg, offered separately: at Antioch the reader who wants
+        // the homecoming rather than the departure has somewhere to tap.
+        again: calls.length > 1 ? calls.slice(1) : null,
+      });
+    }
+    return out.length > 1 || out[0]?.calls.length > 1 ? out : null;
   }
 
   /**
@@ -1429,12 +1485,23 @@ export function createAtlasMap(container, options = {}) {
         // A stop tap opens the gazetteer place behind it, so it gets the same
         // panel a city dot does. The stop carries `placeId` and these rows are
         // already in hand, so this is a lookup rather than new data.
-        journeys.onOpenStop = (stop, route, i) => {
+        journeys.onOpenStop = (stop, route, i, shared = false) => {
           const place = biblicalPlaceById(stop.placeId);
           // A stop whose place has fallen out of the gazetteer still deserves an
           // answer, so it falls back to the generic point panel rather than
           // swallowing the tap.
           if (!place) return openPoint({ lat: stop.y, lng: stop.x });
+
+          // Several journeys meet here and the reader tapped the place, not one
+          // of them — so the panel asks which he means instead of guessing. The
+          // guess is what was wrong before: at Kadesh-barnea a tap always landed
+          // on the Twelve Spies, and a reader following the Exodus was moved
+          // onto another journey without being told. An arrow does not come
+          // through here; it knows its journey already and says so.
+          const visits = shared ? visitsFor(stop) : null;
+          if (visits) {
+            return openPlaceWith(place, { visits, choosing: true });
+          }
           openPlaceWith(place, journeyContext(stop, route, i));
         };
       }
@@ -1564,7 +1631,11 @@ export function createAtlasMap(container, options = {}) {
         centreInView(stop.y, stop.x, { force: true });
         return openPoint({ lat: stop.y, lng: stop.x });
       }
-      openPlaceWith(place, journeyContext(stop, route, i), { force: true });
+      // Arriving by arrow, or by picking a journey out of the chooser, settles
+      // which journey this is — so it opens straight into that one. The other
+      // journeys through the place still come along, as the "also in" line
+      // underneath rather than as a question.
+      openPlaceWith(place, journeyContext(stop, route, i, visitsFor(stop)), { force: true });
     },
     wholeWorld,
     followPassage,

@@ -664,6 +664,44 @@ export class JourneysOverlay extends BaseOverlay {
   }
 
   /**
+   * Every visit to every place, grouped by the place visited.
+   *
+   * Nineteen of the eighty-five places on the shipped journeys are visited by
+   * more than one journey, and Kadesh-barnea is the plainest case: the Exodus
+   * ends there and the Twelve Spies begin there, two dots at one coordinate,
+   * the second drawn over the first. Whichever journey drew last owned the
+   * place — its dot, its tooltip and its tap — and the other may as well not
+   * have been on the map.
+   *
+   * Keyed on `placeId` rather than on the coordinate, because the coordinate is
+   * what the two sources happen to agree on and the place is what they mean; a
+   * stop without one falls back to its rounded position, which is the best
+   * available answer for a point the gazetteer does not know.
+   *
+   * Rebuilt per draw rather than cached against the route list, because what
+   * belongs in it is the *shown* journeys: switching one off has to take its
+   * wedge out of a shared dot, or a place would go on claiming a visit from a
+   * journey no longer on the map.
+   */
+  indexVisits() {
+    const visits = new Map();
+    for (const route of this.shown) {
+      route.stops.forEach((stop, i) => {
+        const key = stop.placeId ?? `@${stop.y.toFixed(4)},${stop.x.toFixed(4)}`;
+        if (!visits.has(key)) visits.set(key, []);
+        visits.get(key).push({ route, stop, i });
+      });
+    }
+    return visits;
+  }
+
+  /** The visits sharing this stop's place, in the order the journeys are drawn. */
+  visitsAt(stop) {
+    const key = stop.placeId ?? `@${stop.y.toFixed(4)},${stop.x.toFixed(4)}`;
+    return this.visits?.get(key) ?? [];
+  }
+
+  /**
    * Mark a stop's dot as the chosen one.
    *
    * Unlike the biblical dots, this overlay does not rebuild itself on a pan, so
@@ -728,6 +766,13 @@ export class JourneysOverlay extends BaseOverlay {
     // the ones just removed from the map.
     this.clear();
 
+    // Before any dot is drawn, because a dot has to know whether it is sharing
+    // its place with another journey to know what shape to be.
+    this.visits = this.indexVisits();
+    // A place visited by several journeys gets one dot between them, drawn with
+    // the first journey to reach it; the rest skip it rather than stack on it.
+    this.dotsDrawn = new Set();
+
     for (const route of this.shown) {
       this.drawRoute(route);
     }
@@ -759,6 +804,12 @@ export class JourneysOverlay extends BaseOverlay {
     // different colours. applyOpacity dims them one at a time instead.
     const dots = L.layerGroup([], { pane: 'overlay-labels' });
     route.stops.forEach((stop, i) => {
+      // A shared place is one dot, not one per journey. The first journey to
+      // reach it draws it for all of them — the marker itself carries every
+      // visit, so nothing is lost by the others standing down.
+      const key = stop.placeId ?? `@${stop.y.toFixed(4)},${stop.x.toFixed(4)}`;
+      if (this.dotsDrawn?.has(key)) return;
+      this.dotsDrawn?.add(key);
       dots.addLayer(this.stopMarker(route, stop, i));
     });
     this.add(dots, null);
@@ -1006,6 +1057,12 @@ export class JourneysOverlay extends BaseOverlay {
    * route's own.
    */
   stopMarker(route, stop, i) {
+    const visits = this.visitsAt(stop);
+    // Several journeys at one place is a different drawing problem, not a
+    // variation on this one: it has no single colour and no single start/end
+    // to state, so it gets its own marker rather than a pile of parameters here.
+    if (visits.length > 1) return this.sharedStopMarker(visits, stop);
+
     const first = i === 0;
     const last = i === route.stops.length - 1;
     const marker = L.circleMarker([stop.y, stop.x], {
@@ -1030,6 +1087,96 @@ export class JourneysOverlay extends BaseOverlay {
       this.onOpenStop(stop, route, i);
     });
     marker.bindTooltip(`${i + 1}. ${stop.n}`, { direction: 'top', offset: [0, -5] });
+    return marker;
+  }
+
+  /**
+   * One place, several journeys: a dot cut into a wedge per visit.
+   *
+   * The problem it answers is that two stops at one coordinate were two dots in
+   * the same spot, so the map showed one journey and silently swallowed the
+   * other — at Kadesh-barnea the Exodus's red arrival covered the green dot the
+   * Twelve Spies set out from, and nothing on the map said the second journey
+   * was there at all.
+   *
+   * A wedge per visit says it in the one language the rest of the layer already
+   * speaks, which is colour: the reader who knows red is the Exodus and green
+   * the Spies reads "both of these meet here" without a legend. Drawn as an
+   * element rather than a `circleMarker` because Leaflet's vector dots are
+   * single-fill by definition; a conic gradient gives exact wedges with no
+   * per-slice geometry, and the ring around it is a border rather than a second
+   * shape to keep aligned.
+   *
+   * The ring still carries start and end, because that is the question a shared
+   * dot makes *more* pressing rather than less: at Kadesh one journey ends and
+   * another begins, so it is drawn green where any journey starts there, red
+   * where one ends, and in neither colour when it is only passed through. A
+   * place that both starts and ends a journey takes the green — a beginning is
+   * the more useful thing to see, and the panel names both the moment it opens.
+   */
+  sharedStopMarker(visits, stop) {
+    const starts = visits.some((v) => v.i === 0);
+    const ends = visits.some((v) => v.i === v.route.stops.length - 1);
+    const ring = starts ? START_COLOUR : ends ? END_COLOUR : '#4a3f33';
+
+    // One wedge per journey, not per visit. Antioch is why: Paul's First and
+    // Second both set out from it and both come home to it, so five visits fall
+    // on that dot from three journeys — and cutting it five ways would put two
+    // pairs of identical wedges on it, which reads as five journeys rather than
+    // as three, two of which went twice. The wedge is the journey; how many
+    // times it called is the panel's to say.
+    const byRoute = [];
+    for (const v of visits) {
+      const found = byRoute.find((g) => g.route.id === v.route.id);
+      if (found) found.visits.push(v);
+      else byRoute.push({ route: v.route, visits: [v] });
+    }
+
+    // Equal wedges in the order the journeys are drawn, so a shared dot looks
+    // the same on every redraw rather than shuffling as the layer rebuilds.
+    const span = 360 / byRoute.length;
+    const slices = byRoute
+      .map((g, n) => `${g.route.colour} ${(n * span).toFixed(2)}deg ${((n + 1) * span).toFixed(2)}deg`)
+      .join(', ');
+
+    const size = 15;
+    const chosen = this.selectedId != null && stop.placeId === this.selectedId ? ' dot-chosen' : '';
+    const icon = L.divIcon({
+      className: `journey-shared${chosen}`,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+      html: `<span class="js-dot" style="background:conic-gradient(${slices});border-color:${ring}"></span>`,
+    });
+
+    const marker = L.marker([stop.y, stop.x], {
+      icon, pane: 'overlay-labels', interactive: true, bubblingMouseEvents: false,
+      // Above the single dots, so where a shared place sits near a plain one the
+      // dot carrying two journeys is the one the tap finds.
+      zIndexOffset: 400,
+    });
+
+    // The host is told which stop was tapped and that it is a shared one; it
+    // builds the journey list itself, from the routes rather than from what is
+    // drawn, so the panel says the same thing whichever way the reader arrived.
+    // A tap asks which journey he means, an arrow already knows — and that is
+    // the panel's choice to make, not the dot's.
+    marker.on('click', (e) => {
+      if (e?.originalEvent) L.DomEvent.stop(e.originalEvent);
+      const [head] = visits;
+      this.onOpenStop(head.stop, head.route, head.i, true);
+    });
+
+    // The place named once, then what each journey does there. The single dots
+    // put the stop number first because there is only ever one; here the number
+    // means nothing until you know whose sequence it counts in, so the journey
+    // leads and a journey that called twice says both in one line.
+    marker.bindTooltip(
+      `<b>${stop.n}</b><br>` + byRoute.map((g) => {
+        const at = g.visits.map((v) => v.i + 1).join(' &amp; ');
+        return `${g.route.name} — stop ${at} of ${g.route.stops.length}`;
+      }).join('<br>'),
+      { direction: 'top', offset: [0, -8] }
+    );
     return marker;
   }
 
@@ -1071,7 +1218,10 @@ export class JourneysOverlay extends BaseOverlay {
     // time rather than under one flattened style.
     for (const group of this.dotGroups ?? []) {
       group.eachLayer((marker) => {
-        marker.setStyle?.({ opacity: this.opacity, fillOpacity: this.opacity });
+        // A shared place's dot is an element, not a vector, so it has no
+        // setStyle to flatten — it fades through the element's own opacity.
+        if (marker.setStyle) marker.setStyle({ opacity: this.opacity, fillOpacity: this.opacity });
+        else marker.setOpacity?.(this.opacity);
       });
     }
 
