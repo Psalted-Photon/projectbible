@@ -46,7 +46,16 @@ const PANES = [
   // labels would mean two owners of a single opacity, so fading the basemap
   // would silently fade the overlay's names with it.
   ['overlay-labels', 560],
-  ['pins', 600], ['labels', 640],
+  ['pins', 600],
+  // A place several journeys visit sits above the gazetteer's dots rather than
+  // among them. It has to: the wedge marks the same coordinate as the red dot
+  // for the city, so in `pins` — let alone in `overlay-labels` below it — the
+  // city dot covered the wedge completely and the only time anyone saw it was
+  // the split second mid-zoom before the pins pane caught up. A marker's
+  // zIndexOffset cannot fix that, because it orders markers within one pane and
+  // this is an argument between two.
+  ['journey-shared', 620],
+  ['labels', 640],
 ];
 
 const PARCHMENT = {

@@ -1148,11 +1148,13 @@ export class JourneysOverlay extends BaseOverlay {
       html: `<span class="js-dot" style="background:conic-gradient(${slices});border-color:${ring}"></span>`,
     });
 
+    // Its own pane, above the gazetteer's dots. The wedge marks the same
+    // coordinate as the red dot for the city, so anywhere below `pins` it is
+    // simply covered — which it was, visible only for the split second during a
+    // zoom before the pins pane redrew over it. This pane also keeps its
+    // pointer events, unlike the lettering panes, so the dot can be tapped.
     const marker = L.marker([stop.y, stop.x], {
-      icon, pane: 'overlay-labels', interactive: true, bubblingMouseEvents: false,
-      // Above the single dots, so where a shared place sits near a plain one the
-      // dot carrying two journeys is the one the tap finds.
-      zIndexOffset: 400,
+      icon, pane: 'journey-shared', interactive: true, bubblingMouseEvents: false,
     });
 
     // The host is told which stop was tapped and that it is a shared one; it
