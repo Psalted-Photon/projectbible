@@ -67,6 +67,18 @@ export interface ParallelState {
   currentSectionId: number | null;
   /** What the strip calls this set, e.g. "Gospels". */
   setLabel: string | null;
+  /**
+   * The Robertson section the view was opened on, for the view to aim at once
+   * its readers are mounted, then cleared.
+   *
+   * Carried here rather than acted on by the picker, because the panes do not
+   * exist yet when the choice is made: the picker creates the windows and the
+   * view mounts the readers a frame later, so the only thing that can scroll to
+   * the section's first verse is the view, after it has attached the engine.
+   * A chapter alone is what the panes open at, and for most of the 185 sections
+   * that is several screens above where the section actually starts.
+   */
+  openSectionId: number | null;
 }
 
 const EMPTY: ParallelState = {
@@ -78,6 +90,7 @@ const EMPTY: ParallelState = {
   currentGroupId: null,
   currentSectionId: null,
   setLabel: null,
+  openSectionId: null,
 };
 
 function createParallelStore() {
@@ -94,7 +107,7 @@ function createParallelStore() {
      */
     open: (
       panes: Array<{ paneId: string; book: string }>,
-      opts: { layout?: ParallelLayout; setLabel?: string } = {},
+      opts: { layout?: ParallelLayout; setLabel?: string; sectionId?: number } = {},
     ) => {
       set({
         active: true,
@@ -105,8 +118,19 @@ function createParallelStore() {
         currentGroupId: null,
         currentSectionId: null,
         setLabel: opts.setLabel ?? null,
+        openSectionId: opts.sectionId ?? null,
       });
     },
+
+    /**
+     * Forget the section the view opened on, once it has been aimed at.
+     *
+     * Cleared rather than left to sit, so a later re-mount of the view — a
+     * layout change that tears the grid down, say — cannot yank the reader back
+     * to where they came in half an hour ago.
+     */
+    clearOpenSection: () =>
+      update((s) => (s.openSectionId === null ? s : { ...s, openSectionId: null })),
 
     /** Leave the view. Phase 6 writes the master's position back first. */
     close: () => set({ ...EMPTY }),

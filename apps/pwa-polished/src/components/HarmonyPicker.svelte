@@ -22,7 +22,12 @@
 
   const dispatch = createEventDispatcher<{
     close: void;
-    choose: { panes: Array<{ book: string; chapter: number }>; label: string };
+    choose: {
+      panes: Array<{ book: string; chapter: number }>;
+      label: string;
+      /** Set only from the contents, so the view can open at the section's own verse. */
+      sectionId?: number;
+    };
   }>();
 
   let tab: 'sets' | 'harmony' = 'sets';
@@ -49,7 +54,15 @@
   }
 
   function chooseSection(entry: HarmonyEntry) {
-    dispatch('choose', { panes: panesForSection(entry.group), label: entry.title });
+    // The id travels with the panes because the chapter alone is not where the
+    // section starts — §110 is Luke 15:11, and opening Luke 15 leaves the reader
+    // ten verses above the parable they asked for. The view aims at the verse
+    // once its readers exist.
+    dispatch('choose', {
+      panes: panesForSection(entry.group),
+      label: entry.title,
+      sectionId: entry.group.id,
+    });
   }
 
   // Captured, so Escape closes the picker rather than reaching the view behind

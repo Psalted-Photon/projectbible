@@ -53,8 +53,8 @@
    * what mounts the view, and the view renders a pane per entry in that list —
    * telling it first would mount readers for windowIds that do not exist yet.
    */
-  function openHarmony(e: CustomEvent<{ panes: Array<{ book: string; chapter: number }>; label: string }>) {
-    const { panes, label } = e.detail;
+  function openHarmony(e: CustomEvent<{ panes: Array<{ book: string; chapter: number }>; label: string; sectionId?: number }>) {
+    const { panes, label, sectionId } = e.detail;
     showHarmonyPicker = false;
     if (panes.length === 0) return;
 
@@ -66,7 +66,7 @@
     windowStore.closeWindow(windowId);
     parallelStore.open(
       ids.map((paneId, i) => ({ paneId, book: panes[i].book })),
-      { setLabel: label },
+      { setLabel: label, sectionId },
     );
   }
 

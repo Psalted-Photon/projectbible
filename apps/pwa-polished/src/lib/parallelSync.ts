@@ -47,6 +47,17 @@ const TICK_MS = 90;
 /** How long to wait for a chapter the follower did not already have. */
 const LOAD_TIMEOUT_MS = 800;
 
+/**
+ * The same wait, for a move made while the view is still opening.
+ *
+ * 800ms is right mid-session, when the panes are mounted and a chapter change
+ * is a database read. It is not right at open: four readers are booting at once
+ * and the first chapter has to come up through all of them, which on a phone
+ * can take longer than the whole budget — and giving up there would leave the
+ * reader at the top of the chapter, which is the bug this exists to fix.
+ */
+const COLD_LOAD_TIMEOUT_MS = 6000;
+
 /** How often to look for the verse element while a chapter is loading. */
 const LOAD_POLL_MS = 60;
 
@@ -76,6 +87,8 @@ interface PaneRuntime {
 }
 
 let container: HTMLElement | null = null;
+/** When the view attached, so the first moments get the cold load budget. */
+let attachedAt = 0;
 let tickTimer: ReturnType<typeof setTimeout> | null = null;
 let pending: { book: string; chapter: number; verse: number } | null = null;
 const runtime = new Map<string, PaneRuntime>();
@@ -99,6 +112,7 @@ const runtime = new Map<string, PaneRuntime>();
 export function attach(containerEl: HTMLElement): void {
   detach();
   container = containerEl;
+  attachedAt = Date.now();
 
   for (const type of ['pointerdown', 'wheel', 'touchstart'] as const) {
     containerEl.addEventListener(type, onUserTouch, { capture: true, passive: true });
@@ -260,7 +274,7 @@ function masterPosition(): { book: string; chapter: number; verse: number } | nu
  * because a step that refused to move because the master happened to be in
  * Matthew would make most of the harmony unreachable by arrow.
  */
-export function goToSection(group: ParallelGroup): void {
+export function goToSection(group: ParallelGroup, opts: { cold?: boolean } = {}): void {
   const state = parallelStore.snapshot();
   const masterId = state.masterId;
   if (!masterId) return;
@@ -287,7 +301,13 @@ export function goToSection(group: ParallelGroup): void {
   // beat later — pressing next twice quickly must step two sections, not aim
   // at the same one twice because the strip had not caught up.
   parallelStore.setCurrentSection(group.id);
-  moveMasterTo(masterId, passage.book, passage.startChapter, passage.startVerse);
+  moveMasterTo(
+    masterId,
+    passage.book,
+    passage.startChapter,
+    passage.startVerse,
+    opts.cold ? COLD_LOAD_TIMEOUT_MS : LOAD_TIMEOUT_MS,
+  );
 }
 
 /**
@@ -308,6 +328,7 @@ function moveMasterTo(
   book: string,
   chapter: number,
   verse: number,
+  timeoutMs: number = LOAD_TIMEOUT_MS,
 ): void {
   const rt = runtimeFor(paneId);
   rt.cancelPendingLoad?.();
@@ -324,7 +345,7 @@ function moveMasterTo(
     windowStore.updateContentState(paneId, { book, chapter, highlightedVerse: null });
   }
 
-  const deadline = Date.now() + LOAD_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
   const timer = setInterval(() => {
     const found = verseElement(paneId, book, chapter, verse);
     if (found) {
@@ -486,7 +507,13 @@ function awaitChapter(
     windowStore.updateContentState(paneId, { book, chapter, highlightedVerse: null });
   }
 
-  const deadline = Date.now() + LOAD_TIMEOUT_MS;
+  // A follower asked for within the cold window is one of the four readers the
+  // view has only just mounted, and it gets the longer budget for the same
+  // reason the master does — giving up there would dim a pane for a chapter
+  // that was simply still booting.
+  const deadline =
+    Date.now() +
+    (Date.now() - attachedAt < COLD_LOAD_TIMEOUT_MS ? COLD_LOAD_TIMEOUT_MS : LOAD_TIMEOUT_MS);
   const timer = setInterval(() => {
     // Whatever happens next, this pane is the user's again the moment they
     // touch it — a load that lands after they have taken over must not scroll.

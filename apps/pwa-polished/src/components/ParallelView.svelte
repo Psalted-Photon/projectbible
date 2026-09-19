@@ -114,6 +114,19 @@
   onMount(async () => {
     await tick();
     parallelSync.attach(container);
+
+    // Opened from the contents rather than from a set: aim at the section's own
+    // first verse. The panes were created at its chapter, which for most of the
+    // 185 sections is well above where the section starts. goToSection is the
+    // same path the strip's arrows take, so the followers arrive through the
+    // ordinary tick and the readers may still be loading — it polls for the
+    // verse element rather than assuming it is already there.
+    const openOn = $parallelStore.openSectionId;
+    if (openOn !== null) {
+      parallelStore.clearOpenSection();
+      const group = groupById(openOn);
+      if (group) parallelSync.goToSection(group, { cold: true });
+    }
   });
 
   onDestroy(() => {
