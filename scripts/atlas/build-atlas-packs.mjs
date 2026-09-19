@@ -36,6 +36,7 @@ import { gzipSync } from 'zlib';
 import { existsSync, readFileSync, readdirSync, unlinkSync, renameSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { buildJourneyTables, JOURNEY_ATTRIBUTION } from './build-journey-tables.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
@@ -69,6 +70,14 @@ const ATTRIBUTION = [
 ].join(' ');
 
 const LICENSE = 'ODbL-1.0 AND CC-BY-4.0 AND CC-BY-SA-3.0 AND public-domain';
+
+/**
+ * The core pack carries the journey routes, and they are BY-SA 4.0. The shards
+ * do not, so they keep the credits above unchanged rather than claiming a
+ * licence over geometry they do not hold.
+ */
+const CORE_ATTRIBUTION = `${ATTRIBUTION} ${JOURNEY_ATTRIBUTION}`;
+const CORE_LICENSE = `${LICENSE} AND CC-BY-SA-4.0`;
 
 // ---------------------------------------------------------------- helpers
 
@@ -505,8 +514,8 @@ function main() {
     // Where the OSM shoreline harvest actually reaches. Outside these boxes the
     // map must not switch to detail 1, because there is nothing there to draw.
     ['detail1_coverage', basemapMeta.detail1_coverage ?? '[]'],
-    ['license', LICENSE],
-    ['attribution', ATTRIBUTION],
+    ['license', CORE_LICENSE],
+    ['attribution', CORE_ATTRIBUTION],
     ['built', built],
   ]);
 
@@ -676,11 +685,22 @@ function main() {
     }
   })();
 
+  // The journeys read atlas_biblical_places for every stop's coordinates, so
+  // they are built after it is filled, in the same file, and fail loudly rather
+  // than leaving a stop at 0,0.
+  console.log('Building the journeys…');
+  const journeys = buildJourneyTables(core.db);
+  console.log(
+    `  ${journeys.journeys} journeys, ${journeys.stops} stops, ` +
+      `${journeys.points.toLocaleString()} points, ${(journeys.gzBytes / 1024).toFixed(0)} KB gzipped`
+  );
+
   const coreSize = core.finish();
   console.log(
     `  atlas-map.sqlite  ${eras.length} eras, ${layers.length} layers indexed, ` +
       `${eraPlaces.length} era places, ${points.length} points, ${biblical.length} biblical places, ` +
-      `${ancient.length} ancient names, ${Object.keys(photos).length} photographs  ${mb(coreSize)}`
+      `${ancient.length} ancient names, ${Object.keys(photos).length} photographs, ` +
+      `${journeys.journeys} journeys  ${mb(coreSize)}`
   );
 
   atlasDb.close();

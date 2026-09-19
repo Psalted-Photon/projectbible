@@ -139,7 +139,10 @@
           "note": "The Ishmaelite caravan carries him down."
         }
       ],
-      "geometry_note": "The UBS line stops at the Egyptian border, so the final Egypt stop sits ~370 km off it. Expected: Phase 5's straight-line fallback draws that last leg."
+      "geometry_note": "The UBS line stops at the Egyptian border, so the final Egypt stop sits ~370 km off it. Expected: Phase 5's straight-line fallback draws that last leg.",
+      "geometry_exempt_stops": [
+        "Egypt"
+      ]
     },
     {
       "id": "exodus-route",
@@ -455,7 +458,10 @@
           "note": "A three days' journey across, and the whole city repents."
         }
       ],
-      "geometry_note": "Ritmeyer never drew the Atlantic leg, so Tarshish sits ~3,600 km off the line. Expected, and the point of the journey: he is sailing the opposite way from where he was sent."
+      "geometry_note": "Ritmeyer never drew the Atlantic leg, so Tarshish sits ~3,600 km off the line. Expected, and the point of the journey: he is sailing the opposite way from where he was sent.",
+      "geometry_exempt_stops": [
+        "Tarshish 1"
+      ]
     },
     {
       "id": "babylonian-exile",
