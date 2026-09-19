@@ -3,6 +3,7 @@
   import Window from "./Window.svelte";
   import WindowContent from "./WindowContent.svelte";
   import EdgeGestureDetector from "./EdgeGestureDetector.svelte";
+  import { parallelStore } from "../stores/parallelStore";
 
   // Group windows by edge. Each container is a full-viewport flex box that only
   // its panels take hits in, so several windows on one edge stack side by side.
@@ -11,6 +12,13 @@
   $: rightPanels = $windowStore.filter(w => w.edge === 'right');
   $: topPanels = $windowStore.filter(w => w.edge === 'top');
   $: bottomPanels = $windowStore.filter(w => w.edge === 'bottom');
+
+  // Harmonies (ParallelView) covers the screen at z-index 8000, which is above
+  // this layer's 100 — so a window opened from inside a harmony reader (Art,
+  // for one) rendered underneath it and only appeared once harmonies closed.
+  // While the harmony view is up, the window layer rises over it; the modals,
+  // which all sit at 10000+, still open on top of both.
+  $: overParallel = $parallelStore.active;
 </script>
 
 <EdgeGestureDetector />
@@ -20,7 +28,7 @@
      What goes inside a window lives once, in WindowContent. -->
 
 <!-- Left panels -->
-<div class="panel-container panel-container-left">
+<div class="panel-container panel-container-left" class:over-parallel={overParallel}>
   {#each leftPanels as panel (panel.id)}
     <Window window={panel}>
       <WindowContent {panel} />
@@ -29,7 +37,7 @@
 </div>
 
 <!-- Right panels -->
-<div class="panel-container panel-container-right">
+<div class="panel-container panel-container-right" class:over-parallel={overParallel}>
   {#each rightPanels as panel (panel.id)}
     <Window window={panel}>
       <WindowContent {panel} />
@@ -38,7 +46,7 @@
 </div>
 
 <!-- Top panels -->
-<div class="panel-container panel-container-top">
+<div class="panel-container panel-container-top" class:over-parallel={overParallel}>
   {#each topPanels as panel (panel.id)}
     <Window window={panel}>
       <WindowContent {panel} />
@@ -47,7 +55,7 @@
 </div>
 
 <!-- Bottom panels -->
-<div class="panel-container panel-container-bottom">
+<div class="panel-container panel-container-bottom" class:over-parallel={overParallel}>
   {#each bottomPanels as panel (panel.id)}
     <Window window={panel}>
       <WindowContent {panel} />
@@ -60,6 +68,11 @@
     position: fixed;
     display: flex;
     z-index: 100;
+  }
+
+  /* Above ParallelView's 8000, below the 10000 modal band. */
+  .panel-container.over-parallel {
+    z-index: 8500;
   }
 
   .panel-container-left {
