@@ -33,6 +33,7 @@ const ROOT = join(HERE, '..', '..', '..');
 const PACK = join(ROOT, 'packs', 'consolidated', 'atlas-map.sqlite');
 const PANE = join(ROOT, 'apps', 'pwa-polished', 'src', 'components', 'AtlasPane.svelte');
 const OVERLAYS = join(ROOT, 'apps', 'pwa-polished', 'src', 'lib', 'atlas', 'overlays.js');
+const MAP = join(ROOT, 'apps', 'pwa-polished', 'src', 'lib', 'atlas', 'map.js');
 
 let failures = 0;
 let checks = 0;
@@ -55,6 +56,7 @@ if (!existsSync(PACK)) {
 
 const paneSource = readFileSync(PANE, 'utf8');
 const overlaySource = readFileSync(OVERLAYS, 'utf8');
+const mapSource = readFileSync(MAP, 'utf8');
 
 // ── The grouping rule, read from the panel ────────────────────────────────
 //
@@ -217,6 +219,63 @@ expect(
   /routeGroups\(ov\)/.test(paneSource) && /ov\.selected\.includes\(route\.id\)/.test(paneSource),
   'the panel reads its switch state from the overlay, not a copy',
   'a local mirror of `selected` drifts the moment anything else toggles a route'
+);
+
+// ── A stop tap reaches the real panel ────────────────────────────────────
+//
+// This path is three hops — overlay callback, host lookup, panel block — and
+// none of them fails the build when broken. A stop whose click handler is gone
+// silently does nothing; a payload field the panel reads under a different name
+// silently renders blank. Both are asserted by name here instead.
+
+console.log('\nA stop tap opens the place panel');
+
+expect(
+  /this\.onOpenStop\s*=/.test(overlaySource) && /onOpenStop\(stop, route, i\)/.test(overlaySource),
+  'the overlay declares onOpenStop and calls it from the stop marker',
+  'without the call a stop tap does nothing at all'
+);
+expect(
+  !/versesForPopup|bindPopup/.test(overlaySource),
+  'the hand-rolled verse popup is gone',
+  'it rendered grey text where the panel renders tappable colour-coded links'
+);
+expect(
+  /journeys\.onOpenStop\s*=/.test(mapSource) && /openPlaceWith\(place, journeyContext/.test(mapSource),
+  'the host wires onOpenStop to the place panel',
+  'an unwired callback leaves every stop tap silent'
+);
+expect(
+  /openJourneyStop\(routeId, i\)/.test(mapSource),
+  'the api exposes openJourneyStop for the panel arrows',
+  'the previous/next buttons call it by name'
+);
+
+// The arrows are the reader's way along a journey, and each is a separate
+// field the panel destructures. A rename in journeyContext renders an arrow
+// that is always absent rather than failing anything.
+for (const field of ['prev', 'next', 'stop', 'total', 'colour']) {
+  expect(
+    new RegExp(`\\b${field}:`).test(mapSource) &&
+      new RegExp(`info\\.journey\\.${field}`).test(paneSource),
+    `journey context carries ${field}, and the panel reads it`,
+    'built in map.js journeyContext(), read in the AtlasPane journey block'
+  );
+}
+
+expect(
+  /openJourneyStop\(info\.journey\.id, info\.journey\.prev\.i\)/.test(paneSource) &&
+    /openJourneyStop\(info\.journey\.id, info\.journey\.next\.i\)/.test(paneSource),
+  'both arrows are wired to openJourneyStop',
+  'a stop is a position in a sequence; the arrows are how a reader walks it'
+);
+
+// The place's verse count is not the journey's, and saying "955 references"
+// under a journey heading implies it is.
+expect(
+  /Where Scripture names this place/.test(paneSource),
+  'the subtitle is reworded when the panel is showing a journey stop',
+  'the gazetteer cannot say which mentions belong to this journey'
 );
 
 console.log('\n' + '─'.repeat(78));

@@ -22,7 +22,7 @@
   import { loadAtlasIndex, getAtlasJson, atlasInstalled, releaseAtlas } from '../lib/atlas/data';
   import { searchPlaces, placesInBounds, releasePlaceIndex } from '../lib/atlas/place-index';
   import { ScriptureSearch } from '../lib/atlas/search.js';
-  import { groupByBook, bookName } from '../lib/atlas/places.js';
+  import { groupByBook, bookName, miles, approxMiles } from '../lib/atlas/places.js';
   import { getBookColor } from '../lib/bibleData';
 
   export let windowId: string | undefined = undefined;
@@ -974,8 +974,75 @@
           {#if info.kind === 'place'}
             <div class="info-name">{info.place.n}</div>
             <div class="info-sub">
-              {info.verses.length} reference{info.verses.length === 1 ? '' : 's'} in Scripture
+              <!-- A journey stop's references are the place's, not the journey's:
+                   the gazetteer records where a place is named and cannot say
+                   which mentions belong to this trip. "955 references" under a
+                   journey heading would imply otherwise. -->
+              {#if info.journey}
+                Where Scripture names this place &middot; {info.verses.length}
+              {:else}
+                {info.verses.length} reference{info.verses.length === 1 ? '' : 's'} in Scripture
+              {/if}
             </div>
+
+            {#if info.journey}
+              <div class="jx" style="border-left-color:{info.journey.colour}">
+                <div class="jx-top">
+                  <span class="jx-dot" style="background:{info.journey.colour}"></span>
+                  <span class="jx-name">{info.journey.name}</span>
+                </div>
+                <div class="jx-meta">
+                  Stop {info.journey.stop} of {info.journey.total}
+                  {#if info.journey.first}
+                    &middot; the journey begins here
+                  {:else if info.journey.last}
+                    &middot; the journey ends here
+                  {:else if info.journey.legKm}
+                    &middot; {miles(info.journey.legKm)} miles by {info.journey.by}
+                  {:else}
+                    &middot; by {info.journey.by}
+                  {/if}
+                </div>
+                {#if info.journey.note}
+                  <div class="jx-note">{info.journey.note}</div>
+                {/if}
+
+                <!-- The arrows are why this block exists: a stop is a position in
+                     a sequence, and the question at one is where he went next.
+                     Each end keeps its slot so the pair does not shift sideways
+                     when only one is there. -->
+                <div class="jx-steps">
+                  {#if info.journey.prev}
+                    <button
+                      class="jx-step"
+                      title="Previous stop: {info.journey.prev.n}"
+                      on:click={() => atlas?.openJourneyStop(info.journey.id, info.journey.prev.i)}
+                    >
+                      <span class="jx-arrow">←</span>
+                      <span class="jx-step-t"><em>Before</em>{info.journey.prev.n}</span>
+                    </button>
+                  {:else}
+                    <span class="jx-step jx-step-off"><span class="jx-step-t"><em>Before</em>—</span></span>
+                  {/if}
+                  {#if info.journey.next}
+                    <button
+                      class="jx-step jx-step-r"
+                      title="Next stop: {info.journey.next.n}"
+                      on:click={() => atlas?.openJourneyStop(info.journey.id, info.journey.next.i)}
+                    >
+                      <span class="jx-step-t"><em>Next</em>{info.journey.next.n}</span>
+                      <span class="jx-arrow">→</span>
+                    </button>
+                  {:else}
+                    <span class="jx-step jx-step-r jx-step-off"><span class="jx-step-t"><em>Next</em>—</span></span>
+                  {/if}
+                </div>
+
+                {#if info.journey.km}
+                  <div class="jx-total">{approxMiles(info.journey.km)} in all</div>
+                {/if}
+              </div>
+            {/if}
             {#if info.place.m || info.place.t}
               <div class="info-where">
                 {#if info.place.m}Modern: <b>{info.place.m}</b><br />{/if}
@@ -1041,6 +1108,7 @@
               <button class="vb-ref" style="border-left-color:#8c4a3f" on:click={() => atlas?.openPlace(info.nearest.place)}>
                 <span class="vb-ref-label" style="color:#c98b7a">{info.nearest.place.n}</span>
                 <span class="vb-ref-text">
+                  {miles(info.nearest.km)} miles away &middot;
                   {info.nearest.place.v.length} reference{info.nearest.place.v.length === 1 ? '' : 's'} in Scripture
                 </span>
               </button>
@@ -1481,6 +1549,52 @@
     font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
   .info-where b { color: var(--text); font-weight: 400; }
+  /* Journey context on a stop. The coloured rule down the left is the journey's
+     own colour, which is what ties the panel to the line on the map without
+     repeating a legend. */
+  .jx {
+    margin-top: 10px; padding: 8px 0 2px 9px;
+    border-left: 2px solid var(--line-2);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  .jx-top { display: flex; align-items: center; gap: 6px; }
+  .jx-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .jx-name { font-size: 12px; font-weight: 600; }
+  .jx-meta { font-size: 11.5px; color: var(--dim); margin-top: 3px; line-height: 1.45; }
+  .jx-note {
+    font-size: 11.5px; color: var(--dim); margin-top: 5px;
+    line-height: 1.45; font-style: italic;
+  }
+
+  /* Two slots, always both present: an end of the journey keeps its empty half
+     so the remaining arrow does not slide across when you reach it. */
+  .jx-steps { display: flex; gap: 6px; margin-top: 8px; }
+  .jx-step {
+    flex: 1 1 0; min-width: 0;
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255, 255, 255, .04);
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 5px; padding: 5px 7px;
+    cursor: pointer; text-align: left;
+    font-family: inherit; color: inherit;
+  }
+  .jx-step-r { justify-content: flex-end; text-align: right; }
+  .jx-step:hover { background: rgba(255, 255, 255, .08); }
+  .jx-step-off { opacity: .35; cursor: default; }
+  .jx-step-off:hover { background: rgba(255, 255, 255, .04); }
+  .jx-arrow { font-size: 13px; color: var(--faint); flex: none; }
+  /* The label sits above the name so a long name has the full width to
+     ellipsise into rather than sharing the line with "Next". */
+  .jx-step-t {
+    min-width: 0; font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .jx-step-t em {
+    display: block; font-style: normal; font-size: 10px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+  }
+  .jx-total { font-size: 11px; color: var(--faint); margin-top: 7px; }
+
   .info-h {
     margin: 15px 0 7px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
     color: var(--faint); font-weight: 400;

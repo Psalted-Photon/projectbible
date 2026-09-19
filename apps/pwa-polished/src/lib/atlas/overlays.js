@@ -17,7 +17,6 @@ import { assignColours, polityColour, fallbackColour } from './colours.js';
 // app is grouped, so one reads the same wherever you meet it. `haversine` is not
 // taken from there: this module exports its own, and importing the twin would be
 // two names for one formula.
-import { groupByBook, bookName as bookLabel } from './places.js';
 
 /** @typedef {{ id:string, title:string, colour:string, opacity:number, enabled:boolean }} OverlayState */
 
@@ -563,24 +562,6 @@ export function haversine(lat1, lon1, lat2, lon2) {
 // ---------------------------------------------------------------------------
 
 /**
- * Journey stops carry a verse list as long as their place is famous.
- *
- * The gazetteer records where a place is *named*, not which of those mentions
- * belong to this journey, and nothing in the data can tell them apart. So a
- * stop at Jerusalem arrives with 955 references, and one bullet each would be a
- * popup nobody can reach the bottom of. Grouped by book and counted, the same
- * shape the word study and the encyclopedia use, it reads as what it is — where
- * Scripture names this place — in a few lines instead of hundreds.
- *
- * Books beyond the first few are summed rather than listed, because the point
- * of the list is the passages a reader would turn to, and a stop mentioned in
- * nineteen books is telling you something different from a stop mentioned in
- * two.
- */
-const POPUP_BOOKS = 4;
-const POPUP_REFS_PER_BOOK = 6;
-
-/**
  * Where a journey starts and where it ends.
  *
  * Fixed rather than derived from the route's colour: they have to mean the same
@@ -622,32 +603,6 @@ function withAlpha(hex, alpha) {
   return `rgba(${r},${g},${b},${Math.max(0, alpha).toFixed(2)})`;
 }
 
-function versesForPopup(events) {
-  if (!events.length) return [];
-  const groups = groupByBook(events.map((e) => [e.what, e.ref]));
-  const lines = [];
-
-  for (const { book, refs } of groups.slice(0, POPUP_BOOKS)) {
-    const shown = refs.slice(0, POPUP_REFS_PER_BOOK).map((r) => r.readable);
-    const rest = refs.length - shown.length;
-    lines.push(
-      `<em>${bookLabel(book)}</em> ${shown.join(', ')}${rest > 0 ? ` +${rest}` : ''}`
-    );
-  }
-
-  // Not "…and 15 more verses" — the count a reader can act on is how many other
-  // books to look in, which is also the honest summary of what was left out.
-  const restBooks = groups.length - Math.min(groups.length, POPUP_BOOKS);
-  if (restBooks > 0) {
-    const restRefs = groups.slice(POPUP_BOOKS).reduce((n, g) => n + g.refs.length, 0);
-    lines.push(
-      `<em>and ${restBooks} more book${restBooks === 1 ? '' : 's'}</em> ` +
-      `(${restRefs} reference${restRefs === 1 ? '' : 's'})`
-    );
-  }
-  return lines;
-}
-
 /**
  * The journeys overlay — the second tenant of the overlay system.
  *
@@ -666,6 +621,10 @@ export class JourneysOverlay extends BaseOverlay {
     this.routes = routes;
     this.selected = routes.map((r) => r.id);   // all on until told otherwise
     this.onRoutesChanged = () => {};
+    // Mirrors BiblicalPlaces.onOpen: a stop tap is routed to the host, which
+    // opens the same info panel the city dots use. Unwired by default, so an
+    // overlay nobody has connected simply does nothing on a tap.
+    this.onOpenStop = () => {};
     this.textFollowsOpacity = true;
   }
 
@@ -906,19 +865,14 @@ export class JourneysOverlay extends BaseOverlay {
       interactive: true, bubblingMouseEvents: false,
     });
 
-    const lines = [
-      `<strong>${i + 1}. ${stop.n}</strong>`,
-      // The first stop was not travelled to, so "0 km by foot" would be a claim
-      // about a journey that had not started.
-      first
-        ? `<span style="opacity:.75">${route.name} begins here</span>`
-        : stop.km
-          ? `${Math.round(stop.km)} km by ${stop.by}`
-          : `by ${stop.by}`,
-      ...(stop.note ? [`<span style="opacity:.75">${stop.note}</span>`] : []),
-      ...versesForPopup(stop.events),
-    ];
-    marker.bindPopup(`<div style="min-width:190px;max-width:260px">${lines.join('<br>')}</div>`);
+    // The tap opens the app's own info panel rather than a Leaflet bubble, so a
+    // stop gets the colour-coded reference list, the verse previews and the
+    // crumb back to the map that every city dot already has. The hover name
+    // stays — it is good and costs nothing.
+    marker.on('click', (e) => {
+      if (e?.originalEvent) L.DomEvent.stop(e.originalEvent);
+      this.onOpenStop(stop, route, i);
+    });
     marker.bindTooltip(`${i + 1}. ${stop.n}`, { direction: 'top', offset: [0, -5] });
     return marker;
   }

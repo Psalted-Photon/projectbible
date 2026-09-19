@@ -31,7 +31,7 @@ import L from 'leaflet';
 import './labels.css';
 import { OverlayHost, TimelineOverlay, JourneysOverlay } from './overlays.js';
 import { LabelEngine } from './labels.js';
-import { BiblicalPlaces, haversine, bookName } from './places.js';
+import { BiblicalPlaces, haversine, bookName, miles } from './places.js';
 import { Paper } from './paper.js';
 import { parsePassage, placesInPassage, eraForBook } from './reading.js';
 
@@ -927,12 +927,72 @@ export function createAtlasMap(container, options = {}) {
 
   /** Everything known about a place, handed over for someone else to render. */
   function openPlace(place) {
+    openPlaceWith(place, null);
+  }
+
+  /**
+   * The place payload, with room for context from whoever opened it.
+   *
+   * One definition rather than two: a journey stop opens the same panel a city
+   * dot does, and the moment the payload is written out twice the two drift.
+   * `journey` is the only extra, and everything below it in the panel — the
+   * photo, the colour-coded references, the crumb back to the map — is the
+   * same code path either way.
+   */
+  function openPlaceWith(place, journey) {
     emit.place({
       kind: 'place',
       place,
       photo: photos[place.id] ?? null,
       verses: place.v ?? [],
+      ...(journey ? { journey } : {}),
     });
+  }
+
+  /**
+   * What the panel says about a stop beyond the place itself.
+   *
+   * The neighbours are the point of the arrows: a stop is a position in a
+   * sequence, and the question a reader has at one is where he went next. They
+   * carry their own index so following one is the same call as tapping its dot,
+   * and they are null at the ends rather than wrapping, because a journey is
+   * not a loop even when it returns to where it started.
+   */
+  function journeyContext(stop, route, i) {
+    const at = (n) => {
+      const s2 = route.stops[n];
+      return s2 ? { n: s2.n, i: n } : null;
+    };
+    return {
+      id: route.id,
+      name: route.name,
+      colour: route.colour,
+      traveller: route.traveler ?? route.traveller ?? null,
+      dates: route.dates ?? null,
+      km: route.km ?? null,
+      stop: i + 1,
+      total: route.stops.length,
+      by: stop.by,
+      legKm: i === 0 ? null : stop.km || null,
+      note: stop.note ?? null,
+      first: i === 0,
+      last: i === route.stops.length - 1,
+      prev: at(i - 1),
+      next: at(i + 1),
+    };
+  }
+
+  /**
+   * The gazetteer row behind a journey stop's `placeId`.
+   *
+   * Built once on first use rather than per tap: `biblical.places` is the same
+   * array throughout the map's life, and rebuilding a 1,278-entry map for every
+   * stop tap would be work done for nothing.
+   */
+  let placeById = null;
+  function biblicalPlaceById(id) {
+    if (!placeById) placeById = new Map((biblical?.places ?? []).map((p) => [p.id, p]));
+    return placeById.get(id) ?? null;
   }
 
   function openPeak(pk) {
@@ -964,7 +1024,7 @@ export function createAtlasMap(container, options = {}) {
       else if (hit.kind === 'land') lines.push({ label: 'In the land of', value: hit.label });
     }
     if (near) {
-      lines.push({ label: 'Nearest biblical place', value: `${near.place.n}, ${near.km.toFixed(0)} km` });
+      lines.push({ label: 'Nearest biblical place', value: `${near.place.n}, ${miles(near.km)} miles` });
     }
     if (town && town.km < 60) {
       const r = town.row;
@@ -1283,6 +1343,18 @@ export function createAtlasMap(container, options = {}) {
       if (routes?.length) {
         journeys = host.register(new JourneysOverlay({ routes }));
         journeys.onRoutesChanged = () => emit.layers();
+
+        // A stop tap opens the gazetteer place behind it, so it gets the same
+        // panel a city dot does. The stop carries `placeId` and these rows are
+        // already in hand, so this is a lookup rather than new data.
+        journeys.onOpenStop = (stop, route, i) => {
+          const place = biblicalPlaceById(stop.placeId);
+          // A stop whose place has fallen out of the gazetteer still deserves an
+          // answer, so it falls back to the generic point panel rather than
+          // swallowing the tap.
+          if (!place) return openPoint({ lat: stop.y, lng: stop.x });
+          openPlaceWith(place, journeyContext(stop, route, i));
+        };
       }
     } catch {
       journeys = null;
@@ -1376,6 +1448,26 @@ export function createAtlasMap(container, options = {}) {
     goToPlace,
     goToScripture,
     openPlace,
+
+    /**
+     * Open a stop by its position in a journey, which is what the panel's
+     * previous/next arrows call.
+     *
+     * The map pans to it: following an arrow to a stop that is off-screen
+     * should take you there, and a panel that changed while the map sat still
+     * would read as the arrow having done nothing. Panning only when the stop
+     * is actually outside the view keeps a step between two visible stops from
+     * lurching the map for no reason.
+     */
+    openJourneyStop(routeId, i) {
+      const route = journeys?.routes?.find((r) => r.id === routeId);
+      const stop = route?.stops?.[i];
+      if (!stop) return;
+      const place = biblicalPlaceById(stop.placeId);
+      if (!map.getBounds().contains([stop.y, stop.x])) map.panTo([stop.y, stop.x]);
+      if (!place) return openPoint({ lat: stop.y, lng: stop.x });
+      openPlaceWith(place, journeyContext(stop, route, i));
+    },
     wholeWorld,
     followPassage,
     clearPassage,
