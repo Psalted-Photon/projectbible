@@ -1,0 +1,1016 @@
+{
+  "_comment": "The editorial layer. UBS supplies the lines; this file decides which journeys ship, what they are called, which places are stops and in what order. See README.md for why legs map to segments explicitly rather than being auto-chained, and LICENSE.md for the BY-SA boundary. Stops carry no coordinates and no verses: both are looked up from atlas_biblical_places by place_id at build time.",
+  "attribution": "UBS Bible Routes, Project MARBLE, drawn by Dr. Leen Ritmeyer. © United Bible Societies 2023. CC BY-SA 4.0.",
+  "source_dir": "ubs-routes",
+  "journeys": [
+    {
+      "id": "abram-ur-to-canaan",
+      "name": "Abram's Journey to Canaan",
+      "traveller": "Abram",
+      "dates": "c. 2091 BC",
+      "testament": "old",
+      "colour": "#c8862f",
+      "sort_order": 1,
+      "description": "Called out of Ur, up the Euphrates to Haran, then south into the land he was promised.",
+      "source": [
+        {
+          "file": "001. Abram's Journey to Haran.geojson",
+          "segments": [
+            0
+          ],
+          "reverse": [
+            0
+          ]
+        },
+        {
+          "file": "003. Abram's Journey to Shechem.geojson",
+          "segments": [
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Ur 1",
+          "by": "foot",
+          "note": "Terah takes his household out of Ur of the Chaldeans."
+        },
+        {
+          "place_id": "Haran",
+          "by": "foot",
+          "note": "They settle, and Terah dies there."
+        },
+        {
+          "place_id": "Damascus",
+          "by": "foot",
+          "note": "South along the caravan road into Canaan."
+        },
+        {
+          "place_id": "Shechem",
+          "by": "foot",
+          "note": "The oak of Moreh — the land is promised to his offspring."
+        },
+        {
+          "place_id": "Bethel 1",
+          "by": "foot",
+          "note": "He pitches his tent and builds an altar."
+        },
+        {
+          "place_id": "Hebron",
+          "by": "foot",
+          "note": "The oaks of Mamre, where he settles."
+        }
+      ]
+    },
+    {
+      "id": "jacob-to-egypt",
+      "name": "Jacob's Journey to Egypt",
+      "traveller": "Jacob and his household",
+      "dates": "c. 1876 BC",
+      "testament": "old",
+      "colour": "#9c6b3f",
+      "sort_order": 2,
+      "description": "Seventy people go down into Egypt to the son they thought was dead.",
+      "source": [
+        {
+          "file": "035. Jacob to Goshen.geojson",
+          "segments": [
+            0
+          ],
+          "reverse": [
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Hebron",
+          "by": "foot",
+          "note": "Jacob sets out from the land of his father's sojourning."
+        },
+        {
+          "place_id": "Beersheba 1",
+          "by": "foot",
+          "note": "He offers sacrifices, and God tells him not to fear going down to Egypt."
+        },
+        {
+          "place_id": "Goshen 1",
+          "by": "foot",
+          "note": "Joseph comes up in his chariot to meet his father."
+        }
+      ]
+    },
+    {
+      "id": "joseph-to-dothan",
+      "name": "Joseph Sold into Egypt",
+      "traveller": "Joseph",
+      "dates": "c. 1898 BC",
+      "testament": "old",
+      "colour": "#b4793d",
+      "sort_order": 3,
+      "description": "Sent to find his brothers, sold to a caravan, and carried down to Egypt.",
+      "source": [
+        {
+          "file": "031. Joseph to Dothan.geojson",
+          "segments": [
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Hebron",
+          "by": "foot",
+          "note": "Israel sends him to see whether it is well with his brothers."
+        },
+        {
+          "place_id": "Shechem",
+          "by": "foot",
+          "note": "He looks for them, and a man tells him they have moved on."
+        },
+        {
+          "place_id": "Dothan",
+          "by": "foot",
+          "note": "They strip him, throw him into a pit, and sell him for twenty shekels."
+        },
+        {
+          "place_id": "Egypt",
+          "by": "foot",
+          "note": "The Ishmaelite caravan carries him down."
+        }
+      ],
+      "geometry_note": "The UBS line stops at the Egyptian border, so the final Egypt stop sits ~370 km off it. Expected: Phase 5's straight-line fallback draws that last leg."
+    },
+    {
+      "id": "exodus-route",
+      "name": "The Exodus",
+      "traveller": "Moses and the Israelites",
+      "dates": "1446–1406 BC",
+      "testament": "old",
+      "colour": "#d4483b",
+      "sort_order": 4,
+      "description": "Out of Egypt to Sinai, and the forty years between the sea and the Jordan.",
+      "source": [
+        {
+          "file": "042. Exodus Route1.geojson",
+          "segments": [
+            0
+          ]
+        },
+        {
+          "file": "043. Exodus Route2.geojson",
+          "segments": [
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Rameses",
+          "by": "foot",
+          "note": "They set out on the day after the Passover."
+        },
+        {
+          "place_id": "Succoth 2",
+          "by": "foot",
+          "note": "The first camp out of Egypt."
+        },
+        {
+          "place_id": "Marah",
+          "by": "foot",
+          "note": "Bitter water made sweet."
+        },
+        {
+          "place_id": "Elim",
+          "by": "foot",
+          "note": "Twelve springs and seventy palm trees."
+        },
+        {
+          "place_id": "Rephidim",
+          "by": "foot",
+          "note": "Water from the rock, and the battle with Amalek."
+        },
+        {
+          "place_id": "Mount Sinai",
+          "by": "foot",
+          "note": "The law is given, and they camp before the mountain a year."
+        },
+        {
+          "place_id": "Kadesh-barnea",
+          "by": "foot",
+          "note": "Where the spies are sent, and where the wandering years are spent."
+        }
+      ]
+    },
+    {
+      "id": "the-spies",
+      "name": "The Twelve Spies",
+      "traveller": "The twelve spies",
+      "dates": "c. 1444 BC",
+      "testament": "old",
+      "colour": "#7a8f3c",
+      "sort_order": 5,
+      "description": "Forty days through the land, and a report that cost a generation.",
+      "source": [
+        {
+          "file": "044. Spies.geojson",
+          "segments": [
+            0,
+            1
+          ],
+          "reverse": [
+            0,
+            1
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Kadesh-barnea",
+          "by": "foot",
+          "note": "Moses sends one man from each tribe."
+        },
+        {
+          "place_id": "Negeb",
+          "by": "foot",
+          "note": "They go up into the dry south country."
+        },
+        {
+          "place_id": "Hebron",
+          "by": "foot",
+          "note": "Where the descendants of Anak lived."
+        },
+        {
+          "place_id": "Hamath 1",
+          "by": "foot",
+          "note": "North as far as Lebo-hamath."
+        }
+      ]
+    },
+    {
+      "id": "davids-wanderings",
+      "name": "David's Flight from Saul",
+      "traveller": "David",
+      "dates": "c. 1013–1010 BC",
+      "testament": "old",
+      "colour": "#5f7fa8",
+      "sort_order": 6,
+      "description": "Years in the wilderness, moving between caves, strongholds and Philistine towns.",
+      "source": [
+        {
+          "file": "086. David's wanderings_1.geojson",
+          "segments": [
+            2,
+            1,
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Ramah 1",
+          "by": "foot",
+          "note": "He flees to Samuel and tells him all that Saul had done."
+        },
+        {
+          "place_id": "Nob",
+          "by": "foot",
+          "note": "The priest gives him the bread of the Presence and Goliath's sword."
+        },
+        {
+          "place_id": "Gath 1",
+          "by": "foot",
+          "note": "He feigns madness before Achish."
+        },
+        {
+          "place_id": "Adullam",
+          "by": "foot",
+          "note": "The cave, where four hundred distressed men gather to him."
+        },
+        {
+          "place_id": "Moab 1",
+          "by": "foot",
+          "note": "He leaves his father and mother with the king of Moab."
+        },
+        {
+          "place_id": "Engedi",
+          "by": "foot",
+          "note": "The strongholds, where he cuts off the corner of Saul's robe."
+        },
+        {
+          "place_id": "Ziklag",
+          "by": "foot",
+          "note": "Achish gives him the town, and he stays sixteen months."
+        }
+      ]
+    },
+    {
+      "id": "elijah-to-horeb",
+      "name": "Elijah's Flight to Horeb",
+      "traveller": "Elijah",
+      "dates": "c. 860 BC",
+      "testament": "old",
+      "colour": "#b5543d",
+      "sort_order": 7,
+      "description": "From the triumph on Carmel to a cave on the mountain of God, forty days south.",
+      "source": [
+        {
+          "file": "115. Elijah on Mount Carmel.geojson",
+          "segments": [
+            0,
+            2
+          ]
+        },
+        {
+          "file": "116. Elijah to Sinai.geojson",
+          "segments": [
+            0
+          ],
+          "reverse": [
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Mount Carmel",
+          "by": "foot",
+          "note": "Fire falls, and the prophets of Baal are put to death."
+        },
+        {
+          "place_id": "Jezreel 2",
+          "by": "foot",
+          "note": "He runs before Ahab's chariot; Jezebel sends word that he will die."
+        },
+        {
+          "place_id": "Beersheba 1",
+          "by": "foot",
+          "note": "He leaves his servant and goes a day's journey into the wilderness."
+        },
+        {
+          "place_id": "Mount Horeb",
+          "by": "foot",
+          "note": "Forty days and nights, and then the low whisper."
+        }
+      ]
+    },
+    {
+      "id": "elisha-ministry",
+      "name": "The Ministry of Elisha",
+      "traveller": "Elisha",
+      "dates": "c. 850–800 BC",
+      "testament": "old",
+      "colour": "#4f8f7d",
+      "sort_order": 8,
+      "description": "A circuit between Gilgal, Jericho, Samaria and Carmel, taking up the mantle Elijah left.",
+      "source": [
+        {
+          "file": "122. Ministry of Elisha.geojson",
+          "segments": [
+            0,
+            5,
+            2,
+            3,
+            1,
+            6
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Abel-meholah",
+          "by": "foot",
+          "note": "Elijah finds him ploughing and throws his cloak over him."
+        },
+        {
+          "place_id": "Gilgal 1",
+          "by": "foot",
+          "note": "The poisoned stew made harmless."
+        },
+        {
+          "place_id": "Bethel 1",
+          "by": "foot",
+          "note": "He goes up from Jericho on the road."
+        },
+        {
+          "place_id": "Jericho 1",
+          "by": "foot",
+          "note": "The spring healed with salt from a new bowl."
+        },
+        {
+          "place_id": "Samaria 1",
+          "by": "foot",
+          "note": "Where he lived, and where Naaman's messengers found him."
+        },
+        {
+          "place_id": "Mount Carmel",
+          "by": "foot",
+          "note": "The Shunammite comes to him there for her son."
+        }
+      ]
+    },
+    {
+      "id": "jonah-to-tarshish",
+      "name": "Jonah's Flight and Errand",
+      "traveller": "Jonah",
+      "dates": "c. 760 BC",
+      "testament": "old",
+      "colour": "#6b7fb8",
+      "sort_order": 9,
+      "description": "Sent east to Nineveh, he takes ship west for Tarshish, and arrives where he was sent anyway.",
+      "source": [
+        {
+          "file": "155. Jonah.geojson",
+          "segments": [
+            3,
+            2,
+            1,
+            0
+          ],
+          "reverse": [
+            3,
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Gath-hepher",
+          "by": "foot",
+          "note": "His home town, where the word of the Lord comes to him."
+        },
+        {
+          "place_id": "Joppa",
+          "by": "foot",
+          "note": "He goes down to the port and pays the fare."
+        },
+        {
+          "place_id": "Tarshish 1",
+          "by": "ship",
+          "note": "The direction he chose — away from the presence of the Lord."
+        },
+        {
+          "place_id": "Nineveh",
+          "by": "foot",
+          "note": "A three days' journey across, and the whole city repents."
+        }
+      ],
+      "geometry_note": "Ritmeyer never drew the Atlantic leg, so Tarshish sits ~3,600 km off the line. Expected, and the point of the journey: he is sailing the opposite way from where he was sent."
+    },
+    {
+      "id": "babylonian-exile",
+      "name": "The Babylonian Exile",
+      "traveller": "The people of Judah",
+      "dates": "605–586 BC",
+      "testament": "old",
+      "colour": "#7d6b9c",
+      "sort_order": 10,
+      "description": "Jerusalem falls, and the people are carried the length of the Fertile Crescent to Babylon.",
+      "source": [
+        {
+          "file": "151. Babylonian Exile.geojson",
+          "segments": [
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Jerusalem",
+          "by": "foot",
+          "note": "The walls are broken down and the temple burned."
+        },
+        {
+          "place_id": "Riblah 1",
+          "by": "foot",
+          "note": "Zedekiah is brought to Nebuchadnezzar and blinded there."
+        },
+        {
+          "place_id": "Babylon 1",
+          "by": "foot",
+          "note": "By the waters of Babylon, there they sat down and wept."
+        }
+      ]
+    },
+    {
+      "id": "flight-to-egypt",
+      "name": "The Flight to Egypt",
+      "traveller": "Joseph, Mary and the child",
+      "dates": "c. 5–4 BC",
+      "testament": "new",
+      "colour": "#c9843f",
+      "sort_order": 1,
+      "description": "Warned in a dream, they leave by night for Egypt, and return to Nazareth after Herod dies.",
+      "source": [
+        {
+          "file": "155a. Bethlehem to Egypt.geojson",
+          "segments": [
+            0
+          ],
+          "reverse": [
+            0
+          ]
+        },
+        {
+          "file": "155b. Bethlehem-Egypt-Nazareth.geojson",
+          "segments": [
+            1
+          ],
+          "reverse": [
+            1
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Bethlehem 1",
+          "by": "foot",
+          "note": "The wise men are warned not to return to Herod."
+        },
+        {
+          "place_id": "Egypt",
+          "by": "foot",
+          "note": "Out of Egypt I called my son."
+        },
+        {
+          "place_id": "Nazareth",
+          "by": "foot",
+          "note": "He withdraws to Galilee rather than to Judea under Archelaus."
+        }
+      ]
+    },
+    {
+      "id": "jesus-galilee-ministry",
+      "name": "Jesus' Ministry in Galilee",
+      "traveller": "Jesus",
+      "dates": "AD 27–30",
+      "testament": "new",
+      "colour": "#3f8f9c",
+      "sort_order": 2,
+      "description": "Nazareth to Capernaum, and the circuit of the lake towns that became his own country.",
+      "source": [
+        {
+          "file": "165. Nazareth to Capernaum.geojson",
+          "segments": [
+            0
+          ],
+          "reverse": [
+            0
+          ]
+        },
+        {
+          "file": "168. Preaching in the synagogues of Galilee.geojson",
+          "segments": [
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Nazareth",
+          "by": "foot",
+          "note": "He reads from Isaiah, and they drive him out of the town."
+        },
+        {
+          "place_id": "Cana",
+          "by": "foot",
+          "note": "Water into wine — the first of the signs."
+        },
+        {
+          "place_id": "Capernaum",
+          "by": "foot",
+          "note": "He makes his home there, by the sea."
+        },
+        {
+          "place_id": "Bethsaida 1",
+          "by": "foot",
+          "note": "The five thousand are fed in a desolate place nearby."
+        },
+        {
+          "place_id": "Gennesaret",
+          "by": "ship",
+          "note": "They moor the boat and the sick are brought to him."
+        },
+        {
+          "place_id": "Nain",
+          "by": "foot",
+          "note": "He stops the bier at the gate and raises the widow's son."
+        },
+        {
+          "place_id": "Caesarea Philippi",
+          "by": "foot",
+          "note": "But who do you say that I am?"
+        }
+      ]
+    },
+    {
+      "id": "last-journey-to-jerusalem",
+      "name": "The Last Journey to Jerusalem",
+      "traveller": "Jesus",
+      "dates": "AD 30",
+      "testament": "new",
+      "colour": "#b0463f",
+      "sort_order": 3,
+      "description": "He sets his face to go to Jerusalem, down the Jordan valley and up from Jericho.",
+      "source": [
+        {
+          "file": "179. Last Journey to Jerusalem.geojson",
+          "segments": [
+            0
+          ],
+          "reverse": [
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Capernaum",
+          "by": "foot",
+          "note": "When the days drew near for him to be taken up."
+        },
+        {
+          "place_id": "Samaria 2",
+          "by": "foot",
+          "note": "A village that would not receive him, because his face was set toward Jerusalem."
+        },
+        {
+          "place_id": "Jericho 1",
+          "by": "foot",
+          "note": "Zacchaeus climbs the sycamore, and blind Bartimaeus calls out."
+        },
+        {
+          "place_id": "Bethany 1",
+          "by": "foot",
+          "note": "Six days before the Passover, at the house of Lazarus."
+        },
+        {
+          "place_id": "Jerusalem",
+          "by": "foot",
+          "note": "He enters riding on a colt, and the crowds spread their cloaks."
+        }
+      ]
+    },
+    {
+      "id": "pauls-first-journey",
+      "name": "Paul's First Missionary Journey",
+      "traveller": "Paul and Barnabas",
+      "dates": "AD 46–48",
+      "testament": "new",
+      "colour": "#4a7fb5",
+      "sort_order": 4,
+      "description": "Out from Antioch through Cyprus into the highlands of Galatia, and back the way they came.",
+      "source": [
+        {
+          "file": "202. First Missionary Journey.geojson",
+          "segments": [
+            2,
+            6,
+            3,
+            4,
+            1,
+            0,
+            5
+          ],
+          "reverse": [
+            6,
+            4,
+            1,
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Antioch 1",
+          "by": "foot",
+          "note": "The church sets them apart and sends them off."
+        },
+        {
+          "place_id": "Seleucia",
+          "by": "foot",
+          "note": "The port of Antioch, where they take ship."
+        },
+        {
+          "place_id": "Salamis",
+          "by": "ship",
+          "note": "They proclaim the word in the synagogues of the Jews."
+        },
+        {
+          "place_id": "Paphos",
+          "by": "foot",
+          "note": "Elymas is struck blind and the proconsul believes."
+        },
+        {
+          "place_id": "Perga",
+          "by": "ship",
+          "note": "John Mark leaves them and returns to Jerusalem."
+        },
+        {
+          "place_id": "Antioch 2",
+          "by": "foot",
+          "note": "Antioch of Pisidia — the sermon in the synagogue, then expulsion."
+        },
+        {
+          "place_id": "Iconium",
+          "by": "foot",
+          "note": "They stay a long time speaking boldly."
+        },
+        {
+          "place_id": "Lystra",
+          "by": "foot",
+          "note": "Taken for gods, then Paul is stoned and dragged out of the city."
+        },
+        {
+          "place_id": "Derbe",
+          "by": "foot",
+          "note": "They make many disciples, then turn back."
+        },
+        {
+          "place_id": "Attalia",
+          "by": "foot",
+          "note": "Down to the coast to sail home."
+        },
+        {
+          "place_id": "Antioch 1",
+          "by": "ship",
+          "note": "They declare all that God had done with them."
+        }
+      ]
+    },
+    {
+      "id": "pauls-second-journey",
+      "name": "Paul's Second Missionary Journey",
+      "traveller": "Paul, Silas and Timothy",
+      "dates": "AD 49–52",
+      "testament": "new",
+      "colour": "#3f9c6b",
+      "sort_order": 5,
+      "description": "Across Asia Minor to a vision of a man of Macedonia, and on into Greece.",
+      "source": [
+        {
+          "file": "203. Second Missionary Journey.geojson",
+          "segments": [
+            5,
+            2,
+            1,
+            3,
+            6,
+            4,
+            0,
+            7
+          ],
+          "reverse": [
+            5,
+            2,
+            0
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Antioch 1",
+          "by": "foot",
+          "note": "Paul and Barnabas part over John Mark; Paul takes Silas."
+        },
+        {
+          "place_id": "Derbe",
+          "by": "foot",
+          "note": "Through Syria and Cilicia, strengthening the churches."
+        },
+        {
+          "place_id": "Lystra",
+          "by": "foot",
+          "note": "Timothy joins them, well spoken of by the brothers."
+        },
+        {
+          "place_id": "Troas",
+          "by": "foot",
+          "note": "The vision in the night: come over to Macedonia and help us."
+        },
+        {
+          "place_id": "Neapolis",
+          "by": "ship",
+          "note": "They make a straight run, and land in Europe."
+        },
+        {
+          "place_id": "Philippi",
+          "by": "foot",
+          "note": "Lydia believes; the earthquake opens the prison doors."
+        },
+        {
+          "place_id": "Thessalonica",
+          "by": "foot",
+          "note": "Three sabbaths of reasoning from the Scriptures."
+        },
+        {
+          "place_id": "Berea",
+          "by": "foot",
+          "note": "More noble, examining the Scriptures daily."
+        },
+        {
+          "place_id": "Athens",
+          "by": "foot",
+          "note": "The Areopagus, and the altar to an unknown god."
+        },
+        {
+          "place_id": "Corinth",
+          "by": "foot",
+          "note": "A year and six months with Aquila and Priscilla."
+        },
+        {
+          "place_id": "Cenchreae",
+          "by": "foot",
+          "note": "He cuts his hair, for he was under a vow."
+        },
+        {
+          "place_id": "Ephesus",
+          "by": "ship",
+          "note": "He leaves Priscilla and Aquila and promises to return."
+        },
+        {
+          "place_id": "Caesarea",
+          "by": "ship",
+          "note": "He lands and goes up to greet the church."
+        },
+        {
+          "place_id": "Antioch 1",
+          "by": "foot",
+          "note": "Home, and he spends some time there."
+        }
+      ]
+    },
+    {
+      "id": "pauls-third-journey",
+      "name": "Paul's Third Missionary Journey",
+      "traveller": "Paul",
+      "dates": "AD 53–57",
+      "testament": "new",
+      "colour": "#8f6bb5",
+      "sort_order": 6,
+      "description": "Three years in Ephesus, back through Greece, and a farewell at Miletus.",
+      "source": [
+        {
+          "file": "204. Third Missionary Journey.geojson",
+          "segments": [
+            5,
+            6,
+            0,
+            2,
+            1,
+            3
+          ],
+          "reverse": [
+            0,
+            2,
+            1
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Antioch 1",
+          "by": "foot",
+          "note": "He sets out again through Galatia and Phrygia."
+        },
+        {
+          "place_id": "Ephesus",
+          "by": "foot",
+          "note": "Two years in the hall of Tyrannus; the silversmiths riot."
+        },
+        {
+          "place_id": "Troas",
+          "by": "foot",
+          "note": "Eutychus falls from the third-storey window."
+        },
+        {
+          "place_id": "Philippi",
+          "by": "ship",
+          "note": "Through Macedonia, giving the churches much encouragement."
+        },
+        {
+          "place_id": "Corinth",
+          "by": "foot",
+          "note": "Three months in Greece before a plot sends him back overland."
+        },
+        {
+          "place_id": "Assos",
+          "by": "foot",
+          "note": "He goes by land while the others sail, and meets them there."
+        },
+        {
+          "place_id": "Miletus",
+          "by": "ship",
+          "note": "He calls the Ephesian elders and they weep at his neck."
+        },
+        {
+          "place_id": "Tyre",
+          "by": "ship",
+          "note": "Seven days with the disciples, who warn him through the Spirit."
+        },
+        {
+          "place_id": "Caesarea",
+          "by": "ship",
+          "note": "Agabus binds his own feet with Paul's belt."
+        },
+        {
+          "place_id": "Jerusalem",
+          "by": "foot",
+          "note": "The brothers receive him gladly; days later he is seized in the temple."
+        }
+      ]
+    },
+    {
+      "id": "voyage-to-rome",
+      "name": "Paul's Voyage to Rome",
+      "traveller": "Paul, under guard",
+      "dates": "AD 59–60",
+      "testament": "new",
+      "colour": "#b5763f",
+      "sort_order": 7,
+      "description": "A prisoner appealing to Caesar, a winter storm, a shipwreck off Malta, and the road up to Rome.",
+      "source": [
+        {
+          "file": "205. Paul's Voyage to Rome.geojson",
+          "segments": [
+            1,
+            2,
+            3,
+            0
+          ],
+          "reverse": [
+            1,
+            2
+          ]
+        }
+      ],
+      "stops": [
+        {
+          "place_id": "Caesarea",
+          "by": "foot",
+          "note": "Handed to a centurion of the Augustan Cohort."
+        },
+        {
+          "place_id": "Sidon",
+          "by": "ship",
+          "note": "Julius treats him kindly and lets him visit friends."
+        },
+        {
+          "place_id": "Myra",
+          "by": "ship",
+          "note": "They transfer to a ship of Alexandria bound for Italy."
+        },
+        {
+          "place_id": "Cnidus",
+          "by": "ship",
+          "note": "The wind does not allow them to go farther."
+        },
+        {
+          "place_id": "Fair Havens",
+          "by": "ship",
+          "note": "Paul warns them the voyage will bring loss, and is overruled."
+        },
+        {
+          "place_id": "Cauda",
+          "by": "ship",
+          "note": "Running under the lee of the island, they haul in the ship's boat."
+        },
+        {
+          "place_id": "Malta",
+          "by": "ship",
+          "note": "The ship runs aground; all 276 reach land, and the viper does him no harm."
+        },
+        {
+          "place_id": "Syracuse",
+          "by": "ship",
+          "note": "Three days, after wintering three months on Malta."
+        },
+        {
+          "place_id": "Rhegium",
+          "by": "ship",
+          "note": "A south wind springs up and carries them on."
+        },
+        {
+          "place_id": "Puteoli",
+          "by": "ship",
+          "note": "Brothers invite them to stay seven days."
+        },
+        {
+          "place_id": "Forum of Appius",
+          "by": "foot",
+          "note": "Believers come out to meet him; he thanks God and takes courage."
+        },
+        {
+          "place_id": "Three Taverns",
+          "by": "foot",
+          "note": "The last stop on the Appian Way."
+        },
+        {
+          "place_id": "Rome",
+          "by": "foot",
+          "note": "Two whole years in his own rented house, proclaiming the kingdom."
+        }
+      ]
+    }
+  ]
+}

@@ -281,6 +281,26 @@ const insertEvent = db.prepare(`
   VALUES (?, ?, ?)
 `);
 
+// The source carries a year as a signed number — negative is BC — and a range
+// as a pair. The column is TEXT because what a reader wants here is a label,
+// not arithmetic, so the pair is rendered once at build time rather than being
+// reassembled by everything downstream that wants to print it.
+function dateRangeLabel(range) {
+  if (!range) return null;
+  const era = (y) => (y < 0 ? `${Math.abs(y)} BC` : `AD ${y}`);
+  const { start, end } = range;
+  if (start == null && end == null) return null;
+  if (start == null) return era(end);
+  if (end == null) return era(start);
+  if (start === end) return era(start);
+  // Within one epoch the era is said once, but which end it attaches to differs:
+  // BC counts down to its label ("1446–1406 BC") and AD counts up from it
+  // ("AD 46–48"). Crossing the epoch, both ends need naming.
+  if (start < 0 && end < 0) return `${Math.abs(start)}–${Math.abs(end)} BC`;
+  if (start >= 0 && end >= 0) return `AD ${start}–${end}`;
+  return `${era(start)}–${era(end)}`;
+}
+
 const journeysTransaction = db.transaction(() => {
   for (const journey of journeyRoutes.journeys) {
     // Insert journey
@@ -288,11 +308,11 @@ const journeysTransaction = db.transaction(() => {
       journey.id,
       journey.name,
       journey.description,
-      journey.traveler,
-      journey.dateRange || null,
-      journey.totalDistanceKm || null
+      journey.person || null,
+      dateRangeLabel(journey.yearRange),
+      journey.totalDistance || null
     );
-    
+
     // Insert waypoints
     for (let i = 0; i < journey.waypoints.length; i++) {
       const wp = journey.waypoints[i];
@@ -302,20 +322,24 @@ const journeysTransaction = db.transaction(() => {
         wp.name,
         wp.coordinates[1], // lat
         wp.coordinates[0], // lon
-        wp.distanceFromPreviousKm || null,
+        wp.distanceFromPrevious ?? null,
         wp.travelMethod || null,
         wp.icon || null
       );
-      
+
       const waypointId = result.lastInsertRowid;
-      
+
       // Insert events for this waypoint
       if (wp.events) {
         for (const event of wp.events) {
           insertEvent.run(
             waypointId,
             event.description,
-            event.verse || null
+            // A stop can be the place of more than one thing, and the source
+            // gives each event its own list of references. Joined rather than
+            // truncated to the first: dropping the rest would quietly lose the
+            // verses that are the whole point of a stop.
+            event.verses?.length ? event.verses.join('; ') : null
           );
         }
       }

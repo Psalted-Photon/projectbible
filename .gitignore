@@ -11,7 +11,22 @@ dist/
 # Data packs - allow committed packs for mobile deployment
 # (packs are small enough for GitHub, ~16MB each)
 # Ignore generated data sources, but allow final packs
-data-sources/
+data-sources/*
+# …except the journeys editorial layer: the curated index, the licence and the
+# notes are ours to keep, small, and the thing that makes the feature
+# reproducible. The 179 UBS route files beside them stay ignored like every
+# other source download — `node scripts/atlas/fetch-ubs-routes.mjs` re-fetches.
+#
+# Each level has to be unexcluded in turn: git does not descend into an
+# excluded directory, so a bare `data-sources/` would hide these no matter what
+# followed it.
+!data-sources/maps/
+data-sources/maps/*
+!data-sources/maps/journeys/
+data-sources/maps/journeys/*
+!data-sources/maps/journeys/journey-index.json
+!data-sources/maps/journeys/LICENSE.md
+!data-sources/maps/journeys/README.md
 
 # Large build artifacts (dictionary pipeline)
 data/raw/
