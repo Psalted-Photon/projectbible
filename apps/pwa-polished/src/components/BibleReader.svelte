@@ -1119,9 +1119,13 @@
   // is not on screen, bring the page to it — but only in the main reader and
   // only while the app is visible. Reading itself never depends on this; if the
   // phone is pocketed there is nothing to look at and nothing to do.
+  // The key is normalized because the engine reads plan data, which spells some
+  // books its own way — "Psalms" where the store keeps "Psalm". Comparing the
+  // two spellings raw meant the guard below never matched on those books, so
+  // every verse tick wrote the store again.
   let lastFollowedChapter = "";
   $: if (!windowId && $readingPosition) {
-    const key = `${$readingPosition.book}-${$readingPosition.chapter}`;
+    const key = `${normalizeBookName($readingPosition.book)}-${$readingPosition.chapter}`;
     if (key !== lastFollowedChapter) {
       lastFollowedChapter = key;
       followReadingPosition($readingPosition.book, $readingPosition.chapter);
@@ -1130,11 +1134,10 @@
 
   function followReadingPosition(book: string, chapter: number): void {
     if (typeof document !== "undefined" && document.hidden) return;
-    if (currentBook === book && currentChapter === chapter) return;
-    if (normalizeBookName(book) !== normalizeBookName(currentBook)) {
-      navigationStore.setBook(book);
-    }
-    navigationStore.setChapter(chapter);
+    const target = normalizeBookName(book);
+    if (target === normalizeBookName(currentBook) && chapter === currentChapter) return;
+    // One write, even when the book changes — see setBookAndChapter.
+    navigationStore.setBookAndChapter(target, chapter);
   }
 
   // Starting to read reveals the navbar, because that is where the controls now

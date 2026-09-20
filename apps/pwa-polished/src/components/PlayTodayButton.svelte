@@ -43,6 +43,16 @@
   $: voiceSizeMB = getVoiceInfo(voiceId)?.approxSizeMB ?? 64;
   $: isLive = $readingState === 'playing' || $readingState === 'paused';
 
+  /** True when the day runs straight through one book, as the plan links judge it. */
+  function isConsecutiveDay(chapters: Array<{ book: string; chapter: number }>): boolean {
+    if (chapters.length <= 1) return true;
+    for (let i = 1; i < chapters.length; i++) {
+      if (chapters[i].book !== chapters[i - 1].book) return false;
+      if (chapters[i].chapter !== chapters[i - 1].chapter + 1) return false;
+    }
+    return true;
+  }
+
   /**
    * Hand the day to the engine.
    *
@@ -52,6 +62,28 @@
    * later programmatic play is allowed, including handoffs with the screen off.
    */
   function play(playlist: PlanPlaylist): void {
+    // Go to the first passage now, in the tap, rather than waiting for the
+    // engine's first clock tick — synthesis takes a while, and until this the
+    // page sat wherever the user happened to be while the audio loaded.
+    // `false` because the plan paints its own green mark, the same reason the
+    // plan's text links pass it.
+    const first = playlist.passages[0];
+    if (first) {
+      navigationStore.setReadingPlanActiveTarget(
+        first.book,
+        first.chapter,
+        first.startVerse ?? null,
+        isConsecutiveDay(playlist.chapters)
+      );
+      navigationStore.navigateTo(
+        $navigationStore.translation,
+        first.book,
+        first.chapter,
+        first.startVerse ?? null,
+        false
+      );
+    }
+
     beginPlanRun(playlist);
     void startReadingPlaylist($navigationStore.translation, playlist.passages);
     onStarted?.();

@@ -128,16 +128,22 @@ function createNavigationStore() {
     },
     // Stepping to another book or chapter by hand is a deliberate move away, so
     // the mark from the last link goes with it.
-    setBook: (book: string) => {
+    setChapter: (chapter: number) => {
       update(state => {
-        const next = { ...state, book: normalizeBookName(book), chapter: 1, highlightedVerse: null, linkHighlight: null };
+        const next = { ...state, chapter, highlightedVerse: null, linkHighlight: null };
         persistState(next);
         return next;
       });
     },
-    setChapter: (chapter: number) => {
+    // Both at once, for Read Aloud following the audio into a new book.
+    // setBook + setChapter would do it in two writes, and setBook lands on
+    // chapter 1 on the way past — a position that was never real. That wrong
+    // middle state got persisted, and it made the reader's chapter-load block
+    // fire twice for one hop; a cross-book hop is a cold fetch, so the two
+    // loads raced and the page could end up staying on the old book.
+    setBookAndChapter: (book: string, chapter: number) => {
       update(state => {
-        const next = { ...state, chapter, highlightedVerse: null, linkHighlight: null };
+        const next = { ...state, book: normalizeBookName(book), chapter, highlightedVerse: null, linkHighlight: null };
         persistState(next);
         return next;
       });
