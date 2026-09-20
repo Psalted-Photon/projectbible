@@ -53,20 +53,40 @@
    * what mounts the view, and the view renders a pane per entry in that list —
    * telling it first would mount readers for windowIds that do not exist yet.
    */
-  function openHarmony(e: CustomEvent<{ panes: Array<{ book: string; chapter: number }>; label: string; sectionId?: number }>) {
-    const { panes, label, sectionId } = e.detail;
+  function openHarmony(
+    e: CustomEvent<{
+      panes: Array<{ book: string; chapter: number }>;
+      label: string;
+      sectionId?: number;
+      translations?: string[];
+    }>,
+  ) {
+    const { panes, label, sectionId, translations } = e.detail;
     showHarmonyPicker = false;
     if (panes.length === 0) return;
 
-    const translation = $navigationStore.translation;
-    const ids = windowStore.createHarmonyPanes(
-      panes.map(p => ({ ...p, translation })),
-    );
+    // A translation comparison names one per pane; a harmony names none and
+    // every pane takes the reader's own, which is what makes the four Gospels
+    // read in the translation you were already in.
+    const perPane = panes.map((p, i) => ({
+      ...p,
+      translation: translations?.[i] ?? $navigationStore.translation,
+    }));
+
+    const ids = windowStore.createHarmonyPanes(perPane);
 
     windowStore.closeWindow(windowId);
     parallelStore.open(
-      ids.map((paneId, i) => ({ paneId, book: panes[i].book })),
-      { setLabel: label, sectionId },
+      ids.map((paneId, i) => ({
+        paneId,
+        book: perPane[i].book,
+        translation: perPane[i].translation,
+      })),
+      {
+        mode: translations ? 'translations' : 'accounts',
+        setLabel: label,
+        sectionId,
+      },
     );
   }
 

@@ -1,6 +1,13 @@
 <script lang="ts">
   /**
-   * The parallel-accounts view: up to four readers showing the same event.
+   * The parallel view: up to four readers side by side.
+   *
+   * Two things live here, and they differ only in what "lined up" means. In
+   * `accounts` mode the panes are different books telling the same event, and
+   * the engine aligns them through the harmony index. In `translations` mode
+   * they are one book in several renderings, aligned on the verse number
+   * itself. The grid, the panes and the lifetime are identical; the strip and
+   * the arrows are what change.
    *
    * This is not a docking arrangement. The window system puts panels against the
    * screen edges, which in portrait gives you one from the top, one from the
@@ -26,6 +33,7 @@
   import { navigationStore } from '../stores/navigationStore';
   import * as parallelSync from '../lib/parallelSync';
   import { groupById, stepSection } from '../lib/parallelIndex';
+  import { BIBLE_BOOKS, translationLabel } from '../lib/bibleData';
 
   /**
    * Below this width the panes are stacked whatever the user chose.
@@ -42,6 +50,7 @@
 
   $: panes = $parallelStore.panes;
   $: masterId = $parallelStore.masterId;
+  $: comparing = $parallelStore.mode === 'translations';
 
   /**
    * Keep each pane's recorded book in step with the reader inside it.
@@ -61,6 +70,13 @@
   $: for (const w of $windowStore) {
     if (w.edge === 'harmony' && w.contentState?.book) {
       parallelStore.setPaneBook(w.id, w.contentState.book);
+    }
+    // The translation follows the same way and for the same reason: every pane
+    // carries the ordinary navbar chip, so a pane's translation can change at
+    // any moment and the strip's label has to follow the reader rather than
+    // name what it opened in.
+    if (w.edge === 'harmony' && w.contentState?.translation) {
+      parallelStore.setPaneTranslation(w.id, w.contentState.translation);
     }
   }
 
@@ -276,19 +292,53 @@
    * would step from a stale place. Disabled rather than hidden, for the same
    * reason the end-of-harmony arrows are.
    */
-  $: canStep = $parallelStore.anchorOn && section !== null;
+  /**
+   * Where the master is, when comparing translations.
+   *
+   * The engine writes this on the same tick that would otherwise write a
+   * section, so like the section it costs no DOM access here.
+   */
+  $: ref = $parallelStore.currentRef;
+
+  /** How many chapters the book the master is in has, for the arrow bounds. */
+  $: chapterCount = ref
+    ? (BIBLE_BOOKS.find((b) => b.name === ref.book)?.chapters ?? 0)
+    : 0;
+
+  $: canStep = $parallelStore.anchorOn && (comparing ? ref !== null : section !== null);
 
   /**
    * Whether an arrow can go anywhere, worked out from the section rather than
    * attempted and discovered. A disabled arrow is how the ends of the harmony
    * are shown — see the note on stepSection about not wrapping.
    */
-  $: canStepBack = canStep && section !== null && stepSection(section.id, -1) !== null;
-  $: canStepFwd = canStep && section !== null && stepSection(section.id, 1) !== null;
+  $: canStepBack = comparing
+    ? canStep && ref !== null && ref.chapter > 1
+    : canStep && section !== null && stepSection(section.id, -1) !== null;
+  $: canStepFwd = comparing
+    ? canStep && ref !== null && ref.chapter < chapterCount
+    : canStep && section !== null && stepSection(section.id, 1) !== null;
 
   /** What the strip calls where the master is, when it is in a named section. */
   $: sectionLabel = section
     ? `§${section.robertsonSection} · ${section.title ?? ''}`.replace(/ · $/, '')
+    : '';
+
+  /**
+   * What the strip says in translations mode.
+   *
+   * The reference the master is on, not the label the view opened with: the set
+   * label is frozen at "John 3" from the moment the comparison was made, and
+   * the reader scrolls straight out of it. The chapter is the honest answer to
+   * "what am I looking at", and it is the unit the arrows move in.
+   */
+  $: refLabel = ref ? `${ref.book} ${ref.chapter}` : ($parallelStore.setLabel ?? '');
+
+  /** The translations on screen, for the strip, in pane order. */
+  $: comparedLabel = comparing
+    ? panes
+        .map((p) => (p.translation ? translationLabel(p.translation) : '?'))
+        .join(' · ')
     : '';
 
   /**
@@ -302,6 +352,16 @@
     section?.soloRobertson === true ? (section.passages[0]?.book ?? null) : null;
 
   function step(delta: 1 | -1) {
+    if (comparing) {
+      // By chapter, which is the only division a translation comparison's panes
+      // share — a Robertson section means nothing when every pane is the same
+      // text.
+      if (!ref) return;
+      const next = ref.chapter + delta;
+      if (next < 1 || next > chapterCount) return;
+      parallelSync.goToChapter(ref.book, next);
+      return;
+    }
     if (!section) return;
     const next = stepSection(section.id, delta);
     if (next) parallelSync.goToSection(next);
@@ -320,21 +380,28 @@
       class="pv-step"
       on:click={() => step(-1)}
       disabled={!canStepBack}
-      aria-label="Previous section"
-      title="Previous section">‹</button>
+      aria-label={comparing ? 'Previous chapter' : 'Previous section'}
+      title={comparing ? 'Previous chapter' : 'Previous section'}>‹</button>
     <button
       class="pv-step"
       on:click={() => step(1)}
       disabled={!canStepFwd}
-      aria-label="Next section"
-      title="Next section">›</button>
+      aria-label={comparing ? 'Next chapter' : 'Next section'}
+      title={comparing ? 'Next chapter' : 'Next section'}>›</button>
 
-    <span class="pv-set">
-      {$parallelStore.setLabel ?? 'Harmony'}
-      {#if sectionLabel}<span class="pv-section">{sectionLabel}</span>{/if}
-    </span>
+    {#if comparing}
+      <span class="pv-set">
+        {refLabel}
+        {#if comparedLabel}<span class="pv-section">{comparedLabel}</span>{/if}
+      </span>
+    {:else}
+      <span class="pv-set">
+        {$parallelStore.setLabel ?? 'Harmony'}
+        {#if sectionLabel}<span class="pv-section">{sectionLabel}</span>{/if}
+      </span>
+    {/if}
 
-    {#if soloBook}
+    {#if soloBook && !comparing}
       <span class="pv-solo">Only in {soloBook}</span>
     {/if}
     {#if demoted}
@@ -343,7 +410,10 @@
            ignores a choice reads as broken. -->
       <span class="pv-note">Stacked — screen too narrow for columns</span>
     {/if}
-    <button class="pv-close" on:click={closeFromUser} aria-label="Close harmony">✕</button>
+    <button
+      class="pv-close"
+      on:click={closeFromUser}
+      aria-label={comparing ? 'Close comparison' : 'Close harmony'}>✕</button>
   </div>
 
   <div class="pv-grid" style={gridStyle} bind:this={container}>
@@ -359,6 +429,14 @@
         data-parallel-pane={pane.paneId}
       >
         <BibleReader windowId={pane.paneId} />
+        {#if comparing && pane.translation}
+          <!-- Which translation this pane is, without having to read the navbar
+               chip inside it. Only in this mode: in a harmony the panes differ
+               by book, which the reader's own bar already says, and every pane
+               shares one translation so a badge would say the same thing four
+               times. -->
+          <div class="pv-trans">{translationLabel(pane.translation)}</div>
+        {/if}
         {#if pane.dim}
           <div class="pv-dim-label">{dimLabel(pane)}</div>
         {/if}
@@ -505,6 +583,25 @@
     border: 1px solid rgba(74, 158, 201, 0.55);
     pointer-events: none;
     z-index: 5;
+  }
+
+  /* Bottom-right rather than top: the reader's own navbar is along the top of
+     every pane, and a badge there would sit on top of it. */
+  .pv-trans {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    padding: 2px 7px;
+    background: rgba(0, 0, 0, 0.62);
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    color: #9fc6db;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 6;
   }
 
   .pv-dim-label {

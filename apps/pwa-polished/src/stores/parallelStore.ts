@@ -21,9 +21,31 @@ import { writable, get } from 'svelte/store';
 export type ParallelLayout = 'stacked' | 'columns' | 'corners';
 
 /**
+ * What the panes are showing, which decides how they are lined up.
+ *
+ * `accounts` is the harmony: different books telling the same event, aligned by
+ * the parallel index's proportional maths because Matthew's telling and Luke's
+ * are different lengths and there is no verse-to-verse correspondence to use.
+ *
+ * `translations` is one book in several renderings. Every pane holds the same
+ * text, so alignment is not an estimate at all — verse 12 is verse 12 in all of
+ * them — and the engine skips the index entirely. Kept as a mode on the state
+ * rather than inferred from "do all the panes share a book", because that test
+ * would quietly become true in the accounts view the moment a user navigated
+ * two panes to the same Gospel by hand, and the alignment would change under
+ * them without anything having been chosen.
+ */
+export type ParallelMode = 'accounts' | 'translations';
+
+/**
  * Why a pane is dimmed. Kept as a tagged reason rather than a prebuilt string so
  * the strip can phrase it ("No parallel in John") and the engine can compare
  * reasons without string matching.
+ *
+ * In `translations` mode only `not-loaded` can ever arise: every pane is the
+ * same book at the same verse, so there is no such thing as a passage one pane
+ * lacks. The other two are `accounts` reasons and the strip phrases them as
+ * such.
  */
 export type DimReason =
   /** The verse the master is on belongs to no parallel group at all. */
@@ -38,12 +60,24 @@ export interface ParallelPane {
   paneId: string;
   /** Which book this pane is showing the event in. */
   book: string;
+  /**
+   * Which translation this pane opened in, for the strip to label it with.
+   *
+   * A label only. The reader's own translation lives in its window state, which
+   * is what it renders from and what its chip writes — this is a copy kept in
+   * step by setPaneTranslation, exactly as `book` is by setPaneBook, so the
+   * strip can name four panes without subscribing to the window store and
+   * re-rendering on every scroll write.
+   */
+  translation: string | null;
   dim: boolean;
   dimReason: DimReason | null;
 }
 
 export interface ParallelState {
   active: boolean;
+  /** Books side by side, or one book in several translations. */
+  mode: ParallelMode;
   layout: ParallelLayout;
   /** The paneId driving the others. Always one of `panes`. */
   masterId: string | null;
@@ -65,6 +99,16 @@ export interface ParallelState {
    * DOM again.
    */
   currentSectionId: number | null;
+  /**
+   * Where the master is, in `translations` mode, for the strip to name.
+   *
+   * The accounts strip names a Robertson section, which is the unit a harmony
+   * moves in. A translation comparison has no such unit — every pane is the
+   * same passage — so what there is to say is simply the reference, and the
+   * engine writes it here on the same tick that would otherwise have written a
+   * section. Null in accounts mode, where currentSectionId is the answer.
+   */
+  currentRef: { book: string; chapter: number; verse: number } | null;
   /** What the strip calls this set, e.g. "Gospels". */
   setLabel: string | null;
   /**
@@ -83,12 +127,14 @@ export interface ParallelState {
 
 const EMPTY: ParallelState = {
   active: false,
+  mode: 'accounts',
   layout: 'stacked',
   masterId: null,
   anchorOn: true,
   panes: [],
   currentGroupId: null,
   currentSectionId: null,
+  currentRef: null,
   setLabel: null,
   openSectionId: null,
 };
@@ -106,17 +152,30 @@ function createParallelStore() {
      * below it is what the layout already implies.
      */
     open: (
-      panes: Array<{ paneId: string; book: string }>,
-      opts: { layout?: ParallelLayout; setLabel?: string; sectionId?: number } = {},
+      panes: Array<{ paneId: string; book: string; translation?: string }>,
+      opts: {
+        mode?: ParallelMode;
+        layout?: ParallelLayout;
+        setLabel?: string;
+        sectionId?: number;
+      } = {},
     ) => {
       set({
         active: true,
+        mode: opts.mode ?? 'accounts',
         layout: opts.layout ?? 'stacked',
         masterId: panes[0]?.paneId ?? null,
         anchorOn: true,
-        panes: panes.map((p) => ({ ...p, dim: false, dimReason: null })),
+        panes: panes.map((p) => ({
+          paneId: p.paneId,
+          book: p.book,
+          translation: p.translation ?? null,
+          dim: false,
+          dimReason: null,
+        })),
         currentGroupId: null,
         currentSectionId: null,
+        currentRef: null,
         setLabel: opts.setLabel ?? null,
         openSectionId: opts.sectionId ?? null,
       });
@@ -199,12 +258,55 @@ function createParallelStore() {
         };
       }),
 
+    /**
+     * Which translation a pane is showing, after the user changes its chip.
+     *
+     * Every pane carries the ordinary navbar, chip included, so a translation
+     * can change at any moment in either mode — the label has to follow it or
+     * the strip would name the translation the pane opened in rather than the
+     * one on screen. Bails when unchanged, for the same reason setDim does:
+     * this is driven from a reactive block that runs on every window-state
+     * write, which is every scroll.
+     */
+    setPaneTranslation: (paneId: string, translation: string) =>
+      update((s) => {
+        const pane = s.panes.find((p) => p.paneId === paneId);
+        if (!pane || pane.translation === translation) return s;
+        return {
+          ...s,
+          panes: s.panes.map((p) =>
+            p.paneId === paneId ? { ...p, translation } : p,
+          ),
+        };
+      }),
+
     setCurrentGroup: (id: number | null) =>
       update((s) => (s.currentGroupId === id ? s : { ...s, currentGroupId: id })),
 
     /** Bails when unchanged, for the same reason setDim does. */
     setCurrentSection: (id: number | null) =>
       update((s) => (s.currentSectionId === id ? s : { ...s, currentSectionId: id })),
+
+    /**
+     * Where the master is, in translations mode. Compared field by field rather
+     * than by identity, because the engine builds a fresh object every tick and
+     * an identity check would notify on every scroll for an unchanged verse.
+     */
+    setCurrentRef: (ref: { book: string; chapter: number; verse: number } | null) =>
+      update((s) => {
+        const cur = s.currentRef;
+        if (cur === ref) return s;
+        if (
+          cur &&
+          ref &&
+          cur.book === ref.book &&
+          cur.chapter === ref.chapter &&
+          cur.verse === ref.verse
+        ) {
+          return s;
+        }
+        return { ...s, currentRef: ref };
+      }),
 
     /** Read without subscribing — what the engine does on every tick. */
     snapshot: (): ParallelState => get({ subscribe }),

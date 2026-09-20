@@ -389,6 +389,36 @@ export function freezeFollowers(): void {
   // was switched off, and the strip would go on naming that section however far
   // the master was afterwards scrolled away from it.
   parallelStore.setCurrentSection(null);
+  // The same argument for the translations strip's reference, which is the
+  // thing it names instead of a section.
+  parallelStore.setCurrentRef(null);
+}
+
+/**
+ * Move a translation comparison to a chapter.
+ *
+ * The harmony's arrows step by Robertson section, which is the unit an event
+ * lives in. A translation comparison has no such unit — every pane is the same
+ * text — so the arrows step by chapter, which is the only division the panes
+ * actually share.
+ *
+ * Like goToSection, only the master is moved and the followers arrive through
+ * the ordinary tick. The master lands at verse 1 rather than keeping its place
+ * in the old chapter, because a chapter step is a request to be at the start of
+ * the next one.
+ */
+export function goToChapter(book: string, chapter: number): void {
+  const state = parallelStore.snapshot();
+  const masterId = state.masterId;
+  if (!masterId) return;
+
+  parallelStore.setPaneBook(masterId, book);
+  for (const pane of state.panes) runtimeFor(pane.paneId).aimedAt = null;
+
+  // Set now rather than on the master's scroll report, so pressing next twice
+  // quickly steps two chapters instead of aiming at the same one twice.
+  parallelStore.setCurrentRef({ book, chapter, verse: 1 });
+  moveMasterTo(masterId, book, chapter, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -398,6 +428,11 @@ export function freezeFollowers(): void {
 function tick(book: string, chapter: number, verse: number): void {
   const state = parallelStore.snapshot();
   if (!state.active || !state.anchorOn || !container) return;
+
+  if (state.mode === 'translations') {
+    tickTranslations(state, book, chapter, verse);
+    return;
+  }
 
   const group = bestParallel(book, chapter, verse);
   parallelStore.setCurrentGroup(group?.id ?? null);
@@ -424,6 +459,79 @@ function tick(book: string, chapter: number, verse: number): void {
 
     driveFollower(group, pane.paneId, pane.book, book, chapter, verse);
   }
+}
+
+/**
+ * The tick for a translation comparison, where alignment is exact.
+ *
+ * Nothing here consults the parallel index, and that is the whole point rather
+ * than an optimisation. Every pane holds the same book, so `bestParallel` would
+ * return the group covering the master's own verse and `passageFor` would find
+ * that same group's passage for the follower — which would aim it at the
+ * passage's *start* by the proportional maths, not at the verse the master is
+ * actually on. Worse, outside the Gospels and the Kings/Chronicles overlap
+ * there are no groups at all, so every follower would dim "No parallel here"
+ * for most of the Bible. The index answers "where does Luke tell this?"; here
+ * the answer is known without asking.
+ *
+ * The section and group are cleared rather than left: they belong to the
+ * harmony strip, and a stale section name under a translation comparison would
+ * claim the arrows step somewhere they do not.
+ */
+function tickTranslations(
+  state: ReturnType<typeof parallelStore.snapshot>,
+  book: string,
+  chapter: number,
+  verse: number,
+): void {
+  parallelStore.setCurrentGroup(null);
+  parallelStore.setCurrentSection(null);
+  parallelStore.setCurrentRef({ book, chapter, verse });
+
+  for (const pane of state.panes) {
+    if (pane.paneId === state.masterId) continue;
+    // The user's hand wins here exactly as it does in the harmony tick.
+    if (Date.now() - runtimeFor(pane.paneId).touchedAt < GRACE_MS) continue;
+    driveTranslationFollower(pane.paneId, book, chapter, verse);
+  }
+}
+
+/**
+ * One follower, at the master's own reference.
+ *
+ * A follower is never dimmed for "not here": the same verse exists in every
+ * translation of the same book, so the only thing that can go wrong is the
+ * chapter not being loaded yet, which awaitChapter reports for itself.
+ *
+ * The book is taken from the master rather than from the pane's own record. In
+ * this mode the panes are meant to be the same book throughout, and a follower
+ * whose book has drifted — the user navigated it by hand with the anchor off,
+ * then switched the anchor back on — should be brought back to what the master
+ * is reading rather than left showing a different book at a matching verse
+ * number, which would look aligned and be nonsense.
+ */
+function driveTranslationFollower(
+  paneId: string,
+  book: string,
+  chapter: number,
+  verse: number,
+): void {
+  parallelStore.setDim(paneId, false);
+
+  const rt = runtimeFor(paneId);
+  const aim = `${book}|${chapter}|${verse}`;
+  if (rt.aimedAt === aim) return;
+  rt.aimedAt = aim;
+
+  const el = verseElement(paneId, book, chapter, verse);
+  if (el) {
+    rt.cancelPendingLoad?.();
+    rt.cancelPendingLoad = null;
+    moveTo(paneId, el);
+    return;
+  }
+
+  awaitChapter(paneId, book, chapter, verse);
 }
 
 /**
