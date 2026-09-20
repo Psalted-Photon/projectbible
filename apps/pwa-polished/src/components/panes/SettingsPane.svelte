@@ -17,6 +17,8 @@
   import FontField from "../FontField.svelte";
   import { contrastRatio, isLowContrast, isValidHex, redLetterFor } from "../../lib/themeColors";
   import { tutorial } from "../../tutorial/state";
+  import { isInstalledApp, isIOS, isPhoneOrTablet } from "../../lib/device";
+  import { canInstall, promptInstall } from "../../lib/installPrompt";
   import { journalLock, getRelockAfterMs, setRelockAfterMs, RELOCK_OPTIONS } from "../../lib/journalLock/lockState";
   import { userProfileStore } from "../../stores/userProfileStore";
   import JournalLockManage from "../JournalLockManage.svelte";
@@ -502,6 +504,39 @@
     paneStore.openPane("wakealarm", "right");
   }
 
+  /**
+   * "Install app". The tutorial offers this too, but the tour runs once and
+   * someone who said no then has nowhere else to look, so the real home for it
+   * is here.
+   *
+   * Three states. Installed already: greyed out, and it says so. Chrome has
+   * handed us its install event: one tap. Anything else -- Safari always, since
+   * iOS has no install API at all -- is instructions, because there is nothing
+   * to call.
+   */
+  let installedApp = isInstalledApp();
+  $: installReady = $canInstall && !installedApp;
+  $: installHint = installedApp
+    ? "Hexapla is installed on this device."
+    : installReady
+      ? "Opens full screen, with no browser bar, and still works with no signal."
+      : isIOS()
+        ? "Tap the Share button at the bottom of Safari, then Add to Home Screen."
+        : isPhoneOrTablet()
+          ? "Open your browser’s menu, then tap Install app or Add to Home screen."
+          : "Your browser has not offered to install Hexapla. Look for an install icon in its address bar.";
+
+  async function installApp() {
+    if (!installReady) return;
+    const outcome = await promptInstall();
+    if (outcome === "accepted") {
+      // The installed window is a separate launch; this tab stays a tab. Recheck
+      // rather than assume, so the row tells the truth either way.
+      installedApp = isInstalledApp();
+      showNotice("Hexapla is on your home screen.");
+    }
+  }
+
   // Every setting in the pane, listed so Svelte re-runs this on any change:
   // apply it to the page straight away, then write it in the background.
   $: {
@@ -871,6 +906,20 @@
 
   <SettingsSection title="General" summary={generalSummary} bind:open={openSections.general}>
     <span slot="icon"><Globe size={16} weight="bold" /></span>
+
+    <!-- On the home screen. Greyed out once it is installed, since there is
+         nothing left to do, and the hint below says which state this is. -->
+    <div class="setting-group">
+      <button
+        class="packs-button install-button"
+        on:click={installApp}
+        disabled={!installReady}
+      >
+        <span class="icon emoji">{installedApp ? "✅" : "⬇️"}</span>
+        <span class="text">{installedApp ? "App installed" : "Install app"}</span>
+      </button>
+      <p class="install-hint">{installHint}</p>
+    </div>
 
     <!-- Tutorial Mode keeps its own on/off (tutorial/state.ts), outside the
          settings payload, so it never syncs between devices. -->
@@ -1310,6 +1359,30 @@
   .packs-button:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  }
+
+  /* Manage Packs' affordance, minus the arrow: this one acts here rather than
+     opening anything. Greyed out when there is nothing to tap. */
+  .install-button {
+    font-size: 0.9rem;
+  }
+
+  .install-button:disabled {
+    opacity: 0.5;
+    cursor: default;
+    box-shadow: none;
+  }
+
+  .install-button:disabled:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .install-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: #999;
   }
 
   /* Same affordance as Manage Packs, but sitting inside the Read Aloud group. */
