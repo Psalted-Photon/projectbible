@@ -122,6 +122,6 @@ export const NAVBAR_TIPS: Tip[] = [
     area,
     target: '.pill-profile',
     title: 'Your account',
-    body: 'Sign in to keep notes, highlights, your journal and plans in step across devices. Entirely optional.',
+    body: 'Your highlights, notes and plans on every device, a journal locked behind your fingerprint, and notebooks you can share. Free, and takes a minute.',
   },
 ];

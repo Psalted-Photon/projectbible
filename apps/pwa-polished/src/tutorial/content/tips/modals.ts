@@ -112,7 +112,7 @@ export const MODAL_TIPS: Tip[] = [
     text: 'Sign in',
     exact: true,
     title: 'Sign in',
-    body: 'An account keeps your notes, highlights, journal and plans safe, and the same on every device.',
+    body: 'Everything you have marked, written and planned, waiting on whichever device you pick up.',
   },
   {
     id: 'profile-create-account',
@@ -121,7 +121,7 @@ export const MODAL_TIPS: Tip[] = [
     text: 'Create Account',
     exact: true,
     title: 'New here?',
-    body: 'Make an account with your email address.',
+    body: 'Sync every device, lock your journal behind a fingerprint, share plans and notebooks. Free, and takes a minute.',
   },
   {
     id: 'profile-tabs',
