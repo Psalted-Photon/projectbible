@@ -49,9 +49,9 @@ export const MAP_TIPS: Tip[] = [
     id: 'map-timeline',
     area,
     target: '.atlas .nav .btn',
-    text: 'Timeline',
+    text: 'Eras',
     exact: true,
-    title: 'Timeline',
+    title: 'Eras',
     body: 'Sixteen eras, from Abraham leaving Ur to the later Roman empire, drawn over the map.',
   },
   {

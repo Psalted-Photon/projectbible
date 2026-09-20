@@ -79,6 +79,7 @@ export type CrumbKind =
   | 'history'
   | 'plan'
   | 'map'
+  | 'timeline'
   | 'link';
 
 /**

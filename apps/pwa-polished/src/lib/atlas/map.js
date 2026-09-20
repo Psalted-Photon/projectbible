@@ -29,7 +29,7 @@ import L from 'leaflet';
 // those elements itself, out of reach of any host component's styling, and
 // because both maps draw names — the docked one and the bare one.
 import './labels.css';
-import { OverlayHost, TimelineOverlay, JourneysOverlay } from './overlays.js';
+import { OverlayHost, ErasOverlay, JourneysOverlay } from './overlays.js';
 import { LabelEngine } from './labels.js';
 import { BiblicalPlaces, haversine, bookName, miles } from './places.js';
 import { Paper } from './paper.js';
@@ -1343,7 +1343,7 @@ export function createAtlasMap(container, options = {}) {
       const i = index.eras.findIndex((e) => e.id === era.id);
       if (i >= 0 && i !== timeline.index) {
         if (!timeline.enabled) {
-          await host.setEnabled('timeline', true);
+          await host.setEnabled('eras', true);
           emit.layers();
         }
         await timeline.setEra(i);
@@ -1474,7 +1474,7 @@ export function createAtlasMap(container, options = {}) {
     }
 
     const overlayPlaces = await getJson(index.overlayPlaces.file);
-    timeline = host.register(new TimelineOverlay({ eras: index.eras, places: overlayPlaces }));
+    timeline = host.register(new ErasOverlay({ eras: index.eras, places: overlayPlaces }));
     timeline.onEraChange = (era) => emit.era(era);
 
     // Journeys, registered beside the timeline and independent of it: they do not

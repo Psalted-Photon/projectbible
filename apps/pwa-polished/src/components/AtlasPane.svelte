@@ -402,7 +402,7 @@
   }
 
   async function toggleTimeline() {
-    await atlas?.setOverlayEnabled('timeline', !timelineOn);
+    await atlas?.setOverlayEnabled('eras', !timelineOn);
     timelineOn = Boolean(atlas?.timeline?.enabled);
     era = atlas?.timeline?.era ?? null;
     eraIndex = atlas?.timeline?.index ?? 0;
@@ -713,9 +713,10 @@
         <span class="btn-label">Layers</span>
       </button>
 
-      <button class="btn" class:on={timelineOn} title="Show the historical timeline" on:click={toggleTimeline}>
+      <!-- Eras, not Timeline: the word belongs to the Timeline window now. -->
+      <button class="btn" class:on={timelineOn} title="Show the historical eras" on:click={toggleTimeline}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
-        <span class="btn-label">Timeline</span>
+        <span class="btn-label">Eras</span>
       </button>
 
       <!-- The overlay's fade lives with the control that turns it on, so the

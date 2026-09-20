@@ -17,16 +17,17 @@
    * tile that does not fill this window. Kept in the same union so the tile grid
    * stays one list, and separated out at the top of handleContentSelect.
    */
-  type ContentType = 'bible' | 'map' | 'notes' | 'isbe' | 'person' | 'naves' | 'commentaries' | 'journal' | 'art' | 'harmony';
+  type ContentType = 'bible' | 'map' | 'timeline' | 'notes' | 'isbe' | 'person' | 'naves' | 'commentaries' | 'journal' | 'art' | 'harmony';
 
   /**
-   * The ten tiles. Accents are borrowed from colors the app already uses — the
+   * The eleven tiles. Accents are borrowed from colors the app already uses — the
    * book-category ramp in bibleData.ts and the nav bar's badge palette — so the
    * picker reads as part of the same app rather than a new color scheme.
    */
   const TILES: { type: ContentType; icon: PanelIconName; label: string; accent: string }[] = [
     { type: 'bible',        icon: 'bible',        label: 'Bible',        accent: '#a67c52' },
     { type: 'map',          icon: 'map',          label: 'Map',          accent: '#61f1ff' },
+    { type: 'timeline',     icon: 'timeline',     label: 'Timeline',     accent: '#f0c040' },
     { type: 'commentaries', icon: 'commentary',   label: 'Commentary',   accent: '#a3e635' },
     { type: 'notes',        icon: 'notes',        label: 'Notes',        accent: '#fde047' },
     { type: 'journal',      icon: 'journal',      label: 'Journal',      accent: '#f2893e' },

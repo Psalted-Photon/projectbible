@@ -14,7 +14,6 @@
  *   place_verses ........................ packs/maps-enhanced.sqlite
  *   places (12,606 duplicate rows) ...... packs/maps-enhanced.sqlite
  *   pleiades_locations / pleiades_names   packs/pleiades.sqlite
- *   eras / events ....................... packs/chronological.sqlite
  *   cross_references (760,343 rows) ..... packs/cross-references.sqlite
  *   place_name_links .................... packs/places-biblical.sqlite
  *   map_tiles (0 rows) .................. packs/maps.sqlite
@@ -308,10 +307,10 @@ console.log('\n   Merging Pleiades...');
 mergePleiades('packs/pleiades.sqlite');
 console.log(`      ✅ Complete`);
 
-// 5. Chronological reading order. eras/events are not imported by the app;
-//    they stay in packs/chronological.sqlite.
+// 5. Chronological reading order, plus the eras and events the Timeline
+//    window labels them with.
 console.log('\n   Merging chronological data...');
-copyTables('packs/chronological.sqlite', 'Chronological', ['chronological_verses']);
+copyTables('packs/chronological.sqlite', 'Chronological', ['chronological_verses', 'events', 'eras']);
 console.log(`      ✅ Complete`);
 
 // Optimize

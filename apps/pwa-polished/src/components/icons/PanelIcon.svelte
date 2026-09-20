@@ -1,6 +1,6 @@
 <script lang="ts" context="module">
   export type PanelIconName =
-    | 'bible' | 'map' | 'commentary' | 'notes' | 'journal'
+    | 'bible' | 'map' | 'timeline' | 'commentary' | 'notes' | 'journal'
     | 'encyclopedia' | 'topical' | 'people' | 'art' | 'harmony';
 
   /**
@@ -9,7 +9,7 @@
    * the library panes: no fills, stroke only, round caps and joins, so a single
    * drawing carries both the dark halo and the white line (see the markup).
    *
-   * The nine have to stay legible at 20px and, more importantly, tell each other
+   * The eleven have to stay legible at 20px and, more importantly, tell each other
    * apart at 20px — hence three different book silhouettes rather than three
    * books: the Bible is open and spread, the journal is closed and clasped, the
    * encyclopedia is a shelf of volumes.
@@ -30,6 +30,19 @@
       'M15 6.4V20',
       'M12 13.4c1.5-1.9 2.4-3.1 2.4-4.2a2.4 2.4 0 10-4.8 0c0 1.1.9 2.3 2.4 4.2z',
       'M13.1 9.4a1.1 1.1 0 11-2.2 0 1.1 1.1 0 012.2 0z',
+    ],
+    // A ruled vertical axis with three events marked off it — the drawing
+    // is of the window, not a clock, so it cannot be read as an alarm.
+    timeline: [
+      'M7 3.4v17.2',
+      'M4.6 3.4h4.8',
+      'M4.6 20.6h4.8',
+      'M9.4 7.4a1.6 1.6 0 11-3.2 0 1.6 1.6 0 013.2 0z',
+      'M9.4 12a1.6 1.6 0 11-3.2 0 1.6 1.6 0 013.2 0z',
+      'M9.4 16.6a1.6 1.6 0 11-3.2 0 1.6 1.6 0 013.2 0z',
+      'M11.4 7.4h7.8',
+      'M11.4 12h6',
+      'M11.4 16.6h7',
     ],
     // Scroll: rolled bars top and bottom, two rules of text between them.
     commentary: [

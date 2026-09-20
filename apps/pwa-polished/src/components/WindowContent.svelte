@@ -5,6 +5,8 @@
   import BibleReader from "./BibleReader.svelte";
   // The map window's contents.
   import AtlasPane from "./AtlasPane.svelte";
+  // The timeline window's contents.
+  import TimelinePane from "./TimelinePane.svelte";
   import CommentaryReader from "./CommentaryReader.svelte";
   import JournalWriter from "./JournalWriter.svelte";
   import JournalLockScreen from "./JournalLockScreen.svelte";
@@ -34,6 +36,8 @@
   <BibleReader windowId={panel.id} />
 {:else if panel.contentType === 'map'}
   <AtlasPane windowId={panel.id} />
+{:else if panel.contentType === 'timeline'}
+  <TimelinePane windowId={panel.id} />
 {:else if panel.contentType === 'commentaries'}
   <CommentaryReader windowId={panel.id} />
 {:else if panel.contentType === 'journal'}

@@ -265,7 +265,8 @@ export async function removePack(packId: string): Promise<void> {
 
   } else if (packType === 'study') {
     const studyStores = [
-      'chronological_order', 'places', 'pleiades_places', 'pleiades_names',
+      'chronological_order', 'chronological_events', 'chronological_eras',
+      'places', 'pleiades_places', 'pleiades_names',
       'pleiades_locations', 'openbible_locations', 'openbible_places',
       'openbible_identifications', 'place_name_links', 'historical_layers', 'map_tiles'
     ] as const;

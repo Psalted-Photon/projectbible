@@ -67,6 +67,7 @@
     CaretUp,
     CaretRight,
     Graph,
+    Hourglass,
     ChatText,
     MagnifyingGlass,
     Microscope,
@@ -723,6 +724,7 @@
     history: ClockCounterClockwise,
     plan: BookOpenText,
     map: MapTrifold,
+    timeline: Hourglass,
     link: Graph,
   };
 

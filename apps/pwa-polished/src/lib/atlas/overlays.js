@@ -192,14 +192,18 @@ function landsIn(geojson) {
 const isWaterBody = (kind) => /water|sea|river|lake/i.test(kind || '');
 
 /**
- * The timeline overlay: a complete historical map for each era.
+ * The eras overlay: a complete historical map for each era.
  *
  * It carries its own coastlines and lettering rather than borrowing the
  * basemap's, which is what lets it stand alone when the basemap is faded out.
+ *
+ * Called the timeline until the Timeline window was built. The word now
+ * means that window and nothing else, so this is Eras — which is what the
+ * slider has always actually been.
  */
-export class TimelineOverlay extends BaseOverlay {
+export class ErasOverlay extends BaseOverlay {
   constructor({ eras, places }) {
-    super({ id: 'timeline', title: 'Historical timeline', colour: '#8c4a3f' });
+    super({ id: 'eras', title: 'Historical eras', colour: '#8c4a3f' });
     this.eras = eras;
     this.places = places;
     this.index = 0;

@@ -2465,8 +2465,9 @@ export async function importPackFromBytes(
         const orderCol = chronoColNames.includes('chrono_index') ? 'chrono_index' : 'order_index';
         const hasEra = chronoColNames.includes('era');
         const hasYear = chronoColNames.includes('timestamp_year');
+        const hasEvent = chronoColNames.includes('event_id');
         const rows = db.exec(`
-          SELECT book, chapter, verse, ${orderCol}${hasEra ? ', era' : ''}${hasYear ? ', timestamp_year' : ''}
+          SELECT book, chapter, verse, ${orderCol}${hasEra ? ', era' : ''}${hasYear ? ', timestamp_year' : ''}${hasEvent ? ', event_id' : ''}
           FROM ${chronoTable}
         `);
         
@@ -2476,6 +2477,8 @@ export async function importPackFromBytes(
             let i = 4;
             const era = hasEra ? (row[i++] as string | null) : null;
             const year = hasYear ? (row[i++] as number | null) : null;
+            // The link the Timeline needs: which of the forty events this verse belongs to.
+            const eventId = hasEvent ? (row[i++] as string | null) : null;
             return {
               // The store's key path. Without it nothing is written at all.
               sequence: order as number,
@@ -2486,6 +2489,7 @@ export async function importPackFromBytes(
               order_index: order as number,
               era,
               year,
+              event_id: eventId,
             };
           });
           
@@ -2497,6 +2501,43 @@ export async function importPackFromBytes(
             console.log(`Imported ${Math.min(i + CHUNK_SIZE, data.length)}/${data.length} chronological entries`);
           }
           console.log(`✅ Chronological ordering imported: ${data.length} entries`);
+        }
+      }
+
+      // The names behind those ids: forty events and twelve eras. Both are
+      // guarded, so a study pack built before the Timeline still imports.
+      if (tableNames.includes('events')) {
+        const eventRows = db.exec('SELECT event_id, name, year_start, year_end, era, description FROM events');
+        if (eventRows.length && eventRows[0].values.length) {
+          const events = eventRows[0].values.map((row: any[]) => ({
+            event_id: row[0] as string,
+            name: row[1] as string,
+            year_start: row[2] as number | null,
+            year_end: row[3] as number | null,
+            era: row[4] as string | null,
+            description: row[5] as string | null,
+          }));
+          await batchWriteTransaction('chronological_events', (store) => {
+            events.forEach(entry => store.put(entry));
+          });
+          console.log(`✅ Chronological events imported: ${events.length}`);
+        }
+      }
+
+      if (tableNames.includes('eras')) {
+        const eraRows = db.exec('SELECT era_id, name, year_start, year_end, description FROM eras');
+        if (eraRows.length && eraRows[0].values.length) {
+          const eras = eraRows[0].values.map((row: any[]) => ({
+            era_id: row[0] as string,
+            name: row[1] as string,
+            year_start: row[2] as number | null,
+            year_end: row[3] as number | null,
+            description: row[4] as string | null,
+          }));
+          await batchWriteTransaction('chronological_eras', (store) => {
+            eras.forEach(entry => store.put(entry));
+          });
+          console.log(`✅ Chronological eras imported: ${eras.length}`);
         }
       }
       

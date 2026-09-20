@@ -15,7 +15,7 @@ import { getDeviceOwner } from '../lib/sync/deviceOwner';
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 39; // Migration 39: the three journey stores (see atlas_journeys)
+const DB_VERSION = 40; // Migration 40: chronological_events / chronological_eras (see Timeline)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -1026,6 +1026,16 @@ export function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('chronological_order')) {
         const chronoStore = db.createObjectStore('chronological_order', { keyPath: 'sequence' });
         chronoStore.createIndex('book', 'book', { unique: false });
+      }
+
+      // The forty events and twelve eras the Timeline window labels the
+      // chronological order with. Both are tiny; both arrive with the study pack.
+      if (!db.objectStoreNames.contains('chronological_events')) {
+        const eventStore = db.createObjectStore('chronological_events', { keyPath: 'event_id' });
+        eventStore.createIndex('era', 'era', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('chronological_eras')) {
+        db.createObjectStore('chronological_eras', { keyPath: 'era_id' });
       }
       
       // Word occurrences store
