@@ -99,3 +99,6 @@ apps/pwa-polished/public/starter.sqlite
 # Local env files. Public build settings live in apps/pwa-polished/.env, which is
 # committed; anything secret goes in a .local file so it never reaches git.
 .env*.local
+
+# Generated email previews (source of truth is supabase/email-templates)
+.email-preview/

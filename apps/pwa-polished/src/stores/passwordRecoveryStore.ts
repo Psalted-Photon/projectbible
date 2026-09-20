@@ -54,12 +54,19 @@ try {
       'That email link has expired or was already used. If it was a password reset, tap "Forgot password?" to get a new one.',
     );
     profileModalStore.open();
-    for (const key of ['error', 'error_code', 'error_description']) query.delete(key);
+    // Both halves have to be rebuilt. This used to write back the query alone,
+    // which left an error that arrived in the hash sitting in the address bar
+    // (and threw away anything else the hash was carrying).
+    for (const key of ['error', 'error_code', 'error_description']) {
+      query.delete(key);
+      hash.delete(key);
+    }
     const rest = query.toString();
+    const restHash = hash.toString();
     window.history.replaceState(
       window.history.state,
       '',
-      window.location.pathname + (rest ? `?${rest}` : ''),
+      window.location.pathname + (rest ? `?${rest}` : '') + (restHash ? `#${restHash}` : ''),
     );
   }
 } catch {

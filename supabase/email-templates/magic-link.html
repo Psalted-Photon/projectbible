@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="supported-color-schemes" content="dark" />
+    <title>Your Hexapla sign-in link</title>
+    <!--[if mso]>
+      <style>body, table, td { font-family: Georgia, serif !important; }</style>
+    <![endif]-->
+  </head>
+  <body style="margin:0; padding:0; background-color:#0e0e10; color:#ffffff;">
+    <!-- Preheader: the grey line the inbox shows next to the subject. -->
+    <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent; height:0; width:0;">
+      One tap signs you in. This link lasts one hour.
+    </div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0e0e10; margin:0; padding:0;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px; background-color:#1c1c1e; border:1px solid rgba(255,255,255,0.10); border-radius:16px; overflow:hidden;">
+
+            <!-- Wordmark -->
+            <tr>
+              <td align="center" style="padding:28px 24px 20px; border-bottom:1px solid rgba(255,255,255,0.07);">
+                <img src="https://hexapla.app/pb-gem.png" width="44" height="44" alt="" style="display:block; border:0; margin:0 auto 10px;" />
+                <img src="https://hexapla.app/email/hexapla-wordmark.png"
+                     width="190" height="60" alt="Hexapla"
+                     style="display:block; border:0; margin:0 auto; width:190px; height:60px; max-width:100%;" />
+              </td>
+            </tr>
+
+            <!-- Greeting -->
+            <tr>
+              <td style="padding:24px 24px 0; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+                <p style="margin:0 0 12px; font-size:19px; font-weight:700; color:rgba(255,255,255,0.92);">
+                  Your sign-in link
+                </p>
+                <p style="margin:0; font-size:15px; line-height:1.6; color:rgba(255,255,255,0.62);">
+                  Open this and you're signed in &mdash; no password needed. The link works once,
+                  and lasts an hour.
+                </p>
+              </td>
+            </tr>
+
+            <!-- Button -->
+            <tr>
+              <td align="center" style="padding:24px 24px 8px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td align="center" bgcolor="#e6b84a" style="border-radius:8px;">
+                      <a href="{{ .ConfirmationURL }}"
+                         style="display:inline-block; padding:13px 28px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:15px; font-weight:700; color:#111111; text-decoration:none; border-radius:8px;">
+                        Sign me in
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Paste-able fallback -->
+            <tr>
+              <td style="padding:8px 24px 0; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+                <p style="margin:0 0 6px; font-size:12px; color:rgba(255,255,255,0.38);">
+                  Button not working? Paste this into your browser:
+                </p>
+                <p style="margin:0; font-size:12px; line-height:1.5; word-break:break-all;">
+                  <a href="{{ .ConfirmationURL }}" style="color:rgba(230,184,74,0.75); text-decoration:none;">{{ .ConfirmationURL }}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Verse -->
+            <tr>
+              <td style="padding:22px 24px 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#231f16; border:1px solid rgba(255,255,255,0.06); border-radius:12px;">
+                  <tr>
+                    <td style="padding:18px 18px 14px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+                      <div style="font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#e6b84a; padding-bottom:10px;">
+                        Psalm 119:105
+                      </div>
+                      <p style="margin:0; font-size:16px; line-height:1.75; font-style:italic; color:rgba(255,255,255,0.85);">
+                        Your word is a lamp to walk by, and a light to illumine my path.
+                      </p>
+                      <div style="padding-top:10px; font-size:12px; color:rgba(255,255,255,0.35);">
+                        (<a href="https://netbible.org" style="color:rgba(230,184,74,0.75); text-decoration:none;">NET</a>)
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding:22px 24px 26px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+                <p style="margin:0 0 12px; font-size:12px; line-height:1.55; color:rgba(255,255,255,0.33); border-top:1px solid rgba(255,255,255,0.07); padding-top:16px;">
+                  Didn't ask for this? You can ignore this email &mdash; nobody is signed in
+                  unless this link is opened.
+                </p>
+                <p style="margin:0; font-size:11px; line-height:1.55; color:rgba(255,255,255,0.26);">
+                  Scripture quoted by permission. Quotations designated (NET) are from the
+                  <a href="https://netbible.org" style="color:rgba(255,255,255,0.4); text-decoration:none;">NET Bible&reg;</a>
+                  copyright &copy;1996, 2019 by Biblical Studies Press, L.L.C. All rights reserved.
+                </p>
+              </td>
+            </tr>
+
+          </table>
+
+          <div style="max-width:480px; padding:16px 8px 0; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:11px; color:rgba(255,255,255,0.22); text-align:center;">
+            Hexapla &middot; hexapla.app
+          </div>
+
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

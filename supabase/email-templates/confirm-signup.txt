@@ -1,0 +1,24 @@
+Hexapla
+
+ONE TAP AND YOU'RE IN
+
+Thank you for joining. Confirm your address and everything you mark, note or
+write is yours across every device you sign in on.
+
+Confirm your account:
+{{ .ConfirmationURL }}
+
+  Hebrews 4:12
+  "For the word of God is living and active and sharper than any double-edged
+  sword, piercing even to the point of dividing soul from spirit, and joints
+  from marrow; it is able to judge the desires and thoughts of the heart."
+  (NET) https://netbible.org
+
+Didn't sign up? You can ignore this email - nothing was created without this
+link being opened.
+
+Scripture quoted by permission. Quotations designated (NET) are from the NET
+Bible(R) copyright (C)1996, 2019 by Biblical Studies Press, L.L.C. All rights
+reserved.
+
+Hexapla - hexapla.app

@@ -29,13 +29,21 @@
   type TabKey = 'reading' | 'notes' | 'journal' | 'settings';
   let currentTab: TabKey = 'reading';
 
-  let authMode: 'login' | 'signup' | 'forgot' = 'login';
+  let authMode: 'login' | 'signup' | 'forgot' | 'sent' = 'login';
   let authEmail = '';
   let authPassword = '';
   let authPasswordConfirm = '';
   let authName = '';
   let authMessage = '';
   let authError = '';
+  let authBusy = false;
+  /** The address the confirmation went to — shown back on the "check your email" screen. */
+  let sentToEmail = '';
+  /** Seconds left before "Send it again" is allowed. Supabase refuses a second
+      message to the same address inside 60s, so the button says so instead of
+      failing. */
+  let resendCooldown = 0;
+  let resendTimer: ReturnType<typeof setInterval> | null = null;
   let nameUpdate = '';
   let currentPassword = '';
   let newPassword = '';
@@ -132,6 +140,7 @@
       unsubscribeSync();
       authSubscription?.data?.subscription?.unsubscribe();
       window.removeEventListener('settingsUpdated', handleSettingsUpdated);
+      if (resendTimer) clearInterval(resendTimer);
     };
   });
 
@@ -149,7 +158,27 @@
   }
 
   $: passwordsMatch = newPassword.length > 0 && newPassword === newPasswordConfirm;
+  $: signUpMatch = authPassword.length > 0 && authPassword === authPasswordConfirm;
+  /** Three plain bands rather than a score — the only hard rule is Supabase's six. */
+  $: signUpStrength =
+    authPassword.length === 0
+      ? ''
+      : authPassword.length < 6
+        ? 'Too short — at least 6 characters'
+        : authPassword.length < 10
+          ? 'Fine — longer is stronger'
+          : 'Strong';
+  $: signUpStrengthClass =
+    authPassword.length === 0 ? '' : authPassword.length < 6 ? 'error' : authPassword.length < 10 ? 'fair' : 'ok';
   $: recoveryMatch = recoveryPassword.length > 0 && recoveryPassword === recoveryPasswordConfirm;
+
+  // Signing out should not drop them back on the "check your email" screen for
+  // whatever address signed up last. The panel is hidden while signed in, so
+  // this only shows up on the way back out.
+  $: if (isSignedIn && authMode === 'sent') {
+    authMode = 'login';
+    sentToEmail = '';
+  }
 
   // An expired reset link: show why on the sign-in panel, once.
   $: if ($authLinkError) {
@@ -183,16 +212,71 @@
     });
   }
 
+  /**
+   * Supabase's own wording is sometimes the useful part — "at least 6
+   * characters" tells someone what to do — and sometimes it is jargon, or
+   * worse, a lie by omission ("Invalid login credentials" for a typo'd
+   * password). So the cases worth naming are named, and anything unrecognised
+   * falls through to Supabase's sentence rather than a blank shrug.
+   */
+  function authErrorText(error: unknown, fallback: string): string {
+    const raw = error instanceof Error && error.message ? error.message : '';
+    const m = raw.toLowerCase();
+    if (!m) return fallback;
+    if (m.includes('invalid login credentials')) {
+      return 'That email and password do not match an account. Check the password, or create an account below.';
+    }
+    if (m.includes('email not confirmed')) {
+      return 'This account still needs confirming — open the link in the email we sent you.';
+    }
+    if (m.includes('already registered') || m.includes('already been registered') || m.includes('user already')) {
+      return 'That email already has an account — try signing in.';
+    }
+    if (m.includes('at least') && m.includes('characters')) {
+      return `Password ${raw.slice(raw.toLowerCase().indexOf('at least'))}`;
+    }
+    if (m.includes('password') && (m.includes('short') || m.includes('weak'))) {
+      return 'That password is too short — use at least 6 characters.';
+    }
+    if (m.includes('invalid email') || m.includes('email address') && m.includes('invalid')) {
+      return 'That does not look like an email address.';
+    }
+    if (m.includes('unable to validate email')) {
+      return 'That does not look like an email address.';
+    }
+    if (m.includes('rate limit') || m.includes('too many') || m.includes('security purposes')) {
+      return 'Too many tries just now — wait a minute and try again.';
+    }
+    if (m.includes('not authorized')) {
+      return 'Email to that address was refused. If this keeps happening, tell Marlowe.';
+    }
+    if (m.includes('failed to fetch') || m.includes('network')) {
+      return 'No connection — check your internet and try again.';
+    }
+    return raw;
+  }
+
   async function handleSignIn() {
     authMessage = '';
     authError = '';
+    if (!authEmail.trim()) {
+      authError = 'Enter your email.';
+      return;
+    }
+    if (!authPassword) {
+      authError = 'Enter your password.';
+      return;
+    }
+    authBusy = true;
     try {
-      await supabaseAuthService.signIn(authEmail, authPassword);
+      await supabaseAuthService.signIn(authEmail.trim(), authPassword);
       authPassword = '';
       authMode = 'login';
     } catch (error) {
       console.error(error);
-      authError = 'Sign in failed.';
+      authError = authErrorText(error, 'Sign in failed.');
+    } finally {
+      authBusy = false;
     }
   }
 
@@ -203,34 +287,97 @@
       authError = 'Name is required.';
       return;
     }
+    if (!authEmail.trim()) {
+      authError = 'Enter your email.';
+      return;
+    }
+    if (authPassword.length < 6) {
+      authError = 'Password must be at least 6 characters.';
+      return;
+    }
     if (authPassword !== authPasswordConfirm) {
       authError = 'Passwords do not match.';
       return;
     }
+    authBusy = true;
     try {
-      await supabaseAuthService.signUp(authEmail, authPassword, authName.trim());
-      authMessage = 'Check your email to confirm your account.';
+      const { alreadyRegistered } = await supabaseAuthService.signUp(
+        authEmail.trim(),
+        authPassword,
+        authName.trim(),
+      );
+      if (alreadyRegistered) {
+        // Supabase sends nothing and reports no error here; saying "check your
+        // email" would leave them waiting for a message that is not coming.
+        authError = 'That email already has an account — try signing in.';
+        return;
+      }
+      sentToEmail = authEmail.trim();
       authPassword = '';
       authPasswordConfirm = '';
+      authMode = 'sent';
+      startResendCooldown();
     } catch (error) {
       console.error(error);
-      authError = 'Sign up failed.';
+      authError = authErrorText(error, 'Sign up failed.');
+    } finally {
+      authBusy = false;
     }
+  }
+
+  function startResendCooldown() {
+    if (resendTimer) clearInterval(resendTimer);
+    resendCooldown = 60;
+    resendTimer = setInterval(() => {
+      resendCooldown -= 1;
+      if (resendCooldown <= 0 && resendTimer) {
+        clearInterval(resendTimer);
+        resendTimer = null;
+        resendCooldown = 0;
+      }
+    }, 1000);
+  }
+
+  async function handleResendConfirmation() {
+    if (resendCooldown > 0 || authBusy) return;
+    authMessage = '';
+    authError = '';
+    authBusy = true;
+    try {
+      await supabaseAuthService.resendSignUpEmail(sentToEmail);
+      authMessage = 'Sent again.';
+      startResendCooldown();
+    } catch (error) {
+      console.error(error);
+      authError = authErrorText(error, 'Could not send it again.');
+    } finally {
+      authBusy = false;
+    }
+  }
+
+  /** "Wrong address?" — back to the form with the address ready to correct. */
+  function backToSignUp() {
+    authMessage = '';
+    authError = '';
+    authMode = 'signup';
   }
 
   async function handleForgotPassword() {
     authMessage = '';
     authError = '';
-    if (!authEmail) {
+    if (!authEmail.trim()) {
       authError = 'Enter your email first.';
       return;
     }
+    authBusy = true;
     try {
-      await supabaseAuthService.resetPassword(authEmail);
+      await supabaseAuthService.resetPassword(authEmail.trim());
       authMessage = 'Check your email for a reset link.';
     } catch (error) {
       console.error(error);
-      authError = 'Password reset failed.';
+      authError = authErrorText(error, 'Password reset failed.');
+    } finally {
+      authBusy = false;
     }
   }
 
@@ -666,25 +813,98 @@
         {:else if !isSignedIn}
           <div class="auth-panel">
             {#if authMode === 'login'}
-              <h3>Log in</h3>
-              <input class="auth-input" type="email" placeholder="Email" bind:value={authEmail} />
-              <input class="auth-input" type="password" placeholder="Password" bind:value={authPassword} />
-              <button class="primary-btn" on:click={handleSignIn}>Sign in</button>
+              <h3>Sign in</h3>
+              <input
+                class="auth-input"
+                type="email"
+                placeholder="Email"
+                autocomplete="email"
+                bind:value={authEmail}
+                on:keydown={(e) => e.key === 'Enter' && handleSignIn()}
+              />
+              <input
+                class="auth-input"
+                type="password"
+                placeholder="Password"
+                autocomplete="current-password"
+                bind:value={authPassword}
+                on:keydown={(e) => e.key === 'Enter' && handleSignIn()}
+              />
+              <button class="primary-btn" on:click={handleSignIn} disabled={authBusy}>
+                {authBusy ? 'Signing in…' : 'Sign in'}
+              </button>
               <button class="link-btn" on:click={() => (authMode = 'forgot')}>Forgot password?</button>
-              <button class="secondary-btn" on:click={() => (authMode = 'signup')}>Create Account</button>
+              <button class="secondary-btn" on:click={() => { authError = ''; authMessage = ''; authMode = 'signup'; }}>
+                Create account
+              </button>
             {:else if authMode === 'signup'}
-              <h3>Create Account</h3>
-              <input class="auth-input" type="text" placeholder="Name" bind:value={authName} />
-              <input class="auth-input" type="email" placeholder="Email" bind:value={authEmail} />
-              <input class="auth-input" type="password" placeholder="Password" bind:value={authPassword} />
-              <input class="auth-input" type="password" placeholder="Confirm Password" bind:value={authPasswordConfirm} />
-              <button class="primary-btn" on:click={handleSignUp}>Create Account</button>
-              <button class="link-btn" on:click={() => (authMode = 'login')}>Back to login</button>
+              <h3>Create account</h3>
+              <input class="auth-input" type="text" placeholder="Name" autocomplete="name" bind:value={authName} />
+              <input class="auth-input" type="email" placeholder="Email" autocomplete="email" bind:value={authEmail} />
+              <input
+                class={`auth-input ${authPassword.length > 0 ? (authPassword.length < 6 ? 'match-error' : 'match-ok') : ''}`}
+                type="password"
+                placeholder="Password"
+                autocomplete="new-password"
+                bind:value={authPassword}
+              />
+              <div class={`password-match ${signUpStrengthClass}`}>{signUpStrength}</div>
+              <input
+                class={`auth-input ${authPasswordConfirm.length > 0 ? (signUpMatch ? 'match-ok' : 'match-error') : ''}`}
+                type="password"
+                placeholder="Confirm password"
+                autocomplete="new-password"
+                bind:value={authPasswordConfirm}
+              />
+              <div class={`password-match ${authPasswordConfirm.length > 0 ? (signUpMatch ? 'ok' : 'error') : ''}`}>
+                {#if authPasswordConfirm.length > 0}
+                  {signUpMatch ? 'Passwords match' : 'Passwords do not match'}
+                {/if}
+              </div>
+              <button class="primary-btn" on:click={handleSignUp} disabled={authBusy}>
+                {authBusy ? 'Creating account…' : 'Create account'}
+              </button>
+              <button class="link-btn" on:click={() => { authError = ''; authMessage = ''; authMode = 'login'; }}>
+                Back to sign in
+              </button>
+            {:else if authMode === 'sent'}
+              <!-- The screen whose absence caused "not sure if it worked". -->
+              <h3>Check your email</h3>
+              <div class="auth-sent">
+                <p class="auth-sent-lead">We sent a confirmation link to</p>
+                <p class="auth-sent-email">{sentToEmail}</p>
+                <p class="auth-sent-note">
+                  Open it and you'll land back here, signed in. It can take a minute, and it
+                  sometimes lands in spam.
+                </p>
+              </div>
+              <button
+                class="secondary-btn"
+                on:click={handleResendConfirmation}
+                disabled={authBusy || resendCooldown > 0}
+              >
+                {resendCooldown > 0 ? `Send it again in ${resendCooldown}s` : 'Send it again'}
+              </button>
+              <button class="link-btn" on:click={backToSignUp}>Wrong address?</button>
+              <button class="link-btn" on:click={() => { authError = ''; authMessage = ''; authMode = 'login'; }}>
+                Back to sign in
+              </button>
             {:else}
-              <h3>Reset Password</h3>
-              <input class="auth-input" type="email" placeholder="Email" bind:value={authEmail} />
-              <button class="primary-btn" on:click={handleForgotPassword}>Send reset link</button>
-              <button class="link-btn" on:click={() => (authMode = 'login')}>Back to login</button>
+              <h3>Reset password</h3>
+              <input
+                class="auth-input"
+                type="email"
+                placeholder="Email"
+                autocomplete="email"
+                bind:value={authEmail}
+                on:keydown={(e) => e.key === 'Enter' && handleForgotPassword()}
+              />
+              <button class="primary-btn" on:click={handleForgotPassword} disabled={authBusy}>
+                {authBusy ? 'Sending…' : 'Send reset link'}
+              </button>
+              <button class="link-btn" on:click={() => { authError = ''; authMessage = ''; authMode = 'login'; }}>
+                Back to sign in
+              </button>
             {/if}
 
             {#if authMessage}
@@ -1062,20 +1282,62 @@
     gap: 10px;
   }
 
+  .auth-panel h3 {
+    margin: 0 0 2px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.92);
+  }
+
   .auth-input {
-    padding: 10px 12px;
-    border-radius: 6px;
-    border: 1px solid #3a3a3a;
+    padding: 11px 13px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
     background: #121212;
     color: inherit;
+    transition: border-color 0.15s;
+  }
+
+  .auth-input:focus {
+    outline: none;
+    border-color: rgba(230, 184, 74, 0.6);
   }
 
   .auth-input.match-ok {
-    border-color: #4caf50;
+    border-color: rgba(230, 184, 74, 0.55);
   }
 
   .auth-input.match-error {
     border-color: #e57373;
+  }
+
+  /* "Check your email" — the tinted block borrowed from the daily card. */
+  .auth-sent {
+    background: rgba(230, 184, 74, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    padding: 16px 16px 14px;
+  }
+
+  .auth-sent-lead {
+    margin: 0;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .auth-sent-email {
+    margin: 4px 0 10px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #e6b84a;
+    word-break: break-all;
+  }
+
+  .auth-sent-note {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.5);
   }
 
   .primary-btn,
@@ -1091,9 +1353,23 @@
   }
 
   .primary-btn {
-    background: #4caf50;
-    border-color: #4caf50;
-    color: #fff;
+    background: #e6b84a;
+    border-color: #e6b84a;
+    color: #111;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-weight: 600;
+    transition: background 0.15s, opacity 0.15s;
+  }
+
+  .primary-btn:hover:not(:disabled) {
+    background: #f0c96a;
+  }
+
+  .primary-btn:disabled,
+  .secondary-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
 
   .secondary-btn {
@@ -1121,7 +1397,7 @@
   .link-btn {
     background: transparent;
     border: none;
-    color: #9ccc65;
+    color: #e6b84a;
     text-align: left;
     padding: 0;
   }
@@ -1133,7 +1409,7 @@
 
   .auth-message {
     font-size: 12px;
-    color: #9ccc65;
+    color: #e6b84a;
   }
 
   .auth-error {
@@ -1147,7 +1423,11 @@
   }
 
   .password-match.ok {
-    color: #9ccc65;
+    color: #e6b84a;
+  }
+
+  .password-match.fair {
+    color: rgba(255, 255, 255, 0.45);
   }
 
   .password-match.error {

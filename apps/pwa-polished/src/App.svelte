@@ -5,6 +5,7 @@
   import LookupModal from "./components/LookupModal.svelte";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
+  import WelcomeModal from "./components/WelcomeModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
   import AppNotice from "./components/AppNotice.svelte";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
@@ -385,6 +386,9 @@
 
     <!-- Daily Greeting & Verse of the Day -->
     <DailyGreetingModal />
+
+    <!-- Shown once, when a new account comes back from its confirmation link -->
+    <WelcomeModal />
 
     <!-- "Running Latest Version" toast after an auto-update reload -->
     <UpdateNotice />

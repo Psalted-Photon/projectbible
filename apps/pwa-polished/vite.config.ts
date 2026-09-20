@@ -260,7 +260,11 @@ export default defineConfig({
         //   reset.html        the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
-        globIgnores: ['**/tts/**', '**/voice-lab.html', '**/reset.html'],
+        //   email/            artwork for the auth emails. It is fetched by
+        //                     mail clients from the live origin and never by
+        //                     the app, so precaching it would cost every user
+        //                     a download nothing here ever reads.
+        globIgnores: ['**/tts/**', '**/voice-lab.html', '**/reset.html', '**/email/**'],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
           /^\/reset\.html$/,
