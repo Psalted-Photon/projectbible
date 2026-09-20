@@ -15,6 +15,7 @@
   import { planMetadataStore } from '../stores/PlanMetadataStore';
   import { syncService, formatSyncLabel, isSyncRunning, SYNC_SCOPE_TOOLTIP, type SyncState } from '../lib/sync';
   import { normalizeBookName, getBookColor, shortBookName } from '../lib/bibleData';
+  import PlayTodayButton from './PlayTodayButton.svelte';
   import { syncQueue } from '../lib/sync/SyncQueueService';
   import { serializePlanData, getRemotePlanStatuses, planUploadOp } from '../adapters/SyncedReadingAdapter';
   import { userProfileStore } from '../stores/userProfileStore';
@@ -1599,6 +1600,7 @@
                         >
                           Read Again →
                         </button>
+                        <PlayTodayButton onStarted={close} />
                       {:else}
                         <button
                           class="start-reading-btn"
@@ -1612,6 +1614,7 @@
                         >
                           Start Reading →
                         </button>
+                        <PlayTodayButton onStarted={close} />
                         <button class="mark-day-btn" on:click={() => markDayComplete(todayReading)}>Mark Day Complete</button>
                       {/if}
                     </div>

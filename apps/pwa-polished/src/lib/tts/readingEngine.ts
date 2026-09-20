@@ -140,6 +140,31 @@ export type ReadingState =
   | 'downloading'
   | 'error';
 
+/**
+ * How a chapter introduces itself.
+ *
+ * `book` and `chapter` are automatic handoffs: the previous chapter has just
+ * finished, so they take a long pause first. `opening` is a start you asked for
+ * — same words, no silence in front, because the wait for the first audio was
+ * the pause. `none` is left for a start that should say nothing at all.
+ */
+type AnnounceMode = 'none' | 'chapter' | 'book' | 'opening';
+
+/** Part of a chapter: from `startVerse`, to `endVerse` or the chapter's end. */
+export interface VerseRange {
+  startVerse: number;
+  endVerse: number | null;
+}
+
+/** One stop on a playlist — a whole chapter, or a range within one. */
+export interface Passage {
+  book: string;
+  chapter: number;
+  startVerse?: number;
+  /** null or undefined both mean to the end of the chapter. */
+  endVerse?: number | null;
+}
+
 /** One thing to speak: a verse of scripture, or a spoken chapter announcement. */
 interface Utterance {
   kind: 'verse' | 'announce';
@@ -147,6 +172,15 @@ interface Utterance {
   book: string;
   chapter: number;
   verse: number | null;
+  /**
+   * Which passage of the playlist this belongs to.
+   *
+   * A gospel-harmony day can cover one event in two passages out of the same
+   * chapter, so book-and-chapter is not a unique key any more. Progress, the
+   * length estimate and the verse list all key off this instead, or the two
+   * would blur into one.
+   */
+  passageIndex: number;
   /** Silence to hold before speaking this, in seconds — rendered as real samples. */
   gapBefore: number;
   pcm?: Uint8Array;
@@ -183,6 +217,13 @@ export interface ReadingPosition {
   book: string;
   chapter: number;
   verse: number | null;
+  /**
+   * Which passage of the run this is — 0 for the chapter you pressed play on,
+   * then one per chapter or plan passage after it. The plan ticker watches this
+   * rather than book and chapter, because a harmony day can read the same
+   * chapter twice and those are two passages, not one.
+   */
+  passageIndex: number;
 }
 
 // ── public state ────────────────────────────────────────────────────────────
@@ -254,6 +295,18 @@ let bilingualReading = false;
 let sampleRate = 22050;
 let tailBook = '';
 let tailChapter = 0;
+/**
+ * The passages still to play, when playback is following a list rather than
+ * Bible order. Null is the ordinary case: keep rolling into the next chapter.
+ *
+ * This is the one seam between "read this chapter and carry on" and "read
+ * today's plan and stop". Everything downstream — the stitcher, the glow, the
+ * progress bar, the lock screen — reads the queue and never knows the
+ * difference.
+ */
+let playlist: Passage[] | null = null;
+/** Index of the passage at the tail of the queue, for keying progress. */
+let tailPassageIndex = 0;
 let currentUrl: string | null = null;
 /** Element events are ours, not the user's, while a segment is being swapped. */
 let swapping = false;
@@ -362,28 +415,38 @@ async function pace(audioSeconds: number, workMs: number): Promise<void> {
 async function loadChapterUtterances(
   book: string,
   chapter: number,
-  announce: 'none' | 'chapter' | 'book'
+  announce: AnnounceMode,
+  range: VerseRange | null = null,
+  passageIndex = 0
 ): Promise<Utterance[]> {
   const settings = getTtsSettings();
   const rows = await textStore.getChapter(translation, book, chapter);
 
   const out: Utterance[] = [];
 
-  // Announcements mark an automatic handoff only — pressing play on a chapter
-  // yourself does not announce it, since you already know where you are.
-  if (announce === 'book') {
+  // Every chapter says where it is. An automatic handoff takes its long pause
+  // first, because the previous chapter has only just stopped speaking;
+  // 'opening' is the same words with no silence in front, since pressing play
+  // already had its wait while the first audio was made.
+  //
+  // Chapter 1 gets the two-part form — "The book of Mark", a beat, "Chapter 1"
+  // — because that is where a book begins. Everywhere else the one-liner.
+  const longForm = announce === 'book' || (announce === 'opening' && chapter === 1);
+  const lead = announce === 'opening' ? 0 : GAP_BEFORE;
+
+  if (longForm) {
     out.push({
       kind: 'announce', text: `The book of ${spokenBookName(book)}`,
-      book, chapter, verse: null, gapBefore: GAP_BEFORE,
+      book, chapter, verse: null, gapBefore: lead, passageIndex,
     });
     out.push({
       kind: 'announce', text: `Chapter ${chapter}`,
-      book, chapter, verse: null, gapBefore: GAP_MID,
+      book, chapter, verse: null, gapBefore: GAP_MID, passageIndex,
     });
-  } else if (announce === 'chapter') {
+  } else if (announce === 'chapter' || announce === 'opening') {
     out.push({
       kind: 'announce', text: `${spokenBookName(book)} Chapter ${chapter}`,
-      book, chapter, verse: null, gapBefore: GAP_BEFORE,
+      book, chapter, verse: null, gapBefore: lead, passageIndex,
     });
   }
 
@@ -396,6 +459,13 @@ async function loadChapterUtterances(
 
   let first = true;
   for (const row of rows) {
+    // A plan passage can be part of a chapter — Mark 6:30-44. A null end means
+    // to the end of the chapter, which is what the plan data uses for a passage
+    // that runs off the bottom.
+    if (range) {
+      if (row.verse < range.startVerse) continue;
+      if (range.endVerse !== null && row.verse > range.endVerse) continue;
+    }
     let speech = extractSpeechText(row.text);
     const original = greek?.get(row.verse);
     if (!speech && !original) continue;
@@ -407,7 +477,7 @@ async function loadChapterUtterances(
     if (original) {
       const route = greekSpeechRoute();
       out.push({
-        kind: 'verse', text: original, book, chapter, verse: row.verse, gapBefore,
+        kind: 'verse', text: original, book, chapter, verse: row.verse, gapBefore, passageIndex,
         voiceId: route.voiceId,
         espeakVoice: route.espeakVoice,
         substitutions: route.substitutions,
@@ -415,7 +485,7 @@ async function loadChapterUtterances(
       // Bilingual: the same verse again in English, close behind the Greek.
       if (settings.bilingualReading && speech) {
         out.push({
-          kind: 'verse', text: speech, book, chapter, verse: row.verse,
+          kind: 'verse', text: speech, book, chapter, verse: row.verse, passageIndex,
           gapBefore: GAP_MID,
         });
       }
@@ -426,7 +496,7 @@ async function loadChapterUtterances(
       // reads it out letter by letter.
       const route = isGreekTranslation(translation) ? greekSpeechRoute() : null;
       out.push({
-        kind: 'verse', text: speech, book, chapter, verse: row.verse, gapBefore,
+        kind: 'verse', text: speech, book, chapter, verse: row.verse, gapBefore, passageIndex,
         voiceId: route?.voiceId,
         espeakVoice: route?.espeakVoice,
         substitutions: route?.substitutions,
@@ -467,15 +537,49 @@ async function loadGreekVerses(
   return out;
 }
 
-/** Append the chapter following the queue's tail. False at the end of the road. */
+/**
+ * Append what comes next. False at the end of the road.
+ *
+ * Following a playlist that is what "next" means; otherwise it is the chapter
+ * after the queue's tail, in Bible order. A playlist running out is how plan
+ * playback stops at the end of the day instead of rolling onward.
+ */
 async function extendQueue(): Promise<boolean> {
+  if (playlist) {
+    const next = playlist.shift();
+    if (!next) return false;
+
+    tailPassageIndex++;
+    const utterances = await loadChapterUtterances(
+      next.book,
+      next.chapter,
+      // Spoken like a handoff, because that is what it is — the long pause and
+      // the book's name when the reading crosses from Genesis into Psalms.
+      next.book === tailBook ? 'chapter' : 'book',
+      passageRange(next),
+      tailPassageIndex
+    );
+    // An empty passage is skipped rather than ending the day — a missing
+    // chapter in one pack should not silence the rest of the reading.
+    if (utterances.length === 0) return extendQueue();
+
+    queue = [...queue, ...utterances];
+    tailBook = next.book;
+    tailChapter = next.chapter;
+    console.log(`🔊 Read Aloud queued ${next.book} ${next.chapter} (plan)`);
+    return true;
+  }
+
   const next = nextChapterOf(tailBook, tailChapter);
   if (!next) return false;
 
+  tailPassageIndex++;
   const utterances = await loadChapterUtterances(
     next.book,
     next.chapter,
-    next.newBook ? 'book' : 'chapter'
+    next.newBook ? 'book' : 'chapter',
+    null,
+    tailPassageIndex
   );
   if (utterances.length === 0) return false;
 
@@ -486,14 +590,20 @@ async function extendQueue(): Promise<boolean> {
   return true;
 }
 
+/** The verse range of a passage, or null when it is a whole chapter. */
+function passageRange(p: Passage): VerseRange | null {
+  if (p.startVerse === undefined && (p.endVerse === undefined || p.endVerse === null)) return null;
+  return { startVerse: p.startVerse ?? 1, endVerse: p.endVerse ?? null };
+}
+
 // ── chapter length estimate ─────────────────────────────────────────────────
 
-function estimateChapterSeconds(book: string, chapter: number): number {
+function estimateChapterSeconds(passageIndex: number): number {
   let known = 0;
   let unknownChars = 0;
   let gaps = 0;
   for (const u of queue) {
-    if (u.book !== book || u.chapter !== chapter) continue;
+    if (u.passageIndex !== passageIndex) continue;
     gaps += u.gapBefore;
     if (u.seconds !== undefined) known += u.seconds;
     else unknownChars += u.text.length;
@@ -501,11 +611,11 @@ function estimateChapterSeconds(book: string, chapter: number): number {
   return known + gaps + unknownChars * secondsPerChar();
 }
 
-/** Assign each utterance its offset from the start of its chapter. */
-function recomputeChapterOffsets(book: string, chapter: number): void {
+/** Assign each utterance its offset from the start of its own passage. */
+function recomputeChapterOffsets(passageIndex: number): void {
   let offset = 0;
   for (const u of queue) {
-    if (u.book !== book || u.chapter !== chapter) continue;
+    if (u.passageIndex !== passageIndex) continue;
     offset += u.gapBefore;
     u.chapterOffset = offset;
     offset += u.seconds ?? u.text.length * secondsPerChar();
@@ -560,7 +670,7 @@ async function buildSegment(gen: number): Promise<boolean> {
   const pieces: Uint8Array[] = [];
   const marks: Mark[] = [];
   /** Chapters this segment reached into, so their offsets are redone once each. */
-  const touched = new Set<string>();
+  const touched = new Set<number>();
   let seconds = 0;
   // A segment is one WAV, so everything in it has to share a rate. Bilingual
   // reading can alternate voices that do not (the Compact English voice is
@@ -578,7 +688,10 @@ async function buildSegment(gen: number): Promise<boolean> {
   while (gen === generation) {
     if (renderCursor >= queue.length) {
       // Out of planned text. Continue into the next chapter, if we are going to.
-      if (get(stopAtChapterEnd) || !get(continuousPlay)) break;
+      // A playlist carries its own idea of what comes next, so it does not ask
+      // the continuous-play setting — the list itself is what ends the run.
+      if (get(stopAtChapterEnd)) break;
+      if (!playlist && !get(continuousPlay)) break;
       if (!(await extendQueue())) break;
       if (gen !== generation) return false;
       continue;
@@ -616,7 +729,7 @@ async function buildSegment(gen: number): Promise<boolean> {
       seconds += u.seconds ?? 0;
     }
     renderCursor++;
-    touched.add(`${u.book}|${u.chapter}`);
+    touched.add(u.passageIndex);
 
     if (seconds >= segmentSeconds()) break;
     // Playing the last thing we have: get this out now rather than making it
@@ -628,10 +741,7 @@ async function buildSegment(gen: number): Promise<boolean> {
   // so calling it inside the loop above made building a segment cost the square
   // of the queue length — around a million steps with a few chapters banked.
   // Nothing reads an offset mid-build, so the end is soon enough.
-  for (const key of touched) {
-    const cut = key.lastIndexOf('|');
-    recomputeChapterOffsets(key.slice(0, cut), Number(key.slice(cut + 1)));
-  }
+  for (const index of touched) recomputeChapterOffsets(index);
 
   if (marks.length === 0) return false;
 
@@ -887,10 +997,13 @@ function updatePositionFromClock(): void {
     return;
   }
 
-  const key = `${u.book}|${u.chapter}|${u.verse ?? 'a'}`;
+  const key = `${u.passageIndex}|${u.book}|${u.chapter}|${u.verse ?? 'a'}`;
   if (key !== lastVerseKey) {
     lastVerseKey = key;
-    readingPosition.set({ translation, book: u.book, chapter: u.chapter, verse: u.verse });
+    readingPosition.set({
+      translation, book: u.book, chapter: u.chapter, verse: u.verse,
+      passageIndex: u.passageIndex,
+    });
 
     if (u.verse !== null) {
       // The reader's highlight, glow and follow-scroll already read this.
@@ -906,23 +1019,23 @@ function updatePositionFromClock(): void {
       currentVerseWindow.set(null);
     }
 
-    refreshChapterInfo(u.book, u.chapter, u.verse);
+    refreshChapterInfo(u.passageIndex, u.verse);
   }
 
   // Progress through the chapter: where this utterance starts, plus how far
   // into it we are. Exact, even though the chapter total is an estimate.
   const into = Math.max(0, getSharedTtsAudio().currentTime - mark.startSeconds);
   const position = (u.chapterOffset ?? 0) + into;
-  chapterProgress.set({ position, duration: Math.max(position, estimateChapterSeconds(u.book, u.chapter)) });
+  chapterProgress.set({ position, duration: Math.max(position, estimateChapterSeconds(u.passageIndex)) });
 }
 
-function refreshChapterInfo(book: string, chapter: number, verse: number | null): void {
+function refreshChapterInfo(passageIndex: number, verse: number | null): void {
   // Bilingual reading queues each verse twice (original, then English), but it
   // is still one verse as far as the counter and the jump list are concerned.
   const verses = [
     ...new Set(
       queue
-        .filter((u) => u.kind === 'verse' && u.book === book && u.chapter === chapter)
+        .filter((u) => u.kind === 'verse' && u.passageIndex === passageIndex)
         .map((u) => u.verse as number)
     ),
   ];
@@ -936,8 +1049,19 @@ function refreshChapterInfo(book: string, chapter: number, verse: number | null)
   verseCounter.set({ index: index >= 0 ? index + 1 : 0, total: verses.length });
 }
 
+/**
+ * Bumped when the queue is played out, as opposed to stopped.
+ *
+ * The plan ticker needs to tell those apart: reaching the end of the day marks
+ * the last passage read, pressing stop halfway through it does not. A store
+ * rather than a call, so the engine keeps knowing nothing about the plan — the
+ * same one-way arrangement as the sleep timer.
+ */
+export const readingFinished = writable<number>(0);
+
 function finish(): void {
   console.log('🔊 Read Aloud finished');
+  readingFinished.update((n) => n + 1);
   stopReading();
 }
 
@@ -976,7 +1100,9 @@ export async function startReading(
     }
     if (gen !== generation) return;
 
-    const utterances = await loadChapterUtterances(book, chapter, 'none');
+    // 'opening': a chapter you started yourself still says where it is, with
+    // no silence first — the wait for the first audio was the pause.
+    const utterances = await loadChapterUtterances(book, chapter, 'opening');
     if (gen !== generation) return;
     if (utterances.length === 0) {
       readingState.set('error');
@@ -1002,9 +1128,93 @@ export async function startReading(
     segmentIndex = 0;
     tailBook = book;
     tailChapter = chapter;
+    tailPassageIndex = 0;
     lastVerseKey = '';
-    recomputeChapterOffsets(book, chapter);
-    refreshChapterInfo(book, chapter, verse);
+    recomputeChapterOffsets(0);
+    refreshChapterInfo(0, verse);
+
+    await buildHeadStart(gen);
+    if (gen !== generation) return;
+
+    await playSegment(gen);
+  } catch (err: any) {
+    if (gen !== generation) return;
+    readingState.set('error');
+    readingError.set(err?.message ?? 'Could not start reading.');
+  }
+}
+
+/**
+ * Begin reading a list of passages, in the order given, stopping at the end.
+ *
+ * The same engine as `startReading` — it simply fills the queue from a list
+ * instead of from Bible order. Must be called from a user gesture for the same
+ * reason: the audio element is unlocked synchronously so every later handoff is
+ * allowed, including ones hours later with the screen off.
+ */
+export async function startReadingPlaylist(
+  translationId: string,
+  passages: Passage[]
+): Promise<void> {
+  unlockTtsAudio();
+
+  stopReading();
+  if (passages.length === 0) return;
+  const gen = ++generation;
+
+  const settings = getTtsSettings();
+  translation = translationId;
+  voiceId = settings.voiceId;
+  rate = settings.rate;
+  greekPronunciation = settings.greekPronunciation;
+  bilingualReading = settings.bilingualReading;
+
+  readingState.set('starting');
+  readingError.set('');
+
+  try {
+    if (!(await isVoiceInstalled(voiceId))) {
+      readingState.set('voice-needed');
+      return;
+    }
+    if (gen !== generation) return;
+
+    const [first, ...rest] = passages;
+    const utterances = await loadChapterUtterances(
+      first.book,
+      first.chapter,
+      'opening',
+      passageRange(first),
+      0
+    );
+    if (gen !== generation) return;
+    if (utterances.length === 0) {
+      readingState.set('error');
+      readingError.set('No text available for this reading.');
+      return;
+    }
+
+    // Greek can be voiced by a model the user has not downloaded yet.
+    const needed = utterances.find((u) => u.voiceId && u.voiceId !== voiceId)?.voiceId;
+    if (needed && !(await isVoiceInstalled(needed))) {
+      readingState.set('voice-needed');
+      return;
+    }
+    if (gen !== generation) return;
+
+    queue = utterances;
+    renderCursor = 0;
+    segments = [];
+    segmentIndex = 0;
+    tailBook = first.book;
+    tailChapter = first.chapter;
+    tailPassageIndex = 0;
+    // Set last: stopReading() above cleared it, and nothing may extend the
+    // queue before the first passage is actually in it.
+    playlist = [...rest];
+    lastVerseKey = '';
+    recomputeChapterOffsets(0);
+    refreshChapterInfo(0, null);
 
     await buildHeadStart(gen);
     if (gen !== generation) return;
@@ -1122,21 +1332,32 @@ export function skipChapter(direction: 1 | -1): void {
   const position = get(readingPosition);
   if (!position) return;
 
+  // Which passage is playing — the key everything else is measured against,
+  // since a harmony day can hold the same chapter twice.
+  const here = currentMark()?.utterance.passageIndex ?? 0;
+
   if (direction === -1) {
-    // Back to the top of the current chapter, like a music player's back button.
-    const found = locate((u) => u.book === position.book && u.chapter === position.chapter);
+    // Back to the top of the current passage, like a music player's back button.
+    const found = locate((u) => u.passageIndex === here);
     if (found) seekTo(found);
+    return;
+  }
+
+  // The next passage is already planned when following a playlist, so skipping
+  // is a seek within what has been queued rather than a guess at Bible order.
+  const found = locate((u) => u.passageIndex === here + 1);
+  if (found) {
+    seekTo(found);
+    return;
+  }
+  if (playlist) {
+    // Not buffered yet. The filler is already working towards it; there is
+    // nowhere useful to jump to, and restarting would throw the list away.
     return;
   }
 
   const next = nextChapterOf(position.book, position.chapter);
   if (!next) return;
-
-  const found = locate((u) => u.book === next.book && u.chapter === next.chapter);
-  if (found) {
-    seekTo(found);
-    return;
-  }
 
   // Not buffered — this is the slow path, and the one that stalls with the
   // screen off. Unavoidable here, but the buffer usually makes it unnecessary.
@@ -1165,6 +1386,8 @@ export function stopReading(): void {
   segmentIndex = 0;
   tailBook = '';
   tailChapter = 0;
+  tailPassageIndex = 0;
+  playlist = null;
   lastVerseKey = '';
   measuredChars = 0;
   measuredSeconds = 0;

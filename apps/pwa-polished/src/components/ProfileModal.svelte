@@ -20,6 +20,7 @@
   import JournalCalendar from './JournalCalendar.svelte';
   import YourDataPanel from './YourDataPanel.svelte';
   import BrandSpinner from './BrandSpinner.svelte';
+  import PlayTodayButton from './PlayTodayButton.svelte';
   import { User } from 'phosphor-svelte';
 
   let isOpen = false;
@@ -680,14 +681,36 @@
               {#if todayReading}
                 <div class="today-card">
                   <h3>{profileName ? `Hey ${profileName}, here's today's reading` : "Today's reading"}</h3>
-                  <div class="chapter-links">
-                    {#each todayReading.chapters as chapter, i}
-                      <button class="chapter-link" on:click={() => navigateToChapter(chapter.book, chapter.chapter)}>
-                        {chapter.book} {chapter.chapter}
-                      </button>{#if i < todayReading.chapters.length - 1}, {/if}
-                    {/each}
+                  {#if todayReading.harmonySections?.length}
+                    <!-- A gospel-harmony day lists verse ranges, not whole
+                         chapters. Without this branch the card would show
+                         nothing and the play button would read passages it had
+                         never listed. -->
+                    {@const harmonyPassages = todayReading.harmonySections.flatMap((s: any) => s.passages)}
+                    <div class="chapter-links">
+                      {#each harmonyPassages as passage, i}
+                        <button
+                          class="chapter-link"
+                          on:click={() => navigateToChapter(passage.book, passage.startChapter)}
+                        >
+                          {passage.label}
+                        </button>{#if i < harmonyPassages.length - 1}, {/if}
+                      {/each}
+                    </div>
+                    <div class="chapter-count">{harmonyPassages.length} passages</div>
+                  {:else}
+                    <div class="chapter-links">
+                      {#each todayReading.chapters as chapter, i}
+                        <button class="chapter-link" on:click={() => navigateToChapter(chapter.book, chapter.chapter)}>
+                          {chapter.book} {chapter.chapter}
+                        </button>{#if i < todayReading.chapters.length - 1}, {/if}
+                      {/each}
+                    </div>
+                    <div class="chapter-count">{todayReading.chapters.length} chapters</div>
+                  {/if}
+                  <div class="today-card-actions">
+                    <PlayTodayButton onStarted={() => profileModalStore.close()} />
                   </div>
-                  <div class="chapter-count">{todayReading.chapters.length} chapters</div>
                 </div>
               {:else}
                 <div class="today-card empty">
@@ -1122,6 +1145,10 @@
 
   .today-card.empty {
     color: #aaa;
+  }
+
+  .today-card-actions {
+    margin-top: 12px;
   }
 
   .chapter-links {
