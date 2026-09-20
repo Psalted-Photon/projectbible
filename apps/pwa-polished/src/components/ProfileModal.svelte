@@ -15,7 +15,7 @@
   import { paneStore } from '../stores/paneStore';
   import { syncService, formatSyncLabel, isSyncRunning, SYNC_SCOPE_TOOLTIP, type SyncState } from '../lib/sync';
   import { pendingWork, type PendingWork } from '../lib/sync/clearPersonalData';
-  import { localDateStr } from '../stores/clockStore';
+  import { localDateStr, todayStore } from '../stores/clockStore';
   import SavedVersesPanel from './SavedVersesPanel.svelte';
   import JournalCalendar from './JournalCalendar.svelte';
   import YourDataPanel from './YourDataPanel.svelte';
@@ -411,24 +411,40 @@
     profileModalStore.close();
   }
 
-  function getTodayReading(plan: any) {
+  /**
+   * The day this card shows — the same rule the Reading Plan modal uses.
+   *
+   * The first day that is due and not finished, so a plan that is behind shows
+   * the overdue reading rather than going blank. Once everything due is done it
+   * falls back to today's own day.
+   */
+  function getTodayReading(plan: any, completed: Map<number, boolean> = new Map()) {
     if (!plan) return null;
     const todayStr = localDateStr(new Date());
-    return plan.days.find((day: any) => planDayDateStr(day.date) === todayStr);
+    const firstDue = plan.days.find(
+      (day: any) => planDayDateStr(day.date) <= todayStr && !completed.get(day.dayNumber)
+    );
+    if (firstDue) return firstDue;
+    return plan.days.find((day: any) => planDayDateStr(day.date) === todayStr) ?? null;
   }
 
+
+  /** Whether the day on the card is actually today, or an overdue one. */
+  $: todayReadingIsToday = !!todayReading && planDayDateStr(todayReading.date) === $todayStore;
 
   async function loadReadingPlan() {
     try {
       // Try new multi-plan key first; use the last (most recently added) plan for the widget
-      const storedNew = localStorage.getItem(STORAGE_ACTIVE_PLANS);
+      // Signed out, the plan is saved to sessionStorage — same fallback the
+      // Reading Plan modal reads, or this card sees no plan at all.
+      const storedNew = localStorage.getItem(STORAGE_ACTIVE_PLANS) ?? sessionStorage.getItem(STORAGE_ACTIVE_PLANS);
       let data: {id: string, plan: any} | null = null;
       if (storedNew) {
         const arr: Array<{id: string, plan: any}> = JSON.parse(storedNew);
         if (arr.length > 0) data = arr[arr.length - 1];
       } else {
         // Fall back to legacy key
-        const storedOld = localStorage.getItem(STORAGE_ACTIVE_PLAN);
+        const storedOld = localStorage.getItem(STORAGE_ACTIVE_PLAN) ?? sessionStorage.getItem(STORAGE_ACTIVE_PLAN);
         if (storedOld) data = JSON.parse(storedOld);
       }
       if (!data) return;
@@ -441,10 +457,13 @@
           day.date = new Date(day.date);
         });
       }
-      todayReading = getTodayReading(currentReadingPlan);
       const progressEntries = currentPlanId
         ? await readingProgressStore.getProgressForPlan(currentPlanId)
         : [];
+      todayReading = getTodayReading(
+        currentReadingPlan,
+        new Map<number, boolean>(progressEntries.map((e: any) => [e.dayNumber, !!e.completed]))
+      );
       verseStats = computeVerseStats(currentReadingPlan, progressEntries);
       const todayStr = localDateStr(new Date());
       daysAheadBehind = currentReadingPlan
@@ -680,7 +699,14 @@
             <div class="reading-tab">
               {#if todayReading}
                 <div class="today-card">
-                  <h3>{profileName ? `Hey ${profileName}, here's today's reading` : "Today's reading"}</h3>
+                  <h3>
+                    {#if todayReadingIsToday}
+                      {profileName ? `Hey ${profileName}, here's today's reading` : "Today's reading"}
+                    {:else}
+                      {profileName ? `Hey ${profileName}, here's your next reading` : 'Your next reading'}
+                      <span class="today-card-day">Day {todayReading.dayNumber}</span>
+                    {/if}
+                  </h3>
                   {#if todayReading.harmonySections?.length}
                     <!-- A gospel-harmony day lists verse ranges, not whole
                          chapters. Without this branch the card would show
@@ -709,12 +735,12 @@
                     <div class="chapter-count">{todayReading.chapters.length} chapters</div>
                   {/if}
                   <div class="today-card-actions">
-                    <PlayTodayButton onStarted={() => profileModalStore.close()} />
+                    <PlayTodayButton onStarted={() => profileModalStore.close()} planId={currentPlanId} day={todayReading} />
                   </div>
                 </div>
               {:else}
                 <div class="today-card empty">
-                  Today is not a reading day in this plan.
+                  Nothing due in this plan right now.
                 </div>
               {/if}
 
@@ -1145,6 +1171,13 @@
 
   .today-card.empty {
     color: #aaa;
+  }
+
+  .today-card-day {
+    margin-left: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #9a90b5;
   }
 
   .today-card-actions {

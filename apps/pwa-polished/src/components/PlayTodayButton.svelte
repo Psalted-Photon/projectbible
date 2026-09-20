@@ -1,11 +1,12 @@
 <script lang="ts">
   /**
-   * "Play today's reading" — one tap, every passage of today's reading in plan
-   * order, then silence.
+   * "Play this reading" — one tap, every passage of the day in plan order,
+   * then silence.
    *
    * Both plan cards use this: the Reading Plan modal's today-card and Profile →
-   * Reading. Neither knows what today's reading is; `getTodayPlaylist` works
-   * that out from storage so the two always agree.
+   * Reading. Each card is already showing a particular day — often an overdue
+   * one — so it hands that day in, and the button plays exactly what the card
+   * lists. With no day given it falls back to working one out from storage.
    *
    * Voice download lives here for the same reason it lives in TtsPlayer: the
    * card you tapped is the one that should show the prompt.
@@ -19,13 +20,18 @@
   } from '../adapters/tts.js';
   import { getTtsSettings } from '../adapters/settings.js';
   import { startReadingPlaylist, readingState, isPreparing } from '../lib/tts/readingEngine';
-  import { getTodayPlaylist, type PlanPlaylist } from '../lib/tts/planPlaylist';
+  import { getTodayPlaylist, buildPlaylistForDay, type PlanPlaylist } from '../lib/tts/planPlaylist';
   import { beginPlanRun } from '../lib/tts/planTicker';
   import { navigationStore } from '../stores/navigationStore';
   import BrandSpinner from './BrandSpinner.svelte';
 
   /** Close the modal once playback is under way. */
   export let onStarted: (() => void) | null = null;
+  /** The plan the card is showing, if it knows. */
+  export let planId: string | null = null;
+  /** The day the card is showing — played as-is, with no second guess. */
+  export let day: any = null;
+  export let label = 'Play this reading';
 
   type Local = 'idle' | 'voice-needed' | 'downloading' | 'error';
   let local: Local = 'idle';
@@ -51,6 +57,12 @@
     onStarted?.();
   }
 
+  /** The card's own day where there is one, otherwise whatever storage says. */
+  function resolvePlaylist(): Promise<PlanPlaylist | null> {
+    if (planId && day) return buildPlaylistForDay(planId, day);
+    return getTodayPlaylist();
+  }
+
   async function handleClick(): Promise<void> {
     // Synchronously, before any await — this is the unlock that iOS counts.
     unlockTtsAudio();
@@ -60,10 +72,10 @@
     pressing = true;
 
     try {
-      const playlist = await getTodayPlaylist();
+      const playlist = await resolvePlaylist();
       if (!playlist) {
         local = 'error';
-        errorMsg = 'Nothing to read today.';
+        errorMsg = 'Nothing to read here.';
         return;
       }
       if (!(await isVoiceInstalled(voiceId))) {
@@ -92,7 +104,7 @@
       return;
     }
     local = 'idle';
-    const playlist = await getTodayPlaylist();
+    const playlist = await resolvePlaylist();
     if (playlist) play(playlist);
   }
 </script>
@@ -111,8 +123,8 @@
   {:else if pressing || (isLive && $isPreparing)}
     <span class="play-today-note"><BrandSpinner size={14} /> Starting…</span>
   {:else}
-    <button class="play-today-btn" on:click={handleClick} title="Read today's whole reading aloud">
-      🗣 Play today's reading
+    <button class="play-today-btn" on:click={handleClick} title="Read this whole reading aloud">
+      🗣 {label}
     </button>
   {/if}
 {/if}

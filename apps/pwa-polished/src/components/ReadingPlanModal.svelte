@@ -1301,6 +1301,19 @@
 
   $: todayReading = (void dayProgressMap, currentReadingPlan ? getTodayReading($todayStore) : null);
 
+  // The banner lists what Play reads, catch-up chapters and all — the playlist
+  // adds them, so a banner showing only the base day would under-list a
+  // catch-up day.
+  $: todayChapters = (void dayProgressMap, todayReading ? getEffectiveChapters(todayReading) : []);
+
+  // These read plan state inside themselves, so a plain call in the template
+  // only re-runs when something else named there changes — switching plan
+  // pills would leave the old plan's rows on screen until the view mode was
+  // toggled. Naming every input here is what makes them repaint.
+  $: displayedDays = (void dayProgressMap, void currentReadingPlan, void catchUpDays, void showCatchUpDays, getDisplayedDays());
+  $: evenSpreadSuggestions = (void dayProgressMap, void currentReadingPlan, void maxCatchUpPerDay, getEvenSpreadSuggestions($todayStore));
+  $: dedicatedCatchUpDays = (void dayProgressMap, void currentReadingPlan, void $todayStore, getDedicatedCatchUpDays());
+
   function getNextReadingDay(todayStr: string = localDateStr(new Date())) {
     if (!currentReadingPlan) return null;
     return currentReadingPlan.days.find(day => {
@@ -1547,7 +1560,11 @@
                   Welcome{userName ? `, ${userName}` : ''}!
                 </div>
                 {#if todayReading}
-                  <div class="welcome-subtitle">Here's your reading for today:</div>
+                  <div class="welcome-subtitle">
+                    {planDayDateStr(todayReading.date) === $todayStore
+                      ? "Here's your reading for today:"
+                      : "Here's your next reading:"}
+                  </div>
                   <div class="today-reading" class:day-done={todayDone}>
                     <div class="today-reading-header">
                       <span class="today-day-label">Day {todayReading.dayNumber} &mdash; {new Date(todayReading.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
@@ -1570,7 +1587,7 @@
                           </div>
                         {/each}
                       {:else}
-                        {#each todayReading.chapters as chapter}
+                        {#each todayChapters as chapter}
                           <label class="banner-chapter-row">
                             <input
                               type="checkbox"
@@ -1594,13 +1611,13 @@
                             if (todayReading.harmonySections?.length) {
                               handlePassageClick(todayReading, todayReading.harmonySections[0].passages[0], 0);
                             } else {
-                              handleChapterClick(todayReading, todayReading.chapters[0]);
+                              handleChapterClick(todayReading, todayChapters[0]);
                             }
                           }}
                         >
                           Read Again →
                         </button>
-                        <PlayTodayButton onStarted={close} />
+                        <PlayTodayButton onStarted={close} planId={currentPlanId} day={todayReading} />
                       {:else}
                         <button
                           class="start-reading-btn"
@@ -1608,13 +1625,13 @@
                             if (todayReading.harmonySections?.length) {
                               handlePassageClick(todayReading, todayReading.harmonySections[0].passages[0], 0);
                             } else {
-                              handleChapterClick(todayReading, todayReading.chapters[0]);
+                              handleChapterClick(todayReading, todayChapters[0]);
                             }
                           }}
                         >
                           Start Reading →
                         </button>
-                        <PlayTodayButton onStarted={close} />
+                        <PlayTodayButton onStarted={close} planId={currentPlanId} day={todayReading} />
                         <button class="mark-day-btn" on:click={() => markDayComplete(todayReading)}>Mark Day Complete</button>
                       {/if}
                     </div>
@@ -1715,7 +1732,7 @@
                 <!-- One row per day, one line each. A 365-day plan is otherwise
                      three stacked lines per day and an unusable amount of scroll. -->
                 <div class="list-view">
-                  {#each getDisplayedDays() as day (day.isCatchUp ? `catchup-${day.dayNumber}` : day.dayNumber)}
+                  {#each displayedDays as day (day.isCatchUp ? `catchup-${day.dayNumber}` : day.dayNumber)}
                     {@const status = getDayStatus(day, $todayStore)}
                     {@const counts = day.harmonySections && day.harmonySections.length > 0
                       ? getDayProgressCountsHarmony(day)
@@ -1813,10 +1830,10 @@
                   {#if catchUpMode === 'spread'}
                     <div class="catchup-preview">
                       <h4>Even spread preview</h4>
-                      {#if getEvenSpreadSuggestions($todayStore).length === 0}
+                      {#if evenSpreadSuggestions.length === 0}
                         <p class="muted">No catch-up needed. You are on schedule.</p>
                       {:else}
-                        {#each getEvenSpreadSuggestions($todayStore) as suggestion}
+                        {#each evenSpreadSuggestions as suggestion}
                           <div class="catchup-item">
                             <strong>Day {suggestion.dayNumber}:</strong>
                             {#each suggestion.addedChapters as chapter, i}
@@ -1832,10 +1849,10 @@
                   {:else}
                     <div class="catchup-preview">
                       <h4>Dedicated catch-up days</h4>
-                      {#if getDedicatedCatchUpDays().length === 0}
+                      {#if dedicatedCatchUpDays.length === 0}
                         <p class="muted">No catch-up needed. You are on schedule.</p>
                       {:else}
-                        {#each getDedicatedCatchUpDays() as day}
+                        {#each dedicatedCatchUpDays as day}
                           <div class="catchup-item">
                             <strong>Catch-up Day {day.dayNumber}:</strong>
                             {#each day.chapters as chapter, i}

@@ -1,11 +1,10 @@
 /**
- * Today's reading, as a list of passages Read Aloud can play straight through.
+ * A day's reading, as a list of passages Read Aloud can play straight through.
  *
- * The plan screens each build this themselves out of their own state — a day,
- * its catch-up chapters, its harmony sections — and that is fine for drawing a
- * card. Playback needs it from anywhere, including the Profile card, which does
- * not load catch-up days at all. So it is worked out once here, from storage,
- * and both buttons ask the same question.
+ * A card that is already showing a day hands that day straight to
+ * `buildPlaylistForDay`, so the button plays what the card lists — including
+ * an overdue day on a plan that is behind. `getTodayPlaylist` keeps the old
+ * route from storage for any caller with no card in front of it.
  */
 
 import type { HarmonyPassage, HarmonySection } from '@projectbible/core';
@@ -83,10 +82,8 @@ function pickTodayDay(plan: any, progress: Map<number, boolean>, todayStr: strin
 /**
  * Build today's playlist, or null when there is nothing to play.
  *
- * Book names in plan data are the plural form ("Psalms") where the reader's
- * canon is singular, so every name is normalised on the way out — the engine
- * looks chapters up by that name and speaks it aloud through the same
- * normalisation.
+ * For callers with no day in hand — the plan is found in storage and the day
+ * picked the same way the Reading Plan modal picks it.
  */
 export async function getTodayPlaylist(): Promise<PlanPlaylist | null> {
   const active = loadActivePlan();
@@ -98,6 +95,23 @@ export async function getTodayPlaylist(): Promise<PlanPlaylist | null> {
   const todayStr = localDateStr(new Date());
   const day = pickTodayDay(active.plan, completed, todayStr);
   if (!day) return null;
+
+  return buildPlaylistForDay(active.id, day);
+}
+
+/**
+ * One given day of one given plan, ready to play, or null when it is empty.
+ *
+ * The day comes from the card that is showing it, so there is no second guess
+ * at which day is meant. Book names in plan data are the plural form
+ * ("Psalms") where the reader's canon is singular, so every name is normalised
+ * on the way out — the engine looks chapters up by that name and speaks it
+ * aloud through the same normalisation.
+ */
+export async function buildPlaylistForDay(planId: string, day: any): Promise<PlanPlaylist | null> {
+  if (!day) return null;
+
+  const entries = await readingProgressStore.getProgressForPlan(planId);
 
   const sections: HarmonySection[] = day.harmonySections ?? [];
   if (sections.length > 0) {
@@ -119,7 +133,7 @@ export async function getTodayPlaylist(): Promise<PlanPlaylist | null> {
     const chapterRefs = sections.flatMap((s) => s.chapter_refs ?? []);
     const chapters = [...new Map(chapterRefs.map((r) => [r.book + r.chapter, r])).values()];
     return {
-      planId: active.id,
+      planId,
       dayNumber: day.dayNumber,
       planType: 'harmony',
       passages,
@@ -131,7 +145,7 @@ export async function getTodayPlaylist(): Promise<PlanPlaylist | null> {
 
   // A standard day, with any catch-up chapters the plan screen has added — the
   // card lists those too, so playback has to include them.
-  const catchUp = loadCatchUpDays(active.id).find((d) => d.dayNumber === day.dayNumber);
+  const catchUp = loadCatchUpDays(planId).find((d) => d.dayNumber === day.dayNumber);
   const entry = entries.find((e) => e.dayNumber === day.dayNumber);
   const added = entry?.catchUpAdjustment?.addedChapters ?? catchUp?.chapters ?? [];
   const chapters = [...(day.chapters ?? []), ...added].map((c: any) => ({
@@ -141,7 +155,7 @@ export async function getTodayPlaylist(): Promise<PlanPlaylist | null> {
   if (chapters.length === 0) return null;
 
   return {
-    planId: active.id,
+    planId,
     dayNumber: day.dayNumber,
     planType: 'standard',
     passages: chapters.map((c) => ({ book: c.book, chapter: c.chapter })),
