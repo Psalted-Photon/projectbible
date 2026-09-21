@@ -178,6 +178,17 @@ export function suggestCatchUp(
   return suggestions;
 }
 
+/**
+ * Plan data is generated with plural book names ("Psalms") while stored
+ * progress is canonicalised to the singular ("Psalm"), so a raw string
+ * comparison never matches and every Psalm reads as unread. Core has no book
+ * table to normalise against, so fold case and drop a trailing "s" — enough to
+ * pair the two spellings of the same book without colliding any two real books.
+ */
+function chapterKey(book: string, chapter: number): string {
+  return `${book.toLowerCase().replace(/s$/, "")}::${chapter}`;
+}
+
 export function calculateVerseCounts(
   plan: ReadingPlan,
   progressEntries: ReadingProgressEntry[],
@@ -196,8 +207,9 @@ export function calculateVerseCounts(
       const count = verseCounts[chapter.book]?.[chapter.chapter - 1] ?? 0;
       dayTotal += count;
 
+      const key = chapterKey(chapter.book, chapter.chapter);
       const chapterProgress = progress?.chaptersRead.find(
-        (item) => item.book === chapter.book && item.chapter === chapter.chapter,
+        (item) => chapterKey(item.book, item.chapter) === key,
       );
       const latest = chapterProgress?.actions?.[chapterProgress.actions.length - 1];
       if (latest?.type === "checked") {

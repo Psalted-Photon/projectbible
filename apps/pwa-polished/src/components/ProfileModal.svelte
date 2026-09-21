@@ -7,7 +7,7 @@
   import { readingPlanModalStore } from '../stores/readingPlanModalStore';
   import { navigationStore, availableTranslations } from '../stores/navigationStore';
   import { translationLabel } from '../lib/bibleData';
-  import { readingProgressStore } from '../stores/ReadingProgressStore';
+  import { readingProgressStore, getChapterKey } from '../stores/ReadingProgressStore';
   import { readingProgressVersion } from '../stores/readingProgressVersionStore';
   import { getDaysAheadBehind, calculateStreak, planDayDateStr } from '@projectbible/core';
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
@@ -649,8 +649,9 @@
         total += verseCount;
 
         if (!progress) return;
+        const key = getChapterKey(chapter.book, chapter.chapter);
         const chapterProgress = progress.chaptersRead.find(
-          (item: any) => item.book === chapter.book && item.chapter === chapter.chapter,
+          (item: any) => getChapterKey(item.book, item.chapter) === key,
         );
         if (!chapterProgress || chapterProgress.actions.length === 0) return;
         const latest = chapterProgress.actions[chapterProgress.actions.length - 1];

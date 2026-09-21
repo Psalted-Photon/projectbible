@@ -7,6 +7,7 @@
   import {
     readingProgressStore,
     getLatestChapterState,
+    getChapterKey,
     type ReadingProgressEntry,
     type HarmonySectionProgress,
   } from '../stores/ReadingProgressStore';
@@ -313,8 +314,9 @@
         total += verseCount;
 
         if (!progress) return;
+        const key = getChapterKey(chapter.book, chapter.chapter);
         const chapterProgress = progress.chaptersRead.find(
-          (item) => item.book === chapter.book && item.chapter === chapter.chapter,
+          (item) => getChapterKey(item.book, item.chapter) === key,
         );
         if (!chapterProgress || chapterProgress.actions.length === 0) return;
         const latest = chapterProgress.actions[chapterProgress.actions.length - 1];
@@ -540,14 +542,22 @@
     return state === 'checked';
   }
 
+  /**
+   * Counts only the day's own chapters. Even Spread can push overdue chapters
+   * onto a day, but the row only draws chips for `day.chapters` — counting the
+   * added ones too gave days a denominator they could never reach from the list
+   * (Sep 1 read "1/10" beside two checkboxes). The extras stay tickable from the
+   * reader and the catch-up view, and `catchUp` surfaces them as a marker so
+   * they aren't invisible.
+   */
   function getDayProgressCounts(day: any) {
     const progress = getDayProgress(day.dayNumber);
-    const effectiveChapters = getEffectiveChapters(day);
-    const total = effectiveChapters.length;
-    const checked = effectiveChapters.filter((chapter: any) =>
+    const total = day.chapters.length;
+    const checked = day.chapters.filter((chapter: any) =>
       isChapterChecked(progress, chapter.book, chapter.chapter)
     ).length;
-    return { checked, total };
+    const catchUp = Math.max(0, getEffectiveChapters(day).length - total);
+    return { checked, total, catchUp };
   }
 
   function getDayStatus(day: any, todayStr: string = localDateStr(new Date())): 'unread' | 'current' | 'completed' | 'ahead' | 'overdue' {
@@ -991,7 +1001,8 @@
       for (const ch of day.chapters) {
         total++;
         const progress = dayProgressMap.get(day.dayNumber);
-        const cp = progress?.chaptersRead?.find((c: any) => c.book === ch.book && c.chapter === ch.chapter);
+        const key = getChapterKey(ch.book, ch.chapter);
+        const cp = progress?.chaptersRead?.find((c: any) => getChapterKey(c.book, c.chapter) === key);
         if (cp?.actions?.length) {
           const latest = cp.actions[cp.actions.length - 1];
           if (latest.type === 'checked') checked++;
@@ -1794,7 +1805,15 @@
                             </label>
                           {/each}
                         </span>
-                        <span class="day-progress">{counts.checked}/{counts.total}</span>
+                        <span class="day-progress">
+                          {counts.checked}/{counts.total}
+                          {#if 'catchUp' in counts && counts.catchUp > 0}
+                            <span
+                              class="day-catchup"
+                              title="{counts.catchUp} overdue chapter{counts.catchUp === 1 ? '' : 's'} moved onto this day — read them from the chapter itself or the catch-up view"
+                            >+{counts.catchUp} catch-up</span>
+                          {/if}
+                        </span>
                         <button
                           class="list-day-check"
                           title="Mark day complete"
@@ -2928,6 +2947,15 @@
     font-size: 11px;
     color: #8a8a8a;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* Quiet by design — the count is the thing being read, this only explains
+     why a day can sit at 2/2 without flipping to completed. */
+  .day-catchup {
+    margin-left: 4px;
+    font-size: 10px;
+    color: #c98b3e;
   }
 
   .list-day-check {

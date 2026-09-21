@@ -95,7 +95,7 @@ function buildEntryId(planId: string, dayNumber: number): string {
  * every row to be checked, and the orphan never could be, so a Psalms day could
  * never be finished.
  */
-function getChapterKey(book: string, chapter: number): string {
+export function getChapterKey(book: string, chapter: number): string {
   return `${normalizeBookName(book)}::${chapter}`;
 }
 
@@ -414,8 +414,9 @@ export class ReadingProgressStore {
     const now = Date.now();
 
     entry.chaptersRead = chapters.map((ch) => {
+      const key = getChapterKey(ch.book, ch.chapter);
       const existing = entry.chaptersRead.find(
-        (item) => item.book === ch.book && item.chapter === ch.chapter,
+        (item) => getChapterKey(item.book, item.chapter) === key,
       );
       const actions = existing?.actions ?? [];
       // Only append when the chapter isn't already checked — repeated "Mark Day
@@ -423,7 +424,7 @@ export class ReadingProgressStore {
       if (!isChapterChecked({ book: ch.book, chapter: ch.chapter, actions })) {
         actions.push({ type: "checked", timestamp: now });
       }
-      return { book: ch.book, chapter: ch.chapter, actions };
+      return { book: normalizeBookName(ch.book), chapter: ch.chapter, actions };
     });
 
     entry.completed = true;
@@ -613,8 +614,9 @@ export function getLatestChapterState(
   chapter: number,
 ): ChapterActionType | null {
   if (!entry) return null;
+  const key = getChapterKey(book, chapter);
   const chapterProgress = entry.chaptersRead.find(
-    (item) => item.book === book && item.chapter === chapter,
+    (item) => getChapterKey(item.book, item.chapter) === key,
   );
   if (!chapterProgress || chapterProgress.actions.length === 0) return null;
   return chapterProgress.actions[chapterProgress.actions.length - 1].type;
