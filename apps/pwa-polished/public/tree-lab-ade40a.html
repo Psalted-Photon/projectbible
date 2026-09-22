@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Family tree lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Milonga&display=swap">
+<style>
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #0d0c0b;
+    color: #ddd;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+  }
+
+  body { display: flex; height: 100vh; overflow: hidden; }
+
+  /* ── Left: the stage ────────────────────────────────────────────────── */
+  .stage {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: #0d0c0b;
+  }
+
+  .stage-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #241f1a;
+    flex-shrink: 0;
+  }
+  .stage-head h1 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 8px 0 0;
+    color: #8a7d6b;
+    letter-spacing: 0.02em;
+  }
+  .hint { font-size: 11.5px; color: #5d554a; }
+  .hint b { color: #8a7d6b; font-weight: 600; }
+
+  .canvas-wrap { flex: 1; position: relative; min-height: 0; }
+  /* touch-action none: the page must not pan or pinch the document out from
+     under the canvas, or the tree's own zoom never sees the gesture. */
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas.dragging { cursor: grabbing; }
+
+  /* Attribution. CC BY-SA is viral — this stays on screen. */
+  .attrib {
+    position: absolute;
+    left: 12px;
+    bottom: 10px;
+    font-size: 10px;
+    color: #4a443c;
+    max-width: 380px;
+    line-height: 1.5;
+    pointer-events: none;
+  }
+
+  .readout-box {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    background: rgba(13,12,11,0.82);
+    border: 1px solid #241f1a;
+    border-radius: 7px;
+    padding: 9px 11px;
+    font-size: 11.5px;
+    color: #a89a85;
+    line-height: 1.6;
+    pointer-events: none;
+    max-width: 260px;
+  }
+  .readout-box .nm { color: #e8dcc8; font-family: Milonga, serif; font-size: 15px; }
+  .readout-box .mn { color: #7d7264; font-style: italic; }
+  .readout-box .tr { font-size: 10.5px; letter-spacing: 0.04em; }
+  .readout-box.empty { display: none; }
+
+  /* ── Right: the controls ────────────────────────────────────────────── */
+  .panel {
+    width: 330px;
+    flex-shrink: 0;
+    background: #121110;
+    border-left: 1px solid #241f1a;
+    overflow-y: auto;
+    padding: 14px;
+  }
+
+  .panel h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b6153;
+    margin: 18px 0 10px;
+    font-weight: 600;
+  }
+  .panel h2:first-child { margin-top: 0; }
+
+  .ctl { margin-bottom: 11px; }
+  .ctl-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 3px;
+  }
+  .ctl-row label { font-size: 12.5px; color: #a89a85; }
+  .ctl-row output {
+    font-size: 12px;
+    color: #c9a227;
+    font-variant-numeric: tabular-nums;
+  }
+  .ctl input[type="range"] { width: 100%; accent-color: #c9a227; }
+
+  /* Per-tribe rows */
+  .tribe {
+    border: 1px solid #241f1a;
+    border-radius: 7px;
+    padding: 8px 9px;
+    margin-bottom: 7px;
+    background: #171513;
+  }
+  .tribe.sel { border-color: #6b5d3a; background: #1c1916; }
+  .tribe-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .stone {
+    width: 13px;
+    height: 13px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.22);
+  }
+  .tribe-name { font-size: 12.5px; color: #cdbfa8; flex: 1; font-family: Milonga, serif; }
+  .tribe-n { font-size: 10.5px; color: #5d554a; font-variant-numeric: tabular-nums; }
+
+  .tribe-body { display: none; margin-top: 7px; }
+  .tribe.open .tribe-body { display: block; }
+  .tribe-body .ctl { margin-bottom: 7px; }
+  .tribe-body .ctl-row label { font-size: 11.5px; color: #8a7d6b; }
+  .tribe-body .ctl-row output { font-size: 11px; }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: #a89a85;
+    margin-bottom: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .check input { accent-color: #c9a227; }
+
+  .panel-btn {
+    width: 100%;
+    background: #232019;
+    border: 1px solid #3a342a;
+    color: #a89a85;
+    border-radius: 6px;
+    padding: 7px 8px;
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+    margin-bottom: 7px;
+  }
+  .panel-btn:hover { background: #2c2820; color: #e0d4bf; }
+
+  .readout {
+    background: #0c0b0a;
+    border: 1px solid #241f1a;
+    border-radius: 6px;
+    padding: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10.5px;
+    color: #7d7264;
+    white-space: pre;
+    overflow-x: auto;
+    line-height: 1.5;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .note {
+    font-size: 11px;
+    color: #5d554a;
+    line-height: 1.55;
+    margin: 0 0 10px;
+  }
+
+  .loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #5d554a;
+    font-size: 13px;
+  }
+  .loading.err { color: #b8564f; text-align: center; padding: 0 30px; line-height: 1.6; }
+
+  /* Drawer handle, phone only */
+  .drawer-tab { display: none; }
+
+  /* ── Phone ──────────────────────────────────────────────────────────── */
+  /* The panel becomes a bottom drawer so the tree gets the whole width.
+     Controls here are the tribe list and its sliders only — no bough
+     dragging, which is a thin target next to a pinch gesture. */
+  @media (max-width: 760px) {
+    body { flex-direction: column; }
+
+    .stage { flex: 1; min-height: 0; }
+    .stage-head { padding: 8px 12px; }
+    .stage-head h1 { font-size: 12px; margin-right: 6px; }
+    .hint { font-size: 10.5px; }
+
+    .drawer-tab {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex-shrink: 0;
+      background: #171513;
+      border-top: 1px solid #2c2620;
+      color: #a89a85;
+      font-size: 12.5px;
+      font-family: inherit;
+      padding: 11px 14px;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .drawer-tab::before {
+      content: '';
+      width: 30px;
+      height: 3px;
+      border-radius: 2px;
+      background: #3a342a;
+    }
+
+    .panel {
+      width: 100%;
+      border-left: none;
+      border-top: 1px solid #241f1a;
+      /* Tall enough to work in, short enough to still see the tree move. */
+      max-height: 56vh;
+      padding: 12px 14px calc(18px + env(safe-area-inset-bottom));
+      flex-shrink: 0;
+      display: none;
+    }
+    body.drawer-open .panel { display: block; }
+
+    /* Bigger touch targets. A 13px slider thumb is not tappable. */
+    .ctl input[type="range"] { height: 30px; }
+    .tribe { padding: 10px; }
+    .tribe-head { padding: 3px 0; }
+    .tribe-name { font-size: 14px; }
+    .stone { width: 16px; height: 16px; }
+    .check { padding: 5px 0; }
+    .panel-btn { padding: 11px 8px; font-size: 13px; }
+
+    .attrib { max-width: none; right: 12px; font-size: 9.5px; }
+    .readout-box { max-width: 190px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="stage-head">
+    <h1>Family tree lab</h1>
+    <span class="hint" id="hintDesktop">
+      <b>Drag a bough</b> to swing it &middot; <b>Shift-drag</b> for spread &middot;
+      <b>Click a person</b> to trace their line &middot; <b>Scroll</b> to zoom
+    </span>
+    <span class="hint" id="hintTouch" style="display:none">
+      <b>Pinch</b> to zoom &middot; <b>Drag</b> to move &middot; <b>Tap a person</b> to trace their line
+    </span>
+  </div>
+  <div class="canvas-wrap">
+    <canvas id="cv"></canvas>
+    <div class="readout-box empty" id="hover"></div>
+    <div class="attrib" id="attrib"></div>
+    <div class="loading" id="loading">Loading people&hellip;</div>
+  </div>
+</div>
+
+<button class="drawer-tab" id="drawerTab">Dials</button>
+
+<div class="panel">
+  <h2>The twelve boughs</h2>
+  <p class="note">
+    Click a tribe to open its dials, or drag its bough on the stage.
+    Angle is measured from straight up.
+  </p>
+  <div id="tribes"></div>
+
+  <h2>Whole tree</h2>
+  <div id="globals"></div>
+
+  <h2>Show</h2>
+  <label class="check"><input type="checkbox" id="optDim" checked /> Dim what isn't selected</label>
+  <label class="check"><input type="checkbox" id="optRoots" checked /> Roots, down to God</label>
+  <label class="check"><input type="checkbox" id="optCrown" checked /> Matthew &amp; Luke lines</label>
+  <label class="check"><input type="checkbox" id="optLabels" checked /> Names on the big nodes</label>
+  <label class="check"><input type="checkbox" id="optGrain" checked /> Paper grain</label>
+  <label class="check"><input type="checkbox" id="optWind" checked /> Wind lines</label>
+
+  <h2>Values</h2>
+  <button class="panel-btn" id="fitBtn">Fit whole tree on screen</button>
+  <button class="panel-btn" id="copyBtn">Copy</button>
+  <button class="panel-btn" id="resetBtn">Reset to defaults</button>
+  <div class="readout" id="readout"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// Family tree lab — roadmap #25
+//
+// The layout is radial, but the twelve boughs are placed by hand rather than
+// by a weighting formula. That is the whole point: Judah has 278 descendants
+// and Dan has 2, and no single blend factor makes both read well. You author
+// the twelve directions; the algorithm still places people inside a bough.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Breastpiece stones, Exodus 28:17-20, in birth order ────────────────────
+// Polished and engraved like seals, not faceted. Readability rules carried
+// over from the plan: jasper speckles so it does not collide with ruby, the
+// greens are spread aqua to yellow-green, agate and onyx are striped.
+const STONES = {
+  Reuben:    { stone: 'ruby',       c: '#9e2b32', lit: '#e0555e' },
+  Simeon:    { stone: 'topaz',      c: '#b07d1a', lit: '#f0b73c' },
+  Levi:      { stone: 'beryl',      c: '#2e8b6f', lit: '#4fd6ad' },
+  Judah:     { stone: 'turquoise',  c: '#2b8ca8', lit: '#54cdee' },
+  Dan:       { stone: 'sapphire',   c: '#2f4ba8', lit: '#5f7fe8' },
+  Naphtali:  { stone: 'emerald',    c: '#1f7a3d', lit: '#3ec46a' },
+  Gad:       { stone: 'jacinth',    c: '#a8531f', lit: '#ec8340' },
+  Asher:     { stone: 'agate',      c: '#8a6b4a', lit: '#c9a077', striped: true },
+  Issachar:  { stone: 'amethyst',   c: '#6b3fa0', lit: '#a271e0' },
+  Zebulun:   { stone: 'chrysolite', c: '#7d9420', lit: '#bcd94a' },
+  Joseph:    { stone: 'onyx',       c: '#57534e', lit: '#9b948c', striped: true },
+  Benjamin:  { stone: 'jasper',     c: '#a03f5e', lit: '#e06d92', speckled: true },
+  Dinah:     { stone: 'pearl',      c: '#8f8578', lit: '#d6cdbd' },
+};
+const GOLD = '#c9a227';
+const LINEN = '#6b6153';
+
+// ── Defaults ───────────────────────────────────────────────────────────────
+// Starting angles fan the twelve across an upward arc in birth order, with
+// reach already leaning against the counts so Dan's twig is not lost next to
+// Judah on first load. These are a starting point to be dragged, not answers.
+const TRIBE_DEFAULTS = {
+  Reuben:   { angle: -72, spread: 10, reach: 1.20, lean:  -8 },
+  Simeon:   { angle: -58, spread: 12, reach: 1.15, lean:  -7 },
+  // Judah (278) and Levi (188) are 70% of everyone traced and sit next to each
+  // other in birth order, so they are the pair that collides first. Levi is
+  // pulled shorter and Judah longer to separate them by radius as well as by
+  // angle — the clash is still visible, which is the point of the lab.
+  Levi:     { angle: -42, spread: 26, reach: 0.88, lean:  -6 },
+  Judah:    { angle: -12, spread: 34, reach: 1.06, lean:  -3 },
+  Dan:      { angle:   8, spread:  5, reach: 1.50, lean:   3 },
+  Naphtali: { angle:  18, spread:  7, reach: 1.42, lean:   4 },
+  Gad:      { angle:  27, spread:  8, reach: 1.36, lean:   5 },
+  Asher:    { angle:  38, spread: 16, reach: 1.10, lean:   6 },
+  Issachar: { angle:  49, spread: 12, reach: 1.20, lean:   7 },
+  Zebulun:  { angle:  58, spread:  6, reach: 1.45, lean:   8 },
+  Joseph:   { angle:  67, spread: 18, reach: 1.05, lean:   9 },
+  Benjamin: { angle:  79, spread: 17, reach: 1.08, lean:  10 },
+  Dinah:    { angle: -84, spread:  4, reach: 1.25, lean: -10 },
+};
+
+const GLOBAL_SPECS = [
+  { key: 'ringGap',   label: 'Generation gap',   min: 10,  max: 70,  step: 1,    def: 30 },
+  { key: 'curve',     label: 'Radius curve',     min: 0.3, max: 1.2, step: 0.01, def: 0.62 },
+  { key: 'trunkLen',  label: 'Trunk length',     min: 30,  max: 180, step: 2,    def: 96 },
+  { key: 'rootGap',   label: 'Root spacing',     min: 8,   max: 40,  step: 1,    def: 19 },
+  { key: 'rootArc',   label: 'Root spread',      min: 0,   max: 80,  step: 1,    def: 34 },
+  { key: 'jitter',    label: 'Jitter',           min: 0,   max: 1,   step: 0.01, def: 0.38 },
+  { key: 'nodeSize',  label: 'Node size',        min: 1,   max: 6,   step: 0.1,  def: 2.6 },
+  { key: 'thickness', label: 'Branch thickness', min: 0.3, max: 4,   step: 0.1,  def: 1.5 },
+  { key: 'dimLevel',  label: 'Dim level',        min: 0,   max: 0.6, step: 0.01, def: 0.13 },
+  { key: 'glow',      label: 'Glow',             min: 0,   max: 1,   step: 0.01, def: 0.55 },
+];
+
+const T = {};   // per-tribe values
+const G = {};   // global values
+for (const [k, v] of Object.entries(TRIBE_DEFAULTS)) T[k] = { ...v };
+for (const s of GLOBAL_SPECS) G[s.key] = s.def;
+
+const OPTS = {
+  dim: true, roots: true, crown: true, labels: true, grain: true, wind: true,
+};
+
+// On a phone the only controls are the tribe list and its sliders. Swinging a
+// bough by touch would fight the pan and pinch gestures for the same finger,
+// so a touch pointer only ever moves the view or taps a person.
+const TOUCH = matchMedia('(pointer: coarse)').matches;
+if (TOUCH) {
+  document.getElementById('hintDesktop').style.display = 'none';
+  document.getElementById('hintTouch').style.display = '';
+}
+
+let DATA = null;
+let selectedTribe = null;   // a tribe name, or null for all
+let tracedPath = null;      // Set of ids on a traced lineage
+let hoverNode = null;
+
+// ── Load ───────────────────────────────────────────────────────────────────
+
+fetch('family-tree-data.json')
+  .then((r) => {
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    return r.json();
+  })
+  .then((d) => {
+    DATA = d;
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('attrib').textContent = d.attribution;
+    build();
+    buildPanel();
+    syncTribeRows();
+    syncGlobals();
+    layout();
+    resize(); // sizes the canvas and paints the first frame
+    // A phone's default scale shows only the middle of the canopy, so open on
+    // the whole tree there and let the user zoom in from something they can see.
+    if (TOUCH || W < 760) fitToScreen();
+  })
+  .catch((e) => {
+    const el = document.getElementById('loading');
+    el.className = 'loading err';
+    el.innerHTML =
+      'Could not load <code>family-tree-data.json</code>.<br>' +
+      'Run <code>node scripts/build-family-tree-data.mjs</code>, and open this page ' +
+      'over the dev server rather than from the filesystem.<br><br>' +
+      `<span style="color:#5d554a">${e.message}</span>`;
+  });
+
+// ── Geometry ───────────────────────────────────────────────────────────────
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+
+// View transform, driven by scroll and by dragging the background.
+let view = { x: 0, y: 0, k: 1 };
+
+const nodes = new Map();    // id -> node record with x, y
+let byTribe = new Map();    // tribe -> node[]
+let rootNodes = [];
+let crownM = [], crownL = [];
+
+/** Deterministic hash so jitter is stable across redraws. */
+function hash(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h >>> 0) % 10000) / 10000;
+}
+
+function build() {
+  nodes.clear();
+  byTribe = new Map();
+  for (const n of DATA.nodes) {
+    nodes.set(n.id, { ...n, kids: [] });
+  }
+  // Children lists, so a bough can be walked from its son of Jacob outward.
+  for (const n of nodes.values()) {
+    if (n.father && nodes.has(n.father)) nodes.get(n.father).kids.push(n.id);
+  }
+  for (const n of nodes.values()) {
+    if (!byTribe.has(n.tribe)) byTribe.set(n.tribe, []);
+    byTribe.get(n.tribe).push(n);
+  }
+  for (const list of byTribe.values()) list.sort((a, b) => a.depth - b.depth);
+}
+
+/**
+ * Place every node.
+ *
+ * Within a bough, a subtree is given a slice of its parent's angular span in
+ * proportion to how many leaves it carries. That is what keeps a deep begat
+ * chain from eating the width its cousins need, and it is the part the user
+ * does not author — only the twelve directions are placed by hand.
+ */
+function layout() {
+  if (!DATA) return;
+  const rad = (d) => (d * Math.PI) / 180;
+
+  // Leaf counts drive the angular share each subtree gets.
+  const leaves = new Map();
+  function countLeaves(id) {
+    if (leaves.has(id)) return leaves.get(id);
+    const n = nodes.get(id);
+    let c = 0;
+    for (const k of n.kids) c += countLeaves(k);
+    if (c === 0) c = 1;
+    leaves.set(id, c);
+    return c;
+  }
+
+  for (const [tribe, list] of byTribe) {
+    const t = T[tribe];
+    if (!t) continue;
+    const head = list[0];
+    if (!head) continue;
+    countLeaves(head.id);
+
+    // Angles here are "from straight up", clockwise, so the panel numbers read
+    // the way the tree looks rather than in canvas radians.
+    function place(id, angle, span, depth) {
+      const n = nodes.get(id);
+      const jit = (hash(id) - 0.5) * G.jitter;
+
+      // Non-linear radius: early generations spread, deep chains compress, so
+      // a 51-generation line is one long bough instead of 51 rings.
+      const r =
+        G.trunkLen +
+        Math.pow(depth + 1, G.curve) * G.ringGap * t.reach +
+        jit * G.ringGap * 0.5;
+
+      // Lean bends the bough away from straight as it climbs.
+      const bend = rad(t.lean) * Math.pow(depth / 8, 1.3);
+      const a = rad(angle - 90) + bend + jit * 0.04;
+
+      n.x = Math.cos(a) * r;
+      n.y = Math.sin(a) * r;
+      n.angle = angle;
+      n.r = r;
+
+      const kids = n.kids;
+      if (!kids.length) return;
+      const total = kids.reduce((s, k) => s + leaves.get(k), 0);
+      let cur = angle - span / 2;
+      for (const k of kids) {
+        const share = (leaves.get(k) / total) * span;
+        place(k, cur + share / 2, share * 0.92, depth + 1);
+        cur += share;
+      }
+    }
+
+    place(head.id, t.angle, t.spread, 0);
+  }
+
+  // Roots: the 22-node chain from Abraham down to God, in a downward wedge.
+  rootNodes = [];
+  if (DATA.roots) {
+    DATA.roots.forEach((r, i) => {
+      const spreadA = rad((i / Math.max(1, DATA.roots.length - 1) - 0.5) * G.rootArc);
+      const d = i * G.rootGap;
+      const jit = (hash(r.id) - 0.5) * G.jitter * 6;
+      rootNodes.push({
+        ...r,
+        x: Math.sin(spreadA) * d * 0.55 + jit,
+        y: G.trunkLen * 0.25 + Math.cos(spreadA) * d,
+        i,
+      });
+    });
+  }
+
+  // Crown lines are drawn from whatever nodes are already placed.
+  const pick = (list) => (list || []).map((c) => nodes.get(c.id)).filter((n) => n && n.x != null);
+  crownM = DATA.crown ? pick(DATA.crown.matthew) : [];
+  crownL = DATA.crown ? pick(DATA.crown.luke) : [];
+}
+
+// ── Drawing ────────────────────────────────────────────────────────────────
+
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  const wrap = cv.parentElement;
+  W = wrap.clientWidth;
+  H = wrap.clientHeight;
+  cv.width = W * DPR;
+  cv.height = H * DPR;
+  draw();
+}
+window.addEventListener('resize', resize);
+
+/**
+ * Frame the whole tree — roots, trunk and canopy — in the current window.
+ * On a phone the default scale shows only the middle, so this runs on first
+ * paint there and is available from the panel everywhere.
+ */
+function fitToScreen() {
+  if (!DATA) return;
+  const pts = [...nodes.values()].filter((n) => n.x != null);
+  if (OPTS.roots) pts.push(...rootNodes);
+  if (!pts.length) return;
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  // Room for the labels that sit above a bough and below God.
+  const pad = 34;
+  const k = Math.min((W - pad * 2) / (maxX - minX || 1), (H - pad * 2) / (maxY - minY || 1));
+  view.k = Math.max(0.05, Math.min(9, k));
+  // The origin is the trunk, which the draw pass puts at (W/2, H*0.62).
+  view.x = -((minX + maxX) / 2) * view.k;
+  view.y = -((minY + maxY) / 2) * view.k + (H / 2 - H * 0.62);
+  draw();
+}
+
+function isLit(n) {
+  if (tracedPath) return tracedPath.has(n.id);
+  if (!selectedTribe) return true;
+  return n.tribe === selectedTribe;
+}
+
+function draw() {
+  if (!DATA) return;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  // Ground
+  const g = ctx.createRadialGradient(W / 2, H * 0.62, 0, W / 2, H * 0.62, Math.max(W, H) * 0.75);
+  g.addColorStop(0, '#16130f');
+  g.addColorStop(1, '#0a0908');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  if (OPTS.wind) drawWind();
+
+  ctx.save();
+  ctx.translate(W / 2 + view.x, H * 0.62 + view.y);
+  ctx.scale(view.k, view.k);
+
+  const dimming = OPTS.dim && (selectedTribe || tracedPath);
+
+  if (OPTS.roots) drawRoots(dimming);
+  drawTrunk(dimming);
+
+  // Dim boughs first so lit ones sit over them.
+  for (const pass of [0, 1]) {
+    for (const [tribe, list] of byTribe) {
+      const lit = !dimming || (tracedPath ? list.some(isLit) : tribe === selectedTribe);
+      if ((pass === 0) === lit) continue;
+      drawBough(tribe, list, lit, dimming);
+    }
+  }
+
+  if (OPTS.crown) drawCrown(dimming);
+
+  ctx.restore();
+
+  if (OPTS.grain) drawGrain();
+  writeReadout();
+}
+
+function drawWind() {
+  ctx.save();
+  ctx.globalAlpha = 0.05;
+  ctx.strokeStyle = '#d8c9a8';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 7; i++) {
+    const y = ((i * 137) % H) + 20;
+    ctx.beginPath();
+    for (let x = -20; x < W + 20; x += 14) {
+      const yy = y + Math.sin((x + i * 90) / 110) * 16 + Math.sin(x / 37) * 3;
+      x === -20 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawGrain() {
+  // Cheap paper grain: a sparse speckle, drawn once over the whole frame.
+  ctx.save();
+  ctx.globalAlpha = 0.035;
+  ctx.fillStyle = '#d8c9a8';
+  for (let i = 0; i < 1400; i++) {
+    const x = (hash('gx' + i) * W) | 0;
+    const y = (hash('gy' + i) * H) | 0;
+    ctx.fillRect(x, y, 1, 1);
+  }
+  ctx.restore();
+}
+
+function drawRoots(dimming) {
+  const lit = !dimming;
+  ctx.save();
+  ctx.globalAlpha = lit ? 0.85 : G.dimLevel + 0.06;
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = G.thickness * 1.3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  rootNodes.forEach((r, i) => (i === 0 ? ctx.moveTo(r.x, r.y) : ctx.lineTo(r.x, r.y)));
+  ctx.stroke();
+
+  for (const r of rootNodes) {
+    const last = r.i === rootNodes.length - 1;
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, last ? G.nodeSize * 2.2 : G.nodeSize * 0.9, 0, Math.PI * 2);
+    ctx.fillStyle = last ? GOLD : '#8a6f2a';
+    ctx.fill();
+  }
+  // God, at the taproot.
+  if (OPTS.labels && rootNodes.length) {
+    const last = rootNodes[rootNodes.length - 1];
+    ctx.fillStyle = GOLD;
+    ctx.font = '600 15px Milonga, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(last.label, last.x, last.y + 26);
+  }
+  ctx.restore();
+}
+
+function drawTrunk(dimming) {
+  ctx.save();
+  ctx.globalAlpha = dimming ? G.dimLevel + 0.1 : 0.9;
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = G.thickness * 3.4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, G.trunkLen * 0.25);
+  ctx.lineTo(0, 0);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, G.nodeSize * 2.4, 0, Math.PI * 2);
+  ctx.fillStyle = GOLD;
+  ctx.fill();
+  if (OPTS.labels) {
+    ctx.fillStyle = '#e8dcc8';
+    ctx.font = '600 14px Milonga, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Jacob', 0, 22);
+  }
+  ctx.restore();
+}
+
+function drawBough(tribe, list, lit, dimming) {
+  const st = STONES[tribe] || { c: LINEN, lit: '#fff' };
+  const col = lit ? st.lit : st.c;
+  ctx.save();
+  ctx.globalAlpha = dimming && !lit ? G.dimLevel : 1;
+
+  // Branches
+  ctx.strokeStyle = col;
+  ctx.lineCap = 'round';
+  for (const n of list) {
+    if (n.x == null) continue;
+    const parent = n.father && nodes.get(n.father);
+    const from = parent && parent.x != null ? parent : { x: 0, y: 0 };
+    if (tracedPath && dimming) {
+      ctx.globalAlpha = tracedPath.has(n.id) ? 1 : G.dimLevel;
+    }
+    // Thinner as it climbs, so the silhouette tapers like a tree.
+    ctx.lineWidth = Math.max(0.35, G.thickness * (1 - Math.min(0.75, n.depth / 14)));
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    // A slight curve reads as growth rather than as a spoke diagram.
+    const mx = (from.x + n.x) / 2;
+    const my = (from.y + n.y) / 2;
+    const dx = n.x - from.x, dy = n.y - from.y;
+    ctx.quadraticCurveTo(mx - dy * 0.08, my + dx * 0.08, n.x, n.y);
+    ctx.stroke();
+  }
+
+  // Nodes
+  for (const n of list) {
+    if (n.x == null) continue;
+    const on = !tracedPath || tracedPath.has(n.id);
+    ctx.globalAlpha = dimming && !lit ? G.dimLevel : (on ? 1 : G.dimLevel);
+    const size = G.nodeSize * (n.depth === 0 ? 2.1 : n.kids.length ? 1.15 : 0.8);
+
+    if (lit && on && G.glow > 0) {
+      ctx.shadowColor = st.lit;
+      ctx.shadowBlur = 11 * G.glow;
+    }
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, size, 0, Math.PI * 2);
+    ctx.fillStyle = col;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Stripes and speckles keep colours apart for anyone who cannot separate
+    // them by hue — and every node can be labelled, so colour is never alone.
+    if (st.striped && size > 2) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(n.x - size, n.y);
+      ctx.lineTo(n.x + size, n.y);
+      ctx.stroke();
+    }
+    if (st.speckled && size > 2) {
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.fillRect(n.x - size * 0.4, n.y - size * 0.3, 0.9, 0.9);
+      ctx.fillRect(n.x + size * 0.2, n.y + size * 0.25, 0.9, 0.9);
+    }
+  }
+
+  // The son of Jacob names the bough.
+  const head = list[0];
+  if (OPTS.labels && head && head.x != null) {
+    ctx.globalAlpha = dimming && !lit ? G.dimLevel + 0.15 : 1;
+    ctx.fillStyle = lit ? '#f0e6d2' : '#8a7d6b';
+    ctx.font = '600 13px Milonga, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(tribe, head.x, head.y - 11);
+    if (lit) {
+      ctx.font = '9.5px -apple-system, sans-serif';
+      ctx.fillStyle = st.lit;
+      ctx.globalAlpha = 0.75;
+      ctx.fillText(st.stone, head.x, head.y - 23);
+    }
+  }
+  ctx.restore();
+}
+
+function drawCrown(dimming) {
+  const lines = [
+    { pts: crownM, col: '#d9c7a0', name: 'Matthew' },
+    { pts: crownL, col: '#9fb8c9', name: 'Luke' },
+  ];
+  ctx.save();
+  for (const l of lines) {
+    if (l.pts.length < 2) continue;
+    ctx.globalAlpha = dimming ? G.dimLevel + 0.12 : 0.6;
+    ctx.strokeStyle = l.col;
+    ctx.lineWidth = G.thickness * 1.1;
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath();
+    l.pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (OPTS.labels) {
+      const end = l.pts[l.pts.length - 1];
+      ctx.fillStyle = l.col;
+      ctx.font = '10.5px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(l.name, end.x, end.y - 9);
+    }
+  }
+  ctx.restore();
+}
+
+// ── Picking and interaction ────────────────────────────────────────────────
+
+function toWorld(cx, cy) {
+  return {
+    x: (cx - W / 2 - view.x) / view.k,
+    y: (cy - H * 0.62 - view.y) / view.k,
+  };
+}
+
+function pick(cx, cy) {
+  const p = toWorld(cx, cy);
+  let best = null, bestD = 14 / view.k;
+  for (const n of nodes.values()) {
+    if (n.x == null) continue;
+    const d = Math.hypot(n.x - p.x, n.y - p.y);
+    if (d < bestD) { bestD = d; best = n; }
+  }
+  return best;
+}
+
+/** Which bough is nearest this point, by angle from the trunk. */
+function pickBough(cx, cy) {
+  const p = toWorld(cx, cy);
+  const r = Math.hypot(p.x, p.y);
+  if (r < G.trunkLen * 0.6) return null;
+  const a = (Math.atan2(p.y, p.x) * 180) / Math.PI + 90;
+  let best = null, bestD = 999;
+  for (const tribe of byTribe.keys()) {
+    if (!T[tribe]) continue;
+    let d = Math.abs(((T[tribe].angle - a + 540) % 360) - 180);
+    d = 180 - d;
+    if (d < bestD) { bestD = d; best = tribe; }
+  }
+  return bestD < 26 ? best : null;
+}
+
+let drag = null;
+
+// Pinch-zoom. Two active pointers zoom about their midpoint; this is viewing,
+// not tuning, so it stays on the phone.
+const pointers = new Map();
+let pinch = null;
+
+cv.addEventListener('pointerdown', (e) => {
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), k: view.k };
+    drag = null;
+    return;
+  }
+
+  const r = cv.getBoundingClientRect();
+  const cx = e.clientX - r.left, cy = e.clientY - r.top;
+  const bough = e.pointerType === 'touch' ? null : pickBough(cx, cy);
+  if (bough) {
+    drag = {
+      type: e.shiftKey ? 'spread' : 'angle',
+      tribe: bough,
+      startA: angleAt(cx, cy),
+      startVal: e.shiftKey ? T[bough].spread : T[bough].angle,
+    };
+    selectTribe(bough);
+  } else {
+    drag = { type: 'pan', x: e.clientX - view.x, y: e.clientY - view.y };
+  }
+  cv.classList.add('dragging');
+  cv.setPointerCapture(e.pointerId);
+});
+
+function angleAt(cx, cy) {
+  const p = toWorld(cx, cy);
+  return (Math.atan2(p.y, p.x) * 180) / Math.PI + 90;
+}
+
+cv.addEventListener('pointermove', (e) => {
+  const r = cv.getBoundingClientRect();
+  const cx = e.clientX - r.left, cy = e.clientY - r.top;
+
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (pinch && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinch.d > 0) {
+      // Zoom about the pinch midpoint, so the tree grows where the fingers are
+      // rather than always about the trunk.
+      const mid = { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top };
+      const before = toWorld(mid.x, mid.y);
+      view.k = Math.max(0.05, Math.min(9, pinch.k * (d / pinch.d)));
+      const after = toWorld(mid.x, mid.y);
+      view.x += (after.x - before.x) * view.k;
+      view.y += (after.y - before.y) * view.k;
+      draw();
+    }
+    return;
+  }
+
+  if (!drag) {
+    const n = pick(cx, cy);
+    if (n !== hoverNode) {
+      hoverNode = n;
+      showHover(n);
+    }
+    return;
+  }
+
+  if (drag.type === 'pan') {
+    view.x = e.clientX - drag.x;
+    view.y = e.clientY - drag.y;
+    draw();
+    return;
+  }
+
+  const delta = ((angleAt(cx, cy) - drag.startA + 540) % 360) - 180;
+  const t = T[drag.tribe];
+  if (drag.type === 'angle') {
+    t.angle = Math.round(drag.startVal + delta);
+  } else {
+    t.spread = Math.max(1, Math.min(90, Math.round(drag.startVal + delta)));
+  }
+  syncTribeRow(drag.tribe);
+  layout();
+  draw();
+});
+
+function endDrag(e) {
+  if (e && e.pointerId != null) pointers.delete(e.pointerId);
+  // Lifting one finger of a pinch must not resume panning with the other, or
+  // the tree lurches as that finger's stale start position is applied.
+  if (pointers.size < 2) pinch = null;
+  if (pointers.size > 0 && drag && drag.type === 'pan') drag = null;
+
+  drag = null;
+  cv.classList.remove('dragging');
+  if (e && e.pointerId != null && cv.hasPointerCapture(e.pointerId)) {
+    cv.releasePointerCapture(e.pointerId);
+  }
+}
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
+
+cv.addEventListener('click', (e) => {
+  // The second finger of a pinch lands as a click when it lifts. Ignoring a
+  // click that arrives while fingers are still down keeps a zoom from also
+  // tracing whoever happened to be under one of them.
+  if (pointers.size > 0) return;
+  const r = cv.getBoundingClientRect();
+  const n = pick(e.clientX - r.left, e.clientY - r.top);
+  if (n) {
+    traceFrom(n);
+  } else if (!pickBough(e.clientX - r.left, e.clientY - r.top)) {
+    tracedPath = null;
+    selectTribe(null);
+  }
+  draw();
+});
+
+cv.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const f = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  view.k = Math.max(0.15, Math.min(9, view.k * f));
+  draw();
+}, { passive: false });
+
+/** Light the father-chain from this person back to the trunk. */
+function traceFrom(n) {
+  const path = new Set();
+  let cur = n.id;
+  const seen = new Set();
+  while (cur && nodes.has(cur) && !seen.has(cur)) {
+    seen.add(cur);
+    path.add(cur);
+    cur = nodes.get(cur).father;
+  }
+  tracedPath = path;
+  selectedTribe = n.tribe;
+  syncTribeRows();
+  showHover(n, true);
+}
+
+function showHover(n, pinned) {
+  const el = document.getElementById('hover');
+  if (!n) { el.className = 'readout-box empty'; return; }
+  const st = STONES[n.tribe] || {};
+  el.className = 'readout-box';
+  const depth = tracedPath ? `<div class="tr" style="color:#6b6153">${tracedPath.size} generations to Jacob</div>` : '';
+  el.innerHTML =
+    `<div class="nm">${n.label}</div>` +
+    (n.meaning ? `<div class="mn">${n.meaning}</div>` : '') +
+    `<div class="tr" style="color:${st.lit || '#888'}">${n.tribe} &middot; ${st.stone || ''}</div>` +
+    (n.verseCount ? `<div class="tr" style="color:#6b6153">${n.verseCount} verse${n.verseCount === 1 ? '' : 's'}</div>` : '') +
+    (pinned ? depth : '');
+}
+
+// ── Panel ──────────────────────────────────────────────────────────────────
+
+function selectTribe(tribe) {
+  selectedTribe = tribe;
+  if (!tribe) tracedPath = null;
+  syncTribeRows();
+  draw();
+}
+
+const TRIBE_SPECS = [
+  { key: 'angle',  label: 'Angle',  min: -180, max: 180, step: 1,    unit: '°' },
+  { key: 'spread', label: 'Spread', min: 1,    max: 90,  step: 1,    unit: '°' },
+  { key: 'reach',  label: 'Reach',  min: 0.3,  max: 2.2, step: 0.01, unit: '' },
+  { key: 'lean',   label: 'Lean',   min: -40,  max: 40,  step: 1,    unit: '°' },
+];
+
+function buildPanel() {
+  const host = document.getElementById('tribes');
+  host.innerHTML = '';
+  for (const tribe of DATA.tribeOrder.concat(byTribe.has('Dinah') ? ['Dinah'] : [])) {
+    if (!byTribe.has(tribe)) continue;
+    const st = STONES[tribe] || { c: LINEN, stone: '' };
+    const n = (DATA.counts && DATA.counts[tribe]) || byTribe.get(tribe).length;
+    const div = document.createElement('div');
+    div.className = 'tribe';
+    div.dataset.tribe = tribe;
+    div.innerHTML =
+      `<div class="tribe-head">` +
+        `<span class="stone" style="background:${st.c}"></span>` +
+        `<span class="tribe-name">${tribe}</span>` +
+        `<span class="tribe-n">${n} &middot; ${st.stone}</span>` +
+      `</div><div class="tribe-body">` +
+      TRIBE_SPECS.map((s) =>
+        `<div class="ctl"><div class="ctl-row">` +
+        `<label for="t_${tribe}_${s.key}">${s.label}</label>` +
+        `<output id="o_${tribe}_${s.key}"></output></div>` +
+        `<input type="range" id="t_${tribe}_${s.key}" data-tribe="${tribe}" data-key="${s.key}" ` +
+        `min="${s.min}" max="${s.max}" step="${s.step}" value="${T[tribe][s.key]}" /></div>`
+      ).join('') +
+      `</div>`;
+
+    div.querySelector('.tribe-head').addEventListener('click', () => {
+      const open = div.classList.contains('open');
+      selectTribe(open ? null : tribe);
+      if (!open) div.classList.add('open');
+    });
+    host.appendChild(div);
+  }
+
+  host.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!el.dataset.tribe) return;
+    T[el.dataset.tribe][el.dataset.key] = parseFloat(el.value);
+    syncTribeRow(el.dataset.tribe);
+    layout();
+    draw();
+  });
+
+  const gh = document.getElementById('globals');
+  gh.innerHTML = GLOBAL_SPECS.map((s) =>
+    `<div class="ctl"><div class="ctl-row">` +
+    `<label for="g_${s.key}">${s.label}</label><output id="go_${s.key}"></output></div>` +
+    `<input type="range" id="g_${s.key}" data-gkey="${s.key}" min="${s.min}" max="${s.max}" ` +
+    `step="${s.step}" value="${G[s.key]}" /></div>`
+  ).join('');
+  gh.addEventListener('input', (e) => {
+    const k = e.target.dataset.gkey;
+    if (!k) return;
+    G[k] = parseFloat(e.target.value);
+    syncGlobals();
+    layout();
+    draw();
+  });
+
+  for (const [id, key] of [
+    ['optDim', 'dim'], ['optRoots', 'roots'], ['optCrown', 'crown'],
+    ['optLabels', 'labels'], ['optGrain', 'grain'], ['optWind', 'wind'],
+  ]) {
+    document.getElementById(id).addEventListener('change', (e) => {
+      OPTS[key] = e.target.checked;
+      draw();
+    });
+  }
+}
+
+function syncTribeRow(tribe) {
+  for (const s of TRIBE_SPECS) {
+    const inp = document.getElementById(`t_${tribe}_${s.key}`);
+    const out = document.getElementById(`o_${tribe}_${s.key}`);
+    if (!inp) continue;
+    inp.value = T[tribe][s.key];
+    out.textContent = T[tribe][s.key] + s.unit;
+  }
+  writeReadout();
+}
+
+function syncTribeRows() {
+  for (const tribe of byTribe.keys()) {
+    if (!T[tribe]) continue;
+    syncTribeRow(tribe);
+    const row = document.querySelector(`.tribe[data-tribe="${tribe}"]`);
+    if (row) row.classList.toggle('sel', tribe === selectedTribe);
+  }
+}
+
+function syncGlobals() {
+  for (const s of GLOBAL_SPECS) {
+    const inp = document.getElementById(`g_${s.key}`);
+    const out = document.getElementById(`go_${s.key}`);
+    if (!inp) continue;
+    inp.value = G[s.key];
+    out.textContent = G[s.key];
+  }
+}
+
+function writeReadout() {
+  const lines = ['const BOUGHS = {'];
+  for (const tribe of byTribe.keys()) {
+    if (!T[tribe]) continue;
+    const t = T[tribe];
+    lines.push(
+      `  ${tribe.padEnd(9)}: { angle: ${String(t.angle).padStart(4)}, ` +
+      `spread: ${String(t.spread).padStart(2)}, reach: ${t.reach.toFixed(2)}, ` +
+      `lean: ${String(t.lean).padStart(3)} },`
+    );
+  }
+  lines.push('};', 'const TREE = {');
+  for (const s of GLOBAL_SPECS) lines.push(`  ${s.key}: ${G[s.key]},`);
+  lines.push('};');
+  document.getElementById('readout').textContent = lines.join('\n');
+}
+
+document.getElementById('fitBtn').addEventListener('click', fitToScreen);
+
+document.getElementById('drawerTab').addEventListener('click', () => {
+  document.body.classList.toggle('drawer-open');
+  const open = document.body.classList.contains('drawer-open');
+  document.getElementById('drawerTab').textContent = open ? 'Hide dials' : 'Dials';
+  // The stage changes height when the drawer moves, so the canvas must be
+  // re-measured or the tree is drawn to the old box and looks offset.
+  requestAnimationFrame(resize);
+});
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  navigator.clipboard?.writeText(document.getElementById('readout').textContent);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  for (const [k, v] of Object.entries(TRIBE_DEFAULTS)) T[k] = { ...v };
+  for (const s of GLOBAL_SPECS) G[s.key] = s.def;
+  view = { x: 0, y: 0, k: 1 };
+  tracedPath = null;
+  selectTribe(null);
+  syncTribeRows();
+  syncGlobals();
+  layout();
+  draw();
+});
+
+</script>
+</body>
+</html>

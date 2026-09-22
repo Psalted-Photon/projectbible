@@ -76,10 +76,11 @@
 
   // The reference names a book, so it is drawn in that book's colour — Isaiah
   // purple, Deuteronomy its own — exactly as the book reads everywhere else in
-  // the app. Only the text takes it. The card's edge, the grade caption and
-  // the chip outlines stay gold or silver, because those carry the other fact:
-  // whether this is a quotation or an echo. Two facts, two channels; letting
-  // the book colour touch the outlines would erase the grade.
+  // the app. Only text takes it, here and on the chips below. The card's edge,
+  // the grade caption and the chip outlines stay gold or silver, because those
+  // carry the other fact: whether this is a quotation or an echo. Two facts,
+  // two channels; letting the book colour touch the outlines would erase the
+  // grade, and letting the grade hold the chip text would erase the book.
   $: refColor = getBookColor(activeRef.book);
 
   // Which grade of claim this is. The gutter mark carries it in its colour, but
@@ -200,6 +201,7 @@
         <button
           class="ot-other"
           class:active={i === refIndex}
+          style="color:{getBookColor(ref.book)}"
           on:click|stopPropagation={() => dispatch('select', { index: i })}
         >{formatOtRef(ref)}</button>
       {/each}
@@ -339,19 +341,26 @@
     flex: 0 0 auto;
   }
 
+  /* Same split as the header: the ring carries the grade, the text carries the
+     book. Each chip is its own reference, so each takes its own book's colour
+     inline — Hebrews 1:5 braids Psalms and 2 Samuel, and the chips say so.
+     No colour here; the inline one would lose to it half the time.
+
+     The unselected chips are dimmed rather than greyed, because grey is now the
+     one thing they cannot be: the book colour is the only label a chip has. */
   .ot-other {
     background: none;
     border: 1px solid #3f3f3f;
     border-radius: 3px;
-    color: #8a8a8a;
     cursor: pointer;
     font-size: 0.68rem;
+    opacity: 0.55;
     padding: 2px 6px;
   }
 
   .ot-other.active {
     border-color: var(--ot-accent);
-    color: var(--ot-ink);
+    opacity: 1;
   }
 
   .ot-body {
