@@ -282,23 +282,50 @@
   /* The wide layout keeps the panel open beside the stage, so the button goes. */
   body.wide-layout .drawer-tab { display: none; }
 
-  /* Base (narrow): stacked, panel hidden until the button opens it. */
+  /* ── Base (narrow) ──────────────────────────────────────────────────────
+     The button and panel are FIXED to the bottom of the viewport rather than
+     laid out after the stage. The stage is a flex:1 column holding a flex:1
+     canvas, so it claims the full 100vh and pushes anything following it past
+     the bottom edge — and body has overflow:hidden, so there is no scrolling
+     to reach it. Taking them out of flow is what guarantees they are on screen. */
   body { flex-direction: column; }
   .stage { flex: 1; min-height: 0; }
+
+  .drawer-tab {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
   .panel {
-    width: 100%;
+    position: fixed;
+    left: 0;
+    right: 0;
+    /* Sits directly on top of the button, which is ~46px tall plus the inset. */
+    bottom: calc(46px + env(safe-area-inset-bottom));
+    z-index: 19;
+    width: auto;
     border-left: none;
     border-top: 1px solid #241f1a;
     max-height: 56vh;
-    padding: 12px 14px calc(18px + env(safe-area-inset-bottom));
-    flex-shrink: 0;
+    padding: 12px 14px;
     display: none;
   }
   body.drawer-open .panel { display: block; }
 
-  /* Wide: the original side-by-side, panel always open. */
+  /* The canvas must not sit under the button, or the tree's bottom is covered. */
+  .canvas-wrap { padding-bottom: calc(46px + env(safe-area-inset-bottom)); }
+
+  /* Wide: the original side-by-side, panel always open. Every fixed-position
+     rule from the narrow base has to be undone here, not just overridden in
+     part, or the panel stays pinned to the bottom of the window. */
   body.wide-layout { flex-direction: row; }
+  body.wide-layout .canvas-wrap { padding-bottom: 0; }
   body.wide-layout .panel {
+    position: static;
     display: block;
     width: 330px;
     max-height: none;
@@ -479,7 +506,7 @@ function applyLayoutMode() {
   // Stamped into the header so the running build can be identified on a device
   // with no console — a stale copy shows no build stamp at all.
   const b = document.getElementById('buildStamp');
-  if (b) b.textContent = `b3 · ${window.innerWidth}px · ${narrow ? 'drawer' : 'side'}`;
+  if (b) b.textContent = `b4 · ${window.innerWidth}px · ${narrow ? 'drawer' : 'side'}`;
 }
 applyLayoutMode();
 window.addEventListener('resize', applyLayoutMode);
