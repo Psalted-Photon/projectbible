@@ -310,8 +310,13 @@
     width: auto;
     border-left: none;
     border-top: 1px solid #241f1a;
-    max-height: 56vh;
-    padding: 12px 14px;
+    /* Half the old 56vh. The drawer scrolls, so a shorter one costs a little
+       scrolling and buys back the tree, which is the thing being judged.
+       In landscape 28vh is only ~110px, too short for one open tribe, so the
+       floor keeps four sliders reachable without scrolling; the cap stops it
+       eating a tall screen. */
+    max-height: clamp(170px, 28vh, 260px);
+    padding: 8px 12px;
     display: none;
   }
   body.drawer-open .panel { display: block; }
@@ -341,14 +346,27 @@
     .stage-head h1 { font-size: 12px; margin-right: 6px; }
     .hint { font-size: 10.5px; }
 
-    /* A 13px slider thumb is not tappable. */
-    .ctl input[type="range"] { height: 30px; }
-    .tribe { padding: 10px; }
-    .tribe-head { padding: 3px 0; }
-    .tribe-name { font-size: 14px; }
-    .stone { width: 16px; height: 16px; }
-    .check { padding: 5px 0; }
-    .panel-btn { padding: 11px 8px; font-size: 13px; }
+    /* The drawer is short, so everything inside is tightened — but the slider
+       thumbs keep a 26px row, because an untappable slider is not a control. */
+    .ctl { margin-bottom: 4px; }
+    .ctl input[type="range"] { height: 26px; }
+    .ctl-row { margin-bottom: 0; }
+
+    .tribe { padding: 5px 8px; margin-bottom: 4px; }
+    .tribe-head { padding: 1px 0; }
+    .tribe-name { font-size: 13px; }
+    .tribe-body { margin-top: 3px; }
+    .stone { width: 14px; height: 14px; }
+
+    .panel h2 { margin: 10px 0 6px; }
+    .panel h2:first-child { margin-top: 0; }
+    /* The intro line and the copied values block are reference, not controls,
+       so they give up their space first. */
+    .note { display: none; }
+    .readout { max-height: 92px; font-size: 10px; }
+
+    .check { padding: 3px 0; margin-bottom: 4px; }
+    .panel-btn { padding: 9px 8px; font-size: 13px; margin-bottom: 5px; }
 
     .attrib { max-width: none; right: 12px; font-size: 9.5px; }
     .readout-box { max-width: 190px; font-size: 11px; }
@@ -506,7 +524,7 @@ function applyLayoutMode() {
   // Stamped into the header so the running build can be identified on a device
   // with no console — a stale copy shows no build stamp at all.
   const b = document.getElementById('buildStamp');
-  if (b) b.textContent = `b4 · ${window.innerWidth}px · ${narrow ? 'drawer' : 'side'}`;
+  if (b) b.textContent = `b5 · ${window.innerWidth}px · ${narrow ? 'drawer' : 'side'}`;
 }
 applyLayoutMode();
 window.addEventListener('resize', applyLayoutMode);
