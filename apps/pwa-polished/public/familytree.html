@@ -3,6 +3,38 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- The lab is retuned and redeployed constantly, and a stale copy is
+     indistinguishable from a broken one. An earlier build was precached by the
+     service worker and kept replaying after the page had moved on, so this page
+     both refuses caching and, below, unregisters any worker still holding it. -->
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<script>
+// Evict the copy an earlier build's service worker already stored. Removing the
+// page from the precache list stops NEW devices caching it, but does nothing
+// about a device that cached it yesterday — only deleting it here does that.
+(function () {
+  try {
+    if ('caches' in window) {
+      caches.keys().then(function (keys) {
+        keys.forEach(function (k) {
+          caches.open(k).then(function (c) {
+            c.keys().then(function (reqs) {
+              reqs.forEach(function (r) {
+                if (r.url.indexOf('tree-lab-') !== -1 ||
+                    r.url.indexOf('familytree') !== -1 ||
+                    r.url.indexOf('family-tree-data') !== -1) {
+                  c.delete(r);
+                }
+              });
+            });
+          });
+        });
+      });
+    }
+  } catch (e) { /* private mode, or caches blocked; the page still works */ }
+})();
+</script>
 <title>Family tree lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -218,12 +250,13 @@
   }
   .loading.err { color: #b8564f; text-align: center; padding: 0 30px; line-height: 1.6; }
 
-  /* Drawer handle. Hidden on a wide window, where the panel is always open;
-     shown by the phone rules below AND by .force-drawer, which the script sets
-     from the real window width. Relying on the media query alone means that if
-     it ever fails to match there is no way to reach the dials at all. */
-  .drawer-tab { display: none; }
-  body.force-drawer .drawer-tab {
+  /* ── The dials: drawer by default, side column when the window is wide ──
+     Deliberately inverted from the usual "phone override" arrangement. The
+     narrow layout is the base state and .wide-layout is the override, so a
+     media query that fails to match, or a script that never runs, leaves the
+     Dials button on screen rather than hiding the only way to reach it. That
+     exact failure stranded this page once already. */
+  .drawer-tab {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -239,16 +272,20 @@
     user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
-  body.force-drawer .drawer-tab::before {
+  .drawer-tab::before {
     content: '';
     width: 30px;
     height: 3px;
     border-radius: 2px;
     background: #3a342a;
   }
-  body.force-drawer { flex-direction: column; }
-  body.force-drawer .stage { flex: 1; min-height: 0; }
-  body.force-drawer .panel {
+  /* The wide layout keeps the panel open beside the stage, so the button goes. */
+  body.wide-layout .drawer-tab { display: none; }
+
+  /* Base (narrow): stacked, panel hidden until the button opens it. */
+  body { flex-direction: column; }
+  .stage { flex: 1; min-height: 0; }
+  .panel {
     width: 100%;
     border-left: none;
     border-top: 1px solid #241f1a;
@@ -257,57 +294,27 @@
     flex-shrink: 0;
     display: none;
   }
-  body.force-drawer.drawer-open .panel { display: block; }
+  body.drawer-open .panel { display: block; }
 
-  /* ── Phone ──────────────────────────────────────────────────────────── */
-  /* The panel becomes a bottom drawer so the tree gets the whole width.
-     Controls here are the tribe list and its sliders only — no bough
-     dragging, which is a thin target next to a pinch gesture. */
+  /* Wide: the original side-by-side, panel always open. */
+  body.wide-layout { flex-direction: row; }
+  body.wide-layout .panel {
+    display: block;
+    width: 330px;
+    max-height: none;
+    border-left: 1px solid #241f1a;
+    border-top: none;
+    padding: 14px;
+  }
+
+  /* Touch targets and tighter chrome on a small screen. Layout is handled by
+     .wide-layout above, not here, so this block is cosmetic only. */
   @media (max-width: 760px) {
-    body { flex-direction: column; }
-
-    .stage { flex: 1; min-height: 0; }
     .stage-head { padding: 8px 12px; }
     .stage-head h1 { font-size: 12px; margin-right: 6px; }
     .hint { font-size: 10.5px; }
 
-    .drawer-tab {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      flex-shrink: 0;
-      background: #171513;
-      border-top: 1px solid #2c2620;
-      color: #a89a85;
-      font-size: 12.5px;
-      font-family: inherit;
-      padding: 11px 14px;
-      cursor: pointer;
-      user-select: none;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .drawer-tab::before {
-      content: '';
-      width: 30px;
-      height: 3px;
-      border-radius: 2px;
-      background: #3a342a;
-    }
-
-    .panel {
-      width: 100%;
-      border-left: none;
-      border-top: 1px solid #241f1a;
-      /* Tall enough to work in, short enough to still see the tree move. */
-      max-height: 56vh;
-      padding: 12px 14px calc(18px + env(safe-area-inset-bottom));
-      flex-shrink: 0;
-      display: none;
-    }
-    body.drawer-open .panel { display: block; }
-
-    /* Bigger touch targets. A 13px slider thumb is not tappable. */
+    /* A 13px slider thumb is not tappable. */
     .ctl input[type="range"] { height: 30px; }
     .tribe { padding: 10px; }
     .tribe-head { padding: 3px 0; }
@@ -319,6 +326,7 @@
     .attrib { max-width: none; right: 12px; font-size: 9.5px; }
     .readout-box { max-width: 190px; font-size: 11px; }
   }
+
 </style>
 </head>
 <body>
@@ -333,6 +341,7 @@
     <span class="hint" id="hintTouch" style="display:none">
       <b>Pinch</b> to zoom &middot; <b>Drag</b> to move &middot; <b>Tap a person</b> to trace their line
     </span>
+    <span class="hint" id="buildStamp" style="margin-left:auto;color:#4a443c"></span>
   </div>
   <div class="canvas-wrap">
     <canvas id="cv"></canvas>
@@ -464,8 +473,13 @@ if (TOUCH) {
  */
 function applyLayoutMode() {
   const narrow = window.innerWidth <= 760 || TOUCH;
-  document.body.classList.toggle('force-drawer', narrow);
+  // The class marks the WIDE case, because narrow is the base state.
+  document.body.classList.toggle('wide-layout', !narrow);
   if (!narrow) document.body.classList.remove('drawer-open');
+  // Stamped into the header so the running build can be identified on a device
+  // with no console — a stale copy shows no build stamp at all.
+  const b = document.getElementById('buildStamp');
+  if (b) b.textContent = `b3 · ${window.innerWidth}px · ${narrow ? 'drawer' : 'side'}`;
 }
 applyLayoutMode();
 window.addEventListener('resize', applyLayoutMode);

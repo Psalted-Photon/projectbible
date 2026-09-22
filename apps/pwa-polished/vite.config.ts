@@ -257,7 +257,7 @@ export default defineConfig({
         // needed — globIgnores keeps the page out of the precache, the denylist
         // keeps the fallback off it — and missing either one is silent.
         //   voice-lab.html    voice auditioning.
-        //   tree-lab-*.html   the family tree lab (roadmap #25). It is tuned
+        //   familytree.html   the family tree lab (roadmap #25). It is tuned
         //                     and redeployed constantly, so a precached copy
         //                     would keep serving the previous build's dials.
         //                     Its data JSON stays out of the precache too: at
@@ -275,13 +275,13 @@ export default defineConfig({
           '**/voice-lab.html',
           '**/reset.html',
           '**/email/**',
-          '**/tree-lab-*.html',
+          '**/familytree.html',
           '**/family-tree-data.json',
         ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
           /^\/reset\.html$/,
-          /^\/tree-lab-[\w-]+\.html$/,
+          /^\/familytree\.html$/,
         ],
         runtimeCaching: [
           {
