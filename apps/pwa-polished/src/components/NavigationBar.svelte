@@ -73,6 +73,7 @@
     Microscope,
     BookOpenText,
     MapTrifold,
+    Quotes,
     Gear,
     SteeringWheel,
     User,
@@ -725,6 +726,7 @@
     plan: BookOpenText,
     map: MapTrifold,
     timeline: Hourglass,
+    otquote: Quotes,
     link: Graph,
   };
 
@@ -732,6 +734,23 @@
   function crumbLabel(c: { book: string; chapter: number; verse: number | null }): string {
     const ref = `${shortBookName(c.book)} ${c.chapter}`;
     return c.verse != null ? `${ref}:${c.verse}` : ref;
+  }
+
+  /**
+   * The translation a crumb goes back to, shown only when it is not the one
+   * you are in now.
+   *
+   * Until the Old Testament quotation marks arrived, a crumb could never differ
+   * — every call site passed the current translation forward, so saying it
+   * would have been noise on every crumb on a phone. Going to the Septuagint
+   * makes a differing translation the normal path, and "Heb 1:7" alone no
+   * longer says where tapping it lands. It is stored on the crumb already, so
+   * this is display only.
+   */
+  function crumbTranslation(c: { nav: { translation: string } }): string {
+    return c.nav.translation && c.nav.translation !== currentTranslation
+      ? c.nav.translation.toUpperCase()
+      : '';
   }
 
   /**
@@ -1750,13 +1769,15 @@
       {#if $canGoBack}
         {#each $navTrail as crumb, i}
           {@const Icon = CRUMB_ICONS[crumb.kind]}
+          {@const crumbTrans = crumbTranslation(crumb)}
           <button
             class="pill-btn pill-btn-text crumb-btn"
             style="color: {getBookColor(crumb.book)};"
             on:click={() => goToCrumb(i + 1)}
-            title={i === 0 ? `Back to ${crumbLabel(crumb)} (home)` : `Back to ${crumbLabel(crumb)}`}
+            title={`Back to ${crumbLabel(crumb)}${crumbTrans ? ` in ${crumbTrans}` : ''}${i === 0 ? ' (home)' : ''}`}
           >
             <span class="pill-label">{crumbLabel(crumb)}</span>
+            {#if crumbTrans}<span class="crumb-trans">{crumbTrans}</span>{/if}
             <Icon size={11} weight="fill" />
           </button>
           <span class="crumb-sep"><CaretRight size={9} weight="bold" /></span>
@@ -2781,6 +2802,23 @@
     font-weight: 500;
     color: inherit;
     white-space: nowrap;
+  }
+
+  /* ── The translation a crumb returns to ────────────────────────────────
+     Only rendered when it differs from the current one, so most trails never
+     show it. Smaller and dimmed against the crumb's own book colour: it is
+     qualifying the reference, not competing with it. */
+  .crumb-trans {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    opacity: 0.55;
+    white-space: nowrap;
+  }
+
+  .crumb-trans::before {
+    content: "·";
+    margin: 0 2px 0 1px;
   }
 
   /* References toggle */
