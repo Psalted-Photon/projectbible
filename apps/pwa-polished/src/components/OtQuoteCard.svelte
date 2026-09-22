@@ -18,14 +18,19 @@
    * Positioning is the part that differs from FootnoteCard. That card anchors
    * to its marker's point and falls back to just below it, which for a gutter
    * mark sitting on a verse's first line drops the card straight onto the verse
-   * you tapped. Here the anchor is the verse's whole box and staying off it is
-   * structural — see placement below.
+   * you tapped. Here the anchor is the verse's whole box and the card always
+   * sits below it — see placement below.
    */
   import { createEventDispatcher } from 'svelte';
   import { formatOtRef, type OtQuoteEntry } from '../lib/otQuotesIndex';
+  import { OT_CARD_GAP, OT_CARD_MAX_HEIGHT } from '../lib/otCardMetrics';
 
-  /** The tapped verse's box in viewport coordinates — what to stay clear of. */
-  export let verseTop = 0;
+  /**
+   * The tapped verse's box in viewport coordinates — what to stay clear of.
+   *
+   * Only the bottom edge matters now that the card is always below the verse,
+   * so the top is not passed. The left edge and width are for centring.
+   */
   export let verseBottom = 0;
   export let verseLeft = 0;
   export let verseWidth = 0;
@@ -42,7 +47,7 @@
   // Narrower than FootnoteCard's 320: one reference and one sentence, against a
   // note that can run to a paragraph and list a dozen passages.
   const WIDTH = 280;
-  const GAP = 10;
+  const GAP = OT_CARD_GAP;
   const EDGE = 8;
 
   let rootEl: HTMLElement;
@@ -67,50 +72,61 @@
   $: activeRef = entry.refs[refIndex];
   $: hasLxx = !!entry.lxx[refIndex];
 
+  // Which grade of claim this is. The gutter mark carries it in its colour, but
+  // that colour is gone the moment the card covers the mark, so the card says
+  // it in words. "Echoing" rather than "alludes to": it is the word used for
+  // exactly this relationship, and it is short enough never to wrap beside →.
+  $: isAllusion = entry.grade === 'allusion';
+  $: gradeLabel = isAllusion ? 'Echoing' : 'Quoting';
+
   // ── Placement ──────────────────────────────────────────────────────────
   //
-  // The rule is not "prefer above, fall back to below" but "never intersect the
-  // verse". Whichever side has room takes the card; if neither does, the larger
-  // side takes it and the card is capped to fit there. The card is kept small
-  // enough (280 × ~200) that a side almost always fits.
+  // Always below the verse. Never above, even when above has more room: above
+  // the verse is where the verse you were just reading is, and covering it is
+  // the one thing this card must not do. Choosing the roomier side would put
+  // the card there roughly half the time, which is why that choice is gone.
+  //
+  // Room below is not this file's problem to solve either. The reader nudges
+  // itself down on open (nudgeOtCardIntoView in BibleReader) so that a whole
+  // card fits, the way the radial ring does, and the scroll handler re-measures
+  // as it goes. What is left here is the last-resort guard: if the verse's
+  // bottom has genuinely gone off the screen mid-scroll, the card hides rather
+  // than squeezing to nothing.
   //
   // The height is not known until it renders, so the measured box is used where
   // there is one and a sensible guess on the first frame.
-  const MAX_HEIGHT = 200;
+  const MAX_HEIGHT = OT_CARD_MAX_HEIGHT;
   let measured = 150;
   $: if (rootEl) measured = Math.min(rootEl.offsetHeight || measured, MAX_HEIGHT);
 
   $: viewportH = typeof window !== 'undefined' ? window.innerHeight : 800;
   $: viewportW = typeof window !== 'undefined' ? window.innerWidth : 400;
 
-  // How much room each side of the verse actually has. A verse scrolled part
-  // way off screen has a box reaching past the viewport, so these clamp at zero
-  // rather than going negative and reading as room.
-  $: roomAbove = Math.max(0, Math.min(verseTop, viewportH) - GAP - EDGE);
+  // How much room there is under the verse. A verse scrolled part way off the
+  // bottom has a box reaching past the viewport, so this clamps at zero rather
+  // than going negative and reading as room.
   $: roomBelow = Math.max(0, viewportH - Math.max(verseBottom, 0) - GAP - EDGE);
 
-  /** Above when it fits there, below when it fits there, else the larger side. */
-  $: placeAbove =
-    measured <= roomAbove ? true : measured <= roomBelow ? false : roomAbove > roomBelow;
-
   /**
-   * The height the card is allowed, which is whatever its side actually has.
+   * The height the card is allowed, which is whatever is under the verse.
    *
    * No minimum is enforced. A floor would be the one thing that could put the
    * card back over the verse — precisely what this is here to prevent — and a
-   * verse tall enough to leave neither side 70px is a verse filling the screen,
-   * where a squeezed card is the honest outcome. Not covering the words you
-   * tapped matters more than the card looking comfortable.
+   * verse whose bottom is at the foot of the screen is one the reader has
+   * already tried to scroll out of the way. Not covering the words you tapped
+   * matters more than the card looking comfortable.
    */
-  $: cappedHeight = Math.max(0, Math.min(MAX_HEIGHT, placeAbove ? roomAbove : roomBelow));
+  $: cappedHeight = Math.max(0, Math.min(MAX_HEIGHT, roomBelow));
 
-  /** What the card will actually occupy, once capped. */
-  $: height = Math.min(measured, cappedHeight);
-
-  // Anchored to the near edge of the verse and grown away from it, so the card
-  // cannot reach the verse from either side. Nothing clamps it back towards the
-  // verse afterwards: an edge clamp is what would undo the whole rule.
-  $: top = placeAbove ? verseTop - GAP - height : verseBottom + GAP;
+  // Anchored to the verse's bottom edge and grown downward, so the card cannot
+  // reach the verse. Nothing clamps it back upward afterwards: an upward clamp
+  // is what would undo the whole rule.
+  //
+  // In paragraph layout a .verse is an inline box, and getBoundingClientRect
+  // returns the union of its line boxes — so verseBottom is the bottom of the
+  // verse's last line whether it runs to one line or six. No per-line walking
+  // is needed; the box already measured is the right one.
+  $: top = verseBottom + GAP;
 
   // Centred on the verse rather than on the mark: the mark sits hard against
   // the left gutter, so centring on it would push the card off the left edge on
@@ -130,12 +146,16 @@
 <div
   class="ot-card themed"
   class:ot-hidden={cappedHeight < 48}
+  class:ot-echo={isAllusion}
   bind:this={rootEl}
   use:portal
   style="left:{left}px; top:{top}px; width:{WIDTH}px; max-height:{cappedHeight}px;"
 >
   <div class="ot-head">
-    <span class="ot-ref">{formatOtRef(activeRef)}</span>
+    <div class="ot-head-lines">
+      <span class="ot-grade">{gradeLabel}</span>
+      <span class="ot-ref">{formatOtRef(activeRef)}</span>
+    </div>
     <button
       class="ot-goto"
       title={hasLxx ? 'Read it in the Septuagint' : 'Go to the passage'}
@@ -179,7 +199,15 @@
 </div>
 
 <style>
+  /* One accent colour per card, and it is the colour of the mark you tapped:
+     gold for a quotation, silver for an echo. Held in a custom property so the
+     edge, the grade line and the reference all turn together — the card should
+     read as the same object as the mark, not as a panel with a coloured word
+     in it. --ot-ink is the same hue lifted for text, which needs more contrast
+     against #2a2a2a than a 3px border does. */
   .ot-card {
+    --ot-accent: #c9a227;
+    --ot-ink: #d9b23c;
     position: fixed;
     z-index: 10000;
     display: flex;
@@ -187,9 +215,14 @@
     padding: 7px 10px 8px;
     background: #2a2a2a;
     border: 1px solid #444;
-    border-left: 3px solid #c9a227;
+    border-left: 3px solid var(--ot-accent);
     border-radius: 6px;
     box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  }
+
+  .ot-card.ot-echo {
+    --ot-accent: #b8c4cc;
+    --ot-ink: #cbd6de;
   }
 
   .ot-hidden {
@@ -205,8 +238,29 @@
     flex: 0 0 auto;
   }
 
+  /* Two stacked lines against the → button, which stays centred on the pair. */
+  .ot-head-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  /* Same quiet register as the SEPTUAGINT foot line, so it reads as a caption
+     over the reference rather than as a heading of its own. */
+  .ot-grade {
+    color: var(--ot-ink);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    line-height: 1.2;
+    opacity: 0.75;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
   .ot-ref {
-    color: #d9b23c;
+    color: var(--ot-ink);
     font-size: 0.82rem;
     font-weight: 600;
     white-space: nowrap;
@@ -218,7 +272,7 @@
     background: #333;
     border: none;
     border-radius: 3px;
-    color: #d9b23c;
+    color: var(--ot-ink);
     cursor: pointer;
     font-size: 0.8rem;
     line-height: 1;
@@ -228,7 +282,7 @@
 
   .ot-goto:hover {
     background: #3d3d3d;
-    color: #e8c85a;
+    filter: brightness(1.12);
   }
 
   .ot-others {
@@ -250,8 +304,8 @@
   }
 
   .ot-other.active {
-    border-color: #c9a227;
-    color: #d9b23c;
+    border-color: var(--ot-accent);
+    color: var(--ot-ink);
   }
 
   .ot-body {

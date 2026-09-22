@@ -97,6 +97,7 @@
     otQuotesForChapter,
     type OtQuoteEntry,
   } from "../lib/otQuotesIndex";
+  import { OT_CARD_GAP, OT_CARD_MAX_HEIGHT } from "../lib/otCardMetrics";
   import type { NoteKind } from "../lib/verseRendering";
   import { userProfileStore } from "../stores/userProfileStore";
   import { profileModalStore } from "../stores/profileModalStore";
@@ -982,7 +983,8 @@
   // The one difference is what it anchors to. The footnote card anchors to its
   // marker's point, which for a gutter mark on a verse's first line would put
   // the card straight over the verse you just tapped. This one anchors to the
-  // verse's whole box, so the card can be kept off it — see OtQuoteCard.
+  // bottom of the verse's whole box and always opens below it, nudging the
+  // reader down when there is not room — see nudgeOtCardIntoView.
 
   /** The mark currently open, its verse, and the box to stay clear of. */
   let otQuoteHit: {
@@ -991,7 +993,6 @@
     chapter: number;
     verse: number;
     entry: OtQuoteEntry;
-    verseTop: number;
     verseBottom: number;
     verseLeft: number;
     verseWidth: number;
@@ -1026,7 +1027,6 @@
     const box = verseEl.getBoundingClientRect();
     otQuoteHit = {
       ...otQuoteHit,
-      verseTop: box.top,
       verseBottom: box.bottom,
       verseLeft: box.left,
       verseWidth: box.width,
@@ -1083,6 +1083,41 @@
     }
   }
 
+  /**
+   * Scroll the reader just enough that a whole card fits under the verse, and
+   * report how far the content moved so the caller can place against where the
+   * verse is about to be.
+   *
+   * The sibling of nudgeRingIntoView, and deliberately the same shape: work out
+   * the overshoot, clamp it to what the scroller has left, scroll smoothly,
+   * return the applied shift. The difference is that only the bottom is
+   * protected. A verse at the very top of the screen needs no nudge — the card
+   * goes below it and both are visible — so there is no upward case here.
+   *
+   * The card's real height is unknown at open time, so the nudge budgets for a
+   * full-size one. Overshooting is the safe direction: the page scrolls a
+   * little more than strictly needed and the card lands with room to spare,
+   * rather than landing clipped.
+   */
+  function nudgeOtCardIntoView(verseBottom: number): number {
+    if (!readerElement) return 0;
+
+    const b = readerElement.getBoundingClientRect();
+    const wanted = verseBottom + OT_CARD_GAP + OT_CARD_MAX_HEIGHT;
+    const over = wanted - (b.bottom - TOAST_MARGIN);
+    if (over <= 0) return 0;
+
+    // Scrolling down moves the content up. Take only what the scroller has —
+    // at the end of the last chapter in a book that can be nothing at all, and
+    // then the card places itself against whatever room is actually there.
+    const room = readerElement.scrollHeight - readerElement.clientHeight - readerElement.scrollTop;
+    const shift = Math.min(over, Math.max(0, room));
+    if (shift === 0) return 0;
+
+    readerElement.scrollBy({ top: shift, behavior: 'smooth' });
+    return shift;
+  }
+
   function openOtQuote(el: HTMLElement, book: string, chapter: number, verse: number, entry: OtQuoteEntry) {
     // A second tap on the same mark closes it, the way the other gutter icons
     // toggle their panels.
@@ -1092,14 +1127,19 @@
     }
     const verseEl = el.closest('.verse') as HTMLElement | null;
     const box = (verseEl ?? el).getBoundingClientRect();
+
+    // Move the page first, then place against where the verse is about to be.
+    // Waiting on the smooth scroll would open the card in the old spot and then
+    // jerk it; the scroll handler re-measures on the way down regardless, so
+    // this only has to be right for the first frame.
+    const shift = nudgeOtCardIntoView(box.bottom);
     otQuoteHit = {
       el,
       book,
       chapter,
       verse,
       entry,
-      verseTop: box.top,
-      verseBottom: box.bottom,
+      verseBottom: box.bottom - shift,
       verseLeft: box.left,
       verseWidth: box.width,
     };
@@ -5764,7 +5804,6 @@
 
 {#if otQuoteHit}
   <OtQuoteCard
-    verseTop={otQuoteHit.verseTop}
     verseBottom={otQuoteHit.verseBottom}
     verseLeft={otQuoteHit.verseLeft}
     verseWidth={otQuoteHit.verseWidth}
@@ -6641,17 +6680,15 @@
     display: inline-block;
   }
 
-  /* An allusion is a softer claim than a quotation, so it is drawn as one.
-     Faded rather than lowercased — at 10px a change of case is invisible and
-     reads as a typo. Revelation and Acts 7 carry a lot of these, and the fade
-     is what keeps a chapter of them calm. */
+  /* An allusion is a softer claim than a quotation, so it is drawn in a
+     different colour rather than a weaker one. A faded gold at 10px reads as a
+     half-painted glyph — broken, not softer. Silver is a cool, light grey with
+     a faint blue cast: solid at full strength, and told apart from the warm
+     gold by temperature rather than by brightness. Revelation and Acts 7 carry
+     a lot of these, and two solid hues keep such a chapter calm without any of
+     its marks looking like a rendering fault. */
   .ot-quote-mark.ot-allusion {
-    opacity: 0.45;
-    font-weight: 400;
-  }
-
-  .ot-quote-mark:hover {
-    opacity: 1;
+    color: #b8c4cc;
   }
 
   /* ── The tapped cross-reference diamond, while its panel is open ─────────
