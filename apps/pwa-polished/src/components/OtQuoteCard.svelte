@@ -22,7 +22,9 @@
    * sits below it — see placement below.
    */
   import { createEventDispatcher } from 'svelte';
+  import { ArrowRight } from 'phosphor-svelte';
   import { formatOtRef, type OtQuoteEntry } from '../lib/otQuotesIndex';
+  import { getBookColor } from '../lib/bibleData';
   import { OT_CARD_GAP, OT_CARD_MAX_HEIGHT } from '../lib/otCardMetrics';
 
   /**
@@ -72,6 +74,14 @@
   $: activeRef = entry.refs[refIndex];
   $: hasLxx = !!entry.lxx[refIndex];
 
+  // The reference names a book, so it is drawn in that book's colour — Isaiah
+  // purple, Deuteronomy its own — exactly as the book reads everywhere else in
+  // the app. Only the text takes it. The card's edge, the grade caption and
+  // the chip outlines stay gold or silver, because those carry the other fact:
+  // whether this is a quotation or an echo. Two facts, two channels; letting
+  // the book colour touch the outlines would erase the grade.
+  $: refColor = getBookColor(activeRef.book);
+
   // Which grade of claim this is. The gutter mark carries it in its colour, but
   // that colour is gone the moment the card covers the mark, so the card says
   // it in words. "Echoing" rather than "alludes to": it is the word used for
@@ -108,24 +118,47 @@
   $: roomBelow = Math.max(0, viewportH - Math.max(verseBottom, 0) - GAP - EDGE);
 
   /**
-   * The height the card is allowed, which is whatever is under the verse.
+   * The shortest card worth drawing: the header, one line of verse, the foot.
    *
-   * No minimum is enforced. A floor would be the one thing that could put the
-   * card back over the verse — precisely what this is here to prevent — and a
-   * verse whose bottom is at the foot of the screen is one the reader has
-   * already tried to scroll out of the way. Not covering the words you tapped
-   * matters more than the card looking comfortable.
+   * Below this the card is not a smaller card, it is a sliver, so this is also
+   * the threshold at which the card gives up its anchor — see `top`.
    */
-  $: cappedHeight = Math.max(0, Math.min(MAX_HEIGHT, roomBelow));
+  const MIN_HEIGHT = 96;
+
+  /**
+   * The height the card is allowed, which is whatever is under the verse, down
+   * to a floor.
+   *
+   * There used to be no floor, on the reasoning that a floor could push the
+   * card back over the verse. What it actually did was make the card vanish.
+   * Revelation 19:2 sits near the top of a short chapter that is briefly the
+   * only one loaded: there is no room below to scroll into, `roomBelow` comes
+   * out under 48, and the card rendered itself `visibility: hidden`. The page
+   * had already moved, so the tap looked like it did nothing at all. Scrolling
+   * down with a card open hit the same branch and made it disappear mid-read,
+   * which is the "it vanishes near the bottom" half of the same bug.
+   *
+   * The floor is safe because the card still never moves upward: `top` is the
+   * verse's bottom edge and nothing clamps it back. A floored card low on the
+   * screen overflows the bottom rather than covering the verse, which is the
+   * trade this feature has always made — the words you tapped stay readable.
+   */
+  $: cappedHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, roomBelow));
 
   // Anchored to the verse's bottom edge and grown downward, so the card cannot
-  // reach the verse. Nothing clamps it back upward afterwards: an upward clamp
-  // is what would undo the whole rule.
+  // reach the verse.
   //
   // In paragraph layout a .verse is an inline box, and getBoundingClientRect
   // returns the union of its line boxes — so verseBottom is the bottom of the
   // verse's last line whether it runs to one line or six. No per-line walking
   // is needed; the box already measured is the right one.
+  //
+  // Nothing clamps it back upward: an upward clamp is what would undo the
+  // whole rule. When the verse sits low enough that a floor-height card will
+  // not fit above the screen's edge, the card simply runs off the bottom. Its
+  // top — the reference and the first line of the quotation — stays on screen,
+  // and the rest comes back with a scroll. Running off the bottom is
+  // recoverable; disappearing, which is what it used to do, is not.
   $: top = verseBottom + GAP;
 
   // Centred on the verse rather than on the mark: the mark sits hard against
@@ -139,13 +172,12 @@
 
 <svelte:window on:keydown={(e) => e.key === 'Escape' && dispatch('close')} />
 
-<!-- Hidden rather than squeezed to nothing when the verse leaves no room on
-     either side — mid-scroll, with the verse spanning the whole viewport. It
-     comes back as soon as a side opens up, because the scroll handler keeps
-     remeasuring. -->
+<!-- No hidden state. The card stays up until you tap away or press Escape,
+     which is what "it should just stay and scroll" means: a card that removes
+     itself because of where the page happens to be scrolled is indistinguish-
+     able from a card that crashed. -->
 <div
   class="ot-card themed"
-  class:ot-hidden={cappedHeight < 48}
   class:ot-echo={isAllusion}
   bind:this={rootEl}
   use:portal
@@ -154,13 +186,8 @@
   <div class="ot-head">
     <div class="ot-head-lines">
       <span class="ot-grade">{gradeLabel}</span>
-      <span class="ot-ref">{formatOtRef(activeRef)}</span>
+      <span class="ot-ref" style="color:{refColor}">{formatOtRef(activeRef)}</span>
     </div>
-    <button
-      class="ot-goto"
-      title={hasLxx ? 'Read it in the Septuagint' : 'Go to the passage'}
-      on:click|stopPropagation={() => dispatch('goto', { index: refIndex })}
-    >→</button>
   </div>
 
   <!-- A verse can quote several passages at once — Hebrews 1:5 braids three
@@ -193,8 +220,22 @@
     {/if}
   </div>
 
+  <!-- The source line and the way there are the same control now. It was a bare
+       → in the top right with the word "Septuagint" sitting unexplained at the
+       bottom; two halves of one idea at opposite corners of a small card. Read
+       together — "Septuagint →" — the label says both what you are looking at
+       and where the button goes, and the top right is left bare. -->
   {#if !busy && !unavailable}
-    <div class="ot-foot">Septuagint</div>
+    <div class="ot-foot">
+      <button
+        class="ot-goto"
+        title={hasLxx ? 'Read it in the Septuagint' : 'Go to the passage'}
+        on:click|stopPropagation={() => dispatch('goto', { index: refIndex })}
+      >
+        <span>Septuagint</span>
+        <ArrowRight size={12} weight="bold" />
+      </button>
+    </div>
   {/if}
 </div>
 
@@ -223,11 +264,6 @@
   .ot-card.ot-echo {
     --ot-accent: #b8c4cc;
     --ot-ink: #cbd6de;
-  }
-
-  .ot-hidden {
-    visibility: hidden;
-    pointer-events: none;
   }
 
   .ot-head {
@@ -259,8 +295,9 @@
     white-space: nowrap;
   }
 
+  /* Colour comes from the book, inline — see refColor. No colour here, or it
+     would win on specificity grounds half the time and the book would be gold. */
   .ot-ref {
-    color: var(--ot-ink);
     font-size: 0.82rem;
     font-weight: 600;
     white-space: nowrap;
@@ -268,15 +305,24 @@
     text-overflow: ellipsis;
   }
 
+  /* Reads as the source line it replaced — same quiet uppercase register — but
+     it is a button, so it takes the card's accent rather than the grey the
+     label had, and a surface to be pressable. */
   .ot-goto {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     background: #333;
     border: none;
     border-radius: 3px;
     color: var(--ot-ink);
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
     line-height: 1;
-    padding: 3px 8px;
+    padding: 4px 8px;
+    text-transform: uppercase;
     flex: 0 0 auto;
   }
 
@@ -329,15 +375,11 @@
     font-style: italic;
   }
 
-  /* The one label that stays. Quiet enough to read as a source line rather
-     than a heading. */
+  /* Holds the one control to the bottom right, where the source line was. */
   .ot-foot {
+    display: flex;
+    justify-content: flex-end;
     margin-top: 5px;
-    color: #7d7d7d;
-    font-size: 0.66rem;
-    letter-spacing: 0.05em;
-    text-align: right;
-    text-transform: uppercase;
     flex: 0 0 auto;
   }
 </style>

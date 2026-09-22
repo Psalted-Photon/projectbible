@@ -1012,14 +1012,38 @@
     otQuoteUnavailable = false;
   }
 
-  /** Keep the card clear of its verse as that verse moves up the screen. */
+  /**
+   * Keep the card clear of its verse as that verse moves up the screen.
+   *
+   * A detached mark is not by itself a reason to close. Loading an adjacent
+   * chapter re-renders the keyed verse blocks, so the exact node that was
+   * tapped can be replaced by an identical one for the same verse while the
+   * card is open and the reader is still looking at it. Closing on that was
+   * the other half of the Revelation 19 report: the smooth nudge crosses the
+   * lazy-load threshold, a chapter is appended or prepended, and the card the
+   * user just opened is torn down by the re-render. So the verse is looked up
+   * again by its coordinates first, and only a verse that is genuinely no
+   * longer on the page closes the card.
+   */
   function repositionOtQuoteCard() {
     if (!otQuoteHit) return;
-    if (!otQuoteHit.el.isConnected) {
-      closeOtQuote();
-      return;
+
+    let verseEl = otQuoteHit.el.isConnected
+      ? (otQuoteHit.el.closest('.verse') as HTMLElement | null)
+      : null;
+
+    if (!verseEl) {
+      const { book, chapter, verse } = otQuoteHit;
+      const found = readerElement?.querySelector(
+        `[data-chapter-section][data-book="${CSS.escape(book)}"][data-chapter="${chapter}"] .verse[data-verse="${verse}"]`,
+      ) as HTMLElement | null;
+      if (found) {
+        verseEl = found;
+        const mark = found.querySelector('.ot-quote-mark') as HTMLElement | null;
+        if (mark) otQuoteHit = { ...otQuoteHit, el: mark };
+      }
     }
-    const verseEl = otQuoteHit.el.closest('.verse') as HTMLElement | null;
+
     if (!verseEl) {
       closeOtQuote();
       return;
@@ -1110,6 +1134,15 @@
     // Scrolling down moves the content up. Take only what the scroller has —
     // at the end of the last chapter in a book that can be nothing at all, and
     // then the card places itself against whatever room is actually there.
+    //
+    // The clamp is the whole point of returning a number. Revelation 19 opens
+    // with one short chapter loaded and nothing appended yet, so a mark near
+    // its top asks for a nudge of ~200px against a scroller holding perhaps
+    // thirty. Returning `over` there would place the card 200px above where
+    // the verse actually ends up, and the honest re-measure on the next scroll
+    // event would find no room and hide it: the page moves, no card appears.
+    // Reporting only the shift that can really happen keeps the first frame
+    // and every frame after it telling the same story.
     const room = readerElement.scrollHeight - readerElement.clientHeight - readerElement.scrollTop;
     const shift = Math.min(over, Math.max(0, room));
     if (shift === 0) return 0;

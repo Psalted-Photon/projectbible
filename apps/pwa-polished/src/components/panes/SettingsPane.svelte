@@ -794,7 +794,7 @@
     <div class="setting-group">
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={showOtQuotes} />
-        <span class="label-text">Mark Old Testament quotations in the New Testament</span>
+        <span class="label-text">Mark Old Testament Quotes and Echoes in the New Testament</span>
       </label>
     </div>
 
