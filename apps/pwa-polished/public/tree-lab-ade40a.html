@@ -218,8 +218,46 @@
   }
   .loading.err { color: #b8564f; text-align: center; padding: 0 30px; line-height: 1.6; }
 
-  /* Drawer handle, phone only */
+  /* Drawer handle. Hidden on a wide window, where the panel is always open;
+     shown by the phone rules below AND by .force-drawer, which the script sets
+     from the real window width. Relying on the media query alone means that if
+     it ever fails to match there is no way to reach the dials at all. */
   .drawer-tab { display: none; }
+  body.force-drawer .drawer-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-shrink: 0;
+    background: #171513;
+    border-top: 1px solid #2c2620;
+    color: #a89a85;
+    font-size: 13px;
+    font-family: inherit;
+    padding: 12px 14px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.force-drawer .drawer-tab::before {
+    content: '';
+    width: 30px;
+    height: 3px;
+    border-radius: 2px;
+    background: #3a342a;
+  }
+  body.force-drawer { flex-direction: column; }
+  body.force-drawer .stage { flex: 1; min-height: 0; }
+  body.force-drawer .panel {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid #241f1a;
+    max-height: 56vh;
+    padding: 12px 14px calc(18px + env(safe-area-inset-bottom));
+    flex-shrink: 0;
+    display: none;
+  }
+  body.force-drawer.drawer-open .panel { display: block; }
 
   /* ── Phone ──────────────────────────────────────────────────────────── */
   /* The panel becomes a bottom drawer so the tree gets the whole width.
@@ -418,6 +456,20 @@ if (TOUCH) {
   document.getElementById('hintDesktop').style.display = 'none';
   document.getElementById('hintTouch').style.display = '';
 }
+
+/**
+ * Decide from the real window width whether the panel is a side column or a
+ * drawer, rather than leaving it to the media query alone. Measuring here is
+ * what guarantees the Dials button exists whenever the panel is hidden.
+ */
+function applyLayoutMode() {
+  const narrow = window.innerWidth <= 760 || TOUCH;
+  document.body.classList.toggle('force-drawer', narrow);
+  if (!narrow) document.body.classList.remove('drawer-open');
+}
+applyLayoutMode();
+window.addEventListener('resize', applyLayoutMode);
+window.addEventListener('orientationchange', () => setTimeout(applyLayoutMode, 100));
 
 let DATA = null;
 let selectedTribe = null;   // a tribe name, or null for all

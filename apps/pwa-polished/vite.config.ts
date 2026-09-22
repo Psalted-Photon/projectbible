@@ -257,6 +257,12 @@ export default defineConfig({
         // needed — globIgnores keeps the page out of the precache, the denylist
         // keeps the fallback off it — and missing either one is silent.
         //   voice-lab.html    voice auditioning.
+        //   tree-lab-*.html   the family tree lab (roadmap #25). It is tuned
+        //                     and redeployed constantly, so a precached copy
+        //                     would keep serving the previous build's dials.
+        //                     Its data JSON stays out of the precache too: at
+        //                     352 KB it would be charged to every install,
+        //                     including everyone who never opens the lab.
         //   reset.html        the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
@@ -264,10 +270,18 @@ export default defineConfig({
         //                     mail clients from the live origin and never by
         //                     the app, so precaching it would cost every user
         //                     a download nothing here ever reads.
-        globIgnores: ['**/tts/**', '**/voice-lab.html', '**/reset.html', '**/email/**'],
+        globIgnores: [
+          '**/tts/**',
+          '**/voice-lab.html',
+          '**/reset.html',
+          '**/email/**',
+          '**/tree-lab-*.html',
+          '**/family-tree-data.json',
+        ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
           /^\/reset\.html$/,
+          /^\/tree-lab-[\w-]+\.html$/,
         ],
         runtimeCaching: [
           {
