@@ -80,6 +80,12 @@ export type CrumbKind =
   | 'plan'
   | 'map'
   | 'timeline'
+  /**
+   * A tap through an Old Testament quotation mark. The only kind that routinely
+   * lands in a different translation from the one it left — it goes to the
+   * Septuagint, because that is the wording the card showed.
+   */
+  | 'otquote'
   | 'link';
 
 /**

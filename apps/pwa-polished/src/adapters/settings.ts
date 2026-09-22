@@ -184,6 +184,7 @@ export interface UserSettings {
   showRedLetter?: boolean; // Show Jesus' words in red (default true)
   showPlaceMarkers?: boolean; // Dotted underline under multi-word place names (default false; needs ISBE pack)
   showSoloMarking?: boolean; // Mark the passages only one Gospel carries (default true)
+  showOtQuotes?: boolean; // Mark NT verses that quote or allude to the OT (default true)
   // Which menu a tapped word opens. 'radial' is a ring around the word, so the
   // word itself stays readable; 'classic' is the older popup above or below it.
   selectionMenu?: 'classic' | 'radial'; // default 'radial'

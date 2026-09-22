@@ -94,6 +94,7 @@
   let showArt: boolean = true;
   let showPlaceMarkers: boolean = false;
   let showSoloMarking: boolean = true;
+  let showOtQuotes: boolean = true;
   let selectionMenu: 'classic' | 'radial' = 'radial';
   let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -165,6 +166,7 @@
       showArt,
       showPlaceMarkers,
       showSoloMarking,
+      showOtQuotes,
       selectionMenu,
       timezone: timezone || undefined,
       autoCheckUpdates,
@@ -299,6 +301,7 @@
     showArt = settings.showArt !== false;
     showPlaceMarkers = settings.showPlaceMarkers === true;
     showSoloMarking = settings.showSoloMarking !== false;
+    showOtQuotes = settings.showOtQuotes !== false;
     selectionMenu = settings.selectionMenu === 'classic' ? 'classic' : 'radial';
     timezone = settings.timezone || '';
     autoCheckUpdates = settings.autoCheckUpdates !== false; // default true
@@ -553,6 +556,7 @@
     showArt;
     showPlaceMarkers;
     showSoloMarking;
+    showOtQuotes;
     selectionMenu;
     timezone;
     autoCheckUpdates;
@@ -784,6 +788,13 @@
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={showSoloMarking} />
         <span class="label-text">Mark passages only one Gospel tells</span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={showOtQuotes} />
+        <span class="label-text">Mark Old Testament quotations in the New Testament</span>
       </label>
     </div>
 

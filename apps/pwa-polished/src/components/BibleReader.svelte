@@ -92,6 +92,11 @@
   } from "../lib/radialMenu";
   import NotePopup from "./NotePopup.svelte";
   import FootnoteCard from "./FootnoteCard.svelte";
+  import OtQuoteCard from "./OtQuoteCard.svelte";
+  import {
+    otQuotesForChapter,
+    type OtQuoteEntry,
+  } from "../lib/otQuotesIndex";
   import type { NoteKind } from "../lib/verseRendering";
   import { userProfileStore } from "../stores/userProfileStore";
   import { profileModalStore } from "../stores/profileModalStore";
@@ -371,6 +376,8 @@
   let showPlaceMarkers = false;
   /** Tint and label the passages only one Gospel carries. */
   let showSoloMarking = true;
+  /** Mark the New Testament verses that quote or allude to the Old. */
+  let showOtQuotes = true;
   /** Flips true once the place-name gazetteer has loaded, to re-trigger a repaint. */
   let placePhrasesLoaded = false;
   let themedTitles = true;
@@ -532,6 +539,32 @@
     artByVerse = map;
   }
   $: rebuildArtByVerse(chapters, showArt);
+
+  /**
+   * Which verses on screen carry an Old Testament quotation.
+   *
+   * Built the same way as the art and TSK maps, but synchronously: the index is
+   * a plain JSON import rather than a pack, so there is nothing to await and no
+   * "is it installed?" branch. Keyed by verse only — the index holds no
+   * character offsets and no per-translation data, which is exactly why the
+   * marks land in the same places whichever translation the pane is showing.
+   */
+  let otQuoteByVerse = new Map<string, OtQuoteEntry>();
+
+  function rebuildOtQuotesByVerse(chs: typeof chapters, enabled: boolean) {
+    if (!enabled || !chs || chs.length === 0) {
+      if (otQuoteByVerse.size > 0) otQuoteByVerse = new Map();
+      return;
+    }
+    const map = new Map<string, OtQuoteEntry>();
+    for (const ch of chs) {
+      for (const [verse, entry] of otQuotesForChapter(ch.book, ch.chapter)) {
+        map.set(annotationKey(ch.book, ch.chapter, verse), entry);
+      }
+    }
+    otQuoteByVerse = map;
+  }
+  $: rebuildOtQuotesByVerse(chapters, showOtQuotes);
 
   // Open the Art window docked to the edge that fits the current orientation
   // (landscape / desktop → right, portrait → bottom). The reader text reflows
@@ -938,6 +971,191 @@
     }
     closeFootnote();
   }
+
+  // ── Old Testament quotations ────────────────────────────────────────────
+  //
+  // The card that opens when you tap the ❝OT❞ mark in the gutter. Wired the
+  // same way as the footnote card above: a hit record holding the anchor, a
+  // fetch ticket so a fast second tap cannot be overtaken by the first tap's
+  // reply, and a reposition on scroll.
+  //
+  // The one difference is what it anchors to. The footnote card anchors to its
+  // marker's point, which for a gutter mark on a verse's first line would put
+  // the card straight over the verse you just tapped. This one anchors to the
+  // verse's whole box, so the card can be kept off it — see OtQuoteCard.
+
+  /** The mark currently open, its verse, and the box to stay clear of. */
+  let otQuoteHit: {
+    el: HTMLElement;
+    book: string;
+    chapter: number;
+    verse: number;
+    entry: OtQuoteEntry;
+    verseTop: number;
+    verseBottom: number;
+    verseLeft: number;
+    verseWidth: number;
+  } | null = null;
+
+  /** Which of the entry's references is expanded. Heb 1:5 carries three. */
+  let otQuoteRefIndex = 0;
+  let otQuoteText = '';
+  let otQuoteBusy = false;
+  let otQuoteUnavailable = false;
+  let otQuoteFetchTicket = 0;
+
+  function closeOtQuote() {
+    otQuoteHit = null;
+    otQuoteText = '';
+    otQuoteBusy = false;
+    otQuoteUnavailable = false;
+  }
+
+  /** Keep the card clear of its verse as that verse moves up the screen. */
+  function repositionOtQuoteCard() {
+    if (!otQuoteHit) return;
+    if (!otQuoteHit.el.isConnected) {
+      closeOtQuote();
+      return;
+    }
+    const verseEl = otQuoteHit.el.closest('.verse') as HTMLElement | null;
+    if (!verseEl) {
+      closeOtQuote();
+      return;
+    }
+    const box = verseEl.getBoundingClientRect();
+    otQuoteHit = {
+      ...otQuoteHit,
+      verseTop: box.top,
+      verseBottom: box.bottom,
+      verseLeft: box.left,
+      verseWidth: box.width,
+    };
+  }
+
+  /**
+   * Pull the Septuagint wording of one of the entry's references into the card.
+   *
+   * Always from lxx2012, never from the translation the reader is in: that the
+   * New Testament follows the Greek Old Testament rather than the Hebrew is the
+   * whole point of the feature. Hebrews 1:7 says "angels spirits, ministers a
+   * flame of fire"; BSB's Psalm 104:4 says "winds His messengers" and the
+   * connection evaporates. The Septuagint reads exactly what Hebrews says.
+   *
+   * Translation is a parameter to getVerse, so fetching here never changes what
+   * the reader is showing.
+   */
+  async function loadOtQuoteRef(index: number) {
+    const hit = otQuoteHit;
+    if (!hit) return;
+    const target = hit.entry.lxx[index];
+
+    const ticket = ++otQuoteFetchTicket;
+    otQuoteRefIndex = index;
+    otQuoteText = '';
+    otQuoteUnavailable = false;
+
+    // No Septuagint coordinate at all — LXX Jeremiah is ordered differently and
+    // lxx2012 does not carry every chapter. The card says so rather than
+    // silently showing the reader's own translation, which would be the one
+    // thing this card must never do.
+    if (!target) {
+      otQuoteUnavailable = true;
+      return;
+    }
+
+    otQuoteBusy = true;
+    try {
+      const text = await textStore.getVerse('lxx2012', target.book, target.chapter, target.verse);
+      if (ticket !== otQuoteFetchTicket) return; // a newer tap owns the card
+      // Preview rendering is not optional here: lxx2012 carries its own inline
+      // cross-references, and LXX Psalm 103:4 literally stores "+ 103:4 Heb
+      // 1:7". Rendered raw that arrives as clutter in the card. (It is also
+      // free confirmation the numbering mapping is right.)
+      if (text) otQuoteText = renderVersePreviewHtml(text);
+      else otQuoteUnavailable = true;
+    } catch (err) {
+      if (ticket !== otQuoteFetchTicket) return;
+      console.error('[OtQuoteCard] Could not load', target, err);
+      otQuoteUnavailable = true;
+    } finally {
+      if (ticket === otQuoteFetchTicket) otQuoteBusy = false;
+    }
+  }
+
+  function openOtQuote(el: HTMLElement, book: string, chapter: number, verse: number, entry: OtQuoteEntry) {
+    // A second tap on the same mark closes it, the way the other gutter icons
+    // toggle their panels.
+    if (otQuoteHit && otQuoteHit.el === el) {
+      closeOtQuote();
+      return;
+    }
+    const verseEl = el.closest('.verse') as HTMLElement | null;
+    const box = (verseEl ?? el).getBoundingClientRect();
+    otQuoteHit = {
+      el,
+      book,
+      chapter,
+      verse,
+      entry,
+      verseTop: box.top,
+      verseBottom: box.bottom,
+      verseLeft: box.left,
+      verseWidth: box.width,
+    };
+    void loadOtQuoteRef(0);
+  }
+
+  /**
+   * Go to the quoted passage — in the Septuagint.
+   *
+   * The card has just shown you Septuagint wording, so "go" means show me more
+   * of that. Landing at Psalm 104:4 in the reader's own translation would show
+   * different words than the card showed, which is the "I can already see the
+   * words" complaint in a new costume, and it would destroy the very insight
+   * the feature exists to make.
+   *
+   * The return trip needs nothing new: NavigationState carries the translation
+   * and a TrailCrumb holds a whole nav, so goBack restores translation and
+   * position together. That plumbing was built and has simply never been
+   * exercised, because every existing call site passes the current translation
+   * forward.
+   */
+  function gotoOtQuote(index: number) {
+    const hit = otQuoteHit;
+    if (!hit) return;
+
+    // Falls back to the Masoretic reference in the reader's own translation
+    // when there is no Septuagint for this one — going somewhere sensible beats
+    // a dead button.
+    const lxx = hit.entry.lxx[index];
+    const ref = hit.entry.refs[index];
+    if (!lxx && !ref) return;
+
+    const translation = lxx ? 'lxx2012' : currentTranslation;
+    const target = lxx ?? { book: ref.book, chapter: ref.chapter, verse: ref.verse };
+
+    if (windowId) {
+      _windowScrollTarget = target.verse;
+      windowStore.updateContentState(windowId, {
+        book: target.book,
+        chapter: target.chapter,
+        highlightedVerse: null,
+        ...(lxx ? { translation: 'lxx2012' } : {}),
+      });
+    } else {
+      // The crumb points at the mark we tapped, not at whatever chapter the
+      // reader had scrolled its way to.
+      navigationStore.pushHistory(get(navigationStore), 'otquote', undefined, {
+        book: hit.book,
+        chapter: hit.chapter,
+        verse: hit.verse,
+      });
+      navigationStore.navigateToVerse(translation, target.book, target.chapter, target.verse);
+    }
+    closeOtQuote();
+  }
+
   let shareModalPassage = '';
 
   // Highlight state
@@ -1040,6 +1258,11 @@
     // else, and the fact it reports — that only Luke tells this — is the sort
     // of thing a reader wants pointed out rather than has to go looking for.
     showSoloMarking = settings.showSoloMarking !== false;
+    // Default on for the same reason as showSoloMarking above: that Hebrews 1:7
+    // is quoting a psalm is the sort of thing a reader wants pointed out rather
+    // than has to go looking for. showPlaceMarkers defaults off only because it
+    // needs an optional pack — this index ships in the bundle.
+    showOtQuotes = settings.showOtQuotes !== false;
     selectionMenu = settings.selectionMenu === "classic" ? "classic" : "radial";
     if (showPlaceMarkers && !placePhrasesLoaded) {
       void loadPlacePhrases().then(() => { placePhrasesLoaded = true; });
@@ -1366,6 +1589,16 @@
   $: if (footnoteHit && (footnoteHit.book !== currentBook || footnoteHit.chapter !== currentChapter)) {
     closeFootnote();
   }
+
+  // Same for the Old Testament quotation card, and for the same reason: it
+  // belongs to the mark it was opened on.
+  $: if (otQuoteHit && (otQuoteHit.book !== currentBook || otQuoteHit.chapter !== currentChapter)) {
+    closeOtQuote();
+  }
+
+  // The marks themselves are gone when the setting goes off, so a card left
+  // standing would be pointing at nothing.
+  $: if (otQuoteHit && !showOtQuotes) closeOtQuote();
 
   // Load verses when navigation changes externally (not from our scroll loading)
   $: {
@@ -2838,6 +3071,7 @@
       // nothing. Keep it over its selection, or drop it once that scrolls away.
       if (showToast) repositionToastToSelection();
       repositionFootnoteCard();
+      repositionOtQuoteCard();
 
       // Save scroll position after user stops scrolling (debounced)
       if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
@@ -5346,6 +5580,17 @@
     };
     document.addEventListener("pointerdown", handleFootnoteOutside, true);
 
+    // Same dismissal for the Old Testament quotation card. The mark itself is
+    // excluded so its own tap reaches the toggle rather than being closed out
+    // from under it.
+    const handleOtQuoteOutside = (e: PointerEvent) => {
+      if (!otQuoteHit) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.(".ot-card") || t?.closest?.(".ot-quote-mark")) return;
+      closeOtQuote();
+    };
+    document.addEventListener("pointerdown", handleOtQuoteOutside, true);
+
     // Text selection. Pointer events cover finger, pen and mouse in one path;
     // the extra non-passive touchmove exists only to stop the page scrolling
     // once a drag has committed to selecting.
@@ -5402,6 +5647,7 @@
       window.removeEventListener("settingsUpdated", handleSettingsUpdate);
       readerElement?.removeEventListener("click", handleNoteClick, true);
       document.removeEventListener("pointerdown", handleFootnoteOutside, true);
+      document.removeEventListener("pointerdown", handleOtQuoteOutside, true);
       readerElement?.removeEventListener("pointermove", handleMouseMove);
       document.removeEventListener("pointerdown", handleToastGuard, true);
       readerElement?.removeEventListener("pointerdown", handlePointerDown);
@@ -5513,6 +5759,23 @@
     on:collapse={closeFootnoteRef}
     on:goto={(e) => gotoFootnoteRef(e.detail.ref)}
     on:close={closeFootnote}
+  />
+{/if}
+
+{#if otQuoteHit}
+  <OtQuoteCard
+    verseTop={otQuoteHit.verseTop}
+    verseBottom={otQuoteHit.verseBottom}
+    verseLeft={otQuoteHit.verseLeft}
+    verseWidth={otQuoteHit.verseWidth}
+    entry={otQuoteHit.entry}
+    refIndex={otQuoteRefIndex}
+    text={otQuoteText}
+    busy={otQuoteBusy}
+    unavailable={otQuoteUnavailable}
+    on:select={(e) => loadOtQuoteRef(e.detail.index)}
+    on:goto={(e) => gotoOtQuote(e.detail.index)}
+    on:close={closeOtQuote}
   />
 {/if}
 
@@ -5823,6 +6086,33 @@
               >
                 <span class="verse-gutter">
                 <span class="verse-number">{verse}</span>
+                <!-- ── An Old Testament quotation on this verse ───────────
+                     First among the markers, straight after the number: the
+                     commentator pills vary in count, so anything placed after
+                     them moves about from verse to verse, and a mark you have
+                     to hunt for is worse than no mark. Nothing is drawn onto
+                     the verse text itself — a tint or underline there would be
+                     indistinguishable from the user's own highlighter. -->
+                {#if showOtQuotes && otQuoteByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
+                  {@const otEntry = otQuoteByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!}
+                  <span
+                    class="ot-quote-mark"
+                    class:ot-allusion={otEntry.grade === 'allusion'}
+                    class:anno-breathing={otQuoteHit?.book === chapterData.book &&
+                      otQuoteHit?.chapter === chapterData.chapter &&
+                      otQuoteHit?.verse === verse}
+                    title={otEntry.grade === 'quote'
+                      ? 'Quotes the Old Testament'
+                      : 'Alludes to the Old Testament'}
+                    role="button"
+                    tabindex="0"
+                    on:click|stopPropagation={(e) =>
+                      openOtQuote(e.currentTarget as HTMLElement, chapterData.book, chapterData.chapter, verse, otEntry)}
+                    on:keypress|stopPropagation={(e) =>
+                      e.key === 'Enter' &&
+                      openOtQuote(e.currentTarget as HTMLElement, chapterData.book, chapterData.chapter, verse, otEntry)}
+                  >❝OT❞</span>
+                {/if}
                 {#if showCommentaries && commentaryByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
                   {#each [...new Set(commentaryByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!.map((e) => e.author))] as author}
                     <AuthorPill
@@ -6325,6 +6615,45 @@
     display: inline-block;
   }
 
+  /* ── The Old Testament quotation mark ─────────────────────────────────────
+     Quote marks say quotation, the letters say which testament. It shares
+     .anno-ref's box exactly — same size, same superscript baseline, same
+     inline-block so it can scale while its card is open — so it sits in the
+     gutter run without disturbing the five layouts that run through here.
+
+     Gold rather than the TSK diamond's amber, and told apart from it by shape
+     and position more than by hue: three letterforms wide against one small
+     solid diamond, and always first in the run.
+
+     Being three glyphs wide is also what buys back the tap target. Padding it
+     out to a 28px box would blow out the gutter's line height; the wider glyph
+     run is already a larger target than ◆ is. */
+  .ot-quote-mark {
+    color: #c9a227;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    cursor: pointer;
+    margin: 0 2px 0 1px;
+    vertical-align: super;
+    user-select: none;
+    white-space: nowrap;
+    display: inline-block;
+  }
+
+  /* An allusion is a softer claim than a quotation, so it is drawn as one.
+     Faded rather than lowercased — at 10px a change of case is invisible and
+     reads as a typo. Revelation and Acts 7 carry a lot of these, and the fade
+     is what keeps a chapter of them calm. */
+  .ot-quote-mark.ot-allusion {
+    opacity: 0.45;
+    font-weight: 400;
+  }
+
+  .ot-quote-mark:hover {
+    opacity: 1;
+  }
+
   /* ── The tapped cross-reference diamond, while its panel is open ─────────
      A slow scale in and out, so you can find your way back to the icon you
      opened without the verse itself being marked — that mark means "start
@@ -6709,6 +7038,10 @@
   }
 
   .verses.nonumber-layout .anno-ref {
+    display: none;
+  }
+
+  .verses.nonumber-layout .ot-quote-mark {
     display: none;
   }
 
