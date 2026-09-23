@@ -322,15 +322,13 @@ for (let pass = 0; pass < 2; pass++) {
   }
 }
 
-// God is not a generation. He is the ground the tree grows out of — Adam is the
-// first seedling — so he is not emitted as a person at all, and his 8,587
-// verses stop being attributed to a node on the canvas. The page draws soil in
-// his place. Dropping him shifts everyone up one ring, putting Adam at 0.
-const emitted = rootOrder.filter((id) => id !== GOD);
-for (const id of emitted) rootDepth.set(id, Math.max(0, (rootDepth.get(id) ?? 0) - 1));
-for (const id of emitted) {
-  if (rootParent.get(id) === GOD) rootParent.set(id, null);
-}
+// God sits at the base of the trunk, below Adam, with everything he is in the
+// pack — his 8,587 verses and his prose. An earlier pass drew him as a band of
+// soil instead and dropped the node; it read worse than simply being the foot
+// of the tree, so he is a node again. He has no father, and the page's trunk
+// walk stops on a missing father, so he lands at the end of the trunk with no
+// layout special case at all.
+const emitted = rootOrder;
 
 // Labels: the same collision handling the canopy gets, over the root set.
 const rootByName = new Map();
