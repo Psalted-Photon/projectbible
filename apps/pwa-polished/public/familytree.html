@@ -662,6 +662,11 @@ let rootNodes = [];         // every pre-Jacob person, placed
 let rootById = new Map();   // id -> that record, for picking and tracing
 let byRootBranch = new Map();
 let crownM = [], crownL = [];
+// The trunk proper: the father-chain God -> Jacob, in order, filled by
+// layout(). It cannot be derived from `branch` at draw time — fifteen other
+// people carry branch 'Trunk' (the wives, Abel, Lud, Elam) without standing
+// in the chain itself.
+let spineChain = [];
 
 /** Deterministic hash so jitter is stable across redraws. */
 function hash(str) {
@@ -851,6 +856,7 @@ function layout() {
   // with distance from Jacob, who sits at the origin holding the canopy, so
   // the whole thing is one radial field with a single origin.
   rootNodes = [];
+  spineChain = [];
   for (const n of rootById.values()) { n.x = n.y = n.r = null; }
 
   if (rootById.size && R.Trunk) {
@@ -890,6 +896,10 @@ function layout() {
         n.r = r;
         n.angle = R.Trunk.angle + sway;
       });
+
+      // Kept for the draw pass, which strokes the whole run as one thick line
+      // rather than as twenty-three separate tapering twigs.
+      spineChain = spine;
 
       // Everyone else on the trunk dials is a sibling or cousin too small to
       // have earned its own row — a lone daughter, a son with no descendants.
@@ -1151,8 +1161,14 @@ function drawRoots(dimming) {
   // together rather than half of it staying bright for no reason.
   const onOf = (n) => (tracedPath ? tracedPath.has(n.id) : !dimming);
 
+  // The trunk's own segments are left to drawTrunk, which strokes the whole
+  // God-to-Jacob run as one thick line. Drawing them here as well would put a
+  // thin twig alongside it, bowing the other way at every joint.
+  const onSpine = new Set(spineChain.map((n) => n.id));
+
   // Branches first, so the dots sit on top of the lines.
   for (const n of rootNodes) {
+    if (onSpine.has(n.id) && n.father && onSpine.has(n.father)) continue;
     const col = ROOT_COLOURS[n.branch] || ROOT_COLOURS.Trunk;
     const on = onOf(n);
     ctx.globalAlpha = dimming ? (on ? 0.9 : G.dimLevel) : 0.85;
@@ -1236,16 +1252,32 @@ function drawTrunk(dimming) {
   ctx.strokeStyle = GOLD;
   ctx.lineWidth = G.thickness * 3.4;
   ctx.lineCap = 'round';
-  ctx.beginPath();
-  // To Isaac, wherever he actually is. This was a hardcoded stub from a fixed
-  // point on the y axis, which had nothing to do with Isaac's position and
-  // left a visible gap in the trunk — the one place the tree did not join up.
-  const jac = rootById.get(DATA.jacob);
-  const isaac = jac && jac.father && rootById.get(jac.father);
-  if (isaac && isaac.x != null) ctx.moveTo(isaac.x, isaac.y);
-  else ctx.moveTo(0, G.trunkLen * 0.25);
-  ctx.lineTo(0, 0);
-  ctx.stroke();
+  ctx.lineJoin = 'round';
+  // The whole trunk, God through to Jacob, as one unbroken stroke. It used to
+  // be drawn as a short stub here and twenty-three thin tapering twigs in the
+  // root pass, so the tree's spine read no heavier than a twig off Cain.
+  // spineChain runs Jacob -> God, so it is walked backwards to grow upward.
+  const run = spineChain.filter((n) => n.x != null);
+  if (run.length > 1) {
+    ctx.beginPath();
+    ctx.moveTo(run[run.length - 1].x, run[run.length - 1].y);
+    for (let i = run.length - 2; i >= 0; i--) {
+      const from = run[i + 1], to = run[i];
+      // The same slight bow the branches use, so the trunk sits in the same
+      // hand as everything growing off it.
+      const mx = (from.x + to.x) / 2;
+      const my = (from.y + to.y) / 2;
+      const dx = to.x - from.x, dy = to.y - from.y;
+      ctx.quadraticCurveTo(mx - dy * 0.08, my + dx * 0.08, to.x, to.y);
+    }
+    ctx.stroke();
+  } else {
+    // No roots loaded — keep the short stub so the canopy is not left floating.
+    ctx.beginPath();
+    ctx.moveTo(0, G.trunkLen * 0.25);
+    ctx.lineTo(0, 0);
+    ctx.stroke();
+  }
   ctx.beginPath();
   ctx.arc(0, 0, G.nodeSize * 2.4, 0, Math.PI * 2);
   ctx.fillStyle = GOLD;
