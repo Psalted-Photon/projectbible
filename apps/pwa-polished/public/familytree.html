@@ -123,6 +123,17 @@
   .readout-box .mn { color: #7d7264; font-style: italic; }
   .readout-box .tr { font-size: 10.5px; letter-spacing: 0.04em; }
   .readout-box.empty { display: none; }
+  /* Where an article would go. Nothing behind it — the lab is a standalone
+     static page, so this proves the layout and links nowhere. */
+  .readout-box .bio {
+    margin-top: 8px;
+    padding: 9px 10px;
+    border: 1px dashed #3a342a;
+    border-radius: 5px;
+    font-size: 10.5px;
+    color: #5d554a;
+    line-height: 1.5;
+  }
 
   /* ── Right: the controls ────────────────────────────────────────────── */
   .panel {
@@ -406,12 +417,20 @@
   </p>
   <div id="tribes"></div>
 
+  <h2>Before Jacob</h2>
+  <p class="note">
+    The trunk runs Adam &rarr; Jacob. Each other row is a bough that forks off
+    it &mdash; Esau at Isaac, Ham at Noah. Angle is an offset from the trunk
+    where it forks, except the trunk's own, which is from straight up.
+  </p>
+  <div id="rootBranches"></div>
+
   <h2>Whole tree</h2>
   <div id="globals"></div>
 
   <h2>Show</h2>
   <label class="check"><input type="checkbox" id="optDim" checked /> Dim what isn't selected</label>
-  <label class="check"><input type="checkbox" id="optRoots" checked /> Roots, down to God</label>
+  <label class="check"><input type="checkbox" id="optRoots" checked /> Before Jacob, down to Adam</label>
   <label class="check"><input type="checkbox" id="optCrown" checked /> Matthew &amp; Luke lines</label>
   <label class="check"><input type="checkbox" id="optLabels" checked /> Names on the big nodes</label>
   <label class="check"><input type="checkbox" id="optGrain" checked /> Paper grain</label>
@@ -451,10 +470,15 @@ const STONES = {
   Zebulun:   { stone: 'chrysolite', c: '#7d9420', lit: '#bcd94a' },
   Joseph:    { stone: 'onyx',       c: '#57534e', lit: '#9b948c', striped: true },
   Benjamin:  { stone: 'jasper',     c: '#a03f5e', lit: '#e06d92', speckled: true },
-  Dinah:     { stone: 'pearl',      c: '#8f8578', lit: '#d6cdbd' },
+  // Dinah has no entry on purpose. The breastpiece carries twelve stones for
+  // twelve sons; inventing a pearl for her put a thirteenth on Exodus 28. She
+  // falls through to LINEN in drawBough and keeps her node and her tap.
 };
 const GOLD = '#c9a227';
 const LINEN = '#6b6153';
+// The first seedling. God is not on the tree — he is the ground it grows from —
+// so Adam is where it starts and is drawn as the largest of the early nodes.
+const ADAM_ID = 'adam_78';
 
 // ── Defaults ───────────────────────────────────────────────────────────────
 // Starting angles fan the twelve across an upward arc in birth order, with
@@ -477,25 +501,76 @@ const TRIBE_DEFAULTS = {
   Zebulun:  { angle:  58, spread:  6, reach: 1.45, lean:   8 },
   Joseph:   { angle:  67, spread: 18, reach: 1.05, lean:   9 },
   Benjamin: { angle:  79, spread: 17, reach: 1.08, lean:  10 },
+  // Dinah is a bough of one, derived from Jacob's thirteen children. She keeps
+  // her entry because layout() skips any bough with no T row — deleting this
+  // deletes her from the canvas — but she has no dials row of her own.
   Dinah:    { angle: -84, spread:  4, reach: 1.25, lean: -10 },
 };
 
+// The pre-Jacob boughs, hand-placed exactly as the twelve are.
+//
+// These people are not "below" Jacob — Esau is his brother, Ishmael his
+// great-uncle, Ham and Japheth are Shem's brothers. They fork off the Adam ->
+// Jacob trunk where they actually fork, so there is one tree and one set of
+// geometry, not a canopy plus a separate root mat.
+//
+// 'Trunk' is Adam -> Jacob and its angle is absolute, from straight up, so 180
+// points at the ground. Every other row is an OFFSET from the trunk angle at
+// the point it forks, so a bough swings about its own fork and the trunk's own
+// sway carries its boughs with it.
+//
+// Sides are chosen to keep the crowded forks apart: Terah's two (Nahor, Haran)
+// and Abraham's three (Ishmael, Midian, Jokshan) are fanned either side rather
+// than stacked. Spreads follow the counts — Ham's 31 against Aram's 5.
+const ROOT_DEFAULTS = {
+  Trunk:    { angle: 180, spread: 40, reach: 1.00, lean:   0 },
+  // Forks at Adam, right at the base of the trunk, so it is thrown well aside
+  // or it lands on Seth's line immediately along from it.
+  Cain:     { angle:  62, spread: 30, reach: 0.80, lean:  10 },
+  // Noah's two. The Table of Nations, and the widest thing down here: Canaan's
+  // eleven sons all land on one ring, so a narrow spread stacks them.
+  Ham:      { angle:  40, spread: 66, reach: 1.05, lean:   8 },
+  Japheth:  { angle: -40, spread: 52, reach: 1.00, lean:  -8 },
+  Aram:     { angle: -30, spread: 20, reach: 0.60, lean:  -6 },
+  Joktan:   { angle:  36, spread: 48, reach: 0.80, lean:   7 },
+  // Terah's two, opposite sides.
+  Nahor:    { angle: -44, spread: 46, reach: 0.85, lean:  -9 },
+  Haran:    { angle: -22, spread: 28, reach: 0.60, lean:  -5 },
+  // Abraham's three, fanned.
+  Ishmael:  { angle:  46, spread: 40, reach: 0.85, lean:   9 },
+  Midian:   { angle:  24, spread: 24, reach: 0.62, lean:   5 },
+  Jokshan:  { angle:  -8, spread: 24, reach: 0.55, lean:  -3 },
+  // Jacob's brother, at the last fork before the trunk reaches him.
+  Esau:     { angle: -52, spread: 44, reach: 0.85, lean: -10 },
+};
+
+// The caps are deliberately far past anything useful. Every canopy bough was
+// sitting on the old 90 spread, which said the limit was wrong, not that 90 was
+// right — place() wraps angles and cos/sin do not care how large a value gets.
+// `curve` is the one exception: it is an exponent, so 2.0 throws a depth-51 node
+// ~81,000px out and 3.0 puts it 4.2 million px away. It stays near 1.2.
+// With no guard rails left, Reset and Fit are the way back from a bad setting.
 const GLOBAL_SPECS = [
-  { key: 'ringGap',   label: 'Generation gap',   min: 10,  max: 70,  step: 1,    def: 30 },
-  { key: 'curve',     label: 'Radius curve',     min: 0.3, max: 1.2, step: 0.01, def: 0.62 },
-  { key: 'trunkLen',  label: 'Trunk length',     min: 30,  max: 180, step: 2,    def: 96 },
-  { key: 'rootGap',   label: 'Root spacing',     min: 8,   max: 40,  step: 1,    def: 19 },
-  { key: 'rootArc',   label: 'Root spread',      min: 0,   max: 80,  step: 1,    def: 34 },
-  { key: 'jitter',    label: 'Jitter',           min: 0,   max: 1,   step: 0.01, def: 0.38 },
-  { key: 'nodeSize',  label: 'Node size',        min: 1,   max: 6,   step: 0.1,  def: 2.6 },
-  { key: 'thickness', label: 'Branch thickness', min: 0.3, max: 4,   step: 0.1,  def: 1.5 },
-  { key: 'dimLevel',  label: 'Dim level',        min: 0,   max: 0.6, step: 0.01, def: 0.13 },
-  { key: 'glow',      label: 'Glow',             min: 0,   max: 1,   step: 0.01, def: 0.55 },
+  { key: 'ringGap',   label: 'Generation gap',   min: 2,    max: 300, step: 1,    def: 30 },
+  { key: 'curve',     label: 'Radius curve',     min: 0.3,  max: 1.6, step: 0.01, def: 0.62 },
+  { key: 'trunkLen',  label: 'Trunk length',     min: 0,    max: 600, step: 2,    def: 96 },
+  { key: 'rootGap',   label: 'Trunk spacing',    min: 2,    max: 200, step: 1,    def: 48 },
+  { key: 'rootArc',   label: 'Trunk sway',       min: 0,    max: 360, step: 1,    def: 60 },
+  { key: 'coupleGap', label: 'Couple gap',       min: 0,    max: 90,  step: 0.5,  def: 7 },
+  { key: 'soilDepth', label: 'Soil depth',       min: 0,    max: 400, step: 1,    def: 46 },
+  { key: 'soilWidth', label: 'Soil width',       min: 0,    max: 3000, step: 5,   def: 320 },
+  { key: 'jitter',    label: 'Jitter',           min: 0,    max: 6,   step: 0.01, def: 0.38 },
+  { key: 'nodeSize',  label: 'Node size',        min: 0.2,  max: 20,  step: 0.1,  def: 2.6 },
+  { key: 'thickness', label: 'Branch thickness', min: 0.05, max: 30,  step: 0.05, def: 1.5 },
+  { key: 'dimLevel',  label: 'Dim level',        min: 0,    max: 1,   step: 0.01, def: 0.13 },
+  { key: 'glow',      label: 'Glow',             min: 0,    max: 3,   step: 0.01, def: 0.55 },
 ];
 
 const T = {};   // per-tribe values
+const R = {};   // per-root-branch values
 const G = {};   // global values
 for (const [k, v] of Object.entries(TRIBE_DEFAULTS)) T[k] = { ...v };
+for (const [k, v] of Object.entries(ROOT_DEFAULTS)) R[k] = { ...v };
 for (const s of GLOBAL_SPECS) G[s.key] = s.def;
 
 const OPTS = {
@@ -547,8 +622,10 @@ fetch('family-tree-data.json')
     document.getElementById('loading').style.display = 'none';
     document.getElementById('attrib').textContent = d.attribution;
     build();
+    buildCrownDistances();
     buildPanel();
     syncTribeRows();
+    syncRootRows();
     syncGlobals();
     layout();
     resize(); // sizes the canvas and paints the first frame
@@ -577,7 +654,9 @@ let view = { x: 0, y: 0, k: 1 };
 
 const nodes = new Map();    // id -> node record with x, y
 let byTribe = new Map();    // tribe -> node[]
-let rootNodes = [];
+let rootNodes = [];         // every pre-Jacob person, placed
+let rootById = new Map();   // id -> that record, for picking and tracing
+let byRootBranch = new Map();
 let crownM = [], crownL = [];
 
 /** Deterministic hash so jitter is stable across redraws. */
@@ -605,6 +684,34 @@ function build() {
     byTribe.get(n.tribe).push(n);
   }
   for (const list of byTribe.values()) list.sort((a, b) => a.depth - b.depth);
+
+  // The roots are a tree now, not a chain, so they are built exactly as the
+  // canopy is: records with kids lists, grouped by the branch they hang off.
+  rootById = new Map();
+  byRootBranch = new Map();
+  for (const r of DATA.roots || []) {
+    rootById.set(r.id, { ...r, kids: [], root: true });
+  }
+  for (const n of rootById.values()) {
+    // A wife is seated beside her husband, not below her father, so she is
+    // kept out of the descent entirely. Leah and Rachel are Laban's daughters;
+    // placing them by descent drew them out along Nahor's bough, a quarter of
+    // the tree away from Jacob.
+    if (n.spouseOf && rootById.has(n.spouseOf)) continue;
+    if (n.father && rootById.has(n.father)) rootById.get(n.father).kids.push(n.id);
+  }
+  for (const n of rootById.values()) {
+    // A wife is drawn beside her husband, so she takes his bough's colour.
+    // Leah is Laban's daughter and would otherwise be tinted as one of Nahor's
+    // while standing next to Jacob on the trunk.
+    if (n.spouseOf && rootById.has(n.spouseOf)) {
+      n.branch = rootById.get(n.spouseOf).branch || 'Trunk';
+    }
+    const br = n.branch || 'Trunk';
+    if (!byRootBranch.has(br)) byRootBranch.set(br, []);
+    byRootBranch.get(br).push(n);
+  }
+  for (const list of byRootBranch.values()) list.sort((a, b) => a.depth - b.depth);
 }
 
 /**
@@ -619,16 +726,75 @@ function layout() {
   if (!DATA) return;
   const rad = (d) => (d * Math.PI) / 180;
 
-  // Leaf counts drive the angular share each subtree gets.
+  // Leaf counts drive the angular share each subtree gets. `from` is whichever
+  // map the subtree lives in, so the canopy and the roots share this. `branch`
+  // stops a Line subtree counting the leaves of a named branch hanging off it —
+  // Abraham's share of the fan must not be swollen by all of Ishmael's people,
+  // who are placed by their own dials elsewhere. It is part of the cache key
+  // for the same reason.
   const leaves = new Map();
-  function countLeaves(id) {
-    if (leaves.has(id)) return leaves.get(id);
-    const n = nodes.get(id);
+  function countLeaves(id, from, branch) {
+    const key = branch ? `${branch}|${id}` : id;
+    if (leaves.has(key)) return leaves.get(key);
+    const n = from.get(id);
+    if (!n) return 1;
     let c = 0;
-    for (const k of n.kids) c += countLeaves(k);
+    for (const k of n.kids) {
+      if (branch && ((from.get(k) || {}).branch || 'Trunk') !== branch) continue;
+      c += countLeaves(k, from, branch);
+    }
     if (c === 0) c = 1;
-    leaves.set(id, c);
+    leaves.set(key, c);
     return c;
+  }
+
+  /**
+   * Place a subtree, recursively, giving each child a slice of the parent's
+   * angular span in proportion to the leaves it carries.
+   *
+   * Angles are "from straight up", clockwise, so the panel numbers read the way
+   * the tree looks rather than in canvas radians. `opts.from` is the node map,
+   * `opts.dials` the hand-placed {angle, spread, reach, lean}, `opts.gap` the
+   * per-generation step and `opts.jitScale` how hard jitter bites — the one
+   * place the roots differ, since a root mat wants more wander than a bough.
+   */
+  function place(id, angle, span, depth, opts) {
+    const n = opts.from.get(id);
+    if (!n) return;
+    const t = opts.dials;
+    const jit = (hash(id) - 0.5) * G.jitter * (opts.jitScale || 1);
+
+    // Non-linear radius: early generations spread, deep chains compress, so a
+    // 51-generation line is one long bough instead of 51 rings.
+    const r =
+      opts.base +
+      Math.pow(depth + 1, G.curve) * opts.gap * t.reach +
+      jit * opts.gap * 0.5;
+
+    // Lean bends the branch away from straight as it runs.
+    const bend = rad(t.lean) * Math.pow(depth / 8, 1.3);
+    const a = rad(angle - 90) + bend + jit * 0.04;
+
+    n.x = Math.cos(a) * r;
+    n.y = Math.sin(a) * r;
+    n.angle = angle;
+    n.r = r;
+
+    // A child that belongs to a different branch is placed by that branch's own
+    // pass — Ishmael hangs off Abraham but is aimed by the Ishmael dials — so
+    // he is skipped here rather than placed twice and given a slice of a span
+    // he does not use.
+    const kids = opts.branch
+      ? n.kids.filter((k) => ((opts.from.get(k) || {}).branch || 'Trunk') === opts.branch)
+      : n.kids;
+    if (!kids.length) return;
+    const total = kids.reduce((s, k) => s + countLeaves(k, opts.from, opts.branch), 0);
+    let cur = angle - span / 2;
+    for (const k of kids) {
+      const share = (countLeaves(k, opts.from, opts.branch) / total) * span;
+      place(k, cur + share / 2, share * 0.92, depth + 1, opts);
+      cur += share;
+    }
   }
 
   for (const [tribe, list] of byTribe) {
@@ -636,58 +802,157 @@ function layout() {
     if (!t) continue;
     const head = list[0];
     if (!head) continue;
-    countLeaves(head.id);
-
-    // Angles here are "from straight up", clockwise, so the panel numbers read
-    // the way the tree looks rather than in canvas radians.
-    function place(id, angle, span, depth) {
-      const n = nodes.get(id);
-      const jit = (hash(id) - 0.5) * G.jitter;
-
-      // Non-linear radius: early generations spread, deep chains compress, so
-      // a 51-generation line is one long bough instead of 51 rings.
-      const r =
-        G.trunkLen +
-        Math.pow(depth + 1, G.curve) * G.ringGap * t.reach +
-        jit * G.ringGap * 0.5;
-
-      // Lean bends the bough away from straight as it climbs.
-      const bend = rad(t.lean) * Math.pow(depth / 8, 1.3);
-      const a = rad(angle - 90) + bend + jit * 0.04;
-
-      n.x = Math.cos(a) * r;
-      n.y = Math.sin(a) * r;
-      n.angle = angle;
-      n.r = r;
-
-      const kids = n.kids;
-      if (!kids.length) return;
-      const total = kids.reduce((s, k) => s + leaves.get(k), 0);
-      let cur = angle - span / 2;
-      for (const k of kids) {
-        const share = (leaves.get(k) / total) * span;
-        place(k, cur + share / 2, share * 0.92, depth + 1);
-        cur += share;
-      }
-    }
-
-    place(head.id, t.angle, t.spread, 0);
+    countLeaves(head.id, nodes);
+    place(head.id, t.angle, t.spread, 0, {
+      from: nodes,
+      dials: t,
+      base: G.trunkLen,
+      gap: G.ringGap,
+    });
   }
 
-  // Roots: the 22-node chain from Abraham down to God, in a downward wedge.
+  // ── The trunk and the pre-Jacob boughs ────────────────────────────────
+  // One tree, not a canopy plus a root mat. The trunk runs Jacob -> Adam and
+  // the eleven boughs fork off it where they actually fork: Esau at Isaac,
+  // Ishmael at Abraham, Ham and Japheth at Noah, Cain at Adam. Radius rises
+  // with distance from Jacob, who sits at the origin holding the canopy, so
+  // the whole thing is one radial field with a single origin.
   rootNodes = [];
-  if (DATA.roots) {
-    DATA.roots.forEach((r, i) => {
-      const spreadA = rad((i / Math.max(1, DATA.roots.length - 1) - 0.5) * G.rootArc);
-      const d = i * G.rootGap;
-      const jit = (hash(r.id) - 0.5) * G.jitter * 6;
-      rootNodes.push({
-        ...r,
-        x: Math.sin(spreadA) * d * 0.55 + jit,
-        y: G.trunkLen * 0.25 + Math.cos(spreadA) * d,
-        i,
+  for (const n of rootById.values()) { n.x = n.y = n.r = null; }
+
+  if (rootById.size && R.Trunk) {
+    const jacob = rootById.get(DATA.jacob);
+    if (jacob) {
+      // The trunk, Jacob first, ending at Adam. Every other pre-Jacob node
+      // hangs off one of these.
+      const spine = [];
+      const seenSpine = new Set();
+      for (let cur = jacob; cur && !seenSpine.has(cur.id); cur = rootById.get(cur.father)) {
+        seenSpine.add(cur.id);
+        spine.push(cur);
+        if (!cur.father) break;
+      }
+
+      // Jacob is the trunk top, at the origin, so the canopy sits on him.
+      jacob.x = 0;
+      jacob.y = 0;
+      jacob.r = 0;
+      jacob.angle = R.Trunk.angle;
+
+      const rad2 = rad;
+      spine.forEach((n, i) => {
+        if (i === 0) return;
+        const jit = (hash(n.id) - 0.5) * G.jitter * 6;
+        const r =
+          G.trunkLen * 0.25 +
+          Math.pow(i, G.curve) * G.rootGap * R.Trunk.reach +
+          jit * G.rootGap * 0.5;
+        // rootArc sways the trunk as it runs instead of it going dead
+        // straight; the lean dial bends it further the further down it goes.
+        const sway = Math.sin(i / Math.max(1, spine.length - 1) * Math.PI) * G.rootArc * 0.25;
+        const bend = rad2(R.Trunk.lean) * Math.pow(i / 8, 1.3);
+        const a = rad2(R.Trunk.angle + sway - 90) + bend + jit * 0.04;
+        n.x = Math.cos(a) * r;
+        n.y = Math.sin(a) * r;
+        n.r = r;
+        n.angle = R.Trunk.angle + sway;
       });
-    });
+
+      // Everyone else on the trunk dials is a sibling or cousin too small to
+      // have earned its own row — a lone daughter, a son with no descendants.
+      // Each forks from the trunk node it hangs off, fanned either side rather
+      // than stacked, so they do not land on top of each other.
+      const onSpine = new Set(spine.map((n) => n.id));
+      for (const s of spine) {
+        const offshoots = s.kids.filter((k) => {
+          const kid = rootById.get(k);
+          return kid && !onSpine.has(k) && (kid.branch || 'Trunk') === 'Trunk';
+        });
+        if (!offshoots.length) continue;
+        const d = R.Trunk;
+        // Spread the fan across the same span the spine's own dial asks for,
+        // measured either side of the direction the spine is heading.
+        const fan = Math.max(d.spread, offshoots.length * 4);
+        const total = offshoots.reduce((a, k) => a + countLeaves(k, rootById, 'Trunk'), 0);
+        let cur = (s.angle ?? d.angle) - fan / 2;
+        for (const k of offshoots) {
+          // Weighted by leaves like everything else, so Joktan's thirteen sons
+          // get more of the fan than a lone daughter beside them.
+          const share = (countLeaves(k, rootById, 'Trunk') / total) * fan;
+          // Offshoots sit shorter than the trunk so the trunk stays readable
+          // as the through-line of the whole tree.
+          place(k, cur + share / 2, share * 0.9, 0, {
+            from: rootById,
+            dials: { ...d, reach: d.reach * 0.8 },
+            base: s.r != null ? s.r : G.trunkLen * 0.25,
+            gap: G.rootGap,
+            jitScale: 6,
+            branch: 'Trunk',
+          });
+          cur += share;
+        }
+      }
+
+      // Each named bough, placed from where it leaves the trunk. Swinging Ham
+      // moves Ham and everyone under him, and nobody else.
+      for (const [branch, list] of byRootBranch) {
+        if (branch === 'Trunk' || !R[branch] || !list.length) continue;
+        const head = list[0];
+        const parent = head.father && rootById.get(head.father);
+        const d = R[branch];
+        place(head.id, (parent ? parent.angle ?? R.Trunk.angle : R.Trunk.angle) + d.angle, d.spread, 0, {
+          from: rootById,
+          dials: d,
+          // Measured from the father's radius, so the branch starts where it
+          // actually forks rather than back at Jacob.
+          base: parent && parent.r != null ? parent.r : G.trunkLen * 0.25,
+          gap: G.rootGap,
+          // The pre-Jacob half wanders harder than the canopy; this is the
+          // lever for how gnarled it reads.
+          jitScale: 6,
+          branch,
+        });
+      }
+
+      // Wives sit BESIDE their husband on the same ring, not below him. A
+      // spouse has no father in this window, so the generic placer would leave
+      // her unplaced; and hanging her off her husband would draw her as his
+      // daughter. Offset along the ring instead, alternating sides so Jacob's
+      // four do not stack on one another.
+      const spouseCount = new Map();
+      for (const n of rootById.values()) {
+        if (!n.spouseOf) continue;
+        const h = rootById.get(n.spouseOf);
+        if (!h || h.x == null) continue;
+        const i = spouseCount.get(n.spouseOf) || 0;
+        spouseCount.set(n.spouseOf, i + 1);
+        // Alternate sides, stepping further out for each additional wife, so
+        // Jacob's four sit two and two rather than in a stack.
+        const side = i % 2 === 0 ? 1 : -1;
+        const step = Math.floor(i / 2) + 1;
+        const rr = h.r || Math.hypot(h.x, h.y);
+        // Jacob is at the origin, where an angular offset means nothing — a
+        // rotation about a zero radius moves you nowhere — so his wives are
+        // offset by distance instead.
+        if (rr < 1) {
+          const d2 = G.coupleGap * step * 1.6;
+          n.x = h.x + d2 * side;
+          n.y = h.y + d2 * 0.35;
+          n.r = Math.hypot(n.x, n.y);
+        } else {
+          const a2 = Math.atan2(h.y, h.x) + rad(G.coupleGap * step * side);
+          n.x = Math.cos(a2) * rr;
+          n.y = Math.sin(a2) * rr;
+          n.r = rr;
+        }
+        n.angle = h.angle;
+        n.partnerId = h.id;
+      }
+    }
+    // Jacob is placed — the boughs leaving him need his radius — but he is
+    // drawn by drawTrunk as the trunk top, so he is kept out of this pass to
+    // avoid a second dot and a second label on the same spot.
+    rootNodes = [...rootById.values()].filter((n) => n.x != null && n.id !== DATA.jacob);
   }
 
   // Crown lines are drawn from whatever nodes are already placed.
@@ -727,7 +992,7 @@ function fitToScreen() {
     if (p.y < minY) minY = p.y;
     if (p.y > maxY) maxY = p.y;
   }
-  // Room for the labels that sit above a bough and below God.
+  // Room for the labels that sit above a bough and below the soil.
   const pad = 34;
   const k = Math.min((W - pad * 2) / (maxX - minX || 1), (H - pad * 2) / (maxY - minY || 1));
   view.k = Math.max(0.05, Math.min(9, k));
@@ -763,7 +1028,7 @@ function draw() {
 
   const dimming = OPTS.dim && (selectedTribe || tracedPath);
 
-  if (OPTS.roots) drawRoots(dimming);
+  if (OPTS.roots) { drawSoil(dimming); drawRoots(dimming); }
   drawTrunk(dimming);
 
   // Dim boughs first so lit ones sit over them.
@@ -813,31 +1078,176 @@ function drawGrain() {
   ctx.restore();
 }
 
-function drawRoots(dimming) {
-  const lit = !dimming;
+// The pre-Jacob boughs are not tribes, so they carry no breastpiece stone and
+// are told apart by shades of bark instead. The trunk stays brightest, because
+// it is the line the whole tree hangs from.
+const ROOT_COLOURS = {
+  Trunk:   { c: '#8a6f2a', lit: GOLD },
+  Cain:    { c: '#6e4a3a', lit: '#b8795c' },
+  Ham:     { c: '#6b5a33', lit: '#b5964f' },
+  Japheth: { c: '#4f5f42', lit: '#89a86f' },
+  Aram:    { c: '#4a5a5c', lit: '#7fa0a3' },
+  Joktan:  { c: '#5d5733', lit: '#9d9459' },
+  Nahor:   { c: '#5a4a5e', lit: '#95809b' },
+  Haran:   { c: '#4e4558', lit: '#877a94' },
+  Ishmael: { c: '#6a5240', lit: '#b08a63' },
+  Midian:  { c: '#63503a', lit: '#a68a63' },
+  Jokshan: { c: '#585040', lit: '#948868' },
+  Esau:    { c: '#73472f', lit: '#c07b52' },
+};
+
+/**
+ * The soil, in God's place.
+ *
+ * God is not a generation and not a node. He is the ground the tree grows out
+ * of, so instead of a dot with a label and a verse count there is a band of
+ * earth beyond Adam, with root hairs running down into it from the first
+ * seedling. Nothing here is pickable and nothing here has a card.
+ */
+function drawSoil(dimming) {
+  const adam = rootById.get(ADAM_ID);
+  if (!adam || adam.x == null) return;
+
+  // The band sits beyond Adam along the direction the trunk is already
+  // running, so it follows the trunk's sway rather than being pinned to the
+  // bottom of the world.
+  const a = Math.atan2(adam.y, adam.x);
+  const r = (adam.r || Math.hypot(adam.x, adam.y)) + G.soilDepth;
+  const cx = Math.cos(a) * r;
+  const cy = Math.sin(a) * r;
+  const half = G.soilWidth / 2;
+
   ctx.save();
-  ctx.globalAlpha = lit ? 0.85 : G.dimLevel + 0.06;
-  ctx.strokeStyle = GOLD;
-  ctx.lineWidth = G.thickness * 1.3;
+  ctx.globalAlpha = dimming ? G.dimLevel + 0.2 : 1;
+  ctx.translate(cx, cy);
+  ctx.rotate(a + Math.PI / 2);
+
+  // Root hairs, reaching from Adam down into the earth. Drawn before the band
+  // so the band's gradient buries their ends.
+  ctx.strokeStyle = '#7a6224';
   ctx.lineCap = 'round';
+  for (let i = 0; i < 11; i++) {
+    const t = (i / 10 - 0.5) * 2;
+    const sx = t * half * 0.30;
+    const len = G.soilDepth * (0.55 + hash('hair' + i) * 0.85);
+    ctx.globalAlpha = (dimming ? G.dimLevel + 0.1 : 0.5) * (1 - Math.abs(t) * 0.45);
+    ctx.lineWidth = Math.max(0.2, G.thickness * (0.75 - Math.abs(t) * 0.4));
+    ctx.beginPath();
+    ctx.moveTo(sx * 0.2, -G.soilDepth);
+    ctx.quadraticCurveTo(sx * 0.7, -G.soilDepth * 0.2, sx, len * 0.55);
+    ctx.stroke();
+  }
+
+  // The earth itself: a band fading out at both ends so it reads as ground
+  // rather than as a drawn rectangle.
+  ctx.globalAlpha = dimming ? G.dimLevel + 0.2 : 1;
+  const g = ctx.createLinearGradient(-half, 0, half, 0);
+  g.addColorStop(0, 'rgba(26,20,13,0)');
+  g.addColorStop(0.5, 'rgba(38,29,18,0.95)');
+  g.addColorStop(1, 'rgba(26,20,13,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(-half, -G.soilDepth * 0.22, G.soilWidth, G.soilDepth * 1.25);
+
+  // A soil line where the earth meets the air.
+  const lg = ctx.createLinearGradient(-half, 0, half, 0);
+  lg.addColorStop(0, 'rgba(122,98,36,0)');
+  lg.addColorStop(0.5, 'rgba(122,98,36,0.6)');
+  lg.addColorStop(1, 'rgba(122,98,36,0)');
+  ctx.strokeStyle = lg;
+  ctx.lineWidth = Math.max(0.4, G.thickness * 0.8);
   ctx.beginPath();
-  rootNodes.forEach((r, i) => (i === 0 ? ctx.moveTo(r.x, r.y) : ctx.lineTo(r.x, r.y)));
+  ctx.moveTo(-half, -G.soilDepth * 0.22);
+  ctx.lineTo(half, -G.soilDepth * 0.22);
   ctx.stroke();
 
-  for (const r of rootNodes) {
-    const last = r.i === rootNodes.length - 1;
-    ctx.beginPath();
-    ctx.arc(r.x, r.y, last ? G.nodeSize * 2.2 : G.nodeSize * 0.9, 0, Math.PI * 2);
-    ctx.fillStyle = last ? GOLD : '#8a6f2a';
-    ctx.fill();
-  }
-  // God, at the taproot.
-  if (OPTS.labels && rootNodes.length) {
-    const last = rootNodes[rootNodes.length - 1];
+  if (OPTS.labels) {
+    ctx.globalAlpha = dimming ? G.dimLevel + 0.25 : 0.92;
     ctx.fillStyle = GOLD;
-    ctx.font = '600 15px Milonga, serif';
     ctx.textAlign = 'center';
-    ctx.fillText(last.label, last.x, last.y + 26);
+    ctx.textBaseline = 'middle';
+    ctx.font = `600 ${Math.max(9, G.soilDepth * 0.30)}px Milonga, serif`;
+    // The text is upside down on the far side of the circle, so it is flipped
+    // back whenever the band has rotated past horizontal.
+    const flip = Math.cos(a + Math.PI / 2) < 0;
+    ctx.save();
+    if (flip) ctx.rotate(Math.PI);
+    ctx.fillText('GOD', 0, G.soilDepth * 0.42 * (flip ? -1 : 1));
+    ctx.restore();
+    ctx.textBaseline = 'alphabetic';
+  }
+  ctx.restore();
+}
+
+function drawRoots(dimming) {
+  if (!rootNodes.length) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+
+  // A traced line lights the root nodes on it. Selecting a bough with no trace
+  // says nothing about who down here belongs to it, so the whole root mat dims
+  // together rather than half of it staying bright for no reason.
+  const onOf = (n) => (tracedPath ? tracedPath.has(n.id) : !dimming);
+
+  // Branches first, so the dots sit on top of the lines.
+  for (const n of rootNodes) {
+    const col = ROOT_COLOURS[n.branch] || ROOT_COLOURS.Trunk;
+    const on = onOf(n);
+    ctx.globalAlpha = dimming ? (on ? 0.9 : G.dimLevel) : 0.85;
+    const parent = n.father && rootById.get(n.father);
+    if (!parent || parent.x == null) continue;
+    ctx.strokeStyle = on && dimming ? col.lit : col.c;
+    // Roots thicken as they go down, the opposite of a bough tapering up.
+    ctx.lineWidth = Math.max(0.2, G.thickness * 1.3 * (1 - Math.min(0.6, n.depth / 30)));
+    ctx.beginPath();
+    ctx.moveTo(parent.x, parent.y);
+    const mx = (parent.x + n.x) / 2;
+    const my = (parent.y + n.y) / 2;
+    const dx = n.x - parent.x, dy = n.y - parent.y;
+    ctx.quadraticCurveTo(mx - dy * 0.08, my + dx * 0.08, n.x, n.y);
+    ctx.stroke();
+  }
+
+  // Nodes.
+  for (const n of rootNodes) {
+    const col = ROOT_COLOURS[n.branch] || ROOT_COLOURS.Trunk;
+    const on = onOf(n);
+    ctx.globalAlpha = dimming && !on ? G.dimLevel : 1;
+    // Adam is the first seedling — the whole tree grows from him — so he is
+    // the largest thing down here. God is not a node at all; he is the soil.
+    const seedling = n.id === ADAM_ID;
+    const size = G.nodeSize * (seedling ? 2.0 : n.kids.length ? 1.05 : 0.75);
+    if (on && !dimming && G.glow > 0) {
+      ctx.shadowColor = col.lit;
+      ctx.shadowBlur = 9 * G.glow;
+    }
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, size, 0, Math.PI * 2);
+    ctx.fillStyle = seedling ? GOLD : (on && dimming ? col.lit : col.c);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // A ring marks the women, so they are findable without reading every label.
+    if (n.female && size > 1.2) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = Math.max(0.4, size * 0.22);
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, size + Math.max(1, size * 0.6), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  // Labels. Every pre-Jacob node is named, which is the point of filling them
+  // in. They are small and set below the dot so they do not sit on the line
+  // running into it; Adam is given the larger hand as the first of them.
+  if (OPTS.labels) {
+    ctx.textAlign = 'center';
+    for (const n of rootNodes) {
+      const on = onOf(n);
+      const seedling = n.id === ADAM_ID;
+      ctx.globalAlpha = dimming && !on ? G.dimLevel + 0.1 : seedling ? 1 : 0.82;
+      ctx.fillStyle = seedling ? GOLD : on ? '#cbbb98' : '#8a7d6b';
+      ctx.font = seedling ? '600 15px Milonga, serif' : '10.5px Milonga, serif';
+      ctx.fillText(n.label, n.x, n.y + (seedling ? 24 : 13));
+    }
   }
   ctx.restore();
 }
@@ -989,6 +1399,17 @@ function pick(cx, cy) {
     const d = Math.hypot(n.x - p.x, n.y - p.y);
     if (d < bestD) { bestD = d; best = n; }
   }
+  // The roots are people too. They are only pickable while they are drawn,
+  // or a tap would trace a line the viewer cannot see. Jacob is the exception:
+  // he is drawn as the trunk whether the roots are shown or not, so he is
+  // always tappable.
+  const pickable = OPTS.roots ? rootNodes : [];
+  const jacob = rootById.get(DATA.jacob);
+  for (const n of jacob && jacob.x != null ? [...pickable, jacob] : pickable) {
+    if (n.x == null) continue;
+    const d = Math.hypot(n.x - p.x, n.y - p.y);
+    if (d < bestD) { bestD = d; best = n; }
+  }
   return best;
 }
 
@@ -1091,7 +1512,7 @@ cv.addEventListener('pointermove', (e) => {
   if (drag.type === 'angle') {
     t.angle = Math.round(drag.startVal + delta);
   } else {
-    t.spread = Math.max(1, Math.min(90, Math.round(drag.startVal + delta)));
+    t.spread = Math.max(1, Math.min(360, Math.round(drag.startVal + delta)));
   }
   syncTribeRow(drag.tribe);
   layout();
@@ -1137,34 +1558,118 @@ cv.addEventListener('wheel', (e) => {
   draw();
 }, { passive: false });
 
-/** Light the father-chain from this person back to the trunk. */
+/**
+ * Light this person's whole line, end to end.
+ *
+ * A canopy node climbs `father` to its son of Jacob and then carries on down
+ * the roots to God. A root node does the same from wherever it sits. However
+ * tangled the roots get at the new slider limits, one tap picks a single line
+ * out of the snarl — which is what makes those limits usable.
+ */
 function traceFrom(n) {
   const path = new Set();
-  let cur = n.id;
   const seen = new Set();
-  while (cur && nodes.has(cur) && !seen.has(cur)) {
+  let cur = n.id;
+  while (cur && !seen.has(cur)) {
     seen.add(cur);
     path.add(cur);
-    cur = nodes.get(cur).father;
+    const rec = nodes.get(cur) || rootById.get(cur);
+    if (!rec) break;
+    // A son of Jacob's `father` already names Jacob, who is in the pre-Jacob
+    // set, so the chain crosses the two halves with no special case. A wife
+    // has no father here, so her line continues through her husband — tapping
+    // Leah lights Jacob's descent to Adam rather than stopping on her alone.
+    cur = rec.father || rec.spouseOf;
   }
   tracedPath = path;
-  selectedTribe = n.tribe;
+  // A root node has no tribe, so the bough selection is cleared rather than
+  // set to undefined, which would dim the whole canopy against nothing.
+  selectedTribe = n.tribe || null;
   syncTribeRows();
+  syncRootRows();
   showHover(n, true);
+}
+
+/**
+ * Generations from Adam, and generations to Jesus.
+ *
+ * The card used to count generations to Jacob, which means nothing to a reader:
+ * Jacob is the middle of this tree, not an end of it. The ends are Adam at the
+ * first seedling and Jesus at the crown, so those are what get measured. Where
+ * a person sits on both lines — everyone on the Matthew or Luke chain — both
+ * show. It counts from Adam rather than God because God is not a generation.
+ */
+function generationOf(id) {
+  const rec = rootById.get(id) || nodes.get(id);
+  if (!rec) return null;
+  if (rec.root) return rec.depth;
+  // A canopy node's own depth counts from its son of Jacob, so the pre-Jacob
+  // side of the journey is Jacob's depth plus the one step onto the bough.
+  const jacob = rootById.get(DATA.jacob);
+  return jacob ? jacob.depth + 1 + rec.depth : null;
+}
+
+// Built once from the two crown chains, because a node is only "N to Jesus"
+// if it is actually on a line that reaches him.
+let toJesus = new Map();
+function buildCrownDistances() {
+  toJesus = new Map();
+  for (const line of [DATA.crown?.matthew, DATA.crown?.luke]) {
+    if (!line || !line.length) continue;
+    line.forEach((c, i) => {
+      const d = line.length - 1 - i;
+      // Matthew is 43 long and Luke 53, so the same man sits at two distances.
+      // The shorter is shown, since it is the count that is true of some line.
+      if (!toJesus.has(c.id) || toJesus.get(c.id) > d) toJesus.set(c.id, d);
+    });
+  }
 }
 
 function showHover(n, pinned) {
   const el = document.getElementById('hover');
   if (!n) { el.className = 'readout-box empty'; return; }
-  const st = STONES[n.tribe] || {};
   el.className = 'readout-box';
-  const depth = tracedPath ? `<div class="tr" style="color:#6b6153">${tracedPath.size} generations to Jacob</div>` : '';
+
+  // Roots are not tribal, so they get their branch in its own colour instead.
+  let where;
+  if (n.root && n.spouseOf) {
+    const h = rootById.get(n.spouseOf);
+    const rc = ROOT_COLOURS[n.branch] || ROOT_COLOURS.Trunk;
+    where = `<div class="tr" style="color:${rc.lit}">wife of ${h ? h.label : 'a man on the tree'}</div>`;
+  } else if (n.root) {
+    const rc = ROOT_COLOURS[n.branch] || ROOT_COLOURS.Trunk;
+    const name = n.branch === 'Trunk' ? 'Adam’s line to Jacob' : `${n.branch}’s bough`;
+    where = `<div class="tr" style="color:${rc.lit}">${name}</div>`;
+  } else {
+    const st = STONES[n.tribe] || {};
+    where = `<div class="tr" style="color:${st.lit || LINEN}">${n.tribe}${st.stone ? ' &middot; ' + st.stone : ''}</div>`;
+  }
+
+  // Lifespan. Only the pre-flood men and a handful after them have both years,
+  // so the line is dropped rather than printing "lived NaN years".
+  const lived = typeof n.lived === 'number' && n.lived > 0
+    ? `<div class="tr" style="color:#8a7d6b">lived ${n.lived} years</div>` : '';
+
+  const fromAdam = generationOf(n.id);
+  const jes = toJesus.get(n.id);
+  const spans = [];
+  if (fromAdam != null && fromAdam > 0) spans.push(`${fromAdam} from Adam`);
+  if (jes != null && jes > 0) spans.push(`${jes} to Jesus`);
+  const gens = spans.length
+    ? `<div class="tr" style="color:#6b6153">${spans.join(' &middot; ')}</div>` : '';
+
+  // A placeholder only — nothing is wired. The lab is a standalone static page
+  // with no route to an article, and it stays one.
+  const bio = pinned ? `<div class="bio">Full bio would appear here</div>` : '';
+
   el.innerHTML =
     `<div class="nm">${n.label}</div>` +
     (n.meaning ? `<div class="mn">${n.meaning}</div>` : '') +
-    `<div class="tr" style="color:${st.lit || '#888'}">${n.tribe} &middot; ${st.stone || ''}</div>` +
+    where +
+    lived +
     (n.verseCount ? `<div class="tr" style="color:#6b6153">${n.verseCount} verse${n.verseCount === 1 ? '' : 's'}</div>` : '') +
-    (pinned ? depth : '');
+    gens +
+    bio;
 }
 
 // ── Panel ──────────────────────────────────────────────────────────────────
@@ -1176,17 +1681,23 @@ function selectTribe(tribe) {
   draw();
 }
 
+// Shared by the twelve boughs and by the root branches — the two use the same
+// {angle, spread, reach, lean} shape, because place() does.
 const TRIBE_SPECS = [
-  { key: 'angle',  label: 'Angle',  min: -180, max: 180, step: 1,    unit: '°' },
-  { key: 'spread', label: 'Spread', min: 1,    max: 90,  step: 1,    unit: '°' },
-  { key: 'reach',  label: 'Reach',  min: 0.3,  max: 2.2, step: 0.01, unit: '' },
-  { key: 'lean',   label: 'Lean',   min: -40,  max: 40,  step: 1,    unit: '°' },
+  { key: 'angle',  label: 'Angle',  min: -180, max: 360, step: 1,    unit: '°' },
+  { key: 'spread', label: 'Spread', min: 1,    max: 360, step: 1,    unit: '°' },
+  { key: 'reach',  label: 'Reach',  min: 0.05, max: 8,   step: 0.01, unit: '' },
+  { key: 'lean',   label: 'Lean',   min: -180, max: 180, step: 1,    unit: '°' },
 ];
 
 function buildPanel() {
   const host = document.getElementById('tribes');
   host.innerHTML = '';
-  for (const tribe of DATA.tribeOrder.concat(byTribe.has('Dinah') ? ['Dinah'] : [])) {
+  // Dinah is not listed. The twelve boughs are the twelve sons; she is a bough
+  // of one because Jacob's `children` has thirteen entries, and giving her a
+  // dials row put a thirteenth tribe in a panel headed "The twelve boughs".
+  // Her node still draws and still taps — see TRIBE_DEFAULTS.Dinah.
+  for (const tribe of DATA.tribeOrder) {
     if (!byTribe.has(tribe)) continue;
     const st = STONES[tribe] || { c: LINEN, stone: '' };
     const n = (DATA.counts && DATA.counts[tribe]) || byTribe.get(tribe).length;
@@ -1221,6 +1732,48 @@ function buildPanel() {
     if (!el.dataset.tribe) return;
     T[el.dataset.tribe][el.dataset.key] = parseFloat(el.value);
     syncTribeRow(el.dataset.tribe);
+    layout();
+    draw();
+  });
+
+  // ── The root branches ────────────────────────────────────────────────
+  // Same rows as a tribe, minus the stone: a root branch has no breastpiece
+  // colour, so its swatch is its own shade of root-gold.
+  const rh = document.getElementById('rootBranches');
+  rh.innerHTML = '';
+  const branchOrder = DATA.rootBranchOrder || [...byRootBranch.keys()];
+  for (const branch of branchOrder) {
+    if (!byRootBranch.has(branch) || !R[branch]) continue;
+    const rc = ROOT_COLOURS[branch] || ROOT_COLOURS.Trunk;
+    const n = (DATA.rootCounts && DATA.rootCounts[branch]) || byRootBranch.get(branch).length;
+    const div = document.createElement('div');
+    div.className = 'tribe';
+    div.dataset.branch = branch;
+    div.innerHTML =
+      `<div class="tribe-head">` +
+        `<span class="stone" style="background:${rc.c}"></span>` +
+        `<span class="tribe-name">${branch === 'Trunk' ? 'The trunk' : branch}</span>` +
+        `<span class="tribe-n">${n}</span>` +
+      `</div><div class="tribe-body">` +
+      TRIBE_SPECS.map((s) =>
+        `<div class="ctl"><div class="ctl-row">` +
+        `<label for="r_${branch}_${s.key}">${s.label}</label>` +
+        `<output id="ro_${branch}_${s.key}"></output></div>` +
+        `<input type="range" id="r_${branch}_${s.key}" data-branch="${branch}" data-key="${s.key}" ` +
+        `min="${s.min}" max="${s.max}" step="${s.step}" value="${R[branch][s.key]}" /></div>`
+      ).join('') +
+      `</div>`;
+    div.querySelector('.tribe-head').addEventListener('click', () => {
+      div.classList.toggle('open');
+    });
+    rh.appendChild(div);
+  }
+
+  rh.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!el.dataset.branch) return;
+    R[el.dataset.branch][el.dataset.key] = parseFloat(el.value);
+    syncRootRow(el.dataset.branch);
     layout();
     draw();
   });
@@ -1272,6 +1825,24 @@ function syncTribeRows() {
   }
 }
 
+function syncRootRow(branch) {
+  for (const s of TRIBE_SPECS) {
+    const inp = document.getElementById(`r_${branch}_${s.key}`);
+    const out = document.getElementById(`ro_${branch}_${s.key}`);
+    if (!inp) continue;
+    inp.value = R[branch][s.key];
+    out.textContent = R[branch][s.key] + s.unit;
+  }
+  writeReadout();
+}
+
+function syncRootRows() {
+  for (const branch of Object.keys(R)) {
+    if (!byRootBranch.has(branch)) continue;
+    syncRootRow(branch);
+  }
+}
+
 function syncGlobals() {
   for (const s of GLOBAL_SPECS) {
     const inp = document.getElementById(`g_${s.key}`);
@@ -1291,6 +1862,16 @@ function writeReadout() {
       `  ${tribe.padEnd(9)}: { angle: ${String(t.angle).padStart(4)}, ` +
       `spread: ${String(t.spread).padStart(2)}, reach: ${t.reach.toFixed(2)}, ` +
       `lean: ${String(t.lean).padStart(3)} },`
+    );
+  }
+  lines.push('};', 'const ROOTS = {');
+  for (const branch of Object.keys(R)) {
+    if (!byRootBranch.has(branch)) continue;
+    const r = R[branch];
+    lines.push(
+      `  ${branch.padEnd(8)}: { angle: ${String(r.angle).padStart(4)}, ` +
+      `spread: ${String(r.spread).padStart(3)}, reach: ${r.reach.toFixed(2)}, ` +
+      `lean: ${String(r.lean).padStart(4)} },`
     );
   }
   lines.push('};', 'const TREE = {');
@@ -1314,13 +1895,18 @@ document.getElementById('copyBtn').addEventListener('click', () => {
   navigator.clipboard?.writeText(document.getElementById('readout').textContent);
 });
 
+// With the slider caps opened right up, this is the way back from a setting
+// that has thrown the tree off-screen — so it resets the view as well as the
+// values, and Fit recovers the framing if only the view has wandered.
 document.getElementById('resetBtn').addEventListener('click', () => {
   for (const [k, v] of Object.entries(TRIBE_DEFAULTS)) T[k] = { ...v };
+  for (const [k, v] of Object.entries(ROOT_DEFAULTS)) R[k] = { ...v };
   for (const s of GLOBAL_SPECS) G[s.key] = s.def;
   view = { x: 0, y: 0, k: 1 };
   tracedPath = null;
   selectTribe(null);
   syncTribeRows();
+  syncRootRows();
   syncGlobals();
   layout();
   draw();

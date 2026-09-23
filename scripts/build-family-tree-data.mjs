@@ -31,7 +31,6 @@ const OUT = path.join(ROOT, 'apps/pwa-polished/public/family-tree-data.json');
 // line — conflating the two slugs silently grafts the whole Matthean genealogy
 // onto the twelve tribes.
 const JACOB = 'israel_682';
-const ABRAHAM = 'abraham_58';
 
 console.log('🌳 Building family tree lab data');
 console.log(`   Source: ${path.relative(ROOT, PACK)}`);
@@ -45,8 +44,9 @@ const db = new Database(PACK, { readonly: true });
 const people = new Map();
 for (const r of db
   .prepare(
-    `SELECT person_id, name, display_title, father, mother, children,
-            member_of, name_meaning, dict_text, birth_year, verse_count
+    `SELECT person_id, name, display_title, gender, father, mother, children,
+            partners, member_of, name_meaning, dict_text,
+            birth_year, death_year, verse_count
      FROM people`
   )
   .all()) {
@@ -156,24 +156,244 @@ for (const [id, tribe] of tribeOf) {
   });
 }
 
-// ── Root chain: Abraham back to God ───────────────────────────────────────
+// ── The roots: God down to Jacob, as a tree ───────────────────────────────
+// The old version climbed `father` from Abraham and kept one man per
+// generation, which threw away every brother, every sister and every wife —
+// 172 people the pack already holds, the whole Table of Nations among them.
+// This descends through `children` instead, so a branch is a branch.
 
-const roots = [];
-{
-  const seen = new Set();
-  let cur = ABRAHAM;
-  while (cur && people.has(cur) && !seen.has(cur)) {
-    seen.add(cur);
-    const r = people.get(cur);
-    roots.push({
-      id: cur,
-      label: r.display_title || r.name,
-      meaning: r.name_meaning || null,
-      prose: r.dict_text || null,
-    });
-    cur = fatherOf(cur);
+const ADAM = 'adam_78';
+const GOD = 'god_1324';
+
+// The descent has to stop somewhere, and "stop at Jacob" is not enough: Leah
+// and Rachel are Laban's daughters, so walking their children walks straight
+// into Judah's line and out through Luke's genealogy — 802 nodes instead of
+// 187. Anyone the canopy already draws is a stopping point.
+const inCanopy = (id) => tribeOf.has(id);
+
+const rootSeen = new Set();
+const rootParent = new Map(); // person_id -> the node it hangs from here
+const rootOrder = [];
+
+function descend(id, from) {
+  if (!id || !people.has(id) || rootSeen.has(id) || inCanopy(id)) return;
+  rootSeen.add(id);
+  rootParent.set(id, from);
+  rootOrder.push(id);
+  // Jacob is the trunk. His children are the twelve boughs, drawn above.
+  if (id === JACOB) return;
+  for (const c of parseLinks(people.get(id).children)) descend(c.slug, id);
+}
+
+// God's `children` are Adam and Eve, so starting there seats the taproot and
+// picks up Eve without a special case.
+descend(people.has(GOD) ? GOD : ADAM, null);
+
+// Wives who are nobody's daughter in this window — Hagar, Keturah, Zillah,
+// Bilhah — are reached only through their partner. `rootSpouse` records that
+// they arrived that way: setting rootParent alone made them their husband's
+// CHILDREN, which drew Bilhah and Zilpah as a fourteenth and fifteenth bough
+// of Jacob, standing next to Reuben.
+const rootSpouse = new Map(); // person_id -> the partner they were reached by
+for (const id of [...rootOrder]) {
+  for (const p of parseLinks(people.get(id).partners)) {
+    if (!people.has(p.slug) || rootSeen.has(p.slug) || inCanopy(p.slug)) continue;
+    rootSeen.add(p.slug);
+    rootParent.set(p.slug, id);
+    rootSpouse.set(p.slug, id);
+    rootOrder.push(p.slug);
   }
 }
+
+// A son is listed under his mother as well as his father, and whichever the
+// walk met first became his parent here — which hung Isaac off Sarah and Jacob
+// off Rebekah, breaking the father-spine the roots are drawn along. Reseat
+// anyone whose real father is also in this window.
+for (const id of rootOrder) {
+  if (rootSpouse.has(id)) continue; // reached as a wife, not as a child
+  const f = fatherOf(id);
+  if (f && rootSeen.has(f) && f !== id) rootParent.set(id, f);
+}
+
+// ── Branch keys ───────────────────────────────────────────────────────────
+// The hand-placed directions in the lab are keyed by branch, exactly as the
+// twelve boughs are. Everything on the Adam -> Jacob trunk is 'Trunk'; each
+// head below owns its whole subtree and gets its own dials.
+//
+// These are every off-trunk subtree of three or more, in the order they fork
+// on the way up, so the panel reads down the trunk. The tree is badly lopsided
+// — from Noah, Shem carries 781 people and Ham 31 — so leaf-count weighting
+// alone would squash Ham and Japheth to slivers. That is exactly why the twelve
+// are placed by hand, and these eleven need it for the same reason.
+
+const ROOT_BRANCH_HEADS = [
+  ['cain_533', 'Cain'],          // forks at Adam
+  ['ham_1359', 'Ham'],           // at Noah
+  ['japheth_726', 'Japheth'],    // at Noah
+  ['aram_285', 'Aram'],          // at Shem — the son of Shem, not aram_286
+  ['joktan_1686', 'Joktan'],     // at Eber
+  ['nahor_2143', 'Nahor'],       // at Terah
+  ['haran_1407', 'Haran'],       // at Terah — carries Lot
+  ['ishmael_630', 'Ishmael'],    // at Abraham
+  ['midian_2075', 'Midian'],     // at Abraham
+  ['jokshan_1685', 'Jokshan'],   // at Abraham
+  ['esau_1216', 'Esau'],         // at Isaac — Jacob's brother
+];
+
+// The trunk itself, so everyone else can be told apart from it. Climbing
+// `rootParent` from Jacob is what the old code did, minus the discarding.
+const trunk = new Set();
+{
+  let cur = JACOB;
+  while (cur && rootSeen.has(cur) && !trunk.has(cur)) {
+    trunk.add(cur);
+    cur = rootParent.get(cur);
+  }
+}
+
+const rootBranch = new Map();
+for (const [head, name] of ROOT_BRANCH_HEADS) {
+  if (!rootSeen.has(head)) continue;
+  const stack = [head];
+  while (stack.length) {
+    const id = stack.pop();
+    if (rootBranch.has(id) || trunk.has(id)) continue;
+    rootBranch.set(id, name);
+    for (const c of parseLinks(people.get(id).children)) {
+      if (rootSeen.has(c.slug) && rootParent.get(c.slug) === id) stack.push(c.slug);
+    }
+    for (const p of parseLinks(people.get(id).partners)) {
+      if (rootSeen.has(p.slug) && rootParent.get(p.slug) === id) stack.push(p.slug);
+    }
+  }
+}
+
+// Depth from Adam, which is what the card prints and what the layout rings on.
+// Computed by climbing rather than in walk order, because reseating people on
+// their father above means a node can now precede its parent in `rootOrder`.
+const rootDepth = new Map();
+function depthOfRoot(id, guard) {
+  if (rootDepth.has(id)) return rootDepth.get(id);
+  const f = rootParent.get(id);
+  if (f == null || !rootSeen.has(f) || guard.has(id)) {
+    rootDepth.set(id, 0);
+    return 0;
+  }
+  guard.add(id);
+  const d = depthOfRoot(f, guard) + 1;
+  rootDepth.set(id, d);
+  return d;
+}
+for (const id of rootOrder) depthOfRoot(id, new Set());
+
+// Marriage crosses generations, and descent alone gets it wrong in both
+// directions. Leah and Rachel are Laban's daughters, so climbing fathers put
+// them a ring BELOW Jacob — on the same ring as his children. A wife reached
+// through her husband landed a ring below him for the opposite reason. Either
+// way a couple must share a ring, so every marriage inside this window is
+// levelled to the shallower of the two.
+const marriedTo = new Map(); // person_id -> partner in this window
+for (const id of rootOrder) {
+  for (const pl of parseLinks(people.get(id).partners)) {
+    if (rootSeen.has(pl.slug)) marriedTo.set(id, pl.slug);
+  }
+}
+
+// The same relation as seen from the wife's side, and emitted. A woman may be
+// on the tree as a daughter and still be someone's wife; both facts are true
+// and the page needs the marriage to seat her beside him.
+const partnerIn = new Map();
+for (const id of rootOrder) {
+  if (id === GOD) continue;
+  for (const pl of parseLinks(people.get(id).partners)) {
+    if (!rootSeen.has(pl.slug) || pl.slug === GOD) continue;
+    // Women are seated beside men, so the relation is recorded on the wife.
+    if (people.get(id).gender === 'Female') partnerIn.set(id, pl.slug);
+  }
+}
+// Two passes, because levelling one couple can change what "shallower" means
+// for the next — Rebekah moves to Isaac, and Isaac is already settled.
+for (let pass = 0; pass < 2; pass++) {
+  for (const [id, via] of marriedTo) {
+    if (!rootDepth.has(id) || !rootDepth.has(via)) continue;
+    const d = Math.min(rootDepth.get(id), rootDepth.get(via));
+    rootDepth.set(id, d);
+    rootDepth.set(via, d);
+  }
+}
+
+// God is not a generation. He is the ground the tree grows out of — Adam is the
+// first seedling — so he is not emitted as a person at all, and his 8,587
+// verses stop being attributed to a node on the canvas. The page draws soil in
+// his place. Dropping him shifts everyone up one ring, putting Adam at 0.
+const emitted = rootOrder.filter((id) => id !== GOD);
+for (const id of emitted) rootDepth.set(id, Math.max(0, (rootDepth.get(id) ?? 0) - 1));
+for (const id of emitted) {
+  if (rootParent.get(id) === GOD) rootParent.set(id, null);
+}
+
+// Labels: the same collision handling the canopy gets, over the root set.
+const rootByName = new Map();
+for (const id of emitted) {
+  const n = people.get(id).name;
+  if (!rootByName.has(n)) rootByName.set(n, []);
+  rootByName.get(n).push(id);
+}
+
+function rootLabelFor(id) {
+  const r = people.get(id);
+  if (r.display_title && r.display_title !== r.name) return r.display_title;
+  const dupes = rootByName.get(r.name);
+  if (!dupes || dupes.length === 1) return r.name;
+  const f = rootParent.get(id);
+  const fname = f && people.get(f) ? people.get(f).name : null;
+  return fname ? `${r.name} (of ${fname})` : r.name;
+}
+
+// Verse refs for root people too, on the same 12-ref budget as the canopy.
+const rootVerses = new Map();
+for (const v of db
+  .prepare('SELECT person_id, book, chapter, verse FROM person_verses')
+  .all()) {
+  if (!rootSeen.has(v.person_id)) continue;
+  if (!rootVerses.has(v.person_id)) rootVerses.set(v.person_id, []);
+  const list = rootVerses.get(v.person_id);
+  if (list.length < 12) list.push(`${v.book} ${v.chapter}:${v.verse}`);
+}
+
+const roots = emitted.map((id) => {
+  const r = people.get(id);
+  // Years are negative (BC). A lifespan needs both ends; God has neither, and
+  // Cainan son of Arphaxad has neither, so `lived` stays null rather than NaN.
+  const lived =
+    typeof r.birth_year === 'number' && typeof r.death_year === 'number'
+      ? r.death_year - r.birth_year
+      : null;
+  return {
+    id,
+    label: rootLabelFor(id),
+    father: rootSpouse.has(id) ? null : rootParent.get(id) ?? null,
+    // Whom this person is married to, where both are on the tree. Set for
+    // everyone married in this window, not only for the wives who were REACHED
+    // through a husband — Leah and Rachel are Laban's daughters, so the walk
+    // met them as children, and without this they would draw as descendants of
+    // Laban's bough instead of standing beside Jacob.
+    spouseOf: partnerIn.get(id) ?? null,
+    // True only for those who are on the tree solely as someone's wife, and so
+    // have no parent here to hang from.
+    marriedIn: rootSpouse.has(id),
+    depth: rootDepth.get(id) ?? 0,
+    branch: rootBranch.get(id) || 'Trunk',
+    female: r.gender === 'Female',
+    meaning: r.name_meaning || null,
+    prose: r.dict_text || null,
+    birthYear: typeof r.birth_year === 'number' ? r.birth_year : null,
+    deathYear: typeof r.death_year === 'number' ? r.death_year : null,
+    lived: lived != null && lived > 0 ? lived : null,
+    verses: rootVerses.get(id) || [],
+    verseCount: r.verse_count ?? 0,
+  };
+});
 
 // ── The crown: Matthew's and Luke's lines to Jesus ────────────────────────
 // They diverge at David (Solomon vs. Nathan), touch at Shealtiel/Zerubbabel,
@@ -251,6 +471,10 @@ const out = {
   ],
   counts,
   maxDepth: Math.max(...depthOf.values()),
+  // The order the lab lists the root dials in; 'Trunk' is Adam -> Jacob.
+  rootBranchOrder: ['Trunk', ...ROOT_BRANCH_HEADS.map(([, n]) => n)],
+  rootCounts: roots.reduce((a, r) => ((a[r.branch] = (a[r.branch] || 0) + 1), a), {}),
+  rootMaxDepth: roots.reduce((m, r) => Math.max(m, r.depth), 0),
   roots,
   crown,
   nodes,
@@ -261,7 +485,11 @@ fs.writeFileSync(OUT, JSON.stringify(out));
 const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
 console.log(`   ${nodes.length} traced, max depth ${out.maxDepth}`);
 console.log(`   ${sorted.map(([t, n]) => `${t} ${n}`).join(', ')}`);
-console.log(`   roots: ${roots.length} nodes, ending at ${roots[roots.length - 1]?.label}`);
+console.log(
+  `   roots: ${roots.length} nodes, depth ${out.rootMaxDepth}, ` +
+    `${roots.filter((r) => r.female).length} women, ` +
+    Object.entries(out.rootCounts).map(([b, n]) => `${b} ${n}`).join(', ')
+);
 console.log(
   `   crown: Matthew ${crown.matthew.length}, Luke ${crown.luke.length}, ` +
     `shared ${crown.shared.length} (fork at ${people.get(crown.divergeAt)?.name ?? '?'})`
