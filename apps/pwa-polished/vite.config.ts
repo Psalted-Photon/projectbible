@@ -263,6 +263,8 @@ export default defineConfig({
         //                     Its data JSON stays out of the precache too: at
         //                     352 KB it would be charged to every install,
         //                     including everyone who never opens the lab.
+        //   gem-lab.html      the breastplate stones prototype, kept as the
+        //                     reference copy of src/lib/gems/.
         //   reset.html        the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
@@ -277,11 +279,13 @@ export default defineConfig({
           '**/email/**',
           '**/familytree.html',
           '**/family-tree-data.json',
+          '**/gem-lab.html',
         ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
           /^\/reset\.html$/,
           /^\/familytree\.html$/,
+          /^\/gem-lab\.html$/,
         ],
         runtimeCaching: [
           {

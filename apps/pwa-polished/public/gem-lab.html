@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Breastplate Stones – Gem Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;500;700&family=Work+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#e9e3d4; --ink:#16223d; --muted:#5b6275; --gold:#a8822e; --cell:#f3efe4; --line:rgba(22,34,61,.14);
+  --stage-a:#1d2b4f; --stage-b:#0a1024;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c1122; --ink:#ebe4d3; --muted:#9aa0b3; --gold:#d1ab58; --cell:#141b33; --line:rgba(235,228,211,.14);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c1122; --ink:#ebe4d3; --muted:#9aa0b3; --gold:#d1ab58; --cell:#141b33; --line:rgba(235,228,211,.14);
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+  font-family:"Work Sans",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.app{display:flex;flex-direction:column;height:100%;max-width:760px;margin:0 auto}
+.stage{position:relative;flex:1 1 auto;min-height:280px;margin:10px 10px 0;border-radius:18px;overflow:hidden;
+  background:radial-gradient(ellipse 70% 60% at 50% 42%, var(--stage-a) 0%, var(--stage-b) 70%, #050814 100%);
+  touch-action:none;cursor:grab}
+.stage:active{cursor:grabbing}
+canvas{display:block;width:100%;height:100%}
+.arrow{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;
+  border:1px solid rgba(209,171,88,.35);background:rgba(5,8,20,.35);color:#d1ab58;font-size:20px;
+  display:grid;place-items:center;cursor:pointer}
+.arrow.prev{left:10px}.arrow.next{right:10px}
+.tilt{position:absolute;top:10px;right:10px;padding:8px 12px;border-radius:999px;border:1px solid rgba(209,171,88,.45);
+  background:rgba(5,8,20,.5);color:#ebe4d3;font:500 13px "Work Sans",sans-serif;cursor:pointer;display:none}
+.hint{position:absolute;left:0;right:0;bottom:10px;text-align:center;font-size:12px;color:rgba(235,228,211,.45);pointer-events:none}
+.err{position:absolute;inset:0;display:none;place-items:center;padding:24px;text-align:center;color:#ebe4d3}
+.lower{display:flex;gap:16px;align-items:flex-start;padding:16px 16px 18px}
+.info{flex:1 1 auto;min-width:0}
+.tribe{font-family:"Frank Ruhl Libre",Georgia,serif;font-weight:700;font-size:clamp(30px,8vw,44px);line-height:1;margin:0 0 8px}
+.heb{font-family:"Frank Ruhl Libre",serif;font-size:26px;color:var(--gold);direction:rtl;line-height:1.1;margin:0 0 6px;display:inline-block}
+.names{font-size:15px;margin:0 0 4px}
+.names .kjv{color:var(--muted)}
+.render{font-size:13px;color:var(--muted);margin:0;line-height:1.45}
+.plate{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,30px);gap:6px;padding:8px;border-radius:6px;
+  border:1.5px solid var(--gold);background:var(--cell)}
+.plate button{width:30px;height:30px;border-radius:5px;border:1px solid var(--line);padding:0;cursor:pointer;
+  background:var(--c);box-shadow:inset 0 -6px 10px rgba(0,0,0,.28), inset 0 4px 6px rgba(255,255,255,.35)}
+.plate button[aria-pressed="true"]{outline:2px solid var(--gold);outline-offset:2px}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.foot{font-size:11.5px;color:var(--muted);padding:0 16px 14px;line-height:1.45}
+@media (min-width:600px){.lower{padding:20px 22px}.foot{padding:0 22px 16px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage" id="stage">
+    <canvas id="c" aria-label="3D gemstone"></canvas>
+    <button class="arrow prev" id="prev" aria-label="Previous stone">‹</button>
+    <button class="arrow next" id="next" aria-label="Next stone">›</button>
+    <button class="tilt" id="tilt">Enable tilt</button>
+    <div class="hint" id="hint">Drag to turn · tilt your phone</div>
+    <div class="err" id="err">This device couldn’t start WebGL, so the stones can’t render here.</div>
+  </div>
+  <div class="lower">
+    <div class="info" aria-live="polite">
+      <h1 class="tribe" id="tribe">Reuben</h1>
+      <p class="heb" id="heb" lang="he"></p>
+      <p class="names" id="names"></p>
+      <p class="render" id="render"></p>
+    </div>
+    <div class="plate" id="plate" role="group" aria-label="Breastplate, row by row"></div>
+  </div>
+  <p class="foot">Stones in Exodus 28:17–20 order, paired with tribes in birth order. That is one of several traditional mappings, and several stone identifications are uncertain.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const TAU = Math.PI*2;
+
+// ---------- Stone data ----------
+// gem: uColor = transmittance tint (linear), ior, disp, depth, facets
+// cab: type 0 carnelian, 1 lapis, 2 agate, 3 onyx, 4 jasper
+const STONES = [
+ {tribe:"Reuben",  heb:"אֹדֶם",   tr:"Odem",     kjv:"Sardius",   as:"carnelian, a translucent red-orange chalcedony", sw:"#c2461c",
+  kind:"cab", type:0, A:[0.42,0.045,0.01], B:[0.80,0.20,0.03], C:[1,1,1], trans:1.0},
+ {tribe:"Simeon",  heb:"פִּטְדָה", tr:"Pitdah",   kjv:"Topaz",     as:"golden topaz, oval cut", sw:"#e0a93b",
+  kind:"gem", cut:"oval", color:[0.97,0.72,0.22], ior:1.62, disp:0.016, depth:1.8, facets:8},
+ {tribe:"Levi",    heb:"בָּרֶקֶת", tr:"Bareket",  kjv:"Carbuncle", as:"red garnet, round brilliant", sw:"#8e1a24",
+  kind:"gem", cut:"brilliant", color:[0.86,0.07,0.11], ior:1.76, disp:0.024, depth:2.2, facets:8},
+ {tribe:"Judah",   heb:"נֹפֶךְ",   tr:"Nophek",   kjv:"Emerald",   as:"emerald, step cut", sw:"#1f8a4c",
+  kind:"gem", cut:"emerald", color:[0.16,0.82,0.36], ior:1.58, disp:0.014, depth:2.0, facets:8},
+ {tribe:"Dan",     heb:"סַפִּיר",  tr:"Sappir",   kjv:"Sapphire",  as:"lapis lazuli with pyrite flecks, the likely ancient ‘sapphire’", sw:"#1d3a8f",
+  kind:"cab", type:1, A:[0.012,0.03,0.28], B:[0.04,0.10,0.55], C:[0.55,0.58,0.62], trans:0.0},
+ {tribe:"Naphtali",heb:"יַהֲלֹם",  tr:"Yahalom",  kjv:"Diamond",   as:"colorless diamond, round brilliant", sw:"#dfe6ee",
+  kind:"gem", cut:"brilliant", color:[0.985,0.985,1.0], ior:2.42, disp:0.06, depth:1.0, facets:16},
+ {tribe:"Gad",     heb:"לֶשֶׁם",   tr:"Leshem",   kjv:"Ligure",    as:"orange jacinth (zircon), cushion cut", sw:"#d9661d",
+  kind:"gem", cut:"cushion", color:[0.98,0.50,0.12], ior:1.93, disp:0.039, depth:1.9, facets:8},
+ {tribe:"Asher",   heb:"שְׁבוֹ",   tr:"Shevo",    kjv:"Agate",     as:"banded agate", sw:"#a5683a",
+  kind:"cab", type:2, A:[0.40,0.13,0.04], B:[0.72,0.50,0.30], C:[0.86,0.85,0.80], trans:0.45},
+ {tribe:"Issachar",heb:"אַחְלָמָה", tr:"Achlamah", kjv:"Amethyst",  as:"amethyst, oval cut", sw:"#7a3fb0",
+  kind:"gem", cut:"oval", color:[0.62,0.26,0.88], ior:1.54, disp:0.013, depth:2.1, facets:8},
+ {tribe:"Zebulun", heb:"תַּרְשִׁישׁ", tr:"Tarshish", kjv:"Beryl",     as:"aquamarine beryl, step cut", sw:"#6fb7c9",
+  kind:"gem", cut:"emerald", color:[0.58,0.86,0.95], ior:1.58, disp:0.014, depth:1.6, facets:8},
+ {tribe:"Joseph",  heb:"שֹׁהַם",   tr:"Shoham",   kjv:"Onyx",      as:"black-and-white banded onyx", sw:"#1b1b1f",
+  kind:"cab", type:3, A:[0.008,0.008,0.01], B:[0.28,0.28,0.29], C:[0.80,0.79,0.76], trans:0.0},
+ {tribe:"Benjamin",heb:"יָשְׁפֵה",  tr:"Yashfeh",  kjv:"Jasper",    as:"mottled red, ochre and green jasper", sw:"#8a3a22",
+  kind:"cab", type:4, A:[0.36,0.05,0.02], B:[0.52,0.24,0.05], C:[0.08,0.22,0.11], trans:0.0},
+];
+
+// ---------- Shaders ----------
+const COMMON = `
+float hash1(float n){ return fract(sin(n)*43758.5453); }
+float spot(vec3 d, vec3 l, float s){ return pow(max(dot(d,l),0.0), s); }
+vec3 env(vec3 d){
+  float y = d.y;
+  vec3 c = vec3(0.012,0.014,0.022) + vec3(0.16,0.18,0.24)*smoothstep(0.0,1.0,y);
+  c += vec3(3.2)            * smoothstep(0.93,0.97, dot(d, normalize(vec3(0.0,1.0,0.25))));
+  c += vec3(2.4,2.3,2.1)    * smoothstep(0.90,0.95, dot(d, normalize(vec3(1.0,0.35,0.2))));
+  c += vec3(1.6,1.75,2.1)   * smoothstep(0.90,0.95, dot(d, normalize(vec3(-1.0,0.25,0.5))));
+  c += vec3(2.2)            * smoothstep(0.95,0.98, dot(d, normalize(vec3(0.2,0.2,1.0))));
+  c += vec3(1.4)            * smoothstep(0.96,0.985,dot(d, normalize(vec3(-0.4,0.6,-0.8))));
+  c += 20.0*spot(d, normalize(vec3(0.5,0.8,0.6)), 1800.0);
+  c += 15.0*spot(d, normalize(vec3(-0.6,0.7,0.3)), 2200.0);
+  c += 13.0*spot(d, normalize(vec3(0.1,0.5,0.9)), 1500.0);
+  c += 11.0*spot(d, normalize(vec3(-0.3,0.9,-0.4)), 2500.0);
+  c += 9.0 *spot(d, normalize(vec3(0.8,0.4,-0.3)), 2000.0);
+  c *= mix(0.12, 1.0, smoothstep(-0.35, 0.1, y));
+  return c;
+}
+vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }
+`;
+
+const VERT = `
+varying vec3 vO; varying vec3 vNo; varying vec3 vN; varying vec3 vW;
+void main(){
+  vO = position; vNo = normal;
+  vN = normalize(mat3(modelMatrix) * normal);
+  vec4 w = modelMatrix * vec4(position,1.0);
+  vW = w.xyz;
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`;
+
+const GEM_FRAG = `
+uniform vec3 uColor; uniform float uIor; uniform float uDisp; uniform float uDepth; uniform float uFacets;
+uniform vec3 uCamObj; uniform mat3 uRot; uniform float uExposure;
+varying vec3 vO; varying vec3 vNo; varying vec3 vN; varying vec3 vW;
+${COMMON}
+vec3 through(vec3 Vo, vec3 No, float ior){
+  vec3 T = refract(Vo, No, 1.0/ior);
+  if(dot(T,T) < 1e-4) T = reflect(Vo, No);
+  float seg = 6.2831853/uFacets;
+  float a = atan(vO.z + T.z*0.8, vO.x + T.x*0.8);
+  float k = floor(a/seg);
+  float a1 = (k+0.5)*seg;
+  vec3 p1 = normalize(vec3(cos(a1)*0.87, -1.0, sin(a1)*0.87));
+  vec3 T2 = reflect(T, p1);
+  float jit = (hash1(k*3.1 + floor(vO.y*6.0)) - 0.5)*seg;
+  float a2 = a1 + 3.14159265 + jit;
+  vec3 p2 = normalize(vec3(cos(a2)*0.87, -1.0, sin(a2)*0.87));
+  vec3 T3 = T2;
+  if(T3.y < 0.0) T3 = reflect(T2, p2);
+  float lum = 1.0;
+  vec3 E;
+  if(T3.y > 0.0){
+    float b = atan(T3.z, T3.x);
+    float ab = (floor(b/seg)+0.5)*seg;
+    vec3 nOut = normalize(vec3(cos(ab)*0.35, 1.0, sin(ab)*0.35));
+    E = refract(T3, -nOut, ior);
+    if(dot(E,E) < 1e-4){ E = reflect(T3, -nOut); lum = 0.35; }
+  } else { E = T3; lum = 0.22; }
+  return env(normalize(uRot*E)) * lum;
+}
+void main(){
+  vec3 N = normalize(vN);
+  vec3 V = normalize(vW - cameraPosition);
+  vec3 No = normalize(vNo);
+  vec3 Vo = normalize(vO - uCamObj);
+  vec3 t;
+  t.r = through(Vo, No, uIor - uDisp).r;
+  t.g = through(Vo, No, uIor).g;
+  t.b = through(Vo, No, uIor + uDisp).b;
+  float h = hash1(dot(floor(vO*9.0), vec3(1.0,57.0,113.0)));
+  t *= pow(uColor, vec3(uDepth*(0.75+0.5*h)));
+  float cosi = clamp(dot(-V,N), 0.0, 1.0);
+  float F0 = pow((uIor-1.0)/(uIor+1.0), 2.0);
+  float F = F0 + (1.0-F0)*pow(1.0-cosi, 5.0);
+  vec3 col = t*(1.0-F) + env(reflect(V,N))*F;
+  col = aces(col*uExposure);
+  gl_FragColor = vec4(pow(col, vec3(1.0/2.2)), 1.0);
+}`;
+
+const CAB_FRAG = `
+uniform float uType; uniform vec3 uA; uniform vec3 uB; uniform vec3 uC; uniform float uTrans; uniform float uExposure;
+varying vec3 vO; varying vec3 vNo; varying vec3 vN; varying vec3 vW;
+${COMMON}
+float h3(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+float vnoise(vec3 x){
+  vec3 i = floor(x); vec3 f = fract(x); f = f*f*(3.0-2.0*f);
+  return mix(mix(mix(h3(i),h3(i+vec3(1.0,0.0,0.0)),f.x), mix(h3(i+vec3(0.0,1.0,0.0)),h3(i+vec3(1.0,1.0,0.0)),f.x), f.y),
+             mix(mix(h3(i+vec3(0.0,0.0,1.0)),h3(i+vec3(1.0,0.0,1.0)),f.x), mix(h3(i+vec3(0.0,1.0,1.0)),h3(i+vec3(1.0,1.0,1.0)),f.x), f.y), f.z);
+}
+float fbm(vec3 p){ float s=0.0, a=0.5; for(int i=0;i<5;i++){ s += a*vnoise(p); p = p*2.03 + vec3(1.7,9.2,3.1); a *= 0.5; } return s; }
+void main(){
+  vec3 p = vO;
+  vec3 base; float metal = 0.0;
+  if(uType < 0.5){
+    float f = fbm(p*2.2);
+    base = mix(uA, uB, smoothstep(0.3, 0.75, f));
+  } else if(uType < 1.5){
+    float f = fbm(p*3.0);
+    base = mix(uA, uB, smoothstep(0.35, 0.7, f));
+    float w = smoothstep(0.6, 0.72, fbm(p*3.5 + vec3(4.0)));
+    base = mix(base, uC, w*0.85);
+    metal = smoothstep(0.70, 0.76, vnoise(p*30.0)) * smoothstep(0.35, 0.6, fbm(p*2.0 + vec3(9.0)));
+    base = mix(base, vec3(0.72,0.52,0.16), metal);
+  } else if(uType < 2.5){
+    float r = length(p.xz*vec2(1.0,1.35)) + 0.22*fbm(p*2.5);
+    float b = sin(r*30.0)*0.5 + 0.5;
+    base = mix(uA, uB, smoothstep(0.2, 0.8, b));
+    base = mix(base, uC, smoothstep(0.93, 0.99, sin(r*11.0 + 1.3)*0.5 + 0.5));
+  } else if(uType < 3.5){
+    float v = p.x*0.55 + p.z*0.9 + 0.12*fbm(p*2.0);
+    base = mix(uA, uC, smoothstep(0.82, 0.93, sin(v*10.0)*0.5 + 0.5));
+    base = mix(base, uB, smoothstep(0.9, 0.98, sin(v*10.0 + 0.6)*0.5 + 0.5)*0.6);
+  } else {
+    float f = fbm(p*3.0); float g = fbm(p*6.0 + vec3(5.0));
+    base = mix(uA, uB, smoothstep(0.35, 0.65, f));
+    base = mix(base, uC, smoothstep(0.58, 0.72, g)*0.85);
+  }
+  vec3 N = normalize(vN);
+  vec3 V = normalize(vW - cameraPosition);
+  vec3 irr = vec3(0.10)
+    + 0.85*max(dot(N, normalize(vec3(0.0,1.0,0.3))), 0.0)
+    + 0.45*max(dot(N, normalize(vec3(1.0,0.35,0.2))), 0.0)
+    + 0.30*vec3(0.85,0.9,1.0)*max(dot(N, normalize(vec3(-1.0,0.25,0.5))), 0.0);
+  float facing = max(dot(N,-V), 0.0);
+  vec3 col = base*irr*(1.0 - metal*0.6);
+  col += uTrans*base*pow(facing, 2.0)*1.1;
+  float F = 0.045 + 0.955*pow(1.0-facing, 5.0);
+  vec3 R = reflect(V, N);
+  col = col*(1.0-F) + env(R)*F;
+  col += metal*env(R)*vec3(1.0,0.8,0.4)*0.9;
+  col = aces(col*uExposure);
+  gl_FragColor = vec4(pow(col, vec3(1.0/2.2)), 1.0);
+}`;
+
+// ---------- Geometry ----------
+const SHAPES = {
+  round:   a => [Math.cos(a), Math.sin(a)],
+  oval:    a => [Math.cos(a), Math.sin(a)*0.72],
+  cushion: a => { const c=Math.cos(a), s=Math.sin(a), p=3.2;
+                  return [Math.sign(c)*Math.pow(Math.abs(c),2/p), Math.sign(s)*Math.pow(Math.abs(s),2/p)*0.9]; }
+};
+const OCT = (()=>{ const W=1, H=0.7, c=0.22;
+  return [[W-c,H],[-(W-c),H],[-W,H-c],[-W,-(H-c)],[-(W-c),-H],[W-c,-H],[W,-(H-c)],[W,H-c]]; })();
+
+const angleOf = p => { let a = Math.atan2(p[2], p[0]); return a < 0 ? a + TAU : a; };
+const prep = pts => pts.map(p => ({p, a: angleOf(p)})).sort((u,v) => u.a - v.a);
+function ring(shape, n, off, r, y){
+  const out = [];
+  for(let i=0;i<n;i++){ const [x,z] = shape(off + i*TAU/n); out.push([x*r, y, z*r]); }
+  return prep(out);
+}
+const octRing = (r, y) => prep(OCT.map(([x,z]) => [x*r, y, z*r]));
+
+function connect(A, B, tris){
+  const nA=A.length, nB=B.length;
+  const ang = (R,i) => R[i%R.length].a + TAU*Math.floor(i/R.length);
+  let i=0, j=0;
+  while(i<nA || j<nB){
+    if(j>=nB || (i<nA && ang(A,i+1) <= ang(B,j+1))){ tris.push([A[i%nA].p, A[(i+1)%nA].p, B[j%nB].p]); i++; }
+    else { tris.push([A[i%nA].p, B[(j+1)%nB].p, B[j%nB].p]); j++; }
+  }
+}
+function fan(center, A, tris){ for(let i=0;i<A.length;i++) tris.push([center, A[i].p, A[(i+1)%A.length].p]); }
+
+function buildFaceted(rings, top, bottom){
+  const tris = [];
+  fan(top, rings[0], tris);
+  for(let k=0;k<rings.length-1;k++) connect(rings[k], rings[k+1], tris);
+  fan(bottom, rings[rings.length-1], tris);
+  const pos=[], nor=[];
+  for(const [a,b0,c0] of tris){
+    let b=b0, c=c0;
+    const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]], v=[c[0]-a[0],c[1]-a[1],c[2]-a[2]];
+    let n=[u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
+    const len=Math.hypot(n[0],n[1],n[2]); if(len<1e-9) continue;
+    const cen=[(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3];
+    if(n[0]*cen[0]+n[1]*cen[1]+n[2]*cen[2] < 0){ const t=b; b=c; c=t; n=[-n[0],-n[1],-n[2]]; }
+    n=[n[0]/len,n[1]/len,n[2]/len];
+    pos.push(...a,...b,...c); nor.push(...n,...n,...n);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor,3));
+  return g;
+}
+function brilliantLike(shape){
+  const s = SHAPES[shape];
+  return buildFaceted([
+    ring(s, 8,  0,       0.56,  0.34),
+    ring(s, 8,  TAU/16,  0.80,  0.20),
+    ring(s, 16, TAU/32,  0.93,  0.10),
+    ring(s, 16, 0,       1.00,  0.025),
+    ring(s, 16, 0,       1.00, -0.025),
+    ring(s, 16, TAU/32,  0.76, -0.22),
+    ring(s, 8,  TAU/16,  0.40, -0.52),
+  ], [0,0.34,0], [0,-0.86,0]);
+}
+function stepCut(){
+  return buildFaceted([
+    octRing(0.60, 0.30), octRing(0.78, 0.22), octRing(0.92, 0.12),
+    octRing(1.00, 0.03), octRing(1.00,-0.03),
+    octRing(0.82,-0.20), octRing(0.58,-0.38), octRing(0.32,-0.54), octRing(0.10,-0.64),
+  ], [0,0.30,0], [0,-0.66,0]);
+}
+function cabochon(){
+  const top = new THREE.SphereGeometry(1, 128, 48, 0, TAU, 0, Math.PI/2);
+  top.scale(1.0, 0.48, 0.74);
+  return top;
+}
+
+// ---------- Renderer ----------
+const canvas = document.getElementById('c');
+const stage = document.getElementById('stage');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true}); }
+catch(e){ document.getElementById('err').style.display='grid'; return; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+const tiltG = new THREE.Group(), spinG = new THREE.Group();
+tiltG.add(spinG); scene.add(tiltG);
+
+const geoCache = {};
+function geometryFor(s){
+  const key = s.kind==='cab' ? 'cab' : s.cut;
+  if(!geoCache[key]){
+    geoCache[key] = key==='cab' ? cabochon()
+                  : key==='emerald' ? stepCut()
+                  : brilliantLike(key==='brilliant' ? 'round' : key);
+  }
+  return geoCache[key];
+}
+function materialFor(s){
+  if(s.kind==='gem'){
+    return new THREE.ShaderMaterial({ vertexShader:VERT, fragmentShader:GEM_FRAG, uniforms:{
+      uColor:{value:new THREE.Vector3(...s.color)}, uIor:{value:s.ior}, uDisp:{value:s.disp},
+      uDepth:{value:s.depth}, uFacets:{value:s.facets}, uCamObj:{value:new THREE.Vector3()},
+      uRot:{value:new THREE.Matrix3()}, uExposure:{value:1.0} }});
+  }
+  return new THREE.ShaderMaterial({ vertexShader:VERT, fragmentShader:CAB_FRAG, uniforms:{
+    uType:{value:s.type}, uA:{value:new THREE.Vector3(...s.A)}, uB:{value:new THREE.Vector3(...s.B)},
+    uC:{value:new THREE.Vector3(...s.C)}, uTrans:{value:s.trans}, uExposure:{value:1.0} }});
+}
+
+let mesh = null, idx = 0, popT = 1;
+function show(i){
+  idx = (i + STONES.length) % STONES.length;
+  const s = STONES[idx];
+  if(mesh){ spinG.remove(mesh); mesh.material.dispose(); }
+  mesh = new THREE.Mesh(geometryFor(s), materialFor(s));
+  if(s.kind==='cab') mesh.position.y = -0.12;
+  spinG.add(mesh);
+  popT = 0;
+  document.getElementById('tribe').textContent = s.tribe;
+  document.getElementById('heb').textContent = s.heb;
+  document.getElementById('names').innerHTML = `${s.tr} <span class="kjv">(KJV: ${s.kjv})</span>`;
+  document.getElementById('render').textContent = `Shown as ${s.as}.`;
+  document.querySelectorAll('#plate button').forEach((b,k)=>b.setAttribute('aria-pressed', k===idx ? 'true':'false'));
+}
+
+// Breastplate navigator
+const plate = document.getElementById('plate');
+STONES.forEach((s,k)=>{
+  const b = document.createElement('button');
+  b.style.setProperty('--c', s.sw);
+  b.setAttribute('aria-label', `${s.tribe}, ${s.tr}`);
+  b.addEventListener('click', ()=>show(k));
+  plate.appendChild(b);
+});
+document.getElementById('prev').addEventListener('click', e=>{ e.stopPropagation(); show(idx-1); });
+document.getElementById('next').addEventListener('click', e=>{ e.stopPropagation(); show(idx+1); });
+window.addEventListener('keydown', e=>{ if(e.key==='ArrowLeft') show(idx-1); if(e.key==='ArrowRight') show(idx+1); });
+
+// Resize
+function resize(){
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w/h;
+  const t = Math.tan(THREE.MathUtils.degToRad(16));
+  const d = Math.max(2.5/(2*t), 2.6/(2*t*camera.aspect));
+  camera.position.set(0, 0, d); camera.lookAt(0,0,0);
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage); resize();
+
+// Drag
+let dragging=false, lx=0, ly=0, lt=0, spinVel=0.35, dragTilt=0;
+stage.addEventListener('pointerdown', e=>{
+  if(e.target.closest('button')) return;
+  dragging=true; lx=e.clientX; ly=e.clientY; lt=performance.now();
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener('pointermove', e=>{
+  if(!dragging) return;
+  const now=performance.now(), dt=Math.max(1,now-lt)/1000;
+  const dx=e.clientX-lx, dy=e.clientY-ly;
+  spinG.rotation.y += dx*0.009;
+  spinVel = THREE.MathUtils.clamp(dx*0.009/dt, -8, 8);
+  dragTilt = THREE.MathUtils.clamp(dragTilt + dy*0.006, -0.6, 0.9);
+  lx=e.clientX; ly=e.clientY; lt=now;
+});
+const endDrag = ()=>{ dragging=false; };
+stage.addEventListener('pointerup', endDrag); stage.addEventListener('pointercancel', endDrag);
+
+// Tilt (gyro)
+let gx=0, gz=0, tgx=0, tgz=0, base=null, gyroOn=false;
+function onOri(e){
+  if(e.beta==null || e.gamma==null) return;
+  if(!base) base={b:e.beta, g:e.gamma};
+  base.b += (e.beta-base.b)*0.004; base.g += (e.gamma-base.g)*0.004;
+  tgx = THREE.MathUtils.clamp((e.beta-base.b)*Math.PI/180, -0.6, 0.6);
+  tgz = THREE.MathUtils.clamp(-(e.gamma-base.g)*Math.PI/180, -0.6, 0.6);
+  gyroOn = true;
+}
+const tiltBtn = document.getElementById('tilt');
+if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
+  tiltBtn.style.display='block';
+  tiltBtn.addEventListener('click', async ()=>{
+    try{
+      const r = await DeviceOrientationEvent.requestPermission();
+      if(r==='granted'){ window.addEventListener('deviceorientation', onOri); tiltBtn.style.display='none'; }
+      else tiltBtn.textContent='Tilt not allowed';
+    }catch(err){ tiltBtn.textContent='Tilt unavailable here'; }
+  });
+} else {
+  window.addEventListener('deviceorientation', onOri);
+}
+
+// Loop
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const inv = new THREE.Matrix4();
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  const idle = reduce ? 0 : (gyroOn ? 0.12 : 0.35);
+  if(!dragging){ spinVel += (idle - spinVel)*Math.min(1, dt*2.5); spinG.rotation.y += spinVel*dt; }
+  gx += (tgx-gx)*Math.min(1,dt*8); gz += (tgz-gz)*Math.min(1,dt*8);
+  tiltG.rotation.x = 0.55 + dragTilt + gx;
+  tiltG.rotation.z = gz;
+  popT = Math.min(1, popT + dt*3);
+  const e = 1 - Math.pow(1-popT, 3);
+  spinG.scale.setScalar(0.85 + 0.15*e);
+  if(mesh){
+    mesh.updateMatrixWorld(true);
+    const u = mesh.material.uniforms;
+    if(u.uRot){
+      u.uRot.value.setFromMatrix4(mesh.matrixWorld);
+      inv.copy(mesh.matrixWorld).invert();
+      u.uCamObj.value.copy(camera.position).applyMatrix4(inv);
+    }
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+show(0);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
