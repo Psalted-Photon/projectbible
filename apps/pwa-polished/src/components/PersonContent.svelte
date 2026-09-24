@@ -9,7 +9,7 @@
   import { personModalStore } from "../stores/personModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import { familyTreeStore } from "../stores/familyTreeStore";
-  import { loadFamilyTree } from "../lib/familyTree/data";
+  import { loadFamilyTree, familyTreeIds } from "../lib/familyTree/data";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
   import WorkTabs from "./WorkTabs.svelte";
@@ -62,6 +62,22 @@
   export let showHeader = true;
   /** Lets a host with its own title bar follow which homonym is showing. */
   export let onPersonChange: ((p: PersonRecord | null) => void) | null = null;
+  /**
+   * Three props for the family tree's bio sheet (roadmap #25), all optional
+   * so the two hosts that exist today — LookupModal and WindowContent —
+   * don't have to change at all to keep behaving exactly as they do now.
+   */
+  /** When set, walking to a relative (openPerson) calls this instead of going
+   *  through windowStore or personModalStore — the sheet owns its own person,
+   *  not a docked window or the People modal. */
+  export let onOpenPerson: ((id: string, name: string) => void) | null = null;
+  /** When set, the card's "See on the tree" link (Phase 2 step 2) calls this
+   *  instead of opening familyTreeStore directly — the sheet is already
+   *  inside the tree, so there's nothing to open, only to close onto. */
+  export let onShowOnTree: ((id: string) => void) | null = null;
+  /** Hides the footer's previous/next arrows when false. An alphabetical
+   *  neighbour means nothing when the card is sitting over a family tree. */
+  export let showTurns = true;
 
   $: docked = !!windowId;
 
@@ -189,6 +205,15 @@
 
   function openPerson(id: string, name: string) {
     showContents = false;
+    if (onOpenPerson) {
+      // The sheet owns this instance's person directly — windowStore and
+      // personModalStore are both left alone, so nothing outside the sheet
+      // hears about this walk. Relatives, crumbs and the back trail keep
+      // working regardless, because they're all local state (`trail`) that
+      // every path through openPerson already updates the same way.
+      onOpenPerson(id, name);
+      return;
+    }
     if (windowId) {
       windowStore.updateContentState(windowId, { personId: id, primaryName: name, trail });
     } else {
@@ -222,6 +247,19 @@
    */
   function openTreeOn(row?: LibraryRow) {
     familyTreeStore.open({ focusId: row ? String(row.id) : null, onLeave: docked ? null : onClose });
+  }
+
+  /** The card's own "🌳 See on the tree" link. Inside the bio sheet, the tree
+   *  is already open underneath — onShowOnTree closes the sheet onto this
+   *  person rather than opening a second tree over the first. Everywhere
+   *  else, this is the same store.open the index and header buttons use. */
+  function showOnTree() {
+    if (!person) return;
+    if (onShowOnTree) {
+      onShowOnTree(person.id);
+      return;
+    }
+    familyTreeStore.open({ focusId: person.id, onLeave: docked ? null : onClose });
   }
 
   /** Step back to someone you came through. */
@@ -604,6 +642,12 @@
               {/each}
             </dd>
           {/if}
+          {#if $familyTreeIds.has(person.id)}
+            <dt>Family tree</dt>
+            <dd class="rel-list">
+              <button class="rel" on:click={showOnTree}>🌳 See on the tree</button>
+            </dd>
+          {/if}
         </dl>
 
         {#if person.verseCount}
@@ -684,7 +728,7 @@
     </div>
 
     <div class="person-footer">
-      {#if neighbors.prev || neighbors.next}
+      {#if showTurns && (neighbors.prev || neighbors.next)}
         <div class="turn">
           {#if neighbors.prev}
             {@const prev = neighbors.prev}

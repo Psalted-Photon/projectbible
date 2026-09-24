@@ -47,6 +47,19 @@ export interface TreeRec extends Partial<FamilyTreeNode>, Partial<FamilyTreeRoot
   partnerId?: string;
 }
 
+/** A TreeRec once it actually has a position. Narrowing `x`/`y` from
+ *  `number | null` to `number` here is what lets draw code use `.y` right
+ *  after checking `.x` — under strict mode those are two separate nullable
+ *  fields, and TypeScript won't infer one from the other without this. */
+export type Placed = TreeRec & { x: number; y: number };
+
+/** True when a person was actually placed on the tree. Use this everywhere
+ *  the lab tests `x == null` / `x != null` — it narrows both x and y at once,
+ *  where the lab's own `x`-only check left `y` still typed as nullable. */
+export function isPlaced(n: TreeRec): n is Placed {
+  return n.x != null && n.y != null;
+}
+
 export interface TreeModel {
   /** The 665-person canopy, id → record. */
   nodes: Map<string, TreeRec>;
@@ -55,13 +68,17 @@ export interface TreeModel {
   rootById: Map<string, TreeRec>;
   byRootBranch: Map<string, TreeRec[]>;
   /** Every placed root record except Jacob himself — he is drawn as the trunk
-   *  top, not as a root dot, so he is held out here to avoid a second node. */
-  rootNodes: TreeRec[];
+   *  top, not as a root dot, so he is held out here to avoid a second node.
+   *  Typed Placed[], not TreeRec[]: it is built by filtering on isPlaced, so
+   *  draw code reading .y right after this list needs no further guard. */
+  rootNodes: Placed[];
   /** The trunk proper: God → Jacob, in trunk order. Fifteen other people carry
-   *  branch 'Trunk' (wives, Abel, Lud, Elam) without being in this chain. */
+   *  branch 'Trunk' (wives, Abel, Lud, Elam) without being in this chain.
+   *  Not filtered to Placed — the trunk stub fallback in drawTrunk runs when
+   *  this has fewer than 2 entries, which can include an unplaced one. */
   spineChain: TreeRec[];
-  crownM: TreeRec[];
-  crownL: TreeRec[];
+  crownM: Placed[];
+  crownL: Placed[];
   toJesus: Map<string, number>;
   /** The bounding box of every placed node, Jacob included. */
   bounds: { minX: number; maxX: number; minY: number; maxY: number };
@@ -263,7 +280,7 @@ export function layout(data: FamilyTreeData): TreeModel {
   }
 
   // ── The trunk and the pre-Jacob boughs ────────────────────────────────
-  let rootNodes: TreeRec[] = [];
+  let rootNodes: Placed[] = [];
   let spineChain: TreeRec[] = [];
 
   if (rootById.size && ROOTS.Trunk) {
@@ -372,8 +389,8 @@ export function layout(data: FamilyTreeData): TreeModel {
             dials: d,
             // The fork: this bough pivots about its head's father, where it
             // actually leaves the trunk. Swinging Ham sweeps him around Noah.
-            ox: parent && parent.x != null ? parent.x : 0,
-            oy: parent && parent.y != null ? parent.y : 0,
+            ox: parent && isPlaced(parent) ? parent.x : 0,
+            oy: parent && isPlaced(parent) ? parent.y : 0,
             // Zero, because depth 0 already steps one generation out from
             // the fork — the head lands one ring from its father, correctly.
             base: 0,
@@ -392,7 +409,7 @@ export function layout(data: FamilyTreeData): TreeModel {
       for (const n of rootById.values()) {
         if (!n.spouseOf) continue;
         const h = rootById.get(n.spouseOf);
-        if (!h || h.x == null || h.y == null) continue;
+        if (!h || !isPlaced(h)) continue;
         const i = spouseCount.get(n.spouseOf) || 0;
         spouseCount.set(n.spouseOf, i + 1);
         const side = i % 2 === 0 ? 1 : -1;
@@ -404,7 +421,7 @@ export function layout(data: FamilyTreeData): TreeModel {
         const father = h.father ? rootById.get(h.father) : undefined;
         let dx: number;
         let dy: number;
-        if (father && father.x != null && h.x != null && h.y != null && father.y != null) {
+        if (father && isPlaced(father)) {
           dx = h.x - father.x;
           dy = h.y - father.y;
         } else {
@@ -429,30 +446,29 @@ export function layout(data: FamilyTreeData): TreeModel {
     }
     // Jacob is placed — the boughs leaving him need his radius — but he is
     // drawn as the trunk top, not as a root dot, so he is excluded here.
-    rootNodes = [...rootById.values()].filter((n) => n.x != null && n.id !== data.jacob);
+    rootNodes = [...rootById.values()].filter((n): n is Placed => isPlaced(n) && n.id !== data.jacob);
   }
 
   // Crown lines are drawn from whatever nodes are already placed.
-  const pick = (list: FamilyTreeCrownLink[] | undefined): TreeRec[] =>
-    (list || []).map((c) => nodes.get(c.id)).filter((n): n is TreeRec => !!n && n.x != null);
+  const pick = (list: FamilyTreeCrownLink[] | undefined): Placed[] =>
+    (list || []).map((c) => nodes.get(c.id)).filter((n): n is Placed => !!n && isPlaced(n));
   const crownM = pick(data.crown?.matthew);
   const crownL = pick(data.crown?.luke);
 
-  // Bounding box of every placed node, Jacob included (he sits at 0,0, which
-  // a filter on x != null would otherwise miss because 0 is falsy in a naive
-  // check — here it is compared explicitly, so he counts).
+  // Bounding box of every placed node, Jacob included — he sits at 0,0,
+  // which isPlaced still counts correctly (unlike a truthiness check on `x`,
+  // which would treat 0 as unplaced).
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
   let maxY = -Infinity;
-  const allPlaced: TreeRec[] = [...nodes.values(), ...rootNodes, rootById.get(data.jacob)].filter(
-    (n): n is TreeRec => !!n && n.x != null && n.y != null,
-  );
+  const jacobRec = rootById.get(data.jacob);
+  const allPlaced: Placed[] = [...nodes.values(), ...rootNodes, ...(jacobRec ? [jacobRec] : [])].filter(isPlaced);
   for (const n of allPlaced) {
-    if (n.x! < minX) minX = n.x!;
-    if (n.x! > maxX) maxX = n.x!;
-    if (n.y! < minY) minY = n.y!;
-    if (n.y! > maxY) maxY = n.y!;
+    if (n.x < minX) minX = n.x;
+    if (n.x > maxX) maxX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.y > maxY) maxY = n.y;
   }
 
   const toJesus = buildCrownDistances(data);

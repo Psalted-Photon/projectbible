@@ -382,7 +382,7 @@
 
     <!-- The family tree, full screen over everything else (roadmap #25).
          Nothing under it unmounts — this is an overlay, not a route. -->
-    {#if $familyTreeStore.open}<FamilyTreeViewer />{/if}
+    {#if $familyTreeStore.isOpen}<FamilyTreeViewer />{/if}
 
     <!-- Shared Reading Plan Modal -->
     <ReadingPlanModal bind:isOpen={showReadingPlanModal} />

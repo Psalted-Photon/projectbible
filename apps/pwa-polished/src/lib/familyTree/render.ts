@@ -11,7 +11,7 @@
  * user asked to keep as a toggle.
  */
 
-import type { TreeModel, TreeRec } from './layout';
+import { isPlaced, type Placed, type TreeModel, type TreeRec } from './layout';
 import {
   GOD_ID,
   GOLD,
@@ -83,24 +83,26 @@ export function toWorld(cx: number, cy: number, view: View, W: number, H: number
 /**
  * Frame the whole tree — roots, trunk and canopy — in a W×H box.
  *
- * `pad` is asymmetric: more room at the top, where the canopy's own labels
- * stick up above the highest node, than at the sides or bottom.
+ * `pad` is asymmetric on all three distinct edges: more room at the top,
+ * where the canopy's own labels stick up above the highest node, than on the
+ * sides; and the bottom needs enough to clear the hint line stacked above the
+ * attribution text, which the sides don't have to make room for at all.
  */
 export function fitView(
   model: TreeModel,
   W: number,
   H: number,
-  pad: { top: number; side: number } = { top: 64, side: 34 },
+  pad: { top: number; bottom: number; side: number } = { top: 64, bottom: 60, side: 34 },
 ): View {
   const { minX, maxX, minY, maxY } = model.bounds;
-  const k = Math.min((W - pad.side * 2) / (maxX - minX || 1), (H - pad.top - pad.side) / (maxY - minY || 1));
+  const k = Math.min((W - pad.side * 2) / (maxX - minX || 1), (H - pad.top - pad.bottom) / (maxY - minY || 1));
   const clampedK = Math.max(0.02, Math.min(9, k));
   const midX = (minX + maxX) / 2;
   const midY = (minY + maxY) / 2;
   // Centre the box's midpoint on the padded area's midpoint. The padded
   // area's own centre is offset from the canvas centre by half the
   // top/bottom pad difference.
-  const areaCy = (pad.top + (H - pad.side)) / 2;
+  const areaCy = (pad.top + (H - pad.bottom)) / 2;
   return viewFor(midX, midY, clampedK, W / 2, areaCy, W, H);
 }
 
@@ -128,14 +130,13 @@ export function draw(s: RenderState): void {
   ctx.setTransform(s.DPR, 0, 0, s.DPR, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  // Ground
+  // Ground. The lab's drawWind — faint moving lines over this — is left out
+  // by request; the ground gradient alone stands in for it.
   const g = ctx.createRadialGradient(W / 2, H * ORIGIN_Y_FRAC, 0, W / 2, H * ORIGIN_Y_FRAC, Math.max(W, H) * 0.75);
   g.addColorStop(0, '#16130f');
   g.addColorStop(1, '#0a0908');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
-
-  drawWind(s);
 
   ctx.save();
   ctx.translate(W / 2 + view.x, H * ORIGIN_Y_FRAC + view.y);
@@ -160,24 +161,6 @@ export function draw(s: RenderState): void {
   ctx.restore();
 
   drawGrain(s);
-}
-
-function drawWind(s: RenderState): void {
-  const { ctx, W, H } = s;
-  ctx.save();
-  ctx.globalAlpha = 0.05;
-  ctx.strokeStyle = '#d8c9a8';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 7; i++) {
-    const y = ((i * 137) % H) + 20;
-    ctx.beginPath();
-    for (let x = -20; x < W + 20; x += 14) {
-      const yy = y + Math.sin((x + i * 90) / 110) * 16 + Math.sin(x / 37) * 3;
-      x === -20 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
-    }
-    ctx.stroke();
-  }
-  ctx.restore();
 }
 
 /** Deterministic hash, the same one layout.ts uses for jitter — reused here
@@ -223,13 +206,12 @@ function drawRoots(s: RenderState, dimming: boolean): void {
 
   // Branches first, so the dots sit on top of the lines.
   for (const n of model.rootNodes) {
-    if (n.x == null || n.y == null) continue;
     if (onSpine.has(n.id) && n.father && onSpine.has(n.father)) continue;
     const col = ROOT_COLOURS[n.branch || 'Trunk'] || ROOT_COLOURS.Trunk;
     const on = onOf(n);
     ctx.globalAlpha = dimming ? (on ? 0.9 : TREE.dimLevel) : 0.85;
     const parent = n.father ? model.rootById.get(n.father) : undefined;
-    if (!parent || parent.x == null || parent.y == null) continue;
+    if (!parent || !isPlaced(parent)) continue;
     ctx.strokeStyle = on && dimming ? col.lit : col.c;
     // Roots thicken as they go down, the opposite of a bough tapering up.
     ctx.lineWidth = Math.max(0.2, TREE.thickness * 1.3 * (1 - Math.min(0.6, (n.depth ?? 0) / 30)));
@@ -245,7 +227,6 @@ function drawRoots(s: RenderState, dimming: boolean): void {
 
   // Nodes.
   for (const n of model.rootNodes) {
-    if (n.x == null || n.y == null) continue;
     const col = ROOT_COLOURS[n.branch || 'Trunk'] || ROOT_COLOURS.Trunk;
     const on = onOf(n);
     ctx.globalAlpha = dimming && !on ? TREE.dimLevel : 1;
@@ -294,7 +275,6 @@ function drawRoots(s: RenderState, dimming: boolean): void {
   // canopy's bough labels below which the `allNames` toggle gates.
   ctx.textAlign = 'center';
   for (const n of model.rootNodes) {
-    if (n.x == null || n.y == null) continue;
     const on = onOf(n);
     const isGod = n.id === GOD_ID;
     ctx.globalAlpha = dimming && !on ? TREE.dimLevel + 0.1 : isGod ? 1 : 0.82;
@@ -318,20 +298,20 @@ function drawTrunk(s: RenderState, dimming: boolean): void {
   ctx.lineJoin = 'round';
   // The whole trunk, God through to Jacob, as one unbroken stroke.
   // spineChain runs Jacob -> God, so it is walked backwards to grow upward.
-  const run = model.spineChain.filter((n) => n.x != null && n.y != null);
+  const run = model.spineChain.filter(isPlaced);
   if (run.length > 1) {
     ctx.beginPath();
-    ctx.moveTo(run[run.length - 1].x!, run[run.length - 1].y!);
+    ctx.moveTo(run[run.length - 1].x, run[run.length - 1].y);
     for (let i = run.length - 2; i >= 0; i--) {
       const from = run[i + 1];
       const to = run[i];
       // The same slight bow the branches use, so the trunk sits in the same
       // hand as everything growing off it.
-      const mx = (from.x! + to.x!) / 2;
-      const my = (from.y! + to.y!) / 2;
-      const dx = to.x! - from.x!;
-      const dy = to.y! - from.y!;
-      ctx.quadraticCurveTo(mx - dy * 0.08, my + dx * 0.08, to.x!, to.y!);
+      const mx = (from.x + to.x) / 2;
+      const my = (from.y + to.y) / 2;
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      ctx.quadraticCurveTo(mx - dy * 0.08, my + dx * 0.08, to.x, to.y);
     }
     ctx.stroke();
   } else {
@@ -365,28 +345,28 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
   ctx.strokeStyle = col;
   ctx.lineCap = 'round';
   for (const n of list) {
-    if (n.x == null || n.y == null) continue;
-    const parent = n.father ? model.nodes.get(n.father) : undefined;
-    const from = parent && parent.x != null && parent.y != null ? parent : { x: 0, y: 0 };
+    if (!isPlaced(n)) continue;
+    const parentRec = n.father ? model.nodes.get(n.father) : undefined;
+    const from: { x: number; y: number } = parentRec && isPlaced(parentRec) ? parentRec : { x: 0, y: 0 };
     if (tracedPath && dimming) {
       ctx.globalAlpha = tracedPath.has(n.id) ? 1 : TREE.dimLevel;
     }
     // Thinner as it climbs, so the silhouette tapers like a tree.
     ctx.lineWidth = Math.max(0.35, TREE.thickness * (1 - Math.min(0.75, (n.depth ?? 0) / 14)));
     ctx.beginPath();
-    ctx.moveTo(from.x!, from.y!);
+    ctx.moveTo(from.x, from.y);
     // A slight curve reads as growth rather than as a spoke diagram.
-    const mx = (from.x! + n.x) / 2;
-    const my = (from.y! + n.y) / 2;
-    const dx = n.x - from.x!;
-    const dy = n.y - from.y!;
+    const mx = (from.x + n.x) / 2;
+    const my = (from.y + n.y) / 2;
+    const dx = n.x - from.x;
+    const dy = n.y - from.y;
     ctx.quadraticCurveTo(mx - dy * 0.08, my + dx * 0.08, n.x, n.y);
     ctx.stroke();
   }
 
   // Nodes
   for (const n of list) {
-    if (n.x == null || n.y == null) continue;
+    if (!isPlaced(n)) continue;
     const on = !tracedPath || tracedPath.has(n.id);
     ctx.globalAlpha = dimming && !lit ? TREE.dimLevel : on ? 1 : TREE.dimLevel;
     let size = TREE.nodeSize * ((n.depth ?? 0) === 0 ? 2.1 : n.kids.length ? 1.15 : 0.8);
@@ -427,7 +407,7 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
 
   // The son of Jacob names the bough — unchanged from the lab, at every zoom.
   const head = list[0];
-  if (head && head.x != null && head.y != null) {
+  if (head && isPlaced(head)) {
     ctx.globalAlpha = dimming && !lit ? TREE.dimLevel + 0.15 : 1;
     // The tribe name in its own stone's colour, so the label and the bough
     // it heads read as one thing. Dimmed boughs keep the duller stone rather
@@ -437,7 +417,12 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
     ctx.font = '600 13px Milonga, serif';
     ctx.textAlign = 'center';
     ctx.fillText(tribe, head.x, head.y - 11);
-    if (lit) {
+    // Dinah has no STONES entry (she's a bough of one, not a tribe — see
+    // config.ts), so st.stone falls through to the LINEN fallback's empty
+    // string here. Guarded explicitly rather than relying on fillText('')
+    // drawing nothing, since that's true by accident of the fallback's
+    // shape, not by anything that says so.
+    if (lit && st.stone) {
       ctx.font = '9.5px -apple-system, sans-serif';
       ctx.fillStyle = st.lit;
       ctx.globalAlpha = 0.75;
@@ -454,7 +439,7 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
     ctx.textAlign = 'center';
     for (let i = 1; i < list.length; i++) {
       const n = list[i];
-      if (n.x == null || n.y == null) continue;
+      if (!isPlaced(n)) continue;
       // Off-screen nodes are skipped so 665 extra names stay cheap while the
       // breathing pulse redraws every frame.
       if (!onScreen(n.x, n.y, view, W, H)) continue;
@@ -476,7 +461,7 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
 
 function drawCrown(s: RenderState, dimming: boolean): void {
   const { ctx, model } = s;
-  const lines: { pts: TreeRec[]; col: string; name: string }[] = [
+  const lines: { pts: Placed[]; col: string; name: string }[] = [
     { pts: model.crownM, col: '#d9c7a0', name: 'Matthew' },
     { pts: model.crownL, col: '#9fb8c9', name: 'Luke' },
   ];
@@ -488,14 +473,14 @@ function drawCrown(s: RenderState, dimming: boolean): void {
     ctx.lineWidth = TREE.thickness * 1.1;
     ctx.setLineDash([4, 5]);
     ctx.beginPath();
-    l.pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x!, p.y!) : ctx.lineTo(p.x!, p.y!)));
+    l.pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
     ctx.stroke();
     ctx.setLineDash([]);
     const end = l.pts[l.pts.length - 1];
     ctx.fillStyle = l.col;
     ctx.font = '10.5px -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(l.name, end.x!, end.y! - 9);
+    ctx.fillText(l.name, end.x, end.y - 9);
   }
   ctx.restore();
 }
@@ -518,17 +503,20 @@ export function pick(model: TreeModel, view: View, W: number, H: number, cx: num
   let best: TreeRec | null = null;
   let bestD = radiusPx / view.k;
   for (const n of model.nodes.values()) {
-    if (n.x == null || n.y == null) continue;
+    if (!isPlaced(n)) continue;
     const d = Math.hypot(n.x - p.x, n.y - p.y);
     if (d < bestD) {
       bestD = d;
       best = n;
     }
   }
+  // Jacob is held out of rootNodes (he's drawn by drawTrunk, not as an
+  // ordinary root dot), so he has to be added back in by hand here, exactly
+  // as the lab does — otherwise he's the one person on the tree nobody can
+  // tap.
   const jacob = model.rootById.get(model.jacobId);
-  const pickable = jacob && jacob.x != null ? [...model.rootNodes, jacob] : model.rootNodes;
+  const pickable: Placed[] = jacob && isPlaced(jacob) ? [...model.rootNodes, jacob] : model.rootNodes;
   for (const n of pickable) {
-    if (n.x == null || n.y == null) continue;
     const d = Math.hypot(n.x - p.x, n.y - p.y);
     if (d < bestD) {
       bestD = d;

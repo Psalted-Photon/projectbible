@@ -456,17 +456,6 @@
             <!-- A sibling of the row rather than inside it: these are buttons,
                  and a button inside a button is invalid and would fire both. -->
             <span class="badges">
-              {#if onOpenTree && $familyTreeIds.has(String(row.id))}
-                <button
-                  class="emoji"
-                  title="See on the family tree"
-                  aria-label="{row.name} on the family tree"
-                  on:click={(e) => {
-                    e.stopPropagation();
-                    onOpenTree?.(row);
-                  }}
-                >🌳</button>
-              {/if}
               {#if shows("place") && row.isPlace}
                 <button class="emoji" title="Show on the map" aria-label="Show {row.name} on the map" on:click={(e) => openBadge(e, row, "place")}>📍</button>
               {/if}
@@ -481,6 +470,22 @@
               {/if}
               {#if shows("dict") && row.hasDict}
                 <button class="emoji" title="Look it up in the dictionary" aria-label="Dictionary entry for {row.name}" on:click={(e) => openBadge(e, row, "dict")}>📖</button>
+              {/if}
+              <!-- Right after 📖, directly beside ★ — not before 📍. 📍 never
+                   appears on a People row, so "before 📍" would silently make
+                   🌳 the leftmost badge, and its screen position would shift
+                   row to row depending on which other badges that row has.
+                   After 📖 gives it a steady column. -->
+              {#if onOpenTree && $familyTreeIds.has(String(row.id))}
+                <button
+                  class="emoji"
+                  title="See on the family tree"
+                  aria-label="{row.name} on the family tree"
+                  on:click={(e) => {
+                    e.stopPropagation();
+                    onOpenTree?.(row);
+                  }}
+                >🌳</button>
               {/if}
             </span>
             <button

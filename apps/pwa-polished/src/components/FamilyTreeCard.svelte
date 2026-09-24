@@ -3,9 +3,8 @@
    * The card that names whoever is hovered or pinned on the tree.
    *
    * Ported from the lab's showHover() (markup and CSS) and its ancestor-list
-   * click handler, as real Svelte rather than innerHTML strings. The "Full
-   * bio would appear here" placeholder is left out — Phase 2 puts a real
-   * Read bio button in its place.
+   * click handler, as real Svelte rather than innerHTML strings. The lab's
+   * "Full bio would appear here" placeholder is a real Read bio button here.
    */
   import { generationOf, ancestorChain, type TreeModel, type TreeRec } from '../lib/familyTree/layout';
   import { ROOT_COLOURS, STONES, LINEN, GOD_ID } from '../lib/familyTree/config';
@@ -17,6 +16,8 @@
   export let pinned = true;
   /** Set once the tree is pinned; tapping a name here traces from them instead. */
   export let onTraceAncestor: ((rec: TreeRec) => void) | null = null;
+  /** Set only on the pinned card; opens this person's bio in the sheet. */
+  export let onReadBio: (() => void) | null = null;
 
   let gensOpen = false;
   // Reset whenever the card starts naming someone else, so walking the tree
@@ -89,7 +90,9 @@
     </div>
   {/if}
 
-  <slot />
+  {#if pinned && onReadBio}
+    <button class="read-bio" on:click={onReadBio}>Read bio</button>
+  {/if}
 </div>
 
 <style>
@@ -185,6 +188,26 @@
   .gens-list button.god {
     color: #cdbfa8;
     font-weight: 600;
+  }
+
+  .read-bio {
+    display: block;
+    width: 100%;
+    margin-top: 9px;
+    padding: 7px 10px;
+    background: #232019;
+    border: 1px solid #3a342a;
+    border-radius: 6px;
+    color: #cdbfa8;
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+  }
+  .read-bio:hover {
+    background: #2c2820;
+    color: #e8dcc8;
   }
 
   @media (max-width: 480px) {

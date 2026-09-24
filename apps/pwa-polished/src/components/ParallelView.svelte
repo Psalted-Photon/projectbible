@@ -198,12 +198,19 @@
    * only pushState in the app; the family tree (roadmap #25) now pushes one of
    * its own when it opens on top of this view, so this is no longer the only
    * entry on the stack — only the only one THIS view owns.
+   *
+   * A fresh marker per open, not a bare `true`: history.state survives a
+   * reload, and the app reloads itself on resume after a deploy, so a bare
+   * boolean would let a stale pbHarmony entry from before that reload go on
+   * satisfying "this is my entry" forever, the same reasoning the tree's own
+   * pbFamilyTree marker uses.
    */
+  const mark = Date.now() + Math.random();
   let pushedHistory = false;
 
   onMount(() => {
     try {
-      history.pushState({ pbHarmony: true }, '');
+      history.pushState({ pbHarmony: mark }, '');
       pushedHistory = true;
     } catch {
       // A blocked pushState costs the back gesture and nothing else; × and
@@ -217,7 +224,7 @@
     // reaches every listener, not just the tree's own — and lands back on the
     // pbHarmony entry this view is still sitting on, which must not also close
     // this view out from under it.
-    if (history.state?.pbHarmony) return;
+    if (history.state?.pbHarmony === mark) return;
     // The entry is already gone by the time this fires, so closing must not try
     // to pop it again.
     pushedHistory = false;

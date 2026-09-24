@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import { familyTreeStore } from '../stores/familyTreeStore';
   import { loadFamilyTree } from '../lib/familyTree/data';
-  import { layout, ancestorChain, type TreeModel, type TreeRec } from '../lib/familyTree/layout';
+  import { layout, ancestorChain, isPlaced, type TreeModel, type TreeRec } from '../lib/familyTree/layout';
   import { draw, fitView, pick, toWorld, viewFor, type View } from '../lib/familyTree/render';
   import { MAX_ZOOM, MIN_ZOOM_OF_FIT, FOCUS_ZOOM } from '../lib/familyTree/config';
   import FamilyTreeCard from './FamilyTreeCard.svelte';
+  import FamilyTreeBioSheet from './FamilyTreeBioSheet.svelte';
 
   /**
    * The tree, full screen on black — opened from People, over everything the
@@ -34,6 +36,7 @@
 
   let rootEl: HTMLDivElement;
   let canvas: HTMLCanvasElement;
+  let closeBtnEl: HTMLButtonElement;
   let ctx: CanvasRenderingContext2D | null = null;
 
   let W = 0;
@@ -55,31 +58,20 @@
   let pinned: TreeRec | null = null;
   let hovered: TreeRec | null = null;
 
-  // ── Breathing pulse ──────────────────────────────────────────────────────
-  // Runs only while someone is pinned — a permanent render loop on a page
-  // that doesn't need one is wasted battery on a phone.
-  let pulsePhase = REDUCED_MOTION ? 1 : 0;
-  let pulseRAF: number | null = null;
-  let pulseStart = 0;
+  /** True whenever `view` is still exactly what fitView last returned — i.e.
+   *  nobody has panned, zoomed or glided anywhere since. Resize uses this to
+   *  decide whether to simply refit (view === fit, nothing to preserve) or to
+   *  keep the screen-centre world point and the current multiple of fit
+   *  (view has drifted, and refitting outright would yank the user's place). */
+  let atFittedView = false;
 
-  function startPulse() {
-    if (pulseRAF != null || REDUCED_MOTION) return;
-    pulseStart = performance.now();
-    const tick = (now: number) => {
-      if (!pinned) {
-        pulseRAF = null;
-        return;
-      }
-      pulsePhase = (Math.sin((now - pulseStart) / 480) + 1) / 2;
-      redraw();
-      pulseRAF = requestAnimationFrame(tick);
-    };
-    pulseRAF = requestAnimationFrame(tick);
+  function markViewFitted(v: View) {
+    view = v;
+    atFittedView = true;
   }
-  function stopPulse() {
-    if (pulseRAF != null) cancelAnimationFrame(pulseRAF);
-    pulseRAF = null;
-    pulsePhase = REDUCED_MOTION ? 1 : 0;
+  /** Any pan/zoom/glide that moves `view` away from the fit calls this. */
+  function markViewMoved() {
+    atFittedView = false;
   }
 
   // ── All names ────────────────────────────────────────────────────────────
@@ -92,7 +84,7 @@
       return true;
     }
   }
-  let allNames = true; // set for real in onMount, once localStorage is safe to touch
+  let allNames = readNamesPref();
   function toggleAllNames() {
     allNames = !allNames;
     try {
@@ -121,9 +113,8 @@
     });
   }
 
-  /** Canvas sizing only, with no side effect on the view — shared by the
-   *  first open (which fits and sets `view` itself) and every later resize
-   *  (which does not: a resize re-measures and redraws, nothing more). */
+  /** Canvas sizing only, with no side effect on the view — shared by open and
+   *  by every later resize, which then decide separately what to do with it. */
   function measure() {
     if (!canvas) return;
     DPR = window.devicePixelRatio || 1;
@@ -133,12 +124,41 @@
     canvas.height = H * DPR;
   }
 
+  /**
+   * Resize or orientation change.
+   *
+   * If the view is still exactly the fitted one, refitting to the new size is
+   * simply correct — there is nothing the user did that refitting could
+   * disturb. Otherwise the world point under the screen centre is kept fixed,
+   * and the zoom is kept at the same multiple of the newly-recalculated
+   * fitted zoom, so a rotation doesn't jump the tree out from under a pan or a
+   * manual zoom the way a blind refit would — the tree's origin is drawn at
+   * 0.62 of the screen height, not the middle, so W and H changing shifts
+   * where that origin lands on screen unless something corrects for it.
+   */
   function resize() {
-    if (!canvas) return;
-    measure();
-    if (model) {
-      fittedK = fitView(model, W, H).k;
+    if (!canvas || !model) {
+      measure();
+      redraw();
+      return;
     }
+    if (atFittedView) {
+      measure();
+      const fit = fitView(model, W, H);
+      fittedK = fit.k;
+      cancelGlide();
+      markViewFitted(fit);
+      redraw();
+      return;
+    }
+    const oldW = W;
+    const oldH = H;
+    const centreWorld = toWorld(oldW / 2, oldH / 2, view, oldW, oldH);
+    const ratio = fittedK ? view.k / fittedK : 1;
+    measure();
+    fittedK = fitView(model, W, H).k;
+    const nextK = Math.max(minZoom, Math.min(MAX_ZOOM, ratio * fittedK));
+    view = viewFor(centreWorld.x, centreWorld.y, nextK, W / 2, H / 2, W, H);
     redraw();
   }
 
@@ -149,7 +169,6 @@
     tracedPath = new Set(chain.map((r) => r.id));
     selectedTribe = n.tribe || null;
     pinned = n;
-    startPulse();
     redraw();
   }
 
@@ -158,51 +177,104 @@
     selectedTribe = null;
     pinned = null;
     hovered = null;
-    stopPulse();
     redraw();
   }
 
-  // ── Glides ───────────────────────────────────────────────────────────────
-  // Two things eased from start to end: log(k) (so the zoom doesn't swoop —
-  // easing k directly changes too fast at the start) and the world point that
-  // should sit at the target screen spot. The view is rebuilt from those two
-  // every frame with viewFor, so a glide can never disagree with a jump cut.
-  let glideRAF: number | null = null;
+  // ── One shared animation loop for the breathing pulse and every glide ────
+  // A phone shouldn't redraw the whole tree twice in the same frame, which is
+  // what two independent rAF loops risk the moment a glide runs while someone
+  // is pinned (the ordinary case: tracing a person starts the pulse, and
+  // opening on them glides to them at the same time).
+  let pulsePhase = REDUCED_MOTION ? 1 : 0;
+  let pulseStart = 0;
+  let glide: {
+    startWorld: { x: number; y: number };
+    targetWorld: { x: number; y: number };
+    logStart: number;
+    logEnd: number;
+    screen: { x: number; y: number };
+    t0: number;
+    ms: number;
+    /** Called once the glide actually lands — not when it's requested — so a
+     *  resize mid-glide can't mistake "heading for the fit" for "already at
+     *  it" and cut the animation short by refitting early. */
+    onArrive?: () => void;
+  } | null = null;
+  let rafId: number | null = null;
 
-  function cancelGlide() {
-    if (glideRAF != null) cancelAnimationFrame(glideRAF);
-    glideRAF = null;
+  function ease(t: number): number {
+    return 1 - Math.pow(1 - t, 3);
   }
 
-  function glideTo(targetWorld: { x: number; y: number }, targetK: number, screen: { x: number; y: number }, ms = 700) {
-    cancelGlide();
+  function frameLoop(now: number) {
+    let needsAnother = false;
+
+    if (pinned && !REDUCED_MOTION) {
+      pulsePhase = (Math.sin((now - pulseStart) / 480) + 1) / 2;
+      needsAnother = true;
+    }
+
+    if (glide) {
+      const t = Math.min(1, (now - glide.t0) / glide.ms);
+      const e = ease(t);
+      const k = Math.exp(glide.logStart + (glide.logEnd - glide.logStart) * e);
+      const wx = glide.startWorld.x + (glide.targetWorld.x - glide.startWorld.x) * e;
+      const wy = glide.startWorld.y + (glide.targetWorld.y - glide.startWorld.y) * e;
+      view = viewFor(wx, wy, k, glide.screen.x, glide.screen.y, W, H);
+      if (t >= 1) {
+        const arrived = glide.onArrive;
+        glide = null;
+        arrived?.();
+      } else {
+        needsAnother = true;
+      }
+    }
+
+    redraw();
+    rafId = needsAnother ? requestAnimationFrame(frameLoop) : null;
+  }
+
+  function ensureLoopRunning() {
+    if (rafId == null) rafId = requestAnimationFrame(frameLoop);
+  }
+
+  function startPulse() {
+    pulseStart = performance.now();
+    ensureLoopRunning();
+  }
+  function stopPulseIfIdle() {
+    if (!pinned) pulsePhase = REDUCED_MOTION ? 1 : 0;
+  }
+
+  function cancelGlide() {
+    glide = null;
+  }
+
+  function glideTo(
+    targetWorld: { x: number; y: number },
+    targetK: number,
+    screen: { x: number; y: number },
+    ms = 700,
+    onArrive?: () => void,
+  ) {
+    markViewMoved();
     if (REDUCED_MOTION) {
       view = viewFor(targetWorld.x, targetWorld.y, targetK, screen.x, screen.y, W, H);
       redraw();
+      onArrive?.();
       return;
     }
-    const startWorld = toWorld(screen.x, screen.y, view, W, H);
-    const startK = view.k;
-    const logStart = Math.log(startK);
-    const logEnd = Math.log(targetK);
-    const t0 = performance.now();
-    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
-
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - t0) / ms);
-      const e = ease(t);
-      const k = Math.exp(logStart + (logEnd - logStart) * e);
-      const wx = startWorld.x + (targetWorld.x - startWorld.x) * e;
-      const wy = startWorld.y + (targetWorld.y - startWorld.y) * e;
-      view = viewFor(wx, wy, k, screen.x, screen.y, W, H);
-      redraw();
-      if (t < 1) {
-        glideRAF = requestAnimationFrame(tick);
-      } else {
-        glideRAF = null;
-      }
+    glide = {
+      startWorld: toWorld(screen.x, screen.y, view, W, H),
+      targetWorld,
+      logStart: Math.log(view.k),
+      logEnd: Math.log(targetK),
+      screen,
+      t0: performance.now(),
+      ms,
+      onArrive,
     };
-    glideRAF = requestAnimationFrame(tick);
+    ensureLoopRunning();
   }
 
   function glideToWhole() {
@@ -214,30 +286,289 @@
     const fit = fitView(model, W, H);
     const anchor = { x: W / 2, y: H / 2 };
     const midWorld = toWorld(anchor.x, anchor.y, fit, W, H);
-    glideTo(midWorld, fit.k, anchor);
+    // atFittedView is restored only once this glide actually lands, not the
+    // moment it's requested — marking it early would let a resize mid-glide
+    // treat "heading for the fit" as "already there" and cut the glide short.
+    glideTo(midWorld, fit.k, anchor, 700, () => {
+      atFittedView = true;
+    });
+  }
+
+  /**
+   * Where a glide should centre the pinned person, given whether the sheet
+   * is covering part of the screen right now.
+   *
+   * The sheet is a bottom sheet on a phone (62% tall) and a right panel at
+   * 760px+, so "the part it leaves uncovered" is a different region in each
+   * case: the top 38% on a phone, the left side on a wide screen. With no
+   * sheet open, the whole screen is free and this is the screen point 62% of
+   * the way down it — the same fraction the tree's own origin (Jacob) is
+   * drawn at, so a focused person lands where the tree's own centre of
+   * gravity already is, not at a dead centre that ignores the canopy/root
+   * balance. Each covered case reapplies that same 0.62 fraction, but scaled
+   * to whatever's left uncovered rather than to the whole screen.
+   */
+  function glideAnchor(): { x: number; y: number } {
+    if (!sheetOpen) return { x: W / 2, y: H * 0.62 };
+    if (isWideLayout()) return { x: (W - 420) / 2, y: H * 0.62 };
+    return { x: W / 2, y: H * 0.38 * 0.62 };
+  }
+
+  function isWideLayout(): boolean {
+    return typeof matchMedia !== 'undefined' && matchMedia('(min-width: 760px)').matches;
   }
 
   /** Opening on a person, or the header 🌳's focusId: zoom to FOCUS_ZOOM, since
    *  the previous zoom (the whole tree, or whatever the last visit left) means
    *  nothing here — this is a fresh arrival, not a move within one visit. */
   function glideToPersonFocused(n: TreeRec) {
-    if (n.x == null || n.y == null) return;
-    glideTo({ x: n.x, y: n.y }, FOCUS_ZOOM, { x: W / 2, y: H * 0.62 });
+    if (!isPlaced(n)) return;
+    glideTo({ x: n.x, y: n.y }, FOCUS_ZOOM, glideAnchor());
   }
 
-  /** Tapping an ancestor in the card: glide to them at whatever zoom the
-   *  tree is already at, per the plan — a walk along a line the user is
-   *  already looking at shouldn't also change how far in they are. */
+  /** Tapping an ancestor in the card, or a relative walked to inside the
+   *  sheet: glide to them at whatever zoom the tree is already at, per the
+   *  plan — a walk along a line the user is already looking at shouldn't
+   *  also change how far in they are. */
   function glideToPersonAtCurrentZoom(n: TreeRec) {
-    if (n.x == null || n.y == null) return;
-    glideTo({ x: n.x, y: n.y }, view.k, { x: W / 2, y: H * 0.62 });
+    if (!isPlaced(n)) return;
+    glideTo({ x: n.x, y: n.y }, view.k, glideAnchor());
   }
 
-  // ── Opening ──────────────────────────────────────────────────────────────
-  onMount(async () => {
-    allNames = readNamesPref();
+  // ── History: back closes the tree, and the sheet on top of it ──────────
+  // Same pattern as ParallelView, with one addition: a fresh marker per open
+  // rather than a bare `true`. history.state survives a reload, and the app
+  // reloads itself on resume after a deploy (App.svelte's controllerchange
+  // handler) — with a bare boolean, an old tree's leftover entry from BEFORE
+  // that reload would still satisfy "state has pbFamilyTree" the next time
+  // the tree opens, so Back could land on the stale entry instead of closing,
+  // and × would need two presses.
+  const treeMark = Date.now() + Math.random();
+  let treePushed = false;
+  /** A fresh marker per sheet OPEN, not per component instance — the sheet
+   *  can open, close and reopen many times across one tree visit. */
+  let sheetMark = 0;
+  let sheetPushed = false;
+
+  /**
+   * Close more than one level at once — ✕ Close while the sheet is open, and
+   * the verse exit, both need this. Two `history.back()` calls issued in the
+   * same task aren't guaranteed to actually move back twice in every browser,
+   * so this sums how many entries were actually pushed (pushState can throw)
+   * and moves back that many in one `history.go`. If neither push landed —
+   * pushState blocked entirely — there's nothing on the stack to consume, so
+   * this closes directly instead of asking history to move nowhere.
+   */
+  function closeEntries(n: number) {
+    treePushed = false;
+    sheetPushed = false;
+    if (n > 0) {
+      history.go(-n);
+    } else {
+      doClose();
+    }
+  }
+
+  /** ✕ Close, or Escape, while the sheet is NOT open: back one level if that
+   *  level exists, otherwise close directly. */
+  function closeTreeOnly() {
+    closeEntries(treePushed ? 1 : 0);
+  }
+
+  /** ✕ Close while the sheet IS open, or the verse exit: consume every
+   *  entry this viewer actually pushed, tree and sheet together. */
+  function closeTreeAndSheet() {
+    closeEntries((treePushed ? 1 : 0) + (sheetPushed ? 1 : 0));
+  }
+
+  function closeViaHistory() {
+    if (sheetOpen) {
+      closeTreeAndSheet();
+    } else {
+      closeTreeOnly();
+    }
+  }
+
+  /** The sheet's own ✕/Escape/Back: close the sheet, leave the tree. */
+  function closeSheetOnly() {
+    if (sheetPushed) {
+      sheetPushed = false;
+      history.back();
+    } else {
+      sheetOpen = false;
+    }
+  }
+
+  function onPopState() {
+    const state = history.state as { pbFamilyTree?: number; pbTreeSheet?: number } | null;
+    if (state?.pbTreeSheet !== sheetMark) {
+      // Either there was no sheet entry to begin with, or it's gone now —
+      // either way the sheet itself must not still claim to be open.
+      sheetPushed = false;
+      sheetOpen = false;
+    }
+    if (state?.pbFamilyTree !== treeMark) {
+      treePushed = false;
+      doClose();
+    }
+  }
+
+  /**
+   * Every key is stopped here while the tree is open, not just Escape.
+   *
+   * Without this, focus can still be sitting on the 🌳 badge underneath the
+   * tree the moment it opens: IndexList's .rows runs a type-to-jump handler
+   * on keydown, so Enter or Space would fire that badge again, and the app's
+   * global `j` shortcut would open a journal window underneath the tree. The
+   * focus move on mount, below, is the real fix — this is the backstop for
+   * whatever that move misses.
+   */
+  function onKeydownCapture(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      if (sheetOpen) closeSheetOnly();
+      else closeViaHistory();
+    }
+  }
+
+  let openerEl: HTMLElement | null = null;
+
+  function doClose() {
+    familyTreeStore.close();
+  }
+
+  // ── The bio sheet ──────────────────────────────────────────────────────
+  let sheetOpen = false;
+  let sheetPersonId: string | null = null;
+  /** Bumped whenever the sheet should mount a FRESH PersonContent — a tree
+   *  tap, an ancestor click on the pinned card, or opening Read bio itself.
+   *  NOT bumped by onOpenPerson (walking a relative from inside the bio):
+   *  that path only changes sheetPersonId, so the existing instance's own
+   *  `trail` — the crumb openRelation just added — survives the switch
+   *  instead of being thrown away by a remount's reset. */
+  let sheetInstanceKey = 0;
+  /** The tree's own label for whoever the sheet is showing, so its header
+   *  has a name before PersonContent's own load resolves. */
+  let sheetFallbackLabel = '';
+
+  function labelFor(id: string): string {
+    return model?.nodes.get(id)?.label ?? model?.rootById.get(id)?.label ?? '';
+  }
+
+  /** Switch the sheet to a fresh person — a tree tap or an ancestor click —
+   *  as opposed to a relative walked to from inside the bio, which uses
+   *  switchSheetNoRemount instead. */
+  function switchSheetFresh(id: string) {
+    sheetPersonId = id;
+    sheetFallbackLabel = labelFor(id);
+    sheetInstanceKey++;
+  }
+
+  /** onOpenPerson from inside the sheet: change the id only, so the running
+   *  PersonContent instance keeps its own back trail. */
+  function switchSheetNoRemount(id: string, name: string) {
+    sheetPersonId = id;
+    sheetFallbackLabel = name;
+  }
+
+  /**
+   * Read bio, on the pinned card. Opens the sheet for that person, pushing
+   * its own history entry on top of the tree's, and re-glides the pinned
+   * person into the region the sheet now leaves uncovered — Phase 1's own
+   * opening glide already centred them on the WHOLE screen, and the sheet
+   * covering 62% of a phone means that earlier centring is now wrong.
+   */
+  function openReadBio() {
+    if (!pinned) return;
+    switchSheetFresh(pinned.id);
+    sheetOpen = true;
+    sheetMark = Date.now() + Math.random();
+    try {
+      history.pushState({ pbFamilyTree: treeMark, pbTreeSheet: sheetMark }, '');
+      sheetPushed = true;
+    } catch {
+      sheetPushed = false;
+    }
+    if (isPlaced(pinned)) glideTo({ x: pinned.x, y: pinned.y }, view.k, glideAnchor());
+  }
+
+  /** onOpenPerson: walking a relative from inside the bio. Switches the
+   *  sheet to them without remounting it, and if they're also on the tree,
+   *  traces, pins and glides to them too — keeping the two in step. */
+  function handleOpenPerson(id: string, name: string) {
+    switchSheetNoRemount(id, name);
+    if (!model) return;
+    const rec = model.nodes.get(id) ?? model.rootById.get(id);
+    if (rec) {
+      traceFrom(rec);
+      startPulse();
+      glideToPersonAtCurrentZoom(rec);
+    }
+  }
+
+  /**
+   * "See on the tree" tapped from inside the sheet: the sheet is already
+   * open over the tree, so this closes it onto that person rather than
+   * opening a second tree over the first.
+   *
+   * `sheetOpen` is set to false directly here, not left to the `popstate`
+   * closeSheetOnly's `history.back()` will eventually raise — that event is
+   * asynchronous, and the glide below reads `sheetOpen` (via glideAnchor)
+   * synchronously, right now. Left to the popstate, the glide would aim at
+   * the region still covered by a sheet that's already on its way out.
+   */
+  function handleShowOnTreeFromSheet(id: string) {
+    closeSheetOnly();
+    sheetOpen = false;
+    if (!model) return;
+    const rec = model.nodes.get(id) ?? model.rootById.get(id);
+    if (rec) {
+      traceFrom(rec);
+      startPulse();
+      glideToPersonAtCurrentZoom(rec);
+    }
+  }
+
+  /**
+   * The verse exit — a verse tapped inside the bio.
+   *
+   * `onLeave` is read off the store BEFORE anything closes: closing the tree
+   * (step 2) nulls the store's state, so reading it after that would already
+   * find nothing to call in step 3. `doClose()` is also called directly here,
+   * not left to the `popstate` that `history.go` will eventually raise — that
+   * event is asynchronous, and `leave()` (step 3) needs the store to already
+   * be closed by the time it runs. Calling `familyTreeStore.close()` twice
+   * (once here, once when that popstate lands) is harmless — it's a plain
+   * `set` to the same empty state either time.
+   */
+  function handleVerseExit() {
+    const leave = get(familyTreeStore).onLeave;
+    closeTreeAndSheet();
+    doClose();
+    leave?.();
+  }
+
+  onDestroy(() => {
+    if (openerEl && document.contains(openerEl)) {
+      openerEl.focus({ preventScroll: true });
+    }
+  });
+
+  /**
+   * Data loading, kept out of `onMount` and never awaited there.
+   *
+   * `onMount` has to stay synchronous (see below), so this is called from it
+   * without an `await` on the call itself. The `destroyed` flag guards every
+   * step after an `await`: a component that unmounts mid-load must not go on
+   * to set state on a component nobody's looking at, or worse, start a glide
+   * that outlives it.
+   */
+  let destroyed = false;
+
+  async function init() {
     try {
       const data = await loadFamilyTree();
+      if (destroyed) return;
       model = layout(data);
       loading = false;
       ctx = canvas.getContext('2d');
@@ -245,44 +576,47 @@
         errored = true;
         return;
       }
-      // Measure the canvas, then set the fitted view, THEN draw the first
-      // frame — resize() draws as its last step, so calling it before `view`
-      // is fitted would flash one frame at the stale default view (0,0,k:1).
+      // Measure and fit BEFORE the first redraw — drawing at the stale
+      // default view (0,0,k:1) first would flash one wrong frame.
       measure();
       const fit = fitView(model, W, H);
       fittedK = fit.k;
-      view = fit;
+      markViewFitted(fit);
       redraw();
 
       const focusId = $familyTreeStore.focusId;
-      const target = focusId ? model.nodes.get(focusId) || model.rootById.get(focusId) : null;
-      if (target && target.x != null && target.y != null) {
+      const target = focusId ? (model.nodes.get(focusId) ?? model.rootById.get(focusId)) : null;
+      if (target && isPlaced(target)) {
         traceFrom(target);
+        startPulse();
         // So the user sees where the whole tree is before zooming to them —
         // the glide starts from the fitted view rather than jumping straight in.
         glideToPersonFocused(target);
       }
 
-      // Milonga can arrive after this first paint; redraw once it's ready so
-      // labels don't sit in the fallback face until the next interaction.
-      document.fonts?.load('600 14px Milonga').then(() => redraw());
+      document.fonts
+        ?.load('600 14px Milonga')
+        .catch(() => {
+          // Font failed to load — labels stay in the fallback face. Not fatal.
+        })
+        .then(() => {
+          if (!destroyed) redraw();
+        });
     } catch {
-      loading = false;
-      errored = true;
+      if (!destroyed) {
+        loading = false;
+        errored = true;
+      }
     }
-  });
-
-  onDestroy(() => {
-    stopPulse();
-    cancelGlide();
-  });
+  }
 
   // ── Gestures ─────────────────────────────────────────────────────────────
-  // Attached by hand, not with on: directives, so passive:false is guaranteed —
-  // a passive listener drops preventDefault(), and without it the page pans
-  // instead of the tree. Modelled on ArtViewer, not the lab: the lab has no
-  // pinch-to-zoom-and-pan-together (it treats a pinch as zoom-only), and no tap
-  // discrimination against a drag.
+  // Modelled on ArtViewer, not the lab: the lab has no pinch-to-zoom-and-pan-
+  // together (it treats a pinch as zoom-only) and no tap discrimination
+  // against a drag. The listeners go on the canvas itself, not on any
+  // ancestor that also holds the chrome — a card, sheet or button inside the
+  // listening element would fight its own scrolling against the pan, and a
+  // wheel over it would zoom the tree underneath instead of scrolling it.
   type Pt = { x: number; y: number };
   const pointers = new Map<number, Pt>();
   let dragLast: Pt | null = null;
@@ -303,6 +637,9 @@
   }
 
   function onPointerDown(e: PointerEvent) {
+    // Mouse hover uses pointermove with no pointer down at all (below); a
+    // mouse button press should still only ever mean the primary button.
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     cancelGlide();
     canvas.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, toLocal(e));
@@ -322,14 +659,13 @@
 
   function onPointerMove(e: PointerEvent) {
     if (!pointers.has(e.pointerId)) {
-      // No button down: plain hover, mouse only, and only while nobody is
-      // pinned — a pinned card isn't hover's to overwrite.
-      if (!pinned && !TOUCH && model) {
+      // No button down. ArtViewer returns immediately here — a photo viewer
+      // has no use for hover — but the tree's hover card needs exactly this
+      // moment: a mouse move with nothing pressed, nobody pinned.
+      if (e.pointerType === 'mouse' && !pinned && model) {
         const p = toLocal(e);
         const n = pick(model, view, W, H, p.x, p.y, 14);
-        if (n !== hovered) {
-          hovered = n;
-        }
+        if (n !== hovered) hovered = n;
       }
       return;
     }
@@ -341,6 +677,7 @@
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       // Two fingers pan and zoom together about their midpoint.
+      markViewMoved();
       view = { ...view, x: view.x + (mid.x - pinchMid.x), y: view.y + (mid.y - pinchMid.y) };
       if (pinchDist > 0 && dist > 0) {
         const before = toWorld(mid.x, mid.y, view, W, H);
@@ -357,6 +694,7 @@
 
     if (dragLast) {
       const p = toLocal(e);
+      markViewMoved();
       view = { ...view, x: view.x + (p.x - dragLast.x), y: view.y + (p.y - dragLast.y) };
       dragLast = p;
       redraw();
@@ -402,14 +740,24 @@
     const n = pick(model, view, W, H, screen.x, screen.y, radius);
     if (n) {
       traceFrom(n);
-    } else {
+      startPulse();
+      // The sheet follows the tree, not the other way round — a tap on the
+      // tree while the sheet is open switches the sheet to whoever was just
+      // tapped, the same as tapping their line-item inside the bio does.
+      if (sheetOpen) switchSheetFresh(n.id);
+    } else if (!sheetOpen) {
+      // Tapping empty ground does nothing while the sheet is open — with a
+      // person already pinned in the sheet, clearing the tree's own
+      // selection here would put the two out of step for no reason.
       clearSelection();
+      stopPulseIfIdle();
     }
   }
 
   function onWheel(e: WheelEvent) {
     e.preventDefault();
     cancelGlide();
+    markViewMoved();
     const r = canvas.getBoundingClientRect();
     const cx = e.clientX - r.left;
     const cy = e.clientY - r.top;
@@ -425,47 +773,27 @@
     e.preventDefault();
   }
 
-  // ── History: back closes the tree ───────────────────────────────────────
-  // Same pattern as ParallelView: one pushState on mount, consumed by ×,
-  // Escape and the phone's Back alike, so none of them can leave a dead
-  // entry behind for the next Back to trip over.
-  let pushedHistory = false;
-
-  function closeViaHistory() {
-    if (pushedHistory) {
-      pushedHistory = false;
-      history.back();
-      return;
-    }
-    doClose();
-  }
-
-  function onPopState() {
-    if (history.state?.pbFamilyTree) return;
-    pushedHistory = false;
-    doClose();
-  }
-
-  /** Escape is caught in the capture phase and stopped, so the People card
-   *  underneath doesn't also step back — same reason HarmonyPicker does this
-   *  for the harmony view behind it. */
-  function onKeydownCapture(e: KeyboardEvent) {
-    if (e.key !== 'Escape') return;
-    e.stopPropagation();
-    closeViaHistory();
-  }
-
-  let openerEl: HTMLElement | null = null;
-
-  function doClose() {
-    familyTreeStore.close();
-  }
-
-  // Attached by hand rather than with on: directives, the same reason
-  // ArtViewer does: passive:false is guaranteed this way, and a passive
-  // listener silently drops preventDefault() — without it the page would pan
-  // instead of the tree.
+  /**
+   * Synchronous, like ArtViewer's own onMount.
+   *
+   * Every listener — canvas, window, popstate, visualViewport — is attached
+   * and the cleanup function returned before any `await` runs. PersonContent
+   * uses an async onMount, but that pattern doesn't fit here: if the cleanup
+   * were returned from an async function, Svelte never runs it, and the
+   * capture-phase keydown listener below would outlive the component and
+   * keep swallowing every keystroke everywhere else in the app. Data loading
+   * is kicked off at the end, into `init()`, without being awaited here.
+   */
   onMount(() => {
+    openerEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    try {
+      history.pushState({ pbFamilyTree: treeMark }, '');
+      treePushed = true;
+    } catch {
+      // × and Escape still close it; only the phone's Back is affected.
+    }
+
     const opts: AddEventListenerOptions = { passive: false };
     canvas.addEventListener('pointerdown', onPointerDown, opts);
     canvas.addEventListener('pointermove', onPointerMove, opts);
@@ -477,7 +805,23 @@
     canvas.addEventListener('gesturestart', blockGesture, opts);
     canvas.addEventListener('gesturechange', blockGesture, opts);
     canvas.addEventListener('gestureend', blockGesture, opts);
+
+    window.addEventListener('keydown', onKeydownCapture, true);
+    window.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('resize', resize);
+
+    // Without this, focus stays on whatever opened the tree — the 🌳 badge
+    // underneath it, or the header button — and the capture-phase keydown
+    // above is the only thing standing between that and the leaks it guards.
+    closeBtnEl?.focus({ preventScroll: true });
+
+    init();
+
     return () => {
+      destroyed = true;
+      if (rafId != null) cancelAnimationFrame(rafId);
+      rafId = null;
+
       canvas.removeEventListener('pointerdown', onPointerDown, opts);
       canvas.removeEventListener('pointermove', onPointerMove, opts);
       canvas.removeEventListener('pointerup', onPointerUp, opts);
@@ -486,31 +830,17 @@
       canvas.removeEventListener('gesturestart', blockGesture, opts);
       canvas.removeEventListener('gesturechange', blockGesture, opts);
       canvas.removeEventListener('gestureend', blockGesture, opts);
+
+      window.removeEventListener('keydown', onKeydownCapture, true);
+      window.removeEventListener('resize', resize);
+      window.visualViewport?.removeEventListener('resize', resize);
     };
-  });
-
-  onMount(() => {
-    openerEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    try {
-      history.pushState({ pbFamilyTree: true }, '');
-      pushedHistory = true;
-    } catch {
-      // × and Escape still close it; only the phone's Back is affected.
-    }
-    window.addEventListener('keydown', onKeydownCapture, true);
-    return () => window.removeEventListener('keydown', onKeydownCapture, true);
-  });
-
-  onDestroy(() => {
-    if (openerEl && document.contains(openerEl)) {
-      openerEl.focus({ preventScroll: true });
-    }
   });
 
   $: hintText = TOUCH ? '· Back to return' : '· Esc to return';
 </script>
 
-<svelte:window on:resize={resize} on:popstate={onPopState} />
+<svelte:window on:popstate={onPopState} />
 
 <div
   class="family-tree no-edge-gesture"
@@ -535,26 +865,49 @@
         All names
       </button>
     </div>
-    <button class="close-btn" on:click={closeViaHistory} aria-label="Close family tree">✕ Close</button>
+    <button class="close-btn" bind:this={closeBtnEl} on:click={closeViaHistory} aria-label="Close family tree">
+      ✕ Close
+    </button>
 
-    {#if pinned}
-      <FamilyTreeCard
-        {model}
-        person={pinned}
-        pinned={true}
-        onTraceAncestor={(rec: TreeRec) => {
-          traceFrom(rec);
-          glideToPersonAtCurrentZoom(rec);
-        }}
-      />
-    {:else if hovered}
-      <FamilyTreeCard {model} person={hovered} pinned={false} />
+    <!-- The tree card hides while the sheet is open — with a person already
+         pinned in the sheet's own header, a second card naming them is
+         redundant, and covering part of the tree it belongs to. -->
+    {#if !sheetOpen}
+      {#if pinned}
+        <FamilyTreeCard
+          {model}
+          person={pinned}
+          pinned={true}
+          onTraceAncestor={(rec: TreeRec) => {
+            traceFrom(rec);
+            startPulse();
+            glideToPersonAtCurrentZoom(rec);
+          }}
+          onReadBio={openReadBio}
+        />
+      {:else if hovered}
+        <FamilyTreeCard {model} person={hovered} pinned={false} />
+      {/if}
     {/if}
 
-    <div class="hint" class:faded={gestured}>
-      Drag to pan · Tap a person to trace their line · Pinch or scroll to zoom {hintText}
+    <div class="bottom-stack" class:faded={gestured}>
+      <div class="hint">
+        Drag to pan · Tap a person to trace their line · Pinch or scroll to zoom {hintText}
+      </div>
     </div>
     <div class="attrib">{model.attribution}</div>
+
+    {#if sheetOpen && sheetPersonId}
+      <FamilyTreeBioSheet
+        personId={sheetPersonId}
+        instanceKey={sheetInstanceKey}
+        fallbackLabel={sheetFallbackLabel}
+        onOpenPerson={handleOpenPerson}
+        onShowOnTree={handleShowOnTreeFromSheet}
+        onClose={handleVerseExit}
+        onBackToTree={closeSheetOnly}
+      />
+    {/if}
   {/if}
 </div>
 
@@ -636,24 +989,31 @@
     background: rgba(0, 0, 0, 0.8);
   }
 
-  .hint {
+  /* Stacked above the attribution rather than side by side: on a phone the
+     attribution below runs full width, and a bottom-centre hint beside it
+     would collide with it rather than clear it. */
+  .bottom-stack {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 30px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 34px);
+    transition: opacity 0.6s ease;
+  }
+  .bottom-stack.faded {
+    opacity: 0;
+  }
+
+  .hint {
     text-align: center;
     font-size: 11px;
     color: #6b6153;
     pointer-events: none;
-    transition: opacity 0.6s ease;
-  }
-  .hint.faded {
-    opacity: 0;
   }
 
   .attrib {
     position: absolute;
     left: 12px;
+    right: 12px;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
     font-size: 10px;
     color: #4a443c;
@@ -664,7 +1024,7 @@
 
   @media (max-width: 480px) {
     .attrib {
-      max-width: calc(100% - 24px);
+      max-width: none;
       font-size: 9.5px;
     }
   }
