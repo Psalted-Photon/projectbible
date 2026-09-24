@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 
 /**
- * Build Family Tree Lab Data (roadmap #25)
+ * Build Family Tree Data (roadmap #25)
  *
- * Read-only. Reads packs/people.sqlite and emits one JSON for the family tree
- * lab. The pack is never modified.
+ * Read-only. Reads packs/people.sqlite and emits one JSON for the in-app
+ * family tree. The pack is never modified.
  *
  * Source: Theographic Bible Metadata by Robert Rouse, CC BY-SA 4.0.
  * The licence is viral — the attribution emitted here must stay on screen.
  *
- * Output: apps/pwa-polished/public/family-tree-data.json
+ * Output: apps/pwa-polished/src/data/family-tree.json
  *
- * It lands in public/ because the lab page ships with the app (so it can be
- * opened on a phone) rather than being dev-server only.
+ * It lands under src/data, not public/, because the app loads it as a lazy
+ * chunk (src/lib/familyTree/data.ts) so the service worker precaches it and
+ * it stops counting against the main bundle. `prose`, `verses`, `birthYear`,
+ * `deathYear` and `marriedIn` are dropped before the write: the People bio
+ * sheet shows the prose, the tree never drew the rest, and cutting them takes
+ * the file from 485 KB to about 133 KB.
  */
 
 import fs from 'fs';
@@ -25,14 +29,14 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 
 const PACK = path.join(ROOT, 'packs/people.sqlite');
-const OUT = path.join(ROOT, 'apps/pwa-polished/public/family-tree-data.json');
+const OUT = path.join(ROOT, 'apps/pwa-polished/src/data/family-tree.json');
 
 // The patriarch. Distinct from jacob_683, who is Joseph's father in Matthew's
 // line — conflating the two slugs silently grafts the whole Matthean genealogy
 // onto the twelve tribes.
 const JACOB = 'israel_682';
 
-console.log('🌳 Building family tree lab data');
+console.log('🌳 Building family tree data');
 console.log(`   Source: ${path.relative(ROOT, PACK)}`);
 
 if (!fs.existsSync(PACK)) {
@@ -456,6 +460,17 @@ const crown = {
 const counts = {};
 for (const t of tribeOf.values()) counts[t] = (counts[t] || 0) + 1;
 
+// The app draws the tree from this file but shows the prose in the People bio
+// sheet instead, which reads it from the people pack directly — so `prose`
+// and `verses` are dead weight here. `birthYear`, `deathYear` and `marriedIn`
+// were lab-only readout fields the tree itself never drew.
+function slimNode({ prose, verses, ...rest }) {
+  return rest;
+}
+function slimRoot({ prose, verses, birthYear, deathYear, marriedIn, ...rest }) {
+  return rest;
+}
+
 const out = {
   attribution:
     'Theographic Bible Metadata by Robert Rouse, licensed CC BY-SA 4.0. ' +
@@ -473,9 +488,9 @@ const out = {
   rootBranchOrder: ['Trunk', ...ROOT_BRANCH_HEADS.map(([, n]) => n)],
   rootCounts: roots.reduce((a, r) => ((a[r.branch] = (a[r.branch] || 0) + 1), a), {}),
   rootMaxDepth: roots.reduce((m, r) => Math.max(m, r.depth), 0),
-  roots,
+  roots: roots.map(slimRoot),
   crown,
-  nodes,
+  nodes: nodes.map(slimNode),
 };
 
 fs.writeFileSync(OUT, JSON.stringify(out));

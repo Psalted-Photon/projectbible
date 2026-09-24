@@ -11,6 +11,7 @@
   import { navesModalStore } from "../../stores/navesModalStore";
   import { personModalStore } from "../../stores/personModalStore";
   import { lexicalModalStore } from "../../stores/lexicalModalStore";
+  import { familyTreeIds } from "../../lib/familyTree/data";
 
   /**
    * The contents list — the table of contents for one reference work. Draws an
@@ -22,6 +23,9 @@
    */
   export let source: LibrarySourceAdapter;
   export let onOpen: (row: LibraryRow) => void;
+  /** Opens the family tree on this row. Only People passes it — the tree has
+   *  nothing to say about a lexicon entry or a topic. */
+  export let onOpenTree: ((row: LibraryRow) => void) | null = null;
   /** Letter to open on — where you left off, or the letter of the current entry. */
   export let initialLetter: string | null = null;
   /**
@@ -452,6 +456,17 @@
             <!-- A sibling of the row rather than inside it: these are buttons,
                  and a button inside a button is invalid and would fire both. -->
             <span class="badges">
+              {#if onOpenTree && $familyTreeIds.has(String(row.id))}
+                <button
+                  class="emoji"
+                  title="See on the family tree"
+                  aria-label="{row.name} on the family tree"
+                  on:click={(e) => {
+                    e.stopPropagation();
+                    onOpenTree?.(row);
+                  }}
+                >🌳</button>
+              {/if}
               {#if shows("place") && row.isPlace}
                 <button class="emoji" title="Show on the map" aria-label="Show {row.name} on the map" on:click={(e) => openBadge(e, row, "place")}>📍</button>
               {/if}

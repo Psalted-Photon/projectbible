@@ -194,11 +194,10 @@
   /**
    * Escape, and the phone's back gesture.
    *
-   * The history entry is pushed on mount and consumed here. It is the only
-   * pushState in the app — everything else uses replaceState — which is
-   * deliberate: one entry that exists exactly as long as this view does cannot
-   * desynchronise the rest of the app from the history stack, whereas a general
-   * routing scheme would be a much larger decision than this view should make.
+   * The history entry is pushed on mount and consumed here. It used to be the
+   * only pushState in the app; the family tree (roadmap #25) now pushes one of
+   * its own when it opens on top of this view, so this is no longer the only
+   * entry on the stack — only the only one THIS view owns.
    */
   let pushedHistory = false;
 
@@ -213,6 +212,12 @@
   });
 
   function onPopState() {
+    // The tree can open over this view, pushing its own entry on top of
+    // pbHarmony. Popping THAT entry fires this listener too — window popstate
+    // reaches every listener, not just the tree's own — and lands back on the
+    // pbHarmony entry this view is still sitting on, which must not also close
+    // this view out from under it.
+    if (history.state?.pbHarmony) return;
     // The entry is already gone by the time this fires, so closing must not try
     // to pop it again.
     pushedHistory = false;

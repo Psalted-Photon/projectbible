@@ -3,6 +3,8 @@
   import BibleReader from "./components/BibleReader.svelte";
   import ParallelView from "./components/ParallelView.svelte";
   import LookupModal from "./components/LookupModal.svelte";
+  import FamilyTreeViewer from "./components/FamilyTreeViewer.svelte";
+  import { familyTreeStore } from "./stores/familyTreeStore";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
   import WelcomeModal from "./components/WelcomeModal.svelte";
@@ -377,6 +379,10 @@
     <!-- The one lookup card: dictionary, topical, encyclopedia and bios all
          live in it, and the tabs across its top switch between them. -->
     <LookupModal />
+
+    <!-- The family tree, full screen over everything else (roadmap #25).
+         Nothing under it unmounts — this is an overlay, not a route. -->
+    {#if $familyTreeStore.open}<FamilyTreeViewer />{/if}
 
     <!-- Shared Reading Plan Modal -->
     <ReadingPlanModal bind:isOpen={showReadingPlanModal} />

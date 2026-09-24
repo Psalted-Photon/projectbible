@@ -8,6 +8,8 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { personModalStore } from "../stores/personModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
+  import { familyTreeStore } from "../stores/familyTreeStore";
+  import { loadFamilyTree } from "../lib/familyTree/data";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
   import WorkTabs from "./WorkTabs.svelte";
@@ -66,6 +68,13 @@
   let bodyEl: HTMLDivElement | null = null;
 
   onMount(async () => {
+    // Not awaited: the 🌳 badges only need familyTreeIds, which this fills in
+    // once the data resolves, and People must not sit on a black screen for a
+    // 130 KB fetch it might not even need this visit.
+    loadFamilyTree().catch(() => {
+      // No tree this session — the 🌳 badges simply never light up.
+    });
+
     if (!initialScrollTop) return;
     // Only where it was measured. Restoring one bio's offset onto another's is
     // how you land halfway down a stranger.
@@ -199,6 +208,20 @@
 
   function openFromContents(row: LibraryRow) {
     jumpToPerson(String(row.id), row.name);
+  }
+
+  /**
+   * Open the family tree on a person from the index, or (via the header
+   * button) on the whole tree with nobody picked.
+   *
+   * `onLeave` is the People card's own close — passed on so that if the user
+   * later leaves the tree for a verse (Phase 2), the card this was opened
+   * from closes too rather than sitting underneath, already left behind.
+   * Docked, there is no card to close: the window stays up the way tapping a
+   * verse from a docked bio already leaves it up.
+   */
+  function openTreeOn(row?: LibraryRow) {
+    familyTreeStore.open({ focusId: row ? String(row.id) : null, onLeave: docked ? null : onClose });
   }
 
   /** Step back to someone you came through. */
@@ -484,6 +507,11 @@
             </button>
           {/if}
         {/if}
+        {#if showContents}
+          <button class="pop-btn tree-btn" on:click={() => openTreeOn()} title="Family tree" aria-label="Open the family tree">
+            🌳
+          </button>
+        {/if}
         {#if onClose}
           <button class="close-btn" on:click={() => onClose?.()} aria-label="Close">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -499,6 +527,7 @@
     <IndexList
       source={peopleSource}
       onOpen={openFromContents}
+      onOpenTree={openTreeOn}
       initialLetter={contentsLetter}
       initialRowId={contentsRowId}
     />
@@ -782,6 +811,12 @@
   }
   .pop-btn:hover {
     color: var(--color-primary, #4a90e2);
+  }
+  /* .pop-btn sets no font-size of its own — the pop-out icon is a sized SVG,
+     but this button holds a bare emoji, which needs telling how big to draw
+     itself so it matches the 18px icons beside it. */
+  .tree-btn {
+    font-size: 17px;
   }
   .close-btn:hover {
     color: var(--text-color, #fff);
