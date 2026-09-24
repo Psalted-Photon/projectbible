@@ -538,7 +538,7 @@ const TRIBE_DEFAULTS = {
   Benjamin: { angle:  79, spread: 17, reach: 1.08, lean:  10 },
   // Dinah is a bough of one, derived from Jacob's thirteen children. She keeps
   // her entry because layout() skips any bough with no T row — deleting this
-  // deletes her from the canvas — but she has no dials row of her own.
+  // deletes her from the canvas. Her dials row sits after the twelve.
   Dinah:    { angle: -84, spread:  4, reach: 1.25, lean: -10 },
 };
 
@@ -1857,11 +1857,9 @@ const TRIBE_SPECS = [
 function buildPanel() {
   const host = document.getElementById('tribes');
   host.innerHTML = '';
-  // Dinah is not listed. The twelve boughs are the twelve sons; she is a bough
-  // of one because Jacob's `children` has thirteen entries, and giving her a
-  // dials row put a thirteenth tribe in a panel headed "The twelve boughs".
-  // Her node still draws and still taps — see TRIBE_DEFAULTS.Dinah.
-  for (const tribe of DATA.tribeOrder) {
+  // Dinah comes after the twelve. She is a bough of one, not a tribe, so she
+  // carries no stone — but she still needs placing, so she gets the same dials.
+  for (const tribe of [...new Set([...DATA.tribeOrder, 'Dinah'])]) {
     if (!byTribe.has(tribe)) continue;
     const st = STONES[tribe] || { c: LINEN, stone: '' };
     const n = (DATA.counts && DATA.counts[tribe]) || byTribe.get(tribe).length;
@@ -1872,7 +1870,7 @@ function buildPanel() {
       `<div class="tribe-head">` +
         `<span class="stone" style="background:${st.c}"></span>` +
         `<span class="tribe-name">${tribe}</span>` +
-        `<span class="tribe-n">${n} &middot; ${st.stone}</span>` +
+        `<span class="tribe-n">${n}${st.stone ? ' &middot; ' + st.stone : ''}</span>` +
       `</div><div class="tribe-body">` +
       TRIBE_SPECS.map((s) =>
         `<div class="ctl"><div class="ctl-row">` +
