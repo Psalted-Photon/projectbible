@@ -116,9 +116,15 @@
     font-size: 11.5px;
     color: #a89a85;
     line-height: 1.6;
+    /* Clicks pass through to the canvas by default, which lets the tree stay
+       interactive under a hover card. The ancestor list below needs the
+       opposite — a click on a name must not also reach the canvas and clear
+       the pin — so this is overridden to 'auto' only while the card is
+       pinned (see .readout-box.pinned below). */
     pointer-events: none;
     max-width: 260px;
   }
+  .readout-box.pinned { pointer-events: auto; }
   .readout-box .nm { color: #e8dcc8; font-family: Milonga, serif; font-size: 15px; }
   .readout-box .mn { color: #7d7264; font-style: italic; }
   .readout-box .tr { font-size: 10.5px; letter-spacing: 0.04em; }
@@ -134,6 +140,33 @@
     color: #5d554a;
     line-height: 1.5;
   }
+
+  /* The "N from God" toggle and the ancestor list it opens. */
+  .readout-box .gens-toggle {
+    cursor: pointer;
+    user-select: none;
+  }
+  .readout-box .gens-toggle:hover { color: #cdbfa8; }
+  .readout-box .gens-toggle::after { content: ' \25be'; font-size: 9px; }
+  .readout-box .gens-toggle.open::after { content: ' \25b4'; }
+  .readout-box .gens-list {
+    margin-top: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    border-top: 1px solid #241f1a;
+    padding-top: 6px;
+  }
+  .readout-box .gens-list a {
+    display: block;
+    padding: 3px 2px;
+    color: #a89a85;
+    text-decoration: none;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .readout-box .gens-list a:hover { background: #1c1916; color: #e0d4bf; }
+  .readout-box .gens-list a b { color: #cdbfa8; font-weight: 600; }
 
   /* ── Right: the controls ────────────────────────────────────────────── */
   .panel {
@@ -391,8 +424,8 @@
   <div class="stage-head">
     <h1>Family tree lab</h1>
     <span class="hint" id="hintDesktop">
-      <b>Drag a bough</b> to swing it &middot; <b>Shift-drag</b> for spread &middot;
-      <b>Click a person</b> to trace their line &middot; <b>Scroll</b> to zoom
+      <b>Drag</b> to pan &middot; <b>Click a person</b> to trace their line &middot;
+      <b>Scroll</b> to zoom
     </span>
     <span class="hint" id="hintTouch" style="display:none">
       <b>Pinch</b> to zoom &middot; <b>Drag</b> to move &middot; <b>Tap a person</b> to trace their line
@@ -412,8 +445,7 @@
 <div class="panel">
   <h2>The twelve boughs</h2>
   <p class="note">
-    Click a tribe to open its dials, or drag its bough on the stage.
-    Angle is measured from straight up.
+    Click a tribe to open its dials. Angle is measured from straight up.
   </p>
   <div id="tribes"></div>
 
@@ -613,6 +645,13 @@ let DATA = null;
 let selectedTribe = null;   // a tribe name, or null for all
 let tracedPath = null;      // Set of ids on a traced lineage
 let hoverNode = null;
+// A clicked person. While set, hover no longer overwrites the card — it took
+// the next mouse twitch as a reason to wipe whoever was actually clicked, even
+// though traceFrom already passed a "pinned" flag to showHover that nothing
+// downstream honoured. Clicking empty canvas clears this along with the trace.
+let pinnedNode = null;
+
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -969,11 +1008,23 @@ function layout() {
         });
       }
 
-      // Wives sit BESIDE their husband on the same ring, not below him. A
-      // spouse has no father in this window, so the generic placer would leave
-      // her unplaced; and hanging her off her husband would draw her as his
-      // daughter. Offset along the ring instead, alternating sides so Jacob's
-      // four do not stack on one another.
+      // Wives sit BESIDE their husband, not below him. A spouse has no father
+      // in this window, so the generic placer would leave her unplaced; and
+      // hanging her off her husband would draw her as his daughter. Offset in
+      // plain pixels, perpendicular to the husband's own growth direction —
+      // his father to him — alternating sides so Jacob's four do not stack on
+      // one another.
+      //
+      // This used to be an angle about the world origin: atan2(h.y, h.x) +
+      // rad(coupleGap * step * side). That is an angle about Jacob, not about
+      // the husband, so the arc length it swept scaled with distance from
+      // Jacob — the same dial put a wife 25px from Lamech, 40px from Adam and
+      // 64px from Esau. Offsetting perpendicular to the husband's own
+      // direction instead means the dial is the same pixel count everywhere,
+      // and a wife always sits beside her husband across his branch rather
+      // than along it. Jacob no longer needs a special case: his direction
+      // comes from Isaac like everyone else's, because "growth direction" is
+      // defined from a father, not from distance to the origin.
       const spouseCount = new Map();
       for (const n of rootById.values()) {
         if (!n.spouseOf) continue;
@@ -985,21 +1036,30 @@ function layout() {
         // Jacob's four sit two and two rather than in a stack.
         const side = i % 2 === 0 ? 1 : -1;
         const step = Math.floor(i / 2) + 1;
-        const rr = h.r || Math.hypot(h.x, h.y);
-        // Jacob is at the origin, where an angular offset means nothing — a
-        // rotation about a zero radius moves you nowhere — so his wives are
-        // offset by distance instead.
-        if (rr < 1) {
-          const d2 = G.coupleGap * step * 1.6;
-          n.x = h.x + d2 * side;
-          n.y = h.y + d2 * 0.35;
-          n.r = Math.hypot(n.x, n.y);
+
+        // The husband's growth direction: his father to him. Jacob's father
+        // is Isaac; Adam has no father in this data, so straight up (the
+        // trunk's own resting direction) is the fallback.
+        const father = h.father && rootById.get(h.father);
+        let dx, dy;
+        if (father && father.x != null) {
+          dx = h.x - father.x;
+          dy = h.y - father.y;
         } else {
-          const a2 = Math.atan2(h.y, h.x) + rad(G.coupleGap * step * side);
-          n.x = Math.cos(a2) * rr;
-          n.y = Math.sin(a2) * rr;
-          n.r = rr;
+          dx = 0;
+          dy = -1;
         }
+        const dlen = Math.hypot(dx, dy) || 1;
+        dx /= dlen;
+        dy /= dlen;
+        // Perpendicular to that direction, so the wife sits across the branch
+        // rather than further along it.
+        const px = -dy, py = dx;
+
+        const d2 = G.coupleGap * step;
+        n.x = h.x + px * d2 * side;
+        n.y = h.y + py * d2 * side;
+        n.r = Math.hypot(n.x, n.y);
         n.angle = h.angle;
         n.partnerId = h.id;
       }
@@ -1057,10 +1117,49 @@ function fitToScreen() {
   draw();
 }
 
+/** Pan (without rezooming) so a single node sits centred, borrowing the same
+ * origin maths fitToScreen uses: the trunk is drawn at (W/2, H*0.62). */
+function panToNode(n) {
+  if (n.x == null) return;
+  view.x = -n.x * view.k;
+  view.y = -n.y * view.k + (H / 2 - H * 0.62);
+  draw();
+}
+
 function isLit(n) {
   if (tracedPath) return tracedPath.has(n.id);
   if (!selectedTribe) return true;
   return n.tribe === selectedTribe;
+}
+
+// ── The pinned node's breathing pulse ───────────────────────────────────────
+// Everything else on this canvas is static — draw() runs on interaction only.
+// A permanent render loop on a page that does not need one is wasted battery,
+// so this rAF loop exists only while a node is pinned and is cancelled the
+// moment it clears, rather than running forever in the background.
+let pulseRAF = null;
+let pulseStart = 0;
+// 0..1, read by drawBough/drawRoots when they hit the pinned id. Reduced
+// motion draws the enlarged size with no animation, so it is fixed at 1
+// rather than driven by a sine.
+let pulsePhase = REDUCED_MOTION ? 1 : 0;
+
+function startPulse() {
+  if (pulseRAF != null || REDUCED_MOTION) return;
+  pulseStart = performance.now();
+  const tick = (now) => {
+    if (!pinnedNode) { pulseRAF = null; return; }
+    pulsePhase = (Math.sin((now - pulseStart) / 480) + 1) / 2;
+    draw();
+    pulseRAF = requestAnimationFrame(tick);
+  };
+  pulseRAF = requestAnimationFrame(tick);
+}
+
+function stopPulse() {
+  if (pulseRAF != null) cancelAnimationFrame(pulseRAF);
+  pulseRAF = null;
+  pulsePhase = REDUCED_MOTION ? 1 : 0;
 }
 
 function draw() {
@@ -1194,10 +1293,17 @@ function drawRoots(dimming) {
     // God is the base the whole tree stands on, so he is the largest thing
     // down here and the only gold one.
     const isGod = n.id === GOD_ID;
-    const size = G.nodeSize * (isGod ? 2.4 : n.kids.length ? 1.05 : 0.75);
+    let size = G.nodeSize * (isGod ? 2.4 : n.kids.length ? 1.05 : 0.75);
+    const isPinned = pinnedNode && n.id === pinnedNode.id;
+    // A slow pulse on radius and glow, so it is obvious which of 852 dots the
+    // card belongs to. 0.22 is the swing either side of the resting size.
+    if (isPinned) size *= 1 + pulsePhase * 0.22;
     if (on && !dimming && G.glow > 0) {
       ctx.shadowColor = col.lit;
-      ctx.shadowBlur = 9 * G.glow;
+      ctx.shadowBlur = (isPinned ? 9 + pulsePhase * 10 : 9) * G.glow;
+    } else if (isPinned) {
+      ctx.shadowColor = col.lit;
+      ctx.shadowBlur = pulsePhase * 10 * G.glow;
     }
     ctx.beginPath();
     ctx.arc(n.x, n.y, size, 0, Math.PI * 2);
@@ -1292,7 +1398,7 @@ function drawTrunk(dimming) {
 }
 
 function drawBough(tribe, list, lit, dimming) {
-  const st = STONES[tribe] || { c: LINEN, lit: '#fff' };
+  const st = STONES[tribe] || { c: LINEN, lit: '#8f8674' };
   const col = lit ? st.lit : st.c;
   ctx.save();
   ctx.globalAlpha = dimming && !lit ? G.dimLevel : 1;
@@ -1324,11 +1430,18 @@ function drawBough(tribe, list, lit, dimming) {
     if (n.x == null) continue;
     const on = !tracedPath || tracedPath.has(n.id);
     ctx.globalAlpha = dimming && !lit ? G.dimLevel : (on ? 1 : G.dimLevel);
-    const size = G.nodeSize * (n.depth === 0 ? 2.1 : n.kids.length ? 1.15 : 0.8);
+    let size = G.nodeSize * (n.depth === 0 ? 2.1 : n.kids.length ? 1.15 : 0.8);
+    const isPinned = pinnedNode && n.id === pinnedNode.id;
+    // A slow pulse on radius and glow, so it is obvious which of 852 dots the
+    // card belongs to.
+    if (isPinned) size *= 1 + pulsePhase * 0.22;
 
     if (lit && on && G.glow > 0) {
       ctx.shadowColor = st.lit;
-      ctx.shadowBlur = 11 * G.glow;
+      ctx.shadowBlur = (isPinned ? 11 + pulsePhase * 12 : 11) * G.glow;
+    } else if (isPinned) {
+      ctx.shadowColor = st.lit;
+      ctx.shadowBlur = pulsePhase * 12 * G.glow;
     }
     ctx.beginPath();
     ctx.arc(n.x, n.y, size, 0, Math.PI * 2);
@@ -1432,22 +1545,6 @@ function pick(cx, cy) {
   return best;
 }
 
-/** Which bough is nearest this point, by angle from the trunk. */
-function pickBough(cx, cy) {
-  const p = toWorld(cx, cy);
-  const r = Math.hypot(p.x, p.y);
-  if (r < G.trunkLen * 0.6) return null;
-  const a = (Math.atan2(p.y, p.x) * 180) / Math.PI + 90;
-  let best = null, bestD = 999;
-  for (const tribe of byTribe.keys()) {
-    if (!T[tribe]) continue;
-    let d = Math.abs(((T[tribe].angle - a + 540) % 360) - 180);
-    d = 180 - d;
-    if (d < bestD) { bestD = d; best = tribe; }
-  }
-  return bestD < 26 ? best : null;
-}
-
 let drag = null;
 
 // Pinch-zoom. Two active pointers zoom about their midpoint; this is viewing,
@@ -1464,28 +1561,10 @@ cv.addEventListener('pointerdown', (e) => {
     return;
   }
 
-  const r = cv.getBoundingClientRect();
-  const cx = e.clientX - r.left, cy = e.clientY - r.top;
-  const bough = e.pointerType === 'touch' ? null : pickBough(cx, cy);
-  if (bough) {
-    drag = {
-      type: e.shiftKey ? 'spread' : 'angle',
-      tribe: bough,
-      startA: angleAt(cx, cy),
-      startVal: e.shiftKey ? T[bough].spread : T[bough].angle,
-    };
-    selectTribe(bough);
-  } else {
-    drag = { type: 'pan', x: e.clientX - view.x, y: e.clientY - view.y };
-  }
+  drag = { type: 'pan', x: e.clientX - view.x, y: e.clientY - view.y };
   cv.classList.add('dragging');
   cv.setPointerCapture(e.pointerId);
 });
-
-function angleAt(cx, cy) {
-  const p = toWorld(cx, cy);
-  return (Math.atan2(p.y, p.x) * 180) / Math.PI + 90;
-}
 
 cv.addEventListener('pointermove', (e) => {
   const r = cv.getBoundingClientRect();
@@ -1511,6 +1590,9 @@ cv.addEventListener('pointermove', (e) => {
   }
 
   if (!drag) {
+    // A pinned card is not hover's to overwrite — the next mouse twitch used
+    // to wipe whoever was actually clicked.
+    if (pinnedNode) return;
     const n = pick(cx, cy);
     if (n !== hoverNode) {
       hoverNode = n;
@@ -1519,22 +1601,9 @@ cv.addEventListener('pointermove', (e) => {
     return;
   }
 
-  if (drag.type === 'pan') {
-    view.x = e.clientX - drag.x;
-    view.y = e.clientY - drag.y;
-    draw();
-    return;
-  }
-
-  const delta = ((angleAt(cx, cy) - drag.startA + 540) % 360) - 180;
-  const t = T[drag.tribe];
-  if (drag.type === 'angle') {
-    t.angle = Math.round(drag.startVal + delta);
-  } else {
-    t.spread = Math.max(1, Math.min(360, Math.round(drag.startVal + delta)));
-  }
-  syncTribeRow(drag.tribe);
-  layout();
+  // Pan is the only pointerdown outcome now, so this is the only drag branch.
+  view.x = e.clientX - drag.x;
+  view.y = e.clientY - drag.y;
   draw();
 });
 
@@ -1563,9 +1632,15 @@ cv.addEventListener('click', (e) => {
   const n = pick(e.clientX - r.left, e.clientY - r.top);
   if (n) {
     traceFrom(n);
-  } else if (!pickBough(e.clientX - r.left, e.clientY - r.top)) {
+  } else {
+    // Empty canvas: the gesture that already cleared a trace now also
+    // clears the pin, stops the breathing loop, and drops the card.
     tracedPath = null;
+    pinnedNode = null;
+    hoverNode = null;
+    stopPulse();
     selectTribe(null);
+    showHover(null);
   }
   draw();
 });
@@ -1578,32 +1653,47 @@ cv.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 /**
- * Light this person's whole line, end to end.
+ * Walk this person's whole line, end to end, and return the records in
+ * order starting with `n` itself and ending at God (when the line reaches
+ * that far back).
  *
  * A canopy node climbs `father` to its son of Jacob and then carries on down
  * the roots to God. A root node does the same from wherever it sits. However
  * tangled the roots get at the new slider limits, one tap picks a single line
- * out of the snarl — which is what makes those limits usable.
+ * out of the snarl — which is what makes those limits usable. Shared by
+ * traceFrom (which only needs the Set of ids) and the ancestor list on the
+ * card (which needs the records themselves, in order).
  */
-function traceFrom(n) {
-  const path = new Set();
+function ancestorChain(n) {
+  const chain = [];
   const seen = new Set();
   let cur = n.id;
   while (cur && !seen.has(cur)) {
     seen.add(cur);
-    path.add(cur);
     const rec = nodes.get(cur) || rootById.get(cur);
     if (!rec) break;
+    chain.push(rec);
     // A son of Jacob's `father` already names Jacob, who is in the pre-Jacob
     // set, so the chain crosses the two halves with no special case. A wife
     // has no father here, so her line continues through her husband — tapping
     // Leah lights Jacob's descent to Adam rather than stopping on her alone.
     cur = rec.father || rec.spouseOf;
   }
+  return chain;
+}
+
+/**
+ * Light this person's whole line, end to end, and pin their card.
+ */
+function traceFrom(n) {
+  const chain = ancestorChain(n);
+  const path = new Set(chain.map((rec) => rec.id));
   tracedPath = path;
   // A root node has no tribe, so the bough selection is cleared rather than
   // set to undefined, which would dim the whole canopy against nothing.
   selectedTribe = n.tribe || null;
+  pinnedNode = n;
+  startPulse();
   syncTribeRows();
   syncRootRows();
   showHover(n, true);
@@ -1672,15 +1762,28 @@ function showHover(n, pinned) {
   const fromGod = generationOf(n.id);
   const jes = toJesus.get(n.id);
   const spans = [];
-  if (fromGod != null && fromGod > 0) spans.push(`${fromGod} from God`);
+  // "N from God" opens the ancestor list, God at the bottom — only when the
+  // card is pinned and clickable; a plain hover keeps the old bare count,
+  // since pointer-events stays off for hover and a toggle nothing can click
+  // would be a lie.
+  if (fromGod != null && fromGod > 0) {
+    spans.push(
+      pinned
+        ? `<span class="gens-toggle" id="gensToggle">${fromGod} from God</span>`
+        : `${fromGod} from God`
+    );
+  }
   if (jes != null && jes > 0) spans.push(`${jes} to Jesus`);
   const gens = spans.length
     ? `<div class="tr" style="color:#6b6153">${spans.join(' &middot; ')}</div>` : '';
+  const gensList = pinned && fromGod != null && fromGod > 0
+    ? `<div class="gens-list" id="gensList" style="display:none"></div>` : '';
 
   // A placeholder only — nothing is wired. The lab is a standalone static page
   // with no route to an article, and it stays one.
   const bio = pinned ? `<div class="bio">Full bio would appear here</div>` : '';
 
+  el.classList.toggle('pinned', !!pinned);
   el.innerHTML =
     `<div class="nm">${n.label}</div>` +
     (n.meaning ? `<div class="mn">${n.meaning}</div>` : '') +
@@ -1688,8 +1791,50 @@ function showHover(n, pinned) {
     lived +
     (n.verseCount ? `<div class="tr" style="color:#6b6153">${n.verseCount} verse${n.verseCount === 1 ? '' : 's'}</div>` : '') +
     gens +
+    gensList +
     bio;
+
+  const toggle = document.getElementById('gensToggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const list = document.getElementById('gensList');
+      const open = list.style.display !== 'none';
+      if (open) {
+        list.style.display = 'none';
+        toggle.classList.remove('open');
+        return;
+      }
+      // Built lazily, on first open, from the same walk traceFrom already
+      // did. ancestorChain walks n -> father -> ... -> God, so dropping n
+      // itself (the card above already says who they are) and keeping the
+      // rest in that order puts God last: God at the bottom, as asked.
+      if (!list.childElementCount) {
+        const chain = ancestorChain(n).slice(1);
+        list.innerHTML = chain
+          .map((rec) => {
+            const isGod = rec.id === GOD_ID;
+            return `<a data-id="${rec.id}">${isGod ? '<b>' + rec.label + '</b>' : rec.label}</a>`;
+          })
+          .join('');
+      }
+      list.style.display = 'block';
+      toggle.classList.add('open');
+    });
+  }
 }
+
+// Delegated: the list is rebuilt on every showHover, so one listener on the
+// card handles whichever ancestor list is currently open. Clicking a name
+// re-traces from that ancestor — new card, new lit line, view pans to them.
+document.getElementById('hover').addEventListener('click', (e) => {
+  const a = e.target.closest('.gens-list a');
+  if (!a) return;
+  const rec = nodes.get(a.dataset.id) || rootById.get(a.dataset.id);
+  if (!rec) return;
+  traceFrom(rec);
+  panToNode(rec);
+  draw();
+});
 
 // ── Panel ──────────────────────────────────────────────────────────────────
 
