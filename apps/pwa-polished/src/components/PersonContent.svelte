@@ -84,7 +84,7 @@
   /** When set, a tap on the tribe's stone calls this instead of opening the
    *  tree — the tree's bio sheet, already over the tree, lights the tribe in
    *  place rather than opening a second tree. */
-  export let onOpenTribe: ((tribe: string) => void) | null = null;
+  export let onOpenTribe: ((tribe: string, personId: string) => void) | null = null;
 
   $: docked = !!windowId;
 
@@ -280,12 +280,12 @@
     familyTreeStore.open({ focusId: person.id, onLeave: docked ? null : onClose });
   }
 
-  /** A tap on the tribe's stone: the tree, lit on this tribe up to God, with
-   *  the tribe's card over it. */
+  /** A tap on the tribe's stone: the tree, lit on this tribe up to God and
+   *  framed on this person's line, with the tribe's card over it. */
   function openTribe() {
-    if (!tribe) return;
-    if (onOpenTribe) return onOpenTribe(tribe);
-    familyTreeStore.open({ tribe, onLeave: docked ? null : onClose });
+    if (!tribe || !person) return;
+    if (onOpenTribe) return onOpenTribe(tribe, person.id);
+    familyTreeStore.open({ tribe, focusId: person.id, onLeave: docked ? null : onClose });
   }
 
   /** Step back to someone you came through. */
@@ -616,7 +616,7 @@
              list of children isn't squeezed for the stone's whole height. -->
         <div class="char-top" class:has-gem={!!tribe}>
           {#if tribe}
-            <div class="tribe-gem"><Gem {tribe} size={64} stage={false} onTap={openTribe} /></div>
+            <div class="tribe-gem"><Gem {tribe} size={96} stage={false} onTap={openTribe} /></div>
           {/if}
           {#if person.nameMeaning}
             <p class="char-meaning">“{person.nameMeaning}”</p>
@@ -957,8 +957,8 @@
   }
   .char-top.has-gem {
     position: relative;
-    min-height: 70px;
-    padding-right: 74px;
+    min-height: 102px;
+    padding-right: 106px;
   }
   .tribe-gem {
     position: absolute;

@@ -17,7 +17,7 @@ export interface FamilyTreeState {
   /** Whose line to trace and pin on open; null opens the whole tree. */
   focusId: string | null;
   /** Open lit on one tribe (a tap on a bio's breastplate stone), with that
-   *  tribe's card over it. Wins over focusId when both are set. */
+   *  tribe's card over it. focusId then names whose line from God to frame. */
   tribe: string | null;
   /** The People card's own close, called when the user leaves for a verse
    *  from inside the bio sheet (Phase 2) so that card closes too. */

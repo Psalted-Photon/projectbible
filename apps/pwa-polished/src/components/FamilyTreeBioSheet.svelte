@@ -33,7 +33,7 @@
   /** Set to show a tribe's card instead of a bio — a tap on a bio's stone. */
   export let tribe: string | null = null;
   /** A tap on the stone inside the bio shown here. */
-  export let onOpenTribe: (tribe: string) => void;
+  export let onOpenTribe: (tribe: string, personId: string) => void;
 
   const REDUCED_MOTION = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -58,7 +58,7 @@
   }
 </script>
 
-<div class="sheet-root" class:reduced={REDUCED_MOTION}>
+<div class="sheet-root" class:reduced={REDUCED_MOTION} class:tribe={!!tribe}>
   <div class="sheet-head">
     <div class="handle" aria-hidden="true"></div>
     <div class="sheet-head-row">
@@ -190,6 +190,40 @@
       animation: none;
     }
   }
+  /* The tribe card splits the screen with the tree, which is lit and framed
+     on a whole line for it: the bottom 45% in portrait, the right 45% in
+     landscape (capped, so a desktop keeps most of its width for the tree).
+     FamilyTreeViewer's tribeRegion() mirrors these numbers, so change them
+     together. Written after the 760px block so it wins at any width. */
+  @media (orientation: portrait) {
+    .sheet-root.tribe {
+      left: 0;
+      right: 0;
+      top: auto;
+      bottom: 0;
+      width: auto;
+      height: 45%;
+      border-radius: 14px 14px 0 0;
+      animation: slide-up 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+  }
+  @media (orientation: landscape) {
+    .sheet-root.tribe {
+      left: auto;
+      right: calc(env(safe-area-inset-right, 0px) + 12px);
+      top: calc(env(safe-area-inset-top, 0px) + 58px);
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+      width: min(45%, 520px);
+      height: auto;
+      border-radius: 10px;
+      border-top: 1px solid var(--border-color, #333);
+      animation: slide-in-right 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+  }
+  .sheet-root.tribe.reduced {
+    animation: none;
+  }
+
   @keyframes slide-in-right {
     from {
       transform: translateX(24px);

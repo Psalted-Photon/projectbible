@@ -57,8 +57,11 @@
   let selectedTribe: string | null = null;
   let pinned: TreeRec | null = null;
   let hovered: TreeRec | null = null;
-  /** The tribe lit whole, from a bio's stone — not a person's line. */
+  /** The tribe lit whole, from a bio's stone. */
   let tribeLit: string | null = null;
+  /** Whose line the tribe view frames: the person whose stone was tapped,
+   *  or the tribe's founding son when they aren't on the tree. */
+  let tribeFocus: TreeRec | null = null;
 
   /** True whenever `view` is still exactly what fitView last returned — i.e.
    *  nobody has panned, zoomed or glided anywhere since. Resize uses this to
@@ -172,29 +175,81 @@
     selectedTribe = n.tribe || null;
     pinned = n;
     tribeLit = null;
+    tribeFocus = null;
     redraw();
   }
 
   /**
-   * Light one tribe whole — every member, plus the line from its founding son
-   * down through Jacob to God — and dim the rest. It goes through tracedPath,
-   * the same set a traced person uses, so the boughs, roots and trunk all
-   * already know how to draw it. Nobody is pinned: it's a tribe, not a person.
+   * Light one tribe whole — every member, plus the line from `focus` (the
+   * person whose stone was tapped) down through Jacob to God — and dim the
+   * rest. It goes through tracedPath, the same set a traced person uses, so
+   * the boughs, roots and trunk all already know how to draw it. The focus is
+   * pinned so its pulse says who you came from; with none on the tree, the
+   * tribe's founding son stands in for the line and nobody pulses.
    */
-  function lightTribe(tribe: string): boolean {
+  function lightTribe(tribe: string, focus: TreeRec | null = null): boolean {
     if (!model) return false;
     const list = model.byTribe.get(tribe);
     if (!list?.length) return false;
     // byTribe is sorted by depth, so the son of Jacob who heads it is first.
-    const chain = ancestorChain(model, list[0]);
+    const line = focus && isPlaced(focus) ? focus : list[0];
+    const chain = ancestorChain(model, line);
     tracedPath = new Set([...chain.map((r) => r.id), ...list.map((r) => r.id)]);
     selectedTribe = tribe;
-    pinned = null;
+    pinned = line === focus ? focus : null;
     hovered = null;
     tribeLit = tribe;
-    stopPulseIfIdle();
+    tribeFocus = line;
+    if (pinned) startPulse();
+    else stopPulseIfIdle();
     redraw();
     return true;
+  }
+
+  type Region = { x: number; y: number; w: number; h: number };
+
+  /**
+   * The part of the screen the tree is still seen in with the tribe card up.
+   * Mirrors the `.tribe` rules in FamilyTreeBioSheet: the top 55% in
+   * portrait, everything left of the panel in landscape. The strip under the
+   * top buttons is left out either way, so a framed line never hides there.
+   */
+  function tribeRegion(): Region {
+    const top = 56;
+    if (W > H) {
+      const panel = Math.min(W * 0.45, 520) + 24;
+      return { x: 0, y: top, w: W - panel, h: H - top };
+    }
+    return { x: 0, y: top, w: W, h: H * 0.55 - top };
+  }
+
+  /**
+   * Zoom and pan so someone's whole line, God to them, fills the part of the
+   * screen the tribe card leaves free. Never closer than a focused person
+   * would be, so a short line doesn't fill the screen with three dots.
+   */
+  function glideToLine(n: TreeRec | null) {
+    if (!model || !n) return;
+    const pts = ancestorChain(model, n).filter(isPlaced);
+    if (!pts.length) return;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of pts) {
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    const r = tribeRegion();
+    // Room for the dots' glow and the names drawn beside them.
+    const PAD = 28;
+    const fit = Math.min((r.w - 2 * PAD) / Math.max(1, maxX - minX), (r.h - 2 * PAD) / Math.max(1, maxY - minY));
+    // fittedK, not minZoom: on open this runs in the same tick fittedK is
+    // set, before the reactive minZoom has caught up with it.
+    const k = Math.max(fittedK * MIN_ZOOM_OF_FIT, Math.min(FOCUS_ZOOM, MAX_ZOOM, fit));
+    glideTo({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, k, { x: r.x + r.w / 2, y: r.y + r.h / 2 });
   }
 
   function clearSelection() {
@@ -538,10 +593,11 @@
   /** A tap on the stone in the bio the sheet is showing: the tree lights that
    *  tribe behind the sheet, and the sheet turns to the tribe's card in place
    *  (no second history entry — Back still just drops the sheet). */
-  function handleOpenTribeFromSheet(tribe: string) {
-    if (!lightTribe(tribe)) return;
+  function handleOpenTribeFromSheet(tribe: string, personId: string) {
+    const rec = model?.nodes.get(personId) ?? model?.rootById.get(personId) ?? null;
+    if (!lightTribe(tribe, rec)) return;
     openTribeCard(tribe);
-    glideToWhole();
+    glideToLine(tribeFocus);
   }
 
   /** onOpenPerson: walking a relative from inside the bio. Switches the
@@ -639,7 +695,8 @@
       const focusId = $familyTreeStore.focusId;
       const target = focusId ? (model.nodes.get(focusId) ?? model.rootById.get(focusId)) : null;
       const tribe = $familyTreeStore.tribe;
-      if (tribe && lightTribe(tribe)) {
+      if (tribe && lightTribe(tribe, target)) {
+        glideToLine(tribeFocus);
         // A beat to see the tribe light up before its card slides over it.
         setTimeout(
           () => {
@@ -936,7 +993,14 @@
     {#if !sheetOpen}
       {#if tribeLit}
         <!-- The way back to the tribe's card once it has been put away. -->
-        <button class="tree-btn tribe-chip" on:click={() => tribeLit && openTribeCard(tribeLit)}>
+        <button
+          class="tree-btn tribe-chip"
+          on:click={() => {
+            if (!tribeLit) return;
+            openTribeCard(tribeLit);
+            glideToLine(tribeFocus);
+          }}
+        >
           About the tribe of {tribeLit}
         </button>
       {:else if pinned}

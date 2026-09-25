@@ -164,7 +164,7 @@
 <div class="tribe-content">
   {#if stone}
     <div class="stone">
-      <Gem {tribe} size={112} stage={false} />
+      <Gem {tribe} size={144} stage={false} />
       <div class="stone-text">
         <div class="stone-name">
           <span class="stone-kjv" style="color:{stoneColour}">{stone.kjv}</span>
