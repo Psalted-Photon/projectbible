@@ -57,6 +57,8 @@
   let selectedTribe: string | null = null;
   let pinned: TreeRec | null = null;
   let hovered: TreeRec | null = null;
+  /** The tribe lit whole, from a bio's stone — not a person's line. */
+  let tribeLit: string | null = null;
 
   /** True whenever `view` is still exactly what fitView last returned — i.e.
    *  nobody has panned, zoomed or glided anywhere since. Resize uses this to
@@ -169,7 +171,30 @@
     tracedPath = new Set(chain.map((r) => r.id));
     selectedTribe = n.tribe || null;
     pinned = n;
+    tribeLit = null;
     redraw();
+  }
+
+  /**
+   * Light one tribe whole — every member, plus the line from its founding son
+   * down through Jacob to God — and dim the rest. It goes through tracedPath,
+   * the same set a traced person uses, so the boughs, roots and trunk all
+   * already know how to draw it. Nobody is pinned: it's a tribe, not a person.
+   */
+  function lightTribe(tribe: string): boolean {
+    if (!model) return false;
+    const list = model.byTribe.get(tribe);
+    if (!list?.length) return false;
+    // byTribe is sorted by depth, so the son of Jacob who heads it is first.
+    const chain = ancestorChain(model, list[0]);
+    tracedPath = new Set([...chain.map((r) => r.id), ...list.map((r) => r.id)]);
+    selectedTribe = tribe;
+    pinned = null;
+    hovered = null;
+    tribeLit = tribe;
+    stopPulseIfIdle();
+    redraw();
+    return true;
   }
 
   function clearSelection() {
@@ -177,6 +202,7 @@
     selectedTribe = null;
     pinned = null;
     hovered = null;
+    tribeLit = null;
     redraw();
   }
 
@@ -450,6 +476,8 @@
   /** The tree's own label for whoever the sheet is showing, so its header
    *  has a name before PersonContent's own load resolves. */
   let sheetFallbackLabel = '';
+  /** Set while the sheet shows a tribe's card rather than a bio. */
+  let sheetTribe: string | null = null;
 
   function labelFor(id: string): string {
     return model?.nodes.get(id)?.label ?? model?.rootById.get(id)?.label ?? '';
@@ -459,6 +487,7 @@
    *  as opposed to a relative walked to from inside the bio, which uses
    *  switchSheetNoRemount instead. */
   function switchSheetFresh(id: string) {
+    sheetTribe = null;
     sheetPersonId = id;
     sheetFallbackLabel = labelFor(id);
     sheetInstanceKey++;
@@ -481,6 +510,14 @@
   function openReadBio() {
     if (!pinned) return;
     switchSheetFresh(pinned.id);
+    openSheet();
+    if (isPlaced(pinned)) glideTo({ x: pinned.x, y: pinned.y }, view.k, glideAnchor());
+  }
+
+  /** Raise the sheet with its own history entry — or, already up, leave it
+   *  be and let the caller change what it shows. */
+  function openSheet() {
+    if (sheetOpen) return;
     sheetOpen = true;
     sheetMark = Date.now() + Math.random();
     try {
@@ -489,7 +526,22 @@
     } catch {
       sheetPushed = false;
     }
-    if (isPlaced(pinned)) glideTo({ x: pinned.x, y: pinned.y }, view.k, glideAnchor());
+  }
+
+  /** The tribe's card, in the sheet. */
+  function openTribeCard(tribe: string) {
+    sheetTribe = tribe;
+    sheetInstanceKey++;
+    openSheet();
+  }
+
+  /** A tap on the stone in the bio the sheet is showing: the tree lights that
+   *  tribe behind the sheet, and the sheet turns to the tribe's card in place
+   *  (no second history entry — Back still just drops the sheet). */
+  function handleOpenTribeFromSheet(tribe: string) {
+    if (!lightTribe(tribe)) return;
+    openTribeCard(tribe);
+    glideToWhole();
   }
 
   /** onOpenPerson: walking a relative from inside the bio. Switches the
@@ -586,7 +638,16 @@
 
       const focusId = $familyTreeStore.focusId;
       const target = focusId ? (model.nodes.get(focusId) ?? model.rootById.get(focusId)) : null;
-      if (target && isPlaced(target)) {
+      const tribe = $familyTreeStore.tribe;
+      if (tribe && lightTribe(tribe)) {
+        // A beat to see the tribe light up before its card slides over it.
+        setTimeout(
+          () => {
+            if (!destroyed && tribeLit === tribe && !sheetOpen) openTribeCard(tribe);
+          },
+          REDUCED_MOTION ? 0 : 650,
+        );
+      } else if (target && isPlaced(target)) {
         traceFrom(target);
         startPulse();
         // So the user sees where the whole tree is before zooming to them —
@@ -873,7 +934,12 @@
          pinned in the sheet's own header, a second card naming them is
          redundant, and covering part of the tree it belongs to. -->
     {#if !sheetOpen}
-      {#if pinned}
+      {#if tribeLit}
+        <!-- The way back to the tribe's card once it has been put away. -->
+        <button class="tree-btn tribe-chip" on:click={() => tribeLit && openTribeCard(tribeLit)}>
+          About the tribe of {tribeLit}
+        </button>
+      {:else if pinned}
         <FamilyTreeCard
           {model}
           person={pinned}
@@ -897,9 +963,11 @@
     </div>
     <div class="attrib">{model.attribution}</div>
 
-    {#if sheetOpen && sheetPersonId}
+    {#if sheetOpen && (sheetPersonId || sheetTribe)}
       <FamilyTreeBioSheet
         personId={sheetPersonId}
+        tribe={sheetTribe}
+        onOpenTribe={handleOpenTribeFromSheet}
         instanceKey={sheetInstanceKey}
         fallbackLabel={sheetFallbackLabel}
         onOpenPerson={handleOpenPerson}
@@ -969,6 +1037,13 @@
     border-color: #6b5d3a;
     color: #e8dcc8;
     background: rgba(44, 40, 32, 0.85);
+  }
+
+  .tribe-chip {
+    position: absolute;
+    /* Where the person card sits, below ✕ Close. */
+    top: calc(env(safe-area-inset-top, 0px) + 58px);
+    right: calc(env(safe-area-inset-right, 0px) + 12px);
   }
 
   .close-btn {

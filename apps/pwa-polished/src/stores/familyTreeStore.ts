@@ -16,20 +16,23 @@ export interface FamilyTreeState {
   isOpen: boolean;
   /** Whose line to trace and pin on open; null opens the whole tree. */
   focusId: string | null;
+  /** Open lit on one tribe (a tap on a bio's breastplate stone), with that
+   *  tribe's card over it. Wins over focusId when both are set. */
+  tribe: string | null;
   /** The People card's own close, called when the user leaves for a verse
    *  from inside the bio sheet (Phase 2) so that card closes too. */
   onLeave: (() => void) | null;
 }
 
-const EMPTY: FamilyTreeState = { isOpen: false, focusId: null, onLeave: null };
+const EMPTY: FamilyTreeState = { isOpen: false, focusId: null, tribe: null, onLeave: null };
 
 function createFamilyTreeStore() {
   const { subscribe, set } = writable<FamilyTreeState>({ ...EMPTY });
 
   return {
     subscribe,
-    open: (opts: { focusId?: string | null; onLeave?: (() => void) | null } = {}) => {
-      set({ isOpen: true, focusId: opts.focusId ?? null, onLeave: opts.onLeave ?? null });
+    open: (opts: { focusId?: string | null; tribe?: string | null; onLeave?: (() => void) | null } = {}) => {
+      set({ isOpen: true, focusId: opts.focusId ?? null, tribe: opts.tribe ?? null, onLeave: opts.onLeave ?? null });
     },
     close: () => set({ ...EMPTY }),
   };

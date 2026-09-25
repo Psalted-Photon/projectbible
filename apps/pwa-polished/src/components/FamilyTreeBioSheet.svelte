@@ -13,6 +13,7 @@
    * makes, not something this component can infer from the id alone.
    */
   import PersonContent from './PersonContent.svelte';
+  import TribeContent from './TribeContent.svelte';
   import type { PersonRecord } from '../adapters/lexicon-lookup.js';
 
   /** The person to show, and a counter the viewer bumps to force a fresh
@@ -29,6 +30,10 @@
   /** The verse exit — tapping a verse inside the bio. */
   export let onClose: () => void;
   export let onBackToTree: () => void;
+  /** Set to show a tribe's card instead of a bio — a tap on a bio's stone. */
+  export let tribe: string | null = null;
+  /** A tap on the stone inside the bio shown here. */
+  export let onOpenTribe: (tribe: string) => void;
 
   const REDUCED_MOTION = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -57,12 +62,16 @@
   <div class="sheet-head">
     <div class="handle" aria-hidden="true"></div>
     <div class="sheet-head-row">
-      <span class="sheet-name">{personLabel}</span>
+      <span class="sheet-name">{tribe ? `Tribe of ${tribe}` : personLabel}</span>
       <button class="back-btn" on:click={onBackToTree}>✕ Back to tree</button>
     </div>
   </div>
   <div class="sheet-body">
-    {#if personId}
+    {#if tribe}
+      {#key instanceKey}
+        <TribeContent {tribe} {onClose} />
+      {/key}
+    {:else if personId}
       {#key instanceKey}
         <PersonContent
           {personId}
@@ -70,6 +79,7 @@
           showTurns={false}
           {onOpenPerson}
           {onShowOnTree}
+          {onOpenTribe}
           {onClose}
           onPersonChange={handlePersonChange}
         />

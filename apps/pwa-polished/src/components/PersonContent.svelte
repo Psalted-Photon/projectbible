@@ -81,6 +81,10 @@
   /** Hides the footer's previous/next arrows when false. An alphabetical
    *  neighbour means nothing when the card is sitting over a family tree. */
   export let showTurns = true;
+  /** When set, a tap on the tribe's stone calls this instead of opening the
+   *  tree — the tree's bio sheet, already over the tree, lights the tribe in
+   *  place rather than opening a second tree. */
+  export let onOpenTribe: ((tribe: string) => void) | null = null;
 
   $: docked = !!windowId;
 
@@ -276,12 +280,12 @@
     familyTreeStore.open({ focusId: person.id, onLeave: docked ? null : onClose });
   }
 
-  /** A tap on the tribe's stone. For now it opens the tree on this person
-   *  (or the whole tree, for someone the tree doesn't carry); the tree's own
-   *  tribe view (roadmap: gems plan, phase 4) will take this over. */
+  /** A tap on the tribe's stone: the tree, lit on this tribe up to God, with
+   *  the tribe's card over it. */
   function openTribe() {
-    if (person && $familyTreeIds.has(person.id)) return showOnTree();
-    familyTreeStore.open({ focusId: null, onLeave: docked ? null : onClose });
+    if (!tribe) return;
+    if (onOpenTribe) return onOpenTribe(tribe);
+    familyTreeStore.open({ tribe, onLeave: docked ? null : onClose });
   }
 
   /** Step back to someone you came through. */
