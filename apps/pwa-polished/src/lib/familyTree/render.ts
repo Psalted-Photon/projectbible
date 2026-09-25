@@ -11,7 +11,7 @@
  * user asked to keep as a toggle.
  */
 
-import { isPlaced, type Placed, type TreeModel, type TreeRec } from './layout';
+import { isPlaced, treeLabel, type Placed, type TreeModel, type TreeRec } from './layout';
 import {
   GOD_ID,
   GOLD,
@@ -283,7 +283,7 @@ function drawRoots(s: RenderState, dimming: boolean): void {
     const lc = ROOT_COLOURS[n.branch || 'Trunk'] || ROOT_COLOURS.Trunk;
     ctx.fillStyle = isGod ? GOLD : on ? lc.lit : lc.c;
     ctx.font = isGod ? '600 16px Milonga, serif' : '10.5px Milonga, serif';
-    ctx.fillText(n.label, n.x, n.y + (isGod ? 26 : 13));
+    ctx.fillText(treeLabel(n.label), n.x, n.y + (isGod ? 26 : 13));
   }
   ctx.restore();
 }
@@ -453,7 +453,7 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
       const base = dimming && !lit ? TREE.dimLevel : on ? 0.82 : TREE.dimLevel;
       ctx.globalAlpha = base * fade;
       ctx.fillStyle = lit ? st.lit : st.c;
-      ctx.fillText(n.label, n.x, n.y + 13);
+      ctx.fillText(treeLabel(n.label), n.x, n.y + 13);
     }
   }
   ctx.restore();

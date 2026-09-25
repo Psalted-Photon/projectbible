@@ -77,17 +77,20 @@ export const ROOT_COLOURS: Record<string, { c: string; lit: string }> = {
 
 // ── Geometry: the twelve boughs ─────────────────────────────────────────
 // Judah (278) and Levi (188) are 70% of everyone traced and sit next to each
-// other in birth order — the pair the user spent the most dial time on.
+// other in birth order — the pair the user spent the most dial time on. Their
+// reach was lengthened past the lab's values (Judah 6.33 → 8, Levi 4.78 → 7)
+// to give the spread pass in layout.ts room to pull their crowded tips apart.
 
 export const BOUGHS: Record<string, BranchSpec> = {
-  Levi: { angle: -72, spread: 46, reach: 4.78, lean: -4 },
+  Levi: { angle: -72, spread: 46, reach: 7, lean: -4 },
   Benjamin: { angle: 125, spread: 42, reach: 8.0, lean: 10 },
   Joseph: { angle: 101, spread: 21, reach: 8.0, lean: -10 },
-  Judah: { angle: -17, spread: 73, reach: 6.33, lean: -2 },
+  Judah: { angle: -17, spread: 73, reach: 8, lean: -2 },
   Reuben: { angle: -127, spread: 41, reach: 8.0, lean: -37 },
   Asher: { angle: 62, spread: 24, reach: 8.0, lean: -10 },
   Gad: { angle: 45, spread: 26, reach: 8.0, lean: 28 },
-  Dan: { angle: 21, spread: 1, reach: 8.0, lean: 33 },
+  // 19, not the lab's 21: clears Hushim off Guni, Naphtali's name beside him.
+  Dan: { angle: 19, spread: 1, reach: 8.0, lean: 33 },
   Dinah: { angle: 98, spread: 1, reach: 2.92, lean: -147 },
   Zebulun: { angle: 89, spread: 7, reach: 8.0, lean: -31 },
   Naphtali: { angle: 29, spread: 12, reach: 8.0, lean: 5 },
@@ -181,3 +184,26 @@ export const FOCUS_ZOOM = 1.2;
 // tribe and root level.
 export const LABEL_MIN_PX = 6;
 export const LABEL_FULL_PX = 8;
+
+// ── Label boxes, for the spread pass ──────────────────────────────────────
+// layout.ts nudges apart the names that would print on top of each other, so
+// it needs to know how big a name is without a canvas to measure it on. These
+// approximate the 10.5px Milonga bough label in tree units — the label is
+// drawn at a fixed size in the tree's own coordinates, so zooming never
+// separates two names that overlap here.
+
+/** Rough width of one character of the bough label. */
+export const LABEL_CHAR_W = 5.4;
+/** The label box's height. A label is centred at y+13, so its box runs from
+ *  roughly y+3 to y+16. */
+export const LABEL_H = 13;
+/** Breathing room added to a label box across and down. */
+export const LABEL_PAD_X = 6;
+export const LABEL_PAD_Y = 3;
+/** The fraction of the drift limit a child may actually use (see
+ *  spreadOffenders). Tuned in simulation: 0.7 and above crossed lines, 0.5
+ *  did not. */
+export const SPREAD_DRIFT = 0.5;
+/** The in/out step for names the spread could not clear: ±half of this, in
+ *  tree units, along the person's own line. */
+export const STAGGER_PX = 30;

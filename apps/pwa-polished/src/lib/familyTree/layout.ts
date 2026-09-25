@@ -18,7 +18,19 @@
  */
 
 import type { FamilyTreeCrownLink, FamilyTreeData, FamilyTreeNode, FamilyTreeRoot } from './data';
-import { BOUGHS, OFFSHOOT_ANGLES, ROOTS, TREE, type BranchSpec } from './config';
+import {
+  BOUGHS,
+  LABEL_CHAR_W,
+  LABEL_H,
+  LABEL_PAD_X,
+  LABEL_PAD_Y,
+  OFFSHOOT_ANGLES,
+  ROOTS,
+  SPREAD_DRIFT,
+  STAGGER_PX,
+  TREE,
+  type BranchSpec,
+} from './config';
 
 /**
  * One person, canopy or root, once placed.
@@ -45,6 +57,20 @@ export interface TreeRec extends Partial<FamilyTreeNode>, Partial<FamilyTreeRoot
   d?: number;
   /** Set on a wife placed beside her husband, rather than under a father. */
   partnerId?: string;
+  /** A small step in or out along this person's own line, in tree units, set
+   *  by the spread pass on a name it could not clear sideways. */
+  stagger?: number;
+}
+
+/**
+ * The name as drawn on the canvas: the full label less any trailing
+ * parenthetical, so "Eliab (son of Helon)" prints as "Eliab". The line to his
+ * father already says whose son he is. The tap card, bio and search keep the
+ * full `label` — this is only for the tree itself, where every character is
+ * width a neighbour's name has to clear.
+ */
+export function treeLabel(label: string): string {
+  return label.replace(/\s*\([^)]*\)\s*$/, '') || label;
 }
 
 /** A TreeRec once it actually has a position. Narrowing `x`/`y` from
@@ -166,29 +192,23 @@ interface PlaceOpts {
 }
 
 /**
- * Place a subtree, recursively, giving each child a slice of the parent's
- * angular span in proportion to the leaves it carries.
+ * Put one person at `angle`, `depth` generations out from the fork — the x/y
+ * maths `place()` has always done, pulled out so the spread pass can move a
+ * person and land him exactly where `place()` would have put him at that
+ * angle.
  */
-function place(
-  id: string,
-  angle: number,
-  span: number,
-  depth: number,
-  opts: PlaceOpts,
-  leaves: Map<string, number>,
-): void {
-  const n = opts.from.get(id);
-  if (!n) return;
+function position(n: TreeRec, angle: number, depth: number, opts: PlaceOpts): void {
   const t = opts.dials;
   const rad = (d: number) => (d * Math.PI) / 180;
-  const jit = (hash(id) - 0.5) * TREE.jitter * (opts.jitScale || 1);
+  const jit = (hash(n.id) - 0.5) * TREE.jitter * (opts.jitScale || 1);
   const ox = opts.ox || 0;
   const oy = opts.oy || 0;
 
   // Distance from the FORK, not from the world origin. Non-linear: early
   // generations spread, deep chains compress, so a 51-generation line reads
-  // as one long bough instead of 51 rings.
-  const d = opts.base + Math.pow(depth + 1, TREE.curve) * opts.gap * t.reach + jit * opts.gap * 0.5;
+  // as one long bough instead of 51 rings. `stagger` is the spread pass's
+  // in/out step, zero for everyone it did not have to move.
+  const d = opts.base + Math.pow(depth + 1, TREE.curve) * opts.gap * t.reach + jit * opts.gap * 0.5 + (n.stagger || 0);
 
   // Lean bends the branch away from straight as it runs, accumulating from
   // the fork because `depth` is depth within this bough.
@@ -203,6 +223,23 @@ function place(
   // and rounding the twelve for no reason is not worth the tidiness.
   n.r = ox === 0 && oy === 0 ? d : Math.hypot(n.x, n.y);
   n.d = d;
+}
+
+/**
+ * Place a subtree, recursively, giving each child a slice of the parent's
+ * angular span in proportion to the leaves it carries.
+ */
+function place(
+  id: string,
+  angle: number,
+  span: number,
+  depth: number,
+  opts: PlaceOpts,
+  leaves: Map<string, number>,
+): void {
+  const n = opts.from.get(id);
+  if (!n) return;
+  position(n, angle, depth, opts);
 
   // A child that belongs to a different named branch is placed by that
   // branch's own pass — Ishmael hangs off Abraham but is aimed by the
@@ -242,6 +279,278 @@ function place(
   }
 }
 
+/** The PlaceOpts every canopy bough is placed with: forked at Jacob. */
+function canopyOpts(nodes: Map<string, TreeRec>, dials: BranchSpec): PlaceOpts {
+  return { from: nodes, dials, ox: 0, oy: 0, base: TREE.trunkLen, gap: TREE.ringGap };
+}
+
+type Pt = { x: number; y: number };
+
+/** One parent→child line as render.ts draws it — a quadratic curve bowed by
+ *  (−dy, dx) × 0.08 — flattened into 6 straight pieces, with its bounding box
+ *  so most pairs can be ruled out without testing a single piece. */
+interface Curve {
+  a: string;
+  b: string;
+  pts: Pt[];
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+/** Stands in for Jacob as the far end of a son of Jacob's line. Jacob is a
+ *  root record, not a canopy one, so no canopy id can collide with this. */
+const JACOB_END = '#jacob';
+
+function curveOf(a: string, b: string, from: Pt, to: Pt): Curve {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const cx = (from.x + to.x) / 2 - dy * 0.08;
+  const cy = (from.y + to.y) / 2 + dx * 0.08;
+  const pts: Pt[] = [];
+  for (let i = 0; i <= 6; i++) {
+    const t = i / 6;
+    const u = 1 - t;
+    pts.push({ x: u * u * from.x + 2 * u * t * cx + t * t * to.x, y: u * u * from.y + 2 * u * t * cy + t * t * to.y });
+  }
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  return { a, b, pts, minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+}
+
+/** Every canopy line — each person to his father, each son of Jacob to 0,0 —
+ *  or only the lines ending on the people in `only`. */
+function canopyCurves(nodes: Map<string, TreeRec>, only?: Set<string>): Curve[] {
+  const out: Curve[] = [];
+  for (const n of nodes.values()) {
+    if (only && !only.has(n.id)) continue;
+    if (!isPlaced(n)) continue;
+    const f = n.father ? nodes.get(n.father) : undefined;
+    if (f && isPlaced(f)) out.push(curveOf(f.id, n.id, f, n));
+    else if (!f) out.push(curveOf(JACOB_END, n.id, { x: 0, y: 0 }, n));
+  }
+  return out;
+}
+
+function segmentsCross(p1: Pt, p2: Pt, p3: Pt, p4: Pt): boolean {
+  const d1x = p2.x - p1.x;
+  const d1y = p2.y - p1.y;
+  const d2x = p4.x - p3.x;
+  const d2y = p4.y - p3.y;
+  const den = d1x * d2y - d1y * d2x;
+  if (Math.abs(den) < 1e-12) return false;
+  const t = ((p3.x - p1.x) * d2y - (p3.y - p1.y) * d2x) / den;
+  const u = ((p3.x - p1.x) * d1y - (p3.y - p1.y) * d1x) / den;
+  return t > 0 && t < 1 && u > 0 && u < 1;
+}
+
+/** Two lines that share a person meet at him by design, so they never count. */
+function curvesCross(c: Curve, e: Curve): boolean {
+  if (c.a === e.a || c.a === e.b || c.b === e.a || c.b === e.b) return false;
+  if (c.maxX < e.minX || e.maxX < c.minX || c.maxY < e.minY || e.maxY < c.minY) return false;
+  for (let i = 0; i < 6; i++) {
+    for (let j = 0; j < 6; j++) {
+      if (segmentsCross(c.pts[i], c.pts[i + 1], e.pts[j], e.pts[j + 1])) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Pull apart only the names that would print on top of each other.
+ *
+ * `place()` gives every child 92% of his share, so a deep line's fan narrows
+ * generation after generation — Joseph, Mary's husband, forty generations
+ * down, has 0.08° for five sons — and the fixed-size labels pile up. Opening
+ * a tribe's spread does not help: it widens the base far more than the tips.
+ * So this runs after the boughs are placed and touches only the rings where
+ * two neighbouring names actually collide; everyone else stays exactly where
+ * `place()` put them.
+ *
+ * Three rules keep the lines from crossing:
+ * - A ring's order is frozen at the angles `place()` gave it. Brothers may
+ *   move apart but never pass each other, and a line that never changes
+ *   places with its neighbour cannot cross it.
+ * - A child may drift only so far from his father's angle. Past acos(rIn/r)
+ *   the father→child line dips back inside the father's own ring and cuts
+ *   across whatever is there; SPREAD_DRIFT keeps to a safe fraction of that.
+ * - Nobody leaves the tribe's footprint — the span its members already
+ *   occupy — rather than its spread wedge. Judah's and Levi's wedges overlap
+ *   by about 4°, and letting Er use Judah's full wedge crossed Levi's line.
+ *
+ * A moved person carries his whole line with him; moving him alone left his
+ * sons' lines crossing his brothers'. Any name still overlapping afterwards
+ * steps in or out along its own line instead (STAGGER_PX). Last, the tribe's
+ * lines are checked against every canopy line, and if anything crosses, the
+ * whole tribe goes back as `place()` left it. The check waits for the whole
+ * tribe: halfway through the walk lines can briefly cross, and undoing on
+ * those threw away good work.
+ */
+function spreadOffenders(nodes: Map<string, TreeRec>, byTribe: Map<string, TreeRec[]>): void {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const deg = (r: number) => (r * 180) / Math.PI;
+  const labelLen = (n: TreeRec) => treeLabel(n.label).length;
+
+  for (const [tribe, list] of byTribe) {
+    const t = BOUGHS[tribe];
+    const head = list[0];
+    if (!t || !head || !isPlaced(head)) continue;
+    const opts = canopyOpts(nodes, t);
+
+    // Depth as place() counted it: from the head, down `kids`.
+    const depthOf = new Map<string, number>([[head.id, 0]]);
+    const walk = [head.id];
+    while (walk.length) {
+      const id = walk.pop()!;
+      for (const k of nodes.get(id)?.kids ?? []) {
+        if (depthOf.has(k) || !nodes.has(k)) continue;
+        depthOf.set(k, depthOf.get(id)! + 1);
+        walk.push(k);
+      }
+    }
+    const members = list.filter((n) => isPlaced(n) && depthOf.has(n.id));
+
+    // Snapshot, for the safety net, and the footprint nobody may leave.
+    const snap = new Map<string, Pick<TreeRec, 'angle' | 'x' | 'y' | 'r' | 'd' | 'stagger'>>();
+    let footMin = Infinity;
+    let footMax = -Infinity;
+    for (const n of members) {
+      snap.set(n.id, { angle: n.angle, x: n.x, y: n.y, r: n.r, d: n.d, stagger: n.stagger });
+      const a = n.angle ?? 0;
+      if (a < footMin) footMin = a;
+      if (a > footMax) footMax = a;
+    }
+    const orig = (n: TreeRec) => snap.get(n.id)!.angle ?? 0;
+
+    // Turn a person and everyone below him by the same amount.
+    const shiftLine = (n: TreeRec, delta: number): void => {
+      position(n, (n.angle ?? 0) + delta, depthOf.get(n.id) ?? 0, opts);
+      for (const k of n.kids) {
+        const kid = nodes.get(k);
+        if (kid && depthOf.has(k)) shiftLine(kid, delta);
+      }
+    };
+
+    // Walk the generations outward, one ring at a time.
+    const rings = new Map<number, TreeRec[]>();
+    for (const n of members) {
+      const dep = depthOf.get(n.id)!;
+      if (!rings.has(dep)) rings.set(dep, []);
+      rings.get(dep)!.push(n);
+    }
+    const ringR = (dep: number) => TREE.trunkLen + Math.pow(dep + 1, TREE.curve) * TREE.ringGap * t.reach;
+    const maxDepth = Math.max(...rings.keys());
+
+    for (let dep = 0; dep <= maxDepth; dep++) {
+      const ring = rings.get(dep);
+      if (!ring || ring.length < 2) continue;
+      ring.sort((a, b) => orig(a) - orig(b));
+
+      const r = ringR(dep);
+      const rIn = dep === 0 ? 0 : ringR(dep - 1);
+      const bend = t.lean * Math.pow(dep / 8, 1.3);
+      const drift = SPREAD_DRIFT * deg(Math.acos(Math.min(1, rIn / r)));
+
+      // The gap each neighbouring pair needs, in degrees, judged by the
+      // pair's own direction: two names on a steep stretch of the ring sit
+      // one above the other and need far less angle than on a flat stretch.
+      const ang = ring.map((n) => n.angle ?? 0);
+      const needs = (): number[] => {
+        const out: number[] = [];
+        for (let i = 0; i < ring.length - 1; i++) {
+          const th = rad((ang[i] + ang[i + 1]) / 2 + bend);
+          const c = Math.abs(Math.cos(th));
+          const s = Math.abs(Math.sin(th));
+          const w = ((labelLen(ring[i]) + labelLen(ring[i + 1])) / 2) * LABEL_CHAR_W + LABEL_PAD_X;
+          const across = c < 0.001 ? Infinity : w / c;
+          const down = s < 0.001 ? Infinity : (LABEL_H + LABEL_PAD_Y) / s;
+          out.push(deg(Math.min(across, down) / r));
+        }
+        return out;
+      };
+      let need = needs();
+
+      // A ring where nobody collides is left exactly as it is.
+      if (need.every((g, i) => ang[i + 1] - ang[i] >= g)) continue;
+
+      // How far each person may go: inside the footprint, and within the
+      // drift limit of his father as the father now sits. Never narrower
+      // than where he already is.
+      const lo: number[] = [];
+      const hi: number[] = [];
+      ring.forEach((n, i) => {
+        let l = footMin;
+        let h = footMax;
+        const f = n.father ? nodes.get(n.father) : undefined;
+        if (dep > 0 && f?.angle != null) {
+          l = Math.max(l, f.angle - drift);
+          h = Math.min(h, f.angle + drift);
+        }
+        lo.push(Math.min(l, ang[i]));
+        hi.push(Math.max(h, ang[i]));
+      });
+
+      // Relax: each pair that is short is pushed apart by half the
+      // shortfall each, until a pass changes nothing.
+      for (let pass = 0; pass < 5000; pass++) {
+        if (pass > 0 && pass % 50 === 0) need = needs();
+        let changed = false;
+        for (let i = 0; i < ring.length - 1; i++) {
+          const short = need[i] - (ang[i + 1] - ang[i]);
+          if (short <= 1e-9) continue;
+          const left = Math.max(lo[i], ang[i] - short / 2);
+          const right = Math.min(hi[i + 1], ang[i + 1] + short / 2);
+          if (Math.abs(left - ang[i]) > 1e-9 || Math.abs(right - ang[i + 1]) > 1e-9) changed = true;
+          ang[i] = left;
+          ang[i + 1] = right;
+        }
+        if (!changed) break;
+      }
+
+      // Each moved person takes his line with him.
+      ring.forEach((n, i) => {
+        const delta = ang[i] - (n.angle ?? 0);
+        if (Math.abs(delta) > 1e-9) shiftLine(n, delta);
+      });
+    }
+
+    // Leftovers: names still overlapping one in their own ring step
+    // alternately in and out along their line, restarting after anyone who
+    // is clear. Only the name moves — his line and his sons stay put.
+    const half = STAGGER_PX / 2;
+    for (const ring of rings.values()) {
+      if (ring.length < 2) continue;
+      const placed = ring.filter(isPlaced).sort((a, b) => (a.angle ?? 0) - (b.angle ?? 0));
+      const boxes = placed.map((n) => {
+        const hw = (labelLen(n) * LABEL_CHAR_W) / 2;
+        return { x0: n.x - hw, x1: n.x + hw, y0: n.y + 3, y1: n.y + 16 };
+      });
+      const offends = boxes.map((b, i) =>
+        boxes.some((o, j) => j !== i && b.x0 < o.x1 && o.x0 < b.x1 && b.y0 < o.y1 && o.y0 < b.y1),
+      );
+      let run = 0;
+      placed.forEach((n, i) => {
+        if (!offends[i]) {
+          run = 0;
+          return;
+        }
+        n.stagger = run % 2 === 0 ? -half : half;
+        run++;
+        position(n, n.angle ?? 0, depthOf.get(n.id) ?? 0, opts);
+      });
+    }
+
+    // Safety net: if any of this tribe's lines now crosses any canopy line,
+    // the whole tribe goes back as place() left it.
+    const mine = canopyCurves(nodes, new Set(members.map((n) => n.id)));
+    const all = canopyCurves(nodes);
+    if (mine.some((c) => all.some((e) => curvesCross(c, e)))) {
+      for (const n of members) Object.assign(n, snap.get(n.id));
+    }
+  }
+}
+
 /**
  * Place every node: the twelve boughs off Jacob, then the trunk and the
  * pre-Jacob boughs off it, then the crown lines from whatever is already up.
@@ -276,8 +585,9 @@ export function layout(data: FamilyTreeData): TreeModel {
     const t = BOUGHS[tribe];
     const head = list[0];
     if (!t || !head) continue;
-    place(head.id, t.angle, t.spread, 0, { from: nodes, dials: t, ox: 0, oy: 0, base: TREE.trunkLen, gap: TREE.ringGap }, leaves);
+    place(head.id, t.angle, t.spread, 0, canopyOpts(nodes, t), leaves);
   }
+  spreadOffenders(nodes, byTribe);
 
   // ── The trunk and the pre-Jacob boughs ────────────────────────────────
   let rootNodes: Placed[] = [];
