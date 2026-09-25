@@ -132,13 +132,23 @@ export function createGemView(canvas: HTMLCanvasElement, stone: Stone, opts: Gem
     } catch { return false; }
   }
 
-  // Loop. Stops while the canvas is off screen, so a stone in a closed sheet
-  // or scrolled-away card costs nothing.
+  // Loop. Skips drawing while the canvas is off screen, so a scrolled-away
+  // card costs next to nothing. This is checked every frame rather than left
+  // to an IntersectionObserver: a stone created inside a sheet that is still
+  // sliding up got told "off screen" and was never told otherwise, so it
+  // froze until the sheet was rebuilt.
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const inv = new THREE.Matrix4();
   let raf = 0, last = 0;
+  function onScreen() {
+    const r = canvas.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0
+      && r.top < window.innerHeight && r.left < window.innerWidth;
+  }
   function frame(now: number) {
-    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    raf = requestAnimationFrame(frame);
+    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
+    if (!onScreen()) return;
     const idle = reduce ? 0 : (gyroOn ? 0.12 : 0.35);
     if (!dragging) { spinVel += (idle - spinVel) * Math.min(1, dt * 2.5); spinG.rotation.y += spinVel * dt; }
     gx += (tgx - gx) * Math.min(1, dt * 8); gz += (tgz - gz) * Math.min(1, dt * 8);
@@ -157,15 +167,9 @@ export function createGemView(canvas: HTMLCanvasElement, stone: Stone, opts: Gem
       }
     }
     renderer.render(scene, camera);
-    raf = requestAnimationFrame(frame);
   }
   const start = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
   const stop = () => { cancelAnimationFrame(raf); raf = 0; };
-  const io = new IntersectionObserver(([entry]) => {
-    if (entry.isIntersecting) start(); else stop();
-  });
-  io.observe(canvas);
-
   setStone(stone);
   start();
 
@@ -174,7 +178,6 @@ export function createGemView(canvas: HTMLCanvasElement, stone: Stone, opts: Gem
     requestTilt,
     destroy() {
       stop();
-      io.disconnect();
       ro.disconnect();
       if (listening) window.removeEventListener('deviceorientation', onOri);
       canvas.removeEventListener('pointerdown', onDown);
