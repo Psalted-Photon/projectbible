@@ -168,10 +168,34 @@
   }
 
   // ── Tracing and hover ────────────────────────────────────────────────────
+  /** How long a line takes to light from God to whoever was chosen, however
+   *  many generations long it is. */
+  const REVEAL_MS = 2000;
+  /**
+   * A line lighting up one person at a time, God first — as if God, then
+   * Adam, then Seth were each tapped in turn — until the chosen person lights
+   * at REVEAL_MS. `extra` (a tribe's other members) lights with them at the
+   * end. The frame loop grows tracedPath from this and drops it once done.
+   */
+  let reveal: { line: string[]; extra: string[]; t0: number } | null = null;
+
+  /** Light `chain` (person back to God, as ancestorChain gives it), plus
+   *  `extra`, growing up from God unless the device asks for reduced motion. */
+  function revealLine(chain: TreeRec[], extra: string[] = []) {
+    const line = chain.map((r) => r.id).reverse();
+    if (REDUCED_MOTION || line.length < 2) {
+      reveal = null;
+      tracedPath = new Set([...line, ...extra]);
+      return;
+    }
+    reveal = { line, extra, t0: performance.now() };
+    tracedPath = new Set(line.slice(0, 1));
+    ensureLoopRunning();
+  }
+
   function traceFrom(n: TreeRec) {
     if (!model) return;
-    const chain = ancestorChain(model, n);
-    tracedPath = new Set(chain.map((r) => r.id));
+    revealLine(ancestorChain(model, n));
     selectedTribe = n.tribe || null;
     pinned = n;
     tribeLit = null;
@@ -193,8 +217,10 @@
     if (!list?.length) return false;
     // byTribe is sorted by depth, so the son of Jacob who heads it is first.
     const line = focus && isPlaced(focus) ? focus : list[0];
-    const chain = ancestorChain(model, line);
-    tracedPath = new Set([...chain.map((r) => r.id), ...list.map((r) => r.id)]);
+    revealLine(
+      ancestorChain(model, line),
+      list.map((r) => r.id),
+    );
     selectedTribe = tribe;
     pinned = line === focus ? focus : null;
     hovered = null;
@@ -253,6 +279,7 @@
   }
 
   function clearSelection() {
+    reveal = null;
     tracedPath = null;
     selectedTribe = null;
     pinned = null;
@@ -293,6 +320,21 @@
     if (pinned && !REDUCED_MOTION) {
       pulsePhase = (Math.sin((now - pulseStart) / 480) + 1) / 2;
       needsAnother = true;
+    }
+
+    if (reveal) {
+      const { line, extra, t0 } = reveal;
+      const t = Math.min(1, Math.max(0, now - t0) / REVEAL_MS);
+      if (t >= 1) {
+        tracedPath = new Set([...line, ...extra]);
+        reveal = null;
+      } else {
+        // God is lit at the start and the chosen person at exactly REVEAL_MS,
+        // with everyone between evenly spaced across it.
+        const lit = 1 + Math.floor(t * (line.length - 1));
+        if (tracedPath?.size !== lit) tracedPath = new Set(line.slice(0, lit));
+        needsAnother = true;
+      }
     }
 
     if (glide) {
