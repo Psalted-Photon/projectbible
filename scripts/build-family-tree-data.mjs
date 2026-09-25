@@ -419,8 +419,11 @@ function chainUp(fromId, stopId) {
 // with no links at all, so a startsWith('jesus_') match picks the wrong man.
 const JESUS = 'jesus_905';
 // Luke names Heli as Joseph's father where Matthew names Jacob, so Luke's line
-// is reached through Heli rather than through Jesus.
+// is reached through Heli rather than through Jesus. The data makes Heli
+// Mary's father, the usual reading of Luke 3:23, so the line runs Heli → Mary
+// → Jesus; without her it jumped from Heli straight across to Jesus.
 const HELI = 'heli_1484';
+const MARY = 'mary_1938';
 
 function crownLine(fromId) {
   return chainUp(fromId, JACOB).map((id) => ({
@@ -430,7 +433,8 @@ function crownLine(fromId) {
 }
 
 const matthew = crownLine(JESUS);
-const luke = people.has(HELI) ? [...crownLine(HELI), { id: JESUS, label: 'Jesus Christ' }] : [];
+const lukeFrom = people.has(MARY) && fatherOf(MARY) === HELI ? MARY : HELI;
+const luke = people.has(HELI) ? [...crownLine(lukeFrom), { id: JESUS, label: 'Jesus Christ' }] : [];
 
 // Where the two lines run together they must draw as one bough, or the shared
 // stretch from Judah to David renders twice and reads as two trunks.

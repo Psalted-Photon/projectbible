@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from "svelte";
+  import { Tree } from "phosphor-svelte";
   import { get } from "svelte/store";
   import { BIBLE_BOOKS, normalizeBookName, getBookColor } from "../lib/bibleData.js";
   import { IndexedDBTextStore } from "../lib/adapters";
@@ -249,7 +250,7 @@
     familyTreeStore.open({ focusId: row ? String(row.id) : null, onLeave: docked ? null : onClose });
   }
 
-  /** The card's own "🌳 See on the tree" link. Inside the bio sheet, the tree
+  /** The card's own "See on the tree" link. Inside the bio sheet, the tree
    *  is already open underneath — onShowOnTree closes the sheet onto this
    *  person rather than opening a second tree over the first. Everywhere
    *  else, this is the same store.open the index and header buttons use. */
@@ -546,8 +547,8 @@
           {/if}
         {/if}
         {#if showContents}
-          <button class="pop-btn tree-btn" on:click={() => openTreeOn()} title="Family tree" aria-label="Open the family tree">
-            🌳
+          <button class="pop-btn" on:click={() => openTreeOn()} title="Family tree" aria-label="Open the family tree">
+            <Tree size={18} />
           </button>
         {/if}
         {#if onClose}
@@ -645,7 +646,7 @@
           {#if $familyTreeIds.has(person.id)}
             <dt>Family tree</dt>
             <dd class="rel-list">
-              <button class="rel" on:click={showOnTree}>🌳 See on the tree</button>
+              <button class="rel" on:click={showOnTree}><Tree size={15} /> See on the tree</button>
             </dd>
           {/if}
         </dl>
@@ -856,12 +857,6 @@
   .pop-btn:hover {
     color: var(--color-primary, #4a90e2);
   }
-  /* .pop-btn sets no font-size of its own — the pop-out icon is a sized SVG,
-     but this button holds a bare emoji, which needs telling how big to draw
-     itself so it matches the 18px icons beside it. */
-  .tree-btn {
-    font-size: 17px;
-  }
   .close-btn:hover {
     color: var(--text-color, #fff);
   }
@@ -964,6 +959,9 @@
     gap: 4px 10px;
   }
   .rel {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     background: none;
     border: none;
     padding: 0;

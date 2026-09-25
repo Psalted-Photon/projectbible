@@ -224,3 +224,14 @@ export const TUCK: string[] = ['segub_2484', 'shelah_2593', 'zerah_2984'];
 export const TUCK_STEP = 0.5;
 export const TUCK_MAX = 40;
 export const TUCK_EASE = 2;
+
+/**
+ * Tribes widened to fill the sky between two neighbours. After the spread and
+ * the tuck, the tribe is stretched sideways from the edge it already shares
+ * with the first neighbour until the gap on the far side matches that one, so
+ * both sides sit the same distance off. Judah was left with a narrow gap to
+ * Levi and a wide one to Dan once Shelah and Zerah were tucked in.
+ */
+export const FIT_BETWEEN: Record<string, [string, string]> = {
+  Judah: ['Levi', 'Dan'],
+};

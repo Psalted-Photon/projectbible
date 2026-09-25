@@ -20,6 +20,7 @@
 import type { FamilyTreeCrownLink, FamilyTreeData, FamilyTreeNode, FamilyTreeRoot } from './data';
 import {
   BOUGHS,
+  FIT_BETWEEN,
   LABEL_CHAR_W,
   LABEL_H,
   LABEL_PAD_X,
@@ -638,6 +639,89 @@ function tuckIn(nodes: Map<string, TreeRec>): void {
 }
 
 /**
+ * Stretch each FIT_BETWEEN tribe sideways until its gaps to the two
+ * neighbours match.
+ *
+ * Gaps are measured where the names actually land — the direction of each
+ * dot from Jacob — not by the `angle` field, which lean bends away from.
+ * Every member's angle is scaled away from the tribe's edge on the near side,
+ * so nobody changes places with a brother and every line keeps its order;
+ * spacing only ever grows, so no name inside the tribe newly lands on
+ * another. The stretch is found by halving, and any stretch that crosses a
+ * line or puts a name on a neighbour's name is treated as too far.
+ */
+function fitBetween(nodes: Map<string, TreeRec>, byTribe: Map<string, TreeRec[]>): void {
+  const polar = (n: Placed) => (Math.atan2(n.x, -n.y) * 180) / Math.PI;
+  const span = (tribe: string): [number, number] | null => {
+    const ps = (byTribe.get(tribe) ?? []).filter(isPlaced).map(polar);
+    return ps.length ? [Math.min(...ps), Math.max(...ps)] : null;
+  };
+  type Box = { x0: number; x1: number; y0: number; y1: number };
+  const boxOf = (n: Placed): Box => {
+    const hw = (treeLabel(n.label).length * LABEL_CHAR_W) / 2;
+    return { x0: n.x - hw, x1: n.x + hw, y0: n.y + 3, y1: n.y + 16 };
+  };
+  const hit = (b: Box, o: Box) => b.x0 < o.x1 && o.x0 < b.x1 && b.y0 < o.y1 && o.y0 < b.y1;
+
+  for (const [tribe, [nearT, farT]] of Object.entries(FIT_BETWEEN)) {
+    const t = BOUGHS[tribe];
+    const members = (byTribe.get(tribe) ?? []).filter(isPlaced);
+    const self = span(tribe);
+    const near = span(nearT);
+    const far = span(farT);
+    if (!t || !members.length || !self || !near || !far) continue;
+    const opts = canopyOpts(nodes, t);
+
+    // Which side each neighbour is on decides which edge stays put.
+    const nearIsLeft = near[1] <= self[0];
+    const gap = nearIsLeft ? self[0] - near[1] : near[0] - self[1];
+    const goal = nearIsLeft ? far[0] - gap : far[1] + gap;
+    const angles = members.map((n) => n.angle ?? 0);
+    const pivot = nearIsLeft ? Math.min(...angles) : Math.max(...angles);
+
+    const depthOf = new Map<string, number>();
+    for (const n of members) {
+      let d = 0;
+      for (let f = n.father ? nodes.get(n.father) : undefined; f; f = f.father ? nodes.get(f.father) : undefined) d++;
+      depthOf.set(n.id, d);
+    }
+    const ids = new Set(members.map((n) => n.id));
+    const otherBoxes = [...nodes.values()].filter((m): m is Placed => isPlaced(m) && !ids.has(m.id)).map(boxOf);
+    const overlaps = () => {
+      let c = 0;
+      for (const n of members) {
+        const b = boxOf(n);
+        for (const o of otherBoxes) if (hit(b, o)) c++;
+      }
+      return c;
+    };
+    const crosses = () => {
+      const mine = canopyCurves(nodes, ids);
+      const all = canopyCurves(nodes);
+      return mine.some((c) => all.some((e) => curvesCross(c, e)));
+    };
+    const stretch = (k: number) =>
+      members.forEach((n, i) => position(n, pivot + (angles[i] - pivot) * k, depthOf.get(n.id) ?? 0, opts));
+    const edge = () => {
+      const s = span(tribe)!;
+      return nearIsLeft ? s[1] : s[0];
+    };
+
+    const allowed = overlaps();
+    let lo = 1;
+    let hi = 2;
+    for (let i = 0; i < 30; i++) {
+      const k = (lo + hi) / 2;
+      stretch(k);
+      const past = nearIsLeft ? edge() > goal : edge() < goal;
+      if (past || crosses() || overlaps() > allowed) hi = k;
+      else lo = k;
+    }
+    stretch(lo);
+  }
+}
+
+/**
  * Place every node: the twelve boughs off Jacob, then the trunk and the
  * pre-Jacob boughs off it, then the crown lines from whatever is already up.
  */
@@ -675,6 +759,7 @@ export function layout(data: FamilyTreeData): TreeModel {
   }
   spreadOffenders(nodes, byTribe);
   tuckIn(nodes);
+  fitBetween(nodes, byTribe);
 
   // ── The trunk and the pre-Jacob boughs ────────────────────────────────
   let rootNodes: Placed[] = [];
