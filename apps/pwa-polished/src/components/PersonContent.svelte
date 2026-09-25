@@ -14,6 +14,8 @@
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
   import WorkTabs from "./WorkTabs.svelte";
+  import Gem from "./Gem.svelte";
+  import { stoneForTribe } from "../lib/gems/stones";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../lib/openWork";
   import { peopleSource } from "../lib/library/source";
   import {
@@ -189,6 +191,17 @@
     .map((n) => n.trim())
     .filter(Boolean);
 
+  /**
+   * The tribe, for the breastplate stone in the corner. Read off the pack's
+   * own "Tribe of Judah" group rather than the family tree, so it shows the
+   * moment the bio does, with no 130 KB tree load behind it. Anyone whose
+   * group names no stone (no tribe, or Dinah) gets no stone.
+   */
+  $: tribe =
+    person?.memberOf
+      ?.map((g) => g.match(/^Tribe of (.+)$/)?.[1])
+      .find((t): t is string => !!t && !!stoneForTribe(t)) ?? null;
+
   // --- Walking the family ------------------------------------------------
   /** One step of the back trail: enough to reopen that person. */
   type TrailStop = { personId: string; name: string };
@@ -261,6 +274,14 @@
       return;
     }
     familyTreeStore.open({ focusId: person.id, onLeave: docked ? null : onClose });
+  }
+
+  /** A tap on the tribe's stone. For now it opens the tree on this person
+   *  (or the whole tree, for someone the tree doesn't carry); the tree's own
+   *  tribe view (roadmap: gems plan, phase 4) will take this over. */
+  function openTribe() {
+    if (person && $familyTreeIds.has(person.id)) return showOnTree();
+    familyTreeStore.open({ focusId: null, onLeave: docked ? null : onClose });
   }
 
   /** Step back to someone you came through. */
@@ -586,12 +607,20 @@
     {/if}
     <div class="person-body" bind:this={bodyEl}>
       <div class="character-view">
-        {#if person.nameMeaning}
-          <p class="char-meaning">“{person.nameMeaning}”</p>
-        {/if}
-        {#if alsoCalled.length}
-          <p class="char-aka">Also called: {alsoCalled.join(", ")}</p>
-        {/if}
+        <!-- With a stone, the meaning and aliases share a band with it and
+             stop short of it; the facts start below at full width, so a long
+             list of children isn't squeezed for the stone's whole height. -->
+        <div class="char-top" class:has-gem={!!tribe}>
+          {#if tribe}
+            <div class="tribe-gem"><Gem {tribe} size={64} stage={false} onTap={openTribe} /></div>
+          {/if}
+          {#if person.nameMeaning}
+            <p class="char-meaning">“{person.nameMeaning}”</p>
+          {/if}
+          {#if alsoCalled.length}
+            <p class="char-aka">Also called: {alsoCalled.join(", ")}</p>
+          {/if}
+        </div>
 
         <dl class="char-facts">
           {#if lifespan(person)}
@@ -921,6 +950,17 @@
      modal, moved rather than restyled. */
   .character-view {
     padding: 4px 2px;
+  }
+  .char-top.has-gem {
+    position: relative;
+    min-height: 70px;
+    padding-right: 74px;
+  }
+  .tribe-gem {
+    position: absolute;
+    top: 0;
+    right: 0;
+    line-height: 0;
   }
   .char-meaning {
     font-size: 16px;

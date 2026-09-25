@@ -18,9 +18,12 @@ export interface BranchSpec {
 }
 
 // ── Colour ───────────────────────────────────────────────────────────────
-// Breastpiece stones, Exodus 28:17-20, in birth order. Polished and engraved
-// like seals, not faceted. Jasper speckles so it does not collide with ruby,
-// the greens are spread aqua to yellow-green, agate and onyx are striped.
+// Breastpiece stones, Exodus 28:17-20, in birth order. The pairing and the
+// names follow src/lib/gems/stones.ts (TRIBE_STONE, KJV names) so the tree and
+// the 3D stones in the bios never disagree; change them together. Colours are
+// each stone's hue lifted to read on the tree's dark ground. The three reds
+// (sardius, carbuncle, jasper) are kept apart by hue and by jasper's speckle;
+// agate and onyx are striped.
 
 export interface StoneSpec {
   stone: string;
@@ -31,18 +34,18 @@ export interface StoneSpec {
 }
 
 export const STONES: Record<string, StoneSpec> = {
-  Reuben: { stone: 'ruby', c: '#9e2b32', lit: '#e0555e' },
+  Reuben: { stone: 'sardius', c: '#a8391c', lit: '#e8603a' },
   Simeon: { stone: 'topaz', c: '#b07d1a', lit: '#f0b73c' },
-  Levi: { stone: 'beryl', c: '#2e8b6f', lit: '#4fd6ad' },
-  Judah: { stone: 'turquoise', c: '#2b8ca8', lit: '#54cdee' },
+  Levi: { stone: 'carbuncle', c: '#962234', lit: '#dc4a62' },
+  Judah: { stone: 'emerald', c: '#1f7a3d', lit: '#3ec46a' },
   Dan: { stone: 'sapphire', c: '#2f4ba8', lit: '#5f7fe8' },
-  Naphtali: { stone: 'emerald', c: '#1f7a3d', lit: '#3ec46a' },
-  Gad: { stone: 'jacinth', c: '#a8531f', lit: '#ec8340' },
+  Naphtali: { stone: 'diamond', c: '#8a96a3', lit: '#dfe6ee' },
+  Gad: { stone: 'ligure', c: '#a8611f', lit: '#f0913e' },
   Asher: { stone: 'agate', c: '#8a6b4a', lit: '#c9a077', striped: true },
   Issachar: { stone: 'amethyst', c: '#6b3fa0', lit: '#a271e0' },
-  Zebulun: { stone: 'chrysolite', c: '#7d9420', lit: '#bcd94a' },
+  Zebulun: { stone: 'beryl', c: '#3f8a9c', lit: '#7fd0e3' },
   Joseph: { stone: 'onyx', c: '#57534e', lit: '#9b948c', striped: true },
-  Benjamin: { stone: 'jasper', c: '#a03f5e', lit: '#e06d92', speckled: true },
+  Benjamin: { stone: 'jasper', c: '#8f4030', lit: '#d06a50', speckled: true },
   // Dinah has no entry on purpose. The breastpiece carries twelve stones for
   // twelve sons; inventing a pearl for her put a thirteenth on Exodus 28. She
   // falls through to LINEN in drawBough and keeps her node and her tap.

@@ -74,7 +74,8 @@ export const STONES: Stone[] = [
 // Which tribe goes with which stone. This is birth order, the prototype's
 // pairing and only one of several traditions (Exodus 28:10 has the names
 // engraved by birth order on the shoulder stones; the breastplate order
-// itself is never spelled out). Swap this map to change the tradition.
+// itself is never spelled out). Swap this map to change the tradition, and
+// change STONES in lib/familyTree/config.ts with it so the tree agrees.
 export const TRIBE_STONE: Record<string, string> = {
   Reuben: 'odem',
   Simeon: 'pitdah',
