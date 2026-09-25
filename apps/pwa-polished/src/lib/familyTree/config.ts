@@ -146,7 +146,7 @@ export const TREE: TreeSpec = {
   coupleGap: 29,
   jitter: 0,
   nodeSize: 6.2,
-  thickness: 0.7,
+  thickness: 0.85,
   dimLevel: 0.23,
   glow: 0.55,
 };

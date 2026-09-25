@@ -214,7 +214,7 @@ function drawRoots(s: RenderState, dimming: boolean): void {
     if (!parent || !isPlaced(parent)) continue;
     ctx.strokeStyle = on && dimming ? col.lit : col.c;
     // Roots thicken as they go down, the opposite of a bough tapering up.
-    ctx.lineWidth = Math.max(0.2, TREE.thickness * 1.3 * (1 - Math.min(0.6, (n.depth ?? 0) / 30)));
+    ctx.lineWidth = Math.max(0.25, TREE.thickness * 1.3 * (1 - Math.min(0.6, (n.depth ?? 0) / 30)));
     ctx.beginPath();
     ctx.moveTo(parent.x, parent.y);
     const mx = (parent.x + n.x) / 2;
@@ -352,7 +352,7 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
       ctx.globalAlpha = tracedPath.has(n.id) ? 1 : TREE.dimLevel;
     }
     // Thinner as it climbs, so the silhouette tapers like a tree.
-    ctx.lineWidth = Math.max(0.35, TREE.thickness * (1 - Math.min(0.75, (n.depth ?? 0) / 14)));
+    ctx.lineWidth = Math.max(0.42, TREE.thickness * (1 - Math.min(0.75, (n.depth ?? 0) / 14)));
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     // A slight curve reads as growth rather than as a spoke diagram.
