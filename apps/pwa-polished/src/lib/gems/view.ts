@@ -63,7 +63,6 @@ export function createGemView(canvas: HTMLCanvasElement, stone: Stone, opts: Gem
   function setStone(s: Stone) {
     if (mesh) { spinG.remove(mesh); mesh.material.dispose(); }
     mesh = new THREE.Mesh(geometryFor(s), materialFor(s));
-    if (s.kind === 'cab') mesh.position.y = -0.12;
     spinG.add(mesh);
     popT = 0;
   }

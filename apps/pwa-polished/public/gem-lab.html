@@ -89,8 +89,9 @@ const TAU = Math.PI*2;
 // gem: uColor = transmittance tint (linear), ior, disp, depth, facets
 // cab: type 0 carnelian, 1 lapis, 2 agate, 3 onyx, 4 jasper
 const STONES = [
- {tribe:"Reuben",  heb:"אֹדֶם",   tr:"Odem",     kjv:"Sardius",   as:"carnelian, a translucent red-orange chalcedony", sw:"#c2461c",
-  kind:"cab", type:0, A:[0.42,0.045,0.01], B:[0.80,0.20,0.03], C:[1,1,1], trans:1.0},
+ {tribe:"Reuben",  heb:"אֹדֶם",   tr:"Odem",     kjv:"Sardius",   as:"polished carnelian, a translucent red-orange chalcedony", sw:"#c2461c",
+  kind:"cab", type:0, A:[0.40,0.035,0.005], B:[0.95,0.30,0.03], C:[0.95,0.62,0.38], trans:1.0,
+  shape:{s:[1.0,0.72,0.82], lump:0.06, flat:0.9, seed:11}},
  {tribe:"Simeon",  heb:"פִּטְדָה", tr:"Pitdah",   kjv:"Topaz",     as:"golden topaz, oval cut", sw:"#e0a93b",
   kind:"gem", cut:"oval", color:[0.97,0.72,0.22], ior:1.62, disp:0.016, depth:1.8, facets:8},
  {tribe:"Levi",    heb:"בָּרֶקֶת", tr:"Bareket",  kjv:"Carbuncle", as:"red garnet, round brilliant", sw:"#8e1a24",
@@ -98,21 +99,25 @@ const STONES = [
  {tribe:"Judah",   heb:"נֹפֶךְ",   tr:"Nophek",   kjv:"Emerald",   as:"emerald, step cut", sw:"#1f8a4c",
   kind:"gem", cut:"emerald", color:[0.16,0.82,0.36], ior:1.58, disp:0.014, depth:2.0, facets:8},
  {tribe:"Dan",     heb:"סַפִּיר",  tr:"Sappir",   kjv:"Sapphire",  as:"lapis lazuli with pyrite flecks, the likely ancient ‘sapphire’", sw:"#1d3a8f",
-  kind:"cab", type:1, A:[0.012,0.03,0.28], B:[0.04,0.10,0.55], C:[0.55,0.58,0.62], trans:0.0},
+  kind:"cab", type:1, A:[0.01,0.02,0.30], B:[0.03,0.08,0.75], C:[0.60,0.63,0.68], trans:0.0,
+  shape:{s:[1.12,0.55,0.74], lump:0.07, flat:0.85, seed:23}},
  {tribe:"Naphtali",heb:"יַהֲלֹם",  tr:"Yahalom",  kjv:"Diamond",   as:"colorless diamond, round brilliant", sw:"#dfe6ee",
   kind:"gem", cut:"brilliant", color:[0.985,0.985,1.0], ior:2.42, disp:0.06, depth:1.0, facets:16},
  {tribe:"Gad",     heb:"לֶשֶׁם",   tr:"Leshem",   kjv:"Ligure",    as:"orange jacinth (zircon), cushion cut", sw:"#d9661d",
   kind:"gem", cut:"cushion", color:[0.98,0.50,0.12], ior:1.93, disp:0.039, depth:1.9, facets:8},
- {tribe:"Asher",   heb:"שְׁבוֹ",   tr:"Shevo",    kjv:"Agate",     as:"banded agate", sw:"#a5683a",
-  kind:"cab", type:2, A:[0.40,0.13,0.04], B:[0.72,0.50,0.30], C:[0.86,0.85,0.80], trans:0.45},
+ {tribe:"Asher",   heb:"שְׁבוֹ",   tr:"Shevo",    kjv:"Agate",     as:"polished banded agate", sw:"#a5683a",
+  kind:"cab", type:2, A:[0,0,0], B:[0,0,0], C:[0,0,0], trans:0.35,
+  shape:{s:[1.0,0.62,0.84], lump:0.06, flat:0.88, seed:37}},
  {tribe:"Issachar",heb:"אַחְלָמָה", tr:"Achlamah", kjv:"Amethyst",  as:"amethyst, oval cut", sw:"#7a3fb0",
   kind:"gem", cut:"oval", color:[0.62,0.26,0.88], ior:1.54, disp:0.013, depth:2.1, facets:8},
  {tribe:"Zebulun", heb:"תַּרְשִׁישׁ", tr:"Tarshish", kjv:"Beryl",     as:"aquamarine beryl, step cut", sw:"#6fb7c9",
   kind:"gem", cut:"emerald", color:[0.58,0.86,0.95], ior:1.58, disp:0.014, depth:1.6, facets:8},
  {tribe:"Joseph",  heb:"שֹׁהַם",   tr:"Shoham",   kjv:"Onyx",      as:"black-and-white banded onyx", sw:"#1b1b1f",
-  kind:"cab", type:3, A:[0.008,0.008,0.01], B:[0.28,0.28,0.29], C:[0.80,0.79,0.76], trans:0.0},
- {tribe:"Benjamin",heb:"יָשְׁפֵה",  tr:"Yashfeh",  kjv:"Jasper",    as:"mottled red, ochre and green jasper", sw:"#8a3a22",
-  kind:"cab", type:4, A:[0.36,0.05,0.02], B:[0.52,0.24,0.05], C:[0.08,0.22,0.11], trans:0.0},
+  kind:"cab", type:3, A:[0.006,0.006,0.008], B:[0.30,0.33,0.38], C:[0.78,0.80,0.84], trans:0.0,
+  shape:{s:[1.05,0.5,0.74], lump:0.025, flat:0.9, seed:41}},
+ {tribe:"Benjamin",heb:"יָשְׁפֵה",  tr:"Yashfeh",  kjv:"Jasper",    as:"polished red and polychrome jasper", sw:"#a8321c",
+  kind:"cab", type:4, A:[0.60,0.36,0.07], B:[0.52,0.50,0.44], C:[0.45,0.10,0.03], trans:0.15,
+  shape:{s:[1.08,0.66,0.8], lump:0.08, flat:0.85, seed:53}},
 ];
 
 // ---------- Shaders ----------
@@ -208,32 +213,95 @@ float vnoise(vec3 x){
              mix(mix(h3(i+vec3(0.0,0.0,1.0)),h3(i+vec3(1.0,0.0,1.0)),f.x), mix(h3(i+vec3(0.0,1.0,1.0)),h3(i+vec3(1.0,1.0,1.0)),f.x), f.y), f.z);
 }
 float fbm(vec3 p){ float s=0.0, a=0.5; for(int i=0;i<5;i++){ s += a*vnoise(p); p = p*2.03 + vec3(1.7,9.2,3.1); a *= 0.5; } return s; }
+float qnoise(vec3 x){
+  vec3 i = floor(x); vec3 f = fract(x); f = f*f*f*(f*(f*6.0-15.0)+10.0);
+  return mix(mix(mix(h3(i),h3(i+vec3(1.0,0.0,0.0)),f.x), mix(h3(i+vec3(0.0,1.0,0.0)),h3(i+vec3(1.0,1.0,0.0)),f.x), f.y),
+             mix(mix(h3(i+vec3(0.0,0.0,1.0)),h3(i+vec3(1.0,0.0,1.0)),f.x), mix(h3(i+vec3(0.0,1.0,1.0)),h3(i+vec3(1.0,1.0,1.0)),f.x), f.y), f.z);
+}
+float sfbm(vec3 p){ return 0.65*qnoise(p) + 0.35*qnoise(p*1.9 + vec3(4.3,1.1,7.7)); }
+float smin(float a, float b, float k){ float h = clamp(0.5 + 0.5*(b-a)/k, 0.0, 1.0); return mix(b, a, h) - k*h*(1.0-h); }
+vec3 flow(vec3 p, float amt){
+  vec3 w = p + amt*vec3(sin(p.y*2.3 + p.z*1.1), sin(p.z*1.9 + p.x*1.7 + 1.3), sin(p.x*2.1 + p.y*1.5 + 2.1));
+  return w + amt*0.7*(vec3(sfbm(p*1.2), sfbm(p*1.2 + vec3(5.2)), sfbm(p*1.2 + vec3(9.1))) - 0.5);
+}
 void main(){
   vec3 p = vO;
   vec3 base; float metal = 0.0;
   if(uType < 0.5){
-    float f = fbm(p*2.2);
-    base = mix(uA, uB, smoothstep(0.3, 0.75, f));
+    float f = fbm(p*1.8);
+    float g = fbm(p*5.0 + vec3(3.0));
+    base = mix(uA, uB, smoothstep(0.25, 0.75, f));
+    base = mix(base, uA*0.6, smoothstep(0.62, 0.75, g)*0.7);
+    float band = smoothstep(0.9, 0.99, sin((p.y*2.0 + f*1.5)*9.0)*0.5 + 0.5);
+    base = mix(base, uC, band*0.3);
   } else if(uType < 1.5){
-    float f = fbm(p*3.0);
-    base = mix(uA, uB, smoothstep(0.35, 0.7, f));
-    float w = smoothstep(0.6, 0.72, fbm(p*3.5 + vec3(4.0)));
-    base = mix(base, uC, w*0.85);
-    metal = smoothstep(0.70, 0.76, vnoise(p*30.0)) * smoothstep(0.35, 0.6, fbm(p*2.0 + vec3(9.0)));
-    base = mix(base, vec3(0.72,0.52,0.16), metal);
+    float f = fbm(p*2.5);
+    base = mix(uA, uB, smoothstep(0.3, 0.7, f));
+    base *= 0.75 + 0.5*vnoise(p*14.0);
+    float vein = 1.0 - smoothstep(0.0, 0.025, abs(fbm(p*2.2 + vec3(7.0)) - 0.5));
+    base = mix(base, uC, vein*0.7);
+    float cluster = smoothstep(0.55, 0.75, fbm(vec3(p.x*1.2, p.y*3.0, p.z*1.2) + vec3(11.0)));
+    metal = cluster * smoothstep(0.62, 0.72, vnoise(p*38.0));
+    metal = max(metal, smoothstep(0.86, 0.9, vnoise(p*45.0 + vec3(2.0)))*0.8);
+    base = mix(base, vec3(0.62,0.46,0.14), metal);
   } else if(uType < 2.5){
-    float r = length(p.xz*vec2(1.0,1.35)) + 0.22*fbm(p*2.5);
-    float b = sin(r*30.0)*0.5 + 0.5;
-    base = mix(uA, uB, smoothstep(0.2, 0.8, b));
-    base = mix(base, uC, smoothstep(0.93, 0.99, sin(r*11.0 + 1.3)*0.5 + 0.5));
+    vec3 w = flow(p, 0.22);
+    float d1 = length((w - vec3(0.30, 0.10, -0.15))*vec3(1.0, 1.4, 1.15));
+    float d2 = length((w - vec3(-0.45, -0.05, 0.30))*vec3(1.2, 1.4, 1.0));
+    float r = smin(d1, d2 + 0.08, 0.35);
+    float t = fract(r*3.4);
+    vec3 c1 = vec3(0.86,0.83,0.77), c2 = vec3(0.80,0.50,0.24), c3 = vec3(0.55,0.13,0.04), c4 = vec3(0.10,0.03,0.015);
+    base = mix(c1, c2, smoothstep(0.06, 0.16, t));
+    base = mix(base, c3, smoothstep(0.22, 0.42, t));
+    base = mix(base, c4, smoothstep(0.52, 0.76, t));
+    base = mix(base, c1, smoothstep(0.90, 0.97, t));
+    float fineW = pow(0.5 + 0.5*sin(r*58.0), 14.0);
+    float fineD = pow(0.5 + 0.5*sin(r*41.0 + 1.0), 16.0);
+    base = mix(base, c1, fineW*0.45);
+    base = mix(base, c4, fineD*0.35);
   } else if(uType < 3.5){
-    float v = p.x*0.55 + p.z*0.9 + 0.12*fbm(p*2.0);
-    base = mix(uA, uC, smoothstep(0.82, 0.93, sin(v*10.0)*0.5 + 0.5));
-    base = mix(base, uB, smoothstep(0.9, 0.98, sin(v*10.0 + 0.6)*0.5 + 0.5)*0.6);
+    vec3 w = flow(p, 0.28);
+    float d1 = length((w - vec3(0.35, 0.05, 0.10))*vec3(1.0, 1.6, 1.3));
+    float d2 = length((w - vec3(-0.40, 0.0, -0.20))*vec3(1.3, 1.5, 1.0));
+    float d3 = length((w - vec3(0.05, -0.1, 0.45))*vec3(1.1, 1.3, 1.6));
+    float r = smin(smin(d1, d2 + 0.05, 0.3), d3 + 0.12, 0.3);
+    float group = 0.5 + 0.5*sin(r*4.3 + 0.7);
+    float sv = 0.5 + 0.5*sin(r*26.0);
+    float lines = smoothstep(0.93, 0.985, sv)*smoothstep(0.25, 0.6, group);
+    float fine = smoothstep(0.965, 0.995, 0.5 + 0.5*sin(r*61.0 + 0.3))*smoothstep(0.4, 0.8, group);
+    float wide = smoothstep(0.955, 0.985, 0.5 + 0.5*sin(r*8.5 + 2.0));
+    float haze = smoothstep(0.6, 0.95, group)*0.22;
+    base = mix(uA, uB, clamp(haze + fine*0.6, 0.0, 1.0));
+    base = mix(base, uC, clamp(lines + wide*0.9, 0.0, 1.0));
   } else {
-    float f = fbm(p*3.0); float g = fbm(p*6.0 + vec3(5.0));
-    base = mix(uA, uB, smoothstep(0.35, 0.65, f));
-    base = mix(base, uC, smoothstep(0.58, 0.72, g)*0.85);
+    // red / polychrome jasper: layered, multi-scale
+    vec3 w = flow(p, 0.3);
+    vec3 wd = w + 0.18*(vec3(fbm(p*2.6), fbm(p*2.6 + vec3(3.3)), fbm(p*2.6 + vec3(7.7))) - 0.5);
+    // mottled red body
+    float m = fbm(wd*2.2);
+    base = mix(vec3(0.66,0.16,0.04), vec3(0.38,0.07,0.05), smoothstep(0.35, 0.7, m));
+    base = mix(base, vec3(0.80,0.27,0.06), smoothstep(0.6, 0.8, fbm(wd*4.5 + vec3(9.0)))*0.5);
+    // clouded maroon veining
+    float rv = abs(fbm(wd*1.7 + vec3(5.0)) - 0.5);
+    base = mix(base, vec3(0.30,0.06,0.07), (1.0 - smoothstep(0.0, 0.07, rv))*0.65);
+    // ochre patches with dark and pale speckles
+    float ocM = smoothstep(0.56, 0.62, fbm(wd*1.4 + vec3(21.0)));
+    vec3 och = mix(vec3(0.80,0.50,0.12), vec3(0.62,0.34,0.08), fbm(p*6.0 + vec3(2.0)));
+    base = mix(base, och, ocM*0.9);
+    base = mix(base, vec3(0.22,0.10,0.04), smoothstep(0.80, 0.86, vnoise(p*34.0 + vec3(1.0)))*ocM*0.85);
+    base = mix(base, vec3(0.85,0.78,0.60), smoothstep(0.84, 0.90, vnoise(p*40.0 + vec3(8.0)))*ocM*0.6);
+    // grey zones with red tendrils running through
+    float gM = smoothstep(0.60, 0.64, fbm(w*1.1 + vec3(33.0)));
+    vec3 grey = mix(vec3(0.62,0.60,0.56), vec3(0.45,0.44,0.42), fbm(p*5.0 + vec3(4.0)));
+    float tend = abs(fbm(wd*3.0 + vec3(44.0)) - 0.5);
+    base = mix(base, mix(grey, vec3(0.62,0.15,0.05), (1.0 - smoothstep(0.02, 0.06, tend))*0.9), gM);
+    // dark hairline fractures and pale quartz veins
+    float h1 = abs(fbm(p*2.4 + vec3(13.0)) - 0.5);
+    base = mix(base, vec3(0.20,0.05,0.03), (1.0 - smoothstep(0.003, 0.011, h1))*0.8);
+    float h2 = abs(fbm(p*1.9 + vec3(61.0)) - 0.5);
+    base = mix(base, vec3(0.80,0.70,0.60), (1.0 - smoothstep(0.002, 0.008, h2))*0.55);
+    // fine grain
+    base *= 0.85 + 0.3*vnoise(p*22.0);
   }
   vec3 N = normalize(vN);
   vec3 V = normalize(vW - cameraPosition);
@@ -322,10 +390,37 @@ function stepCut(){
     octRing(0.82,-0.20), octRing(0.58,-0.38), octRing(0.32,-0.54), octRing(0.10,-0.64),
   ], [0,0.30,0], [0,-0.66,0]);
 }
-function cabochon(){
-  const top = new THREE.SphereGeometry(1, 128, 48, 0, TAU, 0, Math.PI/2);
-  top.scale(1.0, 0.48, 0.74);
-  return top;
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function pebble(o){
+  const rnd = mulberry32(o.seed);
+  const waves = [];
+  for(let i=0;i<5;i++){
+    const v = new THREE.Vector3(rnd()*2-1, rnd()*2-1, rnd()*2-1).normalize();
+    waves.push({v, f:2+rnd()*3.5, ph:rnd()*TAU, a:o.lump*(1-i*0.15)*(0.6+rnd()*0.4)});
+  }
+  const P = d => {
+    let r = 1; for(const w of waves) r += w.a*Math.sin(w.f*d.dot(w.v) + w.ph);
+    let y = d.y*r*o.s[1];
+    if(d.y < 0){ const t = Math.min(1, -d.y/0.6); y *= 1 - (1-o.flat)*t*t*(3-2*t); }
+    return new THREE.Vector3(d.x*r*o.s[0], y, d.z*r*o.s[2]);
+  };
+  const g = new THREE.SphereGeometry(1, 160, 110);
+  const pos = g.attributes.position, nor = g.attributes.normal;
+  const d = new THREE.Vector3(), t1 = new THREE.Vector3(), t2 = new THREE.Vector3(), up = new THREE.Vector3();
+  const e = 0.002;
+  for(let i=0;i<pos.count;i++){
+    d.fromBufferAttribute(pos, i).normalize();
+    up.set(Math.abs(d.y) < 0.99 ? 0 : 1, Math.abs(d.y) < 0.99 ? 1 : 0, 0);
+    t1.crossVectors(up, d).normalize(); t2.crossVectors(d, t1);
+    const p0 = P(d);
+    const p1 = P(d.clone().addScaledVector(t1, e).normalize()).sub(p0);
+    const p2 = P(d.clone().addScaledVector(t2, e).normalize()).sub(p0);
+    const n = new THREE.Vector3().crossVectors(p1, p2).normalize();
+    if(n.dot(p0) < 0) n.negate();
+    pos.setXYZ(i, p0.x, p0.y, p0.z); nor.setXYZ(i, n.x, n.y, n.z);
+  }
+  return g;
 }
 
 // ---------- Renderer ----------
@@ -342,9 +437,9 @@ tiltG.add(spinG); scene.add(tiltG);
 
 const geoCache = {};
 function geometryFor(s){
-  const key = s.kind==='cab' ? 'cab' : s.cut;
+  const key = s.kind==='cab' ? 'cab'+s.shape.seed : s.cut;
   if(!geoCache[key]){
-    geoCache[key] = key==='cab' ? cabochon()
+    geoCache[key] = s.kind==='cab' ? pebble(s.shape)
                   : key==='emerald' ? stepCut()
                   : brilliantLike(key==='brilliant' ? 'round' : key);
   }
@@ -368,7 +463,6 @@ function show(i){
   const s = STONES[idx];
   if(mesh){ spinG.remove(mesh); mesh.material.dispose(); }
   mesh = new THREE.Mesh(geometryFor(s), materialFor(s));
-  if(s.kind==='cab') mesh.position.y = -0.12;
   spinG.add(mesh);
   popT = 0;
   document.getElementById('tribe').textContent = s.tribe;

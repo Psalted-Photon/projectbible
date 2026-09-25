@@ -1,9 +1,9 @@
-// Stone shapes, unchanged from public/gem-lab.html. A faceted cut is a stack
+// Stone shapes, kept in step with public/gem-lab.html. A faceted cut is a stack
 // of rings joined into flat triangles with one normal each, so every facet
 // catches light on its own. Shapes are built once and shared between gems.
 
 import * as THREE from 'three';
-import type { Stone } from './stones';
+import type { Stone, PebbleShape } from './stones';
 
 const TAU = Math.PI * 2;
 type P3 = [number, number, number];
@@ -87,19 +87,56 @@ function stepCut() {
     octRing(0.82, -0.20), octRing(0.58, -0.38), octRing(0.32, -0.54), octRing(0.10, -0.64),
   ], [0, 0.30, 0], [0, -0.66, 0]);
 }
-function cabochon() {
-  const top = new THREE.SphereGeometry(1, 128, 48, 0, TAU, 0, Math.PI / 2);
-  top.scale(1.0, 0.48, 0.74);
-  return top;
+function mulberry32(a: number) {
+  return () => {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
 }
 
-// Never disposed: there are only five shapes and every gem on screen reuses them.
+// A tumbled stone: a sphere squashed to the stone's proportions, pushed in and
+// out by a few seeded waves so no two are the same lump, and a little flatter
+// underneath. Normals come from the shape itself so the lumps catch the light.
+function pebble(o: PebbleShape) {
+  const rnd = mulberry32(o.seed);
+  const waves: { v: THREE.Vector3; f: number; ph: number; a: number }[] = [];
+  for (let i = 0; i < 5; i++) {
+    const v = new THREE.Vector3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1).normalize();
+    waves.push({ v, f: 2 + rnd() * 3.5, ph: rnd() * TAU, a: o.lump * (1 - i * 0.15) * (0.6 + rnd() * 0.4) });
+  }
+  const P = (d: THREE.Vector3) => {
+    let r = 1; for (const w of waves) r += w.a * Math.sin(w.f * d.dot(w.v) + w.ph);
+    let y = d.y * r * o.s[1];
+    if (d.y < 0) { const t = Math.min(1, -d.y / 0.6); y *= 1 - (1 - o.flat) * t * t * (3 - 2 * t); }
+    return new THREE.Vector3(d.x * r * o.s[0], y, d.z * r * o.s[2]);
+  };
+  const g = new THREE.SphereGeometry(1, 160, 110);
+  const pos = g.attributes.position, nor = g.attributes.normal;
+  const d = new THREE.Vector3(), t1 = new THREE.Vector3(), t2 = new THREE.Vector3(), up = new THREE.Vector3();
+  const e = 0.002;
+  for (let i = 0; i < pos.count; i++) {
+    d.fromBufferAttribute(pos, i).normalize();
+    up.set(Math.abs(d.y) < 0.99 ? 0 : 1, Math.abs(d.y) < 0.99 ? 1 : 0, 0);
+    t1.crossVectors(up, d).normalize(); t2.crossVectors(d, t1);
+    const p0 = P(d);
+    const p1 = P(d.clone().addScaledVector(t1, e).normalize()).sub(p0);
+    const p2 = P(d.clone().addScaledVector(t2, e).normalize()).sub(p0);
+    const n = new THREE.Vector3().crossVectors(p1, p2).normalize();
+    if (n.dot(p0) < 0) n.negate();
+    pos.setXYZ(i, p0.x, p0.y, p0.z); nor.setXYZ(i, n.x, n.y, n.z);
+  }
+  return g;
+}
+
+// Never disposed: there are only nine shapes and every gem on screen reuses them.
 const cache: Record<string, THREE.BufferGeometry> = {};
 
 export function geometryFor(s: Stone): THREE.BufferGeometry {
-  const key = s.kind === 'cab' ? 'cab' : s.cut;
+  const key = s.kind === 'cab' ? 'cab' + s.shape.seed : s.cut;
   if (!cache[key]) {
-    cache[key] = key === 'cab' ? cabochon()
+    cache[key] = s.kind === 'cab' ? pebble(s.shape)
       : key === 'emerald' ? stepCut()
       : brilliantLike(key === 'brilliant' ? 'round' : key as 'oval' | 'cushion');
   }
