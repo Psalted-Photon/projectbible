@@ -207,3 +207,20 @@ export const SPREAD_DRIFT = 0.5;
 /** The in/out step for names the spread could not clear: ±half of this, in
  *  tree units, along the person's own line. */
 export const STAGGER_PX = 30;
+
+/**
+ * People turned in toward their tribe's centre after the spread pass, each
+ * carrying his line, as far as he will go before a line would cross or a name
+ * would land on another. Judah's widest slices go to Pharez, so Shelah,
+ * Zerah and Hezron's son Segub were left out on the bough's right edge with
+ * empty sky between them and the rest of Judah. Listed in the order they are
+ * tucked: Segub first, because his line from Hezron runs across the space
+ * Shelah's and Zerah's sons move into.
+ */
+export const TUCK: string[] = ['segub_2484', 'shelah_2593', 'zerah_2984'];
+/** Step and limit for a tuck, in degrees, and how far each one eases back
+ *  out from where he would first touch, so he nests beside his neighbour
+ *  rather than pressed against him. */
+export const TUCK_STEP = 0.5;
+export const TUCK_MAX = 40;
+export const TUCK_EASE = 2;

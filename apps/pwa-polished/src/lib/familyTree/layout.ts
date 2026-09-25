@@ -29,6 +29,10 @@ import {
   SPREAD_DRIFT,
   STAGGER_PX,
   TREE,
+  TUCK,
+  TUCK_EASE,
+  TUCK_MAX,
+  TUCK_STEP,
   type BranchSpec,
 } from './config';
 
@@ -552,6 +556,88 @@ function spreadOffenders(nodes: Map<string, TreeRec>, byTribe: Map<string, TreeR
 }
 
 /**
+ * Turn each TUCK person in toward his tribe's centre, line and all, a step
+ * at a time, and stop at the last step where none of his lines crosses another canopy line and none of his names lands on a
+ * name it was clear of. Stepping, rather than trying the far end first, is
+ * what keeps a line from hopping over a neighbour into a gap beyond it.
+ */
+function tuckIn(nodes: Map<string, TreeRec>): void {
+  type Box = { x0: number; x1: number; y0: number; y1: number };
+  const boxOf = (n: Placed): Box => {
+    const hw = (treeLabel(n.label).length * LABEL_CHAR_W) / 2;
+    return { x0: n.x - hw, x1: n.x + hw, y0: n.y + 3, y1: n.y + 16 };
+  };
+  const hit = (b: Box, o: Box) => b.x0 < o.x1 && o.x0 < b.x1 && b.y0 < o.y1 && o.y0 < b.y1;
+
+  for (const id of TUCK) {
+    const n = nodes.get(id);
+    const t = n?.tribe ? BOUGHS[n.tribe] : undefined;
+    if (!n || !t || !isPlaced(n)) continue;
+    const opts = canopyOpts(nodes, t);
+
+    // His line, and each member's depth from the tribe's head as place()
+    // counted it — the head is whoever has no father on the canopy.
+    const line: TreeRec[] = [];
+    const walk = [n];
+    while (walk.length) {
+      const m = walk.pop()!;
+      line.push(m);
+      for (const k of m.kids) {
+        const kid = nodes.get(k);
+        if (kid && isPlaced(kid)) walk.push(kid);
+      }
+    }
+    let depth0 = 0;
+    for (let f = n.father ? nodes.get(n.father) : undefined; f; f = f.father ? nodes.get(f.father) : undefined) depth0++;
+    const depthOf = new Map<string, number>();
+    const setDepth = (m: TreeRec, d: number) => {
+      depthOf.set(m.id, d);
+      for (const k of m.kids) {
+        const kid = nodes.get(k);
+        if (kid) setDepth(kid, d + 1);
+      }
+    };
+    setDepth(n, depth0);
+
+    const ids = new Set(line.map((m) => m.id));
+    const others = [...nodes.values()].filter((m): m is Placed => isPlaced(m) && !ids.has(m.id));
+    const otherBoxes = others.map(boxOf);
+    const overlaps = (): number => {
+      let c = 0;
+      for (const m of line) {
+        if (!isPlaced(m)) continue;
+        const b = boxOf(m);
+        for (const o of otherBoxes) if (hit(b, o)) c++;
+      }
+      return c;
+    };
+    const crosses = (): boolean => {
+      const mine = canopyCurves(nodes, ids);
+      const all = canopyCurves(nodes);
+      return mine.some((c) => all.some((e) => curvesCross(c, e)));
+    };
+    const turn = (delta: number) => {
+      for (const m of line) position(m, (m.angle ?? 0) + delta, depthOf.get(m.id) ?? 0, opts);
+    };
+
+    const dir = Math.sign(t.angle - (n.angle ?? 0));
+    if (!dir) continue;
+    const allowed = overlaps();
+    if (crosses()) continue;
+    let moved = 0;
+    while (moved + TUCK_STEP <= TUCK_MAX) {
+      turn(dir * TUCK_STEP);
+      if (crosses() || overlaps() > allowed) {
+        turn(-dir * TUCK_STEP);
+        break;
+      }
+      moved += TUCK_STEP;
+    }
+    turn(-dir * Math.min(moved, TUCK_EASE));
+  }
+}
+
+/**
  * Place every node: the twelve boughs off Jacob, then the trunk and the
  * pre-Jacob boughs off it, then the crown lines from whatever is already up.
  */
@@ -588,6 +674,7 @@ export function layout(data: FamilyTreeData): TreeModel {
     place(head.id, t.angle, t.spread, 0, canopyOpts(nodes, t), leaves);
   }
   spreadOffenders(nodes, byTribe);
+  tuckIn(nodes);
 
   // ── The trunk and the pre-Jacob boughs ────────────────────────────────
   let rootNodes: Placed[] = [];

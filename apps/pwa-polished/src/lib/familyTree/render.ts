@@ -476,12 +476,45 @@ function drawCrown(s: RenderState, dimming: boolean): void {
     l.pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
     ctx.stroke();
     ctx.setLineDash([]);
-    const end = l.pts[l.pts.length - 1];
-    ctx.fillStyle = l.col;
-    ctx.font = '10.5px -apple-system, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(l.name, end.x, end.y - 9);
   }
+  // Both lines end on Jesus, so naming each at its end printed "Matthew" and
+  // "Luke" on top of each other. Each name sits instead on the last stretch
+  // its line does not share with the other, a few people back from where the
+  // two lines rejoin, laid along the line and just above it — the people's
+  // own names hang below their dots.
+  const [m, l] = lines;
+  const mIds = new Set(m.pts.map((p) => p.id));
+  const lIds = new Set(l.pts.map((p) => p.id));
+  crownName(ctx, m.pts.filter((p) => !lIds.has(p.id)), m.col, m.name);
+  crownName(ctx, l.pts.filter((p) => !mIds.has(p.id)), l.col, l.name);
+  ctx.restore();
+}
+
+function crownName(ctx: CanvasRenderingContext2D, own: Placed[], col: string, name: string): void {
+  if (own.length < 2) return;
+  const i = Math.max(0, own.length - 4);
+  const a = own[i];
+  const b = own[Math.min(own.length - 1, i + 1)];
+  let dx = b.x - a.x;
+  let dy = b.y - a.y;
+  // Read left to right whichever way the line happens to run.
+  if (dx < 0) {
+    dx = -dx;
+    dy = -dy;
+  }
+  const len = Math.hypot(dx, dy) || 1;
+  // The side of the line facing up the screen.
+  const nx = dy / len;
+  const ny = -dx / len;
+  ctx.save();
+  ctx.translate((a.x + b.x) / 2 + nx * 7, (a.y + b.y) / 2 + ny * 7);
+  ctx.rotate(Math.atan2(dy, dx));
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = col;
+  ctx.font = '10.5px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(name, 0, 0);
   ctx.restore();
 }
 
