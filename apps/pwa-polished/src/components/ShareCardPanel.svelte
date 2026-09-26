@@ -23,6 +23,7 @@
   import ShareCardPaintings from './ShareCardPaintings.svelte';
   import {
     CARD_GRADIENTS,
+    CARD_TEXTURES,
     CARD_SIZES,
     applyLook,
     canvasToBlob,
@@ -75,7 +76,7 @@
   const SECTIONS: { id: Section; label: string }[] = [
     { id: 'looks', label: 'Looks' },
     { id: 'font', label: 'Font' },
-    { id: 'colour', label: 'Colour' },
+    { id: 'colour', label: 'Color' },
     { id: 'background', label: 'Background' },
     { id: 'layout', label: 'Layout' },
   ];
@@ -232,8 +233,10 @@
     if (!hit) return;
     const next = { ...emphasis };
     const now = next[hit.index];
+    // plain → bold → accent → bold and accent → plain
     if (!now) next[hit.index] = 'bold';
     else if (now === 'bold') next[hit.index] = 'accent';
+    else if (now === 'accent') next[hit.index] = 'both';
     else delete next[hit.index];
     emphasis = next;
   }
@@ -378,11 +381,7 @@
     }
   }
 
-  const TEXTURES: { id: CardTexture; label: string }[] = [
-    { id: 'none', label: 'None' },
-    { id: 'grain', label: 'Grain' },
-    { id: 'paper', label: 'Paper' },
-  ];
+  const TEXTURES: { id: CardTexture; label: string }[] = [{ id: 'none', label: 'None' }, ...CARD_TEXTURES];
 
   const SIZE_ORDER: CardSize[] = ['square', 'portrait', 'story'];
 
@@ -483,7 +482,7 @@
   </div>
 
   <p class="sc-hint">
-    {#if wordCount > 0}Tap a word for bold, again for accent colour.{/if}
+    {#if wordCount > 0}Tap a word: bold, then accent color, then both, then back to plain.{/if}
     {#if image} Drag to move the picture, pinch to zoom.{/if}
     {#if hasEmphasis}<button class="sc-link" on:click={() => (emphasis = {})}>Clear words</button>{/if}
   </p>
@@ -526,11 +525,11 @@
         </button>
       </div>
       {#if colourTarget === 'accent'}
-        <p class="sc-note">For words you tap twice on the card.</p>
+        <p class="sc-note">For words you tap twice (accent) or three times (bold and accent) on the card.</p>
       {:else if colourTarget === 'bg' && style.background !== 'solid'}
-        <p class="sc-note">Picking a colour here switches the background to plain colour.</p>
+        <p class="sc-note">Picking a color here switches the background to plain color.</p>
       {/if}
-      <ColorField value={colourValue} label="Card colour" on:change={(e) => setColour(e.detail)}>
+      <ColorField value={colourValue} label="Card color" on:change={(e) => setColour(e.detail)}>
         <button
           class="sc-small-btn"
           type="button"
@@ -551,7 +550,7 @@
 
     {:else if section === 'background'}
       <div class="sc-chips">
-        <button class="sc-chip" class:active={style.background === 'solid'} on:click={() => chooseBackground('solid')}>Colour</button>
+        <button class="sc-chip" class:active={style.background === 'solid'} on:click={() => chooseBackground('solid')}>Color</button>
         <button class="sc-chip" class:active={style.background === 'gradient'} on:click={() => chooseBackground('gradient')}>Gradient</button>
         <button class="sc-chip" class:active={style.background === 'photo'} on:click={() => chooseBackground('photo')}>Your photo</button>
         <button class="sc-chip" class:active={style.background === 'painting'} on:click={() => chooseBackground('painting')}>Painting</button>
@@ -559,7 +558,7 @@
       <input bind:this={fileInput} type="file" accept="image/*" hidden on:change={onPhotoPicked} />
 
       {#if style.background === 'solid'}
-        <p class="sc-note">Set the colour under Colour → Background.</p>
+        <p class="sc-note">Set the color under Color → Background.</p>
       {:else if style.background === 'gradient'}
         <div class="sc-gradients">
           {#each CARD_GRADIENTS as g}

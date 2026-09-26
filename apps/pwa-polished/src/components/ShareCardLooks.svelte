@@ -111,7 +111,7 @@
   <p class="scl-note">
     {editing
       ? 'Tap a look to remove it.'
-      : 'A look keeps the font, colours, background and layout. Photos stay with the card they were picked for.'}
+      : 'A look keeps the font, colors, background and layout. Photos stay with the card they were picked for.'}
   </p>
 {/if}
 

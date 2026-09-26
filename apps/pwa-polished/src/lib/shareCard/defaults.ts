@@ -14,6 +14,7 @@
 import { getCustomThemeSettings, getSettings, resolveTheme } from '../../adapters/settings';
 import { isValidHex, luminance } from '../themeColors';
 import { CARD_GRADIENTS } from './gradients';
+import { CARD_TEXTURES } from './textures';
 import { CARD_SIZES, type CardBackground, type CardStyle, type CardTexture } from './types';
 
 const THEME_COLOURS: Record<'light' | 'dark' | 'sepia', { text: string; bg: string }> = {
@@ -78,7 +79,7 @@ export function sanitizeStyle(raw: unknown, base: CardStyle = defaultCardStyle()
     sizeNudge: num(s.sizeNudge, 0.6, 1.4, base.sizeNudge),
     background: oneOf<CardBackground>(s.background, ['solid', 'gradient', 'photo', 'painting'], base.background),
     gradientId: oneOf(s.gradientId, CARD_GRADIENTS.map((g) => g.id), base.gradientId),
-    texture: oneOf<CardTexture>(s.texture, ['none', 'grain', 'paper'], base.texture),
+    texture: oneOf<CardTexture>(s.texture, ['none', ...CARD_TEXTURES.map((t) => t.id)], base.texture),
     blur: num(s.blur, 0, 1, base.blur),
     darken: num(s.darken, 0, 1, base.darken),
     qr: typeof s.qr === 'boolean' ? s.qr : base.qr,

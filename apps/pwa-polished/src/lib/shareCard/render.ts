@@ -33,8 +33,8 @@ const MARK_FAMILY = 'HexaplaMark';
 const MARK_FONT_URL = '/fonts/tutorial/fredericka-the-great-400.woff2';
 const ICON_URL = '/pwa-192x192.png';
 
-const HAS_GREEK = /[Ͱ-Ͽἀ-῿]/;
-const HAS_HEBREW = /[֐-׿]/;
+const HAS_GREEK = /[\u0370-\u03FF\u1F00-\u1FFF]/;
+const HAS_HEBREW = /[\u0590-\u05FF]/;
 
 /** The passage as the card numbers its words. Tapped-word indices refer to this. */
 export function cardWords(passage: string): string[] {
@@ -195,12 +195,12 @@ export async function renderCard(
   // ── Words ──
   const words = cardWords(passage);
   if (!face.rtl && words.length) {
-    words[0] = `“${words[0]}`;
-    words[words.length - 1] = `${words[words.length - 1]}”`;
+    words[0] = `\u201C${words[0]}`;
+    words[words.length - 1] = `${words[words.length - 1]}\u201D`;
   }
   const emphasis = extras.emphasis ?? {};
   const fontFor = (s: number, i: number) =>
-    `${emphasis[i] === 'bold' ? '700 ' : ''}${s}px ${face.stack}`;
+    `${emphasis[i] === 'bold' || emphasis[i] === 'both' ? '700 ' : ''}${s}px ${face.stack}`;
 
   ctx.direction = face.rtl ? 'rtl' : 'ltr';
   const maxSize = 96 * k * face.scale * style.sizeNudge;
@@ -237,7 +237,7 @@ export async function renderCard(
     for (const i of line) {
       const w = fitted.widths[i];
       ctx.font = fontFor(fitted.fontSize, i);
-      ctx.fillStyle = emphasis[i] === 'accent' ? style.accentColor : style.textColor;
+      ctx.fillStyle = emphasis[i] === 'accent' || emphasis[i] === 'both' ? style.accentColor : style.textColor;
       ctx.fillText(words[i], cursor, cy);
       const left = face.rtl ? cursor - w : cursor;
       boxes.push({ index: i, x: left, y: cy - fitted.lineHeight / 2, w, h: fitted.lineHeight });
@@ -251,7 +251,7 @@ export async function renderCard(
   ctx.globalAlpha = 0.72;
   ctx.fillStyle = style.textColor;
   ctx.font = `600 ${refSize}px ${DEFAULT_STACK}`;
-  const refText = `— ${content.reference} (${content.translationLabel})`;
+  const refText = `\u2014 ${content.reference} (${content.translationLabel})`;
   const refY = top + fitted.lines.length * fitted.lineHeight + refGap + refHeight / 2;
   ctx.fillText(refText, centred ? W / 2 : padX, refY);
   ctx.globalAlpha = 1;
@@ -278,8 +278,8 @@ export async function renderCard(
 function ellipsize(ctx: CanvasRenderingContext2D, text: string, max: number): string {
   if (ctx.measureText(text).width <= max) return text;
   let t = text;
-  while (t.length > 1 && ctx.measureText(`${t}…`).width > max) t = t.slice(0, -1);
-  return `${t.trimEnd()}…`;
+  while (t.length > 1 && ctx.measureText(`${t}\u2026`).width > max) t = t.slice(0, -1);
+  return `${t.trimEnd()}\u2026`;
 }
 
 /** "Hexapla" in Fredericka the Great, the app icon to its right, centred on cx. */

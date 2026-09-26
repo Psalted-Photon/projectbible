@@ -9,6 +9,8 @@
  */
 
 /** The three shapes social apps actually use. */
+import type { TextureId } from './textures';
+
 export type CardSize = 'square' | 'portrait' | 'story';
 
 export const CARD_SIZES: Record<CardSize, { w: number; h: number; label: string }> = {
@@ -18,7 +20,7 @@ export const CARD_SIZES: Record<CardSize, { w: number; h: number; label: string 
 };
 
 export type CardBackground = 'solid' | 'gradient' | 'photo' | 'painting';
-export type CardTexture = 'none' | 'grain' | 'paper';
+export type CardTexture = 'none' | TextureId;
 
 export interface CardStyle {
   size: CardSize;
@@ -58,8 +60,8 @@ export interface CardContent {
   translationLabel: string;
 }
 
-/** How a tapped word is drawn. Absent means plain. */
-export type Emphasis = 'bold' | 'accent';
+/** How a tapped word is drawn. Absent means plain; 'both' is bold in the accent colour. */
+export type Emphasis = 'bold' | 'accent' | 'both';
 
 /** A photo or painting, already decoded and downscaled, with its framing. */
 export interface CardImage {
