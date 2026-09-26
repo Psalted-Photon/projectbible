@@ -505,11 +505,13 @@
       <ShareCardLooks {style} on:apply={(e) => applyChosenLook(e.detail)} />
 
     {:else if section === 'font'}
-      <FontField
-        value={style.fontId}
-        defaultLabel="Card default (EB Garamond)"
-        on:change={(e) => patch({ fontId: e.detail })}
-      />
+      <div class="sc-font">
+        <FontField
+          value={style.fontId}
+          defaultLabel="Card default (EB Garamond)"
+          on:change={(e) => patch({ fontId: e.detail })}
+        />
+      </div>
 
     {:else if section === 'colour'}
       <div class="sc-chips">
@@ -756,6 +758,18 @@
     overflow-y: auto;
     padding: 12px 2px 4px;
     border-top: 1px solid #2a2a2a;
+  }
+
+  /* The font list normally scrolls in its own 320px box, and won't hand the
+     scroll on when it reaches the end. Inside this already-scrolling area that
+     box is taller than the space it sits in, so the bottom fonts were
+     unreachable. Here the list lays out in full and this area does the scrolling. */
+  .sc-font :global(.ff) {
+    max-height: none;
+    overflow: visible;
+  }
+  .sc-font :global(.ff-wrap::after) {
+    display: none;
   }
 
   /* ── Shared control bits ── */
