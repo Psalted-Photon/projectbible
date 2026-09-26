@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
-  import { buildShareText, formatShareRef, type ShareRef } from '../lib/shareText';
+  import { buildShareText, buildShareUrl, formatShareRef, type ShareRef } from '../lib/shareText';
   import { canShare, copyText, shareText as shareViaSheet } from '../lib/clipboard';
   import { translationLabel } from '../lib/bibleData';
   import ShareCardPanel from './ShareCardPanel.svelte';
@@ -103,6 +103,8 @@
         {passage}
         reference={formatShareRef(reference)}
         translationLabel={translationLabel(translation)}
+        shareRef={reference}
+        qrUrl={buildShareUrl(reference, translation)}
         on:close={handleClose}
       />
     {:else}
@@ -161,6 +163,11 @@
     padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
     box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.6);
     user-select: none;
+    /* The Card side has a preview, controls and buttons; it takes the height
+       it is given and scrolls only its controls. */
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 16px);
   }
 
   /* ── Header ── */

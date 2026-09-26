@@ -35,6 +35,9 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   // like font size, so notesBarHidden/journalBarHidden stay per-device.
   'notesTheme',
   'journalTheme',
+  // Share-card looks saved by name. A photo is never part of a look, so
+  // nothing personal or heavy rides along — just fonts, colours and layout.
+  'cardLooks',
   'timezone',
   'dailyDriverEnglishOT', 'dailyDriverEnglishNT',
   'dailyDriverHebrewOT', 'dailyDriverHebrewNT',

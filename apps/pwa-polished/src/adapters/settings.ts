@@ -170,6 +170,7 @@ export interface UserSettings {
   customTheme?: CustomThemeSettings; // Reader font + colours, only used when theme === 'custom'
   notesTheme?: EditorThemeSettings;   // Notes writing surface (sticky notes follow it)
   journalTheme?: EditorThemeSettings; // Journal writing surface
+  cardLooks?: SavedCardLook[]; // Share-card looks saved by name (synced)
   // Whether each surface's formatting toolbar is slid up out of the way.
   // Per-device on purpose (not in SYNCED_KEYS) — an ergonomic choice like font
   // size, and a phone and a desktop rarely want the same answer.
@@ -318,6 +319,31 @@ export function getEditorTheme(surface: EditorSurface): EditorThemeSettings {
 export function updateEditorTheme(surface: EditorSurface, updates: Partial<EditorThemeSettings>): void {
   const current = getEditorTheme(surface);
   updateSettings({ [EDITOR_THEME_KEY[surface]]: { ...current, ...updates } });
+}
+
+/**
+ * A share-card look saved by name. The style is kept loose here and checked
+ * by lib/shareCard's sanitizeStyle on use: a look synced from a newer build
+ * may carry fields this one has never heard of, and must still apply.
+ */
+export interface SavedCardLook {
+  id: string;
+  name: string;
+  style: Record<string, unknown>;
+}
+
+export const MAX_CARD_LOOKS = 12;
+
+export function getCardLooks(): SavedCardLook[] {
+  const list = getSettings().cardLooks;
+  if (!Array.isArray(list)) return [];
+  return list.filter(
+    (l) => l && typeof l.id === 'string' && typeof l.name === 'string' && l.style && typeof l.style === 'object',
+  );
+}
+
+export function setCardLooks(looks: SavedCardLook[]): void {
+  updateSettings({ cardLooks: looks.slice(0, MAX_CARD_LOOKS) });
 }
 
 /** Which settings key holds each surface's toolbar-hidden flag. */
