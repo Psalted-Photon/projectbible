@@ -170,14 +170,17 @@
   // ── Tracing and hover ────────────────────────────────────────────────────
   /** How long a line takes to light from God to whoever was chosen, however
    *  many generations long it is. */
-  const REVEAL_MS = 1300;
+  const REVEAL_MS = 1850;
   /** How much of REVEAL_MS the camera spends easing off wherever the tree was
    *  onto the line's own path, so a tap while zoomed in doesn't jump. */
   const FOLLOW_LEAD_IN = 0.25;
+  /** Where a followed line lands: a little further out than FOCUS_ZOOM, so
+   *  there is more of the tree around the person it lands on. */
+  const FOLLOW_END_ZOOM = FOCUS_ZOOM * 0.8;
 
   /**
    * The camera riding the tip of a lighting line: the whole tree at God, then
-   * in towards FOCUS_ZOOM as the tip climbs, landing on the chosen person at
+   * in towards FOLLOW_END_ZOOM as the tip climbs, landing on the chosen person at
    * `anchor`. Zoom and tip both run off the same progress value, so how far
    * in the camera is always says how far along the line the light has got.
    */
@@ -207,7 +210,7 @@
     if (REDUCED_MOTION || line.length < 2) {
       reveal = null;
       tracedPath = new Set([...line, ...extra]);
-      if (landable) glideTo({ x: target.x, y: target.y }, FOCUS_ZOOM, glideAnchor());
+      if (landable) glideTo({ x: target.x, y: target.y }, FOLLOW_END_ZOOM, glideAnchor());
       return;
     }
     const pts = chain
@@ -218,9 +221,9 @@
     if (landable && model && pts.length >= 2) {
       cancelGlide();
       markViewMoved();
-      cam = { pts, kEnd: FOCUS_ZOOM, anchor: glideAnchor(), fit: fitView(model, W, H), startView: view };
+      cam = { pts, kEnd: FOLLOW_END_ZOOM, anchor: glideAnchor(), fit: fitView(model, W, H), startView: view };
     } else if (landable) {
-      glideTo({ x: target.x, y: target.y }, FOCUS_ZOOM, glideAnchor());
+      glideTo({ x: target.x, y: target.y }, FOLLOW_END_ZOOM, glideAnchor());
     }
     reveal = { line, extra, t0: performance.now(), follow: cam };
     tracedPath = new Set(line.slice(0, 1));
