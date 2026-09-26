@@ -7,7 +7,8 @@ import { isPhoneOrTablet } from '../device';
 
 export type SaveResult = 'shared' | 'downloaded' | 'cancelled';
 
-function download(file: File): void {
+/** A plain browser download, with no share sheet. The share card's Save uses it directly. */
+export function download(file: File): void {
   const url = URL.createObjectURL(file);
   const link = document.createElement('a');
   link.href = url;

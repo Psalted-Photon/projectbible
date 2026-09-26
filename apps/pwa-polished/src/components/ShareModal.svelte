@@ -2,6 +2,8 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { buildShareText, formatShareRef, type ShareRef } from '../lib/shareText';
   import { canShare, copyText, shareText as shareViaSheet } from '../lib/clipboard';
+  import { translationLabel } from '../lib/bibleData';
+  import ShareCardPanel from './ShareCardPanel.svelte';
 
   export let reference: ShareRef;
   /** The verse, or the phrase that was selected out of it. */
@@ -9,6 +11,22 @@
   export let translation = '';
 
   const dispatch = createEventDispatcher<{ close: void }>();
+
+  // ── Text | Card ────────────────────────────────────────────────────────────
+  // Remembered on this device only, so someone who always sends cards lands
+  // on Card. Storage can be missing (private mode), which just means Text.
+
+  type Tab = 'text' | 'card';
+  const TAB_KEY = 'share-sheet-tab';
+  let tab: Tab = 'text';
+  try {
+    if (localStorage.getItem(TAB_KEY) === 'card') tab = 'card';
+  } catch { /* no storage */ }
+
+  function pickTab(t: Tab) {
+    tab = t;
+    try { localStorage.setItem(TAB_KEY, t); } catch { /* no storage */ }
+  }
 
   let includeLink = true;
   let includeTranslation = true;
@@ -75,6 +93,19 @@
       <button class="sh-close-btn" on:click={handleClose} aria-label="Close">✕</button>
     </div>
 
+    <div class="sh-tabs" role="tablist" aria-label="Share as">
+      <button class="sh-tab" class:active={tab === 'text'} role="tab" aria-selected={tab === 'text'} on:click={() => pickTab('text')}>Text</button>
+      <button class="sh-tab" class:active={tab === 'card'} role="tab" aria-selected={tab === 'card'} on:click={() => pickTab('card')}>Card</button>
+    </div>
+
+    {#if tab === 'card'}
+      <ShareCardPanel
+        {passage}
+        reference={formatShareRef(reference)}
+        translationLabel={translationLabel(translation)}
+        on:close={handleClose}
+      />
+    {:else}
     <div class="sh-preview">{shareText}</div>
 
     <div class="sh-toggles">
@@ -104,6 +135,7 @@
         <button class="sh-btn sh-btn-share" on:click={handleShare}>Share…</button>
       {/if}
     </div>
+    {/if}
 
   </div>
 </div>
@@ -163,6 +195,35 @@
     transition: color 0.15s;
   }
   .sh-close-btn:hover { color: #ccc; }
+
+  /* ── Text | Card ── */
+  .sh-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    margin-bottom: 14px;
+    background: #161616;
+    border: 1px solid #2e2e2e;
+    border-radius: 10px;
+  }
+
+  .sh-tab {
+    flex: 1;
+    padding: 7px 0;
+    background: none;
+    border: none;
+    border-radius: 7px;
+    color: #888;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .sh-tab:hover { color: #ccc; }
+  .sh-tab.active {
+    background: #2a2a2a;
+    color: #f0f0f0;
+  }
 
   /* ── Preview ──
      Exactly what leaves the app, wrapped as written. Selectable, unlike the
