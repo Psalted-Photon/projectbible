@@ -118,18 +118,21 @@ class BaseOverlay {
   unmount() { this.clear(); }
 
   applyOpacity() {
-    const dim = (style) => ({
-      ...style,
-      opacity: (style.opacity ?? 1) * this.opacity,
-      fillOpacity: (style.fillOpacity ?? 0) * this.opacity,
-    });
+    const dim = (style, f) => {
+      const out = {
+        ...style,
+        opacity: (style.opacity ?? 1) * this.opacity,
+        fillOpacity: (style.fillOpacity ?? 0) * this.opacity,
+      };
+      return f && this.emphasise ? this.emphasise(out, f) : out;
+    };
     for (const layer of this.layers) {
       const base = layer.__styleFor;
       if (!base || !layer.setStyle) continue;
       // A style can be a function of the feature, so each land keeps its own
       // colour. Flattening one to a single object here once painted every land
       // in the first one's style.
-      layer.setStyle(typeof base === 'function' ? (f) => dim(base(f)) : dim(base));
+      layer.setStyle(typeof base === 'function' ? (f) => dim(base(f), f) : dim(base, null));
     }
   }
 
@@ -211,12 +214,53 @@ export class ErasOverlay extends BaseOverlay {
     this.onEraChange = () => {};
     /** After an era's lands and towns are in, for anything that lists them. */
     this.onDrawn = () => {};
+    /** The one land singled out from the era card, by name. */
+    this.focus = null;
     /** name → palette entry, once the whole timeline has been coloured. */
     this.colourMap = null;
     this.colourJob = null;
   }
 
   get era() { return this.eras[this.index]; }
+
+  /**
+   * Single out one land or province by name, or pass null to let them all be.
+   *
+   * The chosen one is drawn heavier and brighter and the rest fall back, so
+   * flying to Edom arrives at Edom rather than at a patch of the map with Edom
+   * somewhere in it. Cleared by any change of era.
+   */
+  setFocus(name) {
+    this.focus = name || null;
+    this.applyOpacity();
+    if (this.focus) {
+      for (const layer of this.layers) {
+        layer.eachLayer?.((l) => { if (l.feature?.properties?.name === this.focus) l.bringToFront?.(); });
+      }
+    }
+    this.host.onLabelsChanged?.();
+  }
+
+  /** How a feature is drawn while one land is singled out. */
+  emphasise(style, f) {
+    if (!this.focus) return style;
+    if (f.properties?.name === this.focus) {
+      return {
+        ...style,
+        fillOpacity: Math.min(0.75, (style.fillOpacity ?? 0) * 2.2 + 0.12),
+        opacity: 1,
+        weight: (style.weight ?? 1) + 1.8,
+        dashArray: null,
+      };
+    }
+    return { ...style, fillOpacity: (style.fillOpacity ?? 0) * 0.35, opacity: (style.opacity ?? 1) * 0.35 };
+  }
+
+  /** The label's standing while one land is singled out. */
+  emphasisFor(name) {
+    if (!this.focus) return null;
+    return name === this.focus ? 'focus' : 'dim';
+  }
 
   /** A land's or province's fill and ink. */
   colourFor(name) {
@@ -297,6 +341,7 @@ export class ErasOverlay extends BaseOverlay {
     if (next === this.index && this.layers.length) return;
 
     this.index = next;
+    this.focus = null;
     this.onEraChange(this.era);
     if (!this.enabled) return;
 
@@ -451,7 +496,9 @@ export class ErasOverlay extends BaseOverlay {
         lat: c[0], lon: c[1], text: f.properties.name,
         kind: 'land', pane: 'overlay-labels', shape: 'area',
         // In the ink of its own border, so the name says which shape it is.
-        priority: 120, colour: this.colourFor(f.properties.name).ink,
+        priority: f.properties.name === this.focus ? 500 : 120,
+        colour: this.colourFor(f.properties.name).ink,
+        emphasis: this.emphasisFor(f.properties.name),
       });
     }
 
@@ -464,8 +511,9 @@ export class ErasOverlay extends BaseOverlay {
         pane: 'overlay-labels', shape: 'area',
         // The overlay is the subject while it's on, so its lands outrank the
         // modern country names underneath.
-        priority: 100 + Math.min(30, (f.properties.verses ?? 0) / 3),
+        priority: f.properties.name === this.focus ? 500 : 100 + Math.min(30, (f.properties.verses ?? 0) / 3),
         colour: this.colourFor(f.properties.name).ink,
+        emphasis: this.emphasisFor(f.properties.name),
       });
     }
 

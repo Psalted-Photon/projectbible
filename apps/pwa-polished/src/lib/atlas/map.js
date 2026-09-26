@@ -1668,7 +1668,12 @@ export function createAtlasMap(container, options = {}) {
     eraPosition(era) { return eraPos(era, index.eras); },
     frameEra,
     /** One of the era's lands, framed in the space the panels leave. */
-    focusBounds(bounds) { if (bounds?.isValid()) fitClear(bounds, { maxZoom: 7 }); },
+    /** One of the era's lands: singled out, and framed in the space the panels leave. */
+    focusLand(land) {
+      timeline?.setFocus(land?.name ?? null);
+      if (land?.bounds?.isValid()) fitClear(land.bounds, { maxZoom: 7 });
+    },
+    clearLandFocus() { if (timeline?.focus) timeline.setFocus(null); },
     showTown,
 
     goToPlace,

@@ -94,9 +94,9 @@ export class LabelEngine {
    * marker for the place, and is only drawn if the name itself finds room, so
    * the map never shows an unexplained speck.
    */
-  add({ lat, lon, text, kind, pane = 'labels', priority = 0, shape = 'area', dot = null, colour = null }) {
+  add({ lat, lon, text, kind, pane = 'labels', priority = 0, shape = 'area', dot = null, colour = null, emphasis = null }) {
     if (!text) return;
-    this.candidates.push({ lat, lon, text, kind, pane, priority, shape, dot, colour });
+    this.candidates.push({ lat, lon, text, kind, pane, priority, shape, dot, colour, emphasis });
   }
 
   measure(text, kind) {
@@ -201,7 +201,8 @@ export class LabelEngine {
         pane: c.pane,
         interactive: false,
         icon: L.divIcon({
-          className: `map-label ${c.kind}`,
+          // `focus` or `dim`, while one land is singled out on the map.
+          className: `map-label ${c.kind}${c.emphasis ? ` ${c.emphasis}` : ''}`,
           html: c.colour ? `<span style="color:${c.colour}">${c.text}</span>` : c.text,
           iconSize: [chosen.w, chosen.h],
           iconAnchor: [chosen.w / 2 - chosen.dx, chosen.h / 2 - chosen.dy],

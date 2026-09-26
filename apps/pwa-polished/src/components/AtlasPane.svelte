@@ -67,6 +67,8 @@
   let eraTowns: any[] = [];
   let eraEvents: TimelineEvent[] = [];
   let showAllTowns = false;
+  /** The land singled out on the map from the card, by name. */
+  let focusedLand: string | null = null;
   /** The Timeline pack's events, read once the card is first opened. */
   let timelineEvents: TimelineEvent[] | null = null;
   let cardW = 0;
@@ -163,6 +165,12 @@
   $: compact = mapW > 0 && (mapW < 720 || mapH > mapW);
 
   $: eraBooks = parseBooks(era?.books);
+
+  // A land stays singled out only while the card that singled it out is open.
+  $: if (!cardShown && focusedLand) {
+    focusedLand = null;
+    atlas?.clearLandFocus();
+  }
   $: eraColour = (name: string) => atlas?.timeline?.colourFor(name)?.fill ?? '#8c4a3f';
 
   // The nav's Layer dial fades every overlay that is on, so it appears whenever
@@ -193,6 +201,7 @@
           era = next;
           eraIndex = atlas?.timeline?.index ?? 0;
           showAllTowns = false;
+          focusedLand = null;
           eraEvents = eventsIn(era);
         },
         onEraDrawn: refreshEraCard,
@@ -573,6 +582,22 @@
       timelineEvents = (await timelineInstalled()) ? (await loadTimeline()).events : [];
       eraEvents = eventsIn(era);
     }
+  }
+
+  /** Single out a land and fly to it; a second press lets it go. */
+  function focusLand(land: { name: string; bounds: any }) {
+    if (focusedLand === land.name) {
+      showWholeEra();
+      return;
+    }
+    focusedLand = land.name;
+    atlas?.focusLand(land);
+  }
+
+  function showWholeEra() {
+    focusedLand = null;
+    atlas?.clearLandFocus();
+    atlas?.frameEra();
   }
 
   /** The era's lands and towns, read off what the map has just drawn. */
@@ -1078,7 +1103,7 @@
               frontier ran.
             </div>
           {/if}
-          <button class="era-frame" on:click={() => atlas?.frameEra()}>Show the whole era</button>
+          <button class="era-frame" on:click={showWholeEra}>Show the whole era</button>
 
           {#if eraBooks.length}
             <div class="info-h">Books</div>
@@ -1097,7 +1122,12 @@
             <div class="info-h">Lands on the map</div>
             <div class="era-chips">
               {#each eraLands as land}
-                <button class="era-chip" on:click={() => atlas?.focusBounds(land.bounds)}>
+                <button
+                  class="era-chip"
+                  class:on={focusedLand === land.name}
+                  aria-pressed={focusedLand === land.name}
+                  on:click={() => focusLand(land)}
+                >
                   <span class="era-swatch" style="background:{eraColour(land.name)}"></span>{land.name}
                 </button>
               {/each}
@@ -1996,6 +2026,7 @@
     font-size: 12px;
   }
   .era-chip:hover { background: rgba(255, 255, 255, .09); }
+  .era-chip.on { background: rgba(255, 255, 255, .13); border-color: rgba(255, 255, 255, .3); }
   .era-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
   .era-row {
     display: flex; align-items: baseline; gap: 8px; width: 100%;

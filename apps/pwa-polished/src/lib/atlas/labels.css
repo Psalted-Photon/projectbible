@@ -276,3 +276,17 @@
     filter: drop-shadow(0 0 5px rgba(255, 244, 214, .8));
   }
 }
+
+/* One land singled out from the era card: its name glows and grows a little,
+   and every other overlay name steps back. Scaled rather than resized so the
+   box the placement pass measured still sits where it said. */
+.map-label.focus {
+  transform-origin: center;
+  z-index: 10 !important;
+}
+.map-label.focus span {
+  display: inline-block;
+  transform: scale(1.2);
+  text-shadow: 0 0 3px #f6eedb, 0 0 7px #f6eedb, 0 0 14px #fff6df, 0 0 22px #fff6df;
+}
+.map-label.dim { opacity: .35; }
