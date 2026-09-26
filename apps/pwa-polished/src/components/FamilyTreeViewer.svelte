@@ -170,32 +170,90 @@
   // ── Tracing and hover ────────────────────────────────────────────────────
   /** How long a line takes to light from God to whoever was chosen, however
    *  many generations long it is. */
-  const REVEAL_MS = 2000;
+  const REVEAL_MS = 1300;
+  /** How much of REVEAL_MS the camera spends easing off wherever the tree was
+   *  onto the line's own path, so a tap while zoomed in doesn't jump. */
+  const FOLLOW_LEAD_IN = 0.25;
+
+  /**
+   * The camera riding the tip of a lighting line: the whole tree at God, then
+   * in towards FOCUS_ZOOM as the tip climbs, landing on the chosen person at
+   * `anchor`. Zoom and tip both run off the same progress value, so how far
+   * in the camera is always says how far along the line the light has got.
+   */
+  type Follow = {
+    pts: { x: number; y: number }[];
+    kEnd: number;
+    anchor: { x: number; y: number };
+    fit: View;
+    startView: View;
+  };
+
   /**
    * A line lighting up one person at a time, God first — as if God, then
    * Adam, then Seth were each tapped in turn — until the chosen person lights
    * at REVEAL_MS. `extra` (a tribe's other members) lights with them at the
    * end. The frame loop grows tracedPath from this and drops it once done.
    */
-  let reveal: { line: string[]; extra: string[]; t0: number } | null = null;
+  let reveal: { line: string[]; extra: string[]; t0: number; follow: Follow | null } | null = null;
 
   /** Light `chain` (person back to God, as ancestorChain gives it), plus
-   *  `extra`, growing up from God unless the device asks for reduced motion. */
-  function revealLine(chain: TreeRec[], extra: string[] = []) {
+   *  `extra`, growing up from God unless the device asks for reduced motion.
+   *  With `follow`, the camera rides the tip in to the chosen person. */
+  function revealLine(chain: TreeRec[], extra: string[] = [], follow = false) {
     const line = chain.map((r) => r.id).reverse();
+    const target = chain[0];
+    const landable = follow && !!target && isPlaced(target);
     if (REDUCED_MOTION || line.length < 2) {
       reveal = null;
       tracedPath = new Set([...line, ...extra]);
+      if (landable) glideTo({ x: target.x, y: target.y }, FOCUS_ZOOM, glideAnchor());
       return;
     }
-    reveal = { line, extra, t0: performance.now() };
+    const pts = chain
+      .filter(isPlaced)
+      .reverse()
+      .map((r) => ({ x: r.x, y: r.y }));
+    let cam: Follow | null = null;
+    if (landable && model && pts.length >= 2) {
+      cancelGlide();
+      markViewMoved();
+      cam = { pts, kEnd: FOCUS_ZOOM, anchor: glideAnchor(), fit: fitView(model, W, H), startView: view };
+    } else if (landable) {
+      glideTo({ x: target.x, y: target.y }, FOCUS_ZOOM, glideAnchor());
+    }
+    reveal = { line, extra, t0: performance.now(), follow: cam };
     tracedPath = new Set(line.slice(0, 1));
     ensureLoopRunning();
   }
 
+  /** Where the follow camera is at progress `s` (0–1) along the line. */
+  function followView(f: Follow, s: number): View {
+    const last = f.pts.length - 1;
+    const pos = s * last;
+    const i = Math.min(Math.floor(pos), last - 1);
+    const u = pos - i;
+    const a = f.pts[i];
+    const b = f.pts[i + 1];
+    const tip = { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u };
+    const k = Math.exp(Math.log(f.fit.k) + (Math.log(f.kEnd) - Math.log(f.fit.k)) * s);
+    // The tip starts where it sits in the whole-tree view and slides over to
+    // the anchor as the zoom closes in — so s = 0 is exactly the whole tree
+    // and s = 1 is exactly the chosen person at the anchor.
+    const o = toWorld(0, 0, f.fit, W, H);
+    const sx = (tip.x - o.x) * f.fit.k;
+    const sy = (tip.y - o.y) * f.fit.k;
+    return viewFor(tip.x, tip.y, k, sx + (f.anchor.x - sx) * s, sy + (f.anchor.y - sy) * s, W, H);
+  }
+
+  function easeInOut(t: number): number {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  /** Trace someone's line, God up to them, with the camera following it in. */
   function traceFrom(n: TreeRec) {
     if (!model) return;
-    revealLine(ancestorChain(model, n));
+    revealLine(ancestorChain(model, n), [], true);
     selectedTribe = n.tribe || null;
     pinned = n;
     tribeLit = null;
@@ -323,16 +381,32 @@
     }
 
     if (reveal) {
-      const { line, extra, t0 } = reveal;
+      const { line, extra, t0, follow } = reveal;
       const t = Math.min(1, Math.max(0, now - t0) / REVEAL_MS);
       if (t >= 1) {
         tracedPath = new Set([...line, ...extra]);
+        if (follow) view = followView(follow, 1);
         reveal = null;
       } else {
         // God is lit at the start and the chosen person at exactly REVEAL_MS,
-        // with everyone between evenly spaced across it.
-        const lit = 1 + Math.floor(t * (line.length - 1));
+        // easing out of God and into the chosen person. The camera reads the
+        // same `s`, so the zoom and the tip can never drift apart.
+        const s = easeInOut(t);
+        const lit = 1 + Math.floor(s * (line.length - 1));
         if (tracedPath?.size !== lit) tracedPath = new Set(line.slice(0, lit));
+        if (follow) {
+          const cam = followView(follow, s);
+          const b = ease(Math.min(1, t / FOLLOW_LEAD_IN));
+          const sv = follow.startView;
+          view =
+            b >= 1
+              ? cam
+              : {
+                  x: sv.x + (cam.x - sv.x) * b,
+                  y: sv.y + (cam.y - sv.y) * b,
+                  k: Math.exp(Math.log(sv.k) + (Math.log(cam.k) - Math.log(sv.k)) * b),
+                };
+        }
         needsAnother = true;
       }
     }
@@ -369,8 +443,11 @@
     if (!pinned) pulsePhase = REDUCED_MOTION ? 1 : 0;
   }
 
+  /** Stop the camera wherever it is — a glide, or a line's follow. The line
+   *  itself keeps lighting; only the camera lets go. */
   function cancelGlide() {
     glide = null;
+    if (reveal) reveal.follow = null;
   }
 
   function glideTo(
@@ -439,23 +516,6 @@
 
   function isWideLayout(): boolean {
     return typeof matchMedia !== 'undefined' && matchMedia('(min-width: 760px)').matches;
-  }
-
-  /** Opening on a person, or the header 🌳's focusId: zoom to FOCUS_ZOOM, since
-   *  the previous zoom (the whole tree, or whatever the last visit left) means
-   *  nothing here — this is a fresh arrival, not a move within one visit. */
-  function glideToPersonFocused(n: TreeRec) {
-    if (!isPlaced(n)) return;
-    glideTo({ x: n.x, y: n.y }, FOCUS_ZOOM, glideAnchor());
-  }
-
-  /** Tapping an ancestor in the card, or a relative walked to inside the
-   *  sheet: glide to them at whatever zoom the tree is already at, per the
-   *  plan — a walk along a line the user is already looking at shouldn't
-   *  also change how far in they are. */
-  function glideToPersonAtCurrentZoom(n: TreeRec) {
-    if (!isPlaced(n)) return;
-    glideTo({ x: n.x, y: n.y }, view.k, glideAnchor());
   }
 
   // ── History: back closes the tree, and the sheet on top of it ──────────
@@ -652,7 +712,6 @@
     if (rec) {
       traceFrom(rec);
       startPulse();
-      glideToPersonAtCurrentZoom(rec);
     }
   }
 
@@ -675,7 +734,6 @@
     if (rec) {
       traceFrom(rec);
       startPulse();
-      glideToPersonAtCurrentZoom(rec);
     }
   }
 
@@ -747,11 +805,10 @@
           REDUCED_MOTION ? 0 : 650,
         );
       } else if (target && isPlaced(target)) {
+        // traceFrom starts from the fitted view and follows the line in, so
+        // the user sees where the whole tree is before arriving at them.
         traceFrom(target);
         startPulse();
-        // So the user sees where the whole tree is before zooming to them —
-        // the glide starts from the fitted view rather than jumping straight in.
-        glideToPersonFocused(target);
       }
 
       document.fonts
@@ -1053,7 +1110,6 @@
           onTraceAncestor={(rec: TreeRec) => {
             traceFrom(rec);
             startPulse();
-            glideToPersonAtCurrentZoom(rec);
           }}
           onReadBio={openReadBio}
         />
