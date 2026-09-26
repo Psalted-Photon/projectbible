@@ -426,7 +426,7 @@ export function createAtlasMap(container, options = {}) {
    * The host measures its own furniture and reports it here; the engine never
    * reaches into the DOM to find out.
    */
-  const reserved = { right: 0 };
+  const reserved = { right: 0, left: 0, bottom: 0 };
 
   /** The place whose panel is open, by id, so its dot can be drawn as chosen. */
   let selectedId = null;
@@ -963,7 +963,7 @@ export function createAtlasMap(container, options = {}) {
    * photo, the colour-coded references, the crumb back to the map — is the
    * same code path either way.
    */
-  function openPlaceWith(place, journey, { force = false } = {}) {
+  function openPlaceWith(place, journey, { force = false, move = true } = {}) {
     markSelected(place.id);
     emit.place({
       kind: 'place',
@@ -980,6 +980,7 @@ export function createAtlasMap(container, options = {}) {
     // the whole container and let the panel open over the answer. Two rather
     // than one because the host measures through a resize observer, which
     // reports after the frame the panel was painted in.
+    if (!move) return;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (!destroyed) centreInView(place.y, place.x, { force });
     }));
@@ -1246,28 +1247,92 @@ export function createAtlasMap(container, options = {}) {
    * panel, or close enough to an edge to be awkward — so tapping a city already
    * sitting in clear space leaves the map where the reader put it.
    */
-  function centreInView(lat, lon, { force = false } = {}) {
+  function centreInView(lat, lon, { force = false, zoom = null } = {}) {
     const size = map.getSize();
-    // A panel squeezed to nearly the whole width leaves no meaningful space to
-    // aim at, so fall back to plain centring rather than at a sliver.
-    const strip = reserved.right < size.x * 0.55 ? reserved.right : 0;
-    const visibleW = size.x - strip;
-    const target = L.point(visibleW / 2, size.y / 2);
-    const at = map.latLngToContainerPoint([lat, lon]);
+    const clear = clearRect();
+    const target = L.point((clear.x0 + clear.x1) / 2, clear.y1 / 2);
+    const z = zoom ?? map.getZoom();
 
-    if (!force) {
-      const inside =
-        at.x >= EDGE_MARGIN && at.x <= visibleW - EDGE_MARGIN &&
-        at.y >= EDGE_MARGIN && at.y <= size.y - EDGE_MARGIN;
-      if (inside) return;
+    if (z === map.getZoom()) {
+      const at = map.latLngToContainerPoint([lat, lon]);
+      if (!force) {
+        const inside =
+          at.x >= clear.x0 + EDGE_MARGIN && at.x <= clear.x1 - EDGE_MARGIN &&
+          at.y >= EDGE_MARGIN && at.y <= clear.y1 - EDGE_MARGIN;
+        if (inside) return;
+      }
+      if (Math.abs(at.x - target.x) < CENTRE_SLOP && Math.abs(at.y - target.y) < CENTRE_SLOP) return;
     }
-    if (Math.abs(at.x - target.x) < CENTRE_SLOP && Math.abs(at.y - target.y) < CENTRE_SLOP) return;
 
-    // The latlng that would end up under the visible centre: take the pixel
-    // delta from there to the city and apply it to the current centre.
-    const centre = map.latLngToContainerPoint(map.getCenter());
-    const moved = centre.add(at.subtract(target));
-    map.flyTo(map.containerPointToLatLng(moved), map.getZoom(), { duration: 1.1 });
+    // The centre that puts the point under the clear space's middle, worked in
+    // the destination zoom's pixels so a zoom and a pan land together.
+    const offset = target.subtract(size.divideBy(2));
+    const centre = map.unproject(map.project([lat, lon], z).subtract(offset), z);
+    map.flyTo(centre, z, { duration: 1.1 });
+  }
+
+  /**
+   * The part of the container nothing is sitting on, in container pixels.
+   *
+   * A panel squeezed to nearly the whole width or height leaves no meaningful
+   * space to aim at, so that side falls back to the whole container rather
+   * than aiming at a sliver.
+   */
+  function clearRect() {
+    const size = map.getSize();
+    const right = reserved.right < size.x * 0.55 ? reserved.right : 0;
+    const left = reserved.left + right < size.x * 0.8 ? reserved.left : 0;
+    const bottom = reserved.bottom < size.y * 0.7 ? reserved.bottom : 0;
+    return { x0: left, x1: size.x - right, y1: size.y - bottom };
+  }
+
+  /** Fit bounds into the clear space rather than the whole container. */
+  function fitClear(bounds, { maxZoom = 8, pad = 40 } = {}) {
+    const size = map.getSize();
+    const clear = clearRect();
+    map.flyToBounds(bounds, {
+      paddingTopLeft: [clear.x0 + pad, pad],
+      paddingBottomRight: [size.x - clear.x1 + pad, size.y - clear.y1 + pad],
+      maxZoom,
+      duration: 1,
+    });
+  }
+
+  /**
+   * The biblical place an era's town stands for.
+   *
+   * The era's towns come from the atlas pack and the dots from the place
+   * catalogue. Both start from OpenBible's names, so the name usually matches;
+   * when it doesn't, the nearest dot within a few miles is the same place.
+   */
+  function biblicalFor(town) {
+    const all = biblical?.places ?? [];
+    const named = all.find((p) => p.id === town.name) ?? all.find((p) => p.n === town.name);
+    if (named) return named;
+    let best = null;
+    let bestKm = 15;
+    for (const p of all) {
+      const km = haversine(town.lat, town.lon, p.y, p.x);
+      if (km < bestKm) { bestKm = km; best = p; }
+    }
+    return best;
+  }
+
+  /**
+   * Fly to one of the era's towns, close enough to read the streets around it.
+   * `open` also opens its panel; a narrow window leaves no room for one beside
+   * the era sheet, so there the dot is only marked.
+   */
+  function showTown(town, { open = true } = {}) {
+    const place = biblicalFor(town);
+    const lat = place?.y ?? town.lat;
+    const lon = place?.x ?? town.lon;
+    if (place && open) openPlaceWith(place, null, { move: false });
+    else if (place) markSelected(place.id);
+    const zoom = Math.max(map.getZoom(), 8);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!destroyed) centreInView(lat, lon, { force: true, zoom });
+    }));
   }
 
   function dropPin(lat, lon, popupHtml) {
@@ -1430,7 +1495,7 @@ export function createAtlasMap(container, options = {}) {
   function frameEra() {
     if (!timeline) return;
     const bounds = timeline.bounds;
-    if (bounds.isValid()) map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 8, duration: 1 });
+    if (bounds.isValid()) fitClear(bounds, { maxZoom: 8 });
   }
 
   // ----------------------------------------------------------------- start
@@ -1475,6 +1540,7 @@ export function createAtlasMap(container, options = {}) {
     const overlayPlaces = await getJson(index.overlayPlaces.file);
     timeline = host.register(new ErasOverlay({ eras: index.eras, places: overlayPlaces }));
     timeline.onEraChange = (era) => emit.era(era);
+    timeline.onDrawn = () => options.onEraDrawn?.();
 
     // Journeys, registered beside the timeline and independent of it: they do not
     // belong to an era and must not vanish when the slider moves, which would
@@ -1601,6 +1667,9 @@ export function createAtlasMap(container, options = {}) {
     },
     eraPosition(era) { return eraPos(era, index.eras); },
     frameEra,
+    /** One of the era's lands, framed in the space the panels leave. */
+    focusBounds(bounds) { if (bounds?.isValid()) fitClear(bounds, { maxZoom: 7 }); },
+    showTown,
 
     goToPlace,
     goToScripture,
@@ -1608,11 +1677,13 @@ export function createAtlasMap(container, options = {}) {
 
     /**
      * The host says how much of the container its own furniture covers, in
-     * pixels from the right edge. Measured rather than assumed, because the
-     * panel's width is a max-width that shrinks on a narrow window.
+     * pixels from each edge. Measured rather than assumed, because the panels'
+     * widths are max-widths that shrink on a narrow window.
      */
-    setReserved({ right = 0 } = {}) {
+    setReserved({ right = 0, left = 0, bottom = 0 } = {}) {
       reserved.right = Math.max(0, right || 0);
+      reserved.left = Math.max(0, left || 0);
+      reserved.bottom = Math.max(0, bottom || 0);
     },
 
     /** The panel closed: nothing is the chosen dot any more. */

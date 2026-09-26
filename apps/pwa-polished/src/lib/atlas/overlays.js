@@ -209,6 +209,8 @@ export class ErasOverlay extends BaseOverlay {
     this.index = 0;
     this.showAgeing = true;
     this.onEraChange = () => {};
+    /** After an era's lands and towns are in, for anything that lists them. */
+    this.onDrawn = () => {};
     /** name → palette entry, once the whole timeline has been coloured. */
     this.colourMap = null;
     this.colourJob = null;
@@ -426,6 +428,7 @@ export class ErasOverlay extends BaseOverlay {
 
     this.applyOpacity();
     this.host.onLabelsChanged?.();
+    this.onDrawn();
   }
 
   /**

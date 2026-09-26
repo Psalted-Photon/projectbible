@@ -80,7 +80,7 @@ export const MAP_TIPS: Tip[] = [
     area,
     target: '.atlas .tl-caption',
     title: 'This era',
-    body: 'Tap to fit the map to this era.',
+    body: 'Tap for more about this era: its books, lands, places and events.',
   },
   {
     id: 'map-photo',

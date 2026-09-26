@@ -9,6 +9,7 @@
    * wide inside a docked window, which is a thing the lab page never had to do.
    */
   import { onMount, onDestroy, tick } from 'svelte';
+  import { fly } from 'svelte/transition';
   import { get } from 'svelte/store';
   import 'leaflet/dist/leaflet.css';
   import ArtViewer from './ArtViewer.svelte';
@@ -24,6 +25,7 @@
   import { ScriptureSearch } from '../lib/atlas/search.js';
   import { groupByBook, bookName, miles, approxMiles } from '../lib/atlas/places.js';
   import { getBookColor } from '../lib/bibleData';
+  import { loadTimeline, timelineInstalled, formatSpan, type TimelineEvent } from '../lib/timeline/data';
 
   export let windowId: string | undefined = undefined;
 
@@ -58,6 +60,21 @@
   let showBiblical = true;
   let showLabels = true;
   let showEveryPlace = false;
+
+  /** The era card, opened from the caption on the era bar. */
+  let eraCardOpen = false;
+  let eraLands: { name: string; kind: string; bounds: any }[] = [];
+  let eraTowns: any[] = [];
+  let eraEvents: TimelineEvent[] = [];
+  let showAllTowns = false;
+  /** The Timeline pack's events, read once the card is first opened. */
+  let timelineEvents: TimelineEvent[] | null = null;
+  let cardW = 0;
+  let cardH = 0;
+  let mapW = 0;
+  let mapH = 0;
+  /** Few places are worth a glance; the rest wait behind "show all". */
+  const TOWNS_SHOWN = 8;
 
   let openPanel: 'basemap' | 'layers' | 'credit' | null = null;
   let searchOpen = false;
@@ -128,9 +145,25 @@
   // the city it just opened in the space that is left rather than underneath
   // the panel describing it. The panel's own offset from the edge goes in too,
   // and closing it reports zero without anything having to say so.
+  //
+  // The era card is reported the same way: beside the map on a wide window,
+  // across its foot on a narrow or upright one.
+  $: cardShown = eraCardOpen && timelineOn && era;
   $: atlas?.setReserved({
     right: info && infoW ? infoW + 10 + (edge === 'left' ? GRIP_PX : 0) + 14 : 0,
+    left: cardShown && !compact && cardW ? cardW + 10 + (edge === 'right' ? GRIP_PX : 0) + 14 : 0,
+    bottom: cardShown && compact && cardH ? cardH : 0,
   });
+
+  /**
+   * Upright or narrow: the card rises as a sheet across the bottom, and what it
+   * sends the map to lands in the half above it. Otherwise it sits bottom-left
+   * and the map uses the space to its right.
+   */
+  $: compact = mapW > 0 && (mapW < 720 || mapH > mapW);
+
+  $: eraBooks = parseBooks(era?.books);
+  $: eraColour = (name: string) => atlas?.timeline?.colourFor(name)?.fill ?? '#8c4a3f';
 
   // The nav's Layer dial fades every overlay that is on, so it appears whenever
   // there is one to fade rather than only for the timeline it was written for.
@@ -159,7 +192,10 @@
         onEra: (next: any) => {
           era = next;
           eraIndex = atlas?.timeline?.index ?? 0;
+          showAllTowns = false;
+          eraEvents = eventsIn(era);
         },
+        onEraDrawn: refreshEraCard,
         onLayers: () => {
           overlays = atlas?.overlays ?? [];
           timelineOn = Boolean(atlas?.timeline?.enabled);
@@ -520,6 +556,57 @@
       }
       setEra(eraIndex + 1);
     }, 1700);
+  }
+
+  // -------------------------------------------------------------- era card
+
+  /** Open the card and frame the era; a second press closes it. */
+  async function toggleEraCard() {
+    if (eraCardOpen) { eraCardOpen = false; return; }
+    eraCardOpen = true;
+    refreshEraCard();
+    // Framed once the card has been measured, so the era lands beside it and
+    // not underneath it.
+    await tick();
+    requestAnimationFrame(() => requestAnimationFrame(() => atlas?.frameEra()));
+    if (timelineEvents === null) {
+      timelineEvents = (await timelineInstalled()) ? (await loadTimeline()).events : [];
+      eraEvents = eventsIn(era);
+    }
+  }
+
+  /** The era's lands and towns, read off what the map has just drawn. */
+  function refreshEraCard() {
+    const tl = atlas?.timeline;
+    if (!tl?.era) return;
+    const seen = new Set<string>();
+    eraLands = tl.lands.filter((l: any) => !seen.has(l.name) && seen.add(l.name));
+    eraTowns = (tl.places ?? [])
+      .filter((p: any) => p.era_id === tl.era.id)
+      .sort((a: any, b: any) => b.verses - a.verses);
+    eraEvents = eventsIn(tl.era);
+  }
+
+  /** Timeline events that fall inside the era's years, oldest first. */
+  function eventsIn(e: any): TimelineEvent[] {
+    if (!e || !timelineEvents) return [];
+    return timelineEvents.filter((ev) => ev.year_start <= e.year_end && ev.year_end >= e.year_start);
+  }
+
+  function parseBooks(raw: string | null | undefined): string[] {
+    try {
+      const list = JSON.parse(raw ?? '[]');
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function goToEvent(ev: TimelineEvent) {
+    if (!ev.first) return;
+    const current = get(navigationStore);
+    navigationStore.pushHistory(current, 'map');
+    navigationStore.navigateToVerse(current.translation, ev.first.book, ev.first.chapter, ev.first.verse);
   }
 
   // ------------------------------------------------------ the tapped panel
@@ -952,13 +1039,103 @@
     </div>
   {/if}
 
-  <div class="map-area" class:above-timeline={timelineOn && era}>
+  <div
+    class="map-area"
+    class:above-timeline={timelineOn && era}
+    bind:clientWidth={mapW}
+    bind:clientHeight={mapH}
+  >
     <div class="map" bind:this={mapEl}></div>
+
+    <!-- The era, in full. Inside the map area so it stacks over the map's own
+         panes — the hover card it replaces sat in the era bar, beneath them, and
+         only showed through while the map was mid-flight. -->
+    {#if cardShown}
+      <section
+        class="era-card"
+        class:sheet={compact}
+        aria-label="About this era"
+        bind:clientWidth={cardW}
+        bind:clientHeight={cardH}
+        transition:fly={{ y: compact ? 260 : 60, duration: 220 }}
+      >
+        <button class="info-close" aria-label="Close" on:click={() => (eraCardOpen = false)}>✕</button>
+        <div class="era-body">
+          <div class="info-name">{era.title}</div>
+          {#if era.subtitle}<div class="info-sub">{era.subtitle}</div>{/if}
+          <div class="tl-years era-years">
+            <span class="tl-dot {era.confidence}"></span>{eraYear(era.year_start)} – {eraYear(era.year_end)}
+          </div>
+          {#if era.blurb}<p class="era-blurb">{era.blurb}</p>{/if}
+          {#if era.dating_note}<div class="tl-note">{era.dating_note}</div>{/if}
+          <span class="tl-tag {era.confidence}">
+            {era.confidence === 'attested' ? 'Surveyed borders' : 'Approximate · lands named in Scripture'}
+          </span>
+          {#if eraIndex === firstSurveyed}
+            <div class="tl-seam">
+              From here the borders are known. Everything earlier shows the lands
+              its books name, drawn as approximate — nobody knows where Assyria’s
+              frontier ran.
+            </div>
+          {/if}
+          <button class="era-frame" on:click={() => atlas?.frameEra()}>Show the whole era</button>
+
+          {#if eraBooks.length}
+            <div class="info-h">Books</div>
+            <div class="era-chips">
+              {#each eraBooks as book}
+                <button
+                  class="era-chip"
+                  style="border-left-color:{getBookColor(bookName(book))}"
+                  on:click={() => goToVerse(book, `${book}.1.1`)}
+                >{bookName(book)}</button>
+              {/each}
+            </div>
+          {/if}
+
+          {#if eraLands.length}
+            <div class="info-h">Lands on the map</div>
+            <div class="era-chips">
+              {#each eraLands as land}
+                <button class="era-chip" on:click={() => atlas?.focusBounds(land.bounds)}>
+                  <span class="era-swatch" style="background:{eraColour(land.name)}"></span>{land.name}
+                </button>
+              {/each}
+            </div>
+          {/if}
+
+          {#if eraTowns.length}
+            <div class="info-h">Key places</div>
+            {#each showAllTowns ? eraTowns : eraTowns.slice(0, TOWNS_SHOWN) as town}
+              <button class="era-row" on:click={() => atlas?.showTown(town, { open: !compact })}>
+                <span class="era-row-name">{town.name}</span>
+                <span class="era-row-meta">{town.verses} verse{town.verses === 1 ? '' : 's'}</span>
+              </button>
+            {/each}
+            {#if eraTowns.length > TOWNS_SHOWN}
+              <button class="era-more" on:click={() => (showAllTowns = !showAllTowns)}>
+                {showAllTowns ? 'Show fewer' : `Show all ${eraTowns.length}`}
+              </button>
+            {/if}
+          {/if}
+
+          {#if eraEvents.length}
+            <div class="info-h">Events</div>
+            {#each eraEvents as ev}
+              <button class="era-row" disabled={!ev.first} on:click={() => goToEvent(ev)}>
+                <span class="era-row-name">{ev.name}</span>
+                <span class="era-row-meta">{formatSpan(ev.year_start, ev.year_end)}</span>
+              </button>
+            {/each}
+          {/if}
+        </div>
+      </section>
+    {/if}
 
     <!-- Only while an era is showing lands rather than borders. Quiet on
          purpose: findable if you wonder what the soft shapes are, invisible if
-         you don't. -->
-    {#if approximate}
+         you don't. The era card says the same, so the key steps aside for it. -->
+    {#if approximate && !cardShown}
       <div
         class="approx-key"
         title="These centuries show the lands their books name. No borders are drawn, because none are known."
@@ -1214,29 +1391,15 @@
         class="tl-caption"
         role="button"
         tabindex="0"
-        title="Frame this era"
-        on:click={() => atlas?.frameEra()}
-        on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); atlas?.frameEra(); } }}
+        class:on={eraCardOpen}
+        title="More about this era"
+        aria-expanded={eraCardOpen}
+        on:click={toggleEraCard}
+        on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleEraCard(); } }}
       >
         <div class="tl-title">{era.title}</div>
         <div class="tl-years">
           <span class="tl-dot {era.confidence}"></span>{eraYear(era.year_start)} – {eraYear(era.year_end)}
-        </div>
-        <div class="tl-more">
-          {#if era.subtitle}<div class="tl-title">{era.subtitle}</div>{/if}
-          <div class="tl-blurb">{era.blurb ?? ''}</div>
-          {#if era.dating_note}<div class="tl-note">{era.dating_note}</div>{/if}
-          <span class="tl-tag {era.confidence}">
-            {era.confidence === 'attested' ? 'Surveyed borders' : 'Approximate · lands named in Scripture'}
-          </span>
-          {#if eraIndex === firstSurveyed}
-            <div class="tl-seam">
-              From here the borders are known. Everything earlier shows the lands
-              its books name, drawn as approximate — nobody knows where Assyria’s
-              frontier ran.
-            </div>
-          {/if}
-          <div class="tl-hint">Click to frame this era on the map</div>
         </div>
       </div>
 
@@ -1794,9 +1957,66 @@
     padding: 0 1px;
   }
 
+  /* ---------------- the era card ---------------- */
+  /* Bottom-left on a wide window, beside the map it describes; a sheet across
+     the foot on a narrow or upright one. Under the place panel (950), so a
+     place opened from here reads on top of the era it came from. */
+  .era-card {
+    position: absolute; left: calc(10px + var(--grip-l)); bottom: calc(10px + var(--grip-b));
+    width: 340px; max-width: calc(100% - 20px - var(--grip-l) - var(--grip-r));
+    max-height: calc(100% - 20px - var(--grip-b)); z-index: 940;
+    background: rgba(26, 26, 26, .95); border: 1px solid var(--line-2); border-radius: 11px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .5); backdrop-filter: blur(8px);
+    display: flex; flex-direction: column; overflow: hidden;
+    font-family: var(--display);
+  }
+  .era-card.sheet {
+    left: 0; right: 0; bottom: 0; width: auto; max-width: none; max-height: 50%;
+    border-radius: 14px 14px 0 0; border-bottom: 0;
+  }
+  .era-body { overflow-y: auto; padding: 14px 15px; }
+  .era-years { margin-top: 6px; }
+  .era-blurb {
+    margin: 9px 0 0; font-size: 12.5px; color: #c2c6cd; line-height: 1.5;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  .era-frame {
+    display: block; margin-top: 11px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+    background: var(--chrome-2); border: 1px solid var(--line-2); color: var(--text);
+    font-family: inherit; font-size: 12px;
+  }
+  .era-frame:hover { border-color: var(--focus); color: var(--focus); }
+  .era-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .era-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 9px; border-radius: 5px; cursor: pointer;
+    background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08);
+    border-left: 3px solid rgba(255, 255, 255, .08);
+    color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 12px;
+  }
+  .era-chip:hover { background: rgba(255, 255, 255, .09); }
+  .era-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  .era-row {
+    display: flex; align-items: baseline; gap: 8px; width: 100%;
+    padding: 6px 4px; background: none; border: 0; border-top: 1px solid rgba(255, 255, 255, .06);
+    color: var(--text); cursor: pointer; text-align: left;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 12.5px;
+  }
+  .era-row:hover:not(:disabled) { background: rgba(255, 255, 255, .04); }
+  .era-row:disabled { cursor: default; color: var(--dim); }
+  .era-row-name { flex: 1; min-width: 0; }
+  .era-row-meta { color: var(--faint); font-size: 11px; flex: none; }
+  .era-more {
+    margin-top: 4px; padding: 4px 0; background: none; border: 0; cursor: pointer;
+    color: var(--dim); font-family: inherit; font-size: 11.5px;
+  }
+  .era-more:hover { color: var(--text); }
+
   /* ---------------- timeline ---------------- */
   /* One compact row: the era on the left, the slider filling the rest. The
-     detail lives in a hover card so the bar doesn't eat the map. */
+     detail lives in the era card, opened from the caption, so the bar doesn't
+     eat the map. */
   .timeline-bar {
     flex: none; background: #151515; border-top: 1px solid var(--line);
     padding: 6px calc(14px + var(--grip-r))
@@ -1810,6 +2030,7 @@
   }
   @container (max-width: 560px) { .tl-caption { width: 140px; } }
   .tl-caption:hover { background: #1f1f1f; }
+  .tl-caption.on { background: #232323; }
   .tl-caption:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .tl-title {
     font-size: 13px; font-weight: 600; white-space: nowrap;
@@ -1823,18 +2044,6 @@
   .tl-dot.attested { background: #8fc296; }
   .tl-dot.approximate { background: #c98b3a; }
 
-  /* Detail on hover, so the bar stays one row tall. */
-  .tl-more {
-    position: absolute; left: 0; bottom: calc(100% + 8px); width: 320px;
-    background: var(--chrome-2); border: 1px solid var(--line-2); border-radius: 9px;
-    padding: 11px 13px; box-shadow: 0 12px 30px rgba(0, 0, 0, .55);
-    opacity: 0; visibility: hidden; transition: opacity .13s; pointer-events: none;
-  }
-  .tl-caption:hover .tl-more, .tl-caption:focus-visible .tl-more { opacity: 1; visibility: visible; }
-  .tl-blurb {
-    font-size: 12px; color: var(--dim); line-height: 1.45;
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  }
   .tl-note {
     font-size: 11px; color: var(--faint); margin-top: 7px; line-height: 1.4;
     border-left: 2px solid var(--line-2); padding-left: 7px;
@@ -1852,7 +2061,6 @@
   }
   .tl-tag.attested { background: rgba(90, 140, 95, .16); color: #8fc296; border: 1px solid rgba(143, 194, 150, .3); }
   .tl-tag.approximate { background: rgba(201, 139, 58, .14); color: #c98b3a; border: 1px solid rgba(201, 139, 58, .32); }
-  .tl-hint { font-size: 10px; color: var(--faint); margin-top: 9px; }
 
   .tl-controls { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
   .tl-play {
