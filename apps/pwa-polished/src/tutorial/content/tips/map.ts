@@ -46,15 +46,6 @@ export const MAP_TIPS: Tip[] = [
     body: 'Place names, biblical places, every place, the historical overlays, and a switch to age the map.',
   },
   {
-    id: 'map-timeline',
-    area,
-    target: '.atlas .nav .btn',
-    text: 'Eras',
-    exact: true,
-    title: 'Eras',
-    body: 'Sixteen eras, from Abraham leaving Ur to the later Roman empire, drawn over the map.',
-  },
-  {
     id: 'map-whole-world',
     area,
     target: '.atlas .nav .btn',

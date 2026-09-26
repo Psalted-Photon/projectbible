@@ -401,13 +401,6 @@
     await atlas.timeline.draw();
   }
 
-  async function toggleTimeline() {
-    await atlas?.setOverlayEnabled('eras', !timelineOn);
-    timelineOn = Boolean(atlas?.timeline?.enabled);
-    era = atlas?.timeline?.era ?? null;
-    eraIndex = atlas?.timeline?.index ?? 0;
-  }
-
   // ---------------------------------------------------------------- search
 
   async function openSearch() {
@@ -711,12 +704,6 @@
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/><polygon points="12 2 2 7 12 12 22 7"/></svg>
         <span class="btn-label">Layers</span>
-      </button>
-
-      <!-- Eras, not Timeline: the word belongs to the Timeline window now. -->
-      <button class="btn" class:on={timelineOn} title="Show the historical eras" on:click={toggleTimeline}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
-        <span class="btn-label">Eras</span>
       </button>
 
       <!-- The overlay's fade lives with the control that turns it on, so the

@@ -482,6 +482,31 @@ export class ErasOverlay extends BaseOverlay {
     return out;
   }
 
+  /**
+   * The lands and provinces this era draws, each with its own extent.
+   *
+   * Seas are left out: the Great Sea runs to Gibraltar, so framing it with the
+   * lands took the Patriarchs' map out to the whole Mediterranean.
+   */
+  get lands() {
+    const out = [];
+    for (const area of this.hitAreas ?? []) {
+      const features = area.geojson.features.filter((f) => !isWaterBody(f.properties?.kind));
+      if (!features.length) continue;
+      const bounds = L.geoJSON({ type: 'FeatureCollection', features }).getBounds();
+      if (bounds.isValid()) out.push({ name: area.label, kind: area.kind, bounds });
+    }
+    return out;
+  }
+
+  /** Everything the era is about, and nothing of the world around it. */
+  get bounds() {
+    const bounds = L.latLngBounds([]);
+    for (const land of this.lands) bounds.extend(land.bounds);
+    for (const p of this.towns ?? []) bounds.extend([p.lat, p.lon]);
+    return bounds;
+  }
+
   /** What this overlay says sits under a tap. */
   identify(latlng) {
     const out = [];

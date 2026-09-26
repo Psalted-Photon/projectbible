@@ -1420,17 +1420,16 @@ export function createAtlasMap(container, options = {}) {
     return timeline ? timeline.eras.findIndex((e) => e.confidence === 'attested') : -1;
   }
 
-  /** Frame the era's full extent, so Rome's reach is one tap away. */
+  /**
+   * Frame the era's full extent, so Rome's reach is one tap away.
+   *
+   * Only the era's own lands and places. It used to measure every layer the
+   * era draws, and those include the world's coastline and sea, so every era
+   * framed the whole world.
+   */
   function frameEra() {
     if (!timeline) return;
-    const bounds = L.latLngBounds([]);
-    for (const layer of timeline.layers) {
-      if (!layer.getBounds) continue;
-      try {
-        const b = layer.getBounds();
-        if (b.isValid()) bounds.extend(b);
-      } catch { /* layer groups of labels have no bounds; skip them */ }
-    }
+    const bounds = timeline.bounds;
     if (bounds.isValid()) map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 8, duration: 1 });
   }
 
