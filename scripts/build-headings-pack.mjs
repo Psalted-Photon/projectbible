@@ -111,6 +111,36 @@ const BIBLE_BOOKS = [
 ];
 
 /**
+ * Reduce a USFM heading to plain text. NET's headings carry inline markers --
+ * \nd for the divine name, \it and \bd in the acrostic and Song of Songs
+ * speaker labels, and \w word|strong="H1234"\w* word tags -- which would
+ * otherwise reach the reader as literal backslashes.
+ */
+function cleanHeading(text) {
+  return text
+    .replace(/\\\+?w\s+([^|\\]*?)(?:\|[^\\]*)?\\\+?w\*/g, '$1')
+    .replace(/\\\+?[a-z]+\d*\*?/g, '')
+    .split('|')[0]              // Obadiah 1: "Judgment on Edom|Edom's Approaching Destruction"
+    .replace(/\s+/g, ' ')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+([)’:,])/g, '$1')
+    .trim();
+}
+
+/**
+ * Source defects no general rule can repair, keyed "Book chapter:verse" as
+ * the parser would file them; null drops the heading. NET's Ecclesiastes 2
+ * heading sits after an empty \v 1 and swallowed the verse's opening words, and
+ * Obadiah repeats its opening heading mid-verse.
+ */
+const HEADING_FIXES = {
+  net: {
+    'Ecclesiastes 2:2': { verse: 1, heading: 'Futility of Self-Indulgent Pleasure' },
+    'Obadiah 1:2': null,
+  },
+};
+
+/**
  * Parse a USFM file and extract section headings with their (chapter, verse).
  * Headings are attached to the next \v verse marker following them.
  */
@@ -139,7 +169,7 @@ function parseUSFMHeadings(filePath, bookName) {
     const sMatch = line.match(/^\\s(1|2)?\s+(.*)/);
     if (sMatch) {
       pendingLevel = sMatch[1] === '2' ? 2 : 1;
-      pendingHeading = sMatch[2].trim();
+      pendingHeading = cleanHeading(sMatch[2]);
       continue;
     }
 
@@ -147,7 +177,7 @@ function parseUSFMHeadings(filePath, bookName) {
     const qaMatch = line.match(/^\\qa\s+(.*)/);
     if (qaMatch && qaMatch[1].trim()) {
       pendingLevel = 3;
-      pendingHeading = qaMatch[1].trim();
+      pendingHeading = cleanHeading(qaMatch[1]);
       continue;
     }
 
@@ -272,7 +302,10 @@ const insertBatch = db.transaction((rows) => {
 
 let total = 0;
 for (const source of SOURCES) {
-  const rows = source.read().map((r) => ({ ...r, translation: source.id }));
+  const fixes = HEADING_FIXES[source.id] ?? {};
+  const rows = source.read()
+    .filter((r) => fixes[`${r.book} ${r.chapter}:${r.verse}`] !== null)
+    .map((r) => ({ ...r, ...fixes[`${r.book} ${r.chapter}:${r.verse}`], translation: source.id }));
   insertBatch(rows);
   total += rows.length;
   console.log(`  ${source.id.padEnd(4)} ${String(rows.length).padStart(5)} headings  ${source.label}`);

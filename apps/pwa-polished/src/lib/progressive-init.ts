@@ -55,6 +55,37 @@ const STARTER_PACK_URL = '/starter.sqlite';
 const STARTER_TRANSLATION = 'NET';
 
 /**
+ * Bump when starter.sqlite's content changes, so devices that already have it
+ * fetch it again once. Pack versions stay at 1.0.0 before v1, so this is the
+ * only signal a corrected starter has.
+ *   2 — NET headings no longer carry raw USFM markers ("The \nd Lord\nd*’s").
+ */
+const STARTER_REVISION = 2;
+const STARTER_REVISION_KEY = 'hexapla-starter-revision';
+
+/**
+ * Whether this device installed an older starter. A device with no record
+ * installed it before revisions were tracked, so it counts as revision 1.
+ * If storage cannot be read at all, say current — otherwise every launch
+ * would fetch the starter again.
+ */
+function starterIsStale(): boolean {
+  try {
+    return Number(localStorage.getItem(STARTER_REVISION_KEY) ?? 1) < STARTER_REVISION;
+  } catch {
+    return false;
+  }
+}
+
+function markStarterCurrent(): void {
+  try {
+    localStorage.setItem(STARTER_REVISION_KEY, String(STARTER_REVISION));
+  } catch {
+    // Nowhere to record it; the next launch finds the text and moves on.
+  }
+}
+
+/**
  * Whether the starter pack's contents are already on this device.
  *
  * Deliberately asks TextStore rather than looking for a pack row: an import
@@ -76,6 +107,7 @@ export async function hasStarterText(): Promise<boolean> {
     const { IndexedDBTextStore } = await import('../adapters/TextStore');
     const installed = await new IndexedDBTextStore().getTranslations();
     if (!installed.some((t) => t.id.toUpperCase() === STARTER_TRANSLATION)) return false;
+    if (starterIsStale()) return false;
     return await hasSectionHeadings();
   } catch (error) {
     // If the database cannot even be opened there is nothing to install into,
@@ -131,6 +163,7 @@ export async function installStarterText(
 
     onProgress?.('Getting the text...', 60);
     await importPackFromBytes(bytes, 'starter.sqlite');
+    markStarterCurrent();
     onProgress?.('Ready', 100);
 
     console.log('Starter pack installed');
