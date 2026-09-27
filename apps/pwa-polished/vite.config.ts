@@ -110,6 +110,7 @@ function copyPolishedPacks() {
       
       if (isProduction && !useBundled) {
         console.log('📦 Skipping polished packs in buildStart (production mode)');
+        return;
       }
       
       // Copy to public folder for dev server
@@ -129,7 +130,9 @@ function copyPolishedPacks() {
         mkdirSync(publicConsolidatedDir, { recursive: true });
       }
       
-      const files = readdirSync(polishedPacksDir).filter(f => f.endsWith('.sqlite'));
+      const files = existsSync(polishedPacksDir)
+        ? readdirSync(polishedPacksDir).filter(f => f.endsWith('.sqlite'))
+        : [];
       
       if (files.length === 0) {
         console.warn('⚠️  No packs in polished directory');
@@ -168,6 +171,7 @@ function copyPolishedPacks() {
       
       if (isProduction && !useBundled) {
         console.log('\n📦 Skipping polished packs (will download from GitHub Releases)\n');
+        return;
       }
       
       const polishedPacksDir = resolve(__dirname, '../../packs/polished');
@@ -186,7 +190,9 @@ function copyPolishedPacks() {
         mkdirSync(targetConsolidatedDir, { recursive: true });
       }
       
-      const files = readdirSync(polishedPacksDir).filter(f => f.endsWith('.sqlite'));
+      const files = existsSync(polishedPacksDir)
+        ? readdirSync(polishedPacksDir).filter(f => f.endsWith('.sqlite'))
+        : [];
       
       if (files.length === 0) {
         console.warn('⚠️  No packs in polished directory');

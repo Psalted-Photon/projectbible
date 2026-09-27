@@ -296,8 +296,15 @@ export class PackLoader {
    * Download with progress tracking using ReadableStream
    */
   private async downloadWithProgress(pack: PackEntry): Promise<Uint8Array> {
-    this.options.onStage('fetch-start', { url: pack.downloadUrl });
-    const response = await fetch(pack.downloadUrl);
+    // Pinning the proxy URL to the manifest's hash lets the CDN keep a copy
+    // and serve repeat downloads itself; a re-uploaded pack has a new hash,
+    // so it can never be answered with the old bytes. See api/packs/[name].ts.
+    const url =
+      pack.sha256 && pack.downloadUrl.startsWith('/api/packs/') && !pack.downloadUrl.includes('?')
+        ? `${pack.downloadUrl}?v=${pack.sha256}`
+        : pack.downloadUrl;
+    this.options.onStage('fetch-start', { url });
+    const response = await fetch(url);
 
     this.options.onStage('fetch-resolved', {
       status: response.status,

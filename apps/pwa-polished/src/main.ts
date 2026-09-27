@@ -16,6 +16,24 @@ import { watchForInstallPrompt } from './lib/installPrompt';
 // has nothing to offer.
 watchForInstallPrompt();
 
+// A new version replaces the old one's files the moment it installs. A page
+// still running the old version then can't load any screen it hadn't opened
+// yet: those files are gone from the cache and from the server. Vite reports
+// that here, and a reload brings the page onto the new version. The timestamp
+// stops a screen that fails for some other reason from reloading forever.
+window.addEventListener('vite:preloadError', (event) => {
+  try {
+    const last = Number(sessionStorage.getItem('pb-chunk-reload') || 0);
+    if (Date.now() - last < 30_000) return;
+    sessionStorage.setItem('pb-chunk-reload', String(Date.now()));
+    sessionStorage.setItem('pb-updated', '1');
+  } catch {
+    return;
+  }
+  event.preventDefault();
+  window.location.reload();
+});
+
 console.log('🔥 IMPORTS LOADED');
 
 console.log('🔥 GETTING APP ELEMENT');
