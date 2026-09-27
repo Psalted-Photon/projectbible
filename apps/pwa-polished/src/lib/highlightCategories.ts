@@ -3,8 +3,8 @@
  *
  * The colour code behind Saved Verses → Categories. A highlight's look picks
  * its group: a marker by its colour (named, fixed), a solid/boxed/wavy line
- * by its style whatever the colour (named, fixed), text colour by its colour
- * and a dashed line by its style (both unnamed until the user names them).
+ * by its style whatever the colour (named, fixed), and text colour or a
+ * dashed line by its colour (unnamed until the user names them).
  *
  * Pure lookup — nothing here reads or writes a highlight.
  */
@@ -43,7 +43,7 @@ export interface HighlightCategory {
   /** How the header's sample is drawn. */
   kind: 'marker' | 'text' | 'line';
   underlineStyle?: 'solid' | 'dashed' | 'wavy' | 'boxed';
-  /** True when the user may rename it (text colours and dashed). */
+  /** True when the user may rename it (text colours and dashed lines). */
   nameable: boolean;
 }
 
@@ -51,7 +51,6 @@ const LINE_GROUPS: HighlightCategory[] = [
   { key: 'line-solid',  label: 'Verses to Meditate On, Verses that Stand Out', color: null, kind: 'line', underlineStyle: 'solid',  nameable: false },
   { key: 'line-boxed',  label: 'Word to Define or Study', color: null, kind: 'line', underlineStyle: 'boxed',  nameable: false },
   { key: 'line-wavy',   label: 'Repetition', color: null, kind: 'line', underlineStyle: 'wavy',   nameable: false },
-  { key: 'line-dashed', label: 'Dashed underline', color: null, kind: 'line', underlineStyle: 'dashed', nameable: true },
 ];
 
 /** Every group, in the order Categories lists them. */
@@ -63,6 +62,10 @@ export const HIGHLIGHT_CATEGORIES: HighlightCategory[] = [
     key: `text-${i}`, label: `${p.label} text`, color: p.value, kind: 'text' as const, nameable: true,
   })),
   ...LINE_GROUPS,
+  ...HIGHLIGHT_PALETTE.map((p, i) => ({
+    key: `line-dashed-${i}`, label: `${p.label} dashed underline`, color: p.value, kind: 'line' as const,
+    underlineStyle: 'dashed' as const, nameable: true,
+  })),
 ];
 
 function rgb(hex: string): [number, number, number] | null {
@@ -103,9 +106,26 @@ export function categoryMeaning(key: string, names: Record<string, string>): str
   return cat.nameable ? names[key] || 'Custom' : cat.label;
 }
 
+/**
+ * The meaning shown under an underline style's row in the popup. Dashed has
+ * one group per colour, so it lists the colours the user has named and calls
+ * the rest Custom.
+ */
+export function lineStyleMeaning(style: string, names: Record<string, string>): string {
+  if (style !== 'dashed') return categoryMeaning(`line-${style}`, names);
+  const named = HIGHLIGHT_PALETTE
+    .map((p, i) => (names[`line-dashed-${i}`] ? `${p.label}: ${names[`line-dashed-${i}`]}` : null))
+    .filter(Boolean);
+  if (named.length === 0) return 'Custom';
+  return named.length === HIGHLIGHT_PALETTE.length ? named.join(' · ') : `${named.join(' · ')} · others Custom`;
+}
+
 /** The group key for one highlight's look. */
 export function categoryKeyFor(style: HighlightStyle): string {
-  if (style.type === 'underline') return `line-${style.underlineStyle ?? 'solid'}`;
+  if (style.type === 'underline') {
+    const line = style.underlineStyle ?? 'solid';
+    return line === 'dashed' ? `line-dashed-${paletteIndex(style.color)}` : `line-${line}`;
+  }
   if (style.type === 'text-color') return `text-${paletteIndex(style.color)}`;
   return `marker-${paletteIndex(style.color)}`;
 }

@@ -2,7 +2,7 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { BCV, HighlightStyle, UserHighlight, UserWordHighlight } from '@projectbible/core';
   import { userProfileStore } from '../stores/userProfileStore';
-  import { HIGHLIGHT_PALETTE, categoryMeaning } from '../lib/highlightCategories';
+  import { HIGHLIGHT_PALETTE, categoryMeaning, lineStyleMeaning } from '../lib/highlightCategories';
   import { getHighlightNames, getSettings, updateSettings } from '../adapters/settings';
 
   export let reference: BCV;
@@ -256,7 +256,7 @@
             </div>
           </div>
           {#if showMeanings}
-            <div class="hl-underline-meaning">{categoryMeaning(`line-${style}`, names)}</div>
+            <div class="hl-underline-meaning">{lineStyleMeaning(style, names)}</div>
           {/if}
         {/each}
       </div>

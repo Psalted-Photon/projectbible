@@ -257,7 +257,7 @@ Every verse you've highlighted, in one list in your profile. One button sorts it
 - **Categories** — grouped by how you marked them, following a Bible-study colour code:
   - Markers: yellow for the Trinity, God, Jesus, the Holy Spirit; green for wisdom and faithful living; orange for warnings and sin; red for salvation, the blood and the cross; pink for praise, hope and prayer; purple for promises, covenants and the Kingdom; blue for context, prophecy, history, people and places. Each group's header spells out its whole list.
   - Lines, whatever their colour: solid for verses to meditate on or that stand out, boxed for a word to define or study, wavy for repetition.
-  - Text colours and dashed underlines start unnamed. Tap the pencil to give one a name; it follows your account to your other devices.
+  - Text colours and dashed underlines get a group per colour — "Green text", "Blue dashed underline" — until you name them. Tap the pencil to give one a name; it follows your account to your other devices.
 
 A verse marked two ways shows up in both groups. Tap a group's header to fold it away.
 

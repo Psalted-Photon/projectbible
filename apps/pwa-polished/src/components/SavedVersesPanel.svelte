@@ -268,7 +268,7 @@
               {:else if cat.underlineStyle === 'boxed'}
                 <span class="svp-sample svp-sample--boxed">Aa</span>
               {:else}
-                <span class="svp-sample" style="text-decoration: underline {cat.underlineStyle}; text-underline-offset: 3px;">Aa</span>
+                <span class="svp-sample" style="text-decoration: underline {cat.underlineStyle} {cat.color ?? ''}; text-underline-offset: 3px;">Aa</span>
               {/if}
               {#if editingKey !== cat.key}
                 <span class="svp-group-name">
