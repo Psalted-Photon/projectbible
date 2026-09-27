@@ -50,6 +50,24 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
 ];
 
 const LAST_SYNCED_KEY = 'projectbible_settings_synced_at';
+/**
+ * When a setting was last changed on this device without reaching the server
+ * yet. Set by the change hook, cleared by a successful push. Without it a
+ * change made offline was simply dropped: the push bailed and nothing tried
+ * again until the next change.
+ */
+const CHANGED_AT_KEY = 'projectbible_settings_changed_at';
+
+function readKey(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
+function writeKey(key: string, value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch { /* storage unavailable — the next change tries again */ }
+}
 const PUSH_DEBOUNCE_MS = 2_000;
 
 function pickSynced(settings: UserSettings): Record<string, any> {
@@ -84,6 +102,7 @@ async function pushSettingsNow(): Promise<void> {
 
     const row = await upsertUserSettings(userId, synced);
     localStorage.setItem(LAST_SYNCED_KEY, row.updated_at);
+    writeKey(CHANGED_AT_KEY, null);
     console.log('[SettingsSync] Pushed synced settings');
   } catch (err) {
     console.warn('[SettingsSync] Push failed (will retry on next change/sync):', err);
@@ -116,6 +135,15 @@ export async function pullSettings(): Promise<void> {
       return;
     }
 
+    // A change made here that never reached the server (offline at the time)
+    // and is newer than the account's row: this device has the latest word,
+    // so send it rather than overwrite it.
+    const changedAt = readKey(CHANGED_AT_KEY);
+    if (changedAt && new Date(changedAt).getTime() > new Date(row.updated_at).getTime()) {
+      await pushSettingsNow();
+      return;
+    }
+
     const lastSynced = localStorage.getItem(LAST_SYNCED_KEY);
     if (lastSynced && new Date(row.updated_at).getTime() <= new Date(lastSynced).getTime()) {
       return; // nothing newer than what we already applied/pushed
@@ -126,6 +154,8 @@ export async function pullSettings(): Promise<void> {
       if (row.settings[key] !== undefined) incoming[key] = row.settings[key];
     }
     localStorage.setItem(LAST_SYNCED_KEY, row.updated_at);
+    // Another device changed things after this one did; its row wins.
+    writeKey(CHANGED_AT_KEY, null);
     if (Object.keys(incoming).length === 0) return;
 
     applyRemote(incoming);
@@ -155,8 +185,17 @@ function applyRemote(incoming: Record<string, any>): void {
 // ── Startup wiring (module loads with SyncService) ──────────────────────────
 
 registerSettingsChangeHook(() => {
-  if (!applyingRemote) scheduleSettingsPush();
+  if (applyingRemote) return;
+  writeKey(CHANGED_AT_KEY, new Date().toISOString());
+  scheduleSettingsPush();
 });
+
+if (typeof window !== 'undefined') {
+  // Back in signal with a change still waiting: send it.
+  window.addEventListener('online', () => {
+    if (readKey(CHANGED_AT_KEY)) scheduleSettingsPush();
+  });
+}
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {

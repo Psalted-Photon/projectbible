@@ -79,6 +79,8 @@ class SyncService {
   private queueUnsubscribe: (() => void) | null = null;
   private syncStores: SyncStore[] = [];
   private applyFns: Map<SyncTable, (rows: any[]) => Promise<void>> = new Map();
+  /** Auth events, handled one after another outside Supabase's callback. */
+  private authChain: Promise<void> = Promise.resolve();
 
   /**
    * Register a synced store. Called by adapter modules at import time.
@@ -115,13 +117,29 @@ class SyncService {
     });
     
     // Listen for auth changes
+    //
+    // Supabase holds its auth lock while this callback runs, and warns that
+    // awaiting another Supabase call inside it can deadlock — the sign-in
+    // pull calls getUser() and queries every table, so it would sit waiting
+    // on itself until the lock gave up, which surfaced as "Sync timed out".
+    // So the callback only queues the work: setTimeout lets it return first,
+    // and the chain keeps a sign-out and the next sign-in in the order they
+    // happened.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
+        let run: (() => Promise<void>) | null = null;
         if (event === 'SIGNED_IN' && session?.user) {
-          await this.onSignIn(session.user.id);
+          const userId = session.user.id;
+          run = () => this.onSignIn(userId);
         } else if (event === 'SIGNED_OUT') {
-          await this.onSignOut();
+          run = () => this.onSignOut();
         }
+        if (!run) return;
+        const job = run;
+        this.authChain = this.authChain
+          .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+          .then(job)
+          .catch((err) => console.error(`[SyncService] ${event} handler failed:`, err));
       }
     );
     this.authUnsubscribe = () => subscription.unsubscribe();

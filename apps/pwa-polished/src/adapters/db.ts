@@ -1587,10 +1587,13 @@ export async function writeTransaction<T>(
     const request = callback(store);
     logInstallIfActive('tx-request-issued', { store: storeName });
 
+    // Resolved on commit, not on the request's success. A request can succeed
+    // and its transaction still abort afterwards — storage full is the usual
+    // one — and resolving early reported that as a save.
     request.onsuccess = () => {
       logInstallIfActive('tx-request-success', { store: storeName });
-      resolve(request.result);
     };
+    transaction.oncomplete = () => resolve(request.result);
     request.onerror = () => reject(request.error);
     transaction.onabort = () =>
       reject(transaction.error ?? new Error(`${storeName} transaction aborted`));

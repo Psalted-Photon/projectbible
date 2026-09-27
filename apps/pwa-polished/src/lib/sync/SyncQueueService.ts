@@ -19,9 +19,23 @@ const RETRY_MAX_MS = 15 * 60_000;
 
 type QueueListener = (pendingCount: number) => void;
 
+/**
+ * How long an uploaded row is still treated as pending by the pull.
+ * Comfortably longer than one pull takes.
+ */
+const RECENT_UPLOAD_MS = 120_000;
+
 class SyncQueueService {
   private processing = false;
   private listeners: Set<QueueListener> = new Set();
+  /**
+   * `${table}:${id}` → when it finished uploading. A save starts an upload
+   * straight away, so one made while a pull is in flight can reach the server
+   * after the pull fetched and leave the queue before the pull reconciles —
+   * absent from the snapshot and no longer pending, it was taken for deleted
+   * elsewhere and vanished until the next pull brought it back.
+   */
+  private recentlyUploaded: Map<string, number> = new Map();
   
   /**
    * Add an operation to the sync queue
@@ -304,6 +318,7 @@ class SyncQueueService {
    * Clear all pending operations (on sign out)
    */
   async clear(): Promise<void> {
+    this.recentlyUploaded.clear();
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction('sync_queue', 'readwrite');
@@ -323,13 +338,33 @@ class SyncQueueService {
    * reached Supabase yet is never mistaken for one deleted remotely.
    */
   async getPendingIdsFor(table: string): Promise<Set<string>> {
-    const items = await this.getPendingItems();
+    // Every status, not just 'pending': an item that has given up ('failed')
+    // is still a row the server has never seen, not one deleted elsewhere.
+    const items = await this.getAllItems();
     const ids = new Set<string>();
     for (const item of items) {
       const op = item.payload as SyncOperation;
       if (op?.table === table && op.type !== 'DELETE') ids.add(op.id);
     }
+
+    // And anything uploaded in the last couple of minutes — see recentlyUploaded.
+    const cutoff = Date.now() - RECENT_UPLOAD_MS;
+    const prefix = `${table}:`;
+    for (const [key, at] of this.recentlyUploaded) {
+      if (at < cutoff) this.recentlyUploaded.delete(key);
+      else if (key.startsWith(prefix)) ids.add(key.slice(prefix.length));
+    }
     return ids;
+  }
+
+  private async getAllItems(): Promise<DBSyncQueueItem[]> {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('sync_queue', 'readonly');
+      const request = tx.objectStore('sync_queue').getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
   }
 
   private async getPendingItems(): Promise<DBSyncQueueItem[]> {
@@ -369,6 +404,7 @@ class SyncQueueService {
       await this.executeOperation(op, user.id);
       
       // Success - delete from queue
+      if (op.type !== 'DELETE') this.recentlyUploaded.set(`${op.table}:${op.id}`, Date.now());
       await writeTransaction('sync_queue', (store) => store.delete(item.id));
       const dataPreview = op.table === 'reading_progress'
         ? ` day=${op.data?.day_number} completed=${op.data?.completed}`

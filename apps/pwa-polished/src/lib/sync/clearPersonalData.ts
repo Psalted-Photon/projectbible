@@ -117,6 +117,11 @@ const ACCOUNT_KEYS = [
   'pb_journal_relock_ms',
   /** Set once the pre-ownership rows were adopted; the next account adopts its own. */
   'projectbible_ownership_adopted',
+  /**
+   * When this device last matched the account's settings row. Kept across a
+   * switch, the next account's row would look "not newer" and never apply.
+   */
+  'projectbible_settings_synced_at',
 ];
 
 /** What has not reached the server yet, and so would be lost by clearing. */
