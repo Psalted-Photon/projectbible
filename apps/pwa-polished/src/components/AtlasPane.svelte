@@ -177,16 +177,33 @@
   // there is one to fade rather than only for the timeline it was written for.
   $: anyOverlayOn = overlays.some((ov) => ov.enabled);
 
+  /**
+   * Set on close. Opening the map takes several waits, and the pane can be
+   * closed during any of them — after its clean-up has already run. Each wait
+   * checks this, so a closed pane never goes on to build a map nobody sees,
+   * start a resize watcher nothing stops, or reload the geometry just freed.
+   */
+  let destroyed = false;
+  function closedMeanwhile(): boolean {
+    if (!destroyed) return false;
+    releaseAtlas();
+    releasePlaceIndex();
+    return true;
+  }
+
   onMount(async () => {
     root.addEventListener('click', onClickCapture, true);
     try {
-      if (!(await atlasInstalled())) {
+      const installed = await atlasInstalled();
+      if (destroyed) return;
+      if (!installed) {
         missing = true;
         loading = false;
         return;
       }
 
       const index = await loadAtlasIndex();
+      if (closedMeanwhile()) return;
       const saved = windowState?.contentState;
 
       atlas = createAtlasMap(mapEl, {
@@ -225,6 +242,8 @@
       });
 
       await atlas.start();
+      // onDestroy has already called destroy() on this map.
+      if (closedMeanwhile()) return;
 
       eras = atlas.eras;
       firstSurveyed = atlas.firstSurveyedIndex;
@@ -238,6 +257,7 @@
         getAtlasJson(index.biblicalPlaces.file),
         getAtlasJson(index.ancientNames.file),
       ]);
+      if (closedMeanwhile()) return;
       scripture = new ScriptureSearch(places, ancient);
 
       // Leaflet never watches its own container, and docked that container
@@ -248,6 +268,7 @@
       loading = false;
       if (target) applyTarget(target);
     } catch (err) {
+      if (closedMeanwhile()) return;
       console.error('[atlas] failed to open', err);
       error = err instanceof Error ? err.message : String(err);
       loading = false;
@@ -255,6 +276,7 @@
   });
 
   onDestroy(() => {
+    destroyed = true;
     root?.removeEventListener('click', onClickCapture, true);
     if (playTimer) clearInterval(playTimer);
     playTimer = null;

@@ -539,6 +539,7 @@
     books: SharedNotebook[],
     members: Map<string, SharedNotebookMember[]>,
   ) {
+    if (destroyed) return;
     if (!notebookId || !userId) {
       closeSharedLive();
       return;
@@ -605,10 +606,16 @@
   let unsubUserData: (() => void) | null = null;
   let unsubNotebooks: (() => void) | null = null;
   let unsubShared: (() => void) | null = null;
+  /** Set on close. The first load can still be running then, and anything it
+   *  set up afterwards (listeners, a shared page's live room) would outlive
+   *  the panel, because the clean-up below has already run. */
+  let destroyed = false;
 
   onMount(async () => {
     await loadAll();
+    if (destroyed) return;
     await restoreFromContentState();
+    if (destroyed) return;
     if (mode === 'shared') void loadShared();
 
     const reload = () => {
@@ -623,6 +630,7 @@
   });
 
   onDestroy(() => {
+    destroyed = true;
     unsubUserData?.();
     unsubNotebooks?.();
     unsubShared?.();

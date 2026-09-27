@@ -1288,6 +1288,10 @@
       });
       const audio = getSharedTtsAudio();
       audio.src = URL.createObjectURL(blob);
+      // Each word is its own clip, and until now every one stayed in memory
+      // for the session. The one before this is finished with.
+      if (lastWordAudioUrl) URL.revokeObjectURL(lastWordAudioUrl);
+      lastWordAudioUrl = audio.src;
       audio.playbackRate = 1;
       await audio.play();
     } catch (err) {
@@ -1296,6 +1300,9 @@
       setTimeout(() => { if (speakFailedWord === text) speakFailedWord = null; }, 2500);
     }
   }
+
+  /** The last tapped word's clip, released when the next one replaces it. */
+  let lastWordAudioUrl: string | null = null;
 
   /** Word we could not pronounce cleanly, shown briefly instead of bad audio. */
   let speakFailedWord: string | null = null;

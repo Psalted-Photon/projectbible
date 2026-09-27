@@ -103,6 +103,8 @@
   /** The drawn map, when the Historical Map pack is installed. */
   let atlas: any = null;
   let mapObserver: ResizeObserver | null = null;
+  /** Moved on by every destroyMap; see renderMap. */
+  let mapToken = 0;
   /** Re-fitting the drawn map redraws the world, so it waits out a window drag. */
   const mapFitter = createResizeFit(() => {
     map?.invalidateSize();
@@ -528,6 +530,12 @@
   async function renderMap() {
     if (!mapEl || !place || place.latitude == null || place.longitude == null) return;
     destroyMap();
+    // Any later destroyMap (a new article, the tab reopened, the pane closed)
+    // moves the token on. A render that finds it moved after one of its waits
+    // stops there: otherwise it goes on to build a second map, or one in a
+    // pane that is gone, which nothing would ever remove.
+    let token = mapToken;
+    const stale = () => token !== mapToken || !mapEl;
 
     const at: [number, number] = [place.latitude, place.longitude];
 
@@ -537,8 +545,12 @@
         const { createAtlasMap } = await import('../lib/atlas/map.js');
         const { placesInBounds } = await import('../lib/atlas/place-index');
         const index = await loadAtlasIndex();
-        // The tab can be closed while the pack is still being read.
-        if (!mapEl) return;
+        // The tab can be closed while the pack is still being read, and what
+        // was read in the meantime should not stay behind either.
+        if (stale() || !mapEl) {
+          releaseAtlasData();
+          return;
+        }
         atlas = createAtlasMap(mapEl, {
           getJson: getAtlasJson,
           index,
@@ -550,15 +562,21 @@
           zoom: 9,
         });
         await atlas.start();
+        // Already destroyed by whatever moved the token.
+        if (stale() || !place || place.latitude == null || place.longitude == null) return;
         atlas.markPlace(place.latitude, place.longitude, title);
         watchMapSize();
         return;
       }
     } catch (err) {
       // A pack that fails to open is not a reason to show no map at all.
+      if (stale()) return;
       console.warn('[isbe] drawn map unavailable, falling back to tiles', err);
       destroyMap();
+      // That clear-up was this render's own, not a reason to stop.
+      token = mapToken;
     }
+    if (stale()) return;
 
     map = L.map(mapEl, { attributionControl: true, zoomControl: true }).setView(at, 9);
     L.tileLayer(
@@ -594,21 +612,27 @@
     if (mapEl) mapObserver.observe(mapEl);
   }
 
+  /**
+   * An article read once should not carry the map's geometry and its half
+   * million places for the rest of the session. Unless the map window is
+   * open, in which case they are its, and dropping them here would only make
+   * it read them all back on its next pan.
+   */
+  function releaseAtlasData() {
+    if (get(windowStore).some((w) => w.contentType === 'map')) return;
+    import('../lib/atlas/data').then((m) => m.releaseAtlas());
+    import('../lib/atlas/place-index').then((m) => m.releasePlaceIndex());
+  }
+
   function destroyMap() {
+    mapToken++;
     mapObserver?.disconnect();
     mapObserver = null;
     mapFitter.stop();
     if (atlas) {
       atlas.destroy();
       atlas = null;
-      // An article read once should not carry the map's geometry and its half
-      // million places for the rest of the session. Unless the map window is
-      // open, in which case they are its, and dropping them here would only
-      // make it read them all back on its next pan.
-      if (!get(windowStore).some((w) => w.contentType === 'map')) {
-        import('../lib/atlas/data').then((m) => m.releaseAtlas());
-        import('../lib/atlas/place-index').then((m) => m.releasePlaceIndex());
-      }
+      releaseAtlasData();
     }
     if (map) {
       map.remove();

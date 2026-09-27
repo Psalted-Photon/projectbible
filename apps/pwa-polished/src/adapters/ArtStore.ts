@@ -166,7 +166,8 @@ export class IndexedDBArtStore implements ArtStore {
     try {
       const db = await openDB();
       const row = await this.readImage(db, id);
-      if (!row?.data) return null;
+      // Closed while reading: a URL made now would have nothing to revoke it.
+      if (!row?.data || this.disposed) return null;
       return this.cacheBlobUrl(id, row.data, row.mime);
     } catch {
       return null;
@@ -197,6 +198,7 @@ export class IndexedDBArtStore implements ArtStore {
     try {
       const db = await openDB();
       const existing = await this.readImage(db, key);
+      if (this.disposed) return null;
       if (existing?.data) return this.cacheBlobUrl(key, existing.data, existing.mime);
 
       // Collapse duplicate work: two panes browsing at once ask for the same
@@ -262,6 +264,22 @@ export class IndexedDBArtStore implements ArtStore {
     const url = URL.createObjectURL(toBlob(data, mime));
     this.imageUrlCache.set(key, url);
     return url;
+  }
+
+  /**
+   * Revoke the full-size URL of every image not in `keep`, leaving previews
+   * alone. A docked pane can stay open across many scenes, each with several
+   * multi-megabyte paintings, and until now every one it had shown stayed in
+   * memory until the pane closed. The caller must drop the URLs it held for
+   * the released ids.
+   */
+  releaseFullImagesExcept(keep: Set<string>): void {
+    const previewPrefix = thumbKey('');
+    for (const [key, url] of this.imageUrlCache) {
+      if (key.startsWith(previewPrefix) || keep.has(key)) continue;
+      URL.revokeObjectURL(url);
+      this.imageUrlCache.delete(key);
+    }
   }
 
   /**

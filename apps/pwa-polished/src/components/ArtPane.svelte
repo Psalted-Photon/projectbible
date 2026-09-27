@@ -111,7 +111,11 @@
     urls = next;
   }
 
+  /** Moves on with every load, so a slow one can tell a newer one has taken over. */
+  let loadToken = 0;
+
   async function load(_a?: unknown, _b?: unknown, _c?: unknown, _d?: unknown) {
+    const token = ++loadToken;
     loading = true;
     error = null;
     selected = null;
@@ -136,7 +140,15 @@
 
     // Browse previews load lazily through the observer; only the open scene's
     // full-resolution images are resolved up front.
-    if (selected) await resolveImages(selected.works.map((w) => w.imageId));
+    if (token !== loadToken) return;
+    const wanted = (selected?.works ?? []).map((w) => w.imageId);
+    if (selected) await resolveImages(wanted);
+    // Let go of the last scene's full-size paintings now that this one is
+    // showing. A newer load does this for itself, so a stale one leaves it.
+    if (token !== loadToken) return;
+    const keep = new Set(wanted.filter((id): id is string => !!id));
+    artStore.releaseFullImagesExcept(keep);
+    urls = Object.fromEntries(Object.entries(urls).filter(([id]) => keep.has(id)));
   }
 
   // Reload whenever the incoming context changes (also fires once on init)
