@@ -96,6 +96,7 @@
   let showSoloMarking: boolean = true;
   let showOtQuotes: boolean = true;
   let selectionMenu: 'classic' | 'radial' = 'radial';
+  let measureUnits: 'us' | 'metric' = 'us';
   let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const TIMEZONE_OPTIONS: { label: string; value: string }[] = [
@@ -168,6 +169,7 @@
       showSoloMarking,
       showOtQuotes,
       selectionMenu,
+      measureUnits,
       timezone: timezone || undefined,
       autoCheckUpdates,
       customTheme: currentCustom(),
@@ -303,6 +305,7 @@
     showSoloMarking = settings.showSoloMarking !== false;
     showOtQuotes = settings.showOtQuotes !== false;
     selectionMenu = settings.selectionMenu === 'classic' ? 'classic' : 'radial';
+    measureUnits = settings.measureUnits === 'metric' ? 'metric' : 'us';
     timezone = settings.timezone || '';
     autoCheckUpdates = settings.autoCheckUpdates !== false; // default true
     const custom = getCustomThemeSettings();
@@ -558,6 +561,7 @@
     showSoloMarking;
     showOtQuotes;
     selectionMenu;
+    measureUnits;
     timezone;
     autoCheckUpdates;
     customFontId;
@@ -804,6 +808,16 @@
         <select bind:value={selectionMenu}>
           <option value="radial">Ring around the word</option>
           <option value="classic">Classic popup</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Measurements (tap a cubit, shekel or talent)</span>
+        <select bind:value={measureUnits}>
+          <option value="us">US (feet, pounds, gallons)</option>
+          <option value="metric">Metric (meters, kilograms, liters)</option>
         </select>
       </label>
     </div>

@@ -471,6 +471,8 @@ Buttons sweep in one at a time — 25 ms stagger, 120 ms pop. Svelte 5 transitio
 
 Both dispatch an `action` event with the selected text. Seven actions: `dissect`, `search`, `map`, `highlight`, `save`, `notes`, `repeats`. The `map` button is conditional — rendered only when the selection resolves to a place, and it opens the real map window via `src/lib/openMapWindow.ts`. A scope toggle switches between Word and the wider selection.
 
+**Weights, measures and money** — `src/lib/measures.ts`, setting `measureUnits` (`'us'` default, or `'metric'`; synced). `measureForWord()` recognises a unit by its spelling across our translations (cubits, pence, silver coin, furlongs, firkins…) and reads the amount written around it — numerals, words, KJV scores, "and a half", "three-tenths of an", "two or three" ranges — then converts and rounds it. `measureForStrongs()` does the same for Greek and Hebrew taps by Strong's number, one unit at a time. Words that are only sometimes units carry `only`/`needsNumber` passage rules (reed and rod only in Ezekiel 40–48; mile only in Matthew 5, since BSB and NET already print modern miles elsewhere), and "penny", "farthing", "pound" and KJV's "measure" pick their unit by verse. Talents and minas are money in the New Testament and weights of metal in the Old. Money is in days' wages (a denarius = 1), never dollars. `BibleReader` builds a `MeasureContext` from the whole `.verse-text` with `<sup>` markers removed, and passes the result to the ring as `measure`, which takes the bottom pill over from lemma · Strong's and wraps to two lines at 112px so it stays clear of the side seats. Synchronous, no database.
+
 ## 11. Repeated Words
 
 Files: `src/stores/repeatsStore.ts`, `src/lib/repeatColors.ts`, `src/lib/repeatRenderer.ts`, `src/lib/repeatCounts.ts`, `src/stores/repeatCountsStore.ts`, `src/stores/repeatBulkStore.ts`.
@@ -1113,7 +1115,7 @@ Colour swatches are deliberately *not* stored per surface — both editors share
 | Section | Summary | Contents |
 |---|---|---|
 | Appearance | theme · font size | Theme, Typeface, Text colour, Background colour, Preview |
-| Reader | layout · red letters | Font Size, Line Spacing, Verse Layout, Word Wrap, Words of Jesus in red letters, Theme colors in reader titles, Show art icons on Bible scenes, Underline multi-word place names, Menu when you tap a word, plus a nested **Interlinear** sub-section |
+| Reader | layout · red letters | Font Size, Line Spacing, Verse Layout, Word Wrap, Words of Jesus in red letters, Theme colors in reader titles, Show art icons on Bible scenes, Underline multi-word place names, Menu when you tap a word, Measurements (US / Metric), plus a nested **Interlinear** sub-section |
 | Read Aloud (AI voice) | voice · speed | Voice, Reading Speed, Read section headings aloud, Highlight the verse being read, Soft glow drifts along the words, Wake Alarm button |
 | General | timezone · rotation | Time Zone, Allow Screen Rotation |
 | Storage & Updates | Packs · Cache · Updates | Pack Management, Cache Management, auto-update toggle, manual check |

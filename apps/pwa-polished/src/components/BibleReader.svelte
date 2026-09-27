@@ -127,6 +127,7 @@
     wordContextAround,
   } from "../lib/wordSelection";
   import type { WordPos, Segment } from "../lib/wordSelection";
+  import { measureForWord, measureForStrongs, type MeasureContext, type UnitSystem } from "../lib/measures";
   import { repeatsStore, normalizeRepeatWord } from "../stores/repeatsStore";
   import type { RepeatGroup } from "../stores/repeatsStore";
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
@@ -797,8 +798,34 @@
   $: selectionHasMap = selectedIsPerson
     ? selectedPersonPlaces.length > 0
     : selectedIsbeKind === "place";
+  /** "about 450 feet" under a tapped unit word in the ring. Empty on anything else. */
+  $: measureLabel =
+    radialActive &&
+    selectionMode === "word" &&
+    selectedWordCount <= 1 &&
+    selectedMeasureCtx &&
+    selectedMeasureCtx.word === selectedText
+      ? selectedMorphology?.strongsId
+        ? measureForStrongs(
+            selectedMorphology.strongsId,
+            selectedMorphology.gloss_en || selectedMorphology.gloss || "",
+            selectedMeasureCtx.book,
+            selectedMeasureCtx.chapter,
+            selectedMeasureCtx.verse,
+            measureUnits,
+          )
+        : measureForWord(selectedText, selectedMeasureCtx, measureUnits)
+      : "";
   /** Neighbouring words captured at click time, for multi-word phrase expansion. */
   let selectedContext: { before: string[]; after: string[] } | null = null;
+  /**
+   * The tapped word's verse, split around it, for the weights-and-measures
+   * pill. Tied to the word it was read for, so a drag that lands on another
+   * word can't borrow it.
+   */
+  let selectedMeasureCtx: (MeasureContext & { word: string }) | null = null;
+  /** US or Metric, from Settings. */
+  let measureUnits: UnitSystem = "us";
   let selectionMode: "word" | "verse" = "word";
   let selectionRange: Range | null = null;
 
@@ -1344,6 +1371,7 @@
     // needs an optional pack — this index ships in the bundle.
     showOtQuotes = settings.showOtQuotes !== false;
     selectionMenu = settings.selectionMenu === "classic" ? "classic" : "radial";
+    measureUnits = settings.measureUnits === "metric" ? "metric" : "us";
     if (showPlaceMarkers && !placePhrasesLoaded) {
       void loadPlacePhrases().then(() => { placePhrasesLoaded = true; });
     }
@@ -2112,6 +2140,7 @@
 
     selectedText = ds.word || morph.text || "";
     selectedContext = null; // interlinear original-language word: no English phrase context
+    selectedMeasureCtx = measureContextFor(ilWord, selectedText, verseNumInt);
     selectedMorphology = morph;
     selectedVerseNumber = verseNumInt;
 
@@ -3815,6 +3844,7 @@
     selectedPersonPlaces = [];
     selectedIsbeKind = null;
     selectedContext = null;
+    selectedMeasureCtx = null;
     selectedMorphology = null;
     selectionMode = "word";
 
@@ -4033,6 +4063,7 @@
       // user can still Highlight, Search, Notes, etc.
       selectedText = clickInfo.text;
       selectedContext = null; // original-language word: no English phrase context
+      selectedMeasureCtx = measureContextFor(verseText, selectedText, verseNumInt);
       selectedMorphology = morph;
       selectedVerseNumber = verseNumInt;
 
@@ -4125,6 +4156,9 @@
       selectedVerseNumber = verseNumInt;
       // Capture neighbouring words so ISBE phrase expansion can rejoin "Red Sea".
       selectedContext = wordContext(text, wordBounds.start, wordBounds.end);
+      selectedMeasureCtx = measureContextFor(
+        verseText, selectedText, verseNumInt, textNode, wordBounds.start, wordBounds.end,
+      );
       // An English word has no morphology. Only the original-language paths set
       // this, and left standing it would caption this word with the last Greek
       // one you tapped.
@@ -4163,6 +4197,47 @@
   // wordContext / getWordBounds now live in lib/wordSelection.ts so the drag
   // engine and the click paths agree on where a word starts and ends.
   const wordContext = wordContextAround;
+
+  /**
+   * The verse around a tapped word, for the measure pill: "300" before
+   * "cubits", "and a half" after it. Read from the whole verse rather than
+   * the one text node, since a highlight or red letters can split a verse
+   * into several; footnote markers ("[1]") are left out so their digits
+   * can't pass for an amount. Without a text position (Greek and Hebrew
+   * taps, matched by Strong's number) only the verse reference is kept.
+   */
+  function measureContextFor(
+    el: Element,
+    word: string,
+    verse: number | null,
+    textNode?: Node,
+    start = 0,
+    end = 0,
+  ): MeasureContext & { word: string } {
+    const section = el.closest("[data-chapter-section]") as HTMLElement | null;
+    const book = section?.dataset.book || currentBook;
+    const chapter = Number(section?.dataset.chapter) || currentChapter;
+    let before = "";
+    let after = "";
+    const verseText = el.closest(".verse-text") ?? el;
+    if (textNode) {
+      const read = (from: [Node, number], to: [Node, number]) => {
+        try {
+          const r = document.createRange();
+          r.setStart(...from);
+          r.setEnd(...to);
+          const frag = r.cloneContents();
+          frag.querySelectorAll("sup").forEach((s) => s.remove());
+          return frag.textContent ?? "";
+        } catch {
+          return "";
+        }
+      };
+      before = read([verseText, 0], [textNode, start]);
+      after = read([textNode, end], [verseText, verseText.childNodes.length]);
+    }
+    return { word, before, after, book, chapter, verse };
+  }
 
   /**
    * Position the two fine-tune bumpers at the ends of the current selection.
@@ -5781,6 +5856,7 @@
       verse={selectedVerseNumber}
       lemma={selectedMorphology?.lemma ?? ""}
       strongs={selectedMorphology?.strongsId ?? ""}
+      measure={measureLabel}
       on:action={handleToastAction}
       on:modeChange={handleModeChange}
     />

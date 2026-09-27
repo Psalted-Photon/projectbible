@@ -192,6 +192,7 @@ export interface UserSettings {
   // word itself stays readable; 'classic' is the older popup above or below it.
   selectionMenu?: 'classic' | 'radial'; // default 'radial'
   themedTitles?: boolean; // Theme-colored 3D shadow on reader titles/headings (default true)
+  measureUnits?: 'us' | 'metric'; // What a tapped cubit or shekel is converted into (default 'us', synced)
   interlinear?: InterlinearSettings; // Interlinear view prefs for Greek/Hebrew (default: disabled, gloss-only)
   tts?: TtsSettings; // Read Aloud (on-device TTS) prefs
   art?: ArtSettings; // Biblical-art gallery prefs (preview size)

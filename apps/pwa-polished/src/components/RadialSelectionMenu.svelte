@@ -56,6 +56,11 @@
   export let lemma = '';
   export let strongs = '';
   /**
+   * What a unit word comes to today ("about 450 feet", "a day's wage"). When
+   * set it takes the bottom pill over from the lemma, which Define still shows.
+   */
+  export let measure = '';
+  /**
    * Accepted for parity with SelectionToast, and deliberately unused. That
    * component hides itself for a frame while the caller measures it; the ring
    * derives its own size and is placed synchronously, so it has nothing to wait
@@ -129,7 +134,7 @@
   const PILL = { drift: 0.3, gapWord: 6, gapArc: 3.5 };
 
   $: refLabel = verse != null && book ? `${normalizeBookName(book)} ${chapter}:${verse}` : '';
-  $: originLabel = [lemma, strongs].filter(Boolean).join(' · ');
+  $: originLabel = measure || [lemma, strongs].filter(Boolean).join(' · ');
 
   /** The book's category colour, as an rgb triple for the pill's hairline. */
   function bookRgb(name: string): string {
@@ -308,6 +313,7 @@
   {#if originLabel}
     <div
       class="pill"
+      class:measure-pill={!!measure}
       style="--y: {botY}px; --edge: {edgeRgb};"
       bind:clientWidth={botW}
       bind:clientHeight={botH}
@@ -494,6 +500,24 @@
     line-height: 1.15;
     white-space: nowrap;
     overflow: hidden;
+  }
+
+  /* "about 200,000 years' wages" is longer than a lemma. Rather than widen
+     into the seats either side of the bottom gap (they start about 57px out
+     from the centre), the measure wraps onto a second line. The room below
+     the word is taller than it is wide, and pillY measures the height too. */
+  .pill.measure-pill {
+    max-width: 112px;
+    white-space: normal;
+  }
+
+  .pill.measure-pill .pill-text {
+    white-space: normal;
+    text-align: center;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 
   .pill-text {

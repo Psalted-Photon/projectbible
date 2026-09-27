@@ -105,6 +105,14 @@ export const SELECTION_TIPS: Tip[] = [
     body: 'Tap this, then tap another word, and the selection stretches to it. You can also press and drag across words before the ring comes up.',
   },
   {
+    id: 'ring-measure',
+    area,
+    target: '.toast .measure-pill',
+    corner: 'top-left',
+    title: 'What it comes to today',
+    body: 'Tap a cubit, shekel, talent or denarius and this says what it equals now, with the verse’s own number worked in: 300 cubits is about 450 feet. Money is shown in days’ wages. Switch between US and Metric in Settings.',
+  },
+  {
     id: 'ring-word-or-verse',
     area,
     target: '.toast .mode-seat, .toast .toggle-btn',

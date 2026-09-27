@@ -49,6 +49,9 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   'showSectionHeadings',
   'showArt',
   'themedTitles',
+  // US or Metric for the ring's weights-and-measures pill. A preference about
+  // the reader, not the device, so it follows the account.
+  'measureUnits',
 ];
 
 const LAST_SYNCED_KEY = 'projectbible_settings_synced_at';
