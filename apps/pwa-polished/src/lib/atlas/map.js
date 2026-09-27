@@ -25,6 +25,9 @@
  */
 
 import L from 'leaflet';
+// Leaflet's own stylesheet travels with the engine, so whichever map loads it
+// first (the map window or an ISBE article's) arrives with it in place.
+import 'leaflet/dist/leaflet.css';
 // The lettering's own styling. It ships with the engine because Leaflet builds
 // those elements itself, out of reach of any host component's styling, and
 // because both maps draw names — the docked one and the bare one.

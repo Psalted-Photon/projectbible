@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
   import { get } from "svelte/store";
-  import L from "leaflet";
+  import type { Map as LeafletMap } from "leaflet";
   import { isbeModalStore, type IsbeTab } from "../stores/isbeModalStore";
   import { isbeReturnStore, type IsbeReturn } from "../stores/isbeReturnStore";
   import { navigationStore } from "../stores/navigationStore";
@@ -100,7 +100,7 @@
   let loading = false;
 
   let mapEl: HTMLDivElement | null = null;
-  let map: L.Map | null = null;
+  let map: LeafletMap | null = null;
   /** The drawn map, when the Historical Map pack is installed. */
   let atlas: any = null;
   let mapObserver: ResizeObserver | null = null;
@@ -576,6 +576,18 @@
       destroyMap();
       // That clear-up was this render's own, not a reason to stop.
       token = mapToken;
+    }
+    if (stale()) return;
+
+    // Leaflet and its stylesheet load here, the first time a map is drawn,
+    // rather than with the app.
+    let L: typeof import("leaflet");
+    try {
+      L = (await import("leaflet")).default;
+      await import("leaflet/dist/leaflet.css");
+    } catch (err) {
+      console.warn('[isbe] map library unavailable', err);
+      return;
     }
     if (stale()) return;
 

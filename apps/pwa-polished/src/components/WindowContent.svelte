@@ -3,8 +3,6 @@
   import type { DockEdge, WindowState } from "../lib/stores/windowStore";
   import WindowContentSelector from "./WindowContentSelector.svelte";
   import BibleReader from "./BibleReader.svelte";
-  // The map window's contents.
-  import AtlasPane from "./AtlasPane.svelte";
   // The timeline window's contents.
   import TimelinePane from "./TimelinePane.svelte";
   import CommentaryReader from "./CommentaryReader.svelte";
@@ -17,6 +15,11 @@
   import PersonContent from "./PersonContent.svelte";
   import NavesContent from "./NavesContent.svelte";
   import LexicalContent from "./LexicalContent.svelte";
+
+  // The map window's contents load the first time a map window opens: the
+  // pane and the map library are a large share of the app, and most sessions
+  // never open a map.
+  const loadAtlasPane = () => import("./AtlasPane.svelte");
 
   // What goes inside a window, for every edge. WindowContainer renders one of
   // these per docked window; keeping the list here means a new content type is
@@ -35,7 +38,11 @@
 {:else if panel.contentType === 'bible'}
   <BibleReader windowId={panel.id} />
 {:else if panel.contentType === 'map'}
-  <AtlasPane windowId={panel.id} />
+  {#await loadAtlasPane() then { default: AtlasPane }}
+    <AtlasPane windowId={panel.id} />
+  {:catch}
+    <p class="load-failed">The map couldn't load. Close this window and open it again.</p>
+  {/await}
 {:else if panel.contentType === 'timeline'}
   <TimelinePane windowId={panel.id} />
 {:else if panel.contentType === 'commentaries'}
@@ -98,3 +105,12 @@
     strongsId={panel.contentState?.strongsId ?? undefined}
   />
 {/if}
+
+<style>
+  .load-failed {
+    margin: 0;
+    padding: 24px 16px;
+    text-align: center;
+    opacity: 0.7;
+  }
+</style>
