@@ -8,6 +8,7 @@
   import { BIBLE_BOOKS } from '@projectbible/core';
   import type { HighlightStyle, UserNote } from '@projectbible/core';
   import { HIGHLIGHT_CATEGORIES, categoryKeyFor } from '../lib/highlightCategories';
+  import { getHighlightNames, setHighlightName } from '../adapters/settings';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -97,6 +98,33 @@
     if (folded.has(key)) folded.delete(key);
     else folded.add(key);
     folded = folded;
+  }
+
+  // ─── naming — text colours and dashed start unnamed; the name follows the account ─
+  let names: Record<string, string> = getHighlightNames();
+  let editingKey: string | null = null;
+  let editValue = '';
+
+  function startEdit(key: string) {
+    editingKey = key;
+    editValue = names[key] ?? '';
+  }
+
+  function commitEdit() {
+    if (editingKey === null) return;
+    setHighlightName(editingKey, editValue);
+    names = getHighlightNames();
+    editingKey = null;
+  }
+
+  function editKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') commitEdit();
+    else if (e.key === 'Escape') editingKey = null;
+  }
+
+  function focusOnMount(el: HTMLInputElement) {
+    el.focus();
+    el.select();
   }
 
   // ─── data loading ────────────────────────────────────────────────────────────
@@ -225,7 +253,13 @@
       <div class="svp-groups">
         {#each categoryGroups as { cat, verses } (cat.key)}
           <section class="svp-group">
-            <button class="svp-group-header" on:click={() => toggleFold(cat.key)} aria-expanded={!folded.has(cat.key)}>
+            <div class="svp-group-row">
+            <button
+              class="svp-group-header"
+              class:svp-group-header--editing={editingKey === cat.key}
+              on:click={() => toggleFold(cat.key)}
+              aria-expanded={!folded.has(cat.key)}
+            >
               <span class="svp-fold" class:svp-fold--closed={folded.has(cat.key)}>▾</span>
               {#if cat.kind === 'marker'}
                 <span class="svp-sample svp-sample--marker" style="background: {cat.color}">Aa</span>
@@ -236,9 +270,29 @@
               {:else}
                 <span class="svp-sample" style="text-decoration: underline {cat.underlineStyle}; text-underline-offset: 3px;">Aa</span>
               {/if}
-              <span class="svp-group-name">{cat.label}</span>
-              <span class="svp-group-count">{verses.length}</span>
+              {#if editingKey !== cat.key}
+                <span class="svp-group-name">
+                  {names[cat.key] || cat.label}
+                  {#if names[cat.key]}<span class="svp-group-default">{cat.label}</span>{/if}
+                </span>
+                <span class="svp-group-count">{verses.length}</span>
+              {/if}
             </button>
+            {#if editingKey === cat.key}
+              <input
+                class="svp-name-input"
+                bind:value={editValue}
+                placeholder={cat.label}
+                maxlength="40"
+                aria-label="Name for {cat.label}"
+                use:focusOnMount
+                on:keydown={editKeydown}
+                on:blur={commitEdit}
+              />
+            {:else if cat.nameable}
+              <button class="svp-rename" on:click={() => startEdit(cat.key)} aria-label="Name this group" title="Name this group">✎</button>
+            {/if}
+            </div>
             {#if !folded.has(cat.key)}
               <ul class="svp-list">
                 {#each verses as item (item.book + item.chapter + item.verse)}
@@ -432,14 +486,21 @@
     gap: 6px;
   }
 
+  .svp-group-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #2a2a2a;
+  }
+
   .svp-group-header {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 10px;
     width: 100%;
     padding: 6px 4px;
     border: none;
-    border-bottom: 1px solid #2a2a2a;
     background: transparent;
     color: #ddd;
     cursor: pointer;
@@ -479,6 +540,43 @@
   .svp-group-name {
     flex: 1;
     font-weight: 600;
+  }
+
+  .svp-group-header--editing {
+    flex: 0 0 auto;
+  }
+
+  .svp-group-default {
+    margin-left: 6px;
+    font-size: 11px;
+    font-weight: 400;
+    color: #777;
+  }
+
+  .svp-name-input {
+    flex: 1;
+    min-width: 0;
+    margin: 4px 6px 4px 0;
+    padding: 3px 6px;
+    border: 1px solid #4caf50;
+    border-radius: 4px;
+    background: #111;
+    color: #eee;
+    font: inherit;
+    font-weight: 600;
+  }
+
+  .svp-rename {
+    padding: 4px 8px;
+    border: none;
+    background: transparent;
+    color: #888;
+    cursor: pointer;
+    font-size: 15px;
+  }
+
+  .svp-rename:hover {
+    color: #ccc;
   }
 
   .svp-group-count {

@@ -250,7 +250,16 @@ Verse highlights and single-word highlights are tracked separately, so you can h
 
 ### 10.3 Saved verses
 
-Bookmark verses you want to come back to and browse them in one list.
+Every verse you've highlighted, in one list in your profile. One button sorts it three ways:
+
+- **Recent** — newest first.
+- **Bible Order** — Genesis to Revelation.
+- **Categories** — grouped by how you marked them, following a Bible-study colour code:
+  - Markers: God (yellow), Wisdom (green), Warnings (orange), Salvation (red), Praise (pink), Promises (purple), Context (blue).
+  - Lines, whatever their colour: Stands out (solid), Word study (boxed), Repeats (wavy).
+  - Text colours and dashed underlines start unnamed. Tap the pencil to give one a name; it follows your account to your other devices.
+
+A verse marked two ways shows up in both groups. Tap a group's header to fold it away.
 
 ### 10.4 Selecting words
 

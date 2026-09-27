@@ -171,6 +171,7 @@ export interface UserSettings {
   notesTheme?: EditorThemeSettings;   // Notes writing surface (sticky notes follow it)
   journalTheme?: EditorThemeSettings; // Journal writing surface
   cardLooks?: SavedCardLook[]; // Share-card looks saved by name (synced)
+  highlightNames?: Record<string, string>; // Names given to Saved Verses categories, by category key (synced)
   // Whether each surface's formatting toolbar is slid up out of the way.
   // Per-device on purpose (not in SYNCED_KEYS) — an ergonomic choice like font
   // size, and a phone and a desktop rarely want the same answer.
@@ -344,6 +345,24 @@ export function getCardLooks(): SavedCardLook[] {
 
 export function setCardLooks(looks: SavedCardLook[]): void {
   updateSettings({ cardLooks: looks.slice(0, MAX_CARD_LOOKS) });
+}
+
+/**
+ * Names the user has given to Saved Verses categories (text colours, dashed
+ * underline), keyed by the category key from lib/highlightCategories.
+ */
+export function getHighlightNames(): Record<string, string> {
+  const names = getSettings().highlightNames;
+  return names && typeof names === 'object' ? names : {};
+}
+
+/** Name a category, or pass an empty name to go back to its plain label. */
+export function setHighlightName(key: string, name: string): void {
+  const names = { ...getHighlightNames() };
+  const trimmed = name.trim();
+  if (trimmed) names[key] = trimmed;
+  else delete names[key];
+  updateSettings({ highlightNames: names });
 }
 
 /** Which settings key holds each surface's toolbar-hidden flag. */
