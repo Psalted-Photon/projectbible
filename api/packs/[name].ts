@@ -4,13 +4,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { name } = req.query;
 
-    if (!name || Array.isArray(name)) {
+    // A pack name is a plain file name in the release: letters, digits, dots,
+    // dashes and underscores. Anything else (a slash, "..", an encoded slash)
+    // could walk the URL out of the release and onto other GitHub paths, with
+    // the token attached.
+    if (!name || Array.isArray(name) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) || name.includes("..")) {
       res.status(400).send("Invalid pack name");
       return;
     }
 
     const githubUrl =
-      `https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/${name}`;
+      `https://github.com/Psalted-Photon/projectbible/releases/download/packs-v1.0.0/${encodeURIComponent(name)}`;
 
     const headers: Record<string, string> = {
       "User-Agent": "ProjectBible-PackProxy",
