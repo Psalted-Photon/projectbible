@@ -13,6 +13,8 @@ import { adoptUnownedRows } from './adoptOwnership';
 import { clearPersonalData, pendingWork } from './clearPersonalData';
 import { getDeviceOwner, isOwnerReadable } from './deviceOwner';
 import { syncQueue } from './SyncQueueService';
+import { accountEpoch } from './accountEpoch';
+import { fetchAllRows } from './fetchAllRows';
 import { realtimeService } from './RealtimeService';
 import { pullSettings } from './settingsSync';
 import { sharedNotebookStore } from '../../adapters/SharedNotebookStore';
@@ -532,13 +534,14 @@ class SyncService {
   };
   
   private async pullRemoteData(): Promise<void> {
+    const epoch = accountEpoch();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const pulls: Promise<void>[] = [];
     for (const [table, applyFn] of this.applyFns) {
       pulls.push(
-        this.pullTable(table, user.id, applyFn).catch((err) => {
+        this.pullTable(table, user.id, applyFn, epoch).catch((err) => {
           console.error(`[SyncService] pullTable(${table}) threw unexpectedly:`, err);
         })
       );
@@ -549,15 +552,26 @@ class SyncService {
   private async pullTable(
     table: SyncTable, 
     userId: string,
-    applyFn: (rows: any[]) => Promise<void>
+    applyFn: (rows: any[]) => Promise<void>,
+    epoch: number
   ): Promise<void> {
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .eq('user_id', userId);
+    // journal_lock is one row per account, keyed on user_id; every other
+    // table has an id of its own.
+    const { data, error } = await fetchAllRows(
+      () => supabase.from(table).select('*').eq('user_id', userId),
+      table === 'journal_lock' ? 'user_id' : 'id',
+    );
     
     if (error) {
       console.error(`[SyncService] Failed to pull ${table}:`, error);
+      return;
+    }
+
+    // Signed out (or another account signed in) while this was on its way
+    // back. The device has been emptied since; putting these rows back would
+    // hand the old account's work to whoever signs in next.
+    if (epoch !== accountEpoch()) {
+      console.log(`[SyncService] Dropped a ${table} pull that finished after sign-out`);
       return;
     }
     

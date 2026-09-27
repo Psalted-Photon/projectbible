@@ -39,6 +39,7 @@
 import { openDB } from '../../adapters/db';
 import { syncQueue } from './SyncQueueService';
 import { clearDeviceOwner } from './deviceOwner';
+import { bumpAccountEpoch } from './accountEpoch';
 import { clearOutbox, pendingWrites } from '../shared/sharedOutbox';
 import {
   ACTIVE_PLANS_KEY,
@@ -223,6 +224,10 @@ export type ClearReason = 'sign-out' | 'account-switch';
  */
 export async function clearPersonalData(reason: ClearReason = 'sign-out'): Promise<number> {
   let cleared = 0;
+
+  // First, so a pull already in flight for the leaving account finds out
+  // before it writes anything back — see accountEpoch.ts.
+  bumpAccountEpoch();
 
   try {
     const db = await openDB();

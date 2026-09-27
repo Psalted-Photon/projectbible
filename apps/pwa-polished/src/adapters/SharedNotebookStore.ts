@@ -52,6 +52,7 @@ import {
   dropNotebookWrites,
   dropWrite,
   isOffline,
+  isRetryable,
   markAttempt,
   pendingFor,
   pendingPageIds,
@@ -61,6 +62,8 @@ import {
 } from '../lib/shared/sharedOutbox';
 import type { DBSharedOutboxItem } from '../lib/shared/sharedOutbox';
 import { showNotice } from '../stores/noticeStore';
+import { accountEpoch, bumpAccountEpoch } from '../lib/sync/accountEpoch';
+import { fetchAllRows } from '../lib/sync/fetchAllRows';
 
 // ─── Shapes the app works in ─────────────────────────────────────────────────
 
@@ -451,16 +454,19 @@ export class SharedNotebookStoreImpl {
     await this.flushOutbox();
 
     this.pulling = true;
+    const epoch = accountEpoch();
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return false;
 
+      // Paged: past 1,000 rows a single request stops short, and the
+      // reconciliation below would take the rest for removed.
       const [notebooksRes, membersRes, pagesRes] = await Promise.all([
-        supabase.from('shared_notebooks').select('*'),
-        supabase.from('shared_notebook_members').select('*'),
-        supabase.from('shared_notebook_pages').select('*').is('deleted_at', null),
+        fetchAllRows(() => supabase.from('shared_notebooks').select('*')),
+        fetchAllRows(() => supabase.from('shared_notebook_members').select('*')),
+        fetchAllRows(() => supabase.from('shared_notebook_pages').select('*').is('deleted_at', null)),
       ]);
 
       // One table failing is not a reason to reconcile against a half-answer:
@@ -469,6 +475,14 @@ export class SharedNotebookStoreImpl {
       const failure = notebooksRes.error ?? membersRes.error ?? pagesRes.error;
       if (failure) {
         console.error('[SharedNotebooks] pull failed:', failure.message);
+        return false;
+      }
+
+      // Signed out, or another account signed in, while this was in flight.
+      // The device has been emptied since; these rows are not the new
+      // account's to see.
+      if (epoch !== accountEpoch()) {
+        console.log('[SharedNotebooks] Dropped a pull that finished after sign-out');
         return false;
       }
 
@@ -779,6 +793,14 @@ export class SharedNotebookStoreImpl {
   }
 
   /**
+   * plainError for a page write, carrying the HTTP status so `isRetryable`
+   * can tell a refusal from a timeout or a server hiccup.
+   */
+  private rpcError(message: string, status: number): Error {
+    return Object.assign(this.plainError(message), { status });
+  }
+
+  /**
    * The same sentence for every action that simply cannot be done with no
    * signal — joining, changing the code, moving somebody's role.
    *
@@ -850,7 +872,7 @@ export class SharedNotebookStoreImpl {
     }
 
     try {
-      const { data, error } = await supabase.rpc('save_shared_page', {
+      const { data, error, status: httpStatus } = await supabase.rpc('save_shared_page', {
         p_id: args.id,
         p_notebook_id: args.notebookId,
         p_title: args.title.trim() || null,
@@ -860,7 +882,7 @@ export class SharedNotebookStoreImpl {
         p_pinned: args.pinned ?? null,
         p_created_at: args.createdAt ? args.createdAt.toISOString() : null,
       });
-      if (error) throw this.plainError(error.message);
+      if (error) throw this.rpcError(error.message, httpStatus);
 
       const payload = (data ?? {}) as { status?: string; page?: any };
       const status = payload.status === 'conflict' || payload.status === 'deleted'
@@ -877,11 +899,11 @@ export class SharedNotebookStoreImpl {
       if (!payload.page) throw new Error('The page was not saved');
       return { status, page: await this.storePage(payload.page) };
     } catch (err) {
-      // A connection that dropped part way through, or a browser still
-      // claiming to be online in a lift. The same answer as having known it
-      // beforehand: queue it. Anything the server actually said no to is a
-      // refusal and is passed on.
-      if (isOffline(err)) {
+      // A connection that dropped part way through, a browser still claiming
+      // to be online in a lift, a timeout, an expired login or a server
+      // hiccup. The same answer as having known it beforehand: queue it.
+      // Anything the server actually said no to is a refusal and is passed on.
+      if (isRetryable(err)) {
         return { status: 'queued', page: await this.queueSave(args, text) };
       }
       throw err;
@@ -1038,10 +1060,10 @@ export class SharedNotebookStoreImpl {
       return;
     }
     try {
-      const { error } = await supabase.rpc('remove_shared_page', { p_id: id });
-      if (error) throw this.plainError(error.message);
+      const { error, status } = await supabase.rpc('remove_shared_page', { p_id: id });
+      if (error) throw this.rpcError(error.message, status);
     } catch (err) {
-      if (!isOffline(err)) throw err;
+      if (!isRetryable(err)) throw err;
       await this.queueRemove(id);
       return;
     }
@@ -1140,18 +1162,19 @@ export class SharedNotebookStoreImpl {
    * Three endings, and which one it is decides whether the item is kept:
    * delivered, so it goes; refused by the server, so it also goes — retrying a
    * refusal only produces the same refusal, and the words are still in the
-   * local copy for whoever wrote them; or it never arrived, so it stays.
+   * local copy for whoever wrote them; or it never arrived, or arrived with no
+   * real answer (see isRetryable), so it stays.
    */
-  private async flushOne(item: DBSharedOutboxItem): Promise<'sent' | 'dropped' | 'offline'> {
+  private async flushOne(item: DBSharedOutboxItem): Promise<'sent' | 'dropped' | 'kept' | 'offline'> {
     try {
       if (item.kind === 'remove') {
-        const { error } = await supabase.rpc('remove_shared_page', { p_id: item.pageId });
-        if (error) throw this.plainError(error.message);
+        const { error, status } = await supabase.rpc('remove_shared_page', { p_id: item.pageId });
+        if (error) throw this.rpcError(error.message, status);
         await dropWrite(item.pageId);
         return 'sent';
       }
 
-      const { data, error } = await supabase.rpc('save_shared_page', {
+      const { data, error, status } = await supabase.rpc('save_shared_page', {
         p_id: item.pageId,
         p_notebook_id: item.notebookId,
         p_title: item.title.trim() || null,
@@ -1164,7 +1187,7 @@ export class SharedNotebookStoreImpl {
         p_pinned: item.pinned,
         p_created_at: item.createdAt ? new Date(item.createdAt).toISOString() : null,
       });
-      if (error) throw this.plainError(error.message);
+      if (error) throw this.rpcError(error.message, status);
 
       const payload = (data ?? {}) as { status?: string; page?: any };
       if (payload.status === 'conflict' || payload.status === 'deleted') {
@@ -1179,6 +1202,14 @@ export class SharedNotebookStoreImpl {
       if (isOffline(err)) {
         await markAttempt(item);
         return 'offline';
+      }
+      // Reached the server, or timed out trying, without an answer about the
+      // write itself: a timeout, an expired login, a 5xx. Kept for the next
+      // flush. Unlike 'offline' the drain carries on, so one page the server
+      // keeps choking on does not hold up the others behind it.
+      if (isRetryable(err)) {
+        await markAttempt(item);
+        return 'kept';
       }
       // The server thought about it and said no — the notebook has been left
       // since, or the page closed, or a role changed. The item goes, and the
@@ -1496,6 +1527,8 @@ export class SharedNotebookStoreImpl {
 
   /** Throw away every shared row. Called on sign-out — none of it is ours. */
   async clear(): Promise<void> {
+    // First, so a pull already in flight drops its answer (accountEpoch.ts).
+    bumpAccountEpoch();
     for (const storeName of [
       'shared_notebooks',
       'shared_notebook_members',

@@ -181,3 +181,23 @@ export function isOffline(err: unknown): boolean {
     message.includes('err_internet_disconnected')
   );
 }
+
+/**
+ * An error the server did not actually decide, so the write should be kept.
+ *
+ * Wider than `isOffline`. Besides no signal at all, it covers the answers that
+ * say nothing about the write itself: status 0 (the request never completed,
+ * which includes our own 20-second timeout in lib/supabase/client.ts), 401 (a
+ * login that expired and will be refreshed), 408 and 429 (try later), and any
+ * 5xx (the server had a problem). A refusal from the database — a policy, or a
+ * RAISE in one of the functions — comes back as a 4xx and is not included.
+ *
+ * `status` is attached by SharedNotebookStore's rpcError; an error without one
+ * falls back to the offline sentences.
+ */
+export function isRetryable(err: unknown): boolean {
+  if (isOffline(err)) return true;
+  const status = (err as { status?: unknown } | null)?.status;
+  if (typeof status !== 'number') return false;
+  return status === 0 || status === 401 || status === 408 || status === 429 || status >= 500;
+}

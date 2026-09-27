@@ -199,6 +199,10 @@
   let editorText = '';
   let isDirty = false;
   let isSaving = false;
+  // Asked to save while a save was already running. Honoured when that one
+  // finishes, so words typed during a slow save (or just before the panel
+  // closed) are not left behind.
+  let saveAgain = false;
   let saveTimeout: number | null = null;
   let confirmDeleteOpen = false;
   let settling = false; // editor is loading its initial content, not being edited
@@ -1356,7 +1360,11 @@
   }
 
   async function save() {
-    if (isSaving || !target) return;
+    if (!target) return;
+    if (isSaving) {
+      saveAgain = true;
+      return;
+    }
     // A save that came back refused stays refused until the writer decides
     // what to do about it. Retrying every few seconds would only pile up the
     // same answer and bury the bar that is asking them.
@@ -1438,6 +1446,10 @@
       }
     } finally {
       isSaving = false;
+      if (saveAgain) {
+        saveAgain = false;
+        if (isDirty) void save();
+      }
     }
   }
 
