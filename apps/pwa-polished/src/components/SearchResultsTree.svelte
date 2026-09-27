@@ -17,20 +17,23 @@
   export let onToggle: (key: string) => void = () => {};
   export let onSelect: (result: SearchResult) => void = () => {};
 
+  /**
+   * One pass over the raw text with every term at once, escaping each piece
+   * as it goes. Marking term by term over already-escaped text used to let a
+   * later term match inside an earlier term's <mark> tag, and a term like
+   * "amp" or "lt" match inside an escape such as &amp;.
+   */
   function highlight(text: string): string {
-    if (!query || !text) return escapeHtml(text || "");
-    const safe = escapeHtml(text);
-    const terms = query
-      .toLowerCase()
-      .trim()
-      .split(/\s+/)
-      .filter((t) => t.length >= 2);
-    let out = safe;
-    for (const term of terms) {
-      const pattern = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      out = out.replace(new RegExp(`(${pattern})`, "gi"), "<mark>$1</mark>");
+    if (!queryRe || !text) return escapeHtml(text || "");
+    const re = new RegExp(queryRe.source, "gi");
+    let out = "";
+    let last = 0;
+    for (const m of text.matchAll(re)) {
+      const start = m.index ?? 0;
+      out += escapeHtml(text.slice(last, start)) + "<mark>" + escapeHtml(m[0]) + "</mark>";
+      last = start + m[0].length;
     }
-    return out;
+    return out + escapeHtml(text.slice(last));
   }
 
   function escapeHtml(text: string): string {

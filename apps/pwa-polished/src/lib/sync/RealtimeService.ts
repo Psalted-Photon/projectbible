@@ -46,11 +46,12 @@ class RealtimeService {
     }
 
     this.userId = userId;
-    this.channel = supabase.channel(`user_sync_${userId}`);
+    const channel = supabase.channel(`user_sync_${userId}`);
+    this.channel = channel;
 
     // Subscribe to all user data tables
     for (const table of SYNC_TABLES) {
-      this.channel.on(
+      channel.on(
         'postgres_changes',
         {
           event: '*', // INSERT, UPDATE, DELETE
@@ -64,12 +65,16 @@ class RealtimeService {
       );
     }
 
-    this.channel.subscribe((status) => {
+    channel.subscribe((status) => {
       console.log(`[Realtime] Channel status: ${status}`);
+      // A channel that has been replaced or removed reports CLOSED on its way
+      // out. Acting on that used to schedule a reconnect that removed the new
+      // channel, whose CLOSED scheduled another, and so on — live changes
+      // missed in every gap. Only the current channel's status counts.
+      if (this.channel !== channel) return;
       if (status === 'SUBSCRIBED') {
         this.reconnectDelayMs = RECONNECT_BASE_MS;
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        // CLOSED also fires on intentional disconnect — userId is nulled first there.
         if (this.userId) this.scheduleReconnect();
       }
     });
@@ -120,6 +125,12 @@ class RealtimeService {
   private async reconnect(): Promise<void> {
     const userId = this.userId;
     if (!userId) return;
+    // A reconnect already on the timer would otherwise fire later and tear
+    // down the healthy channel this one is about to build.
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.channel) {
       const channel = this.channel;
       this.channel = null;
