@@ -13,6 +13,7 @@
  *   a user's JWT   → immediate test push to that user's own devices only.
  *                    Used by the "Send a real test alarm" button so the whole
  *                    path can be verified without waiting for 6am.
+ *                    One per user per minute.
  *
  * "The admin key" means literally whatever Supabase injects as
  * SUPABASE_SERVICE_ROLE_KEY — compared here as a string, not decoded. On a
@@ -362,6 +363,19 @@ Deno.serve(async (req) => {
         `Sent ${shape(token)}; expected ${shape(serviceRoleKey!)} for the scheduled sweep.`
       );
       return json({ error: 'Not signed in' }, 401);
+    }
+
+    // One test per user per minute (migration 014). Answered as a normal reply
+    // rather than an error, so the app can say "wait" instead of "broken".
+    // Without the migration the claim fails and the test goes out anyway: a
+    // missing limit is better than a test button that stops working.
+    const { data: claimed, error: claimError } = await admin.rpc('claim_wake_alarm_test', {
+      p_user: user.id,
+    });
+    if (claimError) {
+      console.error('[wake-alarm] test limit unavailable, sending anyway:', claimError.message);
+    } else if (claimed === false) {
+      return json({ mode: 'test', limited: true, sent: 0, failed: 0, expired: 0 });
     }
 
     const { data: alarm } = await admin

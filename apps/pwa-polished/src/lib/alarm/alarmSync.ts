@@ -118,6 +118,14 @@ export async function sendTestAlarm(): Promise<AlarmPushResult> {
       };
     }
 
+    if ((data as { limited?: boolean } | null)?.limited) {
+      return {
+        ok: false,
+        reason: 'error',
+        message: 'A test alarm was sent less than a minute ago. Wait a minute and try again.',
+      };
+    }
+
     const sent = (data as { sent?: number } | null)?.sent ?? 0;
     if (sent === 0) {
       return {
