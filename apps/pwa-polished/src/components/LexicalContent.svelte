@@ -1803,7 +1803,6 @@
   }
 
   .full-def,
-  .usage,
   .derivation {
     font-size: 15px;
     line-height: 1.8;
@@ -1836,8 +1835,7 @@
     margin-right: 2px;
   }
 
-  .usage-view,
-  .related-view {
+  .usage-view {
     display: flex;
     flex-direction: column;
     padding: 20px;
@@ -1948,11 +1946,6 @@
 
   .form-verses {
     padding: 0 0 8px 20px;
-  }
-
-  .related-view {
-    align-items: center;
-    padding: 60px 20px;
   }
 
   /* --- Related by sense ---------------------------------------------------
@@ -2196,29 +2189,6 @@
     color: #4caf50;
   }
 
-  .loading-inline {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
-    color: #888;
-  }
-
-  .spinner-small {
-    width: 20px;
-    height: 20px;
-    border: 2px solid rgba(76, 175, 80, 0.2);
-    border-top-color: #4caf50;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-
-  .definition-list {
-    margin: 0;
-    padding-left: 24px;
-    color: var(--text-color, #fff);
-  }
-
   .definitions-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2229,11 +2199,6 @@
     .definitions-grid {
       grid-template-columns: 1fr;
     }
-  }
-
-  .definition-list li {
-    margin-bottom: 16px;
-    line-height: 1.6;
   }
 
   .definition-text {
@@ -2250,11 +2215,6 @@
     border-radius: 4px;
     font-size: 14px;
     color: #aaa;
-  }
-
-  .example-text em {
-    font-style: italic;
-    color: #ccc;
   }
 
   .coming-soon {

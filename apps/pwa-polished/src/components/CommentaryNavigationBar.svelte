@@ -9,7 +9,6 @@
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
 
   export let windowId: string | undefined = undefined;
-  export let visible: boolean = true;
   export let style: string = "";
 
   /* Matches the main navbar: the reference dropdown is two side-by-side columns,

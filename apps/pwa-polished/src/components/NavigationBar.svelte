@@ -2643,9 +2643,6 @@
     flex-shrink: 0;
   }
 
-  .nav-pill-tools {
-  }
-
   /* ── Interlinear control (between the two pills) ───────────────────── */
   .nav-interlinear {
     display: flex;

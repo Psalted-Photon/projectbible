@@ -194,6 +194,7 @@
     {:else}
       <ul class="svp-list">
         {#each sortedVerses as item (item.book + item.chapter + item.verse)}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
           <li class="svp-item" on:click={() => navigateTo(item.book, item.chapter, item.verse)}>
             <div class="svp-item-header">
               <span class="svp-ref">{formatRef(item.book, item.chapter, item.verse)}</span>
@@ -221,6 +222,7 @@
     {:else}
       <ul class="svp-list">
         {#each sortedNotes as item (item.id)}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
           <li class="svp-item" on:click={() => navigateTo(item.book, item.chapter, item.verse)}>
             <div class="svp-item-header">
               <span class="svp-ref">{formatRef(item.book, item.chapter, item.verse)}</span>
@@ -339,6 +341,7 @@
     line-height: 1.5;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }

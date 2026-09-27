@@ -75,7 +75,7 @@
 {#if $dailyGreetingOpen && !$welcomePending}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="dg-overlay" on:click={close}>
-    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_interactive_supports_focus -->
     <div class="dg-card" on:click|stopPropagation role="dialog" aria-modal="true" aria-label="Daily greeting">
       <!-- Header -->
       <div class="dg-header">

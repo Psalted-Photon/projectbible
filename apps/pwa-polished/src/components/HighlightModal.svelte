@@ -407,34 +407,6 @@
   .hl-underline-preview { pointer-events: none; }
   .hl-box-preview { pointer-events: none; padding: 0 1px; }
 
-  .hl-check {
-    position: absolute;
-    top: -3px;
-    right: -3px;
-    width: 14px;
-    height: 14px;
-    background: #fff;
-    color: #111;
-    border-radius: 50%;
-    font-size: 0.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    pointer-events: none;
-  }
-
-  .hl-check-text {
-    background: var(--swatch-color, #fff);
-    color: #111;
-  }
-
-  /* On dark/bold swatches the checkmark badge uses white text for contrast */
-  .hl-check-bold {
-    background: rgba(255,255,255,0.9);
-    color: #111;
-  }
-
   /* ── Underline grid ── */
   .hl-underline-grid { display: flex; flex-direction: column; gap: 8px; }
 

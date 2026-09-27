@@ -1543,8 +1543,7 @@
     }
 
     select,
-    input[type="range"],
-    input[type="text"] {
+    input[type="range"] {
       padding: 0.45rem 0.5rem;
       margin-bottom: 0.6rem;
       font-size: 0.85rem;

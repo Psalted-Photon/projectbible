@@ -654,90 +654,6 @@
     margin-bottom: 16px;
   }
 
-  .presets-section {
-    background: linear-gradient(135deg, #1a1a2a 0%, #2a2a3a 100%);
-    border-color: #f97316;
-  }
-
-  .presets-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
-
-  .preset-button {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 12px 8px;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: #e0e0e0;
-  }
-
-  .preset-button:hover {
-    background: #2a2a2a;
-    border-color: #f97316;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
-  }
-
-  .preset-icon {
-    font-size: 24px;
-  }
-
-  .preset-name {
-    font-size: 12px;
-    font-weight: 600;
-    text-align: center;
-  }
-
-
-  .presets-section {
-    background: linear-gradient(135deg, #1a1a2a 0%, #2a2a3a 100%);
-    border-color: #f97316;
-  }
-
-  .presets-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
-
-  .preset-button {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 12px 8px;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: #e0e0e0;
-  }
-
-  .preset-button:hover {
-    background: #2a2a2a;
-    border-color: #f97316;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
-  }
-
-  .preset-icon {
-    font-size: 24px;
-  }
-
-  .preset-name {
-    font-size: 12px;
-    font-weight: 600;
-    text-align: center;
-  }
 
 
   .control-section h3 {
@@ -1134,21 +1050,6 @@
     font-size: 14px;
   }
 
-  .load-all-link {
-    background: none;
-    border: none;
-    color: #f97316;
-    text-decoration: underline;
-    cursor: pointer;
-    font-size: inherit;
-    font-weight: inherit;
-    padding: 0;
-  }
-
-  .load-all-link:hover {
-    color: #7e8ff0;
-  }
-
   .results-list {
     max-height: 600px;
     overflow-y: auto;
@@ -1171,29 +1072,9 @@
 
 
 
-  .result-category {
-    margin-bottom: 24px;
-  }
-
-  .result-category h4 {
-    margin: 0 0 12px 0;
-    color: #888;
-    font-size: 14px;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
 
 
 
-
-
-  .more-results {
-    color: #888;
-    font-size: 13px;
-    font-style: italic;
-    text-align: center;
-    padding: 12px;
-  }
 
   .preview-results {
     margin-top: 20px;
@@ -1232,7 +1113,8 @@
     line-height: 1.3;
   }
 
-  .highlight-term {
+  /* The marks are added as HTML, which scoped styles do not reach. */
+  .preview-text :global(.highlight-term) {
     background: rgba(255, 193, 7, 0.35);
     border-radius: 3px;
     padding: 2px 4px;
@@ -1339,14 +1221,6 @@
     .control-section select {
       padding: 6px 10px;
       font-size: 13px;
-    }
-
-    .input-row {
-      gap: 6px;
-    }
-
-    .proximity-builder {
-      gap: 6px;
     }
 
     .btn-primary,

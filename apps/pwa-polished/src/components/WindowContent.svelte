@@ -53,7 +53,7 @@
   {#if $journalLock.needsUnlock}
     <JournalLockScreen />
   {:else if $journalLock.ready}
-    <JournalWriter windowId={panel.id} initialDate={panel.contentState?.date} />
+    <JournalWriter initialDate={panel.contentState?.date} />
   {/if}
 {:else if panel.contentType === 'art'}
   <ArtPane

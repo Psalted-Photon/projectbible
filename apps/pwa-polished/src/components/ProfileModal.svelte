@@ -1168,11 +1168,6 @@
     font-size: 18px;
   }
 
-  .profile-icon svg {
-    color: #0f766e;
-    filter: drop-shadow(0 0 4px #2dd4bf);
-  }
-
   .profile-user-icon {
     display: inline-flex;
     align-items: center;

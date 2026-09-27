@@ -7,7 +7,6 @@
   import { onBeforeLock } from '../lib/journalLock/lockState';
   import type { JournalEntry } from '@projectbible/core';
   
-  export let windowId: string | undefined = undefined;
   export let initialDate: string | undefined = undefined;
   
   let editorRef: any;

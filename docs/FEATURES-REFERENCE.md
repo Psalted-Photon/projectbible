@@ -281,7 +281,7 @@ The back arrow only restores the modal if the reader is **still sitting at `at`*
 
 ## 7. Commentaries
 
-Files: `src/components/CommentaryReader.svelte` (608), `src/components/CommentaryNavigationBar.svelte` (799), `src/components/CommentaryModal.svelte` (456), `src/adapters/CommentaryStore.ts` (308), `src/lib/linkifyCommentaryRefs.ts` (238), `src/lib/annotationConfig.ts`.
+Files: `src/components/CommentaryReader.svelte` (608), `src/components/CommentaryNavigationBar.svelte` (799), `src/adapters/CommentaryStore.ts` (308), `src/lib/linkifyCommentaryRefs.ts` (238), `src/lib/annotationConfig.ts`.
 
 ### 7.1 Author registry
 
