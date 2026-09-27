@@ -80,6 +80,7 @@ export type CrumbKind =
   | 'plan'
   | 'map'
   | 'timeline'
+  | 'art'
   /**
    * A tap through an Old Testament quotation mark. The only kind that routinely
    * lands in a different translation from the one it left — it goes to the

@@ -59,8 +59,10 @@ const STARTER_TRANSLATION = 'NET';
  * fetch it again once. Pack versions stay at 1.0.0 before v1, so this is the
  * only signal a corrected starter has.
  *   2 — NET headings no longer carry raw USFM markers ("The \nd Lord\nd*’s").
+ *   3 — 18 NET OT quotations no longer repeat their words ("them male and
+ *       female them male and female"); Isaiah 43's notes lose raw markers.
  */
-const STARTER_REVISION = 2;
+const STARTER_REVISION = 3;
 const STARTER_REVISION_KEY = 'hexapla-starter-revision';
 
 /**

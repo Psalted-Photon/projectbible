@@ -73,6 +73,7 @@
     Microscope,
     BookOpenText,
     MapTrifold,
+    PaintBrush,
     Quotes,
     Gear,
     SteeringWheel,
@@ -726,6 +727,7 @@
     plan: BookOpenText,
     map: MapTrifold,
     timeline: Hourglass,
+    art: PaintBrush,
     otquote: Quotes,
     link: Graph,
   };

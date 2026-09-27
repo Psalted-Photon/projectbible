@@ -509,7 +509,18 @@ function refineWithCrossVerseQuotes(transOut, getter) {
         //    We do NOT override when scan result is wider (that was the Luke 23:3
         //    multi-speaker bug where Pilate's question got highlighted).
         const existing = transOut[key];
-        if (quoteOpenAtStart || !existing) {
+        if (quoteOpenAtStart) {
+          // The continuation span is trusted, but later quotes in the verse may be
+          // a reply from someone else (NET Matt 13:51 "They replied, 'Yes.'",
+          // John 8:41 "We were not born...") — keep those only where they share
+          // words with his <wj> text and the per-verse alignment agrees.
+          const wjText = (wjSpans[key] || []).map(sp => sp.text).join(' ');
+          const later = spans.slice(1).filter(sp =>
+            (!existing || existing.some(ex => sp.s < ex.e && sp.e > ex.s)) &&
+            wordOverlap(text.slice(sp.s, sp.e), wjText) >= 0.35);
+          transOut[key] = [spans[0], ...later];
+          refined++;
+        } else if (!existing) {
           transOut[key] = spans;
           refined++;
         } else {
@@ -520,6 +531,16 @@ function refineWithCrossVerseQuotes(transOut, getter) {
           if (sS >= eS && sE <= eE) {
             transOut[key] = spans;
             refined++;
+          } else {
+            // Jesus's span opens a quote that is never closed in this verse, so
+            // everything after it is still his speech — the word match just fell
+            // short (Rev 2:1 "lamp stands"/"lampstands", Rev 3:1 reworded letters).
+            const lastScan = spans[spans.length - 1];
+            const lastEx = existing[existing.length - 1];
+            if (quoteOpen && lastScan.s === lastEx.s && lastScan.e > lastEx.e) {
+              transOut[key] = [...existing.slice(0, -1), { s: lastEx.s, e: lastScan.e }];
+              refined++;
+            }
           }
         }
       }

@@ -53,6 +53,73 @@ function applyRepair(book, verse) {
   return structure + replacement;
 }
 
+/**
+ * The eBible NET USFM writes the tail of some bold OT quotations twice, e.g.
+ * Matthew 19:4 "\bd \+qt \+it made\+it*\+qt* them male and female them male
+ * and female\bd*". Every such block opens with a nested \+qt, often with the
+ * first word or two in \+it, and ends with its last run of words repeated. The
+ * NET's own text has the quotation once, in bold only (checked against the
+ * pre-USFM pack for all 18 blocks), so drop the second copy and the stray
+ * italics. Hebrews 7:2 also carries "\+qt t\+qt*", a lone letter, dropped too.
+ * A repeat of one word is never treated as a defect ("holy, holy").
+ */
+const BS = '\\';
+const MARKUP = /\\\+?[a-z]+\d*\*?|\|[a-z]+="[^"]*"/g;
+let doubledRepaired = 0;
+
+function repairDoubledBlock(block) {
+  if (!block.includes(BS + '+qt')) return block;
+
+  // Word positions, with markers and attributes blanked out so none of their
+  // letters count as words.
+  const masked = block.replace(MARKUP, (m) => ' '.repeat(m.length));
+  const words = [...masked.matchAll(/[\p{L}\p{N}’']+/gu)].map((m) => ({
+    w: m[0].toLowerCase(),
+    s: m.index,
+    e: m.index + m[0].length,
+  }));
+  const n = words.length;
+  let len = 0;
+  for (let L = Math.floor(n / 2); L >= 2; L--) {
+    let same = true;
+    for (let k = 0; k < L && same; k++) same = words[n - 2 * L + k].w === words[n - L + k].w;
+    if (same) { len = L; break; }
+  }
+  if (!len) return block;
+
+  // Delete the second copy's text, and any punctuation between the copies
+  // (John 12:38 "arm of the Lord, who has..."), but keep the markers so every
+  // opener still has its closer; the emptied \+w pairs are removed after.
+  const from = words[n - len - 1].e;
+  const to = words[n - 1].e;
+  let kept = '';
+  for (const m of block.slice(from, to).matchAll(MARKUP)) kept += m[0];
+  doubledRepaired++;
+  return (block.slice(0, from) + kept + block.slice(to))
+    .replace(/\\\+w\s*(?:\|[a-z]+="[^"]*")?\\\+w\*/g, '')
+    .replace(/\\\+it /g, '')
+    .replace(/\\\+it\*/g, '')
+    .replace(/\\\+qt\s*\p{L}\\\+qt\*\s*/gu, '')
+    .replace(/ {2,}/g, ' ')
+    .replace(/\s+$/, '');
+}
+
+function repairDoubledQuotes(content) {
+  return content.replace(/(\\bd )([\s\S]*?)(\\bd\*)/g, (_, open, inner, close) =>
+    open + repairDoubledBlock(inner) + close);
+}
+
+/**
+ * Isaiah 43's footnotes are the only ones in the NET USFM that mark a reference
+ * with \xo, e.g. "See the note at \xo Is 41:14.\f*". \xo is a cross-reference's
+ * own anchor, so the scanner lifts "Is 41:14." out to the front of the note and
+ * leaves "See the note at" hanging. Inside a footnote the reference is just
+ * part of the sentence, so the marker goes.
+ */
+function unmarkFootnoteReferences(content) {
+  return content.replace(/\\f [\s\S]*?\\f\*/g, (note) => note.replace(/\\\+?xo /g, ''));
+}
+
 /** File names look like 02-GENengnet.usfm; the middle group is the book code. */
 const FILE_PATTERN = /^\d+-([A-Z0-9]+)engnet\.usfm$/i;
 
@@ -91,7 +158,9 @@ function readBooks() {
       process.exit(1);
     }
 
-    const content = readFileSync(join(USFM_DIR, file), 'utf8');
+    const content = unmarkFootnoteReferences(
+      repairDoubledQuotes(readFileSync(join(USFM_DIR, file), 'utf8'))
+    );
     const verses = processVerses(parseUSFM(content, NET_OPTIONS)).map((v) => ({
       chapter: v.chapter,
       verse: v.verse,
@@ -165,6 +234,7 @@ function buildPack(books) {
 
   console.log(`\n✓ ${total.toLocaleString()} verses`);
   console.log(`✓ ${repairsApplied} verses restored from the source-defect table`);
+  console.log(`✓ ${doubledRepaired} doubled quotations written once`);
   console.log(`✓ ${Number(structure.paragraphs).toLocaleString()} verses open a paragraph`);
   console.log(`✓ ${Number(structure.poetry).toLocaleString()} verses carry a poetic line`);
   console.log(`\n✅ NET pack built: ${OUTPUT_PATH}`);

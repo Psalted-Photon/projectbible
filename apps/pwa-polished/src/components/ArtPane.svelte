@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import { get } from 'svelte/store';
+  import { navigationStore } from '../stores/navigationStore';
   import type { ArtScene, ArtWork } from '@projectbible/core';
   import { IndexedDBArtStore } from '../adapters/ArtStore';
   import {
@@ -159,6 +161,13 @@
     selected = null;
   }
 
+  /** Jump the reader to the scene's anchor verse, leaving a crumb to come back. */
+  function goToScene(scene: ArtScene) {
+    const current = get(navigationStore);
+    navigationStore.pushHistory(current, 'art');
+    navigationStore.navigateToVerse(current.translation, scene.book, scene.chapter, scene.verse);
+  }
+
   function openViewer(work: ArtWork) {
     if (!urls[work.imageId]) return;
     viewerWork = work;
@@ -177,7 +186,11 @@
       {/if}
       <header class="scene-head">
         <h2>{selected.title}</h2>
-        {#if selected.passageLabel}<span class="passage">{selected.passageLabel}</span>{/if}
+        {#if selected.passageLabel}
+          <button class="passage" on:click={() => selected && goToScene(selected)}
+            >{selected.passageLabel}</button
+          >
+        {/if}
       </header>
 
       {#if selected.works.length === 0}
@@ -344,6 +357,14 @@
     font-size: 13px;
     color: #b98a4b;
     letter-spacing: 0.02em;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
   }
 
   .back {
