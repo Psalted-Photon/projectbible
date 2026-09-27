@@ -6,7 +6,8 @@
   import { IndexedDBTextStore } from '../lib/adapters';
   import { renderVersePreviewHtml } from '../lib/verseRendering';
   import { BIBLE_BOOKS } from '@projectbible/core';
-  import type { UserNote } from '@projectbible/core';
+  import type { HighlightStyle, UserNote } from '@projectbible/core';
+  import { HIGHLIGHT_CATEGORIES, categoryKeyFor } from '../lib/highlightCategories';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -18,7 +19,9 @@
   let activeTab: SubTab = 'verses';
 
   // ─── sort state ─────────────────────────────────────────────────────────────
-  type SortOrder = 'recent' | 'bible';
+  // 'categories' groups Saved Verses by the colour code; Notes have no marks,
+  // so on that tab it reads as Bible order.
+  type SortOrder = 'recent' | 'bible' | 'categories';
   let sortOrder: SortOrder = 'recent';
 
   // ─── data ───────────────────────────────────────────────────────────────────
@@ -28,6 +31,8 @@
     verse: number;
     text: string | null;
     createdAt: Date;
+    /** Every category this verse's marks fall into (see highlightCategories). */
+    categories: string[];
   }
 
   interface SavedNote {
@@ -80,6 +85,20 @@
   $: sortedVerses = sortVerses(savedVerses, sortOrder);
   $: sortedNotes = sortNotes(savedNotes, sortOrder);
 
+  // ─── categories view — each group in Bible order, empty groups hidden ─────────
+  $: categoryGroups = sortOrder === 'categories'
+    ? HIGHLIGHT_CATEGORIES
+        .map((cat) => ({ cat, verses: sortedVerses.filter((v) => v.categories.includes(cat.key)) }))
+        .filter((g) => g.verses.length > 0)
+    : [];
+
+  let folded = new Set<string>();
+  function toggleFold(key: string) {
+    if (folded.has(key)) folded.delete(key);
+    else folded.add(key);
+    folded = folded;
+  }
+
   // ─── data loading ────────────────────────────────────────────────────────────
   async function loadSavedVerses() {
     loadingVerses = true;
@@ -89,31 +108,36 @@
         userDataStore.getWordHighlights(),
       ]);
 
-      // Deduplicate by book+chapter+verse, keeping the earliest createdAt
-      const map = new Map<string, { book: string; chapter: number; verse: number; createdAt: Date }>();
+      // Deduplicate by book+chapter+verse, keeping the earliest createdAt and
+      // collecting the category of every mark on the verse
+      const map = new Map<string, { book: string; chapter: number; verse: number; createdAt: Date; categories: Set<string> }>();
 
-      const addEntry = (book: string, chapter: number, verse: number, createdAt: Date) => {
+      const addEntry = (book: string, chapter: number, verse: number, createdAt: Date, style: HighlightStyle) => {
         const key = `${book}|${chapter}|${verse}`;
-        const existing = map.get(key);
-        if (!existing || createdAt < existing.createdAt) {
-          map.set(key, { book, chapter, verse, createdAt });
+        let entry = map.get(key);
+        if (!entry) {
+          entry = { book, chapter, verse, createdAt, categories: new Set() };
+          map.set(key, entry);
+        } else if (createdAt < entry.createdAt) {
+          entry.createdAt = createdAt;
         }
+        entry.categories.add(categoryKeyFor(style));
       };
 
       for (const h of highlights) {
-        addEntry(h.reference.book, h.reference.chapter, h.reference.verse, h.createdAt);
+        addEntry(h.reference.book, h.reference.chapter, h.reference.verse, h.createdAt, h.style);
       }
       for (const w of wordHighlights) {
-        addEntry(w.reference.book, w.reference.chapter, w.reference.verse, w.createdAt);
+        addEntry(w.reference.book, w.reference.chapter, w.reference.verse, w.createdAt, w.style);
       }
 
       const translation = $navigationStore.translation;
 
       // Fetch verse text for each unique verse
       const results = await Promise.all(
-        Array.from(map.values()).map(async ({ book, chapter, verse, createdAt }) => {
+        Array.from(map.values()).map(async ({ book, chapter, verse, createdAt, categories }) => {
           const text = await textStore.getVerse(translation, book, chapter, verse);
-          return { book, chapter, verse, text, createdAt } satisfies SavedVerse;
+          return { book, chapter, verse, text, createdAt, categories: [...categories] } satisfies SavedVerse;
         })
       );
 
@@ -166,9 +190,15 @@
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  // Saved Verses cycles Recent → Bible Order → Categories; Notes just the first two
   function toggleSort() {
-    sortOrder = sortOrder === 'recent' ? 'bible' : 'recent';
+    if (activeTab === 'notes') sortOrder = sortOrder === 'recent' ? 'bible' : 'recent';
+    else sortOrder = sortOrder === 'recent' ? 'bible' : sortOrder === 'bible' ? 'categories' : 'recent';
   }
+
+  $: sortLabel = sortOrder === 'recent' ? 'Recent'
+    : sortOrder === 'categories' && activeTab === 'verses' ? 'Categories'
+    : 'Bible Order';
 </script>
 
 <div class="svp-root">
@@ -181,7 +211,7 @@
       Notes
     </button>
     <button class="svp-sort" on:click={toggleSort} title="Toggle sort order">
-      {sortOrder === 'recent' ? 'Recent' : 'Bible Order'}
+      {sortLabel}
     </button>
   </div>
 
@@ -191,6 +221,44 @@
       <div class="svp-loading">Loading…</div>
     {:else if sortedVerses.length === 0}
       <div class="svp-empty">No saved verses yet — highlight or underline a verse while reading.</div>
+    {:else if sortOrder === 'categories'}
+      <div class="svp-groups">
+        {#each categoryGroups as { cat, verses } (cat.key)}
+          <section class="svp-group">
+            <button class="svp-group-header" on:click={() => toggleFold(cat.key)} aria-expanded={!folded.has(cat.key)}>
+              <span class="svp-fold" class:svp-fold--closed={folded.has(cat.key)}>▾</span>
+              {#if cat.kind === 'marker'}
+                <span class="svp-sample svp-sample--marker" style="background: {cat.color}">Aa</span>
+              {:else if cat.kind === 'text'}
+                <span class="svp-sample" style="color: {cat.color}">Aa</span>
+              {:else if cat.underlineStyle === 'boxed'}
+                <span class="svp-sample svp-sample--boxed">Aa</span>
+              {:else}
+                <span class="svp-sample" style="text-decoration: underline {cat.underlineStyle}; text-underline-offset: 3px;">Aa</span>
+              {/if}
+              <span class="svp-group-name">{cat.label}</span>
+              <span class="svp-group-count">{verses.length}</span>
+            </button>
+            {#if !folded.has(cat.key)}
+              <ul class="svp-list">
+                {#each verses as item (item.book + item.chapter + item.verse)}
+                  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+                  <li class="svp-item" on:click={() => navigateTo(item.book, item.chapter, item.verse)}>
+                    <div class="svp-item-header">
+                      <span class="svp-ref">{formatRef(item.book, item.chapter, item.verse)}</span>
+                    </div>
+                    {#if item.text}
+                      <span class="svp-text">{@html renderVersePreviewHtml(item.text)}</span>
+                    {:else}
+                      <span class="svp-text svp-text--missing">Text unavailable</span>
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </section>
+        {/each}
+      </div>
     {:else}
       <ul class="svp-list">
         {#each sortedVerses as item (item.book + item.chapter + item.verse)}
@@ -349,6 +417,73 @@
   .svp-text--missing {
     color: #555;
     font-style: italic;
+  }
+
+  /* ── categories ───────────────────────────────────────────────── */
+  .svp-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .svp-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .svp-group-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 4px;
+    border: none;
+    border-bottom: 1px solid #2a2a2a;
+    background: transparent;
+    color: #ddd;
+    cursor: pointer;
+    font-size: 14px;
+    text-align: left;
+  }
+
+  .svp-fold {
+    color: #777;
+    font-size: 12px;
+    transition: transform 0.15s;
+  }
+
+  .svp-fold--closed {
+    transform: rotate(-90deg);
+  }
+
+  .svp-sample {
+    min-width: 30px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    color: #ccc;
+  }
+
+  .svp-sample--marker {
+    color: #111;
+  }
+
+  .svp-sample--boxed {
+    outline: 2px solid #aaa;
+    outline-offset: 1px;
+  }
+
+  .svp-group-name {
+    flex: 1;
+    font-weight: 600;
+  }
+
+  .svp-group-count {
+    font-size: 12px;
+    color: #777;
   }
 
   .svp-date {

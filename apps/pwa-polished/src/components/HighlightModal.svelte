@@ -2,6 +2,7 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { BCV, HighlightStyle, UserHighlight, UserWordHighlight } from '@projectbible/core';
   import { userProfileStore } from '../stores/userProfileStore';
+  import { HIGHLIGHT_PALETTE } from '../lib/highlightCategories';
 
   export let reference: BCV;
   export let existingHighlight: UserHighlight | UserWordHighlight | null = null;
@@ -21,15 +22,7 @@
 
   // ── Palette definitions ────────────────────────────────────────────────────
 
-  const PALETTE = [
-    { value: '#ffff32', label: 'Yellow' },
-    { value: '#3aff32', label: 'Green' },
-    { value: '#ff9c32', label: 'Orange' },
-    { value: '#ff3232', label: 'Red' },
-    { value: '#ff48ec', label: 'Pink' },
-    { value: '#ba32ff', label: 'Purple' },
-    { value: '#3273ff', label: 'Blue' },
-  ] as const;
+  const PALETTE = HIGHLIGHT_PALETTE;
 
   const UNDERLINE_STYLES = [
     { style: 'solid'  as const, label: 'Solid' },
