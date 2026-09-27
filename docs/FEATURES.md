@@ -369,6 +369,7 @@ If you miss days, the plan offers to catch you up two ways:
 - **Map pane** — open a map beside the text.
 - **Places in the verse you're reading** can be looked up directly.
 - **Search for a place** by name.
+- **How far, how long** — tap the ruler in the map bar, then two places. The card gives the distance as the crow flies and roughly by road, about how long the trip took on foot, by donkey caravan and on horseback, and the verses that name both places. Swap the ends or measure again from the card. Every distance on the map follows the US/Metric setting.
 - **Historical layers** — map layers for different biblical time periods, selectable by period or by year, so you can see the world as it was rather than as it is.
 - **Places by type** — cities, regions, water features, and so on.
 - **Works offline** — map tiles are stored on your device, so the map works with no connection.

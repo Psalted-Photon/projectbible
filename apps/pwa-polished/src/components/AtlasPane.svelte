@@ -23,8 +23,9 @@
   import { loadAtlasIndex, getAtlasJson, atlasInstalled, releaseAtlas } from '../lib/atlas/data';
   import { searchPlaces, placesInBounds, releasePlaceIndex } from '../lib/atlas/place-index';
   import { ScriptureSearch } from '../lib/atlas/search.js';
-  import { groupByBook, bookName, miles, approxMiles } from '../lib/atlas/places.js';
+  import { groupByBook, bookName, distance, approxDistance, setDistanceUnits } from '../lib/atlas/places.js';
   import { getBookColor } from '../lib/bibleData';
+  import { getSettings } from '../adapters/settings';
   import { loadTimeline, timelineInstalled, formatSpan, type TimelineEvent } from '../lib/timeline/data';
 
   export let windowId: string | undefined = undefined;
@@ -184,6 +185,14 @@
    * start a resize watcher nothing stops, or reload the geometry just freed.
    */
   let destroyed = false;
+
+  /** US or Metric, from Settings; every distance on the map follows it. */
+  let units: 'us' | 'metric' = 'us';
+  function readUnits() {
+    units = getSettings().measureUnits === 'metric' ? 'metric' : 'us';
+    setDistanceUnits(units);
+  }
+  readUnits();
   function closedMeanwhile(): boolean {
     if (!destroyed) return false;
     releaseAtlas();
@@ -193,6 +202,7 @@
 
   onMount(async () => {
     root.addEventListener('click', onClickCapture, true);
+    window.addEventListener('settingsUpdated', readUnits);
     try {
       const installed = await atlasInstalled();
       if (destroyed) return;
@@ -229,6 +239,9 @@
           eraIndex = atlas?.timeline?.index ?? 0;
         },
         onPlace: (payload: any) => {
+          // A measured line belongs to its card; another place taking the
+          // panel takes the line off the map with it.
+          if (info?.kind === 'measure') atlas?.cancelMeasure();
           info = payload;
           openBooks = {};
           versePreviews = {};
@@ -237,7 +250,11 @@
           const first = versesByBook(payload.verses ?? [])[0];
           if (first) loadBookText(first);
         },
-        onPoint: (payload: any) => { info = payload; },
+        onPoint: (payload: any) => {
+          if (info?.kind === 'measure') atlas?.cancelMeasure();
+          info = payload;
+        },
+        onMeasure,
         onView: persistView,
       });
 
@@ -278,6 +295,7 @@
   onDestroy(() => {
     destroyed = true;
     root?.removeEventListener('click', onClickCapture, true);
+    window.removeEventListener('settingsUpdated', readUnits);
     if (playTimer) clearInterval(playTimer);
     playTimer = null;
     if (searchTimer) clearTimeout(searchTimer);
@@ -707,13 +725,19 @@
    * name across translations that punctuate it differently.
    */
   $: highlightRe = (() => {
-    const raw = info?.kind === 'place' ? String(info.place?.n ?? '') : '';
-    const bare = raw.replace(/\([^)]*\)/g, '').trim();
-    if (bare.length < 2) return null;
-    const pattern = bare
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/[\s\-‐-―']+/g, "[\\s\\-‐-―']*");
-    return new RegExp(`(${pattern})`, 'gi');
+    // A measured pair marks both names, since each verse listed names both.
+    const raws: string[] =
+      info?.kind === 'place' ? [String(info.place?.n ?? '')]
+      : info?.kind === 'measure' ? [String(info.from?.n ?? ''), String(info.to?.n ?? '')]
+      : [];
+    const patterns = raws
+      .map((raw) => raw.replace(/\([^)]*\)/g, '').trim())
+      .filter((bare) => bare.length >= 2)
+      .map((bare) => bare
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/[\s\-‐-―']+/g, "[\\s\\-‐-―']*"));
+    if (!patterns.length) return null;
+    return new RegExp(`(${patterns.join('|')})`, 'gi');
   })();
 
   /** Stored verse text carries markup a preview row must not show raw. */
@@ -740,6 +764,91 @@
     const current = get(navigationStore);
     navigationStore.pushHistory(current, 'map');
     navigationStore.navigateToVerse(current.translation, bookName(book), chapter, verse);
+  }
+
+  // -------------------------------------------------------------- how far
+
+  /** Which end the map is waiting for; null when not measuring. */
+  let measureStep: 'from' | 'to' | null = null;
+  let measureFromName = '';
+
+  /**
+   * The rough figures behind the card, kept together so they are one edit.
+   * Ancient roads wound round hills and wadis, so the straight line is
+   * stretched by ROAD_FACTOR before it becomes days. A day's travel is in
+   * miles, the unit the sources give it in; HOURS_A_DAY turns a short trip
+   * into hours instead of "under a day".
+   */
+  const ROAD_FACTOR = 1.3;
+  const HOURS_A_DAY = 8;
+  const KM_PER_MILE = 1.609344;
+  const TRAVEL = [
+    { label: 'On foot', milesPerDay: 20 },
+    { label: 'Donkey caravan', milesPerDay: 15 },
+    { label: 'On horseback', milesPerDay: 35 },
+  ];
+
+  function travelTime(roadKm: number, milesPerDay: number): string {
+    const days = roadKm / KM_PER_MILE / milesPerDay;
+    if (days < 0.9) {
+      const hours = Math.max(1, Math.round(days * HOURS_A_DAY));
+      return `about ${hours} hour${hours === 1 ? '' : 's'}`;
+    }
+    const n = Math.max(1, Math.round(days));
+    return `about ${n.toLocaleString()} day${n === 1 ? '' : 's'}`;
+  }
+
+  function toggleMeasure() {
+    if (measureStep) return endMeasure();
+    openPanel = null;
+    searchOpen = false;
+    resultsOpen = false;
+    info = null;
+    atlas?.startMeasure();
+  }
+
+  function endMeasure() {
+    measureStep = null;
+    atlas?.cancelMeasure();
+    if (info?.kind === 'measure') info = null;
+  }
+
+  function onMeasure(state: any) {
+    if (state.step === 'from') {
+      measureStep = 'from';
+      measureFromName = '';
+    } else if (state.step === 'to') {
+      measureStep = 'to';
+      measureFromName = state.from.n;
+    } else {
+      measureStep = null;
+      showMeasure(state.from, state.to, state.km);
+    }
+  }
+
+  /** The verses that name both ends — the same pair list a place carries. */
+  function sharedVerses(a: any, b: any): [string, string][] {
+    const inB = new Set((b.v ?? []).map((ref: [string, string]) => ref[1]));
+    return (a.v ?? []).filter((ref: [string, string]) => inB.has(ref[1]));
+  }
+
+  function showMeasure(from: any, to: any, km: number) {
+    const verses = sharedVerses(from, to);
+    info = { kind: 'measure', from, to, km, verses };
+    openBooks = {};
+    versePreviews = {};
+    const first = versesByBook(verses)[0];
+    if (first) loadBookText(first);
+  }
+
+  function swapMeasure() {
+    if (info?.kind === 'measure') info = { ...info, from: info.to, to: info.from };
+  }
+
+  function closeInfo() {
+    if (info?.kind === 'measure') atlas?.cancelMeasure();
+    info = null;
+    atlas?.clearSelection();
   }
 
   function openPhoto(photo: any, title: string) {
@@ -824,6 +933,18 @@
           <button class="search-clear" aria-label="Clear" on:click={clearSearch}>✕</button>
         </div>
       </div>
+    </div>
+
+    <div class="nav-group">
+      <button
+        class="btn btn-icon measure-btn"
+        class:on={measureStep !== null}
+        aria-label="How far between two places"
+        title="How far between two places"
+        on:click={toggleMeasure}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2"/></svg>
+      </button>
     </div>
 
     <div class="nav-spacer"></div>
@@ -1200,15 +1321,65 @@
       <span class="dot"></span><span>{loading ? 'opening the map…' : statusText}</span>
     </div>
 
+    {#if measureStep}
+      <div class="measure-prompt" role="status">
+        <span>
+          {#if measureStep === 'from'}
+            Tap where to start
+          {:else}
+            From <b>{measureFromName}</b> &middot; tap where to go
+          {/if}
+        </span>
+        <button class="measure-cancel" aria-label="Stop measuring" on:click={endMeasure}>✕</button>
+      </div>
+    {/if}
+
     {#if info}
       <aside class="info" aria-live="polite" bind:clientWidth={infoW}>
         <button
           class="info-close"
           aria-label="Close"
-          on:click={() => { info = null; atlas?.clearSelection(); }}
+          on:click={closeInfo}
         >✕</button>
         <div class="info-body">
-          {#if info.kind === 'place'}
+          {#if info.kind === 'measure'}
+            {@const roadKm = info.km * ROAD_FACTOR}
+            <div class="info-name">{info.from.n} <span class="mx-arrow">→</span> {info.to.n}</div>
+            <div class="info-sub">How far, and how long it took</div>
+
+            <div class="mx">
+              <div class="mx-row">
+                <span>As the crow flies</span><b>{distance(info.km, units)}</b>
+              </div>
+              <div class="mx-row">
+                <span>By road, roughly</span><b>about {distance(roadKm, units)}</b>
+              </div>
+            </div>
+
+            <div class="info-h">Travel time</div>
+            <div class="mx">
+              {#each TRAVEL as way}
+                <div class="mx-row">
+                  <span>{way.label}</span><b>{travelTime(roadKm, way.milesPerDay)}</b>
+                </div>
+              {/each}
+              <div class="mx-note">
+                At about {units === 'metric' ? `${Math.round(TRAVEL[0].milesPerDay * KM_PER_MILE)} km` : `${TRAVEL[0].milesPerDay} miles`}
+                a day on foot, the usual day's journey. Rough figures: terrain, weather
+                and the Sabbath all changed a real trip.
+              </div>
+            </div>
+
+            <div class="mx-actions">
+              <button class="mx-btn" on:click={swapMeasure}>⇄ Swap</button>
+              <button class="mx-btn" on:click={() => { info = null; atlas?.startMeasure(); }}>Measure again</button>
+            </div>
+
+            {#if !info.verses.length}
+              <div class="info-h">Verses naming both</div>
+              <div class="mx-note">No verse names both places.</div>
+            {/if}
+          {:else if info.kind === 'place'}
             <div class="info-name">{info.place.n}</div>
             <div class="info-sub">
               <!-- A journey stop's references are the place's, not the journey's:
@@ -1296,7 +1467,7 @@
                   {:else if info.journey.last}
                     &middot; the journey ends here
                   {:else if info.journey.legKm}
-                    &middot; {miles(info.journey.legKm)} miles by {info.journey.by}
+                    &middot; {distance(info.journey.legKm, units)} by {info.journey.by}
                   {:else}
                     &middot; by {info.journey.by}
                   {/if}
@@ -1337,7 +1508,7 @@
                 </div>
 
                 {#if info.journey.km}
-                  <div class="jx-total">{approxMiles(info.journey.km)} in all</div>
+                  <div class="jx-total">{approxDistance(info.journey.km, units)} in all</div>
                 {/if}
 
                 <!-- The other journeys through this place, offered rather than
@@ -1379,38 +1550,6 @@
                 <span class="shot-credit">{[info.photo.a, info.photo.l].filter(Boolean).join(' · ')}</span>
               </button>
             {/if}
-
-            {#if info.verses.length}
-              <div class="info-h">Where it appears</div>
-              {#each versesByBook(info.verses) as group, i}
-                <!-- The first book opens, so the panel never lands as a wall of
-                     closed rows. -->
-                {@const colour = getBookColor(bookName(group.book))}
-                {@const open = openBooks[group.book] ?? i === 0}
-                <div class="vb-group" class:open>
-                  <button class="vb-header" on:click={() => toggleBook(group, i === 0)}>
-                    <span class="vb-caret" style="color:{colour}">{open ? '▼' : '►'}</span>
-                    <span class="vb-name" style="color:{colour}">{bookName(group.book)}</span>
-                    <span class="vb-count">({group.refs.length})</span>
-                  </button>
-                  <div class="vb-refs">
-                    {#each group.refs as ref}
-                      <button
-                        class="vb-ref"
-                        style="border-left-color:{colour}"
-                        title="Read {ref.readable}"
-                        on:click={() => goToVerse(group.book, ref.osis)}
-                      >
-                        <span class="vb-ref-label" style="color:{colour}">{ref.readable}</span>
-                        {#if versePreviews[ref.osis]}
-                          <span class="vb-ref-text">{@html versePreview(ref.osis)}</span>
-                        {/if}
-                      </button>
-                    {/each}
-                  </div>
-                </div>
-              {/each}
-            {/if}
           {:else}
             <div class="info-name">{info.name}</div>
             <div class="info-sub">{info.subtitle}</div>
@@ -1426,11 +1565,42 @@
               <button class="vb-ref" style="border-left-color:#8c4a3f" on:click={() => atlas?.openPlace(info.nearest.place)}>
                 <span class="vb-ref-label" style="color:#c98b7a">{info.nearest.place.n}</span>
                 <span class="vb-ref-text">
-                  {miles(info.nearest.km)} miles away &middot;
+                  {distance(info.nearest.km, units)} away &middot;
                   {info.nearest.place.v.length} reference{info.nearest.place.v.length === 1 ? '' : 's'} in Scripture
                 </span>
               </button>
             {/if}
+          {/if}
+          {#if (info.kind === 'place' || info.kind === 'measure') && info.verses.length}
+            <div class="info-h">{info.kind === 'measure' ? 'Verses naming both' : 'Where it appears'}</div>
+            {#each versesByBook(info.verses) as group, i}
+              <!-- The first book opens, so the panel never lands as a wall of
+                   closed rows. -->
+              {@const colour = getBookColor(bookName(group.book))}
+              {@const open = openBooks[group.book] ?? i === 0}
+              <div class="vb-group" class:open>
+                <button class="vb-header" on:click={() => toggleBook(group, i === 0)}>
+                  <span class="vb-caret" style="color:{colour}">{open ? '▼' : '►'}</span>
+                  <span class="vb-name" style="color:{colour}">{bookName(group.book)}</span>
+                  <span class="vb-count">({group.refs.length})</span>
+                </button>
+                <div class="vb-refs">
+                  {#each group.refs as ref}
+                    <button
+                      class="vb-ref"
+                      style="border-left-color:{colour}"
+                      title="Read {ref.readable}"
+                      on:click={() => goToVerse(group.book, ref.osis)}
+                    >
+                      <span class="vb-ref-label" style="color:{colour}">{ref.readable}</span>
+                      {#if versePreviews[ref.osis]}
+                        <span class="vb-ref-text">{@html versePreview(ref.osis)}</span>
+                      {/if}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/each}
           {/if}
         </div>
       </aside>
@@ -1951,6 +2121,50 @@
     margin: 15px 0 7px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
     color: var(--faint); font-weight: 400;
   }
+
+  /* ---------------- how far ---------------- */
+  /* The prompt sits where the eye already is, over the map's top edge, and
+     says which end it wants. Its rose border is the navbar button's, so the
+     two read as one mode. */
+  .measure-prompt {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 940; display: flex; align-items: center; gap: 8px;
+    max-width: calc(100% - 20px - var(--grip-l) - var(--grip-r));
+    background: rgba(26, 26, 26, .92); border: 1px solid var(--focus);
+    border-radius: 999px; padding: 5px 5px 5px 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .45); backdrop-filter: blur(6px);
+    font-family: var(--display); font-size: 13px; color: var(--text);
+  }
+  .measure-prompt > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .measure-prompt b { font-weight: 400; color: var(--focus); }
+  .measure-cancel {
+    flex: none; width: 24px; height: 24px; border-radius: 50%;
+    border: 1px solid var(--line); background: var(--chrome-2);
+    color: var(--dim); cursor: pointer; font-size: 11px;
+  }
+  .measure-cancel:hover { color: var(--text); }
+
+  .mx-arrow { color: var(--dim); }
+  .mx {
+    margin-top: 10px; border-left: 2px solid #9a3412; padding-left: 9px;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  .mx-row {
+    display: flex; justify-content: space-between; gap: 10px;
+    font-size: 12.5px; line-height: 1.7; color: var(--dim);
+  }
+  .mx-row b { color: var(--text); font-weight: 500; text-align: right; }
+  .mx-note {
+    font-size: 11px; color: var(--faint); line-height: 1.45; margin-top: 5px;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  .mx-actions { display: flex; gap: 6px; margin-top: 12px; }
+  .mx-btn {
+    flex: 1 1 0; padding: 6px 8px; border-radius: 5px; cursor: pointer;
+    background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08);
+    color: var(--text); font-family: inherit; font-size: 12px;
+  }
+  .mx-btn:hover { background: rgba(255, 255, 255, .08); }
 
   /* The thumbnail on the place panel. Sized so the panel still leads with the
      name and the verses; the picture is an invitation, not the subject. It

@@ -34,7 +34,7 @@ import 'leaflet/dist/leaflet.css';
 import './labels.css';
 import { OverlayHost, ErasOverlay, JourneysOverlay } from './overlays.js';
 import { LabelEngine } from './labels.js';
-import { BiblicalPlaces, haversine, bookName, miles } from './places.js';
+import { BiblicalPlaces, haversine, bookName, distance } from './places.js';
 import { Paper } from './paper.js';
 import { parsePassage, placesInPassage, eraForBook } from './reading.js';
 
@@ -277,7 +277,10 @@ export function createAtlasMap(container, options = {}) {
     place: (info) => options.onPlace?.(info),
     // A spot, a peak or an ancient name is not one of the dots, so whatever was
     // marked as chosen stops being chosen when one of these takes the panel.
-    point: (info) => { markSelected(null); options.onPoint?.(info); },
+    // While measuring, a spot or a peak is not something to measure to, and
+    // opening its panel would bury the prompt, so the tap is let go.
+    point: (info) => { if (measuring) return; markSelected(null); options.onPoint?.(info); },
+    measure: (state) => options.onMeasure?.(state),
     view: () => options.onView?.(map.getCenter(), map.getZoom()),
   };
 
@@ -433,6 +436,15 @@ export function createAtlasMap(container, options = {}) {
 
   /** The place whose panel is open, by id, so its dot can be drawn as chosen. */
   let selectedId = null;
+
+  /**
+   * How far: while on, a place tap is a pick rather than an opening. The first
+   * pick is ringed and waits for the second; the second draws the line and
+   * hands both to the host, which does the arithmetic and the card.
+   */
+  let measuring = false;
+  let measureFrom = null;
+  let measureLayer = null;
 
   // ---------------------------------------------------------- which detail
 
@@ -677,6 +689,8 @@ export function createAtlasMap(container, options = {}) {
   }
 
   function openTown(r) {
+    // A modern town is a fair end to measure to; it just names no verses.
+    if (measuring) return measurePick({ id: null, n: r.name, y: r.lat, x: r.lon, v: [] });
     L.popup()
       .setLatLng([r.lat, r.lon])
       .setContent(
@@ -967,6 +981,7 @@ export function createAtlasMap(container, options = {}) {
    * same code path either way.
    */
   function openPlaceWith(place, journey, { force = false, move = true } = {}) {
+    if (measuring) return measurePick(place);
     markSelected(place.id);
     emit.place({
       kind: 'place',
@@ -1135,7 +1150,7 @@ export function createAtlasMap(container, options = {}) {
       else if (hit.kind === 'land') lines.push({ label: 'In the land of', value: hit.label });
     }
     if (near) {
-      lines.push({ label: 'Nearest biblical place', value: `${near.place.n}, ${miles(near.km)} miles` });
+      lines.push({ label: 'Nearest biblical place', value: `${near.place.n}, ${distance(near.km)}` });
     }
     if (town && town.km < 60) {
       const r = town.row;
@@ -1230,6 +1245,70 @@ export function createAtlasMap(container, options = {}) {
     }
 
     popup.setLatLng(latlng).setContent(list).openOn(map);
+  }
+
+  // ------------------------------------------------------------- how far
+
+  const MEASURE_INK = '#9a3412';
+
+  function clearMeasureLayer() {
+    if (measureLayer) { map.removeLayer(measureLayer); measureLayer = null; }
+  }
+
+  function measureRing(place) {
+    measureLayer.addLayer(L.circleMarker([place.y, place.x], {
+      pane: 'pins', radius: 10, fill: false,
+      color: MEASURE_INK, weight: 2.5, interactive: false,
+    }));
+  }
+
+  function startMeasure() {
+    measuring = true;
+    measureFrom = null;
+    clearMeasureLayer();
+    map.closePopup();
+    markSelected(null);
+    emit.measure({ step: 'from' });
+  }
+
+  /** Off, and the line and rings with it. */
+  function cancelMeasure() {
+    measuring = false;
+    measureFrom = null;
+    clearMeasureLayer();
+  }
+
+  function measurePick(place) {
+    if (!measureFrom) {
+      measureFrom = place;
+      clearMeasureLayer();
+      measureLayer = L.layerGroup([], { pane: 'pins' }).addTo(map);
+      measureRing(place);
+      emit.measure({ step: 'to', from: place });
+      return;
+    }
+    // Tapping the start again is a slip, not a journey of no miles.
+    if (place.y === measureFrom.y && place.x === measureFrom.x) return;
+
+    const from = measureFrom;
+    measuring = false;
+    measureFrom = null;
+    const ends = [[from.y, from.x], [place.y, place.x]];
+    // A pale halo under the dashes, so the line reads over dark tiles and
+    // over the parchment's own ink alike.
+    measureLayer.addLayer(L.polyline(ends, {
+      pane: 'pins', color: '#fff', weight: 5, opacity: 0.6, interactive: false,
+    }));
+    measureLayer.addLayer(L.polyline(ends, {
+      pane: 'pins', color: MEASURE_INK, weight: 2.5, dashArray: '6 6', interactive: false,
+    }));
+    measureRing(place);
+    emit.measure({ step: 'done', from, to: place, km: haversine(from.y, from.x, place.y, place.x) });
+    // Two frames, for the same reason as openPlaceWith: the card has to exist
+    // and be measured before the clear space it leaves is known.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!destroyed) fitClear(L.latLngBounds(ends), { maxZoom: 10, pad: 50 });
+    }));
   }
 
   // -------------------------------------------------------------- movement
@@ -1727,6 +1806,8 @@ export function createAtlasMap(container, options = {}) {
     wholeWorld,
     followPassage,
     clearPassage,
+    startMeasure,
+    cancelMeasure,
 
     /** A single marker and nothing else — what the encyclopedia's tab wants. */
     markPlace(lat, lon, label) {

@@ -35,34 +35,51 @@ export function haversine(lat1, lon1, lat2, lon2) {
 }
 
 /**
- * Kilometres as a miles string, for display only.
+ * The reader's US/Metric choice, for the distance strings below. AtlasPane sets
+ * it from Settings; the engine's own strings (map.js) read it from here, while
+ * the Svelte template passes its reactive copy so a change redraws at once.
+ */
+let currentUnits = 'us';
+export function setDistanceUnits(units) {
+  currentUnits = units === 'metric' ? 'metric' : 'us';
+}
+
+const KM_PER_MILE = 1.609344;
+
+/**
+ * Kilometres as a distance string with its unit, for display only.
  *
  * The pack stores kilometres and the checks assert in kilometres; this converts
  * at the point of display so there is one unit in the data and one in the eye.
- * Every distance a reader sees goes through here, which is also what makes a
- * future unit toggle a single edit rather than a hunt through call sites.
+ * Every distance a reader sees goes through here or approxDistance, which is
+ * what makes the US/Metric setting a single edit rather than a hunt.
  *
- * Whole miles above ten, one decimal below: "3 miles" and "3.4 miles" are
+ * Whole units above ten, one decimal below: "3 miles" and "3.4 miles" are
  * different walks, while 412 and 412.3 miles are the same voyage.
  */
-export function miles(km) {
+export function distance(km, units = currentUnits) {
   if (km == null || !Number.isFinite(km)) return null;
-  const mi = km * 0.621371;
-  return mi < 10 ? `${Math.round(mi * 10) / 10}` : `${Math.round(mi)}`;
+  const metric = units === 'metric';
+  const v = metric ? km : km / KM_PER_MILE;
+  const n = v < 10 ? Math.round(v * 10) / 10 : Math.round(v);
+  const word = metric ? 'km' : n === 1 ? 'mile' : 'miles';
+  return `${n.toLocaleString()} ${word}`;
 }
 
 /**
- * The same conversion, rounded to the nearest hundred and hedged.
+ * The same conversion, rounded to the nearest ten or hundred and hedged.
  *
  * Journey totals sum straight-line hops between stops rather than road length,
  * so "1,432 miles" would claim a precision the number does not have. The route
  * total is the one figure large enough for that to mislead.
  */
-export function approxMiles(km) {
+export function approxDistance(km, units = currentUnits) {
   if (km == null || !Number.isFinite(km)) return null;
-  const mi = km * 0.621371;
-  if (mi < 100) return `about ${Math.round(mi / 10) * 10} miles`;
-  return `about ${(Math.round(mi / 100) * 100).toLocaleString()} miles`;
+  const metric = units === 'metric';
+  const v = metric ? km : km / KM_PER_MILE;
+  const word = metric ? 'km' : 'miles';
+  if (v < 100) return `about ${Math.max(10, Math.round(v / 10) * 10)} ${word}`;
+  return `about ${(Math.round(v / 100) * 100).toLocaleString()} ${word}`;
 }
 
 /**

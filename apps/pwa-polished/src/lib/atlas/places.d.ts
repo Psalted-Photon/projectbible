@@ -7,11 +7,14 @@ export function groupByBook(
 
 export function bookName(osisBook: string): string;
 
+/** Set the US/Metric choice that distance strings default to. */
+export function setDistanceUnits(units: "us" | "metric" | undefined): void;
+
 /**
- * Kilometres as a miles string, for display. Null for a missing distance, so a
- * caller cannot print "null miles" without noticing.
+ * Kilometres as a distance string with its unit ("3.4 miles", "5.5 km"). Null
+ * for a missing distance, so a caller cannot print "null miles" unnoticed.
  */
-export function miles(km: number | null | undefined): string | null;
+export function distance(km: number | null | undefined, units?: "us" | "metric"): string | null;
 
 /** The same, rounded and hedged, for a journey total. */
-export function approxMiles(km: number | null | undefined): string | null;
+export function approxDistance(km: number | null | undefined, units?: "us" | "metric"): string | null;

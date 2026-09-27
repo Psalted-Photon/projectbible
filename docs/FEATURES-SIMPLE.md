@@ -131,6 +131,7 @@
 - Map pane
 - Places in the current verse
 - Place search
+- How far, how long between two places
 - Historical layers by period or year
 - Places by type
 - Offline tiles

@@ -37,6 +37,13 @@ export const MAP_TIPS: Tip[] = [
     body: 'Find any place the Bible names, or any of 562,000 modern ones.',
   },
   {
+    id: 'map-measure',
+    area,
+    target: '.atlas .btn-icon.measure-btn',
+    title: 'How far?',
+    body: 'Tap the ruler, then two places. See the miles between them, and about how many days it took on foot, by donkey caravan or on horseback, plus the verses that name both.',
+  },
+  {
     id: 'map-layers',
     area,
     target: '.atlas .nav .btn',

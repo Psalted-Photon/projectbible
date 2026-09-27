@@ -651,7 +651,13 @@ Two strategies, `ReadingPlanModal.svelte`: `spread` (Even spread) and `dedicated
 
 Files: `src/components/AtlasPane.svelte`. Uses Leaflet.
 
-### 14.1 Encyclopedia link
+### 14.1 How far, how long
+
+Ruler button in the map bar (`.measure-btn`). `startMeasure()` / `cancelMeasure()` in `lib/atlas/map.js` put the engine in measure mode: `openPlaceWith` and `openTown` hand the place to `measurePick` instead of opening it, and `emit.point` drops spot and peak taps. The engine reports `onMeasure({ step: 'from' | 'to' | 'done', from, to, km })` and draws the ring and dashed line (`pins` pane). `AtlasPane` does the card: `ROAD_FACTOR` 1.3 turns the straight line into a road estimate, and `TRAVEL` holds miles a day (foot 20, donkey caravan 15, horseback 35). Under 0.9 days reads as hours at `HOURS_A_DAY` 8. "Verses naming both" is the overlap of the two places' verse lists. Opening any other place clears the line.
+
+Distances go through `distance()` / `approxDistance()` in `lib/atlas/places.js`, which follow `measureUnits`. AtlasPane passes its reactive `units`, and `setDistanceUnits()` sets the default the engine uses. It is re-read on `settingsUpdated`.
+
+### 14.2 Encyclopedia link
 
 The ISBE modal's Map tab renders a Leaflet pin bound to a popup with the entry title (`IsbeModal.svelte`), shown only when coordinates exist. See [6.2](#62-tabs).
 
