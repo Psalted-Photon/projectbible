@@ -496,7 +496,7 @@
     flex: 1;
     min-width: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
     width: 100%;
     padding: 6px 4px;
@@ -509,6 +509,7 @@
   }
 
   .svp-fold {
+    margin-top: 2px;
     color: #777;
     font-size: 12px;
     transition: transform 0.15s;
@@ -539,7 +540,9 @@
 
   .svp-group-name {
     flex: 1;
+    min-width: 0;
     font-weight: 600;
+    line-height: 1.35;
   }
 
   .svp-group-header--editing {

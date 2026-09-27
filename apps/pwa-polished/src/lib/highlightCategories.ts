@@ -23,7 +23,15 @@ export const HIGHLIGHT_PALETTE = [
 ] as const;
 
 /** Marker meanings, index-matched to HIGHLIGHT_PALETTE. */
-const MARKER_NAMES = ['God', 'Wisdom', 'Warnings', 'Salvation', 'Praise', 'Promises', 'Context'];
+const MARKER_NAMES = [
+  'Trinity, God, Jesus, Holy Spirit, Savior, Messiah, Lord',
+  'Wisdom, Lessons, Becoming Christ-like, Following the Way, Faithful Living',
+  'Warnings, Sinful Living, The Enemy, Unbelief, Convictions',
+  'Salvation, The Blood, The Cross, Sacrifice, Atonement, Redemption, Grace',
+  'Praise, Encouragement, Worship, Truth, Hope, Prayers',
+  "Promises, Covenants, The Kingdom, The King's Return, Heaven",
+  'Context, Prophecy, History, Genealogy, Person, Place, Time, Number',
+];
 
 export interface HighlightCategory {
   /** Stable key, also the key a user-given name is stored under. */
@@ -40,9 +48,9 @@ export interface HighlightCategory {
 }
 
 const LINE_GROUPS: HighlightCategory[] = [
-  { key: 'line-solid',  label: 'Stands out',       color: null, kind: 'line', underlineStyle: 'solid',  nameable: false },
-  { key: 'line-boxed',  label: 'Word study',       color: null, kind: 'line', underlineStyle: 'boxed',  nameable: false },
-  { key: 'line-wavy',   label: 'Repeats',          color: null, kind: 'line', underlineStyle: 'wavy',   nameable: false },
+  { key: 'line-solid',  label: 'Verses to Meditate On, Verses that Stand Out', color: null, kind: 'line', underlineStyle: 'solid',  nameable: false },
+  { key: 'line-boxed',  label: 'Word to Define or Study', color: null, kind: 'line', underlineStyle: 'boxed',  nameable: false },
+  { key: 'line-wavy',   label: 'Repetition', color: null, kind: 'line', underlineStyle: 'wavy',   nameable: false },
   { key: 'line-dashed', label: 'Dashed underline', color: null, kind: 'line', underlineStyle: 'dashed', nameable: true },
 ];
 
