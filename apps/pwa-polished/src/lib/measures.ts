@@ -525,11 +525,26 @@ const SCALES_METRIC: Record<Exclude<Kind, 'money'>, Scale[]> = {
   ],
 };
 
+/** Metres → "3 feet 9 inches", "1 foot 6 inches", "2 feet". */
+function feetAndInches(metres: number): string {
+  const total = Math.round(metres / 0.0254);
+  const ft = Math.floor(total / 12);
+  const inches = total % 12;
+  const feet = `${ft} ${ft === 1 ? 'foot' : 'feet'}`;
+  return inches ? `${feet} ${inches} ${inches === 1 ? 'inch' : 'inches'}` : feet;
+}
+
 function physical(kind: Exclude<Kind, 'money'>, lo: number, hi: number, system: UnitSystem): string {
   const metric = system === 'metric';
   const scales = (metric ? SCALES_METRIC : SCALES_US)[kind];
   // Pick the scale by the larger end so a range reads in one unit.
   const scale = [...scales].reverse().find((s) => hi >= s.from) ?? scales[0];
+  // Nobody says "3¾ feet": short lengths read as feet and inches.
+  if (!metric && scale.one === 'foot' && hi / scale.size < 20) {
+    const a = feetAndInches(lo);
+    const b = feetAndInches(hi);
+    return a === b ? a : `${a} to ${b}`;
+  }
   const a = figure(lo / scale.size, metric);
   const b = figure(hi / scale.size, metric);
   const name = a === b && singular(a) ? scale.one : scale.many;
