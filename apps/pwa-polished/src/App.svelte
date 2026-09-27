@@ -168,6 +168,11 @@
         // Only now is there a console to print into. The startup replay in
         // main.ts runs before this and is therefore invisible on the phone.
         dumpPreviousInstallLog();
+        // Same for anything the Content-Security-Policy caught during launch
+        // (public/startup.js keeps the list).
+        for (const line of (window as { __cspViolations?: string[] }).__cspViolations ?? []) {
+          console.warn(line);
+        }
       }
     };
 

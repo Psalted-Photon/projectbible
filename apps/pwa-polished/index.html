@@ -17,11 +17,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Cinzel:wght@400;600&family=Cinzel+Decorative:wght@400;700&family=Jura:wght@400;600&family=Merriweather:wght@400;700&family=Milonga&display=swap">
 
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""/>
-  
+  <!-- Leaflet's stylesheet is bundled with the map code (src/lib/atlas/map.js),
+       so it arrives with the first map instead of from unpkg on every launch. -->
+
   <style>
     * {
       margin: 0;
@@ -263,38 +261,8 @@
 <body>
   <div id="loading">Loading Hexapla...</div>
   <div id="app"></div>
-  <script>
-    // Global error handler
-    window.addEventListener('error', function(e) {
-      document.getElementById('loading').innerHTML = 
-        '<h2 style="color: #f44336;">ERROR</h2>' +
-        '<p style="margin-top: 20px; font-size: 16px;">' + e.message + '</p>' +
-        '<p style="margin-top: 10px; font-size: 14px; color: #888;">' + e.filename + ':' + e.lineno + '</p>';
-    });
-    
-    window.addEventListener('unhandledrejection', function(e) {
-      document.getElementById('loading').innerHTML = 
-        '<h2 style="color: #f44336;">PROMISE ERROR</h2>' +
-        '<p style="margin-top: 20px; font-size: 16px;">' + e.reason + '</p>';
-    });
-    
-    // Hide loading message - check repeatedly until app mounts
-    var checkInterval = setInterval(function() {
-      var app = document.getElementById('app');
-      var loading = document.getElementById('loading');
-      if (app && app.children.length > 0) {
-        if (loading) loading.style.display = 'none';
-        clearInterval(checkInterval);
-      }
-    }, 100);
-    
-    // Fallback: hide after 5 seconds regardless
-    setTimeout(function() {
-      clearInterval(checkInterval);
-      var loading = document.getElementById('loading');
-      if (loading) loading.style.display = 'none';
-    }, 5000);
-  </script>
+  <!-- Launch error display and the CSP watcher. See public/startup.js. -->
+  <script src="/startup.js"></script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

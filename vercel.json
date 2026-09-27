@@ -30,6 +30,15 @@
           "value": "1; mode=block"
         }
       ]
+    },
+    {
+      "source": "/((?!voice-lab\\.html|familytree\\.html|gem-lab\\.html|reset\\.html|email/).*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy-Report-Only",
+          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://server.arcgisonline.com; media-src 'self' data: blob:; connect-src 'self' data: blob: https://tzfavctrqaqcatmjdfxk.supabase.co wss://tzfavctrqaqcatmjdfxk.supabase.co https://huggingface.co https://*.huggingface.co https://*.hf.co; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+        }
+      ]
     }
   ]
 }
