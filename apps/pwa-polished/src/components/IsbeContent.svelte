@@ -34,6 +34,7 @@
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../lib/openWork";
   import { isbeSource } from "../lib/library/source";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
+  import { sanitizePackHtml } from "../lib/sanitizePackHtml";
 
   // The encyclopedia article itself, independent of what is holding it. Two
   // hosts: IsbeModal, a centered card over the reader; and a docked window,
@@ -193,7 +194,7 @@
     if (place) placeNames = await getIsbePlaceNames(place.placeId);
     // Cross-reference linkification hits the name index, so it has to finish
     // before the article renders — otherwise the links would pop in late.
-    articleHtml = entry?.bodyHtml ? await linkifyCrossRefs(entry.bodyHtml) : "";
+    articleHtml = entry?.bodyHtml ? sanitizePackHtml(await linkifyCrossRefs(entry.bodyHtml)) : "";
     loading = false;
 
     // Reopen where we left off — same tab, same things open, same refs dimmed,

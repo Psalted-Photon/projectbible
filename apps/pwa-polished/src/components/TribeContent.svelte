@@ -10,6 +10,7 @@
   import { IndexedDBTextStore } from "../adapters/TextStore";
   import { navigationStore } from "../stores/navigationStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
+  import { sanitizePackHtml } from "../lib/sanitizePackHtml";
   import { getIsbeEntry, getNavesTopic, type NavesPoint, type NavesRef } from "../adapters/lexicon-lookup.js";
 
   /**
@@ -52,7 +53,7 @@
         ]);
         return {
           part,
-          history: entry ? pickParagraphs(entry.bodyHtml, part.isbe.paras) : [],
+          history: entry ? pickParagraphs(sanitizePackHtml(entry.bodyHtml), part.isbe.paras) : [],
           points: topic ? (part.naves.section ? sectionPoints(topic.points) : topic.points) : [],
         };
       }),

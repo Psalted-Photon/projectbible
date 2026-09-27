@@ -9,6 +9,7 @@
   import { parseRefString } from "../lib/parseRefString";
   import { getBookColor } from "../lib/bibleData";
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
+  import { sanitizePackHtml } from "../lib/sanitizePackHtml";
   import { navigationStore } from "../stores/navigationStore";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import AuthorPill from "./AuthorPill.svelte";
@@ -320,7 +321,7 @@
                   class="entry-text"
                   on:click={handleCommentaryBodyClick}
                   on:keydown={handleCommentaryBodyClick}
-                >{@html linkifyCommentaryRefs(entry.text, entry.book, entry.chapter, entry.author)}</div>
+                >{@html sanitizePackHtml(linkifyCommentaryRefs(entry.text, entry.book, entry.chapter, entry.author))}</div>
               {/each}
             </div>
           {/each}

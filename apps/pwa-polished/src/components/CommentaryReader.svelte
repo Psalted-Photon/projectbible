@@ -6,6 +6,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { IndexedDBCommentaryStore, type CommentaryEntry } from "../adapters/CommentaryStore";
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
+  import { sanitizePackHtml } from "../lib/sanitizePackHtml";
   import { parseRefString } from "../lib/parseRefString";
   import { loadEnoch, isEnochAuthor, type EnochBook, type EnochChapter } from "../lib/enochBooks";
 
@@ -288,7 +289,7 @@
                 class="entry-text"
                 on:click={handleCommentaryBodyClick}
                 on:keydown={handleCommentaryBodyClick}
-              >{@html linkifyCommentaryRefs(entry.text, currentBook, currentChapter, entry.author)}</div>
+              >{@html sanitizePackHtml(linkifyCommentaryRefs(entry.text, currentBook, currentChapter, entry.author))}</div>
             </div>
           </div>
 

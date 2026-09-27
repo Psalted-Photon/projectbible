@@ -13,6 +13,7 @@
   import { createEventDispatcher } from 'svelte';
   import { getBookColor } from '../lib/bibleData';
   import { linkifyNoteRefs } from '../lib/linkifyNoteRefs';
+  import { sanitizePackHtml } from '../lib/sanitizePackHtml';
   import type { NoteKind } from '../lib/verseRendering';
 
   export let x = 0;
@@ -56,7 +57,7 @@
     };
   }
 
-  $: prose = linkifyNoteRefs(body, book, chapter);
+  $: prose = sanitizePackHtml(linkifyNoteRefs(body, book, chapter));
 
   $: label =
     kind === 'parallel' ? 'Parallel passages' : kind === 'crossref' ? 'Cross-reference' : 'Footnote';
