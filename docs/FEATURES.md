@@ -261,6 +261,8 @@ Every verse you've highlighted, in one list in your profile. One button sorts it
 
 A verse marked two ways shows up in both groups. Tap a group's header to fold it away.
 
+While you're choosing a highlight, the **Meanings** button in the popup's top corner spells out what each colour and line stands for. Groups you haven't named show as "Custom".
+
 ### 10.4 Selecting words
 
 - **Tap a word** to select it.

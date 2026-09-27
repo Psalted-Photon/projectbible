@@ -18,6 +18,13 @@ export const POPUP_TIPS: Tip[] = [
     body: 'Mark just this word, or every time it repeats.',
   },
   {
+    id: 'highlight-meanings',
+    area,
+    target: '.hl-modal .hl-meanings-btn',
+    title: 'Meanings',
+    body: 'Shows what each colour and line stands for in the colour code, the same groups Saved Verses sorts by.',
+  },
+  {
     id: 'highlight-marker',
     area,
     target: '.hl-modal .hl-swatch-marker',
@@ -27,7 +34,7 @@ export const POPUP_TIPS: Tip[] = [
   {
     id: 'highlight-text-color',
     area,
-    target: '.hl-modal .hl-swatch-text',
+    target: '.hl-modal .hl-swatch-text, .hl-modal .hl-meaning-aa',
     title: 'Text color',
     body: 'Color the letters themselves instead.',
   },

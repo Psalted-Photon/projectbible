@@ -93,6 +93,16 @@ function paletteIndex(color: string): number {
   return best;
 }
 
+/**
+ * What a category means, for the highlight popup's meanings view: the fixed
+ * wording, or for a nameable group the user's name, else "Custom".
+ */
+export function categoryMeaning(key: string, names: Record<string, string>): string {
+  const cat = HIGHLIGHT_CATEGORIES.find((c) => c.key === key);
+  if (!cat) return '';
+  return cat.nameable ? names[key] || 'Custom' : cat.label;
+}
+
 /** The group key for one highlight's look. */
 export function categoryKeyFor(style: HighlightStyle): string {
   if (style.type === 'underline') return `line-${style.underlineStyle ?? 'solid'}`;

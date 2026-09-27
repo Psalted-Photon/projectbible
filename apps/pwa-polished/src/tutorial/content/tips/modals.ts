@@ -145,7 +145,7 @@ export const MODAL_TIPS: Tip[] = [
     target: '.svp-root .svp-pills',
     corner: 'top-left',
     title: 'Saved verses and notes',
-    body: 'Every verse you’ve highlighted, and every note. Tap one to go to it.',
+    body: 'Every verse you’ve highlighted, and every note. Tap one to go to it. The sort button on the right cycles Recent, Bible Order and Categories, which groups verses by what their colours mean.',
   },
   {
     id: 'profile-journal-day',

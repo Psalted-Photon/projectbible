@@ -2,7 +2,8 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { BCV, HighlightStyle, UserHighlight, UserWordHighlight } from '@projectbible/core';
   import { userProfileStore } from '../stores/userProfileStore';
-  import { HIGHLIGHT_PALETTE } from '../lib/highlightCategories';
+  import { HIGHLIGHT_PALETTE, categoryMeaning } from '../lib/highlightCategories';
+  import { getHighlightNames, getSettings, updateSettings } from '../adapters/settings';
 
   export let reference: BCV;
   export let existingHighlight: UserHighlight | UserWordHighlight | null = null;
@@ -40,6 +41,16 @@
   }
 
   let selected: HighlightStyle = initFromExisting(existingHighlight);
+
+  // ── Meanings view — what each colour and line stands for in the colour code ──
+  // Remembered per device; the names come from Saved Verses → Categories.
+  let showMeanings = getSettings().highlightMeanings ?? false;
+  const names = getHighlightNames();
+
+  function toggleMeanings() {
+    showMeanings = !showMeanings;
+    updateSettings({ highlightMeanings: showMeanings });
+  }
 
   $: isLoggedIn = $userProfileStore.isSignedIn;
   $: hasExisting = existingHighlight !== null;
@@ -111,6 +122,12 @@
       <span class="hl-modal-subtitle">
         {#if bulkDescription}{bulkDescription}{:else}{selectionType === 'word' ? 'Word' : 'Verse'} · {reference.book} {reference.chapter}:{reference.verse}{/if}
       </span>
+      <button
+        class="hl-meanings-btn"
+        class:active={showMeanings}
+        on:click={toggleMeanings}
+        aria-pressed={showMeanings}
+      >Meanings</button>
       <button class="hl-close-btn" on:click={handleClose} aria-label="Close">✕</button>
     </div>
 
@@ -141,6 +158,22 @@
     <!-- Marker highlights -->
     <div class="hl-section">
       <div class="hl-section-label">Marker</div>
+      {#if showMeanings}
+        <div class="hl-meaning-list">
+          {#each PALETTE as { value, label }, i}
+            <button
+              class="hl-meaning-row"
+              class:hl-meaning-row-active={isActiveMarker(value)}
+              on:click={() => selectMarker(value)}
+              aria-label="{label} marker"
+              aria-pressed={isActiveMarker(value)}
+            >
+              <span class="hl-swatch hl-swatch-marker hl-swatch-small" style="--swatch-color: {value}"></span>
+              <span class="hl-meaning-text">{categoryMeaning(`marker-${i}`, names)}</span>
+            </button>
+          {/each}
+        </div>
+      {:else}
       <div class="hl-swatches">
         {#each PALETTE as { value, label }}
           <button
@@ -155,11 +188,28 @@
           </button>
         {/each}
       </div>
+      {/if}
     </div>
 
     <!-- Text color -->
     <div class="hl-section">
       <div class="hl-section-label">Text Color</div>
+      {#if showMeanings}
+        <div class="hl-meaning-list">
+          {#each PALETTE as { value, label }, i}
+            <button
+              class="hl-meaning-row"
+              class:hl-meaning-row-active={isActiveTextColor(value)}
+              on:click={() => selectTextColor(value)}
+              aria-label="{label} text color"
+              aria-pressed={isActiveTextColor(value)}
+            >
+              <span class="hl-meaning-aa" style="color: {value}">Aa</span>
+              <span class="hl-meaning-text">{categoryMeaning(`text-${i}`, names)}</span>
+            </button>
+          {/each}
+        </div>
+      {:else}
       <div class="hl-swatches">
         {#each PALETTE as { value, label }}
           <button
@@ -175,6 +225,7 @@
           </button>
         {/each}
       </div>
+      {/if}
     </div>
 
     <!-- Underline -->
@@ -204,6 +255,9 @@
               {/each}
             </div>
           </div>
+          {#if showMeanings}
+            <div class="hl-underline-meaning">{categoryMeaning(`line-${style}`, names)}</div>
+          {/if}
         {/each}
       </div>
     </div>
@@ -247,6 +301,10 @@
     padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
     box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.6);
     user-select: none;
+    max-height: 92vh;
+    max-height: 92dvh;
+    overflow-y: auto;
+    box-sizing: border-box;
   }
 
   /* ── Header ── */
@@ -281,6 +339,79 @@
     transition: color 0.15s;
   }
   .hl-close-btn:hover { color: #ccc; }
+
+  .hl-meanings-btn {
+    align-self: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid #3a3a3a;
+    background: transparent;
+    color: #999;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .hl-meanings-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+  }
+
+  /* ── Meanings view ── */
+  .hl-meaning-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .hl-meaning-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: #ccc;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .hl-meaning-row:hover { background: #262626; }
+  .hl-meaning-row-active {
+    background: #2a2a2a;
+    border-color: #fff;
+  }
+
+  .hl-swatch-small {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    cursor: inherit;
+  }
+  .hl-swatch-small:hover { transform: none; }
+
+  .hl-meaning-aa {
+    width: 24px;
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+
+  .hl-meaning-text {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+  }
+
+  .hl-underline-meaning {
+    margin: -4px 0 4px 56px;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    color: #aaa;
+  }
 
   /* ── Auth gate ── */
   .hl-auth-gate {
