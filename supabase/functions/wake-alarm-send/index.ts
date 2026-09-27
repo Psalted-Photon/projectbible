@@ -1,3 +1,4 @@
+// @ts-nocheck — runs on Supabase's Deno, which VS Code's checker doesn't understand.
 /**
  * wake-alarm-send — the thing that can actually wake a sleeping phone.
  *

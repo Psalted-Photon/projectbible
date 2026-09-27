@@ -40,10 +40,20 @@ function seededRandom(seed: string): () => number {
 // SVG wavy highlight generator
 // ---------------------------------------------------------------------------
 
+/** Width of one wavy tile. The tile repeats across the text rather than
+ *  stretching to it, so the bumps keep the same size and spacing on a single
+ *  word and on a verse that fills whole lines. In em so it follows font size. */
+const TILE_EM = 12;
+const TILE_W = 120; // viewBox width; height is 10
+
 /**
- * Build an SVG data URI for a wavy filled highlight shape.
+ * Build an SVG data URI for one tile of a wavy filled highlight shape.
  * Uses seeded randomness so the same verse always gets the same organic shape.
- * ViewBox: 0 0 100 10 — rendered via background-size:100% 100% to fill the span.
+ * ViewBox: 0 0 120 10 — rendered via background-size:12em 100% + repeat-x.
+ *
+ * Each edge is a smooth curve whose control points wrap around, so the right
+ * end of the tile meets the left end at the same height and slope — tiles
+ * join without a seam.
  */
 function generateWavySvgDataUri(color: string, rng: () => number): string {
   const opacity = (0.38 + rng() * 0.24).toFixed(3);
@@ -51,35 +61,32 @@ function generateWavySvgDataUri(color: string, rng: () => number): string {
   const g = parseInt(color.slice(3, 5), 16);
   const b = parseInt(color.slice(5, 7), 16);
 
-  // Random y-offsets for top (baseline y=1.2) and bottom (baseline y=9.2) edges.
-  // Wider band covers full letter height (ascenders to descenders).
-  // Smaller amplitude = tighter splotch edges.
-  const amp = 0.4 + rng() * 0.5;
-  const N = 7;
-  const topY = Array.from({ length: N + 1 }, () => 1.2 + (rng() * 2 - 1) * amp);
-  const botY = Array.from({ length: N + 1 }, () => 9.2 + (rng() * 2 - 1) * amp);
+  // Control-point heights for top (baseline y=1.2) and bottom (baseline y=9.2)
+  // edges. The wide band covers full letter height (ascenders to descenders).
+  const amp = 0.9 + rng() * 0.6;
+  const N = 8;
+  const seg = TILE_W / N;
+  const topC = Array.from({ length: N }, () => 1.2 + (rng() * 2 - 1) * amp);
+  const botC = Array.from({ length: N }, () => 9.2 + (rng() * 2 - 1) * amp);
+  // On-curve points sit halfway between neighbouring controls (wrapping), which
+  // keeps the curve smooth everywhere and makes point 0 equal point N.
+  const anchor = (c: number[], i: number) => (c[(i - 1 + N) % N] + c[i % N]) / 2;
 
-  // Top edge: left-to-right smooth quadratic bezier through control midpoints
-  let d = `M0,${topY[0].toFixed(2)}`;
-  for (let i = 1; i <= N; i++) {
-    const x = (i / N * 100).toFixed(1);
-    const cpX = ((i - 0.5) / N * 100).toFixed(1);
-    const cpY = ((topY[i - 1] + topY[i]) / 2).toFixed(2);
-    d += ` Q${cpX},${cpY} ${x},${topY[i].toFixed(2)}`;
+  // Top edge: left to right
+  let d = `M0,${anchor(topC, 0).toFixed(2)}`;
+  for (let i = 0; i < N; i++) {
+    d += ` Q${((i + 0.5) * seg).toFixed(1)},${topC[i].toFixed(2)} ${((i + 1) * seg).toFixed(1)},${anchor(topC, i + 1).toFixed(2)}`;
   }
 
-  // Right bridge + bottom edge: right-to-left
-  d += ` L100,${botY[N].toFixed(2)}`;
+  // Right bridge + bottom edge: right to left
+  d += ` L${TILE_W},${anchor(botC, N).toFixed(2)}`;
   for (let i = N - 1; i >= 0; i--) {
-    const x = (i / N * 100).toFixed(1);
-    const cpX = ((i + 0.5) / N * 100).toFixed(1);
-    const cpY = ((botY[i] + botY[i + 1]) / 2).toFixed(2);
-    d += ` Q${cpX},${cpY} ${x},${botY[i].toFixed(2)}`;
+    d += ` Q${((i + 0.5) * seg).toFixed(1)},${botC[i].toFixed(2)} ${(i * seg).toFixed(1)},${anchor(botC, i).toFixed(2)}`;
   }
   d += ' Z';
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 10" preserveAspectRatio="none"><path d="${d}" fill="rgb(${r},${g},${b})" fill-opacity="${opacity}"/></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;  
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${TILE_W} 10" preserveAspectRatio="none"><path d="${d}" fill="rgb(${r},${g},${b})" fill-opacity="${opacity}"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,6 +158,7 @@ export function applyWordHighlightToSpan(
   span.style.removeProperty('background-image');
   span.style.removeProperty('background-size');
   span.style.removeProperty('background-repeat');
+  span.style.removeProperty('background-position');
   span.style.removeProperty('-webkit-box-decoration-break');
   span.style.removeProperty('box-decoration-break');
   span.style.removeProperty('--hl-text-color');
@@ -201,11 +209,15 @@ export function applyWordHighlightToSpan(
 function _applyBackground(el: HTMLElement, color: string, seed: string): void {
   const rng = seededRandom(seed);
   const dataUri = generateWavySvgDataUri(color, rng);
+  // Start each verse at a different point in its tile, so neighbouring verses
+  // don't line their bumps up at the same spot.
+  const offsetEm = (rng() * TILE_EM).toFixed(2);
 
   const target = el.querySelector<HTMLElement>('.verse-text') ?? el;
   target.style.backgroundImage = dataUri;
-  target.style.backgroundSize = '100% 100%';
-  target.style.backgroundRepeat = 'no-repeat';
+  target.style.backgroundSize = `${TILE_EM}em 100%`;
+  target.style.backgroundRepeat = 'repeat-x';
+  target.style.backgroundPosition = `-${offsetEm}em 0`;
   target.style.setProperty('-webkit-box-decoration-break', 'clone');
   target.style.setProperty('box-decoration-break', 'clone');
 }
@@ -223,6 +235,7 @@ export function removeHighlightFromElement(el: HTMLElement): void {
     textSpan.style.removeProperty('background-image');
     textSpan.style.removeProperty('background-size');
     textSpan.style.removeProperty('background-repeat');
+    textSpan.style.removeProperty('background-position');
     textSpan.style.removeProperty('-webkit-box-decoration-break');
     textSpan.style.removeProperty('box-decoration-break');
     textSpan.style.removeProperty('--hl-text-color');
