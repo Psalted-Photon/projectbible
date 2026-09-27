@@ -23,6 +23,7 @@
   import { readingProgressVersion } from '../stores/readingProgressVersionStore';
   import CalendarView from './CalendarView.svelte';
   import BrandSpinner from './BrandSpinner.svelte';
+  import { download } from '../lib/backup/saveFile';
   import harmonyData from '../data/robertson-harmony.json';
   import { BookOpenText } from 'phosphor-svelte';
   
@@ -157,23 +158,36 @@
   // in the background (after onMount ran) are picked up immediately.
   // Also trigger a sync so that the latest Supabase data is pulled —
   // this is the key step that makes a second device see up-to-date progress.
-  $: if (isOpen) {
+  //
+  // Only at the moment it opens. Written as a plain `$: if (isOpen)` block it
+  // also re-ran whenever isSignedIn changed, because the block reads it, so a
+  // sign-in finishing at launch with the modal already open wiped a
+  // half-filled Create form.
+  let wasOpen = false;
+  $: onOpenChange(isOpen);
+
+  function onOpenChange(open: boolean) {
+    const opened = open && !wasOpen;
+    wasOpen = open;
+    if (!opened) return;
     loadActivePlan();
     // A fresh Create Plan form on every visit — the component is never
     // destroyed, so nothing else clears the last plan's name and dates.
     resetCreateForm();
     // Load local progress immediately so the UI isn't blank while sync runs.
     loadProgressForPlan();
-    // Then kick off a sync in the background (throttled to once per 30s).
-    // This pushes any queued writes to Supabase AND pulls the latest progress
-    // down, which will trigger loadProgressForPlan() again via the sync
-    // subscriber once the pull completes.
-    if (isSignedIn) {
-      // Pull first, then re-push local plans: the pull refreshes which plans
-      // the server considers active, so the re-upsert can't resurrect a plan
-      // archived/deleted on another device from a stale local list.
-      syncService.forceSync(30_000).then(() => syncActivePlansToSupabase());
-    }
+  }
+
+  // Then kick off a sync in the background (throttled to once per 30s).
+  // This pushes any queued writes to Supabase AND pulls the latest progress
+  // down, which will trigger loadProgressForPlan() again via the sync
+  // subscriber once the pull completes. Its own statement, so a sign-in that
+  // finishes while the modal is open still gets one, without the reset above.
+  $: if (isOpen && isSignedIn) {
+    // Pull first, then re-push local plans: the pull refreshes which plans
+    // the server considers active, so the re-upsert can't resurrect a plan
+    // archived/deleted on another device from a stale local list.
+    syncService.forceSync(30_000).then(() => syncActivePlansToSupabase());
   }
 
   // Reload progress whenever a Realtime event or pull from Supabase writes
@@ -770,13 +784,13 @@
       verseStats,
       timeline: getCompletionTimeline(),
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `reading-plan-${currentPlanId}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    // download() waits before freeing the file: freeing it straight after
+    // the click could hand Safari an empty download.
+    download(
+      new File([JSON.stringify(payload, null, 2)], `reading-plan-${currentPlanId}.json`, {
+        type: 'application/json',
+      }),
+    );
   }
 
   function exportProgressMarkdown() {
@@ -801,13 +815,7 @@
     });
     lines.push('');
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `reading-plan-${currentPlanId}.md`;
-    link.click();
-    URL.revokeObjectURL(url);
+    download(new File([lines.join('\n')], `reading-plan-${currentPlanId}.md`, { type: 'text/markdown' }));
   }
   
   function savePlanToHistory(plan: ReadingPlan, planId: string) {
