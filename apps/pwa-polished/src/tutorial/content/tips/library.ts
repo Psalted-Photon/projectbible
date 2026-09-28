@@ -173,4 +173,11 @@ export const LIBRARY_TIPS: Tip[] = [
     title: 'Which text',
     body: 'Count the forms and occurrences in one Greek or Hebrew text, or all of them.',
   },
+  {
+    id: 'tree-entrance',
+    area,
+    target: '.family-tree .entrance-btn',
+    title: 'Grand entrance',
+    body: 'On, a tap pulls out to the whole tree, climbs the line from God and lands on the person with a burst of light. Off, the line lights at once and the tree glides straight there.',
+  },
 ];

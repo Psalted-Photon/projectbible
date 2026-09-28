@@ -644,6 +644,7 @@ Biographies of the people of the Bible.
 - **Family links** — parents, children, and spouses are links you can follow.
 - **Pin a biography beside the reader** so you can keep reading with it open.
 - **Bridged to the encyclopedia**, the dictionary, and the topical index.
+- **Grand entrance on the family tree** — tap someone and the tree pulls out to the whole view, pauses, then climbs their line from God with a golden burst and lands on them with a burst in their own colour. Turn it off with the **Grand entrance** button at the top of the tree and a tap lights the line at once and glides straight there. It stays off if your device asks for reduced motion. Only God and Jesus are gold on the tree, and every name has a thin dark edge so it reads over dots of its own colour.
 
 ## 26. Notes & Notebooks
 

@@ -271,6 +271,11 @@ export default defineConfig({
         //                     including everyone who never opens the lab.
         //   gem-lab.html      the breastplate stones prototype, kept as the
         //                     reference copy of src/lib/gems/.
+        //   tree-motion-lab   tunes the tree's Grand Entrance. Built from the
+        //                     app's own source (a second build input, below),
+        //                     so its entry chunk is kept out as well as the
+        //                     page; the code it shares with the app is in
+        //                     chunks the app precaches anyway.
         //   reset.html        the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
@@ -286,12 +291,15 @@ export default defineConfig({
           '**/familytree.html',
           '**/family-tree-data.json',
           '**/gem-lab.html',
+          '**/tree-motion-lab.html',
+          '**/assets/tree-motion-lab-*.js',
         ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
           /^\/reset\.html$/,
           /^\/familytree\.html$/,
           /^\/gem-lab\.html$/,
+          /^\/tree-motion-lab\.html$/,
         ],
         runtimeCaching: [
           {
@@ -395,7 +403,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    copyPublicDir: true
+    copyPublicDir: true,
+    rollupOptions: {
+      // The motion lab is a page of its own that runs the real tree code, so
+      // it is built alongside the app rather than living in public/.
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        'tree-motion-lab': resolve(__dirname, 'tree-motion-lab.html')
+      }
+    }
   }
 });
 

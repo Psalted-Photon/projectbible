@@ -13,11 +13,14 @@
 
 import { isPlaced, treeLabel, type Placed, type TreeModel, type TreeRec } from './layout';
 import {
+  BRONZE,
   GOD_ID,
   GOLD,
   LABEL_FULL_PX,
   LABEL_MIN_PX,
+  LABEL_OUTLINE,
   LINEN,
+  LINEN_LIT,
   ROOT_COLOURS,
   ROSE,
   ROSE_LIT,
@@ -106,17 +109,88 @@ export function fitView(
   return viewFor(midX, midY, clampedK, W / 2, areaCy, W, H);
 }
 
+/** Screen point of a world point, given the current view — toWorld reversed. */
+export function toScreen(x: number, y: number, view: View, W: number, H: number): { x: number; y: number } {
+  return {
+    x: W / 2 + view.x + x * view.k,
+    y: H * ORIGIN_Y_FRAC + view.y + y * view.k,
+  };
+}
+
 /** Whether a world point, at the current view, lands inside the canvas at all. */
 function onScreen(x: number, y: number, view: View, W: number, H: number): boolean {
-  const sx = W / 2 + view.x + x * view.k;
-  const sy = H * ORIGIN_Y_FRAC + view.y + y * view.k;
-  return sx >= -20 && sx <= W + 20 && sy >= -20 && sy <= H + 20;
+  const p = toScreen(x, y, view, W, H);
+  return p.x >= -20 && p.x <= W + 20 && p.y >= -20 && p.y <= H + 20;
 }
 
 function isLit(tracedPath: Set<string> | null, selectedTribe: string | null, n: TreeRec): boolean {
   if (tracedPath) return tracedPath.has(n.id);
   if (!selectedTribe) return true;
   return n.tribe === selectedTribe;
+}
+
+/**
+ * The colour a person's dot is when lit. The drawing and the landing burst
+ * both read it, so a burst always goes off in the colour of the dot it
+ * lands on.
+ */
+export function litColourOf(model: TreeModel, rec: TreeRec): string {
+  if (rec.id === GOD_ID || rec.id === model.jesusId) return GOLD;
+  if (rec.id === model.jacobId) return BRONZE;
+  if (rec.root) {
+    if (rec.spouseOf) return ROSE_LIT;
+    return (ROOT_COLOURS[rec.branch || 'Trunk'] || ROOT_COLOURS.Trunk).lit;
+  }
+  return STONES[rec.tribe || '']?.lit ?? LINEN_LIT;
+}
+
+// ── Names ────────────────────────────────────────────────────────────────
+// Every name is queued while the dots are drawn and painted in one pass at
+// the end of the frame, dim names first and lit ones over them. Drawn per
+// bough, a later bough's dots landed on an earlier bough's names.
+
+interface Label {
+  text: string;
+  x: number;
+  y: number;
+  font: string;
+  colour: string;
+  alpha: number;
+  lit: boolean;
+}
+
+let labels: Label[] = [];
+
+function queueLabel(text: string, x: number, y: number, font: string, colour: string, alpha: number, lit: boolean): void {
+  labels.push({ text, x, y, font, colour, alpha, lit });
+}
+
+/** Stroke then fill, so each name carries a thin dark edge (LABEL_OUTLINE). */
+function outlinedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number): void {
+  if (LABEL_OUTLINE.width > 0) ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
+}
+
+function drawLabels(s: RenderState): void {
+  const { ctx } = s;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = LABEL_OUTLINE.width;
+  ctx.strokeStyle = LABEL_OUTLINE.colour;
+  let font = '';
+  for (const lit of [false, true]) {
+    for (const l of labels) {
+      if (l.lit !== lit) continue;
+      // Setting ctx.font re-parses it, so only when it actually changes.
+      if (l.font !== font) ctx.font = font = l.font;
+      ctx.globalAlpha = l.alpha;
+      ctx.fillStyle = l.colour;
+      outlinedText(ctx, l.text, l.x, l.y);
+    }
+  }
+  ctx.restore();
+  labels = [];
 }
 
 // ── The whole frame ────────────────────────────────────────────────────────
@@ -144,6 +218,7 @@ export function draw(s: RenderState): void {
 
   const dimming = !!(s.selectedTribe || s.tracedPath);
 
+  labels = [];
   drawRoots(s, dimming);
   drawTrunk(s, dimming);
 
@@ -157,6 +232,7 @@ export function draw(s: RenderState): void {
   }
 
   drawCrown(s, dimming);
+  drawLabels(s);
 
   ctx.restore();
 
@@ -238,11 +314,12 @@ function drawRoots(s: RenderState, dimming: boolean): void {
     // A slow pulse on radius and glow, so it is obvious which of 852 dots
     // the card belongs to. 0.22 is the swing either side of the resting size.
     if (isPinned) size *= 1 + pulsePhase * 0.22;
+    const glowCol = litColourOf(model, n);
     if (on && !dimming && TREE.glow > 0) {
-      ctx.shadowColor = col.lit;
+      ctx.shadowColor = glowCol;
       ctx.shadowBlur = (isPinned ? 9 + pulsePhase * 10 : 9) * TREE.glow;
     } else if (isPinned) {
-      ctx.shadowColor = col.lit;
+      ctx.shadowColor = glowCol;
       ctx.shadowBlur = pulsePhase * 10 * TREE.glow;
     }
     ctx.beginPath();
@@ -273,26 +350,40 @@ function drawRoots(s: RenderState, dimming: boolean): void {
   // Labels. Every pre-Jacob node is named — that is the point of the roots
   // being filled in at all — so this one is unconditional, unlike the
   // canopy's bough labels below which the `allNames` toggle gates.
-  ctx.textAlign = 'center';
   for (const n of model.rootNodes) {
     const on = onOf(n);
     const isGod = n.id === GOD_ID;
-    ctx.globalAlpha = dimming && !on ? TREE.dimLevel + 0.1 : isGod ? 1 : 0.82;
     // Each label in its own bough's colour, so a name can be followed back
     // to the line it belongs to without tracing the branch by eye.
     const lc = ROOT_COLOURS[n.branch || 'Trunk'] || ROOT_COLOURS.Trunk;
-    ctx.fillStyle = isGod ? GOLD : on ? lc.lit : lc.c;
-    ctx.font = isGod ? '600 16px Milonga, serif' : '10.5px Milonga, serif';
-    ctx.fillText(treeLabel(n.label), n.x, n.y + (isGod ? 26 : 13));
+    queueLabel(
+      treeLabel(n.label),
+      n.x,
+      n.y + (isGod ? 26 : 13),
+      isGod ? '600 16px Milonga, serif' : '10.5px Milonga, serif',
+      isGod ? GOLD : on ? lc.lit : lc.c,
+      dimming && !on ? TREE.dimLevel + 0.1 : isGod ? 1 : 0.82,
+      on || !dimming,
+    );
   }
   ctx.restore();
 }
 
+/** One trunk segment, with the same slight bow the branches use, so the
+ *  trunk sits in the same hand as everything growing off it. */
+function trunkSegment(ctx: CanvasRenderingContext2D, from: Placed, to: Placed): void {
+  const mx = (from.x + to.x) / 2;
+  const my = (from.y + to.y) / 2;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  ctx.quadraticCurveTo(mx - dy * 0.08, my + dx * 0.08, to.x, to.y);
+}
+
 function drawTrunk(s: RenderState, dimming: boolean): void {
-  const { ctx, model } = s;
+  const { ctx, model, tracedPath, pinnedId, pulsePhase } = s;
   ctx.save();
   ctx.globalAlpha = dimming ? TREE.dimLevel + 0.1 : 0.9;
-  ctx.strokeStyle = GOLD;
+  ctx.strokeStyle = BRONZE;
   ctx.lineWidth = TREE.thickness * 3.4;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -302,18 +393,27 @@ function drawTrunk(s: RenderState, dimming: boolean): void {
   if (run.length > 1) {
     ctx.beginPath();
     ctx.moveTo(run[run.length - 1].x, run[run.length - 1].y);
-    for (let i = run.length - 2; i >= 0; i--) {
-      const from = run[i + 1];
-      const to = run[i];
-      // The same slight bow the branches use, so the trunk sits in the same
-      // hand as everything growing off it.
-      const mx = (from.x + to.x) / 2;
-      const my = (from.y + to.y) / 2;
-      const dx = to.x - from.x;
-      const dy = to.y - from.y;
-      ctx.quadraticCurveTo(mx - dy * 0.08, my + dx * 0.08, to.x, to.y);
-    }
+    for (let i = run.length - 2; i >= 0; i--) trunkSegment(ctx, run[i + 1], run[i]);
     ctx.stroke();
+    // The stretch a traced line runs along, again at full strength, so the
+    // climb visibly runs up the trunk rather than jumping from God to Jacob.
+    if (dimming && tracedPath) {
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      let open = false;
+      for (let i = run.length - 2; i >= 0; i--) {
+        const from = run[i + 1];
+        const to = run[i];
+        if (!tracedPath.has(from.id) || !tracedPath.has(to.id)) {
+          open = false;
+          continue;
+        }
+        if (!open) ctx.moveTo(from.x, from.y);
+        trunkSegment(ctx, from, to);
+        open = true;
+      }
+      ctx.stroke();
+    }
   } else {
     // No roots loaded — keep the short stub so the canopy is not left
     // floating. (Roots always ship with the tree, so this is a defensive
@@ -323,20 +423,33 @@ function drawTrunk(s: RenderState, dimming: boolean): void {
     ctx.lineTo(0, 0);
     ctx.stroke();
   }
+  // Jacob, the trunk top. Full strength whenever the line being traced runs
+  // through him, not left at the trunk's dim level with everything else.
+  const on = !dimming || !!tracedPath?.has(model.jacobId);
+  ctx.globalAlpha = on ? 1 : TREE.dimLevel + 0.1;
+  let size = TREE.nodeSize * 2.4;
+  const isPinned = pinnedId === model.jacobId;
+  // The same pulse and glow a pinned root dot gets (drawRoots).
+  if (isPinned) size *= 1 + pulsePhase * 0.22;
+  if (on && !dimming && TREE.glow > 0) {
+    ctx.shadowColor = BRONZE;
+    ctx.shadowBlur = (isPinned ? 9 + pulsePhase * 10 : 9) * TREE.glow;
+  } else if (isPinned) {
+    ctx.shadowColor = BRONZE;
+    ctx.shadowBlur = pulsePhase * 10 * TREE.glow;
+  }
   ctx.beginPath();
-  ctx.arc(0, 0, TREE.nodeSize * 2.4, 0, Math.PI * 2);
-  ctx.fillStyle = GOLD;
+  ctx.arc(0, 0, size, 0, Math.PI * 2);
+  ctx.fillStyle = BRONZE;
   ctx.fill();
-  ctx.fillStyle = '#e8dcc8';
-  ctx.font = '600 14px Milonga, serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('Jacob', 0, 22);
+  ctx.shadowBlur = 0;
+  queueLabel('Jacob', 0, 22, '600 14px Milonga, serif', '#e8dcc8', on ? 1 : TREE.dimLevel + 0.1, on);
   ctx.restore();
 }
 
 function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean, dimming: boolean): void {
   const { ctx, model, tracedPath, pinnedId, pulsePhase, allNames, view, W, H } = s;
-  const st = STONES[tribe] || { stone: '', c: LINEN, lit: '#8f8674' };
+  const st = STONES[tribe] || { stone: '', c: LINEN, lit: LINEN_LIT };
   const col = lit ? st.lit : st.c;
   ctx.save();
   ctx.globalAlpha = dimming && !lit ? TREE.dimLevel : 1;
@@ -374,17 +487,20 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
     // A slow pulse on radius and glow, so it is obvious which of 852 dots
     // the card belongs to.
     if (isPinned) size *= 1 + pulsePhase * 0.22;
+    // Jesus is gold, like God, whatever Judah's emerald says.
+    const isJesus = n.id === model.jesusId;
+    const glowCol = litColourOf(model, n);
 
     if (lit && on && TREE.glow > 0) {
-      ctx.shadowColor = st.lit;
+      ctx.shadowColor = glowCol;
       ctx.shadowBlur = (isPinned ? 11 + pulsePhase * 12 : 11) * TREE.glow;
     } else if (isPinned) {
-      ctx.shadowColor = st.lit;
+      ctx.shadowColor = glowCol;
       ctx.shadowBlur = pulsePhase * 12 * TREE.glow;
     }
     ctx.beginPath();
     ctx.arc(n.x, n.y, size, 0, Math.PI * 2);
-    ctx.fillStyle = col;
+    ctx.fillStyle = isJesus ? GOLD : col;
     ctx.fill();
     ctx.shadowBlur = 0;
 
@@ -407,27 +523,46 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
 
   // The son of Jacob names the bough — unchanged from the lab, at every zoom.
   const head = list[0];
+  const labelLit = !dimming || lit;
   if (head && isPlaced(head)) {
-    ctx.globalAlpha = dimming && !lit ? TREE.dimLevel + 0.15 : 1;
     // The tribe name in its own stone's colour, so the label and the bough
     // it heads read as one thing. Dimmed boughs keep the duller stone rather
     // than a flat grey, which also keeps the twelve distinguishable while
     // dimmed.
-    ctx.fillStyle = lit ? st.lit : st.c;
-    ctx.font = '600 13px Milonga, serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(tribe, head.x, head.y - 11);
+    queueLabel(
+      tribe,
+      head.x,
+      head.y - 11,
+      '600 13px Milonga, serif',
+      lit ? st.lit : st.c,
+      dimming && !lit ? TREE.dimLevel + 0.15 : 1,
+      labelLit,
+    );
     // Dinah has no STONES entry (she's a bough of one, not a tribe — see
     // config.ts), so st.stone falls through to the LINEN fallback's empty
     // string here. Guarded explicitly rather than relying on fillText('')
     // drawing nothing, since that's true by accident of the fallback's
     // shape, not by anything that says so.
     if (lit && st.stone) {
-      ctx.font = '9.5px -apple-system, sans-serif';
-      ctx.fillStyle = st.lit;
-      ctx.globalAlpha = 0.75;
-      ctx.fillText(st.stone, head.x, head.y - 23);
+      queueLabel(st.stone, head.x, head.y - 23, '9.5px -apple-system, sans-serif', st.lit, 0.75, labelLit);
     }
+  }
+
+  // Jesus is named always, like God, whether or not All names is on — both
+  // crown lines end on him.
+  const jesus = model.jesusId ? list.find((n) => n.id === model.jesusId) : undefined;
+  if (jesus && isPlaced(jesus)) {
+    const on = !tracedPath || tracedPath.has(jesus.id);
+    const jesusLit = !dimming || (lit && on);
+    queueLabel(
+      treeLabel(jesus.label),
+      jesus.x,
+      jesus.y + 20,
+      '600 16px Milonga, serif',
+      GOLD,
+      jesusLit ? 1 : TREE.dimLevel + 0.1,
+      jesusLit,
+    );
   }
 
   // The one addition beyond the lab: every OTHER dot in the bough, named too,
@@ -435,11 +570,10 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
   // above — and so is anyone the lab already draws unconditionally, so this
   // never doubles a name that was already on screen.
   if (allNames) {
-    ctx.font = '10.5px Milonga, serif';
-    ctx.textAlign = 'center';
     for (let i = 1; i < list.length; i++) {
       const n = list[i];
       if (!isPlaced(n)) continue;
+      if (n === jesus) continue;
       // Off-screen nodes are skipped so 665 extra names stay cheap while the
       // breathing pulse redraws every frame.
       if (!onScreen(n.x, n.y, view, W, H)) continue;
@@ -451,9 +585,15 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
       const fade = Math.min(1, (screenPx - LABEL_MIN_PX) / (LABEL_FULL_PX - LABEL_MIN_PX));
       const on = !tracedPath || tracedPath.has(n.id);
       const base = dimming && !lit ? TREE.dimLevel : on ? 0.82 : TREE.dimLevel;
-      ctx.globalAlpha = base * fade;
-      ctx.fillStyle = lit ? st.lit : st.c;
-      ctx.fillText(treeLabel(n.label), n.x, n.y + 13);
+      queueLabel(
+        treeLabel(n.label),
+        n.x,
+        n.y + 13,
+        '10.5px Milonga, serif',
+        lit ? st.lit : st.c,
+        base * fade,
+        !dimming || (lit && on),
+      );
     }
   }
   ctx.restore();
@@ -514,7 +654,10 @@ function crownName(ctx: CanvasRenderingContext2D, own: Placed[], col: string, na
   ctx.font = '10.5px -apple-system, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  ctx.fillText(name, 0, 0);
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = LABEL_OUTLINE.width;
+  ctx.strokeStyle = LABEL_OUTLINE.colour;
+  outlinedText(ctx, name, 0, 0);
   ctx.restore();
 }
 

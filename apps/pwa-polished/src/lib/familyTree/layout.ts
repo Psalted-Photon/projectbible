@@ -114,6 +114,8 @@ export interface TreeModel {
   /** The bounding box of every placed node, Jacob included. */
   bounds: { minX: number; maxX: number; minY: number; maxY: number };
   jacobId: string;
+  /** Where both crown lines end. He is in Judah, but drawn gold, not emerald. */
+  jesusId: string;
   attribution: string;
 }
 
@@ -967,6 +969,7 @@ export function layout(data: FamilyTreeData): TreeModel {
     toJesus,
     bounds: { minX, maxX, minY, maxY },
     jacobId: data.jacob,
+    jesusId: data.crown?.jesus ?? '',
     attribution: data.attribution,
   };
 }

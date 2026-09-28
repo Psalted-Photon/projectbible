@@ -4,8 +4,9 @@
   import { familyTreeStore } from '../stores/familyTreeStore';
   import { loadFamilyTree } from '../lib/familyTree/data';
   import { layout, ancestorChain, isPlaced, type TreeModel, type TreeRec } from '../lib/familyTree/layout';
-  import { draw, fitView, pick, toWorld, viewFor, type View } from '../lib/familyTree/render';
-  import { MAX_ZOOM, MIN_ZOOM_OF_FIT, FOCUS_ZOOM } from '../lib/familyTree/config';
+  import { draw, fitView, litColourOf, pick, toWorld, viewFor, type View } from '../lib/familyTree/render';
+  import { MAX_ZOOM, MIN_ZOOM_OF_FIT, FOCUS_ZOOM, GOD_ID } from '../lib/familyTree/config';
+  import { Entrance, MOTION, drawBursts, makeBurst, type Burst } from '../lib/familyTree/motion';
   import FamilyTreeCard from './FamilyTreeCard.svelte';
   import FamilyTreeBioSheet from './FamilyTreeBioSheet.svelte';
 
@@ -100,6 +101,30 @@
     redraw();
   }
 
+  // ── Grand entrance ───────────────────────────────────────────────────────
+  // On: a tap pulls out to the whole tree, climbs from God and lands with a
+  // burst (motion.ts). Off: the line lights at once and the camera glides
+  // straight there. The device's reduced-motion setting forces it off.
+  const ENTRANCE_KEY = 'projectbible-familytree-entrance';
+  function readEntrancePref(): boolean {
+    try {
+      const v = localStorage.getItem(ENTRANCE_KEY);
+      return v === null ? true : v === '1';
+    } catch {
+      return true;
+    }
+  }
+  let entrance = readEntrancePref();
+  $: entranceActive = entrance && !REDUCED_MOTION;
+  function toggleEntrance() {
+    entrance = !entrance;
+    try {
+      localStorage.setItem(ENTRANCE_KEY, entrance ? '1' : '0');
+    } catch {
+      // Private mode, or storage blocked — the toggle still works this visit.
+    }
+  }
+
   // ── Drawing ──────────────────────────────────────────────────────────────
   function redraw() {
     if (!ctx || !model) return;
@@ -116,6 +141,12 @@
       pulsePhase,
       allNames,
     });
+    // Bursts go over the finished frame. Drawn here rather than only in the
+    // frame loop, so a pan mid-burst doesn't blink it out for a frame.
+    if (bursts.length) {
+      bursts = drawBursts(ctx, bursts, view, W, H, DPR, performance.now());
+      if (bursts.length) ensureLoopRunning();
+    }
   }
 
   /** Canvas sizing only, with no side effect on the view — shared by open and
@@ -168,95 +199,119 @@
   }
 
   // ── Tracing and hover ────────────────────────────────────────────────────
-  /** How long a line takes to light from God to whoever was chosen, however
-   *  many generations long it is. */
-  const REVEAL_MS = 1850;
-  /** How much of REVEAL_MS the camera spends easing off wherever the tree was
-   *  onto the line's own path, so a tap while zoomed in doesn't jump. */
-  const FOLLOW_LEAD_IN = 0.25;
-  /** Where a followed line lands: a little further out than FOCUS_ZOOM, so
-   *  there is more of the tree around the person it lands on. */
-  const FOLLOW_END_ZOOM = FOCUS_ZOOM * 0.8;
+  /** How long a tribe's line takes to light from God, lit from a bio's
+   *  stone. That path has no Grand Entrance and keeps its old pace. */
+  const TRIBE_REVEAL_MS = 1850;
 
   /**
-   * The camera riding the tip of a lighting line: the whole tree at God, then
-   * in towards FOLLOW_END_ZOOM as the tip climbs, landing on the chosen person at
-   * `anchor`. Zoom and tip both run off the same progress value, so how far
-   * in the camera is always says how far along the line the light has got.
+   * The line lighting up, God first, as a phased sequence (motion.ts). A tap
+   * runs the Grand Entrance: out to the whole tree, a hold, then the climb
+   * with the camera following. `extra` (a tribe's other members) lights with
+   * the person at the end. The frame loop grows tracedPath from this and
+   * drops it once done.
    */
-  type Follow = {
-    pts: { x: number; y: number }[];
-    kEnd: number;
-    anchor: { x: number; y: number };
-    fit: View;
-    startView: View;
-  };
+  let seq: { entrance: Entrance; line: string[]; extra: string[] } | null = null;
+  /** Bursts still going off. Drawn over each frame by redraw(). */
+  let bursts: Burst[] = [];
 
-  /**
-   * A line lighting up one person at a time, God first — as if God, then
-   * Adam, then Seth were each tapped in turn — until the chosen person lights
-   * at REVEAL_MS. `extra` (a tribe's other members) lights with them at the
-   * end. The frame loop grows tracedPath from this and drops it once done.
-   */
-  let reveal: { line: string[]; extra: string[]; t0: number; follow: Follow | null } | null = null;
-
-  /** Light `chain` (person back to God, as ancestorChain gives it), plus
-   *  `extra`, growing up from God unless the device asks for reduced motion.
-   *  With `follow`, the camera rides the tip in to the chosen person. */
-  function revealLine(chain: TreeRec[], extra: string[] = [], follow = false) {
-    const line = chain.map((r) => r.id).reverse();
-    const target = chain[0];
-    const landable = follow && !!target && isPlaced(target);
-    if (REDUCED_MOTION || line.length < 2) {
-      reveal = null;
-      tracedPath = new Set([...line, ...extra]);
-      if (landable) glideTo({ x: target.x, y: target.y }, FOLLOW_END_ZOOM, glideAnchor());
-      return;
-    }
-    const pts = chain
+  function linePoints(chain: TreeRec[]) {
+    return chain
       .filter(isPlaced)
       .reverse()
       .map((r) => ({ x: r.x, y: r.y }));
-    let cam: Follow | null = null;
-    if (landable && model && pts.length >= 2) {
-      cancelGlide();
-      markViewMoved();
-      cam = { pts, kEnd: FOLLOW_END_ZOOM, anchor: glideAnchor(), fit: fitView(model, W, H), startView: view };
-    } else if (landable) {
-      glideTo({ x: target.x, y: target.y }, FOLLOW_END_ZOOM, glideAnchor());
+  }
+
+  /** Light `chain` (person back to God, as ancestorChain gives it), plus
+   *  `extra`, growing up from God with no camera move — a tribe lit from its
+   *  stone, which glides separately (glideToLine). */
+  function revealTribeLine(chain: TreeRec[], extra: string[]) {
+    const line = chain.map((r) => r.id).reverse();
+    if (REDUCED_MOTION || line.length < 2 || !model) {
+      seq = null;
+      tracedPath = new Set([...line, ...extra]);
+      return;
     }
-    reveal = { line, extra, t0: performance.now(), follow: cam };
+    const entrance = new Entrance({
+      line,
+      pts: linePoints(chain),
+      from: view,
+      fit: view,
+      W,
+      H,
+      anchor: null,
+      kEnd: view.k,
+      skipOut: true,
+      startColour: null,
+      landColour: null,
+      holdMs: 0,
+      climbMs: TRIBE_REVEAL_MS,
+      curve: 'cubic',
+      now: performance.now(),
+    });
+    seq = { entrance, line, extra };
     tracedPath = new Set(line.slice(0, 1));
     ensureLoopRunning();
   }
 
-  /** Where the follow camera is at progress `s` (0–1) along the line. */
-  function followView(f: Follow, s: number): View {
-    const last = f.pts.length - 1;
-    const pos = s * last;
-    const i = Math.min(Math.floor(pos), last - 1);
-    const u = pos - i;
-    const a = f.pts[i];
-    const b = f.pts[i + 1];
-    const tip = { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u };
-    const k = Math.exp(Math.log(f.fit.k) + (Math.log(f.kEnd) - Math.log(f.fit.k)) * s);
-    // The tip starts where it sits in the whole-tree view and slides over to
-    // the anchor as the zoom closes in — so s = 0 is exactly the whole tree
-    // and s = 1 is exactly the chosen person at the anchor.
-    const o = toWorld(0, 0, f.fit, W, H);
-    const sx = (tip.x - o.x) * f.fit.k;
-    const sy = (tip.y - o.y) * f.fit.k;
-    return viewFor(tip.x, tip.y, k, sx + (f.anchor.x - sx) * s, sy + (f.anchor.y - sy) * s, W, H);
-  }
+  /**
+   * A tap on someone: the Grand Entrance when it is on, otherwise the whole
+   * line at once and one plain glide to them with a small burst. A tap
+   * mid-sequence starts it again from wherever the camera is.
+   */
+  function enterOn(n: TreeRec) {
+    if (!model) return;
+    const chain = ancestorChain(model, n);
+    const line = chain.map((r) => r.id).reverse();
+    const landable = isPlaced(n);
+    const now = performance.now();
+    cancelGlide();
+    seq = null;
 
-  function easeInOut(t: number): number {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    if (!entranceActive || line.length < 2) {
+      tracedPath = new Set(line);
+      if (landable) {
+        glideTo({ x: n.x, y: n.y }, MOTION.endZoom, glideAnchor());
+        if (!REDUCED_MOTION) {
+          // God alone has no climb, so his tap is his own golden burst.
+          const god = n.id === GOD_ID;
+          const colour = litColourOf(model, n);
+          bursts.push(
+            god && entranceActive
+              ? makeBurst(n.x, n.y, colour, MOTION.godBurst, now)
+              : makeBurst(n.x, n.y, colour, MOTION.landBurst, now, MOTION.plainBurstScale),
+          );
+          ensureLoopRunning();
+        }
+      }
+      return;
+    }
+
+    const fit = fitView(model, W, H);
+    const start = chain[chain.length - 1];
+    const entrance = new Entrance({
+      line,
+      pts: linePoints(chain),
+      from: view,
+      fit,
+      W,
+      H,
+      anchor: landable ? glideAnchor() : null,
+      kEnd: MOTION.endZoom,
+      skipOut: atFittedView,
+      startColour: litColourOf(model, start),
+      landColour: litColourOf(model, n),
+      now,
+    });
+    if (landable) markViewMoved();
+    seq = { entrance, line, extra: [] };
+    tracedPath = new Set(line.slice(0, 1));
+    ensureLoopRunning();
   }
 
   /** Trace someone's line, God up to them, with the camera following it in. */
   function traceFrom(n: TreeRec) {
     if (!model) return;
-    revealLine(ancestorChain(model, n), [], true);
+    enterOn(n);
     selectedTribe = n.tribe || null;
     pinned = n;
     tribeLit = null;
@@ -278,7 +333,7 @@
     if (!list?.length) return false;
     // byTribe is sorted by depth, so the son of Jacob who heads it is first.
     const line = focus && isPlaced(focus) ? focus : list[0];
-    revealLine(
+    revealTribeLine(
       ancestorChain(model, line),
       list.map((r) => r.id),
     );
@@ -340,7 +395,7 @@
   }
 
   function clearSelection() {
-    reveal = null;
+    seq = null;
     tracedPath = null;
     selectedTribe = null;
     pinned = null;
@@ -383,33 +438,16 @@
       needsAnother = true;
     }
 
-    if (reveal) {
-      const { line, extra, t0, follow } = reveal;
-      const t = Math.min(1, Math.max(0, now - t0) / REVEAL_MS);
-      if (t >= 1) {
+    if (seq) {
+      const { entrance, line, extra } = seq;
+      const f = entrance.step(now);
+      if (f.view) view = f.view;
+      if (f.bursts.length) bursts.push(...f.bursts);
+      if (f.done) {
         tracedPath = new Set([...line, ...extra]);
-        if (follow) view = followView(follow, 1);
-        reveal = null;
+        seq = null;
       } else {
-        // God is lit at the start and the chosen person at exactly REVEAL_MS,
-        // easing out of God and into the chosen person. The camera reads the
-        // same `s`, so the zoom and the tip can never drift apart.
-        const s = easeInOut(t);
-        const lit = 1 + Math.floor(s * (line.length - 1));
-        if (tracedPath?.size !== lit) tracedPath = new Set(line.slice(0, lit));
-        if (follow) {
-          const cam = followView(follow, s);
-          const b = ease(Math.min(1, t / FOLLOW_LEAD_IN));
-          const sv = follow.startView;
-          view =
-            b >= 1
-              ? cam
-              : {
-                  x: sv.x + (cam.x - sv.x) * b,
-                  y: sv.y + (cam.y - sv.y) * b,
-                  k: Math.exp(Math.log(sv.k) + (Math.log(cam.k) - Math.log(sv.k)) * b),
-                };
-        }
+        if (tracedPath?.size !== f.lit) tracedPath = new Set(line.slice(0, f.lit));
         needsAnother = true;
       }
     }
@@ -431,6 +469,7 @@
     }
 
     redraw();
+    if (bursts.length) needsAnother = true;
     rafId = needsAnother ? requestAnimationFrame(frameLoop) : null;
   }
 
@@ -450,7 +489,7 @@
    *  itself keeps lighting; only the camera lets go. */
   function cancelGlide() {
     glide = null;
-    if (reveal) reveal.follow = null;
+    seq?.entrance.release();
   }
 
   function glideTo(
@@ -461,6 +500,8 @@
     onArrive?: () => void,
   ) {
     markViewMoved();
+    // A glide takes the camera from any sequence still following the line.
+    seq?.entrance.release();
     if (REDUCED_MOTION) {
       view = viewFor(targetWorld.x, targetWorld.y, targetK, screen.x, screen.y, W, H);
       redraw();
@@ -1084,6 +1125,16 @@
       <button class="tree-btn toggle" class:on={allNames} aria-pressed={allNames} on:click={toggleAllNames}>
         All names
       </button>
+      <button
+        class="tree-btn toggle entrance-btn"
+        class:on={entranceActive}
+        aria-pressed={entranceActive}
+        disabled={REDUCED_MOTION}
+        title={REDUCED_MOTION ? 'Off while your device asks for reduced motion' : undefined}
+        on:click={toggleEntrance}
+      >
+        Grand entrance
+      </button>
     </div>
     <button class="close-btn" bind:this={closeBtnEl} on:click={closeViaHistory} aria-label="Close family tree">
       ✕ Close
@@ -1179,8 +1230,16 @@
     position: absolute;
     top: calc(env(safe-area-inset-top, 0px) + 12px);
     left: calc(env(safe-area-inset-left, 0px) + 12px);
+    /* Clear of ✕ Close. On a narrow phone the third pill wraps under the
+       first two rather than running into it. */
+    right: calc(env(safe-area-inset-right, 0px) + 100px);
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
+    pointer-events: none;
+  }
+  .controls-top > * {
+    pointer-events: auto;
   }
 
   .tree-btn {
@@ -1202,6 +1261,10 @@
     border-color: #6b5d3a;
     color: #e8dcc8;
     background: rgba(44, 40, 32, 0.85);
+  }
+  .tree-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .tribe-chip {

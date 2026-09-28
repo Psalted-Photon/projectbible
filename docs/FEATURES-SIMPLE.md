@@ -257,6 +257,7 @@
 - Family links: parents, children, spouses
 - Pin a biography beside the reader
 - Bridged to encyclopedia, dictionary and topical
+- Family tree Grand entrance, with an on/off button
 
 ## 26. Notes & Notebooks
 - Verse notes in a book-by-book tree

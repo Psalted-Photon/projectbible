@@ -51,8 +51,14 @@ export const STONES: Record<string, StoneSpec> = {
   // falls through to LINEN in drawBough and keeps her node and her tap.
 };
 
+/** God and Jesus only. Nothing else on the tree is gold. */
 export const GOLD = '#c9a227';
+/** The trunk, God to Jacob, and Jacob's own dot. Warmer and darker than GOLD
+ *  so the two gold people stand apart from the line between them. */
+export const BRONZE = '#b07a3c';
 export const LINEN = '#6b6153';
+/** Dinah's colour when lit: she has no stone, so LINEN brightened. */
+export const LINEN_LIT = '#8f8674';
 /** Wives. A rose node says "married in" at a glance, which the labels do not. */
 export const ROSE = '#a35a6e';
 export const ROSE_LIT = '#e08aa0';
@@ -64,7 +70,7 @@ export const GOD_ID = 'god_1324';
  *  are told apart by shades of bark instead. The trunk stays brightest,
  *  because it is the line the whole tree hangs from. */
 export const ROOT_COLOURS: Record<string, { c: string; lit: string }> = {
-  Trunk: { c: '#8a6f2a', lit: GOLD },
+  Trunk: { c: '#8a6f2a', lit: BRONZE },
   Cain: { c: '#6e4a3a', lit: '#b8795c' },
   Ham: { c: '#6b5a33', lit: '#b5964f' },
   Japheth: { c: '#4f5f42', lit: '#89a86f' },
@@ -187,6 +193,15 @@ export const FOCUS_ZOOM = 1.2;
 // tribe and root level.
 export const LABEL_MIN_PX = 6;
 export const LABEL_FULL_PX = 8;
+
+/**
+ * The thin dark edge round every name, so a name stays readable over a dot
+ * or a branch of its own colour (Levi's long strips were the worst of it).
+ * Width is in tree units, so it scales with the name. The colour is the
+ * ground's own darkest shade: it reads as black without looking pasted on.
+ * Tuned in tree-motion-lab.html; its Copy values prints this block.
+ */
+export const LABEL_OUTLINE = { width: 2.5, colour: '#0a0908' };
 
 // ── Label boxes, for the spread pass ──────────────────────────────────────
 // layout.ts nudges apart the names that would print on top of each other, so

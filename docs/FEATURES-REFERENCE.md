@@ -1328,6 +1328,16 @@ Opens either way `PersonContent` accepts: by id from the library and the work ta
 
 A bio can be **pinned beside the reader** rather than covering it, and links family relationships as navigable references. The "also called" list wraps and reads as a list rather than running off the edge.
 
+### 25.1 Family tree: Grand entrance
+
+`src/components/FamilyTreeViewer.svelte`, `src/lib/familyTree/motion.ts`. A tap runs an `Entrance` in phases: `out` (glide to `fitView`, skipped when `atFittedView`), `hold` (God alone lit), `climb` (line and camera together, golden burst at the start), `done` (landing burst in `litColourOf(target)`). The climb cannot start while the camera is still travelling out. Every number is in `MOTION`: `outMs` 625, `holdMs` 425, `climbMs` 2500, `endZoom` 0.96, three curves, and a `BurstSpec` each for God and the landing. A pan, pinch, wheel or glide calls `entrance.release()`: the camera lets go and the line finishes on schedule. A tap restarts from wherever the camera is. God alone gets his burst with no climb. A tribe lit from a stone keeps a plain 1850ms reveal with no entrance.
+
+The **Grand entrance** pill in `.controls-top` is saved per device under `projectbible-familytree-entrance` (default on). Off, or under `prefers-reduced-motion`, a tap lights the whole line, does one 700ms glide and fires a landing burst at `plainBurstScale` (none under reduced motion).
+
+Drawing (`render.ts`): God and Jesus (`model.jesusId`, from `crown.jesus`) are `GOLD`; the trunk and Jacob are `BRONZE`. Jacob is full strength when the traced line includes him and pulses when pinned. The traced stretch of the trunk is stroked again at full strength. Every name is queued and painted in one pass after `drawCrown`, dim first, with a `LABEL_OUTLINE` stroke (2.5 tree units, `#0a0908`).
+
+Tuning: `tree-motion-lab.html` (a second Vite input, kept out of the precache) runs the real `draw` and `Entrance`. Its Copy values prints `MOTION` and `LABEL_OUTLINE` to paste back.
+
 ## 26. Notes & Notebooks
 
 `src/components/NotesPane.svelte` — the desk, behind a **Local / Shared** toggle. Three things live here, all signed-in only:
