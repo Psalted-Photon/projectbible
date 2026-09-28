@@ -1037,6 +1037,11 @@
   //
   // Numbers came out of navbar-text-lab.html. `height` is the SVG's own height
   // only — the bar's own box is deliberately left alone.
+  //
+  // When any open gap is narrower than its two shoulders laid end to end, the
+  // flanks would meet before reaching the rest line and the bite looks squashed
+  // (a phone in portrait, mostly). Then the whole bar goes flat instead: full
+  // depth all the way across, clock sitting in the flat gap. See `barFlat`.
   const CONTOUR = {
     restPct: 0.17,
     padX: 1.5,
@@ -1114,6 +1119,10 @@
   // below it gets whatever the hypotenuse has left by then.
   let clockW = { l1: 0, l2: 0, r1: 0, r2: 0 };
   let wedgeGeom = { hFull: 0, hRest: 0, sL: 0, sR: 0 };
+  /** The shoulders would touch, so the edge is a straight line at full depth. */
+  let barFlat = false;
+  // The open gap the clock shares while the bar is flat.
+  let flatGap: { a: number; b: number } | null = null;
   let clockTime = "";
   let clockDay = "";
   let clockDate = "";
@@ -1284,7 +1293,9 @@
       }
     }
 
+    barFlat = gaps.some((g) => !g.crevice && g.b - g.a < g.sL + g.sR);
     recordWedges(gaps, hFull, hRest);
+    if (barFlat) return () => hFull;
 
     // Overlapping influences combine by taking the deepest rise, never by
     // summing — two neighbouring dips must not dig a trench between them.
@@ -1339,6 +1350,17 @@
     const cross = (g: { a: number; b: number; sL: number; sR: number }) =>
       (g.a * g.sR + g.b * g.sL) / (g.sL + g.sR);
 
+    if (barFlat) {
+      // No wedges to fill. The clock shares the first open gap instead, and
+      // how much of it fits depends on the text, so recomputeClockWidths
+      // places it.
+      flatGap = first ? { a: first.a, b: first.b } : null;
+      wedgeGeom = { hFull, hRest, sL: 0, sR: 0 };
+      recomputeClockWidths();
+      return;
+    }
+    flatGap = null;
+
     wedgeTop = hRest + CLOCK_NUDGE_Y;
     wedgeH = Math.max(0, hFull - hRest);
 
@@ -1379,6 +1401,10 @@
    * does. A month with a descender in it is a different depth to one without.
    */
   function recomputeClockWidths(): void {
+    if (barFlat) {
+      layoutFlatClock();
+      return;
+    }
     const { hFull, hRest, sL, sR } = wedgeGeom;
     const swing = hFull - hRest;
 
@@ -1400,6 +1426,55 @@
       r1: wedgeR ? room(sR, wedgeR.w, inkBottom(clockDate, CLOCK_FONT, top)) : 0,
       r2: wedgeR ? room(sR, wedgeR.w, inkBottom(clockMonth, px2, belowTop)) : 0,
     };
+  }
+
+  function textWidth(text: string, px: number): number {
+    if (!text) return 0;
+    if (!inkCtx) inkCtx = document.createElement("canvas").getContext("2d");
+    if (!inkCtx) return text.length * px * 0.6;
+    inkCtx.font = `${px}px Milonga, cursive`;
+    return inkCtx.measureText(text).width;
+  }
+
+  /**
+   * The clock on a flat bar: time and day in the left half of the gap, date
+   * and month in the right, the pair centred down the full depth. When the gap
+   * cannot hold both the time takes all of it, and when it cannot hold even
+   * that the clock steps aside rather than crowding the pills.
+   */
+  function layoutFlatClock(): void {
+    const FLAT_CLOCK_PAD = 6;
+    const px2 = CLOCK_FONT * CLOCK_LINE2_SCALE;
+    const hFull = wedgeGeom.hFull;
+
+    wedgeH = CLOCK_LINE_H * 2;
+    wedgeTop = Math.max(0, (hFull - wedgeH) / 2) + CLOCK_NUDGE_Y;
+
+    if (!flatGap) {
+      wedgeL = wedgeR = null;
+      return;
+    }
+    const { a, b } = flatGap;
+    const w = b - a;
+    const needL =
+      Math.max(textWidth(clockTime, CLOCK_FONT), textWidth(clockDay, px2)) +
+      FLAT_CLOCK_PAD;
+    const needR =
+      Math.max(textWidth(clockDate, CLOCK_FONT), textWidth(clockMonth, px2)) +
+      FLAT_CLOCK_PAD;
+
+    if (needL + needR <= w) {
+      const half = w / 2;
+      wedgeL = { x: a, w: half };
+      wedgeR = { x: a + half, w: half };
+      clockW = { l1: half, l2: half, r1: half, r2: half };
+    } else if (needL <= w) {
+      wedgeL = { x: a, w };
+      wedgeR = null;
+      clockW = { l1: w, l2: w, r1: 0, r2: 0 };
+    } else {
+      wedgeL = wedgeR = null;
+    }
   }
 
   /** Catmull-Rom through the samples, emitted as cubic Béziers. */
@@ -1462,8 +1537,12 @@
   }
 
   function retargetMembrane(animate: boolean): void {
+    const wasFlat = barFlat;
     const next = computeTarget();
     if (!next) return;
+    // Going flat or getting the bite back eases, even when a resize (turning
+    // the phone) is what caused it.
+    if (barFlat !== wasFlat) animate = true;
 
     // Tween the samples, never the path string: two paths with different
     // segment counts cannot be interpolated.
