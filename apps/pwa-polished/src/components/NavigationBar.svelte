@@ -80,6 +80,10 @@
     User,
     X,
     Sun,
+    Play,
+    Pause,
+    Stop,
+    Playlist,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
   import { repeatsStore } from "../stores/repeatsStore";
@@ -2058,7 +2062,7 @@
             on:click={togglePlayPause}
             title={$readingState === 'playing' ? 'Pause reading' : 'Resume reading'}
             aria-label={$readingState === 'playing' ? 'Pause reading' : 'Resume reading'}
-          >{$readingState === 'playing' ? '⏸' : '▶'}</button>
+          >{#if $readingState === 'playing'}<Pause size={17} weight="fill" />{:else}<Play size={17} weight="fill" />{/if}</button>
         {/if}
 
         <span class="tts-nav-ref">{ttsReference}</span>
@@ -2082,7 +2086,7 @@
           on:click={stopReading}
           title="Stop reading"
           aria-label="Stop reading"
-        >■</button>
+        ><Stop size={17} weight="fill" /></button>
 
         <button
           class="tts-nav-btn"
@@ -2090,7 +2094,7 @@
           on:click={() => continuousPlay.update((v) => !v)}
           title={$continuousPlay ? 'Auto-advance: on (click to turn off)' : 'Auto-advance to next chapter'}
           aria-label="Toggle auto-advance"
-        >↠</button>
+        ><Playlist size={17} weight="bold" /></button>
 
         <select
           class="tts-nav-picker tts-nav-sleep"
@@ -2569,6 +2573,9 @@
   }
 
   .tts-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     color: #999;
