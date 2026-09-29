@@ -1,11 +1,13 @@
 /**
- * Tree motion lab — tunes the Grand Entrance and the name outline.
+ * Tree motion lab v2.0 — tunes the Grand Entrance, the name outline, and the
+ * Lights: the tree coming on as it opens, the rest going out when someone is
+ * picked, and a tribe coming on from its stone.
  *
  * Runs the real tree: loadFamilyTree + layout for the data, render.ts's draw
- * for the frame, and motion.ts for the sequence and the bursts. Every slider
- * writes straight into MOTION or LABEL_OUTLINE, so what plays here is what
- * the app plays. Copy values prints both blocks, ready to paste back into
- * src/lib/familyTree/motion.ts and config.ts.
+ * for the frame, and motion.ts for the sequence, the bursts and the light
+ * waves. Every slider writes straight into MOTION, LIGHTS or LABEL_OUTLINE,
+ * so what plays here is what the app plays. Copy values prints the blocks,
+ * ready to paste back into src/lib/familyTree/motion.ts and config.ts.
  *
  * The values are kept in this browser between visits (localStorage), so a
  * reload on the phone doesn't lose a half-tuned set. Reset puts back what
@@ -14,22 +16,30 @@
 
 import { loadFamilyTree } from './src/lib/familyTree/data';
 import { layout, ancestorChain, isPlaced, type TreeModel, type TreeRec } from './src/lib/familyTree/layout';
-import { draw, fitView, litColourOf, pick, toWorld, viewFor, type View } from './src/lib/familyTree/render';
-import { GOD_ID, LABEL_OUTLINE, MAX_ZOOM, MIN_ZOOM_OF_FIT } from './src/lib/familyTree/config';
+import { CROWN_LIGHT, draw, fitView, litColourOf, pick, toWorld, viewFor, type View } from './src/lib/familyTree/render';
+import { GOD_ID, LABEL_OUTLINE, MAX_ZOOM, MIN_ZOOM_OF_FIT, STONES, TREE } from './src/lib/familyTree/config';
 import {
   CURVE_NAMES,
   Entrance,
+  LIGHTS,
   MOTION,
+  ORDER_NAMES,
+  Wave,
   drawBursts,
   ease,
   makeBurst,
+  rankBy,
   type Burst,
   type BurstSpec,
   type Curve,
+  type Lights,
   type Motion,
+  type Order,
+  type WaveSpec,
 } from './src/lib/familyTree/motion';
 
 const SHIPPED_MOTION: Motion = JSON.parse(JSON.stringify(MOTION));
+const SHIPPED_LIGHTS: Lights = JSON.parse(JSON.stringify(LIGHTS));
 const SHIPPED_OUTLINE = { ...LABEL_OUTLINE };
 const STORE_KEY = 'tree-motion-lab-values';
 
@@ -75,17 +85,37 @@ let glide: {
 let target: TreeRec | null = null;
 const picks = new Map<string, TreeRec>();
 
+// Lights: a wave of people coming on or going out, one by one.
+let lightsOn = true;
+let openOnLoad = true;
+let wave: Wave | null = null;
+/** The light the last frame drew, or null when nothing is animating. */
+let light: Map<string, number> | null = null;
+let lightFloor = TREE.dimLevel;
+/** The opening's slow settle onto the whole tree. */
+let openCam: { t0: number; ms: number } | null = null;
+let tribePick = 'Judah';
+/** Everyone the renderer asks about: every person, plus the crown lines. */
+let allIds: string[] = [];
+
 // ── Saved values ─────────────────────────────────────────────────────────
 
 function save() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ motion: MOTION, outline: LABEL_OUTLINE }));
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({ motion: MOTION, outline: LABEL_OUTLINE, lights: LIGHTS, prefs: { lightsOn, openOnLoad } }),
+    );
   } catch {
     // Storage blocked: the lab still works, it just forgets on reload.
   }
 }
 
-function applyValues(motion: Partial<Motion> | undefined, outline: Partial<typeof LABEL_OUTLINE> | undefined) {
+function applyValues(
+  motion: Partial<Motion> | undefined,
+  outline: Partial<typeof LABEL_OUTLINE> | undefined,
+  lights?: Partial<Lights>,
+) {
   if (motion) {
     const { godBurst, landBurst, ...rest } = motion;
     Object.assign(MOTION, rest);
@@ -93,6 +123,11 @@ function applyValues(motion: Partial<Motion> | undefined, outline: Partial<typeo
     if (landBurst) Object.assign(MOTION.landBurst, landBurst);
   }
   if (outline) Object.assign(LABEL_OUTLINE, outline);
+  if (lights) {
+    for (const k of ['open', 'dim', 'tribe'] as const) {
+      if (lights[k]) Object.assign(LIGHTS[k], lights[k]);
+    }
+  }
 }
 
 function load() {
@@ -100,14 +135,16 @@ function load() {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return;
     const v = JSON.parse(raw);
-    applyValues(v?.motion, v?.outline);
+    applyValues(v?.motion, v?.outline, v?.lights);
+    if (typeof v?.prefs?.lightsOn === 'boolean') lightsOn = v.prefs.lightsOn;
+    if (typeof v?.prefs?.openOnLoad === 'boolean') openOnLoad = v.prefs.openOnLoad;
   } catch {
     // Nothing saved, or storage blocked.
   }
 }
 
 function resetValues() {
-  applyValues(JSON.parse(JSON.stringify(SHIPPED_MOTION)), SHIPPED_OUTLINE);
+  applyValues(JSON.parse(JSON.stringify(SHIPPED_MOTION)), SHIPPED_OUTLINE, JSON.parse(JSON.stringify(SHIPPED_LIGHTS)));
   try {
     localStorage.removeItem(STORE_KEY);
   } catch {
@@ -148,25 +185,122 @@ function render(now: number) {
     pinnedId: pinned?.id ?? null,
     pulsePhase,
     allNames,
+    light,
+    lightFloor,
   });
   bursts = drawBursts(ctx, bursts, view, W, H, DPR, now);
+}
+
+// ── Lights ───────────────────────────────────────────────────────────────
+
+/** A person's light in the plain on/off drawing of the current state. */
+function onNow(id: string): number {
+  if (!selectedTribe && !tracedPath) return 1;
+  if (id === CROWN_LIGHT) return 0;
+  if (tracedPath) return tracedPath.has(id) ? 1 : 0;
+  return model?.nodes.get(id)?.tribe === selectedTribe ? 1 : 0;
+}
+
+/** Everyone's light on screen right now, before the state changes. */
+function snapshot(): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const id of allIds) m.set(id, Math.min(1, light ? (light.get(id) ?? 0) : onNow(id)));
+  return m;
+}
+
+/** From `prev` to whatever the state now says, one person at a time. */
+function startWave(prev: Map<string, number>, rise: WaveSpec | null, fall: WaveSpec | null, focus: TreeRec | null, floor: number) {
+  if (!model) return;
+  const m = model;
+  wave = new Wave({
+    ids: allIds,
+    from: (id) => prev.get(id) ?? 0,
+    to: onNow,
+    rise,
+    fall,
+    rank: (spec, ids) => rankBy(spec.order, ids, m, focus),
+    now: performance.now(),
+  });
+  lightFloor = floor;
+}
+
+function stopLights() {
+  wave = null;
+  light = null;
+  openCam = null;
+}
+
+/** Back to the whole tree, everyone lit, nothing moving. */
+function clearAll() {
+  stopLights();
+  seq = null;
+  glide = null;
+  tracedPath = null;
+  selectedTribe = null;
+  pinned = null;
+}
+
+/** The tree coming on as it opens, from God outward. */
+function playOpening() {
+  if (!model) return;
+  clearAll();
+  const fit = fitView(model, W, H);
+  view = fit;
+  atFitted = true;
+  if (!lightsOn) return;
+  const o = LIGHTS.open;
+  const god = model.rootById.get(GOD_ID) ?? null;
+  startWave(new Map(), o, null, god, o.floor);
+  const ms = o.spreadMs + o.fadeMs;
+  if (o.zoomFrom !== 1 && ms > 0) {
+    openCam = { t0: performance.now(), ms };
+    atFitted = false;
+  }
+  if (o.godBurst) fireAt(god, MOTION.godBurst);
+}
+
+/** A tribe from its stone: its line from God and every member come on,
+ *  in order, and everyone else goes out. `fromDim` starts from the whole tree
+ *  dimmed, as when a stone opens the tree; otherwise from what is on screen. */
+function lightTribe(tribe: string, fromDim = false) {
+  if (!model) return;
+  const list = model.byTribe.get(tribe);
+  if (!list?.length) return;
+  const prev = fromDim ? new Map<string, number>() : snapshot();
+  const head = list[0];
+  seq = null;
+  openCam = null;
+  tracedPath = new Set([...ancestorChain(model, head).map((r) => r.id), ...list.map((r) => r.id)]);
+  selectedTribe = tribe;
+  pinned = null;
+  if (lightsOn) startWave(prev, LIGHTS.tribe, LIGHTS.dim, head, TREE.dimLevel);
+  else stopLights();
+  if (!atFitted) glideToWhole();
 }
 
 // ── The sequence, exactly as FamilyTreeViewer runs it ────────────────────
 
 function run(n: TreeRec | null) {
   if (!model || !n) return;
+  const prev = lightsOn ? snapshot() : null;
   const chain = ancestorChain(model, n);
   const line = chain.map((r) => r.id).reverse();
   const now = performance.now();
   glide = null;
   seq = null;
+  openCam = null;
   selectedTribe = n.tribe || null;
   pinned = n;
   pulseStart = now;
+  const lights = () => {
+    // Coming on is left to the climb (or instant without it); the rest burn out.
+    if (prev) startWave(prev, null, LIGHTS.dim, n, TREE.dimLevel);
+    else stopLights();
+  };
 
   if (!entranceOn || line.length < 2) {
     tracedPath = new Set(line);
+    lights();
     if (isPlaced(n)) {
       glideTo({ x: n.x, y: n.y }, MOTION.endZoom, anchor());
       const colour = litColourOf(model, n);
@@ -199,10 +333,12 @@ function run(n: TreeRec | null) {
   atFitted = false;
   seq = { entrance, line };
   tracedPath = new Set(line.slice(0, 1));
+  lights();
 }
 
 function releaseCamera() {
   glide = null;
+  openCam = null;
   seq?.entrance.release();
   atFitted = false;
 }
@@ -239,11 +375,7 @@ function startZoomedIn() {
   const far = [...model.nodes.values()].filter(isPlaced).filter((n) => Math.hypot(n.x, n.y) > 500);
   const spot = far[Math.floor(Math.random() * far.length)];
   if (!spot || !isPlaced(spot)) return;
-  seq = null;
-  glide = null;
-  tracedPath = null;
-  selectedTribe = null;
-  pinned = null;
+  clearAll();
   view = viewFor(spot.x, spot.y, 3, W / 2, H / 2, W, H);
   atFitted = false;
   setTimeout(() => run(target), 450);
@@ -266,6 +398,30 @@ function frame(now: number) {
       seq = null;
     } else if (tracedPath?.size !== f.lit) {
       tracedPath = new Set(seq.line.slice(0, f.lit));
+    }
+  }
+
+  if (wave) {
+    if (wave.done(now)) {
+      wave = null;
+      light = null;
+    } else {
+      light = wave.sample(now);
+      // The climb lights its line as it goes, over whatever the wave says.
+      if (tracedPath) for (const id of tracedPath) if ((light.get(id) ?? 0) < 1) light.set(id, 1);
+    }
+  }
+
+  if (openCam && model) {
+    const t = Math.min(1, (now - openCam.t0) / openCam.ms);
+    const fit = fitView(model, W, H);
+    const c = toWorld(W / 2, H / 2, fit, W, H);
+    const zf = LIGHTS.open.zoomFrom;
+    view = viewFor(c.x, c.y, fit.k * (zf + (1 - zf) * ease(LIGHTS.open.cameraCurve, t)), W / 2, H / 2, W, H);
+    if (t >= 1) {
+      view = fit;
+      openCam = null;
+      atFitted = true;
     }
   }
 
@@ -382,10 +538,7 @@ function pointerEnd(e: PointerEvent) {
         setTarget(n);
         run(n);
       } else {
-        seq = null;
-        tracedPath = null;
-        selectedTribe = null;
-        pinned = null;
+        clearAll();
       }
     }
   }
@@ -448,6 +601,7 @@ whoSel.addEventListener('change', () => {
   run(target);
 });
 document.getElementById('replay')!.addEventListener('click', () => run(target));
+document.getElementById('open')!.addEventListener('click', playOpening);
 document.getElementById('zoomed')!.addEventListener('click', startZoomedIn);
 document.getElementById('whole')!.addEventListener('click', glideToWhole);
 
@@ -638,17 +792,83 @@ function fireAt(rec: TreeRec | null | undefined, spec: BurstSpec, colour?: strin
   bursts.push(makeBurst(rec.x, rec.y, colour ?? litColourOf(model, rec), spec, performance.now()));
 }
 
+function choice<T extends string>(label: string, options: [T, string][], get: () => T, set: (v: T) => void) {
+  const row = el('div', { className: 'row' }, drawer);
+  el('label', { textContent: label }, row);
+  const sel = el('select', {}, row);
+  for (const [value, text] of options) el('option', { value, textContent: text }, sel);
+  sel.value = get();
+  sel.addEventListener('change', () => {
+    set(sel.value as T);
+    save();
+  });
+}
+
+/** The sliders every light wave has. */
+function waveControls(spec: WaveSpec) {
+  choice('Order', Object.entries(ORDER_NAMES) as [Order, string][], () => spec.order, (v) => (spec.order = v));
+  slider('Spread (ms)', () => spec.spreadMs, (v) => (spec.spreadMs = v), 0, 6000, 25);
+  slider('Each fade', () => spec.fadeMs, (v) => (spec.fadeMs = v), 0, 2000, 10);
+  curveControl('Spacing', () => spec.orderCurve, (c) => (spec.orderCurve = c));
+  slider('Scatter', () => spec.jitter, (v) => (spec.jitter = v), 0, 1, 0.01);
+  slider('Flash', () => spec.flash, (v) => (spec.flash = v), 0, 2, 0.05);
+  slider('Flicker', () => spec.flicker, (v) => (spec.flicker = v), 0, 1, 0.01);
+  slider('Flicker speed', () => spec.flickerHz, (v) => (spec.flickerHz = v), 1, 40, 0.5);
+}
+
+/** Everything lit and still, then `then` — so each Play starts the same way. */
+function fromWholeTree(then: () => void) {
+  clearAll();
+  then();
+}
+
 function buildDrawer() {
   if (!model) return;
   const m = model;
   drawer.innerHTML = '';
 
+  el('p', { className: 'title', textContent: 'Tree motion lab v2.0' }, drawer);
+
   heading('Preview');
   checks([
     ['Grand entrance', () => entranceOn, (v) => (entranceOn = v)],
     ['All names', () => allNames, (v) => (allNames = v)],
+    [
+      'Animate lights',
+      () => lightsOn,
+      (v) => {
+        lightsOn = v;
+        if (!v) stopLights();
+      },
+    ],
+    ['Open on load', () => openOnLoad, (v) => (openOnLoad = v)],
   ]);
-  el('p', { className: 'note', textContent: 'Tap a name on the tree to land on them, or pick one above. Values are saved in this browser.' }, drawer);
+  el('p', { className: 'note', textContent: 'Tap a name on the tree to land on them, or pick one above. Values are saved in this browser. Turn off Animate lights to compare with the plain all-on / all-off.' }, drawer);
+
+  heading('Opening the tree', { label: 'Play', onClick: playOpening });
+  el('p', { className: 'note', textContent: 'Everyone comes on one by one, God first. “By generation” lights each generation together; “one at a time” goes person by person.' }, drawer);
+  waveControls(LIGHTS.open);
+  slider('Start bright', () => LIGHTS.open.floor, (v) => (LIGHTS.open.floor = v), 0, 0.5, 0.01);
+  slider('Zoom from', () => LIGHTS.open.zoomFrom, (v) => (LIGHTS.open.zoomFrom = v), 0.4, 1.6, 0.01);
+  curveControl('Camera', () => LIGHTS.open.cameraCurve, (c) => (LIGHTS.open.cameraCurve = c));
+  checks([['God’s burst at the start', () => LIGHTS.open.godBurst, (v) => (LIGHTS.open.godBurst = v)]]);
+
+  heading('Dimming on select', { label: 'Play', onClick: () => fromWholeTree(() => run(target)) });
+  el('p', { className: 'note', textContent: 'Everyone off the line goes out, each at their own moment. Flicker makes them gutter like a flame; Flash is a last flare before it dies. Play starts from the whole tree lit and lands on the person picked above.' }, drawer);
+  waveControls(LIGHTS.dim);
+
+  heading('Tribe from its stone', { label: 'Play', onClick: () => fromWholeTree(() => lightTribe(tribePick, true)) });
+  el('p', { className: 'note', textContent: 'The tribe’s line from God and every member come on in order. Play starts from the tree dimmed, as when a stone opens it. Picking a tribe below starts from what is on screen, so the rest go out using Dimming on select above.' }, drawer);
+  choice(
+    'Tribe',
+    Object.entries(STONES).map(([t, st]) => [t, `${t} · ${st.stone}`] as [string, string]),
+    () => tribePick,
+    (v) => {
+      tribePick = v;
+      lightTribe(v);
+    },
+  );
+  waveControls(LIGHTS.tribe);
 
   heading('Timing');
   slider('Glide out', () => MOTION.outMs, (v) => (MOTION.outMs = v), 0, 2500, 25);
@@ -717,6 +937,7 @@ function fmt(v: unknown, indent: string): string {
 function readout(): string {
   return (
     `// src/lib/familyTree/motion.ts\nexport const MOTION: Motion = ${fmt(MOTION, '')};\n\n` +
+    `// src/lib/familyTree/motion.ts\nexport const LIGHTS: Lights = ${fmt(LIGHTS, '')};\n\n` +
     `// src/lib/familyTree/config.ts\nexport const LABEL_OUTLINE = { width: ${fmtNum(LABEL_OUTLINE.width)}, colour: '${LABEL_OUTLINE.colour}' };\n`
   );
 }
@@ -748,11 +969,13 @@ new ResizeObserver(() => measure()).observe(stage);
 loadFamilyTree()
   .then((data) => {
     model = layout(data);
+    allIds = [...model.nodes.keys(), ...model.rootById.keys(), CROWN_LIGHT];
     measure();
     view = fitView(model, W, H);
     atFitted = true;
     buildPicker(model);
     buildDrawer();
+    if (openOnLoad) playOpening();
     requestAnimationFrame(frame);
     document.fonts?.load('600 14px Milonga').catch(() => {});
   })

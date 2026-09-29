@@ -1,5 +1,6 @@
 /**
- * The Grand Entrance: what happens when someone is tapped on the tree.
+ * The Grand Entrance: what happens when someone is tapped on the tree. And
+ * the Lights (end of the file): people coming on and going out one by one.
  *
  * The camera pulls out to the whole tree, holds there with only God lit, then
  * climbs the line from God to the person while it lights, landing on them.
@@ -11,6 +12,7 @@
  * ships; its Copy values button prints a MOTION block to paste back here.
  */
 
+import { generationOf, isPlaced, type TreeModel, type TreeRec } from './layout';
 import { toScreen, toWorld, viewFor, type View } from './render';
 
 // ── Curves ───────────────────────────────────────────────────────────────
@@ -465,5 +467,250 @@ export class Entrance {
     const sx = (tip.x - o.x) * fit.k;
     const sy = (tip.y - o.y) * fit.k;
     return viewFor(tip.x, tip.y, k, sx + (anchor.x - sx) * s, sy + (anchor.y - sy) * s, W, H);
+  }
+}
+
+// ── Lights ───────────────────────────────────────────────────────────────
+// People lighting and dimming one by one rather than all at once: the tree
+// coming on when it opens, the rest burning out when someone is picked, and
+// a tribe coming on in order from its stone. A Wave moves every person from
+// the light they have now to the light they should end on, each starting at
+// their own moment across a spread. The renderer draws whatever light each
+// person has (RenderState.light). Tuned in the motion lab, like MOTION.
+
+/** Who goes first. */
+export type Order = 'generation' | 'sequence' | 'random' | 'outward' | 'inward';
+
+export const ORDER_NAMES: Record<Order, string> = {
+  generation: 'by generation',
+  sequence: 'one at a time',
+  random: 'random',
+  outward: 'outward from them',
+  inward: 'inward to them',
+};
+
+export interface WaveSpec {
+  /** First person starting to last person starting. */
+  spreadMs: number;
+  /** Each person's own fade. */
+  fadeMs: number;
+  order: Order;
+  /** How the starts are spaced across the spread: linear is even, an
+   *  ease-in holds back then rushes. */
+  orderCurve: Curve;
+  /** 0 keeps the order exact, 1 is fully scattered. */
+  jitter: number;
+  /** A burst of extra glow mid-fade. 0 is none. */
+  flash: number;
+  /** How hard a person flickers while their light changes. 0 is steady. */
+  flicker: number;
+  /** Flickers a second. */
+  flickerHz: number;
+}
+
+export interface OpenSpec extends WaveSpec {
+  /** How bright a person is before their turn. 0 is not there at all. */
+  floor: number;
+  /** The zoom the camera starts at, as a share of the whole-tree zoom; it
+   *  settles to 1 as the tree lights. 1 holds still. */
+  zoomFrom: number;
+  cameraCurve: Curve;
+  /** God's golden burst as the first light goes on. */
+  godBurst: boolean;
+}
+
+export interface Lights {
+  /** The tree coming on when it first opens. */
+  open: OpenSpec;
+  /** Everyone else going out when someone is picked. */
+  dim: WaveSpec;
+  /** A tribe coming on from its stone. The rest go out as dim says. */
+  tribe: WaveSpec;
+}
+
+export const LIGHTS: Lights = {
+  open: {
+    spreadMs: 1600,
+    fadeMs: 260,
+    order: 'generation',
+    orderCurve: 'linear',
+    jitter: 0.15,
+    flash: 0.6,
+    flicker: 0,
+    flickerHz: 12,
+    floor: 0.04,
+    zoomFrom: 0.92,
+    cameraCurve: 'sine',
+    godBurst: true,
+  },
+  dim: {
+    spreadMs: 900,
+    fadeMs: 450,
+    order: 'random',
+    orderCurve: 'linear',
+    jitter: 0,
+    flash: 0.25,
+    flicker: 0.45,
+    flickerHz: 14,
+  },
+  tribe: {
+    spreadMs: 700,
+    fadeMs: 220,
+    order: 'generation',
+    orderCurve: 'linear',
+    jitter: 0.1,
+    flash: 0.5,
+    flicker: 0,
+    flickerHz: 12,
+  },
+};
+
+/**
+ * Each id's place in the order, 0 first to 1 last. Generations count from
+ * God; outward and inward measure from the focus person. An id that is not
+ * a person (the crown lines) is placed as Jesus, where both lines end.
+ */
+export function rankBy(order: Order, ids: string[], model: TreeModel, focus: TreeRec | null): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!ids.length) return out;
+  const recOf = (id: string) => model.nodes.get(id) || model.rootById.get(id) || model.nodes.get(model.jesusId) || null;
+  const f = focus && isPlaced(focus) ? focus : { x: 0, y: 0 };
+  if (order === 'random') {
+    for (const id of ids) out.set(id, Math.random());
+    return out;
+  }
+  if (order === 'outward' || order === 'inward') {
+    const d = new Map<string, number>();
+    let max = 1;
+    for (const id of ids) {
+      const r = recOf(id);
+      const v = r && isPlaced(r) ? Math.hypot(r.x - f.x, r.y - f.y) : 0;
+      d.set(id, v);
+      max = Math.max(max, v);
+    }
+    for (const id of ids) {
+      const v = d.get(id)! / max;
+      out.set(id, order === 'outward' ? v : 1 - v);
+    }
+    return out;
+  }
+  const gen = new Map<string, number>();
+  let maxGen = 1;
+  for (const id of ids) {
+    const g = generationOf(model, recOf(id)?.id ?? id) ?? 0;
+    gen.set(id, g);
+    maxGen = Math.max(maxGen, g);
+  }
+  if (order === 'generation') {
+    for (const id of ids) out.set(id, gen.get(id)! / maxGen);
+    return out;
+  }
+  // One at a time: generation by generation, and left to right round the
+  // tree within each.
+  const angle = (id: string) => {
+    const r = recOf(id);
+    return r && isPlaced(r) ? Math.atan2(r.x, -r.y) : 0;
+  };
+  const sorted = [...ids].sort((a, b) => gen.get(a)! - gen.get(b)! || angle(a) - angle(b));
+  sorted.forEach((id, i) => out.set(id, sorted.length > 1 ? i / (sorted.length - 1) : 0));
+  return out;
+}
+
+interface WaveItem {
+  from: number;
+  to: number;
+  at: number;
+  spec: WaveSpec;
+  phase: number;
+}
+
+export interface WaveInit {
+  /** Everyone the renderer will ask about. */
+  ids: string[];
+  /** Each person's light now, and the light they end on (0 or 1). */
+  from: (id: string) => number;
+  to: (id: string) => number;
+  /** For people coming on, and for people going out. Null is instant. */
+  rise: WaveSpec | null;
+  fall: WaveSpec | null;
+  /** Each spec's order, over the people it moves. */
+  rank: (spec: WaveSpec, ids: string[]) => Map<string, number>;
+  now: number;
+}
+
+/** Every person moving from their light now to their end light. */
+export class Wave {
+  private readonly t0: number;
+  private readonly items = new Map<string, WaveItem>();
+  private readonly ends = new Map<string, number>();
+  private readonly endAt: number;
+  private readonly light = new Map<string, number>();
+
+  constructor(init: WaveInit) {
+    this.t0 = init.now;
+    const rising: string[] = [];
+    const falling: string[] = [];
+    for (const id of init.ids) {
+      const from = init.from(id);
+      const to = init.to(id);
+      this.ends.set(id, to);
+      if (Math.abs(from - to) < 0.01) continue;
+      const spec = to > from ? init.rise : init.fall;
+      if (!spec) continue;
+      (to > from ? rising : falling).push(id);
+      this.items.set(id, { from, to, at: 0, spec, phase: Math.random() * Math.PI * 2 });
+    }
+    let endAt = 0;
+    for (const [ids, spec] of [
+      [rising, init.rise],
+      [falling, init.fall],
+    ] as const) {
+      if (!spec || !ids.length) continue;
+      const rank = init.rank(spec, ids);
+      const j = Math.max(0, Math.min(1, spec.jitter));
+      for (const id of ids) {
+        const r = (rank.get(id) ?? 0) * (1 - j) + Math.random() * j;
+        const it = this.items.get(id)!;
+        it.at = spec.spreadMs * ease(spec.orderCurve, r);
+        endAt = Math.max(endAt, it.at + spec.fadeMs);
+      }
+    }
+    this.endAt = endAt;
+  }
+
+  done(now: number): boolean {
+    return now - this.t0 >= this.endAt;
+  }
+
+  /** Everyone's light at `now`. The same map each call, refilled. */
+  sample(now: number): Map<string, number> {
+    const el = now - this.t0;
+    for (const [id, end] of this.ends) {
+      const it = this.items.get(id);
+      if (!it) {
+        this.light.set(id, end);
+        continue;
+      }
+      const sp = it.spec;
+      const t = sp.fadeMs > 0 ? (el - it.at) / sp.fadeMs : el >= it.at ? 1 : 0;
+      if (t <= 0) {
+        this.light.set(id, it.from);
+        continue;
+      }
+      if (t >= 1) {
+        this.light.set(id, it.to);
+        continue;
+      }
+      const bump = Math.sin(Math.PI * t);
+      let v = it.from + (it.to - it.from) * ease('sine', t) + sp.flash * bump;
+      if (sp.flicker > 0) {
+        // Two sines at odd ratios read as an uneven gutter, not a strobe.
+        const a = (el / 1000) * sp.flickerHz * Math.PI * 2 + it.phase;
+        const n = (Math.sin(a) + Math.sin(a * 1.73 + it.phase * 2)) / 4 + 0.5;
+        v *= 1 - sp.flicker * n * bump;
+      }
+      this.light.set(id, Math.max(0, v));
+    }
+    return this.light;
   }
 }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Tree motion lab</title>
+<title>Tree motion lab v2.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Milonga&display=swap">
@@ -130,6 +130,8 @@
     padding: 8px;
     resize: vertical;
   }
+  .row select { grid-column: 2 / 4; width: 100%; }
+  .title { font-size: 13px; font-weight: 600; color: #e8dcc8; margin: 4px 0 0; letter-spacing: 0.02em; }
   .note { font-size: 12px; color: #6b6153; line-height: 1.45; margin: 4px 0; }
 </style>
 </head>
@@ -139,6 +141,7 @@
       <canvas id="tree"></canvas>
       <div class="bar">
         <button class="primary" id="replay">Replay</button>
+        <button id="open">Open tree</button>
         <button id="zoomed">Start zoomed in</button>
         <button id="whole">Whole tree</button>
         <select id="who" aria-label="Who to land on"></select>

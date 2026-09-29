@@ -52,7 +52,20 @@ export interface RenderState {
   pulsePhase: number;
   /** The one addition beyond the lab: name every dot, not just the bough heads. */
   allNames: boolean;
+  /**
+   * Each person's light while an animation drives it (motion.ts Wave): 0 is
+   * their off look, 1 their lit look, above 1 a flash of extra glow. Every
+   * person has an entry, plus CROWN_LIGHT for the Matthew and Luke lines.
+   * Null or absent draws the plain on/off from tracedPath and selectedTribe.
+   */
+  light?: Map<string, number> | null;
+  /** How bright a person at light 0 is, as an alpha. TREE.dimLevel is the
+   *  ordinary dimmed look; 0 is not there at all. Light mode only. */
+  lightFloor?: number;
 }
+
+/** The Matthew and Luke crown lines' key in RenderState.light. */
+export const CROWN_LIGHT = '#crown';
 
 /**
  * The tree's origin — the trunk top, i.e. Jacob — is always drawn at this
@@ -127,6 +140,48 @@ function isLit(tracedPath: Set<string> | null, selectedTribe: string | null, n: 
   if (tracedPath) return tracedPath.has(n.id);
   if (!selectedTribe) return true;
   return n.tribe === selectedTribe;
+}
+
+// ── Light ────────────────────────────────────────────────────────────────
+// Every element is drawn from one number, its light L: 0 off, 1 on. Without
+// an animation L is just on or off, and the formulas below give exactly the
+// alphas and colours the tree has always had. With one, L runs in between.
+
+/** A person's light: the animation's when one is running, else on/off. */
+function lightOf(s: RenderState, id: string, on: boolean): number {
+  return s.light ? (s.light.get(id) ?? 0) : on ? 1 : 0;
+}
+
+/** An alpha between `off` (a dimmed alpha, scaled down to the animation's
+ *  floor) and `on`. */
+function lerpAlpha(s: RenderState, off: number, on: number, L: number): number {
+  const lo = s.light ? off * ((s.lightFloor ?? TREE.dimLevel) / TREE.dimLevel) : off;
+  return lo + (on - lo) * Math.min(1, L);
+}
+
+/** Glow strength for a light: the lit glow, plus a flash above 1. */
+function glowOf(L: number, lit: boolean): number {
+  return (lit ? Math.min(1, L) : 0) + Math.max(0, L - 1) * 2;
+}
+
+const mixCache = new Map<string, string>();
+
+/** Hex colour a, t of the way to b. Exactly a at 0 and b at 1. */
+function mix(a: string, b: string, t: number): string {
+  if (t <= 0 || a === b) return a;
+  if (t >= 1) return b;
+  const q = Math.round(t * 32);
+  const key = a + b + q;
+  let out = mixCache.get(key);
+  if (!out) {
+    const pa = parseInt(a.slice(1), 16);
+    const pb = parseInt(b.slice(1), 16);
+    const f = q / 32;
+    const ch = (sh: number) => Math.round(((pa >> sh) & 255) + (((pb >> sh) & 255) - ((pa >> sh) & 255)) * f);
+    out = `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+    mixCache.set(key, out);
+  }
+  return out;
 }
 
 /**
@@ -284,11 +339,11 @@ function drawRoots(s: RenderState, dimming: boolean): void {
   for (const n of model.rootNodes) {
     if (onSpine.has(n.id) && n.father && onSpine.has(n.father)) continue;
     const col = ROOT_COLOURS[n.branch || 'Trunk'] || ROOT_COLOURS.Trunk;
-    const on = onOf(n);
-    ctx.globalAlpha = dimming ? (on ? 0.9 : TREE.dimLevel) : 0.85;
+    const L = lightOf(s, n.id, onOf(n));
+    ctx.globalAlpha = lerpAlpha(s, TREE.dimLevel, dimming ? 0.9 : 0.85, L);
     const parent = n.father ? model.rootById.get(n.father) : undefined;
     if (!parent || !isPlaced(parent)) continue;
-    ctx.strokeStyle = on && dimming ? col.lit : col.c;
+    ctx.strokeStyle = mix(col.c, dimming ? col.lit : col.c, L);
     // Roots thicken as they go down, the opposite of a bough tapering up.
     ctx.lineWidth = Math.max(0.25, TREE.thickness * 1.3 * (1 - Math.min(0.6, (n.depth ?? 0) / 30)));
     ctx.beginPath();
@@ -304,27 +359,29 @@ function drawRoots(s: RenderState, dimming: boolean): void {
   // Nodes.
   for (const n of model.rootNodes) {
     const col = ROOT_COLOURS[n.branch || 'Trunk'] || ROOT_COLOURS.Trunk;
-    const on = onOf(n);
-    ctx.globalAlpha = dimming && !on ? TREE.dimLevel : 1;
+    const L = lightOf(s, n.id, onOf(n));
+    ctx.globalAlpha = lerpAlpha(s, TREE.dimLevel, 1, L);
     // God is the base the whole tree stands on, so he is the largest thing
     // down here and the only gold one.
     const isGod = n.id === GOD_ID;
     let size = TREE.nodeSize * (isGod ? 2.4 : n.kids.length ? 1.05 : 0.75);
+    size *= 1 + Math.max(0, L - 1) * 0.5;
     const isPinned = pinnedId === n.id;
     // A slow pulse on radius and glow, so it is obvious which of 852 dots
     // the card belongs to. 0.22 is the swing either side of the resting size.
     if (isPinned) size *= 1 + pulsePhase * 0.22;
     const glowCol = litColourOf(model, n);
-    if (on && !dimming && TREE.glow > 0) {
+    const glow = glowOf(L, !dimming);
+    if (glow > 0 && TREE.glow > 0) {
       ctx.shadowColor = glowCol;
-      ctx.shadowBlur = (isPinned ? 9 + pulsePhase * 10 : 9) * TREE.glow;
+      ctx.shadowBlur = (isPinned ? 9 + pulsePhase * 10 : 9) * TREE.glow * glow;
     } else if (isPinned) {
       ctx.shadowColor = glowCol;
       ctx.shadowBlur = pulsePhase * 10 * TREE.glow;
     }
     ctx.beginPath();
     ctx.arc(n.x, n.y, size, 0, Math.PI * 2);
-    ctx.fillStyle = isGod ? GOLD : on && dimming ? col.lit : col.c;
+    ctx.fillStyle = isGod ? GOLD : mix(col.c, dimming ? col.lit : col.c, L);
     ctx.fill();
     ctx.shadowBlur = 0;
     // A wife is drawn in rose. Without it she is a bare first name floating
@@ -332,7 +389,7 @@ function drawRoots(s: RenderState, dimming: boolean): void {
     if (n.spouseOf) {
       ctx.beginPath();
       ctx.arc(n.x, n.y, size, 0, Math.PI * 2);
-      ctx.fillStyle = on && !dimming ? ROSE_LIT : ROSE;
+      ctx.fillStyle = mix(ROSE, dimming ? ROSE : ROSE_LIT, L);
       ctx.fill();
     }
 
@@ -351,7 +408,7 @@ function drawRoots(s: RenderState, dimming: boolean): void {
   // being filled in at all — so this one is unconditional, unlike the
   // canopy's bough labels below which the `allNames` toggle gates.
   for (const n of model.rootNodes) {
-    const on = onOf(n);
+    const L = lightOf(s, n.id, onOf(n));
     const isGod = n.id === GOD_ID;
     // Each label in its own bough's colour, so a name can be followed back
     // to the line it belongs to without tracing the branch by eye.
@@ -361,9 +418,9 @@ function drawRoots(s: RenderState, dimming: boolean): void {
       n.x,
       n.y + (isGod ? 26 : 13),
       isGod ? '600 16px Milonga, serif' : '10.5px Milonga, serif',
-      isGod ? GOLD : on ? lc.lit : lc.c,
-      dimming && !on ? TREE.dimLevel + 0.1 : isGod ? 1 : 0.82,
-      on || !dimming,
+      isGod ? GOLD : mix(lc.c, lc.lit, L),
+      lerpAlpha(s, TREE.dimLevel + 0.1, isGod ? 1 : 0.82, L),
+      L >= 0.5,
     );
   }
   ctx.restore();
@@ -382,7 +439,7 @@ function trunkSegment(ctx: CanvasRenderingContext2D, from: Placed, to: Placed): 
 function drawTrunk(s: RenderState, dimming: boolean): void {
   const { ctx, model, tracedPath, pinnedId, pulsePhase } = s;
   ctx.save();
-  ctx.globalAlpha = dimming ? TREE.dimLevel + 0.1 : 0.9;
+  ctx.globalAlpha = s.light ? lerpAlpha(s, TREE.dimLevel + 0.1, 0.9, 0) : dimming ? TREE.dimLevel + 0.1 : 0.9;
   ctx.strokeStyle = BRONZE;
   ctx.lineWidth = TREE.thickness * 3.4;
   ctx.lineCap = 'round';
@@ -395,9 +452,25 @@ function drawTrunk(s: RenderState, dimming: boolean): void {
     ctx.moveTo(run[run.length - 1].x, run[run.length - 1].y);
     for (let i = run.length - 2; i >= 0; i--) trunkSegment(ctx, run[i + 1], run[i]);
     ctx.stroke();
+    // While an animation runs, each stretch is lit by the person it climbs
+    // to, laid over the dim trunk with square ends so the joins don't double.
+    if (s.light) {
+      const lo = ctx.globalAlpha;
+      ctx.lineCap = 'butt';
+      for (let i = run.length - 2; i >= 0; i--) {
+        const want = lerpAlpha(s, TREE.dimLevel + 0.1, dimming ? 1 : 0.9, lightOf(s, run[i].id, false));
+        if (want <= lo + 0.005) continue;
+        ctx.globalAlpha = lo >= 1 ? 1 : 1 - (1 - want) / (1 - lo);
+        ctx.beginPath();
+        ctx.moveTo(run[i + 1].x, run[i + 1].y);
+        trunkSegment(ctx, run[i + 1], run[i]);
+        ctx.stroke();
+      }
+      ctx.lineCap = 'round';
+    }
     // The stretch a traced line runs along, again at full strength, so the
     // climb visibly runs up the trunk rather than jumping from God to Jacob.
-    if (dimming && tracedPath) {
+    else if (dimming && tracedPath) {
       ctx.globalAlpha = 1;
       ctx.beginPath();
       let open = false;
@@ -425,15 +498,16 @@ function drawTrunk(s: RenderState, dimming: boolean): void {
   }
   // Jacob, the trunk top. Full strength whenever the line being traced runs
   // through him, not left at the trunk's dim level with everything else.
-  const on = !dimming || !!tracedPath?.has(model.jacobId);
-  ctx.globalAlpha = on ? 1 : TREE.dimLevel + 0.1;
-  let size = TREE.nodeSize * 2.4;
+  const L = lightOf(s, model.jacobId, !dimming || !!tracedPath?.has(model.jacobId));
+  ctx.globalAlpha = lerpAlpha(s, TREE.dimLevel + 0.1, 1, L);
+  let size = TREE.nodeSize * 2.4 * (1 + Math.max(0, L - 1) * 0.5);
   const isPinned = pinnedId === model.jacobId;
   // The same pulse and glow a pinned root dot gets (drawRoots).
   if (isPinned) size *= 1 + pulsePhase * 0.22;
-  if (on && !dimming && TREE.glow > 0) {
+  const glow = glowOf(L, !dimming);
+  if (glow > 0 && TREE.glow > 0) {
     ctx.shadowColor = BRONZE;
-    ctx.shadowBlur = (isPinned ? 9 + pulsePhase * 10 : 9) * TREE.glow;
+    ctx.shadowBlur = (isPinned ? 9 + pulsePhase * 10 : 9) * TREE.glow * glow;
   } else if (isPinned) {
     ctx.shadowColor = BRONZE;
     ctx.shadowBlur = pulsePhase * 10 * TREE.glow;
@@ -443,27 +517,28 @@ function drawTrunk(s: RenderState, dimming: boolean): void {
   ctx.fillStyle = BRONZE;
   ctx.fill();
   ctx.shadowBlur = 0;
-  queueLabel('Jacob', 0, 22, '600 14px Milonga, serif', '#e8dcc8', on ? 1 : TREE.dimLevel + 0.1, on);
+  queueLabel('Jacob', 0, 22, '600 14px Milonga, serif', '#e8dcc8', lerpAlpha(s, TREE.dimLevel + 0.1, 1, L), L >= 0.5);
   ctx.restore();
 }
 
 function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean, dimming: boolean): void {
   const { ctx, model, tracedPath, pinnedId, pulsePhase, allNames, view, W, H } = s;
   const st = STONES[tribe] || { stone: '', c: LINEN, lit: LINEN_LIT };
-  const col = lit ? st.lit : st.c;
+  // A dim twig in a lit bough keeps the lit stone; one in a dim bough, the dull.
+  const offCol = lit ? st.lit : st.c;
+  // Whether each person is lit: a traced line decides, otherwise the bough.
+  const onOf = (n: TreeRec) => !dimming || (lit && (!tracedPath || tracedPath.has(n.id)));
   ctx.save();
-  ctx.globalAlpha = dimming && !lit ? TREE.dimLevel : 1;
 
   // Branches
-  ctx.strokeStyle = col;
   ctx.lineCap = 'round';
   for (const n of list) {
     if (!isPlaced(n)) continue;
     const parentRec = n.father ? model.nodes.get(n.father) : undefined;
     const from: { x: number; y: number } = parentRec && isPlaced(parentRec) ? parentRec : { x: 0, y: 0 };
-    if (tracedPath && dimming) {
-      ctx.globalAlpha = tracedPath.has(n.id) ? 1 : TREE.dimLevel;
-    }
+    const L = lightOf(s, n.id, onOf(n));
+    ctx.globalAlpha = lerpAlpha(s, TREE.dimLevel, 1, L);
+    ctx.strokeStyle = mix(offCol, st.lit, L);
     // Thinner as it climbs, so the silhouette tapers like a tree.
     ctx.lineWidth = Math.max(0.42, TREE.thickness * (1 - Math.min(0.75, (n.depth ?? 0) / 14)));
     ctx.beginPath();
@@ -480,9 +555,10 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
   // Nodes
   for (const n of list) {
     if (!isPlaced(n)) continue;
-    const on = !tracedPath || tracedPath.has(n.id);
-    ctx.globalAlpha = dimming && !lit ? TREE.dimLevel : on ? 1 : TREE.dimLevel;
+    const L = lightOf(s, n.id, onOf(n));
+    ctx.globalAlpha = lerpAlpha(s, TREE.dimLevel, 1, L);
     let size = TREE.nodeSize * ((n.depth ?? 0) === 0 ? 2.1 : n.kids.length ? 1.15 : 0.8);
+    size *= 1 + Math.max(0, L - 1) * 0.5;
     const isPinned = pinnedId === n.id;
     // A slow pulse on radius and glow, so it is obvious which of 852 dots
     // the card belongs to.
@@ -491,16 +567,17 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
     const isJesus = n.id === model.jesusId;
     const glowCol = litColourOf(model, n);
 
-    if (lit && on && TREE.glow > 0) {
+    const glow = glowOf(L, true);
+    if (glow > 0 && TREE.glow > 0) {
       ctx.shadowColor = glowCol;
-      ctx.shadowBlur = (isPinned ? 11 + pulsePhase * 12 : 11) * TREE.glow;
+      ctx.shadowBlur = (isPinned ? 11 + pulsePhase * 12 : 11) * TREE.glow * glow;
     } else if (isPinned) {
       ctx.shadowColor = glowCol;
       ctx.shadowBlur = pulsePhase * 12 * TREE.glow;
     }
     ctx.beginPath();
     ctx.arc(n.x, n.y, size, 0, Math.PI * 2);
-    ctx.fillStyle = isJesus ? GOLD : col;
+    ctx.fillStyle = isJesus ? GOLD : mix(offCol, st.lit, L);
     ctx.fill();
     ctx.shadowBlur = 0;
 
@@ -523,8 +600,9 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
 
   // The son of Jacob names the bough — unchanged from the lab, at every zoom.
   const head = list[0];
-  const labelLit = !dimming || lit;
   if (head && isPlaced(head)) {
+    const L = lightOf(s, head.id, !dimming || lit);
+    const labelLit = L >= 0.5;
     // The tribe name in its own stone's colour, so the label and the bough
     // it heads read as one thing. Dimmed boughs keep the duller stone rather
     // than a flat grey, which also keeps the twelve distinguishable while
@@ -534,8 +612,8 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
       head.x,
       head.y - 11,
       '600 13px Milonga, serif',
-      lit ? st.lit : st.c,
-      dimming && !lit ? TREE.dimLevel + 0.15 : 1,
+      mix(st.c, st.lit, L),
+      lerpAlpha(s, TREE.dimLevel + 0.15, 1, L),
       labelLit,
     );
     // Dinah has no STONES entry (she's a bough of one, not a tribe — see
@@ -543,8 +621,8 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
     // string here. Guarded explicitly rather than relying on fillText('')
     // drawing nothing, since that's true by accident of the fallback's
     // shape, not by anything that says so.
-    if (lit && st.stone) {
-      queueLabel(st.stone, head.x, head.y - 23, '9.5px -apple-system, sans-serif', st.lit, 0.75, labelLit);
+    if (L > 0 && st.stone) {
+      queueLabel(st.stone, head.x, head.y - 23, '9.5px -apple-system, sans-serif', st.lit, 0.75 * Math.min(1, L), labelLit);
     }
   }
 
@@ -552,16 +630,15 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
   // crown lines end on him.
   const jesus = model.jesusId ? list.find((n) => n.id === model.jesusId) : undefined;
   if (jesus && isPlaced(jesus)) {
-    const on = !tracedPath || tracedPath.has(jesus.id);
-    const jesusLit = !dimming || (lit && on);
+    const L = lightOf(s, jesus.id, onOf(jesus));
     queueLabel(
       treeLabel(jesus.label),
       jesus.x,
       jesus.y + 20,
       '600 16px Milonga, serif',
       GOLD,
-      jesusLit ? 1 : TREE.dimLevel + 0.1,
-      jesusLit,
+      lerpAlpha(s, TREE.dimLevel + 0.1, 1, L),
+      L >= 0.5,
     );
   }
 
@@ -583,16 +660,15 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
       const screenPx = 10.5 * view.k;
       if (screenPx < LABEL_MIN_PX) continue;
       const fade = Math.min(1, (screenPx - LABEL_MIN_PX) / (LABEL_FULL_PX - LABEL_MIN_PX));
-      const on = !tracedPath || tracedPath.has(n.id);
-      const base = dimming && !lit ? TREE.dimLevel : on ? 0.82 : TREE.dimLevel;
+      const L = lightOf(s, n.id, onOf(n));
       queueLabel(
         treeLabel(n.label),
         n.x,
         n.y + 13,
         '10.5px Milonga, serif',
-        lit ? st.lit : st.c,
-        base * fade,
-        !dimming || (lit && on),
+        mix(offCol, st.lit, L),
+        lerpAlpha(s, TREE.dimLevel, 0.82, L) * fade,
+        L >= 0.5,
       );
     }
   }
@@ -605,10 +681,11 @@ function drawCrown(s: RenderState, dimming: boolean): void {
     { pts: model.crownM, col: '#d9c7a0', name: 'Matthew' },
     { pts: model.crownL, col: '#9fb8c9', name: 'Luke' },
   ];
+  const L = lightOf(s, CROWN_LIGHT, !dimming);
   ctx.save();
   for (const l of lines) {
     if (l.pts.length < 2) continue;
-    ctx.globalAlpha = dimming ? TREE.dimLevel + 0.12 : 0.6;
+    ctx.globalAlpha = lerpAlpha(s, TREE.dimLevel + 0.12, 0.6, L);
     ctx.strokeStyle = l.col;
     ctx.lineWidth = TREE.thickness * 1.1;
     ctx.setLineDash([4, 5]);
@@ -625,12 +702,14 @@ function drawCrown(s: RenderState, dimming: boolean): void {
   const [m, l] = lines;
   const mIds = new Set(m.pts.map((p) => p.id));
   const lIds = new Set(l.pts.map((p) => p.id));
-  crownName(ctx, m.pts.filter((p) => !lIds.has(p.id)), m.col, m.name);
-  crownName(ctx, l.pts.filter((p) => !mIds.has(p.id)), l.col, l.name);
+  // The names stay at 0.9 dimmed or not; only an animation's floor fades them.
+  const nameAlpha = lerpAlpha(s, 0.9, 0.9, L);
+  crownName(ctx, m.pts.filter((p) => !lIds.has(p.id)), m.col, m.name, nameAlpha);
+  crownName(ctx, l.pts.filter((p) => !mIds.has(p.id)), l.col, l.name, nameAlpha);
   ctx.restore();
 }
 
-function crownName(ctx: CanvasRenderingContext2D, own: Placed[], col: string, name: string): void {
+function crownName(ctx: CanvasRenderingContext2D, own: Placed[], col: string, name: string, alpha: number): void {
   if (own.length < 2) return;
   const i = Math.max(0, own.length - 4);
   const a = own[i];
@@ -649,7 +728,7 @@ function crownName(ctx: CanvasRenderingContext2D, own: Placed[], col: string, na
   ctx.save();
   ctx.translate((a.x + b.x) / 2 + nx * 7, (a.y + b.y) / 2 + ny * 7);
   ctx.rotate(Math.atan2(dy, dx));
-  ctx.globalAlpha = 0.9;
+  ctx.globalAlpha = alpha;
   ctx.fillStyle = col;
   ctx.font = '10.5px -apple-system, sans-serif';
   ctx.textAlign = 'center';
