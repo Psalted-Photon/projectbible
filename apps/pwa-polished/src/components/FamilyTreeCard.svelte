@@ -70,10 +70,10 @@
       {#if fromGod && fromGod > 0}
         {#if pinned && chain.length}
           <button class="gens-toggle" class:open={gensOpen} on:click={() => (gensOpen = !gensOpen)}>
-            {fromGod} from God
+            {fromGod} Generations from God
           </button>
         {:else}
-          <span>{fromGod} from God</span>
+          <span>{fromGod} Generations from God</span>
         {/if}
       {/if}
       {#if toJesus && toJesus > 0}
@@ -85,7 +85,10 @@
   {#if gensOpen && chain.length}
     <div class="gens-list">
       {#each chain as rec (rec.id)}
-        <button class:god={rec.id === GOD_ID} on:click={() => traceTo(rec)}>{rec.label}</button>
+        {@const gen = generationOf(model, rec.id)}
+        <button class:god={rec.id === GOD_ID} on:click={() => traceTo(rec)}>
+          {rec.label}{#if gen && gen > 0}<span class="gen-n">{gen}</span>{/if}
+        </button>
       {/each}
     </div>
   {/if}
@@ -184,6 +187,12 @@
   .gens-list button:hover {
     background: #1c1916;
     color: #e0d4bf;
+  }
+  .gen-n {
+    margin-left: 6px;
+    color: #6b6153;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
   }
   .gens-list button.god {
     color: #cdbfa8;

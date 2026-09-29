@@ -572,8 +572,8 @@
           {/if}
         {/if}
         {#if showContents}
-          <button class="pop-btn" on:click={() => openTreeOn()} title="Family tree" aria-label="Open the family tree">
-            <Tree size={18} />
+          <button class="pop-btn tree-btn" on:click={() => openTreeOn()} title="Family tree" aria-label="Open the family tree">
+            <Tree size={21} />
           </button>
         {/if}
         {#if onClose}
@@ -892,6 +892,17 @@
   }
   .close-btn:hover {
     color: var(--text-color, #fff);
+  }
+  /* The way into the family tree: a soft green chip so it reads as a door. */
+  .pop-btn.tree-btn {
+    padding: 5px;
+    border-radius: 8px;
+    background: rgba(76, 175, 96, 0.18);
+    color: #7fd08f;
+  }
+  .pop-btn.tree-btn:hover {
+    background: rgba(76, 175, 96, 0.3);
+    color: #a6e3b2;
   }
 
   .person-body {
