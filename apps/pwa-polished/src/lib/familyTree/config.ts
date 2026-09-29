@@ -197,11 +197,11 @@ export const LABEL_FULL_PX = 8;
 /**
  * The thin dark edge round every name, so a name stays readable over a dot
  * or a branch of its own colour (Levi's long strips were the worst of it).
- * Width is in tree units, so it scales with the name. The colour is the
- * ground's own darkest shade: it reads as black without looking pasted on.
+ * Width is in tree units, so it scales with the name. The colour is a
+ * near-black close to the ground, so it doesn't look pasted on.
  * Tuned in tree-motion-lab.html; its Copy values prints this block.
  */
-export const LABEL_OUTLINE = { width: 2.5, colour: '#0a0908' };
+export const LABEL_OUTLINE = { width: 1.2, colour: '#0c0c0c' };
 
 // ── Label boxes, for the spread pass ──────────────────────────────────────
 // layout.ts nudges apart the names that would print on top of each other, so
