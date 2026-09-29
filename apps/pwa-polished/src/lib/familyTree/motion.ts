@@ -1,6 +1,6 @@
 /**
  * The Grand Entrance: what happens when someone is tapped on the tree. And
- * the Lights (end of the file): people coming on and going out one by one.
+ * the Lights (end of the file): people coming on one by one.
  *
  * The camera pulls out to the whole tree, holds there with only God lit, then
  * climbs the line from God to the person while it lights, landing on them.
@@ -471,9 +471,8 @@ export class Entrance {
 }
 
 // ── Lights ───────────────────────────────────────────────────────────────
-// People lighting and dimming one by one rather than all at once: the tree
-// coming on when it opens, the rest burning out when someone is picked, and
-// a tribe coming on in order from its stone. A Wave moves every person from
+// People lighting one by one rather than all at once: the tree coming on
+// when it opens, and a tribe coming on in order from its stone. A Wave moves every person from
 // the light they have now to the light they should end on, each starting at
 // their own moment across a spread. The renderer draws whatever light each
 // person has (RenderState.light). Tuned in the motion lab, like MOTION.
@@ -522,9 +521,7 @@ export interface OpenSpec extends WaveSpec {
 export interface Lights {
   /** The tree coming on when it first opens. */
   open: OpenSpec;
-  /** Everyone else going out when someone is picked. */
-  dim: WaveSpec;
-  /** A tribe coming on from its stone. The rest go out as dim says. */
+  /** A tribe coming on from its stone, over the rest of the tree dimmed. */
   tribe: WaveSpec;
 }
 
@@ -542,16 +539,6 @@ export const LIGHTS: Lights = {
     zoomFrom: 0.92,
     cameraCurve: 'sine',
     godBurst: true,
-  },
-  dim: {
-    spreadMs: 900,
-    fadeMs: 450,
-    order: 'random',
-    orderCurve: 'linear',
-    jitter: 0,
-    flash: 0.25,
-    flicker: 0.45,
-    flickerHz: 14,
   },
   tribe: {
     spreadMs: 700,

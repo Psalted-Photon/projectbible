@@ -1,7 +1,7 @@
 /**
  * Tree motion lab v2.0 — tunes the Grand Entrance, the name outline, and the
- * Lights: the tree coming on as it opens, the rest going out when someone is
- * picked, and a tribe coming on from its stone.
+ * Lights: the tree coming on as it opens, and a tribe coming on in order
+ * from its stone.
  *
  * Runs the real tree: loadFamilyTree + layout for the data, render.ts's draw
  * for the frame, and motion.ts for the sequence, the bursts and the light
@@ -85,7 +85,7 @@ let glide: {
 let target: TreeRec | null = null;
 const picks = new Map<string, TreeRec>();
 
-// Lights: a wave of people coming on or going out, one by one.
+// Lights: a wave of people coming on, one by one.
 let lightsOn = true;
 let openOnLoad = true;
 let wave: Wave | null = null;
@@ -124,7 +124,7 @@ function applyValues(
   }
   if (outline) Object.assign(LABEL_OUTLINE, outline);
   if (lights) {
-    for (const k of ['open', 'dim', 'tribe'] as const) {
+    for (const k of ['open', 'tribe'] as const) {
       if (lights[k]) Object.assign(LIGHTS[k], lights[k]);
     }
   }
@@ -201,13 +201,6 @@ function onNow(id: string): number {
   return model?.nodes.get(id)?.tribe === selectedTribe ? 1 : 0;
 }
 
-/** Everyone's light on screen right now, before the state changes. */
-function snapshot(): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const id of allIds) m.set(id, Math.min(1, light ? (light.get(id) ?? 0) : onNow(id)));
-  return m;
-}
-
 /** From `prev` to whatever the state now says, one person at a time. */
 function startWave(prev: Map<string, number>, rise: WaveSpec | null, fall: WaveSpec | null, focus: TreeRec | null, floor: number) {
   if (!model) return;
@@ -259,21 +252,19 @@ function playOpening() {
   if (o.godBurst) fireAt(god, MOTION.godBurst);
 }
 
-/** A tribe from its stone: its line from God and every member come on,
- *  in order, and everyone else goes out. `fromDim` starts from the whole tree
- *  dimmed, as when a stone opens the tree; otherwise from what is on screen. */
-function lightTribe(tribe: string, fromDim = false) {
+/** A tribe from its stone: the whole tree goes dim, then its line from God
+ *  and every member come on, in order. */
+function lightTribe(tribe: string) {
   if (!model) return;
   const list = model.byTribe.get(tribe);
   if (!list?.length) return;
-  const prev = fromDim ? new Map<string, number>() : snapshot();
   const head = list[0];
   seq = null;
   openCam = null;
   tracedPath = new Set([...ancestorChain(model, head).map((r) => r.id), ...list.map((r) => r.id)]);
   selectedTribe = tribe;
   pinned = null;
-  if (lightsOn) startWave(prev, LIGHTS.tribe, LIGHTS.dim, head, TREE.dimLevel);
+  if (lightsOn) startWave(new Map(), LIGHTS.tribe, null, head, TREE.dimLevel);
   else stopLights();
   if (!atFitted) glideToWhole();
 }
@@ -282,25 +273,19 @@ function lightTribe(tribe: string, fromDim = false) {
 
 function run(n: TreeRec | null) {
   if (!model || !n) return;
-  const prev = lightsOn ? snapshot() : null;
   const chain = ancestorChain(model, n);
   const line = chain.map((r) => r.id).reverse();
   const now = performance.now();
   glide = null;
   seq = null;
-  openCam = null;
+  // Everyone else goes dim at once; the climb lights the line.
+  stopLights();
   selectedTribe = n.tribe || null;
   pinned = n;
   pulseStart = now;
-  const lights = () => {
-    // Coming on is left to the climb (or instant without it); the rest burn out.
-    if (prev) startWave(prev, null, LIGHTS.dim, n, TREE.dimLevel);
-    else stopLights();
-  };
 
   if (!entranceOn || line.length < 2) {
     tracedPath = new Set(line);
-    lights();
     if (isPlaced(n)) {
       glideTo({ x: n.x, y: n.y }, MOTION.endZoom, anchor());
       const colour = litColourOf(model, n);
@@ -333,7 +318,6 @@ function run(n: TreeRec | null) {
   atFitted = false;
   seq = { entrance, line };
   tracedPath = new Set(line.slice(0, 1));
-  lights();
 }
 
 function releaseCamera() {
@@ -407,8 +391,6 @@ function frame(now: number) {
       light = null;
     } else {
       light = wave.sample(now);
-      // The climb lights its line as it goes, over whatever the wave says.
-      if (tracedPath) for (const id of tracedPath) if ((light.get(id) ?? 0) < 1) light.set(id, 1);
     }
   }
 
@@ -853,19 +835,15 @@ function buildDrawer() {
   curveControl('Camera', () => LIGHTS.open.cameraCurve, (c) => (LIGHTS.open.cameraCurve = c));
   checks([['God’s burst at the start', () => LIGHTS.open.godBurst, (v) => (LIGHTS.open.godBurst = v)]]);
 
-  heading('Dimming on select', { label: 'Play', onClick: () => fromWholeTree(() => run(target)) });
-  el('p', { className: 'note', textContent: 'Everyone off the line goes out, each at their own moment. Flicker makes them gutter like a flame; Flash is a last flare before it dies. Play starts from the whole tree lit and lands on the person picked above.' }, drawer);
-  waveControls(LIGHTS.dim);
-
-  heading('Tribe from its stone', { label: 'Play', onClick: () => fromWholeTree(() => lightTribe(tribePick, true)) });
-  el('p', { className: 'note', textContent: 'The tribe’s line from God and every member come on in order. Play starts from the tree dimmed, as when a stone opens it. Picking a tribe below starts from what is on screen, so the rest go out using Dimming on select above.' }, drawer);
+  heading('Tribe from its stone', { label: 'Play', onClick: () => fromWholeTree(() => lightTribe(tribePick)) });
+  el('p', { className: 'note', textContent: 'The whole tree goes dim, then the tribe’s line from God and every member come on in order. Picking a tribe below plays it too.' }, drawer);
   choice(
     'Tribe',
     Object.entries(STONES).map(([t, st]) => [t, `${t} · ${st.stone}`] as [string, string]),
     () => tribePick,
     (v) => {
       tribePick = v;
-      lightTribe(v);
+      fromWholeTree(() => lightTribe(v));
     },
   );
   waveControls(LIGHTS.tribe);
