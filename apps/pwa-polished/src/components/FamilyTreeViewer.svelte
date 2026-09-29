@@ -4,9 +4,20 @@
   import { familyTreeStore } from '../stores/familyTreeStore';
   import { loadFamilyTree } from '../lib/familyTree/data';
   import { layout, ancestorChain, isPlaced, type TreeModel, type TreeRec } from '../lib/familyTree/layout';
-  import { draw, fitView, litColourOf, pick, toWorld, viewFor, type View } from '../lib/familyTree/render';
-  import { MAX_ZOOM, MIN_ZOOM_OF_FIT, FOCUS_ZOOM, GOD_ID } from '../lib/familyTree/config';
-  import { Entrance, MOTION, drawBursts, makeBurst, type Burst } from '../lib/familyTree/motion';
+  import { CROWN_LIGHT, draw, fitView, litColourOf, pick, toWorld, viewFor, type View } from '../lib/familyTree/render';
+  import { MAX_ZOOM, MIN_ZOOM_OF_FIT, FOCUS_ZOOM, GOD_ID, TREE } from '../lib/familyTree/config';
+  import {
+    Entrance,
+    LIGHTS,
+    MOTION,
+    Wave,
+    drawBursts,
+    ease as easeCurve,
+    makeBurst,
+    rankBy,
+    type Burst,
+    type WaveSpec,
+  } from '../lib/familyTree/motion';
   import FamilyTreeCard from './FamilyTreeCard.svelte';
   import FamilyTreeBioSheet from './FamilyTreeBioSheet.svelte';
 
@@ -140,6 +151,8 @@
       pinnedId: pinned?.id ?? null,
       pulsePhase,
       allNames,
+      light,
+      lightFloor,
     });
     // Bursts go over the finished frame. Drawn here rather than only in the
     // frame loop, so a pan mid-burst doesn't blink it out for a frame.
@@ -198,19 +211,74 @@
     redraw();
   }
 
-  // ── Tracing and hover ────────────────────────────────────────────────────
-  /** How long a tribe's line takes to light from God, lit from a bio's
-   *  stone. That path has no Grand Entrance and keeps its old pace. */
-  const TRIBE_REVEAL_MS = 1850;
+  // ── Lights ───────────────────────────────────────────────────────────────
+  // People coming on one by one (motion.ts LIGHTS, tuned in the motion lab):
+  // the whole tree as it opens, and a tribe from its stone over the rest of
+  // the tree dimmed. Part of the Grand Entrance, so its pill and the device's
+  // reduced-motion setting turn these off too.
+  let wave: Wave | null = null;
+  /** Each person's light while a wave runs; null draws plain on/off. */
+  let light: Map<string, number> | null = null;
+  let lightFloor = TREE.dimLevel;
+  /** The camera settling from LIGHTS.open.zoomFrom to the whole tree. */
+  let openCam: { t0: number; ms: number } | null = null;
 
+  /** A person's light in the plain on/off drawing of the current state. */
+  function onNow(id: string): number {
+    if (!selectedTribe && !tracedPath) return 1;
+    if (id === CROWN_LIGHT) return 0;
+    if (tracedPath) return tracedPath.has(id) ? 1 : 0;
+    return model?.nodes.get(id)?.tribe === selectedTribe ? 1 : 0;
+  }
+
+  /** Everyone from dark to whatever the state now says, one at a time. */
+  function startWave(spec: WaveSpec, focus: TreeRec | null, floor: number) {
+    if (!model) return;
+    const m = model;
+    wave = new Wave({
+      ids: [...m.nodes.keys(), ...m.rootById.keys(), CROWN_LIGHT],
+      from: () => 0,
+      to: onNow,
+      rise: spec,
+      fall: null,
+      rank: (s, ids) => rankBy(s.order, ids, m, focus),
+      now: performance.now(),
+    });
+    lightFloor = floor;
+    light = wave.sample(performance.now());
+    ensureLoopRunning();
+  }
+
+  function stopLights() {
+    wave = null;
+    light = null;
+    openCam = null;
+  }
+
+  /** The tree coming on as it opens, from God outward. */
+  function playOpening() {
+    if (!model || !entranceActive) return;
+    const o = LIGHTS.open;
+    const god = model.rootById.get(GOD_ID) ?? null;
+    startWave(o, god, o.floor);
+    const ms = o.spreadMs + o.fadeMs;
+    if (o.zoomFrom !== 1 && ms > 0) {
+      openCam = { t0: performance.now(), ms };
+      markViewMoved();
+    }
+    if (o.godBurst && god && isPlaced(god)) {
+      bursts.push(makeBurst(god.x, god.y, litColourOf(model, god), MOTION.godBurst, performance.now()));
+    }
+  }
+
+  // ── Tracing and hover ────────────────────────────────────────────────────
   /**
    * The line lighting up, God first, as a phased sequence (motion.ts). A tap
    * runs the Grand Entrance: out to the whole tree, a hold, then the climb
-   * with the camera following. `extra` (a tribe's other members) lights with
-   * the person at the end. The frame loop grows tracedPath from this and
+   * with the camera following. The frame loop grows tracedPath from this and
    * drops it once done.
    */
-  let seq: { entrance: Entrance; line: string[]; extra: string[] } | null = null;
+  let seq: { entrance: Entrance; line: string[] } | null = null;
   /** Bursts still going off. Drawn over each frame by redraw(). */
   let bursts: Burst[] = [];
 
@@ -219,38 +287,6 @@
       .filter(isPlaced)
       .reverse()
       .map((r) => ({ x: r.x, y: r.y }));
-  }
-
-  /** Light `chain` (person back to God, as ancestorChain gives it), plus
-   *  `extra`, growing up from God with no camera move — a tribe lit from its
-   *  stone, which glides separately (glideToLine). */
-  function revealTribeLine(chain: TreeRec[], extra: string[]) {
-    const line = chain.map((r) => r.id).reverse();
-    if (REDUCED_MOTION || line.length < 2 || !model) {
-      seq = null;
-      tracedPath = new Set([...line, ...extra]);
-      return;
-    }
-    const entrance = new Entrance({
-      line,
-      pts: linePoints(chain),
-      from: view,
-      fit: view,
-      W,
-      H,
-      anchor: null,
-      kEnd: view.k,
-      skipOut: true,
-      startColour: null,
-      landColour: null,
-      holdMs: 0,
-      climbMs: TRIBE_REVEAL_MS,
-      curve: 'cubic',
-      now: performance.now(),
-    });
-    seq = { entrance, line, extra };
-    tracedPath = new Set(line.slice(0, 1));
-    ensureLoopRunning();
   }
 
   /**
@@ -266,6 +302,8 @@
     const now = performance.now();
     cancelGlide();
     seq = null;
+    // Everyone else goes dim at once; the climb lights the line.
+    stopLights();
 
     if (!entranceActive || line.length < 2) {
       tracedPath = new Set(line);
@@ -303,7 +341,7 @@
       now,
     });
     if (landable) markViewMoved();
-    seq = { entrance, line, extra: [] };
+    seq = { entrance, line };
     tracedPath = new Set(line.slice(0, 1));
     ensureLoopRunning();
   }
@@ -333,11 +371,12 @@
     if (!list?.length) return false;
     // byTribe is sorted by depth, so the son of Jacob who heads it is first.
     const line = focus && isPlaced(focus) ? focus : list[0];
-    revealTribeLine(
-      ancestorChain(model, line),
-      list.map((r) => r.id),
-    );
+    seq = null;
+    stopLights();
+    tracedPath = new Set([...ancestorChain(model, line).map((r) => r.id), ...list.map((r) => r.id)]);
     selectedTribe = tribe;
+    // The whole tree goes dim, then the tribe comes on in order.
+    if (entranceActive) startWave(LIGHTS.tribe, line, TREE.dimLevel);
     pinned = line === focus ? focus : null;
     hovered = null;
     tribeLit = tribe;
@@ -396,6 +435,7 @@
 
   function clearSelection() {
     seq = null;
+    stopLights();
     tracedPath = null;
     selectedTribe = null;
     pinned = null;
@@ -439,15 +479,39 @@
     }
 
     if (seq) {
-      const { entrance, line, extra } = seq;
+      const { entrance, line } = seq;
       const f = entrance.step(now);
       if (f.view) view = f.view;
       if (f.bursts.length) bursts.push(...f.bursts);
       if (f.done) {
-        tracedPath = new Set([...line, ...extra]);
+        tracedPath = new Set(line);
         seq = null;
       } else {
         if (tracedPath?.size !== f.lit) tracedPath = new Set(line.slice(0, f.lit));
+        needsAnother = true;
+      }
+    }
+
+    if (wave) {
+      if (wave.done(now)) {
+        wave = null;
+        light = null;
+      } else {
+        light = wave.sample(now);
+        needsAnother = true;
+      }
+    }
+
+    if (openCam && model) {
+      const t = Math.min(1, (now - openCam.t0) / openCam.ms);
+      const fit = fitView(model, W, H);
+      const c = toWorld(W / 2, H / 2, fit, W, H);
+      const zf = LIGHTS.open.zoomFrom;
+      view = viewFor(c.x, c.y, fit.k * (zf + (1 - zf) * easeCurve(LIGHTS.open.cameraCurve, t)), W / 2, H / 2, W, H);
+      if (t >= 1) {
+        openCam = null;
+        markViewFitted(fit);
+      } else {
         needsAnother = true;
       }
     }
@@ -489,6 +553,7 @@
    *  itself keeps lighting; only the camera lets go. */
   function cancelGlide() {
     glide = null;
+    openCam = null;
     seq?.entrance.release();
   }
 
@@ -502,6 +567,7 @@
     markViewMoved();
     // A glide takes the camera from any sequence still following the line.
     seq?.entrance.release();
+    openCam = null;
     if (REDUCED_MOTION) {
       view = viewFor(targetWorld.x, targetWorld.y, targetK, screen.x, screen.y, W, H);
       redraw();
@@ -853,6 +919,8 @@
         // the user sees where the whole tree is before arriving at them.
         traceFrom(target);
         startPulse();
+      } else {
+        playOpening();
       }
 
       document.fonts
