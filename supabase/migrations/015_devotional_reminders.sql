@@ -7,7 +7,8 @@
 -- Same reason as the wake alarm (007): a web app cannot wake a phone, so the
 -- scheduled sender (016 + the devotional-reminder-send function) reads these
 -- rows every minute and sends a push when a morning or evening time arrives.
--- Safe to run more than once.
+-- Safe to run more than once. Written without any $ sign on purpose: pasted
+-- from a phone, dollar signs can be mangled into a syntax error.
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.devotional_reminders (
@@ -17,10 +18,10 @@ CREATE TABLE IF NOT EXISTS public.devotional_reminders (
   -- wake alarm, so they round-trip into <input type="time"> exactly.
   morning_enabled BOOLEAN NOT NULL DEFAULT false,
   morning_time TEXT NOT NULL DEFAULT '07:00'
-    CHECK (morning_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
+    CHECK (length(morning_time) = 5 AND morning_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]'),
   evening_enabled BOOLEAN NOT NULL DEFAULT false,
   evening_time TEXT NOT NULL DEFAULT '20:00'
-    CHECK (evening_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
+    CHECK (length(evening_time) = 5 AND evening_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]'),
 
   -- IANA name, e.g. 'America/Chicago'.
   timezone TEXT NOT NULL DEFAULT 'UTC',

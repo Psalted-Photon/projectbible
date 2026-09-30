@@ -7,98 +7,52 @@
 -- BEFORE RUNNING: deploy the devotional-reminder-send Edge Function. It uses the
 -- same three VAPID secrets the wake alarm already has, so none are new.
 --
--- ONE EDIT REQUIRED: on the marked line below, paste your admin key between the
--- two quotes. Nothing else lives on that line — the word "Bearer" is written by
--- this file, further down, so a stray selection cannot swallow it.
+-- ONE EDIT REQUIRED: replace PUT_THE_KEY_HERE (on its own line below) with the
+-- **sb_secret_...** key from Settings > API Keys — the same key the wake alarm's
+-- job uses, not the legacy service_role JWT. Leave the quotes around it. Put
+-- PUT_THE_KEY_HERE back before committing this file.
 --
--- WHICH KEY: Settings > API Keys shows two systems at once. You want the
--- **sb_secret_...** key from the *new* keys screen, not the legacy service_role
--- JWT next to it. Supabase injects one of the two into the function as
--- SUPABASE_SERVICE_ROLE_KEY and the sender compares against it character by
--- character; on this project that is the new-format key. The check at the bottom
--- of this file will tell you if you grabbed the wrong one.
---
--- Note on where that key ends up: it is stored as plain text inside the
--- cron.job table. Only the database owner can read that table, which is the
--- normal Supabase pattern. If you ever rotate the key, re-run this file.
+-- Unlike 009 this has no $ signs at all (no DO block, no dollar quoting): pasted
+-- from a phone, dollar signs can be mangled into a syntax error.
 -- =============================================================================
 
--- pg_cron runs the schedule; pg_net lets a SQL statement make an HTTP call.
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
 
-DO $do$
-DECLARE
-  -- ─────────────────────────── PASTE HERE ───────────────────────────
-  admin_key text := 'PUT_THE_KEY_HERE';
-  -- ──────────────────────────────────────────────────────────────────
-  project_url text := 'https://tzfavctrqaqcatmjdfxk.supabase.co';
-BEGIN
-  IF admin_key = 'PUT_THE_KEY_HERE' OR admin_key = '' THEN
-    RAISE EXCEPTION 'No key was pasted — nothing has been changed. See the notes at the top of this file.';
-  END IF;
+-- Replace any earlier copy of the job, so a reminder never arrives twice.
+SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'devotional-reminder-every-minute';
 
-  IF admin_key <> btrim(admin_key) OR admin_key ~ '\s' THEN
-    RAISE EXCEPTION 'The key contains a space or line break. Re-copy it with the dashboard''s copy button; nothing has been changed.';
-  END IF;
+-- Every minute. The function decides what is due in each user's own timezone,
+-- and last_morning_on / last_evening_on keep each reminder to once a day.
+SELECT cron.schedule(
+  'devotional-reminder-every-minute',
+  '* * * * *',
+  'SELECT net.http_post(url := ''https://tzfavctrqaqcatmjdfxk.supabase.co/functions/v1/devotional-reminder-send'', headers := jsonb_build_object(''Content-Type'', ''application/json'', ''Authorization'', ''Bearer '
+  || 'PUT_THE_KEY_HERE'
+  || '''), body := ''{}''::jsonb, timeout_milliseconds := 20000);'
+);
 
-  -- Re-running this file should replace the job, not add a second one that makes
-  -- every reminder arrive twice.
-  PERFORM cron.unschedule('devotional-reminder-every-minute')
-  WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'devotional-reminder-every-minute');
-
-  -- Every minute. The function itself decides what is due — it compares each
-  -- reminder's time against the wall clock in that user's own timezone, and
-  -- marks last_morning_on / last_evening_on so each can only send once a day.
-  PERFORM cron.schedule('devotional-reminder-every-minute', '* * * * *', format(
-    $job$
-    SELECT net.http_post(
-      url := %L,
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'Authorization', 'Bearer %s'
-      ),
-      body := '{}'::jsonb,
-      timeout_milliseconds := 20000
-    );
-    $job$, project_url || '/functions/v1/devotional-reminder-send', admin_key));
-END
-$do$;
-
--- Did the right key land? Reports only the shape of it — the key itself is never
--- printed. A legacy JWT is reported as such so you can tell the two apart.
-SELECT
-  CASE
-    WHEN k LIKE 'sb_secret_%' THEN 'Looks right — new-format secret key.'
-    WHEN k LIKE 'eyJ%'        THEN 'Probably WRONG — this is a legacy JWT. Most projects need the sb_secret_ key.'
-    ELSE                           'UNRECOGNISED key format.'
-  END AS "did it work?",
-  length(k) AS "key length"
-FROM (
-  SELECT substring(command from $re$'Bearer ([^']*)'$re$) AS k
-    FROM cron.job WHERE jobname = 'devotional-reminder-every-minute'
-) t;
+-- Did the right key land? Reports only its shape, never the key.
+SELECT CASE
+    WHEN command LIKE '%Bearer sb_secret_%'   THEN 'Looks right — new-format secret key.'
+    WHEN command LIKE '%Bearer eyJ%'          THEN 'Probably WRONG — this is a legacy JWT. Use the sb_secret_ key.'
+    WHEN command LIKE '%PUT_THE_KEY_HERE%'    THEN 'No key pasted — paste it and run this again.'
+    ELSE                                           'UNRECOGNISED key format.'
+  END AS "did it work?"
+FROM cron.job WHERE jobname = 'devotional-reminder-every-minute';
 
 -- =============================================================================
 -- Checking on it afterwards
 -- =============================================================================
--- Is the job registered?
---   SELECT jobid, jobname, schedule, active FROM cron.job;
---
--- Did the last few runs succeed? ('succeeded' here means the HTTP call was
--- made, not that a push was delivered.) Note job_run_details keys off jobid,
--- not jobname, and re-scheduling assigns a new jobid.
+-- Last few runs:
 --   SELECT d.start_time, d.status, d.return_message
 --   FROM cron.job_run_details d JOIN cron.job j USING (jobid)
 --   WHERE j.jobname = 'devotional-reminder-every-minute'
---   ORDER BY d.start_time DESC
---   LIMIT 10;
+--   ORDER BY d.start_time DESC LIMIT 10;
 --
--- What did the function actually reply? This is the decisive one.
---   SELECT created, status_code, content
---   FROM net._http_response
---   ORDER BY created DESC
---   LIMIT 10;
+-- What the function replied:
+--   SELECT created, status_code, content FROM net._http_response
+--   ORDER BY created DESC LIMIT 10;
 --
 -- To stop devotional reminders entirely:
 --   SELECT cron.unschedule('devotional-reminder-every-minute');
