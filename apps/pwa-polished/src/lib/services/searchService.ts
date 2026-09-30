@@ -8,6 +8,8 @@ import { syncedJournalStore } from '../../adapters/SyncedJournalStore';
 import { currentLockView } from '../journalLock/lockState';
 import { navigationStore } from '../../stores/navigationStore';
 import { cleanVersePreviewText } from '../verseRendering';
+import { parseRefString } from '../parseRefString';
+import { getAllReadings, listWorks, shortReadingLabel } from '../devotionals/devotionalsData';
 
 export type SearchCategoryKey =
   | 'bible'
@@ -18,10 +20,11 @@ export type SearchCategoryKey =
   | 'characters'
   | 'encyclopedia'
   | 'topical'
+  | 'devotionals'
   | 'commentaries';
 
 export interface SearchResult {
-  type: 'verse' | 'strongs' | 'note' | 'journal' | 'saved' | 'character' | 'encyclopedia' | 'topical' | 'commentary';
+  type: 'verse' | 'strongs' | 'note' | 'journal' | 'saved' | 'character' | 'encyclopedia' | 'topical' | 'devotional' | 'commentary';
   title: string;
   subtitle?: string;
   reference?: string;
@@ -136,7 +139,7 @@ export class UnifiedSearchService {
 
     // Every category is independent, so fetch them together rather than
     // serially — the slowest one sets the pace instead of their sum.
-    const [verses, strongs, notes, journal, saved, characters, encyclopedia, topical, commentaries] = await Promise.all([
+    const [verses, strongs, notes, journal, saved, characters, encyclopedia, topical, devotionals, commentaries] = await Promise.all([
       this.searchVerses(normalizedQuery, options.limit),
       this.searchStrongs(normalizedQuery),
       this.searchNotes(normalizedQuery),
@@ -145,6 +148,7 @@ export class UnifiedSearchService {
       this.searchCharacters(normalizedQuery),
       this.searchEncyclopedia(normalizedQuery, !!options.deep),
       this.searchTopical(normalizedQuery, !!options.deep),
+      this.searchDevotionals(normalizedQuery),
       options.deep ? this.searchCommentaries(normalizedQuery) : Promise.resolve([]),
     ]);
 
@@ -157,6 +161,7 @@ export class UnifiedSearchService {
       { key: 'characters', name: 'Biblical Characters', count: characters.length, results: characters },
       { key: 'encyclopedia', name: 'Encyclopedia (ISBE)', count: encyclopedia.length, results: encyclopedia },
       { key: 'topical', name: "Topical (Nave's)", count: topical.length, results: topical },
+      { key: 'devotionals', name: 'Devotionals', count: devotionals.length, results: devotionals },
       { key: 'commentaries', name: 'Commentaries', count: commentaries.length, results: commentaries },
     ];
 
@@ -658,6 +663,68 @@ export class UnifiedSearchService {
         }));
     } catch (error) {
       console.error('Error searching topical:', error);
+      return [];
+    }
+  }
+
+  // ── Devotionals ──────────────────────────────────────────────────────────
+
+  /**
+   * A reference ("John 3:16", "Psalm 23") finds the readings built on it — the
+   * Spurgeon headline, or any Daily Light fragment. Anything else is words:
+   * every word of the query has to appear in the reading. Grouped by work.
+   */
+  private async searchDevotionals(query: string): Promise<SearchResult[]> {
+    try {
+      const q = query.trim();
+      if (q.length < 3) return [];
+      const readings = await getAllReadings();
+      if (!readings.length) return [];
+      const works = new Map((await listWorks()).map((w) => [w.workId, w]));
+      const order = (id: string) => works.get(id)?.sortOrder ?? 99;
+
+      // A reference names a book, so only try one when the query has a digit after a word.
+      const ref = /[a-z]/i.test(q) && /\d/.test(q) ? parseRefString(q, '', 0) : null;
+      const refBook = ref?.book ? normalizeBookName(ref.book) : null;
+      const wantVerse = ref && /:\s*\d/.test(q) ? ref.verse : null;
+
+      const hits: { r: (typeof readings)[number]; sub: string }[] = [];
+      if (ref && refBook) {
+        for (const r of readings) {
+          const k = r.keyRefs.find((k) => {
+            if (normalizeBookName(k.book) !== refBook || k.chapter !== ref.chapter) return false;
+            if (wantVerse == null || k.verseStart == null) return true;
+            const vs = k.verses ?? [];
+            return vs.length ? vs.includes(wantVerse) : wantVerse >= k.verseStart && wantVerse <= (k.verseEnd ?? k.verseStart);
+          });
+          if (k) hits.push({ r, sub: `${k.label} · ${k.fragment ?? k.kjvText}` });
+        }
+      } else {
+        const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+        for (const r of readings) {
+          if (!words.every((w) => r.plainText.includes(w))) continue;
+          // plainText is lowercased for matching; the snippet comes from the text as written.
+          const shown = [...r.keyRefs.map((k) => k.fragment ?? k.kjvText), stripHtml(r.bodyHtml || '')].join(' ');
+          hits.push({ r, sub: snippet(shown, words[0], 140) });
+        }
+      }
+
+      return hits
+        .sort((a, b) => order(a.r.workId) - order(b.r.workId) || a.r.month - b.r.month || a.r.day - b.r.day || (a.r.slot === 'morning' ? -1 : 1))
+        .slice(0, CATEGORY_LIMIT)
+        .map(({ r, sub }) => {
+          const work = works.get(r.workId);
+          return {
+            type: 'devotional' as const,
+            title: `${work?.shortTitle ?? r.workId} — ${shortReadingLabel(r.month, r.day, r.slot)}`,
+            subtitle: sub,
+            group: work?.title ?? r.workId,
+            data: { workId: r.workId, month: r.month, day: r.day, slot: r.slot },
+            score: 0,
+          };
+        });
+    } catch (error) {
+      console.error('Error searching devotionals:', error);
       return [];
     }
   }

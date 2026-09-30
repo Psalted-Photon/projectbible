@@ -19,6 +19,7 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { navesModalStore } from "../stores/navesModalStore";
+  import { openDevotional } from "../stores/devotionalStore";
   import { windowStore } from "../lib/stores/windowStore";
   import HelpModal from "./HelpModal.svelte";
   import { Microscope } from 'phosphor-svelte';
@@ -174,6 +175,12 @@
         primaryName: result.data.primaryName,
       });
       closeModal();
+      return;
+    }
+
+    if (result.type === "devotional") {
+      closeModal();
+      openDevotional(result.data);
       return;
     }
 

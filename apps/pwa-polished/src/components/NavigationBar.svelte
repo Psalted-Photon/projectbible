@@ -24,6 +24,7 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { navesModalStore } from "../stores/navesModalStore";
+  import { openDevotional } from "../stores/devotionalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
   import { openWorkIndex } from "../lib/openWork";
   import { get } from "svelte/store";
@@ -892,6 +893,9 @@
         topicId: result.data.topicId,
         primaryName: result.data.primaryName,
       });
+    } else if (result.type === "devotional") {
+      // A devotional reading opens on the Reading Plan window's Devotionals tab.
+      openDevotional(result.data);
     } else if (result.type === "journal") {
       // Journal opens in a docked window, same as from the journal calendar.
       const edge = window.innerHeight > window.innerWidth ? "bottom" : "right";
