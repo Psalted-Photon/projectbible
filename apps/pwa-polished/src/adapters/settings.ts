@@ -63,6 +63,26 @@ export interface WakeAlarmSettings {
 }
 
 /**
+ * Devotionals — which devotional the Verse of the Day link opens, which of the
+ * day's readings to offer, and the reminder times. Reminders are mirrored to
+ * Supabase the same way the wake alarm is, because the server is what sends them.
+ */
+export interface DevotionalReminderSettings {
+  morningEnabled: boolean;
+  morningTime: string; // 'HH:MM', 24-hour, in the user's timezone
+  eveningEnabled: boolean;
+  eveningTime: string;
+}
+
+export interface DevotionalSettings {
+  /** The work the Verse of the Day link opens: 'spurgeon-me' | 'faiths-checkbook' | 'daily-light'. */
+  mainWork: string;
+  /** Morning only, evening only, or both (the one that fits the time of day). */
+  slotMode: 'both' | 'morning' | 'evening';
+  reminders: DevotionalReminderSettings;
+}
+
+/**
  * Custom theme — free choice of reader typeface, text colour and background.
  *
  * Only the Bible reader's text area is affected; app chrome, buttons, book
@@ -197,6 +217,7 @@ export interface UserSettings {
   tts?: TtsSettings; // Read Aloud (on-device TTS) prefs
   art?: ArtSettings; // Biblical-art gallery prefs (preview size)
   wakeAlarm?: WakeAlarmSettings; // Wake alarm push schedule (needs internet at the set time)
+  devotionals?: DevotionalSettings; // Devotionals tab: main work, morning/evening, reminder times (synced)
   allowRotation?: boolean; // Allow screen to rotate to landscape (default false = portrait locked)
   autoCheckUpdates?: boolean; // Automatically check for updates on app open (default true)
   // Pin the navigation bar so it stops hiding itself as you scroll down.
@@ -605,6 +626,35 @@ export function getWakeAlarmSettings(): WakeAlarmSettings {
 export function updateWakeAlarmSettings(updates: Partial<WakeAlarmSettings>): void {
   const current = getWakeAlarmSettings();
   updateSettings({ wakeAlarm: { ...current, ...updates } });
+}
+
+/** Devotional settings with defaults: Morning and Evening, both readings, reminders off. */
+export function getDevotionalSettings(): DevotionalSettings {
+  const s = getSettings().devotionals;
+  return {
+    mainWork: s?.mainWork ?? 'spurgeon-me',
+    slotMode: s?.slotMode ?? 'both',
+    reminders: {
+      morningEnabled: s?.reminders?.morningEnabled ?? false,
+      morningTime: s?.reminders?.morningTime ?? '07:00',
+      eveningEnabled: s?.reminders?.eveningEnabled ?? false,
+      eveningTime: s?.reminders?.eveningTime ?? '20:00',
+    },
+  };
+}
+
+/** Persist devotional settings (merges with what is there, reminders included). */
+export function updateDevotionalSettings(
+  updates: Partial<Omit<DevotionalSettings, 'reminders'>> & { reminders?: Partial<DevotionalReminderSettings> },
+): DevotionalSettings {
+  const current = getDevotionalSettings();
+  const next: DevotionalSettings = {
+    ...current,
+    ...updates,
+    reminders: { ...current.reminders, ...(updates.reminders ?? {}) },
+  };
+  updateSettings({ devotionals: next });
+  return next;
 }
 
 /**
