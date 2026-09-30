@@ -59,6 +59,8 @@
   export let shareRef: ShareRef;
   /** The link a QR code on the card opens. */
   export let qrUrl = '';
+  /** A small line under the reference, e.g. "Spurgeon · Morning and Evening · January 1". */
+  export let source = '';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -110,7 +112,7 @@
     drawing = true;
     file = null;
     try {
-      boxes = await renderCard(canvas, { passage, reference, translationLabel }, s, {
+      boxes = await renderCard(canvas, { passage, reference, translationLabel, source }, s, {
         image,
         emphasis,
         qrUrl,

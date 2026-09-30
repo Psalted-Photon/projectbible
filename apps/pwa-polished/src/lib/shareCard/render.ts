@@ -188,8 +188,11 @@ export async function renderCard(
   const refSize = 38 * k;
   const refGap = 44 * k;
   const refHeight = refSize * 1.3;
+  // A devotional's source line sits under the reference; without one nothing moves.
+  const sourceSize = 27 * k;
+  const sourceHeight = content.source ? sourceSize * 1.7 : 0;
   const areaTop = padTop;
-  const verseMaxHeight = areaBottom - areaTop - refGap - refHeight;
+  const verseMaxHeight = areaBottom - areaTop - refGap - refHeight - sourceHeight;
   const maxWidth = W - padX * 2;
 
   // ── Words ──
@@ -212,7 +215,7 @@ export async function renderCard(
       : fitText(ctx, words, { font: fontFor, maxWidth, maxHeight: verseMaxHeight, maxSize, minSize: 32 * k * face.scale, leading });
   lastFit = { key: fitKey, fit: fitted };
 
-  const blockHeight = fitted.lines.length * fitted.lineHeight + refGap + refHeight;
+  const blockHeight = fitted.lines.length * fitted.lineHeight + refGap + refHeight + sourceHeight;
   const slack = areaBottom - areaTop - blockHeight;
   const top =
     areaTop + (style.position === 'top' ? 0 : style.position === 'bottom' ? slack : slack / 2);
@@ -254,6 +257,11 @@ export async function renderCard(
   const refText = `\u2014 ${content.reference} (${content.translationLabel})`;
   const refY = top + fitted.lines.length * fitted.lineHeight + refGap + refHeight / 2;
   ctx.fillText(refText, centred ? W / 2 : padX, refY);
+  if (content.source) {
+    ctx.globalAlpha = 0.58;
+    ctx.font = `${sourceSize}px ${DEFAULT_STACK}`;
+    ctx.fillText(ellipsize(ctx, content.source, maxWidth), centred ? W / 2 : padX, refY + refHeight / 2 + sourceHeight / 2);
+  }
   ctx.globalAlpha = 1;
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;

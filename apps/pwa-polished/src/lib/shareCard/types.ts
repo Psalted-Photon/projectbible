@@ -58,6 +58,8 @@ export interface CardContent {
   reference: string;
   /** "NET" — always drawn; NET quotes must carry it. */
   translationLabel: string;
+  /** Drawn small under the reference when present, e.g. "Spurgeon · Morning and Evening · January 1". */
+  source?: string;
 }
 
 /** How a tapped word is drawn. Absent means plain; 'both' is bold in the accent colour. */

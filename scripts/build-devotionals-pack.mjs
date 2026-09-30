@@ -54,12 +54,13 @@ for (const f of [SME + '.zdt', DAILY + '.dat', CHECKBOOK, KJV]) {
   }
 }
 
-// OSIS book code -> canonical book name (matches build-isbe-pack.mjs / bibleData.ts).
+// OSIS book code -> the app's book name (bibleData.ts). Note "Psalm", singular,
+// which is how the app stores the book; ISBE's build says "Psalms".
 const OSIS_TO_BOOK = {
   Gen: 'Genesis', Exod: 'Exodus', Lev: 'Leviticus', Num: 'Numbers', Deut: 'Deuteronomy',
   Josh: 'Joshua', Judg: 'Judges', Ruth: 'Ruth', '1Sam': '1 Samuel', '2Sam': '2 Samuel',
   '1Kgs': '1 Kings', '2Kgs': '2 Kings', '1Chr': '1 Chronicles', '2Chr': '2 Chronicles',
-  Ezra: 'Ezra', Neh: 'Nehemiah', Esth: 'Esther', Job: 'Job', Ps: 'Psalms', Prov: 'Proverbs',
+  Ezra: 'Ezra', Neh: 'Nehemiah', Esth: 'Esther', Job: 'Job', Ps: 'Psalm', Prov: 'Proverbs',
   Eccl: 'Ecclesiastes', Song: 'Song of Solomon', Isa: 'Isaiah', Jer: 'Jeremiah',
   Lam: 'Lamentations', Ezek: 'Ezekiel', Dan: 'Daniel', Hos: 'Hosea', Joel: 'Joel',
   Amos: 'Amos', Obad: 'Obadiah', Jonah: 'Jonah', Mic: 'Micah', Nah: 'Nahum', Hab: 'Habakkuk',
@@ -322,7 +323,7 @@ function buildCheckbook() {
  * Daily Light (ThML) — fragments matched to their passages
  * ------------------------------------------------------------------------- */
 
-const norm = (n) => n.replace(/^III /, '3 ').replace(/^II /, '2 ').replace(/^I /, '1 ').replace('Revelation of John', 'Revelation');
+const norm = (n) => n.replace(/^III /, '3 ').replace(/^II /, '2 ').replace(/^I /, '1 ').replace('Revelation of John', 'Revelation').replace(/^Psalms$/, 'Psalm');
 const KJV_VERSES = new Map();
 for (const b of JSON.parse(readFileSync(KJV, 'utf8')).books) {
   for (const c of b.chapters) for (const v of c.verses) KJV_VERSES.set(`${norm(b.name)} ${c.chapter}:${v.verse}`, v.text);

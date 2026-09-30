@@ -26,10 +26,12 @@
   import { download } from '../lib/backup/saveFile';
   import harmonyData from '../data/robertson-harmony.json';
   import { BookOpenText } from 'phosphor-svelte';
+  import DevotionalsTab from './devotionals/DevotionalsTab.svelte';
+  import { devotionalTarget } from '../stores/devotionalStore';
   
   export let isOpen = false;
   
-  let currentTab: 'create' | 'active' | 'history' = 'create';
+  let currentTab: 'create' | 'active' | 'history' | 'devotionals' = 'create';
   let currentReadingPlan: ReadingPlan | null = null;
   let currentPlanId: string | null = null;
 
@@ -170,6 +172,8 @@
     const opened = open && !wasOpen;
     wasOpen = open;
     if (!opened) return;
+    // Signed out, Devotionals is the one tab that works, so it's where the window opens.
+    if (!isSignedIn) currentTab = 'devotionals';
     loadActivePlan();
     // A fresh Create Plan form on every visit — the component is never
     // destroyed, so nothing else clears the last plan's name and dates.
@@ -183,6 +187,9 @@
   // down, which will trigger loadProgressForPlan() again via the sync
   // subscriber once the pull completes. Its own statement, so a sign-in that
   // finishes while the modal is open still gets one, without the reset above.
+  // A reading asked for from elsewhere (Verse of the Day, a link, a reminder) opens on its tab.
+  $: if (isOpen && $devotionalTarget) currentTab = 'devotionals';
+
   $: if (isOpen && isSignedIn) {
     // Pull first, then re-push local plans: the pull refreshes which plans
     // the server considers active, so the re-upsert can't resurrect a plan
@@ -1360,7 +1367,6 @@
         <button class="close-btn" on:click={close}>&times;</button>
       </div>
       
-      {#if isSignedIn}
       <div class="tabs">
         <button 
           class="tab" 
@@ -1383,8 +1389,20 @@
         >
           Completed Archive
         </button>
+        <button
+          class="tab"
+          class:active={currentTab === 'devotionals'}
+          on:click={() => currentTab = 'devotionals'}
+        >
+          Devotionals
+        </button>
       </div>
-      
+
+      {#if currentTab === 'devotionals'}
+      <div class="tab-content">
+        <DevotionalsTab />
+      </div>
+      {:else if isSignedIn}
       <div class="tab-content">
         {#if currentTab === 'create'}
           <div class="create-plan-tab">
@@ -2090,6 +2108,21 @@
     padding: 20px;
     overflow-y: auto;
     flex: 1;
+  }
+
+  /* Four tabs have to fit a phone. */
+  @media (max-width: 560px) {
+    .tabs {
+      padding: 0 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tab {
+      flex: 1 0 auto;
+      padding: 12px 8px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
   }
   
   .form-group {

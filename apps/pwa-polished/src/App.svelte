@@ -31,8 +31,12 @@
   import { JOIN_PARAM, normalizeJoinCode } from "./lib/shared/joinCode";
   import { requestJoin } from "./stores/sharedJoinStore";
   import { journalLockVisibilityChanged } from "./lib/journalLock/lockState";
+  import { devotionalTargetFromParams, devotionalTargetFromUrl, DEVOTIONAL_PARAMS } from "./lib/devotionals/deepLink";
+  import { openDevotional, type DevotionalTarget } from "./stores/devotionalStore";
 
   let appReady = false;
+  /** A devotional reading from the launch URL, opened once the app is ready. */
+  let sharedDevotional: DevotionalTarget | null = null;
   let showReadingPlanModal = false;
 
   // ── Orientation lock ──────────────────────────────────────────────────────
@@ -90,7 +94,10 @@
       const params = new URLSearchParams(window.location.search);
       const refParam = params.get('ref');
       const joinParam = params.get(JOIN_PARAM);
-      if (!refParam && !joinParam) return;
+      // A devotional reading, shared or from a reminder. Opened once the app
+      // is ready; a recipient without the pack gets the install card first.
+      sharedDevotional = devotionalTargetFromParams(params);
+      if (!refParam && !joinParam && !sharedDevotional) return;
 
       /*
        * A join code is parked rather than acted on. There is nothing on screen
@@ -136,6 +143,7 @@
       rest.delete('ref');
       rest.delete('t');
       rest.delete(JOIN_PARAM);
+      for (const p of DEVOTIONAL_PARAMS) rest.delete(p);
       const restQuery = rest.toString();
       window.history.replaceState(
         {},
@@ -147,6 +155,11 @@
     const init = async () => {
       await openSharedLink();
       appReady = true;
+      if (sharedDevotional) {
+        const target = sharedDevotional;
+        sharedDevotional = null;
+        setTimeout(() => openDevotional(target), 0);
+      }
       console.log("✅ App ready (auto-update test build 2)");
 
       // Eruda stays on in production by choice -- it is how this app gets
@@ -294,6 +307,11 @@
 
     const handleSwMessage = (event: MessageEvent) => {
       if (event.data?.type === 'wake-alarm-opened') openWakeAlarmStart();
+      // A devotional reminder tapped while the app was already open.
+      if (event.data?.type === 'devotional-opened') {
+        const target = devotionalTargetFromUrl(String(event.data.url ?? ''));
+        if (target) openDevotional(target);
+      }
     };
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', handleSwMessage);

@@ -87,6 +87,8 @@ export type CrumbKind =
    * Septuagint, because that is the wording the card showed.
    */
   | 'otquote'
+  /** A reference tapped in a devotional reading; the crumb reopens the reading where you were. */
+  | 'devotional'
   | 'link';
 
 /**

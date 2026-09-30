@@ -32,6 +32,10 @@ export interface ShareTextOpts {
   translation: string;
   includeTranslation: boolean;
   includeLink: boolean;
+  /** Where the passage was met, under the reference: "Spurgeon · Morning and Evening · January 1, morning". */
+  source?: string;
+  /** Replaces the verse link, e.g. with one that opens a devotional reading. */
+  url?: string;
 }
 
 /** "Genesis 1:1", or "Genesis 1:1-3" when the selection crossed a boundary. */
@@ -64,6 +68,20 @@ export function buildShareUrl(ref: ShareRef, translation?: string): string {
 }
 
 /**
+ * A link that opens one devotional reading: `?devo=<workId>&d=MM-DD&s=<slot>`.
+ * Same origin-and-path rule as buildShareUrl. A recipient without the pack
+ * lands on the install card, then the reading.
+ */
+export function buildDevotionalUrl(workId: string, month: number, day: number, slot: string): string {
+  if (typeof window === 'undefined') return '';
+  const url = new URL(window.location.pathname, window.location.origin);
+  url.searchParams.set('devo', workId);
+  url.searchParams.set('d', `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+  url.searchParams.set('s', slot);
+  return url.toString();
+}
+
+/**
  * The share block: the passage in quotes, then who said it, then where to read
  * the rest. Blank lines between the three because the middle one is an
  * attribution, not a continuation — every chat app that collapses newlines
@@ -74,9 +92,10 @@ export function buildShareText(o: ShareTextOpts): string {
   const tag = o.includeTranslation ? ` (${translationLabel(o.translation)})` : '';
 
   const lines = [`"${passage}"`, '', `— ${formatShareRef(o.ref)}${tag}`];
+  if (o.source) lines.push(o.source);
 
   if (o.includeLink) {
-    const url = buildShareUrl(o.ref, o.translation);
+    const url = o.url || buildShareUrl(o.ref, o.translation);
     if (url) lines.push('', url);
   }
 

@@ -7,7 +7,10 @@
   import { get } from 'svelte/store';
   import verseOfDay from '../data/verse-of-the-day.json';
   import { renderVerseHtml } from '../lib/verseRendering';
-  import { Sun, ArrowRight } from 'phosphor-svelte';
+  import { Sun, ArrowRight, SunHorizon, MoonStars, CalendarBlank } from 'phosphor-svelte';
+  import { isDevotionalsInstalled, type DevotionalSlot } from '../lib/devotionals/devotionalsData';
+  import { currentSlotStore, todayMonthDay, ONE_A_DAY_WORKS } from '../lib/devotionals/slot';
+  import { devotionalSettings, openDevotional } from '../stores/devotionalStore';
 
   const textStore = new IndexedDBTextStore();
 
@@ -51,6 +54,27 @@
     }
     verseText = parts.join(' ');
     textLoading = false;
+  }
+
+  // ── Today's devotional ──────────────────────────────────────────────────
+  // Hidden until the pack is in. "Morning" before noon and "Evening" after, by
+  // the timezone setting, flipping while the card is open; a fixed Morning or
+  // Evening setting holds all day, and Faith's Checkbook is "Today's".
+  let devoInstalled = false;
+  $: if ($dailyGreetingOpen) isDevotionalsInstalled().then((v) => (devoInstalled = v));
+  $: devoWork = $devotionalSettings.mainWork;
+  let devoSlot: DevotionalSlot;
+  $: devoSlot = ONE_A_DAY_WORKS.has(devoWork)
+    ? 'day'
+    : $devotionalSettings.slotMode === 'both'
+      ? $currentSlotStore
+      : $devotionalSettings.slotMode;
+  $: devoLabel = devoSlot === 'day' ? "Today's Devotional" : devoSlot === 'morning' ? 'Morning Devotional' : 'Evening Devotional';
+
+  function openDevo() {
+    const { month, day } = todayMonthDay();
+    openDevotional({ workId: devoWork, month, day, slot: devoSlot });
+    close();
   }
 
   // Closing counts as reading it — marks today seen so it stays closed.
@@ -101,6 +125,16 @@
           <p class="dg-verse-text dg-unavailable">Install a Bible translation to read the text here.</p>
         {/if}
       </div>
+
+      {#if devoInstalled}
+        <button class="dg-devo" class:evening={devoSlot === 'evening'} on:click={openDevo}>
+          <span class="dg-devo-icon">
+            {#if devoSlot === 'morning'}<SunHorizon size={18} weight="bold" />{:else if devoSlot === 'evening'}<MoonStars size={18} weight="bold" />{:else}<CalendarBlank size={18} weight="bold" />{/if}
+          </span>
+          <span class="dg-devo-label">{devoLabel}</span>
+          <ArrowRight size={14} weight="bold" />
+        </button>
+      {/if}
 
       <!-- Actions -->
       <div class="dg-actions">
@@ -228,6 +262,40 @@
     color: rgba(255, 255, 255, 0.3);
     font-style: normal;
     font-size: 0.82rem;
+  }
+
+  /* ── Today's devotional ──────────────────────────────────── */
+  .dg-devo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 20px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .dg-devo:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .dg-devo-icon {
+    display: flex;
+    padding: 4px;
+    border-radius: 6px;
+    color: #431407;
+    background: radial-gradient(circle, #fde047 0%, #fbbf24 45%, #c2410c 100%);
+  }
+  .dg-devo.evening .dg-devo-icon {
+    color: #e0e7ff;
+    background: radial-gradient(circle, #6366f1 0%, #312e81 70%, #1e1b4b 100%);
+  }
+  .dg-devo-label {
+    flex: 1;
   }
 
   /* ── Actions ─────────────────────────────────────────────── */

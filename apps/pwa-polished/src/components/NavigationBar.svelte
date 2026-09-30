@@ -61,6 +61,7 @@
     Anchor,
     ArrowsOutSimple,
     Books,
+    BookBookmark,
     ClockCounterClockwise,
     NotePencil,
     CaretDown,
@@ -733,6 +734,8 @@
     timeline: Hourglass,
     art: PaintBrush,
     otquote: Quotes,
+    // A book with a ribbon. The praying hands are kept for the prayer section.
+    devotional: BookBookmark,
     link: Graph,
   };
 

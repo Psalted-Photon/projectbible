@@ -9,6 +9,10 @@
   /** The verse, or the phrase that was selected out of it. */
   export let passage = '';
   export let translation = '';
+  /** A line under the reference saying where this came from (a devotional), on the text and the card. */
+  export let source = '';
+  /** The link to send instead of the verse's own, e.g. one that opens a devotional reading. */
+  export let linkUrl = '';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -37,6 +41,8 @@
     translation,
     includeTranslation,
     includeLink,
+    source,
+    url: linkUrl,
   });
 
   // ── Copy ───────────────────────────────────────────────────────────────────
@@ -104,7 +110,8 @@
         reference={formatShareRef(reference)}
         translationLabel={translationLabel(translation)}
         shareRef={reference}
-        qrUrl={buildShareUrl(reference, translation)}
+        {source}
+        qrUrl={linkUrl || buildShareUrl(reference, translation)}
         on:close={handleClose}
       />
     {:else}
