@@ -2021,8 +2021,9 @@
     align-items: center;
     padding: 20px;
     border-bottom: 2px solid #3a3a3a;
+    flex-shrink: 0;
   }
-  
+
   .modal-header h2 {
     margin: 0;
     font-size: 24px;
@@ -2079,6 +2080,8 @@
     border-bottom: 2px solid #3a3a3a;
     padding: 0 20px;
     background: #0f0f0f;
+    /* A tall tab's content scrolls; it never squeezes the tabs. */
+    flex-shrink: 0;
   }
   
   .tab {
@@ -2108,6 +2111,7 @@
     padding: 20px;
     overflow-y: auto;
     flex: 1;
+    min-height: 0;
   }
 
   /* Four tabs have to fit a phone. */
