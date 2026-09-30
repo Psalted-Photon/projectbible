@@ -15,7 +15,7 @@ import { getDeviceOwner } from '../lib/sync/deviceOwner';
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 40; // Migration 40: chronological_events / chronological_eras (see Timeline)
+const DB_VERSION = 41; // Migration 41: devotional_works / devotional_readings (see Devotionals)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -183,7 +183,7 @@ export interface DBAtlasPlaceColumn {
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art' | 'atlas-map' | 'study';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art' | 'atlas-map' | 'study' | 'devotionals';
   translationId?: string;
   translationName?: string;
   language?: string;
@@ -1036,6 +1036,16 @@ export function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('chronological_eras')) {
         db.createObjectStore('chronological_eras', { keyPath: 'era_id' });
+      }
+
+      // The devotionals pack: three works and their readings. A reading's id is
+      // `workId:MM-DD:slot`, so a day's reading is one get, not a query.
+      if (!db.objectStoreNames.contains('devotional_works')) {
+        db.createObjectStore('devotional_works', { keyPath: 'workId' });
+      }
+      if (!db.objectStoreNames.contains('devotional_readings')) {
+        const devoReadings = db.createObjectStore('devotional_readings', { keyPath: 'id' });
+        devoReadings.createIndex('workId', 'workId', { unique: false });
       }
       
       // Word occurrences store

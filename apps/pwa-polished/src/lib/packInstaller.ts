@@ -146,6 +146,15 @@ export const PACK_CATALOG: CatalogPack[] = [
     url: `${PACK_BASE_URL}/art.sqlite`,
   },
   {
+    id: "devotionals",
+    name: "Devotionals",
+    description: "Morning and Evening, Faith's Checkbook, Daily Light",
+    info: "Three classic daily devotionals, a reading for every morning and evening of the year. Charles Spurgeon's Morning and Evening, a short meditation on one verse twice a day. Spurgeon's Faith's Checkbook, a promise of God for each day. And Bagster's Daily Light on the Daily Path, morning and evening readings made entirely of Scripture.\n\nRead them from Reading Plan → Devotionals, or from the link under the Verse of the Day. Every reference opens the reader. Public domain.",
+    size: "8.59 MB",
+    icon: "📖",
+    url: `${PACK_BASE_URL}/devotionals.sqlite`,
+  },
+  {
     id: "people-biblical-v1",
     name: "Biblical Characters",
     description: "Every named person: family, dates, verses",
@@ -164,6 +173,7 @@ export const PACK_CATALOG: CatalogPack[] = [
  */
 export const INSTALL_ALL_ORDER: string[] = [
   'people-biblical-v1',
+  'devotionals',
   'tsk-references',
   'study-tools',
   'translations',

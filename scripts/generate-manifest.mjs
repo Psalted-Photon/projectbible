@@ -106,6 +106,17 @@ const PACK_CONFIGS = {
       'A drawn world map that works offline, sixteen eras of the biblical world from the patriarchs to the later Roman empire, every place Scripture names with its verses, seventeen journeys from the Exodus to the voyage to Rome, and 955 photographs. Sources: Natural Earth (public domain); Barrington Atlas / AWMC and OpenStreetMap (ODbL); Digital Atlas of the Roman Empire (CC BY-SA 3.0); OpenBible.info and GeoNames (CC BY 4.0); journey routes from United Bible Societies (Project MARBLE), drawn by Dr. Leen Ritmeyer (CC BY-SA 4.0)',
     dependencies: []
   },
+  // Type 'study' for the same reason as the Historical Map above: an unknown type
+  // takes the whole manifest down on older builds. The pack's own metadata says
+  // 'devotionals', and that is what routes the import.
+  'devotionals.sqlite': {
+    id: 'devotionals',
+    type: 'study',
+    name: 'Devotionals',
+    description:
+      "Three classic daily devotionals: C. H. Spurgeon's Morning and Evening, Spurgeon's Faith's Checkbook, and Jonathan Bagster's Daily Light on the Daily Path. Public Domain (CrossWire SWORD modules; CCEL)",
+    dependencies: []
+  },
   'atlas-places.sqlite': {
     id: 'atlas-map-places',
     type: 'study',

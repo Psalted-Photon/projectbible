@@ -475,7 +475,7 @@ export async function importPackFromBytes(
       // stored ID always matches the canonical manifest IDs used by the UI.
       id: rawId?.replace(/\.v\d+$/, '') ?? rawId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art' | 'atlas-map',
+      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art' | 'atlas-map' | 'devotionals',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -1904,6 +1904,48 @@ export async function importPackFromBytes(
       }
 
       console.log(`✅ ${packInfo.type === 'encyclotopical' ? 'Encyclotopical' : 'ISBE'} pack ${packInfo.id} imported`);
+    } else if (packInfo.type === 'devotionals') {
+      // Three daily devotionals: the works and every reading. Cleared first so a
+      // rebuilt pack that drops or renames a reading leaves nothing stale behind.
+      console.log('Importing devotionals pack...');
+      await clearStores(['devotional_works', 'devotional_readings']);
+
+      await streamTable(
+        db,
+        'SELECT work_id, title, short_title, author, year, has_slots, sort_order, about FROM works',
+        'devotional_works',
+        ([workId, title, shortTitle, author, year, hasSlots, sortOrder, about]) => ({
+          workId: workId as string,
+          title: title as string,
+          shortTitle: shortTitle as string,
+          author: author as string,
+          year: year as number,
+          hasSlots: !!hasSlots,
+          sortOrder: sortOrder as number,
+          about: about as string,
+        }),
+        { label: 'devotional works' },
+      );
+
+      await streamTable(
+        db,
+        'SELECT work_id, month, day, slot, title, body_html, plain_text, key_refs_json FROM readings',
+        'devotional_readings',
+        ([workId, month, day, slot, title, bodyHtml, plainText, keyRefsJson]) => ({
+          id: `${workId}:${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}:${slot}`,
+          workId: workId as string,
+          month: month as number,
+          day: day as number,
+          slot: slot as string,
+          title: title as string,
+          bodyHtml: bodyHtml as string,
+          plainText: plainText as string,
+          keyRefs: JSON.parse((keyRefsJson as string) || '[]'),
+        }),
+        { batchSize: 300, label: 'devotional readings' },
+      );
+
+      console.log(`✅ Devotionals pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'map') {
       // Import map/places data
       console.log('Importing map pack...');

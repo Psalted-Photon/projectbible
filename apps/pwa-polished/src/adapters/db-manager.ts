@@ -84,6 +84,7 @@ const ISBE_STORES = [
   'isbe_place_verses',
 ];
 const NAVES_STORES = ['naves_topics', 'naves_names', 'naves_points', 'naves_verses', 'naves_tokens'];
+const DEVOTIONAL_STORES = ['devotional_works', 'devotional_readings'];
 
 /**
  * Stores that a finished install of each pack must have put rows in.
@@ -97,6 +98,7 @@ const REQUIRED_STORES_BY_TYPE: Record<string, string[]> = {
   isbe: ISBE_STORES,
   encyclotopical: [...ISBE_STORES, ...NAVES_STORES],
   people: ['people', 'person_names', 'person_verses'],
+  devotionals: DEVOTIONAL_STORES,
 };
 
 /**
