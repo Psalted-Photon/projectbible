@@ -15,6 +15,9 @@
  *
  * The notification opens /?devo=today&s=<slot>; the app decides which work and
  * date that means when it opens.
+ *
+ * Written without a single dollar sign (no template strings) so it survives
+ * being copied from a phone into the dashboard editor.
  */
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
@@ -79,12 +82,12 @@ function localNow(timezone: string, now: Date): { minutes: number; date: string 
 
   return {
     minutes: (Number.isNaN(hour) ? 0 : hour) * 60 + (parseInt(get('minute'), 10) || 0),
-    date: `${get('year')}-${get('month')}-${get('day')}`,
+    date: get('year') + '-' + get('month') + '-' + get('day'),
   };
 }
 
 function parseTimeToMinutes(time: string): number | null {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  const match = /^(\d{1,2}):(\d{2})(?![\s\S])/.exec(time.trim());
   if (!match) return null;
   const hour = parseInt(match[1], 10);
   const minute = parseInt(match[2], 10);
@@ -98,7 +101,7 @@ function dueSlots(row: ReminderRow, now: Date): { slots: Slot[]; localDate: stri
   try {
     local = localNow(row.timezone, now);
   } catch {
-    return { slots: [], localDate: '', reason: `unusable timezone ${row.timezone}` };
+    return { slots: [], localDate: '', reason: 'unusable timezone ' + row.timezone };
   }
 
   const slots: Slot[] = [];
@@ -106,24 +109,24 @@ function dueSlots(row: ReminderRow, now: Date): { slots: Slot[]; localDate: stri
   const check = (slot: Slot, enabled: boolean, time: string, last: string | null) => {
     if (!enabled) return;
     const target = parseTimeToMinutes(time);
-    if (target === null) { notes.push(`${slot}: unreadable time "${time}"`); return; }
-    if (last === local.date) { notes.push(`${slot}: already sent today`); return; }
+    if (target === null) { notes.push(slot + ': unreadable time "' + time + '"'); return; }
+    if (last === local.date) { notes.push(slot + ': already sent today'); return; }
     const drift = local.minutes - target;
     const due = drift >= 0 && drift <= CATCH_UP_MINUTES;
-    notes.push(`${slot}: ${due ? 'due' : 'not due'}, drift ${drift}m`);
+    notes.push(slot + ': ' + (due ? 'due' : 'not due') + ', drift ' + drift + 'm');
     if (due) slots.push(slot);
   };
   check('morning', row.morning_enabled, row.morning_time, row.last_morning_on);
   check('evening', row.evening_enabled, row.evening_time, row.last_evening_on);
 
-  return { slots, localDate: local.date, reason: `${notes.join('; ')} (local ${local.date})` };
+  return { slots, localDate: local.date, reason: notes.join('; ') + ' (local ' + local.date + ')' };
 }
 
 function buildPayload(slot: Slot): NotificationPayload {
   return {
     title: 'Hexapla',
-    body: `Your ${slot} devotional is ready.`,
-    url: `/?devo=today&s=${slot}`,
+    body: 'Your ' + slot + ' devotional is ready.',
+    url: '/?devo=today&s=' + slot,
     tag: 'projectbible-devotional',
     gentle: true,
   };
@@ -169,7 +172,7 @@ async function sendToUser(
         expired++;
       } else {
         failed++;
-        console.error(`[devotional] send failed (${status ?? 'no status'}) for user ${userId}:`, err);
+        console.error('[devotional] send failed (' + (status ?? 'no status') + ') for user ' + userId + ':', err);
       }
     }
   }
@@ -192,10 +195,10 @@ async function runScheduledSweep(admin: SupabaseClient, now: Date) {
   for (const row of rows) {
     const { slots, localDate, reason } = dueSlots(row, now);
     if (!slots.length) {
-      console.log(`[devotional] skipping user ${row.user_id}: ${reason}`);
+      console.log('[devotional] skipping user ' + row.user_id + ': ' + reason);
       continue;
     }
-    console.log(`[devotional] user ${row.user_id}: ${reason}`);
+    console.log('[devotional] user ' + row.user_id + ': ' + reason);
 
     for (const slot of slots) {
       // Claim before sending, so a slow send cannot let the next minute's sweep
@@ -210,7 +213,7 @@ async function runScheduledSweep(admin: SupabaseClient, now: Date) {
         .eq('user_id', row.user_id);
 
       if (claimError) {
-        console.error(`[devotional] claim failed for user ${row.user_id} (${slot}):`, claimError);
+        console.error('[devotional] claim failed for user ' + row.user_id + ' (' + slot + '):', claimError);
         continue;
       }
 
@@ -218,14 +221,14 @@ async function runScheduledSweep(admin: SupabaseClient, now: Date) {
         const result = await sendToUser(admin, row.user_id, buildPayload(slot));
         totalSent += result.sent;
         fired++;
-        if (result.sent === 0) console.warn(`[devotional] user ${row.user_id} was due (${slot}) but has no live devices`);
+        if (result.sent === 0) console.warn('[devotional] user ' + row.user_id + ' was due (' + slot + ') but has no live devices');
       } catch (err) {
-        console.error(`[devotional] send threw for user ${row.user_id} (${slot}):`, err);
+        console.error('[devotional] send threw for user ' + row.user_id + ' (' + slot + '):', err);
       }
     }
   }
 
-  console.log(`[devotional] sweep done — checked ${rows.length}, fired ${fired}, sent ${totalSent}`);
+  console.log('[devotional] sweep done — checked ' + rows.length + ', fired ' + fired + ', sent ' + totalSent);
   return { mode: 'scheduled', checked: rows.length, fired, sent: totalSent };
 }
 
@@ -259,14 +262,14 @@ Deno.serve(async (req) => {
 
   if (missing.length > 0) {
     console.error('[devotional] missing secrets:', missing.join(', '));
-    return json({ error: `Missing secrets: ${missing.join(', ')}` }, 500);
+    return json({ error: 'Missing secrets: ' + missing.join(', ') }, 500);
   }
 
   // Only pg_cron holds this key; there is no user-facing path.
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
   if (token !== serviceRoleKey) {
-    const shape = (t: string) => `${t.length} chars starting ${t.slice(0, 3)}`;
-    console.error(`[devotional] rejected: sent ${shape(token)}; expected ${shape(serviceRoleKey!)}`);
+    const shape = (t: string) => t.length + ' chars starting ' + t.slice(0, 3);
+    console.error('[devotional] rejected: sent ' + shape(token) + '; expected ' + shape(serviceRoleKey!));
     return json({ error: 'Not authorised' }, 401);
   }
 
