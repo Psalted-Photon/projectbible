@@ -209,6 +209,7 @@ Type in the toolbar box and results appear as you type, grouped by where they ca
 - **Saved verses**
 - **Characters** — people in the Bible
 - **Encyclopedia** — ISBE articles
+- **Devotionals** — words in a reading, or a reference: search `John 3:16` to find the readings built on it
 - **Commentaries**
 
 Typing a Strong's number straight into the box (`G26`, `H430`, `g0026`) jumps directly to that entry.
@@ -364,6 +365,19 @@ If you miss days, the plan offers to catch you up two ways:
 - **Calendar view** of your reading days.
 - **Progress syncs across devices** if you're signed in, and merges sensibly — a chapter ticked on your phone stays ticked when your tablet syncs, and vice versa.
 
+### 13.6 Devotionals
+
+Three classic daily devotionals in one free pack (Devotionals, about 9 MB, public domain): Spurgeon's *Morning and Evening*, Spurgeon's *Faith's Checkbook*, and Bagster's *Daily Light on the Daily Path*. They have their own tab in Reading Plan, and it works without an account.
+
+- **Today, or any day** — Morning and Evening buttons for each work, with arrows and a date picker to read ahead or catch up.
+- **Morning, Evening, or both** — choose which reading you want. With both, the one that fits the time of day is marked.
+- **Nothing is swapped out.** Spurgeon's headline verse stays in the King James words he wrote about, with the same verse in your translation right under it. Every word of his is kept.
+- **Daily Light, fragment by fragment** — Bagster's King James fragments exactly as he arranged them, each with its own reference. Tap a fragment to read the full verse in your translation.
+- **Every reference opens the reader** at that verse with the usual fade, and a book-with-a-ribbon crumb brings you back to the reading where you left it.
+- **From the Verse of the Day** — a "Morning Devotional" link before noon and "Evening Devotional" after, by your time zone. You choose which devotional it opens.
+- **Share a reading** — the headline verse, the devotional and date, and a link that opens that reading in Hexapla. The Card tab adds a small line such as "Spurgeon · Morning and Evening · January 1".
+- **Reminders** — a morning and an evening time, sent to your phone like the Wake Alarm. Tapping one opens the reading. Needs sign-in, and on iPhone the app on your home screen.
+
 ## 14. Maps & Places
 
 - **Map pane** — open a map beside the text.
@@ -467,6 +481,7 @@ Everything in the app — translations, lexicons, commentaries, the encyclopedia
 - **Quick install** — one tap for the common packs.
 - **Advanced install** — install from a file or a URL, for packs you've made or been given.
 - **Voice packs** — Read Aloud voices are managed here too.
+- **Devotionals** — Spurgeon's *Morning and Evening* and *Faith's Checkbook*, and Bagster's *Daily Light*. Read them from Reading Plan → Devotionals.
 - **See what's installed**, how big it is, and remove anything you don't want.
 - **Database statistics** — how much space your content is using.
 - **Packs load when needed** — the app fetches a pack the first time you use something that requires it, with a progress bar, rather than making you wait at startup.

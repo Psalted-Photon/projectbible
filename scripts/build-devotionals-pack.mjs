@@ -600,7 +600,9 @@ insWork.run('daily-light', 'Daily Light on the Daily Path', 'Daily Light', 'Jona
 const insReading = db.prepare('INSERT INTO readings VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
 db.transaction(() => {
   for (const r of all) {
-    const plain = (r.title + ' ' + r.key_refs.map((k) => k.kjvText).join(' ') + ' ' + plainOf(r.body_html)).toLowerCase().replace(/\s+/g, ' ').trim();
+    // A date title ("Morning, January 1") is left out, or searching "morning" would match every reading.
+    const searchTitle = /^(Morning|Evening), /.test(r.title) ? '' : r.title;
+    const plain = (searchTitle + ' ' + r.key_refs.map((k) => k.kjvText).join(' ') + ' ' + plainOf(r.body_html)).toLowerCase().replace(/\s+/g, ' ').trim();
     const keyRefs = r.key_refs.map((k) => ({ ...k, label: refLabel(k) }));
     insReading.run(r.work_id, r.month, r.day, r.slot, r.title, r.body_html, plain, JSON.stringify(keyRefs));
   }
