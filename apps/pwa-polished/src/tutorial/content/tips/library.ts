@@ -177,7 +177,7 @@ export const LIBRARY_TIPS: Tip[] = [
     id: 'tree-entrance',
     area,
     target: '.family-tree .entrance-btn',
-    title: 'Grand entrance',
+    title: 'Cinematic',
     body: 'On, a tap pulls out to the whole tree, climbs the line from God and lands on the person with a burst of light. Off, the line lights at once and the tree glides straight there.',
   },
 ];

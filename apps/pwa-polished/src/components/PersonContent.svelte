@@ -16,6 +16,7 @@
   import WorkTabs from "./WorkTabs.svelte";
   import Gem from "./Gem.svelte";
   import { stoneForTribe } from "../lib/gems/stones";
+  import { STONES as TREE_STONES } from "../lib/familyTree/config";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../lib/openWork";
   import { peopleSource } from "../lib/library/source";
   import {
@@ -201,10 +202,13 @@
    * moment the bio does, with no 130 KB tree load behind it. Anyone whose
    * group names no stone (no tribe, or Dinah) gets no stone.
    */
-  $: tribe =
-    person?.memberOf
-      ?.map((g) => g.match(/^Tribe of (.+)$/)?.[1])
-      .find((t): t is string => !!t && !!stoneForTribe(t)) ?? null;
+  $: tribe = person?.memberOf?.map(tribeOfGroup).find((t): t is string => !!t) ?? null;
+
+  /** "Tribe of Judah" → "Judah", for a tribe that has a stone; else null. */
+  function tribeOfGroup(group: string): string | null {
+    const t = group.match(/^Tribe of (.+)$/)?.[1];
+    return t && stoneForTribe(t) && TREE_STONES[t] ? t : null;
+  }
 
   // --- Walking the family ------------------------------------------------
   /** One step of the back trail: enough to reopen that person. */
@@ -282,10 +286,10 @@
 
   /** A tap on the tribe's stone: the tree, lit on this tribe up to God and
    *  framed on this person's line, with the tribe's card over it. */
-  function openTribe() {
-    if (!tribe || !person) return;
-    if (onOpenTribe) return onOpenTribe(tribe, person.id);
-    familyTreeStore.open({ tribe, focusId: person.id, onLeave: docked ? null : onClose });
+  function openTribe(which: string | null = tribe) {
+    if (!which || !person) return;
+    if (onOpenTribe) return onOpenTribe(which, person.id);
+    familyTreeStore.open({ tribe: which, focusId: person.id, onLeave: docked ? null : onClose });
   }
 
   /** Step back to someone you came through. */
@@ -640,7 +644,21 @@
             <dt>Died</dt><dd>{person.deathPlace.name}</dd>
           {/if}
           {#if person.memberOf && person.memberOf.length}
-            <dt>Member of</dt><dd>{person.memberOf.join(", ")}</dd>
+            <!-- A tribe with a stone reads in its colour on the tree and goes
+                 where the stone goes. -->
+            <dt>Member of</dt>
+            <dd>
+              {#each person.memberOf as group, i}
+                {@const t = tribeOfGroup(group)}
+                {#if t}
+                  <button class="rel tribe-link" style="color: {TREE_STONES[t].lit}" on:click={() => openTribe(t)}>
+                    {group}
+                  </button>
+                {:else}
+                  {group}
+                {/if}{i < person.memberOf.length - 1 ? ", " : ""}
+              {/each}
+            </dd>
           {/if}
           <!-- Relatives are links now: the pack has always carried their ids,
                it was only ever the name that got printed. -->

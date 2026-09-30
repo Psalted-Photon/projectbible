@@ -91,28 +91,7 @@
     atFittedView = false;
   }
 
-  // ── All names ────────────────────────────────────────────────────────────
-  const NAMES_KEY = 'projectbible-familytree-names';
-  function readNamesPref(): boolean {
-    try {
-      const v = localStorage.getItem(NAMES_KEY);
-      return v === null ? true : v === '1';
-    } catch {
-      return true;
-    }
-  }
-  let allNames = readNamesPref();
-  function toggleAllNames() {
-    allNames = !allNames;
-    try {
-      localStorage.setItem(NAMES_KEY, allNames ? '1' : '0');
-    } catch {
-      // Private mode, or storage blocked — the toggle still works this visit.
-    }
-    redraw();
-  }
-
-  // ── Grand entrance ───────────────────────────────────────────────────────
+  // ── Cinematic (the Grand Entrance) ───────────────────────────────────────
   // On: a tap pulls out to the whole tree, climbs from God and lands with a
   // burst (motion.ts). Off: the line lights at once and the camera glides
   // straight there. The device's reduced-motion setting forces it off.
@@ -150,7 +129,8 @@
       selectedTribe,
       pinnedId: pinned?.id ?? null,
       pulsePhase,
-      allNames,
+      // Everyone is always named; the lab still has the switch.
+      allNames: true,
       light,
       lightFloor,
     });
@@ -1165,8 +1145,6 @@
       window.visualViewport?.removeEventListener('resize', resize);
     };
   });
-
-  $: hintText = TOUCH ? '· Back to return' : '· Esc to return';
 </script>
 
 <svelte:window on:popstate={onPopState} />
@@ -1190,9 +1168,6 @@
   {#if model}
     <div class="controls-top">
       <button class="tree-btn" on:click={glideToWhole}>Whole tree</button>
-      <button class="tree-btn toggle" class:on={allNames} aria-pressed={allNames} on:click={toggleAllNames}>
-        All names
-      </button>
       <button
         class="tree-btn toggle entrance-btn"
         class:on={entranceActive}
@@ -1201,7 +1176,7 @@
         title={REDUCED_MOTION ? 'Off while your device asks for reduced motion' : undefined}
         on:click={toggleEntrance}
       >
-        Grand entrance
+        Cinematic
       </button>
     </div>
     <button class="close-btn" bind:this={closeBtnEl} on:click={closeViaHistory} aria-label="Close family tree">
@@ -1242,7 +1217,7 @@
 
     <div class="bottom-stack" class:faded={gestured}>
       <div class="hint">
-        Drag to pan · Tap a person to trace their line · Pinch or scroll to zoom {hintText}
+        Drag to pan · Tap a person to trace their line · Pinch or scroll to zoom
       </div>
     </div>
     <div class="attrib">{model.attribution}</div>
