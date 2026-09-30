@@ -17,6 +17,12 @@
 
 const ALARM_TAG = 'projectbible-wake-alarm';
 
+/*
+ * Devotional reminders ride the same push path, marked `gentle`: a reminder,
+ * not an alarm, so it lets itself go and buzzes once instead of three times.
+ * Their URLs carry devo=, which is how a tap is told apart from an alarm's.
+ */
+
 self.addEventListener('push', (event) => {
   // A push with no body still has to show something: Chrome requires every
   // push on a userVisibleOnly subscription to produce a notification, and it
@@ -39,9 +45,9 @@ self.addEventListener('push', (event) => {
     // up into a pile of notifications overnight.
     tag: payload.tag || ALARM_TAG,
     renotify: true,
-    // Keep it on screen until acted on, where the platform honours this.
-    requireInteraction: true,
-    vibrate: [400, 200, 400, 200, 400],
+    // An alarm stays on screen until acted on, where the platform honours this.
+    requireInteraction: !payload.gentle,
+    vibrate: payload.gentle ? [200] : [400, 200, 400, 200, 400],
     timestamp: Date.now(),
     data: {
       url: payload.url || '/?alarm=1',
@@ -68,8 +74,10 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clientList) {
         if (new URL(client.url).origin !== self.location.origin) continue;
         await client.focus();
-        // Tell the running app an alarm just fired; it shows the start screen.
-        client.postMessage({ type: 'wake-alarm-opened', url: target });
+        // Tell the running app what was tapped: a devotional reminder opens its
+        // reading, an alarm shows the start screen.
+        const isDevotional = new URL(target, self.location.origin).searchParams.has('devo');
+        client.postMessage({ type: isDevotional ? 'devotional-opened' : 'wake-alarm-opened', url: target });
         return;
       }
 

@@ -39,6 +39,8 @@
   $: isToday = month === today.month && day === today.day;
 
   onMount(() => {
+    // Settings may have been pulled from another device since the store was made.
+    devotionalSettings.refresh();
     void refresh();
     const onPacks = () => { clearDevotionalsCache(); void refresh(); };
     window.addEventListener('packsUpdated', onPacks);

@@ -19,6 +19,7 @@ import { realtimeService } from './RealtimeService';
 import { pullSettings } from './settingsSync';
 import { sharedNotebookStore } from '../../adapters/SharedNotebookStore';
 import { pullAlarmIfUnset } from '../alarm/alarmSync';
+import { resyncReminderTimezone } from '../devotionals/reminderSync';
 import type { SyncState, SyncTable } from './types';
 
 interface SyncStore {
@@ -397,6 +398,8 @@ class SyncService {
           await pullSettings();
           // Adopt the account's alarm only on a device that has never set one.
           await pullAlarmIfUnset();
+          // Keep devotional reminders on local time after travel or a timezone change.
+          await resyncReminderTimezone();
         } else {
           console.debug('[SyncService] Skipping pull — synced recently');
         }

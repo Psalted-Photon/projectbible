@@ -128,3 +128,19 @@ SELECT cron.unschedule('wake-alarm-every-minute');
 
 Individual users turn their own alarm off in the app, which sets
 `wake_alarms.enabled = false`.
+
+## Devotional reminders
+
+Same machinery, one more table, function and cron job. Once:
+
+1. Run `supabase/migrations/015_devotional_reminders.sql` (the table).
+2. Dashboard → Edge Functions → Deploy a new function, named exactly
+   **`devotional-reminder-send`**. Paste `supabase/functions/devotional-reminder-send/index.ts`.
+   Leave "Verify JWT" on. Its secrets are the same three VAPID values as above;
+   Edge Function secrets are shared across the project, so there is nothing new to set.
+3. Run `supabase/migrations/016_devotional_reminder_cron.sql` with the same
+   `sb_secret_…` key pasted on the marked line, then put `PUT_THE_KEY_HERE` back
+   before committing.
+
+Retest the same day: `UPDATE devotional_reminders SET last_morning_on = NULL, last_evening_on = NULL;`
+Logs: Edge Functions → devotional-reminder-send → Logs (lines start `[devotional]`).
