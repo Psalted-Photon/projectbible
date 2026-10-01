@@ -3,8 +3,9 @@
    * Reading Plan → Devotionals. The way in to the devotionals, and where they
    * are set up. Works signed out; only the reminders need an account.
    *
-   * Three states: the pack isn't installed (install card), home (today's
-   * readings, any other date, setup), or one reading open.
+   * Two states: the pack isn't installed (install card), or home (today's
+   * readings, any other date, setup). An open reading covers the screen on
+   * top of home, and closing it lands back here.
    */
   import { onMount } from 'svelte';
   import { SunHorizon, MoonStars, CalendarBlank, CaretLeft, CaretRight, BookBookmark } from 'phosphor-svelte';
@@ -139,14 +140,15 @@
     </button>
     <p class="dt-small">Public domain. Also in Profile → Packs.</p>
   </div>
-{:else if open && openWork}
-  <DevotionalReading
-    work={openWork}
-    target={open}
-    on:back={() => (open = null)}
-    on:step={(e) => (open = e.detail)}
-  />
 {:else}
+  {#if open && openWork}
+    <DevotionalReading
+      work={openWork}
+      target={open}
+      on:close={() => (open = null)}
+      on:step={(e) => (open = e.detail)}
+    />
+  {/if}
   <div class="dt-home">
     <div class="dt-date-row">
       <button class="dt-icon-btn" on:click={() => moveDay(-1)} aria-label="Previous day"><CaretLeft size={16} weight="bold" /></button>

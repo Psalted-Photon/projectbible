@@ -10,10 +10,15 @@
    *
    * Every reference opens the reader with the fade highlight and leaves a
    * BookBookmark crumb that brings you back here, scrolled where you were.
+   *
+   * Shown full screen over the Reading Plan window, with nothing but the text,
+   * in the reader's own colours (black on dark, paper on light and sepia, the
+   * chosen colours on custom): the X closes it back to the Devotionals tab.
    */
   import { createEventDispatcher, tick } from 'svelte';
   import { get } from 'svelte/store';
-  import { SunHorizon, MoonStars, CalendarBlank, CaretLeft, CaretRight, ShareNetwork } from 'phosphor-svelte';
+  import { fade } from 'svelte/transition';
+  import { SunHorizon, MoonStars, CalendarBlank, CaretLeft, CaretRight, ShareNetwork, X } from 'phosphor-svelte';
   import { navigationStore } from '../../stores/navigationStore';
   import { readingPlanModalStore } from '../../stores/readingPlanModalStore';
   import { devotionalSettings, type DevotionalTarget } from '../../stores/devotionalStore';
@@ -36,12 +41,34 @@
   export let work: DevotionalWork;
   export let target: DevotionalTarget;
 
-  const dispatch = createEventDispatcher<{ back: void; step: DevotionalTarget }>();
+  const dispatch = createEventDispatcher<{ close: void; step: DevotionalTarget }>();
   const textStore = new IndexedDBTextStore();
 
   let reading: DevotionalReading | null = null;
   let loading = true;
-  let rootEl: HTMLElement;
+  let scrollEl: HTMLElement;
+
+  /**
+   * Move the viewer to the end of <body>, as ArtViewer does: on the light and
+   * sepia themes the Reading Plan window carries a CSS filter, which would pin
+   * a fixed-position child to the window and clip it instead of the screen.
+   */
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    // The share window handles its own Escape.
+    if (e.key === 'Escape' && !shareOpen) {
+      e.preventDefault();
+      dispatch('close');
+    }
+  }
 
   $: translation = $navigationStore.translation;
   $: isNet = translation?.toLowerCase() === 'net';
@@ -68,7 +95,7 @@
   }
 
   function scrollContainer(): HTMLElement | null {
-    return (rootEl?.closest('.tab-content') as HTMLElement | null) ?? null;
+    return scrollEl ?? null;
   }
 
   // ── Verse text in the reader's translation ───────────────────────────────
@@ -203,25 +230,32 @@
   }
 </script>
 
-<div class="devo-reading" bind:this={rootEl}>
+<svelte:window on:keydown={onKeydown} />
+
+<div class="devo-layer no-edge-gesture" use:portal transition:fade={{ duration: 140 }}>
+<!-- `themed` takes the reader's light/sepia filter, so the page matches the reader. -->
+<div class="devo-viewer themed">
   <div class="dr-top">
-    <button class="dr-back" on:click={() => dispatch('back')}>
-      <CaretLeft size={14} weight="bold" /> Devotionals
-    </button>
     <div class="dr-top-actions">
       {#if reading && shareRef}
         <button class="dr-icon-btn" on:click={openShare} title="Share this reading" aria-label="Share this reading">
-          <ShareNetwork size={18} weight="bold" />
+          <ShareNetwork size={16} weight="bold" />
         </button>
       {/if}
       <button class="dr-icon-btn" on:click={() => step(-1)} title="Previous reading" aria-label="Previous reading">
-        <CaretLeft size={18} weight="bold" />
+        <CaretLeft size={16} weight="bold" />
       </button>
       <button class="dr-icon-btn" on:click={() => step(1)} title="Next reading" aria-label="Next reading">
-        <CaretRight size={18} weight="bold" />
+        <CaretRight size={16} weight="bold" />
       </button>
     </div>
+    <button class="dr-close" on:click={() => dispatch('close')} title="Close" aria-label="Close reading">
+      <X size={20} weight="bold" />
+    </button>
   </div>
+
+  <div class="dr-scroll" bind:this={scrollEl}>
+  <div class="devo-reading">
 
   <header class="dr-header">
     <span class="dr-slot-icon" class:evening={target.slot === 'evening'} class:day={target.slot === 'day'}>
@@ -294,60 +328,98 @@
       {@html sanitizePackHtml(colorRefs(reading.bodyHtml))}
     </div>
   {/if}
+  </div>
+  </div>
 </div>
 
-{#if shareOpen && shareRef}
-  <ShareModal
-    reference={shareRef}
-    passage={sharePassage}
-    translation={shareTranslation}
-    source={shareSource}
-    linkUrl={buildDevotionalUrl(target.workId, target.month, target.day, target.slot)}
-    on:close={() => (shareOpen = false)}
-  />
-{/if}
+  <!-- Inside the layer so it stacks above the page, outside .themed so it keeps
+       the dark look it has everywhere else in the Reading Plan window. -->
+  {#if shareOpen && shareRef}
+    <ShareModal
+      reference={shareRef}
+      passage={sharePassage}
+      translation={shareTranslation}
+      source={shareSource}
+      linkUrl={buildDevotionalUrl(target.workId, target.month, target.day, target.slot)}
+      on:close={() => (shareOpen = false)}
+    />
+  {/if}
+</div>
 
 <style>
-  .devo-reading {
-    color: rgba(255, 255, 255, 0.88);
+  /* Above the Reading Plan window (1000) and its popups; below nothing but the share window inside it. */
+  .devo-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+  }
+  /* Black under the light/sepia filter turns to the reader's paper; custom brings its own. */
+  .devo-viewer {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--reader-bg, #000);
+    overscroll-behavior: contain;
   }
 
+  /* The portal escaped #app's safe-area padding, so the chrome carries its own. */
   .dr-top {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
-  }
-  .dr-back {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    background: none;
-    border: none;
-    color: #e6b84a;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 6px 4px;
+    flex-shrink: 0;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) calc(env(safe-area-inset-right, 0px) + 12px) 6px
+      calc(env(safe-area-inset-left, 0px) + 12px);
   }
   .dr-top-actions {
     display: flex;
-    gap: 6px;
+    gap: 4px;
   }
   .dr-icon-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.75);
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    background: none;
+    border: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.1));
+    color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.5));
     cursor: pointer;
   }
   .dr-icon-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--reader-text-dim, rgba(255, 255, 255, 0.8));
+  }
+  .dr-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--reader-text, #f2f2f2);
+    cursor: pointer;
+  }
+  .dr-close:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  .dr-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .devo-reading {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 12px calc(env(safe-area-inset-right, 0px) + 20px) calc(env(safe-area-inset-bottom, 0px) + 48px)
+      calc(env(safe-area-inset-left, 0px) + 20px);
+    color: var(--reader-text, rgba(255, 255, 255, 0.88));
   }
 
   .dr-header {
@@ -356,7 +428,7 @@
     gap: 10px;
     padding-bottom: 12px;
     margin-bottom: 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.08));
   }
   .dr-slot-icon {
     display: flex;
@@ -387,7 +459,7 @@
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.45));
   }
 
   .dr-title {
@@ -425,14 +497,14 @@
   .dr-trans {
     margin: 10px 0 0;
     padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.08));
     font-size: 0.95rem;
     line-height: 1.6;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--reader-text-dim, rgba(255, 255, 255, 0.75));
   }
   .dr-trans-tag {
     font-size: 0.78rem;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.5));
     white-space: nowrap;
   }
   .dr-trans-tag a {
@@ -449,7 +521,7 @@
   .dr-body :global(blockquote) {
     margin: 0 0 1em 1.2em;
     font-style: italic;
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--reader-text-dim, rgba(255, 255, 255, 0.72));
   }
   .dr-body :global(.sc) {
     font-variant: small-caps;
@@ -499,16 +571,16 @@
     background: rgba(255, 255, 255, 0.05);
     font-size: 0.95rem;
     line-height: 1.6;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--reader-text-dim, rgba(255, 255, 255, 0.8));
   }
 
   .dr-muted {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.4));
     font-size: 0.85rem;
   }
   .dr-footnote {
     margin-top: 20px;
     font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.35));
   }
 </style>
