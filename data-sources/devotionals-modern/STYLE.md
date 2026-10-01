@@ -100,9 +100,11 @@ So a word is explained the same way every time it comes up. Add to this as the y
 | Advent | A coming or arrival. The Second Advent is Christ's return. |
 | Affections | In older English, the heart's loves and desires, not only fondness. |
 | Atonement | Making peace between God and sinners by paying for sin. |
+| Attribute(s) | A quality that belongs to God, such as his power or his love. |
 | Bosom | The chest, the place of closest embrace. |
 | Bowels (yearned) | Deep feelings. The King James Bible places tender feelings in the gut, the way we place them in the heart. |
 | Carnal | Of the flesh: the desires of our fallen human nature, not only sexual ones. |
+| Comfortable | In older English, comforting and strengthening. |
 | The Comforter | The Holy Spirit; Jesus' name for him in John 14:26. |
 | Communion | Close fellowship and sharing, with God or with each other. (Also the Lord's Supper.) |
 | Complacency | In Spurgeon's day, quiet pleasure and satisfaction, without today's sense of being smug. |
@@ -116,9 +118,12 @@ So a word is explained the same way every time it comes up. Add to this as the y
 | Earnest | A deposit paid up front to promise the rest will follow (Ephesians 1:14). |
 | Effectual | Effective; actually doing what it sets out to do. |
 | The elect | God's chosen people. |
+| Election, elected | God's choice of his people for salvation. |
 | Entailed | An old legal term for an estate fixed to pass down a family line, which could never be sold off or taken away. |
 | Ere long | Before long. |
+| Fetters | Chains or shackles on the feet. |
 | Hart | A male deer. (Joseph Hart the hymn writer is a different note.) |
+| Immutable, immutability | Unchanging. |
 | Imputed | Credited to someone's account. Christ's righteousness is counted as the believer's own. |
 | Intercession | Praying for someone else. Jesus "ever liveth to make intercession" for his people (Hebrews 7:25). |
 | Jehovah | The personal name of God in the Old Testament, printed "the LORD" in most English Bibles. |
@@ -127,10 +132,14 @@ So a word is explained the same way every time it comes up. Add to this as the y
 | Lust | Any strong desire, especially a sinful one, not only sexual desire. |
 | Means (of grace) | The ordinary ways God feeds faith: the Bible, prayer, preaching, the Lord's Supper. |
 | Meet | Suitable, fitting. |
+| Mercy-seat | The gold lid of the ark of the covenant, where God met with his people; a picture of coming to God in prayer. |
+| Omnipotence | Being all-powerful. |
+| Omnipotent | All-powerful. |
 | Ordinances | The practices Christ gave the church, chiefly baptism and the Lord's Supper. |
 | Peculiar | Special, belonging particularly to someone (not odd). |
 | Portion | A share of an inheritance. When God is "our portion", he himself is what we inherit, and he is enough. |
 | Profession, professing | Publicly claiming to be a Christian. A "dead profession" is the claim with no faith behind it. |
+| Profession, professing, professor(s) | Publicly claiming to be a Christian. A "dead profession" is the claim with no faith behind it. |
 | Propitiation | A sacrifice that turns God's anger away by fully paying for sin (1 John 2:2). |
 | Providence | God's care and control over everything that happens, providing for his people. |
 | Quicken | To make alive. "Quick" once meant "living", as in "the quick and the dead". |
@@ -138,12 +147,15 @@ So a word is explained the same way every time it comes up. Add to this as the y
 | Sanctification | The lifelong work of being made holy. |
 | Sanctify, sanctified | Make holy; set apart for God. |
 | Seed | Offspring, descendants. |
+| Sovereign, sovereignty | God's right and power to rule and to choose freely, answering to no one. |
 | Substitution | One taking another's place: here, Christ taking the punishment due to sinners. |
 | Supplication | A humble, earnest request; a prayer. |
+| Surety | A guarantor: someone who promises to pay another's debt. |
 | Type | A person or event in the Old Testament that pictures Christ ahead of time. |
 | Unction | Literally "anointing": the Holy Spirit's power in a sermon or prayer, the thing that makes it reach the heart. |
 | Vanity | Emptiness, worthlessness: anything that promises much and gives nothing. Not only pride in your looks. |
 | Virtually | In effect, in all that matters (not "almost"). |
 | Vouchsafe(d) | Graciously give or grant. |
-| Wont | Used to; in the habit of. |
 | Woe to | An old warning: "how terrible it will be for…". |
+| Wont | Used to; in the habit of. |
+| Wrought | Worked. |
