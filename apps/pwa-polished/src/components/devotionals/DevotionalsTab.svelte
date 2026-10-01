@@ -8,12 +8,13 @@
    * top of home, and closing it lands back here.
    */
   import { onMount } from 'svelte';
-  import { SunHorizon, MoonStars, CalendarBlank, CaretLeft, CaretRight, BookBookmark } from 'phosphor-svelte';
+  import { SunHorizon, MoonStars, CalendarBlank, CalendarDots, CaretLeft, CaretRight, BookBookmark } from 'phosphor-svelte';
   import {
     isDevotionalsInstalled,
     listWorks,
     clearDevotionalsCache,
     shiftDate,
+    formatMonthDay,
     type DevotionalWork,
     type DevotionalSlot,
   } from '../../lib/devotionals/devotionalsData';
@@ -24,6 +25,7 @@
   import { showNotice } from '../../stores/noticeStore';
   import DevotionalReading from './DevotionalReading.svelte';
   import DevotionalReminders from './DevotionalReminders.svelte';
+  import DevotionalCalendar from './DevotionalCalendar.svelte';
 
   let installed: boolean | null = null;
   let works: DevotionalWork[] = [];
@@ -75,18 +77,20 @@
     ({ month, day } = today);
   }
 
-  // The date input needs a whole date; the year only matters for the weekday it shows.
-  $: year = new Date().getFullYear();
-  $: dateValue = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  $: weekday = new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  // This year's weekday for the date; Feb 29 in a year without one just gets its name.
+  $: weekday = (() => {
+    const d = new Date(new Date().getFullYear(), month - 1, day);
+    return d.getMonth() === month - 1
+      ? d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+      : formatMonthDay(month, day);
+  })();
 
-  function onDateInput(e: Event) {
-    const v = (e.target as HTMLInputElement).value;
-    const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(v);
-    if (!m) return;
-    month = +m[1];
-    day = +m[2];
+  let calendarOpen = false;
+
+  function onPickDate(e: CustomEvent<{ month: number; day: number }>) {
+    ({ month, day } = e.detail);
     followingToday = month === today.month && day === today.day;
+    calendarOpen = false;
   }
 
   async function install() {
@@ -152,13 +156,18 @@
   <div class="dt-home">
     <div class="dt-date-row">
       <button class="dt-icon-btn" on:click={() => moveDay(-1)} aria-label="Previous day"><CaretLeft size={16} weight="bold" /></button>
-      <label class="dt-date">
+      <button class="dt-date" class:open={calendarOpen} on:click={() => (calendarOpen = !calendarOpen)} aria-label="Pick a date">
+        <CalendarDots size={17} weight="bold" />
         <span>{weekday}</span>
-        <input type="date" value={dateValue} on:change={onDateInput} aria-label="Pick a date" />
-      </label>
+      </button>
       <button class="dt-icon-btn" on:click={() => moveDay(1)} aria-label="Next day"><CaretRight size={16} weight="bold" /></button>
       {#if !isToday}
         <button class="dt-today" on:click={backToToday}>Today</button>
+      {/if}
+      {#if calendarOpen}
+        <div class="dt-calendar">
+          <DevotionalCalendar {month} {day} on:pick={onPickDate} on:close={() => (calendarOpen = false)} />
+        </div>
       {/if}
     </div>
 
@@ -274,6 +283,7 @@
   }
 
   .dt-date-row {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -293,20 +303,47 @@
     cursor: pointer;
   }
   .dt-date {
-    position: relative;
     flex: 1;
-    text-align: center;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 34px;
+    padding: 0 8px;
+    border-radius: 8px;
+    background: none;
+    border: 1px solid transparent;
+    font-size: 0.95rem;
     font-weight: 700;
     color: rgba(255, 255, 255, 0.9);
     cursor: pointer;
   }
-  /* The native picker sits invisibly over the label, so tapping the date opens it. */
-  .dt-date input {
+  .dt-date :global(svg) {
+    flex-shrink: 0;
+    color: #e6b84a;
+  }
+  .dt-date span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dt-date:hover,
+  .dt-date.open {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  /* The calendar drops down from the middle of the date row, over the readings. */
+  .dt-calendar {
     position: absolute;
-    inset: 0;
-    width: 100%;
-    opacity: 0;
-    cursor: pointer;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+  }
+  .dt-calendar :global(.dc-panel) {
+    position: relative;
   }
   .dt-today {
     background: none;

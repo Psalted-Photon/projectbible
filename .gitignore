@@ -27,6 +27,10 @@ data-sources/maps/journeys/*
 !data-sources/maps/journeys/journey-index.json
 !data-sources/maps/journeys/LICENSE.md
 !data-sources/maps/journeys/README.md
+# The modern-English Spurgeon is our own writing, not a download, so it is kept.
+# The export it is written against (data-sources/devotionals/modernize-export/)
+# stays ignored: `node scripts/export-devotionals-for-modernizing.mjs` remakes it.
+!data-sources/devotionals-modern/
 
 # Large build artifacts (dictionary pipeline)
 data/raw/

@@ -17,7 +17,7 @@
   import { createEventDispatcher, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { fade } from 'svelte/transition';
-  import { SunHorizon, MoonStars, CalendarBlank, CaretLeft, CaretRight, ShareNetwork, X } from 'phosphor-svelte';
+  import { SunHorizon, MoonStars, CalendarBlank, CalendarDots, CaretLeft, CaretRight, ShareNetwork, X } from 'phosphor-svelte';
   import { navigationStore } from '../../stores/navigationStore';
   import { readingPlanModalStore } from '../../stores/readingPlanModalStore';
   import { devotionalSettings, type DevotionalTarget } from '../../stores/devotionalStore';
@@ -35,6 +35,7 @@
     type DevotionalKeyRef,
   } from '../../lib/devotionals/devotionalsData';
   import ShareModal from '../ShareModal.svelte';
+  import DevotionalCalendar from './DevotionalCalendar.svelte';
   import { buildDevotionalUrl } from '../../lib/shareText';
 
   export let work: DevotionalWork;
@@ -183,6 +184,18 @@
     dispatch('step', { workId: target.workId, ...stepReading(target, dir, bothSlots) });
   }
 
+  // ── Calendar ─────────────────────────────────────────────────────────────
+
+  let calendarOpen = false;
+
+  /** Same book, same morning or evening, the picked date. */
+  function onPickDate(e: CustomEvent<{ month: number; day: number }>) {
+    calendarOpen = false;
+    const { month, day } = e.detail;
+    if (month === target.month && day === target.day) return;
+    dispatch('step', { workId: target.workId, month, day, slot: target.slot });
+  }
+
   // ── Share ────────────────────────────────────────────────────────────────
 
   let shareOpen = false;
@@ -211,6 +224,9 @@
           <ShareNetwork size={16} weight="bold" />
         </button>
       {/if}
+      <button class="dr-icon-btn" class:open={calendarOpen} on:click={() => (calendarOpen = !calendarOpen)} title="Pick a date" aria-label="Pick a date">
+        <CalendarDots size={16} weight="bold" />
+      </button>
       <button class="dr-icon-btn" on:click={() => step(-1)} title="Previous reading" aria-label="Previous reading">
         <CaretLeft size={16} weight="bold" />
       </button>
@@ -221,6 +237,11 @@
     <button class="dr-close" on:click={() => dispatch('close')} title="Close" aria-label="Close reading">
       <X size={20} weight="bold" />
     </button>
+    {#if calendarOpen}
+      <div class="dr-calendar">
+        <DevotionalCalendar month={target.month} day={target.day} reader on:pick={onPickDate} on:close={() => (calendarOpen = false)} />
+      </div>
+    {/if}
   </div>
 
   <div class="dr-scroll" bind:this={scrollEl}>
@@ -321,6 +342,7 @@
 
   /* The portal escaped #app's safe-area padding, so the chrome carries its own. */
   .dr-top {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -344,9 +366,19 @@
     color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.5));
     cursor: pointer;
   }
-  .dr-icon-btn:hover {
+  .dr-icon-btn:hover,
+  .dr-icon-btn.open {
     background: rgba(255, 255, 255, 0.08);
     color: var(--reader-text-dim, rgba(255, 255, 255, 0.8));
+  }
+  /* The calendar drops down under the buttons, over the reading. */
+  .dr-calendar {
+    position: absolute;
+    top: 100%;
+    left: calc(env(safe-area-inset-left, 0px) + 12px);
+  }
+  .dr-calendar :global(.dc-panel) {
+    transform-origin: top left;
   }
   .dr-close {
     display: flex;
