@@ -246,6 +246,77 @@ function extractFormattingSpans(text: string): { start: number; end: number; kin
   return ranges;
 }
 
+type Mark = 'red' | 'b' | 'i';
+
+const SENTINEL_MARKS: Record<string, { mark: Mark; open: boolean }> = {
+  '\x02': { mark: 'red', open: true }, '\x03': { mark: 'red', open: false },
+  '\x04': { mark: 'b', open: true },   '\x05': { mark: 'b', open: false },
+  '\x06': { mark: 'i', open: true },   '\x07': { mark: 'i', open: false },
+};
+const MARK_CLOSER: Record<Mark, string> = { red: '\x03', b: '\x05', i: '\x07' };
+const MARK_TAGS: Record<Mark, [string, string]> = {
+  red: ['<span class="red-letter">', '</span>'],
+  b: ['<b>', '</b>'],
+  i: ['<i>', '</i>'],
+};
+// Marks switched on at the same spot open red-letter outermost, so a saying
+// stays one span however much of it is bold or italic.
+const MARK_RANK: Record<Mark, number> = { red: 0, b: 1, i: 2 };
+
+/**
+ * Turn red-letter and <b>/<i> sentinels into tags that always nest.
+ *
+ * The ranges overlap freely — NET bolds an Old Testament quotation inside a
+ * saying of Jesus, often from the same letter — and wrapping each pair on its
+ * own gave `<b><span class="red-letter">Love</b> … </span>`, where the
+ * browser's `</b>` closed the red span as well and left the rest of the saying
+ * black (Mark 12:30). This tracks which marks are on and, before each piece of
+ * content, closes and reopens tags so they nest. As before, an opener with no
+ * closer after it and a closer with nothing open are dropped.
+ */
+function nestSentinels(html: string): string {
+  const want: { mark: Mark; at: number }[] = [];
+  const have: Mark[] = [];
+  let out = '';
+  let units = 0;
+
+  const sync = () => {
+    let keep = 0;
+    while (keep < have.length && keep < want.length && have[keep] === want[keep].mark) keep++;
+    while (have.length > keep) out += MARK_TAGS[have.pop()!][1];
+    for (const w of want.slice(keep)) {
+      out += MARK_TAGS[w.mark][0];
+      have.push(w.mark);
+    }
+  };
+
+  let i = 0;
+  while (i < html.length) {
+    const s = SENTINEL_MARKS[html[i]];
+    if (s) {
+      const on = want.findIndex((w) => w.mark === s.mark);
+      if (!s.open) {
+        if (on !== -1) want.splice(on, 1);
+      } else if (on === -1 && html.indexOf(MARK_CLOSER[s.mark], i + 1) !== -1) {
+        want.push({ mark: s.mark, at: units });
+        want.sort((a, b) => a.at - b.at || MARK_RANK[a.mark] - MARK_RANK[b.mark]);
+      }
+      i++;
+      continue;
+    }
+    sync();
+    // A note marker's tag is one piece of content — nothing may open inside it.
+    const end = html[i] === '<' ? html.indexOf('>', i) : -1;
+    const next = end === -1 ? i + 1 : end + 1;
+    out += html.slice(i, next).replace(/[\x02-\x07]/g, '');
+    units++;
+    i = next;
+  }
+  want.length = 0;
+  sync();
+  return out;
+}
+
 export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]): string {
   const cleaned = stripHtmlTags(text);
 
@@ -288,12 +359,7 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
 
   const { html } = renderTextWithInlineNotes(processed);
 
-  // Wrap sentinels; clean up any orphaned ones
-  return html
-    .replace(/\x02([\s\S]*?)\x03/g, '<span class="red-letter">$1</span>')
-    .replace(/\x04([\s\S]*?)\x05/g, '<b>$1</b>')
-    .replace(/\x06([\s\S]*?)\x07/g, '<i>$1</i>')
-    .replace(/[\x02\x03\x04\x05\x06\x07]/g, '')
+  return nestSentinels(html)
     // Poetic lines. A leading marker opens the verse rather than breaking it,
     // so it emits no <br> — but a second-level opener still needs its indent,
     // and carrying it here rather than on the verse element means a line's

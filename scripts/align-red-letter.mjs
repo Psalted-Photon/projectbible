@@ -2,18 +2,20 @@
 /**
  * align-red-letter.mjs
  *
- * Aligns the WEB <wj> spans (from extract-wj-spans.mjs) to each translation
- * in the pack (WEB, BSB, KJV, NET) and outputs a single static JSON for the PWA.
+ * Places Jesus' words in each translation's pack (WEB, BSB, KJV, NET) and
+ * outputs a single static JSON for the PWA.
  *
- * Key insight: the USFX (WEB 2025 edition) and WEB.json (older edition) have
- * different wording. So instead of text-matching the span text, we use:
+ * WEB, BSB and KJV carry their own <wj> markup (extract-wj-spans*.mjs), from
+ * the same editions as their packs, so each span is found word for word in the
+ * pack text (locateVerbatim). NET has none; it borrows WEB's spans through:
  *
  *   1. Normalised substring match  (fast path, works when text is close)
  *   2. Quote-region by index + word-overlap (main path)
  *      - Find all quoted regions in WEB.json verse text
  *      - Match each USFX <wj> span to a WEB.json quote region by word overlap
  *      - Map to same-indexed quote region in target translation
- *   3. First-3 / last-3 significant-word sequence scan  (KJV fallback)
+ *   3. First-3 / last-3 significant-word sequence scan, and later fallbacks
+ *   then a pass that follows NET's own quotation marks across verses.
  *
  * Never guesses — if no strategy succeeds, the span is omitted.
  *
@@ -34,7 +36,6 @@ const WJ_SPANS_PATH = join(repoRoot, 'data', 'processed', 'wj-spans-web.json');
 const KJV_WJ_SPANS_PATH = join(repoRoot, 'data', 'processed', 'wj-spans-kjv.json');
 const BSB_WJ_SPANS_PATH = join(repoRoot, 'data', 'processed', 'wj-spans-bsb.json');
 const WEB_JSON_PATH = join(repoRoot, 'data-sources', 'WEB.json');
-const KJV_JSON_PATH = join(repoRoot, 'data-sources', 'KJVPCE.json');
 const PACKS_DIR = join(repoRoot, 'packs');
 const OUT_PATH = join(repoRoot, 'apps', 'pwa-polished', 'public', 'red-letter-spans.json');
 
@@ -188,6 +189,23 @@ function wordOverlap(text1, text2) {
 }
 
 // ── Core alignment ─────────────────────────────────────────────────────────────
+
+/**
+ * Find a span word for word in the translation it was marked in, ignoring only
+ * spacing — the span extractors and the pack builders disagree about spaces
+ * around dashes and closing quotes ("heaven— the" / "heaven—the"). This is the
+ * answer whenever it exists: the fuzzy strategies below are for carrying WEB's
+ * spans into NET, and run on a text that has its own spans they would stretch
+ * past a closing quote into narration or stop short of the last word.
+ */
+function locateVerbatim(spanText, text, from) {
+  const chars = [...spanText.replace(/\s+/g, '')];
+  if (chars.length === 0) return null;
+  const re = new RegExp(chars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*'), 'g');
+  re.lastIndex = from;
+  const m = re.exec(text);
+  return m ? { s: m.index, e: m.index + m[0].length } : null;
+}
 
 function alignSpan(spanText, webVerseText, targetText) {
   const span = spanText.trim();
@@ -417,6 +435,19 @@ function snapToQuotes(result, targetText) {
 }
 
 /**
+ * Is a ‘ quotation open at `to`, counting from `from`? A ’ closes one only
+ * when no letter follows, so "don’t" and "God’s" are not taken for closes.
+ */
+function singleQuoteOpen(text, from, to) {
+  let depth = 0;
+  for (let i = from; i < to; i++) {
+    if (text[i] === '‘') depth++;
+    else if (text[i] === '’' && depth > 0 && !/[A-Za-z]/.test(text[i + 1] || '')) depth--;
+  }
+  return depth > 0;
+}
+
+/**
  * Post-processing pass using curly double-quote tracking across verse
  * boundaries. BSB and NET consistently wrap Jesus' speech in \u201C...\u201D
  * regardless of how many verses it spans — those quotes are the ground truth.
@@ -452,6 +483,12 @@ function refineWithCrossVerseQuotes(transOut, getter) {
 
     // quoteOpen: are we inside a \u201C...\u201D region as we enter this verse?
     let quoteOpen = false;
+    // How many \u201C...\u201D quotations are open *inside* that region. NET quotes
+    // a quotation within a quotation within his speech in double marks again
+    // (Mark 12:36 \u2018The Lord said to my lord, \u201CSit at my right hand\u2026\u201D\u2019), and
+    // taking that inner \u201D as the end of his speech left 12:37 looking like
+    // narration, so a word match ran it on into "the large crowd was listening".
+    let nested = 0;
 
     for (let v = 1; v <= maxV + 5; v++) {
       const text = verseTexts.get(v);
@@ -484,7 +521,20 @@ function refineWithCrossVerseQuotes(transOut, getter) {
           spanStart = nextOpen;
           pos = nextOpen + 1;
         } else {
-          // Inside a quoted region
+          // Inside a quoted region. A “ here usually reopens the speech at a
+          // new paragraph and is ignored, but after a ‘ that is still open it
+          // starts a quotation inside the quotation.
+          if (nextOpen >= 0 && (nextClose < 0 || nextOpen < nextClose)
+              && singleQuoteOpen(text, Math.max(spanStart, 0), nextOpen)) {
+            nested++;
+            pos = nextOpen + 1;
+            continue;
+          }
+          if (nextClose >= 0 && nested > 0) {
+            nested--;
+            pos = nextClose + 1;
+            continue;
+          }
           if (nextClose < 0) {
             // No close in this verse — speech continues into next verse
             spans.push({ s: spanStart, e: text.length });
@@ -576,17 +626,6 @@ for (const book of webJson.books) {
 }
 console.log(`   ${Object.keys(webByKey).length} WEB verses`);
 
-console.log('📖 Loading KJV.json...');
-const kjvJson = JSON.parse(readFileSync(KJV_JSON_PATH, 'utf8'));
-const kjvByKey = {};
-for (const book of kjvJson.books) {
-  const usfm = BOOK_NAME_TO_USFM[book.name.toUpperCase()];
-  if (!usfm) continue;
-  for (const ch of book.chapters) {
-    for (const v of ch.verses) kjvByKey[`${usfm}:${ch.chapter}:${v.verse}`] = v.text;
-  }
-}
-
 console.log('📖 Loading wj-spans-web.json...');
 if (!existsSync(WJ_SPANS_PATH)) { console.error('❌ Run extract-wj-spans.mjs first.'); process.exit(1); }
 const wjSpans = JSON.parse(readFileSync(WJ_SPANS_PATH, 'utf8'));
@@ -604,9 +643,11 @@ console.log(`   ${Object.keys(bsbWjSpans).length} verses with BSB \\wj spans`);
 
 // ── Verse text getters ────────────────────────────────────────────────────────
 
-function makeVerseGetter(transId, packFile) {
-  if (transId === 'web') return key => webByKey[key] ?? null;
-  if (transId === 'kjv') return key => kjvByKey[key] ?? null;
+// Every translation is measured against its own pack — the text the reader
+// actually draws. WEB.json and KJVPCE.json are other editions (WEB.json an
+// older revision, KJVPCE single-spaced where the pack is not), so offsets
+// taken from them landed a few letters off in the app, or on the wrong words.
+function makeVerseGetter(packFile) {
   const dbPath = join(PACKS_DIR, packFile);
   if (!existsSync(dbPath)) { console.warn(`   ⚠️  Not found: ${packFile}`); return null; }
   const db = new Database(dbPath, { readonly: true });
@@ -622,13 +663,27 @@ function makeVerseGetter(transId, packFile) {
   };
 }
 
+// ── Source corrections ────────────────────────────────────────────────────────
+
+/**
+ * Verses where a source marks narration as his words. Each entry replaces that
+ * verse's spans with the words he actually says. Found by comparing how much
+ * of each verse is red against WEB and BSB.
+ */
+const SOURCE_FIXES = {
+  kjv: {
+    // eBible's KJV keeps <wj> open through "And the common people heard him gladly."
+    'MRK:12:37': [{ text: 'David therefore himself calleth him Lord; and whence is he then his son?' }],
+  },
+};
+
 // ── Run alignment ─────────────────────────────────────────────────────────────
 
 const translations = [
-  { id: 'web', getter: makeVerseGetter('web') },
-  { id: 'bsb', getter: makeVerseGetter('bsb', 'bsb.sqlite') },
-  { id: 'kjv', getter: makeVerseGetter('kjv') },
-  { id: 'net', getter: makeVerseGetter('net', 'net.sqlite') },
+  { id: 'web', getter: makeVerseGetter('web.sqlite') },
+  { id: 'bsb', getter: makeVerseGetter('bsb.sqlite') },
+  { id: 'kjv', getter: makeVerseGetter('kjv.sqlite') },
+  { id: 'net', getter: makeVerseGetter('net.sqlite') },
 ];
 
 const output = {};
@@ -640,19 +695,23 @@ for (const { id, getter } of translations) {
   let aligned = 0, skipped = 0;
 
   const sourceSpans = (id === 'kjv') ? kjvWjSpans : (id === 'bsb') ? bsbWjSpans : wjSpans;
-  for (const [key, spanDefs] of Object.entries(sourceSpans)) {
+  for (const [key, sourceDefs] of Object.entries(sourceSpans)) {
+    const spanDefs = SOURCE_FIXES[id]?.[key] ?? sourceDefs;
+    // NET has no <wj> markup of its own; it borrows WEB's spans.
+    const ownSpans = id !== 'net';
     const webText = webByKey[key];
-    if (id !== 'kjv' && !webText) continue;
+    if (!ownSpans && !webText) continue;
     const storedText = getter(key);
     if (!storedText) continue;
-    const cleanText = (id === 'web' || id === 'kjv')
-      ? stripHtml(storedText.replace(/^¶\s*/, ''))
-      : stripHtml(stripFootnotes(storedText));
-    const refText = (id === 'web' || id === 'kjv' || id === 'bsb') ? cleanText : webText;
+    const cleanText = stripHtml(stripFootnotes(storedText));
+    const refText = ownSpans ? cleanText : webText;
 
     const results = [];
+    let from = 0;
     for (const spanDef of spanDefs) {
-      const r = snapToQuotes(alignSpan(spanDef.text, refText, cleanText), cleanText);
+      const exact = ownSpans ? locateVerbatim(spanDef.text, cleanText, from) : null;
+      if (exact) from = exact.e;
+      const r = exact ?? snapToQuotes(alignSpan(spanDef.text, refText, cleanText), cleanText);
       if (r && r.e > r.s) { results.push(r); aligned++; } else skipped++;
     }
 
@@ -692,9 +751,7 @@ for (const key of verifyKeys) {
     if (!getter) continue;
     const spans = output[id]?.[key];
     const stored = getter(key) || '';
-    const clean = (id === 'web' || id === 'kjv')
-      ? stored.replace(/^¶\s*/, '')
-      : stripFootnotes(stored);
+    const clean = stripHtml(stripFootnotes(stored));
     if (!spans) { console.log(`    ${id}: (no alignment)`); continue; }
     for (const { s, e } of spans) {
       const ex = clean.slice(s, e);
