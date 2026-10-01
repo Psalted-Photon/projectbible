@@ -2,11 +2,10 @@
   /**
    * One devotional reading.
    *
-   * Spurgeon (Morning and Evening, Faith's Checkbook): his headline verse in the
-   * King James wording he wrote about, the same verse in the reader's own
-   * translation under it, then his text. Daily Light: Bagster's fragments as he
-   * arranged them, each with its reference; tapping a fragment opens the full
-   * verse(s) under it in the reader's translation.
+   * Spurgeon (Morning and Evening, Faith's Checkbook): his headline verse, then
+   * his text. Daily Light: Bagster's references in his paragraphs. Only the
+   * references come from the pack; every verse shown is the reader's own
+   * translation, so there is one translation on the page and no label for it.
    *
    * Every reference opens the reader with the fade highlight and leaves a
    * BookBookmark crumb that brings you back here, scrolled where you were.
@@ -71,8 +70,6 @@
   }
 
   $: translation = $navigationStore.translation;
-  $: isNet = translation?.toLowerCase() === 'net';
-  $: isKjv = translation?.toLowerCase() === 'kjv';
   $: bothSlots = work.hasSlots && $devotionalSettings.slotMode === 'both';
   $: slotLabel = target.slot === 'morning' ? 'Morning' : target.slot === 'evening' ? 'Evening' : '';
 
@@ -82,7 +79,6 @@
   async function load(workId: string, month: number, day: number, slot: DevotionalTarget['slot']) {
     const token = ++loadToken;
     loading = true;
-    expanded = new Set();
     verseCache = {};
     const r = await getReading(workId, month, day, slot);
     if (token !== loadToken) return;
@@ -123,32 +119,14 @@
     verseCache = { ...verseCache, [key]: parts.join(' ') };
   }
 
-  // The Spurgeon headline's translation line follows the reader's translation, and is left
-  // out when it would only repeat the King James words above it.
-  $: if (reading && work.workId !== 'daily-light' && translation && !isKjv) {
+  // Every reference, in the reader's translation; follows it if it changes while the reading is up.
+  $: if (reading && translation) {
     for (const k of reading.keyRefs) loadVerse(k, translation);
   }
 
-  // Re-fetch any open Daily Light verses if the translation changes while the reading is up.
-  $: if (reading && translation) {
-    for (const i of expanded) {
-      const k = reading.keyRefs[i];
-      if (k) loadVerse(k, translation);
-    }
-  }
+  // ── Daily Light ──────────────────────────────────────────────────────────
 
-  // ── Daily Light fragments ────────────────────────────────────────────────
-
-  let expanded = new Set<number>();
-
-  function toggle(i: number) {
-    const next = new Set(expanded);
-    if (next.has(i)) next.delete(i);
-    else next.add(i);
-    expanded = next;
-  }
-
-  /** Fragments grouped into Bagster's paragraphs, keeping each one's index into keyRefs. */
+  /** References grouped into Bagster's paragraphs, keeping each one's index into keyRefs. */
   $: paragraphs = (() => {
     if (!reading || work.workId !== 'daily-light') return [] as { k: DevotionalKeyRef; i: number }[][];
     const groups: { k: DevotionalKeyRef; i: number }[][] = [];
@@ -159,12 +137,6 @@
     });
     return groups.filter(Boolean);
   })();
-
-  /** KJV text with its [supplied words] set in italics, as a printed KJV shows them. */
-  function kjvHtml(text: string): string {
-    const esc = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return esc.replace(/\[([^\]]+)\]/g, '<em>$1</em>');
-  }
 
   // ── Body links ───────────────────────────────────────────────────────────
 
@@ -216,16 +188,12 @@
   let shareOpen = false;
   $: firstRef = reading?.keyRefs[0] ?? null;
   $: shareSource = `${work.author.replace(/^C\. H\. /, '')} · ${work.title} · ${formatMonthDay(target.month, target.day)}${slotLabel ? `, ${slotLabel.toLowerCase()}` : ''}`;
-  $: sharePassage = firstRef
-    ? (translation && !isKjv && verseCache[`${translation}|${firstRef.osis}`]) || firstRef.kjvText
-    : '';
-  $: shareTranslation = firstRef && translation && !isKjv && verseCache[`${translation}|${firstRef.osis}`] ? translation : 'KJV';
-  $: shareRef = firstRef && firstRef.verseStart != null
+  $: sharePassage = firstRef && translation ? verseCache[`${translation}|${firstRef.osis}`] ?? '' : '';
+  $: shareRef = sharePassage && firstRef && firstRef.verseStart != null
     ? { book: normalizeBookName(firstRef.book), chapter: firstRef.chapter, startVerse: firstRef.verseStart, endVerse: firstRef.verseEnd ?? firstRef.verseStart }
     : null;
 
-  async function openShare() {
-    if (firstRef && translation && !isKjv) await loadVerse(firstRef, translation);
+  function openShare() {
     shareOpen = true;
   }
 </script>
@@ -278,49 +246,36 @@
       {#each paragraphs as para, pi}
         <div class="dl-para" class:dl-theme={pi === 0}>
           {#each para as { k, i } (i)}
+            {@const text = verseCache[`${translation}|${k.osis}`]}
             <div class="dl-frag">
-              <button class="dl-frag-text" class:open={expanded.has(i)} on:click={() => toggle(i)}>
-                {@html kjvHtml(k.fragment ?? k.kjvText)}
-              </button>
+              {#if text}
+                <p class="dl-text">{@html renderVerseHtml(text)}</p>
+              {:else if text === ''}
+                <p class="dr-muted">{translationLabel(translation)} doesn't have this verse.</p>
+              {/if}
               <button class="dr-ref" style="color:{getBookColor(normalizeBookName(k.book))}" on:click={() => goToRef(k.osis)}>
                 {k.label}
               </button>
-              {#if expanded.has(i)}
-                {@const text = verseCache[`${translation}|${k.osis}`]}
-                <div class="dl-expand">
-                  {#if text === undefined}
-                    <span class="dr-muted">Loading…</span>
-                  {:else if text}
-                    <span class="dr-trans-text">{@html renderVerseHtml(text)}</span>
-                    <span class="dr-trans-tag">({#if isNet}<a href="https://netbible.org" target="_blank" rel="noopener noreferrer">NET</a>{:else}{translationLabel(translation)}{/if})</span>
-                  {:else}
-                    <span class="dr-muted">{translationLabel(translation)} doesn't have this verse.</span>
-                  {/if}
-                </div>
-              {/if}
             </div>
           {/each}
         </div>
       {/each}
-      <p class="dr-footnote">Bagster's words are the King James Version. Tap any line to read it in {translationLabel(translation)}.</p>
     </div>
   {:else}
     {#if reading.title && !/^(Morning|Evening),/.test(reading.title)}
       <h3 class="dr-title">{reading.title}</h3>
     {/if}
     {#each reading.keyRefs as k}
-      {@const text = translation && !isKjv ? verseCache[`${translation}|${k.osis}`] : ''}
+      {@const text = verseCache[`${translation}|${k.osis}`]}
       <div class="dr-headline">
-        <p class="dr-kjv">“{@html kjvHtml(k.kjvText)}”</p>
+        {#if text}
+          <p class="dr-verse">{@html renderVerseHtml(text)}</p>
+        {:else if text === ''}
+          <p class="dr-muted">{translationLabel(translation)} doesn't have this verse.</p>
+        {/if}
         <button class="dr-ref" style="color:{getBookColor(normalizeBookName(k.book))}" on:click={() => goToRef(k.osis)}>
           {k.label}
         </button>
-        {#if text}
-          <p class="dr-trans">
-            <span class="dr-trans-text">{@html renderVerseHtml(text)}</span>
-            <span class="dr-trans-tag">({#if isNet}<a href="https://netbible.org" target="_blank" rel="noopener noreferrer">NET</a>{:else}{translationLabel(translation)}{/if})</span>
-          </p>
-        {/if}
       </div>
     {/each}
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
@@ -338,7 +293,7 @@
     <ShareModal
       reference={shareRef}
       passage={sharePassage}
-      translation={shareTranslation}
+      translation={translation}
       source={shareSource}
       linkUrl={buildDevotionalUrl(target.workId, target.month, target.day, target.slot)}
       on:close={() => (shareOpen = false)}
@@ -475,14 +430,11 @@
     background: rgba(230, 184, 74, 0.06);
     border: 1px solid rgba(230, 184, 74, 0.15);
   }
-  .dr-kjv {
+  .dr-verse {
     margin: 0 0 6px;
     font-style: italic;
     font-size: var(--base-font-size, 18px);
     line-height: 1.6;
-  }
-  .dr-kjv :global(em) {
-    font-style: normal;
   }
   .dr-ref {
     background: none;
@@ -494,23 +446,6 @@
     cursor: pointer;
     text-align: left;
   }
-  .dr-trans {
-    margin: 10px 0 0;
-    padding-top: 10px;
-    border-top: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.08));
-    font-size: 0.95rem;
-    line-height: 1.6;
-    color: var(--reader-text-dim, rgba(255, 255, 255, 0.75));
-  }
-  .dr-trans-tag {
-    font-size: 0.78rem;
-    color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.5));
-    white-space: nowrap;
-  }
-  .dr-trans-tag a {
-    color: inherit;
-  }
-
   .dr-body {
     font-size: var(--base-font-size, 18px);
     line-height: var(--line-spacing, 1.7);
@@ -535,52 +470,24 @@
   .dl-para {
     margin-bottom: 18px;
   }
-  .dl-theme .dl-frag-text {
+  .dl-theme .dl-text {
     font-size: 1.12em;
     color: #e6b84a;
   }
   .dl-frag {
     margin-bottom: 10px;
   }
-  .dl-frag-text {
-    display: block;
-    width: 100%;
-    background: none;
-    border: none;
-    border-left: 2px solid transparent;
-    padding: 2px 0 2px 8px;
-    margin-left: -10px;
-    color: inherit;
-    font: inherit;
+  .dl-text {
+    margin: 0;
     font-size: var(--base-font-size, 18px);
     line-height: var(--line-spacing, 1.6);
-    text-align: left;
-    cursor: pointer;
-  }
-  .dl-frag-text.open {
-    border-left-color: #e6b84a;
   }
   .dl-frag .dr-ref {
     display: block;
-    margin-left: 0;
-  }
-  .dl-expand {
-    margin: 6px 0 4px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.05);
-    font-size: 0.95rem;
-    line-height: 1.6;
-    color: var(--reader-text-dim, rgba(255, 255, 255, 0.8));
   }
 
   .dr-muted {
     color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.4));
     font-size: 0.85rem;
-  }
-  .dr-footnote {
-    margin-top: 20px;
-    font-size: 0.75rem;
-    color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.35));
   }
 </style>
