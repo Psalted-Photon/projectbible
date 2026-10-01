@@ -697,6 +697,15 @@ function overlap(gloss, note) {
   return g.length ? g.filter((w) => n.has(w)).length / g.length : 1;
 }
 
+// Typing slips. Doubled words the Bible uses on purpose are let through.
+const SLIPS = [
+  [/\b(\w+) \1\b/gi, 'doubled word'],
+  [/\s[,.;:!?]/g, 'space before punctuation'],
+  [/ {2,}/g, 'double space'],
+  [/[a-z][.!?][A-Z]/g, 'no space after a sentence'],
+];
+const DOUBLED_OK = /^(that that|had had|is is|ways ways|thousand thousand|holy holy|verily verily|amen amen)$/i;
+
 function reviewModern(month) {
   const flags = [];
   const glossary = readGlossary();
@@ -731,7 +740,13 @@ function reviewModern(month) {
         const words = q[1].replace(/^[\s,.;:!?—]+|[\s,.;:!?—]+$/g, '');
         if (wordCount(words) >= 3 && !mod.includes(words)) flags.push(`${where}: quotation not word for word: "${words.slice(0, 70)}${words.length > 70 ? '…' : ''}"`);
       }
+      for (const [re, label] of SLIPS) for (const s of text.matchAll(re)) {
+        if (label === 'doubled word' && DOUBLED_OK.test(s[0])) continue;
+        flags.push(`${where}: ${label}: …${text.slice(Math.max(0, s.index - 25), s.index + 25)}…`);
+      }
     });
+    // The (i) panel serves the original view too, so its name for God gets explained.
+    if (/\bJehovah\b/.test(r.body_html) && !(entry.notes || []).some((n) => /\bJehovah\b/.test(`${n?.term} ${n?.note}`))) flags.push(`${at}: the original says Jehovah, with no note`);
     if (origWords && modWords) {
       const ratio = modWords / origWords;
       if (ratio < MODERN_LENGTH[0] || ratio > MODERN_LENGTH[1]) flags.push(`${at}: ${modWords} modern words for ${origWords} original (${ratio.toFixed(2)}×), check nothing was dropped or added`);
