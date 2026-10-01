@@ -1927,11 +1927,14 @@ export async function importPackFromBytes(
         { label: 'devotional works' },
       );
 
+      // The modern-English version and its notes came later; an older pack hasn't got them.
+      const readingCols = (db.exec('PRAGMA table_info(readings)')[0]?.values ?? []).map((c: any[]) => String(c[1]));
+      const hasModern = readingCols.includes('modern_html') && readingCols.includes('notes_json');
       await streamTable(
         db,
-        'SELECT work_id, month, day, slot, title, body_html, plain_text, key_refs_json FROM readings',
+        `SELECT work_id, month, day, slot, title, body_html, plain_text, key_refs_json${hasModern ? ', modern_html, notes_json' : ''} FROM readings`,
         'devotional_readings',
-        ([workId, month, day, slot, title, bodyHtml, plainText, keyRefsJson]) => ({
+        ([workId, month, day, slot, title, bodyHtml, plainText, keyRefsJson, modernHtml, notesJson]) => ({
           id: `${workId}:${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}:${slot}`,
           workId: workId as string,
           month: month as number,
@@ -1941,6 +1944,8 @@ export async function importPackFromBytes(
           bodyHtml: bodyHtml as string,
           plainText: plainText as string,
           keyRefs: JSON.parse((keyRefsJson as string) || '[]'),
+          ...(modernHtml ? { modernHtml: modernHtml as string } : {}),
+          ...(notesJson ? { notes: JSON.parse(notesJson as string) } : {}),
         }),
         { batchSize: 300, label: 'devotional readings' },
       );

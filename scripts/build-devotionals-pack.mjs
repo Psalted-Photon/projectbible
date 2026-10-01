@@ -27,16 +27,23 @@
  *   - checkbook.xml https://www.ccel.org/ccel/s/spurgeon/checkbook.xml (CCEL ThML)
  *   - data-sources/KJV.json, to match Daily Light's fragments to their passages
  *
+ * Modern English (our own writing, kept in git): data-sources/devotionals-modern/
+ * <workId>/<MM>.json gives a reading a plain modern version (modern_html) and
+ * notes on its old words (notes_json); see STYLE.md there. Readings without them
+ * are fine. The build fails if one names a reading that doesn't exist, has the
+ * wrong number of blocks, drops a Scripture link, or links to a verse that isn't there.
+ *
  * Usage:
  *   node scripts/build-devotionals-pack.mjs
  */
 
 import Database from 'better-sqlite3';
 import zlib from 'zlib';
-import { readFileSync, existsSync, copyFileSync, mkdirSync, statSync, unlinkSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, copyFileSync, mkdirSync, statSync, unlinkSync } from 'fs';
 import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import { splitBlocks, htmlToMarked, linksIn, markedToHtml, markupProblem } from './devotional-blocks.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -45,6 +52,7 @@ const SME = resolve(SRC, 'sme/modules/lexdict/zld/devotionals/sme/sme');
 const DAILY = resolve(SRC, 'daily/modules/lexdict/rawld/devotionals/daily/daily');
 const CHECKBOOK = resolve(SRC, 'checkbook.xml');
 const KJV = resolve(ROOT, 'data-sources/KJV.json');
+const MODERN = resolve(ROOT, 'data-sources/devotionals-modern');
 const PACK_OUTPUT = resolve(ROOT, 'packs/consolidated/devotionals.sqlite');
 
 for (const f of [SME + '.zdt', DAILY + '.dat', CHECKBOOK, KJV]) {
@@ -538,6 +546,100 @@ function buildDailyLight() {
 }
 
 /* --------------------------------------------------------------------------- *
+ * Modern English (data-sources/devotionals-modern/)
+ * ------------------------------------------------------------------------- */
+
+const modernErrors = [];
+const pad = (n) => String(n).padStart(2, '0');
+
+/** Why an OSIS link doesn't name a real verse, or null if it does. */
+function badLink(osis) {
+  const r = parseOsis(osis);
+  if (!r || r.verseStart == null) return `"${osis}" isn't a verse reference`;
+  for (let v = r.verseStart; v <= r.verseEnd; v++) {
+    if (!KJV_VERSES.has(`${r.book} ${r.chapter}:${v}`)) return `"${osis}": ${r.book} ${r.chapter}:${v} doesn't exist`;
+  }
+  return null;
+}
+
+/**
+ * Give each reading its modern version and notes, from the per-month files.
+ * Each paragraph carries data-b, the original block it renders, so the app can
+ * keep its place when switching between the two.
+ */
+function attachModern(rows) {
+  if (!existsSync(MODERN)) return;
+  const byId = new Map(rows.map((r) => [`${r.work_id}:${pad(r.month)}-${pad(r.day)}:${r.slot}`, r]));
+  for (const workId of readdirSync(MODERN)) {
+    const dir = resolve(MODERN, workId);
+    if (!statSync(dir).isDirectory()) continue;
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.json')).sort()) {
+      let data;
+      try {
+        data = JSON.parse(readFileSync(resolve(dir, file), 'utf8'));
+      } catch (e) {
+        modernErrors.push(`${workId}/${file}: not valid JSON (${e.message})`);
+        continue;
+      }
+      for (const [key, entry] of Object.entries(data)) {
+        const at = `${workId}/${file} ${key}`;
+        const r = byId.get(`${workId}:${key}`);
+        if (!r) { modernErrors.push(`${at}: no such reading`); continue; }
+
+        if (entry.modern != null) {
+          const blocks = splitBlocks(r.body_html);
+          const modern = entry.modern;
+          if (!Array.isArray(modern) || modern.length !== blocks.length) {
+            modernErrors.push(`${at}: ${blocks.length} block(s) in the original, ${Array.isArray(modern) ? modern.length : 'no list of'} modern`);
+          } else {
+            const html = [];
+            blocks.forEach((b, i) => {
+              const m = modern[i];
+              if (b.kind === 'poem') {
+                if (m !== null) modernErrors.push(`${at} block ${i + 1}: a poem, so it should be null`);
+                html.push(`<blockquote data-b="${i}">${b.html}</blockquote>`);
+                return;
+              }
+              if (typeof m !== 'string' || !m.trim()) { modernErrors.push(`${at} block ${i + 1}: empty`); return; }
+              const problem = markupProblem(m);
+              if (problem) modernErrors.push(`${at} block ${i + 1}: ${problem}`);
+              for (const osis of linksIn(htmlToMarked(b.html))) {
+                if (!linksIn(m).includes(osis)) modernErrors.push(`${at} block ${i + 1}: the link to ${osis} went missing`);
+              }
+              for (const osis of linksIn(m)) {
+                const bad = badLink(osis);
+                if (bad) modernErrors.push(`${at} block ${i + 1}: ${bad}`);
+              }
+              for (const para of m.split(/\n\s*\n/).filter((p) => p.trim())) html.push(`<p data-b="${i}">${markedToHtml(para)}</p>`);
+            });
+            r.modern_html = html.join('');
+          }
+        }
+
+        if (entry.notes != null) {
+          if (!Array.isArray(entry.notes)) { modernErrors.push(`${at}: notes isn't a list`); continue; }
+          const notes = [];
+          entry.notes.forEach((n, i) => {
+            if (typeof n?.term !== 'string' || !n.term.trim() || typeof n?.note !== 'string' || !n.note.trim()) {
+              modernErrors.push(`${at} note ${i + 1}: needs a term and a note`);
+              return;
+            }
+            const problem = markupProblem(n.note);
+            if (problem) modernErrors.push(`${at} note ${i + 1} (${n.term}): ${problem}`);
+            for (const osis of linksIn(n.note)) {
+              const bad = badLink(osis);
+              if (bad) modernErrors.push(`${at} note ${i + 1} (${n.term}): ${bad}`);
+            }
+            notes.push({ term: n.term.trim(), html: markedToHtml(n.note) });
+          });
+          if (notes.length) r.notes = notes;
+        }
+      }
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------- *
  * Build
  * ------------------------------------------------------------------------- */
 
@@ -546,6 +648,7 @@ const me = buildSpurgeonME();
 const cb = buildCheckbook();
 const dl = buildDailyLight();
 const all = [...me, ...cb, ...dl];
+attachModern(all);
 
 if (existsSync(PACK_OUTPUT)) unlinkSync(PACK_OUTPUT);
 mkdirSync(dirname(PACK_OUTPUT), { recursive: true });
@@ -572,6 +675,8 @@ db.exec(`
     body_html     TEXT,
     plain_text    TEXT,     -- lowercased, tag-free, for search
     key_refs_json TEXT,     -- [{book, chapter, verseStart, verseEnd, verses?, osis, label, kjvText, fragment?, para?}]
+    modern_html   TEXT,     -- plain modern English, or NULL; each element's data-b is the original block it renders
+    notes_json    TEXT,     -- [{term, html}] on the old words and phrases, or NULL
     PRIMARY KEY (work_id, month, day, slot)
   );
 `);
@@ -597,14 +702,17 @@ insWork.run('faiths-checkbook', "Faith's Checkbook", 'Checkbook', 'C. H. Spurgeo
 insWork.run('daily-light', 'Daily Light on the Daily Path', 'Daily Light', 'Jonathan Bagster', 1875, 1, 3,
   'Morning and evening readings made entirely of Scripture, verses gathered around one theme.');
 
-const insReading = db.prepare('INSERT INTO readings VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+const insReading = db.prepare('INSERT INTO readings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 db.transaction(() => {
   for (const r of all) {
     // A date title ("Morning, January 1") is left out, or searching "morning" would match every reading.
     const searchTitle = /^(Morning|Evening), /.test(r.title) ? '' : r.title;
-    const plain = (searchTitle + ' ' + r.key_refs.map((k) => k.kjvText).join(' ') + ' ' + plainOf(r.body_html)).toLowerCase().replace(/\s+/g, ' ').trim();
+    // Search finds a word in the modern text or the notes too.
+    const extra = [r.modern_html ? plainOf(r.modern_html) : '', ...(r.notes ?? []).map((n) => `${n.term} ${plainOf(n.html)}`)].join(' ');
+    const plain = (searchTitle + ' ' + r.key_refs.map((k) => k.kjvText).join(' ') + ' ' + plainOf(r.body_html) + ' ' + extra).toLowerCase().replace(/\s+/g, ' ').trim();
     const keyRefs = r.key_refs.map((k) => ({ ...k, label: refLabel(k) }));
-    insReading.run(r.work_id, r.month, r.day, r.slot, r.title, r.body_html, plain, JSON.stringify(keyRefs));
+    insReading.run(r.work_id, r.month, r.day, r.slot, r.title, r.body_html, plain, JSON.stringify(keyRefs),
+      r.modern_html ?? null, r.notes ? JSON.stringify(r.notes) : null);
   }
 })();
 
@@ -636,6 +744,15 @@ console.log(`   ${badBooks.length ? '✗' : '✓'} key-ref books that don't reso
 if (badBooks.length) failed = true;
 console.log(`   ✓ Morning and Evening: ${smeRefFixes} Jude references corrected from Judges`);
 console.log(`   ✓ Daily Light: ${dailyFragments} fragments, every one with a passage (${dailySplits} split in two, ${dailyDropped} stray references dropped)`);
+const modernOf = (w) => all.filter((r) => r.work_id === w && r.modern_html).length;
+const notesOf = (w) => all.filter((r) => r.work_id === w && r.notes).length;
+const noteTotal = all.reduce((n, r) => n + (r.notes?.length ?? 0), 0);
+console.log(`   ${modernErrors.length ? '✗' : '✓'} Modern English: Morning and Evening ${modernOf('spurgeon-me')} of 732, Faith's Checkbook ${modernOf('faiths-checkbook')} of 366; notes on ${notesOf('spurgeon-me') + notesOf('faiths-checkbook')} (${noteTotal} notes)`);
+if (modernErrors.length) {
+  failed = true;
+  console.log(`\n   Modern English problems (${modernErrors.length}):`);
+  for (const e of modernErrors) console.log('     ' + e);
+}
 if (weakMatches.length) {
   console.log(`\n   Daily Light matches under 75% word overlap (${weakMatches.length}), for review:`);
   for (const w of weakMatches) console.log('     ' + w);

@@ -47,3 +47,28 @@ export function htmlToMarked(html) {
 export function linksIn(marked) {
   return [...marked.matchAll(/\[\[([^|\]]+)\|[^\]]*\]\]/g)].map((m) => m[1]);
 }
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Why a piece of marked text can't be turned into HTML, or null if it can:
+ * an unpaired * or ^, or a [[ that never closes.
+ */
+export function markupProblem(marked) {
+  const bare = marked.replace(/\[\[[^|\]]+\|[^\]]*\]\]/g, '');
+  if (/\[\[|\]\]/.test(bare)) return 'a [[link]] that is not [[Osis|label]]';
+  if ((bare.match(/\*/g) || []).length % 2) return 'an unpaired *';
+  if ((bare.match(/\^/g) || []).length % 2) return 'an unpaired ^';
+  return null;
+}
+
+/** Marked text -> HTML, the reverse of htmlToMarked. A line break becomes <br>. */
+export function markedToHtml(marked) {
+  return escapeHtml(marked.trim())
+    .replace(/\[\[([^|\]]+)\|([^\]]*)\]\]/g, (_, osis, label) => `<a class="devo-ref" data-osis="${osis}">${label}</a>`)
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/\^([^^]+)\^/g, '<span class="sc">$1</span>')
+    .replace(/\n/g, '<br>');
+}

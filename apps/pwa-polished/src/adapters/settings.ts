@@ -79,6 +79,8 @@ export interface DevotionalSettings {
   mainWork: string;
   /** Morning only, evening only, or both (the one that fits the time of day). */
   slotMode: 'both' | 'morning' | 'evening';
+  /** Spurgeon as he wrote it, or in plain modern English where that exists. */
+  textMode: 'original' | 'modern';
   reminders: DevotionalReminderSettings;
 }
 
@@ -628,12 +630,13 @@ export function updateWakeAlarmSettings(updates: Partial<WakeAlarmSettings>): vo
   updateSettings({ wakeAlarm: { ...current, ...updates } });
 }
 
-/** Devotional settings with defaults: Morning and Evening, both readings, reminders off. */
+/** Devotional settings with defaults: Morning and Evening, both readings, the original text, reminders off. */
 export function getDevotionalSettings(): DevotionalSettings {
   const s = getSettings().devotionals;
   return {
     mainWork: s?.mainWork ?? 'spurgeon-me',
     slotMode: s?.slotMode ?? 'both',
+    textMode: s?.textMode ?? 'original',
     reminders: {
       morningEnabled: s?.reminders?.morningEnabled ?? false,
       morningTime: s?.reminders?.morningTime ?? '07:00',

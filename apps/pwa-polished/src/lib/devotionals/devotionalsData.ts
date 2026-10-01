@@ -41,6 +41,12 @@ export interface DevotionalKeyRef {
   para?: number;
 }
 
+/** A note on an old word or phrase; html may carry Scripture links (a.devo-ref). */
+export interface DevotionalNote {
+  term: string;
+  html: string;
+}
+
 export interface DevotionalReading {
   id: string;
   workId: string;
@@ -51,6 +57,13 @@ export interface DevotionalReading {
   bodyHtml: string;
   plainText: string;
   keyRefs: DevotionalKeyRef[];
+  /**
+   * Spurgeon in plain modern English, where it has been written. Every element
+   * carries data-b, the index of the original block (bodyHtml's nth child) it renders.
+   */
+  modernHtml?: string;
+  /** Notes on the old words and phrases, where they have been written. */
+  notes?: DevotionalNote[];
 }
 
 export function readingId(workId: string, month: number, day: number, slot: DevotionalSlot): string {

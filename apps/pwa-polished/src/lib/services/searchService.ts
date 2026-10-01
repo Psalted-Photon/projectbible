@@ -704,7 +704,13 @@ export class UnifiedSearchService {
         for (const r of readings) {
           if (!words.every((w) => r.plainText.includes(w))) continue;
           // plainText is lowercased for matching; the snippet comes from the text as written.
-          const shown = [...r.keyRefs.map((k) => k.fragment ?? k.kjvText), stripHtml(r.bodyHtml || '')].join(' ');
+          // The modern text and notes are searched too, so a match may only be there.
+          const shown = [
+            ...r.keyRefs.map((k) => k.fragment ?? k.kjvText),
+            stripHtml(r.bodyHtml || ''),
+            stripHtml(r.modernHtml || ''),
+            ...(r.notes ?? []).map((n) => `${n.term}: ${stripHtml(n.html)}`),
+          ].join(' ');
           hits.push({ r, sub: snippet(shown, words[0], 140) });
         }
       }

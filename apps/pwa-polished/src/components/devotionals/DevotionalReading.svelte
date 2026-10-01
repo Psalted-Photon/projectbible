@@ -7,6 +7,10 @@
    * references come from the pack; every verse shown is the reader's own
    * translation, so there is one translation on the page and no label for it.
    *
+   * Where the pack has them, a Spurgeon reading also has a plain modern-English
+   * version (the Original / Modern switch, remembered as textMode) and notes on
+   * its old words and phrases (the (i) panel). Neither shows when it isn't there.
+   *
    * Every reference opens the reader with the fade highlight and leaves a
    * BookBookmark crumb that brings you back here, scrolled where you were.
    *
@@ -17,7 +21,7 @@
   import { createEventDispatcher, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { fade } from 'svelte/transition';
-  import { SunHorizon, MoonStars, CalendarBlank, CalendarDots, CaretLeft, CaretRight, ShareNetwork, X } from 'phosphor-svelte';
+  import { SunHorizon, MoonStars, CalendarBlank, CalendarDots, CaretLeft, CaretRight, ShareNetwork, Info, X } from 'phosphor-svelte';
   import { navigationStore } from '../../stores/navigationStore';
   import { readingPlanModalStore } from '../../stores/readingPlanModalStore';
   import { devotionalSettings, type DevotionalTarget } from '../../stores/devotionalStore';
@@ -63,11 +67,11 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
-    // The share window handles its own Escape.
-    if (e.key === 'Escape' && !shareOpen) {
-      e.preventDefault();
-      dispatch('close');
-    }
+    // The share window handles its own Escape, and so does the calendar.
+    if (e.key !== 'Escape' || shareOpen) return;
+    e.preventDefault();
+    if (notesOpen) notesOpen = false;
+    else dispatch('close');
   }
 
   $: translation = $navigationStore.translation;
@@ -81,6 +85,7 @@
     const token = ++loadToken;
     loading = true;
     verseCache = {};
+    notesOpen = false;
     const r = await getReading(workId, month, day, slot);
     if (token !== loadToken) return;
     reading = r;
@@ -154,6 +159,7 @@
     });
   }
 
+  /** A Scripture link in the body or the notes panel. */
   function onBodyClick(e: MouseEvent) {
     const a = (e.target as HTMLElement).closest('a.devo-ref') as HTMLAnchorElement | null;
     if (!a) return;
@@ -161,6 +167,59 @@
     const osis = a.getAttribute('data-osis');
     if (osis) goToRef(osis);
   }
+
+  // ── Original / Modern ────────────────────────────────────────────────────
+
+  let bodyEl: HTMLElement;
+
+  $: hasModern = !!reading?.modernHtml;
+  $: showModern = hasModern && $devotionalSettings.textMode === 'modern';
+  $: bodyHtml = reading ? (showModern && reading.modernHtml ? reading.modernHtml : reading.bodyHtml) : '';
+
+  /**
+   * Which original block is at the top of the screen, and how far through it.
+   * The original's nth element is block n; each modern element says its block
+   * in data-b (one long paragraph often becomes three or four).
+   */
+  function blockAtTop(): { block: number; fraction: number } | null {
+    const scroller = scrollContainer();
+    if (!scroller || !bodyEl) return null;
+    const top = scroller.getBoundingClientRect().top;
+    const els = Array.from(bodyEl.children) as HTMLElement[];
+    const blockOf = (el: HTMLElement, i: number) => (showModern ? Number(el.dataset.b) : i);
+    const at = els.findIndex((el) => el.getBoundingClientRect().bottom > top);
+    // Still up in the headline, or past the end: those look the same either way.
+    if (at < 0 || (at === 0 && els[0].getBoundingClientRect().top > top)) return null;
+    const block = blockOf(els[at], at);
+    const span = blockSpan(els.filter((el, i) => blockOf(el, i) === block));
+    return { block, fraction: span.height ? Math.min(1, Math.max(0, (top - span.top) / span.height)) : 0 };
+  }
+
+  function blockSpan(els: HTMLElement[]): { top: number; height: number } {
+    const rects = els.map((el) => el.getBoundingClientRect());
+    const top = Math.min(...rects.map((r) => r.top));
+    return { top, height: Math.max(...rects.map((r) => r.bottom)) - top };
+  }
+
+  /** Switch versions, keeping the same paragraph at the top of the screen. */
+  async function setTextMode(mode: 'original' | 'modern') {
+    if (mode === (showModern ? 'modern' : 'original')) return;
+    const place = blockAtTop();
+    devotionalSettings.update({ textMode: mode });
+    await tick();
+    const scroller = scrollContainer();
+    if (!place || !scroller || !bodyEl) return;
+    const els = Array.from(bodyEl.children) as HTMLElement[];
+    const mine = els.filter((el, i) => (showModern ? Number(el.dataset.b) : i) === place.block);
+    if (!mine.length) return;
+    const span = blockSpan(mine);
+    scroller.scrollTop += span.top + place.fraction * span.height - scroller.getBoundingClientRect().top;
+  }
+
+  // ── Words and phrases ────────────────────────────────────────────────────
+
+  let notesOpen = false;
+  $: notes = reading?.notes ?? [];
 
   /** Open the reader at a reference, leaving a crumb that comes back to this reading. */
   function goToRef(osis: string) {
@@ -234,12 +293,39 @@
         <CaretRight size={16} weight="bold" />
       </button>
     </div>
-    <button class="dr-close" on:click={() => dispatch('close')} title="Close" aria-label="Close reading">
-      <X size={20} weight="bold" />
-    </button>
+    <div class="dr-top-right">
+      {#if hasModern}
+        <div class="dr-mode" role="group" aria-label="Text version">
+          <button class:active={!showModern} aria-pressed={!showModern} on:click={() => setTextMode('original')}>Original</button>
+          <button class:active={showModern} aria-pressed={showModern} on:click={() => setTextMode('modern')}>Modern</button>
+        </div>
+      {/if}
+      {#if notes.length}
+        <button class="dr-icon-btn" class:open={notesOpen} on:click={() => (notesOpen = !notesOpen)} title="Words and phrases" aria-label="Words and phrases">
+          <Info size={17} weight="bold" />
+        </button>
+      {/if}
+      <button class="dr-close" on:click={() => dispatch('close')} title="Close" aria-label="Close reading">
+        <X size={20} weight="bold" />
+      </button>
+    </div>
     {#if calendarOpen}
       <div class="dr-calendar">
         <DevotionalCalendar month={target.month} day={target.day} reader on:pick={onPickDate} on:close={() => (calendarOpen = false)} />
+      </div>
+    {/if}
+    {#if notesOpen && notes.length}
+      <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+      <div class="dr-notes-backdrop" on:click={() => (notesOpen = false)}></div>
+      <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+      <div class="dr-notes" role="dialog" tabindex="-1" aria-label="Words and phrases" on:click={onBodyClick} transition:fade={{ duration: 120 }}>
+        <h4 class="dr-notes-title">Words and phrases</h4>
+        <dl>
+          {#each notes as n}
+            <dt>{n.term}</dt>
+            <dd>{@html sanitizePackHtml(colorRefs(n.html))}</dd>
+          {/each}
+        </dl>
       </div>
     {/if}
   </div>
@@ -301,8 +387,8 @@
       </div>
     {/each}
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-    <div class="dr-body" on:click={onBodyClick}>
-      {@html sanitizePackHtml(colorRefs(reading.bodyHtml))}
+    <div class="dr-body" bind:this={bodyEl} on:click={onBodyClick}>
+      {@html sanitizePackHtml(colorRefs(bodyHtml))}
     </div>
   {/if}
   </div>
@@ -394,6 +480,97 @@
   }
   .dr-close:hover {
     background: rgba(255, 255, 255, 0.16);
+  }
+  .dr-top-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  /* Original / Modern */
+  .dr-mode {
+    display: flex;
+    height: 30px;
+    border: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.12));
+    border-radius: 7px;
+    overflow: hidden;
+  }
+  .dr-mode button {
+    background: none;
+    border: none;
+    padding: 0 9px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.5));
+    cursor: pointer;
+  }
+  .dr-mode button + button {
+    border-left: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.12));
+  }
+  .dr-mode button.active {
+    background: rgba(230, 184, 74, 0.18);
+    color: #e6b84a;
+  }
+  @media (max-width: 370px) {
+    .dr-top-actions {
+      gap: 2px;
+    }
+    .dr-mode button {
+      padding: 0 6px;
+      font-size: 0.68rem;
+    }
+  }
+
+  /* Words and phrases: drops down under the (i), over the reading. */
+  .dr-notes-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+  }
+  .dr-notes {
+    position: absolute;
+    z-index: 31;
+    top: 100%;
+    right: calc(env(safe-area-inset-right, 0px) + 12px);
+    width: min(380px, calc(100vw - 24px));
+    max-height: min(65vh, 520px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
+    padding: 12px 16px 6px;
+    border-radius: 12px;
+    background: var(--reader-bg, #111);
+    border: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.14));
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    color: var(--reader-text, rgba(255, 255, 255, 0.85));
+  }
+  .dr-notes-title {
+    margin: 0 0 10px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.45));
+  }
+  .dr-notes dl {
+    margin: 0;
+  }
+  .dr-notes dt {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: #e6b84a;
+  }
+  .dr-notes dd {
+    margin: 2px 0 12px;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--reader-text-dim, rgba(255, 255, 255, 0.75));
+  }
+  .dr-notes :global(a.devo-ref) {
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
   }
 
   .dr-scroll {
