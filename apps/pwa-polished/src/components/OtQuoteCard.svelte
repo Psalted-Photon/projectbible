@@ -23,7 +23,8 @@
    */
   import { createEventDispatcher } from 'svelte';
   import { ArrowRight } from 'phosphor-svelte';
-  import { formatOtRef, type OtQuoteEntry } from '../lib/otQuotesIndex';
+  import { formatOtRef, formatOtVerses, type OtQuoteEntry, type OtQuoteRef } from '../lib/otQuotesIndex';
+  import { mtToLxxPsalm } from '../lib/lxxPsalms';
   import { getBookColor } from '../lib/bibleData';
   import { OT_CARD_GAP, OT_CARD_MAX_HEIGHT } from '../lib/otCardMetrics';
 
@@ -73,6 +74,37 @@
 
   $: activeRef = entry.refs[refIndex];
   $: hasLxx = !!entry.lxx[refIndex];
+
+  /**
+   * A reference as the Septuagint numbers it, where there is a Septuagint.
+   *
+   * The words on the card are the Septuagint's and "Septuagint →" opens the
+   * Septuagint, so the heading has to be its number too. Headed with the
+   * English one, Mark 14:21's card read "Psalm 41:9" over the words of LXX
+   * 40:9, and the button went to 40:9. Only the Psalms number differently
+   * (from Psalm 10 to 147 the LXX runs one behind), so everywhere else this
+   * returns the reference unchanged.
+   */
+  function shownRef(e: OtQuoteEntry, i: number): OtQuoteRef {
+    const ref = e.refs[i];
+    const lxx = e.lxx[i];
+    if (!lxx || (lxx.book === ref.book && lxx.chapter === ref.chapter && lxx.verse === ref.verse)) {
+      return ref;
+    }
+    // A range keeps its end only when both ends land in the same LXX psalm.
+    const end = ref.endVerse && ref.book === 'Psalms' ? mtToLxxPsalm(ref.chapter, ref.endVerse) : null;
+    return {
+      book: lxx.book,
+      chapter: lxx.chapter,
+      verse: lxx.verse,
+      ...(end && end.chapter === lxx.chapter ? { endVerse: end.verse } : {}),
+    };
+  }
+
+  $: shown = shownRef(entry, refIndex);
+  // Said underneath whenever it differs, so the number in an English Bible is
+  // never lost — that is the one most readers will go looking for.
+  $: renumbered = shown !== activeRef;
 
   // The reference names a book, so it is drawn in that book's colour — Isaiah
   // purple, Deuteronomy its own — exactly as the book reads everywhere else in
@@ -187,7 +219,10 @@
   <div class="ot-head">
     <div class="ot-head-lines">
       <span class="ot-grade">{gradeLabel}</span>
-      <span class="ot-ref" style="color:{refColor}">{formatOtRef(activeRef)}</span>
+      <span class="ot-ref" style="color:{refColor}">{formatOtRef(shown)}</span>
+      {#if renumbered}
+        <span class="ot-english">{formatOtVerses(activeRef)} in English Bibles</span>
+      {/if}
     </div>
   </div>
 
@@ -203,7 +238,7 @@
           class:active={i === refIndex}
           style="color:{getBookColor(ref.book)}"
           on:click|stopPropagation={() => dispatch('select', { index: i })}
-        >{formatOtRef(ref)}</button>
+        >{formatOtRef(shownRef(entry, i))}</button>
       {/each}
     </div>
   {/if}
@@ -276,7 +311,8 @@
     flex: 0 0 auto;
   }
 
-  /* Two stacked lines against the → button, which stays centred on the pair. */
+  /* Stacked lines: the grade, the reference, and for a renumbered psalm the
+     English number under it. */
   .ot-head-lines {
     display: flex;
     flex-direction: column;
@@ -305,6 +341,15 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* A footnote to the reference, not a second heading: small, grey, upright so
+     it does not read as part of the italic quotation below. */
+  .ot-english {
+    color: #8a8a8a;
+    font-size: 0.66rem;
+    line-height: 1.2;
+    white-space: nowrap;
   }
 
   /* Reads as the source line it replaced — same quiet uppercase register — but

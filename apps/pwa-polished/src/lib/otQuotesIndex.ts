@@ -100,9 +100,14 @@ export function otQuoteForVerse(
   return entryIndex === undefined ? null : (index.entries[entryIndex] ?? null);
 }
 
+/** "104:4", or "40:6-8" for a range — the reference without its book. */
+export function formatOtVerses(ref: OtQuoteRef): string {
+  const range = ref.endVerse && ref.endVerse !== ref.verse ? `-${ref.endVerse}` : '';
+  return `${ref.chapter}:${ref.verse}${range}`;
+}
+
 /** "Psalm 104:4", or "Psalm 40:6-8" for a range. Display form, singular book. */
 export function formatOtRef(ref: OtQuoteRef): string {
   const book = ref.book === 'Psalms' ? 'Psalm' : ref.book;
-  const range = ref.endVerse && ref.endVerse !== ref.verse ? `-${ref.endVerse}` : '';
-  return `${book} ${ref.chapter}:${ref.verse}${range}`;
+  return `${book} ${formatOtVerses(ref)}`;
 }

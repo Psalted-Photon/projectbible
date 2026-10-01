@@ -22,7 +22,7 @@
   import { readingPlanModalStore } from '../../stores/readingPlanModalStore';
   import { devotionalSettings, type DevotionalTarget } from '../../stores/devotionalStore';
   import { IndexedDBTextStore } from '../../lib/adapters';
-  import { renderVerseHtml } from '../../lib/verseRendering';
+  import { renderVerseHtml, cleanVersePreviewText } from '../../lib/verseRendering';
   import { sanitizePackHtml } from '../../lib/sanitizePackHtml';
   import { parseOsisRef } from '../../lib/parseRefString';
   import { getBookColor, normalizeBookName, translationLabel } from '../../lib/bibleData';
@@ -188,7 +188,8 @@
   let shareOpen = false;
   $: firstRef = reading?.keyRefs[0] ?? null;
   $: shareSource = `${work.author.replace(/^C\. H\. /, '')} · ${work.title} · ${formatMonthDay(target.month, target.day)}${slotLabel ? `, ${slotLabel.toLowerCase()}` : ''}`;
-  $: sharePassage = firstRef && translation ? verseCache[`${translation}|${firstRef.osis}`] ?? '' : '';
+  // Stored verse text carries poetry and note markers; the share sheet wants plain words.
+  $: sharePassage = firstRef && translation ? cleanVersePreviewText(verseCache[`${translation}|${firstRef.osis}`] ?? '') : '';
   $: shareRef = sharePassage && firstRef && firstRef.verseStart != null
     ? { book: normalizeBookName(firstRef.book), chapter: firstRef.chapter, startVerse: firstRef.verseStart, endVerse: firstRef.verseEnd ?? firstRef.verseStart }
     : null;
