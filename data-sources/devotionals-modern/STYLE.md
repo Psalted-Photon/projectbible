@@ -83,7 +83,7 @@ Each note: start with the meaning, plain, in one to three sentences. Add the sou
 
 ## Checking a month
 
-1. `node scripts/build-devotionals-pack.mjs --check <month>` runs every build check without writing the pack, then lists things in that month worth a second look: straight quotes, old wording or British spelling outside quotation marks, a quotation that didn't come through word for word, a reading much shorter or longer than its original, a note that strays from the glossary. Build failures must be fixed. The review list fails nothing, but every line on it gets a look: fix it, or confirm it's fine (a typo in the source, words Spurgeon put in quotation marks that aren't a quotation).
+1. `node scripts/build-devotionals-pack.mjs --check <month>` runs every build check without writing the pack, then lists things in that month worth a second look: straight quotes, old wording or British spelling outside quotation marks, a quotation that didn't come through word for word, a reading much shorter or longer than its original, a note that strays from the glossary, typing slips (a doubled word, a stray space), and an original that says Jehovah with no note explaining it. Build failures must be fixed. The review list fails nothing, but every line on it gets a look: fix it, or confirm it's fine (a typo in the source, words Spurgeon put in quotation marks that aren't a quotation).
 2. Read each reading against the export:
    - every thought is there, with nothing added and nothing softened
    - quotations and hymn lines are untouched
