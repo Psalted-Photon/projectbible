@@ -666,8 +666,8 @@ const outsideQuotes = (s) => s.replace(/“[^”]*”/g, ' ');
 const wordCount = (s) => (s.match(/[A-Za-z’']+/g) || []).length;
 
 // "Beloved" to the reader is old wording; "our Beloved" is a name for Christ.
-const ARCHAIC = /\b(thee|thou|thy|thine|ye|hath|doth|dost|didst|hast|hadst|shalt|wilt|wouldst|shouldst|couldst|canst|mayest|knowest|seest|sayest|unto|(?<!\b(?:our|my|the|your|his) )beloved)\b|\b[a-z]{2,}eth\b/gi;
-const NOT_ARCHAIC = new Set(['teeth', 'nazareth', 'japheth', 'elizabeth', 'shibboleth', 'ashtoreth', 'kenneth']);
+const ARCHAIC = /\b(thee|thou|thy|thine|ye|hath|doth|dost|didst|hast|hadst|shalt|wilt|wouldst|shouldst|couldst|canst|mayest|knowest|seest|sayest|unto|(?<!\b(?:our|my|the|your|his|her|their) )beloved)\b|\b[a-z]{2,}eth\b/gi;
+const NOT_ARCHAIC = new Set(['teeth', 'nazareth', 'japheth', 'elizabeth', 'shibboleth', 'ashtoreth', 'kenneth', 'mephibosheth', 'ishbosheth', 'jehosheba', 'zareth', 'bethshemesh']);
 const BRITISH = /\b(honour|saviour|colour|labour|favour|behaviour|neighbour|harbour|splendour|vigour|valour|fervour|rigour|ardour|clamour|odour|rumour|humour|endeavour|armour|savour|centre|theatre|sepulchre|plough|grey|whilst|amongst|learnt|spelt|dreamt|leapt|shew|gaol|defence|offence|judgement|realis|recognis|sympathis|criticis|agonis|apologis)\w*/gi;
 const MODERN_LENGTH = [0.85, 1.2];  // modern words per original word, outside these is worth a look
 const NOTE_COUNT = [3, 12];

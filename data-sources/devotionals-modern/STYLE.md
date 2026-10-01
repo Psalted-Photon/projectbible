@@ -98,9 +98,11 @@ So a word is explained the same way every time it comes up. Add to this as the y
 | Term | Explanation |
 |---|---|
 | Advent | A coming or arrival. The Second Advent is Christ's return. |
+| Advocate | Someone who pleads another's case. |
 | Affections | In older English, the heart's loves and desires, not only fondness. |
 | Atonement | Making peace between God and sinners by paying for sin. |
 | Attribute(s) | A quality that belongs to God, such as his power or his love. |
+| Benediction | A blessing. |
 | Bosom | The chest, the place of closest embrace. |
 | Bowels (yearned) | Deep feelings. The King James Bible places tender feelings in the gut, the way we place them in the heart. |
 | Carnal | Of the flesh: the desires of our fallen human nature, not only sexual ones. |
@@ -108,11 +110,13 @@ So a word is explained the same way every time it comes up. Add to this as the y
 | The Comforter | The Holy Spirit; Jesus' name for him in John 14:26. |
 | Communion | Close fellowship and sharing, with God or with each other. (Also the Lord's Supper.) |
 | Complacency | In Spurgeon's day, quiet pleasure and satisfaction, without today's sense of being smug. |
+| Condescension, condescending | Stooping down from a high position, in the good sense, without today's sense of looking down on someone. |
 | Constrain(eth) | Compel; move powerfully. "The love of Christ constraineth us" (2 Corinthians 5:14). |
 | Contrite | Crushed with sorrow over sin. |
 | Conversation | In older English, your whole way of life, not only your talk. |
 | Corruption(s) | The sinful desires still at work in a believer. |
 | Covenant of grace | God's binding promise to save his people through Christ, freely, as a gift and not a reward. |
+| Deign(s) | Graciously chooses, stoops to. |
 | Despondency | Feeling low and discouraged. |
 | Draught | A drink; a long swallow. |
 | Earnest | A deposit paid up front to promise the rest will follow (Ephesians 1:14). |
@@ -121,10 +125,13 @@ So a word is explained the same way every time it comes up. Add to this as the y
 | Election, elected | God's choice of his people for salvation. |
 | Entailed | An old legal term for an estate fixed to pass down a family line, which could never be sold off or taken away. |
 | Ere long | Before long. |
+| Fain | Gladly. |
 | Fetters | Chains or shackles on the feet. |
 | Hart | A male deer. (Joseph Hart the hymn writer is a different note.) |
+| Hither and thither | Here and there. |
 | Immutable, immutability | Unchanging. |
 | Imputed | Credited to someone's account. Christ's righteousness is counted as the believer's own. |
+| Infirmities | Weaknesses. |
 | Intercession | Praying for someone else. Jesus "ever liveth to make intercession" for his people (Hebrews 7:25). |
 | Jehovah | The personal name of God in the Old Testament, printed "the LORD" in most English Bibles. |
 | The Jordan | Israel crossed the river Jordan to enter Canaan. Christians of Spurgeon's day used it as a picture of death, the last river to cross before heaven. |
@@ -137,12 +144,14 @@ So a word is explained the same way every time it comes up. Add to this as the y
 | Omnipotent | All-powerful. |
 | Ordinances | The practices Christ gave the church, chiefly baptism and the Lord's Supper. |
 | Peculiar | Special, belonging particularly to someone (not odd). |
+| Piety | Devotion to God; faith as it's actually lived. |
 | Portion | A share of an inheritance. When God is "our portion", he himself is what we inherit, and he is enough. |
-| Profession, professing | Publicly claiming to be a Christian. A "dead profession" is the claim with no faith behind it. |
+| Presumption | Taking things for granted; overconfidence. |
 | Profession, professing, professor(s) | Publicly claiming to be a Christian. A "dead profession" is the claim with no faith behind it. |
 | Propitiation | A sacrifice that turns God's anger away by fully paying for sin (1 John 2:2). |
 | Providence | God's care and control over everything that happens, providing for his people. |
 | Quicken | To make alive. "Quick" once meant "living", as in "the quick and the dead". |
+| Regeneration | Being born again: the new life God gives by his Spirit. |
 | The rod | God's discipline, the way a father corrects a child. |
 | Sanctification | The lifelong work of being made holy. |
 | Sanctify, sanctified | Make holy; set apart for God. |
@@ -151,6 +160,7 @@ So a word is explained the same way every time it comes up. Add to this as the y
 | Substitution | One taking another's place: here, Christ taking the punishment due to sinners. |
 | Supplication | A humble, earnest request; a prayer. |
 | Surety | A guarantor: someone who promises to pay another's debt. |
+| Tribulation | Trouble, suffering. |
 | Type | A person or event in the Old Testament that pictures Christ ahead of time. |
 | Unction | Literally "anointing": the Holy Spirit's power in a sermon or prayer, the thing that makes it reach the heart. |
 | Vanity | Emptiness, worthlessness: anything that promises much and gives nothing. Not only pride in your looks. |
