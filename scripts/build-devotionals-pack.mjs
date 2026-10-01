@@ -34,7 +34,10 @@
  * wrong number of blocks, drops a Scripture link, or links to a verse that isn't there.
  *
  * Usage:
- *   node scripts/build-devotionals-pack.mjs
+ *   node scripts/build-devotionals-pack.mjs              build the pack
+ *   node scripts/build-devotionals-pack.mjs --check      run every check, write nothing
+ *   node scripts/build-devotionals-pack.mjs --check 2    the same, plus a list of things in
+ *                                                        February's modern text to look over
  */
 
 import Database from 'better-sqlite3';
@@ -54,6 +57,16 @@ const CHECKBOOK = resolve(SRC, 'checkbook.xml');
 const KJV = resolve(ROOT, 'data-sources/KJV.json');
 const MODERN = resolve(ROOT, 'data-sources/devotionals-modern');
 const PACK_OUTPUT = resolve(ROOT, 'packs/consolidated/devotionals.sqlite');
+const STYLE = resolve(MODERN, 'STYLE.md');
+
+// --check builds in memory, so the checks run without touching the pack.
+const CHECK = process.argv.includes('--check');
+const monthArg = process.argv.slice(2).find((a) => /^\d+$/.test(a));
+const REVIEW_MONTH = CHECK && monthArg ? +monthArg : null;
+if (REVIEW_MONTH !== null && !(REVIEW_MONTH >= 1 && REVIEW_MONTH <= 12)) {
+  console.error('❌ Month must be 1-12.');
+  process.exit(1);
+}
 
 for (const f of [SME + '.zdt', DAILY + '.dat', CHECKBOOK, KJV]) {
   if (!existsSync(f)) {
@@ -550,6 +563,7 @@ function buildDailyLight() {
  * ------------------------------------------------------------------------- */
 
 const modernErrors = [];
+const modernEntries = [];  // { at, r, entry } for every reading the files name, for reviewModern()
 const pad = (n) => String(n).padStart(2, '0');
 
 /** Why an OSIS link doesn't name a real verse, or null if it does. */
@@ -585,6 +599,7 @@ function attachModern(rows) {
         const at = `${workId}/${file} ${key}`;
         const r = byId.get(`${workId}:${key}`);
         if (!r) { modernErrors.push(`${at}: no such reading`); continue; }
+        modernEntries.push({ at, r, entry });
 
         if (entry.modern != null) {
           const blocks = splitBlocks(r.body_html);
@@ -639,20 +654,121 @@ function attachModern(rows) {
   }
 }
 
+/* Things in one month's modern text worth a second look. None of them fails the build. */
+
+/** Marked text as plain words: links become their labels, emphasis marks go. */
+const plainMarked = (s) => s.replace(/\[\[[^|\]]+\|([^\]]*)\]\]/g, '$1').replace(/[*^]/g, '');
+/** One spelling of quotes, dashes and ellipses, so the original's typography doesn't count as a change. */
+const sameMarks = (s) => s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/\s*(?:--|[—–])\s*/g, '—')
+  .replace(/\.\s?\.\s?\./g, '…').replace(/\s+/g, ' ').toLowerCase();
+/** Text with its “quotations” blanked out: they keep their own wording and spelling. */
+const outsideQuotes = (s) => s.replace(/“[^”]*”/g, ' ');
+const wordCount = (s) => (s.match(/[A-Za-z’']+/g) || []).length;
+
+// "Beloved" to the reader is old wording; "our Beloved" is a name for Christ.
+const ARCHAIC = /\b(thee|thou|thy|thine|ye|hath|doth|dost|didst|hast|hadst|shalt|wilt|wouldst|shouldst|couldst|canst|mayest|knowest|seest|sayest|unto|(?<!\b(?:our|my|the|your|his) )beloved)\b|\b[a-z]{2,}eth\b/gi;
+const NOT_ARCHAIC = new Set(['teeth', 'nazareth', 'japheth', 'elizabeth', 'shibboleth', 'ashtoreth', 'kenneth']);
+const BRITISH = /\b(honour|saviour|colour|labour|favour|behaviour|neighbour|harbour|splendour|vigour|valour|fervour|rigour|ardour|clamour|odour|rumour|humour|endeavour|armour|savour|centre|theatre|sepulchre|plough|grey|whilst|amongst|learnt|spelt|dreamt|leapt|shew|gaol|defence|offence|judgement|realis|recognis|sympathis|criticis|agonis|apologis)\w*/gi;
+const MODERN_LENGTH = [0.85, 1.2];  // modern words per original word, outside these is worth a look
+const NOTE_COUNT = [3, 12];
+
+/** STYLE.md's glossary: each spelling of a term ("Vouchsafe(d)" is vouchsafe and vouchsafed) -> its first sentence. */
+function readGlossary() {
+  if (!existsSync(STYLE)) return new Map();
+  const md = readFileSync(STYLE, 'utf8');
+  const out = new Map();
+  for (const line of md.slice(md.indexOf('## Glossary')).split('\n')) {
+    const m = line.match(/^\| (.+?) \| (.+?) \|$/);
+    if (!m || m[1] === 'Term') continue;
+    const first = m[2].match(/^.*?[.!?](?=\s|$)/)?.[0] ?? m[2];
+    for (const part of m[1].split(/,\s*/)) {
+      for (const v of [part.replace(/\s*\(.*?\)/g, ''), part.replace(/[()]/g, '')]) out.set(termKey(v), first);
+    }
+  }
+  return out;
+}
+function termKey(t) {
+  return t.toLowerCase().replace(/[“”"‘’']/g, '').replace(/[.,;:!?…]+$/, '').replace(/^the /, '').trim();
+}
+/** The share of the glossary sentence's words that the note also uses, roughly stemmed ("given" = "give"). */
+function overlap(gloss, note) {
+  const stems = (s) => (sameMarks(s).match(/[a-z]{3,}/g) || []).map((w) => w.replace(/(ing|ed|en|es|s)$/, '').replace(/e$/, ''));
+  const g = stems(gloss), n = new Set(stems(note));
+  return g.length ? g.filter((w) => n.has(w)).length / g.length : 1;
+}
+
+function reviewModern(month) {
+  const flags = [];
+  const glossary = readGlossary();
+  for (const r of all) {
+    if (r.month !== month || r.work_id === 'daily-light') continue;
+    const id = `${r.work_id} ${pad(r.month)}-${pad(r.day)}:${r.slot}`;
+    if (!r.modern_html) flags.push(`${id}: no modern text`);
+    if (!r.notes) flags.push(`${id}: no notes`);
+  }
+  for (const { at, r, entry } of modernEntries) {
+    if (r.month !== month) continue;
+    const blocks = splitBlocks(r.body_html);
+    const modern = Array.isArray(entry.modern) ? entry.modern : [];
+    let origWords = 0, modWords = 0;
+    blocks.forEach((b, i) => {
+      const m = modern[i];
+      if (b.kind === 'poem' || typeof m !== 'string') return;
+      const orig = plainMarked(htmlToMarked(b.html));
+      const text = plainMarked(m);
+      origWords += wordCount(orig);
+      modWords += wordCount(text);
+      const where = `${at} block ${i + 1}`;
+      if (/["']/.test(text)) flags.push(`${where}: straight quote`);
+      // Italic runs are left out too: they're the text's own words, walked through.
+      const old = [...outsideQuotes(plainMarked(m.replace(/\*[^*]*\*/g, ' '))).matchAll(ARCHAIC)].map((x) => x[0]).filter((w) => !NOT_ARCHAIC.has(w.toLowerCase()));
+      if (old.length) flags.push(`${where}: old wording outside quotation marks: ${[...new Set(old)].join(', ')}`);
+      const brit = [...outsideQuotes(text).matchAll(BRITISH)].map((x) => x[0]);
+      if (brit.length) flags.push(`${where}: British spelling: ${[...new Set(brit)].join(', ')}`);
+      // Every quotation of three words or more should come through word for word.
+      const mod = sameMarks(text);
+      for (const q of sameMarks(orig).matchAll(/"([^"]+)"/g)) {
+        const words = q[1].replace(/^[\s,.;:!?—]+|[\s,.;:!?—]+$/g, '');
+        if (wordCount(words) >= 3 && !mod.includes(words)) flags.push(`${where}: quotation not word for word: "${words.slice(0, 70)}${words.length > 70 ? '…' : ''}"`);
+      }
+    });
+    if (origWords && modWords) {
+      const ratio = modWords / origWords;
+      if (ratio < MODERN_LENGTH[0] || ratio > MODERN_LENGTH[1]) flags.push(`${at}: ${modWords} modern words for ${origWords} original (${ratio.toFixed(2)}×), check nothing was dropped or added`);
+    }
+    if (Array.isArray(entry.notes)) {
+      const n = entry.notes.length;
+      if (n < NOTE_COUNT[0] || n > NOTE_COUNT[1]) flags.push(`${at}: ${n} notes`);
+      for (const note of entry.notes) {
+        if (typeof note?.note !== 'string' || typeof note?.term !== 'string') continue;
+        const text = plainMarked(note.note);
+        if (/["']/.test(note.term + text)) flags.push(`${at} note "${note.term}": straight quote`);
+        const brit = [...outsideQuotes(text).matchAll(BRITISH)].map((x) => x[0]);
+        if (brit.length) flags.push(`${at} note "${note.term}": British spelling: ${[...new Set(brit)].join(', ')}`);
+        const gloss = glossary.get(termKey(note.term));
+        if (gloss && overlap(gloss, text) < 0.6) flags.push(`${at} note "${note.term}": differs from the glossary, "${gloss}"`);
+      }
+    }
+  }
+  return flags;
+}
+
 /* --------------------------------------------------------------------------- *
  * Build
  * ------------------------------------------------------------------------- */
 
-console.log('📖 Building devotionals pack…');
+console.log(CHECK ? '📖 Checking devotionals pack (nothing is written)…' : '📖 Building devotionals pack…');
 const me = buildSpurgeonME();
 const cb = buildCheckbook();
 const dl = buildDailyLight();
 const all = [...me, ...cb, ...dl];
 attachModern(all);
 
-if (existsSync(PACK_OUTPUT)) unlinkSync(PACK_OUTPUT);
-mkdirSync(dirname(PACK_OUTPUT), { recursive: true });
-const db = new Database(PACK_OUTPUT);
+if (!CHECK) {
+  if (existsSync(PACK_OUTPUT)) unlinkSync(PACK_OUTPUT);
+  mkdirSync(dirname(PACK_OUTPUT), { recursive: true });
+}
+const db = new Database(CHECK ? ':memory:' : PACK_OUTPUT);
 db.pragma('journal_mode = DELETE');
 db.exec(`
   CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT);
@@ -753,13 +869,28 @@ if (modernErrors.length) {
   console.log(`\n   Modern English problems (${modernErrors.length}):`);
   for (const e of modernErrors) console.log('     ' + e);
 }
-if (weakMatches.length) {
+if (weakMatches.length && !CHECK) {
   console.log(`\n   Daily Light matches under 75% word overlap (${weakMatches.length}), for review:`);
   for (const w of weakMatches) console.log('     ' + w);
 }
 if (warnings.length) {
   console.log(`\n⚠️  ${warnings.length} warning(s):`);
   for (const w of warnings) console.log('   ' + w);
+}
+if (REVIEW_MONTH !== null) {
+  const flags = reviewModern(REVIEW_MONTH);
+  console.log(`\n🔍 ${MONTHS[REVIEW_MONTH - 1]}, for review (${flags.length}):`);
+  for (const f of flags) console.log('   ' + f);
+}
+
+if (CHECK) {
+  db.close();
+  if (failed || warnings.length) {
+    console.error('\n❌ Checks failed — see above.');
+    process.exit(1);
+  }
+  console.log('\n✅ Checks passed. Nothing written (--check).');
+  process.exit(0);
 }
 
 console.log('\n📝 Samples:');
