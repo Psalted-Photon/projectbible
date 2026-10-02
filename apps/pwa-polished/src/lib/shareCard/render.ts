@@ -19,10 +19,17 @@ import { getReaderFont } from '../readerFonts';
 import { luminance } from '../themeColors';
 import { drawGradient, getGradient } from './gradients';
 import { drawImageBackground } from './image';
-import { fitText, lineWidth, type FittedText } from './layout';
+import { fitText, largestFit, lineWidth, type FittedText } from './layout';
 import { drawQr, qrMatrix } from './qr';
 import { drawTexture } from './textures';
-import { CARD_SIZES, type CardContent, type CardExtras, type CardStyle, type WordBox } from './types';
+import {
+  CARD_SIZES,
+  TEXT_SIZE_RANGE,
+  type CardContent,
+  type CardExtras,
+  type CardStyle,
+  type RenderedCard,
+} from './types';
 
 /** Face used when the reader has no custom font — the one NET/BSB/WEB read in. */
 const DEFAULT_STACK = "'EB Garamond', Georgia, serif";
@@ -102,9 +109,11 @@ async function loadTextFont(stack: string, sample: string): Promise<void> {
 
 /**
  * Fitting is the slow part (hundreds of measurements). Panning a photo
- * redraws on every move without changing the words, so the last fit is kept.
+ * redraws on every move without changing the words, and dragging the size
+ * slider doesn't change how big the words could go, so both are kept.
  */
 let lastFit: { key: string; fit: FittedText } | null = null;
+let lastLargest: { key: string; size: number } | null = null;
 
 // ── Drawing ──────────────────────────────────────────────────────────────────
 
@@ -126,14 +135,15 @@ function faceFor(style: CardStyle, passage: string): Face {
 
 /**
  * Paint the card onto `canvas`, resizing it to the card's full pixel size.
- * Returns where each word was drawn, for tap-to-emphasise.
+ * Returns where each word was drawn, for tap-to-emphasise, and how big the
+ * words could go before running off the card.
  */
 export async function renderCard(
   canvas: HTMLCanvasElement,
   content: CardContent,
   style: CardStyle,
   extras: CardExtras = {},
-): Promise<WordBox[]> {
+): Promise<RenderedCard> {
   const passage = content.passage.trim().replace(/\s+/g, ' ');
   const face = faceFor(style, passage);
   const [icon, , , qr] = await Promise.all([
@@ -154,11 +164,15 @@ export async function renderCard(
 
   const k = W / 1080;
   const story = style.size === 'story';
-  // Stories put the app's own bars over the top and bottom ~250px.
-  const padX = 108 * k;
-  const padTop = (story ? 260 : 108) * k;
+  // The margin is the person's to choose, down to nothing; only the card's edge limits the words.
+  const padX = style.margin * k;
+  const padTop = style.margin * k;
+  // Stories put the app's own bars over the bottom ~250px, so the mark sits above them.
   const markSize = 34 * k;
   const markBaseline = H - (story ? 230 : 64) * k;
+  // Room kept between the words and the mark, credit or QR below them: follows
+  // the margin, but never so little that the words run into them.
+  const clear = Math.max(16, Math.min(72, style.margin)) * k;
 
   // ── Background ──
   const image = style.background === 'photo' || style.background === 'painting' ? extras.image : null;
@@ -175,14 +189,14 @@ export async function renderCard(
   if (style.texture !== 'none') drawTexture(ctx, style.texture, W, H);
 
   // ── Space for the words ──
-  let areaBottom = markBaseline - markSize - 72 * k;
+  let areaBottom = markBaseline - markSize - clear;
   const creditSize = 22 * k;
   const creditY = markBaseline - markSize - 34 * k;
-  if (image?.credit) areaBottom = creditY - creditSize - 40 * k;
+  if (image?.credit) areaBottom = creditY - creditSize - Math.min(clear, 40 * k);
   const qrSize = 150 * k;
   const qrX = W - 48 * k - qrSize;
   const qrY = markBaseline + 14 * k - qrSize;
-  if (qr) areaBottom = Math.min(areaBottom, qrY - 28 * k);
+  if (qr) areaBottom = Math.min(areaBottom, qrY - Math.min(clear, 28 * k));
 
   // Reference block is a fixed size so the verse can take everything else.
   const refSize = 38 * k;
@@ -206,13 +220,20 @@ export async function renderCard(
     `${emphasis[i] === 'bold' || emphasis[i] === 'both' ? '700 ' : ''}${s}px ${face.stack}`;
 
   ctx.direction = face.rtl ? 'rtl' : 'ltr';
-  const maxSize = 96 * k * face.scale * style.sizeNudge;
+  // Sizes are chosen for a 1080-wide card in the default face; scale both away.
+  const unit = k * face.scale;
   const leading = 1.32 * face.lead;
-  const fitKey = JSON.stringify([words, face.stack, maxSize, maxWidth, verseMaxHeight, leading, emphasis]);
-  const fitted =
-    lastFit?.key === fitKey
-      ? lastFit.fit
-      : fitText(ctx, words, { font: fontFor, maxWidth, maxHeight: verseMaxHeight, maxSize, minSize: 32 * k * face.scale, leading });
+  const box = { font: fontFor, maxWidth, maxHeight: verseMaxHeight, minSize: 32 * unit, leading };
+  const boxKey = JSON.stringify([words, face.stack, maxWidth, verseMaxHeight, leading, emphasis]);
+  const largest =
+    lastLargest?.key === boxKey
+      ? lastLargest.size
+      : largestFit(ctx, words, { ...box, maxSize: TEXT_SIZE_RANGE.max * unit });
+  lastLargest = { key: boxKey, size: largest };
+  // Exactly the chosen size, unless that would run the passage off the card.
+  const size = Math.min(Math.round(style.textSize * unit), largest);
+  const fitKey = JSON.stringify([boxKey, size]);
+  const fitted = lastFit?.key === fitKey ? lastFit.fit : fitText(ctx, words, { ...box, maxSize: size });
   lastFit = { key: fitKey, fit: fitted };
 
   const blockHeight = fitted.lines.length * fitted.lineHeight + refGap + refHeight + sourceHeight;
@@ -227,7 +248,7 @@ export async function renderCard(
     ctx.shadowBlur = 18 * k;
   }
 
-  const boxes: WordBox[] = [];
+  const boxes: RenderedCard['boxes'] = [];
   ctx.textBaseline = 'middle';
   fitted.lines.forEach((line, li) => {
     const lw = lineWidth(line, fitted.widths, fitted.space);
@@ -280,7 +301,7 @@ export async function renderCard(
   if (qr) drawQr(ctx, qr, qrX, qrY, qrSize);
 
   drawMark(ctx, icon, W / 2, markBaseline, markSize, style.textColor);
-  return boxes;
+  return { boxes, largestTextSize: Math.floor(largest / unit) };
 }
 
 function ellipsize(ctx: CanvasRenderingContext2D, text: string, max: number): string {

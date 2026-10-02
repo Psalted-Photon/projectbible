@@ -92,27 +92,58 @@ export function balancedLines(widths: number[], space: number, maxWidth: number)
   return lines;
 }
 
+/** Smallest size the passage is ever drawn at, however long it is. */
+const HARD_FLOOR = 14;
+
+/** The passage laid out at exactly `size`, and whether that fits the box. */
+function layoutAt(
+  ctx: CanvasRenderingContext2D,
+  words: string[],
+  o: FitOptions,
+  size: number,
+): { fitted: FittedText; fits: boolean } {
+  const widths = words.map((w, i) => {
+    ctx.font = o.font(size, i);
+    return ctx.measureText(w).width;
+  });
+  ctx.font = o.font(size, -1);
+  const space = ctx.measureText(' ').width;
+  const lines = balancedLines(widths, space, o.maxWidth);
+  const lineHeight = size * o.leading;
+  const widest = Math.max(0, ...lines.map((l) => lineWidth(l, widths, space)));
+  const fits = lines.length * lineHeight <= o.maxHeight && widest <= o.maxWidth;
+  return { fitted: { lines, fontSize: size, lineHeight, widths, space }, fits };
+}
+
 /**
  * Largest size (≤ maxSize) at which the passage fits the box. Below minSize it
  * keeps going down to a hard floor rather than cutting the passage.
  */
 export function fitText(ctx: CanvasRenderingContext2D, words: string[], o: FitOptions): FittedText {
-  const HARD_FLOOR = 14;
   let size = Math.round(o.maxSize);
   for (;;) {
-    const widths = words.map((w, i) => {
-      ctx.font = o.font(size, i);
-      return ctx.measureText(w).width;
-    });
-    ctx.font = o.font(size, -1);
-    const space = ctx.measureText(' ').width;
-    const lines = balancedLines(widths, space, o.maxWidth);
-    const lineHeight = size * o.leading;
-    const widest = Math.max(0, ...lines.map((l) => lineWidth(l, widths, space)));
-    const fits = lines.length * lineHeight <= o.maxHeight && widest <= o.maxWidth;
-    if (fits || size <= HARD_FLOOR) return { lines, fontSize: size, lineHeight, widths, space };
+    const { fitted, fits } = layoutAt(ctx, words, o, size);
+    if (fits || size <= HARD_FLOOR) return fitted;
     // Coarse steps while large, fine steps near the bottom.
     size -= size > o.minSize ? Math.max(2, Math.round(size * 0.05)) : 1;
   }
+}
+
+/**
+ * The biggest whole-pixel size (≤ maxSize) at which the passage still fits the
+ * box — what "as big as it goes" means for this passage on this card. Found by
+ * halving, since a smaller size never needs more lines than a larger one.
+ */
+export function largestFit(ctx: CanvasRenderingContext2D, words: string[], o: FitOptions): number {
+  let lo = HARD_FLOOR;
+  let hi = Math.floor(o.maxSize);
+  if (hi <= lo) return lo;
+  if (layoutAt(ctx, words, o, hi).fits) return hi;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (layoutAt(ctx, words, o, mid).fits) lo = mid;
+    else hi = mid;
+  }
+  return lo;
 }
 

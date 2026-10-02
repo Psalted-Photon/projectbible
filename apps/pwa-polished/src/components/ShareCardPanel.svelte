@@ -25,6 +25,8 @@
     CARD_GRADIENTS,
     CARD_TEXTURES,
     CARD_SIZES,
+    MARGIN_RANGE,
+    TEXT_SIZE_RANGE,
     applyLook,
     canvasToBlob,
     cardMime,
@@ -88,6 +90,8 @@
 
   let canvas: HTMLCanvasElement | null = null;
   let boxes: WordBox[] = [];
+  /** How big the words could go on the card as it was last drawn. */
+  let largestTextSize: number = TEXT_SIZE_RANGE.max;
   let file: File | null = null;
   let drawing = false;
 
@@ -112,11 +116,12 @@
     drawing = true;
     file = null;
     try {
-      boxes = await renderCard(canvas, { passage, reference, translationLabel, source }, s, {
+      const drawn = await renderCard(canvas, { passage, reference, translationLabel, source }, s, {
         image,
         emphasis,
         qrUrl,
       });
+      if (token === drawToken) ({ boxes, largestTextSize } = drawn);
     } catch (err) {
       console.error('[ShareCard] draw failed', err);
     }
@@ -387,6 +392,17 @@
 
   const SIZE_ORDER: CardSize[] = ['square', 'portrait', 'story'];
 
+  /**
+   * The slider runs from small to as big as this passage fits, so every step
+   * of it changes the card. Its top end is stored as "fill", so the words keep
+   * filling the card when the margin, shape or font changes afterwards.
+   */
+  $: sizeMax = Math.max(TEXT_SIZE_RANGE.min + 1, largestTextSize);
+
+  function setTextSize(v: number) {
+    patch({ textSize: v >= sizeMax ? TEXT_SIZE_RANGE.max : v });
+  }
+
   // ── What this device can do ───────────────────────────────────────────────
 
   /** Can the OS share sheet take an image file? Probed once with a real image type. */
@@ -635,10 +651,15 @@
 
       <label class="sc-slider">
         <span>Text size</span>
-        <input type="range" min="0.6" max="1.4" step="0.05" value={style.sizeNudge}
-          on:input={(e) => patch({ sizeNudge: +e.currentTarget.value })} />
+        <input type="range" min={TEXT_SIZE_RANGE.min} max={sizeMax} step="1" value={Math.min(style.textSize, sizeMax)}
+          on:input={(e) => setTextSize(+e.currentTarget.value)} />
       </label>
-      <p class="sc-note">Long verses shrink to fit whatever this is set to.</p>
+      <label class="sc-slider">
+        <span>Margin</span>
+        <input type="range" min={MARGIN_RANGE.min} max={MARGIN_RANGE.max} step="1" value={style.margin}
+          on:input={(e) => patch({ margin: +e.currentTarget.value })} />
+      </label>
+      <p class="sc-note">Text size all the way up fills the card, out to the margin.</p>
 
       <label class="sc-toggle">
         <input type="checkbox" checked={style.qr} on:change={(e) => patch({ qr: e.currentTarget.checked })} />

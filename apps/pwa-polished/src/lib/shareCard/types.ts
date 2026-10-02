@@ -19,6 +19,10 @@ export const CARD_SIZES: Record<CardSize, { w: number; h: number; label: string 
   story: { w: 1080, h: 1920, label: 'Story' },
 };
 
+/** Text size limits. The top of the range is a ceiling no passage reaches, so it reads as "fill the card". */
+export const TEXT_SIZE_RANGE = { min: 16, max: 600 };
+export const MARGIN_RANGE = { min: 0, max: 300 };
+
 export type CardBackground = 'solid' | 'gradient' | 'photo' | 'painting';
 export type CardTexture = 'none' | TextureId;
 
@@ -35,10 +39,13 @@ export interface CardStyle {
   /** Where the verse block sits in the space above the app mark. */
   position: 'top' | 'middle' | 'bottom';
   /**
-   * Multiplier on the largest size the verse may be drawn at. The text still
-   * shrinks to fit, so this only ever makes short verses smaller or larger.
+   * Size of the verse, in pixels on a 1080-wide card. It is drawn at exactly
+   * this size unless the passage would then run off the card, in which case it
+   * is drawn as big as fits. TEXT_SIZE_RANGE.max means "as big as fits".
    */
-  sizeNudge: number;
+  textSize: number;
+  /** Space between the card's edge and the words, in pixels on a 1080-wide card. 0 is edge to edge. */
+  margin: number;
   background: CardBackground;
   /** Id from gradients.ts, used when background is 'gradient'. */
   gradientId: string;
@@ -95,4 +102,11 @@ export interface WordBox {
   y: number;
   w: number;
   h: number;
+}
+
+/** What drawing a card reports back. */
+export interface RenderedCard {
+  boxes: WordBox[];
+  /** The biggest textSize at which this passage still fits on this card as styled. */
+  largestTextSize: number;
 }

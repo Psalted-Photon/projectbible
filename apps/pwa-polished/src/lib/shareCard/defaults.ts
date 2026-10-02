@@ -15,7 +15,14 @@ import { getCustomThemeSettings, getSettings, resolveTheme } from '../../adapter
 import { isValidHex, luminance } from '../themeColors';
 import { CARD_GRADIENTS } from './gradients';
 import { CARD_TEXTURES } from './textures';
-import { CARD_SIZES, type CardBackground, type CardStyle, type CardTexture } from './types';
+import {
+  CARD_SIZES,
+  MARGIN_RANGE,
+  TEXT_SIZE_RANGE,
+  type CardBackground,
+  type CardStyle,
+  type CardTexture,
+} from './types';
 
 const THEME_COLOURS: Record<'light' | 'dark' | 'sepia', { text: string; bg: string }> = {
   dark: { text: '#e0e0e0', bg: '#1a1a1a' },
@@ -49,7 +56,8 @@ export function defaultCardStyle(): CardStyle {
     bgColor,
     align: 'center',
     position: 'middle',
-    sizeNudge: 1,
+    textSize: 96,
+    margin: 108,
     background: 'solid',
     gradientId: CARD_GRADIENTS[0].id,
     texture: 'none',
@@ -76,7 +84,8 @@ export function sanitizeStyle(raw: unknown, base: CardStyle = defaultCardStyle()
     bgColor: hex(s.bgColor, base.bgColor),
     align: oneOf(s.align, ['left', 'center'] as const, base.align),
     position: oneOf(s.position, ['top', 'middle', 'bottom'] as const, base.position),
-    sizeNudge: num(s.sizeNudge, 0.6, 1.4, base.sizeNudge),
+    textSize: num(s.textSize, TEXT_SIZE_RANGE.min, TEXT_SIZE_RANGE.max, base.textSize),
+    margin: num(s.margin, MARGIN_RANGE.min, MARGIN_RANGE.max, base.margin),
     background: oneOf<CardBackground>(s.background, ['solid', 'gradient', 'photo', 'painting'], base.background),
     gradientId: oneOf(s.gradientId, CARD_GRADIENTS.map((g) => g.id), base.gradientId),
     texture: oneOf<CardTexture>(s.texture, ['none', ...CARD_TEXTURES.map((t) => t.id)], base.texture),
