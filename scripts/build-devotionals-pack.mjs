@@ -569,7 +569,9 @@ const pad = (n) => String(n).padStart(2, '0');
 /** Why an OSIS link doesn't name a real verse, or null if it does. */
 function badLink(osis) {
   const r = parseOsis(osis);
-  if (!r || r.verseStart == null) return `"${osis}" isn't a verse reference`;
+  if (!r) return `"${osis}" isn't a verse reference`;
+  // A whole chapter ("Gen.18") is fine when the source links one.
+  if (r.verseStart == null) return KJV_VERSES.has(`${r.book} ${r.chapter}:1`) ? null : `"${osis}": ${r.book} ${r.chapter} doesn't exist`;
   for (let v = r.verseStart; v <= r.verseEnd; v++) {
     if (!KJV_VERSES.has(`${r.book} ${r.chapter}:${v}`)) return `"${osis}": ${r.book} ${r.chapter}:${v} doesn't exist`;
   }
