@@ -33,6 +33,7 @@
   import { journalLockVisibilityChanged } from "./lib/journalLock/lockState";
   import { devotionalTargetFromParams, devotionalTargetFromUrl, DEVOTIONAL_PARAMS } from "./lib/devotionals/deepLink";
   import { openDevotional, type DevotionalTarget } from "./stores/devotionalStore";
+  import { isInstalledApp } from "./lib/device";
 
   let appReady = false;
   /** A devotional reading from the launch URL, opened once the app is ready. */
@@ -315,6 +316,12 @@
     };
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', handleSwMessage);
+      // Say whether this window is the installed app or a browser tab, so a
+      // notification tap brings forward the app rather than a hexapla.app tab
+      // left open in Chrome. See push-handler.js.
+      navigator.serviceWorker.ready
+        .then((registration) => registration.active?.postMessage({ type: 'window-kind', app: isInstalledApp() }))
+        .catch(() => {});
     }
 
     // Show daily greeting on first open of each new day
