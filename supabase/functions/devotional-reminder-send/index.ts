@@ -158,8 +158,12 @@ async function sendToUser(
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         JSON.stringify(payload),
-        // A reminder can wait a little longer than an alarm, but not into the next slot.
-        { TTL: 1800, urgency: 'normal' }
+        // High urgency, same as the alarm. Anything lower is held by the push
+        // service while a locked phone sleeps and only arrives when it is
+        // unlocked, which is what "normal" did until 2026-10-01. The reminder
+        // stays gentle on the phone; this only decides when it is delivered.
+        // TTL: a reminder can wait a little longer than an alarm, but not into the next slot.
+        { TTL: 1800, urgency: 'high' }
       );
       sent++;
     } catch (err) {

@@ -142,5 +142,9 @@ Same machinery, one more table, function and cron job. Once:
    `sb_secret_…` key pasted on the marked line, then put `PUT_THE_KEY_HERE` back
    before committing.
 
+Reminders must be sent with `urgency: 'high'`, like the alarm. With anything lower, a locked
+phone that has gone to sleep doesn't get the reminder until it is unlocked (seen 2026-10-01 with `'normal'`).
+A short test can pass anyway, because the phone only goes into that sleep after it has been locked and still for a while.
+
 Retest the same day: `UPDATE devotional_reminders SET last_morning_on = NULL, last_evening_on = NULL;`
 Logs: Edge Functions → devotional-reminder-send → Logs (lines start `[devotional]`).

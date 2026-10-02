@@ -3,7 +3,7 @@
  * Build Greek New Testament packs (Byzantine and Textus Receptus)
  */
 
-import { readFileSync, statSync } from 'fs';
+import { readFileSync, statSync, existsSync, rmSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
@@ -16,7 +16,13 @@ function buildPack(inputPath, packId, translationId, translationName, license, a
   console.log(`   Source: ${inputPath}`);
   
   const data = JSON.parse(readFileSync(inputPath, 'utf-8'));
-  
+
+  // Always build from scratch — re-inserting into a previous build collides
+  // with the verses already there.
+  if (existsSync(outputPath)) {
+    rmSync(outputPath);
+  }
+
   const db = new Database(outputPath);
   
   try {
@@ -82,17 +88,27 @@ function buildPack(inputPath, packId, translationId, translationName, license, a
       'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude', 'Revelation'
     ];
     
+    // The source files name books "I Corinthians", "III John" and "Revelation
+    // of John". Matching those against ntBooks as-is silently dropped twelve
+    // books, so translate to the names the rest of the app uses first.
+    const toAppName = (name) => name
+      .replace(/^III /, '3 ')
+      .replace(/^II /, '2 ')
+      .replace(/^I /, '1 ')
+      .replace(/^Revelation of John$/, 'Revelation');
+
     for (const book of data.books) {
-      if (!ntBooks.includes(book.name)) {
+      const bookName = toAppName(book.name);
+      if (!ntBooks.includes(bookName)) {
         continue; // Skip OT books
       }
-      
+
       bookCount++;
       for (const chapterData of book.chapters) {
         for (const verseData of chapterData.verses) {
           if (verseData.text && verseData.text.trim()) { // Only insert non-empty verses
             allVerses.push({
-              book: book.name,
+              book: bookName,
               chapter: chapterData.chapter,
               verse: verseData.verse,
               text: verseData.text.trim()
@@ -104,7 +120,13 @@ function buildPack(inputPath, packId, translationId, translationName, license, a
     }
     
     console.log(`   Processing ${bookCount} books, ${verseCount} verses...`);
-    
+
+    // Deliberately fatal: a short New Testament is what shipped unnoticed for
+    // months when the names above didn't match.
+    if (bookCount !== ntBooks.length) {
+      throw new Error(`${translationName}: found ${bookCount} of ${ntBooks.length} NT books`);
+    }
+
     // Batch insert all verses
     versesTransaction(allVerses);
     
