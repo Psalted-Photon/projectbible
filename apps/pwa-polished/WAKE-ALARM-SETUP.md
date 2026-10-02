@@ -110,8 +110,9 @@ Common causes:
 - **`expired_at` is set** — that browser install is gone. Save the alarm again on
   the phone to re-register it.
 - **`sent: 0`** — the alarm was due but no live device was registered.
-- **Nothing fires but cron succeeds** — check `last_fired_on`; an alarm only
-  fires once per local date. Clear it to retest:
+- **Nothing fires but cron succeeds**: check `last_fired_on`. An alarm only
+  fires once per local date. Since migration 017, saving a different time or
+  switching the alarm back on clears it. To retest at the same time:
   `UPDATE wake_alarms SET last_fired_on = NULL;`
 - **iPhone gets nothing** — the app must be installed to the home screen. Push
   does not work in a Safari tab.
@@ -146,5 +147,7 @@ Reminders must be sent with `urgency: 'high'`, like the alarm. With anything low
 phone that has gone to sleep doesn't get the reminder until it is unlocked (seen 2026-10-01 with `'normal'`).
 A short test can pass anyway, because the phone only goes into that sleep after it has been locked and still for a while.
 
-Retest the same day: `UPDATE devotional_reminders SET last_morning_on = NULL, last_evening_on = NULL;`
+Each reminder goes out once a day. Since migration 017, saving a different time, or switching a reminder
+back on, makes it go out again that day if the new time is still ahead. To retest at the same time:
+`UPDATE devotional_reminders SET last_morning_on = NULL, last_evening_on = NULL;`
 Logs: Edge Functions → devotional-reminder-send → Logs (lines start `[devotional]`).
