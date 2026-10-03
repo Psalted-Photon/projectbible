@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import { CheckCircle, WarningCircle } from 'phosphor-svelte';
+  import { CheckCircle, Info, WarningCircle } from 'phosphor-svelte';
   import { notices, dismissNotice } from '../stores/noticeStore';
 </script>
 
@@ -18,6 +18,8 @@
       <span class="an-icon">
         {#if notice.kind === 'error'}
           <WarningCircle size={20} weight="bold" />
+        {:else if notice.kind === 'info'}
+          <Info size={20} weight="bold" />
         {:else}
           <CheckCircle size={20} weight="bold" />
         {/if}

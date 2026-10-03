@@ -101,6 +101,7 @@
   import type { NoteKind } from "../lib/verseRendering";
   import { userProfileStore } from "../stores/userProfileStore";
   import { profileModalStore } from "../stores/profileModalStore";
+  import { showNotice } from "../stores/noticeStore";
   import AnnotationPanel from "./AnnotationPanel.svelte";
   import AuthorPill from "./AuthorPill.svelte";
   import HighlightModal from "./HighlightModal.svelte";
@@ -2745,12 +2746,19 @@
     };
   }
 
+  /**
+   * Highlights and notes live with an account. Signed out, say so and open
+   * the sign-in screen, rather than opening a card that can't save.
+   */
+  function needsAccount(what: string): boolean {
+    if ($userProfileStore.isSignedIn) return false;
+    showNotice(`${what} need an account`, 'info');
+    profileModalStore.open();
+    return true;
+  }
+
   async function openNotePopup(verse: number, book: string, chapter: number) {
-    const profile = $userProfileStore;
-    if (!profile.isSignedIn) {
-      profileModalStore.open();
-      return;
-    }
+    if (needsAccount('Notes')) return;
     try {
       const notes = await userDataStore.getNotes({ book, chapter, verse });
       const existing = notes[0] ?? null;
@@ -4962,6 +4970,7 @@
   }
 
   function openBulkHighlightModal(req: RepeatHighlightAllRequest) {
+    if (needsAccount('Highlights')) return;
     bulkRepeatRequest = req;
     highlightModalRepeatGroup = null;
     highlightSelectionType = 'word';
@@ -5383,6 +5392,10 @@
       }
       case "highlight": {
         if (selectedVerseNumber === null) break;
+        if (needsAccount('Highlights')) {
+          showToast = false;
+          break;
+        }
         const hlRef = { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber };
         // Capture the selection's character runs now, synchronously, before the
         // modal opens and the painted spans are torn down. One run per verse,

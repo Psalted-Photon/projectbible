@@ -193,7 +193,7 @@ export interface UserSettings {
   notesTheme?: EditorThemeSettings;   // Notes writing surface (sticky notes follow it)
   journalTheme?: EditorThemeSettings; // Journal writing surface
   cardLooks?: SavedCardLook[]; // Share-card looks saved by name (synced)
-  highlightNames?: Record<string, string>; // Names given to Saved Verses categories, by category key (synced)
+  highlightNames?: Record<string, string>; // Names given to Highlights categories, by category key (synced)
   highlightMeanings?: boolean; // Highlight popup shows what each colour and line means (per-device, default false)
   // Whether each surface's formatting toolbar is slid up out of the way.
   // Per-device on purpose (not in SYNCED_KEYS) — an ergonomic choice like font
@@ -373,7 +373,7 @@ export function setCardLooks(looks: SavedCardLook[]): void {
 }
 
 /**
- * Names the user has given to Saved Verses categories (text colours, dashed
+ * Names the user has given to Highlights categories (text colours, dashed
  * underline), keyed by the category key from lib/highlightCategories.
  */
 export function getHighlightNames(): Record<string, string> {

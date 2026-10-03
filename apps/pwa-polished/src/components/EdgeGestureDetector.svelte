@@ -74,7 +74,7 @@
     const now = Date.now();
     if (now - lastLimitNotice < 4000) return;
     lastLimitNotice = now;
-    showNotice(`Up to ${MAX_WINDOWS} windows. Close one to open another.`);
+    showNotice(`Up to ${MAX_WINDOWS} windows. Close one to open another.`, 'info');
   }
 
   /**

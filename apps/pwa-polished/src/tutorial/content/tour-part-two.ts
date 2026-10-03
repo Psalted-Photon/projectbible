@@ -117,7 +117,7 @@ function ringBody(ctx: StepContext): string {
     : people && encyclopedia
       ? 'Define looks the word up. On a person it becomes Bio, and on a place or topic Info, with Map beside it. '
       : 'Define looks the word up. ';
-  return `${lookup}Mark highlights, Notes adds a note, Share sends the verse, Extend stretches the selection to another word you tap, and Verse selects the whole verse.`;
+  return `${lookup}Highlight colours or underlines the words, Notes adds a note, Share sends the verse, Extend stretches the selection to another word you tap, and Verse selects the whole verse.`;
 }
 
 export const PART_TWO: TourStep[] = [

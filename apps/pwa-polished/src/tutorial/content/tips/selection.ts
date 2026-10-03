@@ -2,8 +2,8 @@
  * Dots on the word ring (and the classic toolbar, for people who picked it in
  * Settings).
  *
- * The ring's seats are told apart only by their labels. The two layouts share
- * most of them; where they differ ("Mark" and "Highlight"), both are listed.
+ * The ring's seats are told apart only by their labels, and the classic
+ * toolbar uses the same words for the buttons the two have in common.
  */
 
 import type { Tip } from '../types';
@@ -68,7 +68,7 @@ export const SELECTION_TIPS: Tip[] = [
     id: 'ring-mark',
     area,
     target: BUTTONS,
-    text: ['Mark', 'Highlight'],
+    text: 'Highlight',
     title: 'Highlight',
     body: 'Color the words like a highlighter, change their color, or underline them. Highlights are kept with your account.',
   },

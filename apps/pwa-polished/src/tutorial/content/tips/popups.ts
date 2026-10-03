@@ -22,7 +22,7 @@ export const POPUP_TIPS: Tip[] = [
     area,
     target: '.hl-modal .hl-meanings-btn',
     title: 'Meanings',
-    body: 'Shows what each colour and line stands for in the colour code, the same groups Saved Verses sorts by.',
+    body: 'Shows what each colour and line stands for in the colour code, the same groups Highlights sorts by.',
   },
   {
     id: 'highlight-marker',

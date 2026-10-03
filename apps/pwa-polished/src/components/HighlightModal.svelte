@@ -43,7 +43,7 @@
   let selected: HighlightStyle = initFromExisting(existingHighlight);
 
   // ── Meanings view — what each colour and line stands for in the colour code ──
-  // Remembered per device; the names come from Saved Verses → Categories.
+  // Remembered per device; the names come from Highlights → Categories.
   let showMeanings = getSettings().highlightMeanings ?? false;
   const names = getHighlightNames();
 
@@ -130,13 +130,6 @@
       >Meanings</button>
       <button class="hl-close-btn" on:click={handleClose} aria-label="Close">✕</button>
     </div>
-
-    {#if !isLoggedIn}
-      <div class="hl-auth-gate">
-        <span class="hl-auth-icon">🔒</span>
-        <span>Sign in to save highlights</span>
-      </div>
-    {/if}
 
     {#if isRepeatWord && !bulkDescription}
       <div class="hl-repeat-toggle" role="radiogroup" aria-label="Apply highlight to">
@@ -412,22 +405,6 @@
     line-height: 1.35;
     color: #aaa;
   }
-
-  /* ── Auth gate ── */
-  .hl-auth-gate {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #2a1f0e;
-    border: 1px solid #5a3e10;
-    border-radius: 8px;
-    padding: 10px 12px;
-    margin-bottom: 16px;
-    color: #f59e0b;
-    font-size: 0.8125rem;
-  }
-
-  .hl-auth-icon { font-size: 0.875rem; }
 
   /* ── Repeat scope toggle ── */
   .hl-repeat-toggle {

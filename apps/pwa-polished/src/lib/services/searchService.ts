@@ -157,7 +157,7 @@ export class UnifiedSearchService {
       { key: 'strongs', name: "Strong's", count: strongs.length, results: strongs },
       { key: 'notes', name: 'Notes', count: notes.length, results: notes },
       { key: 'journal', name: 'Journal', count: journal.length, results: journal },
-      { key: 'saved', name: 'Saved Verses', count: saved.length, results: saved },
+      { key: 'saved', name: 'Highlights', count: saved.length, results: saved },
       { key: 'characters', name: 'Biblical Characters', count: characters.length, results: characters },
       { key: 'encyclopedia', name: 'Encyclopedia (ISBE)', count: encyclopedia.length, results: encyclopedia },
       { key: 'topical', name: "Topical (Nave's)", count: topical.length, results: topical },
@@ -410,7 +410,7 @@ export class UnifiedSearchService {
   // ── Saved verses ─────────────────────────────────────────────────────────
 
   /**
-   * The same verses Profile lists as Saved Verses: every verse carrying a
+   * The same verses Profile lists as Highlights: every verse carrying a
    * highlight or underline, whole-verse or single-word. Matched against their
    * text in the translation the reader is showing, since that's the text the
    * list in Profile shows too.

@@ -7,7 +7,8 @@ import { writable } from 'svelte/store';
  * themselves. AppNotice.svelte draws them.
  */
 
-export type NoticeKind = 'success' | 'error';
+/** 'info' is for a plain explanation, like why a button needs an account. */
+export type NoticeKind = 'success' | 'error' | 'info';
 
 export interface Notice {
   id: number;

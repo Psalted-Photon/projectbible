@@ -198,7 +198,7 @@ export function radialItems(o: RadialItemOpts): RadialItem[] {
   if (o.canSpeak) {
     actions.push({ kind: 'action', id: 'speak', label: 'Speak', icon: 'speak', accent: '#34d399' });
   }
-  actions.push({ kind: 'action', id: 'highlight', label: 'Mark', icon: 'highlight', accent: '#fde047' });
+  actions.push({ kind: 'action', id: 'highlight', label: 'Highlight', icon: 'highlight', accent: '#fde047' });
   actions.push({ kind: 'action', id: 'notes', label: 'Notes', icon: 'notes', accent: '#d1e3f5' });
   actions.push({ kind: 'action', id: 'share', label: 'Share', icon: 'share', accent: '#7dd3fc' });
   if (singleWord) {

@@ -1,7 +1,7 @@
 /**
  * highlightCategories.ts
  *
- * The colour code behind Saved Verses → Categories. A highlight's look picks
+ * The colour code behind Highlights → Categories. A highlight's look picks
  * its group: a marker by its colour (named, fixed), a solid/boxed/wavy line
  * by its style whatever the colour (named, fixed), and text colour or a
  * dashed line by its colour (unnamed until the user names them).

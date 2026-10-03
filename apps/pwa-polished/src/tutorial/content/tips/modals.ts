@@ -127,7 +127,7 @@ export const MODAL_TIPS: Tip[] = [
     id: 'profile-tabs',
     area,
     target: '.tabs button',
-    text: 'Saved Verses/Notes',
+    text: 'Highlights/Notes',
     exact: true,
     title: 'Everything of yours',
     body: 'Your reading plan, the verses you’ve highlighted and noted, your journal calendar, and your account settings.',
@@ -144,7 +144,7 @@ export const MODAL_TIPS: Tip[] = [
     area,
     target: '.svp-root .svp-pills',
     corner: 'top-left',
-    title: 'Saved verses and notes',
+    title: 'Highlights and notes',
     body: 'Every verse you’ve highlighted, and every note. Tap one to go to it. The sort button on the right cycles Recent, Bible Order and Categories, which groups verses by what their colours mean.',
   },
   {

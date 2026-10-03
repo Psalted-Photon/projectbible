@@ -721,12 +721,13 @@
           </div>
         </div>
         <div class="profile-actions">
-          <div class="sync-status" title={SYNC_SCOPE_TOOLTIP}>
-            {#if syncing}
-              <BrandSpinner size={13} title="Syncing…" />
-            {/if}
-            <span class="sync-indicator" class:sync-indicator-error={syncState.status === 'error'}>{syncLabel}</span>
-            {#if isSignedIn}
+          <!-- Signed out there is nothing to sync, so only × shows. -->
+          {#if isSignedIn}
+            <div class="sync-status" title={SYNC_SCOPE_TOOLTIP}>
+              {#if syncing}
+                <BrandSpinner size={13} title="Syncing…" />
+              {/if}
+              <span class="sync-indicator" class:sync-indicator-error={syncState.status === 'error'}>{syncLabel}</span>
               <button
                 class="sync-btn"
                 on:click={handleManualSync}
@@ -736,9 +737,7 @@
               >
                 🔄
               </button>
-            {/if}
-          </div>
-          {#if isSignedIn}
+            </div>
             <button class="secondary-btn" on:click={handleSignOut} disabled={signingOut}>
               {signingOut ? 'Signing out…' : 'Sign Out'}
             </button>
@@ -768,12 +767,16 @@
         </div>
       {/if}
 
-      <div class="tabs">
-        <button class:active={currentTab === 'reading'} on:click={() => (currentTab = 'reading')}>Reading Plan</button>
-        <button class:active={currentTab === 'notes'} on:click={() => (currentTab = 'notes')}>Saved Verses/Notes</button>
-        <button class:active={currentTab === 'journal'} on:click={() => (currentTab = 'journal')}>Journal</button>
-        <button class:active={currentTab === 'settings'} on:click={() => (currentTab = 'settings')}>Settings</button>
-      </div>
+      <!-- Signed out, every tab would only show the sign-in screen, so there
+           are no tabs until there is an account behind them. -->
+      {#if isSignedIn}
+        <div class="tabs">
+          <button class:active={currentTab === 'reading'} on:click={() => (currentTab = 'reading')}>Reading Plan</button>
+          <button class:active={currentTab === 'notes'} on:click={() => (currentTab = 'notes')}>Highlights/Notes</button>
+          <button class:active={currentTab === 'journal'} on:click={() => (currentTab = 'journal')}>Journal</button>
+          <button class:active={currentTab === 'settings'} on:click={() => (currentTab = 'settings')}>Settings</button>
+        </div>
+      {/if}
 
       <div class="tab-content">
         {#if isSignedIn && ($passwordRecovery || recoveryDone)}

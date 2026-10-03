@@ -38,7 +38,7 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   // Share-card looks saved by name. A photo is never part of a look, so
   // nothing personal or heavy rides along — just fonts, colours and layout.
   'cardLooks',
-  // Names given to Saved Verses categories, like "Family" for green text.
+  // Names given to Highlights categories, like "Family" for green text.
   'highlightNames',
   'timezone',
   'dailyDriverEnglishOT', 'dailyDriverEnglishNT',

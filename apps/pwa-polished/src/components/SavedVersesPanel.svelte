@@ -20,7 +20,7 @@
   let activeTab: SubTab = 'verses';
 
   // ─── sort state ─────────────────────────────────────────────────────────────
-  // 'categories' groups Saved Verses by the colour code; Notes have no marks,
+  // 'categories' groups Highlights by the colour code; Notes have no marks,
   // so on that tab it reads as Bible order.
   type SortOrder = 'recent' | 'bible' | 'categories';
   let sortOrder: SortOrder = 'recent';
@@ -218,7 +218,7 @@
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  // Saved Verses cycles Recent → Bible Order → Categories; Notes just the first two
+  // Highlights cycles Recent → Bible Order → Categories; Notes just the first two
   function toggleSort() {
     if (activeTab === 'notes') sortOrder = sortOrder === 'recent' ? 'bible' : 'recent';
     else sortOrder = sortOrder === 'recent' ? 'bible' : sortOrder === 'bible' ? 'categories' : 'recent';
@@ -233,7 +233,7 @@
   <!-- Sub-tab pills -->
   <div class="svp-pills">
     <button class="svp-pill" class:active={activeTab === 'verses'} on:click={() => (activeTab = 'verses')}>
-      Saved Verses
+      Highlights
     </button>
     <button class="svp-pill" class:active={activeTab === 'notes'} on:click={() => (activeTab = 'notes')}>
       Notes
@@ -243,12 +243,12 @@
     </button>
   </div>
 
-  <!-- Saved Verses list -->
+  <!-- Highlights list -->
   {#if activeTab === 'verses'}
     {#if loadingVerses}
       <div class="svp-loading">Loading…</div>
     {:else if sortedVerses.length === 0}
-      <div class="svp-empty">No saved verses yet — highlight or underline a verse while reading.</div>
+      <div class="svp-empty">No highlights yet — highlight or underline a verse while reading.</div>
     {:else if sortOrder === 'categories'}
       <div class="svp-groups">
         {#each categoryGroups as { cat, verses } (cat.key)}
