@@ -6,7 +6,8 @@
   import { libraryPrefsStore, isStarred, type LibraryMark } from "../../stores/libraryPrefsStore";
   import { libraryLetterOf, getIsbePlaceByEntryId } from "../../adapters/lexicon-lookup.js";
   import { isTextEntry } from "../../lib/isTextEntry";
-  import type { LibraryBadge, LibrarySourceAdapter, LibraryRow } from "../../lib/library/source";
+  import { WORD_STUDY_PACKS, type LibraryBadge, type LibrarySourceAdapter, type LibraryRow } from "../../lib/library/source";
+  import GetPacksCard from "../GetPacksCard.svelte";
   import { isbeModalStore } from "../../stores/isbeModalStore";
   import { navesModalStore } from "../../stores/navesModalStore";
   import { personModalStore } from "../../stores/personModalStore";
@@ -93,8 +94,19 @@
     loadChapter(nav.book, nav.chapter);
   }
 
+  /**
+   * No entries under any letter: the pack isn't on this device (or its install
+   * was cut short). The list offers the word-study packs instead of a row of
+   * empty letters and "Nothing here."
+   */
+  let packMissing = false;
+
   onMount(async () => {
     letterCounts = await source.getLetterCounts();
+    if (Object.keys(letterCounts).length === 0) {
+      packMissing = true;
+      return;
+    }
     const first = Object.keys(letterCounts)[0] ?? "A";
     await selectLetter(initialLetter || prefs.lastLetter || first, false);
     if (initialRowId != null) {
@@ -352,6 +364,15 @@
   }
 </script>
 
+{#if packMissing}
+  <div class="index-packs">
+    <GetPacksCard
+      packs={[source.pack, ...WORD_STUDY_PACKS.filter((id) => id !== source.pack)]}
+      title="Word study needs packs"
+      note="The encyclopedia, Nave's topics, every person in the Bible and the English dictionary. Download what you'd like here."
+    />
+  </div>
+{:else}
 <div class="index">
   <div class="index-bar">
     <div class="chips">
@@ -512,8 +533,14 @@
     </div>
   </div>
 </div>
+{/if}
 
 <style>
+  .index-packs {
+    padding: 16px;
+    overflow-y: auto;
+  }
+
   .index {
     display: flex;
     flex-direction: column;

@@ -23,6 +23,7 @@
     type ParallelSet,
   } from '../lib/parallelSets';
   import { navigationStore, availableTranslations } from '../stores/navigationStore';
+  import GetPacksCard from './GetPacksCard.svelte';
   import {
     BIBLE_BOOKS,
     getTranslationScope,
@@ -222,13 +223,17 @@
         </p>
 
         {#if offered.length < 2}
-          <!-- One installed translation is not a comparison. Said plainly and
-               pointed at the fix, rather than showing a list that cannot be
-               used — the Packs screen is where more come from. -->
+          <!-- One installed translation is not a comparison. Said plainly,
+               with the fix right under it rather than a list that cannot be used. -->
           <p class="hp-empty">
-            You have one translation that covers {openAt.book}. Install another from
-            Packs to compare them side by side.
+            You have one translation that covers {openAt.book}. Download more to
+            compare them side by side.
           </p>
+          <GetPacksCard
+            packs={['translations']}
+            title="More translations"
+            note="KJV, WEB, BSB and LXX2012, alongside the NET."
+          />
         {:else}
           {#each offered as id (id)}
             {@const order = picked.indexOf(id)}

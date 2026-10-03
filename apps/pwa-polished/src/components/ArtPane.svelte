@@ -12,6 +12,7 @@
     ART_GRID_THRESHOLD,
   } from '../adapters/settings';
   import ArtViewer from './ArtViewer.svelte';
+  import GetPacksCard from './GetPacksCard.svelte';
 
   // Populated from the window's contentState (see WindowContainer)
   export let sceneId: string | undefined = undefined;
@@ -272,8 +273,11 @@
     </header>
     {#if allScenes.length === 0}
       <div class="state">
-        No art installed yet. Install the <strong>Biblical Art</strong> pack to see famous
-        paintings tied to scenes in Scripture.
+        <GetPacksCard
+          packs={['biblical-art']}
+          title="No art installed yet"
+          note="Famous paintings by the old masters, matched to the scenes they show. They work with no connection once they’re in."
+        />
       </div>
     {:else if gridMode}
       <ul class="scene-grid" style="--art-tile:{previewSize}px">

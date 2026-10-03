@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from "svelte";
+  import { packInstallFinished } from "../adapters/db-manager";
+  import GetPacksCard from "./GetPacksCard.svelte";
   import { Tree } from "phosphor-svelte";
   import { get } from "svelte/store";
   import { BIBLE_BOOKS, normalizeBookName, getBookColor } from "../lib/bibleData.js";
@@ -602,7 +604,19 @@
   {:else if loading}
     <div class="person-body"><p class="muted">Loading…</p></div>
   {:else if !person}
-    <div class="person-body"><p class="muted">No bio for this name.</p></div>
+    <div class="person-body">
+      {#await packInstallFinished("people-biblical-v1").catch(() => false) then installed}
+        {#if installed}
+          <p class="muted">No bio for this name.</p>
+        {:else}
+          <GetPacksCard
+            packs={["people-biblical-v1"]}
+            title="Bios aren't installed yet"
+            note="Every named person in Scripture: what their name means, when they lived, their family, and every verse they appear in."
+          />
+        {/if}
+      {/await}
+    </div>
   {:else}
     {#if trail.length}
       <nav class="trail" aria-label="Back trail">

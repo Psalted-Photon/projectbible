@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { packInstallFinished } from "../adapters/db-manager";
+  import GetPacksCard from "./GetPacksCard.svelte";
   import { get } from "svelte/store";
   import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
   import { IndexedDBTextStore } from "../adapters/TextStore";
@@ -144,9 +146,8 @@
   }
 
   // Nothing re-downloads this pack on its own — it isn't one of the packs with
-  // a load trigger — so the fix is a deliberate tap, and the message says where.
-  const REPAIR_HINT =
-    "Open Settings → Manage Packs and tap Encyclotopical to finish installing it.";
+  // a load trigger — so the fix is a deliberate tap, on the card under the message.
+  const REPAIR_HINT = "Download it again below to finish.";
 
   function persistView() {
     if (!windowId) return;
@@ -572,9 +573,20 @@
       {#if loading}
         <div class="muted">Loading…</div>
       {:else if !topic}
-        <div class="muted">No topic here. Install the Encyclotopical pack to read Nave's.</div>
+        {#await packInstallFinished("encyclotopical").catch(() => false) then installed}
+          {#if installed}
+            <div class="muted">No topic here.</div>
+          {:else}
+            <GetPacksCard
+              packs={["encyclotopical"]}
+              title="Nave's isn't installed yet"
+              note="Nave's Topical Bible and the encyclopedia come in one pack: 5,322 topics and 9,380 articles."
+            />
+          {/if}
+        {/await}
       {:else if outlineIncomplete}
         <div class="muted">This topic's outline didn't finish installing. {REPAIR_HINT}</div>
+        <GetPacksCard packs={["encyclotopical"]} title="Finish installing" repair />
       {:else if activeTab === "outline"}
         {#if sections.some((s) => s.children.length)}
           <button class="expand-all" on:click={toggleAll}>
@@ -640,6 +652,7 @@
       {:else if activeTab === "verses"}
         {#if versesIncomplete}
           <div class="muted">This topic's verse list didn't finish installing. {REPAIR_HINT}</div>
+          <GetPacksCard packs={["encyclotopical"]} title="Finish installing" repair />
         {:else}
           <div class="verses">
             {#each versesByBook as group}

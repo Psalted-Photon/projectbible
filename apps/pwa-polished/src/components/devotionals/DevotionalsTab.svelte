@@ -3,12 +3,12 @@
    * Reading Plan → Devotionals. The way in to the devotionals, and where they
    * are set up. Works signed out; only the reminders need an account.
    *
-   * Two states: the pack isn't installed (install card), or home (today's
+   * Two states: the pack isn't installed (the shared Get packs card), or home (today's
    * readings, any other date, setup). An open reading covers the screen on
    * top of home, and closing it lands back here.
    */
   import { onMount } from 'svelte';
-  import { SunHorizon, MoonStars, CalendarBlank, CalendarDots, CaretLeft, CaretRight, BookBookmark } from 'phosphor-svelte';
+  import { SunHorizon, MoonStars, CalendarBlank, CalendarDots, CaretLeft, CaretRight } from 'phosphor-svelte';
   import {
     isDevotionalsInstalled,
     listWorks,
@@ -21,8 +21,7 @@
   import { currentSlotStore, todayMonthDay } from '../../lib/devotionals/slot';
   import { devotionalTarget, devotionalSettings, type DevotionalTarget } from '../../stores/devotionalStore';
   import { todayStore } from '../../stores/clockStore';
-  import { PACK_CATALOG, downloadAndImportPack, installBusy, installMessage } from '../../lib/packInstaller';
-  import { showNotice } from '../../stores/noticeStore';
+  import GetPacksCard from '../GetPacksCard.svelte';
   import DevotionalReading from './DevotionalReading.svelte';
   import DevotionalReminders from './DevotionalReminders.svelte';
   import DevotionalCalendar from './DevotionalCalendar.svelte';
@@ -30,8 +29,6 @@
   let installed: boolean | null = null;
   let works: DevotionalWork[] = [];
   let open: DevotionalTarget | null = null;
-  let installing = false;
-  let progress = '';
 
   // The date the home view shows. Starts on today and follows midnight while it's still on today.
   let month = 1;
@@ -93,31 +90,6 @@
     calendarOpen = false;
   }
 
-  async function install() {
-    const pack = PACK_CATALOG.find((p) => p.id === 'devotionals');
-    if (!pack || $installBusy) return;
-    installing = true;
-    $installBusy = true;
-    try {
-      await downloadAndImportPack(pack, (message) => {
-        progress = message;
-        $installMessage = message;
-      });
-      showNotice('Devotionals installed');
-      window.dispatchEvent(new CustomEvent('packsUpdated'));
-      clearDevotionalsCache();
-      await refresh();
-    } catch (error) {
-      console.error('[Devotionals] install failed', error);
-      showNotice(`Couldn't install Devotionals: ${error instanceof Error ? error.message : String(error)}`, 'error');
-    } finally {
-      installing = false;
-      progress = '';
-      $installBusy = false;
-      $installMessage = '';
-    }
-  }
-
   const SLOT_MODES: { id: 'morning' | 'evening' | 'both'; label: string }[] = [
     { id: 'morning', label: 'Morning' },
     { id: 'evening', label: 'Evening' },
@@ -129,20 +101,16 @@
   <p class="dt-muted">Loading…</p>
 {:else if !installed}
   <div class="dt-install">
-    <span class="dt-install-icon"><BookBookmark size={30} weight="duotone" /></span>
-    <h3>Devotionals</h3>
-    <p>
-      Three classic daily devotionals: Spurgeon's <em>Morning and Evening</em>, Spurgeon's
-      <em>Faith's Checkbook</em>, and Bagster's <em>Daily Light on the Daily Path</em>. A reading for
-      every morning and evening of the year, and it all works offline.
-    </p>
     {#if $devotionalTarget}
-      <p class="dt-note">Someone sent you a reading from these. Install the pack to open it.</p>
+      <p class="dt-note">Someone sent you a reading from these. Download them to open it.</p>
     {/if}
-    <button class="dt-primary" on:click={install} disabled={installing || $installBusy}>
-      {#if installing}{progress || 'Installing…'}{:else if $installBusy}Another pack is installing…{:else}Install (8.6 MB){/if}
-    </button>
-    <p class="dt-small">Public domain. Also in Profile → Packs.</p>
+    <!-- The same card every feature shows for a missing pack. The tab reads
+         the pack fresh on packsUpdated, so this one needs no restart. -->
+    <GetPacksCard
+      packs={['devotionals']}
+      title="Devotionals"
+      note="Spurgeon's Morning and Evening, his Faith's Checkbook, and Bagster's Daily Light on the Daily Path. A reading for every morning and evening of the year, and it all works offline."
+    />
   </div>
 {:else}
   {#if open && openWork}
@@ -241,45 +209,13 @@
   }
 
   .dt-install {
-    text-align: center;
-    max-width: 420px;
+    max-width: 440px;
     margin: 20px auto;
-    color: rgba(255, 255, 255, 0.85);
-  }
-  .dt-install-icon {
-    display: inline-flex;
-    padding: 10px;
-    border-radius: 12px;
-    color: #e6b84a;
-    background: rgba(230, 184, 74, 0.1);
-  }
-  .dt-install h3 {
-    margin: 10px 0 8px;
-  }
-  .dt-install p {
-    line-height: 1.55;
-    color: rgba(255, 255, 255, 0.7);
   }
   .dt-note {
-    color: #e6b84a !important;
-  }
-  .dt-small {
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.4) !important;
-  }
-  .dt-primary {
-    margin-top: 6px;
-    background: #e6b84a;
-    color: #111;
-    border: none;
-    border-radius: 8px;
-    padding: 10px 18px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  .dt-primary:disabled {
-    opacity: 0.6;
-    cursor: default;
+    margin: 0 0 10px;
+    text-align: center;
+    color: #e6b84a;
   }
 
   .dt-date-row {

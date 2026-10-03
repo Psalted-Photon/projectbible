@@ -7,6 +7,7 @@
   import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
   import { ENOCH_EDITIONS, isEnochAuthor, enochLabelFor, loadEnoch } from "../lib/enochBooks";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
+  import PackDropdownSection from "./PackDropdownSection.svelte";
 
   export let windowId: string | undefined = undefined;
   export let style: string = "";
@@ -374,6 +375,14 @@
           {author}
         </button>
       {/each}
+      <!-- No authors means no Commentaries pack: offer it right here. It
+           draws nothing once the pack is in. -->
+      {#if authors.length === 0}
+        <PackDropdownSection
+          heading="Get commentaries"
+          rows={[{ packId: 'commentaries', label: 'Commentaries', contents: 'Henry, Clarke, Calvin, Spurgeon + 14 more' }]}
+        />
+      {/if}
       {#if windowId}
         <!-- Book of Enoch: the single entry point (per-window only) -->
         <div class="dropdown-section-label">📜 Ancient Book</div>

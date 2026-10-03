@@ -1,10 +1,13 @@
 <script lang="ts">
   /**
-   * "More Translations", under the installed ones in the translation dropdown.
+   * Packs offered inside a dropdown: "More Translations" under the installed
+   * ones in the translation list, and the Commentaries pack in an empty
+   * commentary author list.
    *
-   * Two rows, one per pack, each with its own Download button. A row goes away
-   * once its pack is in; until the app restarts it says so, since the list of
-   * translations is read once at startup.
+   * One row per pack, each with its own Download button. A row that was
+   * already installed when the dropdown opened isn't drawn, and with none left
+   * the section draws nothing. A row installed since stays, offering the
+   * restart that shows it, since these lists are read once at startup.
    */
   import { onMount } from 'svelte';
   import { DownloadSimple, ArrowClockwise } from 'phosphor-svelte';
@@ -22,10 +25,10 @@
   } from '../lib/packInstaller';
   import BrandSpinner from './BrandSpinner.svelte';
 
-  const ROWS: { packId: string; label: string; contents: string }[] = [
-    { packId: 'translations', label: 'English', contents: 'KJV, WEB, BSB, LXX2012' },
-    { packId: 'ancient-languages', label: 'Ancient Languages', contents: 'Hebrew, Greek NT, LXX' },
-  ];
+  export let heading: string;
+  export let rows: { packId: string; label: string; contents: string }[];
+  /** What the restart brings, after "Installed. Restart to …". */
+  export let restartFor = 'use it';
 
   let sizes: PackSizes | null = null;
   /** Installed when the dropdown opened: those rows don't show at all. */
@@ -36,9 +39,9 @@
   onMount(async () => {
     loadPackSizes().then((s) => (sizes = s));
     const results = await Promise.all(
-      ROWS.map((r) => packInstallFinished(r.packId).catch(() => false)),
+      rows.map((r) => packInstallFinished(r.packId).catch(() => false)),
     );
-    alreadyIn = Object.fromEntries(ROWS.map((r, i) => [r.packId, results[i]]));
+    alreadyIn = Object.fromEntries(rows.map((r, i) => [r.packId, results[i]]));
   });
 
   function packFor(id: string): CatalogPack | undefined {
@@ -51,12 +54,12 @@
     if (await installPack(pack)) justIn = { ...justIn, [id]: true };
   }
 
-  $: visible = alreadyIn ? ROWS.filter((r) => !alreadyIn![r.packId]) : [];
+  $: visible = alreadyIn ? rows.filter((r) => !alreadyIn![r.packId]) : [];
 </script>
 
 {#if visible.length > 0}
   <div class="mt-section">
-    <div class="mt-head">More Translations</div>
+    <div class="mt-head">{heading}</div>
     {#each visible as row (row.packId)}
       {@const pack = packFor(row.packId)}
       <div class="mt-row">
@@ -65,7 +68,7 @@
           {#if $installingPackId === row.packId}
             <span class="mt-progress">{$installMessage || 'Starting…'}</span>
           {:else if justIn[row.packId]}
-            <span class="mt-contents">Installed. Restart to read them.</span>
+            <span class="mt-contents">Installed. Restart to {restartFor}.</span>
           {:else}
             <span class="mt-contents">{row.contents}</span>
           {/if}
@@ -94,8 +97,17 @@
 
 <style>
   .mt-section {
-    border-top: 1px solid #3a3a3a;
     padding-bottom: 4px;
+  }
+
+  /* A hairline on whichever side meets the rest of the dropdown. */
+  .mt-section:not(:first-child) {
+    border-top: 1px solid #3a3a3a;
+  }
+
+  .mt-section:not(:last-child) {
+    border-bottom: 1px solid #3a3a3a;
+    margin-bottom: 4px;
   }
 
   .mt-head {

@@ -61,7 +61,7 @@
   <p class="scp-note">Looking for paintings…</p>
 {:else if choices.length === 0}
   <p class="scp-note">
-    No paintings of this chapter. Paintings come from the Art pack, which you can add in Packs.
+    No paintings of this chapter. Paintings come from the Biblical Art pack, which the Art window offers to download.
   </p>
 {:else}
   <div class="scp-grid">

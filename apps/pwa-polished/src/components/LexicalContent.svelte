@@ -34,6 +34,7 @@
   import { parseOsisRef } from "../lib/parseRefString";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../lib/morphologyExpander";
   import { openDB } from "../adapters/db";
+  import GetPacksCard from "./GetPacksCard.svelte";
 
   /**
    * The word study itself, independent of what is holding it. Two hosts: the
@@ -996,9 +997,13 @@
                     No definition found for this word in the installed dictionary.
                   </p>
                 {:else}
-                  <p style="margin-top: 12px; padding: 12px; background: #e3f2fd; border-radius: 8px; font-size: 13px;">
-                    <span class="emoji">💡</span> Install the <strong>English Dictionary Pack</strong> from the Packs menu to get offline modern and historic (Webster 1913) definitions!
-                  </p>
+                  <div style="margin-top: 12px;">
+                    <GetPacksCard
+                      packs={["dictionary-en", "lexical"]}
+                      title="Get the dictionaries"
+                      note="Modern and Webster 1913 definitions for English words, and Strong's Hebrew and Greek for the original ones."
+                    />
+                  </div>
                 {/if}
               </div>
             {/if}

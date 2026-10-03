@@ -9,11 +9,13 @@
    * because most features read their packs once, at startup.
    *
    * The install itself is packInstaller's installPack, the same one Manage
-   * Packs uses, so the lock, the space check and the notices are shared.
+   * Packs uses, so the lock, the space check and the notices are shared. A
+   * pack whose install was cut short shows here too, and downloading it again
+   * repairs it.
    */
   import { onMount } from 'svelte';
   import { CheckCircle, DownloadSimple, ArrowClockwise } from 'phosphor-svelte';
-  import { packInstallFinished } from '../adapters/db-manager';
+  import { packInstallFinished, listInstalledPacks } from '../adapters/db-manager';
   import {
     PACK_CATALOG,
     installPack,
@@ -33,6 +35,12 @@
   export let title = 'Get packs';
   /** One line on what the packs bring here. */
   export let note = '';
+  /**
+   * Offer "Download again" even for a pack that looks installed: for a
+   * feature that found part of its pack missing, which the install check
+   * can't always see.
+   */
+  export let repair = false;
 
   $: list = packs
     .map((id) => PACK_CATALOG.find((p) => p.id === id))
@@ -59,7 +67,12 @@
   });
 
   async function download(pack: CatalogPack) {
-    await installPack(pack);
+    // A row with no finished install behind it is one that was cut short.
+    // Clear it first, the way Manage Packs re-downloads, so this repairs it
+    // rather than finding the version already "installed" and stopping.
+    const leftover =
+      repair || (await listInstalledPacks().catch(() => [])).some((p) => p.id === pack.id);
+    await installPack(pack, { replaceExisting: leftover });
     await check();
   }
 </script>
@@ -82,7 +95,7 @@
             <span class="gp-desc">{pack.description}</span>
           {/if}
         </span>
-        {#if done[pack.id]}
+        {#if done[pack.id] && !repair}
           <span class="gp-done"><CheckCircle size={18} weight="fill" /> Installed</span>
         {:else if $installingPackId === pack.id}
           <span class="gp-busy"><BrandSpinner size={22} title="Installing…" /></span>
@@ -95,7 +108,7 @@
             on:click={() => download(pack)}
           >
             <DownloadSimple size={16} weight="bold" />
-            <span>{packSizeLabel(pack, sizes)}</span>
+            <span>{done[pack.id] ? "Download again" : packSizeLabel(pack, sizes)}</span>
           </button>
         {/if}
       </li>

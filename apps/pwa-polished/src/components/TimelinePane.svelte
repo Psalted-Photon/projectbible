@@ -14,6 +14,7 @@
   import { get } from 'svelte/store';
   import { windowStore } from '../lib/stores/windowStore';
   import { navigationStore } from '../stores/navigationStore';
+  import GetPacksCard from './GetPacksCard.svelte';
   import {
     loadTimeline,
     releaseTimeline,
@@ -382,14 +383,11 @@
 <div class="timeline no-edge-gesture" style={gripStyle}>
   {#if missing}
     <div class="gate">
-      <div class="gate-card">
-        <div class="gate-title">The Timeline isn’t installed yet</div>
-        <p>
-          The twelve eras, the forty events and the year on every verse live in
-          the Study Tools pack. Install it from Packs and this window fills in.
-        </p>
-        <p class="gate-note">About 14 MB. Works with no connection once it’s there.</p>
-      </div>
+      <GetPacksCard
+        packs={['study-tools']}
+        title="The Timeline isn’t installed yet"
+        note="The twelve eras, the forty events and the year on every verse come in Study Tools. Works with no connection once it’s there."
+      />
     </div>
   {:else if error}
     <div class="gate">
@@ -725,9 +723,8 @@
   /* ---------------- not installed ---------------- */
   .gate {
     position: absolute; inset: 0; z-index: 30; display: grid; place-items: center;
-    padding: 24px; background: var(--chrome);
+    padding: 24px; background: var(--chrome); overflow-y: auto;
   }
   .gate-card { max-width: 380px; text-align: center; color: var(--dim); font-size: 13px; line-height: 1.6; }
   .gate-title { font-family: var(--display); font-size: 17px; color: var(--text); margin-bottom: 10px; }
-  .gate-note { color: var(--faint); font-size: 12px; }
 </style>

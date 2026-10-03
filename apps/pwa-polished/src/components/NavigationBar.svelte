@@ -11,7 +11,8 @@
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { askConfirm } from "../stores/confirmStore";
-  import MoreTranslations from "./MoreTranslations.svelte";
+  import PackDropdownSection from "./PackDropdownSection.svelte";
+  import { packInstallFinished } from "../adapters/db-manager";
   import { BIBLE_BOOKS, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import {
@@ -157,6 +158,11 @@
   let translationDropdownPositioned = false;
   let referenceDropdownPositioned = false;
   let commDropdownPositioned = false;
+  // Cross-references switched on with no TSK pack: the toggle stays off and
+  // this small dropdown under it offers the pack instead.
+  let refsPackOpen = false;
+  let refsPackPositioned = false;
+  let refsToggleRef: HTMLElement;
 
   // Repeat pills dropdown state
   let repeatDropdownWord: string | null = null; // which pill's dropdown is open
@@ -364,6 +370,55 @@
     }
   }
 
+  /**
+   * The cross-references toggle. Turning it on with no TSK pack used to do
+   * nothing at all; now it stays off and the pack is offered under it.
+   */
+  async function setShowReferences(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const on = input.checked;
+    if (on && !(await packInstallFinished("tsk-references").catch(() => false))) {
+      input.checked = false;
+      await openRefsPack();
+      return;
+    }
+    if (windowId) {
+      windowStore.updateContentState(windowId, { showReferences: on });
+    } else {
+      navigationStore.setShowReferences(on);
+    }
+  }
+
+  async function openRefsPack() {
+    translationDropdownOpen = false;
+    translationDropdownPositioned = false;
+    referenceDropdownOpen = false;
+    referenceDropdownPositioned = false;
+    commDropdownOpen = false;
+    commDropdownPositioned = false;
+    refsPackOpen = true;
+    refsPackPositioned = false;
+    await tick();
+    requestAnimationFrame(() => {
+      const dropdown = (navElement?.querySelector('.refs-pack-dropdown') ?? document.querySelector('.refs-pack-dropdown')) as HTMLElement;
+      if (dropdown && refsToggleRef) {
+        const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth };
+        const rect = refsToggleRef.getBoundingClientRect();
+        const naturalLeft = rect.left - navRect.left;
+        const clampedLeft = Math.max(4, Math.min(naturalLeft, (navElement?.offsetWidth ?? window.innerWidth) - dropdown.offsetWidth - 4));
+        dropdown.style.left = `${clampedLeft}px`;
+        dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
+        refsPackPositioned = true;
+      }
+    });
+  }
+
+  // Any other dropdown opening puts this one away.
+  $: if (translationDropdownOpen || referenceDropdownOpen || commDropdownOpen) {
+    refsPackOpen = false;
+    refsPackPositioned = false;
+  }
+
   async function toggleCommDropdown(event: MouseEvent) {
     event.stopPropagation();
     const opening = !commDropdownOpen;
@@ -555,6 +610,8 @@
       translationDropdownPositioned = false;
       referenceDropdownPositioned = false;
       commDropdownPositioned = false;
+      refsPackOpen = false;
+      refsPackPositioned = false;
       closeRepeatDropdown();
       showResults = false;
     }
@@ -1003,7 +1060,7 @@
         const rect = translationButtonRef.getBoundingClientRect();
         dropdown.style.left = `${rect.left - navRect.left}px`;
         dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
-        dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+        dropdown.style.width = `${Math.max(rect.width, 250)}px`;
       }
     }
     if (referenceDropdownOpen && referenceDropdownPositioned) {
@@ -1952,19 +2009,14 @@
       <div class="pill-divider"></div>
 
       <label
+        bind:this={refsToggleRef}
         class="pill-btn pill-toggle pill-refs"
         title="Show TSK cross-reference markers on verse keywords"
       >
         <input
           type="checkbox"
           checked={currentShowReferences}
-          on:change={(e) => {
-            if (windowId) {
-              windowStore.updateContentState(windowId, { showReferences: e.currentTarget.checked });
-            } else {
-              navigationStore.setShowReferences(e.currentTarget.checked);
-            }
-          }}
+          on:change={setShowReferences}
         />
         <span class="icon-badge icon-badge-refs"><Graph size={18} weight="bold" /><span class="icon-overlay"><Graph size={18} weight="thin" /></span></span>
       </label>
@@ -2313,7 +2365,14 @@
         </button>
       {/each}
       <!-- Packs not yet downloaded, each with its own Download button. -->
-      <MoreTranslations />
+      <PackDropdownSection
+        heading="More Translations"
+        restartFor="read them"
+        rows={[
+          { packId: 'translations', label: 'English', contents: 'KJV, WEB, BSB, LXX2012' },
+          { packId: 'ancient-languages', label: 'Ancient Languages', contents: 'Hebrew, Greek NT, LXX' },
+        ]}
+      />
     </div>
   {/if}
 
@@ -2372,8 +2431,24 @@
     </div>
   {/if}
 
+  {#if refsPackOpen}
+    <div class="dropdown-menu refs-pack-dropdown" class:positioned={refsPackPositioned}>
+      <PackDropdownSection
+        heading="Cross-references need a pack"
+        restartFor="see them"
+        rows={[{ packId: 'tsk-references', label: 'TSK References', contents: '43,000+ cross-references by keyword' }]}
+      />
+    </div>
+  {/if}
+
   {#if commDropdownOpen}
     <div class="dropdown-menu comm-dropdown" class:positioned={commDropdownPositioned}>
+      <!-- The authors are a fixed list, so they show with or without the
+           pack. Without it, offer the pack first. Draws nothing once it's in. -->
+      <PackDropdownSection
+        heading="Get commentaries"
+        rows={[{ packId: 'commentaries', label: 'Commentaries', contents: 'Henry, Clarke, Calvin, Spurgeon + 14 more' }]}
+      />
       {#each Object.entries(COMMENTARY_AUTHORS) as [key, cfg]}
         <label class="comm-author-row">
           <input
@@ -3253,6 +3328,7 @@
   .translation-dropdown,
   .reference-dropdown,
   .comm-dropdown,
+  .refs-pack-dropdown,
   .repeat-dropdown {
     position: fixed;
     left: 0;
@@ -3262,6 +3338,7 @@
   }
 
   .translation-dropdown.positioned,
+  .refs-pack-dropdown.positioned,
   .reference-dropdown.positioned,
   .comm-dropdown.positioned,
   .repeat-dropdown.positioned {
@@ -3345,6 +3422,11 @@
 
   .dropdown-item:hover {
     background: #3a3a3a;
+  }
+
+  .refs-pack-dropdown {
+    width: 260px;
+    max-width: 92vw;
   }
 
   .dropdown-item.selected {

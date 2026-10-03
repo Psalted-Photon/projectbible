@@ -9,6 +9,8 @@
   import { sanitizePackHtml } from "../lib/sanitizePackHtml";
   import { parseRefString } from "../lib/parseRefString";
   import { loadEnoch, isEnochAuthor, type EnochBook, type EnochChapter } from "../lib/enochBooks";
+  import { packInstallFinished } from "../adapters/db-manager";
+  import GetPacksCard from "./GetPacksCard.svelte";
 
   export let windowId: string | undefined = undefined;
 
@@ -197,8 +199,16 @@
     }
   }
 
+  /** No Commentaries pack on this device: the window offers it instead. */
+  let packMissing = false;
+
+  async function checkPack() {
+    packMissing = !(await packInstallFinished("commentaries").catch(() => false));
+  }
+
   onMount(async () => {
     commentaryStore = new IndexedDBCommentaryStore();
+    void checkPack();
 
     // Load initial commentary (Enoch mode is driven by its own reactive)
     if (!isEnoch && currentBook && currentChapter) {
@@ -242,18 +252,22 @@
     </div>
   {:else}
   <div class="commentary-container">
-    {#if loading && entries.length === 0}
+    {#if packMissing && entries.length === 0}
+      <div class="packs-gate">
+        <GetPacksCard
+          packs={["commentaries"]}
+          title="Commentaries aren’t installed yet"
+          note="Eighteen commentary sets working through the text a verse at a time: Henry, Clarke, Calvin, Spurgeon and more."
+        />
+      </div>
+    {:else if loading && entries.length === 0}
       <div class="loading">Loading commentary...</div>
     {:else if error}
       <div class="error">{error}</div>
-      <p class="error-hint">
-        Make sure you have commentary packs installed via Manage Packs.
-      </p>
     {:else if entries.length === 0}
       <div class="no-content">
         <h3>No commentary available</h3>
         <p>No commentary found for {currentBook} {currentChapter}.</p>
-        <p class="hint">Import more commentary packs via Manage Packs to see additional content.</p>
       </div>
     {:else}
       <div class="entries">
@@ -342,11 +356,8 @@
     color: #ff6b6b;
   }
 
-  .error-hint,
-  .hint {
-    font-size: 0.9rem;
-    color: #666;
-    margin-top: 10px;
+  .packs-gate {
+    padding: 16px;
   }
 
   .no-content h3 {

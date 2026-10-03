@@ -1,5 +1,6 @@
 <script lang="ts">
   import { get } from "svelte/store";
+  import GetPacksCard from "./GetPacksCard.svelte";
   import Gem from "./Gem.svelte";
   import NavesPointRefs, { navesRefKey } from "./library/NavesPointRefs.svelte";
   import { stoneForTribe } from "../lib/gems/stones";
@@ -183,7 +184,11 @@
   {#if loading}
     <p class="muted">Loading…</p>
   {:else if nothingInstalled}
-    <p class="muted">This tribe's history and verses come from the encyclopedia and Nave's packs. Install them from Packs to read them here.</p>
+    <GetPacksCard
+      packs={["encyclotopical"]}
+      title="This tribe's history comes in a pack"
+      note="Its history and verses come from the encyclopedia and Nave's, which download together."
+    />
   {:else}
     {#each parts as p, pi}
       {#if p.part.label}

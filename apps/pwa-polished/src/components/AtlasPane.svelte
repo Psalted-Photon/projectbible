@@ -13,6 +13,7 @@
   import { get } from 'svelte/store';
   import 'leaflet/dist/leaflet.css';
   import ArtViewer from './ArtViewer.svelte';
+  import GetPacksCard from './GetPacksCard.svelte';
   import { dragScroll } from '../lib/dragScroll';
   import { windowStore, type MapTarget } from '../lib/stores/windowStore';
   import { navigationStore } from '../stores/navigationStore';
@@ -863,14 +864,11 @@
 <div class="atlas" style={gripStyle} bind:this={root}>
   {#if missing}
     <div class="gate">
-      <div class="gate-card">
-        <div class="gate-title">The Historical Map isn’t installed yet</div>
-        <p>
-          The drawn map, the sixteen eras and every place Scripture names live in
-          a pack. Install it from Packs and this window fills in.
-        </p>
-        <p class="gate-note">About 34 MB. Works with no connection once it’s there.</p>
-      </div>
+      <GetPacksCard
+        packs={['atlas-map']}
+        title="The Historical Map isn’t installed yet"
+        note="The drawn map, the sixteen eras and every place Scripture names. Works with no connection once it’s there."
+      />
     </div>
   {:else if error}
     <div class="gate">
@@ -2374,9 +2372,8 @@
   /* ---------------- not installed ---------------- */
   .gate {
     position: absolute; inset: 0; z-index: 2000; display: grid; place-items: center;
-    padding: 24px; background: var(--chrome);
+    padding: 24px; background: var(--chrome); overflow-y: auto;
   }
   .gate-card { max-width: 380px; text-align: center; color: var(--dim); font-size: 13px; line-height: 1.6; }
   .gate-title { font-family: var(--display); font-size: 17px; color: var(--text); margin-bottom: 10px; }
-  .gate-note { color: var(--faint); font-size: 12px; }
 </style>

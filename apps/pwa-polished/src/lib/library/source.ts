@@ -28,6 +28,12 @@ import {
 
 export type { LibraryRow };
 
+/**
+ * The packs behind word study, in the order the Get packs card lists them:
+ * the encyclopedia and Nave's (one pack), the people, and the dictionary.
+ */
+export const WORD_STUDY_PACKS = ['encyclotopical', 'people-biblical-v1', 'dictionary-en'];
+
 /** One chip above the list. `test` runs against a row already in hand. */
 export interface LibraryFilter {
   key: string;
@@ -41,6 +47,8 @@ export type LibraryBadge = 'place' | 'bio' | 'entry' | 'topic' | 'dict';
 
 export interface LibrarySourceAdapter {
   key: LibrarySource;
+  /** The catalog pack this work comes from. */
+  pack: string;
   /** Shown in the header when browsing rather than reading an entry. */
   label: string;
   /** The line under the title while browsing — what this work actually is. */
@@ -59,6 +67,7 @@ export interface LibrarySourceAdapter {
 
 export const isbeSource: LibrarySourceAdapter = {
   key: 'isbe',
+  pack: 'encyclotopical',
   label: 'Encyclopedia',
   subtitle: 'International Standard Bible Encyclopedia',
   searchPlaceholder: 'Search the encyclopedia…',
@@ -78,6 +87,7 @@ export const isbeSource: LibrarySourceAdapter = {
 
 export const navesSource: LibrarySourceAdapter = {
   key: 'naves',
+  pack: 'encyclotopical',
   label: 'Topical',
   subtitle: "Nave's Topical Bible",
   searchPlaceholder: 'Search topics…',
@@ -92,6 +102,7 @@ export const navesSource: LibrarySourceAdapter = {
 
 export const peopleSource: LibrarySourceAdapter = {
   key: 'people',
+  pack: 'people-biblical-v1',
   label: 'People',
   subtitle: 'Every named person in the Bible',
   searchPlaceholder: 'Search people…',
