@@ -1,3 +1,16 @@
+<script lang="ts" context="module">
+  import type { FamilyTreeData } from '../lib/familyTree/data';
+  import type { TreeModel as Model } from '../lib/familyTree/layout';
+
+  /**
+   * The laid-out tree, kept for the rest of the session. layout() takes a
+   * few hundred milliseconds and its answer never changes for the same data,
+   * so only the first open pays for it. Nothing writes to the model after
+   * layout, so every open can share it.
+   */
+  let laidOut: { data: FamilyTreeData; model: Model } | null = null;
+</script>
+
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
@@ -115,6 +128,19 @@
     }
   }
 
+  // ── Animation clock ──────────────────────────────────────────────────────
+  // Everything timed — the climb, the lights, bursts, glides — runs on this
+  // rather than performance.now(). It stands still between frames, doesn't
+  // move on the first frame after the loop wakes, and moves at most
+  // CLOCK_MAX_STEP per frame. So when the device stalls (most of all on
+  // opening, while the tree is laid out and first painted) the animation
+  // waits rather than playing on unseen, and is never found half over. A
+  // slow but steady device still plays at full speed. The breathing pulse
+  // stays on real time; it loops, so there is nothing to miss.
+  const CLOCK_MAX_STEP = 100;
+  let clock = 0;
+  let lastFrame: number | null = null;
+
   // ── Drawing ──────────────────────────────────────────────────────────────
   function redraw() {
     if (!ctx || !model) return;
@@ -137,7 +163,7 @@
     // Bursts go over the finished frame. Drawn here rather than only in the
     // frame loop, so a pan mid-burst doesn't blink it out for a frame.
     if (bursts.length) {
-      bursts = drawBursts(ctx, bursts, view, W, H, DPR, performance.now());
+      bursts = drawBursts(ctx, bursts, view, W, H, DPR, clock);
       if (bursts.length) ensureLoopRunning();
     }
   }
@@ -222,10 +248,10 @@
       rise: spec,
       fall: null,
       rank: (s, ids) => rankBy(s.order, ids, m, focus),
-      now: performance.now(),
+      now: clock,
     });
     lightFloor = floor;
-    light = wave.sample(performance.now());
+    light = wave.sample(clock);
     ensureLoopRunning();
   }
 
@@ -243,11 +269,11 @@
     startWave(o, god, o.floor);
     const ms = o.spreadMs + o.fadeMs;
     if (o.zoomFrom !== 1 && ms > 0) {
-      openCam = { t0: performance.now(), ms };
+      openCam = { t0: clock, ms };
       markViewMoved();
     }
     if (o.godBurst && god && isPlaced(god)) {
-      bursts.push(makeBurst(god.x, god.y, litColourOf(model, god), MOTION.godBurst, performance.now()));
+      bursts.push(makeBurst(god.x, god.y, litColourOf(model, god), MOTION.godBurst, clock));
     }
   }
 
@@ -279,7 +305,7 @@
     const chain = ancestorChain(model, n);
     const line = chain.map((r) => r.id).reverse();
     const landable = isPlaced(n);
-    const now = performance.now();
+    const now = clock;
     cancelGlide();
     seq = null;
     // Everyone else goes dim at once; the climb lights the line.
@@ -450,11 +476,14 @@
     return 1 - Math.pow(1 - t, 3);
   }
 
-  function frameLoop(now: number) {
+  function frameLoop(real: number) {
     let needsAnother = false;
+    if (lastFrame != null) clock += Math.max(0, Math.min(CLOCK_MAX_STEP, real - lastFrame));
+    lastFrame = real;
+    const now = clock;
 
     if (pinned && !REDUCED_MOTION) {
-      pulsePhase = (Math.sin((now - pulseStart) / 480) + 1) / 2;
+      pulsePhase = (Math.sin((real - pulseStart) / 480) + 1) / 2;
       needsAnother = true;
     }
 
@@ -515,6 +544,8 @@
     redraw();
     if (bursts.length) needsAnother = true;
     rafId = needsAnother ? requestAnimationFrame(frameLoop) : null;
+    // Asleep, the clock stops; the next wake starts from here, not from now.
+    if (rafId == null) lastFrame = null;
   }
 
   function ensureLoopRunning() {
@@ -560,7 +591,7 @@
       logStart: Math.log(view.k),
       logEnd: Math.log(targetK),
       screen,
-      t0: performance.now(),
+      t0: clock,
       ms,
       onArrive,
     };
@@ -867,7 +898,17 @@
     try {
       const data = await loadFamilyTree();
       if (destroyed) return;
-      model = layout(data);
+      if (laidOut?.data !== data) {
+        // First open: let the black screen and "Loading the tree…" paint
+        // before layout holds the page up, so the tap answers at once rather
+        // than freezing on the list underneath. A timeout inside the frame
+        // callback runs after that frame's paint; the callback alone runs
+        // before it.
+        await new Promise<void>((done) => requestAnimationFrame(() => setTimeout(done, 0)));
+        if (destroyed) return;
+        laidOut = { data, model: layout(data) };
+      }
+      model = laidOut.model;
       loading = false;
       ctx = canvas.getContext('2d');
       if (!ctx) {
