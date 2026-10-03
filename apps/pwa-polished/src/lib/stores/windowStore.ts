@@ -116,7 +116,7 @@ export interface WindowState {
   };
 }
 
-const MAX_WINDOWS = 6;
+export const MAX_WINDOWS = 6;
 const STORAGE_KEY = 'projectbible-windows';
 
 /** The three window types that are reference works, and which shelf each is. */

@@ -971,7 +971,7 @@
                 <div class="stat-row"><strong>Verses remaining:</strong> {verseStats.remaining}</div>
                 <div class="stat-row"><strong>Days ahead/behind:</strong> {daysAheadBehind}</div>
                 <div class="stat-row"><strong>Streak:</strong> {streak} days</div>
-                {#if profileName}
+                {#if profileName && verseStats.todayRead > 0}
                   <div class="stat-message">Congrats {profileName}, today you read {verseStats.todayRead} verses!</div>
                 {/if}
               </div>

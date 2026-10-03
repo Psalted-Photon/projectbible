@@ -1513,12 +1513,6 @@
               </div>
             {/if}
             
-            {#if !isSignedIn}
-              <div class="auth-warning">
-                <span>⚠</span>
-                <span>You are not signed in. This plan will be stored temporarily and <strong>lost when you close this tab</strong>. <button class="auth-warning-signin-btn" on:click={() => close()}>Sign in</button> to save permanently.</span>
-              </div>
-            {/if}
             <button class="generate-btn" on:click={generatePlan}>Generate Plan</button>
             {#if planGenerationStatus}
               <div class="status">{planGenerationStatus}</div>
@@ -3114,30 +3108,6 @@
     font-size: 12px;
     color: #888;
     font-weight: normal;
-  }
-
-  /* Auth warning banner */
-  .auth-warning {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    background: rgba(250, 200, 0, 0.1);
-    border: 1px solid rgba(250, 200, 0, 0.4);
-    border-radius: 6px;
-    padding: 10px 14px;
-    margin-bottom: 12px;
-    font-size: 13px;
-    color: #d4a800;
-    line-height: 1.5;
-  }
-  .auth-warning-signin-btn {
-    background: none;
-    border: none;
-    color: #f5c518;
-    text-decoration: underline;
-    cursor: pointer;
-    padding: 0;
-    font: inherit;
   }
 
   /* Auth wall (shown when not signed in) */

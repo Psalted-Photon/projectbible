@@ -702,6 +702,11 @@
   }
 
   async function loadAllResults() {
+    // A thousand or fewer loads quickly and scrolls fine, so it doesn't ask.
+    if (totalResultCount <= 1000) {
+      await performSearch(true);
+      return;
+    }
     const message =
       totalResultCount > 10000
         ? `Load all ${totalResultCount.toLocaleString()} results? This could take a while and create a very long list to scroll through.`
@@ -2203,7 +2208,7 @@
       <button
         class="pill-btn pill-powersearch"
         on:click={() => (showPowerSearchModal = true)}
-        title="Advanced search Ã¢â‚¬â€ regex, proximity, biblical filters"
+        title="Advanced search — regex, proximity, biblical filters"
         aria-label="Advanced search"
       >
         <span class="icon-badge icon-badge-powersearch"><Microscope size={18} weight="bold" /><span class="icon-overlay"><Microscope size={18} weight="thin" /></span></span>

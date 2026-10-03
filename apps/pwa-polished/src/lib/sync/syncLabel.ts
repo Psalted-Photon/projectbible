@@ -12,7 +12,7 @@ import type { SyncState } from './types';
 /** What a sync actually covers — shown on hover, since it's otherwise invisible. */
 export const SYNC_SCOPE_TOOLTIP =
   'Syncs notes, highlights, bookmarks, journal, notebooks, reading plans, ' +
-  'reading progress, settings and the wake alarm across your devices.';
+  'reading progress, settings and the Auto-Read Alarm across your devices.';
 
 function plural(n: number): string {
   return n === 1 ? 'change' : 'changes';

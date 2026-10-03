@@ -137,7 +137,7 @@ export const MODAL_TIPS: Tip[] = [
     area,
     target: '.profile-actions .sync-btn',
     title: 'Sync now',
-    body: 'Syncs notes, highlights, bookmarks, journal, notebooks, reading plans, reading progress, settings and the wake alarm across your devices.',
+    body: 'Syncs notes, highlights, bookmarks, journal, notebooks, reading plans, reading progress, settings and the Auto-Read Alarm across your devices.',
   },
   {
     id: 'profile-saved-verses',

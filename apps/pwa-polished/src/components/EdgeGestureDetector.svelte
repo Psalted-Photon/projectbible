@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { windowStore, type WindowEdge } from "../lib/stores/windowStore";
+  import { windowStore, MAX_WINDOWS, type WindowEdge } from "../lib/stores/windowStore";
   import { pendingCloseEdge } from "../stores/paneStore";
+  import { showNotice } from "../stores/noticeStore";
   import { isTextEntry } from "../lib/isTextEntry";
 
   $: closingEdge = $pendingCloseEdge;
@@ -58,8 +59,35 @@
     return !!(target as HTMLElement | null)?.closest?.('.verse-text');
   }
 
-  $: atLimit = $windowStore.length >= 6;
+  // Counted the way createWindow counts: a Harmonies view's readers are
+  // transient and don't use up any of the six.
+  $: atLimit = $windowStore.filter((w) => !w.transient).length >= MAX_WINDOWS;
   $: bumperClass = atLimit ? 'at-limit' : 'normal';
+
+  /**
+   * At the limit a swipe still gets as far as the direction check, so a real
+   * swipe can be told why nothing opens. A touch that never commits says
+   * nothing. Once per few seconds, so a run of swipes doesn't stack notices.
+   */
+  let lastLimitNotice = 0;
+  function showLimitNotice() {
+    const now = Date.now();
+    if (now - lastLimitNotice < 4000) return;
+    lastLimitNotice = now;
+    showNotice(`Up to ${MAX_WINDOWS} windows. Close one to open another.`);
+  }
+
+  /**
+   * Has a pending edge press moved far enough to tell which way it's going?
+   * Null until it has, then whether it runs along the edge's own axis.
+   */
+  function pendingOnAxis(x: number, y: number): boolean | null {
+    const dx = Math.abs(x - pendingStartX);
+    const dy = Math.abs(y - pendingStartY);
+    if (Math.max(dx, dy) < 10) return null;
+    const isHorizontalEdge = pendingEdge === 'left' || pendingEdge === 'right';
+    return isHorizontalEdge ? dx > dy : dy > dx;
+  }
 
   // Calculate drag distance for visual preview
   $: dragDistance = (() => {
@@ -88,8 +116,6 @@
   })();
 
   function handleTouchStart(e: TouchEvent) {
-    if (atLimit) return; // Don't allow new windows at limit
-
     // Anywhere the user types is off limits — a search box pinned to the right
     // of a card sits inside the swipe lane on a phone, and arming a gesture on
     // it costs the tap its focus. Covers contenteditable too, so the journal
@@ -142,7 +168,6 @@
 
   function handleMouseDown(e: MouseEvent) {
     console.log('🖱️ MOUSE DOWN called - usingTouch:', usingTouch);
-    if (atLimit) return; // Don't allow new windows at limit
     if (usingTouch) {
       console.log('⛔ MOUSE DOWN blocked - usingTouch is true');
       return; // Ignore mouse events when touch is active
@@ -167,22 +192,31 @@
     const x = e.clientX;
     const y = e.clientY;
 
+    let edge: WindowEdge | null = null;
     if (y < EDGE_ZONE_WIDTH) {
-      edgePosition = "top";
-      startDrag(x, y);
+      edge = "top";
     } else if (x < EDGE_ZONE_WIDTH) {
-      edgePosition = "left";
-      startDrag(x, y);
+      edge = "left";
     } else if (x > window.innerWidth - EDGE_ZONE_WIDTH) {
-      edgePosition = "right";
-      startDrag(x, y);
+      edge = "right";
     } else if (y > window.innerHeight - EDGE_ZONE_WIDTH) {
       const centerX = window.innerWidth / 2;
       if (x < centerX - BOTTOM_DEAD_HALF || x > centerX + BOTTOM_DEAD_HALF) {
-        edgePosition = "bottom";
-        startDrag(x, y);
+        edge = "bottom";
       }
     }
+    if (!edge) return;
+
+    if (atLimit) {
+      // No drag at the limit. Wait for the direction instead, as touch does,
+      // so a click on the bar along the top edge doesn't raise the notice.
+      pendingEdge = edge;
+      pendingStartX = x;
+      pendingStartY = y;
+      return;
+    }
+    edgePosition = edge;
+    startDrag(x, y);
   }
 
   function handleMouseMoveHover(e: MouseEvent) {
@@ -225,12 +259,12 @@
 
     // Direction detection — commit when movement matches the edge's axis
     if (pendingEdge !== null && !isDragging) {
-      const dx = Math.abs(x - pendingStartX);
-      const dy = Math.abs(y - pendingStartY);
-      if (Math.max(dx, dy) >= 10) {
-        const isHorizontalEdge = pendingEdge === 'left' || pendingEdge === 'right';
-        const correctAxis = isHorizontalEdge ? dx > dy : dy > dx;
-        if (correctAxis) {
+      const correctAxis = pendingOnAxis(x, y);
+      if (correctAxis !== null) {
+        if (correctAxis && atLimit) {
+          pendingEdge = null;
+          showLimitNotice();
+        } else if (correctAxis) {
           // Matches edge direction → commit drag
           edgePosition = pendingEdge;
           pendingEdge = null;
@@ -258,8 +292,17 @@
   }
 
   function handleMouseMove(e: MouseEvent) {
+    // Only armed at the limit — see handleMouseDown.
+    if (pendingEdge !== null && !isDragging && !usingTouch) {
+      const correctAxis = pendingOnAxis(e.clientX, e.clientY);
+      if (correctAxis !== null) {
+        pendingEdge = null;
+        if (correctAxis) showLimitNotice();
+      }
+      return;
+    }
     if (!isDragging) return;
-    
+
     // Don't interfere with anywhere the user types
     const target = e.target as HTMLElement;
     if (isTextEntry(target)) {
@@ -348,7 +391,8 @@
 
   function handleMouseUp(e: MouseEvent) {
     console.log('🔵 MOUSE UP called:', { isDragging, edgePosition, usingTouch });
-    
+    if (!usingTouch) pendingEdge = null;
+
     // Don't interfere with anywhere the user types
     const target = e.target as HTMLElement;
     if (isTextEntry(target)) {

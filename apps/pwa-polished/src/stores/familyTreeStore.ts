@@ -8,9 +8,7 @@ import { writable } from 'svelte/store';
  * `open()` method below — with an `open()` that takes the details and an
  * unconditional `close()`. Not persisted, and deliberately so — the reason is
  * the one parallelStore.ts gives at its top: a reload must not reopen a
- * fullscreen overlay the user pressed × on, and doing so here would also
- * fight FamilyTreeViewer's own pushState/popstate handling, which assumes it
- * is the one that put its history entry there.
+ * fullscreen overlay the user pressed × on.
  */
 export interface FamilyTreeState {
   isOpen: boolean;

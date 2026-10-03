@@ -61,7 +61,7 @@
 
   {#if !$userProfileStore.isSignedIn}
     <span class="dt-setting-hint">
-      <button class="dr-link" on:click={signIn}>Sign in</button> to get reminders. They come from your account, like the wake alarm.
+      <button class="dr-link" on:click={signIn}>Sign in</button> to get reminders. They come from your account, like the Auto-Read Alarm.
     </span>
   {:else if supportMessage}
     <span class="dt-setting-hint">{supportMessage}</span>

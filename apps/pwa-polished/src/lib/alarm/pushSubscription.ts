@@ -259,7 +259,7 @@ export async function showTestNotification(): Promise<PushSetupResult> {
   }
 
   await registration.showNotification('Hexapla', {
-    body: 'Test notification — this is how your wake alarm will look.',
+    body: 'Test notification — this is how your Auto-Read Alarm will look.',
     icon: '/pwa-192x192.png',
     badge: '/notification-badge-96.png',
     tag: 'projectbible-wake-alarm-test',

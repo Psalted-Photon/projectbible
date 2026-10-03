@@ -185,7 +185,7 @@
       <Alarm size={20} weight="bold" />
       <span class="icon-overlay"><Alarm size={20} weight="thin" /></span>
     </span>
-    Wake Alarm
+    Auto-Read Alarm
   </h2>
 
   <p class="section-description">

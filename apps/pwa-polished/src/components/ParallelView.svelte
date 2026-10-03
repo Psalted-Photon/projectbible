@@ -192,45 +192,10 @@
   }
 
   /**
-   * Escape, and the phone's back gesture.
-   *
-   * The history entry is pushed on mount and consumed here. It used to be the
-   * only pushState in the app; the family tree (roadmap #25) now pushes one of
-   * its own when it opens on top of this view, so this is no longer the only
-   * entry on the stack — only the only one THIS view owns.
-   *
-   * A fresh marker per open, not a bare `true`: history.state survives a
-   * reload, and the app reloads itself on resume after a deploy, so a bare
-   * boolean would let a stale pbHarmony entry from before that reload go on
-   * satisfying "this is my entry" forever, the same reasoning the tree's own
-   * pbFamilyTree marker uses.
+   * Escape. Back is deliberately not caught here: inside the app it does
+   * nothing, so the phone's back gesture goes straight to Android. × and
+   * Escape are the ways out of this view.
    */
-  const mark = Date.now() + Math.random();
-  let pushedHistory = false;
-
-  onMount(() => {
-    try {
-      history.pushState({ pbHarmony: mark }, '');
-      pushedHistory = true;
-    } catch {
-      // A blocked pushState costs the back gesture and nothing else; × and
-      // Escape still work.
-    }
-  });
-
-  function onPopState() {
-    // The tree can open over this view, pushing its own entry on top of
-    // pbHarmony. Popping THAT entry fires this listener too — window popstate
-    // reaches every listener, not just the tree's own — and lands back on the
-    // pbHarmony entry this view is still sitting on, which must not also close
-    // this view out from under it.
-    if (history.state?.pbHarmony === mark) return;
-    // The entry is already gone by the time this fires, so closing must not try
-    // to pop it again.
-    pushedHistory = false;
-    close();
-  }
-
   function onKeydown(e: KeyboardEvent) {
     if (e.key !== 'Escape') return;
     const target = e.target as HTMLElement | null;
@@ -239,22 +204,6 @@
       target?.tagName === 'TEXTAREA' ||
       target?.isContentEditable
     ) {
-      return;
-    }
-    closeFromUser();
-  }
-
-  /**
-   * Leaving by × or Escape, rather than by the back gesture.
-   *
-   * Goes back through history rather than closing directly, so the entry pushed
-   * on mount is consumed. Closing without it would leave a dead entry on the
-   * stack and the next back gesture would appear to do nothing.
-   */
-  function closeFromUser() {
-    if (pushedHistory) {
-      pushedHistory = false;
-      history.back();
       return;
     }
     close();
@@ -380,7 +329,7 @@
   }
 </script>
 
-<svelte:window on:resize={onResize} on:popstate={onPopState} on:keydown={onKeydown} />
+<svelte:window on:resize={onResize} on:keydown={onKeydown} />
 
 <div class="pv-root">
   <div class="pv-strip">
@@ -424,7 +373,7 @@
     {/if}
     <button
       class="pv-close"
-      on:click={closeFromUser}
+      on:click={close}
       aria-label={comparing ? 'Close comparison' : 'Close harmony'}>✕</button>
   </div>
 

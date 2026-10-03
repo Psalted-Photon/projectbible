@@ -159,7 +159,7 @@
       lines.push(`Reading plans: ${bits.length ? bits.join(', ') : 'already up to date'}`);
     }
     if (r.settingsApplied) lines.push('Settings: restored');
-    if (r.alarmProblem) lines.push(`Wake alarm: ${r.alarmProblem}`);
+    if (r.alarmProblem) lines.push(`Auto-Read Alarm: ${r.alarmProblem}`);
     return lines;
   }
 

@@ -639,82 +639,13 @@
     return typeof matchMedia !== 'undefined' && matchMedia('(min-width: 760px)').matches;
   }
 
-  // ── History: back closes the tree, and the sheet on top of it ──────────
-  // Same pattern as ParallelView, with one addition: a fresh marker per open
-  // rather than a bare `true`. history.state survives a reload, and the app
-  // reloads itself on resume after a deploy (App.svelte's controllerchange
-  // handler) — with a bare boolean, an old tree's leftover entry from BEFORE
-  // that reload would still satisfy "state has pbFamilyTree" the next time
-  // the tree opens, so Back could land on the stale entry instead of closing,
-  // and × would need two presses.
-  const treeMark = Date.now() + Math.random();
-  let treePushed = false;
-  /** A fresh marker per sheet OPEN, not per component instance — the sheet
-   *  can open, close and reopen many times across one tree visit. */
-  let sheetMark = 0;
-  let sheetPushed = false;
+  // ── Closing ────────────────────────────────────────────────────────────
+  // × and Escape only. The phone's Back is deliberately not caught: inside
+  // the app it does nothing, so it goes straight to Android.
 
-  /**
-   * Close more than one level at once — ✕ Close while the sheet is open, and
-   * the verse exit, both need this. Two `history.back()` calls issued in the
-   * same task aren't guaranteed to actually move back twice in every browser,
-   * so this sums how many entries were actually pushed (pushState can throw)
-   * and moves back that many in one `history.go`. If neither push landed —
-   * pushState blocked entirely — there's nothing on the stack to consume, so
-   * this closes directly instead of asking history to move nowhere.
-   */
-  function closeEntries(n: number) {
-    treePushed = false;
-    sheetPushed = false;
-    if (n > 0) {
-      history.go(-n);
-    } else {
-      doClose();
-    }
-  }
-
-  /** ✕ Close, or Escape, while the sheet is NOT open: back one level if that
-   *  level exists, otherwise close directly. */
-  function closeTreeOnly() {
-    closeEntries(treePushed ? 1 : 0);
-  }
-
-  /** ✕ Close while the sheet IS open, or the verse exit: consume every
-   *  entry this viewer actually pushed, tree and sheet together. */
-  function closeTreeAndSheet() {
-    closeEntries((treePushed ? 1 : 0) + (sheetPushed ? 1 : 0));
-  }
-
-  function closeViaHistory() {
-    if (sheetOpen) {
-      closeTreeAndSheet();
-    } else {
-      closeTreeOnly();
-    }
-  }
-
-  /** The sheet's own ✕/Escape/Back: close the sheet, leave the tree. */
+  /** The sheet's own ✕/Escape: close the sheet, leave the tree. */
   function closeSheetOnly() {
-    if (sheetPushed) {
-      sheetPushed = false;
-      history.back();
-    } else {
-      sheetOpen = false;
-    }
-  }
-
-  function onPopState() {
-    const state = history.state as { pbFamilyTree?: number; pbTreeSheet?: number } | null;
-    if (state?.pbTreeSheet !== sheetMark) {
-      // Either there was no sheet entry to begin with, or it's gone now —
-      // either way the sheet itself must not still claim to be open.
-      sheetPushed = false;
-      sheetOpen = false;
-    }
-    if (state?.pbFamilyTree !== treeMark) {
-      treePushed = false;
-      doClose();
-    }
+    sheetOpen = false;
   }
 
   /**
@@ -731,7 +662,7 @@
     e.stopPropagation();
     if (e.key === 'Escape') {
       if (sheetOpen) closeSheetOnly();
-      else closeViaHistory();
+      else doClose();
     }
   }
 
@@ -779,9 +710,8 @@
   }
 
   /**
-   * Read bio, on the pinned card. Opens the sheet for that person, pushing
-   * its own history entry on top of the tree's, and re-glides the pinned
-   * person into the region the sheet now leaves uncovered — Phase 1's own
+   * Read bio, on the pinned card. Opens the sheet for that person, and
+   * re-glides the pinned person into the region the sheet now leaves uncovered — Phase 1's own
    * opening glide already centred them on the WHOLE screen, and the sheet
    * covering 62% of a phone means that earlier centring is now wrong.
    */
@@ -792,18 +722,10 @@
     if (isPlaced(pinned)) glideTo({ x: pinned.x, y: pinned.y }, view.k, glideAnchor());
   }
 
-  /** Raise the sheet with its own history entry — or, already up, leave it
-   *  be and let the caller change what it shows. */
+  /** Raise the sheet — or, already up, leave it be and let the caller change
+   *  what it shows. */
   function openSheet() {
-    if (sheetOpen) return;
     sheetOpen = true;
-    sheetMark = Date.now() + Math.random();
-    try {
-      history.pushState({ pbFamilyTree: treeMark, pbTreeSheet: sheetMark }, '');
-      sheetPushed = true;
-    } catch {
-      sheetPushed = false;
-    }
   }
 
   /** The tribe's card, in the sheet. */
@@ -814,8 +736,7 @@
   }
 
   /** A tap on the stone in the bio the sheet is showing: the tree lights that
-   *  tribe behind the sheet, and the sheet turns to the tribe's card in place
-   *  (no second history entry — Back still just drops the sheet). */
+   *  tribe behind the sheet, and the sheet turns to the tribe's card in place. */
   function handleOpenTribeFromSheet(tribe: string, personId: string) {
     const rec = model?.nodes.get(personId) ?? model?.rootById.get(personId) ?? null;
     if (!lightTribe(tribe, rec)) return;
@@ -839,17 +760,11 @@
   /**
    * "See on the tree" tapped from inside the sheet: the sheet is already
    * open over the tree, so this closes it onto that person rather than
-   * opening a second tree over the first.
-   *
-   * `sheetOpen` is set to false directly here, not left to the `popstate`
-   * closeSheetOnly's `history.back()` will eventually raise — that event is
-   * asynchronous, and the glide below reads `sheetOpen` (via glideAnchor)
-   * synchronously, right now. Left to the popstate, the glide would aim at
-   * the region still covered by a sheet that's already on its way out.
+   * opening a second tree over the first. The sheet closes first, because the
+   * glide below reads `sheetOpen` (via glideAnchor) to know what's uncovered.
    */
   function handleShowOnTreeFromSheet(id: string) {
     closeSheetOnly();
-    sheetOpen = false;
     if (!model) return;
     const rec = model.nodes.get(id) ?? model.rootById.get(id);
     if (rec) {
@@ -862,17 +777,11 @@
    * The verse exit — a verse tapped inside the bio.
    *
    * `onLeave` is read off the store BEFORE anything closes: closing the tree
-   * (step 2) nulls the store's state, so reading it after that would already
-   * find nothing to call in step 3. `doClose()` is also called directly here,
-   * not left to the `popstate` that `history.go` will eventually raise — that
-   * event is asynchronous, and `leave()` (step 3) needs the store to already
-   * be closed by the time it runs. Calling `familyTreeStore.close()` twice
-   * (once here, once when that popstate lands) is harmless — it's a plain
-   * `set` to the same empty state either time.
+   * nulls the store's state, so reading it after that would already find
+   * nothing to call. `leave()` runs last, once the store is already closed.
    */
   function handleVerseExit() {
     const leave = get(familyTreeStore).onLeave;
-    closeTreeAndSheet();
     doClose();
     leave?.();
   }
@@ -1126,7 +1035,7 @@
   /**
    * Synchronous, like ArtViewer's own onMount.
    *
-   * Every listener — canvas, window, popstate, visualViewport — is attached
+   * Every listener — canvas, window, visualViewport — is attached
    * and the cleanup function returned before any `await` runs. PersonContent
    * uses an async onMount, but that pattern doesn't fit here: if the cleanup
    * were returned from an async function, Svelte never runs it, and the
@@ -1136,13 +1045,6 @@
    */
   onMount(() => {
     openerEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-
-    try {
-      history.pushState({ pbFamilyTree: treeMark }, '');
-      treePushed = true;
-    } catch {
-      // × and Escape still close it; only the phone's Back is affected.
-    }
 
     const opts: AddEventListenerOptions = { passive: false };
     canvas.addEventListener('pointerdown', onPointerDown, opts);
@@ -1188,8 +1090,6 @@
   });
 </script>
 
-<svelte:window on:popstate={onPopState} />
-
 <div
   class="family-tree no-edge-gesture"
   use:portal
@@ -1220,7 +1120,7 @@
         Cinematic
       </button>
     </div>
-    <button class="close-btn" bind:this={closeBtnEl} on:click={closeViaHistory} aria-label="Close family tree">
+    <button class="close-btn" bind:this={closeBtnEl} on:click={doClose} aria-label="Close family tree">
       ✕ Close
     </button>
 

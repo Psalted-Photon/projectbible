@@ -115,7 +115,7 @@ export const NAVBAR_TIPS: Tip[] = [
     area,
     target: '.pill-settings',
     title: 'Settings',
-    body: 'Themes, fonts, packs and the wake alarm. Tutorial Mode’s switch is under General.',
+    body: 'Themes, fonts, packs and the Auto-Read Alarm. Tutorial Mode’s switch is under General.',
   },
   {
     id: 'nav-profile',

@@ -38,7 +38,7 @@ export const PANE_TIPS: Tip[] = [
   section('Appearance', 'The theme, text size and line spacing. The Custom theme picks the reader’s own typeface and colors.'),
   section('Reader', 'How the text is laid out, red letters, art icons, and whether a tapped word gets the ring or the classic popup.'),
   section('Interlinear (Greek & Hebrew)', 'Which layers show under each Greek or Hebrew word.'),
-  section('Read Aloud (AI voice)', 'The voice, its speed, and what gets read and lit up as it reads. The Wake Alarm is here too.'),
+  section('Read Aloud (AI voice)', 'The voice, its speed, and what gets read and lit up as it reads. The Auto-Read Alarm is here too.'),
   section('General', 'Tutorial Mode, your time zone, the clock in the top bar, and screen rotation.'),
   section('Privacy', 'The journal lock: your fingerprint or face before the Journal opens, with your journal scrambled on this device and in the cloud.'),
   section('Storage & Updates', 'Manage Packs, check for a new version, or clear everything out if the app gets stuck.'),
@@ -53,7 +53,7 @@ export const PANE_TIPS: Tip[] = [
     id: 'settings-wake-alarm',
     area,
     target: '.pane-settings .alarm-button',
-    title: 'Wake Alarm',
+    title: 'Auto-Read Alarm',
     body: 'A notification at the time you choose that opens straight into your reading.',
   },
   {

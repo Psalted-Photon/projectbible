@@ -248,7 +248,7 @@
   const LAYOUT_LABELS: Record<string, string> = {
     "one-per-line": "Verse per line",
     paragraph: "Paragraph",
-    "paragraph-no-verse-numbers": "Paragraph (NoNum)",
+    "paragraph-no-verse-numbers": "Paragraph, no verse numbers",
   };
 
   $: appearanceSummary = `${THEME_LABELS[theme] ?? theme} · ${fontSize}px`;
@@ -741,7 +741,7 @@
         <select bind:value={verseLayout}>
           <option value="one-per-line">Each verse on new line</option>
           <option value="paragraph">Paragraph (flow like book)</option>
-          <option value="paragraph-no-verse-numbers">Paragraph (NoNum)</option>
+          <option value="paragraph-no-verse-numbers">Paragraph, no verse numbers</option>
         </select>
       </label>
     </div>
@@ -770,7 +770,7 @@
     <div class="setting-group">
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={themedTitles} />
-        <span class="label-text">Theme colors in reader titles</span>
+        <span class="label-text">Colour chapter titles by book</span>
       </label>
     </div>
 
@@ -922,7 +922,7 @@
       </div>
       <button class="packs-button alarm-button" on:click={openWakeAlarmPane}>
         <span class="icon emoji">⏰</span>
-        <span class="text">Wake Alarm{alarmSummary ? ` — ${alarmSummary}` : ""}</span>
+        <span class="text">Auto-Read Alarm{alarmSummary ? ` — ${alarmSummary}` : ""}</span>
         <span class="arrow">→</span>
       </button>
     </div>
