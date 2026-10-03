@@ -15,6 +15,13 @@ export const NAVBAR_TIPS: Tip[] = [
     body: 'Switch which Bible you’re reading. Every window can read a different one.',
   },
   {
+    id: 'nav-more-translations',
+    area,
+    target: '.translation-dropdown .mt-head',
+    title: 'More Translations',
+    body: 'Download more Bibles right here: four more in English, or the Hebrew and Greek originals.',
+  },
+  {
     id: 'nav-reference',
     area,
     target: '.pill-btn-reference',

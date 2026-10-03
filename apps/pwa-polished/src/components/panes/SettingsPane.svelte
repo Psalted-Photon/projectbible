@@ -277,8 +277,8 @@
     `${TIMEZONE_OPTIONS.find((o) => o.value === timezone)?.label.replace(/ \(.*\)$/, "") ?? timezone}` +
     `${navBarClock ? "" : " · No clock"}` +
     ` · Rotation ${allowRotation ? "on" : "off"}`;
-  $: storageSummary = `Packs · Updates${autoCheckUpdates ? "" : " (manual)"}`;
-  $: devSummary = `Cache · eruda ${$showEruda ? "shown" : "hidden"}`;
+  $: storageSummary = `Space · Updates${autoCheckUpdates ? "" : " (manual)"}`;
+  $: devSummary = `Packs · Cache · eruda ${$showEruda ? "shown" : "hidden"}`;
 
   // ── Storage & Updates ───────────────────────────────────────────────────
   /** When the build this device is running was made. */
@@ -1174,19 +1174,6 @@
       </div>
     </div>
 
-    <!-- Pack Management -->
-    <div class="sub-block divided">
-      <h3>Pack Management</h3>
-      <p class="section-description">
-        Manage installed Bible translations, lexicons, maps, and other resources.
-      </p>
-      <button class="packs-button" on:click={openPacksPane}>
-        <span class="icon emoji">📦</span>
-        <span class="text">Manage Packs</span>
-        <span class="arrow">→</span>
-      </button>
-    </div>
-
     <!-- Updates -->
     <div class="sub-block divided">
       <h3>Updates</h3>
@@ -1211,7 +1198,21 @@
     <SettingsSection title="Dev Options" summary={devSummary} bind:open={openSections.devOptions}>
       <span slot="icon"><Wrench size={16} weight="bold" /></span>
 
+      <!-- Every pack in one list. Day to day, packs are downloaded where
+           they're needed: the translation list and each feature offer their own. -->
       <div class="sub-block">
+        <h3>Pack Management</h3>
+        <p class="section-description">
+          Install, remove and repair every pack and Read Aloud voice in one place.
+        </p>
+        <button class="packs-button" on:click={openPacksPane}>
+          <span class="icon emoji">📦</span>
+          <span class="text">Manage Packs</span>
+          <span class="arrow">→</span>
+        </button>
+      </div>
+
+      <div class="sub-block divided">
         <h3>Cache</h3>
         <p class="section-description">
           Clears all cached data including packs, service workers, and databases. Use this if packs aren't installing or the app is stuck with old data.
@@ -1526,7 +1527,7 @@
     color: #ccc;
   }
 
-  /* Related concerns inside one section (this device, packs, updates), split
+  /* Related concerns inside one section (this device, then updates), split
      by a hairline rather than by competing coloured cards. */
   .sub-block.divided {
     margin-top: 1.5rem;

@@ -11,6 +11,7 @@
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { askConfirm } from "../stores/confirmStore";
+  import MoreTranslations from "./MoreTranslations.svelte";
   import { BIBLE_BOOKS, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import {
@@ -420,11 +421,13 @@
       if (dropdown && translationButtonRef) {
         const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth };
         const rect = translationButtonRef.getBoundingClientRect();
+        // Wide enough for More Translations to fit a Download button beside
+        // each row. Set before the clamp below measures it.
+        dropdown.style.width = `${Math.max(rect.width, 250)}px`;
         const naturalLeft = rect.left - navRect.left;
         const clampedLeft = Math.max(4, Math.min(naturalLeft, (navElement?.offsetWidth ?? window.innerWidth) - dropdown.offsetWidth - 4));
         dropdown.style.left = `${clampedLeft}px`;
         dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
-        dropdown.style.width = `${Math.max(rect.width, 200)}px`;
         translationDropdownPositioned = true; // reveal now that it's placed
       }
     });
@@ -2309,6 +2312,8 @@
           {translationLabel(translation)}
         </button>
       {/each}
+      <!-- Packs not yet downloaded, each with its own Download button. -->
+      <MoreTranslations />
     </div>
   {/if}
 

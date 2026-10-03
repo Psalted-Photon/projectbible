@@ -30,7 +30,7 @@
   import { appQuiet, anyPaneOpen, overlayOpen } from "../engine/watch";
   import { paneStore } from "../../stores/paneStore";
   import { windowStore } from "../../lib/stores/windowStore";
-  import { PACK_CATALOG } from "../../lib/packInstaller";
+  import { PACK_CATALOG, installPack, installBusy, installMessage } from "../../lib/packInstaller";
   import { packInstallFinished } from "../../adapters/db-manager";
   import TipCard from "./TipCard.svelte";
   import Tour from "./Tour.svelte";
@@ -58,6 +58,8 @@
   let cardBox: Box | null = null;
   let checkingPack = false;
   let missingPack: string | null = null;
+  /** The tip card's pack is downloading, or has just gone in and wants a restart. */
+  let packState: "idle" | "getting" | "installed" = "idle";
 
   // ── Where the dots go ────────────────────────────────────────────────────
 
@@ -231,6 +233,7 @@
   async function openCard(tip: Tip, el: Element | null) {
     mode = { kind: "card", tip, el };
     missingPack = null;
+    packState = "idle";
     checkingPack = !!tip.needs;
     compute();
     if (!tip.needs) return;
@@ -261,9 +264,19 @@
     return (Math.abs(hash) % 22) / 10;
   }
 
-  function getPack() {
-    paneStore.openPane("packs", "right");
-    backToDots();
+  /**
+   * Download the tip's pack right here. Manage Packs is tucked away in Dev
+   * Options now, and each feature offers its own downloads, so the tip does too.
+   */
+  async function getPack() {
+    if (mode.kind !== "card") return;
+    const tip = mode.tip;
+    const pack = PACK_CATALOG.find((p) => p.id === tip.needs);
+    if (!pack) return;
+    packState = "getting";
+    const ok = await installPack(pack);
+    if (mode.kind !== "card" || mode.tip !== tip) return;
+    packState = ok ? "installed" : "idle";
   }
 
   /** Spotlight the tip's target and wait for a press on it (or Done). */
@@ -380,13 +393,25 @@
     body={mode.tip.body}
     box={cardBox}
     extra={mode.tip.extra}
-    note={missingPack ? `Needs the ${missingPack} pack.` : null}
+    note={!missingPack
+      ? null
+      : packState === "getting"
+        ? $installMessage || `Downloading ${missingPack}…`
+        : packState === "installed"
+          ? `${missingPack} is installed. Restart to use it.`
+          : `Needs the ${missingPack} pack.`}
   >
     <svelte:fragment slot="buttons">
       <button class="tut-btn-ghost small" on:click={backToDots}>Got it</button>
       <span class="spacer"></span>
-      {#if missingPack}
-        <button class="tut-btn small" on:click={getPack}>Get the pack</button>
+      {#if missingPack && packState === "installed"}
+        <button class="tut-btn small" on:click={() => window.location.reload()}>Restart</button>
+      {:else if missingPack}
+        <button
+          class="tut-btn small"
+          disabled={packState === "getting" || $installBusy}
+          on:click={getPack}
+        >{packState === "getting" ? "Downloading…" : "Get the pack"}</button>
       {:else if !checkingPack}
         <button class="tut-btn small" on:click={showMe}>Show me</button>
       {/if}

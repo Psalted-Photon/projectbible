@@ -73,9 +73,10 @@
     justify-content: center;
     padding: 16px;
     background: rgba(0, 0, 0, 0.45);
-    /* Over every modal and pane, under AppNotice so a notice raised by the
-       answer is never hidden behind the card that is fading out. */
-    z-index: 10055;
+    /* Over everything, the tutorial included (--tut-z is 100000): the tour's
+       Install everything can raise the space warning, and a question hidden
+       behind the tour card could never be answered. */
+    z-index: 100050;
   }
 
   .ac-card {

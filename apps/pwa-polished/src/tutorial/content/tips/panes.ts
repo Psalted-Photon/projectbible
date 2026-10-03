@@ -1,5 +1,5 @@
 /**
- * Dots in the panes: Settings, Manage Packs and the Wake Alarm, and the pane
+ * Dots in the panes: Settings, Manage Packs and the Auto-Read Alarm, and the pane
  * frame itself. Settings rows are found by their labels, which is all that
  * tells them apart.
  */
@@ -41,8 +41,8 @@ export const PANE_TIPS: Tip[] = [
   section('Read Aloud (AI voice)', 'The voice, its speed, and what gets read and lit up as it reads. The Auto-Read Alarm is here too.'),
   section('General', 'Tutorial Mode, your time zone, the clock in the top bar, and screen rotation.'),
   section('Privacy', 'The journal lock: your fingerprint or face before the Journal opens, with your journal scrambled on this device and in the cloud.'),
-  section('Storage & Updates', 'How much space Hexapla takes on this device, when it last updated, Manage Packs, and checking for a new version.'),
-  section('Dev Options', 'Tools for when something goes wrong: clearing the cache, and the eruda console button. Hide Dev Options puts them away again.'),
+  section('Storage & Updates', 'How much space Hexapla takes on this device, when it last updated, and checking for a new version.'),
+  section('Dev Options', 'Every pack in one list, clearing the cache, and the eruda console button. Hide Dev Options puts them away again.'),
 
   setting('settings-theme', 'Theme', 'Theme', 'Auto follows your device. Sepia and Light are easier in daylight; Custom is yours to set.', true),
   setting('settings-layout', 'Verse Layout', 'Verse layout', 'One verse per line, or flowing paragraphs, with or without verse numbers.'),
@@ -62,7 +62,7 @@ export const PANE_TIPS: Tip[] = [
     area,
     target: '.pane-settings .packs-button:not(.alarm-button)',
     title: 'Manage Packs',
-    body: 'Install, remove and repair packs and Read Aloud voices.',
+    body: 'Every pack and Read Aloud voice in one list, to install, remove or repair. Day to day, the translation list and each feature offer their own downloads.',
   },
   {
     id: 'settings-updates',
@@ -77,6 +77,15 @@ export const PANE_TIPS: Tip[] = [
     target: '.pane-settings .clear-cache-button',
     title: 'Clear cache',
     body: 'A last resort when packs won’t install or the app seems stuck. It deletes every pack on this device, so they need installing again.',
+  },
+
+  // ── Get packs, wherever a feature needs one ──────────────────────────────
+  {
+    id: 'get-packs-card',
+    area,
+    target: '.gp-card .gp-get',
+    title: 'Get packs',
+    body: 'Downloads just what this needs. Most features switch it on after a restart, and the card offers one when it’s in.',
   },
 
   // ── Manage Packs ─────────────────────────────────────────────────────────

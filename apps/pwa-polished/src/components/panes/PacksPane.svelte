@@ -6,18 +6,21 @@
     getDatabaseStats,
     packDataLooksComplete,
   } from "../../adapters/db-manager";
-  import { importPackFromSQLite, atlasPackSupported } from "../../adapters/pack-import";
-  import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from "../../config";
+  import { importPackFromSQLite } from "../../adapters/pack-import";
+  import { USE_BUNDLED_PACKS } from "../../config";
   import {
     PACK_CATALOG,
-    downloadAndImportPack,
-    installAll,
+    installPack,
+    installEverything,
+    estimateRemaining,
     installAllState,
     installBusy,
     installMessage,
     restartNeeded,
-    packsStillToInstall,
-    voicesStillToInstall,
+    loadPackSizes,
+    packSizeLabel,
+    formatBytes,
+    type PackSizes,
   } from "../../lib/packInstaller";
   import {
     isTtsSupported,
@@ -59,12 +62,8 @@
   let showInstallUrl = false;
   let installUrl = "";
 
-  // Live pack sizes, keyed by pack id. The hardcoded `size` strings below are
-  // only a fallback for when the manifest cannot be fetched -- they drift every
-  // time a pack is rebuilt, and drifted badly enough that Study Tools advertised
-  // 438.89 MB while shipping 523.78 MB.
-  let manifestSizes: Record<string, string> = {};
-  let manifestBytes: Record<string, number> = {};
+  // Live pack sizes from the manifest; packInstaller explains why not the catalog's.
+  let sizes: PackSizes | null = null;
   let fileInputElement: HTMLInputElement;
   let installedVoices: string[] = [];
   let voiceList: TtsVoiceInfo[] = [];
@@ -289,7 +288,7 @@
       body: pack.info,
       meta: state
         ? `Installed${state.version ? ` · v${state.version}` : ""} · ${formatBytes(state.bytes)}`
-        : `Download size ${manifestSizes[pack.id] ?? pack.size}`,
+        : `Download size ${packSizeLabel(pack, sizes)}`,
     };
   }
 
@@ -330,131 +329,19 @@
 
   async function installConsolidatedPack(pack: (typeof CONSOLIDATED_PACKS)[0]) {
     // Closing the pane mid-install and reopening it must not start a second
-    // one: the lock is app-wide now, not this component's.
+    // one: the lock is app-wide, not this component's.
     if ($installBusy) return;
-
-    // The map's geometry is compressed inside the pack and inflated on read,
-    // which needs DecompressionStream. Checked here rather than mid-install:
-    // downloading 34 MB and then failing to unpack it would leave a half-built
-    // map that looks installed.
-    if (pack.id === "atlas-map" && !atlasPackSupported()) {
-      showNotice(
-        `${pack.name} needs a newer browser than this one.\n` +
-          "It works in Chrome 80 and later, Safari 16.4 and later, and Firefox 113 and later.",
-        "error"
-      );
-      return;
-    }
 
     const reinstall = installedPacks.some((p) => p.id === pack.id);
     if (reinstall && !(await askConfirm(`${pack.name} is already installed. Download it again?`, { confirmLabel: "Download again" }))) {
       return;
     }
 
-    $installBusy = true;
-    try {
-      // Remove the old copy first so the re-download actually happens —
-      // loadPackOnDemand skips the download when the installed version matches
-      // the manifest, and pack versions stay unchanged when their data updates.
-      if (reinstall) {
-        $installMessage = `Removing old ${pack.name}...`;
-        await removePack(pack.id);
-        await loadPacks();
-        await loadStats();
-      }
-
-      if (!(await hasRoomFor(pack))) return;
-
-      await downloadAndImportPack(pack, (message) => ($installMessage = message));
-
-      $installMessage = "Complete!";
-      $restartNeeded = true;
-      showNotice(`${pack.name} installed`);
-
-      await loadPacks();
-      await loadStats();
-
-      window.dispatchEvent(new CustomEvent("packsUpdated"));
-    } catch (error) {
-      console.error(`Error installing ${pack.name}:`, error);
-      const isQuota =
-        error instanceof DOMException &&
-        (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED");
-      showNotice(
-        isQuota
-          ? `Not enough storage to install ${pack.name}.\n` +
-              "Free up space on your device, or remove a pack you are not using, then try again."
-          : `Couldn't install ${pack.name}: ${errorText(error)}`,
-        "error"
-      );
-    } finally {
-      $installBusy = false;
-      $installMessage = "";
-    }
-  }
-
-  /**
-   * Bytes an install actually pulls down, shards included.
-   *
-   * The art pack is split: art.sqlite holds only the scenes (60 KB) and the
-   * paintings arrive as biblical-art-images-NN. Reading the pack's own manifest
-   * entry alone would call an 85 MB install "60 KB".
-   */
-  function installBytesFor(packId: string): number {
-    let total = manifestBytes[packId] ?? 0;
-    if (packId === "biblical-art") {
-      for (const [id, bytes] of Object.entries(manifestBytes)) {
-        if (id.startsWith("biblical-art-images-")) total += bytes;
-      }
-    }
-    // The map is split the same way: atlas-map.sqlite is under 2 MB, and the
-    // geometry shards and the place index are the other 32.
-    if (packId === "atlas-map") {
-      for (const [id, bytes] of Object.entries(manifestBytes)) {
-        if (id !== "atlas-map" && id.startsWith("atlas-map-")) total += bytes;
-      }
-    }
-    return total;
-  }
-
-  /**
-   * Rough pre-flight space check.
-   *
-   * Installing costs more than the download itself: the file is cached and then
-   * expanded into object stores, so budget for roughly twice its size. Returns
-   * false only when the user declines to continue after being warned -- the
-   * estimate is advisory, and browsers under-report it often enough that a hard
-   * block would be wrong.
-   */
-  async function hasRoomFor(pack: (typeof CONSOLIDATED_PACKS)[0]): Promise<boolean> {
-    return hasRoomForBytes(pack.name, installBytesFor(pack.id));
-  }
-
-  async function hasRoomForBytes(name: string, needed: number): Promise<boolean> {
-    if (!needed || !navigator.storage?.estimate) return true;
-
-    try {
-      const { quota = 0, usage = 0 } = await navigator.storage.estimate();
-      if (!quota) return true;
-
-      // A device reporting more usage than quota is not out of space -- it is
-      // reporting nonsense, and it does so often enough (6 GB used against a
-      // 2 GB quota, on a machine with room to spare) that warning from these
-      // numbers means warning when nothing is wrong.
-      if (usage >= quota) return true;
-
-      const available = quota - usage;
-      if (available >= needed * 2) return true;
-
-      return await askConfirm(
-        `${name} needs about ${formatBytes(needed * 2)} to install, ` +
-          `but only ${formatBytes(Math.max(available, 0))} looks available on this device.\n\n` +
-          `The install may fail partway through. Continue anyway?`,
-        { confirmLabel: "Continue" }
-      );
-    } catch {
-      return true;
-    }
+    // The space check, the map's browser check, the notices and the lock all
+    // live in packInstaller, shared with the Get packs card.
+    await installPack(pack, { replaceExisting: reinstall });
+    await loadPacks();
+    await loadStats();
   }
 
   // ── Install All ──────────────────────────────────────────────────────────
@@ -463,37 +350,18 @@
   let remainingCount = 0;
   let remainingBytes = 0;
 
-  /**
-   * Count what is left and estimate its size. The natural voices all share one
-   * 310 MB engine, and each of their own sizes includes it while it is missing,
-   * so the engine is counted once rather than once per voice.
-   */
   async function refreshRemaining() {
     try {
-      const [packs, voices] = await Promise.all([packsStillToInstall(), voicesStillToInstall()]);
-      const MB = 1024 * 1024;
-      let bytes = packs.reduce(
-        (sum, pack) => sum + (installBytesFor(pack.id) || parseFloat(pack.size) * MB || 0),
-        0
-      );
-      const standard = voices.filter((v) => v.engine !== "kokoro");
-      const natural = voices.filter((v) => v.engine === "kokoro");
-      bytes += standard.reduce((sum, v) => sum + (voiceSizes[v.id] ?? v.approxSizeMB) * MB, 0);
-      if (natural.length > 0) {
-        const largest = Math.max(...natural.map((v) => voiceSizes[v.id] ?? v.approxSizeMB));
-        bytes += (largest + (natural.length - 1)) * MB;
-      }
-      remainingCount = packs.length + voices.length;
-      remainingBytes = bytes;
+      const remaining = await estimateRemaining();
+      remainingCount = remaining.count;
+      remainingBytes = remaining.bytes;
     } catch (error) {
       console.warn("[Packs] Could not work out what is left to install:", error);
     }
   }
 
   async function handleInstallAll() {
-    if ($installBusy) return;
-    if (!(await hasRoomForBytes("Everything left to install", remainingBytes))) return;
-    await installAll();
+    await installEverything();
   }
 
   /**
@@ -522,44 +390,8 @@
   });
 
   async function loadManifestSizes() {
-    try {
-      const response = await fetch(PACK_MANIFEST_URL);
-      if (!response.ok) return;
-      const manifest = await response.json();
-      const packs = Array.isArray(manifest) ? manifest : (manifest?.packs ?? []);
-      const sizes: Record<string, string> = {};
-      const bytesById: Record<string, number> = {};
-      for (const entry of packs) {
-        if (!entry?.id) continue;
-        const bytes = Number(entry.size);
-        if (Number.isFinite(bytes) && bytes > 0) {
-          sizes[entry.id] = formatBytes(bytes);
-          bytesById[entry.id] = bytes;
-        }
-      }
-      // Show the art pack as what it downloads, not as the 60 KB scenes file --
-      // its paintings arrive in separate shards.
-      const artTotal = Object.entries(bytesById).reduce(
-        (sum, [id, bytes]) =>
-          id === "biblical-art" || id.startsWith("biblical-art-images-") ? sum + bytes : sum,
-        0
-      );
-      if (artTotal > 0) sizes["biblical-art"] = formatBytes(artTotal);
-
-      // Same for the map: atlas-map.sqlite is under 2 MB on its own, and the
-      // card would be advertising a 34 MB download as a small one.
-      const atlasTotal = Object.entries(bytesById).reduce(
-        (sum, [id, bytes]) => (id === "atlas-map" || id.startsWith("atlas-map-") ? sum + bytes : sum),
-        0
-      );
-      if (atlasTotal > 0) sizes["atlas-map"] = formatBytes(atlasTotal);
-
-      manifestSizes = sizes;
-      manifestBytes = bytesById;
-    } catch (error) {
-      // Non-fatal: the cards fall back to their hardcoded size strings.
-      console.warn("Could not read pack sizes from manifest:", error);
-    }
+    // Non-fatal: on failure the cards fall back to the catalog's size strings.
+    sizes = await loadPackSizes();
   }
 
   async function loadPacks() {
@@ -704,14 +536,6 @@
       $installMessage = "";
       target.value = ""; // Reset file input
     }
-  }
-
-  function formatBytes(bytes: number): string {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
   }
 
   function getPackTypeIcon(type: string): string {

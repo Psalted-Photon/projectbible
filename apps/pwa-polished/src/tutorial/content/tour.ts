@@ -1,7 +1,9 @@
 /**
  * The guided tour's first half: everything that works before any packs.
  *
- * Packs come first because most of the app does nothing without them. The book
+ * Packs come first because most of the app does nothing without them: one
+ * card offers to install everything, and says each feature also offers its
+ * own downloads, for anyone who'd rather take them as they go. The book
  * picker comes next, and teaches the book colours, because they carry through
  * the whole app. The half that needs packs -- the tap-a-word ring, commentary,
  * cross-references, Read Aloud -- runs once they are installed.
@@ -10,15 +12,15 @@
 import { get } from 'svelte/store';
 import type { TourStep, StepContext } from './types';
 import { slideOutWindowStep } from './steps';
-import { find, inMainReader } from '../engine/targets';
-import { paneOpen, anyPaneOpen } from '../engine/watch';
+import { inMainReader } from '../engine/targets';
 import { windowStore } from '../../lib/stores/windowStore';
 import { navigationStore } from '../../stores/navigationStore';
 import { BIBLE_BOOKS, CATEGORY_LABELS, normalizeBookName } from '../../lib/bibleData';
 import {
   installAllState,
-  packsStillToInstall,
-  voicesStillToInstall,
+  estimateRemaining,
+  installEverything,
+  formatBytes,
 } from '../../lib/packInstaller';
 import { isInstalledApp, isIOS, isPhoneOrTablet } from '../../lib/device';
 import { canInstall, promptInstall } from '../../lib/installPrompt';
@@ -60,10 +62,12 @@ function installRoute(): 'prompt' | 'ios' | 'menu' | 'none' {
   return isPhoneOrTablet() ? 'menu' : 'none';
 }
 
+/** How many packs and voices are left, and roughly their size, worked out once. */
 async function remainingInstalls(ctx: StepContext): Promise<number> {
   if (ctx.tour.remaining === undefined) {
-    const [packs, voices] = await Promise.all([packsStillToInstall(), voicesStillToInstall()]);
-    ctx.tour.remaining = packs.length + voices.length;
+    const { count, bytes } = await estimateRemaining();
+    ctx.tour.remaining = count;
+    ctx.tour.remainingBytes = bytes;
   }
   return ctx.tour.remaining;
 }
@@ -136,9 +140,23 @@ export const PART_ONE: TourStep[] = [
     id: 'packs-intro',
     skipIf: (ctx) => ctx.tour.skipPacks,
     title: 'First, your library',
-    body:
-      'Most of Hexapla comes in packs: more translations, dictionaries, commentaries, the encyclopedia, maps, art and the reading voices. Let’s install them.',
-    nextLabel: 'Show me',
+    body: (ctx) => {
+      const size = ctx.tour.remainingBytes
+        ? ` All of it is about ${formatBytes(ctx.tour.remainingBytes)}, so Wi-Fi is best.`
+        : ' It’s a big download, so Wi-Fi is best.';
+      return (
+        'Most of Hexapla comes in packs: more translations, dictionaries, commentaries, the encyclopedia, maps, art and the reading voices.' +
+        size +
+        ' Or take them as you go: the translation list and each feature offer their own downloads.'
+      );
+    },
+    nextLabel: 'Install everything',
+    // Install All with its space check. It runs in the background, one pack
+    // at a time, and the lime chip follows it.
+    onNext: (ctx) => {
+      ctx.tour.installRequested = true;
+      void installEverything();
+    },
     alt: {
       label: 'Not now',
       run: (ctx) => {
@@ -148,70 +166,13 @@ export const PART_ONE: TourStep[] = [
     },
   },
   {
-    id: 'open-settings',
-    target: () => inMainReader('.pill-settings'),
-    reveal: true,
-    allowPanes: true,
-    skipIf: (ctx) => ctx.tour.skipPacks || paneOpen('settings') || paneOpen('packs'),
-    doneWhen: () => paneOpen('settings'),
-    title: 'Open Settings',
-    body: 'Tap the gear.',
-  },
-  {
-    id: 'open-storage',
-    target: () => find('.pane-settings .sec-head', 'Storage'),
-    reveal: true,
-    allowPanes: true,
-    skipIf: (ctx) =>
-      ctx.tour.skipPacks ||
-      paneOpen('packs') ||
-      find('.pane-settings .sec-head', 'Storage')?.getAttribute('aria-expanded') === 'true',
-    doneWhen: () =>
-      paneOpen('packs') ||
-      find('.pane-settings .sec-head', 'Storage')?.getAttribute('aria-expanded') === 'true',
-    title: 'Storage & Updates',
-    body: 'Tap to open this section.',
-  },
-  {
-    id: 'open-packs',
-    target: () => find('.pane-settings .packs-button:not(.alarm-button)'),
-    reveal: true,
-    allowPanes: true,
-    skipIf: (ctx) => ctx.tour.skipPacks || paneOpen('packs'),
-    doneWhen: () => paneOpen('packs'),
-    title: 'Manage Packs',
-    body: 'Tap here to see every pack.',
-  },
-  {
-    id: 'install-all',
-    target: () => find('.pane-packs .install-all-btn'),
-    reveal: true,
-    allowPanes: true,
-    skipIf: (ctx) => ctx.tour.skipPacks,
-    doneWhen: () => get(installAllState).running,
-    title: 'Install all',
-    body:
-      'One tap installs everything, one pack at a time. It’s a big download, so Wi-Fi is best. The size is shown just below.',
-  },
-  {
     id: 'install-running',
-    target: () => find('.pane-packs .install-all'),
-    allowPanes: true,
-    passThrough: false,
-    skipIf: () => !get(installAllState).running,
+    // Install All works out what is left before it reports running, so this
+    // goes by the tap, not by the store.
+    skipIf: (ctx) => !ctx.tour.installRequested && !get(installAllState).running,
     title: 'Installing',
     body:
-      'It keeps going in the background, even with this closed. Let’s look around while it works.',
-  },
-  {
-    id: 'close-panes',
-    target: () =>
-      paneOpen('packs') ? find('.pane-packs .close-btn') : find('.pane-settings .close-btn'),
-    allowPanes: true,
-    skipIf: () => !anyPaneOpen(),
-    doneWhen: () => !anyPaneOpen(),
-    title: 'Close the panes',
-    body: () => (paneOpen('packs') ? 'Tap × to close Packs, then Settings.' : 'Tap × to close Settings.'),
+      'It keeps going in the background, one pack at a time. Let’s look around while it works.',
   },
 
   // ── Books and their colours ──────────────────────────────────────────────
@@ -352,7 +313,7 @@ export const PART_ONE: TourStep[] = [
       get(installAllState).running
         ? 'We’ll show you the rest once your packs are in. Keep reading; the lime chip at the bottom shows how it’s going.'
         : ctx.tour.packsDeclined
-          ? 'Whenever you’re ready, packs live in Settings → Storage & Updates → Manage Packs.'
+          ? 'Whenever you’re ready, the translation list and each feature offer their own downloads.'
           : 'Keep reading. There’s more to show you.',
     nextLabel: 'Keep reading',
   },

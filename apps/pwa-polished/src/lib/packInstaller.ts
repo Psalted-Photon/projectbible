@@ -9,8 +9,11 @@
  * could install anything, which ruled out an Install All that keeps going with
  * the pane shut.
  *
- * The catalog, the download-and-import steps and the lock now live here. The
- * pane keeps its confirmations and alerts; Install All runs without them.
+ * The catalog, the download-and-import steps and the lock now live here, and
+ * so does installPack: one install with its space check, its notices and the
+ * map's browser check, shared by the Packs pane, the Get packs card that
+ * features show when their pack is missing, and the translation list.
+ * Install All runs without the per-pack notices.
  */
 
 import { writable, get } from 'svelte/store';
@@ -21,17 +24,20 @@ import {
   importAtlasPlaceIndex,
   atlasPackSupported,
 } from '../adapters/pack-import';
-import { packInstallFinished } from '../adapters/db-manager';
+import { packInstallFinished, removePack } from '../adapters/db-manager';
 import { loadPackOnDemand, installArtImageShards, installAtlasParts } from './progressive-init';
-import { USE_BUNDLED_PACKS } from '../config';
+import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from '../config';
 import {
   isTtsSupported,
   getSelectableVoices,
   voiceIsDownloadable,
   storedVoices,
   downloadVoice,
+  voiceDownloadSizeMB,
   type TtsVoiceInfo,
 } from '../adapters/tts';
+import { showNotice, errorText } from '../stores/noticeStore';
+import { askConfirm } from '../stores/confirmStore';
 
 /** Dev builds read packs straight out of public/; production goes through the proxy. */
 export const PACK_BASE_URL = USE_BUNDLED_PACKS ? '/packs/consolidated' : '/api/packs';
@@ -459,4 +465,247 @@ export async function installAll(): Promise<boolean> {
     installBusy.set(false);
   }
   return true;
+}
+
+// ── Sizes ───────────────────────────────────────────────────────────────────
+
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+}
+
+export interface PackSizes {
+  /** What to show for each catalog pack, its shards folded in. */
+  label: Record<string, string>;
+  /** Bytes per file in the manifest, shards listed on their own. */
+  bytes: Record<string, number>;
+}
+
+const NO_SIZES: PackSizes = { label: {}, bytes: {} };
+let sizesRequest: Promise<PackSizes> | null = null;
+
+/**
+ * Live pack sizes from the manifest. The catalog's `size` strings are only a
+ * fallback for when it can't be fetched: they drift every time a pack is
+ * rebuilt, and drifted badly enough that Study Tools once advertised 438.89 MB
+ * while shipping 523.78 MB.
+ *
+ * Fetched once a session. A failed fetch isn't kept, so the next caller tries
+ * again.
+ */
+export function loadPackSizes(): Promise<PackSizes> {
+  if (!sizesRequest) {
+    sizesRequest = fetchPackSizes().catch((error) => {
+      console.warn('Could not read pack sizes from manifest:', error);
+      sizesRequest = null;
+      return NO_SIZES;
+    });
+  }
+  return sizesRequest;
+}
+
+async function fetchPackSizes(): Promise<PackSizes> {
+  const response = await fetch(PACK_MANIFEST_URL);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const manifest = await response.json();
+  const packs = Array.isArray(manifest) ? manifest : (manifest?.packs ?? []);
+  const label: Record<string, string> = {};
+  const bytes: Record<string, number> = {};
+  for (const entry of packs) {
+    if (!entry?.id) continue;
+    const size = Number(entry.size);
+    if (Number.isFinite(size) && size > 0) {
+      label[entry.id] = formatBytes(size);
+      bytes[entry.id] = size;
+    }
+  }
+  // The art pack and the map are split into shards, so each shows as what it
+  // downloads, not as its small first file.
+  for (const id of ['biblical-art', 'atlas-map']) {
+    const total = installBytesFor(id, bytes);
+    if (total > 0) label[id] = formatBytes(total);
+  }
+  return { label, bytes };
+}
+
+/**
+ * Bytes an install actually pulls down, shards included. 0 when the manifest
+ * didn't say.
+ *
+ * art.sqlite holds only the scenes (60 KB) and the paintings arrive as
+ * biblical-art-images-NN; atlas-map.sqlite is under 2 MB and its geometry
+ * shards and place index are the other 32.
+ */
+export function installBytesFor(packId: string, bytes: Record<string, number>): number {
+  let total = bytes[packId] ?? 0;
+  if (packId === 'biblical-art') {
+    for (const [id, size] of Object.entries(bytes)) {
+      if (id.startsWith('biblical-art-images-')) total += size;
+    }
+  }
+  if (packId === 'atlas-map') {
+    for (const [id, size] of Object.entries(bytes)) {
+      if (id !== 'atlas-map' && id.startsWith('atlas-map-')) total += size;
+    }
+  }
+  return total;
+}
+
+/** The size to show for a catalog pack: the manifest's, or the catalog's fallback. */
+export function packSizeLabel(pack: CatalogPack, sizes: PackSizes | null): string {
+  return sizes?.label[pack.id] ?? pack.size;
+}
+
+// ── Space check ─────────────────────────────────────────────────────────────
+
+/**
+ * Rough pre-flight space check.
+ *
+ * Installing costs more than the download itself: the file is cached and then
+ * expanded into object stores, so budget for roughly twice its size. Returns
+ * false only when the user declines to continue after being warned -- the
+ * estimate is advisory, and browsers under-report it often enough that a hard
+ * block would be wrong.
+ */
+export async function hasRoomForBytes(name: string, needed: number): Promise<boolean> {
+  if (!needed || !navigator.storage?.estimate) return true;
+
+  try {
+    const { quota = 0, usage = 0 } = await navigator.storage.estimate();
+    if (!quota) return true;
+
+    // A device reporting more usage than quota is not out of space -- it is
+    // reporting nonsense, and it does so often enough (6 GB used against a
+    // 2 GB quota, on a machine with room to spare) that warning from these
+    // numbers means warning when nothing is wrong.
+    if (usage >= quota) return true;
+
+    const available = quota - usage;
+    if (available >= needed * 2) return true;
+
+    return await askConfirm(
+      `${name} needs about ${formatBytes(needed * 2)} to install, ` +
+        `but only ${formatBytes(Math.max(available, 0))} looks available on this device.\n\n` +
+        `The install may fail partway through. Continue anyway?`,
+      { confirmLabel: 'Continue' },
+    );
+  } catch {
+    return true;
+  }
+}
+
+// ── Installing one pack, with everything around it ─────────────────────────
+
+/** The catalog pack installPack is working on, so the row that started it can show progress. */
+export const installingPackId = writable<string | null>(null);
+
+/**
+ * Install one catalog pack the way a person asks for it: the lock, the map's
+ * browser check, the space check, then the download, then a notice either way.
+ * Sets restartNeeded and fires packsUpdated when it finishes.
+ *
+ * `replaceExisting` removes the installed copy first, so a re-download really
+ * downloads -- loadPackOnDemand skips the download when the installed version
+ * matches the manifest, and pack versions stay unchanged when their data
+ * updates. The caller asks before passing it.
+ *
+ * Returns true when the pack went in. False when another install holds the
+ * lock, the user said no, or it failed (the notice has said why).
+ */
+export async function installPack(
+  pack: CatalogPack,
+  opts: { replaceExisting?: boolean } = {},
+): Promise<boolean> {
+  if (get(installBusy)) return false;
+
+  // The map's geometry is compressed inside the pack and inflated on read,
+  // which needs DecompressionStream. Checked before anything downloads.
+  if (pack.id === 'atlas-map' && !atlasPackSupported()) {
+    showNotice(
+      `${pack.name} needs a newer browser than this one.\n` +
+        'It works in Chrome 80 and later, Safari 16.4 and later, and Firefox 113 and later.',
+      'error',
+    );
+    return false;
+  }
+
+  installBusy.set(true);
+  installingPackId.set(pack.id);
+  try {
+    // Asked before anything is removed, so saying no leaves the old copy alone.
+    const sizes = await loadPackSizes();
+    if (!(await hasRoomForBytes(pack.name, installBytesFor(pack.id, sizes.bytes)))) return false;
+
+    if (opts.replaceExisting) {
+      installMessage.set(`Removing old ${pack.name}...`);
+      await removePack(pack.id);
+    }
+
+    await downloadAndImportPack(pack, (message) => installMessage.set(message));
+
+    restartNeeded.set(true);
+    showNotice(`${pack.name} installed`);
+    window.dispatchEvent(new CustomEvent('packsUpdated'));
+    return true;
+  } catch (error) {
+    console.error(`Error installing ${pack.name}:`, error);
+    showNotice(
+      isQuotaError(error)
+        ? `Not enough storage to install ${pack.name}.\n` +
+            'Free up space on your device, or remove a pack you are not using, then try again.'
+        : `Couldn't install ${pack.name}: ${errorText(error)}`,
+      'error',
+    );
+    return false;
+  } finally {
+    installingPackId.set(null);
+    installMessage.set('');
+    installBusy.set(false);
+  }
+}
+
+// ── Install All, as a person asks for it ────────────────────────────────────
+
+/**
+ * What Install All would still do, and roughly what it would download. The
+ * natural voices all share one 310 MB engine, and each of their own sizes
+ * includes it while it is missing, so the engine is counted once rather than
+ * once per voice.
+ */
+export async function estimateRemaining(): Promise<{ count: number; bytes: number }> {
+  const [packs, voices, sizes] = await Promise.all([
+    packsStillToInstall(),
+    voicesStillToInstall(),
+    loadPackSizes(),
+  ]);
+  const MB = 1024 * 1024;
+  let bytes = packs.reduce(
+    (sum, pack) => sum + (installBytesFor(pack.id, sizes.bytes) || parseFloat(pack.size) * MB || 0),
+    0,
+  );
+  const voiceMB = await Promise.all(
+    voices.map((v) => voiceDownloadSizeMB(v).catch(() => v.approxSizeMB)),
+  );
+  const standard = voices.map((v, i) => ({ v, mb: voiceMB[i] })).filter(({ v }) => v.engine !== 'kokoro');
+  const natural = voices.map((v, i) => ({ v, mb: voiceMB[i] })).filter(({ v }) => v.engine === 'kokoro');
+  bytes += standard.reduce((sum, { mb }) => sum + mb * MB, 0);
+  if (natural.length > 0) {
+    const largest = Math.max(...natural.map(({ mb }) => mb));
+    bytes += (largest + (natural.length - 1)) * MB;
+  }
+  return { count: packs.length + voices.length, bytes };
+}
+
+/**
+ * Install All with its space warning first. Returns false without starting
+ * when another install is running or the user declined the warning.
+ */
+export async function installEverything(): Promise<boolean> {
+  if (get(installBusy)) return false;
+  const { bytes } = await estimateRemaining();
+  if (!(await hasRoomForBytes('Everything left to install', bytes))) return false;
+  return installAll();
 }

@@ -23,7 +23,7 @@ import { navigationStore, availableTranslations } from '../../stores/navigationS
 import { normalizeBookName } from '../../lib/bibleData';
 import { isReadingActive } from '../../lib/tts/readingEngine';
 import { packInstallFinished } from '../../adapters/db-manager';
-import { installAll, packsStillToInstall, voicesStillToInstall } from '../../lib/packInstaller';
+import { installEverything, packsStillToInstall, voicesStillToInstall } from '../../lib/packInstaller';
 
 /** Is this pack installed? Asked once per tour run. */
 async function hasPack(ctx: StepContext, id: string): Promise<boolean> {
@@ -130,14 +130,14 @@ export const PART_TWO: TourStep[] = [
     title: (ctx) => (ctx.tour.missing ? 'A few packs aren’t in' : 'Your packs are in'),
     body: (ctx) =>
       ctx.tour.missing
-        ? 'Anything below that needs a missing pack gets skipped. Install the rest now (Wi-Fi is best), or later from Settings → Storage & Updates → Manage Packs.'
+        ? 'Anything below that needs a missing pack gets skipped. Install the rest now (Wi-Fi is best), or as you go: the translation list and each feature offer their own downloads.'
         : 'Here’s what they switched on: more translations, the word ring, commentary, cross-references and Read Aloud.',
     nextLabel: 'Let’s go',
     alt: {
       label: 'Install now',
       when: (ctx) => ctx.tour.missing > 0,
       run: () => {
-        void installAll();
+        void installEverything();
         tutorial.setStage('waiting');
       },
     },
