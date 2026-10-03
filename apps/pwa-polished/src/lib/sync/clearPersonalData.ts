@@ -162,6 +162,18 @@ export async function pendingWork(): Promise<PendingWork> {
   return { queued, outbox, total: queued + outbox };
 }
 
+/** "3 changes and 1 shared page", or whichever halves are non-zero. */
+export function describePending(pending: PendingWork): string {
+  const parts: string[] = [];
+  if (pending.queued > 0) {
+    parts.push(`${pending.queued} ${pending.queued === 1 ? 'change' : 'changes'}`);
+  }
+  if (pending.outbox > 0) {
+    parts.push(`${pending.outbox} shared ${pending.outbox === 1 ? 'page' : 'pages'}`);
+  }
+  return parts.join(' and ');
+}
+
 /** Empty one store. A store this database has never created is not an error. */
 function clearStore(db: IDBDatabase, storeName: string): Promise<void> {
   if (!db.objectStoreNames.contains(storeName)) return Promise.resolve();

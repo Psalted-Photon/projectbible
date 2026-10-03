@@ -227,6 +227,10 @@ function copyPolishedPacks() {
 }
 
 export default defineConfig({
+  // When this build was made, for "Last updated" in Settings → Storage & Updates.
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     svelte(),
     VitePWA({

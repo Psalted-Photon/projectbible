@@ -5,16 +5,13 @@
   import { supabaseAuthService } from '../services/SupabaseAuthService';
   import { passwordRecovery, authLinkError, finishPasswordRecovery } from '../stores/passwordRecoveryStore';
   import { readingPlanModalStore } from '../stores/readingPlanModalStore';
-  import { navigationStore, availableTranslations } from '../stores/navigationStore';
-  import { translationLabel } from '../lib/bibleData';
+  import { navigationStore } from '../stores/navigationStore';
   import { readingProgressStore, getChapterKey } from '../stores/ReadingProgressStore';
   import { readingProgressVersion } from '../stores/readingProgressVersionStore';
   import { getDaysAheadBehind, calculateStreak, planDayDateStr } from '@projectbible/core';
   import { VERSE_COUNTS } from '../../../../packages/core/src/BibleMetadata';
-  import { applyTheme, getSettings, updateSettings } from '../adapters/settings';
-  import { paneStore } from '../stores/paneStore';
   import { syncService, formatSyncLabel, isSyncRunning, SYNC_SCOPE_TOOLTIP, type SyncState } from '../lib/sync';
-  import { pendingWork, type PendingWork } from '../lib/sync/clearPersonalData';
+  import { pendingWork, describePending, type PendingWork } from '../lib/sync/clearPersonalData';
   import { localDateStr, todayStore } from '../stores/clockStore';
   import SavedVersesPanel from './SavedVersesPanel.svelte';
   import JournalCalendar from './JournalCalendar.svelte';
@@ -62,10 +59,6 @@
   let profileEmail: string | null = null;
   let isSignedIn = false;
   let passwordsMatch = false;
-
-  let theme: 'light' | 'dark' | 'auto' | 'sepia' | 'custom' = 'dark';
-  let defaultOT = '';
-  let defaultNT = '';
 
   let syncState: SyncState = syncService.getState();
   $: syncLabel = formatSyncLabel(syncState, isSignedIn);
@@ -128,18 +121,12 @@
       }
     });
 
-    // Settings can change under us (remote pull, SettingsPane) — re-read.
-    const handleSettingsUpdated = () => loadLocalSettings();
-    window.addEventListener('settingsUpdated', handleSettingsUpdated);
-
-    loadLocalSettings();
     void loadReadingPlan();
 
     return () => {
       unsubscribeProfile();
       unsubscribeSync();
       authSubscription?.data?.subscription?.unsubscribe();
-      window.removeEventListener('settingsUpdated', handleSettingsUpdated);
       if (resendTimer) clearInterval(resendTimer);
     };
   });
@@ -190,26 +177,6 @@
 
   function close() {
     profileModalStore.close();
-  }
-
-  function loadLocalSettings() {
-    const settings = getSettings();
-    theme = settings.theme || 'dark';
-    defaultOT = settings.dailyDriverEnglishOT || '';
-    defaultNT = settings.dailyDriverEnglishNT || '';
-  }
-
-  function applyThemeSelection() {
-    // updateSettings fires the settings-sync hook — cloud push is automatic.
-    updateSettings({ theme });
-    applyTheme(theme);
-  }
-
-  function updateTranslations() {
-    updateSettings({
-      dailyDriverEnglishOT: defaultOT || undefined,
-      dailyDriverEnglishNT: defaultNT || undefined,
-    });
   }
 
   /**
@@ -434,18 +401,6 @@
 
   function cancelSignOut() {
     signOutPending = null;
-  }
-
-  /** "3 notes and 1 shared page", or whichever halves are non-zero. */
-  function describePending(pending: PendingWork): string {
-    const parts: string[] = [];
-    if (pending.queued > 0) {
-      parts.push(`${pending.queued} ${pending.queued === 1 ? 'change' : 'changes'}`);
-    }
-    if (pending.outbox > 0) {
-      parts.push(`${pending.outbox} shared ${pending.outbox === 1 ? 'page' : 'pages'}`);
-    }
-    return parts.join(' and ');
   }
 
   async function handleChangePassword() {
@@ -987,55 +942,9 @@
             <JournalCalendar on:close={close} />
           {:else}
             <div class="settings-tab">
-              <div class="setting-group">
-                <p class="setting-label">Theme</p>
-                <select bind:value={theme}>
-                  <option value="auto">Auto</option>
-                  <option value="sepia">Sepia</option>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                  <option value="custom">Custom</option>
-                </select>
-                {#if theme === 'custom'}
-                  <!-- The typeface and color pickers live in the Settings pane;
-                       duplicating them here would mean two sources of truth. -->
-                  <button
-                    class="link-btn theme-custom-link"
-                    on:click={() => { paneStore.openPane('settings', 'right'); close(); }}
-                  >Customize fonts and colors…</button>
-                {/if}
-              </div>
-              <div class="setting-group">
-                <p class="setting-label">Default OT Translation</p>
-                <select bind:value={defaultOT}>
-                  <option value="">Not set</option>
-                  {#each $availableTranslations as translation}
-                    <option value={translation}>{translationLabel(translation)}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="setting-group">
-                <p class="setting-label">Default NT Translation</p>
-                <select bind:value={defaultNT}>
-                  <option value="">Not set</option>
-                  {#each $availableTranslations as translation}
-                    <option value={translation}>{translationLabel(translation)}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="setting-group">
-                <button class="primary-btn" on:click={() => {
-                  applyThemeSelection();
-                  updateTranslations();
-                }}>
-                  Save Changes
-                </button>
-              </div>
-              <div class="setting-group">
-                <button class="secondary-btn warning-btn" on:click={() => paneStore.openPane('packs', 'right')}>
-                  Manage Packs
-                </button>
-              </div>
+              <!-- Theme, the default translations and Manage Packs live in
+                   the Settings pane. Profile keeps only what belongs to the
+                   account. -->
               <div class="setting-group">
                 <p class="setting-label">Change Name</p>
                 <input class="auth-input" type="text" placeholder="Your name" bind:value={nameUpdate} />
@@ -1375,18 +1284,6 @@
     background: #1f1f1f;
   }
 
-  .secondary-btn.warning-btn {
-    background: linear-gradient(135deg, #ffeb3b 0%, #f9a825 100%);
-    border-color: #ffeb3b;
-    color: #3b2f12;
-  }
-
-  .secondary-btn.warning-btn:hover {
-    background: linear-gradient(135deg, #fff176 0%, #fbc02d 100%);
-    border-color: #fff176;
-    color: #3b2f12;
-  }
-
   .danger-btn {
     background: linear-gradient(135deg, #ef5350 0%, #c62828 100%);
     border-color: #ef5350;
@@ -1399,11 +1296,6 @@
     color: #e6b84a;
     text-align: left;
     padding: 0;
-  }
-
-  .theme-custom-link {
-    margin-top: 8px;
-    font-size: 12px;
   }
 
   .auth-message {
@@ -1505,14 +1397,6 @@
     margin: 0;
     font-size: 13px;
     color: #ccc;
-  }
-
-  .setting-group select {
-    padding: 8px 10px;
-    border-radius: 6px;
-    border: 1px solid #3a3a3a;
-    background: #121212;
-    color: inherit;
   }
 
   .setting-group.danger {

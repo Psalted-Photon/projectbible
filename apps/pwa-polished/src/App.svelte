@@ -10,6 +10,7 @@
   import WelcomeModal from "./components/WelcomeModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
   import AppNotice from "./components/AppNotice.svelte";
+  import AppConfirm from "./components/AppConfirm.svelte";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
   import TutorialLayer from "./tutorial/TutorialLayer.svelte";
   import SharedJoinLayer from "./components/SharedJoinLayer.svelte";
@@ -34,6 +35,7 @@
   import { devotionalTargetFromParams, devotionalTargetFromUrl, DEVOTIONAL_PARAMS } from "./lib/devotionals/deepLink";
   import { openDevotional, type DevotionalTarget } from "./stores/devotionalStore";
   import { isInstalledApp } from "./lib/device";
+  import { showEruda } from "./lib/devOptions";
 
   let appReady = false;
   /** A devotional reading from the launch URL, opened once the app is ready. */
@@ -163,8 +165,10 @@
       }
       console.log("✅ App ready (auto-update test build 2)");
 
-      // Eruda stays on in production by choice -- it is how this app gets
-      // debugged on a real phone. Do not gate it behind a flag.
+      // Eruda always loads in production -- it is how this app gets debugged
+      // on a real phone, and its console has to be running to catch anything.
+      // Only its floating button is hidden, until "Show eruda button" is
+      // switched on in Settings → Dev Options on this device.
       //
       // Loaded after the reader is on screen, not before: it is half a megabyte
       // and used to be the last thing the "Loading App..." screen waited for.
@@ -177,6 +181,16 @@
         eruda.default.position({
           x: window.innerWidth - 60,
           y: window.innerHeight - 60,
+        });
+        // Synchronous with init(), so a hidden button never paints even once.
+        const entryBtn = eruda.default.get("entryBtn");
+        showEruda.subscribe((on) => {
+          if (on) {
+            entryBtn.show();
+          } else {
+            eruda.default.hide();
+            entryBtn.hide();
+          }
         });
         console.log("🐛 Eruda initialized");
         // Only now is there a console to print into. The startup replay in
@@ -431,6 +445,9 @@
 
     <!-- In-app messages (installs, removals, errors) in place of alert() -->
     <AppNotice />
+
+    <!-- In-app yes/no questions in place of confirm() -->
+    <AppConfirm />
 
     <!-- Wake alarm start screen — shown when opened from an alarm notification -->
     <WakeAlarmStart />

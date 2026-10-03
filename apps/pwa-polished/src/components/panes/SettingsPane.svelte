@@ -7,7 +7,7 @@
   import { formatDays, formatTime12h } from "../../lib/alarm/alarmSchedule";
   import { getAllVoices, getSelectableVoices, type TtsVoiceInfo } from "../../adapters/tts";
   import { paneStore } from "../../stores/paneStore";
-  import { Gear, Palette, BookOpenText, SpeakerHigh, Globe, Package, LockSimple } from 'phosphor-svelte';
+  import { Gear, Palette, BookOpenText, SpeakerHigh, Globe, Package, LockSimple, Wrench } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
   import SettingsSection from "../SettingsSection.svelte";
   import { getInterlinearSettings } from "../../adapters/settings";
@@ -24,6 +24,14 @@
   import JournalLockManage from "../JournalLockManage.svelte";
   import JournalLockDialog from "../JournalLockDialog.svelte";
   import { showNotice } from "../../stores/noticeStore";
+  import { askConfirm } from "../../stores/confirmStore";
+  import { availableTranslations } from "../../stores/navigationStore";
+  import { translationLabel } from "../../lib/bibleData";
+  import { syncService } from "../../lib/sync";
+  import { pendingWork, describePending } from "../../lib/sync/clearPersonalData";
+  import {
+    devOptionsUnlocked, showEruda, hideDevOptions, UNLOCK_TAPS, UNLOCK_WINDOW_MS,
+  } from "../../lib/devOptions";
 
   /**
    * Appearance changes land on the reader live, so the pane asks its shell to
@@ -97,6 +105,9 @@
   let showOtQuotes: boolean = true;
   let selectionMenu: 'classic' | 'radial' = 'radial';
   let measureUnits: 'us' | 'metric' = 'us';
+  // Moved here from Profile → Settings. Empty means not set.
+  let defaultOT = "";
+  let defaultNT = "";
   let timezone: string = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const TIMEZONE_OPTIONS: { label: string; value: string }[] = [
@@ -118,6 +129,8 @@
     { label: 'Sydney (AEST/AEDT)',          value: 'Australia/Sydney' },
   ];
   let clearing = false;
+  /** Clear Cache is first counting unsent work, before it asks anything. */
+  let checkingPending = false;
   let checkingUpdate = false;
   let autoCheckUpdates: boolean = true;
   let ttsVoice: string = 'en_US-lessac-medium';
@@ -170,6 +183,8 @@
       showOtQuotes,
       selectionMenu,
       measureUnits,
+      dailyDriverEnglishOT: defaultOT || undefined,
+      dailyDriverEnglishNT: defaultNT || undefined,
       timezone: timezone || undefined,
       autoCheckUpdates,
       customTheme: currentCustom(),
@@ -220,6 +235,7 @@
     general: false,
     privacy: false,
     storage: false,
+    devOptions: false,
   };
 
   // ── Journal lock ────────────────────────────────────────────────────────
@@ -261,7 +277,62 @@
     `${TIMEZONE_OPTIONS.find((o) => o.value === timezone)?.label.replace(/ \(.*\)$/, "") ?? timezone}` +
     `${navBarClock ? "" : " · No clock"}` +
     ` · Rotation ${allowRotation ? "on" : "off"}`;
-  $: storageSummary = `Packs · Cache · Updates${autoCheckUpdates ? "" : " (manual)"}`;
+  $: storageSummary = `Packs · Updates${autoCheckUpdates ? "" : " (manual)"}`;
+  $: devSummary = `Cache · eruda ${$showEruda ? "shown" : "hidden"}`;
+
+  // ── Storage & Updates ───────────────────────────────────────────────────
+  /** When the build this device is running was made. */
+  const lastUpdated = new Date(__BUILD_TIME__).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  /** Space this site takes on the device: packs, voices, maps, the app itself. */
+  let storageUsed = "";
+
+  function formatSize(bytes: number): string {
+    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+    if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`;
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  async function measureStorage() {
+    if (!navigator.storage?.estimate) {
+      storageUsed = "Not reported by this browser";
+      return;
+    }
+    try {
+      const { usage = 0 } = await navigator.storage.estimate();
+      storageUsed = formatSize(usage);
+    } catch {
+      storageUsed = "Not reported by this browser";
+    }
+  }
+
+  // ── Dev Options unlock ──────────────────────────────────────────────────
+  // Ten taps on the Storage & Updates header inside ten seconds. Every tap
+  // counts, opening or closing, so it is ten quick taps whatever state the
+  // section starts in.
+  let devTaps: number[] = [];
+
+  function storageHeaderTapped(e: CustomEvent<boolean>) {
+    if (e.detail) void measureStorage();
+    if ($devOptionsUnlocked) return;
+    const now = Date.now();
+    devTaps = [...devTaps.filter((t) => now - t < UNLOCK_WINDOW_MS), now];
+    if (devTaps.length >= UNLOCK_TAPS) {
+      devTaps = [];
+      devOptionsUnlocked.set(true);
+      showNotice("Dev Options unlocked. They're at the bottom of Settings.");
+    }
+  }
+
+  function putDevOptionsAway() {
+    hideDevOptions();
+    openSections.devOptions = false;
+    showNotice("Dev Options hidden");
+  }
   $: privacySummary = journalLockOn
     ? `Journal lock on · ${relockMs === 0 ? "relocks immediately" : `relocks after ${RELOCK_OPTIONS.find((o) => o.ms === relockMs)?.label ?? ""}`}`
     : "Journal lock off";
@@ -306,6 +377,8 @@
     showOtQuotes = settings.showOtQuotes !== false;
     selectionMenu = settings.selectionMenu === 'classic' ? 'classic' : 'radial';
     measureUnits = settings.measureUnits === 'metric' ? 'metric' : 'us';
+    defaultOT = settings.dailyDriverEnglishOT || "";
+    defaultNT = settings.dailyDriverEnglishNT || "";
     timezone = settings.timezone || '';
     autoCheckUpdates = settings.autoCheckUpdates !== false; // default true
     const custom = getCustomThemeSettings();
@@ -387,12 +460,41 @@
   }
 
   async function clearCacheAndReload() {
-    const warningMessage =
-      'This will delete ALL cached data on this device (downloaded packs, IndexedDB databases, service worker cache, and session storage). You will need to reinstall packs after this. Continue?';
-    if (!confirm(warningMessage)) {
+    // Unsent work lives in the databases this wipes. The same check signing
+    // out makes: try to send it first, then put whatever is still waiting in
+    // front of the user before anything else is asked.
+    checkingPending = true;
+    let pending;
+    try {
+      if (navigator.onLine && $userProfileStore.isSignedIn) {
+        await syncService.forceSync().catch(() => {});
+      }
+      pending = await pendingWork();
+    } finally {
+      checkingPending = false;
+    }
+    if (pending.total > 0) {
+      const one = pending.total === 1;
+      const keepGoing = await askConfirm(
+        `${describePending(pending)} ${one ? "has" : "have"} not reached the server yet.\n\n` +
+          `Clearing the cache deletes ${one ? "it" : "them"} from this device, and ${one ? "it" : "they"} will be lost.`,
+        { confirmLabel: "Clear anyway", cancelLabel: "Keep", danger: true },
+      );
+      if (!keepGoing) return;
+    }
+
+    if (!(await askConfirm(
+      "This deletes everything cached on this device: downloaded packs, databases, the offline copy of the app and session data. " +
+        "You'll need to download packs again afterwards.",
+      { confirmLabel: "Continue", danger: true },
+    ))) {
       return;
     }
-    if (!confirm('Please confirm again: this will permanently delete local packs and cached data from this device. If you are signed in, your cloud-synced settings and reading plans will restore after login. Proceed?')) {
+    if (!(await askConfirm(
+      "Are you sure? Packs and cached data can't be brought back. " +
+        "If you're signed in, your synced settings and reading plans come back when you sign in again.",
+      { confirmLabel: "Clear Cache & Reload", danger: true },
+    ))) {
       return;
     }
 
@@ -562,6 +664,8 @@
     showOtQuotes;
     selectionMenu;
     measureUnits;
+    defaultOT;
+    defaultNT;
     timezone;
     autoCheckUpdates;
     customFontId;
@@ -734,6 +838,30 @@
 
   <SettingsSection title="Reader" summary={readerSummary} bind:open={openSections.reader}>
     <span slot="icon"><BookOpenText size={16} weight="bold" /></span>
+
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Default Old Testament translation</span>
+        <select bind:value={defaultOT}>
+          <option value="">Not set</option>
+          {#each $availableTranslations as translation}
+            <option value={translation}>{translationLabel(translation)}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Default New Testament translation</span>
+        <select bind:value={defaultNT}>
+          <option value="">Not set</option>
+          {#each $availableTranslations as translation}
+            <option value={translation}>{translationLabel(translation)}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
 
     <div class="setting-group">
       <label>
@@ -1029,11 +1157,25 @@
     <JournalLockDialog kind={lockDialog} on:close={() => (lockDialog = null)} />
   {/if}
 
-  <SettingsSection title="Storage &amp; Updates" summary={storageSummary} bind:open={openSections.storage}>
+  <SettingsSection
+    title="Storage &amp; Updates"
+    summary={storageSummary}
+    bind:open={openSections.storage}
+    on:toggle={storageHeaderTapped}
+  >
     <span slot="icon"><Package size={16} weight="bold" /></span>
 
-    <!-- Pack Management -->
+    <!-- This device -->
     <div class="sub-block">
+      <h3>This device</h3>
+      <div class="storage-facts">
+        <span>Space used: <strong>{storageUsed || "Measuring…"}</strong></span>
+        <span>Last updated: <strong>{lastUpdated}</strong></span>
+      </div>
+    </div>
+
+    <!-- Pack Management -->
+    <div class="sub-block divided">
       <h3>Pack Management</h3>
       <p class="section-description">
         Manage installed Bible translations, lexicons, maps, and other resources.
@@ -1045,12 +1187,9 @@
       </button>
     </div>
 
-    <!-- Cache Management -->
+    <!-- Updates -->
     <div class="sub-block divided">
-      <h3>Cache Management</h3>
-      <p class="section-description">
-        Clear all cached data including packs, service workers, and databases. Use this if packs aren't installing or the app is stuck with old data.
-      </p>
+      <h3>Updates</h3>
       <button
         class="check-update-button"
         on:click={checkForUpdates}
@@ -1063,16 +1202,54 @@
         <input type="checkbox" bind:checked={autoCheckUpdates} />
         <span class="toggle-label">Auto-check on open</span>
       </label>
-      <button 
-        class="clear-cache-button" 
-        on:click={clearCacheAndReload}
-        disabled={clearing || checkingUpdate}
-      >
-        <span class="icon emoji">🗑️</span>
-        <span class="text">{clearing ? 'Clearing...' : 'Clear Cache & Reload'}</span>
-      </button>
     </div>
   </SettingsSection>
+
+  <!-- Hidden until the Storage & Updates header is tapped ten times in ten
+       seconds, then kept on this device until Hide Dev Options. -->
+  {#if $devOptionsUnlocked}
+    <SettingsSection title="Dev Options" summary={devSummary} bind:open={openSections.devOptions}>
+      <span slot="icon"><Wrench size={16} weight="bold" /></span>
+
+      <div class="sub-block">
+        <h3>Cache</h3>
+        <p class="section-description">
+          Clears all cached data including packs, service workers, and databases. Use this if packs aren't installing or the app is stuck with old data.
+        </p>
+        <button
+          class="clear-cache-button"
+          on:click={clearCacheAndReload}
+          disabled={clearing || checkingPending || checkingUpdate}
+        >
+          <span class="icon emoji">🗑️</span>
+          <span class="text">{checkingPending ? 'Checking…' : clearing ? 'Clearing...' : 'Clear Cache & Reload'}</span>
+        </button>
+      </div>
+
+      <div class="sub-block divided">
+        <h3>Debug console</h3>
+        <label class="auto-check-toggle">
+          <input
+            type="checkbox"
+            checked={$showEruda}
+            on:change={(e) => showEruda.set(e.currentTarget.checked)}
+          />
+          <span class="toggle-label">Show the eruda button</span>
+        </label>
+        <p class="section-description dev-note">
+          Eruda reads the app's logs on a phone. It runs either way, so it has
+          already caught everything since launch; this only shows its button.
+        </p>
+      </div>
+
+      <div class="sub-block divided">
+        <button class="hide-dev-button" on:click={putDevOptionsAway}>Hide Dev Options</button>
+        <p class="section-description dev-note">
+          Also hides the eruda button. Tap Storage &amp; Updates ten times to bring them back.
+        </p>
+      </div>
+    </SettingsSection>
+  {/if}
 </div>
 
 <style>
@@ -1349,8 +1526,8 @@
     color: #ccc;
   }
 
-  /* Two related concerns inside one section (packs, then cache), split by a
-     hairline rather than by two competing coloured cards. */
+  /* Related concerns inside one section (this device, packs, updates), split
+     by a hairline rather than by competing coloured cards. */
   .sub-block.divided {
     margin-top: 1.5rem;
     padding-top: 1.25rem;
@@ -1498,6 +1675,40 @@
 
   .toggle-label {
     user-select: none;
+  }
+
+  .storage-facts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    color: #aaa;
+    font-size: 0.9rem;
+  }
+
+  .storage-facts strong {
+    color: #e0e0e0;
+    font-weight: 600;
+  }
+
+  .dev-note {
+    margin: 0.5rem 0 0;
+    font-size: 0.8rem;
+  }
+
+  .hide-dev-button {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: #ccc;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .hide-dev-button:hover {
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .clear-cache-button {

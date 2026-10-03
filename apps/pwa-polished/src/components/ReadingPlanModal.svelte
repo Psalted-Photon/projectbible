@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { get } from 'svelte/store';
+  import { askConfirm } from '../stores/confirmStore';
   import { generateReadingPlan, BIBLE_BOOKS, VERSE_COUNTS, suggestCatchUp, getDaysAheadBehind, calculateStreak, planDayDateStr, type ReadingPlanConfig, type ReadingPlan, type HarmonySection, type HarmonyPassage } from '@projectbible/core';
   import { navigationStore } from '../stores/navigationStore';
   import { localDateStr, todayStore } from '../stores/clockStore';
@@ -846,8 +847,9 @@
 
   async function deleteCurrentPlan() {
     if (!selectedPlanId) return;
-    if (confirm('Are you sure you want to delete this reading plan?')) {
-      const deletedId = selectedPlanId;
+    // Captured before asking: the selection could change while the question is up.
+    const deletedId = selectedPlanId;
+    if (await askConfirm('Delete this reading plan?', { confirmLabel: 'Delete', danger: true })) {
       activePlans = activePlans.filter(p => p.id !== deletedId);
       if (activePlans.length > 0) {
         selectedPlanId = activePlans[activePlans.length - 1].id;
@@ -872,7 +874,7 @@
   }
   
   async function deletePlanFromHistory(planId: string) {
-    if (confirm('Are you sure you want to delete this plan from history?')) {
+    if (await askConfirm('Delete this plan from your history?', { confirmLabel: 'Delete', danger: true })) {
       removePlanFromHistory(planId);
       if (isSignedIn) {
         await syncQueue.enqueue({ type: 'DELETE', table: 'reading_plans', id: planId });

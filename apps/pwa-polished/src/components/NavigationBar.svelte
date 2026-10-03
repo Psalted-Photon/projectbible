@@ -10,6 +10,7 @@
     type CrumbKind,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
+  import { askConfirm } from "../stores/confirmStore";
   import { BIBLE_BOOKS, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import {
@@ -712,7 +713,7 @@
         ? `Load all ${totalResultCount.toLocaleString()} results? This could take a while and create a very long list to scroll through.`
         : `Load all ${totalResultCount.toLocaleString()} results?`;
 
-    if (confirm(message)) {
+    if (await askConfirm(message, { confirmLabel: 'Load all' })) {
       await performSearch(true);
     }
   }

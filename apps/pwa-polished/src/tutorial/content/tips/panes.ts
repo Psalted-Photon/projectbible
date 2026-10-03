@@ -36,12 +36,13 @@ export const PANE_TIPS: Tip[] = [
 
   // ── Settings ─────────────────────────────────────────────────────────────
   section('Appearance', 'The theme, text size and line spacing. The Custom theme picks the reader’s own typeface and colors.'),
-  section('Reader', 'How the text is laid out, red letters, art icons, and whether a tapped word gets the ring or the classic popup.'),
+  section('Reader', 'Your default translations, how the text is laid out, red letters, art icons, and whether a tapped word gets the ring or the classic popup.'),
   section('Interlinear (Greek & Hebrew)', 'Which layers show under each Greek or Hebrew word.'),
   section('Read Aloud (AI voice)', 'The voice, its speed, and what gets read and lit up as it reads. The Auto-Read Alarm is here too.'),
   section('General', 'Tutorial Mode, your time zone, the clock in the top bar, and screen rotation.'),
   section('Privacy', 'The journal lock: your fingerprint or face before the Journal opens, with your journal scrambled on this device and in the cloud.'),
-  section('Storage & Updates', 'Manage Packs, check for a new version, or clear everything out if the app gets stuck.'),
+  section('Storage & Updates', 'How much space Hexapla takes on this device, when it last updated, Manage Packs, and checking for a new version.'),
+  section('Dev Options', 'Tools for when something goes wrong: clearing the cache, and the eruda console button. Hide Dev Options puts them away again.'),
 
   setting('settings-theme', 'Theme', 'Theme', 'Auto follows your device. Sepia and Light are easier in daylight; Custom is yours to set.', true),
   setting('settings-layout', 'Verse Layout', 'Verse layout', 'One verse per line, or flowing paragraphs, with or without verse numbers.'),

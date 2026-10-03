@@ -10,6 +10,7 @@
    * `sub` renders the quieter second-level variant (Interlinear inside
    * Reader), matching the two-level pattern already used in IsbeContent.
    */
+  import { createEventDispatcher } from "svelte";
   import { CaretRight } from "phosphor-svelte";
 
   export let title: string;
@@ -17,6 +18,14 @@
   export let summary = "";
   export let open = false;
   export let sub = false;
+
+  /** Fired on every tap of the header, with the new open state. */
+  const dispatch = createEventDispatcher<{ toggle: boolean }>();
+
+  function toggle() {
+    open = !open;
+    dispatch("toggle", open);
+  }
 </script>
 
 <div class="sec" class:sub>
@@ -24,7 +33,7 @@
     class="sec-head"
     class:open
     aria-expanded={open}
-    on:click={() => (open = !open)}
+    on:click={toggle}
   >
     <span class="sec-caret"><CaretRight size={sub ? 10 : 12} weight="bold" /></span>
     {#if $$slots.icon}

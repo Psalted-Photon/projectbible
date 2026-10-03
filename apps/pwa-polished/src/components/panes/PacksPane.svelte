@@ -34,6 +34,7 @@
     type TtsVoiceInfo,
   } from "../../adapters/tts";
   import { showNotice, errorText } from "../../stores/noticeStore";
+  import { askConfirm } from "../../stores/confirmStore";
 
   console.log("DEV:", import.meta.env.DEV);
   console.log("PROD:", import.meta.env.PROD);
@@ -123,12 +124,13 @@
     if (naturalVoices.some((v) => installedVoices.includes(v.id))) return;
     if (!(await hasKokoroModel())) return;
     if (
-      !confirm(
+      !(await askConfirm(
         `That was your last natural voice.\n\n` +
           `They all share one 310 MB engine, which is still stored on this device. ` +
           `Free it up?\n\n` +
           `Installing a natural voice again later will re-download it.`,
-      )
+        { confirmLabel: "Free it up", cancelLabel: "Keep it", danger: true },
+      ))
     ) {
       return;
     }
@@ -148,7 +150,7 @@
     const note = canRedownload
       ? `You can re-download it any time (~${voiceSizes[voiceId] ?? voice.approxSizeMB} MB).`
       : `This is a custom voice — removing it deletes it from this device permanently.`;
-    if (!confirm(`Remove the "${voice.label}" voice? ${note}`)) {
+    if (!(await askConfirm(`Remove the "${voice.label}" voice? ${note}`, { confirmLabel: "Remove", danger: true }))) {
       return;
     }
     try {
@@ -345,7 +347,7 @@
     }
 
     const reinstall = installedPacks.some((p) => p.id === pack.id);
-    if (reinstall && !confirm(`Pack "${pack.name}" is already installed. Re-download it?`)) {
+    if (reinstall && !(await askConfirm(`${pack.name} is already installed. Download it again?`, { confirmLabel: "Download again" }))) {
       return;
     }
 
@@ -444,12 +446,11 @@
       const available = quota - usage;
       if (available >= needed * 2) return true;
 
-      return confirm(
+      return await askConfirm(
         `${name} needs about ${formatBytes(needed * 2)} to install, ` +
-          `but only ${formatBytes(Math.max(available, 0))} looks available on this device.
-
-` +
-          `The install may fail partway through. Continue anyway?`
+          `but only ${formatBytes(Math.max(available, 0))} looks available on this device.\n\n` +
+          `The install may fail partway through. Continue anyway?`,
+        { confirmLabel: "Continue" }
       );
     } catch {
       return true;
@@ -603,17 +604,18 @@
     const pack = installedPacks.find((p) => p.id === packId);
     if (!pack) return;
 
-    const confirmMessage = `Remove "${packId}"?\n\nThis will delete all data for this pack. This cannot be undone.`;
+    const packName = CONSOLIDATED_PACKS.find((p) => p.id === packId)?.name ?? packId;
+    const confirmMessage = `Remove ${packName}?\n\nThis deletes all of its data from this device.`;
 
-    if (!confirm(confirmMessage)) return;
+    if (!(await askConfirm(confirmMessage, { confirmLabel: "Remove", danger: true }))) return;
 
     // Clearing a large pack takes a while. Without a busy state the pane just
     // sits there, which looks exactly like the delete having died.
     $installBusy = true;
-    $installMessage = `Removing ${packId}…`;
+    $installMessage = `Removing ${packName}…`;
     try {
       await removePack(packId);
-      showNotice(`${CONSOLIDATED_PACKS.find((p) => p.id === packId)?.name ?? packId} removed`);
+      showNotice(`${packName} removed`);
       await loadPacks();
       await loadStats();
 
