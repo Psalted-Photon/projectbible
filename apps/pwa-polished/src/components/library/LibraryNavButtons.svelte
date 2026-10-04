@@ -41,11 +41,11 @@
   .nav-buttons {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: calc(2px * var(--bar-scale, 1));
     flex-shrink: 0;
     /* Holds its width even with both buttons hidden, so the title doesn't
        shuffle sideways as you move between the index and an entry. */
-    min-width: 22px;
+    min-width: calc(22px * var(--bar-scale, 1));
   }
   .nav-btn {
     display: flex;
@@ -55,10 +55,16 @@
     border: none;
     color: var(--text-muted, #999);
     cursor: pointer;
-    padding: 3px;
+    padding: calc(3px * var(--bar-scale, 1));
     flex-shrink: 0;
   }
   .nav-btn:hover {
     color: var(--color-primary, #4a90e2);
+  }
+
+  /* Bar size: card headers scale with --bar-scale. */
+  .nav-btn :global(svg) {
+    width: calc(16px * var(--bar-scale, 1));
+    height: calc(16px * var(--bar-scale, 1));
   }
 </style>

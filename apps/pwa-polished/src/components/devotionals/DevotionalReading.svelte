@@ -433,20 +433,20 @@
     align-items: center;
     justify-content: space-between;
     flex-shrink: 0;
-    padding: calc(env(safe-area-inset-top, 0px) + 10px) calc(env(safe-area-inset-right, 0px) + 12px) 6px
-      calc(env(safe-area-inset-left, 0px) + 12px);
+    padding: calc(env(safe-area-inset-top, 0px) + calc(10px * var(--bar-scale, 1))) calc(env(safe-area-inset-right, 0px) + calc(12px * var(--bar-scale, 1))) calc(6px * var(--bar-scale, 1))
+      calc(env(safe-area-inset-left, 0px) + calc(12px * var(--bar-scale, 1)));
   }
   .dr-top-actions {
     display: flex;
-    gap: 4px;
+    gap: calc(4px * var(--bar-scale, 1));
   }
   .dr-icon-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 7px;
+    width: calc(30px * var(--bar-scale, 1));
+    height: calc(30px * var(--bar-scale, 1));
+    border-radius: calc(7px * var(--bar-scale, 1));
     background: none;
     border: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.1));
     color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.5));
@@ -470,8 +470,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: calc(40px * var(--bar-scale, 1));
+    height: calc(40px * var(--bar-scale, 1));
     border: none;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.08);
@@ -484,23 +484,23 @@
   .dr-top-right {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: calc(6px * var(--bar-scale, 1));
     min-width: 0;
   }
 
   /* Original / Modern */
   .dr-mode {
     display: flex;
-    height: 30px;
+    height: calc(30px * var(--bar-scale, 1));
     border: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.12));
-    border-radius: 7px;
+    border-radius: calc(7px * var(--bar-scale, 1));
     overflow: hidden;
   }
   .dr-mode button {
     background: none;
     border: none;
-    padding: 0 9px;
-    font-size: 0.72rem;
+    padding: 0 calc(9px * var(--bar-scale, 1));
+    font-size: calc(0.72rem * var(--bar-scale, 1));
     font-weight: 600;
     color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.5));
     cursor: pointer;
@@ -514,11 +514,11 @@
   }
   @media (max-width: 370px) {
     .dr-top-actions {
-      gap: 2px;
+      gap: calc(2px * var(--bar-scale, 1));
     }
     .dr-mode button {
-      padding: 0 6px;
-      font-size: 0.68rem;
+      padding: 0 calc(6px * var(--bar-scale, 1));
+      font-size: calc(0.68rem * var(--bar-scale, 1));
     }
   }
 
@@ -699,5 +699,12 @@
   .dr-muted {
     color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.4));
     font-size: 0.85rem;
+  }
+
+  /* Bar size: the top bar scales with --bar-scale. Its buttons are fixed
+     boxes, so the icons inside are scaled in place to match. */
+  .dr-icon-btn :global(svg),
+  .dr-close :global(svg) {
+    transform: scale(var(--bar-scale, 1));
   }
 </style>

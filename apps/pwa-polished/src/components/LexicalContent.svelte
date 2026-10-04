@@ -1428,8 +1428,8 @@
     flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    padding: 16px 18px 10px;
+    gap: calc(12px * var(--bar-scale, 1));
+    padding: calc(16px * var(--bar-scale, 1)) calc(18px * var(--bar-scale, 1)) calc(10px * var(--bar-scale, 1));
     border-bottom: 1px solid var(--border-color, #333);
     flex-shrink: 0;
   }
@@ -1443,7 +1443,7 @@
 
   .modal-header h2 {
     margin: 0;
-    font-size: 20px;
+    font-size: calc(20px * var(--bar-scale, 1));
     line-height: 1.15;
     /* Only split a word that genuinely cannot fit; `anywhere` broke mid-word as
        soon as the column got tight, stacking long words one letter per line. */
@@ -1452,8 +1452,8 @@
   }
 
   .head-text .sub {
-    margin-top: 4px;
-    font-size: 12px;
+    margin-top: calc(4px * var(--bar-scale, 1));
+    font-size: calc(12px * var(--bar-scale, 1));
     color: var(--text-muted, #999);
   }
 
@@ -1461,8 +1461,8 @@
      badge needs its own gap rather than inheriting one. */
   .strongs-id {
     display: inline-block;
-    margin-left: 10px;
-    font-size: 15px;
+    margin-left: calc(10px * var(--bar-scale, 1));
+    font-size: calc(15px * var(--bar-scale, 1));
     font-weight: 500;
     padding: 2px 9px;
     background: rgba(76, 175, 80, 0.1);
@@ -1472,7 +1472,7 @@
   .head-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: calc(8px * var(--bar-scale, 1));
     flex-shrink: 0;
   }
   .pop-btn {
@@ -1480,7 +1480,7 @@
     border: none;
     color: var(--text-muted, #999);
     cursor: pointer;
-    padding: 2px;
+    padding: calc(2px * var(--bar-scale, 1));
     display: flex;
     align-items: center;
     flex-shrink: 0;
@@ -1493,7 +1493,7 @@
     border: none;
     color: var(--text-muted, #999);
     cursor: pointer;
-    padding: 2px;
+    padding: calc(2px * var(--bar-scale, 1));
     flex-shrink: 0;
   }
 
@@ -1616,7 +1616,7 @@
   .tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px;
+    gap: calc(2px * var(--bar-scale, 1));
     border-bottom: 1px solid var(--border-color, #333);
     margin-bottom: 14px;
     flex-shrink: 0;
@@ -1627,9 +1627,9 @@
     border: none;
     border-bottom: 2px solid transparent;
     color: var(--text-muted, #999);
-    padding: 8px 12px;
+    padding: calc(8px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1));
     cursor: pointer;
-    font-size: 13px;
+    font-size: calc(13px * var(--bar-scale, 1));
     font-family: inherit;
     white-space: nowrap;
   }
@@ -2275,4 +2275,15 @@
     }
   }
 
+
+  /* Bar size: the header and tabs scale with --bar-scale (Settings →
+     Appearance). The icons are sized by attribute, so they are resized here. */
+  .modal-header .pop-btn svg {
+    width: calc(18px * var(--bar-scale, 1));
+    height: calc(18px * var(--bar-scale, 1));
+  }
+  .modal-header .close-btn svg {
+    width: calc(24px * var(--bar-scale, 1));
+    height: calc(24px * var(--bar-scale, 1));
+  }
 </style>

@@ -419,16 +419,16 @@
   .pv-strip {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px 10px;
-    padding-top: calc(6px + env(safe-area-inset-top, 0px));
+    gap: calc(10px * var(--bar-scale, 1));
+    padding: calc(6px * var(--bar-scale, 1)) calc(10px * var(--bar-scale, 1));
+    padding-top: calc(calc(6px * var(--bar-scale, 1)) + env(safe-area-inset-top, 0px));
     background: #1c1c1c;
     border-bottom: 1px solid #333;
     flex-shrink: 0;
   }
 
   .pv-set {
-    font-size: 12px;
+    font-size: calc(12px * var(--bar-scale, 1));
     font-weight: 600;
     color: #e0e0e0;
     flex: 1;
@@ -449,13 +449,13 @@
     background: none;
     border: none;
     color: #bbb;
-    font-size: 17px;
+    font-size: calc(17px * var(--bar-scale, 1));
     line-height: 1;
     /* A 28px box round a small glyph: the arrows are the one control here that
        gets pressed repeatedly, and at strip height there is no room to make the
        glyph itself bigger. */
-    min-width: 28px;
-    height: 28px;
+    min-width: calc(28px * var(--bar-scale, 1));
+    height: calc(28px * var(--bar-scale, 1));
     padding: 0;
     cursor: pointer;
     flex-shrink: 0;
@@ -474,19 +474,19 @@
   }
 
   .pv-solo {
-    font-size: 10px;
+    font-size: calc(10px * var(--bar-scale, 1));
     font-weight: 600;
     color: #d9b06a;
     border: 1px solid #5a4523;
     background: #2a2116;
     border-radius: 3px;
-    padding: 2px 6px;
+    padding: calc(2px * var(--bar-scale, 1)) calc(6px * var(--bar-scale, 1));
     white-space: nowrap;
     flex-shrink: 0;
   }
 
   .pv-note {
-    font-size: 10px;
+    font-size: calc(10px * var(--bar-scale, 1));
     color: #888;
     white-space: nowrap;
   }
@@ -495,9 +495,9 @@
     background: none;
     border: none;
     color: #999;
-    font-size: 15px;
+    font-size: calc(15px * var(--bar-scale, 1));
     line-height: 1;
-    padding: 4px 6px;
+    padding: calc(4px * var(--bar-scale, 1)) calc(6px * var(--bar-scale, 1));
     cursor: pointer;
     flex-shrink: 0;
   }

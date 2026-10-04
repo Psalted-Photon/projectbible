@@ -844,8 +844,8 @@
     flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    padding: 16px 18px 10px;
+    gap: calc(12px * var(--bar-scale, 1));
+    padding: calc(16px * var(--bar-scale, 1)) calc(18px * var(--bar-scale, 1)) calc(10px * var(--bar-scale, 1));
     border-bottom: 1px solid var(--border-color, #333);
     flex-shrink: 0;
   }
@@ -855,21 +855,21 @@
   }
   .head-text h2 {
     margin: 0;
-    font-size: 20px;
+    font-size: calc(20px * var(--bar-scale, 1));
     line-height: 1.15;
     /* Only split a word that genuinely cannot fit; `anywhere` broke mid-word as
        soon as the column got tight, stacking long names one letter per line. */
     overflow-wrap: break-word;
   }
   .head-text .sub {
-    margin-top: 4px;
-    font-size: 12px;
+    margin-top: calc(4px * var(--bar-scale, 1));
+    font-size: calc(12px * var(--bar-scale, 1));
     color: var(--text-muted, #999);
   }
   .head-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: calc(8px * var(--bar-scale, 1));
     flex-shrink: 0;
   }
   /* Back trail — one row, scrolling sideways rather than wrapping, so walking
@@ -914,7 +914,7 @@
     border: none;
     color: var(--text-muted, #999);
     cursor: pointer;
-    padding: 2px;
+    padding: calc(2px * var(--bar-scale, 1));
     display: flex;
     align-items: center;
     flex-shrink: 0;
@@ -927,7 +927,7 @@
   }
   /* The way into the family tree: a soft green chip so it reads as a door. */
   .pop-btn.tree-btn {
-    padding: 5px;
+    padding: calc(5px * var(--bar-scale, 1));
     border-radius: 8px;
     background: rgba(76, 175, 96, 0.18);
     color: #7fd08f;
@@ -1203,5 +1203,20 @@
     color: #c2c6cd;
     font-size: 12.5px;
     line-height: 1.4;
+  }
+
+  /* Bar size: the header and tabs scale with --bar-scale (Settings →
+     Appearance). The icons are sized by attribute, so they are resized here. */
+  .person-header .pop-btn svg {
+    width: calc(18px * var(--bar-scale, 1));
+    height: calc(18px * var(--bar-scale, 1));
+  }
+  .person-header .close-btn svg {
+    width: calc(24px * var(--bar-scale, 1));
+    height: calc(24px * var(--bar-scale, 1));
+  }
+  .person-header .tree-btn :global(svg) {
+    width: calc(21px * var(--bar-scale, 1));
+    height: calc(21px * var(--bar-scale, 1));
   }
 </style>

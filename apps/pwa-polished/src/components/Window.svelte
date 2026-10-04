@@ -452,11 +452,11 @@
     box-shadow: 0 4.5px 8px rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(3px) saturate(1.1);
     -webkit-backdrop-filter: blur(3px) saturate(1.1);
-    padding: 0 2px;
+    padding: 0 calc(2px * var(--bar-scale, 1));
     display: flex;
     justify-content: space-between;
     align-items: center;
-    min-height: 24px;
+    min-height: calc(24px * var(--bar-scale, 1));
     flex-shrink: 0;
     position: relative;
     z-index: 101;
@@ -514,10 +514,10 @@
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.65);
-    font-size: 9px;
+    font-size: calc(9px * var(--bar-scale, 1));
     line-height: 1;
-    width: 17px;
-    height: 16px;
+    width: calc(17px * var(--bar-scale, 1));
+    height: calc(16px * var(--bar-scale, 1));
     border-radius: 2px;
     cursor: pointer;
     display: flex;
@@ -547,7 +547,7 @@
   .header-actions {
     display: flex;
     align-items: center;
-    gap: 3px;
+    gap: calc(3px * var(--bar-scale, 1));
     flex-shrink: 0;
   }
 
@@ -560,9 +560,9 @@
     background: rgba(255, 255, 255, 0.2);
     border: none;
     color: white;
-    font-size: 12px;
-    width: 15px;
-    height: 15px;
+    font-size: calc(12px * var(--bar-scale, 1));
+    width: calc(15px * var(--bar-scale, 1));
+    height: calc(15px * var(--bar-scale, 1));
     border-radius: 2px;
     cursor: pointer;
     display: flex;
@@ -596,5 +596,12 @@
   }
   .panel-left .panel-content.library {
     padding-right: 26px;
+  }
+
+  /* Bar size: the header, its arrows, swap and × above all scale with
+     --bar-scale (Settings → Appearance). */
+  .swap-button :global(svg) {
+    width: calc(11px * var(--bar-scale, 1));
+    height: calc(11px * var(--bar-scale, 1));
   }
 </style>

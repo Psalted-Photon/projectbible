@@ -220,14 +220,14 @@
 
   .close-btn {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 32px;
-    height: 32px;
+    top: calc(12px * var(--bar-scale, 1));
+    right: calc(12px * var(--bar-scale, 1));
+    width: calc(32px * var(--bar-scale, 1));
+    height: calc(32px * var(--bar-scale, 1));
     border: none;
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
-    font-size: 24px;
+    font-size: calc(24px * var(--bar-scale, 1));
     border-radius: 50%;
     cursor: pointer;
     z-index: 20;

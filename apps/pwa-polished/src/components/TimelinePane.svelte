@@ -561,6 +561,13 @@
     z-index: 20;
     font-family: var(--display);
     overflow: hidden;
+    /* Bar size: scaled as one piece, like the main bar's strip. Laid out
+       1/scale wide so it still spans once scaled; the margin gives back the
+       height the box gained or lost. */
+    width: calc(100% / var(--bar-scale, 1));
+    transform: scale(var(--bar-scale, 1));
+    transform-origin: 0 0;
+    margin-bottom: calc(var(--nav-h) * (var(--bar-scale, 1) - 1));
   }
   .nav-title { font-size: 16px; letter-spacing: .3px; flex: none; }
   .nav-spacer { flex: 1; min-width: 4px; }

@@ -103,8 +103,8 @@
     border-bottom: 2px solid transparent;
     color: var(--text-muted, #999);
     font-family: inherit;
-    font-size: 12px;
-    padding: 9px 6px;
+    font-size: calc(12px * var(--bar-scale, 1));
+    padding: calc(9px * var(--bar-scale, 1)) calc(6px * var(--bar-scale, 1));
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;

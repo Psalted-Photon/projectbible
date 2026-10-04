@@ -82,8 +82,8 @@
 <style>
   .journal-nav {
     display: flex;
-    gap: 8px;
-    padding: 12px;
+    gap: calc(8px * var(--bar-scale, 1));
+    padding: calc(12px * var(--bar-scale, 1));
     border-bottom: 1px solid var(--border-color, #ddd);
     background: var(--nav-bg, #f9f9f9);
     align-items: center;
@@ -91,15 +91,15 @@
   }
   
   button {
-    padding: 8px 16px;
+    padding: calc(8px * var(--bar-scale, 1)) calc(16px * var(--bar-scale, 1));
     border: 1px solid var(--border-color, #ddd);
     background: var(--button-bg, white);
     color: var(--text-color, #222);
     border-radius: 4px;
     cursor: pointer;
-    min-width: 44px;
-    min-height: 44px;
-    font-size: 16px;
+    min-width: calc(44px * var(--bar-scale, 1));
+    min-height: calc(44px * var(--bar-scale, 1));
+    font-size: calc(16px * var(--bar-scale, 1));
     transition: background 0.2s;
   }
   
@@ -112,22 +112,22 @@
   }
   
   input[type="date"] {
-    padding: 8px;
+    padding: calc(8px * var(--bar-scale, 1));
     border: 1px solid var(--border-color, #ddd);
     border-radius: 4px;
-    font-size: 14px;
-    min-height: 44px;
+    font-size: calc(14px * var(--bar-scale, 1));
+    min-height: calc(44px * var(--bar-scale, 1));
     background: var(--input-bg, white);
     color: var(--text-color, #222);
   }
   
   .title-input {
     flex: 1;
-    padding: 8px;
+    padding: calc(8px * var(--bar-scale, 1));
     border: 1px solid var(--border-color, #ddd);
     border-radius: 4px;
-    font-size: 16px;
-    min-height: 44px;
+    font-size: calc(16px * var(--bar-scale, 1));
+    min-height: calc(44px * var(--bar-scale, 1));
     background: var(--input-bg, white);
     color: var(--text-color, #222);
   }
@@ -138,13 +138,13 @@
   
   .status {
     margin-left: auto;
-    font-size: 14px;
+    font-size: calc(14px * var(--bar-scale, 1));
     color: var(--text-secondary, #666);
   }
   
   .status.dirty {
     color: var(--accent-color, #007aff);
-    font-size: 20px;
+    font-size: calc(20px * var(--bar-scale, 1));
     animation: pulse 2s ease-in-out infinite;
   }
   
@@ -157,8 +157,8 @@
   @media (max-width: 640px) {
     .journal-nav {
       flex-wrap: wrap;
-      padding: 8px;
-      gap: 6px;
+      padding: calc(8px * var(--bar-scale, 1));
+      gap: calc(6px * var(--bar-scale, 1));
     }
     
     .title-input {
@@ -168,9 +168,9 @@
     
     button,
     input[type="date"] {
-      min-width: 40px;
-      min-height: 40px;
-      padding: 6px 12px;
+      min-width: calc(40px * var(--bar-scale, 1));
+      min-height: calc(40px * var(--bar-scale, 1));
+      padding: calc(6px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1));
     }
   }
 </style>

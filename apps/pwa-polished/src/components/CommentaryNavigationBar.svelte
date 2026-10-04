@@ -475,7 +475,7 @@
     position: sticky;
     top: 0;
     z-index: 1000;
-    min-height: 68px;
+    min-height: calc(68px * var(--bar-scale, 1));
     --nav-item-height: 33px;
     --nav-item-inline-pad: calc((var(--nav-item-height) - 14px) / 2);
     box-sizing: border-box;
@@ -493,6 +493,13 @@
     align-items: flex-start;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    /* Bar size: scaled as one piece, like the main bar's strip. Laid out
+       1/scale wide so it still spans once scaled. The bar around it grows
+       with its own min-height. Dropdowns sit outside and place themselves
+       from on-screen positions, so they land right at any size. */
+    width: calc(100% / var(--bar-scale, 1));
+    transform: scale(var(--bar-scale, 1));
+    transform-origin: 0 0;
   }
 
   .commentary-nav-content::-webkit-scrollbar {

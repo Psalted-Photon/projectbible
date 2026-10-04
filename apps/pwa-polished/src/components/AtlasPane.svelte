@@ -1732,6 +1732,13 @@
     overflow-x: auto;
     scrollbar-width: none;
     flex-wrap: nowrap;
+    /* Bar size: scaled as one piece, like the main bar's strip. Laid out
+       1/scale wide so it still spans once scaled; the margin gives back the
+       height the box gained or lost. */
+    width: calc(100% / var(--bar-scale, 1));
+    transform: scale(var(--bar-scale, 1));
+    transform-origin: 0 0;
+    margin-bottom: calc(var(--nav-h) * (var(--bar-scale, 1) - 1));
   }
   .nav::-webkit-scrollbar { display: none; }
   .nav.drag-scrolling { cursor: grabbing; user-select: none; }
@@ -1808,7 +1815,7 @@
 
   /* ---------------- dropdown panels ---------------- */
   .panel {
-    position: absolute; top: calc(var(--nav-h) - 4px); background: var(--chrome-2);
+    position: absolute; top: calc(var(--nav-h) * var(--bar-scale, 1) - 4px); background: var(--chrome-2);
     border: 1px solid var(--line-2); border-radius: 9px; padding: 8px;
     box-shadow: 0 12px 30px rgba(0, 0, 0, .5); z-index: 1300; min-width: 210px;
     max-height: 70%; overflow-y: auto;
@@ -1910,7 +1917,7 @@
 
   /* ---------------- search results ---------------- */
   .results {
-    position: absolute; top: calc(var(--nav-h) - 4px); left: calc(8px + var(--grip-l)); z-index: 1300;
+    position: absolute; top: calc(var(--nav-h) * var(--bar-scale, 1) - 4px); left: calc(8px + var(--grip-l)); z-index: 1300;
     width: 320px; max-width: calc(100% - 16px - var(--grip-l) - var(--grip-r));
     max-height: 60%; overflow-y: auto;
     background: var(--chrome-2); border: 1px solid var(--line-2); border-radius: 9px;

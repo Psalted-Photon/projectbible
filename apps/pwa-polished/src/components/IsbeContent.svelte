@@ -1342,8 +1342,8 @@
     flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    padding: 16px 18px 10px;
+    gap: calc(12px * var(--bar-scale, 1));
+    padding: calc(16px * var(--bar-scale, 1)) calc(18px * var(--bar-scale, 1)) calc(10px * var(--bar-scale, 1));
     border-bottom: 1px solid var(--border-color, #333);
     flex-shrink: 0;
   }
@@ -1358,7 +1358,7 @@
   }
   .head-text h2 {
     margin: 0;
-    font-size: 20px;
+    font-size: calc(20px * var(--bar-scale, 1));
     line-height: 1.15;
     /* break-word, not anywhere: only split a word that genuinely cannot fit.
        The longest single word in the encyclopedia is "Anthropomorphism" at 16
@@ -1368,14 +1368,14 @@
     overflow-wrap: break-word;
   }
   .head-text .sub {
-    margin-top: 4px;
-    font-size: 12px;
+    margin-top: calc(4px * var(--bar-scale, 1));
+    font-size: calc(12px * var(--bar-scale, 1));
     color: var(--text-muted, #999);
   }
   .head-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: calc(8px * var(--bar-scale, 1));
     flex-shrink: 0;
   }
   .pop-btn {
@@ -1383,7 +1383,7 @@
     border: none;
     color: var(--text-muted, #999);
     cursor: pointer;
-    padding: 2px;
+    padding: calc(2px * var(--bar-scale, 1));
     display: flex;
     align-items: center;
     flex-shrink: 0;
@@ -1396,7 +1396,7 @@
     border: none;
     color: var(--text-muted, #999);
     cursor: pointer;
-    padding: 2px;
+    padding: calc(2px * var(--bar-scale, 1));
     flex-shrink: 0;
   }
   .close-btn:hover {
@@ -1405,8 +1405,8 @@
   .tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px;
-    padding: 8px 12px 0;
+    gap: calc(2px * var(--bar-scale, 1));
+    padding: calc(8px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1)) 0;
     border-bottom: 1px solid var(--border-color, #333);
     /* Must not shrink: the body's flex-basis resolves to its full content
        height (the container has no definite height), so a tall tab — 955 verse
@@ -1419,8 +1419,8 @@
     border: none;
     border-bottom: 2px solid transparent;
     color: var(--text-muted, #999);
-    padding: 8px 12px;
-    font-size: 13px;
+    padding: calc(8px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1));
+    font-size: calc(13px * var(--bar-scale, 1));
     font-family: inherit;
     cursor: pointer;
     white-space: nowrap;
@@ -1757,5 +1757,16 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 12ch;
+  }
+
+  /* Bar size: the header and tabs scale with --bar-scale (Settings →
+     Appearance). The icons are sized by attribute, so they are resized here. */
+  .isbe-header .pop-btn svg {
+    width: calc(18px * var(--bar-scale, 1));
+    height: calc(18px * var(--bar-scale, 1));
+  }
+  .isbe-header .close-btn svg {
+    width: calc(24px * var(--bar-scale, 1));
+    height: calc(24px * var(--bar-scale, 1));
   }
 </style>
