@@ -2357,28 +2357,30 @@
             {/if}
           </div>
         </div>
-        <button
-          class="pill-btn pill-search-icon-btn"
-          on:click={handleSearchIconClick}
-          title="Search"
-          aria-label="Search"
-        >
-          <span class="icon-badge icon-badge-search"><MagnifyingGlass size={18} weight="bold" /><span class="icon-overlay"><MagnifyingGlass size={18} weight="thin" /></span></span>
-        </button>
         <!-- Advanced search stays out of the way until there is something to
              hand it: it appears once the box has text, and carries that text
-             into its "Search for:" field. -->
-        {#if searchQuery.trim()}
-          <div class="pill-divider"></div>
+             into its "Search for:" field. It butts against the glass as one
+             split button, so it reads as the other way to run the same words. -->
+        <div class="search-pair" class:paired={!!searchQuery.trim()}>
           <button
-            class="pill-btn pill-powersearch"
-            on:click={openAdvancedSearch}
-            title="Advanced search — regex, proximity, biblical filters"
-            aria-label="Advanced search"
+            class="pill-btn pill-search-icon-btn"
+            on:click={handleSearchIconClick}
+            title="Search"
+            aria-label="Search"
           >
-            <span class="icon-badge icon-badge-powersearch"><Microscope size={18} weight="bold" /><span class="icon-overlay"><Microscope size={18} weight="thin" /></span></span>
+            <span class="icon-badge icon-badge-search"><MagnifyingGlass size={18} weight="bold" /><span class="icon-overlay"><MagnifyingGlass size={18} weight="thin" /></span></span>
           </button>
-        {/if}
+          {#if searchQuery.trim()}
+            <button
+              class="pill-btn pill-powersearch"
+              on:click={openAdvancedSearch}
+              title="Advanced search — regex, proximity, biblical filters"
+              aria-label="Advanced search"
+            >
+              <span class="icon-badge icon-badge-powersearch"><Microscope size={18} weight="bold" /><span class="icon-overlay"><Microscope size={18} weight="thin" /></span></span>
+            </button>
+          {/if}
+        </div>
       </div>
 
       <div class="pill-divider"></div>
@@ -3327,6 +3329,28 @@
   .pill-search-icon-btn {
     min-width: 32px;
     padding: 0 6px;
+  }
+
+  /* Glass and microscope joined: no gap, no padding between them, and the
+     facing corners squared so the two badges meet edge to edge. */
+  .search-pair {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .search-pair.paired .pill-search-icon-btn {
+    padding-right: 0;
+    border-radius: 5px 0 0 5px;
+  }
+  .search-pair.paired .pill-powersearch {
+    padding-left: 0;
+    border-radius: 0 5px 5px 0;
+  }
+  .search-pair.paired .icon-badge-search {
+    border-radius: 6px 0 0 6px;
+  }
+  .search-pair.paired .icon-badge-powersearch {
+    border-radius: 0 6px 6px 0;
   }
 
   .pill-search-expander {
