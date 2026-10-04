@@ -60,12 +60,11 @@ export const NAVBAR_TIPS: Tip[] = [
     body: 'Pick commentators, and their colored badges show up by the verses they wrote about.',
   },
   {
-    id: 'nav-word-study',
+    id: 'nav-apps',
     area,
-    target: '.pill-wordstudy',
-    needs: 'encyclotopical',
-    title: 'Word study',
-    body: 'The dictionary, topical index, encyclopedia and Bible people in one place, starting from the encyclopedia’s A–Z.',
+    target: '.pill-apps',
+    title: 'Open a window',
+    body: 'Every kind of window in one list: another Bible, the Map, Timeline, Commentary, your notes and journal, the library, Art and Harmonies. It opens under the text, or beside it when the phone is sideways.',
   },
   {
     id: 'nav-interlinear',
@@ -130,13 +129,6 @@ export const NAVBAR_TIPS: Tip[] = [
     target: '.pv-root .pill-takemaster',
     title: 'Drive from here',
     body: 'Makes this pane the lead. The others follow it instead.',
-  },
-  {
-    id: 'nav-apps',
-    area,
-    target: '.pill-apps',
-    title: 'Open a window',
-    body: 'Every kind of window in one list: another Bible, the Map, Timeline, Commentary, your notes and journal, the library, Art and Harmonies. It opens under the text, or beside it when the phone is sideways.',
   },
   {
     id: 'nav-settings',

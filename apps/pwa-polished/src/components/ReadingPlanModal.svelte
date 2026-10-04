@@ -26,13 +26,15 @@
   import BrandSpinner from './BrandSpinner.svelte';
   import { download } from '../lib/backup/saveFile';
   import harmonyData from '../data/robertson-harmony.json';
-  import { BookOpenText } from 'phosphor-svelte';
+  import { BookOpenText, Plus, ArrowLeft } from 'phosphor-svelte';
   import DevotionalsTab from './devotionals/DevotionalsTab.svelte';
   import { devotionalTarget } from '../stores/devotionalStore';
   
   export let isOpen = false;
   
-  let currentTab: 'create' | 'active' | 'history' | 'devotionals' = 'create';
+  // 'create' is not a tab of its own: it's the form the Active Plan tab's
+  // Create New Plan button opens, so Active Plan stays lit while it shows.
+  let currentTab: 'create' | 'active' | 'history' | 'devotionals' = 'active';
   let currentReadingPlan: ReadingPlan | null = null;
   let currentPlanId: string | null = null;
 
@@ -1370,26 +1372,12 @@
       </div>
       
       <div class="tabs">
-        <button 
-          class="tab" 
-          class:active={currentTab === 'create'}
-          on:click={() => currentTab = 'create'}
-        >
-          Create Plan
-        </button>
-        <button 
-          class="tab" 
-          class:active={currentTab === 'active'}
+        <button
+          class="tab"
+          class:active={currentTab === 'active' || currentTab === 'create'}
           on:click={() => currentTab = 'active'}
         >
           Active Plan
-        </button>
-        <button 
-          class="tab" 
-          class:active={currentTab === 'history'}
-          on:click={() => { currentTab = 'history'; loadPlanHistory(); }}
-        >
-          Completed Archive
         </button>
         <button
           class="tab"
@@ -1397,6 +1385,13 @@
           on:click={() => currentTab = 'devotionals'}
         >
           Devotionals
+        </button>
+        <button
+          class="tab"
+          class:active={currentTab === 'history'}
+          on:click={() => { currentTab = 'history'; loadPlanHistory(); }}
+        >
+          Completed Archive
         </button>
       </div>
 
@@ -1408,6 +1403,9 @@
       <div class="tab-content">
         {#if currentTab === 'create'}
           <div class="create-plan-tab">
+            <button class="back-to-plans-btn" on:click={() => currentTab = 'active'}>
+              <ArrowLeft size={14} weight="bold" /> Back to plans
+            </button>
             <div class="form-group">
               <label for="preset">Preset Plan:</label>
               <select id="preset" bind:value={planPreset}>
@@ -1522,6 +1520,9 @@
           </div>
         {:else if currentTab === 'active'}
           <div class="active-plan-tab">
+            <button class="create-new-plan-btn" on:click={() => currentTab = 'create'}>
+              <Plus size={14} weight="bold" /> Create New Plan
+            </button>
             {#if activePlans.length >= 2}
               <div class="plan-tab-strip">
                 <button
@@ -1713,7 +1714,7 @@
                   <div><strong>Days ahead/behind:</strong> {currentReadingPlan ? getDaysAheadBehind(currentReadingPlan, getProgressEntries(), $todayStore) : 0}</div>
                   <div><strong>Streak:</strong> {currentReadingPlan ? calculateStreak(currentReadingPlan, getProgressEntries(), $todayStore, localDateStr) : 0} days</div>
                 </div>
-                {#if userName}
+                {#if userName && verseStats.todayRead > 0}
                   <div class="progress-message">Congrats {userName}, today you read {verseStats.todayRead} verses!</div>
                 {/if}
                 <div class="progress-actions">
@@ -1924,7 +1925,7 @@
                 </div>
               {/if}
             {:else}
-              <p>No active plan. Create one to get started!</p>
+              <p>No active plan yet. Tap Create New Plan to start one.</p>
             {/if}
           </div>
         {:else}
@@ -2110,7 +2111,7 @@
     min-height: 0;
   }
 
-  /* Four tabs have to fit a phone. */
+  /* Three tabs have to fit a phone. */
   @media (max-width: 560px) {
     .tabs {
       padding: 0 6px;
@@ -2332,6 +2333,42 @@
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
   }
+
+  .create-new-plan-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 14px;
+    padding: 8px 14px;
+    background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+  }
+
+  .back-to-plans-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 14px;
+    padding: 6px 12px;
+    background: #2a2a2a;
+    color: #ccc;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .back-to-plans-btn:hover {
+    color: #fff;
+    background: #333;
+  }
   
   .status {
     margin-top: 10px;
@@ -2479,27 +2516,28 @@
     color: #66bb6a;
   }
   
+  /* Size and shape come from .today-reading-actions; this is colour only. */
   .start-reading-btn {
-    margin-top: 10px;
-    padding: 8px 16px;
     background: #1d4ed8;
     color: white;
-    border: none;
-    border-radius: 4px;
+    border: 1px solid #1d4ed8;
     cursor: pointer;
     transition: all 0.2s;
   }
-  
+
   .start-reading-btn:hover {
     background: #2563eb;
+    border-color: #2563eb;
   }
 
   .today-reading.day-done .start-reading-btn {
     background: #4caf50;
+    border-color: #4caf50;
   }
 
   .today-reading.day-done .start-reading-btn:hover {
     background: #66bb6a;
+    border-color: #66bb6a;
   }
   
   .welcome-banner {
@@ -2600,25 +2638,40 @@
     color: #fff;
   }
 
+  /* The day's buttons were added at different times, each with its own
+     padding, font and margin. Here they share one row at one size, equal
+     widths, and keep only their colours. Play this reading is its own
+     component, hence :global, and the extra .today-reading so this outranks
+     that component's own sizing. */
   .today-reading-actions {
     display: flex;
     gap: 8px;
     margin-top: 10px;
-    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .today-reading .today-reading-actions > :global(*) {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 38px;
+    margin: 0;
+    padding: 6px 10px;
+    box-sizing: border-box;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
   }
 
   .day-complete-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
     background: #1a2e1a;
     border: 1px solid #4caf50;
     color: #66bb6a;
-    padding: 5px 12px;
-    border-radius: 4px;
-    font-size: 13px;
-    font-weight: 600;
   }
 
   .plan-progress {
@@ -2849,17 +2902,14 @@
     margin: 0;
   }
   
-  /* Used by the welcome banner's full-size button. The list view's compact
-     equivalent is .list-day-check. */
+  /* Used by the welcome banner's full-size button, sized by
+     .today-reading-actions. The list view's compact equivalent is
+     .list-day-check. */
   .mark-day-btn {
-    margin-top: 10px;
-    padding: 6px 10px;
     border: 1px solid #3a3a3a;
     background: #1f1f1f;
     color: #ccc;
-    border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
   }
 
   .mark-day-btn:hover {

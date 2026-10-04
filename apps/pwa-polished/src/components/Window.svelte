@@ -297,21 +297,19 @@
         >{e.glyph}</button>
       {/each}
     </div>
-    <div class="header-actions">
-      {#if window.contentType !== 'selector'}
-        <button
-          class="edge-button swap-button"
-          class:open={swapOpen}
-          bind:this={swapButton}
-          on:click={toggleSwap}
-          title="Show something else here"
-          aria-label="Show something else here"
-          aria-haspopup="menu"
-          aria-expanded={swapOpen}
-        ><SquaresFour size={11} weight="bold" /></button>
-      {/if}
-      <button class="close-button" on:click={handleCloseClick} aria-label="Close panel">×</button>
-    </div>
+    {#if window.contentType !== 'selector'}
+      <button
+        class="edge-button swap-button"
+        class:open={swapOpen}
+        bind:this={swapButton}
+        on:click={toggleSwap}
+        title="Show something else here"
+        aria-label="Show something else here"
+        aria-haspopup="menu"
+        aria-expanded={swapOpen}
+      ><SquaresFour size={11} weight="bold" /></button>
+    {/if}
+    <button class="close-button" on:click={handleCloseClick} aria-label="Close panel">×</button>
   </div>
 
   {#if swapOpen && swapButton}
@@ -453,8 +451,11 @@
     backdrop-filter: blur(3px) saturate(1.1);
     -webkit-backdrop-filter: blur(3px) saturate(1.1);
     padding: 0 calc(2px * var(--bar-scale, 1));
-    display: flex;
-    justify-content: space-between;
+    /* Arrows left, swap dead centre, × right. The two outer columns share the
+       spare width equally so the swap stays centred; when the panel gets
+       narrow the arrows' column gives way first, so swap and × stay whole. */
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(auto, 1fr);
     align-items: center;
     min-height: calc(24px * var(--bar-scale, 1));
     flex-shrink: 0;
@@ -544,11 +545,12 @@
     cursor: inherit;
   }
 
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: calc(3px * var(--bar-scale, 1));
-    flex-shrink: 0;
+  /* Twice an arrow's width at the same height, so it's an easy thumb target
+     on a phone. The faint fill shows how far the target reaches. */
+  .swap-button {
+    grid-column: 2;
+    width: calc(34px * var(--bar-scale, 1));
+    background: rgba(255, 255, 255, 0.12);
   }
 
   .swap-button.open {
@@ -556,13 +558,17 @@
     background: rgba(255, 255, 255, 0.28);
   }
 
+  /* Pinned to the third column so it stays at the right end even on the
+     selector, which has no swap button in the middle. */
   .close-button {
+    grid-column: 3;
+    justify-self: end;
     background: rgba(255, 255, 255, 0.2);
     border: none;
     color: white;
-    font-size: calc(12px * var(--bar-scale, 1));
-    width: calc(15px * var(--bar-scale, 1));
-    height: calc(15px * var(--bar-scale, 1));
+    font-size: calc(16px * var(--bar-scale, 1));
+    width: calc(20px * var(--bar-scale, 1));
+    height: calc(20px * var(--bar-scale, 1));
     border-radius: 2px;
     cursor: pointer;
     display: flex;

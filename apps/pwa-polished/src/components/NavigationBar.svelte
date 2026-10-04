@@ -29,7 +29,6 @@
   import { navesModalStore } from "../stores/navesModalStore";
   import { openDevotional } from "../stores/devotionalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
-  import { openWorkIndex } from "../lib/openWork";
   import { get } from "svelte/store";
   import { barScale } from "../lib/barSize";
   import {
@@ -1074,21 +1073,6 @@
 
   function openSettings() {
     paneStore.openPane("settings", "right");
-  }
-
-  /**
-   * The four reference works, without having to tap a word first.
-   *
-   * Lands on the encyclopedia's A–Z contents because that is the index the
-   * tabs can move you around from; the dictionary greys out there, having no
-   * contents list of its own, and lights up once you arrive from a word.
-   *
-   * Always the centred card, never the window — this pill also renders inside
-   * a docked window, and a lookup opened from it should sit over the app rather
-   * than replace what that window was holding.
-   */
-  function openWordStudy() {
-    openWorkIndex("encyclopedia", null);
   }
 
   function updateDropdownPositions() {
@@ -2144,17 +2128,19 @@
 
       <div class="pill-divider"></div>
 
-      <!-- Word study — the four reference works, opened on the encyclopedia's
-           contents. Offered here rather than in the tools pill because it is a
-           way of reading the passage, and because the tools pill is dropped
-           inside a docked window while this one is not. -->
+      <!-- Apps: open any window type. Here rather than in the tools pill
+           because the tools pill is dropped inside a docked window while this
+           one is not. -->
       <button
-        class="pill-btn pill-wordstudy"
-        on:click={openWordStudy}
-        title="Word study — Dictionary, Topical, Encyclopedia, People"
-        aria-label="Word study"
+        class="pill-btn pill-apps"
+        bind:this={appsButtonRef}
+        on:click={openAppsMenu}
+        title="Open a window"
+        aria-label="Open a window"
+        aria-haspopup="menu"
+        aria-expanded={appsMenuOpen}
       >
-        <span class="icon-badge icon-badge-wordstudy"><Books size={18} weight="bold" /><span class="icon-overlay"><Books size={18} weight="thin" /></span></span>
+        <span class="icon-badge icon-badge-apps"><SquaresFour size={18} weight="bold" /><span class="icon-overlay"><SquaresFour size={18} weight="thin" /></span></span>
       </button>
 
       <!-- ── The harmony controls ───────────────────────────────────────────
@@ -2395,21 +2381,6 @@
         aria-label="Verse of the day"
       >
         <span class="icon-badge icon-badge-votd"><Sun size={18} weight="bold" /><span class="icon-overlay"><Sun size={18} weight="thin" /></span></span>
-      </button>
-
-      <div class="pill-divider"></div>
-
-      <!-- Apps: open any window type -->
-      <button
-        class="pill-btn pill-apps"
-        bind:this={appsButtonRef}
-        on:click={openAppsMenu}
-        title="Open a window"
-        aria-label="Open a window"
-        aria-haspopup="menu"
-        aria-expanded={appsMenuOpen}
-      >
-        <span class="icon-badge icon-badge-apps"><SquaresFour size={18} weight="bold" /><span class="icon-overlay"><SquaresFour size={18} weight="thin" /></span></span>
       </button>
 
       <div class="pill-divider"></div>
@@ -3303,7 +3274,6 @@
   }
   .icon-badge-refs        { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #000000 100%); }
   .icon-badge-comm        { background: radial-gradient(circle, #a3e635 0%, #a3e635 20%, #000000 100%); }
-  .icon-badge-wordstudy   { background: radial-gradient(circle, #a67c52 0%, #a67c52 20%, #000000 100%); }
   .icon-badge-search      { background: radial-gradient(circle, #fb7185 0%, #fb7185 20%, #000000 100%); }
   .icon-badge-powersearch { background: radial-gradient(circle, #f97316 0%, #f97316 20%, #000000 100%); }
   .icon-badge-readingplan { background: radial-gradient(circle, #60a5fa 0%, #60a5fa 20%, #000000 100%); }
