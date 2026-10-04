@@ -4,6 +4,7 @@ import { mount } from 'svelte';
 import App from './App.svelte';
 import { hasStarterText, installStarterText, warmPackManifest } from './lib/progressive-init';
 import { applyTheme, getSettings } from './adapters/settings';
+import { applyBarSize } from './lib/barSize';
 import { FEATURES } from './config';
 import './adapters/tts'; // Read Aloud engine client (registers __tts dev hook; worker starts lazily)
 import { initMediaSession } from './lib/tts/mediaSession';
@@ -65,6 +66,9 @@ function applyInitialSettings() {
   // Apply line spacing
   const lineSpacing = settings.lineSpacing || 1.8;
   document.documentElement.style.setProperty('--line-spacing', lineSpacing.toString());
+
+  // Bar size, before the first paint so no bar draws at the wrong size first.
+  applyBarSize(settings.navBarSize);
 }
 
 // Apply settings before app loads

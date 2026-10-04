@@ -31,6 +31,7 @@
   import { isbeReturnStore } from "../stores/isbeReturnStore";
   import { openWorkIndex } from "../lib/openWork";
   import { get } from "svelte/store";
+  import { barScale } from "../lib/barSize";
   import {
     searchQuery as searchQueryStore,
     triggerSearch,
@@ -266,7 +267,10 @@
     if (!navContent || !buttonRef) return;
     const navContentRect = navContent.getBoundingClientRect();
     const buttonRect = buttonRef.getBoundingClientRect();
-    const buttonOffsetFromNavLeft = buttonRect.left - navContentRect.left;
+    // Rects are on-screen pixels; scrollLeft is the strip's own, which differ
+    // by the bar size's scale.
+    const s = navContentRect.width / (navContent.offsetWidth || navContentRect.width) || 1;
+    const buttonOffsetFromNavLeft = (buttonRect.left - navContentRect.left) / s;
     const targetScroll = navContent.scrollLeft + buttonOffsetFromNavLeft - 12;
     // Direct assignment = instant, no animation, no polling needed
     navContent.scrollLeft = Math.max(0, targetScroll);
@@ -284,8 +288,9 @@
     if (!navContent || !el) return;
     const navContentRect = navContent.getBoundingClientRect();
     const elRect = el.getBoundingClientRect();
-    const offsetFromNavLeft = elRect.left - navContentRect.left;
-    const centringGap = (navContent.clientWidth - elRect.width) / 2;
+    const s = navContentRect.width / (navContent.offsetWidth || navContentRect.width) || 1;
+    const offsetFromNavLeft = (elRect.left - navContentRect.left) / s;
+    const centringGap = (navContent.clientWidth - elRect.width / s) / 2;
     const targetScroll = navContent.scrollLeft + offsetFromNavLeft - centringGap;
     navContent.scrollLeft = Math.max(0, targetScroll);
   }
@@ -1156,7 +1161,7 @@
   // flanks would meet before reaching the rest line and the bite looks squashed
   // (a phone in portrait, mostly). Then the whole bar goes flat instead: full
   // depth all the way across, clock sitting in the flat gap. See `barFlat`.
-  const CONTOUR = {
+  const CONTOUR_BASE = {
     restPct: 0.17,
     padX: 1.5,
     padY: 4,
@@ -1170,6 +1175,28 @@
     tween: 0.28,
     samples: 260,
   };
+
+  /**
+   * The contour at the current bar size. The pill strip is scaled as one piece
+   * (see .nav-content), so every length here scales with it to keep fitting
+   * the pills; the ratios, the tween and the sample count don't.
+   */
+  function scaleContour(s: number): typeof CONTOUR_BASE {
+    const b = CONTOUR_BASE;
+    return {
+      ...b,
+      padX: b.padX * s,
+      padY: b.padY * s,
+      shoulderMax: b.shoulderMax * s,
+      shoulderSharp: b.shoulderSharp * s,
+      corner: b.corner * s,
+      height: b.height * s,
+      shadowY: b.shadowY * s,
+      shadowBlur: b.shadowBlur * s,
+    };
+  }
+  let CONTOUR = scaleContour(get(barScale));
+  $: CONTOUR = scaleContour($barScale);
 
   // Every group is separated by a .nav-spacer plus the strip's own gap either
   // side, so the narrowest the middle ever gets is 6 + 44 + 6 on a phone and
@@ -1220,10 +1247,17 @@
   // mirrored in the CSS below and have to stay in step with it — they are here
   // because the taper has to be solved against the same line boxes the browser
   // is drawing.
-  const CLOCK_NUDGE_Y = 1;
-  const CLOCK_FONT = 12;
-  const CLOCK_LINE_H = 15;
+  // Scaled with the bar size, like the contour. The CSS multiplies by the
+  // same --bar-scale.
+  let CLOCK_NUDGE_Y = 1;
+  let CLOCK_FONT = 12;
+  let CLOCK_LINE_H = 15;
   const CLOCK_LINE2_SCALE = 0.8;
+  $: {
+    CLOCK_NUDGE_Y = 1 * $barScale;
+    CLOCK_FONT = 12 * $barScale;
+    CLOCK_LINE_H = 15 * $barScale;
+  }
 
   // Four letters where the shape asks for it. Thur is the widest of these, and
   // the lab was tuned against the widest string each format can ever produce.
@@ -1746,6 +1780,10 @@
       retargetMembrane(a);
     });
   }
+
+  // A new bar size reshapes everything at once: re-read the contour, which
+  // re-fits the clock too.
+  $: if (navContentEl && $barScale) scheduleMembrane(true);
 
   function onMembraneScroll(): void {
     // The strip scrolls sideways under a fixed-width membrane, so the contour
@@ -2670,9 +2708,9 @@
     position: absolute;
     z-index: 1;
     pointer-events: none;
-    font-size: 12px;
-    line-height: 15px;
-    letter-spacing: -0.15px;
+    font-size: calc(12px * var(--bar-scale, 1));
+    line-height: calc(15px * var(--bar-scale, 1));
+    letter-spacing: calc(-0.15px * var(--bar-scale, 1));
     color: #8e8e8e;
     opacity: 0.62;
     white-space: nowrap;
@@ -2725,6 +2763,15 @@
     scrollbar-width: none;
     min-height: 58px;
     flex-wrap: nowrap;
+    /* Bar size. The whole strip is scaled as one piece, so pills, icons, text
+       and gaps all keep their proportions. It is laid out 1/scale wide so it
+       still spans the bar once scaled, and the margin gives back (or takes)
+       the height the 58px box gained, so the text below moves with it. The
+       contour and clock scale their own numbers to match (scaleContour). */
+    width: calc(100% / var(--bar-scale, 1));
+    transform: scale(var(--bar-scale, 1));
+    transform-origin: 0 0;
+    margin-bottom: calc(58px * (var(--bar-scale, 1) - 1));
   }
 
   .nav-content::-webkit-scrollbar {

@@ -82,6 +82,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { get } from "svelte/store";
+  import { barScale } from "../lib/barSize";
   import NavigationBar from "./NavigationBar.svelte";
   import SelectionToast from "./SelectionToast.svelte";
   import RadialSelectionMenu from "./RadialSelectionMenu.svelte";
@@ -330,9 +331,16 @@
   let lastScrollTop = 0;
   let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
   // How far up the navbar travels to get out of the way. Slightly further than
-  // the bar is tall, so its shadow clears the top edge too.
-  const NAV_BAR_HIDDEN = -68;
+  // the bar is tall, so its shadow clears the top edge too. The bar size
+  // scales the bar, so it scales this too.
+  let NAV_BAR_HIDDEN = -68 * get(barScale);
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, NAV_BAR_HIDDEN = hidden)
+  $: {
+    const hidden = -68 * $barScale;
+    // A bar already tucked away stays fully tucked away at its new size.
+    if (navBarOffset === NAV_BAR_HIDDEN) navBarOffset = hidden;
+    NAV_BAR_HIDDEN = hidden;
+  }
   // Pinned means the bar never hides, whatever the scrolling is doing.
   let navBarPinned = getNavBarPinned();
   // The reader's box, handed to the bottom sheets so they narrow with the text

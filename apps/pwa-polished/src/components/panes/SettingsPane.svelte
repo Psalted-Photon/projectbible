@@ -24,6 +24,7 @@
   import JournalLockManage from "../JournalLockManage.svelte";
   import JournalLockDialog from "../JournalLockDialog.svelte";
   import { showNotice } from "../../stores/noticeStore";
+  import { BAR_SIZES, applyBarSize, type BarSize } from "../../lib/barSize";
   import { askConfirm } from "../../stores/confirmStore";
   import { availableTranslations } from "../../stores/navigationStore";
   import { translationLabel } from "../../lib/bibleData";
@@ -97,6 +98,7 @@
   let allowRotation: boolean = false;
   let navBarPinned: boolean = false;
   let navBarClock: boolean = true;
+  let navBarSize: BarSize = "normal";
   let showRedLetter: boolean = true;
   let themedTitles: boolean = true;
   let showArt: boolean = true;
@@ -175,6 +177,7 @@
       allowRotation,
       navBarPinned,
       navBarClock,
+      navBarSize,
       showRedLetter,
       themedTitles,
       showArt,
@@ -267,7 +270,9 @@
     "paragraph-no-verse-numbers": "Paragraph, no verse numbers",
   };
 
-  $: appearanceSummary = `${THEME_LABELS[theme] ?? theme} · ${fontSize}px`;
+  $: appearanceSummary =
+    `${THEME_LABELS[theme] ?? theme} · ${fontSize}px` +
+    `${navBarSize === "normal" ? "" : ` · ${navBarSize === "small" ? "Small" : "Large"} bars`}`;
   $: readerSummary =
     `${LAYOUT_LABELS[verseLayout] ?? verseLayout}${showRedLetter ? " · Red letters" : ""}` +
     `${navBarPinned ? " · Nav bar pinned" : ""}`;
@@ -369,6 +374,7 @@
     allowRotation = settings.allowRotation !== undefined ? settings.allowRotation : false;
     navBarPinned = settings.navBarPinned === true;
     navBarClock = settings.navBarClock !== false;
+    navBarSize = settings.navBarSize ?? "normal";
     showRedLetter = settings.showRedLetter !== false;
     themedTitles = settings.themedTitles !== false;
     showArt = settings.showArt !== false;
@@ -596,6 +602,8 @@
       lineSpacing.toString(),
     );
 
+    applyBarSize(navBarSize);
+
     // Apply word wrap
     if (wordWrap) {
       document.documentElement.style.setProperty("--word-wrap", "normal");
@@ -656,6 +664,7 @@
     allowRotation;
     navBarPinned;
     navBarClock;
+    navBarSize;
     showRedLetter;
     themedTitles;
     showArt;
@@ -832,6 +841,20 @@
           bind:value={lineSpacing}
         />
       </label>
+    </div>
+
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Bar size</span>
+        <select bind:value={navBarSize}>
+          {#each BAR_SIZES as opt}
+            <option value={opt.value}>{opt.label}</option>
+          {/each}
+        </select>
+      </label>
+      <p class="section-description dev-note">
+        The navigation bar, window headers and tabs. On this device only.
+      </p>
     </div>
 
   </SettingsSection>

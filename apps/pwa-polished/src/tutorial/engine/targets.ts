@@ -7,6 +7,9 @@
  * falls back to a plain card; nothing breaks.
  */
 
+import { get } from 'svelte/store';
+import { barScale } from '../../lib/barSize';
+
 /** A rectangle in screen (viewport) coordinates. */
 export interface Box {
   left: number;
@@ -114,9 +117,14 @@ export function inMainReader(selector: string, text?: string): HTMLElement | nul
 /** Space kept clear at the top and bottom of the screen: the navbar, and a thumb. */
 const EDGE_ROOM = 72;
 
+/** The top's share follows the bar size, since the navbar is what it clears. */
+function topRoom(): number {
+  return EDGE_ROOM * get(barScale);
+}
+
 /** On screen with room to spare above and below. */
 export function comfortablyOnScreen(box: Box): boolean {
-  return box.top >= EDGE_ROOM && box.top + box.height <= window.innerHeight - EDGE_ROOM;
+  return box.top >= topRoom() && box.top + box.height <= window.innerHeight - EDGE_ROOM;
 }
 
 /**
@@ -129,7 +137,7 @@ export function nearestInMainReader(selector: string): HTMLElement | null {
   if (all.length === 0) return null;
   return (
     all.find((el) => comfortablyOnScreen(boxOf(el))) ??
-    all.find((el) => boxOf(el).top >= EDGE_ROOM) ??
+    all.find((el) => boxOf(el).top >= topRoom()) ??
     all[all.length - 1]
   );
 }

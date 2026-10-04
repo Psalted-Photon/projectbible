@@ -35,7 +35,7 @@ export const PANE_TIPS: Tip[] = [
   },
 
   // ── Settings ─────────────────────────────────────────────────────────────
-  section('Appearance', 'The theme, text size and line spacing. The Custom theme picks the reader’s own typeface and colors.'),
+  section('Appearance', 'The theme, text size, line spacing and bar size. The Custom theme picks the reader’s own typeface and colors.'),
   section('Reader', 'Your default translations, how the text is laid out, red letters, art icons, and whether a tapped word gets the ring or the classic popup.'),
   section('Interlinear (Greek & Hebrew)', 'Which layers show under each Greek or Hebrew word.'),
   section('Read Aloud (AI voice)', 'The voice, its speed, and what gets read and lit up as it reads. The Auto-Read Alarm is here too.'),
@@ -45,6 +45,7 @@ export const PANE_TIPS: Tip[] = [
   section('Dev Options', 'Every pack in one list, clearing the cache, and the eruda console button. Hide Dev Options puts them away again.'),
 
   setting('settings-theme', 'Theme', 'Theme', 'Auto follows your device. Sepia and Light are easier in daylight; Custom is yours to set.', true),
+  setting('settings-bar-size', 'Bar size', 'Bar size', 'Small, Normal or Large: the top bar, window headers and tabs, buttons and all. Set on each device.', true),
   setting('settings-layout', 'Verse Layout', 'Verse layout', 'One verse per line, or flowing paragraphs, with or without verse numbers.'),
   setting('settings-pin-bar', 'Keep the navigation bar visible', 'Keep the top bar', 'The top bar slides away while you read and comes back when you scroll up. Tick this to keep it.'),
   setting('settings-word-menu', 'Menu when you tap a word', 'The word menu', 'The ring around the word, or the classic popup bar.'),

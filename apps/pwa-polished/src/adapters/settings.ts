@@ -230,6 +230,9 @@ export interface UserSettings {
   // open middle. Per-device like the pin above: it is chrome, and what reads as
   // a nice detail on a desktop can be clutter on a small phone.
   navBarClock?: boolean; // default true
+  // How big the bars, window headers and tab strips are drawn. Per-device like
+  // the two above. See lib/barSize.ts.
+  navBarSize?: 'small' | 'normal' | 'large'; // default 'normal'
 
   // Clock / timezone
   // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected

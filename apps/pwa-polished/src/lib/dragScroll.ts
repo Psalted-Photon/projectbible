@@ -39,6 +39,12 @@ export function dragScroll(node: HTMLElement, options: DragScrollOptions = {}) {
   let startX = 0;
   let startY = 0;
   let startScroll = 0;
+  /**
+   * On-screen pixels per pixel of the strip's own. A strip drawn scaled (the
+   * bar size) scrolls in its own pixels while the pointer moves in screen
+   * ones; without this the bar would run ahead of the pointer or lag it.
+   */
+  let scale = 1;
   /** null while the gesture is still undecided. */
   let dragging: boolean | null = null;
 
@@ -56,6 +62,7 @@ export function dragScroll(node: HTMLElement, options: DragScrollOptions = {}) {
     startX = event.clientX;
     startY = event.clientY;
     startScroll = node.scrollLeft;
+    scale = node.getBoundingClientRect().width / (node.offsetWidth || 1) || 1;
     dragging = null;
   }
 
@@ -83,7 +90,7 @@ export function dragScroll(node: HTMLElement, options: DragScrollOptions = {}) {
     }
 
     event.preventDefault();
-    node.scrollLeft = startScroll - dx;
+    node.scrollLeft = startScroll - dx / scale;
   }
 
   function finish(event?: PointerEvent) {
