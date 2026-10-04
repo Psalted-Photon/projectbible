@@ -161,6 +161,15 @@ export const PACK_CATALOG: CatalogPack[] = [
     url: `${PACK_BASE_URL}/devotionals.sqlite`,
   },
   {
+    id: "timeline",
+    name: "Timeline",
+    description: "The whole story on one strip, with kings and prophets",
+    info: "About four hundred events from Creation to Revelation, in the eras they belong to: every king of Judah and Israel with the Bible's verdict on him, the prophets, the empires and the rulers Scripture names, the four hundred years between the Testaments, the lives of the patriarchs, and when each book was written. Tap anything to read it.\n\nOpens from the Timeline window. Dates are modern conservative (Exodus 1446 BC, Thiele for the kings). CC BY-SA 4.0 (Theographic Bible Metadata).",
+    size: "0.31 MB",
+    icon: "⏳",
+    url: `${PACK_BASE_URL}/timeline.sqlite`,
+  },
+  {
     id: "people-biblical-v1",
     name: "Biblical Characters",
     description: "Every named person: family, dates, verses",
@@ -178,6 +187,7 @@ export const PACK_CATALOG: CatalogPack[] = [
  * to get the tab reclaimed under memory pressure, so they go last.
  */
 export const INSTALL_ALL_ORDER: string[] = [
+  'timeline',
   'people-biblical-v1',
   'devotionals',
   'tsk-references',

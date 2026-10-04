@@ -1,0 +1,15 @@
+{
+  "_about": "Re-dating Theographic's Old Testament (Ussher's chronology) to modern conservative dates. Each anchor pins one Theographic event (by eventID) to its modern year; anything between two anchors is placed by straight-line interpolation between them, on Theographic's year after converting from astronomical years (0 and below lose one, so -1490 is 1491 BC). The Judah kings in kings.json add an anchor each from their `tg` reign event. From `identityFrom` on, Theographic's (converted) years are kept as they are. The Genesis anchors are consistent with lives.json, which counts back from Abram's birth in 2166 BC: Ussher's dates for that stretch move by a constant 170 years, the Egypt years stretch from Ussher's 215 to Exodus 12:40's 430, and from the Exodus to the Temple everything moves 45 years later.",
+  "anchors": [
+    { "tg": 1,   "year": -4174, "note": "Creation (Adam, from the Genesis 5 and 11 ages)" },
+    { "tg": 65,  "year": -2166, "note": "Birth of Abram (1 Kings 6:1 + Exodus 12:40 + Genesis 21:5, 25:26, 47:9)" },
+    { "tg": 85,  "year": -2006, "note": "Birth of Jacob and Esau (Isaac 60)" },
+    { "tg": 118, "year": -1805, "note": "Death of Joseph (born 1915, lived 110 years)" },
+    { "tg": 120, "year": -1526, "note": "Birth of Moses (80 at the Exodus, Exodus 7:7)" },
+    { "tg": 125, "year": -1446, "note": "The Exodus (480 years before the Temple, 1 Kings 6:1)" },
+    { "tg": 129, "year": -1406, "note": "Death of Moses" },
+    { "tg": 162, "year": -966,  "note": "Temple founded, Solomon's fourth year" },
+    { "tg": 164, "year": -931,  "note": "Death of Solomon and the division" }
+  ],
+  "identityFrom": -597
+}

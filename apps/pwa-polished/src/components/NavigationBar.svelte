@@ -92,7 +92,6 @@
     Pause,
     Stop,
     Playlist,
-    SquaresFour,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
   import { repeatsStore } from "../stores/repeatsStore";
@@ -2158,7 +2157,15 @@
         aria-haspopup="menu"
         aria-expanded={appsMenuOpen}
       >
-        <span class="icon-badge icon-badge-apps"><SquaresFour size={18} weight="bold" /><span class="icon-overlay"><SquaresFour size={18} weight="thin" /></span></span>
+        <!-- Four tiles in four tile accents (Art, Commentary, Encyclopedia,
+             Notes) from lib/windowTypes.ts, on the squares of SquaresFour's
+             fill weight. -->
+        <span class="icon-badge icon-badge-apps"><svg width="18" height="18" viewBox="0 0 256 256" aria-hidden="true">
+          <rect x="40"  y="40"  width="80" height="80" rx="16" fill="#fb7185" />
+          <rect x="136" y="40"  width="80" height="80" rx="16" fill="#a3e635" />
+          <rect x="40"  y="136" width="80" height="80" rx="16" fill="#4a90e2" />
+          <rect x="136" y="136" width="80" height="80" rx="16" fill="#fde047" />
+        </svg></span>
       </button>
 
       <!-- ── The harmony controls ───────────────────────────────────────────
@@ -3306,7 +3313,8 @@
   .icon-badge-readingplan { background: radial-gradient(circle, #60a5fa 0%, #60a5fa 20%, #000000 100%); }
   .icon-badge-votd        { background: radial-gradient(circle, #fde047 0%, #fde047 20%, #000000 100%); }
   .icon-badge-settings    { background: radial-gradient(circle, #c0c0c0 0%, #c0c0c0 20%, #000000 100%); }
-  .icon-badge-apps        { background: radial-gradient(circle, #818cf8 0%, #818cf8 20%, #000000 100%); }
+  /* Grey so none of the four tiles sits on its own color. */
+  .icon-badge-apps        { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #000000 100%); }
   .icon-badge-profile     { background: radial-gradient(circle, #d1d5db 0%, #d1d5db 20%, #000000 100%); }
   .pill-refs:has(input:checked) .icon-badge-refs { background: radial-gradient(circle, #a78bfa 0%, #a78bfa 20%, #000000 100%); }
   .pill-profile.signed-in .icon-badge-profile    { background: radial-gradient(circle, #86efac 0%, #86efac 20%, #000000 100%); }

@@ -475,7 +475,7 @@ export async function importPackFromBytes(
       // stored ID always matches the canonical manifest IDs used by the UI.
       id: rawId?.replace(/\.v\d+$/, '') ?? rawId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art' | 'atlas-map' | 'devotionals',
+      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art' | 'atlas-map' | 'devotionals' | 'timeline',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -1951,6 +1951,57 @@ export async function importPackFromBytes(
       );
 
       console.log(`✅ Devotionals pack ${packInfo.id} imported`);
+    } else if (packInfo.type === 'timeline') {
+      // Every item on the Timeline strip, whatever lane it is in. Cleared first
+      // so a rebuilt pack that drops or renames an item leaves nothing stale.
+      // Passages, people and places are JSON in the pack and objects here, so
+      // the window reads them without parsing; empty optional columns are left
+      // off the row rather than stored as nulls.
+      console.log('Importing timeline pack...');
+      await clearStores(['timeline_items']);
+
+      const parseList = (raw: unknown) => {
+        try {
+          const list = JSON.parse((raw as string) || '[]');
+          return Array.isArray(list) ? list : [];
+        } catch {
+          return [];
+        }
+      };
+      await streamTable(
+        db,
+        `SELECT id, kind, lane, sub, title, subtitle, year_start, year_end, approx, tier, parent_id,
+                era_id, sort_key, summary, verdict, verdict_ref, co_start, covers_start, covers_end,
+                book, first_book, first_chapter, first_verse, passages, people, places, search
+           FROM timeline_items`,
+        'timeline_items',
+        ([id, kind, lane, sub, title, subtitle, yearStart, yearEnd, approx, tier, parentId,
+          eraId, sortKey, summary, verdict, verdictRef, coStart, coversStart, coversEnd,
+          book, firstBook, firstChapter, firstVerse, passages, people, places, search]) => {
+          const row: Record<string, unknown> = {
+            id, kind, lane, title,
+            year_start: yearStart,
+            year_end: yearEnd,
+            approx: !!approx,
+            sort_key: sortKey,
+            passages: parseList(passages),
+            people: parseList(people),
+            places: parseList(places),
+            search,
+          };
+          const optional: Record<string, unknown> = {
+            sub, subtitle, tier, parent_id: parentId, era_id: eraId, summary, verdict,
+            verdict_ref: verdictRef, co_start: coStart, covers_start: coversStart,
+            covers_end: coversEnd, book,
+          };
+          for (const [key, value] of Object.entries(optional)) if (value !== null && value !== undefined) row[key] = value;
+          if (firstBook) row.first = { book: firstBook, chapter: firstChapter, verse: firstVerse };
+          return row;
+        },
+        { batchSize: 500, label: 'timeline items' },
+      );
+
+      console.log(`✅ Timeline pack ${packInfo.id} imported`);
     } else if (packInfo.type === 'map') {
       // Import map/places data
       console.log('Importing map pack...');

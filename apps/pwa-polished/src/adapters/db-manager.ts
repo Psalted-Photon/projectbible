@@ -99,6 +99,7 @@ const REQUIRED_STORES_BY_TYPE: Record<string, string[]> = {
   encyclotopical: [...ISBE_STORES, ...NAVES_STORES],
   people: ['people', 'person_names', 'person_verses'],
   devotionals: DEVOTIONAL_STORES,
+  timeline: ['timeline_items'],
 };
 
 /**

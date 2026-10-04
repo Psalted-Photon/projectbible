@@ -1,10 +1,14 @@
 /**
- * The timeline's data, read out of the installed study pack.
+ * The timeline's data, read out of the installed Timeline pack.
  *
- * Three stores back it. `chronological_eras` and `chronological_events` are the
- * twelve bands and the forty markers — tiny, read whole. `chronological_order`
- * is 31,092 rows, and the only thing this module wants from it is the first
- * verse of each event, so it is scanned once and reduced to forty entries.
+ * One store, `timeline_items`, holds everything on the strip whatever lane it
+ * sits in: events, eras, reigns, prophets, world powers, lives and books. It is
+ * about six hundred rows, read whole when the window opens and sorted once.
+ * The pack is built by scripts/build-timeline-pack.mjs from Theographic and the
+ * hand-written files in data-manifests/timeline/.
+ *
+ * The old study-tools tables (chronological_events / _eras / _order) are not
+ * read here any more; Chronological reading mode still uses them.
  *
  * Cached for as long as the window is open, released when it closes, the same
  * discipline as lib/atlas/data.ts.
@@ -12,151 +16,149 @@
 
 import { openDB, readTransaction } from '../../adapters/db';
 
-/** One of the twelve bands. Years are signed; there is no year 0. */
-export interface TimelineEra {
-  era_id: string;
-  name: string;
-  year_start: number;
-  year_end: number;
-  description: string | null;
+export type TimelineLane = 'events' | 'eras' | 'kings' | 'prophets' | 'world' | 'lives' | 'books';
+export type TimelineKind = 'event' | 'era' | 'reign' | 'prophet' | 'empire' | 'ruler' | 'life' | 'book';
+
+/** A verse range, with the label the build printed for it ("Genesis 46:1–47:12"). */
+export interface TimelinePassage {
+  b: string;
+  c: number;
+  v: number;
+  ec: number;
+  ev: number;
+  label: string;
 }
 
-/** One of the forty markers, with the verse it opens. */
-export interface TimelineEvent {
-  event_id: string;
+export interface TimelinePerson {
+  /** The People pack's id, e.g. `hezekiah_1512`. */
+  id: string;
   name: string;
+}
+
+export interface TimelinePlace {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+}
+
+/** One row of the pack. Years are signed (negative = BC) with no year 0. */
+export interface TimelineItem {
+  id: string;
+  kind: TimelineKind;
+  lane: TimelineLane;
+  /** kings: united | judah | israel; world: empire | ruler. */
+  sub?: string;
+  title: string;
+  /** The kind line: "King of Judah", "Lived 930 years". */
+  subtitle?: string;
   year_start: number;
   year_end: number;
-  era: string | null;
-  description: string | null;
-  /** The first verse of the event in chronological order, if the pack has one. */
-  first: { book: string; chapter: number; verse: number } | null;
-  /** How many verses the event covers, for the marker's weight. */
-  verseCount: number;
+  /** Print "c." in front of the date. */
+  approx: boolean;
+  /** Events only: 1 headline, 2 main, 3 detail. */
+  tier?: 1 | 2 | 3;
+  parent_id?: string;
+  era_id?: string;
+  /** The year plus a fraction for the order inside it. */
+  sort_key: number;
+  summary?: string;
+  verdict?: 'right' | 'evil' | 'mixed';
+  verdict_ref?: string;
+  /** Kings: where the sole reign began, after a co-regency from year_start. */
+  co_start?: number;
+  covers_start?: number;
+  covers_end?: number;
+  /** The book whose colour it takes. */
+  book?: string;
+  /** The first verse of the first passage. */
+  first?: { book: string; chapter: number; verse: number };
+  passages: TimelinePassage[];
+  people: TimelinePerson[];
+  places: TimelinePlace[];
+  search: string;
 }
 
 export interface TimelineData {
-  eras: TimelineEra[];
-  events: TimelineEvent[];
+  /** Every row, in order along the axis. */
+  items: TimelineItem[];
+  eras: TimelineItem[];
+  /** The events lane, in story order. */
+  events: TimelineItem[];
+  byId: Map<string, TimelineItem>;
+  /** Children of each parent, in story order. */
+  children: Map<string, TimelineItem[]>;
   /** The span every layout works in, widened to whole centuries. */
   minYear: number;
   maxYear: number;
 }
+
+const STORE = 'timeline_items';
 
 let dataPromise: Promise<TimelineData> | null = null;
 
 /**
  * Drop what is held in memory.
  *
- * Called when the pane closes. The 31k-row scan is already reduced by then, so
- * this is only the forty events and twelve eras — but the same rule applies as
- * for the map: a window that was opened once should not be carried all session.
+ * Called when the pane closes: a window that was opened once should not be
+ * carried all session.
  */
 export function releaseTimeline(): void {
   dataPromise = null;
 }
 
-/** Is the study pack installed with the eras and events in it? */
+/** Is the Timeline pack installed? */
 export async function timelineInstalled(): Promise<boolean> {
   try {
     const db = await openDB();
-    if (!db.objectStoreNames.contains('chronological_events')) return false;
-    if (!db.objectStoreNames.contains('chronological_eras')) return false;
-    const count = await readTransaction<number>('chronological_events', (store) => store.count());
+    if (!db.objectStoreNames.contains(STORE)) return false;
+    const count = await readTransaction<number>(STORE, (store) => store.count());
     return count > 0;
   } catch {
     return false;
   }
 }
 
-function all<T>(storeName: string): Promise<T[]> {
-  return readTransaction<T[]>(storeName, (store) => store.getAll() as IDBRequest<T[]>);
-}
-
-/** A chronological_order row, as pack-import writes it. */
-interface ChronoRow {
-  order_index: number;
-  book: string;
-  chapter: number;
-  verse: number;
-  event_id?: string | null;
-}
-
-/**
- * Everything the window draws.
- *
- * The one expensive step is the getAll of chronological_order. It is done here
- * rather than in the component so the pane can await a single promise, and it
- * is reduced to forty entries before it is kept — the 31k rows themselves are
- * released as soon as this returns.
- */
+/** Everything the window draws. */
 export async function loadTimeline(): Promise<TimelineData> {
   if (dataPromise) return dataPromise;
 
   dataPromise = (async () => {
-    const [eraRows, eventRows] = await Promise.all([
-      all<TimelineEra>('chronological_eras'),
-      all<Omit<TimelineEvent, 'first' | 'verseCount'>>('chronological_events'),
-    ]);
+    const rows = await readTransaction<TimelineItem[]>(STORE, (store) => store.getAll() as IDBRequest<TimelineItem[]>);
+    const items = rows
+      .filter((r) => Number.isFinite(r.year_start) && Number.isFinite(r.year_end))
+      .sort((a, b) => a.sort_key - b.sort_key || a.title.localeCompare(b.title));
 
-    // The lowest order_index per event, and how many verses carry it.
-    const firstByEvent = new Map<string, ChronoRow>();
-    const countByEvent = new Map<string, number>();
-    try {
-      const rows = await all<ChronoRow>('chronological_order');
-      for (const row of rows) {
-        const id = row.event_id;
-        if (!id) continue;
-        countByEvent.set(id, (countByEvent.get(id) ?? 0) + 1);
-        const held = firstByEvent.get(id);
-        if (!held || row.order_index < held.order_index) firstByEvent.set(id, row);
-      }
-    } catch {
-      // A pack imported before event_id was carried: the markers still draw,
-      // they just have no verse to open. Better than an empty window.
+    const byId = new Map(items.map((r) => [r.id, r]));
+    const children = new Map<string, TimelineItem[]>();
+    for (const r of items) {
+      if (!r.parent_id) continue;
+      if (!children.has(r.parent_id)) children.set(r.parent_id, []);
+      children.get(r.parent_id)!.push(r);
     }
 
-    const eras = eraRows
-      .map((era) => ({
-        ...era,
-        year_start: Number(era.year_start),
-        year_end: Number(era.year_end),
-      }))
-      .filter((era) => Number.isFinite(era.year_start) && Number.isFinite(era.year_end))
-      .sort((a, b) => a.year_start - b.year_start || a.year_end - b.year_end);
+    const eras = items.filter((r) => r.lane === 'eras');
+    const events = items.filter((r) => r.lane === 'events');
 
-    const events: TimelineEvent[] = eventRows
-      .map((ev) => {
-        const row = firstByEvent.get(ev.event_id);
-        return {
-          ...ev,
-          year_start: Number(ev.year_start),
-          year_end: Number(ev.year_end ?? ev.year_start),
-          first: row ? { book: row.book, chapter: row.chapter, verse: row.verse } : null,
-          verseCount: countByEvent.get(ev.event_id) ?? 0,
-        };
-      })
-      .filter((ev) => Number.isFinite(ev.year_start))
-      .sort((a, b) => a.year_start - b.year_start || a.name.localeCompare(b.name));
-
-    // The eras overlap and leave gaps, so the span is taken from both lists
-    // rather than assuming the bands tile it, then rounded out to centuries so
-    // the axis labels land on round numbers.
-    const years = [
-      ...eras.flatMap((e) => [e.year_start, e.year_end]),
-      ...events.flatMap((e) => [e.year_start, e.year_end]),
-    ];
+    const years = items.flatMap((r) => [r.year_start, r.year_end]);
     const rawMin = years.length ? Math.min(...years) : -4004;
     const rawMax = years.length ? Math.max(...years) : 100;
 
     return {
+      items,
       eras,
       events,
+      byId,
+      children,
       minYear: Math.floor(rawMin / 100) * 100,
       maxYear: Math.ceil(rawMax / 100) * 100,
     };
   })();
 
+  // A failed read should not be cached as the answer for the rest of the session.
+  dataPromise.catch(() => {
+    dataPromise = null;
+  });
   return dataPromise;
 }
 
@@ -171,8 +173,16 @@ export function formatYear(year: number): string {
   return `AD ${year}`;
 }
 
-/** A span of years, collapsed when it is a single one. */
-export function formatSpan(start: number, end: number): string {
-  if (!Number.isFinite(end) || end === start) return formatYear(start);
-  return `${formatYear(start)} – ${formatYear(end)}`;
+/** A span of years, collapsed when it is a single one, with the era written once. */
+export function formatSpan(start: number, end: number, approx = false): string {
+  const c = approx ? 'c. ' : '';
+  if (!Number.isFinite(end) || end === start) return `${c}${formatYear(start)}`;
+  if (start < 0 && end < 0) return `${c}${Math.abs(start)}–${Math.abs(end)} BC`;
+  if (start > 0 && end > 0) return `${c}AD ${start}–${end}`;
+  return `${c}${formatYear(start)} – ${formatYear(end)}`;
+}
+
+/** An item's dates as the card prints them. */
+export function formatItemSpan(item: TimelineItem): string {
+  return formatSpan(item.year_start, item.year_end, item.approx);
 }

@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-10-02T23:16:55.561Z",
+  "createdAt": "2026-10-04T21:54:33.492Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -31,7 +31,7 @@
       "sha256": "7a10b55932fabbaae1855e16b77c40b4531fe312fb11f60d8ed89df774bb32d1",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map.sqlite",
-      "createdAt": "2026-10-02T23:16:57.252Z"
+      "createdAt": "2026-10-04T21:54:34.691Z"
     },
     {
       "id": "atlas-map-01",
@@ -46,7 +46,7 @@
       "sha256": "2de681fd98d2b5202446f3ec468461c912ade9a8fcfd7f378ed91630376f7bfd",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map-01.sqlite",
-      "createdAt": "2026-10-02T23:16:57.322Z"
+      "createdAt": "2026-10-04T21:54:34.742Z"
     },
     {
       "id": "atlas-map-02",
@@ -61,7 +61,7 @@
       "sha256": "61b2b9f6ce5671fefed269357f23e2c6ee288c68f79e282cf03baccc97516185",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map-02.sqlite",
-      "createdAt": "2026-10-02T23:16:57.345Z"
+      "createdAt": "2026-10-04T21:54:34.758Z"
     },
     {
       "id": "atlas-map-places",
@@ -76,7 +76,7 @@
       "sha256": "f2761d1ffd5e8c672fe4a07a92cc64c4646284940d97ef43e388db19ea1d6966",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-places.sqlite",
-      "createdAt": "2026-10-02T23:16:57.299Z"
+      "createdAt": "2026-10-04T21:54:34.726Z"
     },
     {
       "id": "biblical-art",
@@ -226,7 +226,7 @@
       "sha256": "3dbc698da339d9c3b0f8050e5ec0374b734c4ba57a85f4a7925b6af9a1fa9239",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-10-02T23:16:57.023Z"
+      "createdAt": "2026-10-04T21:54:34.552Z"
     },
     {
       "id": "devotionals",
@@ -241,7 +241,7 @@
       "sha256": "1cfc91c7dc9b0a4b76c1aa90178fea606be6ae5941b7cfac68ef804a65a075b3",
       "dependencies": [],
       "downloadUrl": "/api/packs/devotionals.sqlite",
-      "createdAt": "2026-10-02T23:16:57.274Z"
+      "createdAt": "2026-10-04T21:54:34.709Z"
     },
     {
       "id": "dictionary-en",
@@ -256,7 +256,7 @@
       "sha256": "1bd67240913ebbbf4f78f70add13279e150a989f6abb55eaf001e816a0f3a50a",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-10-02T23:16:56.581Z"
+      "createdAt": "2026-10-04T21:54:34.270Z"
     },
     {
       "id": "encyclotopical",
@@ -271,7 +271,7 @@
       "sha256": "310058b1e7b0dfe240d311fb58728e11bba79dc834d874ab994acd106e393dba",
       "dependencies": [],
       "downloadUrl": "/api/packs/encyclotopical.sqlite",
-      "createdAt": "2026-10-02T23:16:57.240Z"
+      "createdAt": "2026-10-04T21:54:34.686Z"
     },
     {
       "id": "lexical",
@@ -301,7 +301,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-10-02T23:16:56.476Z"
+      "createdAt": "2026-10-04T21:54:34.185Z"
     },
     {
       "id": "study-tools",
@@ -317,6 +317,21 @@
       "dependencies": [],
       "downloadUrl": "/api/packs/study-tools.sqlite",
       "createdAt": "2026-09-20T03:18:38.209Z"
+    },
+    {
+      "id": "timeline",
+      "type": "study",
+      "name": "Timeline",
+      "description": "The whole biblical story on one strip: about 400 events, the eras, every king of Judah and Israel, the prophets, the world powers, the years between the Testaments, lifespans from Adam to Joseph, and when each book was written. Modern conservative dating (Exodus 1446 BC). CC BY-SA 4.0 (Theographic Bible Metadata, Robert Rouse)",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 323584,
+      "sizeMB": 0.31,
+      "sha256": "22f29b08c7c0b447544e9ca9e7dc9beff63590b9c0c6204d11952cacfaaaf588",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/timeline.sqlite",
+      "createdAt": "2026-10-04T21:54:34.711Z"
     },
     {
       "id": "translations",
@@ -346,7 +361,7 @@
       "sha256": "c4541999b5170cfb5c2bf05cc512712e0e3b1e387226a331d2fb85db007238dc",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-10-02T23:16:56.464Z"
+      "createdAt": "2026-10-04T21:54:34.177Z"
     }
   ]
 }

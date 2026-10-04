@@ -27,7 +27,7 @@
   import { groupByBook, bookName, distance, approxDistance, setDistanceUnits } from '../lib/atlas/places.js';
   import { getBookColor } from '../lib/bibleData';
   import { getSettings } from '../adapters/settings';
-  import { loadTimeline, timelineInstalled, formatSpan, type TimelineEvent } from '../lib/timeline/data';
+  import { loadTimeline, timelineInstalled, formatItemSpan, type TimelineItem } from '../lib/timeline/data';
 
   export let windowId: string | undefined = undefined;
 
@@ -67,12 +67,12 @@
   let eraCardOpen = false;
   let eraLands: { name: string; kind: string; bounds: any }[] = [];
   let eraTowns: any[] = [];
-  let eraEvents: TimelineEvent[] = [];
+  let eraEvents: TimelineItem[] = [];
   let showAllTowns = false;
   /** The land singled out on the map from the card, by name. */
   let focusedLand: string | null = null;
   /** The Timeline pack's events, read once the card is first opened. */
-  let timelineEvents: TimelineEvent[] | null = null;
+  let timelineEvents: TimelineItem[] | null = null;
   let cardW = 0;
   let cardH = 0;
   let mapW = 0;
@@ -620,7 +620,11 @@
     await tick();
     requestAnimationFrame(() => requestAnimationFrame(() => atlas?.frameEra()));
     if (timelineEvents === null) {
-      timelineEvents = (await timelineInstalled()) ? (await loadTimeline()).events : [];
+      // Headline and main events only: the detail tier would bury the card
+      // (the Galilean ministry alone has fifty).
+      timelineEvents = (await timelineInstalled())
+        ? (await loadTimeline()).events.filter((ev) => (ev.tier ?? 3) <= 2)
+        : [];
       eraEvents = eventsIn(era);
     }
   }
@@ -654,7 +658,7 @@
   }
 
   /** Timeline events that fall inside the era's years, oldest first. */
-  function eventsIn(e: any): TimelineEvent[] {
+  function eventsIn(e: any): TimelineItem[] {
     if (!e || !timelineEvents) return [];
     return timelineEvents.filter((ev) => ev.year_start <= e.year_end && ev.year_end >= e.year_start);
   }
@@ -668,7 +672,7 @@
     }
   }
 
-  function goToEvent(ev: TimelineEvent) {
+  function goToEvent(ev: TimelineItem) {
     if (!ev.first) return;
     const current = get(navigationStore);
     navigationStore.pushHistory(current, 'map');
@@ -1294,8 +1298,8 @@
             <div class="info-h">Events</div>
             {#each eraEvents as ev}
               <button class="era-row" disabled={!ev.first} on:click={() => goToEvent(ev)}>
-                <span class="era-row-name">{ev.name}</span>
-                <span class="era-row-meta">{formatSpan(ev.year_start, ev.year_end)}</span>
+                <span class="era-row-name">{ev.title}</span>
+                <span class="era-row-meta">{formatItemSpan(ev)}</span>
               </button>
             {/each}
           {/if}

@@ -15,7 +15,7 @@ import { getDeviceOwner } from '../lib/sync/deviceOwner';
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 41; // Migration 41: devotional_works / devotional_readings (see Devotionals)
+const DB_VERSION = 42; // Migration 42: timeline_items (the Timeline pack)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -183,7 +183,7 @@ export interface DBAtlasPlaceColumn {
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art' | 'atlas-map' | 'study' | 'devotionals';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art' | 'atlas-map' | 'study' | 'devotionals' | 'timeline';
   translationId?: string;
   translationName?: string;
   language?: string;
@@ -1046,6 +1046,14 @@ export function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('devotional_readings')) {
         const devoReadings = db.createObjectStore('devotional_readings', { keyPath: 'id' });
         devoReadings.createIndex('workId', 'workId', { unique: false });
+      }
+
+      // The Timeline pack: every event, era, reign, prophet, ruler, life and
+      // book on the strip, one store for all of them. Read whole when the
+      // window opens; the lane index is for the map's era card.
+      if (!db.objectStoreNames.contains('timeline_items')) {
+        const timelineItems = db.createObjectStore('timeline_items', { keyPath: 'id' });
+        timelineItems.createIndex('lane', 'lane', { unique: false });
       }
       
       // Word occurrences store

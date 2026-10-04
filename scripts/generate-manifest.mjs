@@ -117,6 +117,17 @@ const PACK_CONFIGS = {
       "Three classic daily devotionals: C. H. Spurgeon's Morning and Evening, Spurgeon's Faith's Checkbook, and Jonathan Bagster's Daily Light on the Daily Path. Public Domain (CrossWire SWORD modules; CCEL)",
     dependencies: []
   },
+  // Type 'study' for the same reason again; the pack's metadata says 'timeline'.
+  // Its own pack rather than part of Study Tools because Theographic is
+  // share-alike.
+  'timeline.sqlite': {
+    id: 'timeline',
+    type: 'study',
+    name: 'Timeline',
+    description:
+      'The whole biblical story on one strip: about 400 events, the eras, every king of Judah and Israel, the prophets, the world powers, the years between the Testaments, lifespans from Adam to Joseph, and when each book was written. Modern conservative dating (Exodus 1446 BC). CC BY-SA 4.0 (Theographic Bible Metadata, Robert Rouse)',
+    dependencies: []
+  },
   'atlas-places.sqlite': {
     id: 'atlas-map-places',
     type: 'study',

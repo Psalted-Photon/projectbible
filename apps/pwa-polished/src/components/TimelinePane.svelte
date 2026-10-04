@@ -1,14 +1,18 @@
 <script lang="ts">
   /**
-   * The Timeline window: twelve era bands and forty events down a vertical axis.
+   * The Timeline window: the whole story down one vertical strip.
    *
    * Split the same way the map is. The chrome, the gestures and the panel are
    * here; where anything actually sits is lib/timeline/layout.ts, and what there
-   * is to draw is lib/timeline/data.ts.
+   * is to draw is lib/timeline/data.ts, read from the Timeline pack.
    *
-   * A docked window rather than a fullscreen view, deliberately: tapping an
-   * event sends the reader to its first verse and the timeline stays open
-   * beside the passage, which is the only reason to read with one.
+   * Drawn in screen space: every position is worked out in zoomed pixels and
+   * offset by the scroll, and only what is on screen is drawn. An earlier
+   * version scaled one tall layer with a CSS transform, which cannot zoom far
+   * enough to pull the Gospel years apart without blurring or blowing up.
+   *
+   * A docked window rather than a fullscreen view, deliberately: tapping Read
+   * sends the reader to the passage and the timeline stays open beside it.
    */
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
@@ -20,17 +24,23 @@
     releaseTimeline,
     timelineInstalled,
     formatYear,
-    formatSpan,
+    formatItemSpan,
     type TimelineData,
-    type TimelineEra,
-    type TimelineEvent,
+    type TimelineItem,
   } from '../lib/timeline/data';
   import {
     makeScale,
+    makeStoryScale,
     layoutEras,
-    layoutEvents,
+    layoutMarks,
+    layoutBars,
     yearTicks,
-    eraColor,
+    visibleTier,
+    zoomForTier,
+    itemColor,
+    ZOOM_LIMITS,
+    type Mark,
+    type ScaleMode,
     type TimelineScale,
   } from '../lib/timeline/layout';
 
@@ -43,11 +53,8 @@
   let error: string | null = null;
   let data: TimelineData | null = null;
 
-  /** What was tapped, shown in the panel at the foot of the window. */
-  let selected:
-    | { kind: 'event'; value: TimelineEvent }
-    | { kind: 'era'; value: TimelineEra }
-    | null = null;
+  /** What was tapped, shown in the panel at the foot of the window: an event or an era. */
+  let selected: TimelineItem | null = null;
 
   $: windowState = windowId ? $windowStore.find((w) => w.id === windowId) : undefined;
 
@@ -68,42 +75,57 @@
 
   // ===== Scale and layout =====
 
-  let scale: TimelineScale = makeScale(-4004, 100);
-  $: if (data) scale = makeScale(data.minYear, data.maxYear);
+  /** Story spacing by default; true years on the toggle, remembered per window. */
+  let mode: ScaleMode = 'story';
+  let storyScale: TimelineScale = makeScale(-4004, 100);
+  let trueScale: TimelineScale = makeScale(-4004, 100);
+  $: scale = mode === 'story' ? storyScale : trueScale;
+  $: limits = ZOOM_LIMITS[mode];
 
   /** Zoom on the year axis only — this is a ruler, not a map. */
   let zoom = 1;
-  /** How far the axis is scrolled, in content pixels. */
+  /** How far the axis is scrolled, in zoomed pixels; 0 is the top. */
   let ty = 0;
 
   let stageH = 0;
 
-  const MIN_ZOOM = 0.35;
-  const MAX_ZOOM = 8;
+  $: tier = visibleTier(zoom, mode);
+  $: eraLayout = data ? layoutEras(data.eras, scale, zoom) : { bands: [], lanes: 1 };
+  $: marks = data ? layoutMarks(data.events, data.byId, scale, zoom, tier) : [];
+  $: bars = data ? layoutBars(marks, scale, zoom) : [];
 
-  $: eraLayout = data ? layoutEras(data.eras, scale) : { bands: [], lanes: 1 };
-  $: marks = data ? layoutEvents(data.events, scale, 22, zoom) : [];
-  $: ticks = data ? yearTicks(scale, zoom) : [];
-
-  /** Content height at the current zoom, for clamping the scroll. */
-  $: contentH = scale.height * zoom;
+  /** Only what is on screen, plus a margin so nothing pops in at the edge. */
+  const MARGIN = 60;
+  $: viewTop = -ty - MARGIN;
+  $: viewBottom = -ty + stageH + MARGIN;
+  $: shownBands = eraLayout.bands.filter((b) => b.bottom >= viewTop && b.top <= viewBottom);
+  $: shownBars = bars.filter((b) => b.bottom >= viewTop && b.top <= viewBottom);
+  $: shownMarks = marks.filter(
+    (m) => (m.labelZ >= viewTop && m.labelZ <= viewBottom) || (m.z >= viewTop && m.z <= viewBottom),
+  );
+  $: ticks = data ? yearTicks(scale, zoom, viewTop, viewBottom) : [];
 
   function clampTy() {
-    if (contentH <= stageH) {
+    const h = scale.height * zoom;
+    if (h <= stageH) {
       ty = 0;
       return;
     }
-    ty = Math.min(0, Math.max(stageH - contentH, ty));
+    ty = Math.min(0, Math.max(stageH - h, ty));
+  }
+
+  function clampZoom(z: number): number {
+    return Math.min(limits.max, Math.max(limits.min, z));
   }
 
   /**
    * Scale about a point in stage coordinates.
    *
-   * Lifted from ArtViewer: with `transform-origin: 0 0` the mapping is linear,
-   * so holding the anchor still is one line. One dimension here rather than two.
+   * Lifted from ArtViewer: the mapping is linear, so holding the anchor still
+   * is one line. One dimension here rather than two.
    */
   function zoomAt(ay: number, factor: number) {
-    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor));
+    const next = clampZoom(zoom * factor);
     if (next === zoom) return;
     const r = next / zoom;
     ty = ay - (ay - ty) * r;
@@ -115,6 +137,47 @@
   function centreOn(year: number) {
     ty = stageH / 2 - scale.y(year) * zoom;
     clampTy();
+  }
+
+  /** The zoom a fresh window opens at: about six screens of headline events. */
+  function startZoom(s: TimelineScale, m: ScaleMode): number {
+    if (m === 'true') return 1;
+    const h = stageH || 600;
+    return Math.min(1.5, Math.max(ZOOM_LIMITS.story.min, (h * 6) / s.height));
+  }
+
+  /**
+   * Zoom in about the middle until the next tier shows. Behind the pill that
+   * says there is more, since nothing else on the strip tells you a pinch will
+   * bring out a hundred more events.
+   */
+  function zoomToNextTier() {
+    measureStage();
+    const next = (Math.min(3, tier + 1)) as 1 | 2 | 3;
+    const target = clampZoom(Math.max(zoom * 1.25, zoomForTier(next, mode)));
+    zoomAt(stageH / 2, target / zoom);
+  }
+
+  /**
+   * Switch between story spacing and true years, keeping the year in the
+   * middle of the strip where it is and the years around it about as far apart
+   * as they were, so the toggle shows how the spacing differs rather than
+   * throwing the reader somewhere else.
+   */
+  function setMode(next: ScaleMode) {
+    if (next === mode || !data) return;
+    measureStage();
+    const year = scale.yearAt((stageH / 2 - ty) / zoom);
+    const pxPerYear = (scale.y(year + 0.5) - scale.y(year - 0.5)) * zoom;
+    const nextScale = next === 'story' ? storyScale : trueScale;
+    const base = nextScale.y(year + 0.5) - nextScale.y(year - 0.5);
+    const nextLimits = ZOOM_LIMITS[next];
+    mode = next;
+    scale = nextScale;
+    zoom = Math.min(nextLimits.max, Math.max(nextLimits.min, base > 0 ? pxPerYear / base : 1));
+    ty = stageH / 2 - nextScale.y(year) * zoom;
+    clampTy();
+    if (windowId) windowStore.updateContentState(windowId, { timelineScale: next });
   }
 
   // ===== Pointer gestures =====
@@ -129,7 +192,6 @@
   let pinchMid = 0;
   let dragLast: number | null = null;
 
-  let downAt = 0;
   let downPos: Pt = { x: 0, y: 0 };
   let moved = false;
   let multiTouched = false;
@@ -153,7 +215,6 @@
 
     if (pointers.size === 1) {
       dragLast = toStageY(e);
-      downAt = performance.now();
       downPos = { x: e.clientX, y: e.clientY };
       moved = false;
       multiTouched = false;
@@ -207,7 +268,9 @@
       pinchDist = 0;
     } else if (pointers.size === 0) {
       dragLast = null;
-      if (wasSingle && !moved && !multiTouched && performance.now() - downAt < 300) handleTap(y);
+      // Movement alone decides what a tap is, the same as the family tree — a
+      // slow, deliberate press on an event is still a press on it.
+      if (wasSingle && !moved && !multiTouched) handleTap(e.clientX, e.clientY, y);
     }
   }
 
@@ -219,21 +282,67 @@
   /** Double-tap the axis to zoom in on the year under the finger, and out again. */
   let lastTapAt = 0;
   let lastTapY = 0;
+  /** When a tap last chose something, so a click that follows it is not acted on twice. */
+  let tapHandledAt = 0;
 
-  function handleTap(y: number) {
+  /**
+   * A tap: whatever is under the finger, or a double-tap zoom on bare axis.
+   *
+   * The stage captures every pointer for dragging, and a captured pointer's
+   * click lands on the stage rather than the event or band that was pressed —
+   * so their own on:click never fires from a finger. What was tapped is worked
+   * out here instead, the same way FamilyTreeViewer's `pick` does it. The
+   * on:click handlers stay for the keyboard.
+   */
+  function handleTap(clientX: number, clientY: number, y: number) {
+    const hit = document.elementFromPoint(clientX, clientY);
+    if (hit?.closest('[data-more]')) {
+      tapHandledAt = performance.now();
+      lastTapAt = 0;
+      zoomToNextTier();
+      return;
+    }
+    const markEl = hit?.closest<HTMLElement>('[data-mark-key]');
+    const mark = markEl ? marks.find((m) => m.key === markEl.dataset.markKey) : undefined;
+    if (mark) {
+      tapHandledAt = performance.now();
+      lastTapAt = 0;
+      activateMark(mark);
+      return;
+    }
+    const barEl = hit?.closest<HTMLElement>('[data-item-id]');
+    const barItem = barEl && data ? data.byId.get(barEl.dataset.itemId ?? '') : undefined;
+    if (barItem) {
+      tapHandledAt = performance.now();
+      lastTapAt = 0;
+      selectItem(barItem);
+      return;
+    }
+    const bandEl = hit?.closest<HTMLElement>('[data-era-id]');
+    const era = bandEl && data ? data.byId.get(bandEl.dataset.eraId ?? '') : undefined;
+    if (era) {
+      tapHandledAt = performance.now();
+      lastTapAt = 0;
+      selectEra(era);
+      return;
+    }
+
     const now = performance.now();
     if (now - lastTapAt < 300 && Math.abs(y - lastTapY) < 30) {
       lastTapAt = 0;
-      if (zoom > 1.2) {
-        zoom = 1;
-        clampTy();
-      } else {
-        zoomAt(y, 2.5);
-      }
+      const home = startZoom(scale, mode);
+      if (zoom > home * 1.2) zoomAt(y, home / zoom);
+      else zoomAt(y, 2.5);
       return;
     }
     lastTapAt = now;
     lastTapY = y;
+  }
+
+  /** A click from the keyboard; one straight after a tap is the same press. */
+  function fromClick(run: () => void) {
+    if (performance.now() - tapHandledAt < 500) return;
+    run();
   }
 
   function onWheel(e: WheelEvent) {
@@ -256,34 +365,59 @@
 
   // ===== Selection and navigation =====
 
-  function selectEvent(event: TimelineEvent) {
-    selected = { kind: 'event', value: event };
+  function selectItem(item: TimelineItem) {
+    selected = item;
   }
 
-  function selectEra(era: TimelineEra) {
-    selected = { kind: 'era', value: era };
+  function selectEra(era: TimelineItem) {
+    selected = era;
     centreOn((era.year_start + era.year_end) / 2);
   }
 
+  function activateMark(mark: Mark) {
+    if (mark.kind === 'cluster') openCluster(mark);
+    else selectItem(mark.item);
+  }
+
   /**
-   * Take the reader to this event's first verse.
+   * Zoom into a folded run until it comes apart.
+   *
+   * Far enough that the span fills most of the strip and the deepest tier in
+   * it shows; if that is still not enough, the next layout folds what is left
+   * into smaller chips, which open the same way.
+   */
+  function openCluster(mark: Mark) {
+    measureStage();
+    // Already as close as the strip goes: show what the chip stands for
+    // instead of zooming nowhere.
+    if (zoom >= limits.max * 0.98) {
+      const parentId = mark.items[0].parent_id;
+      const shared = parentId && mark.items.every((it) => it.parent_id === parentId || it.id === parentId);
+      selectItem((shared && data?.byId.get(parentId)) || mark.item);
+      return;
+    }
+    const span = (mark.zEnd - mark.z) / zoom;
+    const deepest = Math.max(...mark.items.map((it) => it.tier ?? 3)) as 1 | 2 | 3;
+    const fill = span > 0 ? (stageH * 0.7) / span : zoom * 4;
+    const next = clampZoom(Math.max(zoom * 1.6, fill, zoomForTier(deepest, mode)));
+    const midContent = (mark.z + mark.zEnd) / 2 / zoom;
+    zoom = next;
+    ty = stageH / 2 - midContent * zoom;
+    clampTy();
+  }
+
+  /**
+   * Take the reader to the first verse.
    *
    * The map's exact call: a crumb first, so the navbar's back arrow puts the
    * reader back where it was standing with the timeline still open, then the
-   * jump. Nineteen of the forty events have no verse tagged to them in the
-   * pack, and those are not offered as a link at all rather than being a button
-   * that does nothing.
+   * jump.
    */
-  function goToEvent(event: TimelineEvent) {
-    if (!event.first) return;
+  function goTo(item: TimelineItem) {
+    if (!item.first) return;
     const current = get(navigationStore);
     navigationStore.pushHistory(current, 'timeline');
-    navigationStore.navigateToVerse(
-      current.translation,
-      event.first.book,
-      event.first.chapter,
-      event.first.verse,
-    );
+    navigationStore.navigateToVerse(current.translation, item.first.book, item.first.chapter, item.first.verse);
   }
 
   /**
@@ -303,10 +437,14 @@
   }
 
   function resetView() {
-    zoom = 1;
+    measureStage();
+    zoom = clampZoom(stageH / scale.height);
     ty = 0;
     clampTy();
   }
+
+  /** The era an event belongs to, for the panel's kind line. */
+  $: selectedEra = selected && data && selected.kind !== 'era' ? data.byId.get(selected.era_id ?? '') : undefined;
 
   // ===== Lifecycle =====
 
@@ -320,11 +458,17 @@
           loading = false;
           return;
         }
-        data = await loadTimeline();
+        const loaded = await loadTimeline();
+        storyScale = makeStoryScale(loaded.eras, loaded.events);
+        trueScale = makeScale(loaded.minYear, loaded.maxYear);
+        mode = windowState?.contentState?.timelineScale === 'true' ? 'true' : 'story';
+        data = loaded;
         loading = false;
-        // Wait for the stage to have a height before the first clamp.
+        // Wait for the stage to have a height before the first zoom and clamp.
         requestAnimationFrame(() => {
           measureStage();
+          zoom = startZoom(mode === 'story' ? storyScale : trueScale, mode);
+          ty = 0;
           clampTy();
         });
       } catch (err) {
@@ -384,9 +528,9 @@
   {#if missing}
     <div class="gate">
       <GetPacksCard
-        packs={['study-tools']}
+        packs={['timeline']}
         title="The Timeline isn’t installed yet"
-        note="The twelve eras, the forty events and the year on every verse come in Study Tools. Works with no connection once it’s there."
+        note="About four hundred events from Creation to Revelation, with the kings, the prophets and the empires around them. Works with no connection once it’s there."
       />
     </div>
   {:else if error}
@@ -410,6 +554,17 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
         <span class="btn-label">Chronological</span>
       </button>
+      <button
+        class="btn"
+        class:on={mode === 'true'}
+        aria-pressed={mode === 'true'}
+        title={mode === 'true' ? 'Space the strip by what happens' : 'Space the strip by years, each the same height'}
+        on:click={() => setMode(mode === 'true' ? 'story' : 'true')}
+      >
+        <!-- A ruler: evenly spaced marks. -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2.5" width="8" height="19" rx="1.5"/><line x1="8" y1="7" x2="11" y2="7"/><line x1="8" y1="11" x2="12.5" y2="11"/><line x1="8" y1="15" x2="11" y2="15"/><line x1="8" y1="19" x2="12.5" y2="19"/></svg>
+        <span class="btn-label">True years</span>
+      </button>
       <div class="nav-sep"></div>
       <button class="btn btn-icon" title="Zoom out" aria-label="Zoom out" on:click={() => zoomButton(1 / 1.6)}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -426,87 +581,112 @@
       {#if loading}
         <div class="loading">Reading the timeline…</div>
       {:else if data}
-        <!-- Everything inside is counter-scaled on the Y axis so the bands
-             stretch with the years while the lettering keeps its size. That is
-             what a ruler does: the distances grow, the numbers do not. -->
-        <div class="content" style="transform: translateY({ty}px) scaleY({zoom}); height: {scale.height}px;">
-          {#each eraLayout.bands as band (band.era.era_id)}
-            <div
-              class="band"
-              class:sel={selected?.kind === 'era' && selected.value.era_id === band.era.era_id}
-              style="top: {band.top}px; height: {band.height}px; --c: {band.color}; left: calc(56px + {band.lane} * (var(--lane-w) + 4px)); width: var(--lane-w);"
-              role="button"
-              tabindex="0"
-              title={band.era.name}
-              on:click={() => selectEra(band.era)}
-              on:keydown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  selectEra(band.era);
-                }
-              }}
-            >
-              <span class="band-label" style="transform: scaleY({1 / zoom});">{band.era.name}</span>
-            </div>
-          {/each}
+        <!-- Bands are clipped to the stage so their names stay pinned to the
+             top of whatever part of the era is showing. -->
+        {#each shownBands as band (band.era.id)}
+          {@const top = Math.max(band.top + ty, -4)}
+          {@const bottom = Math.min(band.bottom + ty, stageH + 4)}
+          <div
+            class="band"
+            class:sel={selected?.id === band.era.id}
+            style="top: {top}px; height: {Math.max(0, bottom - top)}px; --c: {band.color}; left: calc(56px + {band.lane} * (var(--lane-w) + 4px)); width: var(--lane-w);"
+            role="button"
+            tabindex="0"
+            title={band.era.title}
+            data-era-id={band.era.id}
+            on:click={() => fromClick(() => selectEra(band.era))}
+            on:keydown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                selectEra(band.era);
+              }
+            }}
+          >
+            <span class="band-label">{band.era.title}</span>
+          </div>
+        {/each}
 
-          {#each ticks as year (year)}
-            <div class="tick" style="top: {scale.y(year)}px;">
-              <span class="tick-label" style="transform: translateY(-50%) scaleY({1 / zoom});">{formatYear(year)}</span>
-              <span class="tick-line"></span>
-            </div>
-          {/each}
+        {#each ticks as t (t.year)}
+          <div class="tick" style="top: {t.z + ty}px;">
+            <span class="tick-label">{formatYear(t.year)}</span>
+            <span class="tick-line"></span>
+          </div>
+        {/each}
 
-          {#each marks as mark (mark.event.event_id)}
-            <!-- The dot stays at the true year; the label slides down where two
-                 would print on top of each other, with a leader back to it. -->
-            <div class="dot" style="top: {mark.top}px; --c: {mark.color}; transform: translateY(-50%) scaleY({1 / zoom});"></div>
-            {#if mark.labelTop - mark.top > 1}
-              <div class="leader" style="top: {mark.top}px; height: {mark.labelTop - mark.top}px;"></div>
+        {#each shownBars as bar (bar.item.id)}
+          {@const top = Math.max(bar.top + ty, -4)}
+          {@const bottom = Math.min(bar.bottom + ty, stageH + 4)}
+          <div
+            class="bar"
+            style="top: {top}px; height: {Math.max(0, bottom - top)}px; --c: {bar.color}; --lane: {bar.lane};"
+            title={bar.item.title}
+            data-item-id={bar.item.id}
+          ></div>
+        {/each}
+
+        {#each shownMarks as mark (mark.key)}
+          <!-- The dot stays at the event's place; the label slides off it where
+               two would print on top of each other, with a leader back to it. -->
+          <div class="dot" class:cluster={mark.kind === 'cluster'} style="top: {mark.z + ty}px; --c: {mark.color};"></div>
+          {#if Math.abs(mark.labelZ - mark.z) > 1}
+            <div class="leader" style="top: {Math.min(mark.z, mark.labelZ) + ty}px; height: {Math.abs(mark.labelZ - mark.z)}px;"></div>
+          {/if}
+          <button
+            class="mark"
+            class:cluster={mark.kind === 'cluster'}
+            class:headline={mark.kind === 'item' && mark.item.tier === 1}
+            class:sel={mark.kind === 'item' && selected?.id === mark.item.id}
+            class:unlinked={mark.kind === 'item' && !mark.item.first}
+            data-mark-key={mark.key}
+            style="top: {mark.labelZ + ty}px; --c: {mark.color};"
+            title={mark.kind === 'cluster' ? `${mark.title}: tap to zoom in` : mark.title}
+            on:click={() => fromClick(() => activateMark(mark))}
+          >
+            {#if mark.kind === 'cluster'}
+              <svg class="mark-zoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="20.5" y2="20.5"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
             {/if}
-            <button
-              class="mark"
-              class:sel={selected?.kind === 'event' && selected.value.event_id === mark.event.event_id}
-              class:unlinked={!mark.event.first}
-              style="top: {mark.labelTop}px; --c: {mark.color}; transform: translateY(-50%) scaleY({1 / zoom});"
-              on:click={() => selectEvent(mark.event)}
-            >
-              <span class="mark-name">{mark.event.name}</span>
-              <span class="mark-year">{formatYear(mark.event.year_start)}</span>
-            </button>
-          {/each}
-        </div>
+            <span class="mark-name">{mark.title}</span>
+            {#if mark.kind === 'item'}
+              <span class="mark-year">{formatYear(mark.item.year_start)}</span>
+            {/if}
+          </button>
+        {/each}
+
+        {#if tier < 3}
+          <button class="more" data-more on:click={() => fromClick(zoomToNextTier)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="20.5" y2="20.5"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Zoom in for more events
+          </button>
+        {/if}
       {/if}
     </div>
 
     {#if selected}
       <div class="panel">
         <button class="panel-close" aria-label="Close" on:click={() => (selected = null)}>×</button>
-        {#if selected.kind === 'event'}
-          <div class="panel-kind" style="--c: {eraColor(selected.value.era ?? '')}">
-            {selected.value.era ?? 'Event'}
+        {#if selected.kind === 'era'}
+          <div class="panel-kind" style="--c: {itemColor(selected)}">Era</div>
+        {:else}
+          <div class="panel-kind" style="--c: {itemColor(selectedEra ?? selected)}">
+            {selectedEra?.title ?? 'Event'}
           </div>
-          <div class="panel-title">{selected.value.name}</div>
-          <div class="panel-span">{formatSpan(selected.value.year_start, selected.value.year_end)}</div>
-          {#if selected.value.description}
-            <p class="panel-body">{selected.value.description}</p>
-          {/if}
-          {#if selected.value.first}
-            {@const first = selected.value.first}
-            {@const event = selected.value}
-            <button class="panel-go" on:click={() => goToEvent(event)}>
-              Read {first.book} {first.chapter}:{first.verse}
-              <span class="panel-go-note">{event.verseCount.toLocaleString()} verses</span>
+        {/if}
+        <div class="panel-title">{selected.title}</div>
+        <div class="panel-span">{formatItemSpan(selected)}</div>
+        {#if selected.summary}
+          <p class="panel-body">{selected.summary}</p>
+        {/if}
+        {#if selected.kind !== 'era'}
+          {#if selected.first && selected.passages.length}
+            {@const item = selected}
+            <button class="panel-go" on:click={() => goTo(item)}>
+              Read {item.passages[0].label}
+              {#if item.passages.length > 1}
+                <span class="panel-go-note">+{item.passages.length - 1} more</span>
+              {/if}
             </button>
           {:else}
-            <p class="panel-note">No passage is tagged to this event yet.</p>
-          {/if}
-        {:else}
-          <div class="panel-kind" style="--c: {eraColor(selected.value.era_id)}">Era</div>
-          <div class="panel-title">{selected.value.name}</div>
-          <div class="panel-span">{formatSpan(selected.value.year_start, selected.value.year_end)}</div>
-          {#if selected.value.description}
-            <p class="panel-body">{selected.value.description}</p>
+            <p class="panel-note">No passage is tied to this event.</p>
           {/if}
         {/if}
       </div>
@@ -585,8 +765,8 @@
   .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .btn svg { width: 15px; height: 15px; flex: none; }
   .btn-icon { padding: 0; justify-content: center; }
-  /* Narrow: the word goes, the clock face stays. */
-  @container (max-width: 430px) { .btn-label { display: none; } }
+  /* Narrow: the words go, the icons stay. */
+  @container (max-width: 520px) { .btn-label { display: none; } .btn:not(.btn-icon) { padding: 0; width: 30px; justify-content: center; } }
 
   /* ---------------- the axis ---------------- */
   .stage {
@@ -599,7 +779,7 @@
        here rather than on the root so a container query can narrow them —
        a query cannot restyle the element that declares the container. */
     --lane-w: 74px;
-    --events-x: calc(56px + 2 * (var(--lane-w) + 4px));
+    --events-x: calc(56px + 2 * (var(--lane-w) + 4px) + 14px);
     /* The gestures are ours; the browser must not also scroll or pinch. */
     touch-action: none;
     cursor: grab;
@@ -608,13 +788,6 @@
   .stage:active { cursor: grabbing; }
   /* Docked narrow, the bands give back the room the event names need. */
   @container (max-width: 380px) { .stage { --lane-w: 52px; } }
-
-  .content {
-    position: absolute;
-    inset: 0 0 auto 0;
-    transform-origin: 0 0;
-    will-change: transform;
-  }
 
   .loading {
     position: absolute; inset: 0; display: grid; place-items: center;
@@ -637,16 +810,15 @@
   .band:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .band-label {
     position: absolute; top: 4px; left: 6px; right: 4px;
-    transform-origin: 0 0;
     font-family: var(--display); font-size: 11.5px; line-height: 1.2;
     color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .7);
     pointer-events: none;
   }
 
-  .tick { position: absolute; left: 0; right: 0; }
+  .tick { position: absolute; left: 0; right: 0; height: 0; pointer-events: none; }
   .tick-label {
     position: absolute; left: 4px; top: 0;
-    transform-origin: 0 50%;
+    transform: translateY(-50%);
     font-size: 10.5px; color: var(--faint); white-space: nowrap;
   }
   .tick-line {
@@ -654,14 +826,28 @@
     background: #262626;
   }
 
+  /* A span that lasts: a thin line from its start to its end, left of the dots. */
+  .bar {
+    position: absolute;
+    left: calc(var(--events-x) - 19px - var(--lane) * 5px);
+    width: 3px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--c) 75%, transparent);
+    cursor: pointer;
+  }
+
   .dot {
     position: absolute;
     left: calc(var(--events-x) - 10px);
     width: 9px; height: 9px; border-radius: 50%;
-    transform-origin: 0 50%;
+    transform: translateY(-50%);
     background: var(--c);
     box-shadow: 0 0 0 2px var(--sunken);
     pointer-events: none;
+  }
+  .dot.cluster {
+    background: var(--sunken);
+    box-shadow: 0 0 0 2px var(--c);
   }
   .leader {
     position: absolute;
@@ -675,7 +861,7 @@
     position: absolute;
     left: calc(var(--events-x) + 4px);
     max-width: calc(100% - var(--events-x) - 12px);
-    transform-origin: 0 50%;
+    transform: translateY(-50%);
     display: flex; align-items: baseline; gap: 7px;
     padding: 3px 8px; border-radius: 6px;
     background: var(--chrome-2); border: 1px solid var(--line);
@@ -686,11 +872,32 @@
   .mark:hover { background: #292929; border-color: var(--line-2); border-left-color: var(--c); }
   .mark.sel { background: #2f2a2b; border-color: var(--focus); border-left-color: var(--c); }
   .mark:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-  /* An event with no verses tagged to it is still real history, so it is drawn
+  .mark.headline .mark-name { font-weight: 600; }
+  /* A folded run: dashed, with a magnifier, so it reads as "there is more here". */
+  .mark.cluster {
+    align-items: center;
+    border-style: dashed;
+    border-left-style: solid;
+    background: #1c1c1c;
+    color: var(--dim);
+  }
+  .mark-zoom { width: 13px; height: 13px; flex: none; align-self: center; }
+  /* An event with no passage tied to it is still real history, so it is drawn
      — just not dressed up as a link to somewhere it cannot go. */
   .mark.unlinked { color: var(--dim); }
   .mark-name { overflow: hidden; text-overflow: ellipsis; }
   .mark-year { color: var(--faint); font-size: 10.5px; flex: none; }
+
+  /* The pill that says there is more to see. Kept small and out of the way. */
+  .more {
+    position: absolute; bottom: 10px; right: 10px; z-index: 5;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 999px; cursor: pointer;
+    background: rgba(33, 33, 33, .92); border: 1px solid var(--line-2); color: var(--dim);
+    font: inherit; font-size: 11.5px;
+  }
+  .more:hover { color: var(--text); border-color: var(--focus); }
+  .more svg { width: 13px; height: 13px; }
 
   /* ---------------- what you tapped ---------------- */
   .panel {
