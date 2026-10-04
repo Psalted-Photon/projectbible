@@ -276,8 +276,15 @@ export const PART_ONE: TourStep[] = [
     target: (ctx) => windowElement(ctx.tour.windowId)?.querySelector('.panel-header') ?? null,
     skipIf: (ctx) => !windowElement(ctx.tour.windowId),
     passThrough: false,
-    title: 'Move it, close it',
-    body: 'The arrows dock the window to another side of the screen, and × closes it.',
+    title: 'Move it, swap it, close it',
+    body: 'The arrows dock the window to another side of the screen. The squares swap what it shows for something else, and × closes it.',
+  },
+  {
+    id: 'window-drag-close',
+    target: (ctx) => windowElement(ctx.tour.windowId)?.querySelector('.panel-header') ?? null,
+    skipIf: (ctx) => !windowElement(ctx.tour.windowId),
+    title: 'Or drag it shut',
+    body: 'Drag this bar back toward the edge the window came from. Past its smallest size the bar and the screen edge turn red. Let go there and it closes.',
   },
 
   // ── Tools ────────────────────────────────────────────────────────────────
@@ -289,6 +296,14 @@ export const PART_ONE: TourStep[] = [
     passThrough: false,
     title: 'Search',
     body: 'Search the Bible, your notes and journal, people, the encyclopedia and the commentaries, all at once.',
+  },
+  {
+    id: 'tool-apps',
+    target: () => inMainReader('.pill-apps'),
+    reveal: true,
+    passThrough: false,
+    title: 'Every window, one tap',
+    body: 'No swipe needed: this lists every kind of window and opens the one you pick.',
   },
   {
     id: 'tool-plans',

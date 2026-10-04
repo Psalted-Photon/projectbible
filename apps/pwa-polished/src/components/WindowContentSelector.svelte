@@ -1,168 +1,44 @@
 <script lang="ts">
-  import { get } from "svelte/store";
   import { windowStore } from "../lib/stores/windowStore";
-  import { navigationStore } from "../stores/navigationStore";
-  import { libraryPrefsStore, resumeTarget } from "../stores/libraryPrefsStore";
-  import { localDateStr } from '../stores/clockStore';
-  import { DEFAULT_TRANSLATION } from "../lib/bibleData";
+  import {
+    WINDOW_TYPES,
+    initialContentFor,
+    openHarmonyView,
+    type WindowChoice,
+    type HarmonyChoice,
+  } from "../lib/windowTypes";
   import PanelIcon from "./icons/PanelIcon.svelte";
-  import type { PanelIconName } from "./icons/PanelIcon.svelte";
   import HarmonyPicker from "./HarmonyPicker.svelte";
-  import { parallelStore } from "../stores/parallelStore";
 
   export let windowId: string;
-
-  /**
-   * `harmony` is not a WindowContentType and never becomes one: it is the one
-   * tile that does not fill this window. Kept in the same union so the tile grid
-   * stays one list, and separated out at the top of handleContentSelect.
-   */
-  type ContentType = 'bible' | 'map' | 'timeline' | 'notes' | 'isbe' | 'person' | 'naves' | 'commentaries' | 'journal' | 'art' | 'harmony';
-
-  /**
-   * The eleven tiles. Accents are borrowed from colors the app already uses — the
-   * book-category ramp in bibleData.ts and the nav bar's badge palette — so the
-   * picker reads as part of the same app rather than a new color scheme.
-   */
-  const TILES: { type: ContentType; icon: PanelIconName; label: string; accent: string }[] = [
-    { type: 'bible',        icon: 'bible',        label: 'Bible',        accent: '#a67c52' },
-    { type: 'map',          icon: 'map',          label: 'Map',          accent: '#61f1ff' },
-    { type: 'timeline',     icon: 'timeline',     label: 'Timeline',     accent: '#f0c040' },
-    { type: 'commentaries', icon: 'commentary',   label: 'Commentary',   accent: '#a3e635' },
-    { type: 'notes',        icon: 'notes',        label: 'Notes',        accent: '#fde047' },
-    { type: 'journal',      icon: 'journal',      label: 'Journal',      accent: '#f2893e' },
-    { type: 'isbe',         icon: 'encyclopedia', label: 'Encyclopedia', accent: '#4a90e2' },
-    { type: 'naves',        icon: 'topical',      label: 'Topical',      accent: '#a78bfa' },
-    { type: 'person',       icon: 'people',       label: 'People',       accent: '#2dd4bf' },
-    { type: 'art',          icon: 'art',          label: 'Art',          accent: '#fb7185' },
-    { type: 'harmony',      icon: 'harmony',      label: 'Harmonies',    accent: '#4a9ec9' },
-  ];
 
   /** The set picker, open over this window until a set is chosen or dismissed. */
   let showHarmonyPicker = false;
 
   /**
-   * Open the harmony view, and take this window down on the way.
-   *
    * Every other tile fills the window the user just slid open and leaves it
-   * docked. This one is the odd one out: it opens a fullscreen view instead, so
-   * the window that launched it has to go — otherwise closing the harmony later
-   * reveals an empty docked panel sitting behind it that the user never asked
-   * for and does not remember opening.
-   *
-   * The panes are made before the store is told, because parallelStore.open is
-   * what mounts the view, and the view renders a pane per entry in that list —
-   * telling it first would mount readers for windowIds that do not exist yet.
+   * docked. Harmonies opens a full-screen view instead, so this window goes
+   * on the way (see openHarmonyView).
    */
-  function openHarmony(
-    e: CustomEvent<{
-      panes: Array<{ book: string; chapter: number }>;
-      label: string;
-      sectionId?: number;
-      translations?: string[];
-    }>,
-  ) {
-    const { panes, label, sectionId, translations } = e.detail;
+  function openHarmony(e: CustomEvent<HarmonyChoice>) {
     showHarmonyPicker = false;
-    if (panes.length === 0) return;
-
-    // A translation comparison names one per pane; a harmony names none and
-    // every pane takes the reader's own, which is what makes the four Gospels
-    // read in the translation you were already in.
-    const perPane = panes.map((p, i) => ({
-      ...p,
-      translation: translations?.[i] ?? $navigationStore.translation,
-    }));
-
-    const ids = windowStore.createHarmonyPanes(perPane);
-
-    windowStore.closeWindow(windowId);
-    parallelStore.open(
-      ids.map((paneId, i) => ({
-        paneId,
-        book: perPane[i].book,
-        translation: perPane[i].translation,
-      })),
-      {
-        mode: translations ? 'translations' : 'accounts',
-        setLabel: label,
-        sectionId,
-      },
-    );
+    openHarmonyView(e.detail, windowId);
   }
 
-  function handleContentSelect(contentType: ContentType) {
-    // Harmonies never reaches the setWindowContent at the bottom of this
-    // function — it has no window content to set. It asks which harmony first,
+  function handleContentSelect(contentType: WindowChoice) {
+    // Harmonies has no window content to set. It asks which harmony first,
     // and openHarmony closes this window rather than filling it.
     if (contentType === 'harmony') {
       showHarmonyPicker = true;
       return;
     }
-
-    // Set initial content state based on type
-    let contentState = {};
-
-    if (contentType === 'bible') {
-      contentState = {
-        translation: DEFAULT_TRANSLATION,
-        book: 'Genesis',
-        chapter: 1,
-      };
-    } else if (contentType === 'commentaries') {
-      const navState = $navigationStore;
-      // The first commentary window takes the anchor and follows the reader, so
-      // it opens with no pinned position. Any later one is a deliberate second
-      // view, so it opens frozen where the reader is now.
-      const isFirst = !get(windowStore).some(w => w.contentType === 'commentaries');
-      contentState = isFirst
-        ? { author: undefined, anchored: true }
-        : {
-            author: undefined,
-            anchored: false,
-            book: navState.book,
-            chapter: navState.chapter,
-          };
-    } else if (contentType === 'map') {
-      contentState = {
-        center: [31.7683, 35.2137], // Jerusalem
-        zoom: 8,
-      };
-    } else if (contentType === 'journal') {
-      contentState = {
-        date: localDateStr(new Date()), // Today
-      };
-    } else if (contentType === 'notes') {
-      contentState = {
-        view: 'browse',
-      };
-    } else if (contentType === 'isbe' || contentType === 'person' || contentType === 'naves') {
-      // Land back on what you were reading only if you closed this shelf a few
-      // minutes ago — enough to undo a misfired close, not enough to hand you
-      // yesterday's lookup. Otherwise open on the contents. Either way the entry
-      // stays in Recently Viewed and one flip away.
-      const prefs = get(libraryPrefsStore);
-      if (contentType === 'isbe') {
-        const last = resumeTarget(prefs, 'isbe');
-        contentState = last
-          ? { kind: 'entry', entryId: Number(last.id), placeId: null, primaryName: last.name }
-          : {};
-      } else if (contentType === 'person') {
-        const last = resumeTarget(prefs, 'people');
-        contentState = last ? { personId: String(last.id), primaryName: last.name } : {};
-      } else {
-        const last = resumeTarget(prefs, 'naves');
-        contentState = last ? { topicId: Number(last.id), primaryName: last.name } : {};
-      }
-    }
-
-    windowStore.setWindowContent(windowId, contentType, contentState);
+    windowStore.setWindowContent(windowId, contentType, initialContentFor(contentType));
   }
 </script>
 
 <div class="content-selector">
   <div class="button-grid">
-    {#each TILES as tile (tile.type)}
+    {#each WINDOW_TYPES as tile (tile.type)}
       <button
         class="content-button {tile.type}"
         style="--accent: {tile.accent}"

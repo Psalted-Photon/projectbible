@@ -118,6 +118,13 @@ export const NAVBAR_TIPS: Tip[] = [
     body: 'Today’s verse, whenever you want to see it again.',
   },
   {
+    id: 'nav-apps',
+    area,
+    target: '.pill-apps',
+    title: 'Open a window',
+    body: 'Every kind of window in one list: another Bible, the Map, Timeline, Commentary, your notes and journal, the library, Art and Harmonies. It opens under the text, or beside it when the phone is sideways.',
+  },
+  {
     id: 'nav-settings',
     area,
     target: '.pill-settings',

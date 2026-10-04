@@ -20,7 +20,7 @@ export const WINDOW_TIPS: Tip[] = [
     target: '.panel > .resize-handle',
     corner: 'center',
     title: 'Resize',
-    body: 'Drag this edge to make the window bigger or smaller. Keep dragging past its smallest size to close it.',
+    body: 'Drag this edge to make the window bigger or smaller. Keep dragging toward the screen edge: past its smallest size the bar and the screen edge turn red, and letting go there closes it.',
   },
   {
     id: 'window-dock',
@@ -28,6 +28,13 @@ export const WINDOW_TIPS: Tip[] = [
     target: '.panel .edge-buttons',
     title: 'Move it',
     body: 'Dock the window to another side of the screen.',
+  },
+  {
+    id: 'window-swap',
+    area,
+    target: '.panel .swap-button',
+    title: 'Show something else',
+    body: 'Swap what this window shows for any other kind: the same list as the apps button on the bar.',
   },
 
   tile('bible', 'Bible', 'Another Bible beside this one: a different translation, or a second passage to compare.'),

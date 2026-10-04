@@ -1,6 +1,11 @@
 <script lang="ts">
   import { windowStore, type WindowState, type WindowEdge } from "../lib/stores/windowStore";
+  import { pendingCloseEdge } from "../stores/paneStore";
+  import { swapWindowContent, openHarmonyView, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
   import { onMount } from 'svelte';
+  import { SquaresFour } from 'phosphor-svelte';
+  import WindowTypeMenu from "./WindowTypeMenu.svelte";
+  import HarmonyPicker from "./HarmonyPicker.svelte";
 
   export let window: WindowState;
 
@@ -35,6 +40,41 @@
   /** How far the pointer must travel on the resize axis before a press on the
       header stops being a button click and becomes a resize. */
   const DRAG_THRESHOLD_PX = 4;
+
+  // Swap: the same list the apps button drops down, picking what this window
+  // shows instead. A brand-new window has its tile grid for that already.
+  let swapButton: HTMLElement;
+  let swapOpen = false;
+  let showHarmonyPicker = false;
+
+  function toggleSwap() {
+    if (suppressClick) return;
+    swapOpen = !swapOpen;
+  }
+
+  function pickSwap(e: CustomEvent<WindowChoice>) {
+    swapOpen = false;
+    const type = e.detail;
+    if (type === 'harmony') {
+      showHarmonyPicker = true;
+      return;
+    }
+    swapWindowContent(window.id, type);
+  }
+
+  // Harmonies is full-screen, so the window that asked for it goes, as it
+  // does from a new window's tile grid.
+  function openHarmony(e: CustomEvent<HarmonyChoice>) {
+    showHarmonyPicker = false;
+    openHarmonyView(e.detail, window.id);
+  }
+
+  /** Light the screen-edge strip red too, as panes do, while a release would close. */
+  function setCloseZone(on: boolean) {
+    isInCloseZone = on;
+    const edge = window.edge === 'harmony' ? null : window.edge;
+    pendingCloseEdge.set(on ? edge : null);
+  }
 
   onMount(() => {
     const windowNumber = window.id.split('-')[1];
@@ -168,7 +208,7 @@
 
     // Close zone: fires the moment unclamped size drops below the 10% minimum —
     // the instant the user pushes "through" where the window stopped. Zero dead zone.
-    isInCloseZone = newSize < 10;
+    setCloseZone(newSize < 10);
 
     windowStore.updateWindowSize(window.id, newSize);
   }
@@ -186,10 +226,11 @@
     isDraggingResize = false;
     windowStore.setResizing(window.id, false);
 
-    if (isInCloseZone) {
+    const closing = isInCloseZone;
+    setCloseZone(false);
+    if (closing) {
       windowStore.closeWindow(window.id);
     }
-    isInCloseZone = false;
   }
 
   function handleCloseClick() {
@@ -256,8 +297,39 @@
         >{e.glyph}</button>
       {/each}
     </div>
-    <button class="close-button" on:click={handleCloseClick} aria-label="Close panel">×</button>
+    <div class="header-actions">
+      {#if window.contentType !== 'selector'}
+        <button
+          class="edge-button swap-button"
+          class:open={swapOpen}
+          bind:this={swapButton}
+          on:click={toggleSwap}
+          title="Show something else here"
+          aria-label="Show something else here"
+          aria-haspopup="menu"
+          aria-expanded={swapOpen}
+        ><SquaresFour size={11} weight="bold" /></button>
+      {/if}
+      <button class="close-button" on:click={handleCloseClick} aria-label="Close panel">×</button>
+    </div>
   </div>
+
+  {#if swapOpen && swapButton}
+    <WindowTypeMenu
+      anchor={swapButton}
+      heading="Show here instead"
+      current={window.contentType}
+      on:pick={pickSwap}
+      on:close={() => (swapOpen = false)}
+    />
+  {/if}
+
+  {#if showHarmonyPicker}
+    <HarmonyPicker
+      on:choose={openHarmony}
+      on:close={() => (showHarmonyPicker = false)}
+    />
+  {/if}
 
   <!-- Panel content -->
   <div class="panel-content" class:library={isLibrary}>
@@ -470,6 +542,18 @@
     color: white;
     background: rgba(255, 255, 255, 0.28);
     cursor: inherit;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+
+  .swap-button.open {
+    color: white;
+    background: rgba(255, 255, 255, 0.28);
   }
 
   .close-button {

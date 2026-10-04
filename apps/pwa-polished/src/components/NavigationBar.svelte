@@ -52,6 +52,9 @@
     jumpToVerse,
   } from "../lib/tts/readingEngine";
   import BrandSpinner from "./BrandSpinner.svelte";
+  import WindowTypeMenu from "./WindowTypeMenu.svelte";
+  import HarmonyPicker from "./HarmonyPicker.svelte";
+  import { openWindowOfType, openHarmonyView, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
   import {
     sleepRemaining,
     stopAtChapterEnd,
@@ -89,6 +92,7 @@
     Pause,
     Stop,
     Playlist,
+    SquaresFour,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
   import { repeatsStore } from "../stores/repeatsStore";
@@ -144,6 +148,39 @@
   let displayedResultCount = 0;
   let showingAll = false;
   let showPowerSearchModal = false;
+
+  // The apps button: every window type in one list, so none of them needs a
+  // swipe to reach. Harmonies asks which set first, like the tile does.
+  let appsButtonRef: HTMLElement;
+  let appsMenuOpen = false;
+  let showHarmonyPicker = false;
+
+  function openAppsMenu() {
+    translationDropdownOpen = false;
+    translationDropdownPositioned = false;
+    referenceDropdownOpen = false;
+    referenceDropdownPositioned = false;
+    commDropdownOpen = false;
+    commDropdownPositioned = false;
+    refsPackOpen = false;
+    refsPackPositioned = false;
+    appsMenuOpen = true;
+  }
+
+  function pickApp(e: CustomEvent<WindowChoice>) {
+    appsMenuOpen = false;
+    const type = e.detail;
+    if (type === 'harmony') {
+      showHarmonyPicker = true;
+      return;
+    }
+    openWindowOfType(type);
+  }
+
+  function openHarmonyFromApps(e: CustomEvent<HarmonyChoice>) {
+    showHarmonyPicker = false;
+    openHarmonyView(e.detail);
+  }
   let searchExpanded = false;
   let searchResultsEl: HTMLDivElement | null = null;
 
@@ -2296,6 +2333,21 @@
 
       <div class="pill-divider"></div>
 
+      <!-- Apps: open any window type -->
+      <button
+        class="pill-btn pill-apps"
+        bind:this={appsButtonRef}
+        on:click={openAppsMenu}
+        title="Open a window"
+        aria-label="Open a window"
+        aria-haspopup="menu"
+        aria-expanded={appsMenuOpen}
+      >
+        <span class="icon-badge icon-badge-apps"><SquaresFour size={18} weight="bold" /><span class="icon-overlay"><SquaresFour size={18} weight="thin" /></span></span>
+      </button>
+
+      <div class="pill-divider"></div>
+
       <!-- Settings -->
       <button
         class="pill-btn pill-settings"
@@ -2518,6 +2570,21 @@
 
 <!-- Power Search Modal -->
 <PowerSearchModal bind:show={showPowerSearchModal} />
+
+{#if appsMenuOpen && appsButtonRef}
+  <WindowTypeMenu
+    anchor={appsButtonRef}
+    on:pick={pickApp}
+    on:close={() => (appsMenuOpen = false)}
+  />
+{/if}
+
+{#if showHarmonyPicker}
+  <HarmonyPicker
+    on:choose={openHarmonyFromApps}
+    on:close={() => (showHarmonyPicker = false)}
+  />
+{/if}
 
 
 <style>
@@ -3155,6 +3222,7 @@
   .icon-badge-readingplan { background: radial-gradient(circle, #60a5fa 0%, #60a5fa 20%, #000000 100%); }
   .icon-badge-votd        { background: radial-gradient(circle, #fde047 0%, #fde047 20%, #000000 100%); }
   .icon-badge-settings    { background: radial-gradient(circle, #c0c0c0 0%, #c0c0c0 20%, #000000 100%); }
+  .icon-badge-apps        { background: radial-gradient(circle, #818cf8 0%, #818cf8 20%, #000000 100%); }
   .icon-badge-profile     { background: radial-gradient(circle, #d1d5db 0%, #d1d5db 20%, #000000 100%); }
   .pill-refs:has(input:checked) .icon-badge-refs { background: radial-gradient(circle, #a78bfa 0%, #a78bfa 20%, #000000 100%); }
   .pill-profile.signed-in .icon-badge-profile    { background: radial-gradient(circle, #86efac 0%, #86efac 20%, #000000 100%); }

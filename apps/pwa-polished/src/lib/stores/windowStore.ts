@@ -277,7 +277,8 @@ function createWindowStore() {
 
         // Start the library resume countdown here rather than on open: what
         // matters is how long ago you left. Both ways out — the × and dragging
-        // the panel into the close zone — arrive at this one function.
+        // the panel into the close zone — arrive at this one function. A swap
+        // to another type is the third, and replaceWindowContent does the same.
         const source = LIBRARY_SOURCE_OF[closing.contentType];
         if (source) libraryPrefsStore.markClosed(source);
       }
@@ -294,6 +295,27 @@ function createWindowStore() {
         const updated = wins.map(w => 
           w.id === id 
             ? { ...w, contentType, contentState: { ...w.contentState, ...contentState } }
+            : w
+        );
+        persist(updated);
+        return updated;
+      });
+    },
+
+    /**
+     * Swap what a window shows. Unlike setWindowContent, the old settings are
+     * dropped rather than merged, so nothing from the last type rides along.
+     * Leaving a reference shelf counts as closing it, the same as the ×.
+     */
+    replaceWindowContent: (id: string, contentType: WindowContentType, contentState?: any) => {
+      const leaving = get({ subscribe }).find(w => w.id === id);
+      const source = leaving ? LIBRARY_SOURCE_OF[leaving.contentType] : undefined;
+      if (source) libraryPrefsStore.markClosed(source);
+
+      update(wins => {
+        const updated = wins.map(w =>
+          w.id === id
+            ? { ...w, contentType, contentState: { ...(contentState ?? {}) } }
             : w
         );
         persist(updated);

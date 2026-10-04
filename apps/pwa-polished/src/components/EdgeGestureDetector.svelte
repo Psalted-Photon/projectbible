@@ -481,7 +481,7 @@
 </script>
 
 <!-- Visual bumpers at screen edges -->
-<div class="bumper bumper-top {bumperClass}" class:hovered={hoveredEdge === 'top'}></div>
+<div class="bumper bumper-top {bumperClass}" class:hovered={hoveredEdge === 'top'} class:pending-close={closingEdge === 'top'}></div>
 <div class="bumper bumper-left {bumperClass}" class:hovered={hoveredEdge === 'left'} class:pending-close={closingEdge === 'left'}></div>
 <div class="bumper bumper-right {bumperClass}" class:hovered={hoveredEdge === 'right'} class:pending-close={closingEdge === 'right'}></div>
 <div class="bumper bumper-bottom {bumperClass}" class:hovered={hoveredEdge === 'bottom'} class:pending-close={closingEdge === 'bottom'}></div>
@@ -518,7 +518,7 @@
   }
 
   .bumper.pending-close {
-    background: rgba(220, 30, 30, 0.85); /* bright red: pane will close on release */
+    background: rgba(220, 30, 30, 0.85); /* bright red: pane or window will close on release */
   }
 
   .bumper-top {
