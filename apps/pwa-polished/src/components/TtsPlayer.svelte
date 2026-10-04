@@ -124,7 +124,7 @@
         on:click={handleClick}
         title={isLive
           ? ($readingState === 'playing' ? 'Pause reading' : 'Resume reading')
-          : 'Read this chapter aloud (AI voice)'}
+          : 'Read this chapter aloud (TextToSpeech)'}
         aria-label={isLive ? 'Pause or resume reading' : 'Read aloud'}
       >
         {isLive && $readingState === 'playing' ? '⏸' : '🗣'}

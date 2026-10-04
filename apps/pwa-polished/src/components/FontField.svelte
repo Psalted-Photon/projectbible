@@ -109,7 +109,9 @@
   }
 
   .ff {
-    max-height: 320px;
+    /* About four rows at a time — enough to compare faces without the list
+       taking over the panel it sits in. */
+    max-height: 210px;
     overflow-y: auto;
     /* The app hides scrollbars globally, so momentum scroll is the only
        affordance — keep it smooth on iOS. */

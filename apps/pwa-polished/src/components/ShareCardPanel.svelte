@@ -782,7 +782,7 @@
     border-top: 1px solid #2a2a2a;
   }
 
-  /* The font list normally scrolls in its own 320px box, and won't hand the
+  /* The font list normally scrolls in its own 210px box, and won't hand the
      scroll on when it reaches the end. Inside this already-scrolling area that
      box is taller than the space it sits in, so the bottom fonts were
      unreachable. Here the list lays out in full and this area does the scrolling. */

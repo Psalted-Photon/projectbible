@@ -14,6 +14,7 @@
   import { createEventDispatcher, onMount } from "svelte";
   import ColorField from "../../components/ColorField.svelte";
   import FontField from "../../components/FontField.svelte";
+  import SectionTabs from "../../components/SectionTabs.svelte";
   import {
     getCustomThemeSettings,
     updateCustomThemeSettings,
@@ -40,6 +41,14 @@
   let bgPresets: string[] = [];
   let editingText = false;
   let editingBg = false;
+
+  /** One section shows at a time, like the share card's controls. */
+  const TABS = [
+    { id: "font", label: "Font" },
+    { id: "text", label: "Text color" },
+    { id: "bg", label: "Background" },
+  ];
+  let tab = "font";
 
   onMount(loadPresets);
 
@@ -139,7 +148,6 @@
       </p>
 
       <div class="etp-field">
-        <span class="etp-label">Preview</span>
         <div class="etp-preview" style={editorPreviewStyle(theme)}>
           The grass withereth, the flower fadeth: but the word of our God shall
           stand for ever.
@@ -152,81 +160,86 @@
         {/if}
       </div>
 
-      <div class="etp-field">
-        <span class="etp-label">Typeface</span>
-        <FontField bind:value={theme.fontId} defaultLabel="Default" />
-      </div>
+      <div class="etp-tabbed">
+        <SectionTabs tabs={TABS} bind:value={tab} label="{surfaceLabel} appearance" />
 
-      <div class="etp-field">
-        <div class="etp-head-row">
-          <span class="etp-label">Text color</span>
-          <button
-            class="etp-btn"
-            class:on={editingText}
-            type="button"
-            disabled={textPresets.length === 0}
-            on:click={() => (editingText = !editingText)}
-          >{editingText ? "Done" : "Edit"}</button>
-        </div>
-        <ColorField bind:value={theme.textColor} label="{surfaceLabel} text">
-          <button
-            class="etp-btn"
-            type="button"
-            disabled={textPresets.includes(theme.textColor) || textPresets.length >= MAX_COLOR_PRESETS}
-            on:click={() => savePreset("text")}
-          >Add</button>
-        </ColorField>
-        <div class="etp-presets">
-          {#each textPresets as color, i}
-            <button
-              class="etp-swatch"
-              class:removing={editingText}
-              type="button"
-              style="background: {color}"
-              title={color}
-              on:click={() => (editingText ? removePreset("text", i) : usePreset("text", color))}
-            >{#if editingText}<span class="etp-x">×</span>{/if}</button>
-          {/each}
-          {#each textSlotsFree as _}
-            <span class="etp-swatch empty"></span>
-          {/each}
-        </div>
-      </div>
+        {#if tab === "font"}
+          <FontField bind:value={theme.fontId} defaultLabel="Default" />
 
-      <div class="etp-field">
-        <div class="etp-head-row">
-          <span class="etp-label">Background color</span>
-          <button
-            class="etp-btn"
-            class:on={editingBg}
-            type="button"
-            disabled={bgPresets.length === 0}
-            on:click={() => (editingBg = !editingBg)}
-          >{editingBg ? "Done" : "Edit"}</button>
-        </div>
-        <ColorField bind:value={theme.bgColor} label="{surfaceLabel} background">
-          <button
-            class="etp-btn"
-            type="button"
-            disabled={bgPresets.includes(theme.bgColor) || bgPresets.length >= MAX_COLOR_PRESETS}
-            on:click={() => savePreset("bg")}
-          >Add</button>
-        </ColorField>
-        <div class="etp-presets">
-          {#each bgPresets as color, i}
-            <button
-              class="etp-swatch"
-              class:removing={editingBg}
-              type="button"
-              style="background: {color}"
-              title={color}
-              on:click={() => (editingBg ? removePreset("bg", i) : usePreset("bg", color))}
-            >{#if editingBg}<span class="etp-x">×</span>{/if}</button>
-          {/each}
-          {#each bgSlotsFree as _}
-            <span class="etp-swatch empty"></span>
-          {/each}
-        </div>
+        {:else if tab === "text"}
+          <div class="etp-field">
+            <ColorField bind:value={theme.textColor} label="{surfaceLabel} text">
+              <button
+                class="etp-btn"
+                type="button"
+                disabled={textPresets.includes(theme.textColor) || textPresets.length >= MAX_COLOR_PRESETS}
+                on:click={() => savePreset("text")}
+              >Add</button>
+            </ColorField>
+            <div class="etp-head-row">
+              <span class="etp-label">Saved colors</span>
+              <button
+                class="etp-btn"
+                class:on={editingText}
+                type="button"
+                disabled={textPresets.length === 0}
+                on:click={() => (editingText = !editingText)}
+              >{editingText ? "Done" : "Edit"}</button>
+            </div>
+            <div class="etp-presets">
+              {#each textPresets as color, i}
+                <button
+                  class="etp-swatch"
+                  class:removing={editingText}
+                  type="button"
+                  style="background: {color}"
+                  title={color}
+                  on:click={() => (editingText ? removePreset("text", i) : usePreset("text", color))}
+                >{#if editingText}<span class="etp-x">×</span>{/if}</button>
+              {/each}
+              {#each textSlotsFree as _}
+                <span class="etp-swatch empty"></span>
+              {/each}
+            </div>
+          </div>
+
+        {:else}
+          <div class="etp-field">
+            <ColorField bind:value={theme.bgColor} label="{surfaceLabel} background">
+              <button
+                class="etp-btn"
+                type="button"
+                disabled={bgPresets.includes(theme.bgColor) || bgPresets.length >= MAX_COLOR_PRESETS}
+                on:click={() => savePreset("bg")}
+              >Add</button>
+            </ColorField>
+            <div class="etp-head-row">
+              <span class="etp-label">Saved colors</span>
+              <button
+                class="etp-btn"
+                class:on={editingBg}
+                type="button"
+                disabled={bgPresets.length === 0}
+                on:click={() => (editingBg = !editingBg)}
+              >{editingBg ? "Done" : "Edit"}</button>
+            </div>
+            <div class="etp-presets">
+              {#each bgPresets as color, i}
+                <button
+                  class="etp-swatch"
+                  class:removing={editingBg}
+                  type="button"
+                  style="background: {color}"
+                  title={color}
+                  on:click={() => (editingBg ? removePreset("bg", i) : usePreset("bg", color))}
+                >{#if editingBg}<span class="etp-x">×</span>{/if}</button>
+              {/each}
+              {#each bgSlotsFree as _}
+                <span class="etp-swatch empty"></span>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -328,6 +341,12 @@
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
+  }
+
+  .etp-tabbed {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
   }
 
   .etp-head-row {

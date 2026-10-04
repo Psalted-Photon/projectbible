@@ -15,6 +15,7 @@
   import { getReaderFont } from "../../lib/readerFonts";
   import ColorField from "../ColorField.svelte";
   import FontField from "../FontField.svelte";
+  import SectionTabs from "../SectionTabs.svelte";
   import { contrastRatio, isLowContrast, isValidHex, redLetterFor } from "../../lib/themeColors";
   import { tutorial } from "../../tutorial/state";
   import { isInstalledApp, isIOS, isPhoneOrTablet } from "../../lib/device";
@@ -52,6 +53,14 @@
   /** Edit mode turns each swatch into a delete button. */
   let editingTextPresets = false;
   let editingBgPresets = false;
+
+  /** One section of the Custom panel shows at a time, like the share card's. */
+  const THEME_TABS = [
+    { id: "font", label: "Font" },
+    { id: "text", label: "Text color" },
+    { id: "bg", label: "Background" },
+  ];
+  let customTab = "font";
 
   $: activeFont = getReaderFont(customFontId);
   $: customContrast = contrastRatio(customTextColor, customBgColor);
@@ -725,85 +734,8 @@
           book colors stay as they are.
         </p>
 
+        <!-- Live preview, above the tabs so it stays in view whichever is open -->
         <div class="cp-field">
-          <span class="label-text">Typeface</span>
-          <FontField bind:value={customFontId} />
-          {#if activeFont?.note}
-            <p class="cp-note">{activeFont.note}</p>
-          {/if}
-        </div>
-
-        <!-- Text color -->
-        <div class="cp-field">
-          <div class="cp-head">
-            <span class="label-text">Text color</span>
-            <button
-              class="cp-edit"
-              class:on={editingTextPresets}
-              disabled={customTextPresets.length === 0}
-              on:click={() => (editingTextPresets = !editingTextPresets)}
-            >{editingTextPresets ? "Done" : "Edit"}</button>
-          </div>
-          <ColorField bind:value={customTextColor} label="Reader text">
-            <button
-              class="cp-save"
-              disabled={customTextPresets.includes(customTextColor) || customTextPresets.length >= MAX_COLOR_PRESETS}
-              on:click={() => savePreset("text")}
-            >Add</button>
-          </ColorField>
-          <div class="cp-presets">
-            {#each customTextPresets as color, i}
-              <button
-                class="cp-swatch"
-                class:removing={editingTextPresets}
-                style="background: {color}"
-                title={color}
-                on:click={() => (editingTextPresets ? removePreset("text", i) : usePreset("text", color))}
-              >{#if editingTextPresets}<span class="cp-x">×</span>{/if}</button>
-            {/each}
-            {#each textSlotsFree as _}
-              <span class="cp-swatch empty"></span>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Background color -->
-        <div class="cp-field">
-          <div class="cp-head">
-            <span class="label-text">Background color</span>
-            <button
-              class="cp-edit"
-              class:on={editingBgPresets}
-              disabled={customBgPresets.length === 0}
-              on:click={() => (editingBgPresets = !editingBgPresets)}
-            >{editingBgPresets ? "Done" : "Edit"}</button>
-          </div>
-          <ColorField bind:value={customBgColor} label="Reader background">
-            <button
-              class="cp-save"
-              disabled={customBgPresets.includes(customBgColor) || customBgPresets.length >= MAX_COLOR_PRESETS}
-              on:click={() => savePreset("bg")}
-            >Add</button>
-          </ColorField>
-          <div class="cp-presets">
-            {#each customBgPresets as color, i}
-              <button
-                class="cp-swatch"
-                class:removing={editingBgPresets}
-                style="background: {color}"
-                title={color}
-                on:click={() => (editingBgPresets ? removePreset("bg", i) : usePreset("bg", color))}
-              >{#if editingBgPresets}<span class="cp-x">×</span>{/if}</button>
-            {/each}
-            {#each bgSlotsFree as _}
-              <span class="cp-swatch empty"></span>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Live preview -->
-        <div class="cp-field">
-          <span class="label-text">Preview</span>
           <div
             class="cp-preview"
             style="background: {customBgColor};
@@ -821,6 +753,87 @@
               Low contrast ({customContrast.toFixed(1)}:1) — this may be hard to read.
               Saving anyway is fine.
             </p>
+          {/if}
+        </div>
+
+        <div class="cp-tabbed">
+          <SectionTabs tabs={THEME_TABS} bind:value={customTab} label="Custom theme" />
+
+          {#if customTab === "font"}
+            <div class="cp-field">
+              <FontField bind:value={customFontId} />
+              {#if activeFont?.note}
+                <p class="cp-note">{activeFont.note}</p>
+              {/if}
+            </div>
+
+          {:else if customTab === "text"}
+            <div class="cp-field">
+              <ColorField bind:value={customTextColor} label="Reader text">
+                <button
+                  class="cp-save"
+                  disabled={customTextPresets.includes(customTextColor) || customTextPresets.length >= MAX_COLOR_PRESETS}
+                  on:click={() => savePreset("text")}
+                >Add</button>
+              </ColorField>
+              <div class="cp-head">
+                <span class="cp-sub">Saved colors</span>
+                <button
+                  class="cp-edit"
+                  class:on={editingTextPresets}
+                  disabled={customTextPresets.length === 0}
+                  on:click={() => (editingTextPresets = !editingTextPresets)}
+                >{editingTextPresets ? "Done" : "Edit"}</button>
+              </div>
+              <div class="cp-presets">
+                {#each customTextPresets as color, i}
+                  <button
+                    class="cp-swatch"
+                    class:removing={editingTextPresets}
+                    style="background: {color}"
+                    title={color}
+                    on:click={() => (editingTextPresets ? removePreset("text", i) : usePreset("text", color))}
+                  >{#if editingTextPresets}<span class="cp-x">×</span>{/if}</button>
+                {/each}
+                {#each textSlotsFree as _}
+                  <span class="cp-swatch empty"></span>
+                {/each}
+              </div>
+            </div>
+
+          {:else}
+            <div class="cp-field">
+              <ColorField bind:value={customBgColor} label="Reader background">
+                <button
+                  class="cp-save"
+                  disabled={customBgPresets.includes(customBgColor) || customBgPresets.length >= MAX_COLOR_PRESETS}
+                  on:click={() => savePreset("bg")}
+                >Add</button>
+              </ColorField>
+              <div class="cp-head">
+                <span class="cp-sub">Saved colors</span>
+                <button
+                  class="cp-edit"
+                  class:on={editingBgPresets}
+                  disabled={customBgPresets.length === 0}
+                  on:click={() => (editingBgPresets = !editingBgPresets)}
+                >{editingBgPresets ? "Done" : "Edit"}</button>
+              </div>
+              <div class="cp-presets">
+                {#each customBgPresets as color, i}
+                  <button
+                    class="cp-swatch"
+                    class:removing={editingBgPresets}
+                    style="background: {color}"
+                    title={color}
+                    on:click={() => (editingBgPresets ? removePreset("bg", i) : usePreset("bg", color))}
+                  >{#if editingBgPresets}<span class="cp-x">×</span>{/if}</button>
+                {/each}
+                {#each bgSlotsFree as _}
+                  <span class="cp-swatch empty"></span>
+                {/each}
+              </div>
+            </div>
           {/if}
         </div>
       </div>
@@ -1397,11 +1410,23 @@
     gap: 0.6rem;
   }
 
+  .cp-tabbed {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
   .cp-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
+  }
+
+  .cp-sub {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #999;
   }
 
   .cp-note {
