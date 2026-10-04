@@ -1182,6 +1182,29 @@
     ".nav-pill, .nav-interlinear, .nav-tts, .nav-repeat-pills";
 
   let navContentEl: HTMLElement;
+
+  // ── The overflow fade ──────────────────────────────────────────────────────
+  // The strip scrolls sideways with its scrollbar hidden, so once extras crowd
+  // in (read-aloud, repeats, the interlinear toggle) whole buttons can sit off
+  // the edge with nothing to say they are there. The side with more hidden gets
+  // a soft fade. It is a mask on the strip, not on the bar: the pills fade into
+  // the membrane, and the membrane itself — its curved end, where the bar
+  // really ends, and its shape animation — is never touched. The class goes on
+  // the bar rather than the strip because the strip's own attributes are
+  // watched, and a flip there would set the membrane re-settling.
+  let fadeSide: "left" | "right" | null = null;
+
+  function updateFade(): void {
+    if (!navContentEl) return;
+    const hiddenL = navContentEl.scrollLeft;
+    const hiddenR =
+      navContentEl.scrollWidth - navContentEl.clientWidth - navContentEl.scrollLeft;
+    // A pixel or two is rounding, not a hidden button.
+    const next =
+      Math.max(hiddenL, hiddenR) < 4 ? null : hiddenR >= hiddenL ? "right" : "left";
+    if (next !== fadeSide) fadeSide = next;
+  }
+
   let membraneFill = "";
   let membraneEdge = "";
   let membraneW = 0;
@@ -1632,6 +1655,9 @@
 
   /** Read the live geometry and turn it into a fresh set of sample heights. */
   function computeTarget(): number[] | null {
+    // Every reason to re-read the contour — a scroll, a resize, a group coming
+    // or going — is also a reason the hidden side may have changed.
+    updateFade();
     if (!navElement) return null;
     const W = navElement.clientWidth;
     if (!W) return null;
@@ -1887,6 +1913,8 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="navigation-bar"
+  class:fade-left={fadeSide === "left"}
+  class:fade-right={fadeSide === "right"}
   {style}
   bind:this={navElement}
   on:pointerdown={onBarPointerDown}
@@ -2701,6 +2729,18 @@
 
   .nav-content::-webkit-scrollbar {
     display: none;
+  }
+
+  /* The overflow fade (see fadeSide). Not quite to nothing at the very edge,
+     so a half-hidden button still reads as a button. */
+  .navigation-bar.fade-right .nav-content {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 44px), rgba(0, 0, 0, 0.12) 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 44px), rgba(0, 0, 0, 0.12) 100%);
+  }
+
+  .navigation-bar.fade-left .nav-content {
+    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 44px), rgba(0, 0, 0, 0.12) 100%);
+    mask-image: linear-gradient(to left, #000 calc(100% - 44px), rgba(0, 0, 0, 0.12) 100%);
   }
 
   /* While a sideways drag is running. The cursor says the bar is being grabbed,
