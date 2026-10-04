@@ -93,14 +93,14 @@ export const NAVBAR_TIPS: Tip[] = [
     area,
     target: '.pill-search-icon-btn',
     title: 'Search',
-    body: 'Search the Bible, your notes and journal, people, the encyclopedia and the commentaries, all at once.',
+    body: 'Search the Bible, your notes and journal, people, the encyclopedia and the commentaries, all at once. Once you type something, Advanced search appears beside it.',
   },
   {
     id: 'nav-power-search',
     area,
     target: '.pill-powersearch',
     title: 'Advanced search',
-    body: 'Search with patterns, words near each other, and filters like book and testament.',
+    body: 'Takes what you typed and opens it in Advanced search, where you can add patterns, words near each other, and filters like book and testament.',
   },
   {
     id: 'nav-reading-plans',

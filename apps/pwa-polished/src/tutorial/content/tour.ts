@@ -295,7 +295,7 @@ export const PART_ONE: TourStep[] = [
     reveal: true,
     passThrough: false,
     title: 'Search',
-    body: 'Search the Bible, your notes and journal, people, the encyclopedia and the commentaries, all at once.',
+    body: 'Search the Bible, your notes and journal, people, the encyclopedia and the commentaries, all at once. Once you type something, Advanced search appears beside it.',
   },
   {
     id: 'tool-apps',

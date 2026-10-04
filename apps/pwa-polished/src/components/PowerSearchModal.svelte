@@ -25,8 +25,27 @@
   import { Microscope } from 'phosphor-svelte';
 
   export let show = false;
+  /** Text typed in the bar's search box before this was opened. It goes into
+   *  "Search for:" each time the window opens, so the user can go on to add
+   *  patterns and filters without retyping it. */
+  export let initialText = "";
 
   let config: SearchConfig = createDefaultConfig();
+
+  let wasShown = false;
+  $: onShowChange(show);
+  function onShowChange(open: boolean) {
+    const text = initialText.trim();
+    if (open && !wasShown && text && text !== config.text) {
+      config.text = text;
+      // Results from an earlier search would sit under the new words.
+      generatedQuery = null;
+      searchResults = [];
+      expandedResultNodes = new Set();
+      totalResultCount = 0;
+    }
+    wasShown = open;
+  }
   let showGeneratedPattern = false;
   let generatedQuery: GeneratedQuery | null = null;
   let previewResults: SearchCategory[] = [];

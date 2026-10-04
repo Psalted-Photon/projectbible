@@ -148,6 +148,8 @@
   let displayedResultCount = 0;
   let showingAll = false;
   let showPowerSearchModal = false;
+  /** What the bar's box held when Advanced search was opened from it. */
+  let powerSearchText = "";
 
   // The apps button: every window type in one list, so none of them needs a
   // swipe to reach. Harmonies asks which set first, like the tile does.
@@ -1053,6 +1055,22 @@
     await tick();
     const input = searchContainerRef?.querySelector('.search-input') as HTMLInputElement;
     input?.focus();
+  }
+
+  // The glass opens the box when it is empty and runs the search once
+  // something is typed, the same as pressing Enter.
+  function handleSearchIconClick() {
+    if (searchExpanded && searchQuery.trim()) {
+      performSearch();
+    } else {
+      expandSearch();
+    }
+  }
+
+  function openAdvancedSearch() {
+    powerSearchText = searchQuery.trim();
+    showResults = false;
+    showPowerSearchModal = true;
   }
 
   function handleSearchFocus() {
@@ -2310,14 +2328,8 @@
         on:keydown|stopPropagation
         role="search"
       >
-        <button
-          class="pill-btn pill-search-icon-btn"
-          on:click={expandSearch}
-          title="Search"
-          aria-label="Search"
-        >
-          <span class="icon-badge icon-badge-search"><MagnifyingGlass size={18} weight="bold" /><span class="icon-overlay"><MagnifyingGlass size={18} weight="thin" /></span></span>
-        </button>
+        <!-- The box opens to the left of the glass, so the glass stays put and
+             becomes the button that runs what was typed. -->
         <div class="pill-search-expander" class:expanded={searchExpanded}>
           <div class="search-input-inner" class:focused={searchFocused}>
             <input
@@ -2345,19 +2357,29 @@
             {/if}
           </div>
         </div>
+        <button
+          class="pill-btn pill-search-icon-btn"
+          on:click={handleSearchIconClick}
+          title="Search"
+          aria-label="Search"
+        >
+          <span class="icon-badge icon-badge-search"><MagnifyingGlass size={18} weight="bold" /><span class="icon-overlay"><MagnifyingGlass size={18} weight="thin" /></span></span>
+        </button>
+        <!-- Advanced search stays out of the way until there is something to
+             hand it: it appears once the box has text, and carries that text
+             into its "Search for:" field. -->
+        {#if searchQuery.trim()}
+          <div class="pill-divider"></div>
+          <button
+            class="pill-btn pill-powersearch"
+            on:click={openAdvancedSearch}
+            title="Advanced search — regex, proximity, biblical filters"
+            aria-label="Advanced search"
+          >
+            <span class="icon-badge icon-badge-powersearch"><Microscope size={18} weight="bold" /><span class="icon-overlay"><Microscope size={18} weight="thin" /></span></span>
+          </button>
+        {/if}
       </div>
-
-      <div class="pill-divider"></div>
-
-      <!-- Advanced Search -->
-      <button
-        class="pill-btn pill-powersearch"
-        on:click={() => (showPowerSearchModal = true)}
-        title="Advanced search — regex, proximity, biblical filters"
-        aria-label="Advanced search"
-      >
-        <span class="icon-badge icon-badge-powersearch"><Microscope size={18} weight="bold" /><span class="icon-overlay"><Microscope size={18} weight="thin" /></span></span>
-      </button>
 
       <div class="pill-divider"></div>
 
@@ -2606,7 +2628,7 @@
 </div>
 
 <!-- Power Search Modal -->
-<PowerSearchModal bind:show={showPowerSearchModal} />
+<PowerSearchModal bind:show={showPowerSearchModal} initialText={powerSearchText} />
 
 {#if appsMenuOpen && appsButtonRef}
   <WindowTypeMenu
@@ -3298,6 +3320,7 @@
   .pill-search-area {
     display: flex;
     align-items: center;
+    gap: 1px;
     flex-shrink: 0;
   }
 
@@ -3324,7 +3347,7 @@
     background: #141414;
     border: 1px solid #3a3a3a;
     border-radius: 5px;
-    margin-left: 4px;
+    margin-right: 4px;
     width: 222px;
     box-sizing: border-box;
     transition: border-color 0.15s;
