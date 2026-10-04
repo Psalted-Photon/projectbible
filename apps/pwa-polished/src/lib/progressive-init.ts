@@ -201,7 +201,13 @@ export function getPackLoader(): PackLoader {
  */
 export async function loadPackOnDemand(
   packId: string,
-  onProgress?: (progress: DownloadProgress) => void
+  onProgress?: (progress: DownloadProgress) => void,
+  /**
+   * An update: the installed copy is removed only once the new one has
+   * downloaded and passed its checksum, so the feature keeps working on the
+   * old data for the whole download, and a failed download leaves it intact.
+   */
+  opts: { replaceAfterDownload?: boolean } = {},
 ): Promise<void> {
   if (USE_BUNDLED_PACKS) {
     console.log('Using bundled packs - skipping on-demand download');
@@ -251,6 +257,12 @@ export async function loadPackOnDemand(
       let data: Uint8Array | null = await loader.downloadPack(packId);
       const byteLength = data.length;
       logInstall('download-returned', { bytes: byteLength });
+
+      if (opts.replaceAfterDownload && installedPack) {
+        const { removePack } = await import('../adapters/db-manager');
+        await removePack(packId);
+        logInstall('old-copy-removed');
+      }
 
       onProgress?.({
         packId,

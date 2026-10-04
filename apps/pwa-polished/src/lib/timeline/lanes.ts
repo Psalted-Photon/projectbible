@@ -101,12 +101,32 @@ export interface LaneLayout {
   groups: Record<string, { x0: number; x1: number }>;
 }
 
-/** Greedy columns by year: an item takes the first column free before it starts. */
-function columnsByYear(items: TimelineItem[]): { cols: Map<string, number>; count: number } {
+/**
+ * Greedy columns by year: an item takes the first column free before it starts.
+ *
+ * Counted per run of overlapping items rather than across the whole lane, so
+ * ten patriarchs alive at once in Genesis do not make every life after them a
+ * tenth of the lane wide. `width[id]` is how many columns that item's run needs.
+ */
+function columnsByYear(items: TimelineItem[]): { cols: Map<string, number>; width: Map<string, number>; count: number } {
   const sorted = [...items].sort((a, b) => a.year_start - b.year_start || b.year_end - a.year_end);
-  const ends: number[] = [];
   const cols = new Map<string, number>();
+  const width = new Map<string, number>();
+  let ends: number[] = [];
+  let run: string[] = [];
+  let runEnd = -Infinity;
+  let count = 1;
+  const closeRun = () => {
+    for (const id of run) width.set(id, Math.max(1, ends.length));
+    count = Math.max(count, ends.length);
+    ends = [];
+    run = [];
+  };
   for (const it of sorted) {
+    if (it.year_start > runEnd) {
+      closeRun();
+      runEnd = -Infinity;
+    }
     let col = ends.findIndex((end) => end < it.year_start);
     if (col === -1) {
       col = ends.length;
@@ -115,8 +135,11 @@ function columnsByYear(items: TimelineItem[]): { cols: Map<string, number>; coun
       ends[col] = it.year_end;
     }
     cols.set(it.id, col);
+    run.push(it.id);
+    runEnd = Math.max(runEnd, it.year_end);
   }
-  return { cols, count: Math.max(1, ends.length) };
+  closeRun();
+  return { cols, width, count };
 }
 
 const whole = (it: TimelineItem): LaneSegment[] => [{ from: it.year_start, to: it.year_end, narrow: false }];
@@ -159,42 +182,30 @@ export function layoutLane(id: LaneId, all: TimelineItem[]): LaneLayout {
     };
   }
 
+  /** Lay a set of items across [from, to] of the lane, each run of overlaps split evenly. */
+  const spread = (list: TimelineItem[], from: number, to: number, group: string): LaneSlot[] => {
+    const { cols, width } = columnsByYear(list);
+    return list.map((it) => {
+      const w = (to - from) / (width.get(it.id) ?? 1);
+      const x0 = from + (cols.get(it.id) ?? 0) * w;
+      return { item: it, x0, x1: x0 + w, segments: whole(it), color: laneColor(it), group };
+    });
+  };
+
   if (id === 'world') {
-    // Empires on the left, wider; the rulers in thinner columns beside them.
-    const empires = items.filter((it) => it.sub === 'empire');
-    const rulers = items.filter((it) => it.sub !== 'empire');
-    const e = columnsByYear(empires);
-    const r = columnsByYear(rulers);
-    const units = e.count * 1.6 + r.count;
-    const ew = 1.6 / units;
-    const rw = 1 / units;
-    const split = e.count * ew;
+    // Empires on the left, a little wider; the rulers beside them.
+    const SPLIT = 0.5;
     return {
       id,
       slots: [
-        ...empires.map((it) => {
-          const c = e.cols.get(it.id) ?? 0;
-          return { item: it, x0: c * ew, x1: (c + 1) * ew, segments: whole(it), color: laneColor(it), group: 'empire' };
-        }),
-        ...rulers.map((it) => {
-          const c = r.cols.get(it.id) ?? 0;
-          return { item: it, x0: split + c * rw, x1: split + (c + 1) * rw, segments: whole(it), color: laneColor(it), group: 'ruler' };
-        }),
+        ...spread(items.filter((it) => it.sub === 'empire'), 0, SPLIT, 'empire'),
+        ...spread(items.filter((it) => it.sub !== 'empire'), SPLIT, 1, 'ruler'),
       ],
-      groups: { empire: { x0: 0, x1: split }, ruler: { x0: split, x1: 1 } },
+      groups: { empire: { x0: 0, x1: SPLIT }, ruler: { x0: SPLIT, x1: 1 } },
     };
   }
 
-  const { cols, count } = columnsByYear(items);
-  const w = 1 / count;
-  return {
-    id,
-    slots: items.map((it) => {
-      const c = cols.get(it.id) ?? 0;
-      return { item: it, x0: c * w, x1: (c + 1) * w, segments: whole(it), color: laneColor(it), group: 'all' };
-    }),
-    groups: { all: { x0: 0, x1: 1 } },
-  };
+  return { id, slots: spread(items, 0, 1, 'all'), groups: { all: { x0: 0, x1: 1 } } };
 }
 
 export interface LaneBar {

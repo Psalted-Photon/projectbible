@@ -2487,13 +2487,16 @@
           {translationLabel(translation)}
         </button>
       {/each}
-      <!-- Packs not yet downloaded, each with its own Download button. -->
+      <!-- Packs not yet downloaded, each with its own Download button, and
+           any installed one with a new version. -->
       <PackDropdownSection
         heading="More Translations"
         restartFor="read them"
         rows={[
           { packId: 'translations', label: 'English', contents: 'KJV, WEB, BSB, LXX2012' },
           { packId: 'ancient-languages', label: 'Ancient Languages', contents: 'Hebrew, Greek NT, LXX' },
+          // Only ever as an update: once TSK is in, its own dropdown never opens.
+          { packId: 'tsk-references', label: 'TSK References', contents: 'Cross-references', updateOnly: true },
         ]}
       />
     </div>

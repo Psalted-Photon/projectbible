@@ -240,6 +240,8 @@ function stageLabel(stage: string): string {
 export async function downloadAndImportPack(
   pack: CatalogPack,
   onMessage: (message: string) => void,
+  /** An update: the old copy goes only after the new one has downloaded. */
+  opts: { replaceAfterDownload?: boolean } = {},
 ): Promise<void> {
   // The map's geometry is compressed inside the pack and inflated on read,
   // which needs DecompressionStream. Checked here rather than mid-install:
@@ -261,6 +263,7 @@ export async function downloadAndImportPack(
     }
     const buffer = await response.arrayBuffer();
 
+    if (opts.replaceAfterDownload) await removePack(pack.id);
     onMessage(`Installing ${pack.name}...`);
     // No File wrapper: it would copy the whole pack into blob storage
     // just to be read straight back out again.
@@ -307,7 +310,7 @@ export async function downloadAndImportPack(
     } else {
       onMessage(`${label} ${pack.name}...`);
     }
-  });
+  }, opts);
 
   // art.sqlite carries only the scenes; the paintings arrive as small
   // shards so sql.js never holds the whole pack at once.
@@ -667,6 +670,58 @@ export async function installPack(
         ? `Not enough storage to install ${pack.name}.\n` +
             'Free up space on your device, or remove a pack you are not using, then try again.'
         : `Couldn't install ${pack.name}: ${errorText(error)}`,
+      'error',
+    );
+    return false;
+  } finally {
+    installingPackId.set(null);
+    installMessage.set('');
+    installBusy.set(false);
+  }
+}
+
+/**
+ * Replace an installed pack with the newer one on the release.
+ *
+ * Unlike a re-download, the old copy stays in place while the new one
+ * downloads: the feature keeps working on what it has, and a download that
+ * fails leaves it untouched. The old data is cleared only once the new file is
+ * in hand and its checksum matches, then the new one is imported.
+ *
+ * Takes the same lock, space check and notices as installPack, so one install
+ * or update runs at a time, app-wide.
+ */
+export async function updatePack(pack: CatalogPack): Promise<boolean> {
+  if (get(installBusy)) return false;
+
+  if (pack.id === 'atlas-map' && !atlasPackSupported()) {
+    showNotice(
+      `${pack.name} needs a newer browser than this one.\n` +
+        'It works in Chrome 80 and later, Safari 16.4 and later, and Firefox 113 and later.',
+      'error',
+    );
+    return false;
+  }
+
+  installBusy.set(true);
+  installingPackId.set(pack.id);
+  try {
+    const sizes = await loadPackSizes();
+    if (!(await hasRoomForBytes(pack.name, installBytesFor(pack.id, sizes.bytes)))) return false;
+
+    await downloadAndImportPack(pack, (message) => installMessage.set(message), { replaceAfterDownload: true });
+
+    restartNeeded.set(true);
+    showNotice(`${pack.name} updated`);
+    window.dispatchEvent(new CustomEvent('packsUpdated'));
+    return true;
+  } catch (error) {
+    console.error(`Error updating ${pack.name}:`, error);
+    showNotice(
+      isQuotaError(error)
+        ? `Not enough storage to update ${pack.name}.\n` +
+            'Free up space on your device, or remove a pack you are not using, then try again.'
+        : `Couldn't update ${pack.name}: ${errorText(error)}`,
       'error',
     );
     return false;

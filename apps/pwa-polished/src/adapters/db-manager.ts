@@ -181,6 +181,25 @@ export async function packInstallFinished(packId: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * The content hash each installed pack was installed from, by pack id.
+ *
+ * A row with no hash is an install that never finished; it is left out, since
+ * that is a repair (the Get packs card's job), not an update. Reads the raw
+ * rows: listInstalledPacks leaves contentHash out.
+ */
+export async function installedPackHashes(): Promise<Record<string, string>> {
+  const db = await openDB();
+  const rows = await new Promise<Array<{ id: string; contentHash?: string }>>((resolve) => {
+    const req = db.transaction('packs', 'readonly').objectStore('packs').getAll();
+    req.onsuccess = () => resolve(req.result ?? []);
+    req.onerror = () => resolve([]);
+  });
+  const out: Record<string, string> = {};
+  for (const row of rows) if (row?.id && row.contentHash) out[row.id] = row.contentHash;
+  return out;
+}
+
 /** Delete a retired audio pack's file (and any journal beside it) from OPFS. */
 async function removeAudioPackFiles(packId: string): Promise<void> {
   try {

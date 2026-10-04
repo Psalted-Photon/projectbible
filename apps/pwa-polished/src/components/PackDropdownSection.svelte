@@ -8,6 +8,11 @@
    * already installed when the dropdown opened isn't drawn, and with none left
    * the section draws nothing. A row installed since stays, offering the
    * restart that shows it, since these lists are read once at startup.
+   *
+   * An installed pack with a newer version on the release gets a row of its
+   * own under "New version available", with the same download button: the
+   * update downloads while the old copy stays in use (updatePack). Not now and
+   * Ignore put it off, as on PackUpdateNotice.
    */
   import { onMount } from 'svelte';
   import { DownloadSimple, ArrowClockwise } from 'phosphor-svelte';
@@ -15,6 +20,7 @@
   import {
     PACK_CATALOG,
     installPack,
+    updatePack,
     installBusy,
     installMessage,
     installingPackId,
@@ -24,9 +30,22 @@
     type PackSizes,
   } from '../lib/packInstaller';
   import BrandSpinner from './BrandSpinner.svelte';
+  import {
+    pendingUpdates,
+    packUpdates,
+    watchPackUpdates,
+    notNowUpdate,
+    ignoreUpdate,
+    markUpdated,
+  } from '../lib/packUpdates';
 
   export let heading: string;
-  export let rows: { packId: string; label: string; contents: string }[];
+  /**
+   * `updateOnly`: a pack that is offered here only when it has a new version,
+   * never as a fresh install (TSK in the translation list, whose own dropdown
+   * only opens while it is missing).
+   */
+  export let rows: { packId: string; label: string; contents: string; updateOnly?: boolean }[];
   /** What the restart brings, after "Installed. Restart to …". */
   export let restartFor = 'use it';
 
@@ -37,6 +56,7 @@
   let justIn: Record<string, boolean> = {};
 
   onMount(async () => {
+    watchPackUpdates();
     loadPackSizes().then((s) => (sizes = s));
     const results = await Promise.all(
       rows.map((r) => packInstallFinished(r.packId).catch(() => false)),
@@ -54,7 +74,26 @@
     if (await installPack(pack)) justIn = { ...justIn, [id]: true };
   }
 
-  $: visible = alreadyIn ? rows.filter((r) => !alreadyIn![r.packId]) : [];
+  $: visible = alreadyIn ? rows.filter((r) => !alreadyIn![r.packId] && !r.updateOnly) : [];
+
+  /** Updated while the dropdown was open: the row stays, offering the restart. */
+  let justUpdated: Record<string, boolean> = {};
+  $: updateRows = alreadyIn
+    ? rows.filter(
+        (r) =>
+          alreadyIn![r.packId] &&
+          ($pendingUpdates[r.packId] || justUpdated[r.packId] || ($installingPackId === r.packId && $packUpdates[r.packId])),
+      )
+    : [];
+
+  async function update(id: string) {
+    const pack = packFor(id);
+    if (!pack) return;
+    if (await updatePack(pack)) {
+      markUpdated(id);
+      justUpdated = { ...justUpdated, [id]: true };
+    }
+  }
 </script>
 
 {#if visible.length > 0}
@@ -88,6 +127,48 @@
             on:click={() => download(row.packId)}
           >
             <DownloadSimple size={14} weight="bold" /> {packSizeLabel(pack, sizes)}
+          </button>
+        {/if}
+      </div>
+    {/each}
+  </div>
+{/if}
+
+{#if updateRows.length > 0}
+  <div class="mt-section">
+    <div class="mt-head">New version available</div>
+    {#each updateRows as row (row.packId)}
+      {@const pack = packFor(row.packId)}
+      <div class="mt-row">
+        <span class="mt-text">
+          <span class="mt-label">{row.label}</span>
+          {#if $installingPackId === row.packId}
+            <span class="mt-progress">{$installMessage || 'Starting…'}</span>
+          {:else if justUpdated[row.packId]}
+            <span class="mt-contents">Updated. Restart to {restartFor}.</span>
+          {:else}
+            <span class="mt-contents">You can keep using this one while the new one downloads.</span>
+            <span class="mt-later">
+              <button type="button" class="mt-link" on:click={() => notNowUpdate(row.packId)}>Not now</button>
+              <button type="button" class="mt-link" on:click={() => ignoreUpdate(row.packId)}>Ignore this update</button>
+            </span>
+          {/if}
+        </span>
+        {#if justUpdated[row.packId]}
+          <button type="button" class="mt-btn mt-restart" on:click={() => window.location.reload()}>
+            <ArrowClockwise size={14} weight="bold" /> Restart
+          </button>
+        {:else if $installingPackId === row.packId}
+          <span class="mt-busy"><BrandSpinner size={20} title="Updating…" /></span>
+        {:else if pack}
+          <button
+            type="button"
+            class="mt-btn"
+            disabled={$installBusy}
+            title={$installBusy ? 'Another pack is installing' : `Download the new ${pack.name}`}
+            on:click={() => update(row.packId)}
+          >
+            <DownloadSimple size={14} weight="bold" /> Update · {packSizeLabel(pack, sizes)}
           </button>
         {/if}
       </div>
@@ -178,6 +259,28 @@
     background: transparent;
     border: 1px solid #e6b84a;
     color: #e6b84a;
+  }
+
+  .mt-later {
+    display: flex;
+    gap: 10px;
+    margin-top: 2px;
+  }
+
+  .mt-link {
+    padding: 2px 0;
+    border: none;
+    background: none;
+    color: #aaa;
+    font-size: 11.5px;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .mt-link:hover {
+    color: #fff;
   }
 
   .mt-busy {

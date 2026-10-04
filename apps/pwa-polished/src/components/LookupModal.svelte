@@ -14,6 +14,15 @@
   import { pendingRestore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { clearCarriedWorks } from "../lib/openWork";
+  import PackUpdateNotice from "./PackUpdateNotice.svelte";
+
+  /** The packs behind each work, so the card can say when one has a new version. */
+  const WORK_PACKS: Record<string, string[]> = {
+    encyclopedia: ["encyclotopical"],
+    topical: ["encyclotopical"],
+    people: ["people-biblical-v1"],
+    dictionary: ["dictionary-en", "lexical"],
+  };
 
   /**
    * The one lookup card.
@@ -203,6 +212,7 @@
 {#if work}
   <div class="modal-backdrop" on:click={handleBackdropClick} role="presentation">
     <div class="modal-container">
+      <PackUpdateNotice packs={WORK_PACKS[work] ?? []} />
       {#if work === "encyclopedia"}
         <IsbeContent
           bind:this={content}

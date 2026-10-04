@@ -88,7 +88,6 @@
     `--grip-b:${edge === 'top' ? GRIP_PX : 0}px`,
   ].join(';');
 
-  $: chronoOn = $navigationStore.isChronologicalMode === true;
 
   // ===== Scale =====
 
@@ -667,17 +666,6 @@
     navigationStore.navigateToVerse(current.translation, p.b, p.c, p.v);
   }
 
-  /**
-   * The switch chronological mode never had.
-   *
-   * `setChronologicalMode` has been on the store, and persisted, since long
-   * before this window — with nothing anywhere in the app that called it. This
-   * is that control, put where reading in time order is already the subject.
-   */
-  function toggleChronological() {
-    navigationStore.setChronologicalMode(!chronoOn);
-  }
-
   function zoomButton(factor: number) {
     stopGlide();
     measureStage();
@@ -694,90 +682,121 @@
 
   // ===== Lifecycle =====
 
-  let resizeObserver: ResizeObserver | null = null;
+  /**
+   * Read the pack and build everything that depends only on it.
+   *
+   * Run at open, and again whenever a pack is installed or updated
+   * (packsUpdated), so a Timeline installed from its own Get packs card, or
+   * updated from the new-version notice, shows straight away with no restart.
+   * A reload keeps the year in the middle of the strip where it was.
+   */
+  async function load(first: boolean) {
+    try {
+      if (!(await timelineInstalled())) {
+        missing = true;
+        loading = false;
+        return;
+      }
+      const keepYear = !first && data && stageH > 0 ? scale.yearAt((stageH / 2 - ty) / zoom) : null;
+      if (!first) releaseTimeline();
+      const loaded = await loadTimeline();
+      storyScale = makeStoryScale(loaded.eras, loaded.events);
+      trueScale = makeScale(loaded.minYear, loaded.maxYear);
+      laneLayouts = new Map(LANES.map((l) => [l.id, layoutLane(l.id, loaded.items)]));
+      hereIndex = buildHereIndex(loaded);
 
-  onMount(() => {
-    (async () => {
-      try {
-        if (!(await timelineInstalled())) {
-          missing = true;
-          loading = false;
-          return;
-        }
-        const loaded = await loadTimeline();
-        storyScale = makeStoryScale(loaded.eras, loaded.events);
-        trueScale = makeScale(loaded.minYear, loaded.maxYear);
-        laneLayouts = new Map(LANES.map((l) => [l.id, layoutLane(l.id, loaded.items)]));
-        hereIndex = buildHereIndex(loaded);
-
+      // The window's own settings, on its first real load (at open, or once a
+      // pack that was missing arrives).
+      if (first || missing) {
         const saved = windowState?.contentState;
         mode = saved?.timelineScale === 'true' ? 'true' : 'story';
         if (Array.isArray(saved?.timelineLanes)) {
           chosenLanes = saved.timelineLanes.filter((id: string) => LANES.some((l) => l.id === id));
         }
         if (typeof saved?.timelineFollow === 'boolean') follow = saved.timelineFollow;
-
-        data = loaded;
-        loading = false;
-        // Wait for the stage to have a size before the first zoom and scroll.
-        requestAnimationFrame(() => {
-          // Follow may already have started a glide at the old zoom; this
-          // placement replaces it.
-          stopGlide();
-          measureStage();
-          zoom = startZoom(mode === 'story' ? storyScale : trueScale, mode);
-          ty = 0;
-          clampTy();
-          // Opening with Follow on starts where the reader is, without a glide.
-          const year = follow ? hereCentreYear() : null;
-          if (year !== null) {
-            ty = tyFor(year);
-            followedKey = hereKey;
-          }
-        });
-      } catch (err) {
-        error = err instanceof Error ? err.message : String(err);
-        loading = false;
       }
-    })();
 
-    // Attached by hand rather than with on: directives so passive:false is
-    // guaranteed — a passive listener drops preventDefault, and without it the
-    // browser scrolls the page instead of the axis.
-    const opts: AddEventListenerOptions = { passive: false };
-    let attached: HTMLDivElement | null = null;
+      const wasMissing = missing;
+      missing = false;
+      error = null;
+      data = loaded;
+      loading = false;
+      // The card keeps showing the same item, as the new pack has it.
+      if (selected) selected = loaded.byId.get(selected.id) ?? null;
 
-    // The stage only exists once the gate has been cleared, so attaching waits
-    // a frame rather than assuming it is there at mount.
-    const raf = requestAnimationFrame(() => {
-      if (!stageEl) return;
-      attached = stageEl;
-      attached.addEventListener('pointerdown', onPointerDown, opts);
-      attached.addEventListener('pointermove', onPointerMove, opts);
-      attached.addEventListener('pointerup', onPointerUp, opts);
-      attached.addEventListener('pointercancel', onPointerCancel, opts);
-      attached.addEventListener('wheel', onWheel, opts);
-      attached.addEventListener('gesturestart', blockGesture, opts);
-      attached.addEventListener('gesturechange', blockGesture, opts);
-      attached.addEventListener('gestureend', blockGesture, opts);
-      resizeObserver = new ResizeObserver(() => measureStage());
-      resizeObserver.observe(attached);
-    });
+      // Wait for the stage to have a size before the zoom and scroll.
+      requestAnimationFrame(() => {
+        // Follow may already have started a glide at the old zoom; this
+        // placement replaces it.
+        stopGlide();
+        measureStage();
+        if (keepYear !== null && !wasMissing) {
+          ty = tyFor(keepYear);
+          return;
+        }
+        zoom = startZoom(mode === 'story' ? storyScale : trueScale, mode);
+        ty = 0;
+        clampTy();
+        // Opening with Follow on starts where the reader is, without a glide.
+        const year = follow ? hereCentreYear() : null;
+        if (year !== null) {
+          ty = tyFor(year);
+          followedKey = hereKey;
+        }
+      });
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      loading = false;
+    }
+  }
 
+  // Attached by hand rather than with on: directives so passive:false is
+  // guaranteed — a passive listener drops preventDefault, and without it the
+  // browser scrolls the page instead of the axis. The stage element comes and
+  // goes with the install gate, so the listeners follow whichever one is there.
+  const listenerOpts: AddEventListenerOptions = { passive: false };
+  let attached: HTMLDivElement | null = null;
+  let resizeObserver: ResizeObserver | null = null;
+
+  const STAGE_EVENTS: [string, (e: any) => void][] = [
+    ['pointerdown', onPointerDown],
+    ['pointermove', onPointerMove],
+    ['pointerup', onPointerUp],
+    ['pointercancel', onPointerCancel],
+    ['wheel', onWheel],
+    ['gesturestart', blockGesture],
+    ['gesturechange', blockGesture],
+    ['gestureend', blockGesture],
+  ];
+
+  function detachStage() {
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    if (!attached) return;
+    for (const [name, fn] of STAGE_EVENTS) attached.removeEventListener(name, fn, listenerOpts);
+    attached = null;
+  }
+
+  function attachStage(el: HTMLDivElement | null | undefined) {
+    if (el === attached) return;
+    detachStage();
+    if (!el) return;
+    attached = el;
+    for (const [name, fn] of STAGE_EVENTS) el.addEventListener(name, fn, listenerOpts);
+    resizeObserver = new ResizeObserver(() => measureStage());
+    resizeObserver.observe(el);
+  }
+
+  $: attachStage(stageEl);
+
+  onMount(() => {
+    void load(true);
+    const onPacks = () => void load(false);
+    window.addEventListener('packsUpdated', onPacks);
     return () => {
-      cancelAnimationFrame(raf);
+      window.removeEventListener('packsUpdated', onPacks);
       stopGlide();
-      resizeObserver?.disconnect();
-      resizeObserver = null;
-      if (!attached) return;
-      attached.removeEventListener('pointerdown', onPointerDown, opts);
-      attached.removeEventListener('pointermove', onPointerMove, opts);
-      attached.removeEventListener('pointerup', onPointerUp, opts);
-      attached.removeEventListener('pointercancel', onPointerCancel, opts);
-      attached.removeEventListener('wheel', onWheel, opts);
-      attached.removeEventListener('gesturestart', blockGesture, opts);
-      attached.removeEventListener('gesturechange', blockGesture, opts);
-      attached.removeEventListener('gestureend', blockGesture, opts);
+      detachStage();
     };
   });
 
@@ -848,10 +867,6 @@
         <button class="menu-item" role="menuitemcheckbox" aria-checked={follow} on:click={toggleFollow}>
           <span class="menu-check">{follow ? '✓' : ''}</span>
           Follow my reading
-        </button>
-        <button class="menu-item" role="menuitemcheckbox" aria-checked={chronoOn} on:click={toggleChronological}>
-          <span class="menu-check">{chronoOn ? '✓' : ''}</span>
-          Chronological reading <span class="menu-sub">the Bible in the order events happened</span>
         </button>
         <div class="menu-row">
           <button class="btn btn-icon" title="Zoom out" aria-label="Zoom out" on:click={() => zoomButton(1 / 1.6)}>

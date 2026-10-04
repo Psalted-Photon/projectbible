@@ -21,6 +21,7 @@
   import { currentSlotStore, todayMonthDay } from '../../lib/devotionals/slot';
   import { devotionalTarget, devotionalSettings, type DevotionalTarget } from '../../stores/devotionalStore';
   import { todayStore } from '../../stores/clockStore';
+  import PackUpdateNotice from '../PackUpdateNotice.svelte';
   import GetPacksCard from '../GetPacksCard.svelte';
   import DevotionalReading from './DevotionalReading.svelte';
   import DevotionalReminders from './DevotionalReminders.svelte';
@@ -113,6 +114,9 @@
     />
   </div>
 {:else}
+  <!-- A newer Devotionals pack on the release. The tab reads the pack fresh on
+       packsUpdated, so the update needs no restart either. -->
+  <PackUpdateNotice packs={['devotionals']} reloads />
   {#if open && openWork}
     <DevotionalReading
       work={openWork}

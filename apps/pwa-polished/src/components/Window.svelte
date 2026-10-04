@@ -6,8 +6,13 @@
   import { SquaresFour } from 'phosphor-svelte';
   import WindowTypeMenu from "./WindowTypeMenu.svelte";
   import HarmonyPicker from "./HarmonyPicker.svelte";
+  import PackUpdateNotice from "./PackUpdateNotice.svelte";
+  import { WINDOW_PACKS } from "../lib/packUpdates";
 
   export let window: WindowState;
+
+  /** The packs this window's content reads, so it can say when one has a new version. */
+  $: updatePacks = WINDOW_PACKS[window.contentType];
 
   // Send this window to another edge. The reader re-insets itself from the
   // store, so nothing here has to know about the layout.
@@ -327,6 +332,10 @@
       on:choose={openHarmony}
       on:close={() => (showHarmonyPicker = false)}
     />
+  {/if}
+
+  {#if updatePacks}
+    <PackUpdateNotice packs={updatePacks.packs} reloads={updatePacks.reloads ?? false} />
   {/if}
 
   <!-- Panel content -->

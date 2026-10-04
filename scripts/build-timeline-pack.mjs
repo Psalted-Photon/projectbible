@@ -574,11 +574,13 @@ for (const r of world.rulers) {
     const b = born.get(l.id);
     if (b === undefined) { fail(`${where}: birth year cannot be worked out`); continue; }
     const d = l.died ?? b + l.age;
-    const age = d - b;
+    // There is no year 0, so a life from 4 BC to AD 30 is 33 years, not 34.
+    const age = d - b - (b < 0 && d > 0 ? 1 : 0);
     const primeval = b < -2166 || l.approx;
     addItem({
       id: `life-${l.id}`, kind: 'life', lane: 'lives', title: l.name,
-      subtitle: `Lived ${age} years`,
+      // "About" where the dates are estimates and the text never gives the age.
+      subtitle: l.approx && l.age === undefined && !l.ageGiven ? `Lived about ${age} years` : `Lived ${age} years`,
       year_start: b, year_end: d, approx: primeval,
       summary: l.note ?? null,
       passages: parsePassages(l.passages, where),
