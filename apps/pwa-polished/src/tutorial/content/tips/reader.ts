@@ -23,6 +23,13 @@ export const READER_TIPS: Tip[] = [
     body: 'An introduction to the whole book, from KingComments.',
   },
   {
+    id: 'reader-book-intro-info',
+    area,
+    target: '.chapter-tools .book-intro-info',
+    title: 'About this book',
+    body: 'The book’s introduction, from any chapter: who wrote it, when, and why.',
+  },
+  {
     id: 'reader-intro-repeat',
     area,
     target: '.intro-repeat-pill',

@@ -108,6 +108,13 @@ function readAloudButton(): HTMLElement | null {
   return own && hasSize(own) ? own : nearestInMainReader('.tts-player');
 }
 
+/** This chapter's way into the book introduction: the button on chapter 1, the (i) after. */
+function bookIntroButton(): HTMLElement | null {
+  const sel = '.book-intro-btn, .book-intro-info';
+  const own = currentSection()?.querySelector<HTMLElement>(sel);
+  return own && hasSize(own) ? own : nearestInMainReader(sel);
+}
+
 function ringBody(ctx: StepContext): string {
   const dictionary = knownPack(ctx, 'dictionary-en');
   const people = knownPack(ctx, 'people-biblical-v1');
@@ -304,6 +311,29 @@ export const PART_TWO: TourStep[] = [
     skipIf: () => !get(isReadingActive),
     title: 'While it reads',
     body: 'The controls wait up here: pause, jump to a verse, stop, carry on into the next chapter, and a sleep timer.',
+  },
+
+  // ── Book introductions ───────────────────────────────────────────────────
+  {
+    id: 'book-intro',
+    target: bookIntroButton,
+    reveal: 'center',
+    pad: 8,
+    skipIf: () => !bookIntroButton(),
+    passThrough: false,
+    title: 'About this book',
+    body: 'Every book has an introduction: who wrote it, when, and why. It sits under the title of chapter 1, and behind the (i) beside the talking head on every chapter after.',
+  },
+
+  // ── Devotionals ──────────────────────────────────────────────────────────
+  {
+    id: 'devotionals',
+    checkpoint: true,
+    target: () => inMainReader('.pill-readingplan'),
+    reveal: true,
+    passThrough: false,
+    title: 'Devotionals',
+    body: 'Spurgeon’s Morning and Evening, his Faith’s Checkbook, and Daily Light: a reading for every day of the year. They’re in the Devotionals tab here, and the Verse of the Day opens today’s.',
   },
 
   // ── Finale ───────────────────────────────────────────────────────────────

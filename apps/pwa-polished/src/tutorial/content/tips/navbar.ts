@@ -118,6 +118,20 @@ export const NAVBAR_TIPS: Tip[] = [
     body: 'Today’s verse, whenever you want to see it again.',
   },
   {
+    id: 'nav-harmony-anchor',
+    area,
+    target: '.pv-root .pill-anchor',
+    title: 'Keep them together',
+    body: 'Lit, the other panes follow this one and keep to the same passage as you read. Tap it to let them read on their own.',
+  },
+  {
+    id: 'nav-harmony-wheel',
+    area,
+    target: '.pv-root .pill-takemaster',
+    title: 'Drive from here',
+    body: 'Makes this pane the lead. The others follow it instead.',
+  },
+  {
     id: 'nav-apps',
     area,
     target: '.pill-apps',

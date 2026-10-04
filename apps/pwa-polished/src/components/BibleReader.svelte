@@ -140,6 +140,7 @@
   import { countWordsInBook } from "../lib/repeatCounts";
   import TtsPlayer from "./TtsPlayer.svelte";
   import { FEATURES } from "../config";
+  import { Info } from "phosphor-svelte";
   import {
     synthesizeWordSpeech,
     unlockTtsAudio,
@@ -595,6 +596,8 @@
 
   // Book intro panel state
   let bookIntroPanelOpen = false;
+  $: showReadAloud =
+    FEATURES.ttsReadAloud && (!isOriginalLanguage(currentTranslation) || canSpeakOriginal(currentTranslation));
   let bookIntroPanelBook = "";
 
   function openBookIntroPanel(book: string) {
@@ -6215,7 +6218,22 @@
               {/each}
               </div>
             {/if}
-            {#if FEATURES.ttsReadAloud && (!isOriginalLanguage(currentTranslation) || canSpeakOriginal(currentTranslation))}
+            {#if chapterData.chapter > 1}
+              <!-- Chapter 1 has the Introduction button under its title. Every
+                   chapter after it gets this quieter (i) beside the talking
+                   head, so the introduction is never a scroll back to the top. -->
+              <div class="chapter-tools">
+                {#if showReadAloud}
+                  <TtsPlayer translation={currentTranslation} book={chapterData.book} chapter={chapterData.chapter} />
+                {/if}
+                <button
+                  class="book-intro-info"
+                  on:click={() => openBookIntroPanel(chapterData.book)}
+                  title="Introduction to {chapterData.book}"
+                  aria-label="Introduction to {chapterData.book}"
+                ><Info size={18} weight="bold" /></button>
+              </div>
+            {:else if showReadAloud}
               <TtsPlayer translation={currentTranslation} book={chapterData.book} chapter={chapterData.chapter} />
             {/if}
           </div>
@@ -6580,6 +6598,33 @@
     background: rgba(100, 160, 255, 0.18);
     border-color: rgba(100, 160, 255, 0.4);
     color: #d0e4ff;
+  }
+
+  /* The talking head and the (i), side by side, from chapter 2 on. */
+  .chapter-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .book-intro-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 50%;
+    color: #888;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .book-intro-info:hover {
+    color: #d0e4ff;
+    background: rgba(100, 160, 255, 0.14);
   }
 
   /* Relocated repeat pills, beside the Introduction button */
