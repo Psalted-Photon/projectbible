@@ -1,5 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { getBookChapters, normalizeBookName, DEFAULT_TRANSLATION } from '../lib/bibleData';
+import { translationForJump } from '../lib/testamentDefaults';
 
 export interface NavigationState {
   translation: string;
@@ -192,6 +193,12 @@ function createNavigationStore() {
      * that takes you to a place in the Bible marks where to start reading, in
      * the target book's category colour. Only callers that paint their own
      * highlight — the reading plan, which keeps its green — pass false.
+     *
+     * A jump into the other testament lands in your default for it (see
+     * lib/testamentDefaults). Only when the caller is carrying the current
+     * translation along: one that names a different translation means it, and
+     * `keepTranslation` is for the two callers that are putting you back
+     * somewhere rather than sending you, where a switch would be wrong.
      */
     navigateTo: (
       translation: string,
@@ -199,12 +206,17 @@ function createNavigationStore() {
       chapter: number,
       scrollTargetVerse: number | null = null,
       highlight = true,
+      keepTranslation = false,
     ) => {
       update(state => {
         const normalized = normalizeBookName(book);
+        const landIn =
+          keepTranslation || translation !== state.translation
+            ? translation
+            : translationForJump(translation, state.book, normalized, get(availableTranslations));
         const next = {
           ...state,
-          translation,
+          translation: landIn,
           book: normalized,
           chapter,
           highlightedVerse: null,
@@ -227,9 +239,14 @@ function createNavigationStore() {
     ) => {
       update(state => {
         const normalized = normalizeBookName(book);
+        // Same rule as navigateTo.
+        const landIn =
+          translation !== state.translation
+            ? translation
+            : translationForJump(translation, state.book, normalized, get(availableTranslations));
         const next = {
           ...state,
-          translation,
+          translation: landIn,
           book: normalized,
           chapter,
           highlightedVerse: null,

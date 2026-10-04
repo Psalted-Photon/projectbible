@@ -12,7 +12,8 @@
 import { get } from 'svelte/store';
 import { windowStore, MAX_WINDOWS, type WindowContentType } from './stores/windowStore';
 import { dockEdge, DOCK_SIZE } from './dockEdge';
-import { navigationStore } from '../stores/navigationStore';
+import { navigationStore, availableTranslations } from '../stores/navigationStore';
+import { defaultTranslationFor, translationForJump } from './testamentDefaults';
 import { libraryPrefsStore, resumeTarget } from '../stores/libraryPrefsStore';
 import { parallelStore } from '../stores/parallelStore';
 import { localDateStr } from '../stores/clockStore';
@@ -58,7 +59,10 @@ export const WINDOW_TYPES: WindowTypeInfo[] = [
 /** What a window of this type starts out showing. */
 export function initialContentFor(type: Exclude<WindowChoice, 'harmony'>): Record<string, any> {
   if (type === 'bible') {
-    return { translation: DEFAULT_TRANSLATION, book: 'Genesis', chapter: 1 };
+    // Genesis, so the Old Testament default when there is one.
+    const translation =
+      defaultTranslationFor('Genesis', get(availableTranslations)) ?? DEFAULT_TRANSLATION;
+    return { translation, book: 'Genesis', chapter: 1 };
   }
   if (type === 'commentaries') {
     const nav = get(navigationStore);
@@ -160,11 +164,15 @@ export function openHarmonyView(choice: HarmonyChoice, fromWindowId?: string) {
 
   // A translation comparison names one per pane; a harmony names none and
   // every pane takes the reader's own, which is what makes the four Gospels
-  // read in the translation you were already in.
-  const readerTranslation = get(navigationStore).translation;
+  // read in the translation you were already in. Opening one in the other
+  // testament is a jump like any other, so it lands in that testament's
+  // default, the same as the reader would.
+  const reader = get(navigationStore);
+  const installed = get(availableTranslations);
   const perPane = panes.map((p, i) => ({
     ...p,
-    translation: translations?.[i] ?? readerTranslation,
+    translation:
+      translations?.[i] ?? translationForJump(reader.translation, reader.book, p.book, installed),
   }));
 
   const ids = windowStore.createHarmonyPanes(perPane);

@@ -244,8 +244,10 @@ function normalizeSettings(raw: UserSettings): UserSettings {
   // Migrate older 3-field settings into the new OT/NT model.
   const out: UserSettings = { ...raw };
 
-  if (!out.dailyDriverEnglishOT && out.dailyDriverEnglish) out.dailyDriverEnglishOT = out.dailyDriverEnglish;
-  if (!out.dailyDriverEnglishNT && out.dailyDriverEnglish) out.dailyDriverEnglishNT = out.dailyDriverEnglish;
+  // Only into a pair that was never set: "" is Not set, chosen on purpose,
+  // and must not be refilled from the old value.
+  if (out.dailyDriverEnglishOT === undefined && out.dailyDriverEnglish) out.dailyDriverEnglishOT = out.dailyDriverEnglish;
+  if (out.dailyDriverEnglishNT === undefined && out.dailyDriverEnglish) out.dailyDriverEnglishNT = out.dailyDriverEnglish;
 
   if (!out.dailyDriverHebrewOT && out.dailyDriverHebrew) out.dailyDriverHebrewOT = out.dailyDriverHebrew;
   if (!out.dailyDriverGreekNT && out.dailyDriverGreek) out.dailyDriverGreekNT = out.dailyDriverGreek;

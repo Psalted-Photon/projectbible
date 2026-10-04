@@ -186,8 +186,11 @@
       showOtQuotes,
       selectionMenu,
       measureUnits,
-      dailyDriverEnglishOT: defaultOT || undefined,
-      dailyDriverEnglishNT: defaultNT || undefined,
+      // "" rather than left out, so Not set reaches the account's other
+      // devices too. The old single setting goes now that the pair is set.
+      dailyDriverEnglishOT: defaultOT,
+      dailyDriverEnglishNT: defaultNT,
+      dailyDriverEnglish: undefined,
       timezone: timezone || undefined,
       autoCheckUpdates,
       customTheme: currentCustom(),
@@ -884,6 +887,11 @@
           {/each}
         </select>
       </label>
+      <p class="section-description dev-note">
+        Going to a book in the other testament switches the reader to your
+        default for it. A translation you pick yourself stays until then. New
+        Bible windows open in your Old Testament default.
+      </p>
     </div>
 
     <div class="setting-group">

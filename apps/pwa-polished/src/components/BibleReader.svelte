@@ -2953,7 +2953,10 @@
       if (windowId) {
         windowStore.updateContentState(windowId, { book: fallbackBook, chapter: fallbackChapter, highlightedVerse: null });
       } else {
-        navigationStore.navigateTo(translation, fallbackBook, fallbackChapter);
+        // keepTranslation: this hop is "the book you asked for isn't in this
+        // translation, here is where it starts", so a testament default must
+        // not swap the translation out from under it.
+        navigationStore.navigateTo(translation, fallbackBook, fallbackChapter, null, true, true);
       }
     } else {
       // Book exists, load normally
