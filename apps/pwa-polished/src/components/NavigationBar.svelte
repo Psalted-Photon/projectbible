@@ -2362,6 +2362,9 @@
              into its "Search for:" field. It butts against the glass as one
              split button, so it reads as the other way to run the same words. -->
         <div class="search-pair" class:paired={!!searchQuery.trim()}>
+          {#if searchQuery.trim()}
+            <span class="search-pair-bg" aria-hidden="true"></span>
+          {/if}
           <button
             class="pill-btn pill-search-icon-btn"
             on:click={handleSearchIconClick}
@@ -3331,9 +3334,14 @@
     padding: 0 6px;
   }
 
-  /* Glass and microscope joined: no gap, no padding between them, and the
-     facing corners squared so the two badges meet edge to edge. */
+  /* Glass and microscope joined as one badge split down the middle. Each
+     badge's own glow darkens all four of its sides, which left a dark seam
+     where they met, so while paired they give up their own backgrounds and
+     share one: pink half, orange half, and a single vignette that darkens
+     only the outside edge. The vignette is the badges' own falloff stretched
+     across both, kept clear over the two icons. */
   .search-pair {
+    position: relative;
     display: flex;
     align-items: center;
     flex-shrink: 0;
@@ -3346,11 +3354,23 @@
     padding-left: 0;
     border-radius: 0 5px 5px 0;
   }
-  .search-pair.paired .icon-badge-search {
-    border-radius: 6px 0 0 6px;
+  .search-pair.paired .icon-badge {
+    background: transparent;
   }
-  .search-pair.paired .icon-badge-powersearch {
-    border-radius: 0 6px 6px 0;
+  /* Sits exactly under the two badges: the buttons' outer 6px padding left
+     and right, and the 3px between a 32px button and a 26px badge. It comes
+     before the badges, which are positioned too, so it paints beneath them. */
+  .search-pair-bg {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 6px;
+    right: 6px;
+    border-radius: 6px;
+    background:
+      radial-gradient(ellipse farthest-corner at 50% 50%, transparent 35%, #000000 100%),
+      linear-gradient(to right, #fb7185 47%, #f97316 53%);
+    pointer-events: none;
   }
 
   .pill-search-expander {
