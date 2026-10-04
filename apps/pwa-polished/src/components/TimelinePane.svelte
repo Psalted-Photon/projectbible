@@ -1,24 +1,35 @@
 <script lang="ts">
   /**
-   * The Timeline window: the whole story down one vertical strip.
+   * The Timeline window: the whole story down one vertical strip, and where
+   * you are in it.
    *
    * Split the same way the map is. The chrome, the gestures and the panel are
-   * here; where anything actually sits is lib/timeline/layout.ts, and what there
-   * is to draw is lib/timeline/data.ts, read from the Timeline pack.
+   * here; where anything sits is lib/timeline/layout.ts (events, eras, ticks)
+   * and lib/timeline/lanes.ts (kings, prophets, world, lives, books); the
+   * questions asked of the data are lib/timeline/query.ts; what there is to
+   * draw is lib/timeline/data.ts, read from the Timeline pack. The card is
+   * TimelineCard, the "At this moment" readout TimelineMoment.
    *
    * Drawn in screen space: every position is worked out in zoomed pixels and
    * offset by the scroll, and only what is on screen is drawn. An earlier
    * version scaled one tall layer with a CSS transform, which cannot zoom far
    * enough to pull the Gospel years apart without blurring or blowing up.
    *
-   * A docked window rather than a fullscreen view, deliberately: tapping Read
-   * sends the reader to the passage and the timeline stays open beside it.
+   * Taps: the stage captures every pointer for dragging, so nothing inside it
+   * ever gets a click from a finger. Anything tappable inside the stage carries
+   * a data- attribute and is found in handleTap. Controls outside the stage
+   * (the nav, its menus, search, the card) are ordinary buttons.
+   *
+   * A docked window rather than a fullscreen view, deliberately: tapping a
+   * passage sends the reader there and the timeline stays open beside it.
    */
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { windowStore } from '../lib/stores/windowStore';
   import { navigationStore } from '../stores/navigationStore';
   import GetPacksCard from './GetPacksCard.svelte';
+  import TimelineCard from './TimelineCard.svelte';
+  import TimelineMoment from './TimelineMoment.svelte';
   import {
     loadTimeline,
     releaseTimeline,
@@ -27,6 +38,7 @@
     formatItemSpan,
     type TimelineData,
     type TimelineItem,
+    type TimelinePassage,
   } from '../lib/timeline/data';
   import {
     makeScale,
@@ -37,12 +49,13 @@
     yearTicks,
     visibleTier,
     zoomForTier,
-    itemColor,
     ZOOM_LIMITS,
     type Mark,
     type ScaleMode,
     type TimelineScale,
   } from '../lib/timeline/layout';
+  import { LANES, laneLimit, laneWidth, layoutLane, laneView, type LaneId, type LaneLayout } from '../lib/timeline/lanes';
+  import { buildHereIndex, findHere, momentAt, searchItems, type HereIndex } from '../lib/timeline/query';
 
   export let windowId: string | undefined = undefined;
 
@@ -53,10 +66,14 @@
   let error: string | null = null;
   let data: TimelineData | null = null;
 
-  /** What was tapped, shown in the panel at the foot of the window: an event or an era. */
+  /** What the card at the foot shows: any item on the strip. */
   let selected: TimelineItem | null = null;
 
   $: windowState = windowId ? $windowStore.find((w) => w.id === windowId) : undefined;
+
+  function remember(patch: Record<string, unknown>) {
+    if (windowId) windowStore.updateContentState(windowId, patch);
+  }
 
   /**
    * The window's resize grip lies over this pane's inner edge and takes every
@@ -73,7 +90,7 @@
 
   $: chronoOn = $navigationStore.isChronologicalMode === true;
 
-  // ===== Scale and layout =====
+  // ===== Scale =====
 
   /** Story spacing by default; true years on the toggle, remembered per window. */
   let mode: ScaleMode = 'story';
@@ -88,9 +105,62 @@
   let ty = 0;
 
   let stageH = 0;
+  let stageW = 0;
 
   $: tier = visibleTier(zoom, mode);
+
+  // ===== Columns =====
+  //
+  // Year ticks, then the eras, then whichever lanes are chosen, then the
+  // events. Worked out here in pixels because the lanes come and go.
+
+  const TICK_W = 50;
+  $: narrow = stageW > 0 && stageW < 430;
+  $: eraW = narrow ? 44 : 62;
+  $: eraX = TICK_W + 2;
+
+  let chosenLanes: LaneId[] = LANES.map((l) => l.id);
+  $: limit = laneLimit(stageW || 400);
+  /** The chosen lanes that fit, most recently chosen first, drawn in their fixed order. */
+  $: shownLaneIds = new Set(chosenLanes.slice(0, limit));
+  $: laneCols = (() => {
+    let x = eraX + eraW + 6;
+    const cols: { id: LaneId; x: number; w: number; header: string }[] = [];
+    for (const lane of LANES) {
+      if (!shownLaneIds.has(lane.id)) continue;
+      const w = laneWidth(lane.id, narrow);
+      cols.push({ id: lane.id, x, w, header: lane.header });
+      x += w + 4;
+    }
+    return cols;
+  })();
+  $: eventsX = (laneCols.length ? laneCols[laneCols.length - 1].x + laneCols[laneCols.length - 1].w : eraX + eraW) + 30;
+
+  let laneLayouts = new Map<LaneId, LaneLayout>();
+
+  function toggleLane(id: LaneId) {
+    // Start from what is actually showing, so turning one off at this width
+    // does not bring a hidden one forward in its place.
+    const base = chosenLanes.slice(0, limit);
+    chosenLanes = base.includes(id) ? base.filter((l) => l !== id) : [id, ...base].slice(0, limit);
+    remember({ timelineLanes: chosenLanes });
+  }
+
+  // ===== Layout =====
+
   $: eraLayout = data ? layoutEras(data.eras, scale, zoom) : { bands: [], lanes: 1 };
+  /** Where two eras overlap they share the column, half each. */
+  $: halfEras = (() => {
+    const half = new Map<string, 'left' | 'right'>();
+    const bands = eraLayout.bands;
+    for (const b of bands) {
+      if (b.lane > 0) half.set(b.era.id, 'right');
+      else if (bands.some((o) => o.lane > 0 && o.era.year_start < b.era.year_end && o.era.year_end > b.era.year_start)) {
+        half.set(b.era.id, 'left');
+      }
+    }
+    return half;
+  })();
   $: marks = data ? layoutMarks(data.events, data.byId, scale, zoom, tier) : [];
   $: bars = data ? layoutBars(marks, scale, zoom) : [];
 
@@ -104,6 +174,12 @@
     (m) => (m.labelZ >= viewTop && m.labelZ <= viewBottom) || (m.z >= viewTop && m.z <= viewBottom),
   );
   $: ticks = data ? yearTicks(scale, zoom, viewTop, viewBottom) : [];
+  $: laneViews = data
+    ? laneCols.map((c) => {
+        const layout = laneLayouts.get(c.id);
+        return { ...c, ...(layout ? laneView(layout, scale, zoom, ty, stageH, c.w) : { bars: [], labels: [] }) };
+      })
+    : [];
 
   function clampTy() {
     const h = scale.height * zoom;
@@ -133,10 +209,38 @@
     clampTy();
   }
 
-  /** Put a year in the middle of the stage, at the current zoom. */
-  function centreOn(year: number) {
-    ty = stageH / 2 - scale.y(year) * zoom;
-    clampTy();
+  /** The scroll that puts a year in the middle of the stage at the current zoom. */
+  function tyFor(year: number): number {
+    const h = scale.height * zoom;
+    const t = stageH / 2 - scale.y(year) * zoom;
+    return h <= stageH ? 0 : Math.min(0, Math.max(stageH - h, t));
+  }
+
+  // ----- Gliding, for Follow my reading and for stepping between items -----
+
+  let glideFrame = 0;
+
+  function stopGlide() {
+    if (glideFrame) cancelAnimationFrame(glideFrame);
+    glideFrame = 0;
+  }
+
+  /** Ease the scroll to a new place over about 300ms. */
+  function glideTo(target: number, ms = 300) {
+    stopGlide();
+    const from = ty;
+    if (Math.abs(target - from) < 1) {
+      ty = target;
+      return;
+    }
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / ms);
+      const e = 1 - Math.pow(1 - t, 3);
+      ty = from + (target - from) * e;
+      glideFrame = t < 1 ? requestAnimationFrame(step) : 0;
+    };
+    glideFrame = requestAnimationFrame(step);
   }
 
   /** The zoom a fresh window opens at: about six screens of headline events. */
@@ -153,7 +257,7 @@
    */
   function zoomToNextTier() {
     measureStage();
-    const next = (Math.min(3, tier + 1)) as 1 | 2 | 3;
+    const next = Math.min(3, tier + 1) as 1 | 2 | 3;
     const target = clampZoom(Math.max(zoom * 1.25, zoomForTier(next, mode)));
     zoomAt(stageH / 2, target / zoom);
   }
@@ -166,6 +270,7 @@
    */
   function setMode(next: ScaleMode) {
     if (next === mode || !data) return;
+    stopGlide();
     measureStage();
     const year = scale.yearAt((stageH / 2 - ty) / zoom);
     const pxPerYear = (scale.y(year + 0.5) - scale.y(year - 0.5)) * zoom;
@@ -177,7 +282,118 @@
     zoom = Math.min(nextLimits.max, Math.max(nextLimits.min, base > 0 ? pxPerYear / base : 1));
     ty = stageH / 2 - nextScale.y(year) * zoom;
     clampTy();
-    if (windowId) windowStore.updateContentState(windowId, { timelineScale: next });
+    remember({ timelineScale: next });
+  }
+
+  // ===== You are here =====
+
+  let hereIndex: HereIndex | null = null;
+  $: here = data && hereIndex && $navigationStore.book && $navigationStore.chapter
+    ? findHere(data, hereIndex, $navigationStore.book, $navigationStore.chapter)
+    : null;
+  $: hereLabel = `${$navigationStore.book} ${$navigationStore.chapter}`;
+  /** Screen pixels: the line, or the top and bottom of the shaded span. */
+  $: hereTop = here ? scale.y(here.start) * zoom + ty : 0;
+  $: hereBottom = here ? (here.range ? scale.y(here.end) * zoom + ty : hereTop) : 0;
+  $: hereWhere = !here ? 'none' : hereBottom < 0 ? 'above' : hereTop > stageH ? 'below' : 'on';
+
+  /** On by default: the strip keeps what you are reading in view. */
+  let follow = true;
+  /** When a finger or wheel last moved the strip; Follow leaves it alone for three seconds after. */
+  let lastUserMove = 0;
+  let followedKey = '';
+
+  $: hereKey = here ? `${here.item.id}|${here.start}|${hereLabel}` : '';
+  $: if (data && follow && hereKey && hereKey !== followedKey && stageH > 0) followHere();
+
+  function hereCentreYear(): number | null {
+    if (!here) return null;
+    if (!here.range) return here.start;
+    // A long span is shown from its start rather than lost around its middle.
+    const spanPx = (scale.y(here.end) - scale.y(here.start)) * zoom;
+    return spanPx < stageH * 0.7 ? (here.start + here.end) / 2 : here.start;
+  }
+
+  function followHere() {
+    followedKey = hereKey;
+    if (performance.now() - lastUserMove < 3000) return;
+    const year = hereCentreYear();
+    if (year !== null) glideTo(tyFor(year));
+  }
+
+  function goToHere() {
+    const year = hereCentreYear();
+    if (year !== null) glideTo(tyFor(year));
+  }
+
+  function toggleFollow() {
+    follow = !follow;
+    remember({ timelineFollow: follow });
+    if (follow) {
+      lastUserMove = 0;
+      followedKey = '';
+    }
+  }
+
+  // ===== At this moment =====
+
+  let momentOn = false;
+  $: momentYear = (() => {
+    const y = Math.round(scale.yearAt((stageH / 2 - ty) / Math.max(zoom, 1e-6)));
+    return y === 0 ? -1 : y;
+  })();
+  $: moment = momentOn && data ? momentAt(data, momentYear) : null;
+  $: momentEra = moment && data ? data.eras.filter((e) => e.year_start <= momentYear && momentYear <= e.year_end).map((e) => e.title).join(' · ') : '';
+
+  function toggleMoment() {
+    momentOn = !momentOn;
+    if (momentOn) selected = null;
+  }
+
+  // ===== Search =====
+
+  let searchOpen = false;
+  let query = '';
+  let searchInput: HTMLInputElement;
+  $: results = searchOpen && data ? searchItems(data, query) : [];
+
+  async function openSearch() {
+    menu = null;
+    searchOpen = !searchOpen;
+    if (searchOpen) {
+      await tick();
+      searchInput?.focus();
+    }
+  }
+
+  function closeSearch() {
+    searchOpen = false;
+    query = '';
+  }
+
+  function pickResult(item: TimelineItem) {
+    closeSearch();
+    focusItem(item);
+  }
+
+  const KIND_LABEL: Record<string, string> = {
+    event: 'Event', era: 'Era', reign: 'King', prophet: 'Prophet', empire: 'Empire', ruler: 'Ruler', life: 'Life', book: 'Book',
+  };
+
+  // ===== Menus =====
+
+  let menu: 'lanes' | 'more' | null = null;
+
+  function toggleMenu(which: 'lanes' | 'more') {
+    menu = menu === which ? null : which;
+  }
+
+  /** A press anywhere but a menu or its button closes it. */
+  function onRootPointerDown(e: PointerEvent) {
+    if (!menu) return;
+    const el = e.target as Element | null;
+    if (el?.closest('.menu, [data-menu-button]')) return;
+    menu = null;
   }
 
   // ===== Pointer gestures =====
@@ -205,10 +421,12 @@
     const r = stageEl.getBoundingClientRect();
     stageTop = r.top;
     stageH = r.height;
+    stageW = r.width;
     clampTy();
   }
 
   function onPointerDown(e: PointerEvent) {
+    stopGlide();
     measureStage();
     stageEl.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: toStageY(e) });
@@ -245,11 +463,13 @@
       else clampTy();
       pinchDist = dist;
       pinchMid = mid;
+      lastUserMove = performance.now();
       e.preventDefault();
     } else if (dragLast !== null) {
       ty += y - dragLast;
       dragLast = y;
       clampTy();
+      if (moved) lastUserMove = performance.now();
       e.preventDefault();
     }
   }
@@ -289,43 +509,33 @@
    * A tap: whatever is under the finger, or a double-tap zoom on bare axis.
    *
    * The stage captures every pointer for dragging, and a captured pointer's
-   * click lands on the stage rather than the event or band that was pressed —
-   * so their own on:click never fires from a finger. What was tapped is worked
-   * out here instead, the same way FamilyTreeViewer's `pick` does it. The
-   * on:click handlers stay for the keyboard.
+   * click lands on the stage rather than the thing that was pressed — so their
+   * own on:click never fires from a finger. What was tapped is worked out here
+   * instead, the same way FamilyTreeViewer's `pick` does it. The on:click
+   * handlers stay for the keyboard.
    */
   function handleTap(clientX: number, clientY: number, y: number) {
     const hit = document.elementFromPoint(clientX, clientY);
-    if (hit?.closest('[data-more]')) {
+    const handled = (run: () => void) => {
       tapHandledAt = performance.now();
       lastTapAt = 0;
-      zoomToNextTier();
-      return;
-    }
+      run();
+    };
+
+    if (hit?.closest('[data-more]')) return handled(zoomToNextTier);
+    if (hit?.closest('[data-here]')) return handled(tapHere);
+
     const markEl = hit?.closest<HTMLElement>('[data-mark-key]');
     const mark = markEl ? marks.find((m) => m.key === markEl.dataset.markKey) : undefined;
-    if (mark) {
-      tapHandledAt = performance.now();
-      lastTapAt = 0;
-      activateMark(mark);
-      return;
-    }
-    const barEl = hit?.closest<HTMLElement>('[data-item-id]');
-    const barItem = barEl && data ? data.byId.get(barEl.dataset.itemId ?? '') : undefined;
-    if (barItem) {
-      tapHandledAt = performance.now();
-      lastTapAt = 0;
-      selectItem(barItem);
-      return;
-    }
+    if (mark) return handled(() => activateMark(mark));
+
+    const itemEl = hit?.closest<HTMLElement>('[data-item-id]');
+    const item = itemEl && data ? data.byId.get(itemEl.dataset.itemId ?? '') : undefined;
+    if (item) return handled(() => selectItem(item));
+
     const bandEl = hit?.closest<HTMLElement>('[data-era-id]');
     const era = bandEl && data ? data.byId.get(bandEl.dataset.eraId ?? '') : undefined;
-    if (era) {
-      tapHandledAt = performance.now();
-      lastTapAt = 0;
-      selectEra(era);
-      return;
-    }
+    if (era) return handled(() => selectEra(era));
 
     const now = performance.now();
     if (now - lastTapAt < 300 && Math.abs(y - lastTapY) < 30) {
@@ -347,7 +557,9 @@
 
   function onWheel(e: WheelEvent) {
     e.preventDefault();
+    stopGlide();
     measureStage();
+    lastUserMove = performance.now();
     // Ctrl/meta-wheel and a trackpad pinch zoom; a plain wheel scrolls the
     // years, which is what a ruler should do.
     if (e.ctrlKey || e.metaKey) {
@@ -371,12 +583,47 @@
 
   function selectEra(era: TimelineItem) {
     selected = era;
-    centreOn((era.year_start + era.year_end) / 2);
+    glideTo(tyFor((era.year_start + era.year_end) / 2));
+  }
+
+  function tapHere() {
+    if (!here) return;
+    if (hereWhere === 'on') selectItem(here.item);
+    else goToHere();
   }
 
   function activateMark(mark: Mark) {
     if (mark.kind === 'cluster') openCluster(mark);
     else selectItem(mark.item);
+  }
+
+  /**
+   * Bring an item into view and open its card: its lane turned on if it was
+   * off, the zoom raised until an event's tier shows, and the strip moved to it.
+   * Used by search, the card's back and next, and its links.
+   */
+  function focusItem(item: TimelineItem) {
+    selected = item;
+    if (!data) return;
+    const lane = item.lane as LaneId;
+    if (LANES.some((l) => l.id === lane) && !shownLaneIds.has(lane)) {
+      chosenLanes = [lane, ...chosenLanes.slice(0, limit)].slice(0, limit);
+      remember({ timelineLanes: chosenLanes });
+    }
+    measureStage();
+    if (item.lane === 'events') {
+      const need = clampZoom(zoomForTier((item.tier ?? 3) as 1 | 2 | 3, mode));
+      if (need > zoom) {
+        stopGlide();
+        zoom = need;
+        ty = tyFor(item.sort_key);
+        return;
+      }
+      glideTo(tyFor(item.sort_key));
+      return;
+    }
+    const spanPx = (scale.y(item.year_end) - scale.y(item.year_start)) * zoom;
+    glideTo(tyFor(spanPx < stageH * 0.7 ? (item.year_start + item.year_end) / 2 : item.year_start));
   }
 
   /**
@@ -387,6 +634,7 @@
    * into smaller chips, which open the same way.
    */
   function openCluster(mark: Mark) {
+    stopGlide();
     measureStage();
     // Already as close as the strip goes: show what the chip stands for
     // instead of zooming nowhere.
@@ -407,17 +655,16 @@
   }
 
   /**
-   * Take the reader to the first verse.
+   * Take the reader to a passage.
    *
    * The map's exact call: a crumb first, so the navbar's back arrow puts the
    * reader back where it was standing with the timeline still open, then the
    * jump.
    */
-  function goTo(item: TimelineItem) {
-    if (!item.first) return;
+  function read(p: TimelinePassage) {
     const current = get(navigationStore);
     navigationStore.pushHistory(current, 'timeline');
-    navigationStore.navigateToVerse(current.translation, item.first.book, item.first.chapter, item.first.verse);
+    navigationStore.navigateToVerse(current.translation, p.b, p.c, p.v);
   }
 
   /**
@@ -432,19 +679,18 @@
   }
 
   function zoomButton(factor: number) {
+    stopGlide();
     measureStage();
     zoomAt(stageH / 2, factor);
   }
 
   function resetView() {
+    stopGlide();
     measureStage();
     zoom = clampZoom(stageH / scale.height);
     ty = 0;
     clampTy();
   }
-
-  /** The era an event belongs to, for the panel's kind line. */
-  $: selectedEra = selected && data && selected.kind !== 'era' ? data.byId.get(selected.era_id ?? '') : undefined;
 
   // ===== Lifecycle =====
 
@@ -461,15 +707,33 @@
         const loaded = await loadTimeline();
         storyScale = makeStoryScale(loaded.eras, loaded.events);
         trueScale = makeScale(loaded.minYear, loaded.maxYear);
-        mode = windowState?.contentState?.timelineScale === 'true' ? 'true' : 'story';
+        laneLayouts = new Map(LANES.map((l) => [l.id, layoutLane(l.id, loaded.items)]));
+        hereIndex = buildHereIndex(loaded);
+
+        const saved = windowState?.contentState;
+        mode = saved?.timelineScale === 'true' ? 'true' : 'story';
+        if (Array.isArray(saved?.timelineLanes)) {
+          chosenLanes = saved.timelineLanes.filter((id: string) => LANES.some((l) => l.id === id));
+        }
+        if (typeof saved?.timelineFollow === 'boolean') follow = saved.timelineFollow;
+
         data = loaded;
         loading = false;
-        // Wait for the stage to have a height before the first zoom and clamp.
+        // Wait for the stage to have a size before the first zoom and scroll.
         requestAnimationFrame(() => {
+          // Follow may already have started a glide at the old zoom; this
+          // placement replaces it.
+          stopGlide();
           measureStage();
           zoom = startZoom(mode === 'story' ? storyScale : trueScale, mode);
           ty = 0;
           clampTy();
+          // Opening with Follow on starts where the reader is, without a glide.
+          const year = follow ? hereCentreYear() : null;
+          if (year !== null) {
+            ty = tyFor(year);
+            followedKey = hereKey;
+          }
         });
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
@@ -502,6 +766,7 @@
 
     return () => {
       cancelAnimationFrame(raf);
+      stopGlide();
       resizeObserver?.disconnect();
       resizeObserver = null;
       if (!attached) return;
@@ -524,7 +789,7 @@
 
 <!-- `.no-edge-gesture`, or scrubbing the axis near the screen edge arms a new
      window instead of scrolling the years. -->
-<div class="timeline no-edge-gesture" style={gripStyle}>
+<div class="timeline no-edge-gesture" style={gripStyle} on:pointerdown={onRootPointerDown}>
   {#if missing}
     <div class="gate">
       <GetPacksCard
@@ -544,40 +809,96 @@
     <div class="nav">
       <div class="nav-title">Timeline</div>
       <div class="nav-spacer"></div>
-      <button
-        class="btn"
-        class:on={chronoOn}
-        aria-pressed={chronoOn}
-        title="Read the Bible in the order events happened"
-        on:click={toggleChronological}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
-        <span class="btn-label">Chronological</span>
+      <button class="btn" class:on={searchOpen} aria-pressed={searchOpen} title="Find an event, king, prophet or book" on:click={openSearch}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="20.5" y2="20.5"/></svg>
+        <span class="btn-label">Find</span>
       </button>
-      <button
-        class="btn"
-        class:on={mode === 'true'}
-        aria-pressed={mode === 'true'}
-        title={mode === 'true' ? 'Space the strip by what happens' : 'Space the strip by years, each the same height'}
-        on:click={() => setMode(mode === 'true' ? 'story' : 'true')}
-      >
-        <!-- A ruler: evenly spaced marks. -->
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2.5" width="8" height="19" rx="1.5"/><line x1="8" y1="7" x2="11" y2="7"/><line x1="8" y1="11" x2="12.5" y2="11"/><line x1="8" y1="15" x2="11" y2="15"/><line x1="8" y1="19" x2="12.5" y2="19"/></svg>
-        <span class="btn-label">True years</span>
+      <button class="btn" class:on={momentOn} aria-pressed={momentOn} title="Everything going on in one year" on:click={toggleMoment}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><polyline points="8 7 12 3 16 7"/><polyline points="8 17 12 21 16 17"/></svg>
+        <span class="btn-label">Moment</span>
       </button>
-      <div class="nav-sep"></div>
-      <button class="btn btn-icon" title="Zoom out" aria-label="Zoom out" on:click={() => zoomButton(1 / 1.6)}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <button class="btn" class:on={menu === 'lanes'} data-menu-button title="Kings, prophets, world powers, lives and books beside the events" on:click={() => toggleMenu('lanes')}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="4.5" height="17" rx="1"/><rect x="10" y="3.5" width="4.5" height="17" rx="1"/><rect x="16.5" y="3.5" width="4" height="17" rx="1"/></svg>
+        <span class="btn-label">Lanes</span>
       </button>
-      <button class="btn btn-icon" title="Zoom in" aria-label="Zoom in" on:click={() => zoomButton(1.6)}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><line x1="12" y1="5" x2="12" y2="19"/></svg>
-      </button>
-      <button class="btn btn-icon" title="Fit the whole span" aria-label="Fit the whole span" on:click={resetView}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 5 12 3 16 5"/><polyline points="8 19 12 21 16 19"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+      <button class="btn btn-icon" class:on={menu === 'more'} data-menu-button title="More" aria-label="More" on:click={() => toggleMenu('more')}>
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
       </button>
     </div>
 
-    <div class="stage" bind:this={stageEl}>
+    {#if menu === 'lanes'}
+      <div class="menu" role="menu">
+        <div class="menu-h">Lanes beside the events</div>
+        {#each LANES as lane (lane.id)}
+          <button class="menu-item" role="menuitemcheckbox" aria-checked={shownLaneIds.has(lane.id)} on:click={() => toggleLane(lane.id)}>
+            <span class="menu-check">{shownLaneIds.has(lane.id) ? '✓' : ''}</span>
+            {lane.label}
+          </button>
+        {/each}
+        <div class="menu-note">
+          {limit === LANES.length ? 'All of them fit at this width.' : `${limit === 1 ? 'One fits' : `${limit} fit`} at this width; widen the window for more.`}
+        </div>
+      </div>
+    {:else if menu === 'more'}
+      <div class="menu" role="menu">
+        <button class="menu-item" role="menuitemcheckbox" aria-checked={mode === 'true'} on:click={() => setMode(mode === 'true' ? 'story' : 'true')}>
+          <span class="menu-check">{mode === 'true' ? '✓' : ''}</span>
+          True years <span class="menu-sub">each year the same height</span>
+        </button>
+        <button class="menu-item" role="menuitemcheckbox" aria-checked={follow} on:click={toggleFollow}>
+          <span class="menu-check">{follow ? '✓' : ''}</span>
+          Follow my reading
+        </button>
+        <button class="menu-item" role="menuitemcheckbox" aria-checked={chronoOn} on:click={toggleChronological}>
+          <span class="menu-check">{chronoOn ? '✓' : ''}</span>
+          Chronological reading <span class="menu-sub">the Bible in the order events happened</span>
+        </button>
+        <div class="menu-row">
+          <button class="btn btn-icon" title="Zoom out" aria-label="Zoom out" on:click={() => zoomButton(1 / 1.6)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="btn btn-icon" title="Zoom in" aria-label="Zoom in" on:click={() => zoomButton(1.6)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><line x1="12" y1="5" x2="12" y2="19"/></svg>
+          </button>
+          <button class="btn" title="Fit the whole span" on:click={resetView}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 5 12 3 16 5"/><polyline points="8 19 12 21 16 19"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+            Whole span
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if searchOpen}
+      <div class="search">
+        <input
+          bind:this={searchInput}
+          bind:value={query}
+          class="search-input"
+          type="search"
+          placeholder="Hezekiah, Exodus, Malachi, Rome…"
+          aria-label="Find on the timeline"
+          on:keydown={(e) => {
+            if (e.key === 'Escape') closeSearch();
+            if (e.key === 'Enter' && results[0]) pickResult(results[0]);
+          }}
+        />
+        <button class="search-close" aria-label="Close search" on:click={closeSearch}>×</button>
+        {#if query.trim()}
+          <div class="results">
+            {#each results as r (r.id)}
+              <button class="result" on:click={() => pickResult(r)}>
+                <span class="result-title">{r.title}</span>
+                <span class="result-meta">{r.subtitle ?? KIND_LABEL[r.kind]} · {formatItemSpan(r)}</span>
+              </button>
+            {:else}
+              <div class="result-none">Nothing on the timeline matches.</div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <div class="stage" bind:this={stageEl} style="--events-x: {eventsX}px; --era-x: {eraX}px; --era-w: {eraW}px;">
       {#if loading}
         <div class="loading">Reading the timeline…</div>
       {:else if data}
@@ -586,10 +907,11 @@
         {#each shownBands as band (band.era.id)}
           {@const top = Math.max(band.top + ty, -4)}
           {@const bottom = Math.min(band.bottom + ty, stageH + 4)}
+          {@const half = halfEras.get(band.era.id)}
           <div
             class="band"
             class:sel={selected?.id === band.era.id}
-            style="top: {top}px; height: {Math.max(0, bottom - top)}px; --c: {band.color}; left: calc(56px + {band.lane} * (var(--lane-w) + 4px)); width: var(--lane-w);"
+            style="top: {top}px; height: {Math.max(0, bottom - top)}px; --c: {band.color}; left: {eraX + (half === 'right' ? eraW / 2 + 1 : 0)}px; width: {half ? eraW / 2 - 1 : eraW}px;"
             role="button"
             tabindex="0"
             title={band.era.title}
@@ -613,6 +935,29 @@
           </div>
         {/each}
 
+        <!-- The lanes: kings, prophets, world, lives, books. -->
+        {#each laneViews as lane (lane.id)}
+          <div class="lane" style="left: {lane.x}px; width: {lane.w}px;">
+            {#each lane.bars as bar (bar.key)}
+              <div
+                class="lane-bar"
+                class:narrow={bar.narrow}
+                class:sel={selected?.id === bar.item.id}
+                style="top: {bar.top}px; height: {bar.height}px; left: {bar.left}px; width: {bar.width}px; --c: {bar.color};"
+                title={bar.item.title}
+                data-item-id={bar.item.id}
+              ></div>
+            {/each}
+            {#each lane.labels as label (label.item.id)}
+              <div
+                class="lane-label"
+                style="top: {label.top}px; left: {label.left}px; max-width: {label.maxWidth}px;"
+                data-item-id={label.item.id}
+              >{label.item.title}</div>
+            {/each}
+          </div>
+        {/each}
+
         {#each shownBars as bar (bar.item.id)}
           {@const top = Math.max(bar.top + ty, -4)}
           {@const bottom = Math.min(bar.bottom + ty, stageH + 4)}
@@ -623,6 +968,23 @@
             data-item-id={bar.item.id}
           ></div>
         {/each}
+
+        <!-- You are here: a line at the event, or a shaded span for a reign,
+             a prophet or a whole book. -->
+        {#if here && hereWhere === 'on'}
+          {#if here.range}
+            <div class="here-span" style="top: {Math.max(hereTop, -2)}px; height: {Math.max(2, Math.min(hereBottom, stageH + 2) - Math.max(hereTop, -2))}px;"></div>
+          {:else}
+            <div class="here-line" style="top: {hereTop}px;"></div>
+          {/if}
+          <button class="here-tag" data-here style="top: {Math.max(Math.min(hereTop, stageH - 24), 4)}px;" on:click={() => fromClick(tapHere)}>
+            You’re reading {hereLabel}
+          </button>
+        {:else if here && hereWhere !== 'none'}
+          <button class="here-tag here-off" class:below={hereWhere === 'below'} data-here on:click={() => fromClick(tapHere)}>
+            {hereWhere === 'above' ? '↑' : '↓'} {hereLabel}
+          </button>
+        {/if}
 
         {#each shownMarks as mark (mark.key)}
           <!-- The dot stays at the event's place; the label slides off it where
@@ -652,6 +1014,26 @@
           </button>
         {/each}
 
+        {#if momentOn}
+          <div class="moment-line" style="top: {stageH / 2}px;"></div>
+          <div class="moment-tag" style="top: {stageH / 2}px;">c. {formatYear(momentYear)}</div>
+        {/if}
+
+        <!-- Lane names, pinned to the top of the strip. -->
+        {#if laneViews.length}
+          <div class="lane-heads">
+            {#each laneViews as lane (lane.id)}
+              <div class="lane-head" style="left: {lane.x}px; width: {lane.w}px;">
+                {#if lane.id === 'kings'}
+                  <span class="lane-head-half">Judah</span><span class="lane-head-half">Israel</span>
+                {:else}
+                  {lane.header}
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+
         {#if tier < 3}
           <button class="more" data-more on:click={() => fromClick(zoomToNextTier)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="20.5" y2="20.5"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
@@ -661,34 +1043,20 @@
       {/if}
     </div>
 
-    {#if selected}
+    {#if data && selected}
       <div class="panel">
-        <button class="panel-close" aria-label="Close" on:click={() => (selected = null)}>×</button>
-        {#if selected.kind === 'era'}
-          <div class="panel-kind" style="--c: {itemColor(selected)}">Era</div>
-        {:else}
-          <div class="panel-kind" style="--c: {itemColor(selectedEra ?? selected)}">
-            {selectedEra?.title ?? 'Event'}
-          </div>
-        {/if}
-        <div class="panel-title">{selected.title}</div>
-        <div class="panel-span">{formatItemSpan(selected)}</div>
-        {#if selected.summary}
-          <p class="panel-body">{selected.summary}</p>
-        {/if}
-        {#if selected.kind !== 'era'}
-          {#if selected.first && selected.passages.length}
-            {@const item = selected}
-            <button class="panel-go" on:click={() => goTo(item)}>
-              Read {item.passages[0].label}
-              {#if item.passages.length > 1}
-                <span class="panel-go-note">+{item.passages.length - 1} more</span>
-              {/if}
-            </button>
-          {:else}
-            <p class="panel-note">No passage is tied to this event.</p>
-          {/if}
-        {/if}
+        <TimelineCard
+          item={selected}
+          {data}
+          {tier}
+          onSelect={focusItem}
+          onRead={read}
+          onClose={() => (selected = null)}
+        />
+      </div>
+    {:else if data && moment}
+      <div class="panel">
+        <TimelineMoment {moment} eraTitle={momentEra} onSelect={focusItem} onClose={() => (momentOn = false)} />
       </div>
     {/if}
   {/if}
@@ -705,6 +1073,7 @@
     --dim: #8a8a8a;
     --faint: #5a5a5a;
     --focus: #fb7185;
+    --moment: #fbbf24;
     --nav-h: 46px;
     /* The app's display face, chrome only — Milonga is unreadable as body text. */
     --display: 'Milonga', cursive;
@@ -751,7 +1120,6 @@
   }
   .nav-title { font-size: 16px; letter-spacing: .3px; flex: none; }
   .nav-spacer { flex: 1; min-width: 4px; }
-  .nav-sep { width: 1px; height: 22px; background: var(--line); margin: 0 3px; flex: none; }
 
   .btn {
     height: 30px; min-width: 30px; padding: 0 9px; border-radius: 6px; cursor: pointer;
@@ -766,7 +1134,69 @@
   .btn svg { width: 15px; height: 15px; flex: none; }
   .btn-icon { padding: 0; justify-content: center; }
   /* Narrow: the words go, the icons stay. */
-  @container (max-width: 520px) { .btn-label { display: none; } .btn:not(.btn-icon) { padding: 0; width: 30px; justify-content: center; } }
+  @container (max-width: 560px) { .nav .btn-label { display: none; } .nav .btn:not(.btn-icon) { padding: 0; width: 30px; justify-content: center; } }
+
+  /* ---------------- menus ---------------- */
+  .menu {
+    position: absolute;
+    top: calc(var(--nav-h) * var(--bar-scale, 1) + 4px);
+    right: calc(8px + var(--grip-r));
+    z-index: 30;
+    min-width: 230px; max-width: calc(100% - 16px);
+    padding: 6px;
+    background: var(--chrome-2);
+    border: 1px solid var(--line-2);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  }
+  .menu-h {
+    padding: 4px 8px 6px;
+    font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+  }
+  .menu-item {
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    width: 100%; padding: 7px 8px; border-radius: 6px; cursor: pointer; text-align: left;
+    background: none; border: 0; color: var(--text); font: inherit; font-size: 13px;
+  }
+  .menu-item:hover { background: #2a2a2a; }
+  .menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .menu-check { width: 14px; flex: none; color: var(--focus); }
+  .menu-sub { flex-basis: 100%; padding-left: 22px; color: var(--faint); font-size: 11px; }
+  .menu-note { padding: 6px 8px 4px; color: var(--faint); font-size: 11px; line-height: 1.4; }
+  .menu-row { display: flex; gap: 6px; padding: 6px 8px 4px; border-top: 1px solid var(--line); margin-top: 4px; }
+
+  /* ---------------- search ---------------- */
+  .search {
+    flex: none; position: relative; z-index: 25;
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px calc(8px + var(--grip-r)) 6px calc(8px + var(--grip-l));
+    background: var(--chrome); border-bottom: 1px solid var(--line);
+  }
+  .search-input {
+    flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 6px;
+    background: var(--sunken); border: 1px solid var(--line-2); color: var(--text);
+    font: inherit; font-size: 14px;
+  }
+  .search-input:focus { outline: none; border-color: var(--focus); }
+  .search-close {
+    width: 30px; height: 30px; border-radius: 6px; background: transparent; border: 0;
+    color: var(--dim); font-size: 19px; line-height: 1; cursor: pointer;
+  }
+  .results {
+    position: absolute; left: calc(8px + var(--grip-l)); right: calc(8px + var(--grip-r)); top: 100%;
+    max-height: 60vh; overflow-y: auto;
+    background: var(--chrome-2); border: 1px solid var(--line-2); border-radius: 0 0 8px 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  }
+  .result {
+    display: block; width: 100%; padding: 7px 10px; text-align: left; cursor: pointer;
+    background: none; border: 0; border-bottom: 1px solid var(--line); font: inherit;
+  }
+  .result:last-child { border-bottom: 0; }
+  .result:hover, .result:focus-visible { background: #2a2a2a; outline: none; }
+  .result-title { display: block; color: var(--color-primary, #4a90e2); font-size: 13px; }
+  .result-meta { display: block; color: var(--faint); font-size: 11px; }
+  .result-none { padding: 10px; color: var(--faint); font-size: 12px; }
 
   /* ---------------- the axis ---------------- */
   .stage {
@@ -775,19 +1205,12 @@
     min-height: 0;
     overflow: hidden;
     background: var(--sunken);
-    /* The two era lanes and where the event column starts after them. Set
-       here rather than on the root so a container query can narrow them —
-       a query cannot restyle the element that declares the container. */
-    --lane-w: 74px;
-    --events-x: calc(56px + 2 * (var(--lane-w) + 4px) + 14px);
     /* The gestures are ours; the browser must not also scroll or pinch. */
     touch-action: none;
     cursor: grab;
     user-select: none;
   }
   .stage:active { cursor: grabbing; }
-  /* Docked narrow, the bands give back the room the event names need. */
-  @container (max-width: 380px) { .stage { --lane-w: 52px; } }
 
   .loading {
     position: absolute; inset: 0; display: grid; place-items: center;
@@ -809,9 +1232,10 @@
   }
   .band:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .band-label {
-    position: absolute; top: 4px; left: 6px; right: 4px;
-    font-family: var(--display); font-size: 11.5px; line-height: 1.2;
+    position: absolute; top: 4px; left: 5px; right: 3px;
+    font-family: var(--display); font-size: 11px; line-height: 1.2;
     color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .7);
+    overflow-wrap: anywhere;
     pointer-events: none;
   }
 
@@ -823,8 +1247,52 @@
   }
   .tick-line {
     position: absolute; left: 52px; right: 0; top: 0; height: 1px;
-    background: #262626;
+    background: #222;
   }
+
+  /* ---------------- lanes ---------------- */
+  .lane {
+    position: absolute; top: 0; bottom: 0;
+    overflow: hidden;
+    background: rgba(255, 255, 255, .015);
+  }
+  .lane-bar {
+    position: absolute;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--c) 55%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c) 80%, transparent);
+    box-sizing: border-box;
+    cursor: pointer;
+  }
+  .lane-bar.narrow {
+    background: repeating-linear-gradient(180deg, var(--c) 0 3px, transparent 3px 6px);
+    border: 0;
+    opacity: .8;
+  }
+  .lane-bar.sel { box-shadow: 0 0 0 2px var(--focus); z-index: 1; }
+  .lane-label {
+    position: absolute;
+    padding: 0 3px;
+    border-radius: 3px;
+    background: rgba(10, 10, 10, .62);
+    color: #f1f1f1;
+    font-size: 10px; line-height: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer;
+    z-index: 2;
+  }
+  .lane-heads {
+    position: absolute; left: 0; right: 0; top: 0; height: 16px; z-index: 3;
+    background: linear-gradient(var(--sunken) 55%, transparent);
+    pointer-events: none;
+  }
+  .lane-head {
+    position: absolute; top: 2px;
+    display: flex; justify-content: center;
+    font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+    white-space: nowrap; overflow: hidden;
+  }
+  .lane-head-half { flex: 1; text-align: center; }
 
   /* A span that lasts: a thin line from its start to its end, left of the dots. */
   .bar {
@@ -868,6 +1336,7 @@
     border-left: 3px solid var(--c);
     color: var(--text); font: inherit; font-size: 12px;
     cursor: pointer; text-align: left; white-space: nowrap;
+    z-index: 2;
   }
   .mark:hover { background: #292929; border-color: var(--line-2); border-left-color: var(--c); }
   .mark.sel { background: #2f2a2b; border-color: var(--focus); border-left-color: var(--c); }
@@ -888,6 +1357,46 @@
   .mark-name { overflow: hidden; text-overflow: ellipsis; }
   .mark-year { color: var(--faint); font-size: 10.5px; flex: none; }
 
+  /* ---------------- you are here ---------------- */
+  .here-line {
+    position: absolute; left: 0; right: 0; height: 0;
+    border-top: 2px solid var(--focus);
+    box-shadow: 0 0 8px rgba(251, 113, 133, .55);
+    pointer-events: none; z-index: 1;
+  }
+  .here-span {
+    position: absolute; left: 0; right: 0;
+    background: rgba(251, 113, 133, .09);
+    border-top: 2px solid rgba(251, 113, 133, .8);
+    border-bottom: 1px dashed rgba(251, 113, 133, .5);
+    box-sizing: border-box;
+    pointer-events: none; z-index: 1;
+  }
+  .here-tag {
+    position: absolute; left: 4px; z-index: 4;
+    transform: translateY(-100%);
+    padding: 1px 7px; border-radius: 999px; cursor: pointer;
+    background: var(--focus); border: 0; color: #1a0a0d;
+    font: inherit; font-size: 11px; font-weight: 600; white-space: nowrap;
+  }
+  .here-tag.here-off { top: 22px; transform: none; opacity: .92; }
+  .here-tag.here-off.below { top: auto; bottom: 10px; left: 10px; }
+
+  /* ---------------- at this moment ---------------- */
+  .moment-line {
+    position: absolute; left: 0; right: 0; height: 0;
+    border-top: 2px dashed var(--moment);
+    pointer-events: none; z-index: 3;
+  }
+  .moment-tag {
+    position: absolute; left: 4px; z-index: 4;
+    transform: translateY(4px);
+    padding: 1px 7px; border-radius: 999px;
+    background: var(--moment); color: #1f1600;
+    font-size: 11px; font-weight: 600; white-space: nowrap;
+    pointer-events: none;
+  }
+
   /* The pill that says there is more to see. Kept small and out of the way. */
   .more {
     position: absolute; bottom: 10px; right: 10px; z-index: 5;
@@ -899,40 +1408,17 @@
   .more:hover { color: var(--text); border-color: var(--focus); }
   .more svg { width: 13px; height: 13px; }
 
-  /* ---------------- what you tapped ---------------- */
+  /* ---------------- the card ---------------- */
   .panel {
     flex: none;
     position: relative;
-    max-height: 46%;
+    max-height: 50%;
     overflow-y: auto;
-    padding: 12px calc(14px + var(--grip-r)) calc(12px + var(--grip-b)) calc(14px + var(--grip-l));
+    padding: 10px calc(14px + var(--grip-r)) calc(14px + var(--grip-b)) calc(14px + var(--grip-l));
     background: var(--chrome);
     border-top: 1px solid var(--line);
     z-index: 20;
   }
-  .panel-close {
-    position: absolute; top: 6px; right: calc(8px + var(--grip-r));
-    width: 26px; height: 26px; border-radius: 6px;
-    background: transparent; border: 0; color: var(--dim);
-    font-size: 19px; line-height: 1; cursor: pointer;
-  }
-  .panel-close:hover { background: var(--chrome-2); color: var(--text); }
-  .panel-kind {
-    font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--c); margin-bottom: 3px;
-  }
-  .panel-title { font-family: var(--display); font-size: 17px; line-height: 1.25; padding-right: 30px; }
-  .panel-span { color: var(--dim); font-size: 12px; margin-top: 2px; }
-  .panel-body { color: var(--dim); font-size: 13px; line-height: 1.6; margin: 8px 0 0; }
-  .panel-note { color: var(--faint); font-size: 12px; margin: 10px 0 0; }
-  .panel-go {
-    margin-top: 10px; padding: 7px 11px; border-radius: 6px; cursor: pointer;
-    background: var(--chrome-2); border: 1px solid var(--line-2); color: var(--text);
-    font: inherit; font-size: 13px; display: inline-flex; align-items: baseline; gap: 8px;
-  }
-  .panel-go:hover { background: #292929; border-color: var(--focus); }
-  .panel-go:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-  .panel-go-note { color: var(--faint); font-size: 11px; }
 
   /* ---------------- not installed ---------------- */
   .gate {

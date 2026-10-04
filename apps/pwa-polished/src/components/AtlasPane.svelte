@@ -325,6 +325,7 @@
    */
   function applyTarget(next: MapTarget) {
     appliedTargetSeq = next.seq;
+    if (next.year != null && atlas) void showYear(next.year);
     const markers = next.markers ?? [];
     if (!markers.length || !atlas) return;
 
@@ -337,6 +338,33 @@
         { padding: [60, 60], maxZoom: 9, duration: 1 }
       );
     }
+  }
+
+  /**
+   * Show the map as it was in a given year: the eras turned on and moved to
+   * the one the year falls in, or the nearest where it falls between two.
+   * Where map eras overlap, the one whose middle is closest wins. Sent by the
+   * Timeline with an event's year.
+   */
+  async function showYear(year: number) {
+    const list: any[] = atlas?.eras ?? eras;
+    if (!atlas || !list.length) return;
+    let best = 0;
+    let bestScore = Infinity;
+    list.forEach((e, i) => {
+      const outside = year < e.year_start ? e.year_start - year : year > e.year_end ? year - e.year_end : 0;
+      const score = outside * 1e6 + Math.abs((e.year_start + e.year_end) / 2 - year);
+      if (score < bestScore) {
+        bestScore = score;
+        best = i;
+      }
+    });
+    if (!atlas.timeline?.enabled) {
+      await atlas.setOverlayEnabled('eras', true);
+      overlays = atlas?.overlays ?? [];
+      timelineOn = Boolean(atlas?.timeline?.enabled);
+    }
+    await setEra(best);
   }
 
   // ---------------------------------------------------------------- navbar

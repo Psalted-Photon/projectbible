@@ -396,7 +396,8 @@ export function layoutBars(marks: Mark[], scale: TimelineScale, zoom: number): B
     } else {
       laneEnds[lane] = bottom;
     }
-    if (lane > 3) continue;
+    // Three at most; a fourth would reach back into the lanes.
+    if (lane > 2) continue;
     bars.push({ item: it, top, bottom, lane, color: m.color });
   }
   return bars;

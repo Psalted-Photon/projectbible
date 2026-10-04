@@ -30,13 +30,15 @@ let handoffSeq = 0;
  * six-window cap already reached. Callers use that to leave whatever they were
  * showing in place rather than closing it onto nothing.
  */
-export function openMapWindow(label: string, markers: MapMarker[]): boolean {
+export function openMapWindow(label: string, markers: MapMarker[], opts: { year?: number } = {}): boolean {
   const located = markers.filter(
     (m) => m.latitude != null && m.longitude != null && Number.isFinite(m.latitude) && Number.isFinite(m.longitude),
   );
-  if (!located.length) return false;
+  // A year alone is still somewhere to go: the map moves to that era.
+  const year = opts.year != null && Number.isFinite(opts.year) ? opts.year : undefined;
+  if (!located.length && year === undefined) return false;
 
-  const target: MapTarget = { seq: ++handoffSeq, label, markers: located };
+  const target: MapTarget = { seq: ++handoffSeq, label, markers: located, ...(year !== undefined ? { year } : {}) };
 
   const existing = get(windowStore).find((w) => w.contentType === 'map');
   if (existing) {
@@ -49,9 +51,10 @@ export function openMapWindow(label: string, markers: MapMarker[]): boolean {
 
   // Centre is seeded from the first marker so the map opens looking at roughly
   // the right part of the world, then applyTarget flies it the rest of the way.
+  // With no places, it opens on the lands of the Bible and the era does the rest.
   windowStore.setWindowContent(id, 'map', {
-    center: [located[0].latitude, located[0].longitude] as [number, number],
-    zoom: 8,
+    center: (located.length ? [located[0].latitude, located[0].longitude] : [31.8, 35.2]) as [number, number],
+    zoom: located.length ? 8 : 5,
     target,
   });
   return true;

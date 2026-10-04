@@ -49,6 +49,12 @@ export interface MapTarget {
   seq: number;
   label: string;
   markers: MapMarker[];
+  /**
+   * A year to show the map in (negative = BC). The Timeline sends it so the
+   * map turns its eras on and moves to the one that year falls in, with the
+   * borders of that time, before marking the places.
+   */
+  year?: number;
 }
 
 export interface WindowState {
