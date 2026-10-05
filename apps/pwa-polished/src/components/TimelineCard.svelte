@@ -24,6 +24,8 @@
   export let tier: 1 | 2 | 3;
   export let onSelect: (item: TimelineItem) => void;
   export let onRead: (passage: TimelinePassage) => void;
+  /** Called before the map opens, so a full-screen timeline steps aside for it. */
+  export let onLeave: () => void = () => {};
   export let onClose: () => void;
 
   const PASSAGES_SHOWN = 6;
@@ -85,10 +87,12 @@
   $: markers = item.places.map((p) => ({ name: p.name, latitude: p.lat, longitude: p.lon }));
 
   function showOnMap() {
+    onLeave();
     openMapWindow(item.title, markers, { year: mapYear });
   }
 
   function showPlace(p: { name: string; lat: number; lon: number }) {
+    onLeave();
     openMapWindow(p.name, [{ name: p.name, latitude: p.lat, longitude: p.lon }], { year: mapYear });
   }
 

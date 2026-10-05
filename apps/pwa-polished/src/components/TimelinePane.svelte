@@ -22,11 +22,14 @@
    *
    * A docked window rather than a fullscreen view, deliberately: tapping a
    * passage sends the reader there and the timeline stays open beside it.
+   * Its bar can still take it full screen on demand; reading a passage or
+   * opening the map from there drops it back into the window first.
    */
   import { onMount, onDestroy, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { windowStore } from '../lib/stores/windowStore';
   import { navigationStore } from '../stores/navigationStore';
+  import { lookupStore } from '../stores/lookupStore';
   import GetPacksCard from './GetPacksCard.svelte';
   import TimelineCard from './TimelineCard.svelte';
   import TimelineMoment from './TimelineMoment.svelte';
@@ -93,7 +96,8 @@
    * AtlasPane and Window.svelte use.
    */
   const GRIP_PX = 26;
-  $: edge = windowState?.edge;
+  // Full screen there is no grip to keep clear of.
+  $: edge = fullscreen ? undefined : windowState?.edge;
   $: gripStyle = [
     `--grip-l:${edge === 'right' ? GRIP_PX : 0}px`,
     `--grip-r:${edge === 'left' ? GRIP_PX : 0}px`,
@@ -557,6 +561,67 @@
     menu = null;
   }
 
+  // ===== Full screen =====
+  //
+  // The same pane, lifted out of its window to cover the whole app and put
+  // back on the way out, so the zoom, the scroll and the open card all come
+  // along and nothing reloads. Not remembered: a reload opens it back in its
+  // window, as the family tree never reopens over a reload either.
+
+  let fullscreen = false;
+
+  /**
+   * Moves the pane to the end of <body> while full screen, the way
+   * FamilyTreeViewer and ArtViewer are moved: the window's panel carries the
+   * light and sepia themes' filter, which would pin a fixed element to the
+   * panel instead of the screen. Only this inner element travels; the
+   * component's own root stays in the window, so Svelte always finds it there.
+   */
+  function portal(node: HTMLElement, on: boolean) {
+    const home = node.parentElement!;
+    const place = (next: boolean) => {
+      if (next) document.body.appendChild(node);
+      else if (node.parentElement !== home) home.appendChild(node);
+    };
+    place(on);
+    return {
+      update: place,
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
+  /** In or out, keeping the year in the middle of the strip in the middle. */
+  async function setFullscreen(on: boolean) {
+    if (on === fullscreen) return;
+    menu = null;
+    stopGlide();
+    measureStage();
+    const year = data && axisLen() > 0 ? scale.yearAt((axisLen() / 2 - ty) / zoom) : null;
+    fullscreen = on;
+    await tick();
+    measureStage();
+    // A second tick lets a turn (down to across, or back) settle first.
+    await tick();
+    if (year !== null) ty = tyFor(year);
+  }
+
+  // The bar holding the way out goes with the install gate.
+  $: if ((missing || error) && fullscreen) fullscreen = false;
+
+  /**
+   * Escape steps out: an open menu or search first, then full screen. Caught
+   * before anything else hears it, so the lookup card, when one is open over
+   * the timeline, is left to take it for itself.
+   */
+  function onKeydownCapture(e: KeyboardEvent) {
+    if (!fullscreen || e.key !== 'Escape' || get(lookupStore)) return;
+    if (menu) menu = null;
+    else if (searchOpen) closeSearch();
+    else void setFullscreen(false);
+  }
+
   // ===== Pointer gestures =====
   //
   // Pointer Events, one path for mouse, touch and pen — the same shape as
@@ -861,9 +926,11 @@
    *
    * The map's exact call: a crumb first, so the navbar's back arrow puts the
    * reader back where it was standing with the timeline still open, then the
-   * jump.
+   * jump. From full screen it goes back into its window first, or the
+   * reader it just moved would be out of sight under it.
    */
   function read(p: TimelinePassage) {
+    void setFullscreen(false);
     const current = get(navigationStore);
     navigationStore.pushHistory(current, 'timeline');
     navigationStore.navigateToVerse(current.translation, p.b, p.c, p.v);
@@ -997,8 +1064,10 @@
     void load(true);
     const onPacks = () => void load(false);
     window.addEventListener('packsUpdated', onPacks);
+    window.addEventListener('keydown', onKeydownCapture, true);
     return () => {
       window.removeEventListener('packsUpdated', onPacks);
+      window.removeEventListener('keydown', onKeydownCapture, true);
       stopGlide();
       detachStage();
     };
@@ -1011,8 +1080,18 @@
 </script>
 
 <!-- `.no-edge-gesture`, or scrubbing the axis near the screen edge arms a new
-     window instead of scrolling the years. -->
-<div class="timeline no-edge-gesture" style={gripStyle} bind:this={rootEl} on:pointerdown={onRootPointerDown}>
+     window instead of scrolling the years. `themed` full screen only: in the
+     window the panel already carries it, and twice would cancel out. -->
+<div class="timeline-home">
+<div
+  class="timeline no-edge-gesture"
+  class:fullscreen
+  class:themed={fullscreen}
+  style={gripStyle}
+  bind:this={rootEl}
+  use:portal={fullscreen}
+  on:pointerdown={onRootPointerDown}
+>
   {#if missing}
     <div class="gate">
       <GetPacksCard
@@ -1046,6 +1125,20 @@
       </button>
       <button class="btn btn-icon" class:on={menu === 'more'} data-menu-button title="More" aria-label="More" on:click={() => toggleMenu('more')}>
         <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+      </button>
+      <button
+        class="btn btn-icon"
+        class:on={fullscreen}
+        aria-pressed={fullscreen}
+        title={fullscreen ? 'Back to the window' : 'Full screen'}
+        aria-label={fullscreen ? 'Back to the window' : 'Full screen'}
+        on:click={() => setFullscreen(!fullscreen)}
+      >
+        {#if fullscreen}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 4 9 9 4 9"/><polyline points="20 9 15 9 15 4"/><polyline points="15 20 15 15 20 15"/><polyline points="4 15 9 15 9 20"/></svg>
+        {:else}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 9 4 4 9 4"/><polyline points="15 4 20 4 20 9"/><polyline points="20 15 20 20 15 20"/><polyline points="9 20 4 20 4 15"/></svg>
+        {/if}
       </button>
     </div>
 
@@ -1423,6 +1516,7 @@
           {tier}
           onSelect={focusItem}
           onRead={read}
+          onLeave={() => setFullscreen(false)}
           onClose={() => (selected = null)}
         />
       </div>
@@ -1432,6 +1526,7 @@
       </div>
     {/if}
   {/if}
+</div>
 </div>
 
 <style>
@@ -1466,6 +1561,21 @@
     container-type: inline-size;
     overflow: hidden;
     isolation: isolate;
+  }
+
+  /* Stays in the window while the pane itself goes full screen. */
+  .timeline-home { height: 100%; }
+
+  /* Over the whole app, the bar and the windows included, but under the
+     lookup card (10001) so a person tapped here opens on top, and under the
+     app's notices. Clear of the notch and the gesture bar. */
+  .timeline.fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    height: auto;
+    box-sizing: border-box;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   }
 
   /* ---------------- navbar ---------------- */
