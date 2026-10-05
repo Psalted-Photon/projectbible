@@ -155,6 +155,15 @@
   let appsButtonRef: HTMLElement;
   let appsMenuOpen = false;
   let showHarmonyPicker = false;
+  // The four tiles' gradients need ids, and there's a nav bar per Bible
+  // window, so each one gets its own.
+  const appsTileId = `apps-tile-${Math.random().toString(36).slice(2, 8)}`;
+  const APPS_TILES = [
+    { x: 40,  y: 40,  color: '#fb7185' },
+    { x: 136, y: 40,  color: '#a3e635' },
+    { x: 40,  y: 136, color: '#4a90e2' },
+    { x: 136, y: 136, color: '#fde047' },
+  ];
 
   function openAppsMenu() {
     translationDropdownOpen = false;
@@ -2159,12 +2168,22 @@
       >
         <!-- Four tiles in four tile accents (Art, Commentary, Encyclopedia,
              Notes) from lib/windowTypes.ts, on the squares of SquaresFour's
-             fill weight. -->
+             fill weight. Each tile fades from its color to black at the
+             edges, the same gradient as the icon badges (circle out to the
+             corners, solid to 20%). -->
         <span class="icon-badge icon-badge-apps"><svg width="18" height="18" viewBox="0 0 256 256" aria-hidden="true">
-          <rect x="40"  y="40"  width="80" height="80" rx="16" fill="#fb7185" />
-          <rect x="136" y="40"  width="80" height="80" rx="16" fill="#a3e635" />
-          <rect x="40"  y="136" width="80" height="80" rx="16" fill="#4a90e2" />
-          <rect x="136" y="136" width="80" height="80" rx="16" fill="#fde047" />
+          <defs>
+            {#each APPS_TILES as tile, i}
+              <radialGradient id="{appsTileId}-{i}" cx="0.5" cy="0.5" r="0.7071">
+                <stop offset="0" stop-color={tile.color} />
+                <stop offset="0.2" stop-color={tile.color} />
+                <stop offset="1" stop-color="#000000" />
+              </radialGradient>
+            {/each}
+          </defs>
+          {#each APPS_TILES as tile, i}
+            <rect x={tile.x} y={tile.y} width="80" height="80" rx="16" fill="url(#{appsTileId}-{i})" />
+          {/each}
         </svg></span>
       </button>
 

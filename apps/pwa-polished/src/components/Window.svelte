@@ -3,7 +3,6 @@
   import { pendingCloseEdge } from "../stores/paneStore";
   import { swapWindowContent, openHarmonyView, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
   import { onMount } from 'svelte';
-  import { SquaresFour } from 'phosphor-svelte';
   import WindowTypeMenu from "./WindowTypeMenu.svelte";
   import HarmonyPicker from "./HarmonyPicker.svelte";
   import PackUpdateNotice from "./PackUpdateNotice.svelte";
@@ -312,7 +311,14 @@
         aria-label="Show something else here"
         aria-haspopup="menu"
         aria-expanded={swapOpen}
-      ><SquaresFour size={11} weight="bold" /></button>
+      ><!-- SquaresFour's bold outlines split into one path per square, in the
+           nav bar apps button's four colors and order. -->
+        <svg width="11" height="11" viewBox="0 0 256 256" aria-hidden="true">
+          <path fill="#fb7185" d="M100,36H56A20,20,0,0,0,36,56v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V56A20,20,0,0,0,100,36ZM96,96H60V60H96Z" />
+          <path fill="#a3e635" d="M200,36H156a20,20,0,0,0-20,20v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V56A20,20,0,0,0,200,36Zm-4,60H160V60h36Z" />
+          <path fill="#4a90e2" d="M100,136H56a20,20,0,0,0-20,20v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V156A20,20,0,0,0,100,136Zm-4,60H60V160H96Z" />
+          <path fill="#fde047" d="M200,136H156a20,20,0,0,0-20,20v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V156A20,20,0,0,0,200,136Zm-4,60H160V160h36Z" />
+        </svg></button>
     {/if}
     <button class="close-button" on:click={handleCloseClick} aria-label="Close panel">×</button>
   </div>
