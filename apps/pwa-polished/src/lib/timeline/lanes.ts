@@ -85,9 +85,12 @@ export interface LaneSegment {
 
 export interface LaneSlot {
   item: TimelineItem;
-  /** Horizontal place inside the lane, as fractions of its width. */
+  /** Place across a column-shaped lane, as fractions of its width (strip runs down). */
   x0: number;
   x1: number;
+  /** Rows of a row-shaped lane, top and bottom, in row units (strip runs across). */
+  r0: number;
+  r1: number;
   segments: LaneSegment[];
   color: string;
   /** Labels in one group never overlap; groups sit side by side. */
@@ -97,6 +100,8 @@ export interface LaneSlot {
 export interface LaneLayout {
   id: LaneId;
   slots: LaneSlot[];
+  /** How many rows the lane needs when the strip runs across. */
+  rowCount: number;
   /** Each label group's horizontal extent, as fractions. */
   groups: Record<string, { x0: number; x1: number }>;
 }
@@ -172,40 +177,48 @@ export function layoutLane(id: LaneId, all: TimelineItem[]): LaneLayout {
         segments.push({ from: main, to: k.year_end, narrow: rival });
         if (!rival) lastEnd = Math.max(lastEnd, k.year_end);
         const [x0, x1] = kingdom === 'judah' ? [0, 0.5] : kingdom === 'israel' ? [0.5, 1] : [0, 1];
-        slots.push({ item: k, x0, x1, segments, color: laneColor(k), group: kingdom });
+        const [r0, r1] = kingdom === 'judah' ? [0, 1] : kingdom === 'israel' ? [1, 2] : [0, 2];
+        slots.push({ item: k, x0, x1, r0, r1, segments, color: laneColor(k), group: kingdom });
       }
     }
     return {
       id,
       slots,
+      rowCount: 2,
       groups: { united: { x0: 0, x1: 1 }, judah: { x0: 0, x1: 0.5 }, israel: { x0: 0.5, x1: 1 } },
     };
   }
 
-  /** Lay a set of items across [from, to] of the lane, each run of overlaps split evenly. */
-  const spread = (list: TimelineItem[], from: number, to: number, group: string): LaneSlot[] => {
-    const { cols, width } = columnsByYear(list);
-    return list.map((it) => {
+  /**
+   * Lay a set of items across [from, to] of a column, each run of overlaps
+   * split evenly; and into rows from `rowFrom`, one row per column.
+   */
+  const spread = (list: TimelineItem[], from: number, to: number, group: string, rowFrom = 0) => {
+    const { cols, width, count } = columnsByYear(list);
+    const slots: LaneSlot[] = list.map((it) => {
+      const col = cols.get(it.id) ?? 0;
       const w = (to - from) / (width.get(it.id) ?? 1);
-      const x0 = from + (cols.get(it.id) ?? 0) * w;
-      return { item: it, x0, x1: x0 + w, segments: whole(it), color: laneColor(it), group };
+      const x0 = from + col * w;
+      return { item: it, x0, x1: x0 + w, r0: rowFrom + col, r1: rowFrom + col + 1, segments: whole(it), color: laneColor(it), group };
     });
+    return { slots, count: list.length ? count : 0 };
   };
 
   if (id === 'world') {
-    // Empires on the left, a little wider; the rulers beside them.
+    // Empires on the left (or top), a little wider; the rulers beside them.
     const SPLIT = 0.5;
+    const empires = spread(items.filter((it) => it.sub === 'empire'), 0, SPLIT, 'empire');
+    const rulers = spread(items.filter((it) => it.sub !== 'empire'), SPLIT, 1, 'ruler', empires.count);
     return {
       id,
-      slots: [
-        ...spread(items.filter((it) => it.sub === 'empire'), 0, SPLIT, 'empire'),
-        ...spread(items.filter((it) => it.sub !== 'empire'), SPLIT, 1, 'ruler'),
-      ],
+      slots: [...empires.slots, ...rulers.slots],
+      rowCount: Math.max(1, empires.count + rulers.count),
       groups: { empire: { x0: 0, x1: SPLIT }, ruler: { x0: SPLIT, x1: 1 } },
     };
   }
 
-  return { id, slots: spread(items, 0, 1, 'all'), groups: { all: { x0: 0, x1: 1 } } };
+  const laid = spread(items, 0, 1, 'all');
+  return { id, slots: laid.slots, rowCount: Math.max(1, laid.count), groups: { all: { x0: 0, x1: 1 } } };
 }
 
 export interface LaneBar {
@@ -282,6 +295,56 @@ export function laneView(
     lastByGroup.set(c.slot.group, top);
     const g = layout.groups[c.slot.group] ?? { x0: 0, x1: 1 };
     labels.push({ item: c.slot.item, top, left: c.left, maxWidth: Math.max(10, g.x1 * width - c.left - 1) });
+  }
+  return { bars, labels };
+}
+
+// ===== Lanes as rows, for the strip running across =====
+
+/** Height of one lane row when the strip runs across, in pixels. */
+export const LANE_ROW_H = 17;
+/** Room above a row-shaped lane for its name. */
+export const LANE_HEAD_H = 13;
+
+/** A row-shaped lane's full height. */
+export function laneRowsHeight(layout: LaneLayout): number {
+  return LANE_HEAD_H + layout.rowCount * LANE_ROW_H + 4;
+}
+
+/**
+ * One lane's bars and labels when the strip runs from left to right: each
+ * item on a row of its own, its name written along its bar from the left edge
+ * of whatever part of it is on screen, so a long reign or life keeps its name
+ * in view while you scroll along it.
+ */
+export function laneViewAcross(
+  layout: LaneLayout,
+  scale: TimelineScale,
+  zoom: number,
+  tx: number,
+  stageW: number,
+  top: number,
+): { bars: LaneBar[]; labels: LaneLabel[] } {
+  const bars: LaneBar[] = [];
+  const labels: LaneLabel[] = [];
+  const rowsTop = top + LANE_HEAD_H;
+  for (const slot of layout.slots) {
+    const rowTop = rowsTop + slot.r0 * LANE_ROW_H;
+    const rowH = (slot.r1 - slot.r0) * LANE_ROW_H;
+    slot.segments.forEach((seg, i) => {
+      const x0 = scale.y(seg.from) * zoom + tx;
+      const x1 = Math.max(x0 + 3, scale.y(seg.to) * zoom + tx);
+      if (x1 < -10 || x0 > stageW + 10) return;
+      const left = Math.max(x0, -4);
+      const right = Math.min(x1, stageW + 4);
+      const h = seg.narrow ? 4 : rowH - 3;
+      const y = seg.narrow ? rowTop + rowH - 5 : rowTop + 1;
+      bars.push({ key: `${slot.item.id}:${i}`, item: slot.item, top: y, height: h, left, width: right - left, color: slot.color, narrow: seg.narrow });
+      if (seg.narrow) return;
+      const labelLeft = Math.max(x0, 0) + 3;
+      const room = right - labelLeft - 3;
+      if (room >= 22) labels.push({ item: slot.item, top: rowTop + (rowH - 3 - 13) / 2 + 1, left: labelLeft, maxWidth: room });
+    });
   }
   return { bars, labels };
 }

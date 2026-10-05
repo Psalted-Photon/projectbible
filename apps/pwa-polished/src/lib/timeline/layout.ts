@@ -162,10 +162,10 @@ export function makeStoryScale(eras: TimelineItem[], events: TimelineItem[]): Ti
  * 2 appears once its 14px have grown to a label's height. True years has no
  * such promise, so it uses fixed steps and lets clusters take up the slack.
  */
-export function visibleTier(zoom: number, mode: ScaleMode): 1 | 2 | 3 {
+export function visibleTier(zoom: number, mode: ScaleMode, gap = LABEL_GAP): 1 | 2 | 3 {
   if (mode === 'story') {
-    if (zoom * TIER_ROOM[3] >= LABEL_GAP) return 3;
-    if (zoom * TIER_ROOM[2] >= LABEL_GAP) return 2;
+    if (zoom * TIER_ROOM[3] >= gap) return 3;
+    if (zoom * TIER_ROOM[2] >= gap) return 2;
     return 1;
   }
   if (zoom >= 40) return 3;
@@ -174,15 +174,22 @@ export function visibleTier(zoom: number, mode: ScaleMode): 1 | 2 | 3 {
 }
 
 export const ZOOM_LIMITS: Record<ScaleMode, { min: number; max: number }> = {
-  story: { min: 0.08, max: 10 },
+  // Running across in a short window, labels get three rows and the detail
+  // tier needs about 10x; 14 leaves room to spare.
+  story: { min: 0.08, max: 14 },
   // AD 30 alone holds some sixty events, Holy Week and Acts 1-7; they need
   // about 1,300px for the year, which is 4,700x.
   true: { min: 0.1, max: 6000 },
 };
 
-/** The zoom at which a tier first shows, so a cluster tap can be sure to open it. */
-export function zoomForTier(tier: 1 | 2 | 3, mode: ScaleMode): number {
-  if (mode === 'story') return (LABEL_GAP / TIER_ROOM[tier]) * 1.02;
+/**
+ * The zoom at which a tier first shows, so a cluster tap can be sure to open
+ * it. `gap` is the room one label needs along the time axis: a label's height
+ * when the strip runs down the screen, a share of a label row when it runs
+ * across.
+ */
+export function zoomForTier(tier: 1 | 2 | 3, mode: ScaleMode, gap = LABEL_GAP): number {
+  if (mode === 'story') return (gap / TIER_ROOM[tier]) * 1.02;
   return tier === 3 ? 40 : tier === 2 ? 4 : 0;
 }
 
@@ -330,8 +337,9 @@ export function layoutMarks(
   scale: TimelineScale,
   zoom: number,
   tier: 1 | 2 | 3,
+  /** Room one label needs along the time axis; see zoomForTier. */
+  gap = LABEL_GAP,
 ): Mark[] {
-  const gap = LABEL_GAP;
   let marks: Mark[] = events
     .filter((e) => (e.tier ?? 3) <= tier)
     .map((e) => {
@@ -406,7 +414,6 @@ export function layoutBars(marks: Mark[], scale: TimelineScale, zoom: number): B
 // ===== Year ticks =====
 
 const TICK_STEPS = [1000, 500, 250, 100, 50, 25, 10, 5, 2, 1];
-const TICK_GAP = 34;
 
 /**
  * The year lines down the side, for what is on screen.
@@ -415,7 +422,14 @@ const TICK_GAP = 34;
  * stretch the story scale has opened up gets single years while a long empty
  * one keeps its centuries. There is no year 0.
  */
-export function yearTicks(scale: TimelineScale, zoom: number, fromZ: number, toZ: number): { year: number; z: number }[] {
+export function yearTicks(
+  scale: TimelineScale,
+  zoom: number,
+  fromZ: number,
+  toZ: number,
+  /** Least room between two ticks: more when the labels sit side by side. */
+  minGap = 34,
+): { year: number; z: number }[] {
   const lo = Math.floor(scale.yearAt(fromZ / zoom));
   const hi = Math.ceil(scale.yearAt(toZ / zoom));
   const taken: number[] = [];
@@ -431,7 +445,7 @@ export function yearTicks(scale: TimelineScale, zoom: number, fromZ: number, toZ
     }
     const before = a > 0 ? z - taken[a - 1] : Infinity;
     const after = a < taken.length ? taken[a] - z : Infinity;
-    return { ok: before >= TICK_GAP && after >= TICK_GAP, at: a };
+    return { ok: before >= minGap && after >= minGap, at: a };
   };
   for (const step of TICK_STEPS) {
     if ((hi - lo) / step > 4000) continue;
@@ -443,6 +457,50 @@ export function yearTicks(scale: TimelineScale, zoom: number, fromZ: number, toZ
       taken.splice(at, 0, z);
       out.push({ year, z });
     }
+  }
+  return out;
+}
+
+// ===== Label rows, for the strip running across =====
+
+export interface RowPlacement {
+  mark: Mark;
+  /** 0 is the row nearest the line of dots. */
+  row: number;
+  /** Zoomed pixels: where the label starts, and how wide it is drawn. */
+  start: number;
+  width: number;
+}
+
+/**
+ * Put event labels into rows above the line of dots, when the strip runs from
+ * left to right.
+ *
+ * Each label starts at its own dot, in the lowest row that is free there.
+ * Where every row is taken it starts as soon as the emptiest row allows, with
+ * a leader back to the dot. layoutMarks has already folded runs too dense for
+ * the rows into chips, so this rarely has to push anything far.
+ */
+export function placeLabelRows(
+  marks: Mark[],
+  rows: number,
+  widthOf: (mark: Mark) => number,
+  maxWidth: number,
+): RowPlacement[] {
+  const GAP = 6;
+  const ends = new Array<number>(rows).fill(-Infinity);
+  const out: RowPlacement[] = [];
+  for (const mark of marks) {
+    const width = Math.min(maxWidth, widthOf(mark));
+    let row = ends.findIndex((end) => end + GAP <= mark.z);
+    let start = mark.z;
+    if (row === -1) {
+      row = 0;
+      for (let r = 1; r < rows; r++) if (ends[r] < ends[row]) row = r;
+      start = ends[row] + GAP;
+    }
+    ends[row] = start + width;
+    out.push({ mark, row, start, width });
   }
   return out;
 }

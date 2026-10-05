@@ -31,16 +31,19 @@
     pendingUpdates,
     packUpdates,
     updatedThisSession,
+    installedThisSession,
     watchPackUpdates,
     notNowUpdate,
     ignoreUpdate,
-    markUpdated,
   } from '../lib/packUpdates';
   import BrandSpinner from './BrandSpinner.svelte';
 
   /** Catalog ids of the packs this feature reads. */
   export let packs: string[];
-  /** The feature picks the new data up by itself, so no restart is offered. */
+  /**
+   * The feature picks new data up by itself and drops its Get packs card once
+   * a pack is in, so the Restart after a fresh install shows here instead.
+   */
   export let reloads = false;
 
   let sizes: PackSizes | null = null;
@@ -57,10 +60,15 @@
     .filter((p): p is CatalogPack => !!p);
   $: waiting = catalog.filter((p) => $pendingUpdates[p.id] && $installingPackId !== p.id);
   $: updating = catalog.find((p) => $installingPackId === p.id && $packUpdates[p.id]);
-  $: updated = !reloads && !restartClosed && $restartNeeded ? catalog.filter((p) => $updatedThisSession.has(p.id)) : [];
+  // Every finished download offers a restart: after an update always, and
+  // after a fresh install where the feature's own Get packs card (which has
+  // its own Restart) has gone.
+  $: updated = !restartClosed && $restartNeeded
+    ? catalog.filter((p) => $updatedThisSession.has(p.id) || (reloads && $installedThisSession.has(p.id)))
+    : [];
 
   async function update(pack: CatalogPack) {
-    if (await updatePack(pack)) markUpdated(pack.id);
+    await updatePack(pack);
   }
 </script>
 
@@ -103,8 +111,8 @@
     {#if !updating && updated.length}
       <div class="pu-row">
         <span class="pu-text">
-          <span class="pu-name">{updated.map((p) => p.name).join(', ')} updated</span>
-          <span class="pu-desc">Restart to use the new version.</span>
+          <span class="pu-name">{updated.map((p) => p.name).join(', ')} {updated.every((p) => $updatedThisSession.has(p.id)) ? 'updated' : 'installed'}</span>
+          <span class="pu-desc">Restart the app to finish.</span>
         </span>
         <div class="pu-actions">
           <button type="button" class="pu-restart" on:click={() => window.location.reload()}>

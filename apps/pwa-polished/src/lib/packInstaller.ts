@@ -37,6 +37,13 @@ import {
   type TtsVoiceInfo,
 } from '../adapters/tts';
 import { showNotice, errorText } from '../stores/noticeStore';
+import { markInstalled, markUpdated } from './packUpdates';
+
+/**
+ * The Restart every finished download offers, wherever it was started from:
+ * most features read their packs once, at startup.
+ */
+const RESTART = { label: 'Restart', run: () => window.location.reload() };
 import { askConfirm } from '../stores/confirmStore';
 
 /** Dev builds read packs straight out of public/; production goes through the proxy. */
@@ -660,7 +667,8 @@ export async function installPack(
     await downloadAndImportPack(pack, (message) => installMessage.set(message));
 
     restartNeeded.set(true);
-    showNotice(`${pack.name} installed`);
+    markInstalled(pack.id);
+    showNotice(`${pack.name} installed`, 'success', { action: RESTART });
     window.dispatchEvent(new CustomEvent('packsUpdated'));
     return true;
   } catch (error) {
@@ -712,7 +720,8 @@ export async function updatePack(pack: CatalogPack): Promise<boolean> {
     await downloadAndImportPack(pack, (message) => installMessage.set(message), { replaceAfterDownload: true });
 
     restartNeeded.set(true);
-    showNotice(`${pack.name} updated`);
+    markUpdated(pack.id);
+    showNotice(`${pack.name} updated`, 'success', { action: RESTART });
     window.dispatchEvent(new CustomEvent('packsUpdated'));
     return true;
   } catch (error) {

@@ -53,6 +53,8 @@ export const pendingUpdates = derived([packUpdates, ignored, notNow], ([$updates
 
 /** Packs updated this session, for the "restart to use it" that follows. */
 export const updatedThisSession = writable<Set<string>>(new Set());
+/** Packs freshly installed this session, likewise. */
+export const installedThisSession = writable<Set<string>>(new Set());
 
 let manifestShas: Promise<Record<string, string>> | null = null;
 
@@ -127,6 +129,10 @@ export function ignoreUpdate(packId: string): void {
 
 export function markUpdated(packId: string): void {
   updatedThisSession.update((s) => new Set(s).add(packId));
+}
+
+export function markInstalled(packId: string): void {
+  installedThisSession.update((s) => new Set(s).add(packId));
 }
 
 /**

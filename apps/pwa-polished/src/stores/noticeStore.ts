@@ -14,6 +14,13 @@ export interface Notice {
   id: number;
   kind: NoticeKind;
   text: string;
+  /** A button on the card, such as the Restart that follows an install. */
+  action?: NoticeAction;
+}
+
+export interface NoticeAction {
+  label: string;
+  run: () => void;
 }
 
 export const notices = writable<Notice[]>([]);
@@ -24,17 +31,18 @@ const timers = new Map<number, ReturnType<typeof setTimeout>>();
 /** More than this and the oldest goes, so a run of failures can't fill the screen. */
 const MAX_VISIBLE = 3;
 
-export function showNotice(text: string, kind: NoticeKind = 'success') {
+export function showNotice(text: string, kind: NoticeKind = 'success', opts: { action?: NoticeAction } = {}) {
   const id = nextId++;
   notices.update((list) => {
-    const next = [...list, { id, kind, text }];
+    const next = [...list, { id, kind, text, ...(opts.action ? { action: opts.action } : {}) }];
     while (next.length > MAX_VISIBLE) dismissTimer(next.shift()!.id);
     return next;
   });
   // Errors tend to be longer and matter more, so they stay up longer, and a
-  // long message gets time to be read.
-  const base = kind === 'error' ? 8000 : 4000;
-  const ms = Math.min(15000, Math.max(base, text.length * 60));
+  // long message gets time to be read. One with a button stays long enough
+  // to be reached for.
+  const base = opts.action ? 20000 : kind === 'error' ? 8000 : 4000;
+  const ms = Math.min(opts.action ? 30000 : 15000, Math.max(base, text.length * 60));
   timers.set(id, setTimeout(() => dismissNotice(id), ms));
 }
 

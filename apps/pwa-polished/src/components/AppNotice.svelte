@@ -1,31 +1,42 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import { CheckCircle, Info, WarningCircle } from 'phosphor-svelte';
+  import { CheckCircle, Info, WarningCircle, ArrowClockwise } from 'phosphor-svelte';
   import { notices, dismissNotice } from '../stores/noticeStore';
 </script>
 
 <!-- Same card as UpdateNotice, so every message the app shows looks alike.
-     Tap one to dismiss it early. -->
+     Tap one to dismiss it early. One with an action (the Restart after an
+     install) carries its own button beside the text. -->
 <div class="an-wrap" role="status" aria-live="polite">
   {#each $notices as notice (notice.id)}
-    <button
-      type="button"
-      class="an-card"
-      class:error={notice.kind === 'error'}
-      transition:fly={{ y: -16, duration: 250 }}
-      on:click={() => dismissNotice(notice.id)}
-    >
-      <span class="an-icon">
-        {#if notice.kind === 'error'}
-          <WarningCircle size={20} weight="bold" />
-        {:else if notice.kind === 'info'}
-          <Info size={20} weight="bold" />
-        {:else}
-          <CheckCircle size={20} weight="bold" />
-        {/if}
-      </span>
-      <span class="an-text">{notice.text}</span>
-    </button>
+    {@const action = notice.action}
+    <div class="an-card" class:error={notice.kind === 'error'} transition:fly={{ y: -16, duration: 250 }}>
+      <button type="button" class="an-body" on:click={() => dismissNotice(notice.id)}>
+        <span class="an-icon">
+          {#if notice.kind === 'error'}
+            <WarningCircle size={20} weight="bold" />
+          {:else if notice.kind === 'info'}
+            <Info size={20} weight="bold" />
+          {:else}
+            <CheckCircle size={20} weight="bold" />
+          {/if}
+        </span>
+        <span class="an-text">{notice.text}</span>
+      </button>
+      {#if action}
+        <button
+          type="button"
+          class="an-action"
+          on:click={() => {
+            dismissNotice(notice.id);
+            action.run();
+          }}
+        >
+          <ArrowClockwise size={16} weight="bold" />
+          {action.label}
+        </button>
+      {/if}
+    </div>
   {/each}
 </div>
 
@@ -47,16 +58,48 @@
   .an-card {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
     max-width: min(100%, 460px);
     background: #1c1c1e;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
-    padding: 10px 18px;
+    padding: 0 8px 0 0;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
     pointer-events: auto;
+  }
+
+  .an-body {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    padding: 10px 10px 10px 18px;
+    background: none;
+    border: none;
     cursor: pointer;
     text-align: left;
+  }
+
+  /* The Get packs card's Restart button. */
+  .an-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid #e6b84a;
+    border-radius: 8px;
+    background: transparent;
+    color: #e6b84a;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .an-action:hover {
+    background: rgba(230, 184, 74, 0.12);
   }
 
   .an-icon {

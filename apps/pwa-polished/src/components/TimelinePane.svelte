@@ -49,12 +49,24 @@
     yearTicks,
     visibleTier,
     zoomForTier,
+    placeLabelRows,
+    LABEL_GAP,
     ZOOM_LIMITS,
     type Mark,
     type ScaleMode,
     type TimelineScale,
   } from '../lib/timeline/layout';
-  import { LANES, laneLimit, laneWidth, layoutLane, laneView, type LaneId, type LaneLayout } from '../lib/timeline/lanes';
+  import {
+    LANES,
+    laneLimit,
+    laneWidth,
+    layoutLane,
+    laneView,
+    laneViewAcross,
+    laneRowsHeight,
+    type LaneId,
+    type LaneLayout,
+  } from '../lib/timeline/lanes';
   import { buildHereIndex, findHere, momentAt, searchItems, type HereIndex } from '../lib/timeline/query';
 
   export let windowId: string | undefined = undefined;
@@ -106,7 +118,60 @@
   let stageH = 0;
   let stageW = 0;
 
-  $: tier = visibleTier(zoom, mode);
+  // ===== Which way the strip runs =====
+  //
+  // Down the screen (oldest at the top) or across it (oldest on the left).
+  // Auto goes by the pane's own shape, wide or tall; the menu can pin either.
+  // Measured on the whole pane, not the stage, so opening the card at the
+  // foot never flips it.
+
+  type OrientPref = 'auto' | 'across' | 'down';
+  let orientPref: OrientPref = 'auto';
+  let rootEl: HTMLDivElement;
+  let paneW = 0;
+  let paneH = 0;
+
+  function acrossNow(): boolean {
+    return orientPref === 'across' || (orientPref === 'auto' && paneW > 0 && paneW > paneH);
+  }
+  $: across = orientPref === 'across' || (orientPref === 'auto' && paneW > 0 && paneW > paneH);
+
+  /** Length of the time axis on screen: the stage's height running down, its width running across. */
+  function axisLen(): number {
+    return acrossNow() ? stageW : stageH;
+  }
+  $: axis = across ? stageW : stageH;
+
+  // ----- Running across: the pinned ruler and eras, then a body that
+  // ----- scrolls up and down with the events and the lanes in it.
+
+  const H_RULER = 18;
+  const H_ERA = 26;
+  const H_TOP = H_RULER + H_ERA + 6;
+  const H_ROW = 22;
+  /**
+   * Label rows above the line of dots, by the pane's height, so opening the
+   * card (which shortens the stage) never changes which events show.
+   */
+  function rowsFor(h: number): number {
+    return h < 380 ? 3 : h < 540 ? 4 : 5;
+  }
+  /** Room one label needs along the axis: a typical label's width shared between the rows. */
+  function gapFor(isAcross: boolean, h: number): number {
+    return isAcross ? Math.round(150 / rowsFor(h)) : LABEL_GAP;
+  }
+  function gapNow(): number {
+    return gapFor(acrossNow(), paneH);
+  }
+  $: hRows = rowsFor(paneH);
+  $: labelGap = gapFor(across, paneH);
+  /** Body coordinates: where the line of dots sits, and where the lanes start below the events. */
+  $: hBaseline = hRows * H_ROW + 14;
+  $: hLanesTop = hBaseline + 30;
+  /** How far the body is scrolled up, in pixels; 0 shows the events at the top. */
+  let cy = 0;
+
+  $: tier = visibleTier(zoom, mode, labelGap);
 
   // ===== Columns =====
   //
@@ -119,7 +184,8 @@
   $: eraX = TICK_W + 2;
 
   let chosenLanes: LaneId[] = LANES.map((l) => l.id);
-  $: limit = laneLimit(stageW || 400);
+  // Running across, lanes stack as rows and the body scrolls, so all of them fit.
+  $: limit = across ? LANES.length : laneLimit(stageW || 400);
   /** The chosen lanes that fit, most recently chosen first, drawn in their fixed order. */
   $: shownLaneIds = new Set(chosenLanes.slice(0, limit));
   $: laneCols = (() => {
@@ -160,33 +226,96 @@
     }
     return half;
   })();
-  $: marks = data ? layoutMarks(data.events, data.byId, scale, zoom, tier) : [];
+  $: marks = data ? layoutMarks(data.events, data.byId, scale, zoom, tier, labelGap) : [];
   $: bars = data ? layoutBars(marks, scale, zoom) : [];
 
   /** Only what is on screen, plus a margin so nothing pops in at the edge. */
   const MARGIN = 60;
   $: viewTop = -ty - MARGIN;
-  $: viewBottom = -ty + stageH + MARGIN;
+  $: viewBottom = -ty + axis + MARGIN;
   $: shownBands = eraLayout.bands.filter((b) => b.bottom >= viewTop && b.top <= viewBottom);
   $: shownBars = bars.filter((b) => b.bottom >= viewTop && b.top <= viewBottom);
   $: shownMarks = marks.filter(
     (m) => (m.labelZ >= viewTop && m.labelZ <= viewBottom) || (m.z >= viewTop && m.z <= viewBottom),
   );
-  $: ticks = data ? yearTicks(scale, zoom, viewTop, viewBottom) : [];
-  $: laneViews = data
+  $: ticks = data ? yearTicks(scale, zoom, viewTop, viewBottom, across ? 64 : 34) : [];
+  $: laneViews = data && !across
     ? laneCols.map((c) => {
         const layout = laneLayouts.get(c.id);
         return { ...c, ...(layout ? laneView(layout, scale, zoom, ty, stageH, c.w) : { bars: [], labels: [] }) };
       })
     : [];
 
+  // ----- Running across: label rows, and the lanes as strips of rows -----
+
+  let measureCtx: CanvasRenderingContext2D | null = null;
+  const widthCache = new Map<string, number>();
+  const LABEL_FONT = "12px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  const YEAR_FONT = "10.5px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+
+  function textWidth(text: string, font: string): number {
+    const key = `${font}|${text}`;
+    let w = widthCache.get(key);
+    if (w === undefined) {
+      measureCtx ??= document.createElement('canvas').getContext('2d');
+      if (measureCtx) {
+        measureCtx.font = font;
+        w = measureCtx.measureText(text).width;
+      } else {
+        w = text.length * 6.6;
+      }
+      widthCache.set(key, w);
+    }
+    return w;
+  }
+
+  /** A label's drawn width: its text, the year or the magnifier, padding and border. */
+  function markWidth(m: Mark): number {
+    const extra = m.kind === 'cluster' ? 20 : textWidth(formatYear(m.item.year_start), YEAR_FONT) + 7;
+    return Math.ceil(textWidth(m.title, LABEL_FONT) + extra + 20);
+  }
+
+  $: placed = across && data ? placeLabelRows(marks, hRows, markWidth, hRows * labelGap - 6) : [];
+  $: shownPlaced = placed.filter((p) => p.start + p.width >= viewTop && p.mark.z <= viewBottom);
+  /** Top of a label row, in body pixels; row 0 sits just above the dots. */
+  function rowTop(row: number): number {
+    return hBaseline - 10 - (row + 1) * H_ROW;
+  }
+
+  $: laneStrips = across && data
+    ? (() => {
+        let y = hLanesTop;
+        const strips: { id: LaneId; label: string; top: number; height: number; layout: LaneLayout | undefined }[] = [];
+        for (const lane of LANES) {
+          if (!shownLaneIds.has(lane.id)) continue;
+          const layout = laneLayouts.get(lane.id);
+          const height = layout ? laneRowsHeight(layout) : 0;
+          strips.push({ id: lane.id, label: lane.label, top: y, height, layout });
+          y += height + 6;
+        }
+        return strips;
+      })()
+    : [];
+  $: laneStripViews = laneStrips.map((st) => ({
+    ...st,
+    ...(st.layout ? laneViewAcross(st.layout, scale, zoom, ty, stageW, st.top) : { bars: [], labels: [] }),
+  }));
+  /** The body's full height, for clamping its scroll. */
+  $: bodyH = laneStrips.length ? laneStrips[laneStrips.length - 1].top + laneStrips[laneStrips.length - 1].height + 10 : hLanesTop;
+
+  function clampCy() {
+    const room = stageH - H_TOP;
+    cy = Math.min(0, Math.max(Math.min(0, room - bodyH), cy));
+  }
+
   function clampTy() {
     const h = scale.height * zoom;
-    if (h <= stageH) {
+    const len = axisLen();
+    if (h <= len) {
       ty = 0;
       return;
     }
-    ty = Math.min(0, Math.max(stageH - h, ty));
+    ty = Math.min(0, Math.max(len - h, ty));
   }
 
   function clampZoom(z: number): number {
@@ -211,8 +340,9 @@
   /** The scroll that puts a year in the middle of the stage at the current zoom. */
   function tyFor(year: number): number {
     const h = scale.height * zoom;
-    const t = stageH / 2 - scale.y(year) * zoom;
-    return h <= stageH ? 0 : Math.min(0, Math.max(stageH - h, t));
+    const len = axisLen();
+    const t = len / 2 - scale.y(year) * zoom;
+    return h <= len ? 0 : Math.min(0, Math.max(len - h, t));
   }
 
   // ----- Gliding, for Follow my reading and for stepping between items -----
@@ -245,7 +375,7 @@
   /** The zoom a fresh window opens at: about six screens of headline events. */
   function startZoom(s: TimelineScale, m: ScaleMode): number {
     if (m === 'true') return 1;
-    const h = stageH || 600;
+    const h = axisLen() || 600;
     return Math.min(1.5, Math.max(ZOOM_LIMITS.story.min, (h * 6) / s.height));
   }
 
@@ -257,8 +387,8 @@
   function zoomToNextTier() {
     measureStage();
     const next = Math.min(3, tier + 1) as 1 | 2 | 3;
-    const target = clampZoom(Math.max(zoom * 1.25, zoomForTier(next, mode)));
-    zoomAt(stageH / 2, target / zoom);
+    const target = clampZoom(Math.max(zoom * 1.25, zoomForTier(next, mode, gapNow())));
+    zoomAt(axisLen() / 2, target / zoom);
   }
 
   /**
@@ -271,7 +401,7 @@
     if (next === mode || !data) return;
     stopGlide();
     measureStage();
-    const year = scale.yearAt((stageH / 2 - ty) / zoom);
+    const year = scale.yearAt((axisLen() / 2 - ty) / zoom);
     const pxPerYear = (scale.y(year + 0.5) - scale.y(year - 0.5)) * zoom;
     const nextScale = next === 'story' ? storyScale : trueScale;
     const base = nextScale.y(year + 0.5) - nextScale.y(year - 0.5);
@@ -279,9 +409,41 @@
     mode = next;
     scale = nextScale;
     zoom = Math.min(nextLimits.max, Math.max(nextLimits.min, base > 0 ? pxPerYear / base : 1));
-    ty = stageH / 2 - nextScale.y(year) * zoom;
+    ty = axisLen() / 2 - nextScale.y(year) * zoom;
     clampTy();
     remember({ timelineScale: next });
+  }
+
+  /** Pin the strip one way, or let it follow the pane's shape. */
+  function setOrient(next: OrientPref) {
+    orientPref = next;
+    remember({ timelineOrient: next });
+  }
+
+  /**
+   * When the strip turns, the year that was in the middle stays in the
+   * middle, and the body goes back to showing the events.
+   */
+  let lastAcross: boolean | null = null;
+  let lastAxis = 0;
+  $: if (data) turned(across, axis);
+  function turned(isAcross: boolean, len: number) {
+    if (lastAcross === null || lastAxis === 0) {
+      lastAcross = isAcross;
+      lastAxis = len;
+      return;
+    }
+    if (isAcross === lastAcross) {
+      lastAxis = len;
+      return;
+    }
+    const year = scale.yearAt((lastAxis / 2 - ty) / zoom);
+    lastAcross = isAcross;
+    lastAxis = len;
+    stopGlide();
+    ty = len / 2 - scale.y(year) * zoom;
+    cy = 0;
+    clampTy();
   }
 
   // ===== You are here =====
@@ -294,7 +456,7 @@
   /** Screen pixels: the line, or the top and bottom of the shaded span. */
   $: hereTop = here ? scale.y(here.start) * zoom + ty : 0;
   $: hereBottom = here ? (here.range ? scale.y(here.end) * zoom + ty : hereTop) : 0;
-  $: hereWhere = !here ? 'none' : hereBottom < 0 ? 'above' : hereTop > stageH ? 'below' : 'on';
+  $: hereWhere = !here ? 'none' : hereBottom < 0 ? 'above' : hereTop > axis ? 'below' : 'on';
 
   /** On by default: the strip keeps what you are reading in view. */
   let follow = true;
@@ -303,14 +465,14 @@
   let followedKey = '';
 
   $: hereKey = here ? `${here.item.id}|${here.start}|${hereLabel}` : '';
-  $: if (data && follow && hereKey && hereKey !== followedKey && stageH > 0) followHere();
+  $: if (data && follow && hereKey && hereKey !== followedKey && axis > 0) followHere();
 
   function hereCentreYear(): number | null {
     if (!here) return null;
     if (!here.range) return here.start;
     // A long span is shown from its start rather than lost around its middle.
     const spanPx = (scale.y(here.end) - scale.y(here.start)) * zoom;
-    return spanPx < stageH * 0.7 ? (here.start + here.end) / 2 : here.start;
+    return spanPx < axisLen() * 0.7 ? (here.start + here.end) / 2 : here.start;
   }
 
   function followHere() {
@@ -338,7 +500,7 @@
 
   let momentOn = false;
   $: momentYear = (() => {
-    const y = Math.round(scale.yearAt((stageH / 2 - ty) / Math.max(zoom, 1e-6)));
+    const y = Math.round(scale.yearAt((axis / 2 - ty) / Math.max(zoom, 1e-6)));
     return y === 0 ? -1 : y;
   })();
   $: moment = momentOn && data ? momentAt(data, momentYear) : null;
@@ -403,58 +565,73 @@
   type Pt = { x: number; y: number };
   const pointers = new Map<number, Pt>();
   let stageTop = 0;
+  let stageLeft = 0;
   let pinchDist = 0;
   let pinchMid = 0;
-  let dragLast: number | null = null;
+  let dragLast: Pt | null = null;
 
   let downPos: Pt = { x: 0, y: 0 };
   let moved = false;
   let multiTouched = false;
 
-  function toStageY(e: PointerEvent): number {
-    return e.clientY - stageTop;
+  /** A pointer in stage pixels. */
+  function toStage(e: PointerEvent): Pt {
+    return { x: e.clientX - stageLeft, y: e.clientY - stageTop };
+  }
+
+  /** How far along the time axis a stage point is. */
+  function along(p: Pt): number {
+    return acrossNow() ? p.x : p.y;
   }
 
   function measureStage() {
     if (!stageEl) return;
     const r = stageEl.getBoundingClientRect();
     stageTop = r.top;
+    stageLeft = r.left;
     stageH = r.height;
     stageW = r.width;
+    if (rootEl) {
+      const pr = rootEl.getBoundingClientRect();
+      paneW = pr.width;
+      paneH = pr.height;
+    }
     clampTy();
+    clampCy();
   }
 
   function onPointerDown(e: PointerEvent) {
     stopGlide();
     measureStage();
     stageEl.setPointerCapture(e.pointerId);
-    pointers.set(e.pointerId, { x: e.clientX, y: toStageY(e) });
+    const p = toStage(e);
+    pointers.set(e.pointerId, p);
 
     if (pointers.size === 1) {
-      dragLast = toStageY(e);
+      dragLast = p;
       downPos = { x: e.clientX, y: e.clientY };
       moved = false;
       multiTouched = false;
     } else if (pointers.size === 2) {
       multiTouched = true;
       const [a, b] = [...pointers.values()];
-      pinchDist = Math.abs(a.y - b.y);
-      pinchMid = (a.y + b.y) / 2;
+      pinchDist = Math.abs(along(a) - along(b));
+      pinchMid = (along(a) + along(b)) / 2;
       dragLast = null;
     }
   }
 
   function onPointerMove(e: PointerEvent) {
     if (!pointers.has(e.pointerId)) return;
-    const y = toStageY(e);
-    pointers.set(e.pointerId, { x: e.clientX, y });
+    const p = toStage(e);
+    pointers.set(e.pointerId, p);
 
     if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 8) moved = true;
 
     if (pointers.size >= 2) {
       const [a, b] = [...pointers.values()];
-      const dist = Math.abs(a.y - b.y);
-      const mid = (a.y + b.y) / 2;
+      const dist = Math.abs(along(a) - along(b));
+      const mid = (along(a) + along(b)) / 2;
       // Two fingers scroll as well as zoom, so a pinch that drifts up the axis
       // takes the years with it.
       ty += mid - pinchMid;
@@ -465,8 +642,15 @@
       lastUserMove = performance.now();
       e.preventDefault();
     } else if (dragLast !== null) {
-      ty += y - dragLast;
-      dragLast = y;
+      // Running across, a drag moves the years sideways and the lanes up and down.
+      if (acrossNow()) {
+        ty += p.x - dragLast.x;
+        cy += p.y - dragLast.y;
+        clampCy();
+      } else {
+        ty += p.y - dragLast.y;
+      }
+      dragLast = p;
       clampTy();
       if (moved) lastUserMove = performance.now();
       e.preventDefault();
@@ -475,7 +659,7 @@
 
   function onPointerUp(e: PointerEvent) {
     const wasSingle = pointers.size === 1;
-    const y = toStageY(e);
+    const at = along(toStage(e));
     pointers.delete(e.pointerId);
     if (stageEl.hasPointerCapture?.(e.pointerId)) stageEl.releasePointerCapture(e.pointerId);
 
@@ -483,13 +667,13 @@
       // Lifting one of two fingers: re-seat the drag on the survivor so the
       // axis doesn't jump by the distance between them.
       const [only] = [...pointers.values()];
-      dragLast = only.y;
+      dragLast = only;
       pinchDist = 0;
     } else if (pointers.size === 0) {
       dragLast = null;
       // Movement alone decides what a tap is, the same as the family tree — a
       // slow, deliberate press on an event is still a press on it.
-      if (wasSingle && !moved && !multiTouched) handleTap(e.clientX, e.clientY, y);
+      if (wasSingle && !moved && !multiTouched) handleTap(e.clientX, e.clientY, at);
     }
   }
 
@@ -562,7 +746,16 @@
     // Ctrl/meta-wheel and a trackpad pinch zoom; a plain wheel scrolls the
     // years, which is what a ruler should do.
     if (e.ctrlKey || e.metaKey) {
-      zoomAt(e.clientY - stageTop, Math.exp(-e.deltaY * 0.0025));
+      zoomAt(acrossNow() ? e.clientX - stageLeft : e.clientY - stageTop, Math.exp(-e.deltaY * 0.0025));
+    } else if (acrossNow()) {
+      // Across: the wheel moves the years; with Shift it moves the lanes.
+      if (e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        cy -= e.deltaY;
+        clampCy();
+      } else {
+        ty -= Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        clampTy();
+      }
     } else {
       ty -= e.deltaY;
       clampTy();
@@ -611,7 +804,8 @@
     }
     measureStage();
     if (item.lane === 'events') {
-      const need = clampZoom(zoomForTier((item.tier ?? 3) as 1 | 2 | 3, mode));
+      if (acrossNow()) cy = 0;
+      const need = clampZoom(zoomForTier((item.tier ?? 3) as 1 | 2 | 3, mode, gapNow()));
       if (need > zoom) {
         stopGlide();
         zoom = need;
@@ -621,8 +815,17 @@
       glideTo(tyFor(item.sort_key));
       return;
     }
+    // Running across, scroll the lanes until this one's strip shows.
+    if (acrossNow()) {
+      const strip = laneStrips.find((st) => st.id === lane);
+      const room = stageH - H_TOP;
+      if (strip && (strip.top + cy < 0 || strip.top + strip.height + cy > room)) {
+        cy = -(strip.top - 8);
+        clampCy();
+      }
+    }
     const spanPx = (scale.y(item.year_end) - scale.y(item.year_start)) * zoom;
-    glideTo(tyFor(spanPx < stageH * 0.7 ? (item.year_start + item.year_end) / 2 : item.year_start));
+    glideTo(tyFor(spanPx < axisLen() * 0.7 ? (item.year_start + item.year_end) / 2 : item.year_start));
   }
 
   /**
@@ -645,11 +848,11 @@
     }
     const span = (mark.zEnd - mark.z) / zoom;
     const deepest = Math.max(...mark.items.map((it) => it.tier ?? 3)) as 1 | 2 | 3;
-    const fill = span > 0 ? (stageH * 0.7) / span : zoom * 4;
-    const next = clampZoom(Math.max(zoom * 1.6, fill, zoomForTier(deepest, mode)));
+    const fill = span > 0 ? (axisLen() * 0.7) / span : zoom * 4;
+    const next = clampZoom(Math.max(zoom * 1.6, fill, zoomForTier(deepest, mode, gapNow())));
     const midContent = (mark.z + mark.zEnd) / 2 / zoom;
     zoom = next;
-    ty = stageH / 2 - midContent * zoom;
+    ty = axisLen() / 2 - midContent * zoom;
     clampTy();
   }
 
@@ -669,13 +872,13 @@
   function zoomButton(factor: number) {
     stopGlide();
     measureStage();
-    zoomAt(stageH / 2, factor);
+    zoomAt(axisLen() / 2, factor);
   }
 
   function resetView() {
     stopGlide();
     measureStage();
-    zoom = clampZoom(stageH / scale.height);
+    zoom = clampZoom(axisLen() / scale.height);
     ty = 0;
     clampTy();
   }
@@ -697,7 +900,7 @@
         loading = false;
         return;
       }
-      const keepYear = !first && data && stageH > 0 ? scale.yearAt((stageH / 2 - ty) / zoom) : null;
+      const keepYear = !first && data && axisLen() > 0 ? scale.yearAt((axisLen() / 2 - ty) / zoom) : null;
       if (!first) releaseTimeline();
       const loaded = await loadTimeline();
       storyScale = makeStoryScale(loaded.eras, loaded.events);
@@ -710,6 +913,7 @@
       if (first || missing) {
         const saved = windowState?.contentState;
         mode = saved?.timelineScale === 'true' ? 'true' : 'story';
+        if (saved?.timelineOrient === 'across' || saved?.timelineOrient === 'down') orientPref = saved.timelineOrient;
         if (Array.isArray(saved?.timelineLanes)) {
           chosenLanes = saved.timelineLanes.filter((id: string) => LANES.some((l) => l.id === id));
         }
@@ -808,7 +1012,7 @@
 
 <!-- `.no-edge-gesture`, or scrubbing the axis near the screen edge arms a new
      window instead of scrolling the years. -->
-<div class="timeline no-edge-gesture" style={gripStyle} on:pointerdown={onRootPointerDown}>
+<div class="timeline no-edge-gesture" style={gripStyle} bind:this={rootEl} on:pointerdown={onRootPointerDown}>
   {#if missing}
     <div class="gate">
       <GetPacksCard
@@ -855,14 +1059,30 @@
           </button>
         {/each}
         <div class="menu-note">
-          {limit === LANES.length ? 'All of them fit at this width.' : `${limit === 1 ? 'One fits' : `${limit} fit`} at this width; widen the window for more.`}
+          {#if across}
+            They stack under the events; drag up and down to see them all.
+          {:else}
+            {limit === LANES.length ? 'All of them fit at this width.' : `${limit === 1 ? 'One fits' : `${limit} fit`} at this width; widen the window for more.`}
+          {/if}
         </div>
       </div>
     {:else if menu === 'more'}
       <div class="menu" role="menu">
+        <div class="menu-h">Layout</div>
+        {#each [
+          { id: 'auto', label: 'Follow the window', sub: 'across when it is wide, down when it is tall' },
+          { id: 'across', label: 'Across', sub: 'oldest on the left' },
+          { id: 'down', label: 'Down', sub: 'oldest at the top' },
+        ] as opt (opt.id)}
+          <button class="menu-item" role="menuitemradio" aria-checked={orientPref === opt.id} on:click={() => setOrient(opt.id as OrientPref)}>
+            <span class="menu-check">{orientPref === opt.id ? '●' : ''}</span>
+            {opt.label} <span class="menu-sub">{opt.sub}</span>
+          </button>
+        {/each}
+        <div class="menu-sep"></div>
         <button class="menu-item" role="menuitemcheckbox" aria-checked={mode === 'true'} on:click={() => setMode(mode === 'true' ? 'story' : 'true')}>
           <span class="menu-check">{mode === 'true' ? '✓' : ''}</span>
-          True years <span class="menu-sub">each year the same height</span>
+          True years <span class="menu-sub">every year the same size</span>
         </button>
         <button class="menu-item" role="menuitemcheckbox" aria-checked={follow} on:click={toggleFollow}>
           <span class="menu-check">{follow ? '✓' : ''}</span>
@@ -916,7 +1136,144 @@
     <div class="stage" bind:this={stageEl} style="--events-x: {eventsX}px; --era-x: {eraX}px; --era-w: {eraW}px;">
       {#if loading}
         <div class="loading">Reading the timeline…</div>
+      {:else if data && across}
+        <!-- Running across: oldest on the left. The ruler and the eras stay
+             pinned at the top; the events and the lanes below them scroll up
+             and down together, every lane item on a row of its own with its
+             name along its bar. -->
+        {#each ticks as t (t.year)}
+          <div class="x-tick-line" style="left: {t.z + ty}px;"></div>
+        {/each}
+        <div class="x-ruler">
+          {#each ticks as t (t.year)}
+            <span class="x-tick-label" style="left: {t.z + ty}px;">{formatYear(t.year)}</span>
+          {/each}
+        </div>
+
+        {#each shownBands as band (band.era.id)}
+          {@const left = Math.max(band.top + ty, -4)}
+          {@const right = Math.min(band.bottom + ty, stageW + 4)}
+          {@const half = halfEras.get(band.era.id)}
+          <div
+            class="band x-band"
+            class:sel={selected?.id === band.era.id}
+            style="left: {left}px; width: {Math.max(0, right - left)}px; top: {H_RULER + 2 + (half === 'right' ? H_ERA / 2 : 0)}px; height: {half ? H_ERA / 2 - 1 : H_ERA}px; --c: {band.color};"
+            role="button"
+            tabindex="0"
+            title={band.era.title}
+            data-era-id={band.era.id}
+            on:click={() => fromClick(() => selectEra(band.era))}
+            on:keydown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                selectEra(band.era);
+              }
+            }}
+          >
+            <span class="band-label x-band-label">{band.era.title}</span>
+          </div>
+        {/each}
+
+        <div class="x-body" style="top: {H_TOP}px;">
+          <div class="x-baseline" style="top: {cy + hBaseline}px;"></div>
+
+          {#each shownBars as bar (bar.item.id)}
+            {@const left = Math.max(bar.top + ty, -4)}
+            {@const right = Math.min(bar.bottom + ty, stageW + 4)}
+            <div
+              class="bar x-bar"
+              style="left: {left}px; width: {Math.max(0, right - left)}px; top: {cy + hBaseline + 9 + bar.lane * 5}px; --c: {bar.color};"
+              title={bar.item.title}
+              data-item-id={bar.item.id}
+            ></div>
+          {/each}
+
+          {#each laneStripViews as strip (strip.id)}
+            <div class="x-lane-head" style="top: {cy + strip.top}px;">
+              {strip.id === 'kings' ? 'Kings · Judah above, Israel below' : strip.label}
+            </div>
+            {#each strip.bars as bar (bar.key)}
+              <div
+                class="lane-bar x-lane-bar"
+                class:narrow={bar.narrow}
+                class:sel={selected?.id === bar.item.id}
+                style="left: {bar.left}px; top: {cy + bar.top}px; width: {bar.width}px; height: {bar.height}px; --c: {bar.color};"
+                title={bar.item.title}
+                data-item-id={bar.item.id}
+              ></div>
+            {/each}
+            {#each strip.labels as label (label.item.id)}
+              <div
+                class="lane-label x-lane-label"
+                style="left: {label.left}px; top: {cy + label.top}px; max-width: {label.maxWidth}px;"
+                data-item-id={label.item.id}
+              >{label.item.title}</div>
+            {/each}
+          {/each}
+
+          {#if here && hereWhere === 'on'}
+            {#if here.range}
+              <div class="here-span x-here-span" style="left: {Math.max(hereTop, -2)}px; width: {Math.max(2, Math.min(hereBottom, stageW + 2) - Math.max(hereTop, -2))}px;"></div>
+            {:else}
+              <div class="here-line x-here-line" style="left: {hereTop}px;"></div>
+            {/if}
+          {/if}
+
+          {#each shownPlaced as p (p.mark.key)}
+            {@const mark = p.mark}
+            {@const top = cy + rowTop(p.row)}
+            <div class="dot x-dot" class:cluster={mark.kind === 'cluster'} style="left: {mark.z + ty}px; top: {cy + hBaseline}px; --c: {mark.color};"></div>
+            <div class="leader x-leader" style="left: {mark.z + ty}px; top: {top + 20}px; height: {Math.max(0, hBaseline - rowTop(p.row) - 20)}px;"></div>
+            {#if p.start - mark.z > 2}
+              <div class="leader x-leader-h" style="left: {mark.z + ty}px; top: {top + 20}px; width: {p.start - mark.z}px;"></div>
+            {/if}
+            <button
+              class="mark x-mark"
+              class:cluster={mark.kind === 'cluster'}
+              class:headline={mark.kind === 'item' && mark.item.tier === 1}
+              class:sel={mark.kind === 'item' && selected?.id === mark.item.id}
+              class:unlinked={mark.kind === 'item' && !mark.item.first}
+              data-mark-key={mark.key}
+              style="left: {p.start + ty}px; top: {top}px; max-width: {p.width}px; --c: {mark.color};"
+              title={mark.kind === 'cluster' ? `${mark.title}: tap to zoom in` : mark.title}
+              on:click={() => fromClick(() => activateMark(mark))}
+            >
+              {#if mark.kind === 'cluster'}
+                <svg class="mark-zoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="20.5" y2="20.5"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              {/if}
+              <span class="mark-name">{mark.title}</span>
+              {#if mark.kind === 'item'}
+                <span class="mark-year">{formatYear(mark.item.year_start)}</span>
+              {/if}
+            </button>
+          {/each}
+
+          {#if momentOn}
+            <div class="moment-line x-moment-line" style="left: {stageW / 2}px;"></div>
+          {/if}
+        </div>
+
+        {#if here && hereWhere === 'on'}
+          <button class="here-tag x-here-tag" data-here style="left: {Math.max(4, Math.min(hereTop + 4, stageW - 150))}px; top: {H_TOP + 2}px;" on:click={() => fromClick(tapHere)}>
+            You’re reading {hereLabel}
+          </button>
+        {:else if here && hereWhere !== 'none'}
+          <button class="here-tag here-off x-here-off" class:after={hereWhere === 'below'} data-here on:click={() => fromClick(tapHere)}>
+            {hereWhere === 'above' ? '←' : '→'} {hereLabel}
+          </button>
+        {/if}
+        {#if momentOn}
+          <div class="moment-tag x-moment-tag" style="left: {stageW / 2}px; top: {H_TOP + 2}px;">c. {formatYear(momentYear)}</div>
+        {/if}
+
+        {#if tier < 3}
+          <button class="more" data-more on:click={() => fromClick(zoomToNextTier)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="20.5" y2="20.5"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Zoom in for more events
+          </button>
+        {/if}
       {:else if data}
+        <!-- Running down: oldest at the top. -->
         <!-- Bands are clipped to the stage so their names stay pinned to the
              top of whatever part of the era is showing. -->
         {#each shownBands as band (band.era.id)}
@@ -1422,6 +1779,69 @@
   }
   .more:hover { color: var(--text); border-color: var(--focus); }
   .more svg { width: 13px; height: 13px; }
+
+  /* ---------------- running across ---------------- */
+  .x-ruler {
+    position: absolute; left: 0; right: 0; top: 0; height: 18px; z-index: 4;
+    background: var(--sunken); border-bottom: 1px solid #222;
+    overflow: hidden; pointer-events: none;
+  }
+  .x-tick-label {
+    position: absolute; top: 2px;
+    transform: translateX(-50%);
+    font-size: 10.5px; color: var(--faint); white-space: nowrap;
+  }
+  .x-tick-line {
+    position: absolute; top: 18px; bottom: 0; width: 1px;
+    background: #1f1f1f; pointer-events: none;
+  }
+  .x-band-label {
+    top: 50%; left: 6px; right: 4px;
+    transform: translateY(-50%);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    overflow-wrap: normal;
+  }
+  .x-body { position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  .x-baseline { position: absolute; left: 0; right: 0; height: 1px; background: #2c2c2c; pointer-events: none; }
+  .bar.x-bar { height: 3px; }
+  .x-lane-head {
+    position: absolute; left: 6px; z-index: 3;
+    font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+    white-space: nowrap; pointer-events: none;
+    text-shadow: 0 1px 2px var(--sunken);
+  }
+  .lane-bar.x-lane-bar.narrow {
+    background: repeating-linear-gradient(90deg, var(--c) 0 3px, transparent 3px 6px);
+  }
+  .lane-label.x-lane-label {
+    background: transparent;
+    color: #fff;
+    font-size: 10.5px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 3px rgba(0, 0, 0, .6);
+  }
+  .dot.x-dot { transform: translate(-50%, -50%); }
+  .leader.x-leader { width: 1px; }
+  .leader.x-leader-h { width: auto; height: 1px; }
+  .mark.x-mark { transform: none; }
+  .here-line.x-here-line {
+    top: 0; bottom: 0; right: auto; height: auto; width: 0;
+    border-top: 0; border-left: 2px solid var(--focus);
+  }
+  .here-span.x-here-span {
+    top: 0; bottom: 0; right: auto; height: auto;
+    border-top: 0; border-bottom: 0;
+    border-left: 2px solid rgba(251, 113, 133, .8);
+    border-right: 1px dashed rgba(251, 113, 133, .5);
+  }
+  .here-tag.x-here-tag { transform: none; }
+  .here-tag.here-off.x-here-off { top: auto; bottom: 10px; left: 10px; }
+  .here-tag.here-off.x-here-off.after { left: auto; right: 10px; bottom: 46px; }
+  .moment-line.x-moment-line {
+    top: 0; bottom: 0; right: auto; height: auto; width: 0;
+    border-top: 0; border-left: 2px dashed var(--moment);
+  }
+  .moment-tag.x-moment-tag { transform: translateX(-50%); }
+  .menu-sep { height: 1px; background: var(--line); margin: 4px 0; }
 
   /* ---------------- the card ---------------- */
   .panel {

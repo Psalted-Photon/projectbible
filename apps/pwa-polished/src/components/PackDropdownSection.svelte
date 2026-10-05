@@ -36,7 +36,6 @@
     watchPackUpdates,
     notNowUpdate,
     ignoreUpdate,
-    markUpdated,
   } from '../lib/packUpdates';
 
   export let heading: string;
@@ -89,10 +88,7 @@
   async function update(id: string) {
     const pack = packFor(id);
     if (!pack) return;
-    if (await updatePack(pack)) {
-      markUpdated(id);
-      justUpdated = { ...justUpdated, [id]: true };
-    }
+    if (await updatePack(pack)) justUpdated = { ...justUpdated, [id]: true };
   }
 </script>
 
