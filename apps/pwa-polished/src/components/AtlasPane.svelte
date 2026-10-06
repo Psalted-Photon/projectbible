@@ -65,6 +65,8 @@
 
   /** The era card, opened from the caption on the era bar. */
   let eraCardOpen = false;
+  /** The note above the approximate-locations key, held open by a tap. */
+  let approxTipPinned = false;
   let eraLands: { name: string; kind: string; bounds: any }[] = [];
   let eraTowns: any[] = [];
   let eraEvents: TimelineItem[] = [];
@@ -143,6 +145,8 @@
   $: if (atlas && target && target.seq !== appliedTargetSeq) applyTarget(target);
 
   $: approximate = timelineOn && era && era.confidence !== 'attested';
+  // The key goes when the era card opens or a surveyed era arrives; its note goes with it.
+  $: if (!approximate || cardShown) approxTipPinned = false;
   $: sources = atlas?.sources ?? [];
 
   // Tell the map how much of itself the info panel is covering, so it can put
@@ -391,10 +395,15 @@
   function onRootPointerDown(event: PointerEvent) {
     const el = event.target as Element | null;
     swallowMapClick = false;
+    // The key's own button opens and closes its note; a tap anywhere else puts it away.
+    const key = el?.closest('.approx-key');
+    const tipWasOpen = approxTipPinned && !(key && root?.contains(key));
+    if (tipWasOpen) approxTipPinned = false;
+
     const control = el?.closest('.nav, .panel, .results');
     if (control && root?.contains(control)) return;
 
-    const wasOpen = openPanel !== null || resultsOpen;
+    const wasOpen = openPanel !== null || resultsOpen || tipWasOpen;
     openPanel = null;
     resultsOpen = false;
     // A tap that closes a dropdown is spent closing it. Left alone, its click
@@ -891,7 +900,10 @@
   }
 </script>
 
-<svelte:window on:pointerdown={onRootPointerDown} />
+<svelte:window
+  on:pointerdown={onRootPointerDown}
+  on:keydown={(e) => { if (e.key === 'Escape') approxTipPinned = false; }}
+/>
 
 <div class="atlas" style={gripStyle} bind:this={root}>
   {#if missing}
@@ -1337,13 +1349,39 @@
 
     <!-- Only while an era is showing lands rather than borders. Quiet on
          purpose: findable if you wonder what the soft shapes are, invisible if
-         you don't. The era card says the same, so the key steps aside for it. -->
+         you don't. The era card says the same, so the key steps aside for it.
+         Its note rises on hover, or on a tap where there is no hover. A bare
+         title showed a question-mark cursor and nothing on a phone, which read
+         as the app not knowing rather than history not recording. -->
     {#if approximate && !cardShown}
-      <div
-        class="approx-key"
-        title="These centuries show the lands their books name. No borders are drawn, because none are known."
-      >
-        <span class="key-band"></span>Approximate locations
+      <div class="approx-key" class:pinned={approxTipPinned} style="--map-w:{mapW}px;--map-h:{mapH}px">
+        <button
+          class="key-btn"
+          aria-expanded={approxTipPinned}
+          on:click={() => (approxTipPinned = !approxTipPinned)}
+        >
+          <span class="key-band"></span>Approximate locations
+        </button>
+        <div class="approx-tip" role="tooltip">
+          <div class="tip-card">
+            <div class="tip-h">Why no borders?</div>
+            <p class="tip-body">
+              Nobody recorded where the frontiers ran this far back, so the map
+              doesn’t invent them. Each colored shape is a land this era’s books
+              name, placed where historians put it. Its edges are a best guess,
+              not a border.
+            </p>
+            {#if firstSurveyed > 0 && eras[firstSurveyed]}
+              <div class="tl-seam">
+                Surveyed borders begin with {eras[firstSurveyed].title},
+                {eraYear(eras[firstSurveyed].year_start)}.
+              </div>
+            {/if}
+            <button class="era-frame" on:click={() => { approxTipPinned = false; toggleEraCard(); }}>
+              More about this era
+            </button>
+          </div>
+        </div>
       </div>
     {/if}
 
@@ -1704,7 +1742,7 @@
 
 <style>
   /* Chrome borrows the reader's palette so the map stops looking like a guest
-     in its own app: same greys, same borders, same rose focus ring. */
+     in its own app: same grays, same borders, same rose focus ring. */
   .atlas {
     --chrome: #1a1a1a;
     --chrome-2: #212121;
@@ -2005,13 +2043,52 @@
   /* ---------------- the key, the status chip ---------------- */
   .approx-key {
     position: absolute; left: calc(10px + var(--grip-l)); bottom: calc(42px + var(--grip-b)); z-index: 900;
+  }
+  .key-btn {
     display: flex; align-items: center; gap: 7px;
     font-family: var(--display); font-size: 11px; color: #b3a68a;
     background: rgba(26, 26, 26, .86); border: 1px solid var(--line);
     border-radius: 7px; padding: 5px 9px; backdrop-filter: blur(6px);
-    cursor: help;
+    cursor: pointer;
   }
-  /* Four of the lands' own colours side by side, because every land now has one. */
+  .approx-key.pinned .key-btn { border-color: #7a5c34; color: #c2a878; }
+  /* The note. The outer box is a transparent bridge over the gap above the
+     key, so a pointer moving up into the note doesn't drop the hover on the way;
+     the card inside is what you see, and scrolls if the window is short. */
+  .approx-tip {
+    position: absolute; left: 0; bottom: 100%; padding-bottom: 6px;
+    width: 280px; max-width: calc(var(--map-w) - 20px - var(--grip-l) - var(--grip-r));
+    visibility: hidden; opacity: 0; transform: translateY(4px);
+    transition: opacity .14s, transform .14s, visibility 0s .14s;
+  }
+  .approx-key.pinned .approx-tip,
+  .key-btn:focus-visible + .approx-tip,
+  .approx-tip:focus-within {
+    visibility: visible; opacity: 1; transform: none;
+    transition: opacity .14s, transform .14s, visibility 0s;
+  }
+  /* Only where there is a real hover. A phone keeps :hover after a tap, which
+     would leave the note stuck open with nothing to say why. */
+  @media (hover: hover) {
+    .approx-key:hover .key-btn { border-color: #7a5c34; color: #c2a878; }
+    .approx-key:hover .approx-tip {
+      visibility: visible; opacity: 1; transform: none;
+      transition: opacity .14s .1s, transform .14s .1s, visibility 0s .1s;
+    }
+  }
+  .tip-card {
+    max-height: calc(var(--map-h) - 90px - var(--grip-b)); overflow-y: auto;
+    background: rgba(26, 26, 26, .95); border: 1px solid var(--line-2); border-radius: 9px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .5); backdrop-filter: blur(8px);
+    padding: 11px 12px; font-family: var(--display);
+  }
+  .tip-h { font-size: 13px; color: var(--text); }
+  .tip-body {
+    margin: 6px 0 0; font-size: 12px; color: #c2c6cd; line-height: 1.5;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  .tip-card .era-frame { margin-top: 10px; }
+  /* Four of the lands' own colors side by side, because every land now has one. */
   .approx-key .key-band {
     width: 20px; height: 9px; border-radius: 2px; flex: none; opacity: .9;
     background: linear-gradient(90deg,
@@ -2048,7 +2125,7 @@
   .info-body { overflow-y: auto; padding: 14px 15px; }
 
   /* Milonga ships one weight, so anything here asking for bold gets a
-     synthesised smear instead. Emphasis comes from size and colour. */
+     synthesized smear instead. Emphasis comes from size and color. */
   .info-name { font-size: 18px; font-weight: 400; padding-right: 26px; }
   .info-sub {
     font-size: 11.5px; color: var(--dim); margin-top: 3px;
@@ -2060,8 +2137,8 @@
     font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
   .info-where b { color: var(--text); font-weight: 400; }
-  /* Journey context on a stop. The coloured rule down the left is the journey's
-     own colour, which is what ties the panel to the line on the map without
+  /* Journey context on a stop. The colored rule down the left is the journey's
+     own color, which is what ties the panel to the line on the map without
      repeating a legend. */
   .jx {
     margin-top: 10px; padding: 8px 0 2px 9px;
@@ -2095,7 +2172,7 @@
   .jx-step-off:hover { background: rgba(255, 255, 255, .04); }
   .jx-arrow { font-size: 13px; color: var(--faint); flex: none; }
   /* The label sits above the name so a long name has the full width to
-     ellipsise into rather than sharing the line with "Next". */
+     ellipsize into rather than sharing the line with "Next". */
   .jx-step-t {
     min-width: 0; font-size: 12px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -2106,10 +2183,10 @@
   }
   .jx-total { font-size: 11px; color: var(--faint); margin-top: 7px; }
 
-  /* The chooser, for a place several journeys pass through. No coloured rule
+  /* The chooser, for a place several journeys pass through. No colored rule
      down its left edge, unlike every other .jx: the rule states which journey
      the block belongs to, and the whole point here is that it belongs to none
-     of them yet. Each row carries its own colour instead. */
+     of them yet. Each row carries its own color instead. */
   .jx-pick { border-left-color: var(--line-2); padding-left: 0; border-left-width: 0; }
   .jx-pick-head {
     font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
@@ -2221,8 +2298,8 @@
   }
 
   /* Verse list — the same shape as the word study, the encyclopedia and Nave's:
-     a caret and a coloured book name, then full-width rows with the book's
-     colour down the left edge. Deliberately not chips. */
+     a caret and a colored book name, then full-width rows with the book's
+     color down the left edge. Deliberately not chips. */
   .vb-group { border-top: 1px solid rgba(255, 255, 255, .07); }
   .vb-header {
     display: flex; align-items: center; gap: 8px; width: 100%;
@@ -2383,7 +2460,7 @@
   }
   .tl-lab.on { color: var(--text); }
 
-  /* The rail changes colour where the evidence changes character: amber while
+  /* The rail changes color where the evidence changes character: amber while
      the map shows lands named in Scripture, green once borders are surveyed. */
   .tl-track {
     position: relative; flex: 1; min-width: 0; height: 34px;
