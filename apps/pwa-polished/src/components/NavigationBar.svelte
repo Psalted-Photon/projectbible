@@ -809,16 +809,18 @@
       // Explicit search, so the expensive categories (commentaries) run too.
       searchResults = await searchService.search(searchQuery, { limit, deep: true });
 
-      // Get total count
-      totalResultCount = await searchService.getTotalCount(searchQuery);
-
       // Calculate displayed count from all categories
       displayedResultCount = searchResults.reduce(
         (sum, category) => sum + category.count,
         0,
       );
-      // "Load all" only applies to Bible results — that's the count that gets capped.
-      const bibleCount = searchResults.find((c) => c.key === "bible")?.count ?? 0;
+      // "Load all" only applies to Bible results — that's the count that gets
+      // capped, and the group says how many there are in all. This used to be
+      // a second full scan of the verses, run after the first just to count
+      // them, which doubled the wait.
+      const bible = searchResults.find((c) => c.key === "bible");
+      const bibleCount = bible?.count ?? 0;
+      totalResultCount = bible?.total ?? bibleCount;
       showingAll = loadAll || bibleCount >= totalResultCount;
 
       // Open the Bible group by default so the common case is one click closer.

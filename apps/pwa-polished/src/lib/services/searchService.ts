@@ -41,6 +41,12 @@ export interface SearchCategory {
   results: SearchResult[];
   /** Results were capped — the count is what we're showing, not what exists. */
   truncated?: boolean;
+  /**
+   * Every match that exists, capped or not. Only the Bible group is capped, so
+   * only it says; it already holds every match before it trims, and counting
+   * them here saves a second full scan just to learn the number.
+   */
+  total?: number;
 }
 
 export interface SearchOptions {
@@ -153,7 +159,7 @@ export class UnifiedSearchService {
     ]);
 
     const categories: SearchCategory[] = [
-      { key: 'bible', name: 'Bible', count: verses.length, results: verses },
+      { key: 'bible', name: 'Bible', count: verses.results.length, results: verses.results, total: verses.total },
       { key: 'strongs', name: "Strong's", count: strongs.length, results: strongs },
       { key: 'notes', name: 'Notes', count: notes.length, results: notes },
       { key: 'journal', name: 'Journal', count: journal.length, results: journal },
@@ -170,14 +176,17 @@ export class UnifiedSearchService {
 
   // ── Bible ────────────────────────────────────────────────────────────────
 
-  private async searchVerses(query: string, limit: number = 250): Promise<SearchResult[]> {
+  private async searchVerses(
+    query: string,
+    limit: number = 250,
+  ): Promise<{ results: SearchResult[]; total: number }> {
     try {
       const dbResults = await this.searchIndex.search(query);
 
       // Limit results (default 250, or all if limit is -1)
       const resultLimit = limit === -1 ? dbResults.length : limit;
 
-      return dbResults.slice(0, resultLimit).map((result, index) => ({
+      const results = dbResults.slice(0, resultLimit).map((result, index) => ({
         type: 'verse' as const,
         title: `${normalizeBookName(result.book)} ${result.chapter}:${result.verse}`,
         // Full stored text, not result.snippet — the snippet is cut from raw
@@ -193,19 +202,10 @@ export class UnifiedSearchService {
         },
         score: 1.0 - (index / 100), // Simple relevance scoring
       }));
+      return { results, total: dbResults.length };
     } catch (error) {
       console.error('Error searching verses:', error);
-      return [];
-    }
-  }
-
-  async getTotalCount(query: string): Promise<number> {
-    try {
-      const dbResults = await this.searchIndex.search(query);
-      return dbResults.length;
-    } catch (error) {
-      console.error('Error getting total count:', error);
-      return 0;
+      return { results: [], total: 0 };
     }
   }
 
