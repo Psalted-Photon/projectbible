@@ -1030,35 +1030,25 @@ export async function importPackFromBytes(
           ? `SELECT ${translationIdCol}, book, chapter, verse, text, heading FROM verses`
           : `SELECT ${translationIdCol}, book, chapter, verse, text FROM verses`;
         
-        const versesRows = db.exec(versesQuery);
-        if (versesRows.length && versesRows[0].values.length) {
-          const verses = versesRows[0].values.map((row) => {
-            const [translationId, book, chapter, verse, text, heading] = row;
-            return {
-              id: `${translationId}:${book}:${chapter}:${verse}`,
-              translationId: translationId as string,
-              book: book as string,
-              chapter: chapter as number,
-              verse: verse as number,
-              text: text as string,
-              heading: hasHeading ? (heading as string | null) : null
-            };
-          });
+        // Streamed: the Ancient Languages pack died here holding every verse
+        // of four translations at once (see streamTable).
+        const verseCount = await streamTable(
+          db,
+          versesQuery,
+          'verses',
+          ([translationId, book, chapter, verse, text, heading]) => ({
+            id: `${translationId}:${book}:${chapter}:${verse}`,
+            translationId: translationId as string,
+            book: book as string,
+            chapter: chapter as number,
+            verse: verse as number,
+            text: text as string,
+            heading: hasHeading ? (heading as string | null) : null
+          }),
+          { label: 'verses' }
+        );
 
-          console.log(`Importing ${verses.length} verses from ${translationsRows[0].values.length} translations...`);
-
-          // Batch insert verses
-          const CHUNK_SIZE = 500;
-          for (let i = 0; i < verses.length; i += CHUNK_SIZE) {
-            const chunk = verses.slice(i, i + CHUNK_SIZE);
-            await batchWriteTransaction('verses', (store) => {
-              chunk.forEach(v => store.put(v));
-            });
-            console.log(`Imported ${Math.min(i + CHUNK_SIZE, verses.length)}/${verses.length} verses`);
-          }
-
-          console.log(`✅ Consolidated pack ${packInfo.id} imported: ${verses.length} verses`);
-        }
+        console.log(`✅ Consolidated pack ${packInfo.id} imported: ${verseCount} verses`);
 
         // The starter pack carries its headings in the same file as its verses,
         // so a text pack has to be asked for them too. A no-op for a pack
@@ -1171,34 +1161,49 @@ export async function importPackFromBytes(
         console.log(`✅ Pack ${packInfo.id} imported successfully`);
       }
       
-      // Import morphology data if available (words table)
+      // Import morphology data if available (words table).
+      //
+      // No try/catch here: a failure partway used to be logged and swallowed,
+      // and the pack was then stamped installed with its words missing.
       if (hasWords) {
         console.log('Importing morphology data from words table...');
-        
-        try {
-          // Check which columns are available in the words table
-          const wordsTableInfo = db.exec('PRAGMA table_info(words)');
-          const columns = wordsTableInfo.length > 0 && wordsTableInfo[0].values 
-            ? wordsTableInfo[0].values.map(row => row[1] as string) 
-            : [];
-          // ancient-languages consolidated pack stores per-row translation_id in words table
-          const hasRowTranslationId = columns.includes('translation_id');
-          const hasGlossEn = columns.includes('gloss_en');
-          const hasTransliteration = columns.includes('transliteration');
-        
+
+        // Check which columns are available in the words table
+        const wordsTableInfo = db.exec('PRAGMA table_info(words)');
+        const columns = wordsTableInfo.length > 0 && wordsTableInfo[0].values
+          ? wordsTableInfo[0].values.map(row => row[1] as string)
+          : [];
+        // ancient-languages consolidated pack stores per-row translation_id in words table
+        const hasRowTranslationId = columns.includes('translation_id');
+        const hasGlossEn = columns.includes('gloss_en');
+        const hasTransliteration = columns.includes('transliteration');
+
         console.log(`  Words table columns: ${columns.join(', ')}`);
-        
+
         // Build SELECT query based on available columns
         let selectQuery = 'SELECT book, chapter, verse, word_order, text, lemma, morph_code, strongs';
         if (hasRowTranslationId) selectQuery += ', translation_id';
         if (hasGlossEn) selectQuery += ', gloss_en';
         if (hasTransliteration) selectQuery += ', transliteration';
         selectQuery += ' FROM words';
-        
-        const wordsRows = db.exec(selectQuery);
-        
-        if (wordsRows.length && wordsRows[0].values.length) {
-          const morphologyData = wordsRows[0].values.map((row) => {
+
+        const wordCount = Number(db.exec('SELECT COUNT(*) FROM words')[0]?.values[0]?.[0] ?? 0);
+
+        if (wordCount > 0) {
+          console.log(`Importing ${wordCount} morphology entries...`);
+
+          // Clear before writing. Rows are keyed by translation, reference and
+          // word position, and put() only overwrites keys the new data also
+          // has. When an edition's word count for a verse drops — which it does
+          // whenever the tagging is corrected — the trailing rows from the old
+          // import survive and attach themselves to the end of that verse.
+          await batchWriteTransaction('morphology', (store) => {
+            store.clear();
+          });
+
+          // Streamed: ~584k rows held at once is what killed the Ancient
+          // Languages install on a phone (see streamTable).
+          await streamTable(db, selectQuery, 'morphology', (row) => {
             const [book, chapter, verse, wordOrder, text, lemma, morphCode, strongs, ...optional] = row;
             let optIdx = 0;
             const rowTransId = hasRowTranslationId ? optional[optIdx++] as string : undefined;
@@ -1237,33 +1242,7 @@ export async function importPackFromBytes(
               transliteration: transliteration as string | undefined,
               language
             };
-          });
-          
-          console.log(`Importing ${morphologyData.length} morphology entries...`);
-
-          // Clear before writing. Rows are keyed by translation, reference and
-          // word position, and put() only overwrites keys the new data also
-          // has. When an edition's word count for a verse drops — which it does
-          // whenever the tagging is corrected — the trailing rows from the old
-          // import survive and attach themselves to the end of that verse.
-          await batchWriteTransaction('morphology', (store) => {
-            store.clear();
-          });
-
-          // Batch insert morphology
-          const CHUNK_SIZE = 500;
-          for (let i = 0; i < morphologyData.length; i += CHUNK_SIZE) {
-            const chunk = morphologyData.slice(i, i + CHUNK_SIZE);
-            await batchWriteTransaction('morphology', (store) => {
-              chunk.forEach(m => store.put(m));
-            });
-            console.log(`Imported ${Math.min(i + CHUNK_SIZE, morphologyData.length)}/${morphologyData.length} morphology entries`);
-          }
-          
-          console.log(`✅ Morphology data imported: ${morphologyData.length} entries`);
-        }
-        } catch (morphError) {
-          console.error('Error importing morphology data:', morphError);
+          }, { label: 'morphology entries' });
         }
       }
       
