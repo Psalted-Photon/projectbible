@@ -6150,7 +6150,7 @@
 
   <div class="text-container">
     {#if loading && chapters.length === 0}
-      <div class="loading">Loading...</div>
+      <div class="loading show-late">Loading...</div>
     {:else if error}
       <div class="error">{error}</div>
     {:else if chapters.length === 0 && noTranslationsInstalled}

@@ -99,7 +99,7 @@
 </script>
 
 {#if installed === null}
-  <p class="dt-muted">Loading…</p>
+  <p class="dt-muted show-late">Loading…</p>
 {:else if !installed}
   <div class="dt-install">
     {#if $devotionalTarget}

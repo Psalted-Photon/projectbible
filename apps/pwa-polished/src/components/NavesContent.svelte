@@ -18,6 +18,7 @@
   import NavesPointRefs, { navesRefKey } from "./library/NavesPointRefs.svelte";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../lib/openWork";
   import { navesSource } from "../lib/library/source";
+  import { reveal } from "../lib/motion";
   import {
     getNavesTopic,
     getNavesVerses,
@@ -583,7 +584,7 @@
 
     <div class="naves-body" bind:this={bodyEl}>
       {#if loading}
-        <div class="muted">Loading…</div>
+        <div class="muted show-late">Loading…</div>
       {:else if !topic}
         {#await packInstallFinished("encyclotopical").catch(() => false) then installed}
           {#if installed}
@@ -626,7 +627,7 @@
                 onLink={followLink}
               />
               {#if expanded[`${i}`]}
-                <div class="sec-body">
+                <div class="sec-body" in:reveal>
                   {#each section.children as child, j}
                     <div class="point">
                       {#if child.text}<div class="point-text">{child.text}</div>{/if}
@@ -670,14 +671,12 @@
             {#each versesByBook as group}
               <div class="vb-group">
                 <button class="vb-header" on:click={() => toggleBook(group.book)}>
-                  <span class="vb-caret" style="color:{group.color}">
-                    {expandedBooks.has(group.book) ? "▼" : "▶"}
-                  </span>
+                  <span class="vb-caret motion-caret" class:open={expandedBooks.has(group.book)} style="color:{group.color}">▶</span>
                   <span class="vb-name" style="color:{group.color}">{group.book}</span>
                   <span class="vb-count">({group.refs.length})</span>
                 </button>
                 {#if expandedBooks.has(group.book)}
-                  <div class="vb-refs">
+                  <div class="vb-refs" in:reveal>
                     {#each group.refs as r}
                       {@const key = `${group.book} ${r.chapter}:${r.verse}`}
                       <button
@@ -909,7 +908,7 @@
   .caret {
     flex-shrink: 0;
     color: var(--color-primary, #4a90e2);
-    transition: transform 0.15s;
+    transition: transform var(--motion-chevron-ms, 150ms) var(--ease-standard, ease);
   }
   .sec-head.open .caret {
     transform: rotate(90deg);

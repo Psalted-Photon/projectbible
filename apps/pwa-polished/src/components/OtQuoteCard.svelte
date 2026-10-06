@@ -248,7 +248,7 @@
 
   <div class="ot-body">
     {#if busy}
-      <p class="ot-note">Loading…</p>
+      <p class="ot-note show-late">Loading…</p>
     {:else if unavailable}
       <!-- Never a silent fall back to the translation you are reading: those
            would be the wrong words presented as the right ones, which is the

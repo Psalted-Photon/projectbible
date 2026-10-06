@@ -262,7 +262,7 @@
   <!-- Content -->
   <div class="panel-body" bind:this={bodyEl}>
     {#if panelLoading}
-      <div class="panel-loading">Loading…</div>
+      <div class="panel-loading show-late">Loading…</div>
     {:else}
       {#if activeTab === "references"}
         {#if displayTskEntries.length === 0}

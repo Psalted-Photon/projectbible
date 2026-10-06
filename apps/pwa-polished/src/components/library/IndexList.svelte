@@ -13,6 +13,7 @@
   import { personModalStore } from "../../stores/personModalStore";
   import { lexicalModalStore } from "../../stores/lexicalModalStore";
   import { familyTreeIds } from "../../lib/familyTree/data";
+  import { reveal } from "../../lib/motion";
 
   /**
    * The contents list — the table of contents for one reference work. Draws an
@@ -421,31 +422,35 @@
     >
       {#if browsing && prefs.starred.length}
         <button class="shelf-head" on:click={() => (showStarred = !showStarred)}>
-          <span class="caret">{showStarred ? "▼" : "▶"}</span>
+          <span class="caret motion-caret" class:open={showStarred}>▶</span>
           <span class="star-on">★</span> Starred
           <span class="count">({prefs.starred.length})</span>
         </button>
         {#if showStarred}
-          {#each prefs.starred as mark}
-            <button class="row shelf-row" on:click={() => openMark(mark)}>
-              <span class="name">{mark.name}</span>
-            </button>
-          {/each}
+          <div in:reveal>
+            {#each prefs.starred as mark}
+              <button class="row shelf-row" on:click={() => openMark(mark)}>
+                <span class="name">{mark.name}</span>
+              </button>
+            {/each}
+          </div>
         {/if}
       {/if}
 
       {#if browsing && prefs.recent.length}
         <button class="shelf-head" on:click={() => (showRecent = !showRecent)}>
-          <span class="caret">{showRecent ? "▼" : "▶"}</span>
+          <span class="caret motion-caret" class:open={showRecent}>▶</span>
           Recently viewed
           <span class="count">({prefs.recent.length})</span>
         </button>
         {#if showRecent}
-          {#each prefs.recent as mark}
-            <button class="row shelf-row" on:click={() => openMark(mark)}>
-              <span class="name">{mark.name}</span>
-            </button>
-          {/each}
+          <div in:reveal>
+            {#each prefs.recent as mark}
+              <button class="row shelf-row" on:click={() => openMark(mark)}>
+                <span class="name">{mark.name}</span>
+              </button>
+            {/each}
+          </div>
         {/if}
       {/if}
 
@@ -460,7 +465,7 @@
       </div>
 
       {#if loading}
-        <div class="muted pad">Loading…</div>
+        <div class="muted pad show-late">Loading…</div>
       {:else if !filteredRows.length}
         <div class="muted pad">
           {searchResults ? "Nothing found." : chapterRows ? "Nothing from this chapter." : "Nothing here."}

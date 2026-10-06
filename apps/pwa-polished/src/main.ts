@@ -5,7 +5,7 @@ import App from './App.svelte';
 import { hasStarterText, installStarterText, warmPackManifest } from './lib/progressive-init';
 import { applyTheme, getSettings } from './adapters/settings';
 import { applyBarSize } from './lib/barSize';
-import { applyMotion } from './lib/motion';
+import { applyMotion, installPress } from './lib/motion';
 import { FEATURES } from './config';
 import './adapters/tts'; // Read Aloud engine client (registers __tts dev hook; worker starts lazily)
 import { initMediaSession } from './lib/tts/mediaSession';
@@ -72,6 +72,7 @@ function applyInitialSettings() {
   applyBarSize(settings.navBarSize);
   // Motion likewise, so nothing plays its movement before the setting lands.
   applyMotion(settings.motion);
+  installPress();
 }
 
 // Apply settings before app loads

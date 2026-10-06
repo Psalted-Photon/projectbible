@@ -22,6 +22,7 @@
   import { STONES as TREE_STONES } from "../lib/familyTree/config";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../lib/openWork";
   import { peopleSource } from "../lib/library/source";
+  import { reveal } from "../lib/motion";
   import {
     getPersonVerses,
     getPersonById,
@@ -616,7 +617,7 @@
       initialRowId={contentsRowId}
     />
   {:else if loading}
-    <div class="person-body"><p class="muted">Loading…</p></div>
+    <div class="person-body"><p class="muted show-late">Loading…</p></div>
   {:else if !person}
     <div class="person-body">
       {#await packInstallFinished("people-biblical-v1").catch(() => false) then installed}
@@ -733,23 +734,24 @@
         {#if person.verseCount}
           <div class="char-verses">
             <button class="char-verses-toggle" on:click={toggleVerseList}>
-              <span class="char-verses-caret">{showVerseList ? "▼" : "▶"}</span>
+              <span class="char-verses-caret motion-caret" class:open={showVerseList}>▶</span>
               Appears in {person.verseCount} verse{person.verseCount === 1 ? "" : "s"}
             </button>
             {#if showVerseList}
+              <div in:reveal>
               {#if versesLoading}
-                <p class="char-verses-loading">Loading…</p>
+                <p class="char-verses-loading show-late">Loading…</p>
               {:else}
                 <div class="char-verses-books">
                   {#each versesByBook as { book, refs, color }}
                     <div class="cv-book-group">
                       <button class="cv-book-header" on:click={() => toggleBook(book, refs)}>
-                        <span class="cv-book-caret" style="color:{color}">{expandedBooks.has(book) ? "▼" : "▶"}</span>
+                        <span class="cv-book-caret motion-caret" class:open={expandedBooks.has(book)} style="color:{color}">▶</span>
                         <span class="cv-book-name" style="color:{color}">{book}</span>
                         <span class="cv-book-count">({refs.length})</span>
                       </button>
                       {#if expandedBooks.has(book)}
-                        <div class="cv-book-refs">
+                        <div class="cv-book-refs" in:reveal>
                           {#each refs as r}
                             <button
                               class="cv-ref"
@@ -770,6 +772,7 @@
                   {/each}
                 </div>
               {/if}
+              </div>
             {/if}
           </div>
         {/if}

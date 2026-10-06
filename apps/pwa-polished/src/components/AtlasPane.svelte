@@ -1648,7 +1648,7 @@
               {@const open = openBooks[group.book] ?? i === 0}
               <div class="vb-group" class:open>
                 <button class="vb-header" on:click={() => toggleBook(group, i === 0)}>
-                  <span class="vb-caret" style="color:{colour}">{open ? '▼' : '►'}</span>
+                  <span class="vb-caret motion-caret" class:open style="color:{colour}">►</span>
                   <span class="vb-name" style="color:{colour}">{bookName(group.book)}</span>
                   <span class="vb-count">({group.refs.length})</span>
                 </button>

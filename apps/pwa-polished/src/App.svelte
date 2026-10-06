@@ -538,6 +538,35 @@
     display: none; /* Chrome, Safari, Opera */
   }
 
+  /* Motion shared by every component (lib/motion.ts). The variables are
+     already adjusted for the Motion setting, so nothing here checks it. */
+
+  /* A section's caret: one arrow pointing right that turns to point down when
+     the section opens, instead of one arrow swapped for another. Give it
+     class:open. */
+  :global(.motion-caret) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: transform var(--motion-chevron-ms, 0ms) var(--ease-standard, ease);
+  }
+  :global(.motion-caret.open) {
+    transform: rotate(90deg);
+  }
+
+  /* "Loading…" that only appears once loading has taken 300ms, so a quick load
+     never flashes it, and then fades in. The wait holds on every Motion
+     setting: it isn't movement, it's not showing what isn't needed. */
+  :global(.show-late) {
+    animation: motion-show-late var(--motion-fade-ms, 0ms) 300ms backwards;
+  }
+  @keyframes -global-motion-show-late {
+    from {
+      opacity: 0;
+    }
+  }
+
   .app-root {
     width: 100%;
     height: 100vh;

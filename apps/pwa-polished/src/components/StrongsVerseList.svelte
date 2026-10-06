@@ -20,6 +20,7 @@
     type VerseUse,
     type Token,
   } from "../lib/strongsUsage";
+  import { reveal } from "../lib/motion";
 
   export let uses: VerseUse[] = [];
   /** Hebrew and Aramaic previews read right-to-left. */
@@ -175,24 +176,22 @@
   {#each corpora as corpus (corpus.testament)}
     {#if splitCorpora}
       <button class="sv-corpus" on:click={() => toggleCorpus(corpus.testament)}>
-        <span class="sv-caret">{expandedCorpora.has(corpus.testament) ? "▼" : "▶"}</span>
+        <span class="sv-caret motion-caret" class:open={expandedCorpora.has(corpus.testament)}>▶</span>
         <span class="sv-corpus-name">{corpus.label}</span>
         <span class="sv-count">{corpus.count} verse{corpus.count === 1 ? "" : "s"}</span>
       </button>
     {/if}
     {#if !splitCorpora || expandedCorpora.has(corpus.testament)}
-      <div class="sv-books" class:indented={splitCorpora}>
+      <div class="sv-books" class:indented={splitCorpora} in:reveal>
         {#each corpus.books as group (group.book)}
           <div class="vb-group">
             <button class="vb-header" on:click={() => toggleBook(corpus.testament, group)}>
-              <span class="vb-caret" style="color:{group.color}">
-                {expandedBooks.has(bookKey(corpus.testament, group.book)) ? "▼" : "▶"}
-              </span>
+              <span class="vb-caret motion-caret" class:open={expandedBooks.has(bookKey(corpus.testament, group.book))} style="color:{group.color}">▶</span>
               <span class="vb-name" style="color:{group.color}">{group.book}</span>
               <span class="vb-count">({group.uses.length})</span>
             </button>
             {#if expandedBooks.has(bookKey(corpus.testament, group.book))}
-              <div class="vb-refs">
+              <div class="vb-refs" in:reveal>
                 {#each group.uses as u (refKey(u))}
                   {@const tokens = previews[previewKey(u)]}
                   {@const marks = marksFor(u)}

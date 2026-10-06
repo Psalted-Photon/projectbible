@@ -371,7 +371,7 @@
   </div>
 
   {#if !loaded && !failed}
-    <div class="viewer-state">Loading…</div>
+    <div class="viewer-state show-late">Loading…</div>
   {:else if failed}
     <div class="viewer-state">Couldn’t open this image.</div>
   {/if}

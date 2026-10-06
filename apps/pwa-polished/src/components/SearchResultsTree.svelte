@@ -4,7 +4,7 @@
    * Power Search. Renders any depth: Bible → translation → book → verse for
    * verses, category → result for notes, journal, characters and the rest.
    */
-  import { CaretDown, CaretRight } from "phosphor-svelte";
+  import { CaretRight } from "phosphor-svelte";
   import type { SearchTreeNode } from "../lib/searchTree";
   import type { SearchResult } from "../lib/services/searchService";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
@@ -77,12 +77,8 @@
       disabled={node.count === 0}
       on:click={() => onToggle(node.key)}
     >
-      <span class="tree-caret">
-        {#if expanded.has(node.key)}
-          <CaretDown size={depth === 0 ? 11 : 9} weight="bold" />
-        {:else}
-          <CaretRight size={depth === 0 ? 11 : 9} weight="bold" />
-        {/if}
+      <span class="tree-caret motion-caret" class:open={expanded.has(node.key)}>
+        <CaretRight size={depth === 0 ? 11 : 9} weight="bold" />
       </span>
       <span class="tree-label" style={node.color ? `color:${node.color}` : ""}>
         {node.label}
@@ -164,12 +160,13 @@
     align-items: center;
     flex-shrink: 0;
     color: #888;
-    /* Transparent to clicks on purpose. Toggling swaps CaretDown for CaretRight,
-       so the icon you clicked is destroyed in the flush that follows — and a
-       detached node has no ancestors, which made the navbar's click-outside
-       handler read the click as landing outside the results panel and close it.
-       Reporting the enclosing button as the target keeps it resolvable, and
-       makes the arrow part of the same hit area as the label. */
+    /* Transparent to clicks on purpose. Toggling used to swap CaretDown for
+       CaretRight, so the icon you clicked was destroyed in the flush that
+       followed — and a detached node has no ancestors, which made the navbar's
+       click-outside handler read the click as landing outside the results panel
+       and close it. The one arrow now turns instead, but reporting the
+       enclosing button as the target still keeps the arrow part of the same
+       hit area as the label. */
     pointer-events: none;
   }
 

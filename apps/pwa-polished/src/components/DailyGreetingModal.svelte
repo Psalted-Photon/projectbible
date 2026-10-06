@@ -118,7 +118,7 @@
       <div class="dg-verse-block">
         <div class="dg-verse-ref">{verseRef}</div>
         {#if textLoading}
-          <p class="dg-verse-text dg-loading">Loading…</p>
+          <p class="dg-verse-text dg-loading show-late">Loading…</p>
         {:else if verseText}
           <p class="dg-verse-text">{@html renderVerseHtml(verseText)}</p>
         {:else if verseRef}

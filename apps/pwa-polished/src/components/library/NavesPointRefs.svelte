@@ -18,6 +18,7 @@
 <script lang="ts">
   import { getBookColor } from "../../lib/bibleData.js";
   import { renderVersePreviewHtml } from "../../lib/verseRendering";
+  import { reveal } from "../../lib/motion";
   import type { NavesRef, NavesLink } from "../../adapters/lexicon-lookup.js";
 
   /**
@@ -67,11 +68,11 @@
 {#if refs.length}
   <div class="refs" class:indent>
     <button class="refs-toggle" on:click={onToggle} aria-expanded={open}>
-      <span class="refs-caret">{open ? "▼" : "▶"}</span>
+      <span class="refs-caret motion-caret" class:open>▶</span>
       <span>{refs.length} reference{refs.length === 1 ? "" : "s"}</span>
     </button>
     {#if open}
-      <div class="ref-list">
+      <div class="ref-list" in:reveal>
         {#each rows as row}
           {#if row.live}
             <button

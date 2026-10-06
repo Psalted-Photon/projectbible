@@ -95,7 +95,8 @@
    * extraction from just moving the same clutter somewhere else.
    */
   import { createEventDispatcher } from 'svelte';
-  import { CaretDown, CaretRight, Trash, PushPin, Lock, CloudArrowUp } from 'phosphor-svelte';
+  import { CaretRight, Trash, PushPin, Lock, CloudArrowUp } from 'phosphor-svelte';
+  import { reveal } from '../lib/motion';
   import AuthorPill from './AuthorPill.svelte';
 
   export let notebooks: ListNotebook[] = [];
@@ -245,12 +246,8 @@
           />
         {:else}
           <button class="nb-header" on:click={() => dispatch('toggle', key)}>
-            <span class="nb-caret">
-              {#if expanded.has(key)}
-                <CaretDown size={11} weight="bold" />
-              {:else}
-                <CaretRight size={11} weight="bold" />
-              {/if}
+            <span class="nb-caret motion-caret" class:open={expanded.has(key)}>
+              <CaretRight size={11} weight="bold" />
             </span>
             {#if notebook.pill}
               <!-- Your own badge in this notebook, on the row that opens it.
@@ -360,7 +357,7 @@
       {/if}
 
       {#if expanded.has(key)}
-        <div class="nb-pages">
+        <div class="nb-pages" in:reveal>
           {#if notebook.pages.length === 0}
             <p class="muted small indent">{emptyPagesText}</p>
           {/if}

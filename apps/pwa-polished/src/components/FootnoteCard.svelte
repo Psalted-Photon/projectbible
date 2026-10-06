@@ -116,7 +116,7 @@
           </button>
         </div>
         {#if openBusy}
-          <p class="fc-note">Loading…</p>
+          <p class="fc-note show-late">Loading…</p>
         {:else if openUnavailable}
           <p class="fc-note">Not in the translation you're reading</p>
         {:else}

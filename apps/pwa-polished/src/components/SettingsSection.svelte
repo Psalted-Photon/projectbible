@@ -12,6 +12,7 @@
    */
   import { createEventDispatcher } from "svelte";
   import { CaretRight } from "phosphor-svelte";
+  import { reveal } from "../lib/motion";
 
   export let title: string;
   /** Short live description of the current values, shown when closed. */
@@ -46,7 +47,7 @@
   </button>
 
   {#if open}
-    <div class="sec-body">
+    <div class="sec-body" in:reveal>
       <slot />
     </div>
   {/if}
@@ -82,7 +83,9 @@
     display: inline-flex;
     flex-shrink: 0;
     color: #888;
-    transition: transform 0.18s ease, color 0.15s;
+    transition:
+      transform var(--motion-chevron-ms, 150ms) var(--ease-standard, ease),
+      color 0.15s;
   }
 
   .sec-head.open .sec-caret {

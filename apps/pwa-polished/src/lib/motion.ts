@@ -165,6 +165,124 @@ export function fadeAway(_el: Element): { duration: number; easing: (t: number) 
   return { duration, easing: (t) => t * t * t, css: (t) => `opacity: ${t}` };
 }
 
+// --- Sections ---------------------------------------------------------------
+
+/**
+ * in:reveal — a section that has just been opened: it fades in, settling 4px
+ * down into place, in step with its caret turning. Plays only when the section
+ * is opened, never when the card it sits in first draws. On Reduced it is a
+ * plain fade; on Off it just appears.
+ */
+export function reveal(_el: Element): { duration: number; easing?: (t: number) => number; css?: (t: number, u: number) => string } {
+  const level = motionLevel();
+  if (level === 'off') return { duration: 0 };
+  if (level === 'reduced') return { duration: MOTION.reducedFadeMs, css: (t) => `opacity: ${t}` };
+  return {
+    duration: MOTION.chevronMs,
+    // Slows into place, like EASE_ENTER. Svelte wants a function here.
+    easing: (t) => 1 - Math.pow(1 - t, 3),
+    css: (t, u) => `opacity: ${t}; transform: translateY(${-4 * u}px)`,
+  };
+}
+
+// --- Windows ----------------------------------------------------------------
+
+function arriveMs(): number {
+  const level = motionLevel();
+  return level === 'off' ? 0 : level === 'full' ? MOTION.tabs.inMs : MOTION.reducedFadeMs;
+}
+
+/**
+ * in:arrive — a window opening: a short fade, as long as a work-tab page takes
+ * to slide in. Plays when a window is opened or moved, not for the windows
+ * already up when the app starts.
+ */
+export function arrive(_el: Element): { duration: number; easing: (t: number) => number; css: (t: number) => string } {
+  return { duration: arriveMs(), easing: (t) => 1 - Math.pow(1 - t, 3), css: (t) => `opacity: ${t}` };
+}
+
+/** The same fade, played on an element that stays put while what's inside it
+ *  changes: a window showing something else. */
+export function fadeIn(el: HTMLElement | null | undefined): void {
+  const ms = arriveMs();
+  if (!el || !ms || typeof el.animate !== 'function') return;
+  el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: EASE_ENTER });
+}
+
+// --- Presses ----------------------------------------------------------------
+
+/**
+ * Buttons press in slightly under your finger and spring back as it lifts.
+ *
+ * One listener for the whole app rather than a style on every button, and it
+ * only presses the controls: anything wider or taller than PRESS_MAX is a row
+ * or a card, which shows the press with its background as it always has. It
+ * never presses inside the reading text or anywhere you type.
+ *
+ * It uses the `scale` property, not `transform`, so a button that is already
+ * placed or turned with a transform keeps it.
+ *
+ * Buttons that open a dropdown don't press either. The dropdown is placed by
+ * measuring its button, a pressed button measures a pixel or two small, and
+ * the dropdown growing out of it is that button's answer to the tap anyway.
+ */
+const PRESS_MAX = { width: 160, height: 72 };
+const NO_PRESS = [
+  '.verses', // the reading text
+  '[contenteditable]',
+  '.no-press',
+  // Dropdown openers.
+  '[aria-haspopup]',
+  '[aria-expanded]',
+  '.nav-dropdown',
+  '.pill-btn',
+  '.nav-il-gear',
+  '.repeat-pill',
+].join(', ');
+const pressing = new Map<HTMLElement, Animation>();
+
+function pressable(target: EventTarget | null): HTMLElement | null {
+  const el = (target as Element | null)?.closest?.('button, [role="button"]') as HTMLElement | null;
+  if (!el || (el as HTMLButtonElement).disabled || el.getAttribute('aria-disabled') === 'true') return null;
+  if (el.closest(NO_PRESS) || typeof el.animate !== 'function') return null;
+  const box = el.getBoundingClientRect();
+  if (!box.width || box.width > PRESS_MAX.width || box.height > PRESS_MAX.height) return null;
+  return el;
+}
+
+function pressDown(e: PointerEvent) {
+  if (e.button !== 0 || motionLevel() !== 'full') return;
+  const el = pressable(e.target);
+  if (!el) return;
+  pressing.get(el)?.cancel();
+  const anim = el.animate([{ scale: '1' }, { scale: String(MOTION.press.scale) }], {
+    duration: MOTION.press.ms,
+    easing: EASE_STANDARD,
+    fill: 'both',
+  });
+  pressing.set(el, anim);
+}
+
+function pressUp() {
+  for (const [el, anim] of pressing) {
+    pressing.delete(el);
+    // Back out from wherever the press had got to.
+    anim.reverse();
+    anim.finished.then(() => anim.cancel(), () => {});
+  }
+}
+
+let pressInstalled = false;
+
+/** Turn on the press. Once, at startup. */
+export function installPress(): void {
+  if (pressInstalled || typeof document === 'undefined') return;
+  pressInstalled = true;
+  document.addEventListener('pointerdown', pressDown, { capture: true, passive: true });
+  window.addEventListener('pointerup', pressUp, { capture: true, passive: true });
+  window.addEventListener('pointercancel', pressUp, { capture: true, passive: true });
+}
+
 // Flipping the device's own switch takes effect at once on Match my device.
 reduceQuery?.addEventListener?.('change', () => {
   if (setting === 'system') applyMotion(setting);

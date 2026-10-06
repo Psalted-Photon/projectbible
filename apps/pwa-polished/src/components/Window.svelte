@@ -7,6 +7,7 @@
   import HarmonyPicker from "./HarmonyPicker.svelte";
   import PackUpdateNotice from "./PackUpdateNotice.svelte";
   import { WINDOW_PACKS } from "../lib/packUpdates";
+  import { arrive, fadeIn } from "../lib/motion";
 
   export let window: WindowState;
 
@@ -246,6 +247,16 @@
   // against the panel's inner edge — the same strip the resize grip covers.
   // They get an inset; nothing else needs one.
   $: isLibrary = ['isbe', 'naves', 'person', 'wordstudy'].includes(window.contentType);
+
+  // Showing something else fades the new content in. Not between the four
+  // reference works: their tabs slide the page across themselves.
+  let contentEl: HTMLDivElement;
+  let shownType = window.contentType;
+  $: if (window.contentType !== shownType) {
+    const tabbed = isLibrary && ['isbe', 'naves', 'person', 'wordstudy'].includes(shownType);
+    shownType = window.contentType;
+    if (!tabbed) fadeIn(contentEl);
+  }
 </script>
 
 <svelte:window 
@@ -261,6 +272,7 @@
      a person's bio, which paint their own dark card in every theme so a pinned
      page looks exactly like the modal it came out of. -->
 <div
+  in:arrive
   class="panel panel-{window.edge} panel-{window.contentType}"
   class:themed={!['map', 'art', 'isbe', 'person', 'naves', 'wordstudy'].includes(window.contentType)}
   style="
@@ -345,7 +357,7 @@
   {/if}
 
   <!-- Panel content -->
-  <div class="panel-content" class:library={isLibrary}>
+  <div class="panel-content" class:library={isLibrary} bind:this={contentEl}>
     <slot />
   </div>
 </div>

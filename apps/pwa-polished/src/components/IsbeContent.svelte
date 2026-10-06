@@ -36,6 +36,7 @@
   import { isbeSource } from "../lib/library/source";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import { sanitizePackHtml } from "../lib/sanitizePackHtml";
+  import { reveal } from "../lib/motion";
 
   // The encyclopedia article itself, independent of what is holding it. Two
   // hosts: IsbeModal, a centered card over the reader; and a docked window,
@@ -1178,7 +1179,7 @@
 
   <div class="isbe-body" bind:this={bodyEl}>
     {#if loading}
-      <div class="muted">Loading…</div>
+      <div class="muted show-late">Loading…</div>
     {:else if activeTab === "overview"}
       <div class="facts">
         {#if place?.type}<div><span class="k">Type</span><span>{titleCaseType(place.type)}</span></div>{/if}
@@ -1218,7 +1219,7 @@
                 <span>{s.title}</span>
               </button>
               {#if expanded[`${i}`]}
-                <div class="sec-body">
+                <div class="sec-body" in:reveal>
                   {#if s.html}<div class="prose">{@html s.html}</div>{/if}
                   {#each s.children as c, j}
                     <div class="sec">
@@ -1233,7 +1234,7 @@
                         <span>{c.title}</span>
                       </button>
                       {#if expanded[`${i}.${j}`]}
-                        <div class="sec-body">
+                        <div class="sec-body" in:reveal>
                           <div class="prose">{@html c.html}</div>
                         </div>
                       {/if}
@@ -1252,14 +1253,12 @@
         {#each versesByBook as group}
           <div class="vb-group">
             <button class="vb-header" on:click={() => toggleBook(group.book)}>
-              <span class="vb-caret" style="color:{group.color}">
-                {expandedBooks.has(group.book) ? "▼" : "▶"}
-              </span>
+              <span class="vb-caret motion-caret" class:open={expandedBooks.has(group.book)} style="color:{group.color}">▶</span>
               <span class="vb-name" style="color:{group.color}">{group.book}</span>
               <span class="vb-count">({group.refs.length})</span>
             </button>
             {#if expandedBooks.has(group.book)}
-              <div class="vb-refs">
+              <div class="vb-refs" in:reveal>
                 {#each group.refs as r}
                   {@const key = `${group.book} ${r.chapter}:${r.verse}`}
                   <button
@@ -1515,7 +1514,7 @@
   .sec-head .caret {
     flex-shrink: 0;
     color: var(--text-muted, #999);
-    transition: transform 0.15s ease;
+    transition: transform var(--motion-chevron-ms, 150ms) var(--ease-standard, ease);
   }
   .sec-head.open .caret {
     transform: rotate(90deg);

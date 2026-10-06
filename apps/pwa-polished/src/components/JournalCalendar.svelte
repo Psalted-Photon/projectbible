@@ -231,7 +231,7 @@
   </div>
 
   {#if loading}
-    <div class="jc-loading">Loading…</div>
+    <div class="jc-loading show-late">Loading…</div>
   {/if}
 </div>
 {/if}

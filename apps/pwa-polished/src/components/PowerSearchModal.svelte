@@ -23,6 +23,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import HelpModal from "./HelpModal.svelte";
   import { Microscope } from 'phosphor-svelte';
+  import { reveal } from '../lib/motion';
 
   export let show = false;
   /** Text typed in the bar's search box before this was opened. It goes into
@@ -486,11 +487,11 @@
                 class="toggle-pattern"
                 on:click={() => showGeneratedPattern = !showGeneratedPattern}
               >
-                {showGeneratedPattern ? '▼' : '▶'} Generated Pattern
+                <span class="motion-caret" class:open={showGeneratedPattern}>▶</span> Generated Pattern
               </button>
-              
+
               {#if showGeneratedPattern}
-                <div class="pattern-code">
+                <div class="pattern-code" in:reveal>
                   <code>{generatedQuery.regex.source}</code>
                   <div class="pattern-info">
                     <span>Complexity: {generatedQuery.estimatedComplexity}/100</span>

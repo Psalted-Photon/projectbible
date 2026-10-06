@@ -118,7 +118,7 @@
   <!-- Body -->
   <div class="intro-body">
     {#if panelLoading}
-      <div class="panel-loading">Loading…</div>
+      <div class="panel-loading show-late">Loading…</div>
     {:else}
       <!-- Intro content -->
       {#if introHtml}

@@ -15,7 +15,7 @@
   import { packInstallFinished } from "../adapters/db-manager";
   import { BIBLE_BOOKS, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
-  import { fadeAway, growFrom } from "../lib/motion";
+  import { fadeAway, growFrom, reveal } from "../lib/motion";
   import {
     searchService,
     type SearchCategory,
@@ -2652,8 +2652,8 @@
                 class:current={book.name === currentBook}
                 on:click={(e) => toggleBook(book.name, e)}
               >
-                <span class="expand-icon">
-                  {#if expandedBooks.has(book.name)}<CaretDown size={10} weight="bold" />{:else}<CaretRight size={10} weight="bold" />{/if}
+                <span class="expand-icon motion-caret" class:open={expandedBooks.has(book.name)}>
+                  <CaretRight size={10} weight="bold" />
                 </span>
                 <span class="book-name">{book.name}</span>
               </button>
@@ -2661,6 +2661,7 @@
               {#if expandedBooks.has(book.name)}
                 <div
                   class="chapters-container"
+                  in:reveal
                   style="--chapter-columns: {Math.min(book.chapters, 7)}"
                 >
                   {#each Array.from({ length: book.chapters }, (_, i) => i + 1) as chapter}

@@ -189,7 +189,7 @@
 
 <div class="art-pane">
   {#if loading}
-    <div class="state">Loading…</div>
+    <div class="state show-late">Loading…</div>
   {:else if error}
     <div class="state error">Couldn’t load art: {error}</div>
   {:else if selected}

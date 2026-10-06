@@ -182,7 +182,7 @@
   {/if}
 
   {#if loading}
-    <p class="muted">Loading…</p>
+    <p class="muted show-late">Loading…</p>
   {:else if nothingInstalled}
     <GetPacksCard
       packs={["encyclotopical"]}

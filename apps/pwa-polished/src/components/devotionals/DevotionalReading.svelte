@@ -346,7 +346,7 @@
   </header>
 
   {#if loading}
-    <p class="dr-muted">Loading…</p>
+    <p class="dr-muted show-late">Loading…</p>
   {:else if !reading}
     <p class="dr-muted">This reading isn't in the installed pack.</p>
   {:else if work.workId === 'daily-light'}

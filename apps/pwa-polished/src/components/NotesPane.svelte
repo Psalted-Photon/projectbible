@@ -1839,7 +1839,7 @@
     <div class="browse-body">
       {#if mode === 'local'}
         {#if loading}
-          <p class="muted">Loading…</p>
+          <p class="muted show-late">Loading…</p>
         {:else}
           <!-- Verse notes: the same book dropdown the search results use -->
           <section class="section">

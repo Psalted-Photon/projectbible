@@ -35,6 +35,7 @@
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../lib/morphologyExpander";
   import { openDB } from "../adapters/db";
   import GetPacksCard from "./GetPacksCard.svelte";
+  import { reveal } from "../lib/motion";
 
   /**
    * The word study itself, independent of what is holding it. Two hosts: the
@@ -1173,13 +1174,13 @@
                 {#each formGroups as f (f.key)}
                   <div class="form-group">
                     <button class="form-row" on:click={() => toggleForm(f.key)}>
-                      <span class="form-caret">{openForm === f.key ? "▼" : "▶"}</span>
+                      <span class="form-caret motion-caret" class:open={openForm === f.key}>▶</span>
                       <span class="form-text" dir={isRtlLanguage ? "rtl" : "ltr"}>{f.form}</span>
                       <span class="form-parse">{parseOf(f.morphCode)}</span>
                       <span class="form-count">{f.count}</span>
                     </button>
                     {#if openForm === f.key}
-                      <div class="form-verses">
+                      <div class="form-verses" in:reveal>
                         <StrongsVerseList
                           uses={f.uses}
                           rtl={isRtlLanguage}
@@ -1216,7 +1217,7 @@
         {:else if activeTab === "arc"}
           <div class="usage-view">
             {#if usageLoading}
-              <p class="hint">Loading…</p>
+              <p class="hint show-late">Loading…</p>
             {:else if arc.first && arc.last}
               <!-- Bound once here so the click handlers close over a verse that
                    is known to exist, rather than re-reading a nullable field
@@ -1289,7 +1290,7 @@
         {:else if activeTab === "spread"}
           <div class="usage-view">
             {#if usageLoading}
-              <p class="hint">Loading…</p>
+              <p class="hint show-late">Loading…</p>
             {:else if distribution.total === 0}
               <p class="coming-soon">No occurrences found in the installed texts.</p>
             {:else}

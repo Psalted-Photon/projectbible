@@ -9,6 +9,7 @@
   import type { HighlightStyle, UserNote } from '@projectbible/core';
   import { HIGHLIGHT_CATEGORIES, categoryKeyFor } from '../lib/highlightCategories';
   import { getHighlightNames, setHighlightName } from '../adapters/settings';
+  import { reveal } from '../lib/motion';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -246,7 +247,7 @@
   <!-- Highlights list -->
   {#if activeTab === 'verses'}
     {#if loadingVerses}
-      <div class="svp-loading">Loading…</div>
+      <div class="svp-loading show-late">Loading…</div>
     {:else if sortedVerses.length === 0}
       <div class="svp-empty">No highlights yet — highlight or underline a verse while reading.</div>
     {:else if sortOrder === 'categories'}
@@ -294,7 +295,7 @@
             {/if}
             </div>
             {#if !folded.has(cat.key)}
-              <ul class="svp-list">
+              <ul class="svp-list" in:reveal>
                 {#each verses as item (item.book + item.chapter + item.verse)}
                   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
                   <li class="svp-item" on:click={() => navigateTo(item.book, item.chapter, item.verse)}>
@@ -338,7 +339,7 @@
   <!-- Notes list -->
   {#if activeTab === 'notes'}
     {#if loadingNotes}
-      <div class="svp-loading">Loading…</div>
+      <div class="svp-loading show-late">Loading…</div>
     {:else if sortedNotes.length === 0}
       <div class="svp-empty">No notes yet — tap a verse and add a note while reading.</div>
     {:else}
@@ -512,7 +513,7 @@
     margin-top: 2px;
     color: #777;
     font-size: 12px;
-    transition: transform 0.15s;
+    transition: transform var(--motion-chevron-ms, 150ms) var(--ease-standard, ease);
   }
 
   .svp-fold--closed {
