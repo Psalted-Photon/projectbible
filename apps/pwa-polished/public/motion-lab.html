@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Motion lab v1.0</title>
+<!--
+  Motion lab: tunes the app's motion before any of it goes into the app.
+
+  A mock lookup card (the four work tabs over an index side and an entry side)
+  plays the library flip three ways, the work-tab switch, a dropdown opening,
+  button presses and a section opening. The Motion setting at the top previews
+  what Reduced and Off will look like, and "Match my phone" follows the phone's
+  Remove animations switch the way the app will.
+
+  Copy values prints the MOTION block for src/lib/motion.ts. Self-contained on
+  purpose, like gem-lab.html: nothing here imports the app.
+-->
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  :root {
+    --bg: #1e1e1e;
+    --text: #e8e8e8;
+    --muted: #999;
+    --border: #333;
+    --primary: #4a90e2;
+    --stage: #0d0d0f;
+    --persp: 1400px;
+    --behind: 0.35;
+    --tab-ind-ms: 200ms;
+    --press: 0.97;
+    --press-ms: 80ms;
+    --chev-ms: 150ms;
+  }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--stage);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body { overflow: hidden; }
+  button { font: inherit; color: inherit; }
+
+  .app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+  /* ---------- Stage ---------- */
+  .stage {
+    position: relative;
+    flex: 0 0 60%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 22px;
+  }
+  .navstrip {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-bottom: 10px;
+  }
+  .pill {
+    background: #262626;
+    border: 1px solid #3a3a3a;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .card-holder {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    justify-content: center;
+  }
+  .readout {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 4px;
+    font: 11px ui-monospace, Menlo, Consolas, monospace;
+    color: #6f6f78;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Press feedback: the small touch from Phase 5, on the controls that are
+     buttons in the app sense. List rows get a background instead. */
+  .btn {
+    transition: transform var(--press-ms) cubic-bezier(0.2, 0, 0, 1);
+  }
+  .btn:active { transform: scale(var(--press)); }
+
+  /* ---------- The card ---------- */
+  .card {
+    width: min(720px, 100%);
+    height: 100%;
+    max-height: 900px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    border-radius: 10px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+  }
+  .card.narrow { width: min(300px, 100%); border-radius: 4px; }
+
+  .work-tabs {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--border);
+  }
+  .work-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 9px 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 150ms, background 150ms;
+  }
+  .work-tab.active { color: var(--primary); background: rgba(74, 144, 226, 0.08); }
+  .work-tab:disabled { opacity: 0.3; cursor: default; }
+  /* One underline that glides, instead of each tab drawing its own. */
+  .tab-ind {
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    width: 25%;
+    height: 2px;
+    background: var(--primary);
+    transition: transform var(--tab-ind-ms) cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  /* The flip. face-wrap is the 3D scene and the darker area you glimpse behind
+     the page while it turns; at rest the face covers it completely. */
+  .face-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    perspective: var(--persp);
+    background: rgba(0, 0, 0, var(--behind));
+  }
+  .flipper {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+  }
+  .face {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    overflow: hidden;
+  }
+  .face.b { transform: rotateY(180deg); }
+  .shade {
+    position: absolute;
+    inset: 0;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .face-inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  /* Header, as in NavesContent / IsbeContent. */
+  .lib-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .nav-buttons { display: flex; align-items: center; gap: 2px; min-width: 22px; flex-shrink: 0; }
+  .icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--muted);
+    padding: 3px;
+    cursor: pointer;
+  }
+  .head-text { flex: 1 1 140px; min-width: 0; }
+  .head-text h2 { margin: 0; font-size: 20px; line-height: 1.15; overflow-wrap: break-word; }
+  .head-text .sub { margin-top: 4px; font-size: 12px; color: var(--muted); }
+
+  /* Index side, as in IndexList. */
+  .index { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .index-bar { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .chip {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 3px 9px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .chip.on { color: var(--primary); border-color: var(--primary); }
+  .index-main { display: flex; flex: 1; min-height: 0; }
+  .rows { position: relative; flex: 1; min-width: 0; overflow-y: auto; padding-bottom: 12px; }
+  .section-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg);
+    padding: 8px 12px 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary);
+    border-bottom: 1px solid var(--border);
+  }
+  .count { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 5px; }
+  .row {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    padding: 9px 14px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .row:active { background: rgba(255, 255, 255, 0.06); }
+  .row.from { box-shadow: inset 3px 0 0 var(--primary); background: rgba(74, 144, 226, 0.07); }
+  .rail {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 6px 4px;
+    font-size: 9.5px;
+    color: var(--muted);
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  /* Entry side. */
+  .sub-tabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .sub-tabs button {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .sub-tabs button.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 18px 20px; line-height: 1.55; }
+  .body p { margin: 0 0 10px; }
+  .muted { color: var(--muted); }
+  .big-word { font-size: 30px; margin: 4px 0 2px; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0 0 12px; font-size: 13.5px; }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; }
+
+  .sec { border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+  .sec-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 9px 0;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .sec-head .n { margin-left: auto; color: var(--muted); font-size: 11px; }
+  .chev {
+    flex-shrink: 0;
+    color: var(--muted);
+    transition: transform var(--chev-ms) cubic-bezier(0.2, 0, 0, 1);
+  }
+  .sec.open .chev { transform: rotate(90deg); }
+  .sec-body { display: none; padding: 0 0 10px 22px; }
+  .sec.open .sec-body { display: block; }
+  .ref-row { margin: 0 0 8px; }
+  .ref { font-weight: 600; font-size: 13px; }
+  .preview { font-size: 13px; color: #bdbdbd; }
+
+  /* ---------- Dropdown ---------- */
+  .dd {
+    position: absolute;
+    z-index: 50;
+    min-width: 170px;
+    background: #262626;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    padding: 4px;
+  }
+  .dd-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: 5px;
+    padding: 8px 12px;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  .dd-item:active, .dd-item.on { background: rgba(74, 144, 226, 0.14); color: var(--primary); }
+
+  /* ---------- Drawer ---------- */
+  .drawer {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 40px);
+    background: #131316;
+    border-top: 1px solid #26262c;
+  }
+  .drawer h1 { font-size: 15px; margin: 4px 0 2px; }
+  .drawer .how { color: #8a8a94; font-size: 12.5px; margin: 0 0 6px; line-height: 1.45; }
+  .drawer h3 {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8d8da0;
+    margin: 18px 0 6px;
+  }
+  .ctl { margin: 10px 0; }
+  .ctl label { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+  .ctl .val { font: 12px ui-monospace, Menlo, Consolas, monospace; color: #c9c9d6; }
+  .ctl input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--primary); }
+  .ctl .hint { color: #7c7c88; font-size: 11.5px; margin-top: 3px; }
+  .ctl.check label { justify-content: flex-start; align-items: center; }
+  .ctl select {
+    width: 100%;
+    margin-top: 5px;
+    background: #1d1d22;
+    border: 1px solid #34343c;
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font: inherit;
+    font-size: 13px;
+  }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .seg button {
+    flex: 1 1 auto;
+    background: #1d1d22;
+    border: 1px solid #34343c;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .seg button.on { border-color: var(--primary); color: var(--primary); background: rgba(74, 144, 226, 0.12); }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 20px; }
+  .actions button {
+    background: #1d1d22;
+    border: 1px solid #34343c;
+    border-radius: 7px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .actions button.primary { border-color: var(--primary); color: #dce9f8; background: rgba(74, 144, 226, 0.18); }
+  pre.copied {
+    white-space: pre-wrap;
+    font: 11px ui-monospace, Menlo, Consolas, monospace;
+    background: #0d0d10;
+    border: 1px solid #26262c;
+    border-radius: 6px;
+    padding: 8px;
+    user-select: all;
+  }
+
+  @media (min-width: 900px) {
+    .app { flex-direction: row; }
+    .stage { flex: 1 1 auto; }
+    .drawer { flex: 0 0 360px; border-top: 0; border-left: 1px solid #26262c; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage" id="stage">
+    <div class="navstrip">
+      <button class="pill btn" id="refPill" data-dd="ref">John 3 ▾</button>
+      <button class="pill btn" id="trPill" data-dd="tr">NET ▾</button>
+    </div>
+    <div class="card-holder">
+      <div class="card" id="card">
+        <div class="work-tabs" id="tabs" role="tablist" aria-label="Reference works"></div>
+        <div class="face-wrap">
+          <div class="flipper" id="flipper">
+            <div class="face a" id="faceA"><div class="shade"></div><div class="face-inner"></div></div>
+            <div class="face b" id="faceB" hidden><div class="shade"></div><div class="face-inner"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dd" id="dd" hidden></div>
+    <div class="readout" id="readout"></div>
+  </div>
+  <div class="drawer" id="drawer"></div>
+</div>
+
+<script>
+(() => {
+  // ---------------------------------------------------------------- values
+  const VERSION = 'v1.0';
+  const STORE_KEY = 'motion-lab-v1';
+
+  const DEFAULTS = {
+    motion: 'phone',
+    layout: 'card',
+    slowmo: false,
+    flipStyle: 'turn',
+    awayMs: 110,
+    inMs: 150,
+    tiltDeg: 14,
+    fullMs: 450,
+    perspective: 1400,
+    shade: 0.25,
+    behind: 0.35,
+    awayEase: 'accelerate',
+    inEase: 'decelerate',
+    fullEase: 'standard',
+    reverse: false,
+    tabIndMs: 200,
+    tabSlidePx: 16,
+    tabOutMs: 90,
+    tabInMs: 160,
+    ddOpenMs: 150,
+    ddCloseMs: 100,
+    ddStart: 96,
+    pressScale: 97,
+    pressMs: 80,
+    chevronMs: 150,
+    fadeMs: 120,
+  };
+
+  const EASES = {
+    standard: ['Standard (Material)', 'cubic-bezier(0.2, 0, 0, 1)'],
+    decelerate: ['Slow into place (Material)', 'cubic-bezier(0, 0, 0, 1)'],
+    accelerate: ['Speed up on the way out (Material)', 'cubic-bezier(0.3, 0, 1, 1)'],
+    emphDecel: ['Strong slow into place', 'cubic-bezier(0.05, 0.7, 0.1, 1)'],
+    emphAccel: ['Strong speed up', 'cubic-bezier(0.3, 0, 0.8, 0.15)'],
+    easeIn: ['Browser ease-in', 'ease-in'],
+    easeOut: ['Browser ease-out', 'ease-out'],
+    linear: ['Linear (mechanical)', 'linear'],
+    overshoot: ['Overshoot (the "too far" sample)', 'cubic-bezier(0.34, 1.56, 0.64, 1)'],
+  };
+  const ease = (k) => (EASES[k] || EASES.standard)[1];
+
+  let V = { ...DEFAULTS };
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (saved && typeof saved === 'object') {
+      for (const k of Object.keys(DEFAULTS)) {
+        if (k in saved && typeof saved[k] === typeof DEFAULTS[k]) V[k] = saved[k];
+      }
+    }
+  } catch {}
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(V)); } catch {}
+  }
+
+  const reduceMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
+  /** full | reduced | off — what the app would actually do right now. */
+  function level() {
+    if (V.motion === 'phone') return reduceMQ.matches ? 'reduced' : 'full';
+    return V.motion;
+  }
+  const ms = (n) => n * (V.slowmo ? 5 : 1);
+
+  // ---------------------------------------------------------------- content
+  const WORKS = [
+    { key: 'encyclopedia', label: 'Encyclopedia', sub: 'International Standard Bible Encyclopedia', hasIndex: true, filters: ['All', 'Places', 'Articles'] },
+    { key: 'topical', label: 'Topical', sub: "Nave's Topical Bible", hasIndex: true, filters: ['All'] },
+    { key: 'dictionary', label: 'Dictionary', sub: '', hasIndex: false, filters: [] },
+    { key: 'people', label: 'People', sub: 'Every named person in the Bible', hasIndex: true, filters: ['All'] },
+  ];
+  const work = (k) => WORKS.find((w) => w.key === k);
+
+  const INDEX = {
+    encyclopedia: {
+      A: ['Aaron', 'Abaddon', 'Abana', 'Abel', 'Abiathar', 'Abigail', 'Abraham', 'Absalom', 'Achaia', 'Adam', 'Adoption', 'Agriculture'],
+      B: ['Baal', 'Babel', 'Babylon', 'Balaam', 'Baptism', 'Barnabas', 'Bethany', 'Bethel', 'Bethlehem', 'Bread'],
+    },
+    topical: {
+      A: ['Abomination', 'Abraham', 'Abstinence', 'Adoption', 'Adultery', 'Affliction', 'Agriculture', 'Alms', 'Altar', 'Angel', 'Anger', 'Anointing'],
+      B: ['Backsliding', 'Baptism', 'Beatitudes', 'Benevolence', 'Blessing', 'Blindness', 'Blood', 'Boldness', 'Bread', 'Brother'],
+    },
+    people: {
+      A: ['Aaron', 'Abel', 'Abiathar', 'Abigail', 'Abijah', 'Abimelech', 'Abner', 'Abraham', 'Absalom', 'Achan', 'Adam', 'Ahab'],
+      B: ['Baasha', 'Balaam', 'Barabbas', 'Barak', 'Barnabas', 'Bartholomew', 'Baruch', 'Bathsheba', 'Benaiah', 'Benjamin', 'Boaz'],
+    },
+  };
+  const COUNTS = { A: '1,284', B: '612' };
+
+  const BOOK_COLORS = { Gen: '#d4a24c', Heb: '#6fb3d2', Rom: '#c27ba0' };
+  const KJV = {
+    'Gen 11:31': "And Terah took Abram his son, and Lot the son of Haran his son's son, and Sarai his daughter in law, his son Abram's wife; and they went forth with them from Ur of the Chaldees…",
+    'Gen 12:1': "Now the LORD had said unto Abram, Get thee out of thy country, and from thy kindred, and from thy father's house, unto a land that I will shew thee:",
+    'Gen 15:6': 'And he believed in the LORD; and he counted it to him for righteousness.',
+    'Gen 17:5': 'Neither shall thy name any more be called Abram, but thy name shall be Abraham; for a father of many nations have I made thee.',
+    'Gen 18:23': 'And Abraham drew near, and said, Wilt thou also destroy the righteous with the wicked?',
+    'Gen 22:2': 'And he said, Take now thy son, thine only son Isaac, whom thou lovest, and get thee into the land of Moriah…',
+    'Gen 25:8': 'Then Abraham gave up the ghost, and died in a good old age, an old man, and full of years; and was gathered to his people.',
+    'Heb 11:8': 'By faith Abraham, when he was called to go out into a place which he should after receive for an inheritance, obeyed; and he went out, not knowing whither he went.',
+    'Rom 4:3': 'For what saith the scripture? Abraham believed God, and it was counted unto him for righteousness.',
+  };
+
+  const refRow = (r) =>
+    `<div class="ref-row"><div class="ref" style="color:${BOOK_COLORS[r.split(' ')[0]] || 'var(--primary)'}">${r}</div>` +
+    `<div class="preview">${KJV[r] || ''}</div></div>`;
+
+  const chevron =
+    '<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+  const sections = (list) =>
+    list
+      .map(
+        ([title, refs]) =>
+          `<div class="sec"><button class="sec-head" data-sec>${chevron}<span>${title}</span><span class="n">${refs.length}</span></button>` +
+          `<div class="sec-body">${refs.length ? refs.map(refRow).join('') : '<div class="muted">Mock section.</div>'}</div></div>`,
+      )
+      .join('');
+
+  const ICON_BACK =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>';
+  const ICON_SWAP =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h15l-3.5-3.5M20 16H5l3.5 3.5"/></svg>';
+  const ICON_CLOSE =
+    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+
+  function head(title, sub, { back, swap }) {
+    return (
+      `<div class="lib-head"><div class="nav-buttons">` +
+      (back ? `<button class="icon btn" data-act="back" aria-label="Back">${ICON_BACK}</button>` : '') +
+      (swap ? `<button class="icon btn" data-act="swap" aria-label="Turn over">${ICON_SWAP}</button>` : '') +
+      `</div><div class="head-text"><h2>${title}</h2><div class="sub">${sub}</div></div>` +
+      `<div class="nav-buttons"><button class="icon btn" aria-label="Close">${ICON_CLOSE}</button></div></div>`
+    );
+  }
+
+  function indexHTML() {
+    const w = work(S.work);
+    const chips = w.filters.map((f, i) => `<button class="chip btn${i === 0 ? ' on' : ''}" data-chip>${f}</button>`).join('');
+    const rows = Object.entries(INDEX[w.key])
+      .map(
+        ([letter, names]) =>
+          `<div class="section-head">${letter}<span class="count">${COUNTS[letter]}</span></div>` +
+          names.map((n) => `<button class="row${n === S.subject ? ' from' : ''}" data-open="${n}">${n}</button>`).join(''),
+      )
+      .join('');
+    const rail = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((l) => `<span>${l}</span>`).join('');
+    return (
+      head(w.label, w.sub, { back: false, swap: true }) +
+      `<div class="index"><div class="index-bar">${chips}</div>` +
+      `<div class="index-main"><div class="rows">${rows}</div><div class="rail">${rail}</div></div></div>`
+    );
+  }
+
+  function entryHTML() {
+    const n = S.subject;
+    const isA = n === 'Abraham';
+    const nav = { back: true, swap: true };
+    switch (S.work) {
+      case 'encyclopedia':
+        return (
+          head(n, 'Article', nav) +
+          `<div class="body">` +
+          (isA
+            ? `<p>The founder of the Hebrew nation and the father of the faithful. Born in Ur of the Chaldees as Abram, son of Terah, he went with his father to Haran and, at God's call, on into Canaan.</p>` +
+              `<p>His life turns on a series of promises: a land, a people as many as the stars, and a blessing for every family of the earth.</p>`
+            : `<p>Mock article for ${n}. In the app this is the full encyclopedia entry; here it only gives the card something to turn over.</p>`) +
+          sections(
+            isA
+              ? [
+                  ['1. Name', ['Gen 17:5']],
+                  ['2. Family and early life', ['Gen 11:31']],
+                  ['3. Call and migration', ['Gen 12:1', 'Heb 11:8']],
+                  ['4. The covenant', ['Gen 15:6']],
+                  ['5. Death and burial', ['Gen 25:8']],
+                ]
+              : [['1. Overview', []], ['2. In Scripture', []]],
+          ) +
+          `</div>`
+        );
+      case 'topical':
+        return (
+          head(n, isA ? '24 points · 112 references' : '6 points · 18 references', nav) +
+          `<div class="sub-tabs"><button class="active" data-subtab>Outline</button><button data-subtab>Verses</button></div>` +
+          `<div class="body">` +
+          sections(
+            isA
+              ? [
+                  ['Called from Ur of the Chaldees', ['Gen 11:31', 'Gen 12:1']],
+                  ['Name changed to Abraham', ['Gen 17:5']],
+                  ['Faith of', ['Gen 15:6', 'Rom 4:3', 'Heb 11:8']],
+                  ['Intercedes for Sodom', ['Gen 18:23']],
+                  ['Offers Isaac', ['Gen 22:2']],
+                  ['Death and burial of', ['Gen 25:8']],
+                ]
+              : [['References to ' + n, []], ['See also', []]],
+          ) +
+          `</div>`
+        );
+      case 'dictionary':
+        return (
+          head(n, isA ? "H85 · Strong's Hebrew" : "Strong's", { back: false, swap: false }) +
+          `<div class="body">` +
+          (isA
+            ? `<div class="big-word">אַבְרָהָם</div><div class="muted">ʼAbrâhâm · ab-raw-hawm'</div>` +
+              `<p style="margin-top:10px">Contracted from H1 and an unused root (probably meaning to be populous); father of a multitude; Abraham, the later name of Abram.</p>` +
+              `<p class="muted">KJV: Abraham.</p>`
+            : `<p>Mock dictionary entry for ${n}.</p>`) +
+          `</div>`
+        );
+      case 'people':
+        return (
+          head(n, isA ? 'Genesis 11:26 – 25:10' : 'Mock person', nav) +
+          `<div class="body">` +
+          (isA
+            ? `<dl class="facts"><dt>Father</dt><dd>Terah</dd><dt>Brothers</dt><dd>Nahor, Haran</dd><dt>Wives</dt><dd>Sarah, Hagar, Keturah</dd><dt>Sons</dt><dd>Ishmael, Isaac, and six by Keturah</dd><dt>Died</dt><dd>Aged 175</dd></dl>` +
+              sections([['Life', ['Gen 12:1', 'Gen 22:2']], ['Death', ['Gen 25:8']]])
+            : `<p>Mock person card for ${n}.</p>`) +
+          `</div>`
+        );
+    }
+    return '';
+  }
+
+  // ---------------------------------------------------------------- state + elements
+  const S = { work: 'topical', side: 'entry', subject: 'Abraham' };
+
+  const $ = (id) => document.getElementById(id);
+  const card = $('card');
+  const tabsEl = $('tabs');
+  const flipper = $('flipper');
+  const faceA = $('faceA');
+  const faceB = $('faceB');
+  const shadeA = faceA.querySelector('.shade');
+  const shadeB = faceB.querySelector('.shade');
+  const dd = $('dd');
+  const stage = $('stage');
+  const readoutEl = $('readout');
+  let lastRun = '';
+
+  tabsEl.innerHTML =
+    WORKS.map((w) => `<button class="work-tab" role="tab" data-work="${w.key}">${w.label}</button>`).join('') +
+    '<div class="tab-ind" id="tabInd"></div>';
+  const tabInd = $('tabInd');
+
+  function updateTabs() {
+    tabsEl.querySelectorAll('.work-tab').forEach((b) => {
+      const k = b.dataset.work;
+      b.classList.toggle('active', k === S.work);
+      b.setAttribute('aria-selected', String(k === S.work));
+      b.disabled = S.side === 'index' && !work(k).hasIndex;
+    });
+    const i = WORKS.findIndex((w) => w.key === S.work);
+    tabInd.style.transform = `translateX(${i * 100}%)`;
+  }
+
+  /** Paint the current side into a face, and on the index, bring the row you came from into view. */
+  function renderInto(face) {
+    face.querySelector('.face-inner').innerHTML = S.side === 'index' ? indexHTML() : entryHTML();
+    if (S.side === 'index') {
+      const rows = face.querySelector('.rows');
+      const from = face.querySelector('.row.from');
+      if (rows && from) rows.scrollTop = Math.max(0, from.offsetTop - rows.clientHeight / 3);
+    }
+  }
+
+  // ---------------------------------------------------------------- the sequencer
+  // One movement at a time. Starting a new one finishes the old one on the
+  // spot (its swap applied, its styles gone) rather than queueing behind it.
+  let run = null;
+
+  function finishRunning() {
+    if (!run) return;
+    const r = run;
+    run = null;
+    r.cancelled = true;
+    for (const a of r.anims) a.cancel();
+    r.anims.clear();
+    if (r.pendingApply) {
+      const f = r.pendingApply;
+      r.pendingApply = null;
+      f();
+    }
+    if (r.cleanup) r.cleanup();
+  }
+
+  function newRun(apply, cleanup) {
+    finishRunning();
+    run = { anims: new Set(), cancelled: false, pendingApply: apply, cleanup, t0: performance.now() };
+    return run;
+  }
+
+  function play(r, el, frames, opts) {
+    const a = el.animate(frames, { fill: 'both', ...opts });
+    r.anims.add(a);
+    return a;
+  }
+
+  /** True once every animation has played out and this run is still the live one. */
+  async function settled(r, anims) {
+    try {
+      await Promise.all(anims.map((a) => a.finished));
+    } catch {
+      return false;
+    }
+    return !r.cancelled && run === r;
+  }
+
+  function applyNow(r) {
+    const f = r.pendingApply;
+    r.pendingApply = null;
+    if (f) f();
+  }
+
+  function endRun(r, label) {
+    for (const a of r.anims) a.cancel();
+    r.anims.clear();
+    if (r.cleanup) r.cleanup();
+    if (run === r) run = null;
+    const took = Math.round(performance.now() - r.t0);
+    lastRun = `${label} ${took} ms`;
+    readout();
+  }
+
+  /** Reduced motion: no movement, just a quick fade out and back in. */
+  async function fadeThrough(r, el, label) {
+    const total = V.fadeMs;
+    const out = play(r, el, [{ opacity: 1 }, { opacity: 0 }], { duration: ms(total * 0.4), easing: ease('accelerate') });
+    if (!(await settled(r, [out]))) return;
+    applyNow(r);
+    const inn = play(r, el, [{ opacity: 0 }, { opacity: 1 }], { duration: ms(total * 0.6), easing: ease('decelerate') });
+    out.cancel();
+    r.anims.delete(out);
+    if (!(await settled(r, [inn]))) return;
+    endRun(r, label);
+  }
+
+  // ---------------------------------------------------------------- flip
+  async function flipTo(side, subject) {
+    if (!work(S.work).hasIndex) {
+      lastRun = 'Dictionary has no index side';
+      readout();
+      return;
+    }
+    const apply = () => {
+      S.side = side;
+      if (subject) S.subject = subject;
+      renderInto(faceA);
+      updateTabs();
+    };
+    const lv = level();
+    if (lv === 'off') {
+      finishRunning();
+      apply();
+      lastRun = 'flip 0 ms (Off)';
+      readout();
+      return;
+    }
+    const r = newRun(apply);
+    if (lv === 'reduced') return fadeThrough(r, faceA, 'flip (fade)');
+
+    // Opening an entry turns one way, going back to the list turns the other.
+    let dir = side === 'entry' ? -1 : 1;
+    if (V.reverse) dir = -dir;
+
+    if (V.flipStyle === 'full') return fullFlip(r, side, subject, dir);
+
+    const tilt = V.flipStyle === 'tilt';
+    const ang = tilt ? V.tiltDeg : 90;
+    const awayOpts = { duration: ms(V.awayMs), easing: ease(V.awayEase) };
+    const a1 = play(r, faceA, [
+      { transform: 'rotateY(0deg)', opacity: 1 },
+      { transform: `rotateY(${dir * ang}deg)`, opacity: tilt ? 0 : 1 },
+    ], awayOpts);
+    const s1 = play(r, shadeA, [{ opacity: 0 }, { opacity: V.shade }], awayOpts);
+    if (!(await settled(r, [a1, s1]))) return;
+
+    // Edge-on (or faded): swap while nobody can see it.
+    applyNow(r);
+    const inOpts = { duration: ms(V.inMs), easing: ease(V.inEase) };
+    const a2 = play(r, faceA, [
+      { transform: `rotateY(${-dir * ang}deg)`, opacity: tilt ? 0 : 1 },
+      { transform: 'rotateY(0deg)', opacity: 1 },
+    ], inOpts);
+    const s2 = play(r, shadeA, [{ opacity: V.shade }, { opacity: 0 }], inOpts);
+    for (const a of [a1, s1]) { a.cancel(); r.anims.delete(a); }
+    if (!(await settled(r, [a2, s2]))) return;
+    endRun(r, tilt ? 'tilt' : 'quick turn');
+  }
+
+  async function fullFlip(r, side, subject, dir) {
+    // Both sides exist at once here: the new one is painted on the back.
+    const prev = { side: S.side, subject: S.subject };
+    S.side = side;
+    if (subject) S.subject = subject;
+    faceB.hidden = false;
+    renderInto(faceB);
+    S.side = prev.side;
+    S.subject = prev.subject;
+    r.cleanup = () => { faceB.hidden = true; };
+
+    const opts = { duration: ms(V.fullMs), easing: ease(V.fullEase) };
+    const f = play(r, flipper, [{ transform: 'rotateY(0deg)' }, { transform: `rotateY(${dir * 180}deg)` }], opts);
+    const shadeFrames = [{ opacity: 0 }, { opacity: V.shade, offset: 0.5 }, { opacity: 0 }];
+    const sa = play(r, shadeA, shadeFrames, opts);
+    const sb = play(r, shadeB, shadeFrames, opts);
+    if (!(await settled(r, [f, sa, sb]))) return;
+    // At rest the front face is always A, so move the new side across. It
+    // looks identical, so nothing visible happens.
+    applyNow(r);
+    endRun(r, 'full flip');
+  }
+
+  // ---------------------------------------------------------------- work tabs
+  async function switchWork(key) {
+    if (key === S.work) return;
+    if (S.side === 'index' && !work(key).hasIndex) return;
+    const oldI = WORKS.findIndex((w) => w.key === S.work);
+    const newI = WORKS.findIndex((w) => w.key === key);
+    finishRunning();
+    S.work = key;
+    applyVars();
+    updateTabs(); // the underline glides on its own (CSS)
+    const apply = () => renderInto(faceA);
+    const lv = level();
+    if (lv === 'off') {
+      apply();
+      lastRun = 'tab 0 ms (Off)';
+      readout();
+      return;
+    }
+    const r = newRun(apply);
+    if (lv === 'reduced') return fadeThrough(r, faceA, 'tab (fade)');
+
+    const d = newI > oldI ? 1 : -1;
+    const px = V.tabSlidePx;
+    const out = play(r, faceA, [
+      { transform: 'translateX(0)', opacity: 1 },
+      { transform: `translateX(${-d * px}px)`, opacity: 0 },
+    ], { duration: ms(V.tabOutMs), easing: ease('accelerate') });
+    if (!(await settled(r, [out]))) return;
+    applyNow(r);
+    const inn = play(r, faceA, [
+      { transform: `translateX(${d * px}px)`, opacity: 0 },
+      { transform: 'translateX(0)', opacity: 1 },
+    ], { duration: ms(V.tabInMs), easing: ease('decelerate') });
+    out.cancel();
+    r.anims.delete(out);
+    if (!(await settled(r, [inn]))) return;
+    endRun(r, 'tab switch');
+  }
+
+  // ---------------------------------------------------------------- sections
+  function toggleSection(headEl) {
+    const sec = headEl.closest('.sec');
+    const open = !sec.classList.contains('open');
+    sec.classList.toggle('open', open);
+    if (!open) return;
+    const lv = level();
+    if (lv === 'off') return;
+    const body = sec.querySelector('.sec-body');
+    body.animate(
+      lv === 'full'
+        ? [{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }]
+        : [{ opacity: 0 }, { opacity: 1 }],
+      { duration: ms(lv === 'full' ? V.chevronMs : V.fadeMs), easing: ease('decelerate') },
+    );
+  }
+
+  // ---------------------------------------------------------------- dropdown
+  const DD_ITEMS = {
+    ref: ['Genesis 12', 'Genesis 22', 'John 3', 'Romans 4', 'Hebrews 11'],
+    tr: ['NET', 'BSB', 'KJV', 'WEB'],
+  };
+  let ddOpener = null;
+  let ddAnim = null;
+
+  function openDropdown(btn) {
+    if (ddOpener === btn) return closeDropdown();
+    if (ddOpener) closeDropdown(true);
+    const kind = btn.dataset.dd;
+    const current = btn.textContent.replace(' ▾', '');
+    dd.innerHTML = DD_ITEMS[kind]
+      .map((t) => `<button class="dd-item${t === current ? ' on' : ''}" data-pick="${t}">${t}</button>`)
+      .join('');
+    dd.hidden = false;
+    const sr = stage.getBoundingClientRect();
+    const br = btn.getBoundingClientRect();
+    const w = dd.offsetWidth;
+    let left = br.left - sr.left;
+    let origin = 'top left';
+    if (left + w > sr.width - 8) {
+      left = br.right - sr.left - w;
+      origin = 'top right';
+    }
+    dd.style.left = `${left}px`;
+    dd.style.top = `${br.bottom - sr.top + 4}px`;
+    dd.style.transformOrigin = origin;
+    ddOpener = btn;
+
+    if (ddAnim) ddAnim.cancel();
+    const lv = level();
+    if (lv === 'off') return;
+    const t0 = performance.now();
+    ddAnim = dd.animate(
+      lv === 'full'
+        ? [{ opacity: 0, transform: `scale(${V.ddStart / 100})` }, { opacity: 1, transform: 'scale(1)' }]
+        : [{ opacity: 0 }, { opacity: 1 }],
+      { duration: ms(lv === 'full' ? V.ddOpenMs : V.fadeMs), easing: ease('decelerate') },
+    );
+    ddAnim.finished.then(() => {
+      lastRun = `dropdown open ${Math.round(performance.now() - t0)} ms`;
+      readout();
+    }, () => {});
+  }
+
+  function closeDropdown(instant) {
+    if (!ddOpener) return;
+    ddOpener = null;
+    if (ddAnim) ddAnim.cancel();
+    const lv = level();
+    if (instant || lv === 'off') {
+      dd.hidden = true;
+      return;
+    }
+    ddAnim = dd.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: ms(lv === 'full' ? V.ddCloseMs : V.fadeMs * 0.6),
+      easing: ease('accelerate'),
+      fill: 'forwards',
+    });
+    const mine = ddAnim;
+    mine.finished.then(() => {
+      if (ddAnim === mine && !ddOpener) {
+        dd.hidden = true;
+        mine.cancel();
+      }
+    }, () => {});
+  }
+
+  // ---------------------------------------------------------------- events
+  card.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-act],[data-open],[data-work],[data-sec],[data-subtab],[data-chip]');
+    if (!t) return;
+    if (t.dataset.work) return switchWork(t.dataset.work);
+    if (t.dataset.open) return flipTo('entry', t.dataset.open);
+    if (t.hasAttribute('data-sec')) return toggleSection(t);
+    if (t.hasAttribute('data-subtab') || t.hasAttribute('data-chip')) {
+      t.parentElement.querySelectorAll(t.hasAttribute('data-chip') ? '.chip' : 'button').forEach((b) =>
+        b.classList.toggle(t.hasAttribute('data-chip') ? 'on' : 'active', b === t),
+      );
+      return;
+    }
+    if (t.dataset.act === 'back') return flipTo('index');
+    if (t.dataset.act === 'swap') return flipTo(S.side === 'index' ? 'entry' : 'index');
+  });
+
+  document.querySelectorAll('[data-dd]').forEach((b) => b.addEventListener('click', () => openDropdown(b)));
+  dd.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-pick]');
+    if (!item || !ddOpener) return;
+    ddOpener.textContent = `${item.dataset.pick} ▾`;
+    closeDropdown();
+  });
+  document.addEventListener('pointerdown', (e) => {
+    if (!ddOpener) return;
+    if (dd.contains(e.target) || e.target.closest('[data-dd]')) return;
+    closeDropdown();
+  });
+
+  // ---------------------------------------------------------------- vars + readout
+  function applyVars() {
+    const root = document.documentElement.style;
+    const lv = level();
+    const full = lv === 'full';
+    root.setProperty('--persp', `${V.perspective}px`);
+    root.setProperty('--behind', String(V.behind));
+    root.setProperty('--tab-ind-ms', `${full ? ms(V.tabIndMs) : 0}ms`);
+    root.setProperty('--press', String(full ? V.pressScale / 100 : 1));
+    root.setProperty('--press-ms', `${ms(V.pressMs)}ms`);
+    root.setProperty('--chev-ms', `${full ? ms(V.chevronMs) : 0}ms`);
+    card.classList.toggle('narrow', V.layout === 'narrow');
+  }
+
+  function readout() {
+    const phone = reduceMQ.matches ? 'ON' : 'off';
+    const lv = level();
+    readoutEl.textContent =
+      `Phone's Remove animations: ${phone} · using: ${lv}${V.slowmo ? ' · slow-mo ×5' : ''}` +
+      (lastRun ? ` · last: ${lastRun}` : '');
+  }
+
+  reduceMQ.addEventListener?.('change', () => {
+    applyVars();
+    readout();
+  });
+
+  // ---------------------------------------------------------------- drawer
+  const easeOptions = Object.entries(EASES).map(([k, [label]]) => [k, label]);
+  const notFull = (v) => v.flipStyle !== 'full';
+
+  const PANEL = [
+    {
+      title: 'Motion',
+      items: [
+        { key: 'motion', type: 'seg', label: 'Motion setting', options: [['phone', 'Match my phone'], ['full', 'Full'], ['reduced', 'Reduced'], ['off', 'Off']],
+          hint: 'Match my phone follows Settings → Accessibility → Remove animations.' },
+        { key: 'layout', type: 'seg', label: 'Shape', options: [['card', 'Lookup card'], ['narrow', 'Narrow window']] },
+        { key: 'slowmo', type: 'check', label: 'Slow motion ×5 (for studying the movement only)' },
+      ],
+    },
+    {
+      title: 'Flip: ⇄, tapping a row, ← back to the list',
+      items: [
+        { key: 'flipStyle', type: 'seg', label: 'Style', options: [['tilt', 'Tilt'], ['turn', 'Quick turn'], ['full', 'Full flip']],
+          hint: 'Full flip is here so you can feel why it is too much for a button you tap all day.' },
+        { key: 'awayMs', type: 'range', label: 'Turn away', min: 40, max: 400, step: 5, unit: 'ms', show: notFull },
+        { key: 'inMs', type: 'range', label: 'Turn in', min: 40, max: 500, step: 5, unit: 'ms', show: notFull },
+        { key: 'tiltDeg', type: 'range', label: 'Tilt angle', min: 4, max: 45, step: 1, unit: '°', show: (v) => v.flipStyle === 'tilt' },
+        { key: 'fullMs', type: 'range', label: 'Full flip length', min: 150, max: 1000, step: 10, unit: 'ms', show: (v) => v.flipStyle === 'full' },
+        { key: 'perspective', type: 'range', label: 'Depth (lower is more dramatic)', min: 400, max: 3000, step: 50, unit: 'px' },
+        { key: 'shade', type: 'range', label: 'Shadow on the page as it turns', min: 0, max: 0.6, step: 0.01 },
+        { key: 'behind', type: 'range', label: 'Darkness behind the page', min: 0, max: 0.8, step: 0.01 },
+        { key: 'awayEase', type: 'select', label: 'Turn-away curve', options: easeOptions, show: notFull },
+        { key: 'inEase', type: 'select', label: 'Turn-in curve', options: easeOptions, show: notFull },
+        { key: 'fullEase', type: 'select', label: 'Full flip curve', options: easeOptions, show: (v) => v.flipStyle === 'full' },
+        { key: 'reverse', type: 'check', label: 'Turn the other way' },
+      ],
+    },
+    {
+      title: 'Work tabs',
+      items: [
+        { key: 'tabIndMs', type: 'range', label: 'Underline glide', min: 0, max: 500, step: 10, unit: 'ms' },
+        { key: 'tabSlidePx', type: 'range', label: 'Content slide distance', min: 0, max: 60, step: 1, unit: 'px' },
+        { key: 'tabOutMs', type: 'range', label: 'Slide out', min: 0, max: 300, step: 5, unit: 'ms' },
+        { key: 'tabInMs', type: 'range', label: 'Slide in', min: 0, max: 400, step: 5, unit: 'ms' },
+      ],
+    },
+    {
+      title: 'Dropdowns: John 3 ▾ and NET ▾',
+      items: [
+        { key: 'ddOpenMs', type: 'range', label: 'Open', min: 0, max: 400, step: 5, unit: 'ms' },
+        { key: 'ddCloseMs', type: 'range', label: 'Close', min: 0, max: 300, step: 5, unit: 'ms' },
+        { key: 'ddStart', type: 'range', label: 'Grows from', min: 80, max: 100, step: 1, unit: '%' },
+      ],
+    },
+    {
+      title: 'Small touches',
+      items: [
+        { key: 'pressScale', type: 'range', label: 'Button press size', min: 88, max: 100, step: 0.5, unit: '%' },
+        { key: 'pressMs', type: 'range', label: 'Press speed', min: 0, max: 200, step: 5, unit: 'ms' },
+        { key: 'chevronMs', type: 'range', label: 'Section chevron and reveal', min: 0, max: 400, step: 10, unit: 'ms' },
+      ],
+    },
+    {
+      title: 'Reduced motion',
+      items: [
+        { key: 'fadeMs', type: 'range', label: 'Fade length (stands in for every turn and slide)', min: 0, max: 400, step: 10, unit: 'ms' },
+      ],
+    },
+  ];
+
+  const fmt = (item, v) => {
+    if (item.unit) return `${v}${item.unit === '°' ? '°' : ' ' + item.unit}`;
+    return Number(v).toFixed(2);
+  };
+
+  function buildDrawer() {
+    const d = $('drawer');
+    let html =
+      `<h1>Motion lab ${VERSION}</h1>` +
+      `<p class="how">Tap ⇄ to turn the card over, a row to open it, ← to go back, and the four tabs to switch works. ` +
+      `Tap twice quickly: the second tap should finish the first at once, never wait behind it.</p>`;
+    for (const sec of PANEL) {
+      html += `<h3>${sec.title}</h3>`;
+      for (const it of sec.items) {
+        const id = `c-${it.key}`;
+        if (it.type === 'range') {
+          html += `<div class="ctl" data-ctl="${it.key}"><label for="${id}"><span>${it.label}</span><span class="val" id="${id}-v"></span></label>` +
+            `<input type="range" id="${id}" min="${it.min}" max="${it.max}" step="${it.step}"></div>`;
+        } else if (it.type === 'seg') {
+          html += `<div class="ctl" data-ctl="${it.key}"><label><span>${it.label}</span></label><div class="seg">` +
+            it.options.map(([k, l]) => `<button data-seg="${it.key}" data-v="${k}">${l}</button>`).join('') +
+            `</div>${it.hint ? `<div class="hint">${it.hint}</div>` : ''}</div>`;
+        } else if (it.type === 'check') {
+          html += `<div class="ctl check" data-ctl="${it.key}"><label><input type="checkbox" id="${id}"> ${it.label}</label></div>`;
+        } else if (it.type === 'select') {
+          html += `<div class="ctl" data-ctl="${it.key}"><label for="${id}"><span>${it.label}</span></label><select id="${id}">` +
+            it.options.map(([k, l]) => `<option value="${k}">${l}</option>`).join('') + `</select></div>`;
+        }
+      }
+    }
+    html +=
+      `<div class="actions"><button id="tenBtn">Flip 10× in a row</button>` +
+      `<button class="primary" id="copyBtn">Copy values</button><button id="resetBtn">Reset</button></div>` +
+      `<pre class="copied" id="copyOut" hidden></pre>`;
+    d.innerHTML = html;
+
+    for (const sec of PANEL) {
+      for (const it of sec.items) {
+        const el = $(`c-${it.key}`);
+        if (it.type === 'range') {
+          el.addEventListener('input', () => set(it.key, Number(el.value)));
+        } else if (it.type === 'check') {
+          el.addEventListener('change', () => set(it.key, el.checked));
+        } else if (it.type === 'select') {
+          el.addEventListener('change', () => set(it.key, el.value));
+        }
+      }
+    }
+    d.querySelectorAll('[data-seg]').forEach((b) => b.addEventListener('click', () => set(b.dataset.seg, b.dataset.v)));
+    $('tenBtn').addEventListener('click', flipTen);
+    $('copyBtn').addEventListener('click', copyValues);
+    $('resetBtn').addEventListener('click', () => {
+      V = { ...DEFAULTS };
+      save();
+      syncDrawer();
+      applyVars();
+      readout();
+    });
+  }
+
+  function syncDrawer() {
+    for (const sec of PANEL) {
+      for (const it of sec.items) {
+        const wrap = document.querySelector(`[data-ctl="${it.key}"]`);
+        wrap.hidden = it.show ? !it.show(V) : false;
+        const el = $(`c-${it.key}`);
+        if (it.type === 'range') {
+          el.value = V[it.key];
+          $(`c-${it.key}-v`).textContent = fmt(it, V[it.key]);
+        } else if (it.type === 'check') {
+          el.checked = V[it.key];
+        } else if (it.type === 'select') {
+          el.value = V[it.key];
+        } else if (it.type === 'seg') {
+          wrap.querySelectorAll('[data-seg]').forEach((b) => b.classList.toggle('on', b.dataset.v === V[it.key]));
+        }
+      }
+    }
+  }
+
+  function set(key, value) {
+    V[key] = value;
+    save();
+    syncDrawer();
+    applyVars();
+    readout();
+  }
+
+  let testing = false;
+  async function flipTen() {
+    const btn = $('tenBtn');
+    if (testing) {
+      testing = false;
+      return;
+    }
+    if (!work(S.work).hasIndex) await switchWork('topical');
+    testing = true;
+    btn.textContent = 'Stop';
+    for (let i = 0; i < 10 && testing; i++) {
+      await flipTo(S.side === 'index' ? 'entry' : 'index');
+      await new Promise((res) => setTimeout(res, ms(140)));
+    }
+    testing = false;
+    btn.textContent = 'Flip 10× in a row';
+  }
+
+  function valuesText() {
+    const e = (k) => `'${ease(V[k])}'`;
+    return [
+      `// Motion lab ${VERSION}. Paste into src/lib/motion.ts.`,
+      `export const MOTION = {`,
+      `  flip: {`,
+      `    style: '${V.flipStyle}', awayMs: ${V.awayMs}, inMs: ${V.inMs}, tiltDeg: ${V.tiltDeg}, fullMs: ${V.fullMs},`,
+      `    perspective: ${V.perspective}, shade: ${V.shade}, behind: ${V.behind}, reverse: ${V.reverse},`,
+      `    awayEase: ${e('awayEase')}, inEase: ${e('inEase')}, fullEase: ${e('fullEase')},`,
+      `  },`,
+      `  tabs: { underlineMs: ${V.tabIndMs}, slidePx: ${V.tabSlidePx}, outMs: ${V.tabOutMs}, inMs: ${V.tabInMs} },`,
+      `  dropdown: { openMs: ${V.ddOpenMs}, closeMs: ${V.ddCloseMs}, startScale: ${V.ddStart / 100} },`,
+      `  press: { scale: ${V.pressScale / 100}, ms: ${V.pressMs} },`,
+      `  chevronMs: ${V.chevronMs},`,
+      `  reducedFadeMs: ${V.fadeMs},`,
+      `};`,
+    ].join('\n');
+  }
+
+  async function copyValues() {
+    const text = valuesText();
+    const btn = $('copyBtn');
+    const out = $('copyOut');
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand('copy');
+        ta.remove();
+      } catch {}
+    }
+    out.textContent = text;
+    out.hidden = false;
+    btn.textContent = ok ? 'Copied ✓' : 'Copy failed: select below';
+    setTimeout(() => (btn.textContent = 'Copy values'), 1600);
+  }
+
+  // ---------------------------------------------------------------- start
+  buildDrawer();
+  syncDrawer();
+  applyVars();
+  renderInto(faceA);
+  updateTabs();
+  readout();
+})();
+</script>
+</body>
+</html>

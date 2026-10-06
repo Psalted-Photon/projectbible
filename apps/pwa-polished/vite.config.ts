@@ -280,7 +280,9 @@ export default defineConfig({
         //                     so its entry chunk is kept out as well as the
         //                     page; the code it shares with the app is in
         //                     chunks the app precaches anyway.
-        //   reset.html        the recovery page. It exists for the case where
+        //   motion-lab.html   tunes the app's motion (library flip, work tabs,
+        //                     dropdowns). Self-contained, like gem-lab.
+        //   reset.html       the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
         //   email/            artwork for the auth emails. It is fetched by
@@ -297,6 +299,7 @@ export default defineConfig({
           '**/gem-lab.html',
           '**/tree-motion-lab.html',
           '**/assets/tree-motion-lab-*.js',
+          '**/motion-lab.html',
         ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
@@ -304,6 +307,7 @@ export default defineConfig({
           /^\/familytree\.html$/,
           /^\/gem-lab\.html$/,
           /^\/tree-motion-lab\.html$/,
+          /^\/motion-lab\.html$/,
         ],
         runtimeCaching: [
           {

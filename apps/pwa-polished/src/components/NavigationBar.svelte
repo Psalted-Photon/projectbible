@@ -307,8 +307,18 @@
     navContent.scrollLeft = Math.max(0, targetScroll);
   }
 
-  // Listen for external search triggers
-  $: if ($triggerSearch > 0) {
+  // Listen for external search triggers. Every bar hears the press, but only a
+  // bar with a search box answers it — a window's half bar has none, and its
+  // results opened with nothing to sit under, at the bar's left edge. And only
+  // a press made while this bar was here: a bar opened later used to replay
+  // the last one the moment it appeared.
+  let seenSearchTrigger = get(triggerSearch);
+  $: answerSearchTrigger($triggerSearch);
+
+  function answerSearchTrigger(count: number) {
+    if (count === seenSearchTrigger) return;
+    seenSearchTrigger = count;
+    if (isMinimal) return;
     searchQuery = $searchQueryStore;
     searchExpanded = true;
     performSearch();
@@ -817,29 +827,10 @@
       searchRan = true;
       showResults = true;
 
-      // Auto-scroll to show the search container
+      // Auto-scroll to show the search container. The list places itself and
+      // follows the strip, so it needs no help here (placeUnderSearch).
       if (searchContainerRef) {
         scrollToShowButton(searchContainerRef);
-      }
-
-      // Position search results dropdown
-      if (searchContainerRef) {
-        requestAnimationFrame(() => {
-          const dropdown = (navElement?.querySelector(".search-results-dropdown") ??
-            document.querySelector(".search-results-dropdown")) as HTMLElement;
-          if (dropdown) {
-            // This used to subtract `.main-content`'s left unconditionally, which
-            // is only right when that element is the containing block — true in
-            // light/sepia, false in dark, where it pushed the dropdown off by the
-            // width of any left-docked window. Ask what the box really is, and
-            // correct `top` by it as well. See lib/fixedOrigin.ts.
-            const origin = fixedOrigin(dropdown);
-            const rect = searchContainerRef.getBoundingClientRect();
-            dropdown.style.left = `${rect.left - origin.left}px`;
-            dropdown.style.top = `${rect.bottom + 4 - origin.top}px`;
-            dropdown.style.width = `${Math.min(rect.width, origin.width - 20)}px`;
-          }
-        });
       }
     } catch (error) {
       console.error("Search error:", error);
@@ -1007,8 +998,53 @@
     // Two ticks: the first mounts the dropdown, the second lets the result rows
     // lay out. Setting scrollTop before the list has height would land at 0.
     await tick();
+    // Bring the box back into view, as a fresh search does.
+    if (searchContainerRef) scrollToShowButton(searchContainerRef);
     await tick();
     if (searchResultsEl) searchResultsEl.scrollTop = origin.scrollTop;
+  }
+
+  /** Hidden until placeUnderSearch has put it somewhere, so it never shows at the edge. */
+  let searchResultsPlaced = false;
+
+  /**
+   * Keep the results list under the search box.
+   *
+   * The list is `position: fixed` and placed by hand, so whatever opens it has
+   * to place it. Doing it here, as the list is made, means nothing can forget:
+   * walking back through a crumb used to make a fresh list that nobody placed,
+   * and it sat at the stylesheet's `left: 0` until the next search finished.
+   * It keeps following the box afterwards, because the box can still be moving
+   * — it eases open over a quarter second when a crumb reopens it, the strip
+   * it sits in scrolls, and the window can change size.
+   *
+   * Measured against the box `position: fixed` really resolves from — here the
+   * bar itself, which carries the slide-away transform. See lib/fixedOrigin.ts.
+   */
+  function placeUnderSearch(node: HTMLElement) {
+    const place = () => {
+      if (!searchContainerRef) return;
+      const origin = fixedOrigin(node);
+      const rect = searchContainerRef.getBoundingClientRect();
+      node.style.left = `${rect.left - origin.left}px`;
+      node.style.top = `${rect.bottom + 4 - origin.top}px`;
+      node.style.width = `${Math.min(rect.width, origin.width - 20)}px`;
+      searchResultsPlaced = true;
+    };
+    place();
+    const boxObs = new ResizeObserver(place);
+    if (searchContainerRef) boxObs.observe(searchContainerRef);
+    const strip = navContentEl;
+    strip?.addEventListener("scroll", place, { passive: true });
+    window.addEventListener("resize", place);
+    return {
+      destroy() {
+        boxObs.disconnect();
+        strip?.removeEventListener("scroll", place);
+        window.removeEventListener("resize", place);
+        searchResultsPlaced = false;
+      },
+    };
   }
 
   $: {
@@ -1176,16 +1212,7 @@
         dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
       }
     }
-    if (showResults) {
-      const dropdown = (navElement?.querySelector(".search-results-dropdown") ??
-        document.querySelector(".search-results-dropdown")) as HTMLElement;
-      if (dropdown && searchContainerRef) {
-        const rect = searchContainerRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left - navRect.left}px`;
-        dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
-        dropdown.style.width = `${Math.min(rect.width, window.innerWidth - 20)}px`;
-      }
-    }
+    // The search results keep themselves placed (placeUnderSearch).
   }
 
   // ── The bar's contoured underside ──────────────────────────────────────────
@@ -2508,7 +2535,12 @@
   </div>
 
   {#if showResults && (queryRef || searchRan)}
-    <div class="search-results-dropdown" bind:this={searchResultsEl}>
+    <div
+      class="search-results-dropdown"
+      class:positioned={searchResultsPlaced}
+      bind:this={searchResultsEl}
+      use:placeUnderSearch
+    >
       <!-- Go-to row: what was typed, read as a reference. A book on its own is
            offered here too, but Enter still searches it ("John" finds people). -->
       {#if queryRef?.kind === "overflow"}
@@ -3971,6 +4003,12 @@
     border-radius: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
     z-index: 10002; /* Higher than dropdowns */
+    /* Hidden until placed under the search box, like the dropdowns above. */
+    visibility: hidden;
+  }
+
+  .search-results-dropdown.positioned {
+    visibility: visible;
   }
 
   .goto-row {
