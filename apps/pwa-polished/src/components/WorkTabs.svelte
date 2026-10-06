@@ -28,7 +28,7 @@
   import { onDestroy, onMount, tick } from "svelte";
   import type { WorksResolution } from "../adapters/lexicon-lookup";
   import { worksInWindow, type WorkKey } from "../lib/openWork";
-  import { EASE_STANDARD, MOTION, motionLevel } from "../lib/motion";
+  import { EASE_ENTER, EASE_EXIT, EASE_STANDARD, MOTION, motionLevel } from "../lib/motion";
 
   /**
    * The four reference works, across the top of every lookup card.
@@ -207,7 +207,7 @@
       : [{ opacity: 1 }, { opacity: 0 }];
     const ms = full ? MOTION.tabs.outMs : MOTION.reducedFadeMs * 0.4;
     stopPage();
-    const anims = els.map((el) => el.animate(frames, { duration: ms, easing: MOTION.flip.awayEase, fill: "forwards" }));
+    const anims = els.map((el) => el.animate(frames, { duration: ms, easing: EASE_EXIT, fill: "forwards" }));
     pageAnims = anims;
     const mine = { key };
     leaving = mine;
@@ -234,7 +234,7 @@
       ? [{ transform: `translateX(${h.dir * px}px)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }]
       : [{ opacity: 0 }, { opacity: 1 }];
     const ms = full ? MOTION.tabs.inMs : MOTION.reducedFadeMs * 0.6;
-    pageAnims = els.map((el) => el.animate(frames, { duration: ms, easing: MOTION.flip.inEase }));
+    pageAnims = els.map((el) => el.animate(frames, { duration: ms, easing: EASE_ENTER }));
   });
 
   onDestroy(() => {

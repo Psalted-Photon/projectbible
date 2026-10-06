@@ -15,6 +15,7 @@
   import { packInstallFinished } from "../adapters/db-manager";
   import { BIBLE_BOOKS, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
+  import { fadeAway, growFrom } from "../lib/motion";
   import {
     searchService,
     type SearchCategory,
@@ -226,6 +227,7 @@
   let interlinearGearRef: HTMLElement;
   let ilPopTop = 0;
   let ilPopLeft = 0;
+  let ilPopEl: HTMLElement | null = null;
 
   function isOriginalLanguage(translationId: string): boolean {
     const id = (translationId || "").toLowerCase();
@@ -259,6 +261,8 @@
       const minLeft = origin.left + 8;
       ilPopLeft = Math.max(minLeft, Math.min(rect.left, maxLeft)) - origin.left;
       ilPopTop = rect.bottom + 6 - origin.top;
+      await tick();
+      growFrom(ilPopEl, rect);
     }
   }
 
@@ -473,6 +477,7 @@
         dropdown.style.left = `${clampedLeft}px`;
         dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
         refsPackPositioned = true;
+        growFrom(dropdown, rect);
       }
     });
   }
@@ -511,6 +516,7 @@
         dropdown.style.left = `${clampedLeft}px`;
         dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
         commDropdownPositioned = true;
+        growFrom(dropdown, rect);
       }
     });
   }
@@ -548,6 +554,7 @@
         dropdown.style.left = `${clampedLeft}px`;
         dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
         translationDropdownPositioned = true; // reveal now that it's placed
+        growFrom(dropdown, rect);
       }
     });
   }
@@ -590,6 +597,7 @@
         dropdown.style.left = `${clampedLeft}px`;
         dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
         referenceDropdownPositioned = true; // reveal now that it's placed
+        growFrom(dropdown, rect);
 
         // Scroll the list to the current book
         if (currentBook) {
@@ -718,6 +726,8 @@
         const clampedLeft = Math.max(4, Math.min(naturalLeft, (navElement?.offsetWidth ?? window.innerWidth) - dropdown.offsetWidth - 4));
         dropdown.style.left = `${clampedLeft}px`;
         dropdown.style.top = `${rect.bottom - navRect.top + 4}px`;
+        // Placed again whenever its view changes; only the first showing grows.
+        if (!repeatDropdownPositioned) growFrom(dropdown, rect);
         repeatDropdownPositioned = true;
       }
     });
@@ -2593,7 +2603,7 @@
 
   <!-- Dropdowns rendered outside nav-content to avoid overflow clipping -->
   {#if translationDropdownOpen}
-    <div class="dropdown-menu translation-dropdown" class:positioned={translationDropdownPositioned}>
+    <div class="dropdown-menu translation-dropdown" class:positioned={translationDropdownPositioned} out:fadeAway>
       {#each $availableTranslations as translation}
         <button
           class="dropdown-item"
@@ -2619,7 +2629,7 @@
   {/if}
 
   {#if referenceDropdownOpen}
-    <div class="dropdown-menu tree-menu reference-dropdown" class:positioned={referenceDropdownPositioned}>
+    <div class="dropdown-menu tree-menu reference-dropdown" class:positioned={referenceDropdownPositioned} out:fadeAway>
       {#each REFERENCE_COLUMNS as column}
         <div class="book-column book-column-{column.testament}">
           <div class="book-column-title">{column.label}</div>
@@ -2674,7 +2684,7 @@
   {/if}
 
   {#if refsPackOpen}
-    <div class="dropdown-menu refs-pack-dropdown" class:positioned={refsPackPositioned}>
+    <div class="dropdown-menu refs-pack-dropdown" class:positioned={refsPackPositioned} out:fadeAway>
       <PackDropdownSection
         heading="Cross-references need a pack"
         restartFor="see them"
@@ -2684,7 +2694,7 @@
   {/if}
 
   {#if commDropdownOpen}
-    <div class="dropdown-menu comm-dropdown" class:positioned={commDropdownPositioned}>
+    <div class="dropdown-menu comm-dropdown" class:positioned={commDropdownPositioned} out:fadeAway>
       <!-- The authors are a fixed list, so they show with or without the
            pack. Without it, offer the pack first. Draws nothing once it's in. -->
       <PackDropdownSection
@@ -2711,6 +2721,7 @@
       <div
         class="dropdown-menu repeat-dropdown"
         class:positioned={repeatDropdownPositioned}
+        out:fadeAway|global
         style="--rp-bg: {REPEAT_COLORS[grp.colorIndex].pill}; --rp-fg: {REPEAT_COLORS[grp.colorIndex].pillText};"
       >
         {#if repeatDropdownView === 'main'}
@@ -2742,6 +2753,8 @@
     ></button>
     <div
       class="interlinear-popover"
+      bind:this={ilPopEl}
+      out:fadeAway
       style="top:{ilPopTop}px; left:{ilPopLeft}px;"
       on:click|stopPropagation
       on:keydown|stopPropagation

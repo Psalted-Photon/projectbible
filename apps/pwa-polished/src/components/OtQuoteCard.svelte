@@ -23,6 +23,7 @@
    */
   import { createEventDispatcher } from 'svelte';
   import { ArrowRight } from 'phosphor-svelte';
+  import { fadeAway, grow } from '../lib/motion';
   import { formatOtRef, formatOtVerses, type OtQuoteEntry, type OtQuoteRef } from '../lib/otQuotesIndex';
   import { mtToLxxPsalm } from '../lib/lxxPsalms';
   import { getBookColor } from '../lib/bibleData';
@@ -214,6 +215,8 @@
   class:ot-echo={isAllusion}
   bind:this={rootEl}
   use:portal
+  use:grow={new DOMRect(verseLeft, verseBottom - 1, verseWidth, 1)}
+  out:fadeAway
   style="left:{left}px; top:{top}px; width:{WIDTH}px; max-height:{cappedHeight}px;"
 >
   <div class="ot-head">

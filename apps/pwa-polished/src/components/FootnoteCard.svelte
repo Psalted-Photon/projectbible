@@ -12,6 +12,7 @@
    */
   import { createEventDispatcher } from 'svelte';
   import { getBookColor } from '../lib/bibleData';
+  import { fadeAway, grow } from '../lib/motion';
   import { linkifyNoteRefs } from '../lib/linkifyNoteRefs';
   import { sanitizePackHtml } from '../lib/sanitizePackHtml';
   import type { NoteKind } from '../lib/verseRendering';
@@ -91,6 +92,8 @@
   class="footnote-card themed"
   bind:this={rootEl}
   use:portal
+  use:grow={new DOMRect(x, y, 0, 18)}
+  out:fadeAway
   style="left:{left}px; top:{top}px; width:{WIDTH}px; --ref-color:{color};"
 >
   <div class="fc-head">

@@ -8,6 +8,7 @@
    */
   import { createEventDispatcher } from 'svelte';
   import { getBookColor } from '../lib/bibleData';
+  import { fadeAway, grow } from '../lib/motion';
 
   export let x = 0;
   export let y = 0;
@@ -52,6 +53,8 @@
 <div
   class="ref-popover themed"
   use:portal
+  use:grow={new DOMRect(x, y, 0, 20)}
+  out:fadeAway
   style="left:{left}px; top:{top}px; width:{WIDTH}px; --ref-color:{color};"
 >
   <button class="ref-action" on:click={() => dispatch('goto')}>

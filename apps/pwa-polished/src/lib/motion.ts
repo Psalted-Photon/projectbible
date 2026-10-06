@@ -48,6 +48,10 @@ export const MOTION = {
 
 /** For movements with no direction of their own: a press, a chevron, an underline. */
 export const EASE_STANDARD = 'cubic-bezier(0.2, 0, 0, 1)';
+/** Things arriving slow into place. */
+export const EASE_ENTER = 'cubic-bezier(0, 0, 0, 1)';
+/** Things leaving speed up on the way out. */
+export const EASE_EXIT = 'cubic-bezier(0.3, 0, 1, 1)';
 
 const reduceQuery =
   typeof window !== 'undefined' && window.matchMedia
@@ -79,8 +83,8 @@ export function applyMotion(s: MotionSetting | undefined): void {
     const fade = level === 'off' ? 0 : MOTION.reducedFadeMs;
     const vars: Record<string, string> = {
       '--ease-standard': EASE_STANDARD,
-      '--ease-enter': MOTION.flip.inEase,
-      '--ease-exit': MOTION.flip.awayEase,
+      '--ease-enter': EASE_ENTER,
+      '--ease-exit': EASE_EXIT,
       '--motion-fade-ms': `${fade}ms`,
       '--motion-press-ms': `${full ? MOTION.press.ms : 0}ms`,
       '--motion-press-scale': String(full ? MOTION.press.scale : 1),
@@ -95,6 +99,70 @@ export function applyMotion(s: MotionSetting | undefined): void {
     for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
   }
   motion.set(level);
+}
+
+// --- Dropdowns and popups --------------------------------------------------
+
+const growing = new WeakMap<Element, Animation>();
+
+/**
+ * A dropdown or popup growing out of what opened it: from 96% and clear to its
+ * full size, slowing into place. `from` is the opener's box; the growth starts
+ * from its middle, on whichever edge of the dropdown faces it. Call it once
+ * the dropdown is placed and about to show. On Reduced it is a plain fade; on
+ * Off it just appears.
+ *
+ * Nothing is left on the element after: the transform and its origin are part
+ * of the animation, not set as styles.
+ */
+export function growFrom(el: HTMLElement | null | undefined, from?: DOMRect | null): void {
+  if (!el || typeof el.animate !== 'function') return;
+  growing.get(el)?.cancel();
+  const level = motionLevel();
+  if (level === 'off') return;
+  let anim: Animation;
+  if (level === 'reduced') {
+    anim = el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: MOTION.reducedFadeMs, easing: EASE_ENTER });
+  } else {
+    const origin = originFacing(el, from);
+    anim = el.animate(
+      [
+        { opacity: 0, transform: `scale(${MOTION.dropdown.startScale})`, transformOrigin: origin },
+        { opacity: 1, transform: 'scale(1)', transformOrigin: origin },
+      ],
+      { duration: MOTION.dropdown.openMs, easing: EASE_ENTER },
+    );
+  }
+  growing.set(el, anim);
+}
+
+/** Svelte action form of growFrom, for a popup that is placed as it mounts. */
+export function grow(el: HTMLElement, from?: DOMRect | null) {
+  growFrom(el, from);
+}
+
+/** Where on `el` the opener's middle is, as a transform-origin. */
+function originFacing(el: HTMLElement, from?: DOMRect | null): string {
+  if (!from) return 'center top';
+  const box = el.getBoundingClientRect();
+  const x = Math.round(Math.min(Math.max(from.left + from.width / 2 - box.left, 0), box.width));
+  const midY = from.top + from.height / 2;
+  const y = midY <= box.top + box.height / 2 ? 'top' : 'bottom';
+  return `${x}px ${y}`;
+}
+
+/**
+ * out:fadeAway — a dropdown or popup leaving: a quick fade, about a third the
+ * time it took to open. Svelte makes the leaving element ignore taps while it
+ * fades, so a tap lands on what's under it. Reopened mid-fade, Svelte brings
+ * the same element back rather than drawing a second one.
+ */
+export function fadeAway(_el: Element): { duration: number; easing: (t: number) => number; css: (t: number) => string } {
+  const level = motionLevel();
+  const duration =
+    level === 'full' ? MOTION.dropdown.closeMs : level === 'reduced' ? Math.round(MOTION.reducedFadeMs * 0.6) : 0;
+  // Speeds up on the way out, like EASE_EXIT. Svelte wants a function here.
+  return { duration, easing: (t) => t * t * t, css: (t) => `opacity: ${t}` };
 }
 
 // Flipping the device's own switch takes effect at once on Match my device.

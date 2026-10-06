@@ -14,6 +14,7 @@
   import { createEventDispatcher, onMount, tick } from 'svelte';
   import PanelIcon from './icons/PanelIcon.svelte';
   import { WINDOW_TYPES, type WindowChoice } from '../lib/windowTypes';
+  import { fadeAway, growFrom } from '../lib/motion';
 
   /** The button it hangs from. */
   export let anchor: HTMLElement;
@@ -62,7 +63,13 @@
     const fromRight = a.right - w;
     left = fromLeft + w <= vw - margin ? fromLeft : fromRight;
     left = Math.max(margin, Math.min(left, vw - w - margin));
+    const first = !placed;
     placed = true;
+    // Placed again on every resize; only the first showing grows.
+    if (first) {
+      await tick();
+      growFrom(menuEl, a);
+    }
   }
 
   function choose(type: WindowChoice) {
@@ -87,7 +94,7 @@
 
 <svelte:window on:keydown={onKey} />
 
-<div class="wtm-layer no-edge-gesture" use:portal>
+<div class="wtm-layer no-edge-gesture" use:portal out:fadeAway>
   <button
     type="button"
     class="wtm-backdrop"

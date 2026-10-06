@@ -3,6 +3,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { BIBLE_BOOKS } from "../lib/bibleData";
   import { onMount, onDestroy } from "svelte";
+  import { fadeAway, growFrom } from "../lib/motion";
   import { Anchor, CaretDown, CaretRight, CaretUp } from "phosphor-svelte";
   import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
   import { ENOCH_EDITIONS, isEnochAuthor, enochLabelFor, loadEnoch } from "../lib/enochBooks";
@@ -116,13 +117,9 @@
     authorDropdownOpen = !authorDropdownOpen;
     if (authorDropdownOpen) {
       referenceDropdownOpen = false;
-      
-      // Refresh authors in case database was just populated
-      if (commentaryStore) {
-        authors = await commentaryStore.getAuthors();
-      }
-      
-      // Position dropdown
+
+      // Position dropdown. Asked for before the authors are refreshed below,
+      // which can take a frame or two, so it never shows anywhere but here.
       requestAnimationFrame(() => {
         const dropdown = document.querySelector(
           ".author-dropdown",
@@ -132,8 +129,14 @@
           dropdown.style.left = `${rect.left}px`;
           dropdown.style.top = `${rect.bottom + 4}px`;
           dropdown.style.width = `${Math.max(rect.width, 200)}px`;
+          growFrom(dropdown, rect);
         }
       });
+
+      // Refresh authors in case database was just populated
+      if (commentaryStore) {
+        authors = await commentaryStore.getAuthors();
+      }
     }
   }
 
@@ -158,7 +161,8 @@
           dropdown.style.left = `${rect.left}px`;
           dropdown.style.top = `${rect.bottom + 4}px`;
           dropdown.style.removeProperty('width');
-          
+          growFrom(dropdown, rect);
+
           // Scroll to current book
           if (currentBook) {
             requestAnimationFrame(() => {
@@ -358,7 +362,7 @@
 
   <!-- Dropdowns rendered outside nav-content to avoid overflow clipping -->
   {#if authorDropdownOpen}
-    <div class="dropdown-menu author-dropdown">
+    <div class="dropdown-menu author-dropdown" out:fadeAway>
       <button
         class="dropdown-item"
         class:selected={currentAuthor === "All Authors"}
@@ -400,7 +404,7 @@
   {/if}
 
   {#if referenceDropdownOpen && isEnoch}
-    <div class="dropdown-menu tree-menu commentary-reference-dropdown">
+    <div class="dropdown-menu tree-menu commentary-reference-dropdown" out:fadeAway>
       <div class="enoch-chapter-grid">
         {#each enochChapters as ch}
           <button
@@ -419,7 +423,7 @@
   {#if referenceDropdownOpen && !isEnoch}
     <!-- book-tree carries the two-column layout; .tree-menu is shared with the
          Enoch picker above, which must stay a single block. -->
-    <div class="dropdown-menu tree-menu book-tree commentary-reference-dropdown">
+    <div class="dropdown-menu tree-menu book-tree commentary-reference-dropdown" out:fadeAway>
       {#each REFERENCE_COLUMNS as column}
         <div class="book-column book-column-{column.testament}">
           <div class="book-column-title">{column.label}</div>

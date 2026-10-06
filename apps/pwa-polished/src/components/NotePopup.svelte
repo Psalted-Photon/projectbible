@@ -5,6 +5,7 @@
   import { getEditorTheme } from '../adapters/settings';
   import { editorThemeVars } from '../lib/editorTheme';
   import { fixedOrigin } from '../lib/fixedOrigin';
+  import { grow } from '../lib/motion';
 
   export let book: string;
   export let chapter: number;
@@ -289,8 +290,12 @@
   }
 </script>
 
+<!-- Grows in like the other popups, but has no fade on the way out: it holds
+     the note being written, and reopening during a fade would bring back this
+     same window, text and all, for whatever verse was tapped next. -->
 <div
   bind:this={popupEl}
+  use:grow
   class="note-popup"
   class:interacting={interactMode !== null}
   style="left:{left}px; top:{top}px; width:{w}px; height:{h}px; {noteTheme}"
