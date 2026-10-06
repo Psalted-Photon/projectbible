@@ -19,7 +19,7 @@ import { BIBLE_BOOKS, CATEGORY_LABELS, normalizeBookName } from '../../lib/bible
 import {
   installAllState,
   estimateRemaining,
-  installEverything,
+  installAll,
   formatBytes,
 } from '../../lib/packInstaller';
 import { isInstalledApp, isIOS, isPhoneOrTablet } from '../../lib/device';
@@ -151,11 +151,11 @@ export const PART_ONE: TourStep[] = [
       );
     },
     nextLabel: 'Install everything',
-    // Install All with its space check. It runs in the background, one pack
-    // at a time, and the lime chip follows it.
+    // Install All runs in the background, one pack at a time, and the lime
+    // chip follows it.
     onNext: (ctx) => {
       ctx.tour.installRequested = true;
-      void installEverything();
+      void installAll();
     },
     alt: {
       label: 'Not now',

@@ -10,8 +10,8 @@
  * the pane shut.
  *
  * The catalog, the download-and-import steps and the lock now live here, and
- * so does installPack: one install with its space check, its notices and the
- * map's browser check, shared by the Packs pane, the Get packs card that
+ * so does installPack: one install with its notices and the map's browser
+ * check, shared by the Packs pane, the Get packs card that
  * features show when their pack is missing, and the translation list.
  * Install All runs without the per-pack notices.
  */
@@ -44,7 +44,6 @@ import { markInstalled, markUpdated } from './packUpdates';
  * most features read their packs once, at startup.
  */
 const RESTART = { label: 'Restart', run: () => window.location.reload() };
-import { askConfirm } from '../stores/confirmStore';
 
 /** Dev builds read packs straight out of public/; production goes through the proxy. */
 export const PACK_BASE_URL = USE_BUNDLED_PACKS ? '/packs/consolidated' : '/api/packs';
@@ -579,44 +578,6 @@ export function packSizeLabel(pack: CatalogPack, sizes: PackSizes | null): strin
   return sizes?.label[pack.id] ?? pack.size;
 }
 
-// ── Space check ─────────────────────────────────────────────────────────────
-
-/**
- * Rough pre-flight space check.
- *
- * Installing costs more than the download itself: the file is cached and then
- * expanded into object stores, so budget for roughly twice its size. Returns
- * false only when the user declines to continue after being warned -- the
- * estimate is advisory, and browsers under-report it often enough that a hard
- * block would be wrong.
- */
-export async function hasRoomForBytes(name: string, needed: number): Promise<boolean> {
-  if (!needed || !navigator.storage?.estimate) return true;
-
-  try {
-    const { quota = 0, usage = 0 } = await navigator.storage.estimate();
-    if (!quota) return true;
-
-    // A device reporting more usage than quota is not out of space -- it is
-    // reporting nonsense, and it does so often enough (6 GB used against a
-    // 2 GB quota, on a machine with room to spare) that warning from these
-    // numbers means warning when nothing is wrong.
-    if (usage >= quota) return true;
-
-    const available = quota - usage;
-    if (available >= needed * 2) return true;
-
-    return await askConfirm(
-      `${name} needs about ${formatBytes(needed * 2)} to install, ` +
-        `but only ${formatBytes(Math.max(available, 0))} looks available on this device.\n\n` +
-        `The install may fail partway through. Continue anyway?`,
-      { confirmLabel: 'Continue' },
-    );
-  } catch {
-    return true;
-  }
-}
-
 // ── Installing one pack, with everything around it ─────────────────────────
 
 /** The catalog pack installPack is working on, so the row that started it can show progress. */
@@ -624,7 +585,7 @@ export const installingPackId = writable<string | null>(null);
 
 /**
  * Install one catalog pack the way a person asks for it: the lock, the map's
- * browser check, the space check, then the download, then a notice either way.
+ * browser check, then the download, then a notice either way.
  * Sets restartNeeded and fires packsUpdated when it finishes.
  *
  * `replaceExisting` removes the installed copy first, so a re-download really
@@ -655,10 +616,6 @@ export async function installPack(
   installBusy.set(true);
   installingPackId.set(pack.id);
   try {
-    // Asked before anything is removed, so saying no leaves the old copy alone.
-    const sizes = await loadPackSizes();
-    if (!(await hasRoomForBytes(pack.name, installBytesFor(pack.id, sizes.bytes)))) return false;
-
     if (opts.replaceExisting) {
       installMessage.set(`Removing old ${pack.name}...`);
       await removePack(pack.id);
@@ -696,7 +653,7 @@ export async function installPack(
  * fails leaves it untouched. The old data is cleared only once the new file is
  * in hand and its checksum matches, then the new one is imported.
  *
- * Takes the same lock, space check and notices as installPack, so one install
+ * Takes the same lock and notices as installPack, so one install
  * or update runs at a time, app-wide.
  */
 export async function updatePack(pack: CatalogPack): Promise<boolean> {
@@ -714,9 +671,6 @@ export async function updatePack(pack: CatalogPack): Promise<boolean> {
   installBusy.set(true);
   installingPackId.set(pack.id);
   try {
-    const sizes = await loadPackSizes();
-    if (!(await hasRoomForBytes(pack.name, installBytesFor(pack.id, sizes.bytes)))) return false;
-
     await downloadAndImportPack(pack, (message) => installMessage.set(message), { replaceAfterDownload: true });
 
     restartNeeded.set(true);
@@ -771,15 +725,4 @@ export async function estimateRemaining(): Promise<{ count: number; bytes: numbe
     bytes += (largest + (natural.length - 1)) * MB;
   }
   return { count: packs.length + voices.length, bytes };
-}
-
-/**
- * Install All with its space warning first. Returns false without starting
- * when another install is running or the user declined the warning.
- */
-export async function installEverything(): Promise<boolean> {
-  if (get(installBusy)) return false;
-  const { bytes } = await estimateRemaining();
-  if (!(await hasRoomForBytes('Everything left to install', bytes))) return false;
-  return installAll();
 }

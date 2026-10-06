@@ -11,7 +11,7 @@
   import {
     PACK_CATALOG,
     installPack,
-    installEverything,
+    installAll,
     estimateRemaining,
     installAllState,
     installBusy,
@@ -361,7 +361,7 @@
   }
 
   async function handleInstallAll() {
-    await installEverything();
+    await installAll();
   }
 
   /**

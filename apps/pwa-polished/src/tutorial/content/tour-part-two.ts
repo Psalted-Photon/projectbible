@@ -23,7 +23,7 @@ import { navigationStore, availableTranslations } from '../../stores/navigationS
 import { normalizeBookName } from '../../lib/bibleData';
 import { isReadingActive } from '../../lib/tts/readingEngine';
 import { packInstallFinished } from '../../adapters/db-manager';
-import { installEverything, packsStillToInstall, voicesStillToInstall } from '../../lib/packInstaller';
+import { installAll, packsStillToInstall, voicesStillToInstall } from '../../lib/packInstaller';
 
 /** Is this pack installed? Asked once per tour run. */
 async function hasPack(ctx: StepContext, id: string): Promise<boolean> {
@@ -144,7 +144,7 @@ export const PART_TWO: TourStep[] = [
       label: 'Install now',
       when: (ctx) => ctx.tour.missing > 0,
       run: () => {
-        void installEverything();
+        void installAll();
         tutorial.setStage('waiting');
       },
     },
