@@ -1,6 +1,34 @@
+<script context="module" lang="ts">
+  import type { WorkKey as Key } from "../lib/openWork";
+  import type { MotionLevel } from "../lib/motion";
+
+  /**
+   * A tab switch on its way from the card being left to the one arriving.
+   *
+   * Every work draws its own row of tabs, so switching works throws this row
+   * away and the next work brings a new one. The old row writes down where its
+   * underline was gliding and which way the page went, and the new row picks
+   * both up as it mounts. `host` is what both cards sit in (the lookup card's
+   * frame, or the window), so a second window opening at the same moment can't
+   * take a switch that isn't its own.
+   */
+  type Glide = { from: number; to: number; at: number };
+  type Handoff = {
+    host: Element | null;
+    to: Key;
+    dir: number;
+    level: MotionLevel;
+    glide: Glide | null;
+    at: number;
+  };
+  let handoff: Handoff | null = null;
+</script>
+
 <script lang="ts">
+  import { onDestroy, onMount, tick } from "svelte";
   import type { WorksResolution } from "../adapters/lexicon-lookup";
   import { worksInWindow, type WorkKey } from "../lib/openWork";
+  import { EASE_STANDARD, MOTION, motionLevel } from "../lib/motion";
 
   /**
    * The four reference works, across the top of every lookup card.
@@ -62,18 +90,166 @@
     return TABS.find((t) => t.key === key)?.label ?? key;
   }
 
-  function pick(key: WorkKey) {
-    if (key === current || !isAvailable(key, works, onIndex, inWindow)) return;
-    onSelect(key);
+  // --- The switch ----------------------------------------------------------
+  //
+  // The tab you tap lights at once and one underline glides over to it. The
+  // page under the tabs slides a little the other way and fades, the next work
+  // opens while it can't be seen, and its page slides in from the side you
+  // tapped. Tap again mid-switch and it goes straight to the new tab: nothing
+  // queues. On Reduced the page fades and the underline jumps; on Off the work
+  // just changes. Timings are MOTION.tabs in lib/motion.ts.
+
+  let tabsEl: HTMLDivElement;
+  let indEl: HTMLDivElement;
+  /** The tab tapped, lit while the page slides out and before its work opens. */
+  let picked: WorkKey | null = null;
+  $: shown = picked ?? current;
+  $: shownAt = indexOf(shown);
+
+  let glideAnim: Animation | null = null;
+  let lastGlide: Glide | null = null;
+  let pageAnims: Animation[] = [];
+  /** The switch waiting on the page to slide out, if any. */
+  let leaving: { key: WorkKey } | null = null;
+  let destroyed = false;
+
+  function indexOf(key: WorkKey): number {
+    return Math.max(0, TABS.findIndex((t) => t.key === key));
   }
+
+  /** Where the underline is right now, in tab widths, mid-glide included. */
+  function underlineAt(): number {
+    if (!indEl || !tabsEl) return shownAt;
+    const w = indEl.offsetWidth;
+    if (!w) return shownAt;
+    return (indEl.getBoundingClientRect().left - tabsEl.getBoundingClientRect().left) / w;
+  }
+
+  /** The card's page: everything under the tabs. */
+  function pageEls(): HTMLElement[] {
+    const els: HTMLElement[] = [];
+    for (let el = tabsEl?.nextElementSibling; el; el = el.nextElementSibling) {
+      if (el instanceof HTMLElement) els.push(el);
+    }
+    return els;
+  }
+
+  function glide(from: number, to: number, elapsed = 0) {
+    glideAnim?.cancel();
+    glideAnim = null;
+    lastGlide = null;
+    const ms = MOTION.tabs.underlineMs;
+    if (motionLevel() !== "full" || Math.abs(from - to) < 0.01 || elapsed >= ms) return;
+    if (!indEl || typeof indEl.animate !== "function") return;
+    glideAnim = indEl.animate(
+      [{ transform: `translateX(${from * 100}%)` }, { transform: `translateX(${to * 100}%)` }],
+      { duration: ms, easing: EASE_STANDARD },
+    );
+    glideAnim.currentTime = elapsed;
+    lastGlide = { from, to, at: performance.now() - elapsed };
+  }
+
+  function stopPage() {
+    for (const a of pageAnims) a.cancel();
+    pageAnims = [];
+  }
+
+  /** The lookup card's frame or the window: whatever this card sits in. */
+  function host(): Element | null {
+    return tabsEl?.parentElement?.parentElement ?? null;
+  }
+
+  /** Open the work. If it didn't open after all, this row is still here: put
+   *  the page back and the underline home. */
+  function go(key: WorkKey, dir: number) {
+    leaving = null;
+    const level = motionLevel();
+    handoff = level === "off" ? null : { host: host(), to: key, dir, level, glide: lastGlide, at: performance.now() };
+    onSelect(key);
+    tick().then(() => {
+      if (destroyed) return;
+      handoff = null;
+      stopPage();
+      picked = null;
+      glide(underlineAt(), indexOf(current));
+    });
+  }
+
+  async function pick(key: WorkKey) {
+    if (key === shown || !isAvailable(key, works, onIndex, inWindow)) return;
+    const from = underlineAt();
+
+    // Back to the tab you were on before the page had gone: it comes back.
+    if (key === current) {
+      leaving = null;
+      stopPage();
+      picked = null;
+      glide(from, indexOf(key));
+      return;
+    }
+
+    const dir = indexOf(key) > indexOf(current) ? 1 : -1;
+    const level = motionLevel();
+    const els = pageEls();
+    picked = key;
+    glide(from, indexOf(key));
+    // A second tap mid-switch: the page is already on its way out, so go
+    // straight to the new tab.
+    if (level === "off" || leaving || !els.length || typeof els[0].animate !== "function") {
+      go(key, dir);
+      return;
+    }
+
+    const full = level === "full";
+    const px = MOTION.tabs.slidePx;
+    const frames: Keyframe[] = full
+      ? [{ transform: "translateX(0)", opacity: 1 }, { transform: `translateX(${-dir * px}px)`, opacity: 0 }]
+      : [{ opacity: 1 }, { opacity: 0 }];
+    const ms = full ? MOTION.tabs.outMs : MOTION.reducedFadeMs * 0.4;
+    stopPage();
+    const anims = els.map((el) => el.animate(frames, { duration: ms, easing: MOTION.flip.awayEase, fill: "forwards" }));
+    pageAnims = anims;
+    const mine = { key };
+    leaving = mine;
+    try {
+      await Promise.all(anims.map((a) => a.finished));
+    } catch {
+      return; // cancelled: tapped back, or this row went away
+    }
+    if (leaving === mine && !destroyed) go(key, dir);
+  }
+
+  // The arriving row: carry on the glide and bring the page in.
+  onMount(() => {
+    const h = handoff;
+    if (!h || h.to !== current || h.host !== host()) return;
+    handoff = null;
+    if (performance.now() - h.at > 500) return;
+    if (h.glide) glide(h.glide.from, h.glide.to, performance.now() - h.glide.at);
+    const els = pageEls();
+    if (!els.length || typeof els[0].animate !== "function") return;
+    const full = h.level === "full";
+    const px = MOTION.tabs.slidePx;
+    const frames: Keyframe[] = full
+      ? [{ transform: `translateX(${h.dir * px}px)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }]
+      : [{ opacity: 0 }, { opacity: 1 }];
+    const ms = full ? MOTION.tabs.inMs : MOTION.reducedFadeMs * 0.6;
+    pageAnims = els.map((el) => el.animate(frames, { duration: ms, easing: MOTION.flip.inEase }));
+  });
+
+  onDestroy(() => {
+    destroyed = true;
+    leaving = null;
+    glideAnim?.cancel();
+  });
 </script>
 
-<div class="work-tabs" role="tablist" aria-label="Reference works">
+<div class="work-tabs" role="tablist" aria-label="Reference works" bind:this={tabsEl}>
   {#each TABS as tab (tab.key)}
     {@const live = isAvailable(tab.key, works, onIndex, inWindow)}
     <button
       class="work-tab"
-      class:active={tab.key === current}
+      class:active={tab.key === shown}
       disabled={!live}
       role="tab"
       aria-selected={tab.key === current}
@@ -83,12 +259,14 @@
       {tab.label}
     </button>
   {/each}
+  <div class="tab-ind" style:transform="translateX({shownAt * 100}%)" bind:this={indEl} aria-hidden="true"></div>
 </div>
 
 <style>
   /* Deliberately not called .tabs: IsbeContent and NavesContent style their
      section tabs as an unqualified `.tabs button`, which would capture this. */
   .work-tabs {
+    position: relative;
     display: flex;
     flex-shrink: 0;
     background: rgba(255, 255, 255, 0.03);
@@ -109,6 +287,9 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    transition:
+      color var(--motion-fade-ms, 120ms),
+      background var(--motion-fade-ms, 120ms);
   }
   .work-tab:hover:not(:disabled):not(.active) {
     color: var(--text-color, #fff);
@@ -116,8 +297,19 @@
   }
   .work-tab.active {
     color: var(--color-primary, #4a90e2);
-    border-bottom-color: var(--color-primary, #4a90e2);
     background: rgba(74, 144, 226, 0.08);
+  }
+  /* One underline for the row, which glides from tab to tab, instead of each
+     tab drawing its own. It sits over the tabs' own transparent 2px border, so
+     the row is the same height it always was. */
+  .tab-ind {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 25%;
+    height: 2px;
+    background: var(--color-primary, #4a90e2);
+    pointer-events: none;
   }
   /* Grayed rather than hidden — the point is that the row never changes shape,
      so you can see at a glance what this subject does and doesn't have. */

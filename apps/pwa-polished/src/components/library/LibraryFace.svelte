@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import { MOTION, motionLevel } from "../../lib/motion";
 
   /**
@@ -88,6 +88,12 @@
     end(r);
     apply?.();
   }
+
+  // Switching works mid-turn throws this card away: the turn goes with it,
+  // and its change is never made to a card that is leaving.
+  onDestroy(() => {
+    if (run) end(run);
+  });
 
   export async function turn(toEntry: boolean, apply: () => void): Promise<void> {
     finish();
