@@ -93,7 +93,7 @@ export const NAVBAR_TIPS: Tip[] = [
     area,
     target: '.pill-search-icon-btn',
     title: 'Search',
-    body: 'Search the Bible, your notes and journal, people, the encyclopedia and the commentaries, all at once. Once you type something, Advanced search appears beside it.',
+    body: 'Search the Bible, your notes and journal, people, the encyclopedia and the commentaries, all at once. Type a reference like 1 Cor 5 and press Enter to go straight there. Once you type something, Advanced search appears beside it.',
   },
   {
     id: 'nav-power-search',

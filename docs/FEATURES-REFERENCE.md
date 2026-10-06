@@ -383,6 +383,8 @@ Eight categories (`SearchCategoryKey`): `bible`, `strongs`, `notes`, `journal`, 
 
 **Strong's fast path** — `STRONGS_QUERY = /^([GgHh])\s*0*(\d{1,4})$/` detects a Strong's number typed straight into the box. Because the morphology pack is inconsistent about zero-padding (Greek rows store `G976`, Hebrew rows store `H0121`), `strongsVariants()` tries both the bare and 4-padded spellings. This mirrors the same fallback in `adapters/lexicon-lookup.ts`.
 
+**Reference jump** — lives in `NavigationBar.svelte`, not the service. `readQueryAsRef(query)` in `src/lib/bibleRefs.ts` reads the whole query with `findRefs` (the notes reader) and returns `ref`, `book` (a book name alone), `overflow` (numbers past the book, with a message), or null. It counts only when the reference is the entire query, apart from continuations like `, 18`. `findRefs` trims an overlong reference back to what exists, so `overflow` re-reads the query loosely to say why instead. `submitSearch()` (Enter and the glass) jumps on `ref`, shows a notice on `overflow`, and otherwise runs `performSearch()`. The jump is `jumpToQueryRef()` → `navigateToResult()`, so it leaves the `search` crumb with `snapshotSearch()` before `navigateTo` marks the verse in its book's color. The Go-to row is a `VerseRefRow` at the top of the results list. `searchRan` decides whether the results area below it shows, so a typed reference opens the list with only the row. A crumb left by a jump carries no results, so restoring it shows just the row.
+
 **Helpers** — `stripHtml()`, `snippet(text, term, maxLength = 160)` which windows around the first match so long entries stay scannable.
 
 ### 9.2 Advanced (power) search

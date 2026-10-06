@@ -303,6 +303,15 @@
     }
     if (!isDragging) return;
 
+    // No button held means the release happened somewhere we never heard
+    // about. A drag can't outlive the press that started it, so drop it rather
+    // than let the preview trail the pointer until the next click opens a window.
+    if (!usingTouch && e.buttons === 0) {
+      isDragging = false;
+      edgePosition = null;
+      return;
+    }
+
     // Don't interfere with anywhere the user types
     const target = e.target as HTMLElement;
     if (isTextEntry(target)) {
@@ -393,9 +402,12 @@
     console.log('🔵 MOUSE UP called:', { isDragging, edgePosition, usingTouch });
     if (!usingTouch) pendingEdge = null;
 
-    // Don't interfere with anywhere the user types
+    // Don't interfere with anywhere the user types -- unless a drag is under
+    // way, which finishes wherever it is let go. The search box's X folds the
+    // box on press, so the release lands on the text field that slides under
+    // the pointer; stopping here left that drag running with no button held.
     const target = e.target as HTMLElement;
-    if (isTextEntry(target)) {
+    if (!isDragging && isTextEntry(target)) {
       console.log('⛔ MOUSE UP blocked - clicking in a text field');
       e.stopPropagation();
       return;

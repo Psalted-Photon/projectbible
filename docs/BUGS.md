@@ -753,6 +753,32 @@ repeated in the other stores while in there.
 
 ---
 
+### [x] 12. Clearing the search box with its X leaves a window preview stuck to the mouse
+
+**Fixed 2026-10-05.** Clicking the X now just clears and folds the box.
+
+Before the fix, after typing in the navbar search and clicking the X, the top-edge
+window preview followed the mouse with no button held. The next click dropped it, and
+if the mouse had moved down far enough, that click opened a top window.
+
+**Root cause:** `components/EdgeGestureDetector.svelte` starts a drag on any mouse
+press in the top 40px, and the X sits in that strip. The X runs `clearSearch` on
+mousedown, so the X disappears and the box folds during that same press. The text
+field moves into the spot the X left, so the mouseup lands on the `<input>`.
+`handleMouseUp` returned early on any text field before it reset `isDragging`, so the
+drag never ended.
+
+Three changes, any one of which breaks the chain:
+
+- `EdgeGestureDetector.svelte` `handleMouseUp` — the text-field check only applies
+  when no drag is under way. A drag finishes wherever it is let go.
+- `EdgeGestureDetector.svelte` `handleMouseMove` — a mouse drag that sees
+  `e.buttons === 0` is dropped with no window. A drag can't outlive its press.
+- `NavigationBar.svelte` — the X's mousedown is `|stopPropagation`, because a
+  button that vanishes under the pointer should never start a gesture.
+
+---
+
 ## Project
 
 ### [ ] 11. The repo still lives under the old name, not the Hexapla org

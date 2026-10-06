@@ -24,6 +24,9 @@
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import SearchResultsTree from "./SearchResultsTree.svelte";
+  import VerseRefRow from "./VerseRefRow.svelte";
+  import { readQueryAsRef } from "../lib/bibleRefs";
+  import { showNotice } from "../stores/noticeStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { navesModalStore } from "../stores/navesModalStore";
@@ -735,12 +738,46 @@
     if (!searchQuery.trim()) {
       searchResults = [];
       showResults = false;
+      searchRan = false;
+    } else if (readQueryAsRef(searchQuery)) {
+      // Open the list for the Go-to row while it's being typed, before any search.
+      showResults = true;
     }
+  }
+
+  /** Has a search run, so the list has results (or their absence) to show below the Go-to row? */
+  let searchRan = false;
+
+  /**
+   * What the box reads as, the way a note reads a reference — "1 cor 5",
+   * "rom. 8:28". Drives the Go-to row at the top of the list.
+   */
+  $: queryRef = readQueryAsRef(searchQuery);
+
+  /** Enter and the glass: a reference goes straight there, anything else is searched. */
+  function submitSearch() {
+    const ref = readQueryAsRef(searchQuery);
+    if (ref?.kind === "ref") jumpToQueryRef(ref);
+    else if (ref?.kind === "overflow") showNotice(ref.message, "info");
+    else performSearch();
+  }
+
+  /**
+   * Go where the box points. The crumb is left with the search in it first
+   * (navigateToResult), so the magnifying glass brings the box back with the
+   * reference still typed. Then the box folds away and lets go of focus, which
+   * puts a phone's keyboard down.
+   */
+  function jumpToQueryRef(ref: { book: string; chapter: number; verse: number }) {
+    navigateToResult(ref.book, ref.chapter, ref.verse);
+    clearSearch();
+    const input = searchContainerRef?.querySelector(".search-input") as HTMLInputElement | null;
+    if (input && document.activeElement === input) input.blur();
   }
 
   function handleSearchKeydown(event: KeyboardEvent) {
     if (event.key === "Enter" && searchQuery.trim()) {
-      performSearch();
+      submitSearch();
     } else if (event.key === "Escape") {
       showResults = false;
       if (!searchQuery.trim()) {
@@ -777,6 +814,7 @@
       // Open the Bible group by default so the common case is one click closer.
       expandedSearchNodes = new Set(bibleCount > 0 ? ["bible"] : []);
 
+      searchRan = true;
       showResults = true;
 
       // Auto-scroll to show the search container
@@ -963,6 +1001,8 @@
     displayedResultCount = origin.displayed;
     showingAll = origin.showingAll;
     searchExpanded = origin.expandedUi;
+    // A crumb left by typing a reference carries no results, only the Go-to row.
+    searchRan = origin.results.length > 0;
     showResults = true;
     // Two ticks: the first mounts the dropdown, the second lets the result rows
     // lay out. Setting scrollTop before the list has height would land at 0.
@@ -1040,6 +1080,7 @@
     showResults = false;
     searchQuery = "";
     searchResults = [];
+    searchRan = false;
   }
 
   function toggleSearchNode(key: string) {
@@ -1055,6 +1096,7 @@
     searchQuery = "";
     searchResults = [];
     showResults = false;
+    searchRan = false;
     searchExpanded = false;
   }
 
@@ -1069,7 +1111,7 @@
   // something is typed, the same as pressing Enter.
   function handleSearchIconClick() {
     if (searchExpanded && searchQuery.trim()) {
-      performSearch();
+      submitSearch();
     } else {
       expandSearch();
     }
@@ -2373,9 +2415,11 @@
                 <BrandSpinner size={14} title="Searching…" />
               </div>
             {:else if searchQuery}
+              <!-- Keeps its press from the edge-swipe detector: the X vanishes
+                   under the pointer, so it must never start a window drag. -->
               <button
                 class="clear-search"
-                on:mousedown|preventDefault={clearSearch}
+                on:mousedown|preventDefault|stopPropagation={clearSearch}
                 title="Clear search"
               >
                 <X size={12} weight="duotone" />
@@ -2463,33 +2507,52 @@
 
   </div>
 
-  {#if showResults}
+  {#if showResults && (queryRef || searchRan)}
     <div class="search-results-dropdown" bind:this={searchResultsEl}>
-      {#if displayedResultCount > 0}
-        <div class="search-stats">
-          Showing {displayedResultCount}
-          {#if !showingAll && totalResultCount > displayedResultCount}
-            of <button class="load-all-link" on:click={loadAllResults}
-              >{totalResultCount} results</button
-            >
-          {:else}
-            {totalResultCount > 1 ? "results" : "result"}
-          {/if}
+      <!-- Go-to row: what was typed, read as a reference. A book on its own is
+           offered here too, but Enter still searches it ("John" finds people). -->
+      {#if queryRef?.kind === "overflow"}
+        <div class="goto-hint">{queryRef.message}</div>
+      {:else if queryRef}
+        {@const goTo = queryRef}
+        <div class="goto-row">
+          <VerseRefRow
+            book={goTo.book}
+            chapter={goTo.chapter}
+            verse={goTo.verse}
+            label={goTo.label}
+            onOpen={() => jumpToQueryRef(goTo)}
+          />
         </div>
       {/if}
 
-      {#if searchTree.length > 0}
-        <SearchResultsTree
-          nodes={searchTree}
-          expanded={expandedSearchNodes}
-          query={searchQuery}
-          onToggle={toggleSearchNode}
-          onSelect={handleResultClick}
-        />
-      {:else}
-        <div class="no-search-results">
-          No results found for "{searchQuery}"
-        </div>
+      {#if searchRan}
+        {#if displayedResultCount > 0}
+          <div class="search-stats">
+            Showing {displayedResultCount}
+            {#if !showingAll && totalResultCount > displayedResultCount}
+              of <button class="load-all-link" on:click={loadAllResults}
+                >{totalResultCount} results</button
+              >
+            {:else}
+              {totalResultCount > 1 ? "results" : "result"}
+            {/if}
+          </div>
+        {/if}
+
+        {#if searchTree.length > 0}
+          <SearchResultsTree
+            nodes={searchTree}
+            expanded={expandedSearchNodes}
+            query={searchQuery}
+            onToggle={toggleSearchNode}
+            onSelect={handleResultClick}
+          />
+        {:else}
+          <div class="no-search-results">
+            No results found for "{searchQuery}"
+          </div>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -3908,6 +3971,21 @@
     border-radius: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
     z-index: 10002; /* Higher than dropdowns */
+  }
+
+  .goto-row {
+    padding: 6px;
+  }
+
+  .goto-row:not(:last-child),
+  .goto-hint:not(:last-child) {
+    border-bottom: 1px solid #3a3a3a;
+  }
+
+  .goto-hint {
+    padding: 10px 14px;
+    color: #888;
+    font-size: 13px;
   }
 
   .no-search-results {

@@ -97,6 +97,11 @@ function longestValidPrefix(digits: string, ok: (n: number) => boolean): string 
   return '';
 }
 
+/** How many verses a chapter has, or null when the table doesn't know. */
+export function verseCount(book: string, chapter: number): number | null {
+  return VERSE_COUNTS[verseCountKey(book)]?.[chapter - 1] ?? null;
+}
+
 export function isValidVerse(book: string, chapter: number, verse: number): boolean {
   const counts = VERSE_COUNTS[verseCountKey(book)];
   // No data for this book — don't reject on ignorance, only on knowledge.
@@ -503,4 +508,88 @@ function pushIfValid(
     verse,
     chapterOnly,
   });
+}
+
+// ---------------------------------------------------------------------------
+// A whole search query as a place to go
+// ---------------------------------------------------------------------------
+
+/**
+ * What the search box makes of what was typed in it.
+ *
+ * `ref` — the whole query names a place, and Enter goes there.
+ * `book` — just a book name. Offered as a place, but Enter still searches the
+ *   word, because "John", "Job" and "Acts" are things people search for.
+ * `overflow` — a reference whose numbers run past the book. Said plainly
+ *   rather than trimmed back to something the writer didn't ask for.
+ */
+export type QueryRef =
+  | { kind: 'ref' | 'book'; book: string; chapter: number; verse: number; label: string }
+  | { kind: 'overflow'; message: string };
+
+/** What may follow a reference and still leave it the whole query: more verses, "; 6:2", ", 7". */
+const QUERY_TAIL_RE = /^\s*(?:[;,][\d:;,\s–-]*)?$/;
+
+/**
+ * A book name and the numbers after it, written any way at all — so a
+ * reference that runs past the end of its book can still be read well enough
+ * to say why it goes nowhere. findRefs trims such a reference back to what is
+ * real ("acts 29" links "Acts 2"), which is right inside a note and wrong in a
+ * box where someone asked for exactly chapter 29.
+ */
+const QUERY_LOOSE_RE = /^(.*?[a-z])\.?\s*(\d+)(?::(\d+))?[\d:;,\s–-]*$/i;
+
+/**
+ * Read a search query as a reference, the same way a note reads one: "1 cor 5",
+ * "first timothy 2", "rom. 8:28", "gospel of john 3:16". Only when the
+ * reference is the entire query — "1 cor 5 love" is a search for love.
+ *
+ * A chapter on its own lands on its first verse, and a range on the verse it
+ * opens at — where every other link in the app starts you reading.
+ */
+export function readQueryAsRef(query: string): QueryRef | null {
+  const q = query.trim().replace(/[.!?]+$/, '');
+  if (!/[a-z]/i.test(q)) return null;
+
+  if (/\d/.test(q)) {
+    const [m] = findRefs(q);
+    if (m && m.start === 0 && QUERY_TAIL_RE.test(q.slice(m.end))) {
+      const range = m.chapterOnly ? null : m.raw.match(/[–-]\s*(\d+(?::\d+)?)\s*$/);
+      return {
+        kind: 'ref',
+        book: m.book,
+        chapter: m.chapter,
+        verse: m.verse,
+        label: range ? `${m.canonical}–${range[1]}` : m.canonical,
+      };
+    }
+
+    const loose = q.match(QUERY_LOOSE_RE);
+    if (loose && !shortFormNeedsCapital(loose[1].trim())) {
+      const book = resolveBook(loose[1]);
+      if (book) {
+        const chapter = parseInt(loose[2]);
+        if (!isValidChapter(book, chapter)) {
+          const n = getBookChapters(book);
+          const name = book === 'Psalm' ? 'Psalms' : book;
+          return { kind: 'overflow', message: `${name} has ${n} chapter${n === 1 ? '' : 's'}` };
+        }
+        const verse = loose[3] ? parseInt(loose[3]) : null;
+        if (verse !== null && !isValidVerse(book, chapter, verse)) {
+          const n = verseCount(book, chapter);
+          if (n) return { kind: 'overflow', message: `${book} ${chapter} has ${n} verse${n === 1 ? '' : 's'}` };
+        }
+      }
+    }
+  }
+
+  // A book on its own. Three letters at least, so typing "rest" doesn't flash
+  // Revelation at "re", and the prose words ("is", "am") stay words.
+  const letters = q.replace(/[^a-z]/gi, '');
+  if (letters.length >= 3 && !shortFormNeedsCapital(q)) {
+    const book = resolveBook(q);
+    if (book) return { kind: 'book', book, chapter: 1, verse: 1, label: `${book} 1` };
+  }
+
+  return null;
 }
