@@ -26,6 +26,7 @@
   import JournalLockDialog from "../JournalLockDialog.svelte";
   import { showNotice } from "../../stores/noticeStore";
   import { BAR_SIZES, applyBarSize, type BarSize } from "../../lib/barSize";
+  import { MOTION_SETTINGS, applyMotion, type MotionSetting } from "../../lib/motion";
   import { askConfirm } from "../../stores/confirmStore";
   import { availableTranslations } from "../../stores/navigationStore";
   import { translationLabel } from "../../lib/bibleData";
@@ -108,6 +109,7 @@
   let navBarPinned: boolean = false;
   let navBarClock: boolean = true;
   let navBarSize: BarSize = "normal";
+  let motionSetting: MotionSetting = "system";
   let showRedLetter: boolean = true;
   let themedTitles: boolean = true;
   let showArt: boolean = true;
@@ -187,6 +189,7 @@
       navBarPinned,
       navBarClock,
       navBarSize,
+      motion: motionSetting,
       showRedLetter,
       themedTitles,
       showArt,
@@ -284,7 +287,8 @@
 
   $: appearanceSummary =
     `${THEME_LABELS[theme] ?? theme} · ${fontSize}px` +
-    `${navBarSize === "normal" ? "" : ` · ${navBarSize === "small" ? "Small" : "Large"} bars`}`;
+    `${navBarSize === "normal" ? "" : ` · ${navBarSize === "small" ? "Small" : "Large"} bars`}` +
+    `${motionSetting === "reduced" ? " · Reduced motion" : motionSetting === "off" ? " · Motion off" : ""}`;
   $: readerSummary =
     `${LAYOUT_LABELS[verseLayout] ?? verseLayout}${showRedLetter ? " · Red letters" : ""}` +
     `${navBarPinned ? " · Nav bar pinned" : ""}`;
@@ -387,6 +391,7 @@
     navBarPinned = settings.navBarPinned === true;
     navBarClock = settings.navBarClock !== false;
     navBarSize = settings.navBarSize ?? "normal";
+    motionSetting = settings.motion ?? "system";
     showRedLetter = settings.showRedLetter !== false;
     themedTitles = settings.themedTitles !== false;
     showArt = settings.showArt !== false;
@@ -615,6 +620,7 @@
     );
 
     applyBarSize(navBarSize);
+    applyMotion(motionSetting);
 
     // Apply word wrap
     if (wordWrap) {
@@ -677,6 +683,7 @@
     navBarPinned;
     navBarClock;
     navBarSize;
+    motionSetting;
     showRedLetter;
     themedTitles;
     showArt;
@@ -870,6 +877,21 @@
       </label>
       <p class="section-description dev-note">
         The navigation bar, window headers and tabs. On this device only.
+      </p>
+    </div>
+
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Motion</span>
+        <select bind:value={motionSetting}>
+          {#each MOTION_SETTINGS as opt}
+            <option value={opt.value}>{opt.label}</option>
+          {/each}
+        </select>
+      </label>
+      <p class="section-description dev-note">
+        How much the app moves. Match my device follows your device's own reduce-motion switch;
+        Reduced swaps movement for a quick fade; Off stops it all. On this device only.
       </p>
     </div>
 

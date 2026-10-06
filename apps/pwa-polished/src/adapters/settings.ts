@@ -233,6 +233,10 @@ export interface UserSettings {
   // How big the bars, window headers and tab strips are drawn. Per-device like
   // the two above. See lib/barSize.ts.
   navBarSize?: 'small' | 'normal' | 'large'; // default 'normal'
+  // How much the app moves: follow the device's own reduce-motion switch, a
+  // short fade in place of every movement, or none at all. Per-device like Bar
+  // size. See lib/motion.ts.
+  motion?: 'system' | 'reduced' | 'off'; // default 'system'
 
   // Clock / timezone
   // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected
