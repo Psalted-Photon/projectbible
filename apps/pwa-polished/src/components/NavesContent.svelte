@@ -13,6 +13,7 @@
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
+  import LibraryFace from "./library/LibraryFace.svelte";
   import WorkTabs from "./WorkTabs.svelte";
   import NavesPointRefs, { navesRefKey } from "./library/NavesPointRefs.svelte";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../lib/openWork";
@@ -359,7 +360,7 @@
   }
 
   function openFromContents(row: LibraryRow) {
-    jumpToTopic(Number(row.id), row.name);
+    turnTo(true, () => jumpToTopic(Number(row.id), row.name));
   }
 
   function popTrailTo(index: number) {
@@ -395,9 +396,18 @@
   $: lastRead = $libraryPrefsStore.naves.lastRead;
   $: canFlip = showContents ? !!topic || !!lastRead : true;
 
+  /** The page under the work tabs. Moving between the index and a topic turns
+   *  it over; a crumb or the Outline/Verses tabs change it in place. */
+  let face: { turn(toEntry: boolean, apply: () => void): void } | null = null;
+
+  function turnTo(toEntry: boolean, apply: () => void) {
+    if (face) face.turn(toEntry, apply);
+    else apply();
+  }
+
   function goBack() {
     if (trail.length) return popTrailTo(trail.length - 1);
-    showContents = true;
+    turnTo(false, () => (showContents = true));
   }
 
   /** Escape comes here before the host closes — see IsbeContent.handleBack. */
@@ -409,15 +419,16 @@
 
   function flip() {
     if (!showContents) {
-      showContents = true;
+      turnTo(false, () => (showContents = true));
       return;
     }
     // Nothing loaded this session — flip to whatever you last had open.
-    if (!topic && lastRead) {
-      jumpToTopic(Number(lastRead.id), lastRead.name);
+    const last = lastRead;
+    if (!topic && last) {
+      turnTo(true, () => jumpToTopic(Number(last.id), last.name));
       return;
     }
-    showContents = false;
+    turnTo(true, () => (showContents = false));
   }
 
   // --- Recents -----------------------------------------------------------
@@ -509,6 +520,7 @@
 
 <div class="naves-content" class:docked>
   <WorkTabs {works} current="topical" onIndex={showContents} inWindow={docked} onSelect={selectWork} />
+  <LibraryFace bind:this={face}>
   <div class="naves-header">
     <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
     <div class="head-text">
@@ -712,6 +724,7 @@
       <span class="src">Nave's Topical Bible (Orville J. Nave, public domain)</span>
     </div>
   {/if}
+  </LibraryFace>
 </div>
 
 <style>

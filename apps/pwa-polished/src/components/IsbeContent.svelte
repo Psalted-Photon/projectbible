@@ -30,6 +30,7 @@
   } from "../adapters/lexicon-lookup.js";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
+  import LibraryFace from "./library/LibraryFace.svelte";
   import WorkTabs from "./WorkTabs.svelte";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../lib/openWork";
   import { isbeSource } from "../lib/library/source";
@@ -274,7 +275,7 @@
   }
 
   function openFromContents(row: LibraryRow) {
-    jumpToEntry(Number(row.id), row.name);
+    turnTo(true, () => jumpToEntry(Number(row.id), row.name));
   }
 
   /** Step back to an article you came through. */
@@ -327,9 +328,19 @@
   $: lastRead = $libraryPrefsStore.isbe.lastRead;
   $: canFlip = showContents ? !!entry || !!place || !!lastRead : true;
 
+  /** The page under the work tabs. Moving between the index and an article
+   *  turns it over; a crumb, a page-turn arrow or a section tab changes it in
+   *  place. */
+  let face: { turn(toEntry: boolean, apply: () => void): void } | null = null;
+
+  function turnTo(toEntry: boolean, apply: () => void) {
+    if (face) face.turn(toEntry, apply);
+    else apply();
+  }
+
   function goBack() {
     if (trail.length) return popTrailTo(trail.length - 1);
-    showContents = true;
+    turnTo(false, () => (showContents = true));
   }
 
   /** Escape comes here before the host closes: walk out a step if there is
@@ -342,16 +353,17 @@
 
   function flip() {
     if (!showContents) {
-      showContents = true;
+      turnTo(false, () => (showContents = true));
       return;
     }
     // Nothing loaded this session — flip to whatever you last had open, which
     // is what a stale window leaves on the other side of the card.
-    if (!entry && !place && lastRead) {
-      jumpToEntry(Number(lastRead.id), lastRead.name);
+    const last = lastRead;
+    if (!entry && !place && last) {
+      turnTo(true, () => jumpToEntry(Number(last.id), last.name));
       return;
     }
-    showContents = false;
+    turnTo(true, () => (showContents = false));
   }
 
   // --- Dictionary bridge -------------------------------------------------
@@ -1097,6 +1109,7 @@
 
 <div class="isbe-content" class:docked>
   <WorkTabs {works} current="encyclopedia" onIndex={showContents} inWindow={docked} onSelect={selectWork} />
+  <LibraryFace bind:this={face}>
   <div class="isbe-header">
     <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
     <div class="head-text">
@@ -1317,6 +1330,7 @@
     {/if}
     <span class="src">International Standard Bible Encyclopedia (1915, public domain) · place data © OpenBible.info CC BY 4.0</span>
   </div>
+  </LibraryFace>
 </div>
 
 <style>

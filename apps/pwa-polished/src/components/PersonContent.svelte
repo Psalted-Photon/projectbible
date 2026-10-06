@@ -15,6 +15,7 @@
   import { loadFamilyTree, familyTreeIds } from "../lib/familyTree/data";
   import IndexList from "./library/IndexList.svelte";
   import LibraryNavButtons from "./library/LibraryNavButtons.svelte";
+  import LibraryFace from "./library/LibraryFace.svelte";
   import WorkTabs from "./WorkTabs.svelte";
   import Gem from "./Gem.svelte";
   import { stoneForTribe } from "../lib/gems/stones";
@@ -256,7 +257,7 @@
   }
 
   function openFromContents(row: LibraryRow) {
-    jumpToPerson(String(row.id), row.name);
+    turnTo(true, () => jumpToPerson(String(row.id), row.name));
   }
 
   /**
@@ -327,9 +328,18 @@
   $: lastRead = $libraryPrefsStore.people.lastRead;
   $: canFlip = showContents ? !!person || !!lastRead : true;
 
+  /** The page under the work tabs. Moving between the index and a person turns
+   *  it over; a crumb or a relative changes it in place. */
+  let face: { turn(toEntry: boolean, apply: () => void): void } | null = null;
+
+  function turnTo(toEntry: boolean, apply: () => void) {
+    if (face) face.turn(toEntry, apply);
+    else apply();
+  }
+
   function goBack() {
     if (trail.length) return popTrailTo(trail.length - 1);
-    showContents = true;
+    turnTo(false, () => (showContents = true));
   }
 
   /** Escape walks out one step, and reports whether it had anywhere to go — the
@@ -343,15 +353,16 @@
 
   function flip() {
     if (!showContents) {
-      showContents = true;
+      turnTo(false, () => (showContents = true));
       return;
     }
     // Nothing loaded this session — flip to whoever you last had open.
-    if (!person && lastRead) {
-      jumpToPerson(String(lastRead.id), lastRead.name);
+    const last = lastRead;
+    if (!person && last) {
+      turnTo(true, () => jumpToPerson(String(last.id), last.name));
       return;
     }
-    showContents = false;
+    turnTo(true, () => (showContents = false));
   }
 
   // --- Recents -----------------------------------------------------------
@@ -553,6 +564,9 @@
   {#if showHeader}
     <!-- Hosted inside the word-study card, that card draws the tabs instead. -->
     <WorkTabs {works} current="people" onIndex={showContents} inWindow={docked} onSelect={selectWork} />
+  {/if}
+  <LibraryFace bind:this={face}>
+  {#if showHeader}
     <div class="person-header">
       <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
       <div class="head-text">
@@ -817,6 +831,7 @@
       </p>
     </div>
   {/if}
+  </LibraryFace>
 </div>
 
 <style>
