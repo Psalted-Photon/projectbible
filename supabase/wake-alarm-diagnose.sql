@@ -48,7 +48,7 @@ BEGIN
           (2, 'Key filled in?', 'PROBABLY WRONG - a legacy JWT. This project needs the sb_secret_ key. Check step 4.');
       ELSE
         INSERT INTO wake_alarm_check VALUES
-          (2, 'Key filled in?', 'UNCLEAR - no recognisable key after "Bearer". Did the paste swallow the word Bearer?');
+          (2, 'Key filled in?', 'UNCLEAR - no recognizable key after "Bearer". Did the paste swallow the word Bearer?');
       END IF;
     END LOOP;
 

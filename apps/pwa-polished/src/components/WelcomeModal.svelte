@@ -183,7 +183,7 @@
     font-style: italic;
   }
 
-  /* The licence asks for "(NET)" after the quotation, with the letters
+  /* The license asks for "(NET)" after the quotation, with the letters
      linking out to netbible.org wherever there is a connection. */
   .wm-credit {
     margin-top: 10px;

@@ -82,7 +82,7 @@
   $: byUserId = new Map(members.map((m) => [m.userId, m]));
   $: blocks = splitPageBlocks(clean).map((block) => {
     // An id stamped by somebody who has since left the notebook has nobody to
-    // draw. Dropped rather than drawn grey: the line was written by the people
+    // draw. Dropped rather than drawn gray: the line was written by the people
     // still named beside it plus somebody who is gone, and a blank disc would
     // only invite the question without answering it.
     const known = block.pills.map((id) => byUserId.get(id)).filter((m): m is SharedNotebookMember => !!m);
@@ -102,7 +102,7 @@
     const el = (e.target as HTMLElement | null)?.closest?.('.bible-ref') as HTMLElement | null;
     if (!el) return;
 
-    // A reference the sanitiser stripped the target from is just text now —
+    // A reference the sanitizer stripped the target from is just text now —
     // leave it alone rather than opening a menu that goes nowhere.
     const ref = el.getAttribute('data-ref');
     const book = el.getAttribute('data-book');
@@ -351,7 +351,7 @@
     font-style: italic;
   }
 
-  /* A reference whose target the allowlist rejected. It keeps the colour so
+  /* A reference whose target the allowlist rejected. It keeps the color so
      the sentence still reads as one piece, but it is not a link. */
   .shared-page :global(.bible-ref:not([data-ref])) {
     border-bottom: none;

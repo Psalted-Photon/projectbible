@@ -1,5 +1,5 @@
 /**
- * Parallel-passage index — lookup and fraction maths.
+ * Parallel-passage index — lookup and fraction math.
  *
  * Pure and stateless: everything here is a function of the index data and the
  * arguments handed in, with nothing cached and nothing read from the DOM. The
@@ -469,7 +469,7 @@ export function targetWithin(
  * one the reader is under.
  *
  * Only the target's own chapter is searched. A heading two verses away across a
- * chapter break would have to be found by walking into the neighbouring
+ * chapter break would have to be found by walking into the neighboring
  * chapter's verse numbering, and the 20 passages in the whole index that cross
  * a break do not justify it — they fall through to the proportional target,
  * which is correct, just unrefined.

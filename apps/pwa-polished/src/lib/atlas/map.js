@@ -20,7 +20,7 @@
  *   switched on.
  *
  *   Overlays ride on top and must be self-sufficient. Each registers what it
- *   draws, what colour it is and what a tap on it means, so the timeline is
+ *   draws, what color it is and what a tap on it means, so the timeline is
  *   just the first of them rather than something the map is built around.
  */
 
@@ -125,7 +125,7 @@ const NOT_AT_FINEST = new Set([
   // shoreline comes from the accurate side of the pair.
   'land',
   // The sea's own edge is the shoreline. A separate coarse stroke would run a
-  // kilometre away from it and read as two coasts.
+  // kilometer away from it and read as two coasts.
   'coastline',
 ]);
 
@@ -334,7 +334,7 @@ export function createAtlasMap(container, options = {}) {
    * A Leaflet canvas renderer lives in a single pane, so sharing one instance
    * across layers quietly ignores their `pane` option and draws them all in one
    * place. That put the city dots outside the label pane, so fading the basemap
-   * removed the names and left the dots behind — the unlabelled specks. It also
+   * removed the names and left the dots behind — the unlabeled specks. It also
    * meant the pane z-order above was decorative rather than real.
    */
   const renderers = new Map();
@@ -427,7 +427,7 @@ export function createAtlasMap(container, options = {}) {
   /**
    * How much of the container something else is sitting on top of.
    *
-   * Leaflet has no idea the info panel exists, so its idea of the centre is the
+   * Leaflet has no idea the info panel exists, so its idea of the center is the
    * middle of the whole container — a strip of which is underneath the panel.
    * The host measures its own furniture and reports it here; the engine never
    * reaches into the DOM to find out.
@@ -451,9 +451,9 @@ export function createAtlasMap(container, options = {}) {
   /**
    * True only when the whole view sits inside one covered box.
    *
-   * The centre is not enough. At this level the sea is drawn rather than the
+   * The center is not enough. At this level the sea is drawn rather than the
    * land, so beyond the edge of a box there would be no sea to draw and the
-   * Mediterranean would come out the colour of parchment.
+   * Mediterranean would come out the color of parchment.
    */
   function fineWaterCovers(bounds) {
     const w = bounds.getWest(), e = bounds.getEast();
@@ -461,11 +461,11 @@ export function createAtlasMap(container, options = {}) {
     return fineWaterBoxes.some((b) => w >= b[0] && e <= b[2] && s >= b[1] && n <= b[3]);
   }
 
-  /** Which generalisation to draw at a given zoom. */
+  /** Which generalization to draw at a given zoom. */
   function detailFor(z) {
     if (z < 4.5) return 110;
     if (z < 7) return 50;
-    // Close in, Natural Earth's kilometre-accurate shoreline is the thing you
+    // Close in, Natural Earth's kilometer-accurate shoreline is the thing you
     // notice — it puts Capernaum in the Sea of Galilee — so where OpenStreetMap
     // has been harvested, use that instead.
     if (z >= 10 && fineWaterBoxes.length && fineWaterCovers(map.getBounds())) return 1;
@@ -547,7 +547,7 @@ export function createAtlasMap(container, options = {}) {
 
     /**
      * At the finest level there is no land polygon — the sea is painted over the
-     * ground instead — so the ground has to become the land colour, or crossing
+     * ground instead — so the ground has to become the land color, or crossing
      * into that level would shift every shore from parchment to the slightly
      * darker backing behind the map.
      */
@@ -735,7 +735,7 @@ export function createAtlasMap(container, options = {}) {
 
     // Basemap lettering. Skipped entirely on a tile basemap, which draws its own.
     if (showLabels && basemapKind === 'parchment') {
-      // Seas and countries, from whatever generalisation is on screen.
+      // Seas and countries, from whatever generalization is on screen.
       for (const [layerKind, kind, minZoom, priority] of [
         ['marine', 'sea', 3, 70],
         ['countries', 'country', 3.5, 60],
@@ -803,7 +803,7 @@ export function createAtlasMap(container, options = {}) {
             kind: water ? 'water-point' : 'city',
             shape: 'point',
             // Somewhere named and lived-in outranks an unnamed creek, but a
-            // labelled feature of any kind beats leaving a bare dot.
+            // labeled feature of any kind beats leaving a bare dot.
             priority: 26 + Math.min(18, Math.log10((r.population ?? 0) + 10) * 4) + (water ? 1 : 0),
           });
         }
@@ -889,7 +889,7 @@ export function createAtlasMap(container, options = {}) {
    * How aged the map should look right now.
    *
    * 1 at the oldest era, 0 once the timeline reaches the present or is switched
-   * off entirely — the ageing belongs to the overlay, not to the map.
+   * off entirely — the aging belongs to the overlay, not to the map.
    */
   function agedness() {
     if (!timeline?.enabled || !timeline.showAgeing) return 0;
@@ -977,7 +977,7 @@ export function createAtlasMap(container, options = {}) {
    * One definition rather than two: a journey stop opens the same panel a city
    * dot does, and the moment the payload is written out twice the two drift.
    * `journey` is the only extra, and everything below it in the panel — the
-   * photo, the colour-coded references, the crumb back to the map — is the
+   * photo, the color-coded references, the crumb back to the map — is the
    * same code path either way.
    */
   function openPlaceWith(place, journey, { force = false, move = true } = {}) {
@@ -994,7 +994,7 @@ export function createAtlasMap(container, options = {}) {
     // stays where the reader put it. An arrow always moves — see openJourneyStop.
     //
     // Two frames later, because on the first tap the panel does not exist yet
-    // and the host cannot have reported its width; centring now would aim at
+    // and the host cannot have reported its width; centering now would aim at
     // the whole container and let the panel open over the answer. Two rather
     // than one because the host measures through a resize observer, which
     // reports after the frame the panel was painted in.
@@ -1022,7 +1022,7 @@ export function createAtlasMap(container, options = {}) {
   /**
    * What the panel says about a stop beyond the place itself.
    *
-   * The neighbours are the point of the arrows: a stop is a position in a
+   * The neighbors are the point of the arrows: a stop is a position in a
    * sequence, and the question a reader has at one is where he went next. They
    * carry their own index so following one is the same call as tapping its dot,
    * and they are null at the ends rather than wrapping, because a journey is
@@ -1184,7 +1184,7 @@ export function createAtlasMap(container, options = {}) {
   function pickDotAt(e) {
     const point = e.containerPoint;
     if (!point) return false;
-    // A tap on a dot reports the dot's centre as its position, so the real one
+    // A tap on a dot reports the dot's center as its position, so the real one
     // comes from the pointer.
     const at = map.containerPointToLatLng(point);
     const pointer = e.originalEvent?.pointerType;
@@ -1207,7 +1207,7 @@ export function createAtlasMap(container, options = {}) {
 
     hits.sort((a, b) => a.edge - b.edge);
     // A mouse landing inside a dot means that dot. A fingertip inside one may
-    // still have been aiming at the neighbour it also covered.
+    // still have been aiming at the neighbor it also covered.
     if (hits.length === 1 || (!touch && hits[0].edge <= 0)) {
       hits[0].open();
     } else {
@@ -1322,8 +1322,8 @@ export function createAtlasMap(container, options = {}) {
    * Put a point in the middle of the space actually visible.
    *
    * With the info panel open the clear space is the container minus the strip
-   * the panel covers, so centring on the container would park the city behind
-   * the very panel describing it. This aims at the centre of what is left.
+   * the panel covers, so centering on the container would park the city behind
+   * the very panel describing it. This aims at the center of what is left.
    *
    * Without `force` it only moves when it has to — the point is behind the
    * panel, or close enough to an edge to be awkward — so tapping a city already
@@ -1346,7 +1346,7 @@ export function createAtlasMap(container, options = {}) {
       if (Math.abs(at.x - target.x) < CENTRE_SLOP && Math.abs(at.y - target.y) < CENTRE_SLOP) return;
     }
 
-    // The centre that puts the point under the clear space's middle, worked in
+    // The center that puts the point under the clear space's middle, worked in
     // the destination zoom's pixels so a zoom and a pan land together.
     const offset = target.subtract(size.divideBy(2));
     const centre = map.unproject(map.project([lat, lon], z).subtract(offset), z);
@@ -1384,7 +1384,7 @@ export function createAtlasMap(container, options = {}) {
    * The biblical place an era's town stands for.
    *
    * The era's towns come from the atlas pack and the dots from the place
-   * catalogue. Both start from OpenBible's names, so the name usually matches;
+   * catalog. Both start from OpenBible's names, so the name usually matches;
    * when it doesn't, the nearest dot within a few miles is the same place.
    */
   function biblicalFor(town) {
@@ -1471,7 +1471,7 @@ export function createAtlasMap(container, options = {}) {
     if (readingLayer) { map.removeLayer(readingLayer); readingLayer = null; }
 
     if (!parsed) {
-      if (String(text ?? '').trim()) emit.status(`don't recognise "${String(text).trim()}"`);
+      if (String(text ?? '').trim()) emit.status(`don't recognize "${String(text).trim()}"`);
       return null;
     }
 

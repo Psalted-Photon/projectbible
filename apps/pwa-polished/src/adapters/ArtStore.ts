@@ -225,7 +225,7 @@ export class IndexedDBArtStore implements ArtStore {
         const small = await downscaleBlob(toBlob(source.data, mime));
         if (!small) return { data: source.data, mime };
 
-        // Persisting is an optimisation for next time, not part of showing the
+        // Persisting is an optimization for next time, not part of showing the
         // image now -- a full quota must not blank the gallery.
         try {
           await new Promise<void>((resolve, reject) => {

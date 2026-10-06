@@ -45,7 +45,7 @@ self.addEventListener('push', (event) => {
     // up into a pile of notifications overnight.
     tag: payload.tag || ALARM_TAG,
     renotify: true,
-    // An alarm stays on screen until acted on, where the platform honours this.
+    // An alarm stays on screen until acted on, where the platform honors this.
     requireInteraction: !payload.gentle,
     vibrate: payload.gentle ? [200] : [400, 200, 400, 200, 400],
     timestamp: Date.now(),

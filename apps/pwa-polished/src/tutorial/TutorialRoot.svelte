@@ -3,7 +3,7 @@
    * Everything Tutorial Mode draws, loaded only while it is on.
    *
    * Sits at the app root, outside the reader. The light and sepia themes put a
-   * colour-flipping filter on the reader, and anything fixed inside a filtered
+   * color-flipping filter on the reader, and anything fixed inside a filtered
    * box is positioned against that box instead of the screen; out here neither
    * happens.
    */

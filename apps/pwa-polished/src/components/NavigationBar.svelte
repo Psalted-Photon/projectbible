@@ -286,7 +286,7 @@
   }
 
   /**
-   * Same nudge, but centred rather than left-aligned.
+   * Same nudge, but centered rather than left-aligned.
    *
    * Both rects come from inside the same transformed ancestor (the bar slides
    * up and down), so their difference is unaffected by that transform — and
@@ -342,7 +342,7 @@
    * On, the followers are driven; off, they are ordinary readers wearing half a
    * navbar, free to be navigated independently. That is the whole meaning of the
    * switch, and it is the same one the commentary window's anchor has — which is
-   * why it is the same icon in the same two colours, grey loose and teal
+   * why it is the same icon in the same two colors, gray loose and teal
    * following. There is no drifted state here: a follower the user has scrolled
    * rejoins on the master's next move by itself, so there is nothing to tell
    * them about and nothing to press.
@@ -1295,7 +1295,7 @@
    * setting still decides whether there is a clock at all.
    */
   $: clockVisible = showClock && navMode !== 'follower';
-  // How much room each line is centred in. The wedge is a triangle, so its
+  // How much room each line is centered in. The wedge is a triangle, so its
   // width is not one number: the top line gets most of the run and the one
   // below it gets whatever the hypotenuse has left by then.
   let clockW = { l1: 0, l2: 0, r1: 0, r2: 0 };
@@ -1378,7 +1378,7 @@
     const m = inkCtx.measureText(text);
     const asc = m.fontBoundingBoxAscent ?? px * 0.8;
     const desc = m.fontBoundingBoxDescent ?? px * 0.2;
-    // Glyphs sit centred in the line box, so the baseline is the half-leading
+    // Glyphs sit centered in the line box, so the baseline is the half-leading
     // plus the font's own ascent below the top of that box.
     const baseline = boxTop + (CLOCK_LINE_H - (asc + desc)) / 2 + asc;
     return baseline + (m.actualBoundingBoxDescent ?? 0);
@@ -1479,7 +1479,7 @@
     if (barFlat) return () => hFull;
 
     // Overlapping influences combine by taking the deepest rise, never by
-    // summing — two neighbouring dips must not dig a trench between them.
+    // summing — two neighboring dips must not dig a trench between them.
     return (x: number): number => {
       let y = hFull;
       for (const g of gaps) {
@@ -1571,8 +1571,8 @@
   /**
    * How wide the wedge still is at the depth each line's ink reaches.
    *
-   * Centre a line in that and it keeps the same gap either side without ever
-   * crossing the hypotenuse: the box it centres in *is* the room, so there is
+   * Center a line in that and it keeps the same gap either side without ever
+   * crossing the hypotenuse: the box it centers in *is* the room, so there is
    * nothing to overflow into. The top line gets most of the run and the one
    * below it gets whatever the taper has left by then, which is what makes the
    * stack narrow the way the wedge does.
@@ -1619,7 +1619,7 @@
 
   /**
    * The clock on a flat bar: time and day in the left half of the gap, date
-   * and month in the right, the pair centred down the full depth. When the gap
+   * and month in the right, the pair centered down the full depth. When the gap
    * cannot hold both the time takes all of it, and when it cannot hold even
    * that the clock steps aside rather than crowding the pills.
    */
@@ -2082,7 +2082,7 @@
       <div class="pill-divider"></div>
 
       <!-- Reference (book + chapter) — the last crumb in the trail.
-           Filled in the book's category colour when you are home, hollow when
+           Filled in the book's category color when you are home, hollow when
            there is a trail behind it. Solid reads as settled; an outline reads
            as provisional, which is what being off home is. -->
       <div class="nav-dropdown reference-dropdown-trigger category-{currentBookCategory}">
@@ -2756,11 +2756,11 @@
     transform: translateX(1.5px);
   }
 
-  /* Each line is centred in a box the width of the wedge at that line's own
+  /* Each line is centered in a box the width of the wedge at that line's own
      depth, so a line with room to spare sits with an even gap either side and
      the stack narrows with the taper. min-width is the floor that keeps this
      honest: when a line is wider than the room, the box grows to the text
-     instead of centring it, so it stays flush against the pill rather than
+     instead of centering it, so it stays flush against the pill rather than
      being pushed out past the edge. The boxes anchor to the wedge's vertical
      side, which is the side the pill is on. */
   .nav-clock-line {
@@ -3165,7 +3165,7 @@
 
   /* ── The translation a crumb returns to ────────────────────────────────
      Only rendered when it differs from the current one, so most trails never
-     show it. Smaller and dimmed against the crumb's own book colour: it is
+     show it. Smaller and dimmed against the crumb's own book color: it is
      qualifying the reference, not competing with it. */
   .crumb-trans {
     font-size: 9px;
@@ -3197,18 +3197,18 @@
   /* Reference button category colors (text tint only) */
   /* ── Home vs away ──────────────────────────────────────────────────────
      Home is a filled pill: you chose this chapter, you are settled. Away is
-     the same pill hollow, with the trail of crumbs to its left. The colour
+     the same pill hollow, with the trail of crumbs to its left. The color
      comes from the book's category either way, so only the treatment changes.
-     Declared before the per-category colour rules so those still set the text
-     colour when away. */
+     Declared before the per-category color rules so those still set the text
+     color when away. */
   /* ── Home ─────────────────────────────────────────────────────────────────
      The chip is the dark plate: 6px corners, matching the icon badges. The
-     colour inside is a separate shape, not a background — a stadium, flat top
+     color inside is a separate shape, not a background — a stadium, flat top
      and bottom with true semicircular ends.
 
      A gradient cannot draw that. A radial gradient is an ellipse: it curves the
      whole way round and pinches toward the ends, and sized to the corners (the
-     default) its black endpoint lands outside the box, so the colour was being
+     default) its black endpoint lands outside the box, so the color was being
      clipped at roughly 70% of the way to black rather than fading out — a hard
      cut at the sides and no dark band at all along the top and bottom.
 
@@ -3219,7 +3219,7 @@
 
      It goes on the label rather than the button because the button is 32px tall
      by definition, so a fill there has nowhere to breathe above and below. The
-     caret is the label's sibling and stays outside the chip, uncoloured, like
+     caret is the label's sibling and stays outside the chip, uncolored, like
      every other dropdown. */
   /* Holds the translation and the location pill. Its own flex context is what
      lets the two swap without duplicating either block of markup — the divider
@@ -3240,7 +3240,7 @@
      which is what being off home is.
 
      The ring is currentColor so it always matches the label it surrounds. The
-     label's per-category colours further down this file match CATEGORY_COLORS
+     label's per-category colors further down this file match CATEGORY_COLORS
      in lib/bibleData.ts; keep them in step if that palette changes.
 
      A pixel comes off the padding to pay for the border, so the pill is the
@@ -3256,13 +3256,13 @@
   .at-home .pill-label {
     position: relative;
     /* Load-bearing. `position: relative` alone does not open a stacking
-       context, so the colour's negative z-index would drop it behind this
+       context, so the color's negative z-index would drop it behind this
        element's own black background and it would vanish. With one, negative-z
        children paint above the background and below the text — exactly where
-       the colour belongs, and the text then needs no z-index of its own. */
+       the color belongs, and the text then needs no z-index of its own. */
     isolation: isolate;
     /* Clips the blur to the rounded corners, so the chip's outer edge stays
-       crisp while the colour inside stays soft. */
+       crisp while the color inside stays soft. */
     overflow: hidden;
     display: inline-flex;
     align-items: center;
@@ -3284,8 +3284,8 @@
     position: absolute;
     /* Vertical then horizontal. The ends sit 2.5px further out than the top
        and bottom, which lengthens the stadium by 5px overall and keeps the
-       dark band tighter above and below than it is at the ends — the colour
-       reads as a pill lying in the chip rather than a blob centred in it.
+       dark band tighter above and below than it is at the ends — the color
+       reads as a pill lying in the chip rather than a blob centered in it.
        Blur grows with the shape; overflow on the chip clips whatever spills. */
     inset: 2.5px 1.5px;
     border-radius: 999px;
@@ -3335,16 +3335,16 @@
   .icon-badge-readingplan { background: radial-gradient(circle, #60a5fa 0%, #60a5fa 20%, #000000 100%); }
   .icon-badge-votd        { background: radial-gradient(circle, #fde047 0%, #fde047 20%, #000000 100%); }
   .icon-badge-settings    { background: radial-gradient(circle, #c0c0c0 0%, #c0c0c0 20%, #000000 100%); }
-  /* Grey so none of the four tiles sits on its own color. */
+  /* Gray so none of the four tiles sits on its own color. */
   .icon-badge-apps        { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #000000 100%); }
   .icon-badge-profile     { background: radial-gradient(circle, #d1d5db 0%, #d1d5db 20%, #000000 100%); }
   .pill-refs:has(input:checked) .icon-badge-refs { background: radial-gradient(circle, #a78bfa 0%, #a78bfa 20%, #000000 100%); }
   .pill-profile.signed-in .icon-badge-profile    { background: radial-gradient(circle, #86efac 0%, #86efac 20%, #000000 100%); }
 
   /* ── The harmony controls ──────────────────────────────────────────────────
-     Grey loose, teal following — the same two states in the same two colours as
+     Gray loose, teal following — the same two states in the same two colors as
      the commentary window's anchor, because it is the same idea and a user who
-     has met one should not have to learn the other. The wheel stays one colour:
+     has met one should not have to learn the other. The wheel stays one color:
      it is an action rather than a state, and nothing about this pane is on or
      off while you are looking at it. */
   .icon-badge-anchor      { background: radial-gradient(circle, #9ca3af 0%, #9ca3af 20%, #000000 100%); }

@@ -49,7 +49,7 @@ export function openMapWindow(label: string, markers: MapMarker[], opts: { year?
   const id = windowStore.createWindow(dockEdge(), DOCK_SIZE);
   if (!id) return false; // At the six-window cap.
 
-  // Centre is seeded from the first marker so the map opens looking at roughly
+  // Center is seeded from the first marker so the map opens looking at roughly
   // the right part of the world, then applyTarget flies it the rest of the way.
   // With no places, it opens on the lands of the Bible and the era does the rest.
   windowStore.setWindowContent(id, 'map', {

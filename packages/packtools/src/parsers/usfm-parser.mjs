@@ -20,7 +20,7 @@ import { parseUSFM, processVerses, cleanUSFMMarkup } from './usfm-scanner.mjs';
  * Parsing is the shared scanner's job; what stays here is the book map this
  * collection needs for its deuterocanonical titles, and the pack writer.
  *
- * The scanner replaced a line-based parser that only recognised poetry on a
+ * The scanner replaced a line-based parser that only recognized poetry on a
  * bare \q1 and emitted no paragraph break at all, which is why the shipped
  * LXX pack carries 2,466 poetic lines and exactly one paragraph break against
  * 1,008 in its source.
@@ -140,7 +140,7 @@ const LINE_2 = '\x12';      // new poetic line, indented
 /** Markers whose own text is footnote content, not verse text. */
 const FOOTNOTE_INNER = new Set(['fr', 'ft', 'fq', 'fqa', 'fl', 'fk', 'fv', 'fp', 'fdc']);
 
-/** Markers whose text is supplied/emphasised wording — stored as <i> like NET. */
+/** Markers whose text is supplied/emphasized wording — stored as <i> like NET. */
 const ITALIC_MARKERS = new Set(['add', 'it', 'em', 'qt']);
 
 /** Front matter and structural lines that carry no verse text. */

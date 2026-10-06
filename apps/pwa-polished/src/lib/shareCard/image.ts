@@ -40,7 +40,7 @@ export async function decodeImage(src: Blob | string): Promise<{ source: HTMLCan
 }
 
 /**
- * Colours to start a photo card with, taken from the photo itself: a pale tint
+ * Colors to start a photo card with, taken from the photo itself: a pale tint
  * of its main hue for the words and a brighter one for accents. The dark
  * overlay that comes with it is what makes pale text safe on any photo.
  */
@@ -50,7 +50,7 @@ export function suggestColours(source: CanvasImageSource): { text: string; accen
   const ctx = c.getContext('2d', { willReadFrequently: true })!;
   ctx.drawImage(source, 0, 0, 24, 24);
   const d = ctx.getImageData(0, 0, 24, 24).data;
-  // Weight each pixel by how colourful it is, so a grey sky doesn't wash out the hue.
+  // Weight each pixel by how colorful it is, so a gray sky doesn't wash out the hue.
   let r = 0, g = 0, b = 0, w = 0, lr = 0, lg = 0, lb = 0;
   for (let i = 0; i < d.length; i += 4) {
     const max = Math.max(d[i], d[i + 1], d[i + 2]);

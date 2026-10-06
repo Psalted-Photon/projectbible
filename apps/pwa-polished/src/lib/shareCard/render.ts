@@ -8,7 +8,7 @@
  * Safari drops web fonts, and a card drawn in the fallback face is the one
  * failure that would be seen by everyone the card is sent to.
  *
- * Layers, back to front: background (colour, gradient, photo or painting),
+ * Layers, back to front: background (color, gradient, photo or painting),
  * texture, the verse (auto-fitted, tapped words bold or accented), the
  * reference with its translation, a painting's credit, the QR code, and at
  * the foot a faint "Hexapla" mark with the app icon. The mark is always drawn;
@@ -135,7 +135,7 @@ function faceFor(style: CardStyle, passage: string): Face {
 
 /**
  * Paint the card onto `canvas`, resizing it to the card's full pixel size.
- * Returns where each word was drawn, for tap-to-emphasise, and how big the
+ * Returns where each word was drawn, for tap-to-emphasize, and how big the
  * words could go before running off the card.
  */
 export async function renderCard(
@@ -242,7 +242,7 @@ export async function renderCard(
     areaTop + (style.position === 'top' ? 0 : style.position === 'bottom' ? slack : slack / 2);
   const centred = style.align === 'center';
 
-  // Pale words on a photo get a soft shadow; on flat colour they don't need one.
+  // Pale words on a photo get a soft shadow; on flat color they don't need one.
   if (image && luminance(style.textColor) > 0.4) {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
     ctx.shadowBlur = 18 * k;
@@ -311,7 +311,7 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, max: number): st
   return `${t.trimEnd()}\u2026`;
 }
 
-/** "Hexapla" in Fredericka the Great, the app icon to its right, centred on cx. */
+/** "Hexapla" in Fredericka the Great, the app icon to its right, centered on cx. */
 function drawMark(
   ctx: CanvasRenderingContext2D,
   icon: HTMLImageElement | null,

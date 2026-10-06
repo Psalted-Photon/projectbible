@@ -11,7 +11,7 @@ export function bookName(osisBook: string): string;
 export function setDistanceUnits(units: "us" | "metric" | undefined): void;
 
 /**
- * Kilometres as a distance string with its unit ("3.4 miles", "5.5 km"). Null
+ * Kilometers as a distance string with its unit ("3.4 miles", "5.5 km"). Null
  * for a missing distance, so a caller cannot print "null miles" unnoticed.
  */
 export function distance(km: number | null | undefined, units?: "us" | "metric"): string | null;

@@ -4,7 +4,7 @@
  * Build ISBE (International Standard Bible Encyclopedia) Pack
  *
  * A self-contained encyclopedia + biblical-geography pack. ISBE (1915, James Orr,
- * public domain) supplies ~9,380 scholarly articles — the depth analogue of the
+ * public domain) supplies ~9,380 scholarly articles — the depth analog of the
  * person bios in people.sqlite, but for places, monuments, rivers, plants, coins,
  * customs and doctrine. Place coordinates, verse links and the multi-word phrase
  * gazetteer are joined in from OpenBible.info (CC BY 4.0) so the "More Info" /

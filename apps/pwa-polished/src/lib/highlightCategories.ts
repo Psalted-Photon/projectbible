@@ -1,10 +1,10 @@
 /**
  * highlightCategories.ts
  *
- * The colour code behind Highlights → Categories. A highlight's look picks
- * its group: a marker by its colour (named, fixed), a solid/boxed/wavy line
- * by its style whatever the colour (named, fixed), and text colour or a
- * dashed line by its colour (unnamed until the user names them).
+ * The color code behind Highlights → Categories. A highlight's look picks
+ * its group: a marker by its color (named, fixed), a solid/boxed/wavy line
+ * by its style whatever the color (named, fixed), and text color or a
+ * dashed line by its color (unnamed until the user names them).
  *
  * Pure lookup — nothing here reads or writes a highlight.
  */
@@ -38,12 +38,12 @@ export interface HighlightCategory {
   key: string;
   /** Default label shown when the user hasn't named it. */
   label: string;
-  /** Swatch colour for the header (the palette colour, or null for line groups). */
+  /** Swatch color for the header (the palette color, or null for line groups). */
   color: string | null;
   /** How the header's sample is drawn. */
   kind: 'marker' | 'text' | 'line';
   underlineStyle?: 'solid' | 'dashed' | 'wavy' | 'boxed';
-  /** True when the user may rename it (text colours and dashed lines). */
+  /** True when the user may rename it (text colors and dashed lines). */
   nameable: boolean;
 }
 
@@ -76,9 +76,9 @@ function rgb(hex: string): [number, number, number] | null {
 }
 
 /**
- * The palette slot a colour belongs to. Older highlights can carry colours
+ * The palette slot a color belongs to. Older highlights can carry colors
  * from before the current palette (the legacy default was #ffeb3b), so an
- * unknown colour goes to its nearest slot rather than falling out of every
+ * unknown color goes to its nearest slot rather than falling out of every
  * group.
  */
 function paletteIndex(color: string): number {
@@ -108,7 +108,7 @@ export function categoryMeaning(key: string, names: Record<string, string>): str
 
 /**
  * The meaning shown under an underline style's row in the popup. Dashed has
- * one group per colour, so it lists the colours the user has named and calls
+ * one group per color, so it lists the colors the user has named and calls
  * the rest Custom.
  */
 export function lineStyleMeaning(style: string, names: Record<string, string>): string {

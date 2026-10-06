@@ -1,7 +1,7 @@
 /**
  * Drawing the tree onto a canvas.
  *
- * Ported line for line from the lab's draw functions — colours, sizes, alphas
+ * Ported line for line from the lab's draw functions — colors, sizes, alphas
  * and fonts are unchanged, because the user has signed off this look at every
  * zoom. What changed is mechanical: the lab's module-level globals (ctx, W,
  * H, view, OPTS, selectedTribe, ...) become one `RenderState` argument, since
@@ -69,7 +69,7 @@ export const CROWN_LIGHT = '#crown';
 
 /**
  * The tree's origin — the trunk top, i.e. Jacob — is always drawn at this
- * fraction of the canvas, not at its centre, so there is room above it for
+ * fraction of the canvas, not at its center, so there is room above it for
  * the canopy and below it for the roots to run out toward.
  */
 const ORIGIN_Y_FRAC = 0.62;
@@ -115,8 +115,8 @@ export function fitView(
   const clampedK = Math.max(0.02, Math.min(9, k));
   const midX = (minX + maxX) / 2;
   const midY = (minY + maxY) / 2;
-  // Centre the box's midpoint on the padded area's midpoint. The padded
-  // area's own centre is offset from the canvas centre by half the
+  // Center the box's midpoint on the padded area's midpoint. The padded
+  // area's own center is offset from the canvas center by half the
   // top/bottom pad difference.
   const areaCy = (pad.top + (H - pad.bottom)) / 2;
   return viewFor(midX, midY, clampedK, W / 2, areaCy, W, H);
@@ -145,7 +145,7 @@ function isLit(tracedPath: Set<string> | null, selectedTribe: string | null, n: 
 // ── Light ────────────────────────────────────────────────────────────────
 // Every element is drawn from one number, its light L: 0 off, 1 on. Without
 // an animation L is just on or off, and the formulas below give exactly the
-// alphas and colours the tree has always had. With one, L runs in between.
+// alphas and colors the tree has always had. With one, L runs in between.
 
 /** A person's light: the animation's when one is running, else on/off. */
 function lightOf(s: RenderState, id: string, on: boolean): number {
@@ -166,7 +166,7 @@ function glowOf(L: number, lit: boolean): number {
 
 const mixCache = new Map<string, string>();
 
-/** Hex colour a, t of the way to b. Exactly a at 0 and b at 1. */
+/** Hex color a, t of the way to b. Exactly a at 0 and b at 1. */
 function mix(a: string, b: string, t: number): string {
   if (t <= 0 || a === b) return a;
   if (t >= 1) return b;
@@ -185,8 +185,8 @@ function mix(a: string, b: string, t: number): string {
 }
 
 /**
- * The colour a person's dot is when lit. The drawing and the landing burst
- * both read it, so a burst always goes off in the colour of the dot it
+ * The color a person's dot is when lit. The drawing and the landing burst
+ * both read it, so a burst always goes off in the color of the dot it
  * lands on.
  */
 export function litColourOf(model: TreeModel, rec: TreeRec): string {
@@ -410,7 +410,7 @@ function drawRoots(s: RenderState, dimming: boolean): void {
   for (const n of model.rootNodes) {
     const L = lightOf(s, n.id, onOf(n));
     const isGod = n.id === GOD_ID;
-    // Each label in its own bough's colour, so a name can be followed back
+    // Each label in its own bough's color, so a name can be followed back
     // to the line it belongs to without tracing the branch by eye.
     const lc = ROOT_COLOURS[n.branch || 'Trunk'] || ROOT_COLOURS.Trunk;
     queueLabel(
@@ -581,8 +581,8 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Stripes and speckles keep colours apart for anyone who cannot separate
-    // them by hue — and every node can be labelled, so colour is never alone.
+    // Stripes and speckles keep colors apart for anyone who cannot separate
+    // them by hue — and every node can be labeled, so color is never alone.
     if (st.striped && size > 2) {
       ctx.strokeStyle = 'rgba(255,255,255,0.5)';
       ctx.lineWidth = 0.6;
@@ -603,9 +603,9 @@ function drawBough(s: RenderState, tribe: string, list: TreeRec[], lit: boolean,
   if (head && isPlaced(head)) {
     const L = lightOf(s, head.id, !dimming || lit);
     const labelLit = L >= 0.5;
-    // The tribe name in its own stone's colour, so the label and the bough
+    // The tribe name in its own stone's color, so the label and the bough
     // it heads read as one thing. Dimmed boughs keep the duller stone rather
-    // than a flat grey, which also keeps the twelve distinguishable while
+    // than a flat gray, which also keeps the twelve distinguishable while
     // dimmed.
     queueLabel(
       tribe,

@@ -60,7 +60,7 @@ const index = indexData as unknown as OtQuotesIndex;
  * The index stores the pack's spelling of every book, which for the Psalter is
  * the plural "Psalms". bibleData.ts declares the canonical name as the singular
  * "Psalm", so a reader asking about the book it is displaying can arrive here
- * with either. Normalising on the way in costs one comparison and avoids
+ * with either. Normalizing on the way in costs one comparison and avoids
  * silently dropping the single largest source of Old Testament quotations.
  */
 function packBook(book: string): string {

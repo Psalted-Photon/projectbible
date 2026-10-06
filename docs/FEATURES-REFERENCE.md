@@ -61,7 +61,7 @@ All text rendering runs through `renderVerseHtml()` in `src/lib/verseRendering.t
 | Red-letter | Setting `showRedLetter`, default `true`. Spans loaded lazily from `/red-letter-spans.json`, keyed `{transId: {"BOOK:CH:V": [{s,e}]}}`; network failure degrades silently. Rendered via `\x02`/`\x03` sentinels into `.red-letter`. Theme-specific colors — dark `#FF3F3F`, light `#CC0000`, sepia `#FF2020` — set in `src/App.svelte`, which re-applies the parent invert filter so the light/sepia theme filter doesn't bleach the red. `BibleReader.svelte` |
 | Section headings | Setting `showSectionHeadings`, default `true`. Extracted from the leading `+ Heading. ` marker in stored verse text by `extractHeading()`, `verseRendering.ts` — a leading run that *is* `\x01`-terminated is a note, not a heading, and is left alone. Rendered at `BibleReader.svelte`. Level 3 is the Psalm 119 acrostic labels (`\qa` ALEPH, BETH…) from the headings pack. **No UI toggle exists** — see [Known gaps](#known-gaps). |
 | Footnotes | Stored as `+ note text` runs terminated by a `\x01` sentinel. Rendered as `<sup class="inline-note inline-footnote">[n]</sup>` in `#6699ff`. `renderTextWithInlineNotes()`, `verseRendering.ts` |
-| Cross-reference markers | Same mechanism, rendered grey `#ccc` with class `.inline-xref`. Classified by `isCrossReference()`, `verseRendering.ts` — a note counts as a cross-reference if it contains a `\d+:\d+` token and does *not* begin with a wording-note starter (`Or`, `Lit`, `I.e.`, `That is`, `Some manuscripts`, `Gr.`, `Gk.`, `Heb.`, `Aram.`, `Lat.`). |
+| Cross-reference markers | Same mechanism, rendered gray `#ccc` with class `.inline-xref`. Classified by `isCrossReference()`, `verseRendering.ts` — a note counts as a cross-reference if it contains a `\d+:\d+` token and does *not* begin with a wording-note starter (`Or`, `Lit`, `I.e.`, `That is`, `Some manuscripts`, `Gr.`, `Gk.`, `Heb.`, `Aram.`, `Lat.`). |
 | Note-boundary detection | `findNoteEnd()`, `verseRendering.ts` — the `\x01` sentinel *is* the boundary; it is read, never inferred. Shared by the HTML renderer, the preview cleaner and the read-aloud extractor so the three can never disagree. A `+` run with no terminator is rendered verbatim as text: guessing a boundary from prose is what used to swallow scripture, so the fix is in the pack builders, not here. |
 | Poetic lines | `\x11` opens a poetic line, `\x12` an indented one, `\x10` a stanza break (verse-initial only). Deliberately not `\x0B`/`\x0C`, which JS treats as whitespace and `trim()` would eat. A marker leading the verse becomes `.poetry-1`/`.poetry-2`/`.stanza-break` on the verse element via `verseStructure()`; mid-verse markers become `<br>` in `renderVerseHtml()`. The joining space is stored *beside* the marker, so stripping the markers reproduces marker-less text exactly and no character offset (highlights, TTS glow, red-letter spans) shifts. Written by `build-bsb-pack.mjs` and `packtools/parsers/usfm-parser.mjs`. |
 | Plural "you" | LXX2012 carries a bare `⌃` meaning the preceding "you" is plural. Rendered as `<sup class="plural-marker">[pl]</sup>`; dropped from previews and read-aloud. |
@@ -95,7 +95,7 @@ Primary files: `src/stores/navigationStore.ts`, `src/components/NavigationBar.sv
 
 - 66 books defined in `BIBLE_BOOKS`, `src/lib/bibleData.ts`.
 - Ten categories with both colors (`CATEGORY_COLORS`) and display labels (`CATEGORY_LABELS`): `pentateuch` `#a67c52` Pentateuch, `historical` `#6ca0dc` Historical, `wisdom` `#f0c040` Wisdom, `major-prophets` `#5c1e99` Major Prophets, `minor-prophets` `#a45be9` Minor Prophets, `gospels` `#fc345c` Gospels, `acts` `#ff6520` Acts, `pauline` `#6048cc` Pauline Epistles, `general` `#f2893e` General Epistles, `revelation` `#61f1ff` Eschaton.
-- `getBookColor()` falls back to neutral grey for unknown books.
+- `getBookColor()` falls back to neutral gray for unknown books.
 - Chapter counts from `getBookChapters()`; the picker renders a chapter grid, `NavigationBar.svelte`.
 - Book list filtered by translation scope via `getAvailableBooks()`.
 
@@ -461,7 +461,7 @@ API: `getWordBounds()`, `resolveWordAt()`, `comparePos()`, `sameSection()`, `sel
 
 Setting `selectionMenu`, default `'radial'`. Two presentations of the same seven actions.
 
-**Radial** — `src/components/RadialSelectionMenu.svelte`, geometry in `src/lib/radialMenu.ts`. A ring around the tapped word, so the word itself stays readable. The shape is a donut with two slices cut out, at 3 o'clock and 9 o'clock; what is left is an arc across the top and another across the bottom, and the two gaps line up with the word's own line of text so the whole line reads straight through the menu. That is also why the ring can slide sideways as far as it likes — near the edge of the screen the word simply ends up in the left or right gap instead of dead centre, and is still fully readable.
+**Radial** — `src/components/RadialSelectionMenu.svelte`, geometry in `src/lib/radialMenu.ts`. A ring around the tapped word, so the word itself stays readable. The shape is a donut with two slices cut out, at 3 o'clock and 9 o'clock; what is left is an arc across the top and another across the bottom, and the two gaps line up with the word's own line of text so the whole line reads straight through the menu. That is also why the ring can slide sideways as far as it likes — near the edge of the screen the word simply ends up in the left or right gap instead of dead center, and is still fully readable.
 
 The geometry lives outside the component because `BibleReader` has to know the ring's size *before* anything renders: it places the menu synchronously and may have to nudge-scroll the reader to make room. Both sides importing one module is what keeps the placement and the drawing agreed on where the buttons are. `BADGE` is the button diameter (54) and the minimum gap between two of them; `ringRadius()`, `outerRadius()`, `seatAngles()`, `seatOffset()`, `radialItems()`, `radialItemCount()`.
 
@@ -471,7 +471,7 @@ Buttons sweep in one at a time — 25 ms stagger, 120 ms pop. Svelte 5 transitio
 
 Both dispatch an `action` event with the selected text. Seven actions: `dissect`, `search`, `map`, `highlight`, `save`, `notes`, `repeats`. The `map` button is conditional — rendered only when the selection resolves to a place, and it opens the real map window via `src/lib/openMapWindow.ts`. A scope toggle switches between Word and the wider selection.
 
-**Weights, measures and money** — `src/lib/measures.ts`, setting `measureUnits` (`'us'` default, or `'metric'`; synced). `measureForWord()` recognises a unit by its spelling across our translations (cubits, pence, silver coin, furlongs, firkins…) and reads the amount written around it — numerals, words, KJV scores, "and a half", "three-tenths of an", "two or three" ranges — then converts and rounds it. `measureForStrongs()` does the same for Greek and Hebrew taps by Strong's number, one unit at a time. Words that are only sometimes units carry `only`/`needsNumber` passage rules (reed and rod only in Ezekiel 40–48; mile only in Matthew 5, since BSB and NET already print modern miles elsewhere), and "penny", "farthing", "pound" and KJV's "measure" pick their unit by verse. Talents and minas are money in the New Testament and weights of metal in the Old. Money is in days' wages (a denarius = 1), never dollars. `BibleReader` builds a `MeasureContext` from the whole `.verse-text` with `<sup>` markers removed, and passes the result to the ring as `measure`, which takes the bottom pill over from lemma · Strong's and wraps to two lines at 112px so it stays clear of the side seats. Synchronous, no database.
+**Weights, measures and money** — `src/lib/measures.ts`, setting `measureUnits` (`'us'` default, or `'metric'`; synced). `measureForWord()` recognizes a unit by its spelling across our translations (cubits, pence, silver coin, furlongs, firkins…) and reads the amount written around it — numerals, words, KJV scores, "and a half", "three-tenths of an", "two or three" ranges — then converts and rounds it. `measureForStrongs()` does the same for Greek and Hebrew taps by Strong's number, one unit at a time. Words that are only sometimes units carry `only`/`needsNumber` passage rules (reed and rod only in Ezekiel 40–48; mile only in Matthew 5, since BSB and NET already print modern miles elsewhere), and "penny", "farthing", "pound" and KJV's "measure" pick their unit by verse. Talents and minas are money in the New Testament and weights of metal in the Old. Money is in days' wages (a denarius = 1), never dollars. `BibleReader` builds a `MeasureContext` from the whole `.verse-text` with `<sup>` markers removed, and passes the result to the ring as `measure`, which takes the bottom pill over from lemma · Strong's and wraps to two lines at 112px so it stays clear of the side seats. Synchronous, no database.
 
 ## 11. Repeated Words
 
@@ -772,7 +772,7 @@ Playback: `synthesizeSpeech()`, `getSharedTtsAudio()`, `unlockTtsAudio()`.
 
 `unlockTtsAudio()` must be called from inside a user tap, before any async work — it plays a tiny silent clip to satisfy mobile autoplay policy. `getSharedTtsAudio()` returns one shared `<audio>` element; the engine, the sleep timer's fade, and the media session all act on that same element.
 
-Custom voices are catalogued in `localStorage` on the main thread; the worker receives an explicit `source` for them, while built-ins fall back to the static catalog so internal callers work source-free.
+Custom voices are cataloged in `localStorage` on the main thread; the worker receives an explicit `source` for them, while built-ins fall back to the static catalog so internal callers work source-free.
 
 ### 16.8 Settings
 
@@ -790,7 +790,7 @@ Custom voices are catalogued in `localStorage` on the main thread; the worker re
 
 ### 16.9 Player and navbar controls
 
-`TtsPlayer.svelte`. Controls: play/pause, jump to a verse, stop, continuous play toggle, cancel during preparation, dismiss, sleep timer. When reading is active the controls also appear centred in the navbar, so playback is reachable without returning to the chapter that started it.
+`TtsPlayer.svelte`. Controls: play/pause, jump to a verse, stop, continuous play toggle, cancel during preparation, dismiss, sleep timer. When reading is active the controls also appear centered in the navbar, so playback is reachable without returning to the chapter that started it.
 
 The app icon spins whenever the engine is generating audio — `BrandSpinner.svelte`, the gem alone without the icon's black tile.
 
@@ -841,7 +841,7 @@ The whole header bar is the resize grip, not a separate handle — a thin hit ta
 |---|---|---|
 | `EDGE_ZONE_WIDTH` | 40 px | Width of the grab zone along each edge |
 | `OPEN_THRESHOLD` | 0.05 | 5% of screen width/height before a window opens |
-| `BOTTOM_DEAD_HALF` | 20 px | Half of a 40 px centre dead zone on the bottom edge, left free for the Android home gesture |
+| `BOTTOM_DEAD_HALF` | 20 px | Half of a 40 px center dead zone on the bottom edge, left free for the Android home gesture |
 
 Two-stage commit: touching an edge sets a **pending** edge; the drag only commits once movement direction matches that edge's axis. This is what stops accidental opens.
 
@@ -904,7 +904,7 @@ Entry point from Settings: "Manage Packs" button, `SettingsPane.svelte`.
 
 Pack `type` values, from `src/adapters/db.ts`: `text`, `lexicon`, `dictionary`, `places`, `geonames`, `map`, `cross-references`, `morphology`, `audio`, `original-language`, `commentary`, `references`, `headings`, `people`, `isbe`, `encyclotopical`, `art`.
 
-**`encyclotopical`** is the ISBE encyclopedia and Nave's Topical Bible in one pack — it supersedes the standalone `isbe` pack, and its import path fills both the `isbe_*` and `naves_*` stores. `isbe` is still recognised so an already-installed encyclopedia keeps working. See [24](#24-naves-topical-bible).
+**`encyclotopical`** is the ISBE encyclopedia and Nave's Topical Bible in one pack — it supersedes the standalone `isbe` pack, and its import path fills both the `isbe_*` and `naves_*` stores. `isbe` is still recognized so an already-installed encyclopedia keeps working. See [24](#24-naves-topical-bible).
 
 ### 19.5 Configuration
 
@@ -999,7 +999,7 @@ Reading progress is the deliberate exception: it **union-merges** rather than la
 
 `theme`, `customTheme`, `notesTheme`, `journalTheme`, `timezone`, `dailyDriverEnglishOT`, `dailyDriverEnglishNT`, `dailyDriverHebrewOT`, `dailyDriverHebrewNT`, `dailyDriverGreekOT`, `dailyDriverGreekNT`, `interlinear`, `showRedLetter`, `showSectionHeadings`, `showArt`, `themedTitles`
 
-The three theme keys travel because they are taste, not ergonomics. For `customTheme` the font *id* is what crosses, not the file — every device ships every face, and an id an older deploy doesn't recognise falls back to the per-translation font.
+The three theme keys travel because they are taste, not ergonomics. For `customTheme` the font *id* is what crosses, not the file — every device ships every face, and an id an older deploy doesn't recognize falls back to the per-translation font.
 
 Everything else stays per-device by design — font size, line spacing, verse layout, word wrap, rotation, update checks, `selectionMenu`, and the two editor-toolbar flags (`notesBarHidden`, `journalBarHidden`). A phone and a desktop rarely want the same font size, and whether a toolbar is slid away is the same kind of choice.
 
@@ -1084,9 +1084,9 @@ Scrollbars are hidden globally while remaining scrollable — `scrollbar-width: 
 
 ### 21.3 The Custom theme
 
-A fifth theme with a free choice of reader typeface, text colour and background. `CustomThemeSettings` in `settings.ts`; `DEFAULT_CUSTOM_THEME` matches the dark theme exactly, so switching to Custom changes nothing until something is edited.
+A fifth theme with a free choice of reader typeface, text color and background. `CustomThemeSettings` in `settings.ts`; `DEFAULT_CUSTOM_THEME` matches the dark theme exactly, so switching to Custom changes nothing until something is edited.
 
-**Scope is deliberately narrow.** Only the Bible reader's text area is affected. App chrome, buttons, book category colours and highlight colours are untouched, and red-letter still overrides the text colour when it is switched on.
+**Scope is deliberately narrow.** Only the Bible reader's text area is affected. App chrome, buttons, book category colors and highlight colors are untouched, and red-letter still overrides the text color when it is switched on.
 
 | Field | Meaning |
 |---|---|
@@ -1094,13 +1094,13 @@ A fifth theme with a free choice of reader typeface, text colour and background.
 | `textColor` / `bgColor` | Hex |
 | `textPresets` / `bgPresets` | Saved swatches, capped at `MAX_COLOR_PRESETS` (10) |
 
-The two preset lists are separate on purpose — the colours that make good text are rarely the ones that make good backgrounds.
+The two preset lists are separate on purpose — the colors that make good text are rarely the ones that make good backgrounds.
 
 **Fonts.** `lib/readerFonts.ts` — twenty faces, self-hosted from `/fonts/` as latin-subset woff2 and declared in `index.html`. Every one is OFL or Apache licensed: the app serves the font file to every user, which counts as redistribution, so "free for personal use" faces can never be added here. Grouped by `READER_FONT_GROUPS`; looked up with `getReaderFont()` and `fontsInGroup()`.
 
 Each `ReaderFont` carries `scale` and `lead` multipliers because x-heights differ enormously across these faces — Tangerine at 19px renders at roughly half the visual size of Bitter at 19px, and Rock Salt's ascenders collide at normal line spacing. The multipliers apply to the user's `--base-font-size` and `--line-spacing` rather than replacing them, so both sliders keep working exactly as before and switching typeface doesn't make the text lurch.
 
-**Derived colours.** `lib/themeColors.ts` — once the user can pick any two colours, several downstream colours can no longer be hardcoded. `redLetterFor(bg)` keeps the red legible against a near-white or near-black background; `dimTowardsBg()` places secondary headings between the text and the background. Supporting maths: `hexToRgb()`, `rgbToHex()`, `isValidHex()`, `hexToHsl()`, `hslToHex()`, `luminance()`, `contrastRatio()`, `mix()`. Keeping the rules here rather than in scattered `color-mix()` calls is the point.
+**Derived colors.** `lib/themeColors.ts` — once the user can pick any two colors, several downstream colors can no longer be hardcoded. `redLetterFor(bg)` keeps the red legible against a near-white or near-black background; `dimTowardsBg()` places secondary headings between the text and the background. Supporting math: `hexToRgb()`, `rgbToHex()`, `isValidHex()`, `hexToHsl()`, `hslToHex()`, `luminance()`, `contrastRatio()`, `mix()`. Keeping the rules here rather than in scattered `color-mix()` calls is the point.
 
 **Pickers.** `ColorField.svelte` and `FontField.svelte` are in-app rather than native controls, so a phone gets the same picker a desktop does.
 
@@ -1112,7 +1112,7 @@ Each `ReaderFont` carries `scale` and `lead` multipliers because x-heights diffe
 
 `lib/editorTheme.ts` turns a saved theme into CSS variables: `editorThemeVars()` for the live surface, `editorPreviewStyle()` for the picker's preview. The variables go on the editor's own root element rather than on `:root`, because Notes and the Journal can be open side by side in the window system and must be able to hold different themes at once.
 
-Colour swatches are deliberately *not* stored per surface — both editors share the reader's `textPresets` / `bgPresets`, so a colour saved in one place is available in all three. UI in `EditorThemePanel.svelte`.
+Color swatches are deliberately *not* stored per surface — both editors share the reader's `textPresets` / `bgPresets`, so a color saved in one place is available in all three. UI in `EditorThemePanel.svelte`.
 
 ### 21.5 Settings pane layout
 
@@ -1120,7 +1120,7 @@ Colour swatches are deliberately *not* stored per surface — both editors share
 
 | Section | Summary | Contents |
 |---|---|---|
-| Appearance | theme · font size | Theme, Typeface, Text colour, Background colour, Preview |
+| Appearance | theme · font size | Theme, Typeface, Text color, Background color, Preview |
 | Reader | layout · red letters | Font Size, Line Spacing, Verse Layout, Word Wrap, Words of Jesus in red letters, Theme colors in reader titles, Show art icons on Bible scenes, Underline multi-word place names, Menu when you tap a word, Measurements (US / Metric), plus a nested **Interlinear** sub-section |
 | Read Aloud (AI voice) | voice · speed | Voice, Reading Speed, Read section headings aloud, Highlight the verse being read, Soft glow drifts along the words, Wake Alarm button |
 | General | timezone · rotation | Time Zone, Allow Screen Rotation |
@@ -1246,7 +1246,7 @@ Previously there were four cards and switching meant closing one and opening ano
 
 ### 23.2 The work tabs
 
-`WorkTabs.svelte` — all four tabs across the top of every lookup card, always drawn, always in the same order, at equal widths so a tab is in the same place every time regardless of label length. A tab is greyed when that work has nothing for the subject.
+`WorkTabs.svelte` — all four tabs across the top of every lookup card, always drawn, always in the same order, at equal widths so a tab is in the same place every time regardless of label length. A tab is grayed when that work has nothing for the subject.
 
 These replaced a row of "bridge pills" that changed depending on which card you were in: the encyclopedia offered Topical and Dictionary, stepping into Topical changed the set, and so there was never a fixed thing to aim at.
 
@@ -1256,7 +1256,7 @@ Availability comes from `resolveWorks`, which returns **ids rather than booleans
 
 `src/lib/openWork.ts` is the single path. `WorkKey` is `'dictionary' | 'topical' | 'encyclopedia' | 'people'`, mapped to window content types `wordstudy`, `naves`, `isbe`, `person`.
 
-This is one path on purpose. The tabs used to call the old "jump to the encyclopedia" buttons, which were built to *replace* the card you were on and only knew how to open a centred card — so inside a docked window they threw a card over the whole app instead of changing the window. Tabs and jump-links wanting different things from the same code is what caused that, so the jump-links are gone and everything comes through here.
+This is one path on purpose. The tabs used to call the old "jump to the encyclopedia" buttons, which were built to *replace* the card you were on and only knew how to open a centered card — so inside a docked window they threw a card over the whole app instead of changing the window. Tabs and jump-links wanting different things from the same code is what caused that, so the jump-links are gone and everything comes through here.
 
 `worksInWindow()`, `carriedWorks()`, `clearCarriedWorks()`, `openWorkSubject()`, `openWorkIndex()`.
 
@@ -1290,7 +1290,7 @@ This is one path on purpose. The tabs used to call the old "jump to the encyclop
 
 A classic topical index — a subject, its outline, and the verses under each point. Ships inside the `encyclotopical` pack alongside ISBE; builder `scripts/build-encyclotopical-pack.mjs`.
 
-`src/stores/navesModalStore.ts`, `src/components/NavesContent.svelte`, Nave's functions in `src/adapters/lexicon-lookup.ts`, list behaviour via `navesSource` in [23.5](#235-one-shell-three-lists).
+`src/stores/navesModalStore.ts`, `src/components/NavesContent.svelte`, Nave's functions in `src/adapters/lexicon-lookup.ts`, list behavior via `navesSource` in [23.5](#235-one-shell-three-lists).
 
 ### 24.1 Store
 
@@ -1314,13 +1314,13 @@ Five object stores, added in migration 33:
 
 `getNavesTopic()`, `getNavesVerses()`, `resolveNavesTopicId()`, `getNavesTopicName()`, `getNavesLetterCounts()`, `getNavesForLetter()`, `getNavesNeighbors()`, `searchNaves()`, `getNavesInChapter()`.
 
-Outline links are coloured by the book they reference, like every other reference in the app, rather than all sharing one colour.
+Outline links are colored by the book they reference, like every other reference in the app, rather than all sharing one color.
 
 ## 25. People
 
 Browsable biographies of the people of the Bible, bridged to the other three works.
 
-`src/stores/personModalStore.ts`, `src/components/PersonContent.svelte`; list behaviour via `peopleSource` in [23.5](#235-one-shell-three-lists).
+`src/stores/personModalStore.ts`, `src/components/PersonContent.svelte`; list behavior via `peopleSource` in [23.5](#235-one-shell-three-lists).
 
 People used to be the odd one out of the four works: a bio could only reach the screen riding `lexicalModalStore.characterData` — that is, as a word study of a word that happened to be a person — so **nothing could navigate to a bio.** `personModalStore` gives it the same standing as the encyclopedia and topical stores, so all four bridge to each other symmetrically.
 
@@ -1330,7 +1330,7 @@ A bio can be **pinned beside the reader** rather than covering it, and links fam
 
 ### 25.1 Family tree: Grand entrance
 
-`src/components/FamilyTreeViewer.svelte`, `src/lib/familyTree/motion.ts`. A tap runs an `Entrance` in phases: `out` (glide to `fitView`, skipped when `atFittedView`), `hold` (God alone lit), `climb` (line and camera together, golden burst at the start), `done` (landing burst in `litColourOf(target)`). The climb cannot start while the camera is still travelling out. Every number is in `MOTION`: `outMs` 525, `holdMs` 225, `climbMs` 2600, `endZoom` 1, three curves, and a `BurstSpec` each for God and the landing. A pan, pinch, wheel or glide calls `entrance.release()`: the camera lets go and the line finishes on schedule. A tap restarts from wherever the camera is. God alone gets his burst with no climb. A tribe lit from a stone keeps a plain 1850ms reveal with no entrance.
+`src/components/FamilyTreeViewer.svelte`, `src/lib/familyTree/motion.ts`. A tap runs an `Entrance` in phases: `out` (glide to `fitView`, skipped when `atFittedView`), `hold` (God alone lit), `climb` (line and camera together, golden burst at the start), `done` (landing burst in `litColourOf(target)`). The climb cannot start while the camera is still traveling out. Every number is in `MOTION`: `outMs` 525, `holdMs` 225, `climbMs` 2600, `endZoom` 1, three curves, and a `BurstSpec` each for God and the landing. A pan, pinch, wheel or glide calls `entrance.release()`: the camera lets go and the line finishes on schedule. A tap restarts from wherever the camera is. God alone gets his burst with no climb. A tribe lit from a stone keeps a plain 1850ms reveal with no entrance.
 
 The **Grand entrance** pill in `.controls-top` is saved per device under `projectbible-familytree-entrance` (default on). Off, or under `prefers-reduced-motion`, a tap lights the whole line, does one 700ms glide and fires a landing burst at `plainBurstScale` (none under reduced motion).
 
@@ -1416,7 +1416,7 @@ The feature by file:
 |---|---|
 | `supabase/migrations/012_shared_notebooks.sql` | three tables, ten policies, the guard, every RPC — [26.8](#268-the-server-migration-012) |
 | `src/adapters/SharedNotebookStore.ts` | the store, the pull, and every write — [26.9](#269-sharednotebookstore) |
-| `src/lib/shared/sanitizeNoteHtml.ts` | the allowlist every page passes through twice — [26.10](#2610-the-sanitiser) |
+| `src/lib/shared/sanitizeNoteHtml.ts` | the allowlist every page passes through twice — [26.10](#2610-the-sanitizer) |
 | `src/lib/shared/ids.ts`, `joinCode.ts` | UUIDs for shared rows; the code, its link, its QR — [26.11](#2611-ids-and-join-codes) |
 | `src/lib/shared/sharedPermissions.ts` | one function per rule, each mirroring a policy — [26.13](#2613-permissions) |
 | `src/lib/shared/memberIdentity.ts`, `paragraphStamp.ts` | badges, and who wrote which line — [26.14](#2614-badges-and-the-pill-gutter) |
@@ -1442,7 +1442,7 @@ Two revision counters, both bumped by `shared_page_bump_rev()` on every page wri
 
 **Ten policies**, three of which carry the whole shape of the feature: *Writers can add shared pages*; *Authors, and open pages, can be edited*; *Authors and the owner can delete shared pages*. Reading is by membership; changing the notebook itself, and writing anybody's member row, is the owner's.
 
-**`shared_page_guard()`**, a `BEFORE INSERT OR UPDATE` trigger — the cheap second line behind the client sanitiser, refusing the handful of things the editor can never legitimately produce:
+**`shared_page_guard()`**, a `BEFORE INSERT OR UPDATE` trigger — the cheap second line behind the client sanitizer, refusing the handful of things the editor can never legitimately produce:
 
 - over 200,000 characters (`MAX_PAGE_CHARS` client-side is the same number)
 - raw markup — `<script>`, `<iframe>`, `<style>`, `<svg>`, or any `on…=`, `href=`, `src=` attribute. A `<` typed as prose arrives escaped, so a live tag in stored text was never something a person typed.
@@ -1486,7 +1486,7 @@ The singleton is `sharedNotebookStore`. Reads: `getNotebooks()`, `getNotebook()`
 
 `SharedPageSaveResult.status` is `saved` | `conflict` | `deleted` | `queued` — none of the four is an error, which is why it is a returned value. A *refusal* (a reader writing, a closed page) is a different thing and throws.
 
-### 26.10 The sanitiser
+### 26.10 The sanitizer
 
 `src/lib/shared/sanitizeNoteHtml.ts`. A local note is HTML this device wrote and only this device reads back. A shared page is HTML somebody else wrote, parsed into the DOM here. So it runs at both ends — before upload, so this device never publishes something odd it picked up from a paste, and again on the way in, because neither side should have to trust the other. A page that was clean when written and one tampered with in between look identical from here.
 
@@ -1499,9 +1499,9 @@ What survives is exactly what the editor can produce:
 | Styles | `font-size` (bounded to 3 digits of px), `text-align`, `white-space`, `--ref-color` — each checked against its own pattern, not just its name |
 | Attributes | `class`, `style`, `dir` anywhere; `data-ref`, `data-book`, `data-chapter`, `data-verse`, `data-expanded`, `role` on a verse reference; `data-pid` and `data-pills` on a paragraph |
 
-Everything else goes: every link, image, script, event attribute and id, and every style that could paint or position anything. Colour is the point of the exercise — a shared page carries structure, and how it looks comes from the reader's own settings, exactly as a local note does. Tags in `DROP_ENTIRELY` lose their text with them; everything else unknown is unwrapped instead, because a stray `<div>` round a paragraph is clutter whereas the text inside a `<script>` is the attack.
+Everything else goes: every link, image, script, event attribute and id, and every style that could paint or position anything. Color is the point of the exercise — a shared page carries structure, and how it looks comes from the reader's own settings, exactly as a local note does. Tags in `DROP_ENTIRELY` lose their text with them; everything else unknown is unwrapped instead, because a stray `<div>` round a paragraph is clutter whereas the text inside a `<script>` is the attack.
 
-`sanitizeNoteHtml()` returns `''` for anything that isn't a string, so a malformed row renders as an empty page rather than throwing on the way in. `sharedPagePreviewText()` sanitises before reading text out, so previews and emptiness checks never touch raw markup. `isPageWithinSizeLimit()` checks `MAX_PAGE_CHARS` (200,000) before upload, so the writer is told plainly rather than meeting the database's refusal as a sync failure.
+`sanitizeNoteHtml()` returns `''` for anything that isn't a string, so a malformed row renders as an empty page rather than throwing on the way in. `sharedPagePreviewText()` sanitizes before reading text out, so previews and emptiness checks never touch raw markup. `isPageWithinSizeLimit()` checks `MAX_PAGE_CHARS` (200,000) before upload, so the writer is told plainly rather than meeting the database's refusal as a sync failure.
 
 ### 26.11 Ids and join codes
 
@@ -1550,11 +1550,11 @@ There is still **no delete-the-whole-notebook**, and an owner cannot leave — t
 
 ### 26.14 Badges and the pill gutter
 
-**`AuthorPill.svelte`** — two letters on a coloured disc. Written three times before it existed once: BibleReader's verse gutter, AnnotationPanel's header, and now a notebook's members. There is no logic in it on purpose — which colour and which letters belong to whom has two different answers (`annotationConfig` for a commentator, the member row for a person) and neither is the component's business. Two shapes, both exactly as they were: `gutter` 20×14 for a margin, `round` 22×22 for a heading. `breathing` is the slow pulse marking the pill whose panel is open; `extraClass` is kept because the tutorial looks for `.anno-icon`.
+**`AuthorPill.svelte`** — two letters on a colored disc. Written three times before it existed once: BibleReader's verse gutter, AnnotationPanel's header, and now a notebook's members. There is no logic in it on purpose — which color and which letters belong to whom has two different answers (`annotationConfig` for a commentator, the member row for a person) and neither is the component's business. Two shapes, both exactly as they were: `gutter` 20×14 for a margin, `round` 22×22 for a heading. `breathing` is the slow pulse marking the pill whose panel is open; `extraClass` is kept because the tutorial looks for `.anno-icon`.
 
-**`src/lib/shared/memberIdentity.ts`** — the defaults a join can work out without reading a roster it is not yet in. `defaultInitials()` gives initials from two words and the first two letters from one; `defaultMemberColor()` derives from the user id rather than picking at random, so a phone and a laptop agree. `MEMBER_COLORS` is the commentary palette in a fixed order — fixed because a palette that reordered itself would give the same person a different colour on a different device.
+**`src/lib/shared/memberIdentity.ts`** — the defaults a join can work out without reading a roster it is not yet in. `defaultInitials()` gives initials from two words and the first two letters from one; `defaultMemberColor()` derives from the user id rather than picking at random, so a phone and a laptop agree. `MEMBER_COLORS` is the commentary palette in a fixed order — fixed because a palette that reordered itself would give the same person a different color on a different device.
 
-A colour is *identity*, not appearance: unlike the typeface and the page colours, which are each reader's own, it is stored on the member row and looks the same to everybody. Deriving it can therefore land on one somebody already wears, which is a collision in a badge and not in data. **`MemberPillPicker.svelte`** is where that is settled — per notebook, because the colour's whole job is telling people apart inside one group, and the same person can be teal in one and amber in another. Colours already taken are marked, not refused.
+A color is *identity*, not appearance: unlike the typeface and the page colors, which are each reader's own, it is stored on the member row and looks the same to everybody. Deriving it can therefore land on one somebody already wears, which is a collision in a badge and not in data. **`MemberPillPicker.svelte`** is where that is settled — per notebook, because the color's whole job is telling people apart inside one group, and the same person can be teal in one and amber in another. Colors already taken are marked, not refused.
 
 **`src/lib/shared/paragraphStamp.ts`** — who worked on which line. On every save the stored version and the one being saved are lined up paragraph by paragraph: unchanged text keeps its id and its pills exactly; a rewritten paragraph keeps its id and gains the saver; a new one gets a new id and starts with just them; one that has gone, goes. `MAX_PILLS` is 16, and past it the earliest names are kept — the first author most of all — with the person who just typed taking the last place, because the gutter must not lie about the line in front of them.
 
@@ -1591,11 +1591,11 @@ In the editor the strip is a warning rather than a lock. The revision check is w
 
 One sheet for both, doing the copy itself the way the create and join sheets do, so the busy state and a refusal have somewhere to be shown; `NotesPane` works out the destinations (`CopyDestination`) and leaves off any shared notebook this account may only read, rather than offering it and then being refused.
 
-Sending goes through the ordinary `createPage()`, so the copy is sanitised and stamped on arrival and every paragraph starts out credited to whoever sent it — in that notebook it is their page. Coming the other way, `stripStamps()` takes the pids and pills off, because a paragraph id and its pills only mean anything beside the roster they were stamped against. Keeping a copy asks nothing of the notebook, so it sits on the page menu for everyone, a Broadcast reader included; an account that has never made a notebook of its own gets Quick Notes made for it rather than an empty list.
+Sending goes through the ordinary `createPage()`, so the copy is sanitized and stamped on arrival and every paragraph starts out credited to whoever sent it — in that notebook it is their page. Coming the other way, `stripStamps()` takes the pids and pills off, because a paragraph id and its pills only mean anything beside the roster they were stamped against. Keeping a copy asks nothing of the notebook, so it sits on the page menu for everyone, a Broadcast reader included; an account that has never made a notebook of its own gets Quick Notes made for it rather than an empty list.
 
 ### 26.17 Running a notebook
 
-`SharedNotebookAdmin.svelte` (862) — one sheet off every shared notebook's row menu, for two quite different readers. Anybody in the notebook sees the roster — each person as the badge they wear, with what they may do and how many pages are theirs — and can leave. Its owner sees the same list with controls on it and the notebook's own settings underneath. Together rather than apart because every one of those decisions is about the same thing, and somebody who has just realised a person should not be writing in their notebook should not have to guess which of two screens to look on.
+`SharedNotebookAdmin.svelte` (862) — one sheet off every shared notebook's row menu, for two quite different readers. Anybody in the notebook sees the roster — each person as the badge they wear, with what they may do and how many pages are theirs — and can leave. Its owner sees the same list with controls on it and the notebook's own settings underneath. Together rather than apart because every one of those decisions is about the same thing, and somebody who has just realized a person should not be writing in their notebook should not have to guess which of two screens to look on.
 
 The owner can move somebody between **Reads / Writes / Runs it**, or take them out — which asks *separately* whether their pages go with them, because a group usually wants to keep the notes and lose the access. Joining can be closed, leaving everyone already in where they are, and a new code issued, which kills every old link, QR and written-down code at once. Group/Broadcast and private/public are switchable here rather than settled at creation.
 
@@ -1609,7 +1609,7 @@ The third state is the sad one: a notebook this account has been removed from. I
 
 **Keyed on `pageId`**, so one row per page rather than one per autosave: twenty minutes offline means "send what I end up with", not "replay every keystroke on the way there". A later edit folds into the waiting one and keeps its `baseRev` and `createdAt` — the oldest `baseRev` because that is still the newest version of everybody else's work this device has seen, and the original `createdAt` so a page begun offline is still *created* rather than updated.
 
-**Stamped and sanitised when queued, not when sent.** The pills are worked out against the stored page, and while offline the stored page is the only one there is; stamping at the door means the gutter is right on the device straight away and the text that eventually goes up is the text that was on screen. `flushOutbox()` therefore sends it as-is rather than stamping twice.
+**Stamped and sanitized when queued, not when sent.** The pills are worked out against the stored page, and while offline the stored page is the only one there is; stamping at the door means the gutter is right on the device straight away and the text that eventually goes up is the text that was on screen. `flushOutbox()` therefore sends it as-is rather than stamping twice.
 
 **The flush runs at the top of `pull()`** — up before down — and on the browser's own `online` event, so coming out of aeroplane mode is enough on its own; a **Try now** button is there for anyone who would rather press something. What the flush finds decides what happens to the item: delivered, and it goes; **refused, and it goes too**, with the database's own sentence shown and the words still in the local copy, because retrying a refusal only produces the refusal again; never arrived — `isOffline(err)`, a `TypeError` from a fetch that never left the building — and it stays.
 

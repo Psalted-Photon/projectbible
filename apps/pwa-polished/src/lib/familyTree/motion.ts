@@ -5,7 +5,7 @@
  * The camera pulls out to the whole tree, holds there with only God lit, then
  * climbs the line from God to the person while it lights, landing on them.
  * A golden burst goes off round God as the climb starts and a burst in the
- * person's own colour as it lands.
+ * person's own color as it lands.
  *
  * Every number lives in MOTION. The viewer and the motion lab
  * (tree-motion-lab.html) both run this file, so what the lab plays is what
@@ -73,7 +73,7 @@ function bezier([x1, y1, x2, y2]: [number, number, number, number], x: number): 
 /** One burst's look. Sizes are screen px, so a burst is the same size at
  *  any zoom. */
 export interface BurstSpec {
-  /** A soft glow blooming out from the centre. */
+  /** A soft glow blooming out from the center. */
   flare: boolean;
   /** A ring racing outward. */
   ring: boolean;
@@ -86,7 +86,7 @@ export interface BurstSpec {
   ms: number;
   /** Sparks. */
   count: number;
-  /** The fan the sparks are thrown in, degrees, centred on straight up.
+  /** The fan the sparks are thrown in, degrees, centered on straight up.
    *  360 is a full circle. */
   spread: number;
   /** Pull on the sparks, px/s². Negative floats them upward. */
@@ -333,7 +333,7 @@ export interface EntranceInit {
   kEnd: number;
   /** The view is already the whole tree, so there is nothing to glide out of. */
   skipOut: boolean;
-  /** Burst colours; null for no burst. */
+  /** Burst colors; null for no burst. */
   startColour: string | null;
   landColour: string | null;
   /** Overrides, for a line lit without the entrance (a tribe from its stone). */
@@ -355,7 +355,7 @@ export interface EntranceFrame {
 
 /**
  * One tap's sequence, in phases: out → hold → climb → done. The climb cannot
- * start while the camera is still travelling out, which is what used to snap
+ * start while the camera is still traveling out, which is what used to snap
  * it back. Timings are read from MOTION when it starts.
  */
 export class Entrance {
@@ -435,7 +435,7 @@ export class Entrance {
     return { view, lit: line.length, bursts, done: true };
   }
 
-  /** Whatever the view was, eased onto the whole tree about the screen centre. */
+  /** Whatever the view was, eased onto the whole tree about the screen center. */
   private outView(e: number): View {
     const { from, fit, W, H } = this.i;
     const a = { x: W / 2, y: H / 2 };

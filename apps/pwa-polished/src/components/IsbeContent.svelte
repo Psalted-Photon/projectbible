@@ -414,7 +414,7 @@
 
   // Verses grouped by book, in canonical order, for the Verses tab. Book names
   // are normalized first so an alias spelling from the pack joins its real
-  // group instead of forming its own with the grey fallback color.
+  // group instead of forming its own with the gray fallback color.
   $: versesByBook = (() => {
     const groups = new Map<string, VerseRef[]>();
     for (const v of verses) {
@@ -1074,7 +1074,7 @@
    * historical overlays and the place search, which is the whole reason to go
    * there. So the article does not travel — the place does.
    *
-   * The centre card gets out of the way once the map has somewhere to appear.
+   * The center card gets out of the way once the map has somewhere to appear.
    * A docked article stays where the reader put it, and the map opens alongside.
    */
   function openInMapWindow() {

@@ -4,7 +4,7 @@
  * Build People (Biblical Characters) Pack
  *
  * Creates an SQLite pack with biographical data for every named person in the
- * Bible, plus a name index and a per-person verse list used to recognise when a
+ * Bible, plus a name index and a per-person verse list used to recognize when a
  * clicked word is a character (and to disambiguate homonyms by the verse the
  * reader is currently in).
  *

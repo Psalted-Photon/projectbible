@@ -6,7 +6,7 @@
  * branches sitting where they wanted them. The lab's own dials are gone —
  * these are the values they were left on, copied out of its readout panel —
  * and nothing here should change without going back through the lab, because
- * changing one bough's numbers can move where its neighbours need to sit too.
+ * changing one bough's numbers can move where its neighbors need to sit too.
  */
 
 /** One bough or branch's hand-placed direction: {angle, spread, reach, lean}. */
@@ -17,10 +17,10 @@ export interface BranchSpec {
   lean: number;
 }
 
-// ── Colour ───────────────────────────────────────────────────────────────
+// ── Color ───────────────────────────────────────────────────────────────
 // Breastpiece stones, Exodus 28:17-20, in birth order. The pairing and the
 // names follow src/lib/gems/stones.ts (TRIBE_STONE, KJV names) so the tree and
-// the 3D stones in the bios never disagree; change them together. Colours are
+// the 3D stones in the bios never disagree; change them together. Colors are
 // each stone's hue lifted to read on the tree's dark ground. The three reds
 // (sardius, carbuncle, jasper) are kept apart by hue and by jasper's speckle;
 // agate and onyx are striped.
@@ -57,7 +57,7 @@ export const GOLD = '#c9a227';
  *  so the two gold people stand apart from the line between them. */
 export const BRONZE = '#b07a3c';
 export const LINEN = '#6b6153';
-/** Dinah's colour when lit: she has no stone, so LINEN brightened. */
+/** Dinah's color when lit: she has no stone, so LINEN brightened. */
 export const LINEN_LIT = '#8f8674';
 /** Wives. A rose node says "married in" at a glance, which the labels do not. */
 export const ROSE = '#a35a6e';
@@ -164,7 +164,7 @@ export const TREE: TreeSpec = {
  * Both fork at a point on the trunk where they are their father's ONLY
  * offshoot placed this way (Abel is Adam's one trunk offshoot; Elam is the
  * middle of Shem's three sons, but the other two are on the trunk itself),
- * so the automatic placement puts them dead centre of the fan at 179° — for
+ * so the automatic placement puts them dead center of the fan at 179° — for
  * Abel that points straight down past God, making him the tree's lowest
  * point; for Elam it lands him on the trunk between Cainan and Mahalaleel.
  *
@@ -196,8 +196,8 @@ export const LABEL_FULL_PX = 8;
 
 /**
  * The thin dark edge round every name, so a name stays readable over a dot
- * or a branch of its own colour (Levi's long strips were the worst of it).
- * Width is in tree units, so it scales with the name. The colour is a
+ * or a branch of its own color (Levi's long strips were the worst of it).
+ * Width is in tree units, so it scales with the name. The color is a
  * near-black close to the ground, so it doesn't look pasted on.
  * Tuned in tree-motion-lab.html; its Copy values prints this block.
  */
@@ -212,7 +212,7 @@ export const LABEL_OUTLINE = { width: 1.2, colour: '#0c0c0c' };
 
 /** Rough width of one character of the bough label. */
 export const LABEL_CHAR_W = 5.4;
-/** The label box's height. A label is centred at y+13, so its box runs from
+/** The label box's height. A label is centered at y+13, so its box runs from
  *  roughly y+3 to y+16. */
 export const LABEL_H = 13;
 /** Breathing room added to a label box across and down. */
@@ -227,7 +227,7 @@ export const SPREAD_DRIFT = 0.5;
 export const STAGGER_PX = 30;
 
 /**
- * People turned in toward their tribe's centre after the spread pass, each
+ * People turned in toward their tribe's center after the spread pass, each
  * carrying his line, as far as he will go before a line would cross or a name
  * would land on another. Judah's widest slices go to Pharez, so Shelah,
  * Zerah and Hezron's son Segub were left out on the bough's right edge with
@@ -237,16 +237,16 @@ export const STAGGER_PX = 30;
  */
 export const TUCK: string[] = ['segub_2484', 'shelah_2593', 'zerah_2984'];
 /** Step and limit for a tuck, in degrees, and how far each one eases back
- *  out from where he would first touch, so he nests beside his neighbour
+ *  out from where he would first touch, so he nests beside his neighbor
  *  rather than pressed against him. */
 export const TUCK_STEP = 0.5;
 export const TUCK_MAX = 40;
 export const TUCK_EASE = 2;
 
 /**
- * Tribes widened to fill the sky between two neighbours. After the spread and
+ * Tribes widened to fill the sky between two neighbors. After the spread and
  * the tuck, the tribe is stretched sideways from the edge it already shares
- * with the first neighbour until the gap on the far side matches that one, so
+ * with the first neighbor until the gap on the far side matches that one, so
  * both sides sit the same distance off. Judah was left with a narrow gap to
  * Levi and a wide one to Dan once Shelah and Zerah were tucked in.
  */

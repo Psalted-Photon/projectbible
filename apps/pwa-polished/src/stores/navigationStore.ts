@@ -11,7 +11,7 @@ export interface NavigationState {
   scrollTargetVerse?: number | null;
   /**
    * Where the "start here" highlight belongs after a link navigation, in the
-   * book category colour of the target book.
+   * book category color of the target book.
    *
    * This carries its own book and chapter rather than a bare verse number.
    * The reader mounts several chapters at once, so a lone number cannot say
@@ -115,7 +115,7 @@ const navigationHistory = writable<TrailCrumb[]>([]);
 
 /**
  * The origin snapshot from the step just walked back to, waiting for whichever
- * surface recognises it to put itself back.
+ * surface recognizes it to put itself back.
  *
  * This is how a crumb reopens the panel you left from without the navigation
  * store needing to know what a commentary panel or a search tree is. Whoever
@@ -191,7 +191,7 @@ function createNavigationStore() {
      *
      * `highlight` defaults to true because that is the app-wide rule: any link
      * that takes you to a place in the Bible marks where to start reading, in
-     * the target book's category colour. Only callers that paint their own
+     * the target book's category color. Only callers that paint their own
      * highlight — the reading plan, which keeps its green — pass false.
      *
      * A jump into the other testament lands in your default for it (see

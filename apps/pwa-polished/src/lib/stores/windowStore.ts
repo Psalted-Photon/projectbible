@@ -10,7 +10,7 @@ export type WindowContentType = 'selector' | 'bible' | 'map' | 'timeline' | 'not
  * registered here so that everything the reader already keys off `windowId` —
  * its content state, its chapter, its translation chip — works with no change
  * at all. But it is not docked to anything, and the two places that draw docked
- * windows both filter by the four real edges (`App.svelte`'s inset maths and
+ * windows both filter by the four real edges (`App.svelte`'s inset math and
  * `WindowContainer.svelte`'s four containers), so a harmony pane is invisible to
  * both: never rendered as a panel, never counted in the reader's insets.
  */

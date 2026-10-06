@@ -26,9 +26,9 @@ import {
 
 const SYNCED_KEYS: (keyof UserSettings)[] = [
   'theme',
-  // The Custom theme's typeface and colour presets follow the account — the
+  // The Custom theme's typeface and color presets follow the account — the
   // font *id* travels, not the file, and every device ships every face. An id
-  // an older deploy doesn't recognise falls back to the per-translation font.
+  // an older deploy doesn't recognize falls back to the per-translation font.
   'customTheme',
   // The Notes and Journal writing themes travel the same way and for the same
   // reason. Whether their toolbars are slid away does NOT — that is ergonomic,
@@ -36,7 +36,7 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   'notesTheme',
   'journalTheme',
   // Share-card looks saved by name. A photo is never part of a look, so
-  // nothing personal or heavy rides along — just fonts, colours and layout.
+  // nothing personal or heavy rides along — just fonts, colors and layout.
   'cardLooks',
   // Names given to Highlights categories, like "Family" for green text.
   'highlightNames',

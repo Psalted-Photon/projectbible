@@ -2,14 +2,14 @@
  * Tutorial Mode's look. Everything tutorial reads from here, so the lime or
  * the typeface changes in one place.
  *
- * One colour, electric lime, marks everything that belongs to the tutorial —
+ * One color, electric lime, marks everything that belongs to the tutorial —
  * dots, rings, card edges, buttons — and nothing else in the app uses it. The
- * app's own greens are the muted success colours (#4caf50, #8bc34a); the
+ * app's own greens are the muted success colors (#4caf50, #8bc34a); the
  * nearest bright ones are the highlight swatches, which only ever appear as
  * flat marker fills on text, never as a glowing ring.
  *
  * The tutorial ignores the app's Dark, Light, Sepia and Custom themes: it draws
- * outside the reader's colour-flipping filter and paints its own colours.
+ * outside the reader's color-flipping filter and paints its own colors.
  *
  * Fonts are self-hosted beside the app's other faces, so the service worker's
  * existing /fonts/ rule caches them for offline use. Both are OFL.
@@ -40,7 +40,7 @@
 }
 
 .tut-root {
-  /* The tutorial colour, and its glow. */
+  /* The tutorial color, and its glow. */
   --tut-lime: #c6ff00;
   --tut-lime-soft: rgba(198, 255, 0, 0.35);
   --tut-lime-faint: rgba(198, 255, 0, 0.12);

@@ -60,7 +60,7 @@ export function planUploadOp(id: string, plan: any, archivedAt?: number): SyncOp
       name: cfg.name || `${plan.totalDays}-day reading plan`,
       config: JSON.stringify({
         ...cfg,
-        // Ensure Date objects are serialised as ISO strings
+        // Ensure Date objects are serialized as ISO strings
         startDate: cfg.startDate instanceof Date ? cfg.startDate.toISOString() : cfg.startDate,
         endDate:   cfg.endDate   instanceof Date ? cfg.endDate.toISOString()   : cfg.endDate,
       }),
@@ -417,7 +417,7 @@ export async function applyRemoteReadingProgress(
         : undefined;
 
       // created_at / completed_at / started_reading_at may be ISO strings
-      // (TIMESTAMPTZ) or epoch-ms numbers — normalise to epoch-ms for IndexedDB.
+      // (TIMESTAMPTZ) or epoch-ms numbers — normalize to epoch-ms for IndexedDB.
       const toMs = (v: any): number | undefined =>
         v == null ? undefined : typeof v === 'number' ? v : new Date(v).getTime();
 

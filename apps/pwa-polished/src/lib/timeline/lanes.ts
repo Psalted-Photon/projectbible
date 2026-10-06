@@ -42,7 +42,7 @@ export function laneWidth(id: LaneId, narrow: boolean): number {
 }
 
 /**
- * The Bible's own verdict on a king, as a colour. Fixed rather than themed,
+ * The Bible's own verdict on a king, as a color. Fixed rather than themed,
  * like the rest of the timeline's dark look: green did right, red did evil,
  * amber did both.
  */

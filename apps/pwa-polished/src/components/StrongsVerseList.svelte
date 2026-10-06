@@ -3,7 +3,7 @@
    * The verse list shared by the word study's Forms and Occurrences tabs.
    *
    * Same shape as the encyclopedia's and Nave's verse tabs — books collapse,
-   * expanding one loads its text, and each row carries its book's colour — so a
+   * expanding one loads its text, and each row carries its book's color — so a
    * verse list reads identically wherever you meet one. What differs here is the
    * preview: it shows the *original* Greek or Hebrew with the tagged word
    * marked, which is the whole point of arriving from a lexicon entry.
@@ -146,7 +146,7 @@
    *
    * A whole verse of Greek would push every other row off the screen, but a
    * blunt character cut could drop the very word the row exists to show. So the
-   * window is centred on the first marked token instead, and says so with an
+   * window is centered on the first marked token instead, and says so with an
    * ellipsis when there is more either side.
    */
   const WINDOW = 7;

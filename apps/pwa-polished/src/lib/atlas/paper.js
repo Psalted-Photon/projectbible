@@ -10,7 +10,7 @@
  *
  *   a warm yellowing;
  *   uneven tone — broad blotches where the sheet has browned more;
- *   fibres, some darker and some lighter than the paper around them;
+ *   fibers, some darker and some lighter than the paper around them;
  *   foxing, the rust-brown spots old paper grows;
  *   a fine grain and the odd fleck of dust;
  *   and worn, darker edges.
@@ -40,11 +40,11 @@ const LIGHT_PANE = ['paper-light', 586];
 /** Tile sizes on screen, in CSS pixels. Unrelated sizes keep the repeats from lining up. */
 const TILE = { mottle: 1024, spots: 1280, fibres: 512, grain: 256, hatch: [240, 60] };
 
-/** The land's yellowing: a wash, not a colour, so nothing under it is hidden. */
+/** The land's yellowing: a wash, not a color, so nothing under it is hidden. */
 const LAND_TINT = 'rgba(226,188,122,0.32)';
-/** The sea's: cool and a little grey, so aged water still reads as water. */
+/** The sea's: cool and a little gray, so aged water still reads as water. */
 const WATER_TINT = 'rgba(168,190,192,0.22)';
-/** The engraver's ink for the water, a dark blue-grey. */
+/** The engraver's ink for the water, a dark blue-gray. */
 const WATER_INK = '38,66,78';
 
 /**
@@ -120,7 +120,7 @@ function tilingNoise(size, baseCells, octaves, rand) {
   return out;
 }
 
-/** Broad uneven patches in one colour. Drawn small and stretched, since blotches have no fine detail. */
+/** Broad uneven patches in one color. Drawn small and stretched, since blotches have no fine detail. */
 function mottle(seed, [r, g, b], strength) {
   const size = 256;
   const noise = tilingNoise(size, 2, 6, seeded(seed));
@@ -163,7 +163,7 @@ function spots() {
   const ctx = c.getContext('2d');
 
   // Foxing: rust-brown spots, darkest at the core, some with a speck or two
-  // beside them the way mould spreads.
+  // beside them the way mold spreads.
   for (let n = 0; n < 26; n++) {
     const x = rand() * size;
     const y = rand() * size;
@@ -199,7 +199,7 @@ function spots() {
   return c;
 }
 
-/** Fibres: short curved strands, dark or light. */
+/** Fibers: short curved strands, dark or light. */
 function fibres(light) {
   const css = TILE.fibres;
   const res = sharpness();
@@ -314,7 +314,7 @@ function paperTextures() {
  * them as shapes: it paints the paper across the whole canvas, then uses the
  * water to cut the paper away and lay the engraved water in its place.
  *
- * The light fibres need a normal blend while everything else multiplies, so a
+ * The light fibers need a normal blend while everything else multiplies, so a
  * second canvas rides along in its own pane, sized, moved and scaled in step.
  */
 const PaperRenderer = L.Canvas.extend({

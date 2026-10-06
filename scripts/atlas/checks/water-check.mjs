@@ -2,9 +2,9 @@
 /**
  * Does the map put biblical places on the right side of the water?
  *
- * Natural Earth's shoreline is right to about a kilometre, which reads fine at
+ * Natural Earth's shoreline is right to about a kilometer, which reads fine at
  * country scale and badly close in: it put Capernaum in the Sea of Galilee and
- * fourteen harbour towns out at sea. This reports, for every place Scripture
+ * fourteen harbor towns out at sea. This reports, for every place Scripture
  * names, whether the map has it on land or in water, at both the coarse level
  * and the fine one — so a claim that the water is fixed can be checked rather
  * than believed.

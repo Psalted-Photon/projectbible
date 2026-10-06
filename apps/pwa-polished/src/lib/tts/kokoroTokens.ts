@@ -41,7 +41,7 @@ export const KOKORO_VOCAB: Record<string, number> = {
  * Matches what kokoro-js applies before tokenizing.
  */
 export const KOKORO_FOLD: Record<string, string> = {
-  ʲ: 'j', // palatalisation written as a modifier; Kokoro wants a plain glide
+  ʲ: 'j', // palatalization written as a modifier; Kokoro wants a plain glide
   r: 'ɹ', // espeak's tapped r for English; Kokoro learned the approximant
   x: 'k', // velar fricative English does not use — nearest sound it knows
   ɬ: 'l', // Welsh ll, not in Kokoro's table at all

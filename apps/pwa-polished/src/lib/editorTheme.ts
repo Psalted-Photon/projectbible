@@ -28,15 +28,15 @@ const BASE_LEAD = 1.6;
  * and you get a dark toolbar with pale buttons, rather than the shipped white
  * buttons stranded on it.
  *
- * Everything is a mix towards the *text* colour, which is by definition the
- * colour that reads against this background — nudging towards white or black
+ * Everything is a mix towards the *text* color, which is by definition the
+ * color that reads against this background — nudging towards white or black
  * would disappear at one end of the range or the other.
  */
 function chrome(text: string, bg: string) {
   return {
     /** Toolbar strip: a shade off the page so the two read as separate bands. */
     toolbarBg: mix(bg, text, 0.09),
-    /** Buttons sit on the toolbar, so they step back towards the page colour. */
+    /** Buttons sit on the toolbar, so they step back towards the page color. */
     buttonBg: mix(bg, text, 0.03),
     buttonHoverBg: mix(bg, text, 0.16),
     /** Visible but quiet — the same weight the shipped #ddd has on white. */
@@ -51,7 +51,7 @@ function chrome(text: string, bg: string) {
  *
  * The shipped #007aff is a mid blue that vanishes against a dark navy page and
  * shouts against a pale one, so it is nudged towards white or black to keep it
- * legible either way rather than being recoloured to something arbitrary — it
+ * legible either way rather than being recolored to something arbitrary — it
  * should still read as "the accent blue".
  */
 function accentFor(bg: string): string {
@@ -88,7 +88,7 @@ export function editorThemeVars(theme: EditorThemeSettings): string {
   // variables unset so the editor's Milonga fallback stays in charge.
   if (font) {
     decls.push(`--font-family: ${font.stack}`);
-    // The same x-height normalisation the reader does. Without it Tangerine
+    // The same x-height normalization the reader does. Without it Tangerine
     // lands at about half the size of Bitter at the identical pixel value and
     // Rock Salt overshoots — the multipliers in readerFonts.ts exist to make
     // the faces comparable, and they are just as necessary here.
@@ -100,9 +100,9 @@ export function editorThemeVars(theme: EditorThemeSettings): string {
 }
 
 /**
- * Preview colours for the theme panel's sample line, matching what the reader's
+ * Preview colors for the theme panel's sample line, matching what the reader's
  * preview does — inline styles rather than the variables, so the sample tracks
- * a colour drag that has not been committed yet.
+ * a color drag that has not been committed yet.
  */
 export function editorPreviewStyle(theme: EditorThemeSettings): string {
   const font = getReaderFont(theme.fontId);

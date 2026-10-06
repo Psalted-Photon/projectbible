@@ -2,7 +2,7 @@
   /**
    * A row of tabs that splits a settings panel into sections, the way the
    * share card's controls are split — one section on screen at a time, so a
-   * long panel doesn't have to be scrolled past colour boxes and sliders that
+   * long panel doesn't have to be scrolled past color boxes and sliders that
    * catch the finger meant for scrolling.
    *
    * Scales with Bar size, like every other tab strip in the app.

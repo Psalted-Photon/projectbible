@@ -1,7 +1,7 @@
 /**
  * The card's QR code: a small plate in a corner that opens the verse.
  *
- * Always dark squares on a pale plate, whatever the card's colours. Many
+ * Always dark squares on a pale plate, whatever the card's colors. Many
  * phone cameras will not read a light-on-dark code, and a QR that looks
  * right but will not scan is worse than none. The generator is the one the
  * shared-notebook invite already uses (QrCode.svelte), loaded on demand.
@@ -42,7 +42,7 @@ export function drawQr(ctx: CanvasRenderingContext2D, m: Matrix, x: number, y: n
   ctx.fillStyle = '#111111';
   for (let r = 0; r < m.count; r++) {
     for (let c = 0; c < m.count; c++) {
-      // Overlap by a hair so no seams show between neighbouring squares.
+      // Overlap by a hair so no seams show between neighboring squares.
       if (m.dark(r, c)) ctx.fillRect(x + (c + QUIET) * cell, y + (r + QUIET) * cell, cell + 0.5, cell + 0.5);
     }
   }

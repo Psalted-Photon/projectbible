@@ -148,7 +148,7 @@ export class BibleRefNode extends ElementNode {
 
   private applyAttrs(el: HTMLElement): void {
     // `is-pending` is a link mid-edit with nothing to point at yet. It keeps the
-    // reference colour so it still reads as one piece, but drops the underline
+    // reference color so it still reads as one piece, but drops the underline
     // and is not clickable.
     const classes = ['bible-ref'];
     if (this.__expanded) classes.push('is-expanded');
@@ -204,7 +204,7 @@ export class BibleRefNode extends ElementNode {
     };
   }
 
-  // ── Behaviour ────────────────────────────────────────────────────────────
+  // ── Behavior ────────────────────────────────────────────────────────────
 
   isInline(): boolean {
     return true;

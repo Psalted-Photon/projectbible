@@ -62,8 +62,8 @@
 
 <style>
   /* The grid and the caption each take an auto margin on their outer edge, so
-     the pair sits centred while there is room and simply starts at the top once
-     there isn't. `justify-content: center` used to do the centring, which meant
+     the pair sits centered while there is room and simply starts at the top once
+     there isn't. `justify-content: center` used to do the centering, which meant
      an overflowing grid spilled off both ends and put the first row out of
      reach — a panel dragged short could not scroll back up to it. */
   .content-selector {

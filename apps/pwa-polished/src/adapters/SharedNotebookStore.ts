@@ -104,7 +104,7 @@ export interface SharedNotebookPage {
   notebookId: string;
   authorId: string;
   title?: string;
-  /** Always sanitised — on the way in from the server and again before display. */
+  /** Always sanitized — on the way in from the server and again before display. */
   text: string;
   editMode: 'anyone' | 'author';
   pinned: boolean;
@@ -245,7 +245,7 @@ function rowToDBPage(row: any): DBSharedNotebookPage {
     notebookId: row.notebook_id,
     authorId: row.author_id,
     title: row.title ?? undefined,
-    // Sanitised here, at the door, so nothing downstream ever holds a page of
+    // Sanitized here, at the door, so nothing downstream ever holds a page of
     // somebody else's markup in its raw form — not the list preview, not the
     // reader, not a copy saved back into a personal notebook.
     text: sanitizeNoteHtml(row.text),
@@ -583,7 +583,7 @@ export class SharedNotebookStoreImpl {
    *
    * Taken from the account rather than asked for, because a join should be one
    * tap. What it produces is a default — phase 4's picker is where anyone who
-   * wants different letters or a different colour changes them.
+   * wants different letters or a different color changes them.
    */
   private async identity(): Promise<{
     userId: string;
@@ -727,7 +727,7 @@ export class SharedNotebookStoreImpl {
       members: (payload.members ?? []).map((m) =>
         toMember(rowToDBMember({ ...m, notebook_id: notebook.id })),
       ),
-      // Sanitised on arrival like every other page — this is the one path where
+      // Sanitized on arrival like every other page — this is the one path where
       // the markup has not been near the allowlist before, so it matters most.
       pages: (payload.pages ?? []).map((pg) => toPage(rowToDBPage(pg))),
     };
@@ -847,7 +847,7 @@ export class SharedNotebookStoreImpl {
     pinned?: boolean;
     createdAt?: Date;
   }): Promise<SharedPageSaveResult> {
-    // Sanitised before it leaves this device as well as when it arrives. The
+    // Sanitized before it leaves this device as well as when it arrives. The
     // page is about to be somebody else's to read, and nothing the editor can
     // legitimately produce is lost by passing it through the allowlist twice.
     const clean = sanitizeNoteHtml(args.text);
@@ -857,7 +857,7 @@ export class SharedNotebookStoreImpl {
     // stamping reads the stored version's ids and writes the new version's,
     // and it should be looking at the same markup everybody else will see.
     // The attributes it adds are two the allowlist already permits, so the
-    // sanitiser at the other end leaves them alone.
+    // sanitizer at the other end leaves them alone.
     const text = stampParagraphs(args.previousText, clean, await this.saverId());
     if (text.length > MAX_PAGE_CHARS) {
       throw new Error('That page is too long to save');
@@ -1178,7 +1178,7 @@ export class SharedNotebookStoreImpl {
         p_id: item.pageId,
         p_notebook_id: item.notebookId,
         p_title: item.title.trim() || null,
-        // Sanitised and stamped when it was queued, so it goes as it is. Doing
+        // Sanitized and stamped when it was queued, so it goes as it is. Doing
         // either again would be measuring it against a stored page that has
         // moved on since, which is the one thing that must not happen to it.
         p_text: item.text,
@@ -1281,14 +1281,14 @@ export class SharedNotebookStoreImpl {
   // ── Your badge ───────────────────────────────────────────────────────────
 
   /**
-   * Change the two letters and the colour you are known by in one notebook.
+   * Change the two letters and the color you are known by in one notebook.
    *
    * A plain UPDATE rather than another function: the policy on the members
    * table already says a member may change their own row and nobody else's,
    * so there is nothing here a SECURITY DEFINER would add except a place for
    * the rule to be written down twice and drift.
    *
-   * Per notebook on purpose. The colour is meant to tell people apart inside
+   * Per notebook on purpose. The color is meant to tell people apart inside
    * one group, so it has to be able to move when the group you are in already
    * has somebody wearing it — one badge across every notebook would make that
    * impossible to resolve.
@@ -1487,7 +1487,7 @@ export class SharedNotebookStoreImpl {
    *
    * What clears away a read-only copy of a notebook this account is no longer
    * in. It is purely local: a notebook you are still a member of would simply
-   * come back on the next pull, which is the honest behaviour — this is not a
+   * come back on the next pull, which is the honest behavior — this is not a
    * way to leave.
    */
   async forgetNotebook(notebookId: string): Promise<void> {

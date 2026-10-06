@@ -27,7 +27,7 @@
   let rootEl: HTMLElement;
 
   /**
-   * Our on-screen size, for the caller's placement maths. The button grid
+   * Our on-screen size, for the caller's placement math. The button grid
    * changes shape with the selection — Define/Bio/More Info, Map, Repeats and
    * Extend all come and go, and none of the buttons wrap — so both width and
    * height vary and neither can be assumed.
@@ -148,10 +148,10 @@
     border-bottom: 1px solid #333;
   }
   
-  /* The colour lives in the word, not behind it — same as the ring's toggle.
+  /* The color lives in the word, not behind it — same as the ring's toggle.
      It sits on the actions' own background so it reads as one of them rather
-     than a block of colour, and the tint alone says it is a live choice. It
-     used to share the dim grey the unselected half of the old Word/Verse pair
+     than a block of color, and the tint alone says it is a live choice. It
+     used to share the dim gray the unselected half of the old Word/Verse pair
      wore, which on its own reads as a switched-off button. */
   .toggle-btn {
     flex: 1;

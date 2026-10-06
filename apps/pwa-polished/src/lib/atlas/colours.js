@@ -1,24 +1,24 @@
 /**
- * Colours for the timeline's lands, provinces and empires.
+ * Colors for the timeline's lands, provinces and empires.
  *
  * Every shape used to share one orange-brown, so a map of twenty lands read as
  * one smear with twenty names floating over it, and nothing said which name
- * belonged to which shape. Now each land and province gets a colour of its own,
+ * belonged to which shape. Now each land and province gets a color of its own,
  * and its name is lettered in the darker shade its border is drawn in, so name
  * and shape visibly belong together.
  *
  * Three promises, in order of how badly breaking them would show:
  *
- *   No two lands drawn in the same era share a colour, and provinces that touch
+ *   No two lands drawn in the same era share a color, and provinces that touch
  *   never do.
- *   A name keeps its colour in every era, so Moab stays Moab-coloured as the
+ *   A name keeps its color in every era, so Moab stays Moab-colored as the
  *   slider moves rather than reshuffling on every step.
- *   Among the colours still allowed, a shape takes the one furthest from its
- *   neighbours', so the pairs that do sit side by side are easy to tell apart.
+ *   Among the colors still allowed, a shape takes the one furthest from its
+ *   neighbors', so the pairs that do sit side by side are easy to tell apart.
  *
- * Keeping a colour across eras means it has to be decided with every era in
+ * Keeping a color across eras means it has to be decided with every era in
  * view at once, so the assignment runs over the whole timeline before the first
- * era is drawn. It is deterministic: the same data gives the same colours in
+ * era is drawn. It is deterministic: the same data gives the same colors in
  * every session.
  */
 
@@ -64,8 +64,8 @@ const BY_ID = new Map(PALETTE.map((c) => [c.id, c]));
  * The empire an era's unnamed territory draws.
  *
  * Those layers are one realm's extent cut into pieces — Rome in AD 117 is 112
- * polygons, most of them islands — so they take one colour between them.
- * Colouring the pieces apart would turn one empire into a patchwork of
+ * polygons, most of them islands — so they take one color between them.
+ * Coloring the pieces apart would turn one empire into a patchwork of
  * countries that never existed. Rome keeps its red through all five of its eras.
  */
 const POLITIES = {
@@ -80,7 +80,7 @@ const POLITIES = {
   'later-empire': 'brick',
 };
 
-/** The colour of the realm an era's unnamed territory belongs to. */
+/** The color of the realm an era's unnamed territory belongs to. */
 export function polityColour(eraId) {
   return BY_ID.get(POLITIES[eraId] ?? 'brick');
 }
@@ -90,9 +90,9 @@ export function isWaterKind(kind) {
   return /water|sea|river|lake|spring/i.test(kind || '');
 }
 
-// ------------------------------------------------------------ colour distance
+// ------------------------------------------------------------ color distance
 
-/** CIE L*a*b*, for telling how far apart two colours look. */
+/** CIE L*a*b*, for telling how far apart two colors look. */
 function lab(hex) {
   const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16) / 255));
@@ -129,7 +129,7 @@ function bboxOf(geometry, pad = 0) {
 const overlaps = (a, b) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
 
 /**
- * Give every name on the timeline its colour.
+ * Give every name on the timeline its color.
  *
  * @param {Array<{ id: string, hasPolity: boolean,
  *   lands: Array<{ name: string, kind?: string, geometry: any }>,
@@ -139,10 +139,10 @@ const overlaps = (a, b) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] 
  * A name is one node however many eras it turns up in, and its constraints are
  * the union of all of them. Two lands in the same era must differ outright;
  * two provinces must differ when their extents meet. Shapes that meet in any
- * era are neighbours, and a colour is scored by how far it sits from the
- * neighbours already coloured.
+ * era are neighbors, and a color is scored by how far it sits from the
+ * neighbors already colored.
  *
- * The order is the usual one for colouring a map: always the most constrained
+ * The order is the usual one for coloring a map: always the most constrained
  * shape next, so the hard cases pick while there is still room to pick.
  */
 export function assignColours(eras) {
@@ -165,7 +165,7 @@ export function assignColours(eras) {
   };
 
   for (const era of eras) {
-    // A land drawn over an empire's fill would vanish into it in the same colour.
+    // A land drawn over an empire's fill would vanish into it in the same color.
     const polity = era.hasPolity ? PALETTE.indexOf(polityColour(era.id)) : -1;
 
     const lands = era.lands.map((l) => ({ name: l.name, box: bboxOf(l.geometry, 0.25) }));
@@ -177,7 +177,7 @@ export function assignColours(eras) {
     for (let i = 0; i < lands.length; i++) {
       for (let j = i + 1; j < lands.length; j++) {
         // Every pair of lands in an era is a conflict; only overlapping ones
-        // are also neighbours worth pushing apart in hue.
+        // are also neighbors worth pushing apart in hue.
         nodes.get(lands[i].name).conflicts.add(lands[j].name);
         nodes.get(lands[j].name).conflicts.add(lands[i].name);
         if (overlaps(lands[i].box, lands[j].box)) link(lands[i].name, lands[j].name, false);
@@ -241,8 +241,8 @@ export function assignColours(eras) {
         const k = nodes.get(m).colour;
         if (k >= 0) nearest = Math.min(nearest, DISTANCE[i][k]);
       }
-      // Furthest from the nearest neighbour wins; with no neighbour coloured
-      // yet, the least-used colour does, so the palette gets spread around.
+      // Furthest from the nearest neighbor wins; with no neighbor colored
+      // yet, the least-used color does, so the palette gets spread around.
       const score = (nearest === Infinity ? 1000 : nearest) - used[i] * 0.5;
       if (score > bestScore) {
         best = i;
@@ -258,7 +258,7 @@ export function assignColours(eras) {
   return out;
 }
 
-/** A colour for a name the assignment never saw, stable across sessions. */
+/** A color for a name the assignment never saw, stable across sessions. */
 export function fallbackColour(name) {
   let h = 0;
   for (const ch of String(name)) h = (h * 31 + ch.codePointAt(0)) >>> 0;

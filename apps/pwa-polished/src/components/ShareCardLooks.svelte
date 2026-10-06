@@ -21,7 +21,7 @@
   let editing = false;
   let nameInput: HTMLInputElement | null = null;
 
-  /** A chip shows the look itself: its background with an "Aa" in its font and colour. */
+  /** A chip shows the look itself: its background with an "Aa" in its font and color. */
   function chipStyle(raw: CardStyle | Record<string, unknown>): string {
     const s = sanitizeStyle(raw);
     const bg =

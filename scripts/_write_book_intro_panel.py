@@ -143,7 +143,7 @@ content = """\
     {#if panelLoading}
       <div class="panel-loading">Loading\u2026</div>
     {:else if panelMode === "verseView"}
-      <!-- Full chapter reader — identical behaviour to AnnotationPanel -->
+      <!-- Full chapter reader — identical behavior to AnnotationPanel -->
       <div class="view-chapter-header">{viewBook} {viewChapter}</div>
       {#each viewVerses as v (v.verse)}
         {#if v.heading}

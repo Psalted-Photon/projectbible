@@ -25,7 +25,7 @@ export function edgeLane(edge: DockEdge): EdgeLane {
       return { edge, box: { left: w * 0.3, top: 0, width: w * 0.4, height: LANE_DEPTH } };
     case 'bottom':
     default:
-      // Left of the middle: the centre of the bottom edge is kept free for the
+      // Left of the middle: the center of the bottom edge is kept free for the
       // phone's own home gesture and never opens a window.
       return { edge: 'bottom', box: { left: w * 0.12, top: h - LANE_DEPTH, width: w * 0.26, height: LANE_DEPTH } };
   }

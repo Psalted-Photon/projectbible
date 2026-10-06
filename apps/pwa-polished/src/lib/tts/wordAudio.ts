@@ -2,7 +2,7 @@
  * One Greek word, spoken on its own.
  *
  * The voice cannot do it directly. Trained on sentences, it has no valid
- * behaviour for a two- or three-sound utterance: `ἐν` alone runs 1.6s of
+ * behavior for a two- or three-sound utterance: `ἐν` alone runs 1.6s of
  * hallucinated noise, and the result is different every time. Chapter reading
  * is unaffected — even the shortest Greek verse is long enough.
  *
@@ -85,7 +85,7 @@ function findEdges(samples: Float32Array, sampleRate: number): Edges {
 
 /**
  * The word's length according to each copy, or null when the clip has no
- * recognisable shape. The first copy ends at the first real pause; the last
+ * recognizable shape. The first copy ends at the first real pause; the last
  * copy begins at the last one.
  */
 export function measureCopies(

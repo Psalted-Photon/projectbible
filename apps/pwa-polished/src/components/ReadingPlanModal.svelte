@@ -49,7 +49,7 @@
   const STORAGE_PLAN_HISTORY = 'projectbible_reading_plan_history';
   
   // Create plan form state. This component is mounted once for the whole app
-  // session and never destroyed, so these initialisers run exactly once —
+  // session and never destroyed, so these initializers run exactly once —
   // resetCreateForm() is what actually gives each visit a clean form.
   let planPreset = '';
   let planName = '';
@@ -703,7 +703,7 @@
 
     const nav = get(navigationStore);
     navigationStore.setReadingPlanActiveTarget(passage.book, passage.startChapter, passage.startVerse, false);
-    // false: the plan paints its own green mark, so no category-coloured one too.
+    // false: the plan paints its own green mark, so no category-colored one too.
     navigationStore.navigateTo(nav.translation, passage.book, passage.startChapter, passage.startVerse, false);
     isOpen = false;
   }
@@ -1811,7 +1811,7 @@
                           on:click={() => markHarmonyDayComplete(day)}
                         >✓</button>
                       {:else}
-                        <!-- Standard plan day: chapter chips in their book's colour -->
+                        <!-- Standard plan day: chapter chips in their book's color -->
                         <span class="list-day-chapters">
                           {#each day.chapters as chapter}
                             <label class="chapter-chip" style="--book-color: {getBookColor(chapter.book)}">
@@ -2516,7 +2516,7 @@
     color: #66bb6a;
   }
   
-  /* Size and shape come from .today-reading-actions; this is colour only. */
+  /* Size and shape come from .today-reading-actions; this is color only. */
   .start-reading-btn {
     background: #1d4ed8;
     color: white;
@@ -2640,7 +2640,7 @@
 
   /* The day's buttons were added at different times, each with its own
      padding, font and margin. Here they share one row at one size, equal
-     widths, and keep only their colours. Play this reading is its own
+     widths, and keep only their colors. Play this reading is its own
      component, hence :global, and the extra .today-reading so this outranks
      that component's own sizing. */
   .today-reading-actions {
@@ -3017,7 +3017,7 @@
     accent-color: var(--book-color, #4caf50);
   }
 
-  /* Book-category colour, same palette as the nav dropdown and reader. */
+  /* Book-category color, same palette as the nav dropdown and reader. */
   .chapter-chip .chapter-link {
     padding: 0;
     border: 0;

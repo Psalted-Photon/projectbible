@@ -4,7 +4,7 @@
  * Packs come first because most of the app does nothing without them: one
  * card offers to install everything, and says each feature also offers its
  * own downloads, for anyone who'd rather take them as they go. The book
- * picker comes next, and teaches the book colours, because they carry through
+ * picker comes next, and teaches the book colors, because they carry through
  * the whole app. The half that needs packs -- the tap-a-word ring, commentary,
  * cross-references, Read Aloud -- runs once they are installed.
  */
@@ -175,7 +175,7 @@ export const PART_ONE: TourStep[] = [
       'It keeps going in the background, one pack at a time. Let’s look around while it works.',
   },
 
-  // ── Books and their colours ──────────────────────────────────────────────
+  // ── Books and their colors ──────────────────────────────────────────────
   {
     id: 'book-picker',
     checkpoint: true,

@@ -16,12 +16,12 @@
  * so anchoring to the verse put the glow in the wrong place, drifting as the
  * text rewrapped. `.text-container` is a block that scrolls with the content
  * and is already the anchor the text-selection drag handles use, so the same
- * "rect minus container rect" maths applies and layout mode stops mattering.
+ * "rect minus container rect" math applies and layout mode stops mattering.
  *
  * Smoothness, in three parts — all of it matters, they compound:
  *  1. The size is fixed once. Changing width/height per frame forces layout
  *     and re-renders the (expensive) blur every frame; with a constant size
- *     the browser rasterises the blur once and just slides it around.
+ *     the browser rasterizes the blur once and just slides it around.
  *  2. Only `transform` changes per frame — the compositor-only path.
  *  3. Travel is continuous through the gaps between words, and the audio
  *     clock is predicted between its coarse updates. Reading currentTime raw

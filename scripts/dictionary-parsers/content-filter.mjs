@@ -1,7 +1,7 @@
 /**
  * Content filter for the modern (Wordset) dictionary.
  *
- * Wordset is built on Princeton WordNet, whose purpose was to catalogue every
+ * Wordset is built on Princeton WordNet, whose purpose was to catalog every
  * attested sense of a word so software could tell them apart. No reader was
  * considered, so sordid senses get attached to ordinary words — "street" ships
  * with a sense about poverty, crime and prostitution.

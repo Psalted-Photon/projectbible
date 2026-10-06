@@ -561,7 +561,7 @@ export async function importPackFromBytes(
       // Bundled image blobs (full + thumbnail) for offline display.
       //
       // These blobs are ~99% of the pack, so reading them with db.exec would
-      // materialise the whole file as binary in JS -- on top of the source
+      // materialize the whole file as binary in JS -- on top of the source
       // ArrayBuffer and sql.js's own WASM-heap copy -- and kill the renderer on
       // a phone without the headroom. Step through the rows instead, writing
       // each one out and dropping it, so only a few MB are ever held at once.
@@ -617,7 +617,7 @@ export async function importPackFromBytes(
         console.log('No art_images table in this pack — scenes imported without images');
       }
     } else if (packInfo.type === 'atlas-map') {
-      // The Historical Map: sixteen eras, the catalogue of drawn layers, the
+      // The Historical Map: sixteen eras, the catalog of drawn layers, the
       // places Scripture names, and the photographs. The geometry itself and
       // the place search index arrive in their own files — see
       // importAtlasGeometryShard and importAtlasPlaceIndex.
@@ -631,7 +631,7 @@ export async function importPackFromBytes(
       }
 
       // A re-install must not leave rows from the previous one behind: a layer
-      // dropped between builds would otherwise stay in the catalogue for ever,
+      // dropped between builds would otherwise stay in the catalog for ever,
       // pointing at geometry no shard carries.
       await clearStores([
         'atlas_meta',
@@ -1681,7 +1681,7 @@ export async function importPackFromBytes(
       }
 
       // Verse appearances — clear first (autoIncrement keys). The book name is
-      // normalised on the way in, for the reason given on topic_verses below.
+      // normalized on the way in, for the reason given on topic_verses below.
       await new Promise<void>((resolve, reject) => {
         const tx = idb.transaction('person_verses', 'readwrite');
         tx.objectStore('person_verses').clear();
@@ -1794,7 +1794,7 @@ export async function importPackFromBytes(
         { label: 'place-name index entries' },
       );
 
-      // Place verse appearances. The book name is normalised on the way in
+      // Place verse appearances. The book name is normalized on the way in
       // because "in this chapter" looks these up by the exact stored string —
       // see the note on topic_verses below.
       await clearStore('isbe_place_verses');
@@ -1869,7 +1869,7 @@ export async function importPackFromBytes(
 
         // Verse citations.
         //
-        // The book name is normalised on the way in. The builders write the OSIS
+        // The book name is normalized on the way in. The builders write the OSIS
         // book title, which calls the book of Psalms "Psalms"; the app's
         // canonical name is the singular "Psalm", the way you'd name one song
         // out of a songbook. Everywhere that folds the name in passing coped

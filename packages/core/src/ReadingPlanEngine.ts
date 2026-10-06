@@ -180,9 +180,9 @@ export function suggestCatchUp(
 
 /**
  * Plan data is generated with plural book names ("Psalms") while stored
- * progress is canonicalised to the singular ("Psalm"), so a raw string
+ * progress is canonicalized to the singular ("Psalm"), so a raw string
  * comparison never matches and every Psalm reads as unread. Core has no book
- * table to normalise against, so fold case and drop a trailing "s" — enough to
+ * table to normalize against, so fold case and drop a trailing "s" — enough to
  * pair the two spellings of the same book without colliding any two real books.
  */
 function chapterKey(book: string, chapter: number): string {

@@ -93,7 +93,7 @@
       "summary": "David's son steals the hearts of Israel and drives his father from Jerusalem; 'O Absalom, my son, my son!'" },
     { "id": "solomon-king", "title": "Solomon crowned; he asks for wisdom", "year": -971, "tier": 2,
       "passages": "1 Kings 1:28-53; 1 Kings 3:3-28", "people": ["solomon_2762", "nathan_2153", "bathsheba_416"], "places": ["jerusalem_636"],
-      "summary": "Anointed at Gihon before David dies; at Gibeon he asks for an understanding heart and is given riches and honour besides." },
+      "summary": "Anointed at Gihon before David dies; at Gibeon he asks for an understanding heart and is given riches and honor besides." },
     { "id": "temple-dedicated", "title": "The Temple dedicated", "year": -959, "tier": 2,
       "passages": "1 Kings 8; 2 Chronicles 5-7", "people": ["solomon_2762"], "places": ["jerusalem_636"],
       "summary": "The ark is brought into the Most Holy Place and the glory of the LORD fills the house." },

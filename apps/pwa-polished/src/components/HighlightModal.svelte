@@ -42,7 +42,7 @@
 
   let selected: HighlightStyle = initFromExisting(existingHighlight);
 
-  // ── Meanings view — what each colour and line stands for in the colour code ──
+  // ── Meanings view — what each color and line stands for in the color code ──
   // Remembered per device; the names come from Highlights → Categories.
   let showMeanings = getSettings().highlightMeanings ?? false;
   const names = getHighlightNames();

@@ -15,7 +15,7 @@
 const KEY = 'pb:install-log';
 const MAX_ENTRIES = 200;
 
-/** One breadcrumb. Kept short -- it is re-serialised on every write. */
+/** One breadcrumb. Kept short -- it is re-serialized on every write. */
 interface LogEntry {
   /** ms since the run started */
   t: number;
@@ -197,7 +197,7 @@ export function dumpPreviousInstallLog(): void {
  * Expose the dump on `window` so it can be read from a console that attached
  * late.
  *
- * Eruda initialises when the app component mounts, well after startup logging
+ * Eruda initializes when the app component mounts, well after startup logging
  * has already run, and it only captures console output from its own init
  * onward -- so the automatic replay is invisible on exactly the device we need
  * it from. Calling `__installLog()` by hand works no matter when the console

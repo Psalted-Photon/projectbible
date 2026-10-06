@@ -22,11 +22,11 @@ export const COMMENTARY_AUTHORS: Record<string, AuthorConfig> = {
   'Abbott':                { color: '#475569', initials: 'Ab', fullName: 'Abbott' },
   // Keyed on the author string the pack actually stores. It reads "Thomas
   // Aquinas (Catena Aurea)", so the shorter key never matched and Aquinas fell
-  // through to the grey fallback.
+  // through to the gray fallback.
   'Thomas Aquinas (Catena Aurea)': { color: '#B45309', initials: 'Aq', fullName: 'Thomas Aquinas (Catena Aurea)' },
   'John Lightfoot':        { color: '#0369A1', initials: 'Li', fullName: 'John Lightfoot' },
   'Martin Luther':         { color: '#A21CAF', initials: 'Lu', fullName: 'Martin Luther' },
-  // Where a verse quotes, or is quoted by, another. Its own colour so the badge
+  // Where a verse quotes, or is quoted by, another. Its own color so the badge
   // reads as "there is a quotation here" rather than as one more commentator.
   'Quoting Passages':      { color: '#14B8A6', initials: 'Qp', fullName: 'Quotations & Allusions' },
   // Matches TSK_COLOR below — same body of cross-references, same cue.

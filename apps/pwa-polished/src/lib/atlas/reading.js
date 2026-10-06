@@ -53,7 +53,7 @@ const BOOK_ALIASES = {
 
 /**
  * Read "Acts 17", "1 Kings 6:1" or "acts" into a book and optional chapter.
- * Returns null when nothing recognisable is there.
+ * Returns null when nothing recognizable is there.
  */
 export function parsePassage(text) {
   const raw = String(text ?? '').trim().toLowerCase();

@@ -23,7 +23,7 @@
   } from '../lib/radialMenu';
   import { normalizeBookName, getBookColor } from '../lib/bibleData';
 
-  /** Viewport centre of the ring — the middle of the tapped word. */
+  /** Viewport center of the ring — the middle of the tapped word. */
   export let cx = 0;
   export let cy = 0;
   /** The word's line box. Drives the ring's size, so the gap tracks font size. */
@@ -136,7 +136,7 @@
   $: refLabel = verse != null && book ? `${normalizeBookName(book)} ${chapter}:${verse}` : '';
   $: originLabel = measure || [lemma, strongs].filter(Boolean).join(' · ');
 
-  /** The book's category colour, as an rgb triple for the pill's hairline. */
+  /** The book's category color, as an rgb triple for the pill's hairline. */
   function bookRgb(name: string): string {
     const n = parseInt(getBookColor(name).slice(1), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(', ');
@@ -407,12 +407,12 @@
      "current" state, because its label is where you'd be going rather than where
      you are.
 
-     The colour lives in the word, not behind it. A tinted fill was see-through
-     enough to read the verse through, and a coloured disc with an outline was
+     The color lives in the word, not behind it. A tinted fill was see-through
+     enough to read the verse through, and a colored disc with an outline was
      the only thing on the ring whose whole circle was visible — which made the
      smallest button look like the biggest. Keeping the same near-solid dark
-     circle its neighbours wear leaves the coloured word as the thing you see,
-     the way their coloured icon is. Indigo is the accent armed Extend uses. */
+     circle its neighbors wear leaves the colored word as the thing you see,
+     the way their colored icon is. Indigo is the accent armed Extend uses. */
   .mode-seat {
     width: calc(var(--badge) - 6px);
     height: calc(var(--badge) - 6px);
@@ -504,7 +504,7 @@
 
   /* "about 200,000 years' wages" is longer than a lemma. Rather than widen
      into the seats either side of the bottom gap (they start about 57px out
-     from the centre), the measure wraps onto a second line. The room below
+     from the center), the measure wraps onto a second line. The room below
      the word is taller than it is wide, and pillY measures the height too. */
   .pill.measure-pill {
     max-width: 112px;

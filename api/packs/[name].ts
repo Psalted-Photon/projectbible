@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createHash } from "crypto";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Stops the GitHub download when the app hangs up (closed tab, cancelled
+  // Stops the GitHub download when the app hangs up (closed tab, canceled
   // install), rather than letting it run on, billed, until the 5-minute limit.
   const abort = new AbortController();
   res.on("close", () => {

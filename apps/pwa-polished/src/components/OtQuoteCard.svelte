@@ -4,7 +4,7 @@
    *
    * It shows two things and nothing else: which Old Testament passage the verse
    * is quoting, and how that passage reads in the Septuagint. No "Quoted"
-   * label, no book-colour bar, no rendering of the verse in the translation you
+   * label, no book-color bar, no rendering of the verse in the translation you
    * are already reading — you know your translation and you can see the words.
    *
    * The Septuagint wording is the entire point. Hebrews 1:7 says God makes his
@@ -32,7 +32,7 @@
    * The tapped verse's box in viewport coordinates — what to stay clear of.
    *
    * Only the bottom edge matters now that the card is always below the verse,
-   * so the top is not passed. The left edge and width are for centring.
+   * so the top is not passed. The left edge and width are for centering.
    */
   export let verseBottom = 0;
   export let verseLeft = 0;
@@ -106,17 +106,17 @@
   // never lost — that is the one most readers will go looking for.
   $: renumbered = shown !== activeRef;
 
-  // The reference names a book, so it is drawn in that book's colour — Isaiah
+  // The reference names a book, so it is drawn in that book's color — Isaiah
   // purple, Deuteronomy its own — exactly as the book reads everywhere else in
   // the app. Only text takes it, here and on the chips below. The card's edge,
   // the grade caption and the chip outlines stay gold or silver, because those
   // carry the other fact: whether this is a quotation or an echo. Two facts,
-  // two channels; letting the book colour touch the outlines would erase the
+  // two channels; letting the book color touch the outlines would erase the
   // grade, and letting the grade hold the chip text would erase the book.
   $: refColor = getBookColor(activeRef.book);
 
-  // Which grade of claim this is. The gutter mark carries it in its colour, but
-  // that colour is gone the moment the card covers the mark, so the card says
+  // Which grade of claim this is. The gutter mark carries it in its color, but
+  // that color is gone the moment the card covers the mark, so the card says
   // it in words. "Echoing" rather than "alludes to": it is the word used for
   // exactly this relationship, and it is short enough never to wrap beside →.
   $: isAllusion = entry.grade === 'allusion';
@@ -194,8 +194,8 @@
   // recoverable; disappearing, which is what it used to do, is not.
   $: top = verseBottom + GAP;
 
-  // Centred on the verse rather than on the mark: the mark sits hard against
-  // the left gutter, so centring on it would push the card off the left edge on
+  // Centered on the verse rather than on the mark: the mark sits hard against
+  // the left gutter, so centering on it would push the card off the left edge on
   // a phone every time.
   $: left = Math.min(
     Math.max(verseLeft + verseWidth / 2 - WIDTH / 2, EDGE),
@@ -277,10 +277,10 @@
 </div>
 
 <style>
-  /* One accent colour per card, and it is the colour of the mark you tapped:
+  /* One accent color per card, and it is the color of the mark you tapped:
      gold for a quotation, silver for an echo. Held in a custom property so the
      edge, the grade line and the reference all turn together — the card should
-     read as the same object as the mark, not as a panel with a coloured word
+     read as the same object as the mark, not as a panel with a colored word
      in it. --ot-ink is the same hue lifted for text, which needs more contrast
      against #2a2a2a than a 3px border does. */
   .ot-card {
@@ -333,7 +333,7 @@
     white-space: nowrap;
   }
 
-  /* Colour comes from the book, inline — see refColor. No colour here, or it
+  /* Color comes from the book, inline — see refColor. No color here, or it
      would win on specificity grounds half the time and the book would be gold. */
   .ot-ref {
     font-size: 0.82rem;
@@ -343,7 +343,7 @@
     text-overflow: ellipsis;
   }
 
-  /* A footnote to the reference, not a second heading: small, grey, upright so
+  /* A footnote to the reference, not a second heading: small, gray, upright so
      it does not read as part of the italic quotation below. */
   .ot-english {
     color: #8a8a8a;
@@ -353,7 +353,7 @@
   }
 
   /* Reads as the source line it replaced — same quiet uppercase register — but
-     it is a button, so it takes the card's accent rather than the grey the
+     it is a button, so it takes the card's accent rather than the gray the
      label had, and a surface to be pressable. */
   .ot-goto {
     display: inline-flex;
@@ -387,12 +387,12 @@
   }
 
   /* Same split as the header: the ring carries the grade, the text carries the
-     book. Each chip is its own reference, so each takes its own book's colour
+     book. Each chip is its own reference, so each takes its own book's color
      inline — Hebrews 1:5 braids Psalms and 2 Samuel, and the chips say so.
-     No colour here; the inline one would lose to it half the time.
+     No color here; the inline one would lose to it half the time.
 
-     The unselected chips are dimmed rather than greyed, because grey is now the
-     one thing they cannot be: the book colour is the only label a chip has. */
+     The unselected chips are dimmed rather than grayed, because gray is now the
+     one thing they cannot be: the book color is the only label a chip has. */
   .ot-other {
     background: none;
     border: 1px solid #3f3f3f;

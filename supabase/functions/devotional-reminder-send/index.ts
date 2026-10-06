@@ -274,7 +274,7 @@ Deno.serve(async (req) => {
   if (token !== serviceRoleKey) {
     const shape = (t: string) => t.length + ' chars starting ' + t.slice(0, 3);
     console.error('[devotional] rejected: sent ' + shape(token) + '; expected ' + shape(serviceRoleKey!));
-    return json({ error: 'Not authorised' }, 401);
+    return json({ error: 'Not authorized' }, 401);
   }
 
   webpush.setVapidDetails(vapidSubject!, vapidPublic!, vapidPrivate!);

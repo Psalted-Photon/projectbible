@@ -132,7 +132,7 @@ async function inflate(data: Blob): Promise<string> {
 /**
  * What the map can draw, and where each piece lives.
  *
- * Built once per pane. Everything here is small — the catalogue, the eras, the
+ * Built once per pane. Everything here is small — the catalog, the eras, the
  * coverage boxes — so it is read whole rather than queried.
  */
 export async function loadAtlasIndex(): Promise<AtlasIndex> {
@@ -222,7 +222,7 @@ export async function loadAtlasIndex(): Promise<AtlasIndex> {
  * One layer, or one of the small derived tables, by key.
  *
  * The drop-in for the lab's getJson: same signature, same cached-promise
- * behaviour, same parsed result.
+ * behavior, same parsed result.
  */
 export function getAtlasJson(key: string): Promise<any> {
   if (!cache.has(key)) cache.set(key, build(key));

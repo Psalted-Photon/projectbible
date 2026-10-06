@@ -4,7 +4,7 @@
  * Esri's tiles, and the ground every overlay reads against.
  *
  * Natural Earth, public domain. It ships the same world at three
- * generalisations, so the map can hold coarse shapes at world zoom and swap to
+ * generalizations, so the map can hold coarse shapes at world zoom and swap to
  * finer ones as the reader comes in, instead of drawing every fjord in Norway
  * to fill forty pixels.
  *
@@ -26,7 +26,7 @@ const mb = (n) => `${(n / 1e6).toFixed(2)} MB`;
 const log = (...a) => console.log(...a);
 
 /**
- * Natural Earth is already generalised per level, so this only strips float
+ * Natural Earth is already generalized per level, so this only strips float
  * noise and specks — the shapes themselves are left as the cartographers drew
  * them.
  */
@@ -145,7 +145,7 @@ if (only) {
   process.exit(0);
 }
 
-// The graticule is drawn, not generalised — one set of lines serves every zoom.
+// The graticule is drawn, not generalized — one set of lines serves every zoom.
 {
   const fc = await readShape('ne_10m_graticules_10');
   if (fc) {

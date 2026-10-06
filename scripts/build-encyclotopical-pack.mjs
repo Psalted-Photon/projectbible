@@ -239,7 +239,7 @@ function alsoCalledNames(points) {
     const m = p.text.match(/^(?:\d+\.\s*)?Also called\s+(.+)$/i);
     if (!m) continue;
     for (const part of m[1].split(/\s+and\s+|,(?![^(]*\))/)) {
-      // "AHIHUD, son of Bela" — the name is the capitalised run at the front.
+      // "AHIHUD, son of Bela" — the name is the capitalized run at the front.
       const name = (part.match(/^[A-Z][A-Z'\-’ ]*[A-Z]|^[A-Z]/) || [])[0];
       if (name && name.trim().length >= 2) names.push(name.trim());
     }

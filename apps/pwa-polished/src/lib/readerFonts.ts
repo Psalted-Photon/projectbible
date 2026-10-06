@@ -9,7 +9,7 @@
  * ── Why every font carries scale/lead ──────────────────────────────────
  * X-heights differ enormously across these faces. Tangerine set at 19px
  * renders at roughly half the visual size of Bitter at 19px, and Rock Salt's
- * ascenders collide at normal line spacing. Without normalisation, switching
+ * ascenders collide at normal line spacing. Without normalization, switching
  * typeface would make the text lurch even though the user never touched the
  * font-size slider.
  *
@@ -60,7 +60,7 @@ export const READER_FONTS: ReaderFont[] = [
   { id: 'imfell', label: 'IM Fell English', group: 'Old & Gothic', scale: 1.05, lead: 1.0,
     stack: "'IMFellEnglish', Georgia, serif", note: 'A real 17th-century letterpress face.' },
   { id: 'grenze', label: 'Grenze Gotisch', group: 'Old & Gothic', scale: 1.05, lead: 1.0,
-    stack: "'GrenzeGotisch', Georgia, serif", note: 'Blackletter flavour, far more readable than true fraktur.' },
+    stack: "'GrenzeGotisch', Georgia, serif", note: 'Blackletter flavor, far more readable than true fraktur.' },
 
   { id: 'specialelite', label: 'Special Elite', group: 'Typewriter', scale: 0.95, lead: 1.0,
     stack: "'SpecialElite', Courier, monospace", note: 'Distressed typewriter with ink bleed.' },

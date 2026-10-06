@@ -14,7 +14,7 @@
  *              probability bands rather than invented lines.
  *   overlay    roads, walls, aqueducts and cities, available on any era.
  *
- * Sources and licences, both attribution-only:
+ * Sources and licenses, both attribution-only:
  *   AWMC / Barrington Atlas  — ODbL 1.0
  *   OpenBible.info           — CC BY 4.0
  */
@@ -152,7 +152,7 @@ for (const dir of fs.readdirSync(POLITICAL_DIR)) {
  *
  * Augustus divided Italy into these and Pliny lists them in order in the
  * Natural History; the numerals and the names are one published pair, not a
- * reconstruction. Checked before use: every region's centre falls where its
+ * reconstruction. Checked before use: every region's center falls where its
  * name belongs — I below Rome, III in the toe, IX on the Ligurian coast, X in
  * the north-east, XI beyond the Po.
  */

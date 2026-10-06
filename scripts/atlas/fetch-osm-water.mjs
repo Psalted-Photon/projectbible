@@ -4,7 +4,7 @@
  *
  * Why this exists: Natural Earth draws the Sea of Galilee as a twenty-five
  * point blob whose northern edge runs about 1.5 km too far north, so Capernaum
- * — correctly placed to within metres — sits in the lake. The Barrington
+ * — correctly placed to within meters — sits in the lake. The Barrington
  * linework is no better there, at twenty-seven points. OpenStreetMap has the
  * same lake as a single closed ring of two thousand points, and against that
  * one every town on the shore is on the shore.
@@ -38,7 +38,7 @@ const ENDPOINTS = [
 ];
 let endpoint = 0;
 
-/** A public service doing us a favour. One request at a time, with a breath between. */
+/** A public service doing us a favor. One request at a time, with a breath between. */
 const PAUSE_MS = 4000;
 const RETRIES = 3;
 const TIMEOUT_MS = 180000;

@@ -40,7 +40,7 @@ function normalizeBookName(book: string): string[] {
   // Common alternate spellings / singular-vs-plural aliases
   const bookAliases: Record<string, string> = {
     'PSALM': 'Psalms',   // app uses 'Psalm'; DB packs store 'Psalms'
-    'PSALMS': 'Psalm',   // incoming DB data normalised to canonical name
+    'PSALMS': 'Psalm',   // incoming DB data normalized to canonical name
     'SONG OF SONGS': 'Song of Solomon',
     'SONG OF SONG': 'Song of Solomon',
     'SONGS OF SOLOMON': 'Song of Solomon',

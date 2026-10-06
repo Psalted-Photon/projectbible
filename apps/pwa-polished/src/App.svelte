@@ -89,7 +89,7 @@
      *   ?join=ABCDEFGH           an invitation to a shared notebook.
      *
      * Awaited inside init() rather than run from the onMount body, because the
-     * translation can only be honoured after asking the database what is
+     * translation can only be honored after asking the database what is
      * installed — and the answer has to arrive before appReady lets the reader
      * render, or the verse becomes a jump instead of where it opened.
      */
@@ -116,7 +116,7 @@
           ? parseRefString(refParam, current.book, current.chapter)
           : null;
         if (target) {
-          // Honour the sender's translation only where the recipient has it.
+          // Honor the sender's translation only where the recipient has it.
           // A cold device has the starter pack and nothing else, so a verse
           // sent in KJV arrives in NET rather than as an empty chapter.
           const wanted = params.get('t')?.toUpperCase();
@@ -520,9 +520,9 @@
     filter: invert(1) hue-rotate(180deg);
     color: #FF2020;
   }
-  /* Custom theme applies no filter to .themed at all, so the colour renders
+  /* Custom theme applies no filter to .themed at all, so the color renders
      directly. --reader-red is derived from the chosen background's luminance
-     (see lib/themeColors.ts) and always wins over the user's text colour —
+     (see lib/themeColors.ts) and always wins over the user's text color —
      red letter is the one thing the Custom theme does not hand over. */
   :global(body.custom-theme .red-letter) {
     color: var(--reader-red, #FF3F3F);

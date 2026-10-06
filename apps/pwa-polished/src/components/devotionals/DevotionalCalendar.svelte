@@ -5,7 +5,7 @@
    * days are not lined up under weekdays and February always has its 29th.
    *
    * The parent places it (it drops down under whatever opened it). `reader`
-   * dresses it in the reader's colours for the reading screen; without it, it
+   * dresses it in the reader's colors for the reading screen; without it, it
    * matches the Reading Plan window like the rest of the Devotionals tab.
    */
   import { createEventDispatcher, onMount } from 'svelte';

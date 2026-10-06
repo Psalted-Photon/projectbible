@@ -286,7 +286,7 @@
     backdrop-filter: blur(3px);
     animation: fadeIn 0.2s ease-out;
   }
-  /* The card's own background and text colour come from whichever work is
+  /* The card's own background and text color come from whichever work is
      inside it, because each of them has to paint its own in a docked window
      too. */
   .modal-container {

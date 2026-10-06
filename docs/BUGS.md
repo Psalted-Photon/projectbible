@@ -12,7 +12,7 @@ Line numbers were verified 2026-08-13 and will drift as the files change.
 
 The four lookup cards are one system, reached from each other by the tab row across
 the top of every card. Order is fixed — Dictionary, Topical, Encyclopedia, People —
-and a tab greys out when that work has nothing for the subject.
+and a tab grays out when that work has nothing for the subject.
 
 Availability and opening both come from one place: `resolveWorks(name, ref?)` in
 `adapters/lexicon-lookup.ts`, which asks all four at once and returns the **ids**, not
@@ -24,7 +24,7 @@ there were eight separate checkers with four different term rules between them.
 The tab row is `components/WorkTabs.svelte`. Its class is deliberately **not**
 `.tabs`: `IsbeContent` and `NavesContent` style their section tabs as an unqualified
 `.tabs button`, which would capture it. Over the A–Z index the tabs switch index
-rather than subject; Dictionary greys out there, having no index of its own.
+rather than subject; Dictionary grays out there, having no index of its own.
 
 The index badges (📍 👤 📕 📚 📖) navigate too, added 2026-08-13.
 `annotateLibraryBadges` keeps the id beside each flag it sets — the ids were always
@@ -68,7 +68,7 @@ Dictionary was the odd one out of the four, so it was changed to match Encyclope
 and Topical rather than the other way round. What you'd notice:
 
 - The title is smaller and sits in the same place, with the same spacing around it.
-- There's now a small grey line under the title, like the other three have. It reads
+- There's now a small gray line under the title, like the other three have. It reads
   `Greek · agapē · noun` for a Strong's entry, `Dictionary · noun, verb` for an
   English word, the verse count for a bio, and the result count for a search.
 - The card is the same width as the other two, with the same rounded corners, and
@@ -93,7 +93,7 @@ styling — they didn't behave like one system. The bridge pills changed dependi
 which card you were in, the Dictionary title read "Lexical Study: love" with the word
 lowercase and tacked on the end, and People wasn't somewhere you could navigate to at
 all. Replaced with four fixed tabs across the top of every card — Dictionary, Topical,
-Encyclopedia, People — always the same four in the same order, greyed when that work
+Encyclopedia, People — always the same four in the same order, grayed when that work
 has nothing for the subject. See "The four works" below.
 
 #### Exact values changed
@@ -250,12 +250,12 @@ own verse list. There is no master list to be shared between them. Maybe it is w
 
 ### [x] 4. Topical outline verse pills are all green, ignoring app theme colors
 
-**Fixed 2026-08-13.** The scripture links on the Topical outline tab are now coloured
-by book, using the same colours the Verses tab and the nav bar's reference dropdown
-already use. Hovering one highlights it in that book's colour too.
+**Fixed 2026-08-13.** The scripture links on the Topical outline tab are now colored
+by book, using the same colors the Verses tab and the nav bar's reference dropdown
+already use. Hovering one highlights it in that book's color too.
 
 Links that point at another topic rather than a verse are unchanged — they aren't
-scripture, and they were already the right colour.
+scripture, and they were already the right color.
 
 The chips already carried the reference they point at, so the book was there to read;
 nothing new had to be looked up.
@@ -411,13 +411,13 @@ session. Extend and shift-click return before the reset, so they still grow the
 selection you already have rather than starting over.
 
 Two side effects went with it: while stuck on Verse the reader skipped the person and
-encyclopedia lookup, so Define never relabelled to Bio or Info; and Mark saved a
+encyclopedia lookup, so Define never relabeled to Bio or Info; and Mark saved a
 whole-verse highlight where a word one was meant, which then wouldn't line up with
 word highlights made elsewhere.
 
 **Also, same pass: the Word/Verse pair became one toggle.** On a fresh tap the word
 is already highlighted in front of you, so a button announcing it earned nothing. The
-single button is labelled with what you'd be switching *to* — "Verse" on a word,
+single button is labeled with what you'd be switching *to* — "Verse" on a word,
 "Word" once the verse is selected. It never shows an active state, because its label
 is where you'd be going rather than where you are. Done in both the ring and the
 plain toast so the two stay consistent; the ring re-spaces itself around the freed
@@ -445,7 +445,7 @@ removed. Fixed by clamping the delay at zero — which is also the *correct* val
 since the highest-index seat should leave first in a reverse sweep. A stray **Extend**
 button stranded at the bottom of the ring was the visible tell.
 
-Separately, the toggle had been left wearing the dim grey that used to mean "not the
+Separately, the toggle had been left wearing the dim gray that used to mean "not the
 mode you're in", which alone reads as a switched-off button. It now uses the same
 indigo an armed Extend uses for a live choice, in both the ring and the plain toast.
 
@@ -674,7 +674,7 @@ search box shielded itself from it already; it now checks centrally too.
 **Why it looked intermittent.** `.index-bar` is `justify-content: space-between`, so
 the search bar is pinned to the card's right edge. With a 16px backdrop pad and a
 `min(720px, 100%)` card, on a phone the magnifier sits roughly 26–50px from the right
-of the screen — inside the detector's 40px lane. On a wide desktop the centred card is
+of the screen — inside the detector's 40px lane. On a wide desktop the centered card is
 nowhere near an edge. Docked left or right, it is always in the lane.
 
 The existing per-field `stopPropagation` shields in `NotesPane`, `JournalNavigationBar`
@@ -708,7 +708,7 @@ Worth capturing next time it happens, since it would narrow this quickly:
 - does the box collapse back to its icon, or stay open but lose the caret?
 - does it need a query long enough to run a search (2+ characters), or does it happen
   before typing anything?
-- does it happen in a docked window as well as in the centred card?
+- does it happen in a docked window as well as in the centered card?
 - does it happen on the very first open, or only after a previous search?
 
 ---

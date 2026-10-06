@@ -108,7 +108,7 @@
    * The grid. Rows and columns rather than a flex direction, because the ask was
    * even panes with fixed boundaries: `1fr` each means four panes are exactly a
    * quarter of the screen whatever is inside them, and nothing a reader does to
-   * its own content can push a neighbour around.
+   * its own content can push a neighbor around.
    */
   $: gridStyle =
     effectiveLayout === 'columns'

@@ -6,7 +6,7 @@
  *
  * Two sources, because CI and a laptop have different things available. Locally
  * the built pack is sitting in packs/ and is simply copied. On Vercel that file
- * is an unmaterialised Git LFS pointer, so it is downloaded from the release
+ * is an unmaterialized Git LFS pointer, so it is downloaded from the release
  * instead — the same trick ensure-bundled-packs.mjs uses.
  *
  * This one is deliberately fatal. Every other pack is optional and downloads on

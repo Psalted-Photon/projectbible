@@ -26,8 +26,8 @@
 <script lang="ts">
   /**
    * One Scripture reference, drawn the way every reference list in the app
-   * draws it: the reference in its book's colour, over the opening words of
-   * the passage in the reader's translation, with a bar of the same colour down
+   * draws it: the reference in its book's color, over the opening words of
+   * the passage in the reader's translation, with a bar of the same color down
    * the left. The Verses tab, the encyclopedia's and the map's verse lists, and
    * Nave's outline all use this row; new lists should use this component so
    * a reference never looks like two different things in two places.

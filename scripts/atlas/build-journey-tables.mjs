@@ -8,9 +8,9 @@
  * Running this file directly does a dry run against the shipped pack, which is
  * how you check the index without rebuilding 340 MB of map.
  *
- * The licence boundary is a table boundary, so it is enforced here:
+ * The license boundary is a table boundary, so it is enforced here:
  *
- *   atlas_journeys          ours — names, travellers, colours, descriptions
+ *   atlas_journeys          ours — names, travelers, colors, descriptions
  *   atlas_journey_stops     ours — the stop sequence, by place_id
  *   atlas_journey_geometry  UBS, CC BY-SA 4.0 — id and gzipped coordinates, and
  *                           nothing else. No names, no notes, no verses.
@@ -93,7 +93,7 @@ function buildGeometry(journey) {
           `${journey.id}: ${src.file} has ${segs.length} segments, index ${i} out of range`
         );
       }
-      // Rounded to 5 decimal places — about a metre, which is far finer than a
+      // Rounded to 5 decimal places — about a meter, which is far finer than a
       // hand-drawn Roman road is accurate to, and roughly halves the blob.
       const coords = segs[i].map(([lon, lat]) => [round5(lon), round5(lat)]);
       legs.push(reverse.has(i) ? coords.reverse() : coords);
@@ -219,7 +219,7 @@ export function buildJourneyTables(db, { log = console.log } = {}) {
   if (!places.size) throw new Error('atlas_biblical_places is empty — build it before the journeys');
 
   db.exec(`
-    -- Ours. Names, travellers, colours, descriptions — the editorial layer.
+    -- Ours. Names, travelers, colors, descriptions — the editorial layer.
     CREATE TABLE atlas_journeys (
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,

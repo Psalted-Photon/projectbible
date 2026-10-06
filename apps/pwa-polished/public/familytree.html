@@ -648,7 +648,7 @@ let hoverNode = null;
 // A clicked person. While set, hover no longer overwrites the card — it took
 // the next mouse twitch as a reason to wipe whoever was actually clicked, even
 // though traceFrom already passed a "pinned" flag to showHover that nothing
-// downstream honoured. Clicking empty canvas clears this along with the trace.
+// downstream honored. Clicking empty canvas clears this along with the trace.
 let pinnedNode = null;
 
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -749,7 +749,7 @@ function build() {
     if (n.father && rootById.has(n.father)) rootById.get(n.father).kids.push(n.id);
   }
   for (const n of rootById.values()) {
-    // A wife is drawn beside her husband, so she takes his bough's colour.
+    // A wife is drawn beside her husband, so she takes his bough's color.
     // Leah is Laban's daughter and would otherwise be tinted as one of Nahor's
     // while standing next to Jacob on the trunk.
     if (n.spouseOf && rootById.has(n.spouseOf)) {
@@ -811,7 +811,7 @@ function layout() {
    * point and nowhere else.
    *
    * The twelve tribes all fork at Jacob, who is the world origin, so for them
-   * ox and oy are 0 and the maths below reduces to what it always was. That is
+   * ox and oy are 0 and the math below reduces to what it always was. That is
    * why the tree was radial in the first place — not a choice, but what falls
    * out of twelve sons sharing one father. Every other bough forks lower down
    * the trunk, and before this carried a fork origin they all orbited Jacob
@@ -1117,8 +1117,8 @@ function fitToScreen() {
   draw();
 }
 
-/** Pan (without rezooming) so a single node sits centred, borrowing the same
- * origin maths fitToScreen uses: the trunk is drawn at (W/2, H*0.62). */
+/** Pan (without rezooming) so a single node sits centered, borrowing the same
+ * origin math fitToScreen uses: the trunk is drawn at (W/2, H*0.62). */
 function panToNode(n) {
   if (n.x == null) return;
   view.x = -n.x * view.k;
@@ -1135,7 +1135,7 @@ function isLit(n) {
 // ── The pinned node's breathing pulse ───────────────────────────────────────
 // Everything else on this canvas is static — draw() runs on interaction only.
 // A permanent render loop on a page that does not need one is wasted battery,
-// so this rAF loop exists only while a node is pinned and is cancelled the
+// so this rAF loop exists only while a node is pinned and is canceled the
 // moment it clears, rather than running forever in the background.
 let pulseRAF = null;
 let pulseStart = 0;
@@ -1340,7 +1340,7 @@ function drawRoots(dimming) {
       const on = onOf(n);
       const isGod = n.id === GOD_ID;
       ctx.globalAlpha = dimming && !on ? G.dimLevel + 0.1 : isGod ? 1 : 0.82;
-      // Each label in its own bough's colour, so a name can be followed back
+      // Each label in its own bough's color, so a name can be followed back
       // to the line it belongs to without tracing the branch by eye. The
       // crowded pre-Jacob half is where this matters most.
       const lc = ROOT_COLOURS[n.branch] || ROOT_COLOURS.Trunk;
@@ -1449,8 +1449,8 @@ function drawBough(tribe, list, lit, dimming) {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Stripes and speckles keep colours apart for anyone who cannot separate
-    // them by hue — and every node can be labelled, so colour is never alone.
+    // Stripes and speckles keep colors apart for anyone who cannot separate
+    // them by hue — and every node can be labeled, so color is never alone.
     if (st.striped && size > 2) {
       ctx.strokeStyle = 'rgba(255,255,255,0.5)';
       ctx.lineWidth = 0.6;
@@ -1470,9 +1470,9 @@ function drawBough(tribe, list, lit, dimming) {
   const head = list[0];
   if (OPTS.labels && head && head.x != null) {
     ctx.globalAlpha = dimming && !lit ? G.dimLevel + 0.15 : 1;
-    // The tribe name in its own stone's colour, so the label and the bough it
+    // The tribe name in its own stone's color, so the label and the bough it
     // heads read as one thing. Dimmed boughs keep the duller stone rather than
-    // a flat grey, which also keeps the twelve distinguishable while dimmed.
+    // a flat gray, which also keeps the twelve distinguishable while dimmed.
     ctx.fillStyle = lit ? st.lit : st.c;
     ctx.font = '600 13px Milonga, serif';
     ctx.textAlign = 'center';
@@ -1739,7 +1739,7 @@ function showHover(n, pinned) {
   if (!n) { el.className = 'readout-box empty'; return; }
   el.className = 'readout-box';
 
-  // Roots are not tribal, so they get their branch in its own colour instead.
+  // Roots are not tribal, so they get their branch in its own color instead.
   let where;
   if (n.root && n.spouseOf) {
     const h = rootById.get(n.spouseOf);
@@ -1900,7 +1900,7 @@ function buildPanel() {
 
   // ── The root branches ────────────────────────────────────────────────
   // Same rows as a tribe, minus the stone: a root branch has no breastpiece
-  // colour, so its swatch is its own shade of root-gold.
+  // color, so its swatch is its own shade of root-gold.
   const rh = document.getElementById('rootBranches');
   rh.innerHTML = '';
   const branchOrder = DATA.rootBranchOrder || [...byRootBranch.keys()];

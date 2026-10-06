@@ -7,7 +7,7 @@
  * tap answered "Rome". These come from the Digital Atlas of the Roman Empire
  * instead. This checks them after simplification, which is the version the map
  * actually draws, because a shape can be right in the source and wrong once
- * generalised.
+ * generalized.
  */
 import fs from 'fs';
 import path from 'path';

@@ -4,7 +4,7 @@
    * everywhere it leads.
    *
    * Passages are the app's ordinary reference rows (VerseRefRow): the reference
-   * in its book's colour over the opening words, the same as every verse list
+   * in its book's color over the opening words, the same as every verse list
    * in the app. Other items on the strip (the event this is part of, the events
    * inside it) are plain text links. People and places stay chips, which is the
    * app's rule for things that have no verse to preview: a chip leaves
@@ -236,7 +236,7 @@
   .card-refs { display: flex; flex-direction: column; gap: 4px; }
   .card-verdict + .card-refs { margin-top: 5px; }
 
-  /* Other items on the strip: plain links, coloured like the app's links. */
+  /* Other items on the strip: plain links, colored like the app's links. */
   .card-link {
     background: none; border: 0; padding: 0; cursor: pointer;
     color: var(--color-primary, #4a90e2); font: inherit; text-align: left;

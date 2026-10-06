@@ -9,7 +9,7 @@
  *   - which stops the drawn line never reaches, and so get a dotted connector
  *   - which legs come out dashed, and whether that matches the sea legs
  *   - whether any journey falls back to straight lines
- *   - whether the label colours are parseable as colours
+ *   - whether the label colors are parseable as colors
  *
  * The helpers are reproduced rather than imported, because the real ones live in
  * a Leaflet module that needs a browser. The constants are *read out of*
@@ -19,7 +19,7 @@
  * It earned its keep on first run, failing twice on real bugs:
  *
  *   - the end-ring red was #b0463f, which is the Last Journey to Jerusalem's own
- *     colour, so that journey's arrival would have been an invisible ring
+ *     color, so that journey's arrival would have been an invisible ring
  *   - the leg styling took its method from the stop nearest a leg's last point,
  *     and the stored direction is unreliable, so Paul's First Journey credited
  *     the Seleucia → Salamis crossing to Seleucia and drew all three of its sea
@@ -295,7 +295,7 @@ expect(
 // than the matching: the Voyage to Rome has 13 stops and 4 legs, because
 // Ritmeyer drew one stroke past a string of ports instead of one per call. So
 // there is no list of expected exceptions to keep — 12 of 21 crossings are
-// covered by a leg that also covers their neighbours.
+// covered by a leg that also covers their neighbors.
 //
 // What can be asserted is that the dashing tracks how much of a journey was
 // sailed. The Voyage to Rome is 9 crossings out of 12 and must come out mostly
@@ -331,7 +331,7 @@ expect(
 
 // The dotted connectors and the dashed legs must not both claim the same
 // crossing: a stop off the end of the line gets the dotted line *instead* of a
-// leg, and drawing both would be two answers to where the traveller went.
+// leg, and drawing both would be two answers to where the traveler went.
 const doubleDrawn = seaStops.filter(
   (s) => s.matched.length && s.route.unreached.some((u) => u.name === s.name)
 );
@@ -362,11 +362,11 @@ expect(
   `${inventedSea.map((r) => r.id).join(', ')}`
 );
 
-// The ends have to be distinguishable from every route colour, or a ring the
-// colour of the line it sits on marks nothing.
+// The ends have to be distinguishable from every route color, or a ring the
+// color of the line it sits on marks nothing.
 //
 // Equality is the wrong test and was the first one written here: #b0463f was
-// caught by it, being the Last Journey's exact colour, but it also sat 15 from
+// caught by it, being the Last Journey's exact color, but it also sat 15 from
 // Elijah's #b5543d, which equality would have passed while the ring stayed just
 // as invisible. So this measures distance, and the floor is well above the 15
 // that hid it and below the 65 the current pair actually achieve.
@@ -380,7 +380,7 @@ function rgbDistance(a, b) {
 
 expect(
   /^#[0-9a-f]{6}$/i.test(START_COLOUR) && /^#[0-9a-f]{6}$/i.test(END_COLOUR),
-  'the start and end colours are #rrggbb'
+  'the start and end colors are #rrggbb'
 );
 
 for (const [what, ring] of [['start', START_COLOUR], ['end', END_COLOUR]]) {
@@ -389,7 +389,7 @@ for (const [what, ring] of [['start', START_COLOUR], ['end', END_COLOUR]]) {
     .sort((a, b) => a.d - b.d)[0];
   expect(
     nearest.d >= MIN_RING_DISTANCE,
-    `the ${what} ring is distinguishable from every route colour ` +
+    `the ${what} ring is distinguishable from every route color ` +
       `(nearest ${nearest.id} at ${Math.round(nearest.d)})`,
     `${ring} sits ${Math.round(nearest.d)} from ${nearest.id}'s ${nearest.colour} — ` +
       `that journey's ${what} would be invisible on its own line`
@@ -399,15 +399,15 @@ for (const [what, ring] of [['start', START_COLOUR], ['end', END_COLOUR]]) {
 expect(
   rgbDistance(START_COLOUR, END_COLOUR) >= MIN_RING_DISTANCE * 2,
   'the start and end rings are unmistakable for each other',
-  'the two ends of a journey are the one thing its single colour cannot say'
+  'the two ends of a journey are the one thing its single color cannot say'
 );
 
-// The lettering fades through its colour, so every route colour has to survive
+// The lettering fades through its color, so every route color has to survive
 // withAlpha as something a browser will accept.
 const faded = journeys.map((j) => withAlpha(j.colour, 0.4));
 expect(
   faded.every((c) => /^rgba\(\d{1,3},\d{1,3},\d{1,3},0\.\d\d\)$/.test(c)),
-  'every route colour fades to a valid rgba()',
+  'every route color fades to a valid rgba()',
   `first failure: ${faded.find((c) => !/^rgba\(/.test(c))}`
 );
 expect(

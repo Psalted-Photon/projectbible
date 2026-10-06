@@ -8,7 +8,7 @@
    * These replaced a row of "bridge pills" that changed depending on which card
    * you were in — the encyclopedia offered Topical and Dictionary, and stepping
    * into Topical changed the set — so there was never a fixed thing to aim at.
-   * All four are always drawn, always in this order, and greyed when that work
+   * All four are always drawn, always in this order, and grayed when that work
    * has nothing for the subject. Equal widths, so a tab is in the same place
    * every time regardless of how long the labels are.
    *
@@ -52,7 +52,7 @@
     }
   }
 
-  /** Why a tab is greyed, so hovering it says something useful. */
+  /** Why a tab is grayed, so hovering it says something useful. */
   function reason(key: WorkKey, win: boolean): string {
     if (win && !worksInWindow(key)) return `${label(key)} can't be pinned into a window yet`;
     return `Nothing in ${label(key)} for this`;
@@ -119,7 +119,7 @@
     border-bottom-color: var(--color-primary, #4a90e2);
     background: rgba(74, 144, 226, 0.08);
   }
-  /* Greyed rather than hidden — the point is that the row never changes shape,
+  /* Grayed rather than hidden — the point is that the row never changes shape,
      so you can see at a glance what this subject does and doesn't have. */
   .work-tab:disabled {
     opacity: 0.3;

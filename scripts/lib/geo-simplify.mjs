@@ -9,7 +9,7 @@
  *
  * Nothing here invents geometry. Every point kept is a point a surveyor put
  * there; simplification only drops points that lie within `tolerance` of the
- * line their neighbours already describe.
+ * line their neighbors already describe.
  */
 
 /** Perpendicular distance from p to the segment ab, in degrees. */

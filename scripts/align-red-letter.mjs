@@ -9,7 +9,7 @@
  * the same editions as their packs, so each span is found word for word in the
  * pack text (locateVerbatim). NET has none; it borrows WEB's spans through:
  *
- *   1. Normalised substring match  (fast path, works when text is close)
+ *   1. Normalized substring match  (fast path, works when text is close)
  *   2. Quote-region by index + word-overlap (main path)
  *      - Find all quoted regions in WEB.json verse text
  *      - Match each USFX <wj> span to a WEB.json quote region by word overlap
@@ -108,14 +108,14 @@ function stripHtml(text) {
   return text.replace(/<[^>]+>/g, '');
 }
 
-/** Length-preserving quote normalisation (curly → straight). */
+/** Length-preserving quote normalization (curly → straight). */
 function normalizeQuotes(text) {
   return text
     .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
     .replace(/[\u2018\u2019\u201A\u201B]/g, "'");
 }
 
-/** Broader normalisation for search (may change length). */
+/** Broader normalization for search (may change length). */
 function normalizeForSearch(text) {
   return normalizeQuotes(text)
     .replace(/\u2014|\u2015/g, '--')
@@ -214,7 +214,7 @@ function alignSpan(spanText, webVerseText, targetText) {
   const nSpan = normalizeForSearch(span);
   const nTarget = normalizeForSearch(targetText);
 
-  // Strategy 1: normalised substring
+  // Strategy 1: normalized substring
   let idx = nTarget.indexOf(nSpan);
   if (idx >= 0) return { s: idx, e: idx + nSpan.length };
 

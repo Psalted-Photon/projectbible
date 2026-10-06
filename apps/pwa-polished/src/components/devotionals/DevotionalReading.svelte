@@ -15,8 +15,8 @@
    * BookBookmark crumb that brings you back here, scrolled where you were.
    *
    * Shown full screen over the Reading Plan window, with nothing but the text,
-   * in the reader's own colours (black on dark, paper on light and sepia, the
-   * chosen colours on custom): the X closes it back to the Devotionals tab.
+   * in the reader's own colors (black on dark, paper on light and sepia, the
+   * chosen colors on custom): the X closes it back to the Devotionals tab.
    */
   import { createEventDispatcher, tick } from 'svelte';
   import { get } from 'svelte/store';

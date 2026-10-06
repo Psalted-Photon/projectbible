@@ -343,7 +343,7 @@ async function importWordset() {
   let blockedWords = 0;
 
   // A lemma can turn up in more than one run of the NDJSON (different source
-  // files normalising to the same word), so the counter is kept per word_id
+  // files normalizing to the same word), so the counter is kept per word_id
   // rather than per flush. Otherwise those words restart at 1 mid-entry and the
   // reader sees two senses both numbered 1.
   const orderByWord = new Map();

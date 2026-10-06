@@ -68,7 +68,7 @@ function generateWavySvgDataUri(color: string, rng: () => number): string {
   const seg = TILE_W / N;
   const topC = Array.from({ length: N }, () => 1.2 + (rng() * 2 - 1) * amp);
   const botC = Array.from({ length: N }, () => 9.2 + (rng() * 2 - 1) * amp);
-  // On-curve points sit halfway between neighbouring controls (wrapping), which
+  // On-curve points sit halfway between neighboring controls (wrapping), which
   // keeps the curve smooth everywhere and makes point 0 equal point N.
   const anchor = (c: number[], i: number) => (c[(i - 1 + N) % N] + c[i % N]) / 2;
 
@@ -197,7 +197,7 @@ export function applyWordHighlightToSpan(
 }
 
 /**
- * Apply a background colour to an element using a seeded wavy SVG data URI.
+ * Apply a background color to an element using a seeded wavy SVG data URI.
  *
  * For verse containers (.verse): resolves to the inline .verse-text child so
  * the highlight wraps only the text width, not the full block container.
@@ -209,7 +209,7 @@ export function applyWordHighlightToSpan(
 function _applyBackground(el: HTMLElement, color: string, seed: string): void {
   const rng = seededRandom(seed);
   const dataUri = generateWavySvgDataUri(color, rng);
-  // Start each verse at a different point in its tile, so neighbouring verses
+  // Start each verse at a different point in its tile, so neighboring verses
   // don't line their bumps up at the same spot.
   const offsetEm = (rng() * TILE_EM).toFixed(2);
 

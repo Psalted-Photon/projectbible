@@ -50,7 +50,7 @@
     } catch (err) {
       if (err instanceof PasskeyError) {
         error = {
-          cancelled: 'Cancelled.',
+          cancelled: 'Canceled.',
           unsupported: 'This browser can’t use a fingerprint for the journal.',
           'already-added': 'This device already has a fingerprint for the journal.',
           'no-match': 'Something went wrong. Try again.',

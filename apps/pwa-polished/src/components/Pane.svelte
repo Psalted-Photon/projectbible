@@ -14,7 +14,7 @@
   let resizeStartSize = 0;
 
   // Set by the settings pane while its Appearance section is open, so the
-  // reader behind shows its real colours and typeface as they are edited.
+  // reader behind shows its real colors and typeface as they are edited.
   let clearBackdrop = false;
 
   function handleClose() {

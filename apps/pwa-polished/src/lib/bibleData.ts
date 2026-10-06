@@ -193,7 +193,7 @@ const SHORT_BOOK_NAMES: Record<string, string> = {
 /**
  * A book's name compressed for dense lists — the reading plan's one-line day
  * rows, where "1 Chronicles 12" would push the rest of the day off the line.
- * Falls back to the full name for anything unrecognised.
+ * Falls back to the full name for anything unrecognized.
  */
 export function shortBookName(book: string): string {
   const name = normalizeBookName(book);

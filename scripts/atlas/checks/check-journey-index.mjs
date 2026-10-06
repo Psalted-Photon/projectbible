@@ -58,8 +58,8 @@ for (const j of index.journeys) {
     if (!j[f]) errors.push(`${where}: empty ${f}`);
   }
   if (!['old', 'new'].includes(j.testament)) errors.push(`${where}: testament "${j.testament}"`);
-  if (!/^#[0-9a-f]{6}$/i.test(j.colour || '')) errors.push(`${where}: colour "${j.colour}" is not #rrggbb`);
-  if (seenColours.has(j.colour)) warnings.push(`${where}: shares colour ${j.colour} with ${seenColours.get(j.colour)}`);
+  if (!/^#[0-9a-f]{6}$/i.test(j.colour || '')) errors.push(`${where}: color "${j.colour}" is not #rrggbb`);
+  if (seenColours.has(j.colour)) warnings.push(`${where}: shares color ${j.colour} with ${seenColours.get(j.colour)}`);
   seenColours.set(j.colour, j.id);
 
   // Geometry: the file must exist and every segment index must be in range.

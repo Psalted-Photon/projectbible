@@ -37,7 +37,7 @@
 
   /**
    * Appearance changes land on the reader live, so the pane asks its shell to
-   * drop the dim + blur while that section is open — you can't judge a colour
+   * drop the dim + blur while that section is open — you can't judge a color
    * you can't see. Bound by Pane.svelte; every other section keeps the blur.
    */
   export let clearBackdrop = false;
@@ -81,7 +81,7 @@
     };
   }
 
-  /** Store the current colour in the next free slot. Duplicates are a no-op. */
+  /** Store the current color in the next free slot. Duplicates are a no-op. */
   function savePreset(kind: "text" | "bg") {
     const color = kind === "text" ? customTextColor : customBgColor;
     if (!isValidHex(color)) return;
@@ -524,7 +524,7 @@
       if ('indexedDB' in window) {
         closeDB();
         // 'projectbible-packs' is where PackLoader keeps the downloaded files.
-        // The name used to be spelt 'ProjectBible_Packs', which matches nothing,
+        // The name used to be spelled 'ProjectBible_Packs', which matches nothing,
         // so on browsers without indexedDB.databases() the payloads survived.
         const namesToDelete = new Set<string>(["projectbible", "projectbible-packs"]);
         if ('databases' in indexedDB) {
@@ -598,7 +598,7 @@
     applyTheme(theme);
 
     // applyTheme reads the custom theme back from storage, which is a step
-    // behind while the user is still dragging a colour picker — push the
+    // behind while the user is still dragging a color picker — push the
     // in-progress values over the top so the preview is live.
     if (theme === "custom") applyCustomThemeVars(currentCustom());
 
@@ -637,7 +637,7 @@
    * someone who said no then has nowhere else to look, so the real home for it
    * is here.
    *
-   * Three states. Installed already: greyed out, and it says so. Chrome has
+   * Three states. Installed already: grayed out, and it says so. Chrome has
    * handed us its install event: one tap. Anything else -- Safari always, since
    * iOS has no install API at all -- is instructions, because there is nothing
    * to call.
@@ -942,7 +942,7 @@
     <div class="setting-group">
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={themedTitles} />
-        <span class="label-text">Colour chapter titles by book</span>
+        <span class="label-text">Color chapter titles by book</span>
       </label>
     </div>
 
@@ -1048,7 +1048,7 @@
           list="tts-rate-ticks"
           bind:value={ttsRate}
         />
-        <!-- 1.0 sits exactly in the middle of 0.5–1.5, so the centre tick is
+        <!-- 1.0 sits exactly in the middle of 0.5–1.5, so the center tick is
              normal speed and the slider reads as a balance either side of it. -->
         <datalist id="tts-rate-ticks">
           <option value="0.5"></option>
@@ -1104,7 +1104,7 @@
   <SettingsSection title="General" summary={generalSummary} bind:open={openSections.general}>
     <span slot="icon"><Globe size={16} weight="bold" /></span>
 
-    <!-- On the home screen. Greyed out once it is installed, since there is
+    <!-- On the home screen. Grayed out once it is installed, since there is
          nothing left to do, and the hint below says which state this is. -->
     <div class="setting-group">
       <button
@@ -1370,8 +1370,8 @@
     font-weight: 500;
   }
 
-  /* Ends and centre of the reading-speed slider. The middle label is the point:
-     1.0 is the centre of the range, not a value buried off to one side. */
+  /* Ends and center of the reading-speed slider. The middle label is the point:
+     1.0 is the center of the range, not a value buried off to one side. */
   .speed-ticks {
     display: flex;
     justify-content: space-between;
@@ -1584,7 +1584,7 @@
   }
 
   /* Related concerns inside one section (this device, then updates), split
-     by a hairline rather than by competing coloured cards. */
+     by a hairline rather than by competing colored cards. */
   .sub-block.divided {
     margin-top: 1.5rem;
     padding-top: 1.25rem;
@@ -1621,7 +1621,7 @@
   }
 
   /* Manage Packs' affordance, minus the arrow: this one acts here rather than
-     opening anything. Greyed out when there is nothing to tap. */
+     opening anything. Grayed out when there is nothing to tap. */
   .install-button {
     font-size: 0.9rem;
   }

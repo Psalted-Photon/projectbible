@@ -6,7 +6,7 @@
  * translation now goes through it, so a source's structure survives the trip
  * into a pack instead of being flattened.
  *
- * Behaviour is BSB's by default, byte for byte -- see the options below for
+ * Behavior is BSB's by default, byte for byte -- see the options below for
  * the two places other sources need to differ.
  */
 
@@ -92,7 +92,7 @@ const LEGACY_SPACED_MARKERS = new Set(['p', 'm', 'q', 'q1', 'q2', 'q3', 'qm', 'q
 const PLAIN_CHAR_MARKERS = new Set(['w', 'add', 'em']);
 
 /**
- * Per-source differences. Everything not listed here is BSB's behaviour, which
+ * Per-source differences. Everything not listed here is BSB's behavior, which
  * has to stay byte-identical because saved highlight offsets point into it.
  *
  * paragraphFromProseMarker — a bare \p (or \m, \pmo …) opens a new paragraph.
@@ -283,7 +283,7 @@ export function parseUSFM(content, options = {}) {
       // Note markers: \f + \fr ref \ft text \f* is a footnote, and \x + \xo ref
       // \xt target \x* a cross-reference. They are different things and are now
       // stored as different things -- the terminator says which. LXX carries
-      // 298 cross-references that were lost while only \f was recognised; BSB
+      // 298 cross-references that were lost while only \f was recognized; BSB
       // has none, NET has none.
       if (marker === 'f' || marker === 'x') {
         const endMarker = '\\' + marker + '*';
@@ -401,7 +401,7 @@ export function parseUSFM(content, options = {}) {
         continue;
       }
 
-      // Italic character marker (supplied/emphasised wording), stored the way
+      // Italic character marker (supplied/emphasized wording), stored the way
       // NET stores it so the existing <i> renderer picks it up.
       const reopenSpace =
         preserveSpaceAfterCharClose && closingMarker && skippedSpace ? ' ' : '';

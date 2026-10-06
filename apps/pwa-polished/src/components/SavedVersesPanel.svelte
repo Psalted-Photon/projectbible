@@ -20,7 +20,7 @@
   let activeTab: SubTab = 'verses';
 
   // ─── sort state ─────────────────────────────────────────────────────────────
-  // 'categories' groups Highlights by the colour code; Notes have no marks,
+  // 'categories' groups Highlights by the color code; Notes have no marks,
   // so on that tab it reads as Bible order.
   type SortOrder = 'recent' | 'bible' | 'categories';
   let sortOrder: SortOrder = 'recent';
@@ -100,7 +100,7 @@
     folded = folded;
   }
 
-  // ─── naming — text colours and dashed start unnamed; the name follows the account ─
+  // ─── naming — text colors and dashed start unnamed; the name follows the account ─
   let names: Record<string, string> = getHighlightNames();
   let editingKey: string | null = null;
   let editValue = '';

@@ -298,7 +298,7 @@ class SyncService {
    * asymmetry runs the other way: the rows on a device whose storage is
    * blocked are most likely the same person's, and wiping them on a wrong
    * guess destroys work that may never have reached the server. Refusing to
-   * act leaves at worst the pre-phase-5 behaviour.
+   * act leaves at worst the pre-phase-5 behavior.
    *
    * Nothing asks before clearing. By the time this runs Supabase has already
    * changed who is signed in, so there is no longer anybody to put the

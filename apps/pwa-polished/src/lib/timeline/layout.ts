@@ -1,7 +1,7 @@
 /**
  * Where everything sits on the axis.
  *
- * Kept out of the component for the same reason the map's maths is: the
+ * Kept out of the component for the same reason the map's math is: the
  * component is about chrome and gestures, and none of this needs a DOM to be
  * reasoned about.
  *
@@ -28,7 +28,7 @@ export const PX_PER_YEAR = 0.28;
 /** Breathing room above the first year and below the last, true years. */
 const PAD_YEARS = 60;
 
-/** The neutral colour for anything with no book behind it. */
+/** The neutral color for anything with no book behind it. */
 const NEUTRAL = '#8a8f98';
 
 export type ScaleMode = 'story' | 'true';
@@ -82,7 +82,7 @@ const timeRoom = (years: number) => 6 * Math.log2(1 + Math.max(0, years) / 10);
  * Built as a list of knots (year → y), one per event and per era start, each
  * pushed below the last by that event's room plus a little for the time
  * between them. Between knots, years are spread evenly, so a year still maps to
- * one place and the ticks can be labelled.
+ * one place and the ticks can be labeled.
  */
 export function makeStoryScale(eras: TimelineItem[], events: TimelineItem[]): TimelineScale {
   const points: { t: number; w: number }[] = [
@@ -193,10 +193,10 @@ export function zoomForTier(tier: 1 | 2 | 3, mode: ScaleMode, gap = LABEL_GAP): 
   return tier === 3 ? 40 : tier === 2 ? 4 : 0;
 }
 
-// ===== Colour =====
+// ===== Color =====
 
 /**
- * Colours come off the app's own book ramp rather than a new palette, so the
+ * Colors come off the app's own book ramp rather than a new palette, so the
  * timeline reads as part of the same app.
  */
 export function itemColor(item: TimelineItem | null | undefined): string {

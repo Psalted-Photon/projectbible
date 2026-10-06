@@ -2,7 +2,7 @@
  * Textures laid over any background.
  *
  * Every one is made here from noise and shapes, never loaded as an image file,
- * so they cost no download and no licence. Each is drawn once per card size
+ * so they cost no download and no license. Each is drawn once per card size
  * into its own layer and then reused: a drag redraws the card every frame, and
  * rebuilding a marble or a halftone that often would stutter.
  *
@@ -50,7 +50,7 @@ function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContex
   return [c, c.getContext('2d')!];
 }
 
-/** Grey noise, `size` square, values around 128 ± spread. */
+/** Gray noise, `size` square, values around 128 ± spread. */
 function noiseTile(size: number, seed: number, spread = 128): HTMLCanvasElement {
   const [c, ctx] = canvas(size, size);
   const rnd = seeded(seed);

@@ -9,12 +9,12 @@
  * The reading-plan green highlight was the original and is the reference: a
  * horizontal gradient, strongest at the first word, trailing off to nothing.
  * Six later copies drifted from it. This module is that original with its
- * positioning maths fixed, and every copy now goes through it.
+ * positioning math fixed, and every copy now goes through it.
  *
- * ── Colour rule ────────────────────────────────────────────────────────────
- * Reading plan keeps its own two colours (green to start, brown to end).
- * EVERY other time a link brings you to a verse, the colour is that verse's
- * book category colour from CATEGORY_COLORS — and it is the colour of the book
+ * ── Color rule ────────────────────────────────────────────────────────────
+ * Reading plan keeps its own two colors (green to start, brown to end).
+ * EVERY other time a link brings you to a verse, the color is that verse's
+ * book category color from CATEGORY_COLORS — and it is the color of the book
  * the verse actually lives in, never the reader's current book, which drifts on
  * its own as you scroll. Shape, size, opacity and radius are identical in every
  * case; the hue is the only thing a caller may vary.
@@ -66,7 +66,7 @@ export interface VerseTarget {
 }
 
 export interface HighlightOptions {
-  /** Hex colour. Omit and the verse's own book category colour is used. */
+  /** Hex color. Omit and the verse's own book category color is used. */
   color?: string;
   /** Which end of the verse the gradient is strongest at. Default 'start'. */
   side?: 'start' | 'end';
@@ -106,7 +106,7 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 /**
- * The colour any non-reading-plan highlight must use: the category colour of
+ * The color any non-reading-plan highlight must use: the category color of
  * the book the verse belongs to. Callers pass the target book, never the
  * reader's current book — the scroll handler rewrites that as the user moves,
  * so by the time a highlight paints it can name a book you already left.
@@ -298,7 +298,7 @@ function place(a: Active): void {
     el.style.width = seg.width + 'px';
     el.style.height = seg.height + 'px';
     // Every piece paints the whole gradient at its full length and slides it so
-    // the colour picks up where the last line left off. Without this each line
+    // the color picks up where the last line left off. Without this each line
     // would restart at full strength and read as stripes rather than one fade.
     el.style.backgroundSize = total + 'px 100%';
     el.style.backgroundPositionX = fromRight

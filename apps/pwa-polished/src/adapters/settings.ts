@@ -85,14 +85,14 @@ export interface DevotionalSettings {
 }
 
 /**
- * Custom theme — free choice of reader typeface, text colour and background.
+ * Custom theme — free choice of reader typeface, text color and background.
  *
  * Only the Bible reader's text area is affected; app chrome, buttons, book
- * category colours and highlight colours are deliberately untouched. Red
- * letter still overrides the text colour when it is switched on.
+ * category colors and highlight colors are deliberately untouched. Red
+ * letter still overrides the text color when it is switched on.
  *
  * Both preset lists are capped at 10 by the UI. They are separate lists on
- * purpose — the colours that make good text are rarely the ones that make
+ * purpose — the colors that make good text are rarely the ones that make
  * good backgrounds.
  */
 export interface CustomThemeSettings {
@@ -127,8 +127,8 @@ export const MAX_COLOR_PRESETS = 10;
  * has a fallback for every variable, so the default mode sets nothing at all
  * rather than re-stating the same values and risking a drift.
  *
- * Colour swatches are deliberately NOT stored here. Both surfaces share the
- * reader's textPresets/bgPresets lists, so a colour saved in one place is
+ * Color swatches are deliberately NOT stored here. Both surfaces share the
+ * reader's textPresets/bgPresets lists, so a color saved in one place is
  * available in all three.
  */
 export interface EditorThemeSettings {
@@ -189,12 +189,12 @@ export interface UserSettings {
   
   // Display settings
   theme?: 'light' | 'dark' | 'auto' | 'sepia' | 'custom';
-  customTheme?: CustomThemeSettings; // Reader font + colours, only used when theme === 'custom'
+  customTheme?: CustomThemeSettings; // Reader font + colors, only used when theme === 'custom'
   notesTheme?: EditorThemeSettings;   // Notes writing surface (sticky notes follow it)
   journalTheme?: EditorThemeSettings; // Journal writing surface
   cardLooks?: SavedCardLook[]; // Share-card looks saved by name (synced)
   highlightNames?: Record<string, string>; // Names given to Highlights categories, by category key (synced)
-  highlightMeanings?: boolean; // Highlight popup shows what each colour and line means (per-device, default false)
+  highlightMeanings?: boolean; // Highlight popup shows what each color and line means (per-device, default false)
   // Whether each surface's formatting toolbar is slid up out of the way.
   // Per-device on purpose (not in SYNCED_KEYS) — an ergonomic choice like font
   // size, and a phone and a desktop rarely want the same answer.
@@ -378,7 +378,7 @@ export function setCardLooks(looks: SavedCardLook[]): void {
 }
 
 /**
- * Names the user has given to Highlights categories (text colours, dashed
+ * Names the user has given to Highlights categories (text colors, dashed
  * underline), keyed by the category key from lib/highlightCategories.
  */
 export function getHighlightNames(): Record<string, string> {

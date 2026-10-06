@@ -91,7 +91,7 @@
   /** True whenever `view` is still exactly what fitView last returned — i.e.
    *  nobody has panned, zoomed or glided anywhere since. Resize uses this to
    *  decide whether to simply refit (view === fit, nothing to preserve) or to
-   *  keep the screen-centre world point and the current multiple of fit
+   *  keep the screen-center world point and the current multiple of fit
    *  (view has drifted, and refitting outright would yank the user's place). */
   let atFittedView = false;
 
@@ -184,7 +184,7 @@
    *
    * If the view is still exactly the fitted one, refitting to the new size is
    * simply correct — there is nothing the user did that refitting could
-   * disturb. Otherwise the world point under the screen centre is kept fixed,
+   * disturb. Otherwise the world point under the screen center is kept fixed,
    * and the zoom is kept at the same multiple of the newly-recalculated
    * fitted zoom, so a rotation doesn't jump the tree out from under a pan or a
    * manual zoom the way a blind refit would — the tree's origin is drawn at
@@ -602,7 +602,7 @@
     if (!model) return;
     // fitView already knows exactly where the tree's midpoint has to land on
     // screen — reading that back with toWorld, rather than re-deriving the
-    // padded area's centre here, means this can never drift out of step with
+    // padded area's center here, means this can never drift out of step with
     // fitView's own pad if that ever changes.
     const fit = fitView(model, W, H);
     const anchor = { x: W / 2, y: H / 2 };
@@ -616,7 +616,7 @@
   }
 
   /**
-   * Where a glide should centre the pinned person, given whether the sheet
+   * Where a glide should center the pinned person, given whether the sheet
    * is covering part of the screen right now.
    *
    * The sheet is a bottom sheet on a phone (62% tall) and a right panel at
@@ -624,8 +624,8 @@
    * case: the top 38% on a phone, the left side on a wide screen. With no
    * sheet open, the whole screen is free and this is the screen point 62% of
    * the way down it — the same fraction the tree's own origin (Jacob) is
-   * drawn at, so a focused person lands where the tree's own centre of
-   * gravity already is, not at a dead centre that ignores the canopy/root
+   * drawn at, so a focused person lands where the tree's own center of
+   * gravity already is, not at a dead center that ignores the canopy/root
    * balance. Each covered case reapplies that same 0.62 fraction, but scaled
    * to whatever's left uncovered rather than to the whole screen.
    */
@@ -712,8 +712,8 @@
   /**
    * Read bio, on the pinned card. Opens the sheet for that person, and
    * re-glides the pinned person into the region the sheet now leaves uncovered — Phase 1's own
-   * opening glide already centred them on the WHOLE screen, and the sheet
-   * covering 62% of a phone means that earlier centring is now wrong.
+   * opening glide already centered them on the WHOLE screen, and the sheet
+   * covering 62% of a phone means that earlier centering is now wrong.
    */
   function openReadBio() {
     if (!pinned) return;
@@ -870,7 +870,7 @@
   }
 
   // ── Gestures ─────────────────────────────────────────────────────────────
-  // Modelled on ArtViewer, not the lab: the lab has no pinch-to-zoom-and-pan-
+  // Modeled on ArtViewer, not the lab: the lab has no pinch-to-zoom-and-pan-
   // together (it treats a pinch as zoom-only) and no tap discrimination
   // against a drag. The listeners go on the canvas itself, not on any
   // ancestor that also holds the chrome — a card, sheet or button inside the
@@ -1277,7 +1277,7 @@
   }
 
   /* Stacked above the attribution rather than side by side: on a phone the
-     attribution below runs full width, and a bottom-centre hint beside it
+     attribution below runs full width, and a bottom-center hint beside it
      would collide with it rather than clear it. */
   .bottom-stack {
     position: absolute;

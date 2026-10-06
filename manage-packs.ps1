@@ -64,7 +64,7 @@ function Promote-Pack {
     if (Test-Path $destPath) {
         $confirm = Read-Host "$Name already exists in polished. Overwrite? (y/N)"
         if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-            Write-Host "Cancelled." -ForegroundColor Yellow
+            Write-Host "Canceled." -ForegroundColor Yellow
             return
         }
     }
@@ -94,7 +94,7 @@ function Demote-Pack {
     if (Test-Path $destPath) {
         $confirm = Read-Host "$Name already exists in workbench. Overwrite? (y/N)"
         if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-            Write-Host "Cancelled." -ForegroundColor Yellow
+            Write-Host "Canceled." -ForegroundColor Yellow
             return
         }
     }
@@ -106,7 +106,7 @@ function Demote-Pack {
 function Clean-Workbench {
     $confirm = Read-Host "WARNING: Delete ALL packs from workbench? This cannot be undone. (y/N)"
     if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-        Write-Host "Cancelled." -ForegroundColor Yellow
+        Write-Host "Canceled." -ForegroundColor Yellow
         return
     }
     

@@ -14,7 +14,7 @@
  *   - two rows with indistinguishable swatches are two rows a reader cannot
  *     match to the two lines crossing each other on the map
  *   - a name too long for the row is a row that says the same thing as its
- *     neighbour, because the part that differs is the part that got clipped
+ *     neighbor, because the part that differs is the part that got clipped
  *
  * The grouping rule is read out of AtlasPane.svelte rather than copied, for the
  * same reason journeys-draw-check.mjs reads its constants out of overlays.js: a
@@ -129,12 +129,12 @@ function rgbDistance(a, b) {
 
 expect(
   journeys.every((j) => rgb(j.colour)),
-  'every swatch is a colour the style attribute will accept',
+  'every swatch is a color the style attribute will accept',
   `first failure: ${journeys.find((j) => !rgb(j.colour))?.colour}`
 );
 
-// A 10px swatch is a much smaller sample than a drawn line, so two colours that
-// are distinguishable as routes can still be one colour as squares. The
+// A 10px swatch is a much smaller sample than a drawn line, so two colors that
+// are distinguishable as routes can still be one color as squares. The
 // threshold is deliberately lower than the ring check's 65: these are compared
 // side by side in a list, where a small difference still reads, rather than
 // across a map. What this rules out is a genuine near-duplicate.
@@ -184,12 +184,12 @@ expect(
 const long = journeys.filter((j) => j.name.length > VISIBLE_CHARS);
 console.log(`       ${long.length} of ${journeys.length} names clip; longest ${Math.max(...journeys.map((j) => j.name.length))} chars`);
 
-// The row's tooltip is the traveller and the dates, which is the thing a
+// The row's tooltip is the traveler and the dates, which is the thing a
 // clipped name most needs backing up. Both have to be there or the tooltip
 // reads "undefined · undefined".
 expect(
   journeys.every((j) => j.traveller && j.dates),
-  'every row has a traveller and dates for its tooltip',
+  'every row has a traveler and dates for its tooltip',
   `first failure: ${journeys.find((j) => !j.traveller || !j.dates)?.id}`
 );
 
@@ -238,7 +238,7 @@ expect(
 expect(
   !/versesForPopup|bindPopup/.test(overlaySource),
   'the hand-rolled verse popup is gone',
-  'it rendered grey text where the panel renders tappable colour-coded links'
+  'it rendered gray text where the panel renders tappable color-coded links'
 );
 expect(
   /journeys\.onOpenStop\s*=/.test(mapSource) && /openPlaceWith\(place, journeyContext/.test(mapSource),

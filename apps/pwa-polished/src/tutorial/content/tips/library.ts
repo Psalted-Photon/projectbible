@@ -23,7 +23,7 @@ export const LIBRARY_TIPS: Tip[] = [
     target: '.work-tabs',
     corner: 'top-left',
     title: 'Four reference works',
-    body: 'Switch between the dictionary, topical index, encyclopedia and people. A greyed-out tab has nothing for this.',
+    body: 'Switch between the dictionary, topical index, encyclopedia and people. A grayed-out tab has nothing for this.',
   },
   {
     id: 'library-contents',

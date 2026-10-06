@@ -3,7 +3,7 @@
    * Paintings of this passage, offered as card backgrounds.
    *
    * They come from the Art pack, which is public-domain art already on the
-   * device, so nothing is fetched and there is nothing to licence. The chapter's
+   * device, so nothing is fetched and there is nothing to license. The chapter's
    * scenes are listed nearest-first: the scene whose heading sits just above
    * the shared verse is almost always the one being quoted.
    */

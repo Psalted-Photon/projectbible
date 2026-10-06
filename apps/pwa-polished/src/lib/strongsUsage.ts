@@ -27,7 +27,7 @@ export interface UsageRow {
   /** Book name exactly as the pack stored it — needed to query the verse back
    *  out of `verse_ref`, whose key path is the raw field. */
   rawBook: string;
-  /** Normalized name, for grouping, ordering and colour. */
+  /** Normalized name, for grouping, ordering and color. */
   book: string;
   chapter: number;
   verse: number;
@@ -86,7 +86,7 @@ const BOOK_ORDER = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
 const BOOK_TESTAMENT = new Map(BIBLE_BOOKS.map((b) => [b.name, b.testament]));
 
 /** Display order for the source picker: NT editions, then the Septuagint, then
- *  Hebrew. Anything unrecognised sorts after, alphabetically. */
+ *  Hebrew. Anything unrecognized sorts after, alphabetically. */
 const SOURCE_ORDER = ['BYZ', 'TR', 'SBLGNT', 'OGNT', 'LXX', 'WLC', 'HEBREW-OSHB'];
 
 function sourceRank(id: string): number {
@@ -106,7 +106,7 @@ export function refKey(u: Pick<VerseUse, 'book' | 'chapter' | 'verse'>): string 
 }
 
 /** Which testament a book belongs to. Unknown books fall to NT so a verse from
- *  an unrecognised pack still lands somewhere rather than vanishing. */
+ *  an unrecognized pack still lands somewhere rather than vanishing. */
 export function testamentOf(book: string): 'OT' | 'NT' {
   return BOOK_TESTAMENT.get(normalizeBookName(book)) ?? 'NT';
 }
@@ -391,7 +391,7 @@ const CATEGORY_INDEX = new Map(Object.keys(CATEGORY_LABELS).map((c, i) => [c, i]
  *
  * A word landing in several categories at once is the ordinary case rather than
  * an awkward one — nothing has to choose a winner, because each bar carries its
- * own book's colour and the spread across categories is the finding.
+ * own book's color and the spread across categories is the finding.
  */
 export function buildDistribution(uses: VerseUse[]): Distribution {
   const perBook = new Map<string, number>();

@@ -9,7 +9,7 @@
    *
    * Everybody is drawn as the badge they already wear on their pages, so the
    * strip needs no legend — a name in the notebook and a name in the strip are
-   * the same two letters and the same colour. Somebody on this very page gets
+   * the same two letters and the same color. Somebody on this very page gets
    * a ring around theirs; somebody elsewhere in the notebook does not.
    *
    * It draws nothing at all when there is nobody else about, rather than an

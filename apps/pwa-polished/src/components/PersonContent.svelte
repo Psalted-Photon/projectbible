@@ -82,7 +82,7 @@
    *  inside the tree, so there's nothing to open, only to close onto. */
   export let onShowOnTree: ((id: string) => void) | null = null;
   /** Hides the footer's previous/next arrows when false. An alphabetical
-   *  neighbour means nothing when the card is sitting over a family tree. */
+   *  neighbor means nothing when the card is sitting over a family tree. */
   export let showTurns = true;
   /** When set, a tap on the tribe's stone calls this instead of opening the
    *  tree — the tree's bio sheet, already over the tree, lights the tribe in
@@ -658,7 +658,7 @@
             <dt>Died</dt><dd>{person.deathPlace.name}</dd>
           {/if}
           {#if person.memberOf && person.memberOf.length}
-            <!-- A tribe with a stone reads in its colour on the tree and goes
+            <!-- A tribe with a stone reads in its color on the tree and goes
                  where the stone goes. -->
             <dt>Member of</dt>
             <dd>

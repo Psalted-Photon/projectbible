@@ -39,7 +39,7 @@ const DROPPED_PREFIX_RE = /^(?:the\s+)?(?:gospel|book|epistle|letter|psalm)\s+(?
 
 /**
  * Resolve however the user wrote a book name to the app's canonical spelling,
- * or null when it isn't a book we recognise.
+ * or null when it isn't a book we recognize.
  */
 export function resolveBook(raw: string): string | null {
   if (!raw) return null;
@@ -110,7 +110,7 @@ export function isValidVerse(book: string, chapter: number, verse: number): bool
 // Patterns (lifted verbatim from linkifyCommentaryRefs)
 // ---------------------------------------------------------------------------
 
-// Book names and abbreviations recognised in prose. Ordered longest-first so
+// Book names and abbreviations recognized in prose. Ordered longest-first so
 // the alternation engine matches greedily.
 //
 // This list is commentary's, character for character, so nothing about how
@@ -153,7 +153,7 @@ const CONT_SEG = `(?:${CV_FULL}|\\d+[ab]?)`;
 
 /**
  * Book optional — a bare "3:16" resolves against the chapter being read.
- * Case-sensitive, matching commentary's long-standing behaviour.
+ * Case-sensitive, matching commentary's long-standing behavior.
  */
 const REF_RE_CONTEXTUAL = new RegExp(
   `\\b(?:(${BOOK_PATTERN})\\s+(${CV_LEAD})|(${CV_FULL}))((?:\\s*[;,]\\s*${CONT_SEG}(?![A-Za-z]))*)`,
@@ -208,7 +208,7 @@ const REF_RE_BOOK_REQUIRED = new RegExp(
  *
  * Used while someone is editing an existing link. Backspacing "Acts 5:4" passes
  * through "Acts " — not a reference, but plainly on its way to being one again.
- * Recognising that lets the link hold together instead of falling apart at the
+ * Recognizing that lets the link hold together instead of falling apart at the
  * halfway point and stranding the edit.
  */
 const PARTIAL_RE = new RegExp(
@@ -240,7 +240,7 @@ export function couldBecomeRef(text: string): boolean {
 /**
  * The only abbreviations that genuinely turn up in ordinary sentences followed
  * by a number — "the answer is 5 minutes", "I am 5 foot ten", "he 3 times
- * refused", "so 1 more thing". Lowercase, these are prose; capitalised
+ * refused", "so 1 more thing". Lowercase, these are prose; capitalized
  * ("Is 5:8", "Am 5:18") they are books.
  *
  * Everything else is accepted in any case, because the cost of being strict is

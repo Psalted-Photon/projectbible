@@ -68,7 +68,7 @@
    *
    * One element instead of several hundred rects: a version-3 code is 29×29,
    * and a node apiece is a real cost on a phone for no gain, since they are all
-   * the same colour and none of them is interactive.
+   * the same color and none of them is interactive.
    */
   function pathFor(m: Matrix): string {
     const parts: string[] = [];

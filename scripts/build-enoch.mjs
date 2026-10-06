@@ -5,7 +5,7 @@
 //
 // Outputs, into apps/pwa-polished/src/data/ :
 //   book-of-enoch-charles.json   — R. H. Charles (1917), from Wikisource
-//   book-of-enoch-laurence.json  — Richard Laurence (1821/1883), from Global Grey
+//   book-of-enoch-laurence.json  — Richard Laurence (1821/1883), from Global Gray
 //
 // Both translations are in the public domain. Text is fetched verbatim; only
 // editorial apparatus is stripped (Charles' ⌈ ⌉ restoration brackets; Laurence's
@@ -119,7 +119,7 @@ async function buildCharles() {
   };
 }
 
-// ---------- LAURENCE (Global Grey) ----------
+// ---------- LAURENCE (Global Gray) ----------
 function stripLaurence(html) {
   html = html.replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, ''); // footnote ref links + inner marker
   html = html.replace(/<sup[^>]*>[\s\S]*?<\/sup>/gi, '');

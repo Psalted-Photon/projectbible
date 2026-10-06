@@ -5,7 +5,7 @@
  * 179 GeoJSON files, CC BY-SA 4.0, © United Bible Societies 2023, drawn by
  * Dr. Leen Ritmeyer. They are gitignored like every other source download, so
  * this script is how a fresh clone gets them back — see
- * data-sources/maps/journeys/LICENSE.md for what the licence obliges.
+ * data-sources/maps/journeys/LICENSE.md for what the license obliges.
  *
  * Cached on disk, so a re-run only pulls what is missing.
  */

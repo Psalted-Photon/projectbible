@@ -7,7 +7,7 @@
  *
  * Why these two and nothing else: a cold visitor has to be able to read
  * something, and the English translations pack is far too heavy for that job —
- * not for the download (10 MB gzipped) but for the install, which materialises
+ * not for the download (10 MB gzipped) but for the install, which materializes
  * all 152,718 verses in memory before writing. NET alone is 31,102.
  *
  * All four translations' headings go in, not just NET's. Headings fall back to
@@ -35,10 +35,10 @@ const TRANSLATION_ID = 'net';
 for (const [label, path] of [['NET', NET_SOURCE], ['section headings', HEADINGS_SOURCE]]) {
   if (!existsSync(path)) {
     console.error(`❌ Missing ${label} source: ${path}`);
-    console.error('   Git LFS files may not be materialised. Run: git lfs pull');
+    console.error('   Git LFS files may not be materialized. Run: git lfs pull');
     process.exit(1);
   }
-  // An unmaterialised LFS pointer is a ~130-byte text file that would otherwise
+  // An unmaterialized LFS pointer is a ~130-byte text file that would otherwise
   // sail through and produce a silently empty pack.
   if (statSync(path).size < 100_000) {
     console.error(`❌ ${label} source looks like a Git LFS pointer, not a database: ${path}`);
@@ -121,7 +121,7 @@ db.transaction((rows) => {
 })(headingRows);
 console.log(`   Headings: ${headingRows.length.toLocaleString()}`);
 
-// ── Catalogue rows ─────────────────────────────────────────────────────────
+// ── Catalog rows ─────────────────────────────────────────────────────────
 db.prepare('INSERT INTO translations (id, name, language, description) VALUES (?, ?, ?, ?)').run(
   TRANSLATION_ID,
   'New English Translation',
@@ -129,7 +129,7 @@ db.prepare('INSERT INTO translations (id, name, language, description) VALUES (?
   'New English Translation',
 );
 
-// pack_type 'translation' is normalised to 'text' on import, which is what puts
+// pack_type 'translation' is normalized to 'text' on import, which is what puts
 // the verses in front of TextStore.
 const metadata = {
   pack_id: 'starter',

@@ -7,7 +7,7 @@
  * family tree. The pack is never modified.
  *
  * Source: Theographic Bible Metadata by Robert Rouse, CC BY-SA 4.0.
- * The licence is viral — the attribution emitted here must stay on screen.
+ * The license is viral — the attribution emitted here must stay on screen.
  *
  * Output: apps/pwa-polished/src/data/family-tree.json
  *
@@ -295,7 +295,7 @@ for (const id of rootOrder) depthOfRoot(id, new Set());
 // them a ring BELOW Jacob — on the same ring as his children. A wife reached
 // through her husband landed a ring below him for the opposite reason. Either
 // way a couple must share a ring, so every marriage inside this window is
-// levelled to the shallower of the two.
+// leveled to the shallower of the two.
 const marriedTo = new Map(); // person_id -> partner in this window
 for (const id of rootOrder) {
   for (const pl of parseLinks(people.get(id).partners)) {
@@ -315,7 +315,7 @@ for (const id of rootOrder) {
     if (people.get(id).gender === 'Female') partnerIn.set(id, pl.slug);
   }
 }
-// Two passes, because levelling one couple can change what "shallower" means
+// Two passes, because leveling one couple can change what "shallower" means
 // for the next — Rebekah moves to Isaac, and Isaac is already settled.
 for (let pass = 0; pass < 2; pass++) {
   for (const [id, via] of marriedTo) {
@@ -400,7 +400,7 @@ const roots = emitted.map((id) => {
 // ── The crown: Matthew's and Luke's lines to Jesus ────────────────────────
 // They diverge at David (Solomon vs. Nathan), touch at Shealtiel/Zerubbabel,
 // and disagree on Joseph's father. Both are drawn so neither is silently
-// chosen; each is labelled.
+// chosen; each is labeled.
 
 function chainUp(fromId, stopId) {
   const out = [];

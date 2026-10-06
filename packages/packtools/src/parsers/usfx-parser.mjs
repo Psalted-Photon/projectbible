@@ -228,7 +228,7 @@ export function parseUSFX(filePath) {
     if (SMALL_CAPS_ELEMENTS.has(name)) { smallCaps++; return; }
     if (ITALIC_ELEMENTS.has(name)) { append('<i>'); return; }
     if (BOLD_ELEMENTS.has(name)) { append('<b>'); return; }
-    // <w> and anything else unrecognised: keep the text, drop the wrapper.
+    // <w> and anything else unrecognized: keep the text, drop the wrapper.
   };
 
   parser.onclosetag = (name) => {

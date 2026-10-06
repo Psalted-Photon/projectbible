@@ -79,7 +79,7 @@ function splitGreek(cell) {
  * "G0976=N-NSF" → { strongs: 'G0976', morph: 'N-NSF' }
  *
  * Two complications. A word can be prefixed with the Hebrew number it renders
- * ("H0085|G0011=N-GSM-P"), and it can be conjoined to a neighbour with «
+ * ("H0085|G0011=N-GSM-P"), and it can be conjoined to a neighbor with «
  * ("G1138«G1138=N-GSM-P"). Only the Greek number of the word itself is wanted.
  */
 function splitStrongs(cell) {

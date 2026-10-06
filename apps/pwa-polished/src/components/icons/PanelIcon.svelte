@@ -15,7 +15,7 @@
    * encyclopedia is a shelf of volumes.
    */
   const PATHS: Record<PanelIconName, string[]> = {
-    // Open book, centre spine, a cross on the left page.
+    // Open book, center spine, a cross on the left page.
     bible: [
       'M12 7C10.4 5.6 8 5 5 5H3v12h2c3 0 5.4.6 7 2',
       'M12 7c1.6-1.4 4-2 7-2h2v12h-2c-3 0-5.4.6-7 2',

@@ -49,7 +49,7 @@ export interface DBArtImage {
    *
    * Stored as a Blob: IndexedDB structured-clones a raw Uint8Array through
    * memory, which for the art pack meant pushing 87 MB of bytes through the
-   * serialiser, while a Blob is handed to Chrome's file-backed blob store
+   * serializer, while a Blob is handed to Chrome's file-backed blob store
    * instead. Packs installed by older builds still hold a Uint8Array here, so
    * readers must accept both.
    */
@@ -78,7 +78,7 @@ export interface DBAtlasEra {
   books?: string | null;
 }
 
-/** A drawn layer's entry in the catalogue. The geometry lives in atlas_geometry. */
+/** A drawn layer's entry in the catalog. The geometry lives in atlas_geometry. */
 export interface DBAtlasLayer {
   id: string;
   group: 'basemap' | 'overlay';
@@ -408,7 +408,7 @@ export interface DBSharedNotebookPage {
   notebookId: string;
   authorId: string;
   title?: string;
-  text: string; // Sanitised HTML — never rendered without passing sanitizeNoteHtml
+  text: string; // Sanitized HTML — never rendered without passing sanitizeNoteHtml
   /** 'author' means closed: nobody but the author may rewrite it. */
   editMode: 'anyone' | 'author';
   pinned: boolean;
@@ -449,7 +449,7 @@ export interface DBSharedOutboxItem {
   /** 'save' covers both a new page and the hundredth edit of an old one. */
   kind: 'save' | 'remove';
   title: string;
-  /** Sanitised and already stamped, so the pills are right while offline too. */
+  /** Sanitized and already stamped, so the pills are right while offline too. */
   text: string;
   /** The revision this edit was measured against. Null for a new page. */
   baseRev: number | null;
@@ -1368,7 +1368,7 @@ export function openDB(): Promise<IDBDatabase> {
         atlasEras.createIndex('sortOrder', 'sortOrder', { unique: false });
       }
 
-      // The catalogue of drawn layers — what exists, and which shard the bytes
+      // The catalog of drawn layers — what exists, and which shard the bytes
       // came from. Carries no geometry itself.
       if (!db.objectStoreNames.contains('atlas_layers')) {
         const atlasLayers = db.createObjectStore('atlas_layers', { keyPath: 'id' });
@@ -1417,8 +1417,8 @@ export function openDB(): Promise<IDBDatabase> {
         db.createObjectStore('atlas_place_index', { keyPath: 'name' });
       }
 
-      // The journeys a reader can follow: who travelled, when, and in what
-      // colour. Ours, not the route source's.
+      // The journeys a reader can follow: who traveled, when, and in what
+      // color. Ours, not the route source's.
       if (!db.objectStoreNames.contains('atlas_journeys')) {
         const atlasJourneys = db.createObjectStore('atlas_journeys', { keyPath: 'id' });
         atlasJourneys.createIndex('sortOrder', 'sortOrder', { unique: false });
@@ -1562,7 +1562,7 @@ export async function readTransaction<T>(
  * Every morphology word in a chapter, for original-language reading.
  *
  * The words table always keys on a lowercase translation id, while the reader
- * may be showing an uppercase one, so the id is normalised here rather than at
+ * may be showing an uppercase one, so the id is normalized here rather than at
  * each call site.
  */
 export async function getMorphologyForChapter(

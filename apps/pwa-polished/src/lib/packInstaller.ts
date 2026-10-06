@@ -54,7 +54,7 @@ export interface CatalogPack {
   name: string;
   /** One-line summary that heads the info card. */
   description: string;
-  /** The info card's body: author lists, licence terms, where it shows up. */
+  /** The info card's body: author lists, license terms, where it shows up. */
   info: string;
   /** Fallback size string for when the manifest cannot be fetched. */
   size: string;
@@ -64,7 +64,7 @@ export interface CatalogPack {
 
 // Each pack carries two descriptions, and both open with the (i) button:
 // `description` is the one-line summary that heads the info card, and `info`
-// is the body under it -- author lists, licence terms, where the pack
+// is the body under it -- author lists, license terms, where the pack
 // actually shows up in the app. The pill itself shows only the name, because
 // on a phone that is all there is room to read.
 export const PACK_CATALOG: CatalogPack[] = [
@@ -99,7 +99,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     id: "tsk-references",
     name: "TSK References",
     description: "43,000+ cross-references by keyword",
-    info: "The Treasury of Scripture Knowledge: over 43,000 entries linking each verse to the other passages that echo it, organised by the specific word in the verse that triggers the link.\n\nCross-references show beside the verse you are reading and in the Cross-References window. Public domain (1830s).",
+    info: "The Treasury of Scripture Knowledge: over 43,000 entries linking each verse to the other passages that echo it, organized by the specific word in the verse that triggers the link.\n\nCross-references show beside the verse you are reading and in the Cross-References window. Public domain (1830s).",
     size: "6.21 MB",
     icon: "🔗",
     url: `${PACK_BASE_URL}/tsk-references.sqlite`,

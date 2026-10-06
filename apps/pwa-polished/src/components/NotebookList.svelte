@@ -1,7 +1,7 @@
 <script lang="ts" context="module">
   /**
-   * A badge on a row: two letters and a colour, drawn by AuthorPill. The list
-   * is handed one already worked out — whose badge it is, and where the colour
+   * A badge on a row: two letters and a color, drawn by AuthorPill. The list
+   * is handed one already worked out — whose badge it is, and where the color
    * came from, is the caller's business.
    */
   export interface ListPill {
@@ -107,7 +107,7 @@
    * a local one would otherwise open and close it too.
    */
   export let keyPrefix = 'nb';
-  /** The line and focus colour. Local is indigo; Shared gets its own. */
+  /** The line and focus color. Local is indigo; Shared gets its own. */
   export let accent = '#667eea';
   /** Page titles. Distinct from the accent so a row still reads as a link. */
   export let pageAccent = '#60a5fa';
@@ -650,7 +650,7 @@
     color: #9a9a9a;
   }
 
-  /* Warm rather than grey: a page still on this device is not a fault, but it
+  /* Warm rather than gray: a page still on this device is not a fault, but it
      is the one thing on the row worth noticing. */
   .page-flag.waiting {
     color: #e0b060;

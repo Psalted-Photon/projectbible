@@ -193,7 +193,7 @@ async function buildBSBPack() {
       const verses = processVerses(rawVerses);
 
       // BSB also ships as USJ, which marks up the inside of each footnote:
-      // which words are the italicised alternate wording, and which are
+      // which words are the italicized alternate wording, and which are
       // references the publisher already resolved to a target. The text
       // stays the USFM edition's -- see usj-notes.mjs for why.
       const usjPath = join(USJ_DIR, `${usjCodeFor(book.file)}.usj`);

@@ -31,9 +31,9 @@ export interface CardStyle {
   /** Font id from lib/readerFonts.ts. '' means the card's own default face. */
   fontId: string;
   textColor: string;   // hex
-  /** Colour for words tapped to "accent", and nothing else. */
+  /** Color for words tapped to "accent", and nothing else. */
   accentColor: string; // hex
-  /** Solid background, and the colour a photo falls back to in a saved look. */
+  /** Solid background, and the color a photo falls back to in a saved look. */
   bgColor: string;     // hex
   align: 'left' | 'center';
   /** Where the verse block sits in the space above the app mark. */
@@ -69,7 +69,7 @@ export interface CardContent {
   source?: string;
 }
 
-/** How a tapped word is drawn. Absent means plain; 'both' is bold in the accent colour. */
+/** How a tapped word is drawn. Absent means plain; 'both' is bold in the accent color. */
 export type Emphasis = 'bold' | 'accent' | 'both';
 
 /** A photo or painting, already decoded and downscaled, with its framing. */
@@ -79,7 +79,7 @@ export interface CardImage {
   height: number;
   /** 1 fills the card exactly; larger zooms in. */
   zoom: number;
-  /** Offset of the image centre from the card centre, in card pixels. */
+  /** Offset of the image center from the card center, in card pixels. */
   panX: number;
   panY: number;
   /** Small credit line, for a painting. */

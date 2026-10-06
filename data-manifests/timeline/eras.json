@@ -1,12 +1,12 @@
 {
-  "_about": "The fourteen eras of the Timeline. Modern conservative dating: Exodus 1446 BC, Thiele's king dates, Merrill's for Saul, David and Solomon. Years are signed (negative = BC) and there is no year 0. `book` is the book whose colour the band takes; null falls back to the app's neutral colour. Judah Alone and the Exile overlap on purpose (605-586).",
+  "_about": "The fourteen eras of the Timeline. Modern conservative dating: Exodus 1446 BC, Thiele's king dates, Merrill's for Saul, David and Solomon. Years are signed (negative = BC) and there is no year 0. `book` is the book whose color the band takes; null falls back to the app's neutral color. Judah Alone and the Exile overlap on purpose (605-586).",
   "eras": [
     { "id": "primeval", "name": "Primeval History", "start": -4174, "end": -2166, "approx": true, "book": "Genesis",
       "summary": "From Creation to the Tower of Babel: the Fall, the Flood and the scattering of the nations. Dates follow the Genesis 5 and 11 genealogies back from Abram, and are approximate." },
     { "id": "patriarchs", "name": "The Patriarchs", "start": -2166, "end": -1876, "approx": true, "book": "Genesis",
       "summary": "Abraham, Isaac, Jacob and Joseph: God's covenant promises to one family, from Abram's birth to Jacob's move into Egypt." },
     { "id": "egypt", "name": "Israel in Egypt", "start": -1876, "end": -1446, "book": "Exodus",
-      "summary": "Four hundred and thirty years in Egypt (Exodus 12:40), from honoured guests in Goshen to slaves building store cities for Pharaoh." },
+      "summary": "Four hundred and thirty years in Egypt (Exodus 12:40), from honored guests in Goshen to slaves building store cities for Pharaoh." },
     { "id": "exodus", "name": "Exodus and Wilderness", "start": -1446, "end": -1406, "book": "Numbers",
       "summary": "The Passover, the Red Sea, the Law at Sinai, the tabernacle, and forty years in the wilderness after the refusal at Kadesh." },
     { "id": "conquest", "name": "Conquest", "start": -1406, "end": -1375, "book": "Joshua",

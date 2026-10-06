@@ -104,9 +104,9 @@ export async function getTodayPlaylist(): Promise<PlanPlaylist | null> {
  *
  * The day comes from the card that is showing it, so there is no second guess
  * at which day is meant. Book names in plan data are the plural form
- * ("Psalms") where the reader's canon is singular, so every name is normalised
+ * ("Psalms") where the reader's canon is singular, so every name is normalized
  * on the way out — the engine looks chapters up by that name and speaks it
- * aloud through the same normalisation.
+ * aloud through the same normalization.
  */
 export async function buildPlaylistForDay(planId: string, day: any): Promise<PlanPlaylist | null> {
   if (!day) return null;

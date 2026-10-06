@@ -52,7 +52,7 @@ export type Stone = {
   tr: string;
   kjv: string;
   as: string;
-  /** Flat swatch colour for small, non-3D uses. */
+  /** Flat swatch color for small, non-3D uses. */
   sw: string;
 } & (CutStone | CabStone);
 

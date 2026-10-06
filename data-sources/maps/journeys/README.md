@@ -5,8 +5,8 @@ Three things live here:
 | | |
 |---|---|
 | `ubs-routes/` | 179 GeoJSON files from UBS Project MARBLE. **Gitignored.** Re-fetch with `node scripts/atlas/fetch-ubs-routes.mjs`. |
-| `LICENSE.md` | The CC BY-SA 4.0 notice, verbatim, and where the licence boundary sits. |
-| `journey-index.json` | Ours. The editorial layer — which journeys ship, what they are called, which places are stops, in what order, in what colour. |
+| `LICENSE.md` | The CC BY-SA 4.0 notice, verbatim, and where the license boundary sits. |
+| `journey-index.json` | Ours. The editorial layer — which journeys ship, what they are called, which places are stops, in what order, in what color. |
 
 UBS supplies lines. The index decides what those lines mean.
 
@@ -18,7 +18,7 @@ and not a simpler one.
 **The geometry is bare.** 508 LineStrings across 179 files, and `properties` is
 empty on all but three of them (`025`, `177` carry a stray `"Overlay (Copy)"`;
 `061` has a null feature). No names, no dates, no verse references, no stop
-markers. That is convenient for the licence boundary — there is nothing in
+markers. That is convenient for the license boundary — there is nothing in
 these files to separate out, because they are pure coordinates — but it means
 every name a reader will see has to come from us.
 
@@ -57,9 +57,9 @@ journeys[]
   id           our id, kebab-case, stable — the join key for all three tables
   name         what the reader sees
   traveller    who
-  dates        display string, already era-labelled ("AD 46–48", "1446–1406 BC")
+  dates        display string, already era-labeled ("AD 46–48", "1446–1406 BC")
   testament    "old" | "new"  — the grouping in the Layers sub-list
-  colour       this journey's line colour
+  colour       this journey's line color
   sort_order   order within its testament
   description  one line
   source[]     which UBS file, which segments, in which direction

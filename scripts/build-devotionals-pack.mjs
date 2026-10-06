@@ -472,7 +472,7 @@ const weakMatches = [];
 function splitFragment(frag, passages, after) {
   const pieces = frag.split(/(?<=[.?!;:])\s+(?=[A-Z[])|\s*(?=\. \. \.)/).filter((p) => p.trim());
   if (pieces.length < 2) return [frag];
-  // A piece too short to place on its own ("We", "Jehovahshammah:") rides with its neighbour.
+  // A piece too short to place on its own ("We", "Jehovahshammah:") rides with its neighbor.
   const tiny = (p) => words(p).length < 3;
   const merged = [];
   let carry = '';

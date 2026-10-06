@@ -50,7 +50,7 @@ Everything the app does, in plain language. Free, offline-first, and private: yo
 - **Words of Jesus in red** — red-letter text, shown correctly in dark, light, and sepia themes. Can be turned off.
 - **Section headings** — the small pericope titles between verses ("The Sermon on the Mount"). Can be turned off.
 - **Footnotes** — small blue numbers in the text. Tap one to read the translator's note.
-- **Cross-reference markers** — same small numbers, in grey rather than blue, when the note points to another passage instead of explaining wording. The app tells the two apart automatically.
+- **Cross-reference markers** — same small numbers, in gray rather than blue, when the note points to another passage instead of explaining wording. The app tells the two apart automatically.
 - **Bold and italic** — preserved from translations that use them, including the italics some Bibles use for supplied words.
 - **Art icons** — a small icon next to verses that a painting depicts. Tap it to open the artwork. Can be turned off.
 - **Place-name underlines** — an optional faint dotted underline under multi-word place names like "Red Sea" or "Abel Beth Maacah", so you can see which words act as a single place when tapped. Off by default, and needs the encyclopedia pack.
@@ -79,7 +79,7 @@ Two complete English editions are included and read like any other book:
 
 - **Back button** — steps back through the passages you've visited, like a browser's back button. It only appears when there's somewhere to go back to.
 - **Tap any reference to follow it** — references inside cross-references, commentaries, and encyclopedia articles are all live links. The verse you land on is marked in its book's category color so you can spot where to start reading. The mark stays until you follow another link or step away by hand, and it comes back if you leave the chapter and return.
-- **Reference shorthand is understood** — "Ex 20:21", "Am 5:18-20", or a bare "3:14" while you're already in a book all resolve correctly. Common abbreviations and alternate book spellings are recognised.
+- **Reference shorthand is understood** — "Ex 20:21", "Am 5:18-20", or a bare "3:14" while you're already in a book all resolve correctly. Common abbreviations and alternate book spellings are recognized.
 - **The toolbar follows your scrolling** — as you scroll into a new chapter, the book and chapter shown in the toolbar update to match, without yanking the page around.
 
 ## 3. Translations
@@ -130,7 +130,7 @@ Tap any word in the text to open a full study panel for it. Works on English wor
 
 - **Dictionary definitions** — grouped by part of speech.
 - **Plurals and variants are handled** — tapping "waters" finds "water"; tapping a verb form finds its base form.
-- **People are recognised** — tapping a name opens that person's entry with the verses they appear in, rather than a dictionary definition of the word.
+- **People are recognized** — tapping a name opens that person's entry with the verses they appear in, rather than a dictionary definition of the word.
 
 ### 5.3 Grammar in plain English
 
@@ -255,14 +255,14 @@ Every verse you've highlighted, in one list in your profile. One button sorts it
 
 - **Recent** — newest first.
 - **Bible Order** — Genesis to Revelation.
-- **Categories** — grouped by how you marked them, following a Bible-study colour code:
+- **Categories** — grouped by how you marked them, following a Bible-study color code:
   - Markers: yellow for the Trinity, God, Jesus, the Holy Spirit; green for wisdom and faithful living; orange for warnings and sin; red for salvation, the blood and the cross; pink for praise, hope and prayer; purple for promises, covenants and the Kingdom; blue for context, prophecy, history, people and places. Each group's header spells out its whole list.
-  - Lines, whatever their colour: solid for verses to meditate on or that stand out, boxed for a word to define or study, wavy for repetition.
-  - Text colours and dashed underlines get a group per colour — "Green text", "Blue dashed underline" — until you name them. Tap the pencil to give one a name; it follows your account to your other devices.
+  - Lines, whatever their color: solid for verses to meditate on or that stand out, boxed for a word to define or study, wavy for repetition.
+  - Text colors and dashed underlines get a group per color — "Green text", "Blue dashed underline" — until you name them. Tap the pencil to give one a name; it follows your account to your other devices.
 
 A verse marked two ways shows up in both groups. Tap a group's header to fold it away.
 
-While you're choosing a highlight, the **Meanings** button in the popup's top corner spells out what each colour and line stands for. Groups you haven't named show as "Custom".
+While you're choosing a highlight, the **Meanings** button in the popup's top corner spells out what each color and line stands for. Groups you haven't named show as "Custom".
 
 ### 10.4 Selecting words
 
@@ -624,7 +624,7 @@ Four reference works you can **browse like books**, rather than only reaching th
 
 ### 23.1 Four tabs, one card
 
-All four works sit as tabs across the top of every lookup. They're always in the same order and always the same width, so a tab is in the same place every time. A tab is greyed out when that work has nothing on your subject — so a tab you can tap is one that will definitely open something.
+All four works sit as tabs across the top of every lookup. They're always in the same order and always the same width, so a tab is in the same place every time. A tab is grayed out when that work has nothing on your subject — so a tab you can tap is one that will definitely open something.
 
 Switching tabs doesn't close and reopen anything. Each work remembers where you were, so you can look something up in the Encyclopedia, check the Dictionary, and come back to find your place kept.
 
@@ -659,7 +659,7 @@ Biographies of the people of the Bible.
 - **Family links** — parents, children, and spouses are links you can follow.
 - **Pin a biography beside the reader** so you can keep reading with it open.
 - **Bridged to the encyclopedia**, the dictionary, and the topical index.
-- **Grand entrance on the family tree** — tap someone and the tree pulls out to the whole view, pauses, then climbs their line from God with a golden burst and lands on them with a burst in their own colour. Turn it off with the **Grand entrance** button at the top of the tree and a tap lights the line at once and glides straight there. It stays off if your device asks for reduced motion. Only God and Jesus are gold on the tree, and every name has a thin dark edge so it reads over dots of its own colour.
+- **Grand entrance on the family tree** — tap someone and the tree pulls out to the whole view, pauses, then climbs their line from God with a golden burst and lands on them with a burst in their own color. Turn it off with the **Grand entrance** button at the top of the tree and a tap lights the line at once and glides straight there. It stays off if your device asks for reduced motion. Only God and Jesus are gold on the tree, and every name has a thin dark edge so it reads over dots of its own color.
 
 ## 26. Notes & Notebooks
 
@@ -667,7 +667,7 @@ A desk for everything you write, in its own panel, with a **Local / Shared** swi
 
 ### 26.1 Three kinds of notes
 
-- **Verse notes** — everything you've attached to a verse, organised in a book-by-book tree.
+- **Verse notes** — everything you've attached to a verse, organized in a book-by-book tree.
 - **Notebooks** — folders you name yourself, holding free-form pages that aren't tied to any verse.
 - **Shared notebooks** — the same thing, kept with other people. [26.3](#263-notebooks-you-keep-with-other-people).
 
@@ -689,7 +689,7 @@ A shared notebook is one a group writes in together — a study group, a class, 
 - **Make one and hand out its code.** Eight characters, with none of the letters that get misread. The same invitation is also a link and a QR code: read the code aloud across a room, paste the link, or hold one phone up to another.
 - **Two kinds.** *Everyone writes*, or *only you write* and any number read.
 - **Private or public.** A private notebook shows nothing at all to anyone who isn't in it. A public one can be read by anyone holding the link, with no account at all — reading only. Writing always needs an account.
-- **Everybody gets a badge** — two letters and a colour, the same badge commentators wear in the reader. Yours is chosen for you when you join, and you can change it, differently in each notebook.
+- **Everybody gets a badge** — two letters and a color, the same badge commentators wear in the reader. Yours is chosen for you when you join, and you can change it, differently in each notebook.
 - **You can tell who wrote which line.** Every paragraph carries the badges of everyone who has written in it, in a margin beside it.
 - **One person writes a page at a time.** You can see who else is in the notebook and who is in the page you have open. While somebody is writing, you're told so rather than handed a pencil that would lose — and after a minute of quiet you can take over.
 - **Nothing is overwritten and nothing is merged behind your back.** If two versions of a page collide, you're never asked to pick a winner: yours is kept as a page of its own, beside theirs.

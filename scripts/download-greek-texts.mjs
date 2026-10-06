@@ -6,7 +6,7 @@
  *
  *   data-sources/ebible-grcbrent/   Brenton's Greek Septuagint (1851), USFM.
  *                                   The Greek printed opposite the English
- *                                   that LXX2012 modernises, so the two line
+ *                                   that LXX2012 modernizes, so the two line
  *                                   up verse for verse.
  *   data-sources/ebible-grctr/      Textus Receptus, USFM, with footnotes
  *                                   naming where Scrivener 1894 differs.
@@ -72,7 +72,7 @@ async function ebible(id, dir) {
   let n = 0;
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory) continue;
-    // copr.htm carries the licence statement; keep it beside the text.
+    // copr.htm carries the license statement; keep it beside the text.
     if (!/\.usfm$/i.test(entry.entryName) && entry.entryName !== 'copr.htm') continue;
     zip.extractEntryTo(entry, dir, false, true);
     n++;

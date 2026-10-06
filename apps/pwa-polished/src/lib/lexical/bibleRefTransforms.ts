@@ -71,7 +71,7 @@ export function formatVerseSuffix(text: string): string {
 }
 
 /**
- * Recognises the printed verse by the shape formatVerseSuffix gives it.
+ * Recognizes the printed verse by the shape formatVerseSuffix gives it.
  *
  * Used to tell which half is left when an expanded link loses a child: the
  * reference, or the scripture. They are treated very differently.
@@ -177,7 +177,7 @@ function convertRun(node: TextNode, run: RefMatch[]): void {
       match.verse,
       false,
     );
-    // The label is canonicalised here: "lk 12:1" becomes "Luke 12:1".
+    // The label is canonicalized here: "lk 12:1" becomes "Luke 12:1".
     refNode.append($createTextNode(match.canonical));
     matchNode.replace(refNode);
     if (i === run.length - 1) lastCreated = refNode;

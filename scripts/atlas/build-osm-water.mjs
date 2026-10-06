@@ -2,8 +2,8 @@
 /**
  * Turn the harvested OpenStreetMap water into a fine detail level for the map.
  *
- * Natural Earth's lakes and coastline are right to about a kilometre, which is
- * invisible at country scale and glaring close in: fourteen harbour towns sit
+ * Natural Earth's lakes and coastline are right to about a kilometer, which is
+ * invisible at country scale and glaring close in: fourteen harbor towns sit
  * out at sea and Capernaum sits in the Sea of Galilee. This builds the same
  * layers again from OpenStreetMap, over the ground where a reader actually
  * zooms deep — the cells holding a place Scripture names.
@@ -29,8 +29,8 @@ const PACK = path.join(ROOT, 'packs/basemap.sqlite');
 const OUT = path.join(ROOT, 'apps/pwa-polished/public/atlas');
 
 /**
- * Fine, because the whole point is the last kilometre. Four decimals is about
- * eleven metres at this latitude, which is finer than any shoreline is known.
+ * Fine, because the whole point is the last kilometer. Four decimals is about
+ * eleven meters at this latitude, which is finer than any shoreline is known.
  */
 const TUNING = { decimals: 4, tolerance: 0.00015, minArea: 0.0000004 };
 
@@ -213,7 +213,7 @@ const overlaps = (a, b) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] 
  * The sea, as filled shapes rather than a line.
  *
  * A shoreline drawn as a line does not say which side is wet, and the fourteen
- * harbour towns sitting out at sea need exactly that. Closing coastline into sea
+ * harbor towns sitting out at sea need exactly that. Closing coastline into sea
  * polygons is the fiddly part of this job — rings have to be cut and closed
  * against each edge, and getting it subtly wrong puts a town on the wrong side
  * of the water — so the closing is not done here. It arrives already done, from
@@ -277,8 +277,8 @@ function store(kind, title, features, tuning = TUNING) {
 }
 
 /**
- * The sea is one enormous smooth boundary, so it can be generalised harder than
- * a lake without anyone seeing it: forty-odd metres, against the kilometre it
+ * The sea is one enormous smooth boundary, so it can be generalized harder than
+ * a lake without anyone seeing it: forty-odd meters, against the kilometer it
  * replaces.
  */
 const SEA_TUNING = { decimals: 4, tolerance: 0.0004, minArea: 0.0000004 };

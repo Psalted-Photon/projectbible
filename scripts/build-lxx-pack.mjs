@@ -10,7 +10,7 @@
  * and 19 (95 verses).
  *
  * Brenton's 1851 edition printed this Greek opposite his English, and LXX2012
- * is a modernisation of that English, so the two line up verse for verse. The
+ * is a modernization of that English, so the two line up verse for verse. The
  * build checks that against the shipped LXX2012 and fails if a book's
  * chapters disagree.
  *
@@ -130,7 +130,7 @@ function parseUsfm(source) {
 /**
  * Brenton prints a book's opening words, and some oracle headings, in
  * capitals — and Greek capitals carry no accents, so lowercasing "ΚΑΙ" would
- * give an unaccented "και". Each capitalised word takes the spelling it most
+ * give an unaccented "και". Each capitalized word takes the spelling it most
  * often has elsewhere in Brenton ("ΚΑΙ" → "καὶ", "ἩΣΑΙΑΣ" → "Ἡσαΐας"), and
  * the first word of each run of capitals keeps an initial capital.
  */
@@ -255,7 +255,7 @@ function buildLXXPack() {
   })();
 
   // ── Checks ────────────────────────────────────────────────────────────
-  console.log('🔤 Capitalised words restored:');
+  console.log('🔤 Capitalized words restored:');
   for (const [from, to] of changes) console.log(`   ${from} → ${to}`);
 
   const shape = (d, where, args) =>

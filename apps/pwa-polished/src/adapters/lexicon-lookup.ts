@@ -891,7 +891,7 @@ export interface IsbeResolution {
   matchedByVerse?: boolean; // place confirmed by the exact clicked verse
 }
 
-/** Context captured at click time so phrase expansion can see neighbouring words. */
+/** Context captured at click time so phrase expansion can see neighboring words. */
 export interface IsbeClickContext {
   word: string;
   before?: string[];  // preceding words in reading order (nearest last)
@@ -1600,7 +1600,7 @@ export function libraryLetterOf(sortKey: string): string {
 
 /**
  * The entries either side of this one alphabetically — the footer arrows.
- * Walks the index by key alone, so stepping to a neighbour costs one cursor
+ * Walks the index by key alone, so stepping to a neighbor costs one cursor
  * hop plus one record read, not a scan.
  */
 export async function getIsbeNeighbors(
@@ -2246,7 +2246,7 @@ export async function getNavesInChapter(book: string, chapter: number): Promise<
  * The bio pack is the master list of people: 3,067 names, which is small
  * enough to hold whole. So rather than the per-letter index reads the
  * encyclopedia needs, the roster is read once and then sliced in memory —
- * letters, neighbours and search all come off the same sorted array.
+ * letters, neighbors and search all come off the same sorted array.
  * ------------------------------------------------------------------ */
 
 let peopleRoster: LibraryRow[] | null = null;
@@ -2453,7 +2453,7 @@ const EMPTY_WORKS: WorksResolution = {
  * own resolvers already fold plurals and multi-word phrases. Only the
  * dictionary is narrowed to `headWord`, since it files single words. A pack
  * that isn't installed contributes null rather than throwing, so the tabs
- * simply grey out.
+ * simply gray out.
  *
  * `ref` is the verse the subject was clicked in, where there is one — it lets
  * the person and place lookups disambiguate homonyms.

@@ -28,7 +28,7 @@
  * journey is made worse.
  *
  * This is imported by the builder and by the reporter that measures it, rather
- * than living in either, so the measurement cannot drift from the behaviour.
+ * than living in either, so the measurement cannot drift from the behavior.
  */
 
 /** Great-circle km. The same formula the builder and the app's overlay use. */
@@ -171,7 +171,7 @@ export function orientLegs(legs, stops) {
       //
       // Pairs are weighted by how near both stops come to the line. A city
       // 1 km off the road is strong evidence about that road's direction; one
-      // 40 km off is the same city seen from a neighbouring corridor, and on
+      // 40 km off is the same city seen from a neighboring corridor, and on
       // Paul's Second that is literally the case — the homeward leg runs within
       // 26 km of outbound Troas. Unweighted, distant bystanders outvote the
       // stops the leg actually threads.

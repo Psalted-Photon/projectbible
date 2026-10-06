@@ -183,7 +183,7 @@
    * Supabase's own wording is sometimes the useful part — "at least 6
    * characters" tells someone what to do — and sometimes it is jargon, or
    * worse, a lie by omission ("Invalid login credentials" for a typo'd
-   * password). So the cases worth naming are named, and anything unrecognised
+   * password). So the cases worth naming are named, and anything unrecognized
    * falls through to Supabase's sentence rather than a blank shrug.
    */
   function authErrorText(error: unknown, fallback: string): string {

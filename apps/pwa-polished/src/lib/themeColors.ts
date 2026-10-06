@@ -1,8 +1,8 @@
 /**
- * Colour maths for the Custom theme.
+ * Color math for the Custom theme.
  *
- * The Custom theme lets the user pick any text and background colour, which
- * means several downstream colours can no longer be hardcoded: secondary
+ * The Custom theme lets the user pick any text and background color, which
+ * means several downstream colors can no longer be hardcoded: secondary
  * headings need to sit between the text and the background, and the red-letter
  * red has to stay legible whether the background is near-white or near-black.
  * Deriving them here keeps the rules in one readable place instead of scattered
@@ -37,7 +37,7 @@ export function rgbToHex({ r, g, b }: Rgb): string {
   return '#' + [r, g, b].map((v) => clamp255(v).toString(16).padStart(2, '0')).join('');
 }
 
-/** True if the string is a colour we can actually work with. */
+/** True if the string is a color we can actually work with. */
 export function isValidHex(hex: string): boolean {
   return hexToRgb(hex) !== null;
 }
@@ -52,7 +52,7 @@ export interface Hsl {
 }
 
 /**
- * HSL rather than HSV because the colour picker's spectrum box runs white at
+ * HSL rather than HSV because the color picker's spectrum box runs white at
  * the top, through the pure hue, to black at the bottom — that vertical axis
  * *is* lightness. A point at (x, y) in the box is hsl(x * 360, s, 1 - y), and
  * hexToHsl is what puts the marker back in the right place when a preset or a
@@ -70,10 +70,10 @@ export function hexToHsl(hex: string): Hsl {
   const l = (max + min) / 2;
   const d = max - min;
 
-  if (d === 0) return { h: 0, s: 0, l }; // grey — hue is meaningless
+  if (d === 0) return { h: 0, s: 0, l }; // gray — hue is meaningless
 
   // Denominator flips above 50% lightness; both branches approach 0 as the
-  // colour nears pure white or black, which is why d === 0 is handled first.
+  // color nears pure white or black, which is why d === 0 is handled first.
   const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
 
   let h: number;
@@ -85,7 +85,7 @@ export function hexToHsl(hex: string): Hsl {
 }
 
 export function hslToHex(h: number, s: number, l: number): string {
-  // Wrap hue and clamp the rest so callers can hand over raw pointer maths.
+  // Wrap hue and clamp the rest so callers can hand over raw pointer math.
   const hue = ((h % 360) + 360) % 360;
   const sat = Math.max(0, Math.min(1, s));
   const light = Math.max(0, Math.min(1, l));
@@ -142,20 +142,20 @@ export function mix(a: string, b: string, amount: number): string {
 }
 
 /**
- * Red-letter colour for a given background.
+ * Red-letter color for a given background.
  *
  * The two values match what the dark and light themes already use, so red
  * letter looks the same in Custom as it does elsewhere. Picking by background
- * luminance rather than by text colour is deliberate: legibility is a function
+ * luminance rather than by text color is deliberate: legibility is a function
  * of what the text sits *on*, and the red deliberately ignores the user's text
- * colour anyway.
+ * color anyway.
  */
 export function redLetterFor(bg: string): string {
   return luminance(bg) > 0.45 ? '#CC0000' : '#FF3F3F';
 }
 
 /**
- * Secondary and tertiary text, for headings that currently use fixed greys.
+ * Secondary and tertiary text, for headings that currently use fixed grays.
  * Dimming *towards the background* works on light and dark alike — nudging
  * towards black would vanish on a dark background and vice versa.
  */

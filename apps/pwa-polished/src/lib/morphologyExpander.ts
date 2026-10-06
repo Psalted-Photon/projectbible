@@ -161,7 +161,7 @@ export function expandRmacCode(code: string): string {
   const pos = parts[0];
   const posName = RMAC_POS[pos];
 
-  if (!posName) return code; // unrecognised — return raw
+  if (!posName) return code; // unrecognized — return raw
 
   // Standalone POS (no inflection)
   if (RMAC_STANDALONE.has(pos)) {
@@ -338,7 +338,7 @@ const OSHB_STATE: Record<string, string> = {
 /**
  * Expand a Hebrew/Aramaic OSHB code to plain English.
  * Handles compound codes with '/' separator (prefix/main-word).
- * Returns the raw code if unrecognised.
+ * Returns the raw code if unrecognized.
  */
 export function expandOshbCode(raw: string): string {
   if (!raw) return '';

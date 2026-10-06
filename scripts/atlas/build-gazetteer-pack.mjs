@@ -6,7 +6,7 @@
  * counts as worth shipping is the whole problem, and it is set out at
  * shouldKeep() below.
  *
- * Search is FTS5 over a normalised form of each name, so "st cloud",
+ * Search is FTS5 over a normalized form of each name, so "st cloud",
  * "St. Cloud" and "Saint Cloud" are one query, and prefixes match as you type.
  */
 import fs from 'fs';
@@ -128,7 +128,7 @@ function shouldKeep({ fclass, fcode, population, altNames, lat, lon }) {
   return altNames >= SPOKEN_IN;
 }
 
-/** Same rules as the client's normalise(), so queries and rows agree. */
+/** Same rules as the client's normalize(), so queries and rows agree. */
 const WORDS = {
   st: 'saint', ste: 'sainte', mt: 'mount', mtn: 'mountain', ft: 'fort',
   n: 'north', s: 'south', e: 'east', w: 'west',

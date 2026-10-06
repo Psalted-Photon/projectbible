@@ -61,7 +61,7 @@ export interface PlaceColumns {
   admin1sLower: string[];
 }
 
-/** Written forms that mean the same word. Mirrored from the client's normalise. */
+/** Written forms that mean the same word. Mirrored from the client's normalize. */
 const WORDS: Record<string, string> = {
   st: 'saint', ste: 'sainte', mt: 'mount', mtn: 'mountain', ft: 'fort',
   n: 'north', s: 'south', e: 'east', w: 'west',

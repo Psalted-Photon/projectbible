@@ -1,5 +1,5 @@
 {
-  "_about": "The prophets lane: Samuel, Nathan, Elijah, Elisha, the sixteen writing prophets, and John the Baptist. `start`/`end` are the years of ministry, modern conservative dates; most are approximate. `book` is the book they wrote, which also gives the bar its colour; the four without one take the book their story is told in. `served` names the kings they spoke to.",
+  "_about": "The prophets lane: Samuel, Nathan, Elijah, Elisha, the sixteen writing prophets, and John the Baptist. `start`/`end` are the years of ministry, modern conservative dates; most are approximate. `book` is the book they wrote, which also gives the bar its color; the four without one take the book their story is told in. `served` names the kings they spoke to.",
   "prophets": [
     { "id": "samuel", "name": "Samuel", "start": -1095, "end": -1015, "approx": true, "book": "1 Samuel", "personId": "samuel_2469",
       "served": "Eli, Saul and the young David", "passages": "1 Samuel 1-16; 1 Samuel 25:1",
@@ -51,7 +51,7 @@
       "summary": "A priest among the exiles by the river Chebar: the glory leaving the Temple, the valley of dry bones, and a new Temple." },
     { "id": "obadiah", "name": "Obadiah", "start": -586, "end": -580, "approx": true, "book": "Obadiah", "personId": "obadiah_2215",
       "served": "After the fall of Jerusalem", "passages": "Obadiah 1",
-      "summary": "The shortest book of the Old Testament: judgement on Edom for gloating over Jerusalem's fall." },
+      "summary": "The shortest book of the Old Testament: judgment on Edom for gloating over Jerusalem's fall." },
     { "id": "haggai", "name": "Haggai", "start": -520, "end": -520, "approx": false, "book": "Haggai", "personId": "haggai_1349",
       "served": "Zerubbabel the governor and Joshua the high priest", "passages": "Haggai 1-2; Ezra 5:1-2",
       "summary": "Four messages in four months that got the stalled Temple rebuilt: consider your ways." },
@@ -63,6 +63,6 @@
       "summary": "The last prophet of the Old Testament: careless priests, broken marriages, robbed tithes, and Elijah to come before the day of the LORD." },
     { "id": "john-baptist", "name": "John the Baptist", "start": 26, "end": 28, "approx": true, "book": "Luke", "personId": "john_1676",
       "served": "Herod Antipas's Galilee and Pilate's Judea", "passages": "Luke 1:5-25; Luke 1:57-80; Matthew 3; John 1:19-36; Matthew 14:1-12",
-      "summary": "The voice in the wilderness, the Elijah Malachi promised; he baptised Jesus and was beheaded by Herod Antipas." }
+      "summary": "The voice in the wilderness, the Elijah Malachi promised; he baptized Jesus and was beheaded by Herod Antipas." }
   ]
 }

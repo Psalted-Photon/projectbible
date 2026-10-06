@@ -165,13 +165,13 @@ void main(){
     // clouded maroon veining
     float rv = abs(fbm(wd*1.7 + vec3(5.0)) - 0.5);
     base = mix(base, vec3(0.30,0.06,0.07), (1.0 - smoothstep(0.0, 0.07, rv))*0.65);
-    // ochre patches with dark and pale speckles
+    // ocher patches with dark and pale speckles
     float ocM = smoothstep(0.56, 0.62, fbm(wd*1.4 + vec3(21.0)));
     vec3 och = mix(vec3(0.80,0.50,0.12), vec3(0.62,0.34,0.08), fbm(p*6.0 + vec3(2.0)));
     base = mix(base, och, ocM*0.9);
     base = mix(base, vec3(0.22,0.10,0.04), smoothstep(0.80, 0.86, vnoise(p*34.0 + vec3(1.0)))*ocM*0.85);
     base = mix(base, vec3(0.85,0.78,0.60), smoothstep(0.84, 0.90, vnoise(p*40.0 + vec3(8.0)))*ocM*0.6);
-    // grey zones with red tendrils running through
+    // gray zones with red tendrils running through
     float gM = smoothstep(0.60, 0.64, fbm(w*1.1 + vec3(33.0)));
     vec3 grey = mix(vec3(0.62,0.60,0.56), vec3(0.45,0.44,0.42), fbm(p*5.0 + vec3(4.0)));
     float tend = abs(fbm(wd*3.0 + vec3(44.0)) - 0.5);

@@ -199,7 +199,7 @@
   let editorText = '';
   let isDirty = false;
   let isSaving = false;
-  // Asked to save while a save was already running. Honoured when that one
+  // Asked to save while a save was already running. Honored when that one
   // finishes, so words typed during a slow save (or just before the panel
   // closed) are not left behind.
   let saveAgain = false;
@@ -291,7 +291,7 @@
 
   // ─── Verse-note tree ────────────────────────────────────────────────────────
   // Shaped as SearchResults so SearchResultsTree renders it unchanged — the
-  // book caps, counts, canonical order and reader colours all come free.
+  // book caps, counts, canonical order and reader colors all come free.
   $: verseTree = buildVerseTree(verseNotes);
 
   function buildVerseTree(notes: typeof verseNotes): SearchTreeNode[] {
@@ -579,7 +579,7 @@
    *
    * Undefined for somebody who is not on the roster — a page written by
    * a person who has since left the notebook. The row still names them from
-   * the page's author id; it simply has no colour to draw them in, and an
+   * the page's author id; it simply has no color to draw them in, and an
    * invented one would be a different person's badge next week.
    */
   function pillFor(member: SharedNotebookMember | null, title: string): ListPill | undefined {
@@ -767,7 +767,7 @@
     inviteNotebook = sharedNotebooks.find((n) => n.id === notebookId) ?? null;
   }
 
-  /** Change the two letters and the colour you are known by in one notebook. */
+  /** Change the two letters and the color you are known by in one notebook. */
   function openBadgePicker(notebookId: string) {
     badgeNotebook = sharedNotebooks.find((n) => n.id === notebookId) ?? null;
   }
@@ -984,7 +984,7 @@
    *
    * The way out of a save that was refused, and the reason a conflict here
    * costs nobody a paragraph: yours becomes a new page beside theirs instead of
-   * one of the two being chosen over the other. Phase 8 generalises this to
+   * one of the two being chosen over the other. Phase 8 generalizes this to
    * edits made with no signal at all, which arrive at the same fork much later.
    */
   async function keepAsNewPage() {
@@ -2136,7 +2136,7 @@
     border-radius: 4px;
     cursor: pointer;
     flex-shrink: 0;
-    /* Some of these are a glyph and one is an icon — centre both the same way
+    /* Some of these are a glyph and one is an icon — center both the same way
        rather than letting the icon sit on the text baseline. */
     display: inline-flex;
     align-items: center;

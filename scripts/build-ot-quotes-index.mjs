@@ -142,7 +142,7 @@ const BOOK_ALIASES = {
 /**
  * The pack's own spelling of a book, which is the plural "Psalms" — not
  * bibleData.ts's singular canonical "Psalm". The index emits pack form and the
- * consumer normalises, because every lookup this index feeds goes to a pack.
+ * consumer normalizes, because every lookup this index feeds goes to a pack.
  * Getting this backwards would silently drop the single largest OT source, so
  * the build asserts a non-zero Psalms count before writing.
  */
@@ -170,7 +170,7 @@ const RE_SINGLE_CHAPTER = /^(\d+)$/; //                               7
  * "Isa 8:8, 10" — a verse list — arrives here already split on the comma by the
  * caller, so this only ever sees a single contiguous reference.
  *
- * Returns null on a shape we do not recognise, which the caller reports; a
+ * Returns null on a shape we do not recognize, which the caller reports; a
  * silently dropped reference is the failure mode this whole script guards
  * against.
  */
@@ -282,7 +282,7 @@ function mtToLxxPsalm(chapter, verse) {
 
 /**
  * Check the rule above against lxx2012's own superscriptions, which carry the
- * Hebrew number in parentheses — LXX 103:1 opens "(104)". Every labelled
+ * Hebrew number in parentheses — LXX 103:1 opens "(104)". Every labeled
  * chapter must agree, or the build stops: nobody should be hand-maintaining a
  * numbering table that the shipped data already states.
  *
@@ -313,7 +313,7 @@ function assertPsalmsMapping(db) {
   }
 
   if (labelled < 100) {
-    throw new Error(`Only ${labelled} labelled LXX psalm superscriptions found — pack shape changed?`);
+    throw new Error(`Only ${labelled} labeled LXX psalm superscriptions found — pack shape changed?`);
   }
   if (mismatches.length) {
     throw new Error(
@@ -490,7 +490,7 @@ function main() {
 
   // -------------------------------------------------------------------------
   // Precompute the Septuagint coordinates, so the reader never does
-  // versification maths
+  // versification math
   // -------------------------------------------------------------------------
 
   const entries = [];

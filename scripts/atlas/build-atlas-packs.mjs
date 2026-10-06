@@ -74,7 +74,7 @@ const LICENSE = 'ODbL-1.0 AND CC-BY-4.0 AND CC-BY-SA-3.0 AND public-domain';
 /**
  * The core pack carries the journey routes, and they are BY-SA 4.0. The shards
  * do not, so they keep the credits above unchanged rather than claiming a
- * licence over geometry they do not hold.
+ * license over geometry they do not hold.
  */
 const CORE_ATTRIBUTION = `${ATTRIBUTION} ${JOURNEY_ATTRIBUTION}`;
 const CORE_LICENSE = `${LICENSE} AND CC-BY-SA-4.0`;

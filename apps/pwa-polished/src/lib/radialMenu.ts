@@ -9,7 +9,7 @@
  * gaps line up with the word's own line of text so the whole line reads straight
  * through the menu. That is also why the ring can slide sideways as far as it
  * likes: near the edge of the screen the word simply ends up in the left or right
- * gap instead of dead centre, and is still fully readable.
+ * gap instead of dead center, and is still fully readable.
  *
  * This lives outside the component because BibleReader has to know the ring's
  * size *before* anything renders — it places the menu synchronously and may have
@@ -47,13 +47,13 @@ const RADIUS_NUDGE = 12;
 // ---------------------------------------------------------------------------
 
 /**
- * Radius of the circle the button centres sit on.
+ * Radius of the circle the button centers sit on.
  *
  * Two constraints, whichever is larger: the buttons must not collide along their
  * arc, and the innermost pair must clear the line of text. The line wins at the
  * reader's default text size and above, which is what makes the ring grow with
  * the font; below it a full eight- or nine-button ring bottoms out on the arc
- * instead and stops shrinking, which is the behaviour the pills want anyway —
+ * instead and stops shrinking, which is the behavior the pills want anyway —
  * the hole stays wide enough to hold them at any text size.
  */
 export function ringRadius(lineHeight: number, count: number): number {
@@ -96,7 +96,7 @@ export function seatAngles(count: number): number[] {
   return [...spread(top, 330, 210), ...spread(bottom, 150, 30)];
 }
 
-/** Seat angle → offset from the ring's centre, in px. */
+/** Seat angle → offset from the ring's center, in px. */
 export function seatOffset(angleDeg: number, radius: number): { dx: number; dy: number } {
   return {
     dx: radius * Math.cos(angleDeg * RAD),
@@ -148,7 +148,7 @@ export interface RadialItem {
   label: string;
   /** Key into the component's icon map. Modes have none — they show their label. */
   icon?: string;
-  /** Badge splash colour. Modes have none. */
+  /** Badge splash color. Modes have none. */
   accent?: string;
 }
 
@@ -210,7 +210,7 @@ export function radialItems(o: RadialItemOpts): RadialItem[] {
       id: 'extend',
       label: o.extendArmed ? 'Tap…' : 'Extend',
       icon: 'extend',
-      // Extend is a state, not a destination — grey until it is armed.
+      // Extend is a state, not a destination — gray until it is armed.
       accent: o.extendArmed ? '#667eea' : '#9ca3af',
     });
   }

@@ -38,7 +38,7 @@ export function normalizeJoinCode(raw: string): string {
   return (raw ?? '').toUpperCase().replace(/[\s\-_.]/g, '');
 }
 
-/** Eight characters, all from the alphabet. Run it on a normalised code. */
+/** Eight characters, all from the alphabet. Run it on a normalized code. */
 export function isJoinCode(raw: string): boolean {
   const code = normalizeJoinCode(raw);
   if (code.length !== JOIN_CODE_LENGTH) return false;

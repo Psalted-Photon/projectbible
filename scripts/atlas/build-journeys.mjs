@@ -46,7 +46,7 @@ const out = routes.map((r) => ({
       n: s.place_name,
       y: s.latitude,
       x: s.longitude,
-      // How they travelled between stops decides how the leg is drawn: a sea
+      // How they traveled between stops decides how the leg is drawn: a sea
       // crossing is not a road, and drawing both the same would say it was.
       by: s.travel_method || 'foot',
       km: s.distance_from_previous_km || null,

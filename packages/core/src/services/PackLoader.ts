@@ -446,7 +446,7 @@ export class PackLoader {
       const request = store.put({
         id: packId,
         version,
-        // What the bytes actually are, so a rebuilt pack is recognised as
+        // What the bytes actually are, so a rebuilt pack is recognized as
         // different even when it kept its version number.
         sha256,
         data,

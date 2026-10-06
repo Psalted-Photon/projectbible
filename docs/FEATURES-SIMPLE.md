@@ -211,7 +211,7 @@
 - Per-theme red-letter tuning
 - Custom theme: 20 typefaces, free text and background colors, live preview
 - 10 saved text swatches and 10 background swatches
-- Typefaces normalised so switching doesn't change apparent size
+- Typefaces normalized so switching doesn't change apparent size
 - Separate Notes and Journal writing themes
 - Slide-away editor toolbar
 - Font size 12–32px
@@ -236,7 +236,7 @@
 
 ## 23. The Study Library
 - Four works: Dictionary, Topical, Encyclopedia, People
-- Fixed tabs, greyed when a work has nothing
+- Fixed tabs, grayed when a work has nothing
 - One card — each work keeps its place when you switch
 - A–Z rail with entry counts, empty letters dimmed
 - Per-work search

@@ -1,22 +1,22 @@
 <script lang="ts">
   /**
-   * Your badge in one shared notebook: two letters and a colour.
+   * Your badge in one shared notebook: two letters and a color.
    *
    * Joining gives you both without asking — the letters from your name, the
-   * colour worked out from your account id so that a phone and a laptop agree
+   * color worked out from your account id so that a phone and a laptop agree
    * without either of them having to read a roster it is not yet in. That is
    * the right trade for a join that should be one tap, and it leaves exactly
-   * one thing over: the colour it picked may already be somebody else's in
+   * one thing over: the color it picked may already be somebody else's in
    * this notebook. This is where that gets settled, and where anybody who
    * simply wants different letters changes them.
    *
-   * Per notebook, because the colour's whole job is telling people apart
+   * Per notebook, because the color's whole job is telling people apart
    * inside one group. The same person can be teal in one and amber in another,
    * and has to be able to be.
    *
    * The palette is the commentary palette. A member gets the badge a
    * commentator gets, which is the point — the reader has already taught
-   * everybody that two letters on a coloured disc means "this is who said
+   * everybody that two letters on a colored disc means "this is who said
    * this".
    */
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
@@ -29,7 +29,7 @@
   export let notebook: SharedNotebook;
   /** Your own member row in it. */
   export let member: SharedNotebookMember;
-  /** Everybody else in the notebook, so their colours can be marked as taken. */
+  /** Everybody else in the notebook, so their colors can be marked as taken. */
   export let others: SharedNotebookMember[] = [];
 
   const dispatch = createEventDispatcher<{ close: void; saved: SharedNotebookMember }>();
@@ -40,10 +40,10 @@
   let problem = '';
 
   /**
-   * Whose colour is whose, so a colour already in use can say so.
+   * Whose color is whose, so a color already in use can say so.
    *
    * Nothing stops you taking one anyway. Two people may well want the same
-   * colour in a notebook of three, and refusing them would be this screen
+   * color in a notebook of three, and refusing them would be this screen
    * deciding something that is theirs to decide — it says who has it and
    * leaves the choice alone.
    */
@@ -110,7 +110,7 @@
 
     <p class="mp-note">
       This is how you are marked on the pages you write in
-      <strong>{notebook.name || 'this notebook'}</strong>. Everybody sees the same colour.
+      <strong>{notebook.name || 'this notebook'}</strong>. Everybody sees the same color.
     </p>
 
     <div class="mp-preview">
@@ -136,7 +136,7 @@
     </label>
 
     <div class="mp-field">
-      <span class="mp-label">Colour</span>
+      <span class="mp-label">Color</span>
       <div class="mp-swatches">
         {#each MEMBER_COLORS as swatch}
           {@const owner = takenBy.get(swatch.toLowerCase())}
@@ -145,7 +145,7 @@
             class:active={swatch.toLowerCase() === color.toLowerCase()}
             class:taken={!!owner}
             style="--swatch:{swatch}"
-            title={owner ? `${owner} has this one` : 'Use this colour'}
+            title={owner ? `${owner} has this one` : 'Use this color'}
             aria-label={owner ? `${swatch}, ${owner} has this one` : swatch}
             on:click={() => (color = swatch)}
           ></button>
@@ -305,7 +305,7 @@
     box-shadow: 0 0 0 1px #2dd4bf;
   }
 
-  /* A quiet dot in the corner. Deliberately not a cross: the colour is still
+  /* A quiet dot in the corner. Deliberately not a cross: the color is still
      yours to take, and a cross would read as "you cannot". */
   .mp-swatch.taken::after {
     content: '';

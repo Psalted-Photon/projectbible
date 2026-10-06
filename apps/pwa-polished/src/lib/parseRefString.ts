@@ -173,7 +173,7 @@ export const BOOK_MAP: Record<string, string> = {
 };
 
 /**
- * Try to extract a recognised book abbreviation from the start of `ref`.
+ * Try to extract a recognized book abbreviation from the start of `ref`.
  * Returns { book (canonical), rest (chapter:verse string) } or null.
  */
 function extractBook(ref: string): { book: string; rest: string } | null {
@@ -263,7 +263,7 @@ export function parseRefString(
  * A reference to a whole chapter ("2Sam.20", "Acts.10") lands on its first
  * verse — the same convention parseRefString uses a few lines up for a bare
  * "Genesis 5". Nave's cites a chapter this way 2,207 times, and insisting on a
- * verse number meant every one of them rendered as an uncoloured chip that did
+ * verse number meant every one of them rendered as an uncolored chip that did
  * nothing at all when tapped.
  */
 export function parseOsisRef(ref: string): RefTarget | null {

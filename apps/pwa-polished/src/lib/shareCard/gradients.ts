@@ -1,9 +1,9 @@
 /**
  * Gradient backgrounds.
  *
- * Each is two colours on a diagonal with a soft glow of a third laid over one
+ * Each is two colors on a diagonal with a soft glow of a third laid over one
  * corner. That glow is what makes it read as a modern "mesh" gradient rather
- * than a 2000s web button. Every preset carries the text colour it was chosen
+ * than a 2000s web button. Every preset carries the text color it was chosen
  * with, so picking one gives a readable card straight away.
  */
 
@@ -13,9 +13,9 @@ export interface CardGradient {
   from: string;
   to: string;
   glow: string;
-  /** Text colour it reads well with. */
+  /** Text color it reads well with. */
   text: string;
-  /** Accent colour that sits well on it. */
+  /** Accent color that sits well on it. */
   accent: string;
 }
 
@@ -68,7 +68,7 @@ export function drawGradient(ctx: CanvasRenderingContext2D, g: CardGradient, W: 
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
-  // And a faint echo of the far colour from the bottom-left, so the corners differ.
+  // And a faint echo of the far color from the bottom-left, so the corners differ.
   const echo = ctx.createRadialGradient(W * 0.1, H * 0.95, 0, W * 0.1, H * 0.95, r * 0.7);
   echo.addColorStop(0, hexA(g.to, 0.45));
   echo.addColorStop(1, hexA(g.to, 0));

@@ -115,7 +115,7 @@ export async function emptyJournalUploads(): Promise<void> {
 
 /**
  * Everything setup builds before anything is saved. Dropped without a trace
- * if setup is cancelled.
+ * if setup is canceled.
  */
 export interface LockDraft {
   account: Account;
@@ -171,7 +171,7 @@ export async function addFingerprintToDraft(draft: LockDraft): Promise<void> {
   );
 }
 
-/** Setup was cancelled: forget the key, and the passkey it made. */
+/** Setup was canceled: forget the key, and the passkey it made. */
 export function discardDraft(draft: LockDraft): void {
   if (draft.passkeySlot?.rpId && draft.passkeySlot.credentialId) {
     forgetPasskey(draft.passkeySlot.rpId, draft.passkeySlot.credentialId);

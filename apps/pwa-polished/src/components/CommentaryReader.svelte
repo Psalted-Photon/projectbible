@@ -189,7 +189,7 @@
       entryEl.classList.add('commentary-entry-marked');
       entryEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-      // One timer, cancelled if another jump lands first. Left uncancelled it
+      // One timer, canceled if another jump lands first. Left uncanceled it
       // could strip the mark off a later entry, or fire after teardown.
       if (markTimer !== null) clearTimeout(markTimer);
       markTimer = window.setTimeout(() => {

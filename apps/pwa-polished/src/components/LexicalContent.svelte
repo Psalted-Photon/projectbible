@@ -464,7 +464,7 @@
    *
    * Keeps the translation you are reading rather than forcing the tagged text's
    * own edition on you, and goes through `navigateToVerse` so the verse arrives
-   * with the category-coloured fade every other verse list in the app gives you.
+   * with the category-colored fade every other verse list in the app gives you.
    */
   function handleVerseClick(use: VerseUse) {
     visitedRefs = new Set(visitedRefs).add(refKey(use));
@@ -564,7 +564,7 @@
   }
 
   /**
-   * The grey line under the title. Encyclopedia and Topical both read as
+   * The gray line under the title. Encyclopedia and Topical both read as
    * "what it is  ·  how many", and this mirrors them so the three headers sit
    * at the same height. Each part is guarded, so a lexicon row missing its
    * transliteration drops that piece instead of leaving a stray separator.
@@ -2041,14 +2041,14 @@
   }
 
   /* --- Spread tab ---------------------------------------------------------
-     A bar per book, coloured by the app's own book-category ramp so a bar means
+     A bar per book, colored by the app's own book-category ramp so a bar means
      the same thing here as a verse number does in the reader.
 
      That ramp was built for identity cues, not for charting, and measured as a
      chart palette it has two real problems: the prophets' and Pauline purples
      sit under 3:1 against this surface, and Acts' orange against the Gospels'
      red is below the normal-vision separation floor. Neither is worth forking
-     the app's colours over, because colour is not carrying identity here — every
+     the app's colors over, because color is not carrying identity here — every
      bar is named and grouped under its category. The relief the contrast
      shortfall obliges is built in instead: each bar sits on a visible track and
      carries a 1px inner ring, so a dark purple still reads as a length, and the
@@ -2110,7 +2110,7 @@
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
   }
 
-  /* Text ink, never the series colour. */
+  /* Text ink, never the series color. */
   .bar-value {
     color: var(--text-muted, #9aa0aa);
     font-size: 12px;

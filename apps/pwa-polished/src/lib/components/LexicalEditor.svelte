@@ -86,7 +86,7 @@
     window.dispatchEvent(new CustomEvent(SURFACE_EVENT, { detail: surface }));
   }
 
-  // Persist theme edits. Debounced because a colour drag fires continuously,
+  // Persist theme edits. Debounced because a color drag fires continuously,
   // and localStorage plus the Supabase push don't need every tick of it.
   const THEME_PERSIST_MS = 200;
   let themeHydrated = false;
@@ -820,7 +820,7 @@
   :global(.editor-text-superscript) { font-size: 0.75em; vertical-align: super; }
   :global(.editor-text-subscript) { font-size: 0.75em; vertical-align: sub; }
 
-  /* Bible references. --ref-color is the book's own category colour, set on the
+  /* Bible references. --ref-color is the book's own category color, set on the
      element by BibleRefNode, so a gospel reads gospel-red and so on. */
   :global(.bible-ref) {
     color: var(--ref-color, #c0392b);

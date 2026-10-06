@@ -34,7 +34,7 @@
   export let title = '';
   /** What to call it on this sheet: its title, or its first line. */
   export let label = 'Untitled';
-  /** The page's HTML. Sanitised again on the way into a shared notebook. */
+  /** The page's HTML. Sanitized again on the way into a shared notebook. */
   export let text = '';
   export let destinations: CopyDestination[] = [];
 
@@ -61,7 +61,7 @@
     problem = '';
     try {
       if (mode === 'to-shared') {
-        // The shared side sanitises and stamps it on the way in, so every
+        // The shared side sanitizes and stamps it on the way in, so every
         // paragraph of the copy starts out credited to whoever sent it — which
         // is true: in that notebook, this page is theirs.
         await sharedNotebookStore.createPage({

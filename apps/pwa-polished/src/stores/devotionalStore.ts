@@ -52,7 +52,7 @@ export const devotionalSettings = createDevotionalSettingsStore();
 
 /**
  * The BookBookmark crumb walking back to a reading. The crumb's origin carries
- * the reading and where it was scrolled; whoever recognises a pending restore
+ * the reading and where it was scrolled; whoever recognizes a pending restore
  * clears it. Lives here, not in the tab, because the tab isn't mounted while
  * the Reading Plan window is shut, which is exactly when the crumb is tapped.
  */

@@ -23,7 +23,7 @@
   /**
    * Everything one outline point cites.
    *
-   * Scripture opens into the same row the Verses tab uses — book-coloured
+   * Scripture opens into the same row the Verses tab uses — book-colored
    * label over the opening line of the passage — so you can read what a point
    * rests on without leaving the outline. It starts closed and the text is
    * only fetched once it opens: "Prayer" cites over a thousand verses, and an
@@ -58,7 +58,7 @@
       label: r.label,
       key,
       live: key !== null,
-      // A ref we can't read falls through to getBookColor's own neutral grey.
+      // A ref we can't read falls through to getBookColor's own neutral gray.
       color: getBookColor(parseOsisRef(r.osis)?.book ?? ""),
     };
   });

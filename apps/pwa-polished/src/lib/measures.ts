@@ -6,13 +6,13 @@
  * 6:15, "a day's wage" for a denarius. Everything here is synchronous and
  * table-driven so the pill arrives with the ring instead of popping in late.
  *
- * English words carry no Strong's numbers, so a unit is recognised by its
+ * English words carry no Strong's numbers, so a unit is recognized by its
  * spelling, across the translations we ship (BSB, NET, KJV, WEB, LXX2012).
  * Greek and Hebrew taps match on the Strong's number instead.
  *
  * Values follow ISBE's "Weights and Measures" and the figures the BSB's own
  * footnotes use. Money is given in days' wages, never dollars — a denarius
- * was a labourer's pay for a day, and that holds up where a price does not.
+ * was a laborer's pay for a day, and that holds up where a price does not.
  */
 
 import { BIBLE_BOOKS, normalizeBookName } from './bibleData';
@@ -23,7 +23,7 @@ type Kind = 'length' | 'dry' | 'liquid' | 'weight' | 'money';
 
 interface Unit {
   kind: Kind;
-  /** Metres, litres, grams, or days' wages, by kind. */
+  /** Meters, liters, grams, or days' wages, by kind. */
   value: number;
   /** History gives a range, so the figure reads "about …". */
   varies: boolean;
@@ -32,7 +32,7 @@ interface Unit {
 }
 
 const U: Record<string, Unit> = {
-  // Length (metres)
+  // Length (meters)
   cubit:        { kind: 'length', value: 0.4572, varies: true },
   longCubit:    { kind: 'length', value: 0.5334, varies: true }, // a cubit and a handbreadth
   span:         { kind: 'length', value: 0.2286, varies: true },
@@ -44,7 +44,7 @@ const U: Record<string, Unit> = {
   sabbathWalk:  { kind: 'length', value: 914, varies: true },   // 2,000 cubits
   dayWalk:      { kind: 'length', value: 32000, varies: true },
 
-  // Dry volume (litres)
+  // Dry volume (liters)
   ephah:        { kind: 'dry', value: 22, varies: true },
   omer:         { kind: 'dry', value: 2.2, varies: true },
   homer:        { kind: 'dry', value: 220, varies: true },
@@ -54,7 +54,7 @@ const U: Record<string, Unit> = {
   cab:          { kind: 'dry', value: 1.2, varies: true },
   choinix:      { kind: 'dry', value: 1.1, varies: true },
 
-  // Liquid volume (litres)
+  // Liquid volume (liters)
   bath:         { kind: 'liquid', value: 22, varies: true },
   hin:          { kind: 'liquid', value: 3.7, varies: true },
   log:          { kind: 'liquid', value: 0.31, varies: true },
@@ -473,7 +473,7 @@ function figure(v: number, metric: boolean): string {
 const singular = (shown: string) => shown === '1' || /^[¼½¾]$/.test(shown);
 
 interface Scale {
-  /** How many base units (metres, litres, grams) make one of these. */
+  /** How many base units (meters, liters, grams) make one of these. */
   size: number;
   one: string;
   many: string;
@@ -525,7 +525,7 @@ const SCALES_METRIC: Record<Exclude<Kind, 'money'>, Scale[]> = {
   ],
 };
 
-/** Metres → "3 feet 9 inches", "1 foot 6 inches", "2 feet". */
+/** Meters → "3 feet 9 inches", "1 foot 6 inches", "2 feet". */
 function feetAndInches(metres: number): string {
   const total = Math.round(metres / 0.0254);
   const ft = Math.floor(total / 12);

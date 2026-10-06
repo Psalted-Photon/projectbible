@@ -3,7 +3,7 @@
    * The step-by-step dialogs for the journal lock: turning it on, making a
    * new recovery code, and turning it off.
    *
-   * Turning on saves nothing until the last step: cancelling before then
+   * Turning on saves nothing until the last step: canceling before then
    * forgets the new key and the passkey it made. It says plainly that losing
    * both the passkey and the recovery code loses the journal, and asks twice —
    * once up front, and again on the button that turns it on. Turning off also
@@ -79,7 +79,7 @@
   function problemText(err: unknown): string {
     if (err instanceof JournalLockError) return err.message;
     if (err instanceof PasskeyError) {
-      if (err.problem === 'cancelled') return 'Cancelled. Tap the button to try again.';
+      if (err.problem === 'cancelled') return 'Canceled. Tap the button to try again.';
       if (err.problem === 'unsupported') {
         fingerprintUnavailable = true;
         return 'This browser can’t use a fingerprint for the journal.';

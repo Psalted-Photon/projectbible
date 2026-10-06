@@ -144,7 +144,7 @@ function walkUsjChildren(content, bookCode, spans, state) {
 
     if (node.type === 'char' && node.marker === 'wj') {
       if (state.curCh > 0 && state.curV > 0) {
-        // Use segment-aware collection so verse markers inside wj are honoured
+        // Use segment-aware collection so verse markers inside wj are honored
         collectWjSegments(node.content || [], state, bookCode, spans);
       }
       continue; // Don't recurse further — already handled above

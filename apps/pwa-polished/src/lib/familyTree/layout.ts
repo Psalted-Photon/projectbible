@@ -72,7 +72,7 @@ export interface TreeRec extends Partial<FamilyTreeNode>, Partial<FamilyTreeRoot
  * parenthetical, so "Eliab (son of Helon)" prints as "Eliab". The line to his
  * father already says whose son he is. The tap card, bio and search keep the
  * full `label` — this is only for the tree itself, where every character is
- * width a neighbour's name has to clear.
+ * width a neighbor's name has to clear.
  */
 export function treeLabel(label: string): string {
   return label.replace(/\s*\([^)]*\)\s*$/, '') || label;
@@ -170,7 +170,7 @@ function buildRoots(data: FamilyTreeData): {
   }
   const byRootBranch = new Map<string, TreeRec[]>();
   for (const n of rootById.values()) {
-    // A wife is drawn beside her husband, so she takes his bough's colour.
+    // A wife is drawn beside her husband, so she takes his bough's color.
     // Leah is Laban's daughter and would otherwise be tinted as one of
     // Nahor's while standing next to Jacob on the trunk.
     if (n.spouseOf && rootById.has(n.spouseOf)) {
@@ -200,7 +200,7 @@ interface PlaceOpts {
 
 /**
  * Put one person at `angle`, `depth` generations out from the fork — the x/y
- * maths `place()` has always done, pulled out so the spread pass can move a
+ * math `place()` has always done, pulled out so the spread pass can move a
  * person and land him exactly where `place()` would have put him at that
  * angle.
  */
@@ -276,7 +276,7 @@ function place(
   let cur = angle - span / 2;
   for (const k of kids) {
     const share = (countLeaves(k) / total) * span;
-    // The one behaviour change from the lab: a child with a fixed offshoot
+    // The one behavior change from the lab: a child with a fixed offshoot
     // angle (Abel, Elam) is placed there instead of at the middle of its
     // share. `cur` still advances by the full share either way, so this
     // child's siblings keep the position they would otherwise have had.
@@ -372,13 +372,13 @@ function curvesCross(c: Curve, e: Curve): boolean {
  * down, has 0.08° for five sons — and the fixed-size labels pile up. Opening
  * a tribe's spread does not help: it widens the base far more than the tips.
  * So this runs after the boughs are placed and touches only the rings where
- * two neighbouring names actually collide; everyone else stays exactly where
+ * two neighboring names actually collide; everyone else stays exactly where
  * `place()` put them.
  *
  * Three rules keep the lines from crossing:
  * - A ring's order is frozen at the angles `place()` gave it. Brothers may
  *   move apart but never pass each other, and a line that never changes
- *   places with its neighbour cannot cross it.
+ *   places with its neighbor cannot cross it.
  * - A child may drift only so far from his father's angle. Past acos(rIn/r)
  *   the father→child line dips back inside the father's own ring and cuts
  *   across whatever is there; SPREAD_DRIFT keeps to a safe fraction of that.
@@ -459,7 +459,7 @@ function spreadOffenders(nodes: Map<string, TreeRec>, byTribe: Map<string, TreeR
       const bend = t.lean * Math.pow(dep / 8, 1.3);
       const drift = SPREAD_DRIFT * deg(Math.acos(Math.min(1, rIn / r)));
 
-      // The gap each neighbouring pair needs, in degrees, judged by the
+      // The gap each neighboring pair needs, in degrees, judged by the
       // pair's own direction: two names on a steep stretch of the ring sit
       // one above the other and need far less angle than on a flat stretch.
       const ang = ring.map((n) => n.angle ?? 0);
@@ -559,10 +559,10 @@ function spreadOffenders(nodes: Map<string, TreeRec>, byTribe: Map<string, TreeR
 }
 
 /**
- * Turn each TUCK person in toward his tribe's centre, line and all, a step
+ * Turn each TUCK person in toward his tribe's center, line and all, a step
  * at a time, and stop at the last step where none of his lines crosses another canopy line and none of his names lands on a
  * name it was clear of. Stepping, rather than trying the far end first, is
- * what keeps a line from hopping over a neighbour into a gap beyond it.
+ * what keeps a line from hopping over a neighbor into a gap beyond it.
  */
 function tuckIn(nodes: Map<string, TreeRec>): void {
   type Box = { x0: number; x1: number; y0: number; y1: number };
@@ -642,7 +642,7 @@ function tuckIn(nodes: Map<string, TreeRec>): void {
 
 /**
  * Stretch each FIT_BETWEEN tribe sideways until its gaps to the two
- * neighbours match.
+ * neighbors match.
  *
  * Gaps are measured where the names actually land — the direction of each
  * dot from Jacob — not by the `angle` field, which lean bends away from.
@@ -650,7 +650,7 @@ function tuckIn(nodes: Map<string, TreeRec>): void {
  * so nobody changes places with a brother and every line keeps its order;
  * spacing only ever grows, so no name inside the tribe newly lands on
  * another. The stretch is found by halving, and any stretch that crosses a
- * line or puts a name on a neighbour's name is treated as too far.
+ * line or puts a name on a neighbor's name is treated as too far.
  */
 function fitBetween(nodes: Map<string, TreeRec>, byTribe: Map<string, TreeRec[]>): void {
   const polar = (n: Placed) => (Math.atan2(n.x, -n.y) * 180) / Math.PI;
@@ -674,7 +674,7 @@ function fitBetween(nodes: Map<string, TreeRec>, byTribe: Map<string, TreeRec[]>
     if (!t || !members.length || !self || !near || !far) continue;
     const opts = canopyOpts(nodes, t);
 
-    // Which side each neighbour is on decides which edge stays put.
+    // Which side each neighbor is on decides which edge stays put.
     const nearIsLeft = near[1] <= self[0];
     const gap = nearIsLeft ? self[0] - near[1] : near[0] - self[1];
     const goal = nearIsLeft ? far[0] - gap : far[1] + gap;

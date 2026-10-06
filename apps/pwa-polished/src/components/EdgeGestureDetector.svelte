@@ -276,7 +276,7 @@
         } else {
           // Wrong axis → cancel, let browser handle naturally
           pendingEdge = null;
-          console.log('❌ Wrong axis - bumper cancelled');
+          console.log('❌ Wrong axis - bumper canceled');
         }
       }
       return;
@@ -499,14 +499,14 @@
 <style>
   .bumper {
     position: fixed;
-    background: rgba(80, 80, 80, 0.3); /* dark grey */
+    background: rgba(80, 80, 80, 0.3); /* dark gray */
     pointer-events: none;
     z-index: 9998;
     transition: background 0.2s;
   }
 
   .bumper.hovered {
-    background: rgba(140, 140, 140, 0.5); /* light grey */
+    background: rgba(140, 140, 140, 0.5); /* light gray */
   }
 
   .bumper.at-limit {

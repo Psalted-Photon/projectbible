@@ -98,7 +98,7 @@ export function sanitizeStyle(raw: unknown, base: CardStyle = defaultCardStyle()
 /**
  * A look applied to this card. A photo or painting belongs to the card it was
  * picked for, not to the look, so a look that used one falls back to its
- * colour unless this card already has an image to put there.
+ * color unless this card already has an image to put there.
  */
 export function applyLook(look: CardStyle, hasImage: boolean): CardStyle {
   const style = sanitizeStyle(look);

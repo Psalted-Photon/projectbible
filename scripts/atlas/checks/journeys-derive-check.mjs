@@ -178,17 +178,17 @@ expect(
 );
 expect(
   routes.every((r) => r.name && r.dates && r.colour && r.id),
-  'every route has an id, name, dates and colour'
+  'every route has an id, name, dates and color'
 );
 expect(
   routes.every((r) => /^#[0-9a-f]{6}$/i.test(r.colour)),
-  'every colour is #rrggbb',
+  'every color is #rrggbb',
   'phase 5 hands these straight to Leaflet'
 );
 expect(
   new Set(routes.map((r) => r.colour)).size === routes.length,
-  'colours are unique across journeys',
-  'two journeys the same colour is two journeys a reader cannot tell apart'
+  'colors are unique across journeys',
+  'two journeys the same color is two journeys a reader cannot tell apart'
 );
 expect(
   routes.every((r) => Number.isFinite(r.km) && r.km > 0),

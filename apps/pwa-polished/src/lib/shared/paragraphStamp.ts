@@ -51,10 +51,10 @@
 
 import { paragraphId } from './ids';
 
-/** Matches the sanitiser's cap, so a list built here is never trimmed there. */
+/** Matches the sanitizer's cap, so a list built here is never trimmed there. */
 const MAX_PILLS = 16;
 
-/** The same shape the sanitiser accepts for an id in `data-pills`. */
+/** The same shape the sanitizer accepts for an id in `data-pills`. */
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** One top-level block of a page, ready to be drawn with its gutter. */

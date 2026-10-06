@@ -23,7 +23,7 @@ const BOOK_ORDER = [
 ];
 const ORDER = new Map(BOOK_ORDER.map((b, i) => [b, i]));
 
-/** Great-circle distance in kilometres. */
+/** Great-circle distance in kilometers. */
 export function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const rad = Math.PI / 180;
@@ -47,9 +47,9 @@ export function setDistanceUnits(units) {
 const KM_PER_MILE = 1.609344;
 
 /**
- * Kilometres as a distance string with its unit, for display only.
+ * Kilometers as a distance string with its unit, for display only.
  *
- * The pack stores kilometres and the checks assert in kilometres; this converts
+ * The pack stores kilometers and the checks assert in kilometers; this converts
  * at the point of display so there is one unit in the data and one in the eye.
  * Every distance a reader sees goes through here or approxDistance, which is
  * what makes the US/Metric setting a single edit rather than a hunt.
@@ -103,7 +103,7 @@ const MIN_RADIUS = STEP_RADII[0];
 const STROKE = 1.2;
 /** Clear space between the edges of two dots, in pixels. */
 const DOT_GAP = 1;
-/** Neighbour lookups only ever need to reach one dot-pair away. */
+/** Neighbor lookups only ever need to reach one dot-pair away. */
 const CELL = Math.ceil(STEP_RADII[STEP_RADII.length - 1] * 2 + STROKE + DOT_GAP);
 
 function radiusFor(verses) {
@@ -195,7 +195,7 @@ export class BiblicalPlaces {
    *
    * Places come most-referenced first, so each one is sized against the dots
    * already down and shrinks to clear them. It also leaves room for every
-   * lesser neighbour still to come at the smallest size, so a well-attested
+   * lesser neighbor still to come at the smallest size, so a well-attested
    * place can never crowd a village off the map. Nothing goes below the
    * smallest step: two places close enough to collide even then are a zoom
    * away from coming apart.
@@ -204,7 +204,7 @@ export class BiblicalPlaces {
     const pts = shown.map((p) => this.map.project([p.y, p.x], this.dotZoom));
 
     // Every place in view goes in the grid first, so a dot can see the lesser
-    // neighbours it has to leave room for as well as the ones already sized.
+    // neighbors it has to leave room for as well as the ones already sized.
     const grid = new Map();
     pts.forEach((pt, i) => {
       const k = `${Math.floor(pt.x / CELL)}:${Math.floor(pt.y / CELL)}`;
@@ -263,7 +263,7 @@ export class BiblicalPlaces {
 
   /**
    * Every dot within `slop` pixels of a point, measured from the dot's edge
-   * rather than its centre, so a big dot is as easy to hit as it looks.
+   * rather than its center, so a big dot is as easy to hit as it looks.
    * Nearest first.
    */
   near(lat, lon, slop) {

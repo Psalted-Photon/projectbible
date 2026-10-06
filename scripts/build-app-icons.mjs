@@ -4,7 +4,7 @@
 //   node scripts/build-app-icons.mjs
 //
 // Source is public/Logo.png (1024x1024). The gold gem is located by its own
-// colour rather than hardcoded coordinates, scaled, and composited true-centred
+// color rather than hardcoded coordinates, scaled, and composited true-centered
 // on a full-bleed black square — so changing Logo.png and re-running is all a
 // future logo change needs.
 //
@@ -42,7 +42,7 @@ const SOURCE = join(PUBLIC, 'Logo.png');
 // first attempt at 78% trusted the spec and lost its points on a real home
 // screen.
 //
-// What has to fit is the gem's furthest pixel from centre, and that is NOT half
+// What has to fit is the gem's furthest pixel from center, and that is NOT half
 // its height. The gem is a pointy-top hexagon whose side vertices sit at
 // roughly (W/2, H/4); with W=505 and H=547 that diagonal is longer than H/2, so
 // the sides bind before the points do. assertMaskableFits() below measures it
@@ -63,7 +63,7 @@ const ANDROID_SAFE_ZONE = 72 / 108;
 const FAVICON_SIZES = [16, 32, 48];
 const FAVICON_FILL = 0.92;
 
-/** Bounding box of the gold gem, found by colour so the art can move. */
+/** Bounding box of the gold gem, found by color so the art can move. */
 async function findGem(file) {
   const { data, info } = await sharp(file).ensureAlpha().raw()
     .toBuffer({ resolveWithObject: true });
@@ -74,7 +74,7 @@ async function findGem(file) {
       const i = (y * w + x) * c;
       const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
       if (a < 128) continue;
-      // warm, red >= green > blue, and clearly not grey
+      // warm, red >= green > blue, and clearly not gray
       if (r > 90 && g > 60 && r - b > 50 && g - b > 30) {
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
@@ -88,7 +88,7 @@ async function findGem(file) {
 }
 
 /**
- * One icon: the gem scaled so its height is `fill` of `size`, centred on opaque
+ * One icon: the gem scaled so its height is `fill` of `size`, centered on opaque
  * black. The crop carries the master's own black backing, which meets the black
  * canvas seamlessly, so the gem's anti-aliased edge stays clean.
  */
@@ -102,9 +102,9 @@ async function renderIcon(gem, size, fill) {
   })
     .composite([{ input: layer, left: Math.round((size - w) / 2), top: Math.round((size - h) / 2) }])
     // A gem this size is mostly gradient, and 24-bit RGB costs 220KB for the
-    // 512 alone. A 256-colour palette is 4x smaller at a mean error of 0.56/255
+    // 512 alone. A 256-color palette is 4x smaller at a mean error of 0.56/255
     // — indistinguishable here. Do not lower it: sharp snaps anything under 256
-    // down to a 16-colour palette, which bands the gold visibly.
+    // down to a 16-color palette, which bands the gold visibly.
     .png({ palette: true, colours: 256, effort: 10 })
     .toBuffer();
 }
@@ -125,9 +125,9 @@ function buildIco(images) {
     const e = 16 * n;
     entries[e] = size >= 256 ? 0 : size;   // 0 means 256
     entries[e + 1] = size >= 256 ? 0 : size;
-    entries[e + 2] = 0;                    // palette colours
+    entries[e + 2] = 0;                    // palette colors
     entries[e + 3] = 0;                    // reserved
-    entries.writeUInt16LE(1, e + 4);       // colour planes
+    entries.writeUInt16LE(1, e + 4);       // color planes
     entries.writeUInt16LE(32, e + 6);      // bits per pixel
     entries.writeUInt32LE(data.length, e + 8);
     entries.writeUInt32LE(offset, e + 12);
@@ -157,7 +157,7 @@ console.log('  ' + 'favicon.ico'.padEnd(30) + FAVICON_SIZES.join('/').padEnd(9) 
 /**
  * The maskable icon is the one Android crops, and getting it wrong stays
  * invisible until it reaches a home screen. Measure the furthest gold pixel
- * from the centre and fail loudly if it falls outside the safe zone.
+ * from the center and fail loudly if it falls outside the safe zone.
  */
 async function assertMaskableFits(file) {
   const { data, info } = await sharp(join(PUBLIC, file)).ensureAlpha().raw()

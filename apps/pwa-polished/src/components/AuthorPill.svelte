@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Two letters on a coloured disc — the badge that says who this is.
+   * Two letters on a colored disc — the badge that says who this is.
    *
    * It was written twice before this existed: once in BibleReader's verse
    * gutter, where a commentator's initials sit beside the verse number, and
@@ -8,10 +8,10 @@
    * rounder version. Shared notebooks want a third copy for their members, so
    * the two became one rather than three.
    *
-   * There is no logic here on purpose. Which colour and which letters belong
+   * There is no logic here on purpose. Which color and which letters belong
    * to whom is a question with two different answers — annotationConfig for a
    * commentator, the member row for a person — and neither of them is this
-   * component's business. It is handed a colour and two letters and draws them.
+   * component's business. It is handed a color and two letters and draws them.
    *
    * Two shapes, both exactly as they were:
    *   gutter — 20×14, barely taller than a word, for sitting in a margin.
@@ -35,7 +35,7 @@
 
   const dispatch = createEventDispatcher<{ select: void }>();
 
-  // The reader's badge is the same gradient it has always had: the colour
+  // The reader's badge is the same gradient it has always had: the color
   // itself for the first fifth, then a fall into the same near-black. Written
   // once here rather than at each call site.
   $: background = `radial-gradient(circle, ${color} 0%, ${color} 20%, #431407 100%)`;
@@ -111,7 +111,7 @@
      A slow scale in and out, so you can find your way back to the icon you
      opened. transform does not affect layout, so nothing around it shifts.
      The reader's cross-reference diamond has the same cadence from its own
-     rule — this one travelled here with the pill. */
+     rule — this one traveled here with the pill. */
   @keyframes pill-breathe {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.28); }

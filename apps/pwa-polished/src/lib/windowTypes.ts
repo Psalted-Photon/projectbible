@@ -6,7 +6,7 @@
  * Three places offer this list: the tile grid in a brand-new window, the apps
  * button on the bar, and the swap button in a window's header. They used to be
  * one list inside WindowContentSelector; now all three read it from here, so a
- * type added or recoloured once shows the same everywhere.
+ * type added or recolored once shows the same everywhere.
  */
 
 import { get } from 'svelte/store';
@@ -130,7 +130,7 @@ export function openWindowOfType(type: Exclude<WindowChoice, 'harmony'>): boolea
 
 /**
  * Show something else in an open window. Its old settings are dropped rather
- * than merged in, so a map's centre or a Bible's chapter doesn't ride along
+ * than merged in, so a map's center or a Bible's chapter doesn't ride along
  * into the new type.
  */
 export function swapWindowContent(windowId: string, type: Exclude<WindowChoice, 'harmony'>) {

@@ -207,10 +207,10 @@ console.log('\nCore — eras, places, points, names, photographs');
   }
   expect(photoMismatch === 0, 'every photograph keeps its urls and its credit', `${photoMismatch} differ`);
 
-  // Every photograph has to carry an attributable author and licence, or it
+  // Every photograph has to carry an attributable author and license, or it
   // cannot be shown at all under CC BY-SA.
   const uncredited = outPhotos.filter((r) => !r.author || !r.license).length;
-  expect(uncredited === 0, 'every photograph names its photographer and licence', `${uncredited} uncredited`);
+  expect(uncredited === 0, 'every photograph names its photographer and license', `${uncredited} uncredited`);
 
   expect(!!meta.detail1_coverage && meta.detail1_coverage !== '[]',
     'the fine-water coverage boxes came across',
@@ -298,7 +298,7 @@ console.log('\nPlace index — columns rebuilt into rows and compared to the gaz
     'the searchable blob is newline-delimited at both ends');
 
   // Nothing but lowercase letters, digits and single spaces may reach the
-  // searchable blob, or indexOf and the query would be normalised differently
+  // searchable blob, or indexOf and the query would be normalized differently
   // and a real place would silently stop being findable.
   expect(!/[^\na-z0-9 ]/.test(normBlob), 'the searchable blob is plain lowercase ASCII');
 

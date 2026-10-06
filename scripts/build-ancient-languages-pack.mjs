@@ -246,7 +246,7 @@ if (existsSync(lxxPath)) {
 console.log('\nMerging TAGNT per-edition Greek morphology...');
 const tagntPath = join(PACKS_DIR, 'tagnt-morphology.sqlite');
 if (!existsSync(tagntPath)) {
-  // Deliberately fatal. Falling back to the old one-text-two-labels behaviour
+  // Deliberately fatal. Falling back to the old one-text-two-labels behavior
   // is what produced silently wrong data for months; a loud failure is better.
   console.error(`\n❌ Missing ${tagntPath}`);
   console.error('   Run: node scripts/build-tagnt-morphology.mjs');

@@ -6,7 +6,7 @@
  * source files. This validates the pack, against what actually got written —
  * a different question, and the one that matters once a reader downloads it.
  *
- * Four things are checked, and the licence boundary is one of them: a name or
+ * Four things are checked, and the license boundary is one of them: a name or
  * a note leaking into atlas_journey_geometry would put our authored content
  * inside the BY-SA table, which is the whole thing the table split exists to
  * prevent, and nothing else would notice.
@@ -81,20 +81,20 @@ for (const row of journeys) {
     row.dates === source.dates &&
     row.colour === source.colour &&
     row.testament === source.testament;
-  expect(same, `${row.id} carries the index's name, traveller, dates, colour and testament`);
+  expect(same, `${row.id} carries the index's name, traveler, dates, color and testament`);
 }
 
 // Every field the overlay and the Layers list read must be present: an empty
-// colour draws a black line, an empty name is a blank row in the panel.
+// color draws a black line, an empty name is a blank row in the panel.
 const blank = journeys.filter(
   (j) => !j.name || !j.traveller || !j.dates || !j.colour || !j.testament || !j.km
 );
-expect(!blank.length, 'no journey has an empty name, traveller, dates, colour, testament or km',
+expect(!blank.length, 'no journey has an empty name, traveler, dates, color, testament or km',
   blank.map((j) => j.id).join(', '));
 
 const colours = new Set(journeys.map((j) => j.colour));
-expect(colours.size === journeys.length, 'every journey has its own colour',
-  `${colours.size} colours across ${journeys.length} journeys`);
+expect(colours.size === journeys.length, 'every journey has its own color',
+  `${colours.size} colors across ${journeys.length} journeys`);
 
 // ------------------------------------------------------------ stops
 

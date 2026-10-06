@@ -1,7 +1,7 @@
 /**
  * placeMarkerRenderer.ts
  *
- * Optional, opt-in overlay that draws a faint dotted underline under recognised
+ * Optional, opt-in overlay that draws a faint dotted underline under recognized
  * multi-word biblical place names ("Red Sea", "Abel Beth Maacah") in the reading
  * text, so the reader can see what is clickable as a single place unit.
  *

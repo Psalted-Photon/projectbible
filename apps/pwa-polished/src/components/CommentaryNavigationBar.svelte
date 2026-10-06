@@ -574,7 +574,7 @@
 
   /* ── The anchor ────────────────────────────────────────────────────────────
      Moved here from the main navbar, where it was always really about this
-     window. Grey is loose, teal is following the reader, amber is following but
+     window. Gray is loose, teal is following the reader, amber is following but
      drifted. The badge recipe mirrors NavigationBar.svelte — Svelte scopes CSS
      per component, so it has to be restated rather than shared. */
   .pill-anchor {

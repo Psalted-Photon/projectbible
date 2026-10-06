@@ -1,10 +1,10 @@
 /**
- * The two letters and the colour a member is known by.
+ * The two letters and the color a member is known by.
  *
  * Every member of a shared notebook gets the badge a commentator gets — two
- * letters on a coloured disc — so the palette is the commentary palette rather
- * than a second one invented for this. A member's colour is identity, not
- * appearance: unlike the typeface and the page colours, which are each reader's
+ * letters on a colored disc — so the palette is the commentary palette rather
+ * than a second one invented for this. A member's color is identity, not
+ * appearance: unlike the typeface and the page colors, which are each reader's
  * own, it is stored on the member row and looks the same to everyone.
  *
  * These are the defaults, worked out from what we already know about a person
@@ -16,8 +16,8 @@ import { COMMENTARY_AUTHORS } from '../annotationConfig';
 /**
  * The palette, in a fixed order, with duplicates removed.
  *
- * Fixed because the colour is derived from the user id below, and a palette
- * that reordered itself would give the same person a different colour on a
+ * Fixed because the color is derived from the user id below, and a palette
+ * that reordered itself would give the same person a different color on a
  * different device. Object key order in JavaScript is stable for string keys,
  * so this is the order annotationConfig lists them in.
  */
@@ -44,16 +44,16 @@ export function defaultInitials(displayName: string): string {
 }
 
 /**
- * A colour for this account, the same one every time.
+ * A color for this account, the same one every time.
  *
  * Derived from the user id rather than picked at random so that joining from a
- * phone and a laptop does not produce two different colours for one person,
+ * phone and a laptop does not produce two different colors for one person,
  * and so nothing has to be looked up before the join goes through — the roster
  * of a notebook you are not yet in is, correctly, unreadable.
  *
- * It can therefore land on a colour somebody in that notebook already has.
+ * It can therefore land on a color somebody in that notebook already has.
  * That is a collision in a badge, not in data, and phase 4's picker is where it
- * gets resolved — it will offer the free colours first.
+ * gets resolved — it will offer the free colors first.
  */
 export function defaultMemberColor(userId: string): string {
   let hash = 0;

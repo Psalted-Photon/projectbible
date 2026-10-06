@@ -10,7 +10,7 @@ import type { WorksResolution } from '../adapters/lexicon-lookup';
  *
  * This is one path on purpose. The work tabs used to call the old "jump to the
  * encyclopedia" buttons, which were built to *replace* the card you were on and
- * only ever knew how to open a centred card — so inside a docked window they
+ * only ever knew how to open a centered card — so inside a docked window they
  * threw a card over the whole app instead of changing the window. Tabs and
  * jump-links wanting different things from the same code is what caused that,
  * so the jump-links are gone and everything comes through here.
@@ -29,7 +29,7 @@ const WINDOW_TYPE: Record<WorkKey, WindowContentType> = {
  * Can this work be shown inside a docked window?
  *
  * All four can, now that the dictionary's contents are separable from its card.
- * Kept as a function because a tab that can't do something should grey out
+ * Kept as a function because a tab that can't do something should gray out
  * rather than quietly opening a card over the top, and this is where that would
  * be said.
  */

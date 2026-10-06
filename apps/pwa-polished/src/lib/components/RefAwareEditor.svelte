@@ -3,7 +3,7 @@
    * LexicalEditor plus the Bible-reference popover.
    *
    * Everywhere the app offers free writing — notes, notebook pages, the journal
-   * — wants the same behaviour when a reference is clicked, so it lives here
+   * — wants the same behavior when a reference is clicked, so it lives here
    * once rather than in each of them. Drop-in replacement for LexicalEditor:
    * same props, same events, same exported methods.
    */

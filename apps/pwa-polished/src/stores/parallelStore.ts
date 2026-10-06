@@ -24,7 +24,7 @@ export type ParallelLayout = 'stacked' | 'columns' | 'corners';
  * What the panes are showing, which decides how they are lined up.
  *
  * `accounts` is the harmony: different books telling the same event, aligned by
- * the parallel index's proportional maths because Matthew's telling and Luke's
+ * the parallel index's proportional math because Matthew's telling and Luke's
  * are different lengths and there is no verse-to-verse correspondence to use.
  *
  * `translations` is one book in several renderings. Every pane holds the same

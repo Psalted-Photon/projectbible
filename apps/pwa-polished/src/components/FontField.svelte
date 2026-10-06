@@ -3,7 +3,7 @@
    * In-app typeface picker.
    *
    * Replaces a `<select>` whose `<option>`s carried `font-family`. Desktop
-   * browsers draw that dropdown as HTML and honour the CSS; phones substitute
+   * browsers draw that dropdown as HTML and honor the CSS; phones substitute
    * a native spinner that discards it, so every font name rendered in the
    * system font and you had to pick one to find out what it looked like.
    *
@@ -75,7 +75,7 @@
         aria-selected={value === font.id}
         on:click={() => pick(font.id)}
       >
-        <!-- The scale multiplier is the same x-height normalisation the reader
+        <!-- The scale multiplier is the same x-height normalization the reader
              uses, so Tangerine doesn't show up half the size of Bitter. -->
         <span style="font-family: {font.stack}; font-size: calc(1.15rem * {font.scale})">
           {font.label}

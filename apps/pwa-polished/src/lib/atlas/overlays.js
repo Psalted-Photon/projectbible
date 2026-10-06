@@ -7,7 +7,7 @@
  * makes the opacity dials worth having: the reader can sit anywhere between the
  * modern world and the overlay's own world.
  *
- * Each overlay declares its name, its colour, its legend and what a tap on it
+ * Each overlay declares its name, its color, its legend and what a tap on it
  * means. Nothing here knows about the timeline specifically, so the journeys
  * overlay and whatever comes after drop in without touching the map.
  */
@@ -130,7 +130,7 @@ class BaseOverlay {
       const base = layer.__styleFor;
       if (!base || !layer.setStyle) continue;
       // A style can be a function of the feature, so each land keeps its own
-      // colour. Flattening one to a single object here once painted every land
+      // color. Flattening one to a single object here once painted every land
       // in the first one's style.
       layer.setStyle(typeof base === 'function' ? (f) => dim(base(f), f) : dim(base, null));
     }
@@ -182,9 +182,9 @@ const MAX_LANDS = 22;
 /**
  * The lands an era actually draws.
  *
- * Only lands we can also name: unlabelled probability bands read as random
+ * Only lands we can also name: unlabeled probability bands read as random
  * brush strokes, because the shape means nothing without the word. Shared by the
- * drawing and the colouring, which have to agree on exactly which lands appear
+ * drawing and the coloring, which have to agree on exactly which lands appear
  * together.
  */
 function landsIn(geojson) {
@@ -216,7 +216,7 @@ export class ErasOverlay extends BaseOverlay {
     this.onDrawn = () => {};
     /** The one land singled out from the era card, by name. */
     this.focus = null;
-    /** name → palette entry, once the whole timeline has been coloured. */
+    /** name → palette entry, once the whole timeline has been colored. */
     this.colourMap = null;
     this.colourJob = null;
   }
@@ -268,9 +268,9 @@ export class ErasOverlay extends BaseOverlay {
   }
 
   /**
-   * Colour every land and province on the timeline, once.
+   * Color every land and province on the timeline, once.
    *
-   * A land keeps its colour from era to era, so the choice can't be made one
+   * A land keeps its color from era to era, so the choice can't be made one
    * era at a time: it needs every era's lands in view at once. That means
    * reading every era's layers on first mount — about a megabyte, which the
    * slider would have read anyway — and the assignment itself takes a few
@@ -305,15 +305,15 @@ export class ErasOverlay extends BaseOverlay {
       try {
         this.colourMap = assignColours(eras);
       } catch {
-        // Every name still gets a steady colour of its own; only the promises
-        // about neighbours are lost.
+        // Every name still gets a steady color of its own; only the promises
+        // about neighbors are lost.
         this.colourMap = null;
       }
     })();
     return this.colourJob;
   }
 
-  /** 0 at the oldest era, 1 at the newest — drives the ageing ramp. */
+  /** 0 at the oldest era, 1 at the newest — drives the aging ramp. */
   get progress() {
     return this.eras.length < 2 ? 1 : this.index / (this.eras.length - 1);
   }
@@ -402,7 +402,7 @@ export class ErasOverlay extends BaseOverlay {
 
     // The empire this era's unnamed territory belongs to. Where the era also
     // names its provinces, the extent under them is only an outline: a wash of
-    // the empire's colour beneath would tint every province alike.
+    // the empire's color beneath would tint every province alike.
     const realm = polityColour(era.id);
     const namesProvinces = eraLayers.some((l) =>
       l.kind === 'territory' && l.geojson.features.some((f) => f.properties?.name));
@@ -444,7 +444,7 @@ export class ErasOverlay extends BaseOverlay {
       if (layer.kind === 'region') {
         const named = { type: 'FeatureCollection', features: landsIn(layer.geojson) };
 
-        // Each land in its own colour, its contours in the darker ink its name
+        // Each land in its own color, its contours in the darker ink its name
         // is lettered in. Bands are nested contours, so stacking them makes the
         // middle densest; a faint line on each keeps the land reading as one
         // shape rather than a smear, without claiming a border nobody knows.
@@ -644,14 +644,14 @@ export function haversine(lat1, lon1, lat2, lon2) {
 /**
  * Where a journey starts and where it ends.
  *
- * Fixed rather than derived from the route's colour: they have to mean the same
+ * Fixed rather than derived from the route's color: they have to mean the same
  * thing on all seventeen, and a green that shifted per journey would say
  * "journey" rather than "start".
  *
- * Both are darker and more saturated than any route colour, which is the
- * constraint rather than a preference — a ring the colour of the line it sits on
+ * Both are darker and more saturated than any route color, which is the
+ * constraint rather than a preference — a ring the color of the line it sits on
  * marks nothing. The first red tried here was #b0463f, which is exactly the Last
- * Journey to Jerusalem's own colour and 15 from Elijah's, so that journey's
+ * Journey to Jerusalem's own color and 15 from Elijah's, so that journey's
  * arrival at Jerusalem would have been invisible. The check asserts the gap now
  * rather than trusting the next pair of eyes.
  */
@@ -702,11 +702,11 @@ const ANCHOR_KM = 120;
 const JOINT_KM = 60;
 
 /**
- * A `#rrggbb` faded to an alpha, for somewhere only a colour can be given.
+ * A `#rrggbb` faded to an alpha, for somewhere only a color can be given.
  *
- * The journey colours are all six-digit hex out of the index, and the gate
+ * The journey colors are all six-digit hex out of the index, and the gate
  * asserts it, so anything else returning unchanged is the right failure: a
- * colour that renders at full strength is a missed fade, not a broken label.
+ * color that renders at full strength is a missed fade, not a broken label.
  */
 function withAlpha(hex, alpha) {
   if (alpha >= 1) return hex;
@@ -724,7 +724,7 @@ function withAlpha(hex, alpha) {
  * the same placement pass, and answers taps the same way, while drawing
  * something completely different.
  *
- * Each route brings its own colour, so unlike the timeline this overlay's
+ * Each route brings its own color, so unlike the timeline this overlay's
  * `colour` is only what the Layers panel puts in its swatch — nothing drawn
  * uses it.
  */
@@ -835,7 +835,7 @@ export class JourneysOverlay extends BaseOverlay {
 
   async mount() {
     // No labelPane here, unlike the timeline: this overlay's lettering fades
-    // through its own colour rather than through the pane, which it shares. The
+    // through its own color rather than through the pane, which it shares. The
     // placement pass runs on the host's change anyway, so mounting does not have
     // to ask for one.
     this.draw();
@@ -865,7 +865,7 @@ export class JourneysOverlay extends BaseOverlay {
   /**
    * One journey: its line, then its stops on top.
    *
-   * The colour comes from the route rather than the overlay, because seventeen
+   * The color comes from the route rather than the overlay, because seventeen
    * journeys crossing the same country in one teal are seventeen journeys a
    * reader cannot tell apart.
    */
@@ -881,7 +881,7 @@ export class JourneysOverlay extends BaseOverlay {
     // Added with no style bag, because the base class dims a group by flattening
     // one style over all its children — which is right for a coastline and wrong
     // here, where the start ring, the end ring and the stops between are three
-    // different colours. applyOpacity dims them one at a time instead.
+    // different colors. applyOpacity dims them one at a time instead.
     const dots = L.layerGroup([], { pane: 'overlay-labels' });
     route.stops.forEach((stop, i) => {
       // A shared place is one dot, not one per journey. The first journey to
@@ -966,7 +966,7 @@ export class JourneysOverlay extends BaseOverlay {
    *   anchor  the journey's first stop to the nearest end of the line, and the
    *           last stop to its nearest end. Drawn in the adjacent leg's own
    *           style, because this is survey coarseness rather than a separate
-   *           claim about how he travelled.
+   *           claim about how he traveled.
    *   joint   one leg's end to another leg's start, where they nearly meet.
    *           Also the adjacent leg's style, for the same reason.
    *   neither anything wider is left alone. Open water is not a road, and the
@@ -1090,7 +1090,7 @@ export class JourneysOverlay extends BaseOverlay {
   }
 
   /**
-   * How the traveller covered this leg.
+   * How the traveler covered this leg.
    *
    * The leg is matched to the consecutive pair of stops its two ends sit closest
    * to, scoring both orientations and keeping the cheaper, and the method is then
@@ -1131,15 +1131,15 @@ export class JourneysOverlay extends BaseOverlay {
   /**
    * A stop's dot: green where the journey starts, red where it ends.
    *
-   * The ends are the one thing a route drawn in a single colour cannot say for
+   * The ends are the one thing a route drawn in a single color cannot say for
    * itself — a line has two ends and no direction — so they are marked in
-   * colours that mean the same thing on every journey rather than in the
+   * colors that mean the same thing on every journey rather than in the
    * route's own.
    */
   stopMarker(route, stop, i) {
     const visits = this.visitsAt(stop);
     // Several journeys at one place is a different drawing problem, not a
-    // variation on this one: it has no single colour and no single start/end
+    // variation on this one: it has no single color and no single start/end
     // to state, so it gets its own marker rather than a pile of parameters here.
     if (visits.length > 1) return this.sharedStopMarker(visits, stop);
 
@@ -1159,7 +1159,7 @@ export class JourneysOverlay extends BaseOverlay {
     });
 
     // The tap opens the app's own info panel rather than a Leaflet bubble, so a
-    // stop gets the colour-coded reference list, the verse previews and the
+    // stop gets the color-coded reference list, the verse previews and the
     // crumb back to the map that every city dot already has. The hover name
     // stays — it is good and costs nothing.
     marker.on('click', (e) => {
@@ -1180,7 +1180,7 @@ export class JourneysOverlay extends BaseOverlay {
    * was there at all.
    *
    * A wedge per visit says it in the one language the rest of the layer already
-   * speaks, which is colour: the reader who knows red is the Exodus and green
+   * speaks, which is color: the reader who knows red is the Exodus and green
    * the Spies reads "both of these meet here" without a legend. Drawn as an
    * element rather than a `circleMarker` because Leaflet's vector dots are
    * single-fill by definition; a conic gradient gives exact wedges with no
@@ -1190,7 +1190,7 @@ export class JourneysOverlay extends BaseOverlay {
    * The ring still carries start and end, because that is the question a shared
    * dot makes *more* pressing rather than less: at Kadesh one journey ends and
    * another begins, so it is drawn green where any journey starts there, red
-   * where one ends, and in neither colour when it is only passed through. A
+   * where one ends, and in neither color when it is only passed through. A
    * place that both starts and ends a journey takes the green — a beginning is
    * the more useful thing to see, and the panel names both the moment it opens.
    */
@@ -1267,9 +1267,9 @@ export class JourneysOverlay extends BaseOverlay {
     if (zoom < 5) return [];
     const out = [];
     for (const route of this.shown) {
-      // Lettered in the journey's own colour, so a numbered name belongs to a
+      // Lettered in the journey's own color, so a numbered name belongs to a
       // visible line rather than floating between two of them. The fade is baked
-      // into the colour because the pass renders it as an inline `color:` — see
+      // into the color because the pass renders it as an inline `color:` — see
       // applyTextOpacity for why it cannot be done with the pane.
       const colour = withAlpha(route.colour, this.textOpacity);
       route.stops.forEach((stop, i) => {
@@ -1295,7 +1295,7 @@ export class JourneysOverlay extends BaseOverlay {
   applyOpacity() {
     super.applyOpacity();
 
-    // Each dot keeps the colour it was drawn in — the start ring, the end ring
+    // Each dot keeps the color it was drawn in — the start ring, the end ring
     // and the route's own are three different answers — so they fade one at a
     // time rather than under one flattened style.
     for (const group of this.dotGroups ?? []) {
@@ -1312,13 +1312,13 @@ export class JourneysOverlay extends BaseOverlay {
   }
 
   /**
-   * Journey lettering fades through its own colour, not through the pane.
+   * Journey lettering fades through its own color, not through the pane.
    *
    * `overlay-labels` is shared with the timeline, so setting its opacity here
    * would dim the timeline's land and sea names as well — one overlay reaching
-   * into another's lettering. The names carry their alpha in the colour instead,
+   * into another's lettering. The names carry their alpha in the color instead,
    * which means a redraw rather than a style tweak; the placement pass has to run
-   * anyway for a colour change to reach the page.
+   * anyway for a color change to reach the page.
    */
   applyTextOpacity() {
     this.host?.onLabelsChanged?.();

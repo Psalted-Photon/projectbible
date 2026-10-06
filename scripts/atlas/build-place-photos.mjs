@@ -2,7 +2,7 @@
 /**
  * Photographs for the places Scripture names.
  *
- * OpenBible catalogues a photograph for almost every biblical site — 2,423 of
+ * OpenBible catalogs a photograph for almost every biblical site — 2,423 of
  * them, mostly from Wikimedia — and the app has never used one. A tap on
  * Bethlehem should show you the place, not only tell you about it.
  *
@@ -15,7 +15,7 @@
  * now allows a fixed set — 120, 250, 330, 500 and 1280 are served, 400 and 800
  * are refused — so those are the two picked here rather than round numbers.
  *
- * Every photograph carries its photographer and licence, which is what CC BY-SA
+ * Every photograph carries its photographer and license, which is what CC BY-SA
  * asks for and what the viewer shows under the picture.
  */
 import fs from 'fs';
@@ -39,7 +39,7 @@ for (const line of lines('image.jsonl')) {
   if (!d.id || !d.thumbnail_url_pattern) continue;
   images.set(d.id, d);
 }
-console.log(`${images.size} images catalogued`);
+console.log(`${images.size} images cataloged`);
 
 // --------------------------------------------------- best photo per place
 
@@ -84,7 +84,7 @@ for (const line of lines('ancient.jsonl')) {
     // The page the picture came from. A link in the caption, never a redirect.
     u: img.url || thumb.credit_url || '',
     d: plain(thumb.description || Object.values(img.descriptions ?? {})[0] || ''),
-    // Average colours, so the space holds its shape before the picture lands.
+    // Average colors, so the space holds its shape before the picture lands.
     p: thumb.placeholder || '',
   });
 }

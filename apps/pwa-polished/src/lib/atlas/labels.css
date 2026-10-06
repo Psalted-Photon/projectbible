@@ -4,12 +4,12 @@
  * This lives beside the engine rather than in the pane that hosts it, for two
  * reasons. Leaflet builds these elements itself, so a component's scoped
  * styling never reaches them — which is exactly how they went missing in the
- * move and left every name in the app's near-white body colour on pale
+ * move and left every name in the app's near-white body color on pale
  * parchment. And there are two maps: the docked one and the bare one in the
  * encyclopedia. Both draw lettering, so both need this, and neither should own
  * it.
  *
- * The colours are the map's own, written out rather than taken from variables,
+ * The colors are the map's own, written out rather than taken from variables,
  * so the lettering reads the same whatever is hosting it. Parchment is #ece1c8
  * and the ink is #3d3427; the haloes are parchment glows that let a name sit on
  * top of a coastline and still be read.
@@ -189,15 +189,15 @@
 
 /* ---------------- the dot whose panel is open ----------------
 
-   A pulse rather than a colour change, because these dots are already
-   colour-coded — red for a place Scripture names, the route's own colour for a
+   A pulse rather than a color change, because these dots are already
+   color-coded — red for a place Scripture names, the route's own color for a
    journey stop — and repainting one would say something about the place rather
    than about the panel.
 
    The halo is a drop-shadow on the path itself. A second marker would be
    another thing to build, move and throw away on every redraw, and growing the
    stroke instead would change the size the collision fitting measured, pushing
-   the neighbouring dots around whenever one was tapped.
+   the neighboring dots around whenever one was tapped.
 
    transform-box: fill-box makes the scale happen about the dot rather than
    about the SVG's own origin, which is somewhere off in the corner of the
@@ -232,7 +232,7 @@
 
    One dot cut into a wedge per journey says it in the language the layer
    already speaks — the reader who knows which line is which reads "these meet
-   here" off the colours, with no legend. It is an element rather than a Leaflet
+   here" off the colors, with no legend. It is an element rather than a Leaflet
    vector because a conic gradient gives exact wedges with no per-slice geometry
    to compute, and the ring is then a border rather than a second shape to keep
    aligned with the first.
@@ -248,8 +248,8 @@
   border-radius: 50%;
   border: 2.8px solid;
   box-sizing: border-box;
-  /* The wedges meet at the centre, and a hairline of the seam reading as a
-     third colour is the one artefact a gradient like this produces. A dark
+  /* The wedges meet at the center, and a hairline of the seam reading as a
+     third color is the one artifact a gradient like this produces. A dark
      inner edge under the border hides the join at the rim, where the eye is. */
   box-shadow: inset 0 0 0 1px rgba(40, 30, 20, .35);
 }

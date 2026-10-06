@@ -89,7 +89,7 @@ function buildEntryId(planId: string, dayNumber: number): string {
 /**
  * Progress is keyed by book and chapter, so the book name has to be normalized
  * first. Plan data is generated with plural forms — `reading-plan.ts` writes
- * "Psalms" — while the reader canonicalises to "Psalm". Comparing them raw
+ * "Psalms" — while the reader canonicalizes to "Psalm". Comparing them raw
  * meant `Psalm::5` never matched `Psalms::5`, so ticking a chapter off added a
  * second, orphaned row instead of updating the plan's own. Completion requires
  * every row to be checked, and the orphan never could be, so a Psalms day could

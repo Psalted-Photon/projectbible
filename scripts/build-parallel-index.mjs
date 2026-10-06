@@ -86,7 +86,7 @@ const RE_SINGLE_CHAPTER = /^(\d+)$/; //                                         
 
 /**
  * Parse one reference, e.g. "Matthew 13:1–9" or "Genesis 4—9".
- * Returns a passage, or null if the shape is not one we recognise.
+ * Returns a passage, or null if the shape is not one we recognize.
  */
 function parseReference(raw) {
   const text = raw.trim().replace(/\s+/g, ' ');

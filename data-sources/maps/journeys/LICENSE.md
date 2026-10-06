@@ -1,4 +1,4 @@
-# UBS Bible Routes — licence
+# UBS Bible Routes — license
 
 The route geometry under `ubs-routes/` is not ours. It is:
 
@@ -14,7 +14,7 @@ BY-SA is viral: anything that adapts the geometry must itself be BY-SA. It does
 **not** reach content merely shipped alongside it. So the boundary is kept
 structural rather than promised — the geometry lives alone in its own table,
 `atlas_journey_geometry`, holding nothing but a journey id and gzipped
-coordinates. Stop names, verse references, travel methods, colours and ordering
+coordinates. Stop names, verse references, travel methods, colors and ordering
 are our own work in `atlas_journeys` and `atlas_journey_stops`, joined by id.
 
 The BY-SA boundary is therefore a table boundary. It can be audited, and the
@@ -32,7 +32,7 @@ untouched.
 
 ---
 
-The full licence text as published by UBS follows, verbatim.
+The full license text as published by UBS follows, verbatim.
 
 Attribution-ShareAlike 4.0 International
 

@@ -69,7 +69,7 @@
   /**
    * Keep the image inside the stage.
    *
-   * On an axis where the image is smaller than the stage it is hard-centred —
+   * On an axis where the image is smaller than the stage it is hard-centered —
    * that is what puts a portrait painting in the middle of a landscape screen
    * with black either side. Otherwise it may move, but not past its own edge.
    */
@@ -85,7 +85,7 @@
    *
    * With `transform-origin: 0 0` the mapping is linear (screen = natural * k + T),
    * so holding the anchor still is a one-liner. This is what makes a pinch zoom
-   * under the fingers rather than at the centre of the screen.
+   * under the fingers rather than at the center of the screen.
    */
   function zoomAt(ax: number, ay: number, factor: number) {
     const next = Math.min(maxK, Math.max(minK, k * factor));
@@ -122,7 +122,7 @@
   /**
    * Re-fit after a rotation or a resize, preserving how far in the user was.
    *
-   * Keeps the natural-space point that was at the centre of the stage there,
+   * Keeps the natural-space point that was at the center of the stage there,
    * and keeps the zoom as the same multiple of fit — so fit stays fit and 3x
    * stays roughly 3x rather than snapping back.
    */
@@ -422,7 +422,7 @@
     position: absolute;
     left: 0;
     top: 0;
-    /* Linear transform maths depends on this origin — see zoomAt(). */
+    /* Linear transform math depends on this origin — see zoomAt(). */
     transform-origin: 0 0;
     opacity: 0;
     -webkit-user-drag: none;

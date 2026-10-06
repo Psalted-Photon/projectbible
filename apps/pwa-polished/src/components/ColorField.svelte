@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * In-app colour picker.
+   * In-app color picker.
    *
    * Replaces `<input type="color">`, which hands rendering to the operating
    * system — desktop Chrome opens a full dialog, phones substitute a cramped
@@ -8,8 +8,8 @@
    * to have one picker that looks and behaves the same everywhere.
    *
    * Pick by touching the spectrum box; hue runs left to right and lightness
-   * top to bottom, so every colour is visible at once and nothing has to be
-   * reasoned about. The neutrals strip covers white/grey/black, which a
+   * top to bottom, so every color is visible at once and nothing has to be
+   * reasoned about. The neutrals strip covers white/gray/black, which a
    * rainbow represents badly. The muted/vivid slider is secondary — it only
    * exists to reach desaturated tones, and can be ignored entirely.
    */
@@ -27,9 +27,9 @@
 
   /**
    * Saturation is component state, not derived from `value`, because it has to
-   * survive picking a grey. hexToHsl reports s = 0 for any neutral, so reading
+   * survive picking a gray. hexToHsl reports s = 0 for any neutral, so reading
    * it back would silently reset the slider to "muted" every time the user
-   * touched the neutrals strip, and the box would go grey with it.
+   * touched the neutrals strip, and the box would go gray with it.
    */
   let saturation = 1;
 
@@ -95,7 +95,7 @@
   }
 
   function onSaturation() {
-    // Re-place the current colour at the new saturation, keeping hue and
+    // Re-place the current color at the new saturation, keeping hue and
     // lightness, so the swatch tracks the slider instead of jumping.
     commit(hslToHex(hsl.h, saturation, hsl.l));
   }
@@ -132,7 +132,7 @@
 </script>
 
 <div class="cf">
-  <!-- Spectrum: hue across, white → colour → black down.
+  <!-- Spectrum: hue across, white → color → black down.
        The linter does not count role="application" as interactive, but this
        element is: it takes focus, handles pointer drags and arrow keys.
        ARIA has no two-dimensional slider role to use instead. -->
@@ -159,14 +159,14 @@
     ></span>
   </div>
 
-  <!-- Neutrals: white → grey → black, which the rainbow covers poorly. -->
+  <!-- Neutrals: white → gray → black, which the rainbow covers poorly. -->
   <div
     bind:this={stripEl}
     class="cf-strip"
     class:dragging={dragging === "strip"}
     role="slider"
     tabindex="0"
-    aria-label="{label} greys"
+    aria-label="{label} grays"
     aria-valuemin={0}
     aria-valuemax={100}
     aria-valuenow={Math.round(hsl.l * 100)}
@@ -271,8 +271,8 @@
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 1px 4px rgba(0, 0, 0, 0.5);
     pointer-events: none;
   }
-  /* Hue is meaningless for a grey, so the box marker would sit at a lie —
-     show whichever marker matches the kind of colour that is selected. */
+  /* Hue is meaningless for a gray, so the box marker would sit at a lie —
+     show whichever marker matches the kind of color that is selected. */
   .cf-marker.hidden {
     display: none;
   }

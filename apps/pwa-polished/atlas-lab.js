@@ -1,7 +1,7 @@
 /**
  * Atlas lab — the workshop for the map.
  *
- * This is the real thing, not a mockup: the same data, detail and behaviour the
+ * This is the real thing, not a mockup: the same data, detail and behavior the
  * app will ship with. It gets lifted into the map panel once it's right.
  *
  * Two ideas hold the whole file together:
@@ -11,7 +11,7 @@
  *   switched on.
  *
  *   Overlays ride on top and must be self-sufficient. Each one registers what it
- *   draws, what colour it is and what a tap on it means, so the timeline is just
+ *   draws, what color it is and what a tap on it means, so the timeline is just
  *   the first of them rather than something the map is built around.
  */
 import L from 'leaflet';
@@ -85,7 +85,7 @@ map.getPane('labels').style.pointerEvents = 'none';
  * A Leaflet canvas renderer lives in a single pane, so sharing one instance
  * across layers quietly ignores their `pane` option and draws them all in one
  * place. That put the city dots outside the label pane, so fading the basemap
- * removed the names and left the dots behind — the unlabelled specks. It also
+ * removed the names and left the dots behind — the unlabeled specks. It also
  * meant the pane z-order below was decorative rather than real.
  */
 const renderers = new Map();
@@ -118,9 +118,9 @@ let fineWaterBoxes = [];
 /**
  * True only when the whole view sits inside one covered box.
  *
- * The centre is not enough. At this level the sea is drawn rather than the
+ * The center is not enough. At this level the sea is drawn rather than the
  * land, so beyond the edge of a box there would be no sea to draw and the
- * Mediterranean would come out the colour of parchment.
+ * Mediterranean would come out the color of parchment.
  */
 function fineWaterCovers(bounds) {
   const w = bounds.getWest(), e = bounds.getEast();
@@ -128,11 +128,11 @@ function fineWaterCovers(bounds) {
   return fineWaterBoxes.some((b) => w >= b[0] && e <= b[2] && s >= b[1] && n <= b[3]);
 }
 
-/** Which generalisation to draw at a given zoom. */
+/** Which generalization to draw at a given zoom. */
 function detailFor(zoom) {
   if (zoom < 4.5) return 110;
   if (zoom < 7) return 50;
-  // Close in, Natural Earth's kilometre-accurate shoreline is the thing you
+  // Close in, Natural Earth's kilometer-accurate shoreline is the thing you
   // notice — it puts Capernaum in the Sea of Galilee — so where OpenStreetMap
   // has been harvested, use that instead.
   if (zoom >= 10 && fineWaterBoxes.length && fineWaterCovers(map.getBounds())) return 1;
@@ -153,7 +153,7 @@ const NOT_AT_FINEST = new Set([
   // shoreline comes from the accurate side of the pair.
   'land',
   // The sea's own edge is the shoreline. A separate coarse stroke would run a
-  // kilometre away from it and read as two coasts.
+  // kilometer away from it and read as two coasts.
   'coastline',
 ]);
 
@@ -278,7 +278,7 @@ async function drawParchment(detail) {
 
   /**
    * At the finest level there is no land polygon — the sea is painted over the
-   * ground instead — so the ground has to become the land colour, or crossing
+   * ground instead — so the ground has to become the land color, or crossing
    * into that level would shift every shore from parchment to the slightly
    * darker backing behind the map.
    */
@@ -382,7 +382,7 @@ let cities = null;
 let peaks = null;
 
 
-/** Rough visual centre of a polygon — good enough to hang a name on. */
+/** Rough visual center of a polygon — good enough to hang a name on. */
 function centroid(geom) {
   const polys = geom.type === 'Polygon' ? [geom.coordinates]
               : geom.type === 'MultiPolygon' ? geom.coordinates : [];
@@ -406,7 +406,7 @@ function centroid(geom) {
  *
  * The gazetteer knows 10.7 million places and the map can only letter a fraction
  * of them, so the rest are drawn as plain dots you can click. They're real
- * places and clicking says what they are, which is the only thing an unlabelled
+ * places and clicking says what they are, which is the only thing an unlabeled
  * speck needs to earn its spot.
  */
 let townDots = null;
@@ -491,7 +491,7 @@ async function drawLabels() {
 
   // Basemap lettering. Skipped entirely on a tile basemap, which draws its own.
   if (showLabels && basemapKind === 'parchment') {
-    // Seas and countries, from whatever generalisation is on screen.
+    // Seas and countries, from whatever generalization is on screen.
     for (const [layerKind, kind, minZoom, priority] of [
       ['marine', 'sea', 3, 70],
       ['countries', 'country', 3.5, 60],
@@ -555,7 +555,7 @@ async function drawLabels() {
           kind: water ? 'water-point' : 'city',
           shape: 'point',
           // Somewhere named and lived-in outranks an unnamed creek, but a
-          // labelled feature of any kind beats leaving a bare dot.
+          // labeled feature of any kind beats leaving a bare dot.
           priority: 26 + Math.min(18, Math.log10((r.population ?? 0) + 10) * 4) + (water ? 1 : 0),
         });
       }
@@ -1107,13 +1107,13 @@ for (const ev of ['pointerup', 'pointercancel']) {
   $('photo-stage').addEventListener(ev, () => { photoViewer.dragging = false; });
 }
 
-// -------------------------------------------------------- the ageing look
+// -------------------------------------------------------- the aging look
 
 /**
  * How aged the map should look right now.
  *
  * 1 at the oldest era, 0 once the timeline reaches the present or is switched
- * off entirely — the ageing belongs to the overlay, not to the map.
+ * off entirely — the aging belongs to the overlay, not to the map.
  */
 function agedness() {
   if (!timeline?.enabled || !timeline.showAgeing) return 0;
@@ -1239,7 +1239,7 @@ async function followPassage(text) {
 
   if (!parsed) {
     readingPassage = null;
-    if (text.trim()) status(`don't recognise "${text.trim()}"`);
+    if (text.trim()) status(`don't recognize "${text.trim()}"`);
     return;
   }
 
@@ -1311,7 +1311,7 @@ readingInput.addEventListener('keydown', (e) => {
 /**
  * Open the panel for a biblical place.
  *
- * The verse list groups by book in canonical order and colours each row by the
+ * The verse list groups by book in canonical order and colors each row by the
  * book's category, matching the word study and the encyclopedia — a verse list
  * should read the same wherever you meet one.
  */
@@ -1319,7 +1319,7 @@ readingInput.addEventListener('keydown', (e) => {
  * The photograph on a place panel.
  *
  * A thumbnail, the photographer under it, and the whole picture one tap away.
- * The average colours OpenBible ships hold the space while the picture loads,
+ * The average colors OpenBible ships hold the space while the picture loads,
  * so the panel does not jump as it arrives.
  */
 function photoBlock(place) {

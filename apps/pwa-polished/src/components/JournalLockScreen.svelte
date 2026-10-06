@@ -51,7 +51,7 @@
       const problem = err instanceof PasskeyError ? err.problem : 'failed';
       const detail = err instanceof PasskeyError ? err.detail : String((err as Error)?.message ?? err);
       error = {
-        cancelled: 'Fingerprint cancelled. Tap the button to try again.',
+        cancelled: 'Fingerprint canceled. Tap the button to try again.',
         unsupported: 'This browser can’t use a fingerprint for the journal. Use your recovery code instead.',
         'already-added': 'Something went wrong. Try again, or use your recovery code.',
         'no-match': 'That passkey doesn’t open this journal. Try another, or use your recovery code.',

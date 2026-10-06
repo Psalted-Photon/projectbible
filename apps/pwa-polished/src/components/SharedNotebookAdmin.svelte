@@ -7,7 +7,7 @@
    * the same sheet and finds the roster has controls on it and the notebook's
    * own settings underneath. They are together rather than apart because every
    * one of those decisions is about the same thing — who may do what here —
-   * and a person who has just realised somebody should not be writing in their
+   * and a person who has just realized somebody should not be writing in their
    * notebook should not have to guess which of two screens to look on.
    *
    * Nothing here decides anything the database does not decide again. The

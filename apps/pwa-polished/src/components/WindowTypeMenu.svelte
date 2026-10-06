@@ -139,7 +139,7 @@
     cursor: default;
   }
 
-  /* The bar's dropdown look: the same grey card, border and shadow. */
+  /* The bar's dropdown look: the same gray card, border and shadow. */
   .wtm-menu {
     position: fixed;
     width: 210px;

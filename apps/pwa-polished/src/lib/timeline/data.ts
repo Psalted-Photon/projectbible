@@ -69,7 +69,7 @@ export interface TimelineItem {
   co_start?: number;
   covers_start?: number;
   covers_end?: number;
-  /** The book whose colour it takes. */
+  /** The book whose color it takes. */
   book?: string;
   /** The first verse of the first passage. */
   first?: { book: string; chapter: number; verse: number };

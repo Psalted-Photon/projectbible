@@ -20,7 +20,7 @@
  *   - four style declarations and no others
  *
  * Everything else is dropped: every link, image, script, event attribute, id,
- * and every style that could paint or position anything. Colour is the point
+ * and every style that could paint or position anything. Color is the point
  * of the exercise — a shared page carries structure, and how it looks comes
  * from the reader's own settings, the same way a local note does.
  */
@@ -63,7 +63,7 @@ const ALLOWED_CLASSES = new Set([
 
 /**
  * Style is where a shared page could otherwise repaint itself in somebody
- * else's colours, so it is narrowed to the four declarations the editor
+ * else's colors, so it is narrowed to the four declarations the editor
  * actually writes. Each is checked against its own pattern, not just its name.
  */
 const ALLOWED_STYLES: Record<string, RegExp> = {
@@ -73,8 +73,8 @@ const ALLOWED_STYLES: Record<string, RegExp> = {
   'text-align': /^(left|center|right|justify)$/,
   // Lexical puts this on every text span; without it, runs of spaces collapse.
   'white-space': /^(pre-wrap|normal|nowrap|pre-line)$/,
-  // A verse reference's book colour. Identity, not decoration — it is the same
-  // colour the reader paints that book in, and BibleRefNode sets it itself.
+  // A verse reference's book color. Identity, not decoration — it is the same
+  // color the reader paints that book in, and BibleRefNode sets it itself.
   '--ref-color': /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i,
 };
 
@@ -254,7 +254,7 @@ export function sanitizeNoteHtml(html: unknown): string {
 
 /**
  * The readable text of a page, for previews, counts and emptiness checks.
- * Sanitises first, so it never parses raw markup from anybody else.
+ * Sanitizes first, so it never parses raw markup from anybody else.
  */
 export function sharedPagePreviewText(html: unknown): string {
   const clean = sanitizeNoteHtml(html);

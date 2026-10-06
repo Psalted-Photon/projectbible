@@ -828,7 +828,7 @@
           )
         : measureForWord(selectedText, selectedMeasureCtx, measureUnits)
       : "";
-  /** Neighbouring words captured at click time, for multi-word phrase expansion. */
+  /** Neighboring words captured at click time, for multi-word phrase expansion. */
   let selectedContext: { before: string[]; after: string[] } | null = null;
   /**
    * The tapped word's verse, split around it, for the weights-and-measures
@@ -1814,7 +1814,7 @@
   function doScrollToVerse(book: string, chapter: number, verse: number) {
     // "Already loaded" means the chapter is in the DOM, not that it matches the
     // navigation store — the scroll handler rewrites the store's book and
-    // chapter as the user moves, so those can name a neighbour while the
+    // chapter as the user moves, so those can name a neighbor while the
     // chapter we want is still mounted and perfectly scrollable.
     beginDeliberateNavigation();
     if (findVerseEl(readerElement, book, chapter, verse)) {
@@ -2488,7 +2488,7 @@
       // before the load meant a load that bailed or lost a race left the key
       // claiming this destination was handled, and nothing would retry it
       // until you navigated somewhere else and back — the "works on the
-      // second tap" behaviour.
+      // second tap" behavior.
       lastNavigationKey = `${translation}-${book}-${chapter}-${isChronologicalMode}`;
 
       console.log(
@@ -2744,7 +2744,7 @@
       const raw = localStorage.getItem(key);
       if (raw) return JSON.parse(raw);
     } catch { /* ignore */ }
-    // Default: centred in the box the popup is actually placed in, which is not
+    // Default: centered in the box the popup is actually placed in, which is not
     // always the viewport (see lib/fixedOrigin.ts). Only this fallback needs the
     // correction — a note the user has dragged is saved from its own left/top,
     // so stored positions are already in the right space and must not be moved.
@@ -2869,7 +2869,7 @@
       const store = transaction.objectStore("morphology");
       const index = store.index("verse_ref");
 
-      // Normalise the display translation ID to match what ancient-languages.sqlite
+      // Normalize the display translation ID to match what ancient-languages.sqlite
       // stores in its words table (always lowercase).
       // e.g. 'BYZ' → 'byz', 'HEBREW-OSHB' → 'hebrew-oshb'
       const MORPH_ID_ALIAS: Record<string, string> = {
@@ -4176,7 +4176,7 @@
     if (wordBounds) {
       selectedText = text.substring(wordBounds.start, wordBounds.end).trim();
       selectedVerseNumber = verseNumInt;
-      // Capture neighbouring words so ISBE phrase expansion can rejoin "Red Sea".
+      // Capture neighboring words so ISBE phrase expansion can rejoin "Red Sea".
       selectedContext = wordContext(text, wordBounds.start, wordBounds.end);
       selectedMeasureCtx = measureContextFor(
         verseText, selectedText, verseNumInt, textNode, wordBounds.start, wordBounds.end,
@@ -4391,7 +4391,7 @@
     );
     if (!verseEl) return;
     searchHighlightedElement = verseEl;
-    // One landing behaviour for the whole app. This used to centre the verse
+    // One landing behavior for the whole app. This used to center the verse
     // with scrollIntoView while every other jump put it near the top, so the
     // same verse arrived in a different place depending on how you got there.
     void scrollToTarget(currentBook, currentChapter, verseNumber);
@@ -4529,7 +4529,7 @@
     document.removeEventListener("mouseup", stopDrag, true);
     document.removeEventListener("touchend", stopDrag, true);
 
-    // A press on a bumper that never travelled is a tap, and a tap anywhere
+    // A press on a bumper that never traveled is a tap, and a tap anywhere
     // outside the toast means "put this away". Without this the two bumpers
     // are dead zones sitting right where a thumb naturally lands.
     if (wasTap) {
@@ -4576,7 +4576,7 @@
 
   /**
    * The lines the toast has to stay off: the top of the selection's first line
-   * and the bottom of its last, each with its own centre so the toast sits over
+   * and the bottom of its last, each with its own center so the toast sits over
    * whichever end it ends up beside.
    */
   interface ToastAnchor {
@@ -4584,7 +4584,7 @@
     bottom: number;
     topCenterX: number;
     bottomCenterX: number;
-    /** Centre of the first line — where the radial menu's hole goes. */
+    /** Center of the first line — where the radial menu's hole goes. */
     centerX: number;
     centerY: number;
     /** The first line's box height. Sizes the radial menu's gaps. */
@@ -4756,10 +4756,10 @@
   }
 
   /**
-   * Centre the ring on the word.
+   * Center the ring on the word.
    *
    * Horizontally it slides to fit — that costs nothing, because the two gaps run
-   * along the word's own line, so a word pushed off-centre simply sits in the
+   * along the word's own line, so a word pushed off-center simply sits in the
    * left or right opening and stays readable. Clamped against the reader, not
    * the window: the reader can be one pane of several.
    *
@@ -6696,7 +6696,7 @@
   .intro-repeat-back { color: #999; font-weight: 600; }
 
   /* --reader-font-scale / --reader-lead-scale are the Custom theme's per-font
-     normalisation (see lib/readerFonts.ts). They MULTIPLY the user's font-size
+     normalization (see lib/readerFonts.ts). They MULTIPLY the user's font-size
      and line-spacing sliders rather than replacing them, and default to 1, so
      every other theme is unaffected. */
   .verses {
@@ -6866,8 +6866,8 @@
   }
 
   /* An allusion is a softer claim than a quotation, so it is drawn in a
-     different colour rather than a weaker one. A faded gold at 10px reads as a
-     half-painted glyph — broken, not softer. Silver is a cool, light grey with
+     different color rather than a weaker one. A faded gold at 10px reads as a
+     half-painted glyph — broken, not softer. Silver is a cool, light gray with
      a faint blue cast: solid at full strength, and told apart from the warm
      gold by temperature rather than by brightness. Revelation and Acts 7 carry
      a lot of these, and two solid hues keep such a chapter calm without any of
@@ -6882,7 +6882,7 @@
      reading here", which is not what happened. Matches the 2s ease-in-out
      cadence of the anchor pill in the navbar. transform does not affect
      layout, so the text around it never shifts. The commentary pill has the
-     same cadence from AuthorPill's own copy, which travelled with it. */
+     same cadence from AuthorPill's own copy, which traveled with it. */
   @keyframes anno-breathe {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.28); }
@@ -7364,10 +7364,10 @@
      applied as a left edge rather than a background wash: it has to survive
      every theme and every font setting, and sit under highlights, repeat
      markers and the interlinear without competing with any of them — all of
-     which own the verse's background or its text colour already.
+     which own the verse's background or its text color already.
 
      currentColor is not used anywhere here. The marking means one specific
-     thing, so it keeps one colour rather than inheriting whatever the theme
+     thing, so it keeps one color rather than inheriting whatever the theme
      has made the text. */
   .verse.solo-only {
     box-shadow: inset 2px 0 0 var(--solo-edge, #b8924e66);
@@ -7546,7 +7546,7 @@
   /* ── The "start here" mark ────────────────────────────────────────────────
      One recipe for the whole family. Reading plan passes its green (or brown,
      to close the day); every other link passes the target book's category
-     colour. Shape, size, opacity and radius are identical in every case — hue
+     color. Shape, size, opacity and radius are identical in every case — hue
      is the only thing that varies, which is what makes them read as one
      feature rather than six.
 
@@ -7577,7 +7577,7 @@
   }
 
   /* A right-to-left verse begins at its right edge, so a left-to-right fade
-     would put the strongest colour on the last word read and trail off over
+     would put the strongest color on the last word read and trail off over
      the first — backwards. The end-of-day bookmark is mirrored for the same
      reason: it marks where reading stops. */
   :global(.vh-overlay.vh-rtl) {

@@ -272,7 +272,7 @@
     style = applyLook(look, wantsPhoto || wantsPainting);
   }
 
-  // Colours
+  // Colors
   type ColourTarget = 'text' | 'accent' | 'bg';
   let colourTarget: ColourTarget = 'text';
   const custom = getCustomThemeSettings();
@@ -286,7 +286,7 @@
   function setColour(hex: string) {
     if (colourTarget === 'text') patch({ textColor: hex });
     else if (colourTarget === 'accent') patch({ accentColor: hex });
-    // Choosing a background colour means wanting a plain background.
+    // Choosing a background color means wanting a plain background.
     else patch({ bgColor: hex, background: 'solid' });
   }
 
@@ -336,7 +336,7 @@
     patch({ background: kind });
   }
 
-  /** New picture on the card: colours from the picture, dimmed so pale words read. */
+  /** New picture on the card: colors from the picture, dimmed so pale words read. */
   function adoptImage(kind: 'photo' | 'painting', img: CardImage) {
     const c = suggestColours(img.source);
     if (kind === 'photo') photo = img;
@@ -642,7 +642,7 @@
       <div class="sc-field-label">Words</div>
       <div class="sc-chips">
         <button class="sc-chip" class:active={style.align === 'left'} on:click={() => patch({ align: 'left' })}>Left</button>
-        <button class="sc-chip" class:active={style.align === 'center'} on:click={() => patch({ align: 'center' })}>Centre</button>
+        <button class="sc-chip" class:active={style.align === 'center'} on:click={() => patch({ align: 'center' })}>Center</button>
         <span class="sc-gap"></span>
         <button class="sc-chip" class:active={style.position === 'top'} on:click={() => patch({ position: 'top' })}>Top</button>
         <button class="sc-chip" class:active={style.position === 'middle'} on:click={() => patch({ position: 'middle' })}>Middle</button>

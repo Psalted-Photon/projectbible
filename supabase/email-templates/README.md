@@ -45,7 +45,7 @@ URL, and open it.
 - **Inline styles and tables only.** A `<style>` block and flexbox are both
   widely stripped or ignored by mail clients. There is one `<style>` here, an
   mso conditional, which is the accepted way to reach Outlook.
-- **The NET footer** is a licence condition, not decoration. NET may be quoted
+- **The NET footer** is a license condition, not decoration. NET may be quoted
   freely in a free app provided the quotation is followed by `(NET)` and, where
   there is internet access, those letters link to netbible.org. Both the verse
   credit and the footer line satisfy that; do not trim them.

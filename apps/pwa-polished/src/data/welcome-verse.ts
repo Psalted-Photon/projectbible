@@ -9,7 +9,7 @@
  * NET permits free quotation in a non-commercial app provided the quotation is
  * followed by "(NET)", and where there is internet access those letters must
  * link to netbible.org. That link is a deliberate exception to the house rule
- * that media opens in-app — it is a licence condition, not navigation.
+ * that media opens in-app — it is a license condition, not navigation.
  */
 export const WELCOME_VERSE = {
   reference: 'Hebrews 4:12',
@@ -22,7 +22,7 @@ export const WELCOME_VERSE = {
     'it is able to judge the desires and thoughts of the heart.',
 } as const;
 
-/** The full acknowledgment, as the licence words it. Used in the email footer. */
+/** The full acknowledgment, as the license words it. Used in the email footer. */
 export const NET_ATTRIBUTION =
   'Scripture quoted by permission. Quotations designated (NET) are from the NET Bible® ' +
   'copyright ©1996, 2019 by Biblical Studies Press, L.L.C. All rights reserved.';

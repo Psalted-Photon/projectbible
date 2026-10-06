@@ -632,7 +632,7 @@ function eraOf(row) {
 }
 for (const row of items.values()) eraOf(row);
 
-// Colour book: the first passage's, where nothing more specific was given.
+// Color book: the first passage's, where nothing more specific was given.
 for (const row of items.values()) if (!row.book && row.passages.length) row.book = row.passages[0].b;
 
 // Order inside a year. Where a year holds only Theographic events and groups,
@@ -727,7 +727,7 @@ db.exec(`
     co_start      INTEGER,        -- kings: where the sole reign began, after a co-regency from year_start
     covers_start  INTEGER,        -- books: the span the book's events take up
     covers_end    INTEGER,
-    book          TEXT,           -- the book that colours it
+    book          TEXT,           -- the book that colors it
     first_book    TEXT,
     first_chapter INTEGER,
     first_verse   INTEGER,

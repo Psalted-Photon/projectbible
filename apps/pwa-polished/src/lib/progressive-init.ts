@@ -357,7 +357,7 @@ const ATLAS_PLACES_ID = 'atlas-map-places';
 /**
  * Download and import everything the Historical Map needs beyond its core.
  *
- * atlas-map.sqlite carries the eras, the layer catalogue and the places; the
+ * atlas-map.sqlite carries the eras, the layer catalog and the places; the
  * drawn geometry arrives as ~10 MB shards and the place search index as one
  * more file, so sql.js never holds the whole 34 MB at once. Each goes through
  * PackLoader, so it keeps the retry and SHA-256 validation every other download

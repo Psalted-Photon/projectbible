@@ -153,7 +153,7 @@ export const ERAS = [
   {
     id: 'rome-provinces',
     title: 'The Provinces of Rome',
-    subtitle: 'The empire organised',
+    subtitle: 'The empire organized',
     yearStart: 180, yearEnd: 220,
     confidence: 'attested',
     blurb: 'The mature provincial system that the early church grew up inside.',
@@ -168,7 +168,7 @@ export const ERAS = [
   {
     id: 'later-empire',
     title: 'The Later Empire',
-    subtitle: "Diocletian's reorganisation",
+    subtitle: "Diocletian's reorganization",
     yearStart: 284, yearEnd: 400,
     confidence: 'attested',
     blurb: 'The empire is redivided into many smaller provinces, the shape it carried into the Christian centuries.',

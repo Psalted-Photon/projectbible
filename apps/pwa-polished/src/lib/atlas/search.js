@@ -4,7 +4,7 @@
  * People don't type the way a gazetteer spells things. "st cloud", "St. Cloud"
  * and "Saint Cloud" are the same request, and "saint cloud mn" is that request
  * plus a way of saying which one. All of that has to work, so matching happens
- * on a normalised form rather than the raw string.
+ * on a normalized form rather than the raw string.
  *
  * Rows are packed arrays to keep 168,000 places affordable:
  *   [name, asciiName|0, admin1, country, lat, lon, population]
@@ -55,7 +55,7 @@ export function normalise(text) {
 export class PlaceSearch {
   constructor(rows) {
     this.rows = rows;
-    /** Normalised name per row, built once — the expensive part. */
+    /** Normalized name per row, built once — the expensive part. */
     this.keys = rows.map((r) => normalise(r[ASCII] || r[NAME]));
     this.admin = rows.map((r) => normalise(`${r[ADMIN]} ${r[COUNTRY]}`));
   }

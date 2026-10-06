@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase/client';
  * in sessionStorage, so the service worker's auto-update reload doesn't eat the
  * welcome before it has been shown.
  *
- * Modelled on passwordRecoveryStore, which catches the sibling case.
+ * Modeled on passwordRecoveryStore, which catches the sibling case.
  */
 const FLAG_KEY = 'pb-welcome-pending';
 

@@ -2,7 +2,7 @@ import { writable } from 'svelte/store';
 
 /**
  * In-app yes/no questions, in place of the browser's confirm() box. confirm()
- * is a grey system dialog that looks nothing like the rest of the app; these
+ * is a gray system dialog that looks nothing like the rest of the app; these
  * ask in the same card as the notices. AppConfirm.svelte draws them.
  */
 

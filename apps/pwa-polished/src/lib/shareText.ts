@@ -57,7 +57,7 @@ export function formatShareRef(ref: ShareRef): string {
  *
  * The translation rides along because without it a link opens in whatever the
  * *recipient* last read — so a verse sent in KJV would arrive as NET on a device
- * that has only the starter pack. It is honoured only where it is installed.
+ * that has only the starter pack. It is honored only where it is installed.
  */
 export function buildShareUrl(ref: ShareRef, translation?: string): string {
   if (typeof window === 'undefined') return '';

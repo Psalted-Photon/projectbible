@@ -9,7 +9,7 @@
  *
  * This is not the shared-page allowlist (lib/shared/sanitizeNoteHtml.ts). Pack
  * text is real formatting — headings, lists, tables, links, the app's own
- * coloured reference spans — and all of that has to survive. So it keeps every
+ * colored reference spans — and all of that has to survive. So it keeps every
  * element and attribute except the ones that can run code, load a page into
  * the app, or restyle the app around the text:
  *

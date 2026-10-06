@@ -8,7 +8,7 @@
    * happening and gives every control room to be touched.
    *
    * Chrome is dark like the settings pane, deliberately *not* themed by the
-   * colours being chosen — a picker that recolours itself as you drag is very
+   * colors being chosen — a picker that recolours itself as you drag is very
    * hard to aim. Only the preview line shows the result.
    */
   import { createEventDispatcher, onMount } from "svelte";
@@ -33,7 +33,7 @@
 
   /**
    * Saved swatches are shared with the reader's Custom theme rather than kept
-   * per surface, so a colour saved anywhere is available everywhere. Read on
+   * per surface, so a color saved anywhere is available everywhere. Read on
    * mount and written straight back through the same helpers the settings pane
    * uses, which keeps one list and one sync path.
    */

@@ -136,7 +136,7 @@
    *
    * preventDefault is for mouse only. On mousedown it suppresses the text
    * selection a drag would otherwise paint, and the click still fires after it.
-   * On touchstart it would cancel the synthesised click and kill the buttons,
+   * On touchstart it would cancel the synthesized click and kill the buttons,
    * so scrolling is held off with `touch-action: none` in the CSS instead.
    */
   function handleHeaderDragStart(e: MouseEvent | TouchEvent) {
@@ -257,7 +257,7 @@
 
 <!-- `themed` is a whole-panel color inversion on the light and sepia themes.
      Maps can't take it (the tiles invert), nor can the art gallery for the same
-     reason -- paintings came out as colour negatives -- and neither can the encyclopedia or
+     reason -- paintings came out as color negatives -- and neither can the encyclopedia or
      a person's bio, which paint their own dark card in every theme so a pinned
      page looks exactly like the modal it came out of. -->
 <div
@@ -466,8 +466,8 @@
     backdrop-filter: blur(3px) saturate(1.1);
     -webkit-backdrop-filter: blur(3px) saturate(1.1);
     padding: 0 calc(2px * var(--bar-scale, 1));
-    /* Arrows left, swap dead centre, × right. The two outer columns share the
-       spare width equally so the swap stays centred; when the panel gets
+    /* Arrows left, swap dead center, × right. The two outer columns share the
+       spare width equally so the swap stays centered; when the panel gets
        narrow the arrows' column gives way first, so swap and × stay whole. */
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(auto, 1fr);
@@ -506,7 +506,7 @@
 
   /* The other half of why the warning was never seen: on light and sepia the
      panel carries `filter: invert(1) hue-rotate(180deg)` (App.svelte), which
-     turns this red into cyan. Cancelled by re-applying the same filter, the
+     turns this red into cyan. Canceled by re-applying the same filter, the
      way .red-letter does. Maps and the encyclopedia never get .themed, so
      they're excluded and keep their red directly. */
   :global(body.light-theme) .panel.themed .panel-header.close-zone,

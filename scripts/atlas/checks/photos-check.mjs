@@ -62,7 +62,7 @@ for (const id of sample) {
       results.push(`${label} failed`);
     }
   }
-  const missing = [!shot.a && 'no author', !shot.l && 'no licence', !shot.u && 'no source link'].filter(Boolean);
+  const missing = [!shot.a && 'no author', !shot.l && 'no license', !shot.u && 'no source link'].filter(Boolean);
   if (missing.length) bad++;
   console.log(`  ${(nameOf.get(id) ?? id).padEnd(18)} ${results.join('  ')}${missing.length ? `  << ${missing.join(', ')}` : ''}`);
 }

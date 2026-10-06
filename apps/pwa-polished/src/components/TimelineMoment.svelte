@@ -2,7 +2,7 @@
   /**
    * "At this moment": everything going on in the year under the Moment line.
    *
-   * One line per lane, each name a plain link coloured the way its lane draws
+   * One line per lane, each name a plain link colored the way its lane draws
    * it, which opens that item's card. Empty lines are left out, so a year with
    * no king of Israel simply has no Israel line.
    */

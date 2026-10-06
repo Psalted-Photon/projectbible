@@ -866,7 +866,7 @@ function buildDrawer() {
   heading('Name outline');
   slider('Width', () => LABEL_OUTLINE.width, (v) => (LABEL_OUTLINE.width = v), 0, 6, 0.1);
   const row = el('div', { className: 'row' }, drawer);
-  el('label', { textContent: 'Colour' }, row);
+  el('label', { textContent: 'Color' }, row);
   const colour = el('input', { type: 'color', value: LABEL_OUTLINE.colour }, row);
   const colourOut = el('output', { textContent: LABEL_OUTLINE.colour }, row);
   colour.addEventListener('input', () => {

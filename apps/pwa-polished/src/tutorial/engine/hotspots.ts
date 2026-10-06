@@ -14,7 +14,7 @@ import type { Box } from './targets';
 export interface Spot {
   tip: Tip;
   el: Element;
-  /** The dot's centre, in screen coordinates. */
+  /** The dot's center, in screen coordinates. */
   x: number;
   y: number;
 }
@@ -103,7 +103,7 @@ export function locateAll(tips: Tip[]): Spot[] {
   return spots;
 }
 
-/** Dots at least this close to one another (centre to centre) share one dot. */
+/** Dots at least this close to one another (center to center) share one dot. */
 const CLUSTER_GAP = 44;
 
 /** Several tips close together, drawn as one numbered dot. */

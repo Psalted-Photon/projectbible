@@ -148,7 +148,7 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
     if (body.length > 0) {
       noteIndex++;
       // No title attribute: that was the browser's own tooltip, which the
-      // footnote card replaces. Colour lives in the stylesheet, not here.
+      // footnote card replaces. Color lives in the stylesheet, not here.
       const anchorAttr = anchor ? ` data-note-ref="${escapeHtml(anchor)}"` : '';
       out += `<sup class="inline-note ${kind === 'footnote' ? 'inline-footnote' : 'inline-xref'}" ` +
         `data-note="${encodeURIComponent(body)}" data-note-index="${noteIndex}" ` +

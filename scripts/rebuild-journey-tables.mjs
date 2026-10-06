@@ -7,7 +7,7 @@
  * traveler, dateRange, totalDistanceKm, distanceFromPreviousKm and event.verse
  * against person, yearRange, totalDistance, distanceFromPrevious and verses[] —
  * so every one of them wrote NULL. The result was a journeys overlay with no
- * travellers, no dates, no distances and not one verse on any of its thirty
+ * travelers, no dates, no distances and not one verse on any of its thirty
  * events, which is why the overlay was parked as too thin to ship.
  *
  * The names are fixed in the builder, but that builder deletes and rebuilds the

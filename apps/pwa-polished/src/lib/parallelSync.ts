@@ -465,10 +465,10 @@ function tick(book: string, chapter: number, verse: number): void {
  * The tick for a translation comparison, where alignment is exact.
  *
  * Nothing here consults the parallel index, and that is the whole point rather
- * than an optimisation. Every pane holds the same book, so `bestParallel` would
+ * than an optimization. Every pane holds the same book, so `bestParallel` would
  * return the group covering the master's own verse and `passageFor` would find
  * that same group's passage for the follower — which would aim it at the
- * passage's *start* by the proportional maths, not at the verse the master is
+ * passage's *start* by the proportional math, not at the verse the master is
  * actually on. Worse, outside the Gospels and the Kings/Chronicles overlap
  * there are no groups at all, so every follower would dim "No parallel here"
  * for most of the Bible. The index answers "where does Luke tell this?"; here
@@ -768,7 +768,7 @@ function moveTo(paneId: string, verseEl: HTMLElement): void {
  * Recomputed on every retarget rather than cached, because getBoundingClientRect
  * is relative to the current scroll: a rect measured one tick ago describes a
  * pane that has since moved, and reusing it would aim the tween at a position
- * off by however far it has travelled in between.
+ * off by however far it has traveled in between.
  */
 function targetTopFor(scroller: HTMLElement, verseEl: HTMLElement): number {
   const target = withHeading(verseEl);

@@ -11,7 +11,7 @@
  *
  * This used to be written out at each call site, which is how App.svelte ended
  * up hardcoding 'right' and two other copies drifted into comparing the
- * operands the other way round. One copy, so the reader learns one behaviour.
+ * operands the other way round. One copy, so the reader learns one behavior.
  */
 
 import type { DockEdge } from './stores/windowStore';

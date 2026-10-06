@@ -180,7 +180,7 @@ export const MODAL_TIPS: Tip[] = [
     target: '.svp-root .svp-pills',
     corner: 'top-left',
     title: 'Highlights and notes',
-    body: 'Every verse you’ve highlighted, and every note. Tap one to go to it. The sort button on the right cycles Recent, Bible Order and Categories, which groups verses by what their colours mean.',
+    body: 'Every verse you’ve highlighted, and every note. Tap one to go to it. The sort button on the right cycles Recent, Bible Order and Categories, which groups verses by what their colors mean.',
   },
   {
     id: 'profile-journal-day',

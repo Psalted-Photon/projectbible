@@ -9,7 +9,7 @@
  * The rule below is not hand-asserted prose: scripts/build-ot-quotes-index.mjs
  * re-derives it from lxx2012's own superscriptions, which carry the Hebrew
  * number in parentheses (LXX 103:1 opens "(104)"), and fails the build if this
- * function disagrees with any of the 136 labelled chapters. If the mapping ever
+ * function disagrees with any of the 136 labeled chapters. If the mapping ever
  * changes, the build says so rather than the reader silently showing the wrong
  * psalm.
  *

@@ -14,7 +14,7 @@ export interface SearchTreeNode {
   key: string;
   label: string;
   count: number;
-  /** Depth-based accent colour (book colours come from getBookColor). */
+  /** Depth-based accent color (book colors come from getBookColor). */
   color?: string;
   children?: SearchTreeNode[];
   results?: SearchResult[];
@@ -34,7 +34,7 @@ function groupBy<T>(items: T[], keyOf: (item: T) => string): Map<string, T[]> {
 }
 
 /**
- * Verses grouped into canonical book order, coloured to match the reader.
+ * Verses grouped into canonical book order, colored to match the reader.
  * Exported because the Notes panel builds the same book dropdown from stored
  * notes rather than from a search.
  */

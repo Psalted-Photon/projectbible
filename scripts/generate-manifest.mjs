@@ -160,7 +160,7 @@ for (const filename of readdirSync(PACKS_DIR)
 //
 // The type must be one the schema already accepts (see validTypes in
 // packages/core/src/schemas/PackManifest.ts). validateManifest rejects the whole
-// manifest over a single unrecognised type, and older builds carry their own copy
+// manifest over a single unrecognized type, and older builds carry their own copy
 // of that list -- so inventing a new type here takes every pack down on every
 // device that has not updated yet, which is exactly what "art-images" did.
 for (const filename of readdirSync(PACKS_DIR)

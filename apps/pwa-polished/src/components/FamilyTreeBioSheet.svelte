@@ -4,7 +4,7 @@
    *
    * Hosts the real People card, PersonContent, in its `hosted` mode — no
    * host has used that mode before this, so this sheet supplies everything
-   * it removes: the background colour, the scrolling, and the padding
+   * it removes: the background color, the scrolling, and the padding
    * `hosted` clears from `.person-body` and `.person-footer`.
    *
    * The `{#key}` block is what gives a walk through the bio its own fresh

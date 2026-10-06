@@ -116,7 +116,7 @@
 
   /**
    * The real test: the server pushes to this account's devices. Lock the phone
-   * first — that is the behaviour worth proving.
+   * first — that is the behavior worth proving.
    */
   async function runRealTestAlarm() {
     testingReal = true;
@@ -319,7 +319,7 @@
       </button>
       <span class="test-desc">
         The whole path, from the server. <strong>Lock your phone and close the app
-        first</strong> — that's the behaviour worth proving. Arrives within a few
+        first</strong> — that's the behavior worth proving. Arrives within a few
         seconds.
       </span>
     </div>
