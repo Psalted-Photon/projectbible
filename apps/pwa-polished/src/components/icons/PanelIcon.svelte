@@ -1,7 +1,7 @@
 <script lang="ts" context="module">
   export type PanelIconName =
     | 'bible' | 'map' | 'timeline' | 'commentary' | 'notes' | 'journal'
-    | 'encyclopedia' | 'topical' | 'people' | 'art' | 'harmony';
+    | 'encyclopedia' | 'topical' | 'people' | 'strongs' | 'art' | 'harmony';
 
   /**
    * Line art drawn for the window picker — one entry per panel type, each a list
@@ -9,7 +9,7 @@
    * the library panes: no fills, stroke only, round caps and joins, so a single
    * drawing carries both the dark halo and the white line (see the markup).
    *
-   * The eleven have to stay legible at 20px and, more importantly, tell each other
+   * The twelve have to stay legible at 20px and, more importantly, tell each other
    * apart at 20px — hence three different book silhouettes rather than three
    * books: the Bible is open and spread, the journal is closed and clasped, the
    * encyclopedia is a shelf of volumes.
@@ -90,6 +90,15 @@
       'M4.6 20.4V9.6a7.4 7.4 0 0114.8 0v10.8z',
       'M14.6 11.2a2.6 2.6 0 11-5.2 0 2.6 2.6 0 015.2 0z',
       'M7.6 20.4a4.4 4.4 0 018.8 0',
+    ],
+    // A Greek alpha beside a number sign: an original word filed by number,
+    // which is the whole of Strong's — and nothing like the books around it.
+    strongs: [
+      'M11.4 9c-.9 3.9-2.6 6-4.6 6a2.6 2.6 0 01-2.6-2.6c0-1.9 1.4-3.4 3-3.4 2.2 0 3 2.8 4.4 6',
+      'M15.4 8.4l-1 7.2',
+      'M18.8 8.4l-1 7.2',
+      'M13.6 10.6h6',
+      'M13.2 13.4h6',
     ],
     // Square frame around a landscape — deliberately not the arch above.
     art: [

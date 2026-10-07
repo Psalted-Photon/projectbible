@@ -171,22 +171,20 @@ The preview block uses fixed `line-height: 1.15` and `font-size: 21px` with `em`
 
 ## 5. Word Study
 
-Files: `src/components/LexicalModal.svelte` (2,215 lines), `src/adapters/lexicon-lookup.ts` (1,192 lines), `src/lib/morphologyExpander.ts` (467 lines), `src/adapters/LexiconStore.ts`, `src/stores/lexicalModalStore.ts`.
+Files: `src/components/LexicalContent.svelte` (the Dictionary), `src/components/strongs/` (`StrongsContent`, `StrongsEntry`, `SpeakWord`), `src/lib/strongs/` (`entry.ts`, `source.ts`, `collate.ts`), `src/lib/strongsUsage.ts`, `src/adapters/lexicon-lookup.ts`, `src/lib/morphologyExpander.ts`, `src/stores/lexicalModalStore.ts`, `src/stores/strongsModalStore.ts`.
 
-### 5.1 Modal structure
+### 5.1 Two works
 
-State `activeTab: "definition" | "occurrences" | "related"`, `LexicalModal.svelte`. Two distinct tab strips are rendered depending on whether the subject is an English word or a Strong's entry:
+Since 2026-10-07 the word study is two of the five works ([23](#23-the-study-library)):
 
-- **English word** — Definition, Related. No Occurrences tab.
-- **Strong's entry** — Definition, Occurrences, Related.
+- **Dictionary** — `LexicalContent.svelte`. An English word's definitions, or a tapped Greek/Hebrew word's grammar: the word, lemma, transliteration, gloss and parsing. Its Strong's number opens the Strong's work through `openWorkSubject('strongs', …)`, carrying the word and its morphology so the Dictionary tab can come back to them.
+- **Strong's** — `StrongsContent.svelte` frames `StrongsEntry.svelte`, whose tabs are Definition, Forms, Occurrences, Arc, Spread and Related.
 
-Guard at: `if (isEnglishWord && activeTab === "occurrences") activeTab = "definition"` — prevents a blank body when a leftover Occurrences tab carries into the English-word view. Tab resets to `"definition"` on open.
-
-Lazy loads: occurrences fetched only when the Occurrences tab is first opened, inflection forms only when the Definition tab is opened.
+The four usage tabs share one scan of the `morphology` store (`loadStrongsUsage`), started the first time one of them is opened. A classic number's scan takes in its split ids by key range (`usageRange`): the Greek texts tag Jesus as G2424G 955 times and as plain G2424 twice.
 
 ### 5.2 Strong's entry sections
 
-`LexicalModal.svelte` — Entry Information, Short Definition, Full Definition, KJV Usage, Derivation, Inflection Forms, then the Occurrences and Related tabs.
+`StrongsEntry.svelte` — Entry Information, Short Definition, Meanings (`loadMeanings`, only when a split says something its number doesn't), Full Definition, KJV Renderings, Derivation; then the Forms, Occurrences, Arc, Spread and Related tabs. Strong's numbers in the definition and derivation text become `.strongs-ref` links (`linkNumbers`, applied only to text between tags).
 
 Lookup functions in `src/adapters/lexicon-lookup.ts`:
 
@@ -823,7 +821,7 @@ Two independent docking systems.
 
 `src/lib/stores/windowStore.ts`, `src/components/Window.svelte`, `src/components/WindowContainer.svelte`, `src/components/WindowContentSelector.svelte`, `src/components/WindowContent.svelte`, `src/components/Pane.svelte`.
 
-- `WindowContentType` — `'selector' | 'bible' | 'map' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves'`
+- `WindowContentType` — `'selector' | 'bible' | 'map' | 'timeline' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves' | 'strongs'`
 - `WindowEdge` — `'top' | 'left' | 'right' | 'bottom'`
 - `MAX_WINDOWS = 6`; `createWindow()` returns `null` at capacity
 - `setWindowContent(id, contentType, contentState?)` — each window carries its own `contentState`, so a second Bible window can sit on a different chapter from the main reader
@@ -1238,11 +1236,11 @@ Settings pane → Read Aloud section → Wake Alarm button, which opens the `wak
 
 ## 23. The Study Library
 
-Four reference works, browsable like books rather than only reachable by tapping a word: **Dictionary**, **Topical**, **Encyclopedia**, and **People**.
+Five reference works in one card: **Encyclopedia**, **Topical**, **People**, **Dictionary** and **Strong's**. All but the Dictionary are browsable like books rather than only reachable by tapping a word.
 
-Files: `src/lib/openWork.ts`, `src/stores/lookupStore.ts`, `src/components/LookupModal.svelte`, `WorkTabs.svelte`, `src/components/library/` (`AlphabetRail`, `IndexList`, `LibraryNavButtons`, `RefSearchBar`), `src/lib/library/source.ts`, `src/stores/libraryPrefsStore.ts`. Per-work bodies: `LexicalContent.svelte`, `NavesContent.svelte`, `IsbeContent.svelte`, `PersonContent.svelte`.
+Files: `src/lib/openWork.ts`, `src/stores/lookupStore.ts`, `src/components/LookupModal.svelte`, `WorkTabs.svelte`, `src/components/library/` (`AlphabetRail`, `IndexList`, `LibraryNavButtons`, `RefSearchBar`), `src/lib/library/source.ts`, `src/stores/libraryPrefsStore.ts`. Per-work bodies: `IsbeContent.svelte`, `NavesContent.svelte`, `PersonContent.svelte`, `LexicalContent.svelte`, `strongs/StrongsContent.svelte`.
 
-### 23.1 One card, four works
+### 23.1 One card, five works
 
 `lookupStore` holds which work is on top, or `null` when no card is up. **There is one card, not four.** Each work still keeps its own state in its own store; this only says which is in front. That separation is what makes the tabs behave like tabs — switching changes this value, the card itself never unmounts, and the work you left keeps its place for when you come back.
 
@@ -1250,7 +1248,7 @@ Previously there were four cards and switching meant closing one and opening ano
 
 ### 23.2 The work tabs
 
-`WorkTabs.svelte` — all four tabs across the top of every lookup card, always drawn, always in the same order, at equal widths so a tab is in the same place every time regardless of label length. A tab is grayed when that work has nothing for the subject.
+`WorkTabs.svelte` — all five tabs across the top of every lookup card, always drawn, always in the same order (Encyclopedia, Topical, People, Dictionary, Strong's), at equal widths so a tab is in the same place every time regardless of label length. A tab is grayed when that work has nothing for the subject. A hidden row holds the full names in the tabs' own font; when the widest won't fit a fifth of the row, every tab takes its short name together ("Encyc.", "Dict."). It is measured with a `ResizeObserver` rather than set at a breakpoint, so it follows Bar size and window width.
 
 These replaced a row of "bridge pills" that changed depending on which card you were in: the encyclopedia offered Topical and Dictionary, stepping into Topical changed the set, and so there was never a fixed thing to aim at.
 
@@ -1258,11 +1256,13 @@ Availability comes from `resolveWorks`, which returns **ids rather than booleans
 
 ### 23.3 Switching works
 
-`src/lib/openWork.ts` is the single path. `WorkKey` is `'dictionary' | 'topical' | 'encyclopedia' | 'people'`, mapped to window content types `wordstudy`, `naves`, `isbe`, `person`.
+`src/lib/openWork.ts` is the single path. `WorkKey` is `'dictionary' | 'topical' | 'encyclopedia' | 'people' | 'strongs'`, mapped to window content types `wordstudy`, `naves`, `isbe`, `person`, `strongs`.
+
+`WorksResolution` carries `strongs` (`{ id, word?, morph? }`) and `strongsSearch`. `resolveWorks` fills them from the English term through `strongsForTerm` — one matching entry opens it, several open the contents searched for the term. A tapped word carries its morphology in `strongs.morph`, which is what lets the Dictionary tab return to its grammar in the card (`dictionaryAvailable`); a window can't keep morphology in storage, so there it falls back to the English gloss.
 
 This is one path on purpose. The tabs used to call the old "jump to the encyclopedia" buttons, which were built to *replace* the card you were on and only knew how to open a centered card — so inside a docked window they threw a card over the whole app instead of changing the window. Tabs and jump-links wanting different things from the same code is what caused that, so the jump-links are gone and everything comes through here.
 
-`worksInWindow()`, `carriedWorks()`, `clearCarriedWorks()`, `openWorkSubject()`, `openWorkIndex()`.
+`worksInWindow()`, `carriedWorks()`, `clearCarriedWorks()`, `openWorkSubject()`, `openWorkIndex()`, `openStrongsWord()` (the ring's Strong's pill).
 
 ### 23.4 Browsing a work
 
@@ -1276,25 +1276,37 @@ This is one path on purpose. The tabs used to call the old "jump to the encyclop
 
 `LibraryNavButtons.svelte` supplies back and flip controls, which replaced the earlier hamburger.
 
-### 23.5 One shell, three lists
+### 23.5 One shell, four lists
 
-`src/lib/library/source.ts`. `IndexList` doesn't know what an ISBE entry is, or a Nave's topic, or a person — it knows how to draw an alphabet, a letter's worth of rows, and a set of filter chips. Each work supplies a `LibrarySourceAdapter` and gets the whole browsing shell for free, **which is why the three lists come out identical rather than merely similar.**
+`src/lib/library/source.ts`. `IndexList` doesn't know what an ISBE entry is, or a Nave's topic, or a person — it knows how to draw an alphabet, a letter's worth of rows, and a set of filter chips. Each work supplies a `LibrarySourceAdapter` and gets the whole browsing shell for free, **which is why the lists come out identical rather than merely similar.**
 
-`isbeSource`, `navesSource`, `peopleSource`. `LibraryBadge` is `'place' | 'bio' | 'entry' | 'topic' | 'dict'`; badges are navigable — tapping one opens the work it marks.
+`isbeSource`, `navesSource`, `peopleSource`, and `strongsSource(lang, sort)` from `src/lib/strongs/source.ts`. A list not filed A–Z describes its own sections through the optional `letters`, `railLabel`, `sectionLabel`, `letterOf` and `locate`, and its missing-pack offer through `missingPacks`. Rows may carry `tag`, `tagColor`, `nameLang`, `meta` and `markName`, and `IndexList` has a `controls` slot and an `initialSearch` prop. The other three lists use none of these and are unchanged. `LibraryBadge` is `'place' | 'bio' | 'entry' | 'topic' | 'dict'`; badges are navigable — tapping one opens the work it marks.
 
 ### 23.6 Personal layer
 
 `src/stores/libraryPrefsStore.ts` — which entries you starred, which you read lately, and where you left off in each source, persisted to `localStorage` and keyed by source so the three lists keep their own stars and history rather than sharing one pile.
 
-`LibrarySource` is `'isbe' | 'naves' | 'people'`. `resumeTarget()`, `isStarred()`.
+`LibrarySource` is `'isbe' | 'naves' | 'people' | 'strongs'`. `resumeTarget()`, `isStarred()`.
 
 `RESUME_WINDOW_MS` is 30 minutes: reopening a library window inside that window resumes where you were, and after it opens fresh. A window you come back to an hour later is a new session, not an interrupted one.
+
+### 23.7 Strong's
+
+`src/lib/strongs/source.ts` reads each language's classic rows once per session from `greek_strongs_entries` / `hebrew_strongs_entries` (the `lexical` pack) into a slim in-memory index. It reads only the key range G0001–G5624 and H0001–H8674 through each number's splits, so the Septuagint-only (G6000+) and prefix (H9001+) entries are never read. Split meanings (G2424G, H1254A) get no rows of their own; their glosses ride on their number's row for search.
+
+- **Orders** — `number`, `english`, `original`, `used`, cycled by one button and saved in `localStorage` (`projectbible_strongs_sort`). `collate.ts` folds the keys: Greek and Hebrew lose accents, points and final forms (sin and shin file together); the English key skips a leading "to " and a leading "(qualifier) ". Section keys are never plain integers (`n500`, `u100`), because an object keyed by integers reorders itself and breaks the list's next-section step.
+- **Counts** — `src/data/strongs-counts.json` (index = number), built by `scripts/build-strongs-counts.mjs` from the ancient-languages pack: BYZ (TR where BYZ has none) and OSHB, splits folded in. Rerun it if that pack changes. It is an app file rather than a pack column so nobody re-downloads the 372 MB lexical pack for it.
+- **Search** — both languages: numbers, Greek/Hebrew letters (folded), transliteration, and English through `wordMatcher`; ranked exact, word, transliteration prefix, split gloss, then by use count.
+- **In this chapter** — `book_chapter_verse_word` on the `morphology` store, folded to classic ids, in the list's language.
+- **Entry extras** — `SpeakWord.svelte` with `src/lib/tts/speakWord.ts` (Greek only; the reader's ring keeps its own copy). Back trail (`trail`, kept in a window's `contentState` and the crumb snapshot).
+- **The ring** — `RadialSelectionMenu`'s bottom pill is a button whenever it shows a Strong's number and no measure. It dispatches `strongs`, which `BibleReader.handleToastAction` sends to `openStrongsWord()`. A lemma with no Greek or Hebrew letters (OSHB codes such as `b/7225`) is swapped for the Strong's headword.
+- **Window** — `strongs` is in `WINDOW_TYPES` (icon `strongs`) and resumes on `resumeTarget(prefs, 'strongs')`. A `wordstudy` window saved holding a `strongsId` from before the split opens as Strong's.
 
 ## 24. Nave's Topical Bible
 
 A classic topical index — a subject, its outline, and the verses under each point. Ships inside the `encyclotopical` pack alongside ISBE; builder `scripts/build-encyclotopical-pack.mjs`.
 
-`src/stores/navesModalStore.ts`, `src/components/NavesContent.svelte`, Nave's functions in `src/adapters/lexicon-lookup.ts`, list behavior via `navesSource` in [23.5](#235-one-shell-three-lists).
+`src/stores/navesModalStore.ts`, `src/components/NavesContent.svelte`, Nave's functions in `src/adapters/lexicon-lookup.ts`, list behavior via `navesSource` in [23.5](#235-one-shell-four-lists).
 
 ### 24.1 Store
 
@@ -1324,7 +1336,7 @@ Outline links are colored by the book they reference, like every other reference
 
 Browsable biographies of the people of the Bible, bridged to the other three works.
 
-`src/stores/personModalStore.ts`, `src/components/PersonContent.svelte`; list behavior via `peopleSource` in [23.5](#235-one-shell-three-lists).
+`src/stores/personModalStore.ts`, `src/components/PersonContent.svelte`; list behavior via `peopleSource` in [23.5](#235-one-shell-four-lists).
 
 People used to be the odd one out of the four works: a bio could only reach the screen riding `lexicalModalStore.characterData` — that is, as a word study of a word that happened to be a person — so **nothing could navigate to a bio.** `personModalStore` gives it the same standing as the encyclopedia and topical stores, so all four bridge to each other symmetrically.
 

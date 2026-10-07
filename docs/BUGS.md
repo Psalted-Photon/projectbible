@@ -8,18 +8,21 @@ Line numbers were verified 2026-08-13 and will drift as the files change.
 
 ---
 
-## The four works
+## The five works
 
-The four lookup cards are one system, reached from each other by the tab row across
-the top of every card. Order is fixed — Dictionary, Topical, Encyclopedia, People —
-and a tab grays out when that work has nothing for the subject.
+The five works are one system in one card (`components/LookupModal.svelte`), reached
+from each other by the tab row across the top. Order is fixed — Encyclopedia,
+Topical, People, Dictionary, Strong's (since 2026-10-07; it was Dictionary, Topical,
+Encyclopedia, People) — and a tab grays out when that work has nothing for the
+subject.
 
 Availability and opening both come from one place: `resolveWorks(name, ref?)` in
-`adapters/lexicon-lookup.ts`, which asks all four at once and returns the **ids**, not
-booleans, so a lit tab is guaranteed to open something. It uses `headWord` for the
-dictionary (which files single words) and the full name for the rest, and hands back
-the term it used so open handlers can't drift from what lit the tab up. Before this
-there were eight separate checkers with four different term rules between them.
+`adapters/lexicon-lookup.ts`, which asks all of them at once and returns the **ids**,
+not booleans, so a lit tab is guaranteed to open something. It uses `headWord` for the
+dictionary (which files single words) and for Strong's (matched on each gloss's head
+word, so "to love" answers "love"), and the full name for the rest, and hands back the
+term it used so open handlers can't drift from what lit the tab up. Before this there
+were eight separate checkers with four different term rules between them.
 
 The tab row is `components/WorkTabs.svelte`. Its class is deliberately **not**
 `.tabs`: `IsbeContent` and `NavesContent` style their section tabs as an unqualified
@@ -40,14 +43,16 @@ Only one lookup card is open at a time. The tabs close the one they leave, and
 would also put two Escape handlers on the same key. Docked windows aren't stores, so
 they survive both.
 
-Quick map of the four, since they're spread across more files than you'd expect:
+Quick map of the five, since they're spread across more files than you'd expect. All
+five sit in the one `LookupModal.svelte`; `stores/lookupStore.ts` says which is in front.
 
-| Popup | Shell | Content | Store |
-|---|---|---|---|
-| Dictionary | `LexicalModal.svelte` | (self-contained) | `stores/lexicalModalStore.ts` |
-| Encyclopedia | `IsbeModal.svelte` | `IsbeContent.svelte` | `stores/isbeModalStore.ts` |
-| Topical | `NavesModal.svelte` | `NavesContent.svelte` | `stores/navesModalStore.ts` |
-| People | `PersonModal.svelte` | `PersonContent.svelte` | `stores/personModalStore.ts` |
+| Work | Content | Store |
+|---|---|---|
+| Encyclopedia | `IsbeContent.svelte` | `stores/isbeModalStore.ts` |
+| Topical | `NavesContent.svelte` | `stores/navesModalStore.ts` |
+| People | `PersonContent.svelte` | `stores/personModalStore.ts` |
+| Dictionary | `LexicalContent.svelte` | `stores/lexicalModalStore.ts` |
+| Strong's | `strongs/StrongsContent.svelte` | `stores/strongsModalStore.ts` |
 
 People got its own store and shell on 2026-08-13. Until then a bio could only reach
 the screen riding `lexicalModalStore.characterData` — as a word study of a word that

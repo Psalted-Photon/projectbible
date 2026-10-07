@@ -45,5 +45,6 @@ export const WINDOW_TIPS: Tip[] = [
   tile('isbe', 'Encyclopedia', 'The Bible encyclopedia, A–Z: people, places, customs and ideas.', 'encyclotopical'),
   tile('naves', 'Topical', 'Nave’s topical index: every passage on a subject, from mercy to fasting.', 'encyclotopical'),
   tile('person', 'People', 'Every named person in the Bible, with their family, dates and verses.', 'people-biblical-v1'),
+  tile('strongs', 'Strong’s', 'Strong’s Hebrew and Greek dictionary: every word of the original Bible, by number, meaning or alphabet.', 'lexical'),
   tile('art', 'Art', 'Paintings of Bible scenes by the old masters.', 'biblical-art'),
 ];

@@ -117,6 +117,8 @@ Tap any word in the text to open a full study panel for it. Works on English wor
 
 ### 5.1 For Greek and Hebrew words
 
+Tap a Greek or Hebrew word and the Dictionary shows its grammar: the word as written, its dictionary form, transliteration, English meaning and parsing. Its Strong's number opens the full entry in **Strong's**, one tab over — or tap the number under the word in the ring to go straight there. The entry holds:
+
 - **Entry information** — the word, its transliteration, its dictionary form, and its Strong's number.
 - **Short definition** — the quick answer.
 - **Full definition** — the complete lexicon entry.
@@ -125,6 +127,9 @@ Tap any word in the text to open a full study panel for it. Works on English wor
 - **Inflection forms** — the other forms this word takes across the text.
 - **Occurrences** — every verse in the Bible using this word, so you can see how it's actually used rather than only how it's defined.
 - **Related words** — synonyms and words sharing a root.
+- **Hear it** — a speaker beside a Greek word says it aloud. Hebrew has no voice yet.
+
+Strong's can also be browsed and searched on its own — see [23.3](#233-strongs).
 
 ### 5.2 For English words
 
@@ -157,7 +162,7 @@ You don't have to tap a word to get in. The encyclopedia has its own A–Z conte
 
 ### 6.4 Linked to the other works
 
-Where an encyclopedia entry and a dictionary entry describe the same thing, the app connects them, so you can move between the short definition and the long article without searching again. The same goes for the topical index and the people entries — all four are one tap apart.
+Where an encyclopedia entry and a dictionary entry describe the same thing, the app connects them, so you can move between the short definition and the long article without searching again. The same goes for the topical index, the people entries and Strong's — all five works are one tap apart.
 
 ### 6.5 Place-name underlines
 
@@ -283,6 +288,8 @@ Selecting text brings up everything you can do to it:
 **Dissect** (word study) · **Search** · **Map** (for places) · **Highlight** · **Save** · **Notes** · **Repeats**
 
 The Map button only appears when what you selected is actually a place, and it opens the real map.
+
+Under a Greek or Hebrew word, the ring shows its dictionary form and Strong's number. Tap the number to open the word in Strong's.
 
 Two styles, switchable in Settings:
 
@@ -464,7 +471,7 @@ The gesture is deliberately careful about not firing by accident: it waits until
 
 ### 18.2 What can go in a window
 
-Bible text · Map · Notes · Word study · Commentaries · Journal · Art · Encyclopedia · Topical · People
+Bible text · Map · Notes · Word study · Commentaries · Journal · Art · Encyclopedia · Topical · People · Strong's
 
 Up to six windows at once. Each is resizable, and each remembers its own state — a second Bible window can sit on a different chapter from the main one.
 
@@ -624,11 +631,11 @@ The sleep timer is the other half of this idea — see [16.4](#164-sleep-timer).
 
 ## 23. The Study Library
 
-Four reference works you can **browse like books**, rather than only reaching them by tapping a word: the **Dictionary**, **Nave's Topical Bible**, the **Encyclopedia**, and **People**.
+Five reference works sit together in one card: the **Encyclopedia**, **Nave's Topical Bible**, **People**, the **Dictionary**, and **Strong's**. All but the Dictionary can be **browsed like books**, rather than only reached by tapping a word.
 
-### 23.1 Four tabs, one card
+### 23.1 Five tabs, one card
 
-All four works sit as tabs across the top of every lookup. They're always in the same order and always the same width, so a tab is in the same place every time. A tab is grayed out when that work has nothing on your subject — so a tab you can tap is one that will definitely open something.
+All five works sit as tabs across the top of every lookup, in that order: Encyclopedia, Topical, People, Dictionary, Strong's. They're always in the same order and always the same width, so a tab is in the same place every time. Where the full names don't fit, every tab takes its short name at once ("Encyc.", "Dict."), so the row never mixes the two. A tab is grayed out when that work has nothing on your subject — so a tab you can tap is one that will definitely open something.
 
 Switching tabs doesn't close and reopen anything. Each work remembers where you were, so you can look something up in the Encyclopedia, check the Dictionary, and come back to find your place kept.
 
@@ -640,7 +647,24 @@ Switching tabs doesn't close and reopen anything. Each work remembers where you 
 - **Star entries** you want to keep, and see the ones you read recently.
 - **Picks up where you left off** — reopen within half an hour and you're back on the same entry. After that it opens fresh, because an hour later is a new sitting.
 
-All three lists work identically, so learning one teaches you the others.
+All four lists work identically, so learning one teaches you the others.
+
+### 23.3 Strong's
+
+Strong's Hebrew and Greek dictionary, as a book of its own: one row for every word Strong's numbered — 5,523 Greek and 8,674 Hebrew — showing the number, the word, its meaning, and how often the Bible uses it (**G26 ἀγάπη love 114×**).
+
+- **Greek or Hebrew** — a switch at the top. It opens on the language of the testament you're reading.
+- **Four orders, one button** — tap to go through them: by number, by English meaning ("to create" files under C), in Greek or Hebrew alphabet order (accents, vowel points and final letters set aside, the way a lexicon files them), and most used first. The side rail follows the order, and the order you leave it in is kept.
+- **Search both languages at once** — by number (`G26`, `H430`, `26`), by Greek or Hebrew letters with or without their accents, by transliteration (`agape`, `elohim`), or by English meaning, matched as whole words the way the main search does.
+- **In this chapter** — just the words of the chapter you're reading.
+- **Counts** come from the Byzantine Greek text and the Open Scriptures Hebrew Bible.
+
+An entry adds to what [5.1](#51-for-greek-and-hebrew-words) lists:
+
+- **Meanings** — where a later edition split one of Strong's numbers into different words (H1254 is both "to create" and "to fatten"; G2424 is both Jesus and Joshua), the entry lists each meaning, and each can be studied on its own. The number itself counts them all.
+- **Numbers are links** — "from G25" in a derivation, a related word, or another meaning opens that entry. A trail of where you've been runs across the top, and Back walks it.
+- **The other works** light up from the entry's English meaning: G11 Abraham opens Abraham in the Encyclopedia and People. It works the other way too — on an English word, the Strong's tab opens the matching entry, or a list of them when several translate it ("love").
+- **Pin it beside the reader**, or open Strong's as its own window from the apps button.
 
 ## 24. Nave's Topical Bible
 

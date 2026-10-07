@@ -1,7 +1,7 @@
 /**
  * windowTypes.ts
  *
- * The eleven things a window can show, and how each one starts out.
+ * The twelve things a window can show, and how each one starts out.
  *
  * Three places offer this list: the tile grid in a brand-new window, the apps
  * button on the bar, and the swap button in a window's header. They used to be
@@ -27,7 +27,7 @@ import type { PanelIconName } from '../components/icons/PanelIcon.svelte';
  * instead, after asking which set.
  */
 export type WindowChoice =
-  | 'bible' | 'map' | 'timeline' | 'notes' | 'isbe' | 'person' | 'naves'
+  | 'bible' | 'map' | 'timeline' | 'notes' | 'isbe' | 'person' | 'naves' | 'strongs'
   | 'commentaries' | 'journal' | 'art' | 'harmony';
 
 export interface WindowTypeInfo {
@@ -52,6 +52,8 @@ export const WINDOW_TYPES: WindowTypeInfo[] = [
   { type: 'isbe',         icon: 'encyclopedia', label: 'Encyclopedia', accent: '#4a90e2' },
   { type: 'naves',        icon: 'topical',      label: 'Topical',      accent: '#a78bfa' },
   { type: 'person',       icon: 'people',       label: 'People',       accent: '#2dd4bf' },
+  // Strong's own Greek green, the color its Greek numbers are drawn in.
+  { type: 'strongs',      icon: 'strongs',      label: 'Strong’s',     accent: '#4caf50' },
   { type: 'art',          icon: 'art',          label: 'Art',          accent: '#fb7185' },
   { type: 'harmony',      icon: 'harmony',      label: 'Harmonies',    accent: '#4a9ec9' },
 ];
@@ -83,7 +85,7 @@ export function initialContentFor(type: Exclude<WindowChoice, 'harmony'>): Recor
   if (type === 'notes') {
     return { view: 'browse' };
   }
-  if (type === 'isbe' || type === 'person' || type === 'naves') {
+  if (type === 'isbe' || type === 'person' || type === 'naves' || type === 'strongs') {
     // Land back on what you were reading only if you closed this shelf a few
     // minutes ago — enough to undo a misfired close, not enough to hand you
     // yesterday's lookup. Otherwise open on the contents. Either way the entry
@@ -98,6 +100,10 @@ export function initialContentFor(type: Exclude<WindowChoice, 'harmony'>): Recor
     if (type === 'person') {
       const last = resumeTarget(prefs, 'people');
       return last ? { personId: String(last.id), primaryName: last.name } : {};
+    }
+    if (type === 'strongs') {
+      const last = resumeTarget(prefs, 'strongs');
+      return last ? { strongsId: String(last.id) } : {};
     }
     const last = resumeTarget(prefs, 'naves');
     return last ? { topicId: Number(last.id), primaryName: last.name } : {};
