@@ -63,7 +63,7 @@
 <button class="ref-row" style="border-left-color:{color}" on:click={onOpen}>
   <span class="ref-row-label" style="color:{color}">{label ?? `${book} ${chapter}:${verse}`}</span>
   {#if text}
-    <span class="ref-row-text">{@html renderVersePreviewHtml(text, { maxLength: 150 })}</span>
+    <span class="ref-row-text" dir="auto">{@html renderVersePreviewHtml(text, { maxLength: 150 })}</span>
   {/if}
 </button>
 
@@ -99,6 +99,9 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    /* The row is text-align: left; a Hebrew preview (dir="auto") lines up on
+       the right instead. */
+    text-align: start;
     color: #c2c6cd;
     font-size: 12.5px;
     line-height: 1.4;

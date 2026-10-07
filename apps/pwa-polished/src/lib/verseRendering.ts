@@ -22,6 +22,30 @@ const LINE_1 = '\x11';
 const LINE_2 = '\x12';
 
 /**
+ * The Hebrew text marks where a word's parts meet with "/" (בְּ/רֵאשִׁית) —
+ * study notation a printed Bible never shows. Only a slash straight after a
+ * Hebrew letter or mark is touched, so no other translation can be affected.
+ * (One, in Numbers 27:5, ends a word whose last letter the source lost.)
+ */
+const HEBREW_PART_SLASH = /([\u0590-\u05FF])\//g;
+
+/**
+ * What the reader shows in a slash's place: a word joiner. It is invisible,
+ * one character for one so saved highlight offsets stay put, and not a word
+ * break, so tapping either part selects the whole word.
+ */
+export const WORD_JOINER = '\u2060';
+
+export function hideHebrewPartSlashes(text: string): string {
+  return text.replace(HEBREW_PART_SLASH, '$1' + WORD_JOINER);
+}
+
+/** For text that leaves the reader as prose: the slashes and their joiners go. */
+export function dropHebrewPartMarks(text: string): string {
+  return text.replace(HEBREW_PART_SLASH, '$1').replace(/\u2060/g, '');
+}
+
+/**
  * Note sentinels, written by the pack builders -- the definitive list lives in
  * packages/packtools/src/parsers/usfm-scanner.mjs.
  *
@@ -323,7 +347,7 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
   // ⌃ (plural "you") becomes markup at the very end. Swap it for a marker now,
   // one character for one, so span offsets are untouched and the substitution
   // can never land inside an attribute of a note rendered from this text.
-  let processed = cleaned.replace(/⌃/g, '\x13');
+  let processed = hideHebrewPartSlashes(cleaned).replace(/⌃/g, '\x13');
   const insertions: { pos: number; ch: string }[] = [];
 
   // Red-letter spans → \x02/\x03 sentinels (offsets mapped past footnote markers)
@@ -467,7 +491,7 @@ export function renderVersePreviewHtml(
   insertions.sort((a, b) => b.pos - a.pos);
   for (const { pos, ch } of insertions) work = work.slice(0, pos) + ch + work.slice(pos);
 
-  work = dropInlineNotes(work)
+  work = dropHebrewPartMarks(dropInlineNotes(work))
     .replace(NOTE_SENTINELS, '')
     .replace(/[\x10\x11\x12]/g, ' ')
     .replace(/[¶⌃]/g, '')
@@ -505,7 +529,7 @@ export function renderVersePreviewHtml(
 
 /** Preview text with no markup at all — for surfaces that render plain text. */
 export function cleanVersePreviewText(text: string): string {
-  return dropInlineNotes(stripHtmlTags(text ?? ''))
+  return dropHebrewPartMarks(dropInlineNotes(stripHtmlTags(text ?? '')))
     .replace(NOTE_SENTINELS, '')
     .replace(/[\x10\x11\x12]/g, ' ')
     .replace(/[¶⌃]/g, '')

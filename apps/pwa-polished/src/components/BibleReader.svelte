@@ -172,6 +172,7 @@
     cleanVersePreviewText,
     extractHeading,
     verseStructure,
+    hideHebrewPartSlashes,
   } from "../lib/verseRendering";
   import { parseRefString } from "../lib/parseRefString";
   import { BIBLE_BOOKS, normalizeBookName, DEFAULT_TRANSLATION } from "../lib/bibleData";
@@ -1522,7 +1523,9 @@
   $: translationFontClass = getTranslationFontClass(currentTranslation);
   $: isInterlinearActive =
     interlinearSettings.enabled && isOriginalLanguage(currentTranslation);
-  $: isInterlinearRtl = isHebrewTranslation(currentTranslation);
+  // Hebrew reads right to left: the verse area takes dir="rtl", which lines the
+  // text up on the right and puts each verse number before its verse there.
+  $: isRtlText = isHebrewTranslation(currentTranslation);
   $: isChronologicalMode = windowId ? false : ($navigationStore.isChronologicalMode ?? false);
   $: highlightVerse = windowId
     ? (windowState?.contentState?.highlightedVerse ?? null)
@@ -2038,7 +2041,7 @@
         ` data-transliteration="${escapeAttribute(translit)}"` +
         ` data-parsing="${escapeAttribute(rawParse)}"` +
         ` data-language="${escapeAttribute(lang)}">` +
-        `<span class="il-orig">${escapeInterlinearText(orig)}</span>` +
+        `<span class="il-orig">${escapeInterlinearText(hideHebrewPartSlashes(orig))}</span>` +
         `<span class="il-gloss">${escapeInterlinearText(gloss)}</span>` +
         `<span class="il-translit">${escapeInterlinearText(translit)}</span>` +
         `<span class="il-lemma">${escapeInterlinearText(lemma)}</span>` +
@@ -2183,11 +2186,13 @@
     // NFD decompose → strip ALL combining diacritics:
     //   U+0300–036F  Greek polytonic accents (and general combining marks)
     //   U+0591–05C7  Hebrew cantillation marks + vowel points
+    // and the marks between a Hebrew word's parts: "/" in the morphology
+    // entries, the word joiner (U+2060) the reader shows in its place.
     // Then lowercase and recompose NFC.
     // This lets "αβρααμ" match "Ἀβραὰμ" and "ב" match "בְּ".
     return text
       .normalize("NFD")
-      .replace(/[\u0300-\u036F\u0591-\u05C7]/g, "")
+      .replace(/[\u0300-\u036F\u0591-\u05C7\/\u2060]/g, "")
       .toLowerCase()
       .normalize("NFC");
   }
@@ -2347,6 +2352,10 @@
       clickOffset = range.startOffset;
     }
 
+    // The word as it is matched and shown, without the word joiners the
+    // reader puts between a Hebrew word's parts (hideHebrewPartSlashes).
+    const wordText = (w: string) => w.normalize("NFC").replace(/\u2060/g, "");
+
     // Segment verse text into words
     const hasSegmenter = typeof Intl !== "undefined" && "Segmenter" in Intl;
 
@@ -2370,7 +2379,7 @@
         // Check if click is within this segment
         if (clickOffset >= segmentStart && clickOffset < segmentEnd) {
           if (segment.isWordLike) {
-            return { index: wordIndex, text: segment.segment.normalize("NFC") };
+            return { index: wordIndex, text: wordText(segment.segment) };
           } else {
             // Click landed on '/', punctuation, or cantillation — return the
             // nearest preceding word-like segment. Handles OSHB prefix
@@ -2382,7 +2391,7 @@
 
         // Count word index for word-like segments
         if (segment.isWordLike) {
-          lastWordSeg = { index: wordIndex, text: segment.segment.normalize("NFC") };
+          lastWordSeg = { index: wordIndex, text: wordText(segment.segment) };
           wordIndex++;
         }
       }
@@ -2392,7 +2401,7 @@
         console.warn("⚠️ Intl.Segmenter not available, using regex fallback");
       }
 
-      const words = Array.from(verseText.matchAll(/[\p{L}\p{M}]+/gu));
+      const words = Array.from(verseText.matchAll(/[\p{L}\p{M}\u2060]+/gu));
 
       for (let i = 0; i < words.length; i++) {
         const match = words[i];
@@ -2400,7 +2409,7 @@
         const end = start + match[0].length;
 
         if (clickOffset >= start && clickOffset < end) {
-          return { index: i, text: match[0].normalize("NFC") };
+          return { index: i, text: wordText(match[0]) };
         }
       }
     }
@@ -4283,49 +4292,45 @@
     const lastRect = rects[rects.length - 1];
     const containerRect = textContainer.getBoundingClientRect();
 
-    // For RTL text (Hebrew), the visual "left" handle is the reading-end
-    // of the word and the visual "right" handle is the reading-start.
-    // Swap the drag-edge assignments so dragging toward reading-start
-    // always extends the selection backward and vice-versa.
-    const isRTL =
-      getComputedStyle(textContainer as Element).direction === "rtl" ||
-      currentTranslation === "hebrew-oshb" ||
-      currentTranslation === "wlc";
+    // Hebrew reads right to left, so a selection starts at the right edge of
+    // its first line and ends at the left edge of its last. Each bumper sits
+    // on its own end and moves that end ("left" is the start, "right" the end),
+    // which holds however many lines the selection spans.
+    const rtl = isHebrewTranslation(currentTranslation);
+    const startX = rtl ? firstRect.right : firstRect.left;
+    const endX = rtl ? lastRect.left : lastRect.right;
 
-    const startEdge = isRTL ? ("right" as const) : ("left" as const);
-    const endEdge = isRTL ? ("left" as const) : ("right" as const);
-
-    // Left handle at start of selection
-    const leftHandle = document.createElement("div");
-    leftHandle.className = "drag-handle-float left";
-    leftHandle.style.position = "absolute";
-    leftHandle.style.left = `${firstRect.left - containerRect.left}px`;
-    leftHandle.style.top = `${firstRect.top - containerRect.top + textContainer.scrollTop}px`;
-    leftHandle.style.height = `${firstRect.height}px`;
-    leftHandle.addEventListener("mousedown", (e) => startDrag(e, startEdge));
-    leftHandle.addEventListener(
+    // Bumper at the start of the selection
+    const startHandle = document.createElement("div");
+    startHandle.className = "drag-handle-float left";
+    startHandle.style.position = "absolute";
+    startHandle.style.left = `${startX - containerRect.left}px`;
+    startHandle.style.top = `${firstRect.top - containerRect.top + textContainer.scrollTop}px`;
+    startHandle.style.height = `${firstRect.height}px`;
+    startHandle.addEventListener("mousedown", (e) => startDrag(e, "left"));
+    startHandle.addEventListener(
       "touchstart",
-      (e) => startDragTouch(e, startEdge),
+      (e) => startDragTouch(e, "left"),
       { passive: false },
     );
 
-    // Right handle at end of selection
-    const rightHandle = document.createElement("div");
-    rightHandle.className = "drag-handle-float right";
-    rightHandle.style.position = "absolute";
-    rightHandle.style.left = `${lastRect.right - containerRect.left}px`;
-    rightHandle.style.top = `${lastRect.top - containerRect.top + textContainer.scrollTop}px`;
-    rightHandle.style.height = `${lastRect.height}px`;
-    rightHandle.addEventListener("mousedown", (e) => startDrag(e, endEdge));
-    rightHandle.addEventListener(
+    // Bumper at the end of the selection
+    const endHandle = document.createElement("div");
+    endHandle.className = "drag-handle-float right";
+    endHandle.style.position = "absolute";
+    endHandle.style.left = `${endX - containerRect.left}px`;
+    endHandle.style.top = `${lastRect.top - containerRect.top + textContainer.scrollTop}px`;
+    endHandle.style.height = `${lastRect.height}px`;
+    endHandle.addEventListener("mousedown", (e) => startDrag(e, "right"));
+    endHandle.addEventListener(
       "touchstart",
-      (e) => startDragTouch(e, endEdge),
+      (e) => startDragTouch(e, "right"),
       { passive: false },
     );
 
-    textContainer.appendChild(leftHandle);
-    textContainer.appendChild(rightHandle);
-    highlightedElements.push(leftHandle, rightHandle);
+    textContainer.appendChild(startHandle);
+    textContainer.appendChild(endHandle);
+    highlightedElements.push(startHandle, endHandle);
   }
 
   function highlightSelection(range: Range, mode: "word" | "verse") {
@@ -6247,7 +6252,8 @@
             class:paragraph-layout={verseLayout === "paragraph"}
             class:nonumber-layout={verseLayout === "paragraph-no-verse-numbers"}
             class:interlinear-active={isInterlinearActive}
-            class:il-rtl={isInterlinearActive && isInterlinearRtl}
+            dir={isRtlText ? "rtl" : undefined}
+            lang={isRtlText ? "he" : undefined}
             class:il-show-gloss={isInterlinearActive && interlinearSettings.showGloss}
             class:il-show-translit={isInterlinearActive && interlinearSettings.showTranslit}
             class:il-show-lemma={isInterlinearActive && interlinearSettings.showLemma}
@@ -6367,7 +6373,7 @@
                 </span>
                 {#if hCtxsForVerse.length > 0}
                   {#each hCtxsForVerse as hCtx}
-                    <div class="harmony-btn-row">
+                    <div class="harmony-btn-row" dir="ltr">
                       {#if hCtx.isLastPassage}
                         <button
                           class="harmony-finish-btn"
@@ -6755,7 +6761,7 @@
     font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) * 0.5);
     color: var(--verse-num-color, #888);
     vertical-align: super;
-    margin-right: 0.1rem;
+    margin-inline-end: 0.1rem;
   }
 
   .verse-text {
@@ -6923,7 +6929,7 @@
     color: #f7c948;
     font-size: 0.82em;
     cursor: pointer;
-    margin-left: 0.25em;
+    margin-inline-start: 0.25em;
     vertical-align: baseline;
     user-select: none;
     opacity: 0.85;
@@ -7143,9 +7149,6 @@
     align-items: flex-start;
     gap: 0.2em 0.7em;
     line-height: 1.15;
-  }
-  :global(.verses.il-rtl .verse-text.interlinear) {
-    direction: rtl;
   }
   :global(.verse-text.interlinear .il-word) {
     display: inline-flex;

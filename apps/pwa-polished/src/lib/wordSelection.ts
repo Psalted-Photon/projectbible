@@ -38,8 +38,12 @@ export interface Segment {
 // Word boundaries
 // ---------------------------------------------------------------------------
 
-/** Unicode-aware so Greek and Hebrew (and combining marks) count as word chars. */
-const isWordChar = (ch: string) => /[\p{L}\p{M}\p{N}]/u.test(ch);
+/**
+ * Unicode-aware so Greek and Hebrew (and combining marks) count as word chars.
+ * U+2060 is the word joiner the reader puts between a Hebrew word's parts
+ * (verseRendering's hideHebrewPartSlashes), so a tap takes the whole word.
+ */
+const isWordChar = (ch: string) => /[\p{L}\p{M}\p{N}\u2060]/u.test(ch);
 
 /**
  * Expand from a character offset out to the whole word containing it.
@@ -303,7 +307,8 @@ function segmentText(seg: Segment): string {
       Math.min(node.length, end - start),
     );
   }
-  return out;
+  // The word joiners inside Hebrew words are the reader's, not the text's.
+  return out.replace(/\u2060/g, '');
 }
 
 /** The selected text, verses joined by a space. */
