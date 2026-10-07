@@ -7,6 +7,10 @@
   import { get } from 'svelte/store';
   import verseOfDay from '../data/verse-of-the-day.json';
   import { renderVerseHtml } from '../lib/verseRendering';
+  import { DEFAULT_TRANSLATION, getBookChapters, translationLabel } from '../lib/bibleData';
+  import { testamentOf } from '../lib/testamentDefaults';
+  import { booksInTranslation } from '../lib/translationBooks';
+  import { mtToLxxPsalm } from '../lib/lxxPsalms';
   import { Sun, ArrowRight, SunHorizon, MoonStars, CalendarBlank } from 'phosphor-svelte';
   import { isDevotionalsInstalled, type DevotionalSlot } from '../lib/devotionals/devotionalsData';
   import { currentSlotStore, todayMonthDay, ONE_A_DAY_WORKS } from '../lib/devotionals/slot';
@@ -14,23 +18,48 @@
 
   const textStore = new IndexedDBTextStore();
 
-  // Parse "Book Ch:V" or "Book Ch:V1-V2" → structured object
+  // Parse "Book Ch:V" or "Book Ch:V1-V2" → structured object. A one-chapter
+  // book may give verses alone ("Jude 24-25"), which means chapter 1.
   function parseRef(ref: string) {
     const m = ref.match(/^(.+?)\s+(\d+):(\d+)(?:-(\d+))?$/);
-    if (!m) return null;
+    if (m) {
+      return {
+        book: m[1],
+        chapter: parseInt(m[2], 10),
+        startVerse: parseInt(m[3], 10),
+        endVerse: m[4] ? parseInt(m[4], 10) : parseInt(m[3], 10),
+      };
+    }
+    const one = ref.match(/^(.+?)\s+(\d+)(?:-(\d+))?$/);
+    if (!one || getBookChapters(one[1]) !== 1) return null;
     return {
-      book: m[1],
-      chapter: parseInt(m[2], 10),
-      startVerse: parseInt(m[3], 10),
-      endVerse: m[4] ? parseInt(m[4], 10) : parseInt(m[3], 10),
+      book: one[1],
+      chapter: 1,
+      startVerse: parseInt(one[2], 10),
+      endVerse: one[3] ? parseInt(one[3], 10) : parseInt(one[2], 10),
     };
   }
+
+  // The list's references use English verse numbers. The Septuagint runs a
+  // psalm behind, which lib/lxxPsalms converts; the Hebrew (and the LXX lemma
+  // text) also counts psalm titles as verses and starts a few chapters early
+  // or late. In these a chapter is only used when it has as many verses as the
+  // English, so the card says the verse isn't available rather than quietly
+  // showing a different one.
+  const LXX_NUMBERING = new Set(['lxx', 'lxx2012']);
+  const OWN_NUMBERING = new Set(['hebrew-oshb', 'wlc', ...LXX_NUMBERING]);
+
+  interface VerseSpan { chapter: number; startVerse: number; endVerse: number }
 
   // State (re-evaluated each time modal opens)
   let todayStr = '';
   let verseRef = '';
   let parsed: ReturnType<typeof parseRef> = null;
   let verseText = '';
+  /** Where the verse sits in the reader's translation (LXX Psalms differ). */
+  let verseAt: VerseSpan | null = null;
+  let verseTranslation = '';
+  let unavailable = '';
   let textLoading = false;
 
   // Reload content whenever the modal opens
@@ -40,21 +69,75 @@
     verseRef = (verseOfDay as Record<string, string>)[mmdd] ?? '';
     parsed = parseRef(verseRef);
     verseText = '';
+    verseAt = null;
+    verseTranslation = '';
+    unavailable = '';
     textLoading = true;
     loadVerseText();
   }
 
+  // Always the reader's translation, never another one borrowed in its place:
+  // when it hasn't got the verse, the card says so.
   async function loadVerseText() {
     if (!parsed) { textLoading = false; return; }
+    const p = parsed;
     const translation = get(navigationStore).translation;
+    const id = translation.toLowerCase();
+    const label = translationLabel(translation);
+
+    const books = await booksInTranslation(translation);
+    if (books && !books.has(p.book)) {
+      const testament = testamentOf(p.book);
+      const hasTestament = [...books].some((b) => testamentOf(b) === testament);
+      unavailable = hasTestament
+        ? `Not available in ${label}.`
+        : `Not available in ${label}, which has the ${testament === 'NT' ? 'Old' : 'New'} Testament only.`;
+      textLoading = false;
+      return;
+    }
+
+    let at: VerseSpan | null = { chapter: p.chapter, startVerse: p.startVerse, endVerse: p.endVerse };
+    let checkCount = OWN_NUMBERING.has(id);
+    if (LXX_NUMBERING.has(id) && p.book === 'Psalm') {
+      const s = mtToLxxPsalm(p.chapter, p.startVerse);
+      const e = mtToLxxPsalm(p.chapter, p.endVerse);
+      at = s && e && s.chapter === e.chapter ? { chapter: s.chapter, startVerse: s.verse, endVerse: e.verse } : null;
+      // The conversion is checked against lxx2012 at build time. The lemma
+      // text counts titles as verses on top, so it still gets the count check.
+      if (id === 'lxx2012') checkCount = false;
+    }
+    if (at && checkCount) {
+      const [own, english] = await Promise.all([
+        textStore.getChapter(translation, p.book, at.chapter),
+        textStore.getChapter(DEFAULT_TRANSLATION, p.book, p.chapter),
+      ]);
+      if (own[own.length - 1]?.verse !== english[english.length - 1]?.verse) at = null;
+    }
+    if (!at) {
+      unavailable = `Not available in ${label}, which numbers the verses of this chapter differently.`;
+      textLoading = false;
+      return;
+    }
+
     const parts: string[] = [];
-    for (let v = parsed.startVerse; v <= parsed.endVerse; v++) {
-      const t = await textStore.getVerse(translation, parsed.book, parsed.chapter, v);
+    for (let v = at.startVerse; v <= at.endVerse; v++) {
+      const t = await textStore.getVerse(translation, p.book, at.chapter, v);
       if (t) parts.push(t);
     }
     verseText = parts.join(' ');
+    if (verseText) {
+      verseAt = at;
+      verseTranslation = translation;
+    } else unavailable = `Not available in ${label}.`;
     textLoading = false;
   }
+
+  // Where the verse is in the translation, when its numbers differ from the
+  // list's: Psalm 103:5-7 is "Psalm 102:5-7" in LXX2012.
+  $: ownRef =
+    parsed && verseAt && (verseAt.chapter !== parsed.chapter || verseAt.startVerse !== parsed.startVerse)
+      ? `${parsed.book} ${verseAt.chapter}:${verseAt.startVerse}${verseAt.endVerse !== verseAt.startVerse ? `-${verseAt.endVerse}` : ''}`
+      : '';
 
   // ── Today's devotional ──────────────────────────────────────────────────
   // Hidden until the pack is in. "Morning" before noon and "Evening" after, by
@@ -83,12 +166,12 @@
   }
 
   function goToVerse() {
-    if (!parsed) { close(); return; }
+    if (!parsed || !verseAt) { close(); return; }
     const current = get(navigationStore);
     // Push current location so the navbar back arrow can return here
     navigationStore.pushHistory(current);
     // navigateToVerse (not navigateTo) so the verse gets the category-colored fade highlight
-    navigationStore.navigateToVerse(current.translation, parsed.book, parsed.chapter, parsed.startVerse);
+    navigationStore.navigateToVerse(current.translation, parsed.book, verseAt.chapter, verseAt.startVerse);
     close();
   }
 </script>
@@ -121,8 +204,13 @@
           <p class="dg-verse-text dg-loading show-late">Loading…</p>
         {:else if verseText}
           <p class="dg-verse-text">{@html renderVerseHtml(verseText)}</p>
-        {:else if verseRef}
-          <p class="dg-verse-text dg-unavailable">Install a Bible translation to read the text here.</p>
+          <!-- The card always reads the reader's translation, which the bar
+               already names; only a different verse number needs saying. -->
+          {#if ownRef}
+            <div class="dg-own-ref">{ownRef} in {translationLabel(verseTranslation)}</div>
+          {/if}
+        {:else if unavailable}
+          <p class="dg-verse-text dg-unavailable">{unavailable}</p>
         {/if}
       </div>
 
@@ -138,7 +226,7 @@
 
       <!-- Actions -->
       <div class="dg-actions">
-        {#if parsed}
+        {#if parsed && verseAt}
           <button class="dg-btn-primary" on:click={goToVerse}>
             Read in context <ArrowRight size={14} weight="bold" />
           </button>
@@ -262,6 +350,12 @@
     color: rgba(255, 255, 255, 0.3);
     font-style: normal;
     font-size: 0.82rem;
+  }
+
+  .dg-own-ref {
+    margin-top: 10px;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.35);
   }
 
   /* ── Today's devotional ──────────────────────────────────── */

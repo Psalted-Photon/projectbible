@@ -27,6 +27,8 @@
   import SearchResultsTree from "./SearchResultsTree.svelte";
   import VerseRefRow from "./VerseRefRow.svelte";
   import { readQueryAsRef } from "../lib/bibleRefs";
+  import { booksInTranslation } from "../lib/translationBooks";
+  import { defaultTranslationFor, translationForJump, testamentOf } from "../lib/testamentDefaults";
   import { showNotice } from "../stores/noticeStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
@@ -640,6 +642,49 @@
         }
       });
     }
+  }
+
+  // ── Books the translation doesn't have ─────────────────────────────────────
+  // The Greek texts are New Testament only, the Hebrew and Septuagint Old, so
+  // the reference dropdown dims the books a pick would land on an empty page.
+  // In the main reader a jump into the other testament switches to your default
+  // for it (lib/testamentDefaults), so a book counts as there when that one has
+  // it; a window keeps its own translation. Until a translation's books are
+  // known nothing dims.
+  let bookSets = new Map<string, Set<string>>();
+
+  $: if (referenceDropdownOpen || currentTranslation) {
+    void loadBookSets([
+      currentTranslation,
+      defaultTranslationFor("Genesis", $availableTranslations),
+      defaultTranslationFor("Matthew", $availableTranslations),
+    ]);
+  }
+
+  async function loadBookSets(ids: (string | null)[]) {
+    for (const id of ids) {
+      if (!id || bookSets.has(id.toLowerCase())) continue;
+      const books = await booksInTranslation(id);
+      if (books) bookSets = new Map(bookSets).set(id.toLowerCase(), books);
+    }
+  }
+
+  function landsIn(book: string): string {
+    return windowId
+      ? currentTranslation
+      : translationForJump(currentTranslation, currentBook, book, $availableTranslations);
+  }
+
+  $: bookMissing = (book: string): boolean =>
+    bookSets.get(landsIn(book).toLowerCase())?.has(book) === false;
+
+  function explainMissingBook(book: string) {
+    const target = landsIn(book);
+    const books = bookSets.get(target.toLowerCase());
+    const testament = testamentOf(book);
+    const hasTestament = BIBLE_BOOKS.some((b) => b.testament === testament && books?.has(b.name));
+    const scope = hasTestament ? "" : testament === "NT" ? ", which has the Old Testament only" : ", which has the New Testament only";
+    showNotice(`${book} isn't in ${translationLabel(target)}${scope}.`, "info");
   }
 
   function selectChapter(bookName: string, chapter: number) {
@@ -2650,7 +2695,8 @@
                 class="book-button"
                 class:expanded={expandedBooks.has(book.name)}
                 class:current={book.name === currentBook}
-                on:click={(e) => toggleBook(book.name, e)}
+                class:missing={bookMissing(book.name)}
+                on:click={(e) => (bookMissing(book.name) ? explainMissingBook(book.name) : toggleBook(book.name, e))}
               >
                 <span class="expand-icon motion-caret" class:open={expandedBooks.has(book.name)}>
                   <CaretRight size={10} weight="bold" />
@@ -3879,6 +3925,12 @@
     background: rgba(102, 126, 234, 0.2);
     font-weight: 500;
     box-shadow: none;
+  }
+
+  /* Not in this translation: still tappable, for the notice saying so. */
+  .book-button.missing {
+    opacity: 0.35;
+    filter: grayscale(1);
   }
 
   .expand-icon {
