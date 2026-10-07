@@ -57,6 +57,14 @@ export const SELECTION_TIPS: Tip[] = [
     body: 'Hear the word said aloud in the original language.',
   },
   {
+    id: 'ring-strongs',
+    area,
+    target: '.toast .pill.link',
+    needs: 'lexical',
+    title: 'Strong’s number',
+    body: 'Tap the number under the word to open it in Strong’s: its meaning, its forms and every place it’s used.',
+  },
+  {
     id: 'ring-search',
     area,
     target: BUTTONS,

@@ -114,6 +114,7 @@
   import { subscribeToUserDataRemoteChanges } from "../adapters/SyncedUserDataStore";
   import { applyChapterHighlights } from "../lib/highlightRenderer";
   import { isTextEntry } from "../lib/isTextEntry";
+  import { openStrongsWord } from "../lib/openWork";
   import {
     resolveWordAt,
     comparePos,
@@ -5206,6 +5207,14 @@
     switch (action) {
       case "speak":
         void speakOriginalWord(capturedMorphology?.text || text, capturedMorphology?.language);
+        showToast = false;
+        break;
+
+      case "strongs":
+        // The Strong's number under the word in the ring: straight to its entry.
+        if (capturedMorphology?.strongsId) {
+          openStrongsWord(capturedMorphology.strongsId, text, capturedMorphology);
+        }
         showToast = false;
         break;
 

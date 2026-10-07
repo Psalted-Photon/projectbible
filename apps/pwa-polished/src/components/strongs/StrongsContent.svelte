@@ -256,11 +256,14 @@
     if (worksFor === e.id) return;
     worksFor = e.id;
     const inherited = carriedWorks("strongs", e.id);
-    if (inherited) {
+    // A resolution that came with its English term already has the other works
+    // in it. One that came from the ring carries only the tapped word, which
+    // is kept for the Dictionary tab while the rest are looked up here.
+    if (inherited?.term) {
       works = inherited;
       return;
     }
-    const own = { id: e.id };
+    const own = inherited?.strongs ?? { id: e.id };
     works = { ...EMPTY_WORKS, strongs: own };
     const term = glossTerm(e.shortDefinition ?? "") || e.transliteration || "";
     if (!term) return;

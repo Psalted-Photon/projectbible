@@ -4,7 +4,8 @@ import { navesModalStore } from '../stores/navesModalStore';
 import { personModalStore } from '../stores/personModalStore';
 import { lexicalModalStore } from '../stores/lexicalModalStore';
 import { strongsModalStore } from '../stores/strongsModalStore';
-import type { WorksResolution } from '../adapters/lexicon-lookup';
+import { EMPTY_WORKS, type WorksResolution } from '../adapters/lexicon-lookup';
+import type { DBMorphology } from '../adapters/db';
 
 /**
  * Switching between the five reference works.
@@ -250,6 +251,16 @@ export function openWorkSubject(
       return true;
     }
   }
+}
+
+/**
+ * A tapped Greek or Hebrew word's Strong's entry, from the number under it in
+ * the ring. The word and its grammar ride along, so the Dictionary tab beside
+ * the entry goes back to them; the other works are worked out from the
+ * entry's gloss once it opens.
+ */
+export function openStrongsWord(strongsId: string, word: string, morph: DBMorphology | null): void {
+  openWorkSubject('strongs', { ...EMPTY_WORKS, strongs: { id: strongsId, word, morph } }, word, null);
 }
 
 /**

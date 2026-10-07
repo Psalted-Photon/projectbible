@@ -22,6 +22,9 @@
     type RadialItem,
   } from '../lib/radialMenu';
   import { normalizeBookName, getBookColor } from '../lib/bibleData';
+  import { lookupStrongs } from '../adapters/lexicon-lookup';
+  import { displayId, languageColor } from '../lib/strongs/entry';
+  import { firstForm, isGreekText, isHebrewText } from '../lib/strongs/collate';
   import { motionLevel } from '../lib/motion';
 
   /** Viewport center of the ring — the middle of the tapped word. */
@@ -135,7 +138,37 @@
   const PILL = { drift: 0.3, gapWord: 6, gapArc: 3.5 };
 
   $: refLabel = verse != null && book ? `${normalizeBookName(book)} ${chapter}:${verse}` : '';
-  $: originLabel = measure || [lemma, strongs].filter(Boolean).join(' · ');
+  /**
+   * The word as the bottom pill names it. OSHB files a Hebrew lemma as a code
+   * ("b/7225", "1254 a"), which means nothing to a reader, so a lemma with no
+   * Greek or Hebrew letters in it gives way to its Strong's headword once that
+   * has been looked up.
+   */
+  let headword = '';
+  let headwordFor = '';
+  $: {
+    const key = `${lemma}|${strongs}`;
+    if (key !== headwordFor) {
+      headwordFor = key;
+      const readable = isGreekText(lemma) || isHebrewText(lemma);
+      headword = readable ? lemma : '';
+      if (!readable && strongs) {
+        lookupStrongs(strongs)
+          .then((found) => {
+            if (headwordFor === key && found?.lemma) headword = firstForm(found.lemma);
+          })
+          .catch(() => {});
+      }
+    }
+  }
+  $: number = strongs ? displayId(strongs) : '';
+  /** A Strong's number makes the pill a link to its entry. A measure doesn't. */
+  $: strongsLink = !measure && !!strongs;
+  $: originLabel = measure || [headword, number].filter(Boolean).join(' · ');
+
+  function openStrongs() {
+    dispatch('action', { action: 'strongs', text: selectedText });
+  }
 
   /** The book's category color, as an rgb triple for the pill's hairline. */
   function bookRgb(name: string): string {
@@ -311,7 +344,28 @@
     </div>
   {/if}
 
-  {#if originLabel}
+  {#if strongsLink}
+    <!-- The one pill that takes a tap: the word's Strong's number opens its
+         entry. -->
+    <button
+      class="pill link"
+      style="--y: {botY}px; --edge: {edgeRgb};"
+      bind:clientWidth={botW}
+      bind:clientHeight={botH}
+      in:pillIn|global
+      out:pillOut|global
+      on:click={openStrongs}
+      title="Open {number} in Strong’s"
+      aria-label="{originLabel} — open in Strong’s"
+    >
+      <span class="pill-text">
+        {#if headword}<bdi>{headword}</bdi> · {/if}<span
+          class="pill-num"
+          style="color: {languageColor(/^H/i.test(strongs) ? 'hebrew' : 'greek')}">{number}</span
+        >
+      </span>
+    </button>
+  {:else if originLabel}
     <div
       class="pill"
       class:measure-pill={!!measure}
@@ -526,5 +580,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* The Strong's pill is a link: it takes the press the other pill lets fall
+     through to the scrim, and its number is underlined like a link. */
+  .pill.link {
+    pointer-events: auto;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .pill-num {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+  }
+  .pill.link:hover .pill-num {
+    text-decoration-style: solid;
   }
 </style>
