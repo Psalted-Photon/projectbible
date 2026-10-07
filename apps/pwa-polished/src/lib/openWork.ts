@@ -3,10 +3,11 @@ import { isbeModalStore } from '../stores/isbeModalStore';
 import { navesModalStore } from '../stores/navesModalStore';
 import { personModalStore } from '../stores/personModalStore';
 import { lexicalModalStore } from '../stores/lexicalModalStore';
+import { strongsModalStore } from '../stores/strongsModalStore';
 import type { WorksResolution } from '../adapters/lexicon-lookup';
 
 /**
- * Switching between the four reference works.
+ * Switching between the five reference works.
  *
  * This is one path on purpose. The work tabs used to call the old "jump to the
  * encyclopedia" buttons, which were built to *replace* the card you were on and
@@ -15,7 +16,7 @@ import type { WorksResolution } from '../adapters/lexicon-lookup';
  * jump-links wanting different things from the same code is what caused that,
  * so the jump-links are gone and everything comes through here.
  */
-export type WorkKey = 'dictionary' | 'topical' | 'encyclopedia' | 'people';
+export type WorkKey = 'dictionary' | 'topical' | 'encyclopedia' | 'people' | 'strongs';
 
 /** Which docked-window content each work renders as. */
 const WINDOW_TYPE: Record<WorkKey, WindowContentType> = {
@@ -23,12 +24,13 @@ const WINDOW_TYPE: Record<WorkKey, WindowContentType> = {
   topical: 'naves',
   encyclopedia: 'isbe',
   people: 'person',
+  strongs: 'strongs',
 };
 
 /**
  * Can this work be shown inside a docked window?
  *
- * All four can, now that the dictionary's contents are separable from its card.
+ * All five can, now that the dictionary's contents are separable from its card.
  * Kept as a function because a tab that can't do something should gray out
  * rather than quietly opening a card over the top, and this is where that would
  * be said.
@@ -38,7 +40,7 @@ export function worksInWindow(_work: WorkKey): boolean {
 }
 
 /**
- * Every field any of the four works keeps in a window, blanked.
+ * Every field any of the five works keeps in a window, blanked.
  *
  * A window's saved details are *merged* rather than replaced, so switching from
  * an article to a topic would otherwise leave the article's id, its open
@@ -52,6 +54,7 @@ const BLANK = {
   placeId: null,
   topicId: null,
   personId: null,
+  strongsId: null,
   selectedText: '',
   primaryName: '',
   tab: null,
@@ -96,7 +99,26 @@ function subjectState(work: WorkKey, works: WorksResolution | null): Record<stri
       if (!works.dict || !works.term) return null;
       return { ...BLANK, selectedText: works.term };
     }
+    case 'strongs': {
+      if (!works.strongs) return null;
+      return { ...BLANK, strongsId: works.strongs.id };
+    }
   }
+}
+
+/**
+ * The tapped Greek or Hebrew word the Dictionary can go back to, when the
+ * subject came from one. Only the card can: a window keeps its details in
+ * storage, which has no place for a word's grammar, so there the Dictionary
+ * opens on the English gloss like any other subject.
+ */
+function tappedWord(works: WorksResolution | null, windowId: string | null) {
+  return !windowId && works?.strongs?.morph ? works.strongs : null;
+}
+
+/** Can the Dictionary tab open something for this subject? */
+export function dictionaryAvailable(works: WorksResolution | null, inWindow: boolean): boolean {
+  return !!works?.dict || (!inWindow && !!works?.strongs?.morph);
 }
 
 // --- The subject the tabs are carrying ------------------------------------
@@ -127,6 +149,8 @@ function carriedKey(work: WorkKey, w: WorksResolution): string | null {
       return w.person ? w.person.person.id : null;
     case 'dictionary':
       return w.term || null;
+    case 'strongs':
+      return w.strongs?.id ?? null;
   }
 }
 
@@ -158,6 +182,19 @@ export function openWorkSubject(
   clickedWord: string,
   windowId: string | null,
 ): boolean {
+  // Back to the tapped word's grammar, if that is where this subject started.
+  const tapped = work === 'dictionary' ? tappedWord(works, windowId) : null;
+  if (tapped) {
+    carried = works;
+    lexicalModalStore.open({
+      selectedText: tapped.word ?? '',
+      strongsId: tapped.id,
+      morphologyData: tapped.morph ?? null,
+      lexicalEntries: null,
+    });
+    return true;
+  }
+
   const state = subjectState(work, works);
   if (!state) return false;
 
@@ -205,6 +242,10 @@ export function openWorkSubject(
       });
       return true;
     }
+    case 'strongs': {
+      strongsModalStore.open({ strongsId: works!.strongs!.id });
+      return true;
+    }
   }
 }
 
@@ -232,8 +273,10 @@ export function openWorkIndex(work: WorkKey, windowId: string | null): boolean {
     case 'people':
       personModalStore.open({});
       return true;
-    // The dictionary has no contents list to open onto.
+    // The dictionary has no contents list to open onto, and Strong's gets
+    // its list in the next step.
     case 'dictionary':
+    case 'strongs':
       return false;
   }
 }

@@ -243,17 +243,17 @@
     windowStore.closeWindow(window.id);
   }
 
-  // The three reference works put an alphabet rail and per-row buttons hard
+  // The reference works put an alphabet rail and per-row buttons hard
   // against the panel's inner edge — the same strip the resize grip covers.
   // They get an inset; nothing else needs one.
-  $: isLibrary = ['isbe', 'naves', 'person', 'wordstudy'].includes(window.contentType);
+  $: isLibrary = ['isbe', 'naves', 'person', 'wordstudy', 'strongs'].includes(window.contentType);
 
-  // Showing something else fades the new content in. Not between the four
+  // Showing something else fades the new content in. Not between the five
   // reference works: their tabs slide the page across themselves.
   let contentEl: HTMLDivElement;
   let shownType = window.contentType;
   $: if (window.contentType !== shownType) {
-    const tabbed = isLibrary && ['isbe', 'naves', 'person', 'wordstudy'].includes(shownType);
+    const tabbed = isLibrary && ['isbe', 'naves', 'person', 'wordstudy', 'strongs'].includes(shownType);
     shownType = window.contentType;
     if (!tabbed) fadeIn(contentEl);
   }
@@ -274,7 +274,7 @@
 <div
   in:arrive
   class="panel panel-{window.edge} panel-{window.contentType}"
-  class:themed={!['map', 'art', 'isbe', 'person', 'naves', 'wordstudy'].includes(window.contentType)}
+  class:themed={!['map', 'art', 'isbe', 'person', 'naves', 'wordstudy', 'strongs'].includes(window.contentType)}
   style="
     {window.edge === 'left' || window.edge === 'right' ? `width: ${window.size}%` : `height: ${window.size}%`};
   "

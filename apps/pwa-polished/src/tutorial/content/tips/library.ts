@@ -1,6 +1,6 @@
 /**
  * Dots in the reference works: the encyclopedia, the topical index, Bible
- * people and word study. The same views open as a window and as the lookup
+ * people, the dictionary and Strong's. The same views open as a window and as the lookup
  * card over the reader, so these tips serve both.
  */
 
@@ -8,7 +8,7 @@ import type { Tip } from '../types';
 
 const area = 'Library';
 
-const ENTRY = '.isbe-content, .naves-content, .person-content, .lexical-content';
+const ENTRY = '.isbe-content, .naves-content, .person-content, .lexical-content, .strongs-content';
 
 function inEntry(selector: string): string {
   return ENTRY.split(', ')
@@ -22,8 +22,8 @@ export const LIBRARY_TIPS: Tip[] = [
     area,
     target: '.work-tabs',
     corner: 'top-left',
-    title: 'Four reference works',
-    body: 'Switch between the dictionary, topical index, encyclopedia and people. A grayed-out tab has nothing for this.',
+    title: 'Five reference works',
+    body: 'Switch between the encyclopedia, topical index, people, dictionary and Strong’s. A grayed-out tab has nothing for this.',
   },
   {
     id: 'library-contents',
@@ -157,7 +157,7 @@ export const LIBRARY_TIPS: Tip[] = [
     area,
     target: '.lexical-content .strongs-link',
     title: 'Strong’s number',
-    body: 'Open the full entry for the original word: its definition, forms, and every place it’s used.',
+    body: 'Open the original word in Strong’s: its definition, forms, and every place it’s used.',
   },
   {
     id: 'word-gloss',
@@ -169,7 +169,7 @@ export const LIBRARY_TIPS: Tip[] = [
   {
     id: 'word-source-text',
     area,
-    target: '.lexical-content .source-picker',
+    target: '.strongs-content .source-picker',
     title: 'Which text',
     body: 'Count the forms and occurrences in one Greek or Hebrew text, or all of them.',
   },

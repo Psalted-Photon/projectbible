@@ -3,7 +3,7 @@
  * Handles lookups across the consolidated lexical pack and dictionary pack
  */
 
-import { openDB } from './db.js';
+import { openDB, type DBMorphology } from './db.js';
 import { dictionaryCache } from '../lib/lru-cache.js';
 import { normalizeBookName } from '../lib/bibleData.js';
 
@@ -2436,14 +2436,21 @@ export interface WorksResolution {
   entry: IsbeResolution | null;
   /** Person bio, ready to open. */
   person: PersonLookupResult | null;
+  /**
+   * Strong's entry, ready to open. When the subject is a tapped Greek or Hebrew
+   * word it carries that word and its grammar too, so the Dictionary tab can go
+   * back to them rather than to the English gloss.
+   */
+  strongs: { id: string; word?: string; morph?: DBMorphology | null } | null;
 }
 
-const EMPTY_WORKS: WorksResolution = {
+export const EMPTY_WORKS: WorksResolution = {
   term: '',
   dict: false,
   topic: null,
   entry: null,
   person: null,
+  strongs: null,
 };
 
 /**
@@ -2492,5 +2499,6 @@ export async function resolveWorks(
     topic,
     entry,
     person,
+    strongs: null,
   };
 }

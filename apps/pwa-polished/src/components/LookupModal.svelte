@@ -5,11 +5,13 @@
   import NavesContent from "./NavesContent.svelte";
   import PersonContent from "./PersonContent.svelte";
   import LexicalContent from "./LexicalContent.svelte";
+  import StrongsContent from "./strongs/StrongsContent.svelte";
   import { lookupStore } from "../stores/lookupStore";
   import { isbeModalStore, type IsbeModalState, type IsbeTab } from "../stores/isbeModalStore";
   import { navesModalStore, type NavesTab } from "../stores/navesModalStore";
   import { personModalStore } from "../stores/personModalStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
+  import { strongsModalStore } from "../stores/strongsModalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
   import { pendingRestore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
@@ -22,6 +24,7 @@
     topical: ["encyclotopical"],
     people: ["people-biblical-v1"],
     dictionary: ["dictionary-en", "lexical"],
+    strongs: ["lexical"],
   };
 
   /**
@@ -38,6 +41,7 @@
   $: naves = $navesModalStore;
   $: person = $personModalStore;
   $: lexical = $lexicalModalStore;
+  $: strongs = $strongsModalStore;
 
   // The nav bar's back arrow reopens the encyclopedia where you left it and
   // leaves the detail in isbeReturnStore for us. Consumed once per open and
@@ -109,8 +113,13 @@
     } else if (pending?.surface === 'lexical' && pending.snapshot) {
       pendingRestore.set(null);
       const snap = pending.snapshot;
-      saved = { ...saved, dictionary: { tab: snap.tab, scrollTop: snap.scrollTop } };
+      saved = { ...saved, dictionary: { scrollTop: snap.scrollTop } };
       lexicalModalStore.open(snap.payload);
+    } else if (pending?.surface === 'strongs' && pending.snapshot) {
+      pendingRestore.set(null);
+      const snap = pending.snapshot;
+      saved = { ...saved, strongs: { tab: snap.tab, scrollTop: snap.scrollTop } };
+      strongsModalStore.open({ strongsId: snap.strongsId });
     }
   }
 
@@ -125,6 +134,7 @@
     navesModalStore.close();
     personModalStore.close();
     lexicalModalStore.close();
+    strongsModalStore.close();
     lookupStore.close();
     // The teardown lands in the flush after this returns; take the guard off
     // once it has been and gone.
@@ -192,6 +202,13 @@
     const id = newWindow();
     if (!id) return;
     windowStore.setWindowContent(id, "person", { ...snap });
+    close();
+  }
+
+  function popOutStrongs(snap: { strongsId: string; tab: string }) {
+    const id = newWindow();
+    if (!id) return;
+    windowStore.setWindowContent(id, "strongs", { strongsId: snap.strongsId, tab: snap.tab });
     close();
   }
 
@@ -263,10 +280,18 @@
           strongsId={lexical.strongsId}
           morphologyData={lexical.morphologyData}
           lexicalEntries={lexical.lexicalEntries}
-          initialTab={saved.dictionary?.tab ?? null}
           initialScrollTop={saved.dictionary?.scrollTop ?? 0}
           onSnapshot={(snap) => remember("dictionary", snap)}
           onClose={close}
+        />
+      {:else if work === "strongs"}
+        <StrongsContent
+          strongsId={strongs.strongsId}
+          initialTab={saved.strongs?.tab ?? null}
+          initialScrollTop={saved.strongs?.scrollTop ?? 0}
+          onSnapshot={(snap) => remember("strongs", snap)}
+          onClose={close}
+          onPopOut={popOutStrongs}
         />
       {/if}
     </div>

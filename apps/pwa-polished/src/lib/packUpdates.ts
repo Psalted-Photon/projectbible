@@ -149,4 +149,5 @@ export const WINDOW_PACKS: Record<string, { packs: string[]; reloads?: boolean }
   naves: { packs: ['encyclotopical'] },
   person: { packs: ['people-biblical-v1'] },
   wordstudy: { packs: ['dictionary-en', 'lexical'] },
+  strongs: { packs: ['lexical'] },
 };

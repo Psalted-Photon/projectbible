@@ -3,14 +3,16 @@
 ## "Push" and "push live"
 Vercel only builds a commit whose message contains `[deploy]` — see `ignoreCommand` in vercel.json. Every other push is backed up to GitHub and costs nothing. So there are two commands, and both run as a single Bash call — do not split into separate tool calls that each require approval.
 
+Stage only the files changed for the work being pushed, named one by one — never `git add -A` or `git add .`. Other uncommitted changes in the tree are left alone unless the user asks for them.
+
 When the user says **"push"** — save to GitHub, do not deploy:
 ```
-git add -A && git commit -m "<concise message>" && git push
+git add <changed files> && git commit -m "<concise message>" && git push
 ```
 
 When the user says **"push live"** or **"deploy"** — same, with the marker appended so Vercel builds it:
 ```
-git add -A && git commit -m "<concise message> [deploy]" && git push
+git add <changed files> && git commit -m "<concise message> [deploy]" && git push
 ```
 
 To deploy something already pushed without the marker, a dashboard Redeploy will not work — it re-runs the ignore step against the same message. Make an empty commit instead:

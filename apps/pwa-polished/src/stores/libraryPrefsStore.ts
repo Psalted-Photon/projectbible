@@ -11,7 +11,7 @@
 
 import { writable } from 'svelte/store';
 
-export type LibrarySource = 'isbe' | 'naves' | 'people';
+export type LibrarySource = 'isbe' | 'naves' | 'people' | 'strongs';
 
 /** A starred or recently-read entry, holding just enough to draw its row. */
 export interface LibraryMark {
@@ -57,6 +57,7 @@ const empty = (): LibraryPrefs => ({
   isbe: emptySource(),
   naves: emptySource(),
   people: emptySource(),
+  strongs: emptySource(),
 });
 
 function isMark(m: any): m is LibraryMark {

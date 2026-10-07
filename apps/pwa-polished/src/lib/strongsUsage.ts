@@ -120,6 +120,21 @@ function compareRefs(a: VerseUse, b: VerseUse): number {
 }
 
 /**
+ * Which tagged ids a number covers.
+ *
+ * A classic number takes in its split meanings: the Greek texts tag Jesus as
+ * G2424G 955 times and as plain G2424 twice, so G2424 read exactly would show
+ * almost nothing. A split id (G2424G, H1254A) is one meaning and stays exact.
+ * Stored ids are four digits, so G2424's range can't reach into G24240.
+ */
+function usageRange(strongsId: string): IDBKeyRange {
+  const m = strongsId.match(/^([GH])0*(\d{1,4})$/i);
+  if (!m) return IDBKeyRange.only(strongsId);
+  const id = `${m[1].toUpperCase()}${m[2].padStart(4, '0')}`;
+  return IDBKeyRange.bound(id, `${id}￿`);
+}
+
+/**
  * Every tagged word carrying this Strong's number, in one pass.
  *
  * Deliberately unfiltered: the source picker switches between editions without
@@ -134,7 +149,7 @@ export async function loadStrongsUsage(strongsId: string): Promise<StrongsUsage>
     // writes `strongsId`. Prefer the index that actually has keys in it.
     const indexName = store.indexNames.contains('strongsId') ? 'strongsId' : 'by_strongs';
     const found: UsageRow[] = [];
-    const req = store.index(indexName).openCursor(IDBKeyRange.only(strongsId));
+    const req = store.index(indexName).openCursor(usageRange(strongsId));
     req.onsuccess = (e) => {
       const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
       if (!cursor) {

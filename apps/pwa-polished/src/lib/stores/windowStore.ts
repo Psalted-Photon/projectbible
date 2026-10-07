@@ -1,7 +1,7 @@
 import { writable, get } from 'svelte/store';
 import { libraryPrefsStore, type LibrarySource } from '../../stores/libraryPrefsStore';
 
-export type WindowContentType = 'selector' | 'bible' | 'map' | 'timeline' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves';
+export type WindowContentType = 'selector' | 'bible' | 'map' | 'timeline' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves' | 'strongs';
 /**
  * Which edge a window is docked to — plus `harmony`, which is not an edge at
  * all.
@@ -125,11 +125,12 @@ export interface WindowState {
 export const MAX_WINDOWS = 6;
 const STORAGE_KEY = 'projectbible-windows';
 
-/** The three window types that are reference works, and which shelf each is. */
+/** The window types that are reference works with a shelf, and which shelf each is. */
 const LIBRARY_SOURCE_OF: Partial<Record<WindowContentType, LibrarySource>> = {
   isbe: 'isbe',
   naves: 'naves',
   person: 'people',
+  strongs: 'strongs',
 };
 
 function createWindowStore() {

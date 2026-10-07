@@ -1,47 +1,29 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from "svelte";
-  import { IndexedDBLexiconStore } from "../adapters/LexiconStore";
-  import type { StrongEntry } from "@projectbible/core";
-  import { getBookColor } from "../lib/bibleData.js";
-  import StrongsVerseList from "./StrongsVerseList.svelte";
-  import {
-    loadStrongsUsage,
-    buildVerseUses,
-    buildFormGroups,
-    sourcesByTestament,
-    summarizeArc,
-    buildDistribution,
-    refKey,
-    type StrongsUsage,
-    type VerseUse,
-  } from "../lib/strongsUsage";
   import {
     englishLexicalService,
     type WordInfo,
   } from "../../../../packages/core/src/search/englishLexicalService";
   import {
     lookupEnglishWord,
-    lookupStrongs,
     resolveWorks,
+    EMPTY_WORKS,
     type WorksResolution,
   } from "../adapters/lexicon-lookup.js";
   import WorkTabs from "./WorkTabs.svelte";
   import { openWorkSubject, carriedWorks, type WorkKey } from "../lib/openWork";
   import { windowStore } from "../lib/stores/windowStore";
-  import { get } from "svelte/store";
-  import { navigationStore } from "../stores/navigationStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
-  import { parseOsisRef } from "../lib/parseRefString";
-  import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../lib/morphologyExpander";
+  import { expandRmacCode, expandOshbCode } from "../lib/morphologyExpander";
+  import { languageColor, glossTerm } from "../lib/strongs/entry";
   import { openDB } from "../adapters/db";
   import GetPacksCard from "./GetPacksCard.svelte";
-  import { reveal } from "../lib/motion";
 
   /**
-   * The word study itself, independent of what is holding it. Two hosts: the
-   * lookup card, and a docked window pinned beside the reader — the same
-   * arrangement the encyclopedia, topical and bio views already use. `windowId`
-   * is what tells the two apart.
+   * The dictionary: an English word's definitions, or a tapped Greek or Hebrew
+   * word's grammar. The original word's full Strong's entry is the Strong's
+   * work's now, one tab over. Two hosts: the lookup card, and a docked window
+   * pinned beside the reader — `windowId` is what tells them apart.
    */
   export let selectedText = "";
   export let strongsId: string | undefined = undefined;
@@ -51,62 +33,38 @@
   export let windowId: string | null = null;
   /** The host's own close. Docked, Window.svelte supplies the ×. */
   export let onClose: (() => void) | null = null;
-  /** Which sub-tab was open and how far down, restored when you come back. */
-  export let initialTab: "definition" | "forms" | "occurrences" | "arc" | "spread" | "related" | null = null;
+  /** How far down it was, restored when you come back. */
   export let initialScrollTop = 0;
   /** Reports the view on the way out, so switching tabs and coming back lands
    *  where you left rather than at the top. */
-  export let onSnapshot: ((snap: { tab: string; scrollTop: number }) => void) | null = null;
+  export let onSnapshot: ((snap: { scrollTop: number }) => void) | null = null;
 
   $: docked = !!windowId;
 
-  // A clicked name that resolves to someone opens on the People tab, which is
-  // its own view in the same card — this one is only ever the word study now.
-
   /** Hand what's on screen to a docked window, so it can sit beside the
-   *  passage. Same edge convention as the encyclopedia's pop-out — and it pins
-   *  whichever of the two views you're looking at. */
+   *  passage. Same edge convention as the encyclopedia's pop-out. */
   function popOut() {
     const edge = window.innerHeight > window.innerWidth ? "bottom" : "right";
     const id = windowStore.createWindow(edge, 50);
     // At the six-window cap. Leave the card up rather than closing onto nothing.
     if (!id) return;
-    // Only the term and the Strong's number go into the window: the rest is
-    // re-resolved on mount anyway, and window state is written to storage on
-    // every change — no place for a morphology blob.
-    windowStore.setWindowContent(id, "wordstudy", {
-      selectedText,
-      strongsId: strongsId ?? null,
-      primaryName: selectedText,
-    });
+    // A window's details are written to storage on every change, which has no
+    // place for a word's grammar — so a tapped word is pinned as its Strong's
+    // entry, which a window can hold, and an English word as itself.
+    const tapped = morphologyData?.strongsId;
+    if (tapped) {
+      windowStore.setWindowContent(id, "strongs", { strongsId: tapped });
+    } else {
+      windowStore.setWindowContent(id, "wordstudy", { selectedText, primaryName: selectedText });
+    }
     close();
   }
 
-  let lexiconStore: IndexedDBLexiconStore;
-  let strongEntry: StrongEntry | null = null;
-  let searchResults: StrongEntry[] = [];
   let loading = false;
   let error = "";
-  let activeTab: "definition" | "forms" | "occurrences" | "arc" | "spread" | "related" = initialTab ?? "definition";
   let bodyEl: HTMLDivElement | null = null;
 
-  onDestroy(() => onSnapshot?.({ tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0 }));
-
-  /**
-   * The word study as it stands, plus what it takes to reopen it.
-   *
-   * Unlike the other works this one cannot be rebuilt from an id — the card is
-   * opened with a whole resolution (the clicked text, its morphology, the
-   * matched entries) — so the crumb carries that payload rather than a key.
-   */
-  function viewSnapshot() {
-    const { isOpen: _isOpen, ...payload } = get(lexicalModalStore);
-    return { payload, tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0 };
-  }
-
-  // activeTab now belongs to the Strong's view alone
-  // (Definition/Occurrences/Related). The English-word view has no tab strip:
-  // definitions are all it shows.
+  onDestroy(() => onSnapshot?.({ scrollTop: bodyEl?.scrollTop ?? 0 }));
 
   // English lexical data
   let englishWordInfo: WordInfo | null = null;
@@ -115,48 +73,9 @@
   let hasOfflineDefinitions = false;
   let localLexicalEntries: any = null;
 
-  // --- Usage: the Forms and Occurrences tabs ------------------------------
-  // Both tabs answer questions about the same set of tagged words, so they share
-  // one scan of the morphology store rather than running one apiece.
-  let usage: StrongsUsage | null = null;
-  let usageLoading = false;
-  let usageLoadedFor = "";
-  /** Which edition is being studied. Null means all of them at once. */
-  let source: string | null = null;
-  /** Refs already followed, dimmed on return. Shared by both tabs, since they
-   *  are two views of the same verses. */
-  let visitedRefs = new Set<string>();
-  /** Which inflected form is open. One at a time: the table is the index you
-   *  scan, and several open at once buries it. */
-  let openForm: string | null = null;
-
-  $: verseUses = usage ? buildVerseUses(usage, source) : [];
-  $: formGroups = usage ? buildFormGroups(usage, source) : [];
-  $: variantBaseline = usage ? sourcesByTestament(usage) : { OT: [], NT: [] };
-  /**
-   * A badge says the editions disagree about a verse, which is only a question
-   * worth asking when you are looking at all of them. Studying one edition,
-   * every row would trivially be "only in" that edition and the badge would
-   * become wallpaper.
-   */
-  $: activeBaseline = source === null ? variantBaseline : { OT: [], NT: [] };
-  $: arc = summarizeArc(verseUses);
-  $: distribution = buildDistribution(verseUses);
-  /** The picker only earns its row when there is a choice to make. A Hebrew
-   *  entry only ever appears in one text. */
-  $: showSourcePicker = (usage?.sources.length ?? 0) > 1;
-  $: isRtlLanguage = strongEntry?.language === "hebrew" || strongEntry?.language === "aramaic";
-
-  /**
-   * Words sharing this one's sense, grouped in two tiers. Greek only: the
-   * domain tagging comes from the Greek NT, so a Hebrew entry has none.
-   */
-  $: related = (strongEntry as any)?.related as
-    | { sense: { id: string; lemma: string; gloss: string }[]; area: { id: string; lemma: string; gloss: string }[] }
-    | undefined;
-
+  let mounted = false;
   onMount(async () => {
-    lexiconStore = new IndexedDBLexiconStore();
+    mounted = true;
     if (initialScrollTop) {
       // Only meaningful once the body has something in it to scroll.
       await tick();
@@ -167,7 +86,7 @@
   // Reload whenever the subject changes. Mounted fresh per open today; keyed so
   // it also re-reads when the host swaps the word underneath it.
   let loadedKey = "";
-  $: if (lexiconStore) {
+  $: if (mounted) {
     const key = `${selectedText}|${strongsId ?? ""}`;
     if (key !== loadedKey) {
       loadedKey = key;
@@ -190,44 +109,47 @@
     }).catch(() => { isDictionaryInstalled = false; });
   });
 
-  // --- Encyclopedia bridge ------------------------------------------------
-  // What the other three works have for this term. One resolver answers all of
-  // them at once and hands back ids rather than booleans, so a control that
-  // lights up is guaranteed to open something. Plural-folded by the shared
-  // resolvers underneath; silent when a pack isn't installed.
+  // --- The other works ----------------------------------------------------
+  // What the other works have for this term. One resolver answers all of them
+  // at once and hands back ids rather than booleans, so a control that lights
+  // up is guaranteed to open something. Plural-folded by the shared resolvers
+  // underneath; silent when a pack isn't installed.
   let works: WorksResolution | null = null;
   let worksCheckedFor = "";
 
   /**
-   * The term to ask the other three works about.
+   * The term to ask the other works about.
    *
    * They are all indexed in English — the encyclopedia has "Abraham", not
-   * Ἀβραάμ — so on a Strong's entry the word on screen was never going to match
-   * anything, and the tab bar sat dead on the one screen most likely to want it.
-   * The gloss is the English handle; the transliteration is the fallback for
-   * entries that have no gloss.
+   * Ἀβραάμ — so on a tapped original word the word on screen was never going
+   * to match anything. The gloss is the English handle; the transliteration
+   * is the fallback for words that have no gloss.
    */
   $: worksTerm = ((): string => {
-    if (!strongsId && !morphologyData) return selectedText;
+    if (!morphologyData) return selectedText;
     const m = morphologyData as any;
-    return glossHead(m?.gloss_en ?? m?.gloss ?? "") || strongEntry?.transliteration || m?.transliteration || "";
+    return glossTerm(m?.gloss_en ?? m?.gloss ?? "") || m?.transliteration || "";
   })();
 
   $: if (worksTerm) checkWorks(worksTerm);
 
-  /** Glosses often qualify themselves — "Abraham, the patriarch" — and only the
-   *  head word stands a chance of resolving or of being a dictionary entry. */
-  function glossHead(gloss: string): string {
-    return String(gloss ?? "").split(/[,;(]/)[0].trim();
-  }
+  /**
+   * The tabs' subject. A tapped word also has a Strong's entry, and carries
+   * itself along so the Dictionary tab can come back to this view of it.
+   */
+  $: tabWorks = morphologyData?.strongsId
+    ? {
+        ...(works ?? EMPTY_WORKS),
+        strongs: { id: String(morphologyData.strongsId), word: selectedText, morph: morphologyData },
+      }
+    : works;
 
   /**
    * The gloss is the English word behind the original one, so it behaves like
    * any other English word in the app: tapping it opens the dictionary on it.
-   * Clearing the Strong's id is what moves this card off the morphology view.
    */
   function openGloss(gloss: string) {
-    const word = glossHead(gloss);
+    const word = glossTerm(gloss);
     if (!word) return;
     if (windowId) {
       windowStore.updateContentState(windowId, { selectedText: word, strongsId: null });
@@ -239,6 +161,15 @@
       morphologyData: null,
       lexicalEntries: null,
     });
+  }
+
+  /** The tapped word's full entry, in the Strong's tab. */
+  function openStrongs(id: string) {
+    const subject: WorksResolution = {
+      ...(tabWorks ?? EMPTY_WORKS),
+      strongs: { id, word: selectedText, morph: morphologyData },
+    };
+    openWorkSubject("strongs", subject, selectedText, windowId);
   }
 
   async function checkWorks(text: string) {
@@ -265,94 +196,44 @@
     }
   }
 
-
-  /**
-   * The work tabs. This card holds two of the four itself — a word study and,
-   * when a clicked name resolved to someone, their bio — so switching between
-   * Dictionary and People is a flip in place rather than a second card. Step 3
-   * folds that into the shared card and this special case goes away.
-   *
-   * This card is never docked, so there is no window branch here.
-   */
+  /** The work tabs. Nothing closes: the card keeps its frame and swaps the
+   *  work inside it, and a window changes in place. */
   function selectWork(work: WorkKey) {
-    // Nothing closes: the card keeps its frame and swaps the work inside it.
-    openWorkSubject(work, works, worksTerm || selectedText, windowId);
+    openWorkSubject(work, tabWorks, worksTerm || selectedText, windowId);
   }
 
   async function loadLexicalData() {
     loading = true;
     error = "";
-    strongEntry = null;
-    searchResults = [];
     englishWordInfo = null;
     englishPOS = [];
     isEnglishWord = false;
     localLexicalEntries = null;
-    activeTab = "definition";
-    resetUsage();
 
     try {
       // Check if we already have lexical entries from the new lookup system
       if (lexicalEntries) {
-        console.log('✅ Using lexical entries from lookup system:', lexicalEntries);
         isEnglishWord = true;
-        
-        // Map lexicalEntries to the format this modal expects
         englishWordInfo = {
           word: lexicalEntries.word,
           ipa_us: lexicalEntries.ipa_us ?? undefined,
         };
-        
-        // Use POS from lexicalEntries if available
         if (lexicalEntries.pos) {
           englishPOS = Array.isArray(lexicalEntries.pos) ? lexicalEntries.pos : [lexicalEntries.pos];
         }
-        
-        // Use offline definitions from dictionary pack (NO API CALL)
-        if (lexicalEntries.modern && lexicalEntries.modern.length > 0) {
-          console.log('✅ Using offline modern definitions:', lexicalEntries.modern.length);
-          // Modern definitions will be displayed separately
-        }
-        
-        if (lexicalEntries.historic && lexicalEntries.historic.length > 0) {
-          console.log('✅ Using offline historic definitions:', lexicalEntries.historic.length);
-          // Historic definitions will be displayed separately
-        }
-        
-        loading = false;
         return;
       }
-      
-      // If we have morphology data, don't need to load anything - just display it
-      if (morphologyData) {
-        loading = false;
-        return;
-      }
-      
+
+      // A tapped word: its grammar is all this view shows, and it came with it.
+      if (morphologyData) return;
+
+      // A bare Strong's number is the Strong's work's to show now.
       if (strongsId) {
-        // Use lookupStrongs which queries the correct greek_strongs_entries /
-        // hebrew_strongs_entries stores (lexiconStore.getStrong queries the
-        // empty legacy 'strongs_entries' store).
-        const result = await lookupStrongs(strongsId);
-        if (result) {
-          // Map LexiconEntry shape to StrongEntry shape the template expects
-          strongEntry = {
-            id: strongsId,
-            lemma: result.lemma ?? '',
-            transliteration: result.transliteration ?? '',
-            definition: result.definition ?? '',
-            shortDefinition: result.shortDefinition ?? '',
-            partOfSpeech: result.partOfSpeech ?? '',
-            language: (result.language ?? 'greek') as 'greek' | 'hebrew' | 'aramaic',
-            derivation: result.derivation,
-            kjvUsage: result.kjvUsage,
-            pronunciation: result.phonetic ? { phonetic: result.phonetic } : undefined,
-            related: result.related,
-          } as StrongEntry;
-        } else {
-          error = `Strong's ${strongsId} not found in lexicon`;
-        }
-      } else if (selectedText) {
+        openStrongs(strongsId);
+        return;
+      }
+
+      if (selectedText) {
         const searchText = selectedText.trim().toLowerCase();
 
         try {
@@ -369,41 +250,25 @@
                 ? offlineEntry.pos
                 : [offlineEntry.pos];
             }
-            loading = false;
             return;
           }
         } catch (err) {
           console.log("Offline dictionary lookup failed:", err);
         }
 
-        // First try English lexical lookup
         try {
           await englishLexicalService.initialize();
-          englishWordInfo =
-            await englishLexicalService.getPronunciation(searchText);
-
+          englishWordInfo = await englishLexicalService.getPronunciation(searchText);
           if (englishWordInfo) {
             isEnglishWord = true;
-            englishPOS = await englishLexicalService
-              .getPOSTags(searchText)
-              .catch(() => []);
-
-            return; // Found English word, no need to search biblical languages
+            englishPOS = await englishLexicalService.getPOSTags(searchText).catch(() => []);
+            return;
           }
         } catch (err) {
           console.log("English lexical lookup failed:", err);
-          // Continue to biblical language search
         }
 
-        // If not found in English, search biblical language lexicons
-        searchResults = await lexiconStore.searchDefinition(selectedText);
-
-        if (searchResults.length === 1) {
-          strongEntry = searchResults[0];
-          searchResults = [];
-        } else if (searchResults.length === 0) {
-          error = `No lexical entries found for "${selectedText}"`;
-        }
+        error = `No lexical entries found for "${selectedText}"`;
       }
     } catch (err) {
       console.error("Error loading lexical data:", err);
@@ -414,284 +279,34 @@
     }
   }
 
-  function selectEntry(entry: StrongEntry) {
-    strongEntry = entry;
-    searchResults = [];
-  }
-
   function close() {
-    strongEntry = null;
-    searchResults = [];
     error = "";
     onClose?.();
   }
 
-  /**
-   * Every tagged word carrying this number, in one pass.
-   *
-   * Both tabs read from the result, and the source picker filters it in memory,
-   * so switching editions or tabs never goes back to the database.
-   */
-  async function loadUsage(id: string) {
-    if (usageLoadedFor === id || usageLoading) return;
-    usageLoading = true;
-    try {
-      const found = await loadStrongsUsage(id);
-      // A slower scan must not overwrite a word opened since.
-      if (strongEntry?.id !== id) return;
-      usage = found;
-      usageLoadedFor = id;
-      source = defaultSource(found.sources);
-    } catch (err) {
-      console.error("Failed to load Strong's usage:", err);
-      usage = { rows: [], sources: [] };
-      usageLoadedFor = id;
-    } finally {
-      usageLoading = false;
-    }
-  }
-
-  /** Open on the text you are already reading when that is one of the originals,
-   *  so the study agrees with the passage beside it. */
-  function defaultSource(sources: string[]): string | null {
-    if (sources.length < 2) return null;
-    const reading = get(navigationStore).translation?.toLowerCase();
-    const match = sources.find((s) => s.toLowerCase() === reading);
-    return match ?? null;
-  }
-
-  /**
-   * Follow a verse into the reader.
-   *
-   * Keeps the translation you are reading rather than forcing the tagged text's
-   * own edition on you, and goes through `navigateToVerse` so the verse arrives
-   * with the category-colored fade every other verse list in the app gives you.
-   */
-  function handleVerseClick(use: VerseUse) {
-    visitedRefs = new Set(visitedRefs).add(refKey(use));
-    const current = get(navigationStore);
-    // Docked there is nothing to reopen — the study stays up across the jump,
-    // so a snapshot would only put a second copy of the word on top of it. The
-    // crumb itself still goes on: it walks the reader back either way.
-    navigationStore.pushHistory(
-      current,
-      'library',
-      docked ? undefined : { surface: 'lexical', snapshot: viewSnapshot() },
-    );
-    navigationStore.navigateToVerse(current.translation, use.book, use.chapter, use.verse);
-    // Docked, the study stays put beside the passage you just jumped to.
-    if (!docked) close();
-  }
-
-  /** Everything the usage tabs hold about one number, forgotten. Following a
-   *  Strong's link swaps the word without going back through `loadLexicalData`,
-   *  so without this the previous word's verses stay on screen under the new
-   *  word's heading until the fresh scan lands. */
-  function resetUsage() {
-    usage = null;
-    usageLoadedFor = "";
-    source = null;
-    visitedRefs = new Set();
-    openForm = null;
-  }
-
-  async function loadStrongsEntry(strongsNum: string) {
-    loading = true;
-    error = "";
-    strongEntry = null;
-    resetUsage();
-    const result = await lookupStrongs(strongsNum);
-    if (result) {
-      strongEntry = {
-        id: strongsNum,
-        lemma: result.lemma ?? '',
-        transliteration: result.transliteration ?? '',
-        definition: result.definition ?? '',
-        shortDefinition: result.shortDefinition ?? '',
-        partOfSpeech: result.partOfSpeech ?? '',
-        language: (result.language ?? 'greek') as 'greek' | 'hebrew' | 'aramaic',
-        derivation: result.derivation,
-        kjvUsage: result.kjvUsage,
-        pronunciation: result.phonetic ? { phonetic: result.phonetic } : undefined,
-        related: result.related,
-      } as StrongEntry;
-    } else {
-      error = `Strong's ${strongsNum} not found in lexicon`;
-    }
-    loading = false;
-  }
-
-  // One scan serves Forms and Occurrences, so it starts as soon as either is
-  // asked for and neither waits on the other afterwards.
-  $: if (
-    (activeTab === "forms" ||
-      activeTab === "occurrences" ||
-      activeTab === "arc" ||
-      activeTab === "spread") &&
-    strongEntry
-  ) {
-    loadUsage(strongEntry.id);
-  }
-
-  /** Parsing in words. Hebrew and Aramaic are coded differently from Greek. */
-  function parseOf(morphCode: string): string {
-    return isRtlLanguage ? expandOshbCode(morphCode) : expandRmacCode(morphCode);
-  }
-
-  function toggleForm(key: string) {
-    openForm = openForm === key ? null : key;
-  }
-
-  function getLanguageColor(lang: string): string {
-    switch (lang) {
-      case "greek":
-        return "#4CAF50";
-      case "hebrew":
-        return "#2196F3";
-      case "aramaic":
-        return "#9C27B0";
-      default:
-        return "#757575";
-    }
-  }
-
-  /** "greek" -> "Greek". Same title-casing IsbeContent does for place types. */
+  /** "noah" -> "Noah". Same title-casing IsbeContent does for place types. */
   function titleCase(t: string): string {
     return t.replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
-  function plural(n: number, word: string): string {
-    return `${n} ${word}${n === 1 ? "" : "s"}`;
-  }
-
   /**
    * The gray line under the title. Encyclopedia and Topical both read as
-   * "what it is  ·  how many", and this mirrors them so the three headers sit
-   * at the same height. Each part is guarded, so a lexicon row missing its
-   * transliteration drops that piece instead of leaving a stray separator.
-   * Branches match the title's own branches in the header markup.
+   * "what it is  ·  how many", and this mirrors them so the headers sit at the
+   * same height.
    */
   $: headerSubtitle = ((): string => {
     const bits: string[] = [];
-    if (strongEntry) {
-      bits.push(titleCase(strongEntry.language));
-      if (strongEntry.transliteration) bits.push(strongEntry.transliteration);
-      if (strongEntry.partOfSpeech) bits.push(strongEntry.partOfSpeech);
-    } else if (isEnglishWord && englishWordInfo) {
+    if (isEnglishWord && englishWordInfo) {
       bits.push("Dictionary");
       if (englishPOS.length) bits.push(englishPOS.join(", "));
-    } else if (searchResults.length) {
-      bits.push(plural(searchResults.length, "result"));
     }
     return bits.join("  ·  ");
   })();
-
-  /**
-   * Convert SWORD/Thayer markup to safe HTML for {@html} rendering.
-   * Handles: <b>, <i>, <BR />, <ref='...'>, __ numbered items.
-   * Any other tags are stripped.
-   */
-  function renderStrongsMarkup(text: string): string {
-    if (!text) return "";
-    return text
-      // Bold and italic pass-through
-      .replace(/<b>([\s\S]*?)<\/b>/gi, "<strong>$1</strong>")
-      .replace(/<i>([\s\S]*?)<\/i>/gi, "<em>$1</em>")
-      // Line breaks (various SWORD spellings)
-      .replace(/<BR\s*\/>/gi, "<br>")
-      // Scripture refs → clickable buttons
-      .replace(
-        /<ref='([^']+)'>([\s\S]*?)<\/ref>/gi,
-        '<button class="scripture-ref" data-ref="$1">$2</button>',
-      )
-      // Numbered items: __ at start of a segment → indented block
-      .replace(/(^|\n|<br>)__(\d+\.)/g, '$1<span class="strongs-item">$2</span> ')
-      // Strip any remaining unknown tags
-      .replace(/<(?!\/?(strong|em|br|button|span)[^>]*>)[^>]+>/gi, "");
-  }
-
-  /**
-   * Strong's KJV usage is one long comma-separated string carrying its own
-   * notation, which reads as noise until it is broken apart:
-   *   X    the KJV supplied this word with nothing behind it in the Greek
-   *   +    the word is only ever rendered in combination with another
-   *   ( )  alternative endings, or optional words — "alway(-s)"
-   * Commas inside brackets belong to a rendering rather than separating two,
-   * so "all (manner of, means)" must not split into three.
-   */
-  type Rendering = { text: string; marker: "supplied" | "combined" | null };
-
-  function parseKjvUsage(usage: string): Rendering[] {
-    const parts: string[] = [];
-    let depth = 0;
-    let buf = "";
-    for (const ch of usage) {
-      if (ch === "(" || ch === "[") depth++;
-      else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
-      if (ch === "," && depth === 0) {
-        parts.push(buf);
-        buf = "";
-        continue;
-      }
-      buf += ch;
-    }
-    parts.push(buf);
-
-    const out: Rendering[] = [];
-    for (const raw of parts) {
-      // Strong's ends the list with a full stop, and sometimes appends a prose
-      // aside ("Compare names in 'Abi-'.") that is not a rendering.
-      // Strong's sometimes closes a list with a prose aside riding on the last
-      // rendering — "principal. Compare names in 'Abi-'." Cut at the sentence
-      // boundary so the aside does not become a rendering.
-      let t = raw.replace(/\s+/g, " ").trim().split(/\.\s+(?=[A-Z])/)[0];
-      t = t.replace(/\.$/, "").trim();
-      if (!t || /^compare\b/i.test(t)) continue;
-      let marker: Rendering["marker"] = null;
-      if (/^X\s+/.test(t)) {
-        marker = "supplied";
-        t = t.replace(/^X\s+/, "");
-      } else if (/^\+\s*/.test(t)) {
-        marker = "combined";
-        t = t.replace(/^\+\s*/, "");
-      }
-      if (t) out.push({ text: t, marker });
-    }
-    return out;
-  }
-
-  $: kjvRenderings = strongEntry?.kjvUsage ? parseKjvUsage(strongEntry.kjvUsage) : [];
-  $: kjvHasMarkers = kjvRenderings.some((r) => r.marker);
-
-  /** Handle clicks on rendered Strong's markup — catches scripture-ref buttons. */
-  function handleDefinitionClick(e: MouseEvent) {
-    const target = e.target as HTMLElement;
-    if (!target.classList.contains("scripture-ref")) return;
-    const osisRef = target.dataset.ref;
-    if (!osisRef) return;
-    const parsed = parseOsisRef(osisRef);
-    if (!parsed) return;
-    const current = get(navigationStore);
-    // Docked, same as the usage list: the study is still there to come back to,
-    // so the crumb carries no snapshot and no second copy gets opened.
-    navigationStore.pushHistory(
-      current,
-      'library',
-      docked ? undefined : { surface: 'lexical', snapshot: viewSnapshot() },
-    );
-    // navigateToVerse, not navigateTo: a scripture reference followed out of a
-    // definition should land with the same fade highlight every other verse link
-    // in the app gives you.
-    navigationStore.navigateToVerse(current.translation, parsed.book, parsed.chapter, parsed.verse);
-    // Docked, the study stays put — reading the passage beside it is the whole
-    // point of pinning it. Only a card has to get out of the way.
-    if (!docked) close();
-  }
 </script>
 
 <div class="lexical-content" class:docked>
   <WorkTabs
-    {works}
+    works={tabWorks}
     current="dictionary"
     inWindow={docked}
     onSelect={selectWork}
@@ -699,15 +314,7 @@
   <div class="modal-header">
     <div class="head-text">
       <h2>
-        {#if strongEntry}
-          {strongEntry.lemma}
-          <span
-            class="strongs-id"
-            style="color: {getLanguageColor(strongEntry.language)}"
-          >
-            {strongEntry.id}
-          </span>
-        {:else if selectedText}
+        {#if selectedText}
           <!-- The word itself is the title, as it is in the other three
                cards. Title-cased because bridging in from them forces the
                term lowercase, so it would otherwise read "noah". -->
@@ -777,7 +384,7 @@
         <p>{error}</p>
         <p class="hint">Lexical packs may not be fully installed yet.</p>
       </div>
-    {:else if morphologyData && !strongEntry}
+    {:else if morphologyData}
       <!-- Original Language Morphology Display -->
       <div class="morphology-view">
         <div class="info-section">
@@ -811,10 +418,11 @@
             {#if morphologyData.strongsId}
               <dt>Strong's:</dt>
               <dd>
-                <button 
-                  class="strongs-link" 
-                  style="color: {getLanguageColor(morphologyData.language)}"
-                  on:click={() => loadStrongsEntry(morphologyData!.strongsId!)}
+                <button
+                  class="strongs-link"
+                  style="color: {languageColor(morphologyData.language)}"
+                  on:click={() => openStrongs(morphologyData.strongsId)}
+                  title="Open in Strong’s"
                 >
                   {morphologyData.strongsId}
                 </button>
@@ -828,7 +436,7 @@
                 <button
                   class="gloss"
                   on:click={() => openGloss(gloss)}
-                  title="Look up “{glossHead(gloss)}” in the dictionary"
+                  title="Look up “{glossTerm(gloss)}” in the dictionary"
                 >
                   {gloss}
                 </button>
@@ -851,7 +459,7 @@
 
             <dt>Language:</dt>
             <dd>
-              <span style="color: {getLanguageColor(morphologyData.language)}">
+              <span style="color: {languageColor(morphologyData.language)}">
                 {morphologyData.language.charAt(0).toUpperCase() + morphologyData.language.slice(1)}
               </span>
             </dd>
@@ -861,35 +469,10 @@
         {#if morphologyData.strongsId}
           <div class="hint-section">
             <p class="hint">
-              <span class="emoji">💡</span> Click Strong's number above to view full lexicon entry
+              <span class="emoji">💡</span> Tap the Strong's number for its full entry in Strong's
             </p>
           </div>
         {/if}
-      </div>
-    {:else if searchResults.length > 0}
-      <div class="search-results">
-        <p class="results-header">Found {searchResults.length} entries:</p>
-        <div class="results-list">
-          {#each searchResults as result}
-            <button
-              class="result-item"
-              on:click={() => selectEntry(result)}
-            >
-              <div class="result-lemma">
-                {result.lemma}
-                <span
-                  class="result-id"
-                  style="color: {getLanguageColor(result.language)}"
-                >
-                  {result.id}
-                </span>
-              </div>
-              <div class="result-definition">
-                {result.shortDefinition || result.definition.slice(0, 100)}
-              </div>
-            </button>
-          {/each}
-        </div>
       </div>
     {:else if isEnglishWord && englishWordInfo}
       <!-- English Word Information. No tab strip: definitions are the only
@@ -1010,368 +593,6 @@
             {/if}
           </div>
       </div>
-    {:else if strongEntry}
-      {#if morphologyData}
-        <button class="back-btn" on:click={() => (strongEntry = null)}>← Back to Morphology</button>
-      {/if}
-      <div class="tabs">
-        <button
-          class="tab"
-          class:active={activeTab === "definition"}
-          on:click={() => (activeTab = "definition")}
-        >
-          Definition
-        </button>
-        <button
-          class="tab"
-          class:active={activeTab === "forms"}
-          on:click={() => (activeTab = "forms")}
-        >
-          Forms
-        </button>
-        <button
-          class="tab"
-          class:active={activeTab === "occurrences"}
-          on:click={() => (activeTab = "occurrences")}
-        >
-          Occurrences
-        </button>
-        <button class="tab" class:active={activeTab === "arc"} on:click={() => (activeTab = "arc")}>
-          Arc
-        </button>
-        <button
-          class="tab"
-          class:active={activeTab === "spread"}
-          on:click={() => (activeTab = "spread")}
-        >
-          Spread
-        </button>
-        <button
-          class="tab"
-          class:active={activeTab === "related"}
-          on:click={() => (activeTab = "related")}
-        >
-          Related
-        </button>
-      </div>
-
-      <div class="tab-content">
-        <!-- Which text is being studied. Sits above the pane rather than inside
-             each tab, so switching between Forms and Occurrences keeps the
-             control in one place and the choice applies to both. -->
-        {#if showSourcePicker && activeTab !== "definition" && activeTab !== "related"}
-          <div class="source-picker" role="group" aria-label="Source text">
-            {#each usage?.sources ?? [] as s (s)}
-              <button class="src" class:active={source === s} on:click={() => (source = s)}>
-                {s.toUpperCase()}
-              </button>
-            {/each}
-            <button class="src" class:active={source === null} on:click={() => (source = null)}>
-              All
-            </button>
-          </div>
-        {/if}
-        {#if activeTab === "definition"}
-          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="definition-view" on:click={handleDefinitionClick}>
-            <div class="info-section">
-              <h3>Entry Information</h3>
-              <dl>
-                <dt>Strong's ID:</dt>
-                <dd style="color: {getLanguageColor(strongEntry.language)}">
-                  {strongEntry.id}
-                </dd>
-
-                <dt>Lemma:</dt>
-                <dd class="lemma-text">{strongEntry.lemma}</dd>
-
-                {#if strongEntry.transliteration}
-                  <dt>Transliteration:</dt>
-                  <dd>{strongEntry.transliteration}</dd>
-                {/if}
-
-                {#if strongEntry.pronunciation?.phonetic}
-                  <dt>Pronunciation:</dt>
-                  <dd class="phonetic">{strongEntry.pronunciation.phonetic}</dd>
-                {/if}
-
-                <dt>Language:</dt>
-                <dd
-                  style="color: {getLanguageColor(
-                    strongEntry.language,
-                  )}; text-transform: capitalize;"
-                >
-                  {strongEntry.language}
-                </dd>
-
-                {#if strongEntry.partOfSpeech}
-                  <dt>Part of Speech:</dt>
-                  <dd>
-                    {expandStepBiblePOS(strongEntry.partOfSpeech)}
-                    <span class="code-raw">({strongEntry.partOfSpeech})</span>
-                  </dd>
-                {/if}
-
-                <!-- No occurrence count here: the lexicon lookup never fills
-                     `occurrences`, so this row only ever rendered as nothing.
-                     The Occurrences tab counts the real verses instead. -->
-              </dl>
-            </div>
-
-            {#if strongEntry.shortDefinition}
-              <div class="info-section">
-                <h3>Short Definition</h3>
-                <p class="short-def">{strongEntry.shortDefinition}</p>
-              </div>
-            {/if}
-
-            <div class="info-section">
-              <h3>Full Definition</h3>
-              <p class="full-def">{@html renderStrongsMarkup(strongEntry.definition)}</p>
-            </div>
-
-            {#if kjvRenderings.length}
-              <div class="info-section">
-                <h3>KJV Renderings</h3>
-                <div class="renderings">
-                  {#each kjvRenderings as r (r.text + (r.marker ?? ""))}
-                    <span class="rendering" class:marked={r.marker}>
-                      {#if r.marker === "supplied"}<span class="rend-mark" title="Supplied by the KJV translators — nothing stands behind it in the Greek">✛</span>{/if}
-                      {#if r.marker === "combined"}<span class="rend-mark" title="Rendered only in combination with another word">+</span>{/if}
-                      {r.text}
-                    </span>
-                  {/each}
-                </div>
-                {#if kjvHasMarkers}
-                  <p class="rend-legend">
-                    <span class="rend-mark">✛</span> supplied by the translators
-                    &nbsp;·&nbsp;
-                    <span class="rend-mark">+</span> only in combination
-                  </p>
-                {/if}
-              </div>
-            {/if}
-
-            {#if strongEntry.derivation}
-              <div class="info-section">
-                <h3>Derivation</h3>
-                <p class="derivation">{@html renderStrongsMarkup(strongEntry.derivation)}</p>
-              </div>
-            {/if}
-
-          </div>
-        {:else if activeTab === "forms"}
-          <div class="usage-view">
-            {#if usageLoading}
-              <p class="hint">Loading forms…</p>
-            {:else if formGroups.length === 0}
-              <p class="coming-soon">No tagged forms found in the installed texts.</p>
-            {:else}
-              <p class="usage-count">
-                {formGroups.length} form{formGroups.length === 1 ? "" : "s"}
-              </p>
-              <div class="forms">
-                {#each formGroups as f (f.key)}
-                  <div class="form-group">
-                    <button class="form-row" on:click={() => toggleForm(f.key)}>
-                      <span class="form-caret motion-caret" class:open={openForm === f.key}>▶</span>
-                      <span class="form-text" dir={isRtlLanguage ? "rtl" : "ltr"}>{f.form}</span>
-                      <span class="form-parse">{parseOf(f.morphCode)}</span>
-                      <span class="form-count">{f.count}</span>
-                    </button>
-                    {#if openForm === f.key}
-                      <div class="form-verses" in:reveal>
-                        <StrongsVerseList
-                          uses={f.uses}
-                          rtl={isRtlLanguage}
-                          variantBaseline={activeBaseline}
-                          visited={visitedRefs}
-                          onNavigate={handleVerseClick}
-                        />
-                      </div>
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {:else if activeTab === "occurrences"}
-          <div class="usage-view">
-            {#if usageLoading}
-              <p class="hint">Loading occurrences…</p>
-            {:else if verseUses.length === 0}
-              <p class="coming-soon">No occurrences found in the installed texts.</p>
-            {:else}
-              <p class="usage-count">
-                {verseUses.length} verse{verseUses.length === 1 ? "" : "s"}
-              </p>
-              <StrongsVerseList
-                uses={verseUses}
-                rtl={isRtlLanguage}
-                variantBaseline={activeBaseline}
-                visited={visitedRefs}
-                onNavigate={handleVerseClick}
-              />
-            {/if}
-          </div>
-        {:else if activeTab === "arc"}
-          <div class="usage-view">
-            {#if usageLoading}
-              <p class="hint show-late">Loading…</p>
-            {:else if arc.first && arc.last}
-              <!-- Bound once here so the click handlers close over a verse that
-                   is known to exist, rather than re-reading a nullable field
-                   whenever they happen to fire. -->
-              {@const first = arc.first}
-              {@const last = arc.last}
-              {#if arc.hapax}
-                <p class="hapax">
-                  <strong>Hapax legomenon</strong> — used once in the whole of the
-                  text installed. Everything this word means rests on one verse.
-                </p>
-              {/if}
-              <dl class="arc">
-                <dt>Reach</dt>
-                <dd>
-                  {arc.total} verse{arc.total === 1 ? "" : "s"} across
-                  {arc.books} book{arc.books === 1 ? "" : "s"}
-                </dd>
-                <dt>First</dt>
-                <dd>
-                  <button class="arc-ref" on:click={() => handleVerseClick(first)}>
-                    {refKey(first)}
-                  </button>
-                </dd>
-                <dt>Last</dt>
-                <dd>
-                  <button class="arc-ref" on:click={() => handleVerseClick(last)}>
-                    {refKey(last)}
-                  </button>
-                </dd>
-                {#if arc.busiest}
-                  <dt>Densest</dt>
-                  <dd>
-                    <span style="color:{getBookColor(arc.busiest.book)}">{arc.busiest.book}</span>
-                    <span class="arc-dim">({arc.busiest.count})</span>
-                  </dd>
-                {/if}
-              </dl>
-              <!-- Only when a word actually reaches both. How the Septuagint uses
-                   a word against how the New Testament does is the comparison
-                   that makes a Greek word study worth doing. -->
-              {#each arc.spans as span (span.testament)}
-                <div class="arc-span">
-                  <h3>{span.label}</h3>
-                  <dl class="arc">
-                    <dt>Reach</dt>
-                    <dd>
-                      {span.total} verse{span.total === 1 ? "" : "s"} across
-                      {span.books} book{span.books === 1 ? "" : "s"}
-                    </dd>
-                    <dt>First</dt>
-                    <dd>
-                      <button class="arc-ref" on:click={() => handleVerseClick(span.first)}>
-                        {refKey(span.first)}
-                      </button>
-                    </dd>
-                    <dt>Last</dt>
-                    <dd>
-                      <button class="arc-ref" on:click={() => handleVerseClick(span.last)}>
-                        {refKey(span.last)}
-                      </button>
-                    </dd>
-                  </dl>
-                </div>
-              {/each}
-            {:else}
-              <p class="coming-soon">No occurrences found in the installed texts.</p>
-            {/if}
-          </div>
-        {:else if activeTab === "spread"}
-          <div class="usage-view">
-            {#if usageLoading}
-              <p class="hint show-late">Loading…</p>
-            {:else if distribution.total === 0}
-              <p class="coming-soon">No occurrences found in the installed texts.</p>
-            {:else}
-              <p class="usage-count">
-                {distribution.total} verse{distribution.total === 1 ? "" : "s"}, by book
-              </p>
-              {#each distribution.corpora as corpus (corpus.testament)}
-                <div class="spread-corpus">
-                  {#if distribution.corpora.length > 1}
-                    <h3 class="spread-corpus-name">
-                      {corpus.label}
-                      <span class="arc-dim">{corpus.total}</span>
-                    </h3>
-                  {/if}
-                  {#each corpus.categories as cat (cat.category)}
-                    <p class="spread-cat">{cat.label}</p>
-                    {#each cat.books as b (b.book)}
-                      <div class="bar-row" title="{b.book}: {b.count} verses">
-                        <span class="bar-label">{b.book}</span>
-                        <span class="bar-track">
-                          <!-- Every bar measured against the busiest single book,
-                               so one scale serves the whole chart. -->
-                          <span
-                            class="bar-fill"
-                            style="width:{Math.max(2, (b.count / distribution.max) * 100)}%; background:{b.color}"
-                          ></span>
-                        </span>
-                        <span class="bar-value">{b.count}</span>
-                      </div>
-                    {/each}
-                  {/each}
-                </div>
-              {/each}
-            {/if}
-          </div>
-        {:else if activeTab === "related"}
-          <div class="usage-view">
-            {#if related?.sense?.length || related?.area?.length}
-              <p class="usage-count">Words grouped by sense, not by spelling</p>
-              {#if related.sense.length}
-                <div class="rel-group">
-                  <h3>The same sense</h3>
-                  <div class="rel-words">
-                    {#each related.sense as w (w.id)}
-                      <button class="rel-word" on:click={() => loadStrongsEntry(w.id)}>
-                        <span class="rel-lemma">{w.lemma}</span>
-                        <span class="rel-gloss">{w.gloss}</span>
-                      </button>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-              {#if related.area.length}
-                <div class="rel-group">
-                  <h3>Nearby in meaning</h3>
-                  <div class="rel-words">
-                    {#each related.area as w (w.id)}
-                      <button class="rel-word" on:click={() => loadStrongsEntry(w.id)}>
-                        <span class="rel-lemma">{w.lemma}</span>
-                        <span class="rel-gloss">{w.gloss}</span>
-                      </button>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            {:else if isRtlLanguage}
-              <p class="coming-soon">Sense grouping covers Greek only.</p>
-              <p class="hint">
-                The tagging behind it comes from the Greek New Testament, so
-                Hebrew and Aramaic entries have none yet.
-              </p>
-            {:else}
-              <p class="coming-soon">No words share this one's sense.</p>
-              <p class="hint">
-                Only words tagged in the Greek New Testament can be grouped, so
-                a word that never occurs there has nothing to sit beside.
-              </p>
-            {/if}
-          </div>
-        {/if}
-      </div>
     {:else}
       <div class="empty-state">
         <svg
@@ -1458,17 +679,6 @@
     color: var(--text-muted, #999);
   }
 
-  /* The h2 is normal inline flow now (it used to be its own flex row), so the
-     badge needs its own gap rather than inheriting one. */
-  .strongs-id {
-    display: inline-block;
-    margin-left: calc(10px * var(--bar-scale, 1));
-    font-size: calc(15px * var(--bar-scale, 1));
-    font-weight: 500;
-    padding: 2px 9px;
-    background: rgba(76, 175, 80, 0.1);
-    border-radius: 6px;
-  }
 
   .head-actions {
     display: flex;
@@ -1558,91 +768,7 @@
     margin-top: 8px;
   }
 
-  .search-results {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
 
-  .results-header {
-    font-size: 16px;
-    color: #888;
-    margin: 0;
-  }
-
-  .results-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .result-item {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-color, #333);
-    border-radius: 8px;
-    padding: 16px;
-    text-align: left;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .result-item:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: #4caf50;
-  }
-
-  .result-lemma {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .result-id {
-    font-size: 14px;
-    padding: 2px 8px;
-    background: rgba(76, 175, 80, 0.1);
-    border-radius: 4px;
-  }
-
-  .result-definition {
-    font-size: 14px;
-    color: #aaa;
-  }
-
-  /* Mirrors the Encyclopedia/Topical tab strip. Those wrap rather than scroll
-     when narrow, which keeps every tab reachable on a phone. */
-  .tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: calc(2px * var(--bar-scale, 1));
-    border-bottom: 1px solid var(--border-color, #333);
-    margin-bottom: 14px;
-    flex-shrink: 0;
-  }
-
-  .tab {
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--text-muted, #999);
-    padding: calc(8px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1));
-    cursor: pointer;
-    font-size: calc(13px * var(--bar-scale, 1));
-    font-family: inherit;
-    white-space: nowrap;
-  }
-
-  .tab:hover {
-    color: var(--text-color, #fff);
-  }
-
-  .tab.active {
-    color: var(--color-primary, #4a90e2);
-    border-bottom-color: var(--color-primary, #4a90e2);
-  }
 
   .tab-content {
     animation: fadeIn 0.2s ease-out;
@@ -1758,20 +884,6 @@
     opacity: 0.8;
   }
 
-  .back-btn {
-    background: none;
-    border: none;
-    color: var(--color-primary, #4a90e2);
-    cursor: pointer;
-    font-size: 14px;
-    padding: 0 0 12px 0;
-    text-decoration: underline;
-    display: block;
-  }
-
-  .back-btn:hover {
-    opacity: 0.75;
-  }
 
   .morphology-view {
     display: flex;
@@ -1797,397 +909,7 @@
     font-weight: 600;
   }
 
-  .short-def {
-    font-size: 16px;
-    line-height: 1.6;
-    color: var(--text-color, #fff);
-    margin: 0;
-    padding: 16px;
-    background: rgba(76, 175, 80, 0.1);
-    border-left: 4px solid #4caf50;
-    border-radius: 4px;
-  }
 
-  .full-def,
-  .derivation {
-    font-size: 15px;
-    line-height: 1.8;
-    color: #ccc;
-    margin: 0;
-  }
-
-  /* Scripture reference links rendered inside Strong's definitions */
-  :global(.scripture-ref) {
-    background: none;
-    border: none;
-    padding: 0;
-    font: inherit;
-    font-size: inherit;
-    line-height: inherit;
-    color: var(--color-primary, #4a90e2);
-    text-decoration: underline;
-    cursor: pointer;
-    display: inline;
-  }
-
-  :global(.scripture-ref:hover) {
-    opacity: 0.8;
-  }
-
-  /* Indented numbered items: __1. __2. */
-  :global(.strongs-item) {
-    display: inline-block;
-    font-weight: 600;
-    margin-right: 2px;
-  }
-
-  .usage-view {
-    display: flex;
-    flex-direction: column;
-    padding: 20px;
-    gap: 12px;
-  }
-
-  .usage-count {
-    font-size: 13px;
-    color: var(--text-muted, #888);
-    margin: 0;
-  }
-
-  /* --- Source picker ------------------------------------------------------
-     Which of the installed original texts the counts and lists describe. Shown
-     only when more than one has this word, so a Hebrew study never grows a
-     one-button row. */
-  .source-picker {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 12px 20px 0;
-  }
-
-  .src {
-    background: none;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 4px;
-    color: var(--text-muted, #9aa0aa);
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 11.5px;
-    letter-spacing: 0.03em;
-    padding: 3px 9px;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-  }
-
-  .src:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--text-color, #dfe2e8);
-  }
-
-  .src.active {
-    background: color-mix(in srgb, var(--color-primary, #4a90e2) 18%, transparent);
-    border-color: var(--color-primary, #4a90e2);
-    color: var(--color-primary, #4a90e2);
-  }
-
-  .phonetic {
-    font-family: monospace;
-    font-size: 0.95em;
-    color: var(--text-muted, #aaa);
-    letter-spacing: 0.03em;
-  }
-
-  /* --- Forms tab ----------------------------------------------------------
-     A row per inflected form, opening onto the verses that use it. Was a table;
-     it became rows because a table cell is a poor place to hang a verse list. */
-  .forms {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .form-group {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  }
-
-  .form-row {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    width: 100%;
-    background: none;
-    border: none;
-    color: var(--text-color, #dfe2e8);
-    cursor: pointer;
-    font-family: inherit;
-    padding: 7px 4px;
-    text-align: left;
-  }
-
-  .form-row:hover {
-    background: rgba(255, 255, 255, 0.04);
-  }
-
-  .form-caret {
-    font-size: 10px;
-    color: var(--text-muted, #9aa0aa);
-  }
-
-  .form-text {
-    font-family: "Gentium Plus", "SBL Greek", "SBL Hebrew", serif;
-    font-size: 15px;
-  }
-
-  .form-parse {
-    flex: 1;
-    color: var(--text-secondary, #ccc);
-    font-size: 12px;
-  }
-
-  /* Verses, not raw hits — so it agrees with the list it opens onto. */
-  .form-count {
-    color: var(--text-muted, #888);
-    font-variant-numeric: tabular-nums;
-    font-size: 12px;
-    white-space: nowrap;
-  }
-
-  .form-verses {
-    padding: 0 0 8px 20px;
-  }
-
-  /* --- Related by sense ---------------------------------------------------
-     Grouped by Louw-Nida semantic domain, so these are words that mean
-     something similar rather than words that look similar. The domain numbers
-     stay internal: Louw-Nida's category names are UBS's, so each group is
-     described by its own members instead. */
-  .rel-group + .rel-group {
-    margin-top: 4px;
-  }
-
-  .rel-group h3 {
-    margin: 0 0 8px;
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--text-muted, #9aa0aa);
-  }
-
-  .rel-words {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-  }
-
-  .rel-word {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    border-radius: 5px;
-    cursor: pointer;
-    font-family: inherit;
-    padding: 5px 9px;
-    text-align: left;
-  }
-
-  .rel-word:hover {
-    background: rgba(255, 255, 255, 0.09);
-    border-color: color-mix(in srgb, var(--color-primary, #4a90e2) 45%, transparent);
-  }
-
-  .rel-lemma {
-    font-family: "Gentium Plus", "SBL Greek", serif;
-    font-size: 14.5px;
-    color: var(--text-color, #dfe2e8);
-  }
-
-  .rel-gloss {
-    font-size: 11.5px;
-    color: var(--text-muted, #9aa0aa);
-  }
-
-  /* --- KJV renderings -----------------------------------------------------
-     One comma-separated string in the source; chips here, because the point is
-     to see the spread of senses the translators reached for at a glance. */
-  .renderings {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-  }
-
-  .rendering {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    color: var(--text-color, #dfe2e8);
-    font-size: 12.5px;
-    padding: 3px 8px;
-  }
-
-  .rendering.marked {
-    border-style: dashed;
-  }
-
-  .rend-mark {
-    color: var(--text-muted, #9aa0aa);
-    font-size: 11px;
-    margin-right: 3px;
-  }
-
-  .rend-legend {
-    color: var(--text-muted, #9aa0aa);
-    font-size: 11.5px;
-    margin: 8px 0 0;
-  }
-
-  /* --- Spread tab ---------------------------------------------------------
-     A bar per book, colored by the app's own book-category ramp so a bar means
-     the same thing here as a verse number does in the reader.
-
-     That ramp was built for identity cues, not for charting, and measured as a
-     chart palette it has two real problems: the prophets' and Pauline purples
-     sit under 3:1 against this surface, and Acts' orange against the Gospels'
-     red is below the normal-vision separation floor. Neither is worth forking
-     the app's colors over, because color is not carrying identity here — every
-     bar is named and grouped under its category. The relief the contrast
-     shortfall obliges is built in instead: each bar sits on a visible track and
-     carries a 1px inner ring, so a dark purple still reads as a length, and the
-     count is printed in text ink beyond the bar rather than on the fill. */
-  .spread-corpus + .spread-corpus {
-    margin-top: 6px;
-  }
-
-  .spread-corpus-name {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin: 0 0 8px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-color, #dfe2e8);
-  }
-
-  .spread-cat {
-    margin: 10px 0 5px;
-    color: var(--text-muted, #9aa0aa);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  .bar-row {
-    display: grid;
-    grid-template-columns: 8.5em 1fr 2.2em;
-    align-items: center;
-    gap: 8px;
-    /* 2px of surface between adjacent bars. */
-    padding: 2px 0;
-  }
-
-  .bar-label {
-    font-size: 12.5px;
-    color: var(--text-color, #dfe2e8);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  /* The track is what makes a low-contrast fill still legible as a length. */
-  .bar-track {
-    display: block;
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 4px;
-    height: 10px;
-    overflow: hidden;
-  }
-
-  .bar-fill {
-    display: block;
-    height: 100%;
-    border-radius: 4px;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-  }
-
-  /* Text ink, never the series color. */
-  .bar-value {
-    color: var(--text-muted, #9aa0aa);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-  }
-
-  /* --- Arc tab ------------------------------------------------------------ */
-  .hapax {
-    background: color-mix(in srgb, #fde047 12%, transparent);
-    border: 1px solid color-mix(in srgb, #fde047 35%, transparent);
-    border-radius: 6px;
-    color: #e4e7ec;
-    font-size: 13px;
-    line-height: 1.5;
-    margin: 0;
-    padding: 9px 11px;
-  }
-
-  .hapax strong {
-    color: #fde047;
-  }
-
-  dl.arc {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 6px 14px;
-    margin: 0;
-    align-items: baseline;
-  }
-
-  dl.arc dt {
-    color: var(--text-muted, #9aa0aa);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  dl.arc dd {
-    margin: 0;
-    font-size: 13.5px;
-  }
-
-  .arc-ref {
-    background: none;
-    border: none;
-    padding: 0;
-    font-family: inherit;
-    font-size: 13.5px;
-    color: var(--color-primary, #4a90e2);
-    cursor: pointer;
-    text-decoration: underline;
-    text-decoration-style: dotted;
-    text-underline-offset: 3px;
-  }
-
-  .arc-ref:hover {
-    text-decoration-style: solid;
-  }
-
-  .arc-dim {
-    color: var(--text-muted, #9aa0aa);
-    font-size: 12px;
-  }
-
-  .arc-span {
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
-    padding-top: 12px;
-  }
-
-  .arc-span h3 {
-    margin: 0 0 8px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-color, #dfe2e8);
-  }
 
   .ipa-text {
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -2223,11 +945,6 @@
     color: #aaa;
   }
 
-  .coming-soon {
-    font-size: 18px;
-    color: #888;
-    margin: 0;
-  }
 
   .empty-state {
     display: flex;

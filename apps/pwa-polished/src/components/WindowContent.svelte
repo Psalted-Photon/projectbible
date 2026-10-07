@@ -15,6 +15,7 @@
   import PersonContent from "./PersonContent.svelte";
   import NavesContent from "./NavesContent.svelte";
   import LexicalContent from "./LexicalContent.svelte";
+  import StrongsContent from "./strongs/StrongsContent.svelte";
 
   // The map window's contents load the first time a map window opens: the
   // pane and the map library are a large share of the app, and most sessions
@@ -31,6 +32,7 @@
   type IsbeProps = ComponentProps<typeof IsbeContent>;
   type PersonProps = ComponentProps<typeof PersonContent>;
   type NavesProps = ComponentProps<typeof NavesContent>;
+  type StrongsProps = ComponentProps<typeof StrongsContent>;
 </script>
 
 {#if panel.contentType === 'selector'}
@@ -98,11 +100,18 @@
        four docked containers in WindowContainer, so panel.edge cannot be
        'harmony' here even though the type allows it in general. -->
   <NotesPane windowId={panel.id} contentState={panel.contentState} edge={panel.edge as DockEdge} />
+{:else if panel.contentType === 'strongs' || (panel.contentType === 'wordstudy' && panel.contentState?.strongsId)}
+  <!-- A word study pinned before Strong's was its own work, holding an entry,
+       opens here: the entry moved, and the window shouldn't lose it. -->
+  <StrongsContent
+    windowId={panel.id}
+    strongsId={panel.contentState?.strongsId ?? null}
+    initialTab={(panel.contentState?.tab ?? null) as StrongsProps['initialTab']}
+  />
 {:else if panel.contentType === 'wordstudy'}
   <LexicalContent
     windowId={panel.id}
     selectedText={panel.contentState?.selectedText ?? ''}
-    strongsId={panel.contentState?.strongsId ?? undefined}
   />
 {/if}
 

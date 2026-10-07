@@ -27,18 +27,19 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import type { WorksResolution } from "../adapters/lexicon-lookup";
-  import { worksInWindow, type WorkKey } from "../lib/openWork";
+  import { worksInWindow, dictionaryAvailable, type WorkKey } from "../lib/openWork";
   import { EASE_ENTER, EASE_EXIT, EASE_STANDARD, MOTION, motionLevel } from "../lib/motion";
 
   /**
-   * The four reference works, across the top of every lookup card.
+   * The five reference works, across the top of every lookup card.
    *
    * These replaced a row of "bridge pills" that changed depending on which card
    * you were in — the encyclopedia offered Topical and Dictionary, and stepping
    * into Topical changed the set — so there was never a fixed thing to aim at.
-   * All four are always drawn, always in this order, and grayed when that work
+   * All five are always drawn, always in this order, and grayed when that work
    * has nothing for the subject. Equal widths, so a tab is in the same place
-   * every time regardless of how long the labels are.
+   * every time regardless of how long the labels are. Where the full names
+   * don't fit, every tab takes its short name together.
    *
    * Availability comes from resolveWorks, which returns the ids rather than
    * booleans — so a tab that is lit is one that will definitely open something.
@@ -52,11 +53,12 @@
   export let inWindow = false;
   export let onSelect: (work: WorkKey) => void;
 
-  const TABS: { key: WorkKey; label: string }[] = [
-    { key: "encyclopedia", label: "Encyclopedia" },
-    { key: "topical", label: "Topical" },
-    { key: "dictionary", label: "Dictionary" },
-    { key: "people", label: "People" },
+  const TABS: { key: WorkKey; label: string; short: string }[] = [
+    { key: "encyclopedia", label: "Encyclopedia", short: "Encyc." },
+    { key: "topical", label: "Topical", short: "Topical" },
+    { key: "people", label: "People", short: "People" },
+    { key: "dictionary", label: "Dictionary", short: "Dict." },
+    { key: "strongs", label: "Strong’s", short: "Strong’s" },
   ];
 
   function isAvailable(key: WorkKey, w: WorksResolution | null, idx: boolean, win: boolean): boolean {
@@ -66,11 +68,14 @@
     // A pinned window can only hold works that have a window form.
     if (win && !worksInWindow(key)) return false;
     // Browsing an index, the tabs move you between indexes. Every work has one
-    // except the dictionary, which has no A–Z list to show.
-    if (idx) return key !== "dictionary";
+    // except the dictionary, which has no A–Z list to show, and Strong's, whose
+    // list comes in the next step.
+    if (idx) return key !== "dictionary" && key !== "strongs";
     switch (key) {
       case "dictionary":
-        return !!w?.dict;
+        return dictionaryAvailable(w, win);
+      case "strongs":
+        return !!w?.strongs;
       case "topical":
         return !!w?.topic;
       case "encyclopedia":
@@ -112,6 +117,37 @@
   /** The switch waiting on the page to slide out, if any. */
   let leaving: { key: WorkKey } | null = null;
   let destroyed = false;
+
+  // --- Short names --------------------------------------------------------
+  //
+  // Measured rather than set at a screen width, so it follows Bar size and
+  // whatever the tabs sit in — a narrow window on a wide screen included. The
+  // hidden row holds the full names in the tabs' own font and padding; if the
+  // widest won't fit an equal share of the row, every tab goes short at once,
+  // so the row never mixes the two.
+
+  let measureEl: HTMLDivElement;
+  let compact = false;
+  let resizeObs: ResizeObserver | null = null;
+
+  function measure() {
+    if (!tabsEl || !measureEl) return;
+    const share = tabsEl.clientWidth / TABS.length;
+    if (!share) return;
+    let widest = 0;
+    for (const el of Array.from(measureEl.children)) widest = Math.max(widest, (el as HTMLElement).offsetWidth);
+    compact = widest > share;
+  }
+
+  onMount(() => {
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    // The row changes width with the card or window; the hidden names change
+    // width with Bar size.
+    resizeObs = new ResizeObserver(() => measure());
+    resizeObs.observe(tabsEl);
+    resizeObs.observe(measureEl);
+  });
 
   function indexOf(key: WorkKey): number {
     return Math.max(0, TABS.findIndex((t) => t.key === key));
@@ -238,6 +274,7 @@
   });
 
   onDestroy(() => {
+    resizeObs?.disconnect();
     destroyed = true;
     leaving = null;
     glideAnim?.cancel();
@@ -256,10 +293,21 @@
       title={live ? tab.label : reason(tab.key, inWindow)}
       on:click={() => pick(tab.key)}
     >
-      {tab.label}
+      {compact ? tab.short : tab.label}
     </button>
   {/each}
-  <div class="tab-ind" style:transform="translateX({shownAt * 100}%)" bind:this={indEl} aria-hidden="true"></div>
+  <div
+    class="tab-ind"
+    style:width="{100 / TABS.length}%"
+    style:transform="translateX({shownAt * 100}%)"
+    bind:this={indEl}
+    aria-hidden="true"
+  ></div>
+  <div class="tab-measure" bind:this={measureEl} aria-hidden="true">
+    {#each TABS as tab (tab.key)}
+      <span class="work-tab">{tab.label}</span>
+    {/each}
+  </div>
 </div>
 
 <style>
@@ -306,10 +354,25 @@
     position: absolute;
     left: 0;
     bottom: 0;
-    width: 25%;
     height: 2px;
     background: var(--color-primary, #4a90e2);
     pointer-events: none;
+  }
+  /* The full names, laid out like tabs but never seen: measure() reads their
+     widths to decide whether the row goes short. */
+  .tab-measure {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    visibility: hidden;
+    pointer-events: none;
+    height: 0;
+    overflow: hidden;
+  }
+  .tab-measure .work-tab {
+    flex: none;
+    overflow: visible;
   }
   /* Grayed rather than hidden — the point is that the row never changes shape,
      so you can see at a glance what this subject does and doesn't have. */
