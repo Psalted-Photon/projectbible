@@ -11,7 +11,7 @@
  * all 152,718 verses in memory before writing. NET alone is 31,102.
  *
  * All four translations' headings go in, not just NET's. Headings fall back to
- * BSB's per chapter at read time, and NET only carries 1,751 of the 4,894 rows —
+ * BSB's per chapter at read time, and NET only carries 1,750 of the 4,879 rows —
  * strip the rest and most chapters silently lose their titles.
  *
  * Usage: node scripts/build-starter-pack.mjs

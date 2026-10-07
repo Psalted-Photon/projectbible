@@ -31,7 +31,8 @@
 
 import { get, writable, derived } from 'svelte/store';
 import { IndexedDBTextStore } from '../adapters';
-import { extractSpeechText } from '../verseRendering';
+import { HeadingsStore } from '../../adapters/HeadingsStore';
+import { extractSpeechText, extractHeading } from '../verseRendering';
 import { nextChapterOf, spokenBookName } from '../bibleData';
 import { getTtsSettings } from '../../adapters/settings';
 import {
@@ -128,6 +129,10 @@ const GAP_BEFORE = 3;
 const GAP_MID = 1;    // between "The book of Mark" and "Chapter 1"
 const GAP_AFTER = 2;
 
+/** Silence around a section heading read in the middle of a chapter, in seconds. */
+const HEADING_GAP_BEFORE = 1;
+const HEADING_GAP_AFTER = 0.5;
+
 /** Fallback pace before any real audio has been measured (seconds per character). */
 const DEFAULT_SECONDS_PER_CHAR = 0.067;
 
@@ -165,13 +170,23 @@ export interface Passage {
   endVerse?: number | null;
 }
 
-/** One thing to speak: a verse of scripture, or a spoken chapter announcement. */
+/**
+ * One thing to speak: a verse of scripture, a section heading, or a spoken
+ * chapter announcement.
+ */
 interface Utterance {
-  kind: 'verse' | 'announce';
+  kind: 'verse' | 'heading' | 'announce';
   text: string;
   book: string;
   chapter: number;
+  /**
+   * Null for anything that is not verse text. A heading is spoken on its own
+   * rather than glued to the front of its verse, so the verse's highlight and
+   * glow start when the verse itself does.
+   */
   verse: number | null;
+  /** The verse a heading sits above, so the counter does not drop to zero. */
+  headingFor?: number;
   /**
    * Which passage of the playlist this belongs to.
    *
@@ -280,6 +295,7 @@ export const isPreparing = derived(
 // ── internals ───────────────────────────────────────────────────────────────
 
 const textStore = new IndexedDBTextStore();
+const headingsStore = new HeadingsStore();
 
 let queue: Utterance[] = [];      // what to say, in order, across chapters
 let renderCursor = 0;             // next utterance to turn into audio
@@ -457,6 +473,15 @@ async function loadChapterUtterances(
     ? await loadGreekVerses(book, chapter)
     : null;
 
+  // The same headings the reader shows for this translation. They live in
+  // their own table, not on the verse rows — reading them from the rows is why
+  // this setting used to do nothing. Greek texts have none of their own and
+  // borrow the BSB's English ones, which would land between Greek verses, so
+  // they are left out there.
+  const headings = settings.readHeadings && !isGreekTranslation(translation)
+    ? await headingsStore.getChapterHeadings(book, chapter, translation)
+    : null;
+
   let first = true;
   for (const row of rows) {
     // A plan passage can be part of a chapter — Mark 6:30-44. A null end means
@@ -466,13 +491,23 @@ async function loadChapterUtterances(
       if (row.verse < range.startVerse) continue;
       if (range.endVerse !== null && row.verse > range.endVerse) continue;
     }
-    let speech = extractSpeechText(row.text);
+    const speech = extractSpeechText(row.text);
     const original = greek?.get(row.verse);
     if (!speech && !original) continue;
-    if (settings.readHeadings && row.heading && speech) {
-      speech = `${row.heading.trim().replace(/\.?$/, '.')} ${speech}`;
+    let gapBefore = first && announce !== 'none' ? GAP_AFTER : 0;
+
+    // Picked in the same order as the reader: a heading written into the verse
+    // text, then the translation's headings table.
+    const heading = headings
+      ? spokenHeading(extractHeading(row.text).heading || headings.get(row.verse)?.heading || '')
+      : '';
+    if (heading) {
+      out.push({
+        kind: 'heading', text: heading, book, chapter, verse: null, headingFor: row.verse,
+        gapBefore: first ? gapBefore : HEADING_GAP_BEFORE, passageIndex,
+      });
+      gapBefore = HEADING_GAP_AFTER;
     }
-    const gapBefore = first && announce !== 'none' ? GAP_AFTER : 0;
 
     if (original) {
       const route = greekSpeechRoute();
@@ -511,6 +546,31 @@ async function loadChapterUtterances(
 function isGreekTranslation(translationId: string): boolean {
   const id = translationId.toLowerCase();
   return id === 'byz' || id === 'tr' || id === 'sblgnt' || id === 'lxx';
+}
+
+/**
+ * A heading as it should be spoken, or '' when nothing speakable is left.
+ *
+ * KJV's carry italics tags. Psalm 119's headings are the Hebrew letter and its
+ * name — "א (Alef)" in NET, "א ALEPH." in KJV — and an English voice cannot say
+ * the letter, so only the name is read. A heading that is all brackets loses
+ * them, and one in capitals is lowered, since a voice can spell capitals out
+ * letter by letter.
+ */
+function spokenHeading(raw: string): string {
+  let text = raw
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[֐-׿]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const bracketed = text.match(/^\((.*)\)$/);
+  if (bracketed) text = bracketed[1].trim();
+  if (!text) return '';
+  if (/[A-Z]{2}/.test(text) && !/[a-z]/.test(text)) {
+    text = text.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+  }
+  // Ending on a stop gives the voice a falling, finished tone.
+  return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
 /** Speakable Greek text per verse, or null when this chapter has no word data. */
@@ -997,7 +1057,7 @@ function updatePositionFromClock(): void {
     return;
   }
 
-  const key = `${u.passageIndex}|${u.book}|${u.chapter}|${u.verse ?? 'a'}`;
+  const key = `${u.passageIndex}|${u.book}|${u.chapter}|${u.verse ?? (u.headingFor ? `h${u.headingFor}` : 'a')}`;
   if (key !== lastVerseKey) {
     lastVerseKey = key;
     readingPosition.set({
@@ -1013,13 +1073,14 @@ function updatePositionFromClock(): void {
         durationSeconds: u.seconds ?? 0,
       });
     } else {
-      // A spoken announcement — no verse is being read, so the page goes quiet
-      // rather than leaving the previous verse lit with its glow still sweeping.
+      // A spoken announcement or heading — no verse is being read, so the page
+      // goes quiet rather than leaving the previous verse lit with its glow
+      // still sweeping.
       ttsCurrentVerse.set(null);
       currentVerseWindow.set(null);
     }
 
-    refreshChapterInfo(u.passageIndex, u.verse);
+    refreshChapterInfo(u.passageIndex, u.verse ?? u.headingFor ?? null);
   }
 
   // Progress through the chapter: where this utterance starts, plus how far

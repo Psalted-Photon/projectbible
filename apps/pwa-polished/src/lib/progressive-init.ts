@@ -61,8 +61,10 @@ const STARTER_TRANSLATION = 'NET';
  *   2 — NET headings no longer carry raw USFM markers ("The \nd Lord\nd*’s").
  *   3 — 18 NET OT quotations no longer repeat their words ("them male and
  *       female them male and female"); Isaiah 43's notes lose raw markers.
+ *   4 — KJV's notes on where each letter was written no longer sit above
+ *       verse 1 of the next book ("Written to the Romans…" over 1 Corinthians).
  */
-const STARTER_REVISION = 3;
+const STARTER_REVISION = 4;
 const STARTER_REVISION_KEY = 'hexapla-starter-revision';
 
 /**

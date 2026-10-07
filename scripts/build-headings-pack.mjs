@@ -5,7 +5,10 @@
  *
  * Headings are an overlay rather than a column on the verse tables, because the
  * consolidated pack has no room for one. Each translation that writes its own
- * gets its own rows: BSB has 3,097, NET 1,802, KJV 44 and WEB 5. A translation
+ * gets its own rows: BSB has 3,107, NET 1,750 and KJV 22 (Psalm 119's stanza
+ * labels). WEB's five and KJV's other eight are in the Apocrypha, which is not
+ * in the book list, and KJV's 14 closing notes on where each letter was written
+ * are dropped by the parser because no verse follows them. A translation
  * with none -- or a passage where it has none -- falls back to BSB's at read
  * time, which is what the whole app did before this.
  *

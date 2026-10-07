@@ -135,6 +135,12 @@ export function parseUSFX(filePath) {
       chapter = 0;
       pendingPoetry = '';
       pendingStanza = false;
+      // A heading still waiting when a book ends has no verse after it in that
+      // book. KJV closes each of Paul's letters and Hebrews this way, with the
+      // traditional note on where it was written ("Written to the Romans from
+      // Corinthus…"), and carrying it over put it above verse 1 of the next
+      // book. There is no slot after a book's last verse, so it is dropped.
+      pendingHeading = null;
       return;
     }
 
