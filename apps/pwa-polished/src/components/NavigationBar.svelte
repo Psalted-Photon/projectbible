@@ -2772,7 +2772,7 @@
   {/if}
 </div>
 
-<!-- Power Search Modal -->
+<!-- Advanced Search Modal -->
 <PowerSearchModal bind:show={showPowerSearchModal} initialText={powerSearchText} />
 
 {#if appsMenuOpen && appsButtonRef}

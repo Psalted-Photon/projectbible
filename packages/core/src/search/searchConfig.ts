@@ -1,5 +1,5 @@
 /**
- * Power Search Configuration Schema and Safe Regex Generator
+ * Advanced Search Configuration Schema and Safe Regex Generator
  * Converts visual UI controls into optimized search patterns
  */
 

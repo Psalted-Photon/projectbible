@@ -144,8 +144,9 @@
       const query = generateSafeRegex(config);
       generatedQuery = query;
 
-      // Power Search is always an explicit search, so run the deep categories too.
-      searchResults = await searchService.search(query.regex.source, { limit: -1, deep: true });
+      // Always an explicit search, so run the deep categories too. The pattern
+      // tests the text; the plain words are for the lookups by name or number.
+      searchResults = await searchService.search(config.text, { limit: -1, deep: true, pattern: query.regex });
       totalResultCount = searchResults.reduce((sum, cat) => sum + cat.count, 0);
 
       // Open the Bible group so results are visible without a first click.
@@ -278,7 +279,7 @@
     <div class="modal-container" on:click|stopPropagation>
       <!-- Header -->
       <div class="modal-header">
-        <h2><span class="header-icon"><Microscope size={20} weight="bold" /><span class="icon-overlay"><Microscope size={20} weight="thin" /></span></span> Power Search</h2>
+        <h2><span class="header-icon"><Microscope size={20} weight="bold" /><span class="icon-overlay"><Microscope size={20} weight="thin" /></span></span> Advanced Search</h2>
         <button class="close-button" on:click={closeModal} title="Close">✕</button>
       </div>
 
@@ -530,6 +531,7 @@
                   nodes={searchTree}
                   expanded={expandedResultNodes}
                   query={config.text}
+                  anywhere
                   onToggle={toggleResultNode}
                   onSelect={handleResultClick}
                 />

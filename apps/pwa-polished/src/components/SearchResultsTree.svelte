@@ -1,10 +1,11 @@
 <script lang="ts">
   /**
    * Recursive collapsible results tree, shared by the nav search dropdown and
-   * Power Search. Renders any depth: Bible → translation → book → verse for
+   * Advanced Search. Renders any depth: Bible → translation → book → verse for
    * verses, category → result for notes, journal, characters and the rest.
    */
   import { CaretRight } from "phosphor-svelte";
+  import { highlightPattern } from "../lib/searchWords";
   import type { SearchTreeNode } from "../lib/searchTree";
   import type { SearchResult } from "../lib/services/searchService";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
@@ -14,6 +15,9 @@
   export let expanded: Set<string> = new Set();
   export let depth = 0;
   export let query = "";
+  /** Mark the query's letters wherever they appear, the way Advanced Search
+   *  matches. The bar's search marks only the word forms it searched for. */
+  export let anywhere = false;
   export let onToggle: (key: string) => void = () => {};
   export let onSelect: (result: SearchResult) => void = () => {};
 
@@ -25,7 +29,8 @@
    */
   function highlight(text: string): string {
     if (!queryRe || !text) return escapeHtml(text || "");
-    const re = new RegExp(queryRe.source, "gi");
+    // A fresh copy, flags and all: the word forms need the u flag.
+    const re = new RegExp(queryRe.source, queryRe.flags);
     let out = "";
     let last = 0;
     for (const m of text.matchAll(re)) {
@@ -43,16 +48,8 @@
       .replace(/>/g, "&gt;");
   }
 
-  /** The query terms as one pattern, for the verse renderer's own marking. */
-  $: queryRe = (() => {
-    const alt = (query || "")
-      .trim()
-      .split(/\s+/)
-      .filter((t) => t.length >= 2)
-      .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join("|");
-    return alt ? new RegExp(`(${alt})`, "gi") : null;
-  })();
+  /** The query as one pattern, for the verse renderer's own marking. */
+  $: queryRe = highlightPattern(query || "", anywhere);
 
   /**
    * Verse subtitles are raw stored text — BSB footnotes, KJV pilcrows, NET
@@ -93,6 +90,7 @@
             nodes={node.children}
             {expanded}
             {query}
+            {anywhere}
             {onToggle}
             {onSelect}
             depth={depth + 1}

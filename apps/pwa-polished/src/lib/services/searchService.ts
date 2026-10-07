@@ -10,6 +10,7 @@ import { navigationStore } from '../../stores/navigationStore';
 import { cleanVersePreviewText } from '../verseRendering';
 import { parseRefString } from '../parseRefString';
 import { getAllReadings, listWorks, shortReadingLabel } from '../devotionals/devotionalsData';
+import { patternMatcher, wordMatcher, type TextMatcher } from '../searchWords';
 
 export type SearchCategoryKey =
   | 'bible'
@@ -57,6 +58,24 @@ export interface SearchOptions {
    * cursors ~89k rows). Set for an explicit Enter/Search press only.
    */
   deep?: boolean;
+  /**
+   * Advanced Search's own pattern. Without one, each word of the query finds
+   * itself and its forms and nothing else (lib/searchWords), so "eye" never
+   * finds obeyed. With one, text is tested against the pattern as given, and
+   * the query is used only for the lookups by name or number: people, the
+   * encyclopedia and topical titles, and Strong's.
+   */
+  pattern?: RegExp;
+}
+
+/** The two ways a category can want the words: anywhere in it, or together. */
+interface Matchers {
+  /** Every word somewhere in the text, in any order. */
+  all: TextMatcher;
+  /** The words together, in the order typed. */
+  phrase: TextMatcher;
+  /** Set for Advanced Search, which brings its own pattern. */
+  pattern: boolean;
 }
 
 /** Per-category caps, so one huge category can't bury the others. */
@@ -93,9 +112,9 @@ function stripHtml(html: string): string {
 }
 
 /** Trim to a window around the first match so long entries stay scannable. */
-function snippet(text: string, term: string, maxLength = 160): string {
+function snippet(text: string, match: TextMatcher, maxLength = 160): string {
   if (text.length <= maxLength) return text;
-  const at = text.toLowerCase().indexOf(term.toLowerCase());
+  const at = match.indexIn(text);
   if (at === -1) return `${text.slice(0, maxLength)}…`;
   const start = Math.max(0, at - Math.floor(maxLength / 3));
   const end = Math.min(text.length, start + maxLength);
@@ -134,28 +153,31 @@ export class UnifiedSearchService {
    * options object to opt into the deep categories.
    */
   async search(query: string, limit?: number | SearchOptions): Promise<SearchCategory[]> {
-    if (!query || query.trim().length === 0) {
+    const options: SearchOptions = typeof limit === 'object' && limit !== null ? limit : { limit };
+
+    // Advanced Search can run on its pattern alone (words near each other).
+    const normalizedQuery = (query || '').trim();
+    if (!normalizedQuery && !options.pattern) {
       return [];
     }
 
-    const options: SearchOptions = typeof limit === 'object' && limit !== null ? limit : { limit };
-
-    // Don't lowercase regex patterns - they contain special characters like \W that would break
-    const normalizedQuery = query.trim();
+    const match: Matchers = options.pattern
+      ? { all: patternMatcher(options.pattern), phrase: patternMatcher(options.pattern), pattern: true }
+      : { all: wordMatcher(normalizedQuery, 'all'), phrase: wordMatcher(normalizedQuery, 'phrase'), pattern: false };
 
     // Every category is independent, so fetch them together rather than
     // serially — the slowest one sets the pace instead of their sum.
     const [verses, strongs, notes, journal, saved, characters, encyclopedia, topical, devotionals, commentaries] = await Promise.all([
-      this.searchVerses(normalizedQuery, options.limit),
+      this.searchVerses(match.all, options.limit),
       this.searchStrongs(normalizedQuery),
-      this.searchNotes(normalizedQuery),
-      this.searchJournal(normalizedQuery),
-      this.searchSaved(normalizedQuery),
+      this.searchNotes(match.phrase),
+      this.searchJournal(match.phrase),
+      this.searchSaved(match.phrase),
       this.searchCharacters(normalizedQuery),
       this.searchEncyclopedia(normalizedQuery, !!options.deep),
       this.searchTopical(normalizedQuery, !!options.deep),
-      this.searchDevotionals(normalizedQuery),
-      options.deep ? this.searchCommentaries(normalizedQuery) : Promise.resolve([]),
+      this.searchDevotionals(normalizedQuery, match),
+      options.deep ? this.searchCommentaries(normalizedQuery, match) : Promise.resolve([]),
     ]);
 
     const categories: SearchCategory[] = [
@@ -177,11 +199,11 @@ export class UnifiedSearchService {
   // ── Bible ────────────────────────────────────────────────────────────────
 
   private async searchVerses(
-    query: string,
+    match: TextMatcher,
     limit: number = 250,
   ): Promise<{ results: SearchResult[]; total: number }> {
     try {
-      const dbResults = await this.searchIndex.search(query);
+      const dbResults = await this.searchIndex.scan(match);
 
       // Limit results (default 250, or all if limit is -1)
       const resultLimit = limit === -1 ? dbResults.length : limit;
@@ -350,12 +372,11 @@ export class UnifiedSearchService {
 
   // ── Notes / Journal ──────────────────────────────────────────────────────
 
-  private async searchNotes(query: string): Promise<SearchResult[]> {
+  private async searchNotes(match: TextMatcher): Promise<SearchResult[]> {
     try {
-      const term = query.toLowerCase();
       const notes = await this.userData.getNotes();
       return notes
-        .filter((note) => stripHtml(note.text).toLowerCase().includes(term))
+        .filter((note) => match.test(stripHtml(note.text)))
         .slice(0, CATEGORY_LIMIT)
         .map((note) => {
           const book = normalizeBookName(note.reference.book);
@@ -363,7 +384,7 @@ export class UnifiedSearchService {
           return {
             type: 'note' as const,
             title: ref,
-            subtitle: snippet(stripHtml(note.text), query),
+            subtitle: snippet(stripHtml(note.text), match),
             reference: ref,
             data: {
               book,
@@ -380,24 +401,22 @@ export class UnifiedSearchService {
     }
   }
 
-  private async searchJournal(query: string): Promise<SearchResult[]> {
+  private async searchJournal(match: TextMatcher): Promise<SearchResult[]> {
     try {
       // A locked journal isn't searched at all — not even which days match.
       if (currentLockView().needsUnlock) return [];
-      const term = query.toLowerCase();
       // The synced store hands back unscrambled text while unlocked.
       const entries = await syncedJournalStore.getEntries();
       return entries
         .filter((entry) => {
           if (entry.locked || entry.unreadable) return false;
-          const haystack = `${entry.title || ''} ${stripHtml(entry.text)}`.toLowerCase();
-          return haystack.includes(term);
+          return match.test(`${entry.title || ''} ${stripHtml(entry.text)}`);
         })
         .slice(0, CATEGORY_LIMIT)
         .map((entry) => ({
           type: 'journal' as const,
           title: entry.title ? `${entry.date} — ${entry.title}` : entry.date,
-          subtitle: snippet(stripHtml(entry.text), query),
+          subtitle: snippet(stripHtml(entry.text), match),
           data: { date: entry.date, entryId: entry.id },
           score: 1,
         }));
@@ -415,9 +434,8 @@ export class UnifiedSearchService {
    * text in the translation the reader is showing, since that's the text the
    * list in Profile shows too.
    */
-  private async searchSaved(query: string): Promise<SearchResult[]> {
+  private async searchSaved(match: TextMatcher): Promise<SearchResult[]> {
     try {
-      const term = query.toLowerCase();
       const [highlights, wordHighlights] = await Promise.all([
         this.userData.getHighlights(),
         this.userData.getWordHighlights(),
@@ -444,7 +462,7 @@ export class UnifiedSearchService {
       );
 
       return verses
-        .filter((v) => v.text && cleanVersePreviewText(v.text).toLowerCase().includes(term))
+        .filter((v) => v.text && match.test(cleanVersePreviewText(v.text)))
         .sort(
           (a, b) =>
             (bookOrder.get(a.book) ?? 999) - (bookOrder.get(b.book) ?? 999) ||
@@ -674,17 +692,17 @@ export class UnifiedSearchService {
    * Spurgeon headline, or any Daily Light fragment. Anything else is words:
    * every word of the query has to appear in the reading. Grouped by work.
    */
-  private async searchDevotionals(query: string): Promise<SearchResult[]> {
+  private async searchDevotionals(query: string, match: Matchers): Promise<SearchResult[]> {
     try {
       const q = query.trim();
-      if (q.length < 3) return [];
+      if (q.length < 3 && !match.pattern) return [];
       const readings = await getAllReadings();
       if (!readings.length) return [];
       const works = new Map((await listWorks()).map((w) => [w.workId, w]));
       const order = (id: string) => works.get(id)?.sortOrder ?? 99;
 
       // A reference names a book, so only try one when the query has a digit after a word.
-      const ref = /[a-z]/i.test(q) && /\d/.test(q) ? parseRefString(q, '', 0) : null;
+      const ref = !match.pattern && /[a-z]/i.test(q) && /\d/.test(q) ? parseRefString(q, '', 0) : null;
       const refBook = ref?.book ? normalizeBookName(ref.book) : null;
       const wantVerse = ref && /:\s*\d/.test(q) ? ref.verse : null;
 
@@ -700,9 +718,8 @@ export class UnifiedSearchService {
           if (k) hits.push({ r, sub: `${k.label} · ${k.fragment ?? k.kjvText}` });
         }
       } else {
-        const words = q.toLowerCase().split(/\s+/).filter(Boolean);
         for (const r of readings) {
-          if (!words.every((w) => r.plainText.includes(w))) continue;
+          if (!match.all.test(r.plainText)) continue;
           // plainText is lowercased for matching; the snippet comes from the text as written.
           // The modern text and notes are searched too, so a match may only be there.
           const shown = [
@@ -711,7 +728,7 @@ export class UnifiedSearchService {
             stripHtml(r.modernHtml || ''),
             ...(r.notes ?? []).map((n) => `${n.term}: ${stripHtml(n.html)}`),
           ].join(' ');
-          hits.push({ r, sub: snippet(shown, words[0], 140) });
+          hits.push({ r, sub: snippet(shown, match.all, 140) });
         }
       }
 
@@ -741,10 +758,9 @@ export class UnifiedSearchService {
    * ~89k entries with no text index, so this cursors and bails at the cap.
    * Only runs on an explicit search, never on type-ahead.
    */
-  private async searchCommentaries(query: string): Promise<SearchResult[]> {
+  private async searchCommentaries(query: string, match: Matchers): Promise<SearchResult[]> {
     try {
-      const term = query.toLowerCase();
-      if (term.length < 3) return [];
+      if (query.length < 3 && !match.pattern) return [];
 
       const db = await openDB();
       if (!db.objectStoreNames.contains('commentary_entries')) return [];
@@ -764,13 +780,13 @@ export class UnifiedSearchService {
           }
           const entry = cursor.value as any;
           const text = stripHtml(entry.text || '');
-          if (text.toLowerCase().includes(term)) {
+          if (match.phrase.test(text)) {
             const book = normalizeBookName(entry.book);
             const ref = `${book} ${entry.chapter}:${entry.verseStart}`;
             results.push({
               type: 'commentary',
               title: entry.title ? `${ref} — ${entry.title}` : ref,
-              subtitle: snippet(text, query),
+              subtitle: snippet(text, match.phrase),
               reference: ref,
               group: entry.author || 'Unknown',
               data: {

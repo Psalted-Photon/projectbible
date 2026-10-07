@@ -385,9 +385,11 @@ Eight categories (`SearchCategoryKey`): `bible`, `strongs`, `notes`, `journal`, 
 
 **Reference jump** — lives in `NavigationBar.svelte`, not the service. `readQueryAsRef(query)` in `src/lib/bibleRefs.ts` reads the whole query with `findRefs` (the notes reader) and returns `ref`, `book` (a book name alone), `overflow` (numbers past the book, with a message), or null. It counts only when the reference is the entire query, apart from continuations like `, 18`. `findRefs` trims an overlong reference back to what exists, so `overflow` re-reads the query loosely to say why instead. `submitSearch()` (Enter and the glass) jumps on `ref`, shows a notice on `overflow`, and otherwise runs `performSearch()`. The jump is `jumpToQueryRef()` → `navigateToResult()`, so it leaves the `search` crumb with `snapshotSearch()` before `navigateTo` marks the verse in its book's color. The Go-to row is a `VerseRefRow` at the top of the results list. `searchRan` decides whether the results area below it shows, so a typed reference opens the list with only the row. A crumb left by a jump carries no results, so restoring it shows just the row.
 
-**Helpers** — `stripHtml()`, `snippet(text, term, maxLength = 160)` which windows around the first match so long entries stay scannable.
+**Word matching** — `src/lib/searchWords.ts`. The bar's search builds a `TextMatcher` with `wordMatcher(query, 'all' | 'phrase')`: each typed word matches itself and its English forms (-s/-es, -ed, -ing, -eth/-est; -d, -r/-rs, -th, -st and dropped-e -ing on words ending in e; y → ies/ied/ieth/iest; doubled last letter), bounded by Unicode letter lookarounds, so `eye` never matches obeyed. No -er except on e-words (keeps corn ≠ corner, man ≠ manner). A typed plural adds its singular. `LITTLE_WORDS` and words under three letters match only themselves. Non-ASCII words (Greek, Hebrew) still match anywhere. Bible and devotionals use `all` (every word, any order); notes, journal, highlights and commentaries use `phrase` (words together, in order). `SearchOptions.pattern` (Advanced search) swaps both for `patternMatcher(regex)`, and the query text then feeds only Strong's and the name lookups (people, ISBE and Nave's titles, still prefix). `highlightPattern(query, anywhere)` marks results the same way; `SearchResultsTree`'s `anywhere` prop is set by Advanced search. `IndexedDBSearchIndex.scan(match)` is the verse cursor; `search(query)` wraps it with word matching.
 
-### 9.2 Advanced (power) search
+**Helpers** — `stripHtml()`, `snippet(text, match, maxLength = 160)` which windows around the first match so long entries stay scannable.
+
+### 9.2 Advanced search
 
 `PowerSearchModal.svelte`. Config options:
 
@@ -406,7 +408,7 @@ Toolbar entry point `NavigationBar.svelte`, tooltip "Advanced search — regex, 
 
 ### 9.3 In-app help
 
-`src/components/HelpModal.svelte` — `helpContent` record, each key giving `{title, description, examples[]}`. Topics: Match Type, Must Contain / Must NOT Contain, Proximity Search, Include Plurals, Case-Insensitive Search, Pattern Complexity. This modal is power-search-specific, not a general app help system.
+`src/components/HelpModal.svelte` — `helpContent` record, each key giving `{title, description, examples[]}`. Topics: Match Type, Must Contain / Must NOT Contain, Proximity Search, Include Plurals, Case-Insensitive Search, Pattern Complexity. This modal is specific to Advanced search, not a general app help system.
 
 ## 10. Highlights & Notes
 

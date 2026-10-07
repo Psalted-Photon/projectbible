@@ -2,36 +2,27 @@ import type { SearchIndex, SearchResult } from '@projectbible/core';
 import { BIBLE_BOOKS } from '../lib/bibleData.js';
 import type { DBVerse } from './db.js';
 import { cleanVersePreviewText } from '../lib/verseRendering';
+import { wordMatcher, type TextMatcher } from '../lib/searchWords';
 
 export class IndexedDBSearchIndex implements SearchIndex {
   /**
-   * Search for verses containing the query string
-   * @param query Search term(s) or regex pattern
+   * Search for verses holding each word of the query, in its own forms
+   * (lib/searchWords).
+   * @param query Search term(s)
    * @param translations Optional list of translation IDs to search within
    */
   async search(query: string, translations?: string[]): Promise<SearchResult[]> {
     if (!query.trim()) {
       return [];
     }
+    return this.scan(wordMatcher(query, 'all'), translations);
+  }
 
-    // Try to detect if this is a regex pattern (contains regex metacharacters)
-    const isRegex = /[\\()?.*+[\]{}|^$]/.test(query);
-    let regex: RegExp | null = null;
-    let searchTerms: string[] = [];
-    
-    if (isRegex) {
-      try {
-        // Treat as regex pattern
-        regex = new RegExp(query, 'gi');
-      } catch (error) {
-        console.error('Invalid regex pattern, falling back to simple search:', error);
-        searchTerms = query.toLowerCase().trim().split(/\s+/);
-      }
-    } else {
-      // Simple term search
-      searchTerms = query.toLowerCase().trim().split(/\s+/);
-    }
-    
+  /**
+   * Every verse the matcher accepts, in canonical order. The matcher decides
+   * what counts — the bar's word forms or Advanced Search's pattern.
+   */
+  async scan(match: TextMatcher, translations?: string[]): Promise<SearchResult[]> {
     try {
       const db = await import('./db.js').then(m => m.openDB());
       
@@ -60,24 +51,9 @@ export class IndexedDBSearchIndex implements SearchIndex {
             // a snippet could be cut through a control character.
             const searchable = cleanVersePreviewText(verse.text);
 
-            let matches = false;
+            if (match.test(searchable)) {
+              const snippet = this.createSnippet(searchable, match.indexIn(searchable));
 
-            if (regex) {
-              matches = regex.test(searchable);
-              // Reset regex lastIndex for next test
-              regex.lastIndex = 0;
-            } else {
-              // Check if all search terms are in the verse text
-              const lowerText = searchable.toLowerCase();
-              matches = searchTerms.every(term => lowerText.includes(term));
-            }
-
-            if (matches) {
-              // Create snippet with highlighted terms
-              const snippet = regex
-                ? this.createSnippet(searchable, [])
-                : this.createSnippet(searchable, searchTerms);
-              
               results.push({
                 translation: verse.translationId,
                 book: verse.book,
@@ -124,27 +100,16 @@ export class IndexedDBSearchIndex implements SearchIndex {
   }
 
   /**
-   * Create a snippet of the verse with context around matching terms
+   * Create a snippet of the verse with context around the first match
    * @param text The full verse text
-   * @param searchTerms The search terms to highlight
+   * @param firstMatch Where the first match starts, or -1
    */
-  private createSnippet(text: string, searchTerms: string[]): string {
+  private createSnippet(text: string, firstMatch: number): string {
     const maxLength = 150;
     
     // If text is short enough, return it all
     if (text.length <= maxLength) {
       return text;
-    }
-    
-    // Find the first occurrence of any search term
-    const lowerText = text.toLowerCase();
-    let firstMatch = -1;
-    
-    for (const term of searchTerms) {
-      const pos = lowerText.indexOf(term);
-      if (pos !== -1 && (firstMatch === -1 || pos < firstMatch)) {
-        firstMatch = pos;
-      }
     }
     
     if (firstMatch === -1) {

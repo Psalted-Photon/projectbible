@@ -212,6 +212,8 @@ Type in the toolbar box and results appear as you type, grouped by where they ca
 - **Devotionals** — words in a reading, or a reference: search `John 3:16` to find the readings built on it
 - **Commentaries**
 
+Each word you type finds itself and its own forms, not the same letters inside other words: `eye` finds eye, eyes, eyed and eyeing, but not obeyed or journeyed, and `love` finds loved, loveth, loving and lovers. A plural finds its singular too (`eyes` finds eye). Common little words (the, and, for, will) find only themselves. To match letters anywhere in a word, use Advanced search with **Contains**.
+
 Typing a Strong's number straight into the box (`G26`, `H430`, `g0026`) jumps directly to that entry.
 
 Typing a reference goes straight to it. The box reads references the same way notes and the journal do — `1 cor 5`, `rom. 8:28`, `first timothy 2`, `gospel of john 3:16` — and while you type, a **Go to** row at the top of the list shows the reference in its book's color over the opening words of the verse. Press Enter (or tap the row) and the reader opens there, with the verse you land on marked in the book's color, and a magnifying-glass crumb that brings you back with the reference still in the box. A chapter lands on its first verse, a range on the verse it starts at. A reference only jumps when it's the whole search — `1 cor 5 love` is a search for love. A book name on its own (`romans`, `john`) gets a Go to row too, but Enter still searches the word, so "John" still finds people. A chapter or verse that doesn't exist says so (`Acts has 28 chapters`) instead of going anywhere.
