@@ -339,6 +339,13 @@
   // scales the bar, so it scales this too.
   let NAV_BAR_HIDDEN = -68 * get(barScale);
   let navBarOffset = 0; // Track navbar Y offset (0 = visible, NAV_BAR_HIDDEN = hidden)
+  // The app's own smooth nudges (word ring, quote card, read-aloud following
+  // the verse) leave the bar where it is; only the reader's scrolling moves it.
+  // Called just before each one; a smooth scroll finishes well inside 800ms.
+  let navBarStillUntil = 0;
+  function holdNavBarStill(): void {
+    navBarStillUntil = performance.now() + 800;
+  }
   $: {
     const hidden = -68 * $barScale;
     // A bar already tucked away stays fully tucked away at its new size.
@@ -1189,6 +1196,7 @@
     const shift = Math.min(over, Math.max(0, room));
     if (shift === 0) return 0;
 
+    holdNavBarStill();
     readerElement.scrollBy({ top: shift, behavior: 'smooth' });
     return shift;
   }
@@ -1421,6 +1429,7 @@
     if (rect.top >= topBand && rect.bottom <= bottomBand) return;
     const target =
       readerElement.scrollTop + (rect.top - containerRect.top) - containerRect.height * 0.35;
+    holdNavBarStill();
     readerElement.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
   }
 
@@ -1680,7 +1689,7 @@
     clearReadingPlanHighlight();
     navigationStore.setReadingPlanActiveTarget(next.book, next.chapter, null, false);
     navigationStore.navigateTo(currentTranslation, next.book, next.chapter, null, false);
-    if (!navBarPinned) navBarOffset = NAV_BAR_HIDDEN;
+    navBarOffset = 0;
   }
 
   async function handleMarkAndContinue(ctx: any, book: string, chapter: number) {
@@ -1893,7 +1902,9 @@
       }
       prev = prev.previousElementSibling as HTMLElement | null;
     }
-    if (!navBarPinned) navBarOffset = NAV_BAR_HIDDEN;
+    // Arriving somewhere shows the bar, so the crumbs stay in reach and can be
+    // tapped through like tabs. Only the reader's own scroll down hides it.
+    navBarOffset = 0;
     const containerRect = readerElement.getBoundingClientRect();
     const targetRect = scrollTarget.getBoundingClientRect();
     const newScrollTop = readerElement.scrollTop + (targetRect.top - containerRect.top) - 8;
@@ -2550,6 +2561,7 @@
         scrollResetPending = true;
         await tick(); // flush DOM so scrollHeight reflects the new single-chapter content
         lastScrollTop = 0;
+        navBarOffset = 0;
         readerElement.scrollTop = 0; // direct assignment — always instant, ignores scroll-behavior CSS
         if (scrollToVerse != null) {
           // Cleared before the await, not after: the scroll waits on fonts, and
@@ -3179,6 +3191,8 @@
       if (navBarPinned) {
         // Pinned down: scrolling never moves it.
         navBarOffset = 0;
+      } else if (performance.now() < navBarStillUntil) {
+        // One of our own nudges is moving the page, not the reader.
       } else if (scrollTop < 5) {
         // Near top - always fully visible
         navBarOffset = 0;
@@ -3512,6 +3526,10 @@
           const newScrollHeight = readerElement.scrollHeight;
           readerElement.scrollTop =
             readerElement.scrollTop + (newScrollHeight - oldScrollHeight);
+          // That jump is a whole chapter downward. Without moving the baseline
+          // with it, the scroll handler reads it as the reader scrolling down and
+          // hides the bar in the middle of a scroll up.
+          lastScrollTop = readerElement.scrollTop;
         }
       }
     } catch (err) {
@@ -4822,6 +4840,7 @@
     shift = Math.sign(shift) * Math.min(Math.abs(shift), Math.max(0, room));
     if (shift === 0) return 0;
 
+    holdNavBarStill();
     readerElement.scrollBy({ top: -shift, behavior: "smooth" });
     return shift;
   }
