@@ -25,6 +25,9 @@ export interface DevotionalTarget {
   slot: DevotionalSlot;
   /** Where the reading was scrolled to, when coming back from the reader. */
   scrollTop?: number;
+  /** Whether the words-and-phrases panel was open, and where it was scrolled. */
+  notesOpen?: boolean;
+  notesScrollTop?: number;
 }
 
 export const devotionalTarget = writable<DevotionalTarget | null>(null);
@@ -59,7 +62,15 @@ export const devotionalSettings = createDevotionalSettingsStore();
 pendingRestore.subscribe((pending) => {
   const p = pending as ({ surface?: string } & Partial<DevotionalTarget>) | null;
   if (p?.surface !== 'devotional' || !p.workId || !p.month || !p.day || !p.slot) return;
-  const target: DevotionalTarget = { workId: p.workId, month: p.month, day: p.day, slot: p.slot, scrollTop: p.scrollTop };
+  const target: DevotionalTarget = {
+    workId: p.workId,
+    month: p.month,
+    day: p.day,
+    slot: p.slot,
+    scrollTop: p.scrollTop,
+    notesOpen: p.notesOpen,
+    notesScrollTop: p.notesScrollTop,
+  };
   // Out of the subscriber before writing back to the store it's subscribed to.
   queueMicrotask(() => {
     pendingRestore.set(null);

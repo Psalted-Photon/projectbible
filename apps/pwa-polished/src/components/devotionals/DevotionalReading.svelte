@@ -90,10 +90,12 @@
     if (token !== loadToken) return;
     reading = r;
     loading = false;
+    // Coming back from the reader puts the reading where it was, (i) panel and all; anything else starts at the top.
+    notesOpen = !!target.notesOpen && !!r?.notes?.length;
     await tick();
-    // Coming back from the reader puts the reading where it was; anything else starts at the top.
     const scroller = scrollContainer();
     if (scroller) scroller.scrollTop = target.scrollTop ?? 0;
+    if (notesEl) notesEl.scrollTop = target.notesScrollTop ?? 0;
   }
 
   function scrollContainer(): HTMLElement | null {
@@ -219,6 +221,7 @@
   // ── Words and phrases ────────────────────────────────────────────────────
 
   let notesOpen = false;
+  let notesEl: HTMLElement | null = null;
   $: notes = reading?.notes ?? [];
 
   /** Open the reader at a reference, leaving a crumb that comes back to this reading. */
@@ -233,6 +236,8 @@
       day: target.day,
       slot: target.slot,
       scrollTop: scrollContainer()?.scrollTop ?? 0,
+      notesOpen,
+      notesScrollTop: notesOpen ? notesEl?.scrollTop ?? 0 : 0,
     });
     // navigateToVerse (not navigateTo) so the verse gets the fade highlight.
     navigationStore.navigateToVerse(current.translation, t.book, t.chapter, t.verse ?? 1);
@@ -318,7 +323,7 @@
       <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
       <div class="dr-notes-backdrop" on:click={() => (notesOpen = false)}></div>
       <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-      <div class="dr-notes" role="dialog" tabindex="-1" aria-label="Words and phrases" on:click={onBodyClick} transition:fade={{ duration: 120 }}>
+      <div class="dr-notes" bind:this={notesEl} role="dialog" tabindex="-1" aria-label="Words and phrases" on:click={onBodyClick} transition:fade={{ duration: 120 }}>
         <h4 class="dr-notes-title">Words and phrases</h4>
         <dl>
           {#each notes as n}
