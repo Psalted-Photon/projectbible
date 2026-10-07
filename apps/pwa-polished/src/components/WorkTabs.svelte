@@ -74,7 +74,7 @@
       case "dictionary":
         return dictionaryAvailable(w, win);
       case "strongs":
-        return !!w?.strongs;
+        return !!w?.strongs || !!w?.strongsSearch;
       case "topical":
         return !!w?.topic;
       case "encyclopedia":

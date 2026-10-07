@@ -16,7 +16,15 @@
   import { navigationStore } from "../../stores/navigationStore";
   import { parseOsisRef } from "../../lib/parseRefString";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../../lib/morphologyExpander";
-  import { languageColor, isRtl, displayId, type StrongsEntryData, type EntryTab } from "../../lib/strongs/entry";
+  import {
+    languageColor,
+    isRtl,
+    displayId,
+    loadMeanings,
+    type StrongsEntryData,
+    type EntryTab,
+    type Meaning,
+  } from "../../lib/strongs/entry";
   import { reveal } from "../../lib/motion";
 
   /**
@@ -29,7 +37,8 @@
   export let activeTab: EntryTab = "definition";
   /** A verse followed out of the entry — the frame decides what happens to the card. */
   export let onVerse: (target: { book: string; chapter: number; verse: number }) => void;
-  /** Another entry asked for from this one: a related word. */
+  /** Another entry asked for from this one: a related word, a number named
+   *  in the text, or another of a split number's meanings. */
   export let onOpenEntry: (id: string) => void;
   /** Reports a tab change, so a window can keep it. */
   export let onTab: ((tab: EntryTab) => void) | null = null;
@@ -74,6 +83,21 @@
   /** Words sharing this one's sense, grouped in two tiers. Greek only: the
    *  domain tagging comes from the Greek NT, so a Hebrew entry has none. */
   $: related = entry.related;
+
+  // --- Meanings ----------------------------------------------------------
+  // STEPBible splits some numbers where Strong's gave one number to two words
+  // (H1254 is "to create" and "to fatten"). The number and each of its
+  // meanings are listed, so either can be studied on its own.
+  let meanings: Meaning[] = [];
+  let meaningsFor = "";
+  $: if (entry.id !== meaningsFor) {
+    meaningsFor = entry.id;
+    meanings = [];
+    const id = entry.id;
+    loadMeanings(id).then((found) => {
+      if (meaningsFor === id) meanings = found;
+    });
+  }
 
   // A different word, whether by a related link or the host swapping it:
   // the previous word's verses must not stay up under the new heading while
@@ -168,7 +192,22 @@
       // Numbered items: __ at start of a segment → indented block
       .replace(/(^|\n|<br>)__(\d+\.)/g, '$1<span class="strongs-item">$2</span> ')
       // Strip any remaining unknown tags
-      .replace(/<(?!\/?(strong|em|br|button|span)[^>]*>)[^>]+>/gi, "");
+      .replace(/<(?!\/?(strong|em|br|button|span)[^>]*>)[^>]+>/gi, "")
+      .split(/(<[^>]+>)/)
+      .map((part) => (part.startsWith("<") ? part : linkNumbers(part)))
+      .join("");
+  }
+
+  /**
+   * Strong's numbers named in the text — "from G0025", "plural of H0433" —
+   * become links to their entries. Only the text between tags is touched, so a
+   * verse reference's own markup is never rewritten.
+   */
+  function linkNumbers(text: string): string {
+    return text.replace(/\b([GH])0*(\d{1,4})([A-Z]?)\b/g, (_m, prefix: string, digits: string, split: string) => {
+      const id = `${prefix}${digits.padStart(4, "0")}${split}`;
+      return `<button class="strongs-ref" data-strongs="${id}">${prefix}${digits}${split}</button>`;
+    });
   }
 
   /**
@@ -222,9 +261,15 @@
   $: kjvRenderings = entry.kjvUsage ? parseKjvUsage(entry.kjvUsage) : [];
   $: kjvHasMarkers = kjvRenderings.some((r) => r.marker);
 
-  /** Handle clicks on rendered Strong's markup — catches scripture-ref buttons. */
+  /** Handle clicks on rendered Strong's markup — verse references and
+   *  Strong's numbers. */
   function handleDefinitionClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
+    const number = target.closest<HTMLElement>(".strongs-ref")?.dataset.strongs;
+    if (number) {
+      onOpenEntry(number);
+      return;
+    }
     if (!target.classList.contains("scripture-ref")) return;
     const osisRef = target.dataset.ref;
     if (!osisRef) return;
@@ -314,6 +359,26 @@
         <div class="info-section">
           <h3>Short Definition</h3>
           <p class="short-def">{entry.shortDefinition}</p>
+        </div>
+      {/if}
+
+      {#if meanings.length}
+        <div class="info-section">
+          <h3>Meanings</h3>
+          <div class="meanings">
+            {#each meanings as m (m.id)}
+              <button
+                class="meaning"
+                class:here={m.id === entry.id}
+                disabled={m.id === entry.id}
+                on:click={() => onOpenEntry(m.id)}
+              >
+                <span class="meaning-id" style="color: {languageColor(entry.language)}">{displayId(m.id)}</span>
+                <span class="meaning-lemma" dir={rtl ? "rtl" : "ltr"}>{m.lemma}</span>
+                <span class="meaning-gloss">{m.all ? "every meaning" : m.gloss}</span>
+              </button>
+            {/each}
+          </div>
         </div>
       {/if}
 
@@ -706,6 +771,73 @@
 
   :global(.scripture-ref:hover) {
     opacity: 0.8;
+  }
+
+  /* Strong's numbers named in a definition or derivation, as links in their
+     language's color. */
+  :global(.strongs-ref) {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    line-height: inherit;
+    cursor: pointer;
+    display: inline;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+  }
+  :global(.strongs-ref[data-strongs^="G"]) {
+    color: #4caf50;
+  }
+  :global(.strongs-ref[data-strongs^="H"]) {
+    color: #2196f3;
+  }
+  :global(.strongs-ref:hover) {
+    text-decoration-style: solid;
+  }
+
+  /* --- Meanings -----------------------------------------------------------
+     A split number's meanings, one row each, the one on screen marked. */
+  .meanings {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .meaning {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-color, #dfe2e8);
+    cursor: pointer;
+    font-family: inherit;
+    padding: 6px 8px;
+    text-align: left;
+  }
+  .meaning:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .meaning.here {
+    background: rgba(74, 144, 226, 0.1);
+    box-shadow: inset 3px 0 0 var(--color-primary, #4a90e2);
+    cursor: default;
+  }
+  .meaning-id {
+    min-width: 4.2em;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .meaning-lemma {
+    font-family: "Gentium Plus", "SBL Greek", "SBL Hebrew", serif;
+    font-size: 15px;
+  }
+  .meaning-gloss {
+    color: var(--text-muted, #9aa0aa);
+    font-size: 13px;
   }
 
   /* Indented numbered items: __1. __2. */

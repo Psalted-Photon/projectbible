@@ -10,6 +10,8 @@
 import type { StrongEntry } from '@projectbible/core';
 import { lookupStrongs, type RelatedWords } from '../../adapters/lexicon-lookup.js';
 import { expandStepBiblePOS } from '../morphologyExpander';
+import { openDB } from '../../adapters/db';
+import { firstForm } from './collate';
 
 export type StrongsEntryData = StrongEntry & { related?: RelatedWords };
 
@@ -51,6 +53,47 @@ export function displayId(id: string): string {
 export function classicId(id: string): string {
   const m = /^([GH])0*(\d{1,4})[A-Za-z]?$/i.exec(id ?? '');
   return m ? `${m[1].toUpperCase()}${m[2].padStart(4, '0')}` : id;
+}
+
+/** One meaning of a number STEPBible split — or, with `all`, the number itself. */
+export interface Meaning {
+  id: string;
+  lemma: string;
+  gloss: string;
+  all: boolean;
+}
+
+/**
+ * The meanings a number was split into, led by the number itself, for the
+ * entry to list. Empty when there is nothing to choose between: no split, or
+ * splits that only repeat their number (H0001G is "father", like H0001).
+ */
+export async function loadMeanings(id: string): Promise<Meaning[]> {
+  const base = classicId(id);
+  const storeName = /^H/i.test(base) ? 'hebrew_strongs_entries' : 'greek_strongs_entries';
+  const db = await openDB();
+  if (!db.objectStoreNames.contains(storeName)) return [];
+  const rows = await new Promise<any[]>((resolve) => {
+    const req = db
+      .transaction(storeName, 'readonly')
+      .objectStore(storeName)
+      .getAll(IDBKeyRange.bound(base, `${base}￿`));
+    req.onsuccess = () => resolve(req.result ?? []);
+    req.onerror = () => resolve([]);
+  });
+  const own = rows.find((r) => r.id === base);
+  const splits = rows.filter((r) => r.id !== base && /^[GH]\d{4}[A-Za-z]$/.test(r.id));
+  const sameAsOwn = (r: any) =>
+    (r.shortDefinition ?? '') === (own?.shortDefinition ?? '') &&
+    firstForm(r.lemma ?? '') === firstForm(own?.lemma ?? '');
+  if (!splits.length || splits.every(sameAsOwn)) return [];
+  const meaning = (r: any, all: boolean): Meaning => ({
+    id: r.id,
+    lemma: firstForm(r.lemma ?? ''),
+    gloss: String(r.shortDefinition ?? ''),
+    all,
+  });
+  return [...(own ? [meaning(own, true)] : []), ...splits.sort((a, b) => (a.id < b.id ? -1 : 1)).map((r) => meaning(r, false))];
 }
 
 /** How an entry is named on the Starred and Recently viewed shelves. */

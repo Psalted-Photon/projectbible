@@ -160,6 +160,13 @@ export const LIBRARY_TIPS: Tip[] = [
     body: 'Open the original word in Strong’s: its definition, forms, and every place it’s used.',
   },
   {
+    id: 'strongs-speak',
+    area,
+    target: '.strongs-content .speak-btn',
+    title: 'Hear it',
+    body: 'Say the Greek word aloud, in the pronunciation you chose in Settings.',
+  },
+  {
     id: 'strongs-lang',
     area,
     target: '.strongs-content .lang-switch',

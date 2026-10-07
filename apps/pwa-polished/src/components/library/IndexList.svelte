@@ -37,6 +37,9 @@
    * marked while the contents are open, so you can see where you came from.
    */
   export let initialRowId: string | number | null = null;
+  /** A search to open with, already run — what an English word's Strong's
+   *  tab lands on when more than one entry translates it. */
+  export let initialSearch: string | null = null;
 
   const CHUNK = 150;
   /** How long a burst of typing stays one search term. */
@@ -106,6 +109,15 @@
    */
   let packMissing = false;
 
+  let mounted = false;
+  /** The search last put in from outside, so it is run once, not on every flush. */
+  let appliedSearch: string | null = null;
+  $: if (mounted && initialSearch && initialSearch !== appliedSearch) {
+    appliedSearch = initialSearch;
+    searchBar?.show(initialSearch);
+    runSearch(initialSearch);
+  }
+
   onMount(async () => {
     letterCounts = await source.getLetterCounts();
     if (Object.keys(letterCounts).length === 0) {
@@ -129,6 +141,8 @@
       // at the top of the list, which is where you used to arrive anyway.
       if (i >= 0) await revealRow(i);
     }
+    // The list underneath is ready, so a search handed in can land on it.
+    mounted = true;
   });
 
   async function selectLetter(next: string, remember = true) {

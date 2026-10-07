@@ -6,6 +6,7 @@
 import { openDB, type DBMorphology } from './db.js';
 import { dictionaryCache } from '../lib/lru-cache.js';
 import { normalizeBookName } from '../lib/bibleData.js';
+import { strongsForTerm } from '../lib/strongs/source';
 
 export interface Definition {
   id: number;
@@ -2453,6 +2454,9 @@ export interface WorksResolution {
    * back to them rather than to the English gloss.
    */
   strongs: { id: string; word?: string; morph?: DBMorphology | null } | null;
+  /** More than one Strong's entry translates `term`: the Strong's tab opens
+   *  its contents searched for it instead of picking one. */
+  strongsSearch: string | null;
 }
 
 export const EMPTY_WORKS: WorksResolution = {
@@ -2462,6 +2466,7 @@ export const EMPTY_WORKS: WorksResolution = {
   entry: null,
   person: null,
   strongs: null,
+  strongsSearch: null,
 };
 
 /**
@@ -2485,17 +2490,21 @@ export async function resolveWorks(
 
   const term = headWord(subject);
 
-  const [entryRes, topicRes, dictRes, personRes] = await Promise.allSettled([
+  const [entryRes, topicRes, dictRes, personRes, strongsRes] = await Promise.allSettled([
     resolveIsbeClick({ word: subject, ref: ref ?? null }),
     resolveNavesTopicId(subject),
     lookupEnglishWord(term),
     lookupPerson(subject, ref ?? null),
+    // The Strong's index is read on the first lookup of a session — the one
+    // slow call — and kept after that.
+    strongsForTerm(term),
   ]);
 
   const entry = entryRes.status === 'fulfilled' ? entryRes.value : null;
   const topicId = topicRes.status === 'fulfilled' ? topicRes.value : null;
   const english = dictRes.status === 'fulfilled' ? dictRes.value : null;
   const person = personRes.status === 'fulfilled' ? personRes.value : null;
+  const strongsIds = strongsRes.status === 'fulfilled' ? strongsRes.value : [];
 
   let topic: { id: number; name: string } | null = null;
   if (topicId != null) {
@@ -2510,6 +2519,7 @@ export async function resolveWorks(
     topic,
     entry,
     person,
-    strongs: null,
+    strongs: strongsIds.length === 1 ? { id: strongsIds[0] } : null,
+    strongsSearch: strongsIds.length > 1 ? term : null,
   };
 }

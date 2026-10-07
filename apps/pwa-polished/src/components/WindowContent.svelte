@@ -106,7 +106,9 @@
   <StrongsContent
     windowId={panel.id}
     strongsId={panel.contentState?.strongsId ?? null}
+    search={panel.contentState?.strongsSearch ?? null}
     initialTab={(panel.contentState?.tab ?? null) as StrongsProps['initialTab']}
+    initialTrail={(panel.contentState?.trail ?? []) as StrongsProps['initialTrail']}
   />
 {:else if panel.contentType === 'wordstudy'}
   <LexicalContent

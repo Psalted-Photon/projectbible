@@ -43,6 +43,9 @@ interface IndexRow {
   splitGlosses: string[];
   origKey: string;
   glossKey: string;
+  /** The gloss's head word alone — "love" for "love, goodwill" and for "to
+   *  love" — for matching an English word from another work. */
+  headKey: string;
   translitKey: string;
   count: number;
 }
@@ -119,6 +122,7 @@ async function buildIndex(lang: StrongsLang): Promise<IndexRow[]> {
       splitGlosses: [],
       origKey: lang === 'greek' ? greekKey(firstForm(lemma)) : hebrewKey(firstForm(lemma)),
       glossKey: glossKey(gloss),
+      headKey: glossKey(gloss).split(/[,;:/(]/)[0].trim(),
       translitKey: translitKey(translit),
       count: counts[num] ?? 0,
     });
@@ -321,6 +325,22 @@ async function searchStrongs(query: string, sort: StrongsSort): Promise<LibraryR
   // Best match first; among equals, the word the Bible uses most.
   ranked.sort((a, b) => a.rank - b.rank || b.row.count - a.row.count || a.row.num - b.row.num);
   return ranked.slice(0, SEARCH_LIMIT).map(({ row }) => toRow(row, sort));
+}
+
+/**
+ * The classic entries an English word translates, most used first — for
+ * lighting the Strong's tab from another work. Matched on the gloss's head
+ * word, so "love" finds ἀγάπη (love) and ἀγαπάω (to love) but not every gloss
+ * that mentions love somewhere.
+ */
+export async function strongsForTerm(term: string): Promise<string[]> {
+  const key = glossKey(term).split(/[,;:/(]/)[0].trim();
+  if (!key) return [];
+  const [greek, hebrew] = await Promise.all([loadIndex('greek'), loadIndex('hebrew')]);
+  return [...greek, ...hebrew]
+    .filter((r) => r.headKey === key)
+    .sort((a, b) => b.count - a.count || a.num - b.num)
+    .map((r) => r.id);
 }
 
 // --- In this chapter ---------------------------------------------------------

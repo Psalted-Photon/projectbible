@@ -118,7 +118,7 @@
     } else if (pending?.surface === 'strongs' && pending.snapshot) {
       pendingRestore.set(null);
       const snap = pending.snapshot;
-      saved = { ...saved, strongs: { tab: snap.tab, scrollTop: snap.scrollTop } };
+      saved = { ...saved, strongs: { tab: snap.tab, scrollTop: snap.scrollTop, trail: snap.trail ?? [] } };
       strongsModalStore.open({ strongsId: snap.strongsId });
     }
   }
@@ -205,10 +205,10 @@
     close();
   }
 
-  function popOutStrongs(snap: { strongsId: string; tab: string }) {
+  function popOutStrongs(snap: { strongsId: string; tab: string; trail: { id: string; name: string }[] }) {
     const id = newWindow();
     if (!id) return;
-    windowStore.setWindowContent(id, "strongs", { strongsId: snap.strongsId, tab: snap.tab });
+    windowStore.setWindowContent(id, "strongs", { strongsId: snap.strongsId, tab: snap.tab, trail: snap.trail });
     close();
   }
 
@@ -288,6 +288,8 @@
         <StrongsContent
           bind:this={content}
           strongsId={strongs.strongsId}
+          search={strongs.search}
+          initialTrail={saved.strongs?.trail ?? []}
           initialTab={saved.strongs?.tab ?? null}
           initialScrollTop={saved.strongs?.scrollTop ?? 0}
           onSnapshot={(snap) => remember("strongs", snap)}

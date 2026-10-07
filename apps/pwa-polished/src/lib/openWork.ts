@@ -55,6 +55,7 @@ const BLANK = {
   topicId: null,
   personId: null,
   strongsId: null,
+  strongsSearch: null,
   selectedText: '',
   primaryName: '',
   tab: null,
@@ -100,8 +101,9 @@ function subjectState(work: WorkKey, works: WorksResolution | null): Record<stri
       return { ...BLANK, selectedText: works.term };
     }
     case 'strongs': {
-      if (!works.strongs) return null;
-      return { ...BLANK, strongsId: works.strongs.id };
+      if (works.strongs) return { ...BLANK, strongsId: works.strongs.id };
+      if (works.strongsSearch) return { ...BLANK, strongsSearch: works.strongsSearch };
+      return null;
     }
   }
 }
@@ -150,7 +152,7 @@ function carriedKey(work: WorkKey, w: WorksResolution): string | null {
     case 'dictionary':
       return w.term || null;
     case 'strongs':
-      return w.strongs?.id ?? null;
+      return w.strongs?.id ?? (w.strongsSearch ? `search:${w.strongsSearch}` : null);
   }
 }
 
@@ -243,7 +245,8 @@ export function openWorkSubject(
       return true;
     }
     case 'strongs': {
-      strongsModalStore.open({ strongsId: works!.strongs!.id });
+      const found = works!.strongs;
+      strongsModalStore.open({ strongsId: found?.id ?? null, search: found ? null : works!.strongsSearch });
       return true;
     }
   }

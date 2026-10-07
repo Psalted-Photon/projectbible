@@ -8,6 +8,9 @@
   import { ArrowsDownUp } from "phosphor-svelte";
   import GetPacksCard from "../GetPacksCard.svelte";
   import StrongsEntry from "./StrongsEntry.svelte";
+  import SpeakWord, { type SpeakStatus } from "./SpeakWord.svelte";
+  import { canSpeakGreek } from "../../lib/tts/speakWord";
+  import { firstForm } from "../../lib/strongs/collate";
   import { packInstallFinished } from "../../adapters/db-manager";
   import { resolveWorks, EMPTY_WORKS, type WorksResolution, type LibraryRow } from "../../adapters/lexicon-lookup.js";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../../lib/openWork";
@@ -59,8 +62,14 @@
   export let onSnapshot: ((snap: Snapshot) => void) | null = null;
   export let initialTab: EntryTab | null = null;
   export let initialScrollTop = 0;
+  /** Entries walked through on the way to this one, for Back. */
+  export let initialTrail: TrailStop[] = [];
+  /** Open on the contents already searched for this — an English word that
+   *  more than one Strong's entry translates. */
+  export let search: string | null = null;
 
-  type Snapshot = { strongsId: string; tab: EntryTab; scrollTop: number };
+  type TrailStop = { id: string; name: string };
+  type Snapshot = { strongsId: string; tab: EntryTab; scrollTop: number; trail: TrailStop[] };
 
   $: docked = !!windowId;
 
@@ -73,6 +82,8 @@
 
   /** Which side is up: the contents, or an entry. */
   let showContents = strongsId == null;
+  /** Entries left by following a link inside one, newest last. */
+  let trail: TrailStop[] = [...initialTrail];
 
   // Reload whenever the id changes: a related word, a row from the contents,
   // or the host swapping it. No id means the contents.
@@ -99,6 +110,14 @@
   }
 
   $: rtl = isRtl(entry?.language);
+
+  // --- Saying it ---------------------------------------------------------
+  // Greek only: there is no Hebrew voice. The line under the header belongs to
+  // the word on screen, so a new word clears it.
+  let speaker: SpeakWord | null = null;
+  let speakStatus: SpeakStatus = null;
+  $: canSay = !!entry && entry.language === "greek" && canSpeakGreek();
+  $: entry, (speakStatus = null);
   $: subtitle = entry
     ? [languageName(entry), entry.transliteration, entry.partOfSpeech ? partOfSpeechText(entry.partOfSpeech) : ""]
         .filter(Boolean)
@@ -122,6 +141,14 @@
   // testament you're reading — and the order is the one you last left it in.
   let lang: StrongsLang = strongsId ? langOf(strongsId) : readerLang();
   let sort: StrongsSort = savedSort();
+  /** The search the contents open with. Spent once the language or order
+   *  changes, since that starts the list afresh. */
+  let listSearch: string | null = search;
+  let seenSearch = search;
+  $: if (search !== seenSearch) {
+    seenSearch = search;
+    listSearch = search;
+  }
   $: source = strongsSource(lang, sort);
   /** The row to land on and keep marked: the entry's classic number. */
   $: contentsRowId = entry ? classicId(entry.id) : null;
@@ -133,11 +160,18 @@
   function cycleSort() {
     sort = nextSort(sort);
     saveSort(sort);
+    listSearch = null;
+  }
+
+  function setLang(next: StrongsLang) {
+    if (next === lang) return;
+    lang = next;
+    listSearch = null;
   }
 
   // --- Back and flip -----------------------------------------------------
   $: lastRead = $libraryPrefsStore.strongs.lastRead;
-  $: canGoBack = !showContents && !!entry;
+  $: canGoBack = !showContents && (trail.length > 0 || !!entry);
   $: canFlip = showContents ? !!entry || !!lastRead : true;
 
   /** The page under the work tabs; moving between the contents and an entry
@@ -155,8 +189,27 @@
     showContents = true;
   }
 
+  /** Back walks out one step at a time: an entry off the trail, then the
+   *  contents. */
   function goBack() {
+    if (trail.length) return popTrailTo(trail.length - 1);
     turnTo(false, showList);
+  }
+
+  /** Back to an entry on the trail, dropping it and everything after it. */
+  function popTrailTo(index: number) {
+    const stop = trail[index];
+    if (!stop) return;
+    trail = trail.slice(0, index);
+    openEntry(stop.id);
+  }
+
+  /** Follow a link inside the entry, leaving this one on the trail. */
+  function followEntry(id: string) {
+    if (entry && id !== entry.id) {
+      trail = [...trail, { id: entry.id, name: `${displayId(entry.id)} ${firstForm(entry.lemma)}` }];
+    }
+    openEntry(id);
   }
 
   /** Escape comes here before the host closes — see IsbeContent.handleBack. */
@@ -180,9 +233,13 @@
     turnTo(true, () => (showContents = false));
   }
 
+  /** Open from the contents — a fresh start, no trail. */
   function openFromContents(row: LibraryRow) {
     const id = String(row.id);
-    turnTo(true, () => openEntry(id));
+    turnTo(true, () => {
+      trail = [];
+      openEntry(id);
+    });
   }
 
   // --- The other four works ----------------------------------------------
@@ -237,7 +294,7 @@
     // already loaded changes no id.
     showContents = false;
     if (windowId) {
-      windowStore.updateContentState(windowId, { strongsId: id });
+      windowStore.updateContentState(windowId, { strongsId: id, trail });
       return;
     }
     strongsModalStore.open({ strongsId: id });
@@ -269,7 +326,7 @@
   /** Everything needed to put this entry back exactly as it is now. */
   function viewSnapshot(): Snapshot | null {
     if (!entry) return null;
-    return { strongsId: entry.id, tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0 };
+    return { strongsId: entry.id, tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0, trail };
   }
 
   onDestroy(() => {
@@ -288,6 +345,9 @@
           {#if !showContents && entry}
             <span class="lemma" dir={rtl ? "rtl" : "ltr"}>{entry.lemma}</span>
             <span class="strongs-id" style="color: {languageColor(entry.language)}">{displayId(entry.id)}</span>
+            {#if canSay}
+              <SpeakWord bind:this={speaker} bind:status={speakStatus} word={firstForm(entry.lemma)} />
+            {/if}
           {:else}
             {source.label}
           {/if}
@@ -299,6 +359,20 @@
             {subtitle}
           {/if}
         </div>
+        {#if !showContents && speakStatus}
+          <div class="speak-note" role="status">
+            {#if speakStatus.kind === "voice-needed"}
+              The Greek voice isn’t on this device yet.
+              <button class="speak-get" on:click={() => speaker?.download()}>
+                Download it (~{speakStatus.sizeMB} MB)
+              </button>
+            {:else if speakStatus.kind === "downloading"}
+              Downloading the Greek voice… {speakStatus.percent}%
+            {:else}
+              {speakStatus.text}
+            {/if}
+          </div>
+        {/if}
       </div>
       <div class="head-actions">
         {#if !showContents && entry && onPopOut}
@@ -324,11 +398,11 @@
       <!-- A new language or order is a new list: its sections, rail and rows
            all change, so it starts afresh rather than patching the old one. -->
       {#key source}
-        <IndexList {source} onOpen={openFromContents} initialRowId={contentsRowId}>
+        <IndexList {source} onOpen={openFromContents} initialRowId={contentsRowId} initialSearch={listSearch}>
           <svelte:fragment slot="controls">
             <div class="lang-switch" role="group" aria-label="Language">
-              <button class="ctl" class:on={lang === "greek"} on:click={() => (lang = "greek")}>Greek</button>
-              <button class="ctl" class:on={lang === "hebrew"} on:click={() => (lang = "hebrew")}>Hebrew</button>
+              <button class="ctl" class:on={lang === "greek"} on:click={() => setLang("greek")}>Greek</button>
+              <button class="ctl" class:on={lang === "hebrew"} on:click={() => setLang("hebrew")}>Hebrew</button>
             </div>
             <button
               class="ctl sort"
@@ -343,6 +417,15 @@
         </IndexList>
       {/key}
     {:else}
+    {#if trail.length}
+      <nav class="trail" aria-label="Back trail">
+        {#each trail as stop, i}
+          <button class="crumb" on:click={() => popTrailTo(i)}>{stop.name}</button>
+          <span class="crumb-sep">›</span>
+        {/each}
+        {#if entry}<span class="crumb here">{displayId(entry.id)} {firstForm(entry.lemma)}</span>{/if}
+      </nav>
+    {/if}
     <div class="strongs-body" bind:this={bodyEl}>
       {#if loading}
         <div class="muted show-late">Loading…</div>
@@ -351,7 +434,7 @@
           {entry}
           bind:activeTab
           onVerse={goToVerse}
-          onOpenEntry={openEntry}
+          onOpenEntry={followEntry}
           onTab={persistTab}
         />
       {:else if strongsId}
@@ -458,6 +541,60 @@
   }
   .muted {
     color: var(--text-muted, #999);
+  }
+
+  /* The speaker's line: the offer to fetch the voice, its progress, or why
+     nothing played. */
+  .speak-note {
+    margin-top: calc(6px * var(--bar-scale, 1));
+    font-size: calc(12px * var(--bar-scale, 1));
+    color: var(--text-muted, #999);
+  }
+  .speak-get {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-left: 4px;
+    font: inherit;
+    color: #34d399;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  /* Entries walked through by links, the way the encyclopedia shows its trail. */
+  .trail {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 18px 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  .trail::-webkit-scrollbar {
+    display: none;
+  }
+  .crumb {
+    background: none;
+    border: none;
+    color: var(--color-primary, #4a90e2);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 0;
+    cursor: pointer;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .crumb.here {
+    color: var(--text-muted, #999);
+    cursor: default;
+  }
+  .crumb-sep {
+    color: var(--text-muted, #666);
+    font-size: 11px;
   }
 
   /* The contents' own controls, drawn like the list's chips beside them. */

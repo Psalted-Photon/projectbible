@@ -107,11 +107,13 @@ export interface WindowState {
     visited?: string[];
     scrollTop?: number;
     /** Pages walked through to get here, for the back trail. One shape per
-     *  work: articles carry entry/place ids, topics a topicId, bios a personId. */
+     *  work: articles carry entry/place ids, topics a topicId, bios a personId,
+     *  Strong's entries their number. */
     trail?: Array<
       | { entryId: number | null; placeId: string | null; name: string }
       | { topicId: number; name: string }
       | { personId: string; name: string }
+      | { id: string; name: string }
     >;
     /** For person windows: whose bio is pinned. */
     personId?: string | null;

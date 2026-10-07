@@ -24,6 +24,13 @@
   let query = "";
   let inputEl: HTMLInputElement | null = null;
 
+  /** Open already holding a search, without raising the keyboard — the
+   *  results are what was asked for, not more typing. */
+  export function show(text: string) {
+    expanded = true;
+    query = text;
+  }
+
   export function collapse() {
     expanded = false;
     query = "";
