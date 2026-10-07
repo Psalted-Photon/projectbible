@@ -328,9 +328,11 @@ function createNavigationStore() {
   /**
    * Walk back to a step in the trail — what tapping a crumb behind you does.
    * `depth` is 1-based, matching what pushHistory returns, so depth 1 is home.
-   * The crumbs after it, and the spot you are leaving, move ahead of you.
+   * The crumbs after it, and the spot you are leaving, move ahead of you —
+   * unless `clearAfter`, the crumb menu's "Go here and clear after", which
+   * drops them instead.
    */
-  function goToDepth(depth: number): TrailCrumb | null {
+  function goToDepth(depth: number, clearAfter = false): TrailCrumb | null {
     const here = get({ subscribe });
     let target: TrailCrumb | undefined;
     trail.update((t) => {
@@ -338,7 +340,7 @@ function createNavigationStore() {
       target = t.back[depth - 1];
       return {
         back: t.back.slice(0, depth - 1),
-        ahead: [...t.back.slice(depth), crumbForHere(here, t.current), ...t.ahead],
+        ahead: clearAfter ? [] : [...t.back.slice(depth), crumbForHere(here, t.current), ...t.ahead],
         current: target,
       };
     });
@@ -581,9 +583,10 @@ function createNavigationStore() {
     /**
      * Walk forward to a crumb ahead of you. `index` is 0-based from the one
      * nearest the location pill. The spot you are leaving, and the crumbs
-     * between it and the target, move behind you.
+     * between it and the target, move behind you. With `clearAfter`, the
+     * crumbs beyond the target go.
      */
-    goToAhead: (index: number) => {
+    goToAhead: (index: number, clearAfter = false) => {
       const here = get({ subscribe });
       let target: TrailCrumb | undefined;
       trail.update((t) => {
@@ -591,12 +594,23 @@ function createNavigationStore() {
         target = t.ahead[index];
         return {
           back: [...t.back, crumbForHere(here, t.current), ...t.ahead.slice(0, index)],
-          ahead: t.ahead.slice(index + 1),
+          ahead: clearAfter ? [] : t.ahead.slice(index + 1),
           current: target,
         };
       });
       if (target) arrive(target);
       return target ?? null;
+    },
+    /**
+     * Take one crumb out of the trail without going anywhere. `index` is
+     * 0-based in its own list. Removing one behind you moves every crumb after
+     * it down a depth.
+     */
+    removeCrumb: (side: 'back' | 'ahead', index: number) => {
+      trail.update((t) => {
+        if (index < 0 || index >= t[side].length) return t;
+        return { ...t, [side]: t[side].filter((_, i) => i !== index) };
+      });
     },
     /** Empty the trail, behind and ahead. Where you are becomes home. */
     clearHistory: () => {

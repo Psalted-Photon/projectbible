@@ -714,6 +714,7 @@
     // so every check below would pass and close the very panel the click landed
     // in. It can't be asked where it was, so leave the dropdowns alone.
     if (!target?.isConnected) return;
+    if (crumbMenu && !target.closest(".crumb-menu")) closeCrumbMenu();
     if (
       !target.closest(".nav-pill") &&
       !target.closest(".dropdown-menu") &&
@@ -971,15 +972,16 @@
 
   /**
    * Walk back to a step in the trail. Depth is 1-based, so crumb 1 is the first
-   * hop away from home — tapping it puts you all the way back.
+   * hop away from home — tapping it puts you all the way back. `clearAfter`
+   * drops the crumbs after it rather than leaving them ahead of you.
    */
-  function goToCrumb(depth: number) {
+  function goToCrumb(depth: number, clearAfter = false) {
     const ret = get(isbeReturnStore);
     // Checked before the pop: a crumb at position N undoes the
     // step that was recorded at depth N. Reading the depth afterwards would
     // always be one short and never match.
     const undoingTheJump = !!ret && depth === ret.depth;
-    navigationStore.goToDepth(depth);
+    navigationStore.goToDepth(depth, clearAfter);
     if (undoingTheJump) isbeModalStore.open(ret!.modal);
     else if (ret && get(historyDepth) < ret.depth) isbeReturnStore.set(null);
   }
@@ -2008,6 +2010,146 @@
     pinNoticeTimer = setTimeout(() => (pinNoticeText = ""), 1400);
   }
 
+  // ── Hold a crumb for its menu ──────────────────────────────────────────────
+  // The same press time, slop and buzz as holding the bar to pin it; a
+  // right-click opens it too, for a mouse. A hold never also fires the tap,
+  // and a sideways drag cancels it, so it never fights the bar's scroll.
+  type CrumbSide = "back" | "ahead";
+
+  let crumbMenu: { side: CrumbSide; index: number; anchor: HTMLElement } | null = null;
+  let crumbMenuPositioned = false;
+  let crumbHoldTimer: ReturnType<typeof setTimeout> | undefined;
+  let crumbHoldX = 0;
+  let crumbHoldY = 0;
+  /**
+   * Set when a press opened the menu, so the click that ends that same press
+   * is not taken as a tap. Cleared on the next press, because a phone does
+   * not always send that click at all.
+   */
+  let crumbHeld = false;
+
+  function cancelCrumbHold(): void {
+    if (crumbHoldTimer) clearTimeout(crumbHoldTimer);
+    crumbHoldTimer = undefined;
+  }
+
+  function onCrumbPointerDown(event: PointerEvent, side: CrumbSide, index: number): void {
+    crumbHeld = false;
+    if (event.button !== 0) return;
+    const anchor = event.currentTarget as HTMLElement;
+    crumbHoldX = event.clientX;
+    crumbHoldY = event.clientY;
+    cancelCrumbHold();
+    crumbHoldTimer = setTimeout(() => {
+      crumbHoldTimer = undefined;
+      crumbHeld = true;
+      void openCrumbMenu(side, index, anchor);
+    }, PIN_PRESS_MS);
+  }
+
+  function onCrumbPointerMove(event: PointerEvent): void {
+    if (!crumbHoldTimer) return;
+    const dx = event.clientX - crumbHoldX;
+    const dy = event.clientY - crumbHoldY;
+    if (dx * dx + dy * dy > PIN_PRESS_SLOP * PIN_PRESS_SLOP) cancelCrumbHold();
+  }
+
+  function onCrumbContextMenu(event: MouseEvent, side: CrumbSide, index: number): void {
+    event.preventDefault();
+    // A long press on a phone can raise this as well as the hold timer, in
+    // either order. Whichever comes first opens the menu; the other is a no-op.
+    if (crumbHoldTimer) {
+      cancelCrumbHold();
+      crumbHeld = true;
+    }
+    if (crumbMenu?.side === side && crumbMenu.index === index) return;
+    void openCrumbMenu(side, index, event.currentTarget as HTMLElement);
+  }
+
+  function onCrumbClick(event: MouseEvent, side: CrumbSide, index: number): void {
+    if (crumbHeld) {
+      crumbHeld = false;
+      // Kept from the document listener too, which would close the menu it just opened.
+      event.stopPropagation();
+      return;
+    }
+    if (side === "back") goToCrumb(index + 1);
+    else navigationStore.goToAhead(index);
+  }
+
+  async function openCrumbMenu(side: CrumbSide, index: number, anchor: HTMLElement) {
+    translationDropdownOpen = false;
+    referenceDropdownOpen = false;
+    commDropdownOpen = false;
+    closeRepeatDropdown();
+
+    navigator.vibrate?.(15);
+    crumbMenu = { side, index, anchor };
+    crumbMenuPositioned = false;
+    await tick();
+    requestAnimationFrame(() => {
+      const menu = (navElement?.querySelector(".crumb-menu") ??
+        document.querySelector(".crumb-menu")) as HTMLElement | null;
+      if (!menu || !crumbMenu) return;
+      const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0 };
+      const rect = anchor.getBoundingClientRect();
+      const naturalLeft = rect.left - navRect.left;
+      const clampedLeft = Math.max(4, Math.min(naturalLeft, (navElement?.offsetWidth ?? window.innerWidth) - menu.offsetWidth - 4));
+      menu.style.left = `${clampedLeft}px`;
+      menu.style.top = `${rect.bottom - navRect.top + 4}px`;
+      growFrom(menu, rect);
+      crumbMenuPositioned = true;
+    });
+  }
+
+  function closeCrumbMenu(): void {
+    crumbMenu = null;
+    crumbMenuPositioned = false;
+  }
+
+  // A menu left open over a trail that has since changed would act on the
+  // wrong crumb. (Scrolling the bar closes it too — see .nav-content.)
+  $: {
+    $navTrail;
+    $navAhead;
+    closeCrumbMenu();
+  }
+
+  function onWindowKeydown(event: KeyboardEvent): void {
+    if (crumbMenu && event.key === "Escape") closeCrumbMenu();
+  }
+
+  /** Go to the held crumb and drop every crumb after it — what a tap used to do. */
+  function crumbMenuGo(): void {
+    const m = crumbMenu;
+    closeCrumbMenu();
+    if (!m) return;
+    if (m.side === "back") goToCrumb(m.index + 1, true);
+    else navigationStore.goToAhead(m.index, true);
+  }
+
+  function crumbMenuRemove(): void {
+    const m = crumbMenu;
+    closeCrumbMenu();
+    if (!m) return;
+    if (m.side === "back") {
+      // The ISBE return remembers its crumb by depth. Removing that crumb ends
+      // it; removing one before it moves it down a depth with everything else.
+      const ret = get(isbeReturnStore);
+      const depth = m.index + 1;
+      if (ret && depth === ret.depth) isbeReturnStore.set(null);
+      else if (ret && depth < ret.depth) isbeReturnStore.set({ ...ret, depth: ret.depth - 1 });
+    }
+    navigationStore.removeCrumb(m.side, m.index);
+  }
+
+  /** Where you are becomes home. No confirm: only the trail is lost. */
+  function crumbMenuClear(): void {
+    closeCrumbMenu();
+    isbeReturnStore.set(null);
+    navigationStore.clearHistory();
+  }
+
   function teardownMembrane(): void {
     membraneResizeObs?.disconnect();
     membraneMutationObs?.disconnect();
@@ -2087,6 +2229,8 @@
   }
 </script>
 
+<svelte:window on:keydown={onWindowKeydown} />
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="navigation-bar"
@@ -2155,7 +2299,14 @@
     <div class="pin-notice" role="status">{pinNoticeText}</div>
   {/if}
 
-  <div class="nav-content" bind:this={navContentEl} use:dragScroll>
+  <!-- A crumb menu stays where it opened, so it closes rather than hang
+       under nothing once its crumb scrolls away. -->
+  <div
+    class="nav-content"
+    bind:this={navContentEl}
+    use:dragScroll
+    on:scroll={() => crumbMenu && closeCrumbMenu()}
+  >
 
     <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Pill 1: Navigation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ -->
     <div class="nav-pill nav-pill-nav">
@@ -2173,7 +2324,13 @@
           <button
             class="pill-btn pill-btn-text crumb-btn"
             style="color: {getBookColor(crumb.book)};"
-            on:click={() => goToCrumb(i + 1)}
+            on:click={(e) => onCrumbClick(e, "back", i)}
+            on:pointerdown={(e) => onCrumbPointerDown(e, "back", i)}
+            on:pointermove={onCrumbPointerMove}
+            on:pointerup={cancelCrumbHold}
+            on:pointercancel={cancelCrumbHold}
+            on:pointerleave={cancelCrumbHold}
+            on:contextmenu={(e) => onCrumbContextMenu(e, "back", i)}
             title={`Back to ${crumbLabel(crumb)}${crumbTrans ? ` in ${crumbTrans}` : ''}${i === 0 ? ' (home)' : ''}`}
           >
             <span class="pill-label">{crumbLabel(crumb)}</span>
@@ -2246,7 +2403,13 @@
             <button
               class="pill-btn pill-btn-text crumb-btn crumb-ahead"
               style="color: {getBookColor(crumb.book)};"
-              on:click={() => navigationStore.goToAhead(i)}
+              on:click={(e) => onCrumbClick(e, "ahead", i)}
+              on:pointerdown={(e) => onCrumbPointerDown(e, "ahead", i)}
+              on:pointermove={onCrumbPointerMove}
+              on:pointerup={cancelCrumbHold}
+              on:pointercancel={cancelCrumbHold}
+              on:pointerleave={cancelCrumbHold}
+              on:contextmenu={(e) => onCrumbContextMenu(e, "ahead", i)}
               title={`Forward to ${crumbLabel(crumb)}${crumbTrans ? ` in ${crumbTrans}` : ''}`}
             >
               <span class="pill-label">{crumbLabel(crumb)}</span>
@@ -2758,6 +2921,20 @@
     </div>
   {/if}
 
+  {#if crumbMenu}
+    <div class="dropdown-menu crumb-menu" class:positioned={crumbMenuPositioned} role="menu" out:fadeAway>
+      <button class="crumb-menu-item" role="menuitem" on:click|stopPropagation={crumbMenuGo}>
+        Go here and clear after
+      </button>
+      <button class="crumb-menu-item" role="menuitem" on:click|stopPropagation={crumbMenuRemove}>
+        Remove this one
+      </button>
+      <button class="crumb-menu-item" role="menuitem" on:click|stopPropagation={crumbMenuClear}>
+        Clear trail
+      </button>
+    </div>
+  {/if}
+
   {#if refsPackOpen}
     <div class="dropdown-menu refs-pack-dropdown" class:positioned={refsPackPositioned} out:fadeAway>
       <PackDropdownSection
@@ -3173,6 +3350,43 @@
     color: #999;
     font-weight: 600;
     justify-content: flex-start;
+  }
+
+  /* ── The crumb menu ────────────────────────────────────────────────────
+     The repeat menu's look, sized by --bar-scale like the bar it hangs from. */
+  .crumb-menu {
+    min-width: calc(170px * var(--bar-scale, 1));
+    padding: calc(4px * var(--bar-scale, 1));
+    overflow: hidden;
+  }
+
+  .crumb-menu-item {
+    display: block;
+    width: 100%;
+    padding: calc(9px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1));
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: #e0e0e0;
+    text-align: left;
+    font-family: inherit;
+    font-size: calc(13px * var(--bar-scale, 1));
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s;
+    touch-action: manipulation;
+  }
+
+  .crumb-menu-item:hover {
+    background: #3a3a3a;
+  }
+
+  /* A hold opens the crumb menu, so the press must not select the label or
+     raise the phone's own callout. */
+  .crumb-btn {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
 
   /* Ã¢â€â‚¬Ã¢â€â‚¬ Pill containers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
@@ -3759,7 +3973,8 @@
   .reference-dropdown,
   .comm-dropdown,
   .refs-pack-dropdown,
-  .repeat-dropdown {
+  .repeat-dropdown,
+  .crumb-menu {
     position: fixed;
     left: 0;
     top: 0;
@@ -3771,7 +3986,8 @@
   .refs-pack-dropdown.positioned,
   .reference-dropdown.positioned,
   .comm-dropdown.positioned,
-  .repeat-dropdown.positioned {
+  .repeat-dropdown.positioned,
+  .crumb-menu.positioned {
     visibility: visible;
   }
 
