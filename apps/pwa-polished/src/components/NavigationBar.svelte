@@ -6,6 +6,7 @@
     canGoBack,
     historyDepth,
     navTrail,
+    navAhead,
     pendingRestore,
     type CrumbKind,
   } from "../stores/navigationStore";
@@ -926,7 +927,7 @@
    * The icon on a crumb — how you left that spot, and so what comes back if you
    * tap it. Reuses icons already in this bar rather than introducing a new set.
    */
-  const CRUMB_ICONS: Record<CrumbKind, typeof Graph> = {
+  const CRUMB_ICONS: Record<CrumbKind, typeof Graph | null> = {
     commentary: ChatText,
     crossref: Graph,
     search: MagnifyingGlass,
@@ -941,6 +942,8 @@
     // A book with a ribbon. The praying hands are kept for the prayer section.
     devotional: BookBookmark,
     link: Graph,
+    // Left by the trail, not a link: there is no "how you left" to show.
+    plain: null,
   };
 
   /** "Ps 23:4" — abbreviated so a deep trail still fits on a phone. */
@@ -2175,7 +2178,7 @@
           >
             <span class="pill-label">{crumbLabel(crumb)}</span>
             {#if crumbTrans}<span class="crumb-trans">{crumbTrans}</span>{/if}
-            <Icon size={11} weight="fill" />
+            {#if Icon}<Icon size={11} weight="fill" />{/if}
           </button>
           <span class="crumb-sep"><CaretRight size={9} weight="bold" /></span>
         {/each}
@@ -2228,6 +2231,31 @@
           {/if}
         </button>
       </div>
+
+      <!-- ── The crumbs ahead of you ─────────────────────────────────────
+           Left behind when you tap back along the trail, the way a browser
+           keeps its Forward list. Faded, because you have not gone that way
+           yet this time; following any new link clears them. They sit right
+           after the location pill, before the translation. -->
+      {#if $navAhead.length > 0}
+        <div class="crumbs-ahead">
+          {#each $navAhead as crumb, i}
+            {@const Icon = CRUMB_ICONS[crumb.kind]}
+            {@const crumbTrans = crumbTranslation(crumb)}
+            <span class="crumb-sep"><CaretRight size={9} weight="bold" /></span>
+            <button
+              class="pill-btn pill-btn-text crumb-btn crumb-ahead"
+              style="color: {getBookColor(crumb.book)};"
+              on:click={() => navigationStore.goToAhead(i)}
+              title={`Forward to ${crumbLabel(crumb)}${crumbTrans ? ` in ${crumbTrans}` : ''}`}
+            >
+              <span class="pill-label">{crumbLabel(crumb)}</span>
+              {#if crumbTrans}<span class="crumb-trans">{crumbTrans}</span>{/if}
+              {#if Icon}<Icon size={11} weight="fill" />{/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
 
       </div>
 
@@ -3378,18 +3406,41 @@
      by definition, so a fill there has nowhere to breathe above and below. The
      caret is the label's sibling and stays outside the chip, uncolored, like
      every other dropdown. */
-  /* Holds the translation and the location pill. Its own flex context is what
-     lets the two swap without duplicating either block of markup — the divider
-     stays between them either way. Note this reorders visually only; keyboard
-     tab order still follows the DOM. */
+  /* Holds the translation, the location pill and the crumbs ahead of you. Its
+     own flex context is what lets them swap without duplicating any block of
+     markup — the divider stays between the translation and the rest either
+     way, and the crumbs ahead always follow the location pill directly. Note
+     this reorders visually only; keyboard tab order still follows the DOM. */
   .nav-locus {
     display: flex;
     align-items: center;
     gap: 1px;
   }
 
-  .nav-locus.away {
-    flex-direction: row-reverse;
+  .nav-locus > .translation-dropdown-trigger { order: 1; }
+  .nav-locus > .pill-divider { order: 2; }
+  .nav-locus > .reference-dropdown-trigger { order: 3; }
+  .nav-locus > .crumbs-ahead { order: 4; }
+
+  .nav-locus.away > .reference-dropdown-trigger { order: 1; }
+  .nav-locus.away > .crumbs-ahead { order: 2; }
+  .nav-locus.away > .pill-divider { order: 3; }
+  .nav-locus.away > .translation-dropdown-trigger { order: 4; }
+
+  .crumbs-ahead {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+  }
+
+  /* Ahead of you: the same crumb, faded, since you have not gone that way yet
+     this time. Opacity rather than a paler color keeps the book color true. */
+  .crumb-ahead {
+    opacity: 0.45;
+  }
+
+  .crumb-ahead:hover {
+    opacity: 0.75;
   }
 
   /* Away: the same 6px rectangle as the home chip, but a hollow ring rather

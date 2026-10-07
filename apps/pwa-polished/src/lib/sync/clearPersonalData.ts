@@ -122,6 +122,8 @@ const ACCOUNT_KEYS = [
    * switch, the next account's row would look "not newer" and never apply.
    */
   'projectbible_settings_synced_at',
+  /** The breadcrumb trail, saved so it survives closing the app (navigationStore.ts). */
+  'projectbible_trail',
 ];
 
 /** What has not reached the server yet, and so would be lost by clearing. */
@@ -294,6 +296,16 @@ export async function clearPersonalData(reason: ClearReason = 'sign-out'): Promi
     notifyUserDataChange();
   } catch (err) {
     console.warn('[ClearData] Could not tell the UI the data is gone:', err);
+  }
+
+  // The trail on screen goes too. Removing its saved copy above is not
+  // enough: the live trail would be saved again, under whoever signs in
+  // next, the first time it changes. Imported late for the same cycle reason.
+  try {
+    const { navigationStore } = await import('../../stores/navigationStore');
+    navigationStore.clearHistory();
+  } catch (err) {
+    console.warn('[ClearData] Could not clear the breadcrumb trail:', err);
   }
 
   console.log(

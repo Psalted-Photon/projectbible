@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { getBookChapters, normalizeBookName, DEFAULT_TRANSLATION } from '../lib/bibleData';
 import { translationForJump } from '../lib/testamentDefaults';
+import { getDeviceOwner } from '../lib/sync/deviceOwner';
 
 export interface NavigationState {
   translation: string;
@@ -90,7 +91,12 @@ export type CrumbKind =
   | 'otquote'
   /** A reference tapped in a devotional reading; the crumb reopens the reading where you were. */
   | 'devotional'
-  | 'link';
+  | 'link'
+  /**
+   * A spot you left by the trail rather than by a link, where nothing recorded
+   * a panel to bring back. Drawn without an icon.
+   */
+  | 'plain';
 
 /**
  * One step on the way out from home.
@@ -111,7 +117,192 @@ export interface TrailCrumb {
   origin?: unknown;
 }
 
-const navigationHistory = writable<TrailCrumb[]>([]);
+/**
+ * The trail, kept the way a browser keeps Back and Forward: tapping a crumb
+ * walks to it without throwing away the ones after it.
+ */
+interface Trail {
+  /** The crumbs behind you, oldest first. back[0] is home. */
+  back: TrailCrumb[];
+  /** The crumbs ahead of you, nearest first — the order they sit in on the bar. */
+  ahead: TrailCrumb[];
+  /**
+   * The crumb you tapped to get where you are, or null if you came some other
+   * way. When you leave by the trail again, the spot you leave keeps this
+   * crumb's icon and panel, as long as you are still in its chapter.
+   */
+  current: TrailCrumb | null;
+}
+
+function emptyTrail(): Trail {
+  return { back: [], ahead: [], current: null };
+}
+
+/**
+ * The spot you are leaving by the trail, as a crumb, saved where you are
+ * standing. If that is still the chapter the crumb you came by brought you
+ * to, it keeps that crumb's icon, verse and panel. Anywhere else nothing
+ * recorded a panel, so it is a plain crumb that brings back the chapter and
+ * the verse the last link marked, if that mark is in this chapter.
+ */
+function crumbForHere(state: NavigationState, current: TrailCrumb | null): TrailCrumb {
+  const { book, chapter } = state;
+  const stillThere = !!current && current.book === book && current.chapter === chapter;
+  const mark = state.linkHighlight;
+  const verse = stillThere
+    ? current!.verse
+    : mark && mark.book === book && mark.chapter === chapter
+      ? mark.verse
+      : null;
+  return {
+    nav: { ...state, highlightedVerse: null, scrollTargetVerse: verse },
+    kind: stillThere ? current!.kind : 'plain',
+    book,
+    chapter,
+    verse,
+    origin: stillThere ? current!.origin : undefined,
+  };
+}
+
+/**
+ * The trail, saved so it is still there after the app is closed.
+ *
+ * Only for a signed-in account, and only on this device: the copy is stamped
+ * with the account it was made under and any other account ignores it, and
+ * sign-out removes it (ACCOUNT_KEYS in lib/sync/clearPersonalData.ts). There
+ * is no server copy.
+ */
+const TRAIL_STORAGE_KEY = 'projectbible_trail';
+
+/**
+ * The most crumbs the saved copy keeps, behind and ahead together. The oldest
+ * go first, then the farthest ahead. Only the saved copy is trimmed — the live
+ * trail is not, because callers hold on to the depth pushHistory hands back,
+ * and dropping a crumb from the front would shift every one of those.
+ */
+const TRAIL_SAVE_LIMIT = 20;
+
+/**
+ * A panel snapshot bigger than this saves as just the verse. Search crumbs
+ * carry their whole result list, and twenty of those could fill storage.
+ */
+const ORIGIN_SAVE_LIMIT = 64 * 1024;
+
+/**
+ * Whether a value survives being saved and read back unchanged. A snapshot
+ * holding a Set, a Map, a Date or a class instance would come back as
+ * something else, so it is not saved at all.
+ */
+function isPlainData(value: unknown, depth = 0): boolean {
+  if (depth > 32) return false;
+  if (value === null || value === undefined) return true;
+  switch (typeof value) {
+    case 'string':
+    case 'boolean':
+      return true;
+    case 'number':
+      return Number.isFinite(value);
+    case 'object': {
+      // An undefined in an array saves as null, so it does not come back the same.
+      if (Array.isArray(value)) return value.every((v) => v !== undefined && isPlainData(v, depth + 1));
+      const proto = Object.getPrototypeOf(value);
+      if (proto !== Object.prototype && proto !== null) return false;
+      return Object.values(value).every((v) => isPlainData(v, depth + 1));
+    }
+    default:
+      return false;
+  }
+}
+
+/** The crumb's panel snapshot if it can be saved; otherwise the crumb brings back just the verse. */
+function saveableOrigin(origin: unknown): unknown {
+  if (origin === undefined || !isPlainData(origin)) return undefined;
+  try {
+    return JSON.stringify(origin).length <= ORIGIN_SAVE_LIMIT ? origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isSavedCrumb(c: any): c is TrailCrumb {
+  return (
+    c != null &&
+    typeof c === 'object' &&
+    typeof c.kind === 'string' &&
+    typeof c.book === 'string' &&
+    typeof c.chapter === 'number' &&
+    c.nav != null &&
+    typeof c.nav.translation === 'string' &&
+    typeof c.nav.book === 'string' &&
+    typeof c.nav.chapter === 'number'
+  );
+}
+
+function loadTrail(): Trail {
+  try {
+    const raw = localStorage.getItem(TRAIL_STORAGE_KEY);
+    if (!raw) return emptyTrail();
+    const saved = JSON.parse(raw);
+    const owner = getDeviceOwner();
+    if (!owner || saved?.owner !== owner) return emptyTrail();
+    return {
+      back: Array.isArray(saved.back) ? saved.back.filter(isSavedCrumb) : [],
+      ahead: Array.isArray(saved.ahead) ? saved.ahead.filter(isSavedCrumb) : [],
+      current: isSavedCrumb(saved.current) ? saved.current : null,
+    };
+  } catch {
+    return emptyTrail();
+  }
+}
+
+/** Drop the oldest crumbs first, then the farthest ahead, down to the save limit. */
+function trimForSave(trail: Trail): Trail {
+  let excess = trail.back.length + trail.ahead.length - TRAIL_SAVE_LIMIT;
+  if (excess <= 0) return trail;
+  const dropBack = Math.min(excess, trail.back.length);
+  excess -= dropBack;
+  return {
+    back: trail.back.slice(dropBack),
+    ahead: trail.ahead.slice(0, trail.ahead.length - excess),
+    current: trail.current,
+  };
+}
+
+function persistTrail(trail: Trail): void {
+  const owner = getDeviceOwner();
+  try {
+    if (!owner || (trail.back.length === 0 && trail.ahead.length === 0)) {
+      localStorage.removeItem(TRAIL_STORAGE_KEY);
+      return;
+    }
+  } catch {
+    return;
+  }
+  const kept = trimForSave(trail);
+  const save = (strip: (c: TrailCrumb) => TrailCrumb) =>
+    localStorage.setItem(
+      TRAIL_STORAGE_KEY,
+      JSON.stringify({
+        owner,
+        back: kept.back.map(strip),
+        ahead: kept.ahead.map(strip),
+        current: kept.current ? strip(kept.current) : null,
+      }),
+    );
+  try {
+    save((crumb) => ({ ...crumb, origin: saveableOrigin(crumb.origin) }));
+  } catch {
+    // Storage full: the panels are the bulk of it, so save just the places.
+    try {
+      save((crumb) => ({ ...crumb, origin: undefined }));
+    } catch {
+      // Blocked storage. The trail still works until the app is closed.
+    }
+  }
+}
+
+const trail = writable<Trail>(loadTrail());
+trail.subscribe(persistTrail);
 
 /**
  * The origin snapshot from the step just walked back to, waiting for whichever
@@ -126,6 +317,34 @@ export const pendingRestore = writable<unknown | null>(null);
 
 function createNavigationStore() {
   const { subscribe, set, update } = writable<NavigationState>(loadPersistedState());
+
+  /** Stand where a crumb remembers, with its panel waiting to be put back. */
+  function arrive(target: TrailCrumb) {
+    persistState(target.nav);
+    set(target.nav);
+    pendingRestore.set(target.origin ?? null);
+  }
+
+  /**
+   * Walk back to a step in the trail — what tapping a crumb behind you does.
+   * `depth` is 1-based, matching what pushHistory returns, so depth 1 is home.
+   * The crumbs after it, and the spot you are leaving, move ahead of you.
+   */
+  function goToDepth(depth: number): TrailCrumb | null {
+    const here = get({ subscribe });
+    let target: TrailCrumb | undefined;
+    trail.update((t) => {
+      if (depth < 1 || depth > t.back.length) return t;
+      target = t.back[depth - 1];
+      return {
+        back: t.back.slice(0, depth - 1),
+        ahead: [...t.back.slice(depth), crumbForHere(here, t.current), ...t.ahead],
+        current: target,
+      };
+    });
+    if (target) arrive(target);
+    return target ?? null;
+  }
 
   return {
     subscribe,
@@ -312,6 +531,9 @@ function createNavigationStore() {
      *
      * Returns the new stack depth. Callers that want to come back to something
      * when this exact step is undone keep the depth as a token.
+     *
+     * A new step forks the trail, the way following a link empties a
+     * browser's Forward list: the crumbs ahead of you go.
      */
     pushHistory: (
       state: NavigationState,
@@ -320,7 +542,7 @@ function createNavigationStore() {
       anchor?: { book: string; chapter: number; verse?: number | null },
     ) => {
       let depth = 0;
-      navigationHistory.update((history) => {
+      trail.update(({ back: history }) => {
         const book = anchor ? normalizeBookName(anchor.book) : state.book;
         const chapter = anchor ? anchor.chapter : state.chapter;
         const verse = anchor
@@ -338,55 +560,47 @@ function createNavigationStore() {
           verse,
           origin,
         };
-        const next = [...history, crumb];
-        depth = next.length;
-        return next;
+        const back = [...history, crumb];
+        depth = back.length;
+        return { back, ahead: [], current: null };
       });
       return depth;
     },
     /** Attach an origin snapshot to the step just pushed. */
     attachOrigin: (depth: number, origin: unknown) => {
-      navigationHistory.update((history) => {
-        if (depth < 1 || depth > history.length) return history;
-        const next = [...history];
-        next[depth - 1] = { ...next[depth - 1], origin };
-        return next;
+      trail.update((t) => {
+        if (depth < 1 || depth > t.back.length) return t;
+        const back = [...t.back];
+        back[depth - 1] = { ...back[depth - 1], origin };
+        return { ...t, back };
       });
     },
-    goBack: () => {
-      let previous: TrailCrumb | undefined;
-      navigationHistory.update((history) => {
-        previous = history[history.length - 1];
-        return history.slice(0, -1);
-      });
-      if (previous) {
-        persistState(previous.nav);
-        set(previous.nav);
-        pendingRestore.set(previous.origin ?? null);
-      }
-      return previous ?? null;
-    },
+    /** One step back. */
+    goBack: () => goToDepth(get(trail).back.length),
+    goToDepth,
     /**
-     * Walk back to a specific step and drop everything after it — what tapping
-     * a breadcrumb does. `depth` is 1-based, matching what pushHistory returns,
-     * so depth 1 is the first hop away from home.
+     * Walk forward to a crumb ahead of you. `index` is 0-based from the one
+     * nearest the location pill. The spot you are leaving, and the crumbs
+     * between it and the target, move behind you.
      */
-    goToDepth: (depth: number) => {
+    goToAhead: (index: number) => {
+      const here = get({ subscribe });
       let target: TrailCrumb | undefined;
-      navigationHistory.update((history) => {
-        if (depth < 1 || depth > history.length) return history;
-        target = history[depth - 1];
-        return history.slice(0, depth - 1);
+      trail.update((t) => {
+        if (index < 0 || index >= t.ahead.length) return t;
+        target = t.ahead[index];
+        return {
+          back: [...t.back, crumbForHere(here, t.current), ...t.ahead.slice(0, index)],
+          ahead: t.ahead.slice(index + 1),
+          current: target,
+        };
       });
-      if (target) {
-        persistState(target.nav);
-        set(target.nav);
-        pendingRestore.set(target.origin ?? null);
-      }
+      if (target) arrive(target);
       return target ?? null;
     },
+    /** Empty the trail, behind and ahead. Where you are becomes home. */
     clearHistory: () => {
-      navigationHistory.set([]);
+      trail.set(emptyTrail());
     },
     reset: () => {
       persistState(initialState);
@@ -397,16 +611,22 @@ function createNavigationStore() {
 
 export const navigationStore = createNavigationStore();
 
-export const canGoBack = derived(navigationHistory, (history) => history.length > 0);
+export const canGoBack = derived(trail, (t) => t.back.length > 0);
 
 /**
  * The trail of steps between home and here, oldest first — what the navbar
  * breadcrumbs render. Empty means you are home.
  */
-export const navTrail = derived(navigationHistory, (history) => history);
+export const navTrail = derived(trail, (t) => t.back);
+
+/**
+ * The crumbs ahead of you, nearest first — the faded ones after the location
+ * pill, left there when you tapped back along the trail.
+ */
+export const navAhead = derived(trail, (t) => t.ahead);
 
 /** How many steps are on the back stack — the token pushHistory hands back. */
-export const historyDepth = derived(navigationHistory, (history) => history.length);
+export const historyDepth = derived(trail, (t) => t.back.length);
 
 // Derived store for getting current chapter count
 export const currentBookChapters = derived(
