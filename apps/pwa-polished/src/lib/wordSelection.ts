@@ -171,8 +171,8 @@ export function resolveWordAt(
   const parent = node.parentElement;
   if (!parent) return null;
 
-  // Footnote markers and verse numbers are not selectable words.
-  if (parent.closest('.inline-note') || parent.closest('.verse-number')) return null;
+  // Footnote markers, the LXX [pl] and verse numbers are not selectable words.
+  if (parent.closest('.inline-note') || parent.closest('.plural-marker') || parent.closest('.verse-number')) return null;
 
   const textEl = parent.closest<HTMLElement>('.verse-text');
   if (!textEl) return null;

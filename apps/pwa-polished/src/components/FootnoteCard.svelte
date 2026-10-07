@@ -24,6 +24,8 @@
   /** The note's own verse reference, e.g. "1:3". Empty when the source gave none. */
   export let noteRef = '';
   export let kind: NoteKind = 'footnote';
+  /** Replaces the label `kind` would give, for a card that is not a pack note (the LXX [pl]). */
+  export let kindLabel: string | null = null;
   export let index = 1;
   /** Where the note sits, for references that name no book. */
   export let book = '';
@@ -61,7 +63,8 @@
   $: prose = sanitizePackHtml(linkifyNoteRefs(body, book, chapter));
 
   $: label =
-    kind === 'parallel' ? 'Parallel passages' : kind === 'crossref' ? 'Cross-reference' : 'Footnote';
+    kindLabel ??
+    (kind === 'parallel' ? 'Parallel passages' : kind === 'crossref' ? 'Cross-reference' : 'Footnote');
 
   $: heading = noteRef ? `${book} ${noteRef.replace(/\./g, ':')}` : `${label} ${index}`;
   $: color = getBookColor(book);

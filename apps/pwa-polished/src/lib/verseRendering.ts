@@ -401,8 +401,9 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
     // did not, so older KJV packs showed it mid-verse as a stray glyph.
     .replace(/¶\s*/g, '')
     // ⌃ marks a plural "you" in the LXX — a stray glyph mid-sentence unless it
-    // is presented as what it is.
-    .replace(/\x13/g, '<sup class="plural-marker" title="Plural &ldquo;you&rdquo;">[pl]</sup>');
+    // is presented as what it is. A tap opens the reader's footnote card with
+    // the explanation; no title, so no OS tooltip or help cursor.
+    .replace(/\x13/g, '<sup class="plural-marker" aria-label="Plural &ldquo;you&rdquo;">[pl]</sup>');
 }
 
 /**

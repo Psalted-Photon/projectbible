@@ -925,6 +925,8 @@
     body: string;
     noteRef: string;
     kind: NoteKind;
+    /** Set for a card that is not a pack note — the LXX [pl] — and shown in place of the kind. */
+    kindLabel?: string;
     index: number;
     book: string;
     chapter: number;
@@ -932,6 +934,16 @@
     /** The marker itself, so the card can stay attached to it while scrolling. */
     el: HTMLElement;
   } | null = null;
+
+  /**
+   * What the LXX 2012's [pl] means, shown when it is tapped. The translator's
+   * introduction: modern English has no accepted plural "you", so Brenton's
+   * "ye" became "you⌃".
+   */
+  const PLURAL_YOU_NOTE =
+    'The “you” just before this mark is plural, spoken to more than one person. ' +
+    'Brenton’s 1851 English said “ye” here. Modern English uses one word for both, ' +
+    'so the LXX 2012 marks the plural instead. Read it like “you all” or “y’all.”';
   let footnoteRef: string | null = null;
   let footnoteText = '';
   let footnoteBusy = false;
@@ -3557,6 +3569,7 @@
     if (!target) return true;
     return !!(
       target.closest(".inline-note") ||
+      target.closest(".plural-marker") ||
       target.closest(".footnote-card") ||
       target.closest(".navigation-bar") ||
       target.closest("button") ||
@@ -3992,6 +4005,7 @@
     // Ignore special elements
     if (
       target.closest(".inline-note") ||
+      target.closest(".plural-marker") ||
       target.closest(".toast") ||
       target.closest(".navigation-bar") ||
       target.closest("button")
@@ -5758,6 +5772,33 @@
       const target = e.target as HTMLElement | null;
       if (!target) return;
 
+      // The LXX [pl] opens the same card, with what the mark means.
+      const pluralEl = target.closest(".plural-marker") as HTMLElement | null;
+      if (pluralEl) {
+        e.preventDefault();
+        const section = pluralEl.closest("[data-book][data-chapter]") as HTMLElement | null;
+        const verseEl = pluralEl.closest(".verse[data-verse]") as HTMLElement | null;
+        const box = pluralEl.getBoundingClientRect();
+        const book = section?.dataset.book || currentBook;
+        const chapter = Number(section?.dataset.chapter) || currentChapter;
+        const verse = Number(verseEl?.dataset.verse) || null;
+        footnoteHit = {
+          x: box.left + box.width / 2,
+          y: box.top,
+          body: PLURAL_YOU_NOTE,
+          noteRef: verse ? `${chapter}:${verse}` : "",
+          kind: "footnote",
+          kindLabel: "Plural you",
+          index: 1,
+          book,
+          chapter,
+          verse,
+          el: pluralEl,
+        };
+        closeFootnoteRef();
+        return;
+      }
+
       const noteEl = target.closest(".inline-note") as HTMLElement | null;
       if (!noteEl) return;
 
@@ -5792,7 +5833,7 @@
     const handleFootnoteOutside = (e: PointerEvent) => {
       if (!footnoteHit) return;
       const t = e.target as HTMLElement | null;
-      if (t?.closest?.(".footnote-card") || t?.closest?.(".inline-note")) return;
+      if (t?.closest?.(".footnote-card") || t?.closest?.(".inline-note") || t?.closest?.(".plural-marker")) return;
       closeFootnote();
     };
     document.addEventListener("pointerdown", handleFootnoteOutside, true);
@@ -5966,6 +6007,7 @@
     body={footnoteHit.body}
     noteRef={footnoteHit.noteRef}
     kind={footnoteHit.kind}
+    kindLabel={footnoteHit.kindLabel ?? null}
     index={footnoteHit.index}
     book={footnoteHit.book}
     chapter={footnoteHit.chapter}
@@ -7368,12 +7410,13 @@
     width: 1.6em;
   }
 
-  /* LXX marks a plural "you" with ⌃; shown as what it means, not a stray glyph */
+  /* LXX marks a plural "you" with ⌃; shown as what it means, not a stray glyph.
+     A tap opens the footnote card explaining it. */
   :global(.plural-marker) {
     color: var(--verse-num-color, #888);
     font-size: 0.65em;
     margin-left: 1px;
-    cursor: help;
+    cursor: pointer;
   }
 
   /* Increase font size for mobile devices */
