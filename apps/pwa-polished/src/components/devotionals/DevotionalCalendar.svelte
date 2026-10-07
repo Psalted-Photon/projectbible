@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
    * The devotionals' date picker: a month of day numbers, and the month name
-   * zooms out to the whole year. The readings are the same every year, so the
-   * days are not lined up under weekdays and February always has its 29th.
+   * zooms out to the whole year. The readings are the same every year, but the
+   * days line up under this year's weekdays, like the tab's date above them.
+   * February always has its 29th; in a year without one it just follows the 28th.
    *
    * The parent places it (it drops down under whatever opened it). `reader`
    * dresses it in the reader's colors for the reading screen; without it, it
@@ -22,12 +23,16 @@
   const dispatch = createEventDispatcher<{ pick: { month: number; day: number }; close: void }>();
 
   const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const today = todayMonthDay();
+  const year = new Date().getFullYear();
 
   let view: 'days' | 'months' = 'days';
   let viewMonth = month;
 
   $: days = Array.from({ length: DAYS_IN_MONTH[viewMonth - 1] }, (_, i) => i + 1);
+  // Empty boxes before the 1st, so it sits under this year's weekday for it.
+  $: blanks = new Date(year, viewMonth - 1, 1).getDay();
 
   function shiftMonth(delta: number) {
     viewMonth = ((viewMonth - 1 + delta + 12) % 12) + 1;
@@ -69,8 +74,12 @@
       </button>
       <button class="dc-step" on:click={() => shiftMonth(1)} aria-label="Next month"><CaretRight size={14} weight="bold" /></button>
     </div>
+    <div class="dc-days dc-weekdays" aria-hidden="true">
+      {#each WEEKDAYS as wd}<span>{wd}</span>{/each}
+    </div>
     {#key viewMonth}
       <div class="dc-days" in:scale={{ start: 1.06, duration: 140 }}>
+        {#each Array(blanks) as _}<span></span>{/each}
         {#each days as d (d)}
           <button
             class="dc-cell"
@@ -181,6 +190,15 @@
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 4px;
+  }
+  .dc-weekdays {
+    margin-bottom: 4px;
+  }
+  .dc-weekdays span {
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    opacity: 0.5;
   }
   .dc-months {
     display: grid;
