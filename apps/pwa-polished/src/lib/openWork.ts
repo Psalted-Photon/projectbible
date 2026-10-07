@@ -273,10 +273,11 @@ export function openWorkIndex(work: WorkKey, windowId: string | null): boolean {
     case 'people':
       personModalStore.open({});
       return true;
-    // The dictionary has no contents list to open onto, and Strong's gets
-    // its list in the next step.
-    case 'dictionary':
     case 'strongs':
+      strongsModalStore.open({ strongsId: null });
+      return true;
+    // The dictionary has no contents list to open onto.
+    case 'dictionary':
       return false;
   }
 }

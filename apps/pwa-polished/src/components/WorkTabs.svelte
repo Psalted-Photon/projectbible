@@ -68,9 +68,8 @@
     // A pinned window can only hold works that have a window form.
     if (win && !worksInWindow(key)) return false;
     // Browsing an index, the tabs move you between indexes. Every work has one
-    // except the dictionary, which has no A–Z list to show, and Strong's, whose
-    // list comes in the next step.
-    if (idx) return key !== "dictionary" && key !== "strongs";
+    // except the dictionary, which has no A–Z list to show.
+    if (idx) return key !== "dictionary";
     switch (key) {
       case "dictionary":
         return dictionaryAvailable(w, win);

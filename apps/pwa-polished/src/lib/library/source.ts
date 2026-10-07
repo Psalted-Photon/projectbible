@@ -63,6 +63,23 @@ export interface LibrarySourceAdapter {
   getRowsInChapter?(book: string, chapter: number): Promise<LibraryRow[]>;
   filters: LibraryFilter[];
   badges: LibraryBadge[];
+
+  // A list that isn't filed A–Z (Strong's, by number or by Greek letter)
+  // describes its own sections. Left out, the list is the A–Z it always was.
+
+  /** Every section in order, for the side rail. Empty ones are shown dimmed. */
+  letters?: string[];
+  /** A section as the rail shows it, where the key itself won't do. */
+  railLabel?(letter: string): string;
+  /** A section as its heading names it. */
+  sectionLabel?(letter: string): string;
+  /** Which section a typed prefix (or a row's sort key) falls in. */
+  letterOf?(sortKey: string): string;
+  /** Which section holds a row, by id — for opening on the entry you came from. */
+  locate?(id: string | number): Promise<string | null>;
+  /** What the list offers when its pack isn't installed. Left out, it offers
+   *  every word-study pack. */
+  missingPacks?: { title: string; note: string };
 }
 
 export const isbeSource: LibrarySourceAdapter = {

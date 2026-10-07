@@ -160,6 +160,20 @@ export const LIBRARY_TIPS: Tip[] = [
     body: 'Open the original word in Strong’s: its definition, forms, and every place it’s used.',
   },
   {
+    id: 'strongs-lang',
+    area,
+    target: '.strongs-content .lang-switch',
+    title: 'Greek or Hebrew',
+    body: 'Browse the Greek words of the New Testament or the Hebrew of the Old. Search looks through both.',
+  },
+  {
+    id: 'strongs-sort',
+    area,
+    target: '.strongs-content .ctl.sort',
+    title: 'Change the order',
+    body: 'Tap to go through the orders: by number, by English meaning, in Greek or Hebrew alphabet order, and most used first.',
+  },
+  {
     id: 'word-gloss',
     area,
     target: '.lexical-content .gloss',

@@ -3,15 +3,30 @@
   import { get } from "svelte/store";
   import WorkTabs from "../WorkTabs.svelte";
   import LibraryFace from "../library/LibraryFace.svelte";
+  import LibraryNavButtons from "../library/LibraryNavButtons.svelte";
+  import IndexList from "../library/IndexList.svelte";
+  import { ArrowsDownUp } from "phosphor-svelte";
   import GetPacksCard from "../GetPacksCard.svelte";
   import StrongsEntry from "./StrongsEntry.svelte";
   import { packInstallFinished } from "../../adapters/db-manager";
-  import { resolveWorks, EMPTY_WORKS, type WorksResolution } from "../../adapters/lexicon-lookup.js";
+  import { resolveWorks, EMPTY_WORKS, type WorksResolution, type LibraryRow } from "../../adapters/lexicon-lookup.js";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../../lib/openWork";
   import { windowStore } from "../../lib/stores/windowStore";
   import { navigationStore } from "../../stores/navigationStore";
   import { strongsModalStore } from "../../stores/strongsModalStore";
   import { libraryPrefsStore } from "../../stores/libraryPrefsStore";
+  import { testamentOf } from "../../lib/strongsUsage";
+  import {
+    strongsSource,
+    savedSort,
+    saveSort,
+    nextSort,
+    sortLabel,
+    sortName,
+    langOf,
+    type StrongsLang,
+    type StrongsSort,
+  } from "../../lib/strongs/source";
   import {
     loadStrongsEntry,
     languageColor,
@@ -19,6 +34,9 @@
     partOfSpeechText,
     glossTerm,
     isRtl,
+    displayId,
+    classicId,
+    shelfName,
     type StrongsEntryData,
     type EntryTab,
   } from "../../lib/strongs/entry";
@@ -27,6 +45,9 @@
    * Strong's, as a work of its own beside the encyclopedia, Nave's, the people
    * and the dictionary. Same two hosts as the others: the lookup card, and a
    * docked window pinned beside the reader. `windowId` tells them apart.
+   *
+   * Two sides, like the encyclopedia: the contents (every classic number, in
+   * the order you pick) and one entry. The page turns between them.
    */
   export let strongsId: string | null = null;
   export let windowId: string | null = null;
@@ -50,10 +71,15 @@
   /** The saved scroll belongs to the first entry shown, not to the next one. */
   let restoreScroll = initialScrollTop;
 
-  // Reload whenever the id changes: a related word, or the host swapping it.
+  /** Which side is up: the contents, or an entry. */
+  let showContents = strongsId == null;
+
+  // Reload whenever the id changes: a related word, a row from the contents,
+  // or the host swapping it. No id means the contents.
   let loadedId: string | null | undefined = undefined;
   $: if (strongsId !== loadedId) {
     loadedId = strongsId;
+    showContents = strongsId == null;
     loadEntry();
   }
 
@@ -85,9 +111,78 @@
     rememberedId = entry.id;
     libraryPrefsStore.markRead("strongs", {
       id: entry.id,
-      name: entry.shortDefinition ? `${entry.lemma} · ${entry.shortDefinition}` : entry.lemma,
+      name: shelfName(entry.id, entry.lemma, entry.shortDefinition),
       sortKey: entry.id,
     });
+  }
+
+  // --- The contents ------------------------------------------------------
+  // One language at a time, since Greek and Hebrew can't share an alphabet. It
+  // opens on the language of what you're looking at — the entry, or else the
+  // testament you're reading — and the order is the one you last left it in.
+  let lang: StrongsLang = strongsId ? langOf(strongsId) : readerLang();
+  let sort: StrongsSort = savedSort();
+  $: source = strongsSource(lang, sort);
+  /** The row to land on and keep marked: the entry's classic number. */
+  $: contentsRowId = entry ? classicId(entry.id) : null;
+
+  function readerLang(): StrongsLang {
+    return testamentOf(get(navigationStore).book) === "OT" ? "hebrew" : "greek";
+  }
+
+  function cycleSort() {
+    sort = nextSort(sort);
+    saveSort(sort);
+  }
+
+  // --- Back and flip -----------------------------------------------------
+  $: lastRead = $libraryPrefsStore.strongs.lastRead;
+  $: canGoBack = !showContents && !!entry;
+  $: canFlip = showContents ? !!entry || !!lastRead : true;
+
+  /** The page under the work tabs; moving between the contents and an entry
+   *  turns it over. */
+  let face: { turn(toEntry: boolean, apply: () => void): void } | null = null;
+
+  function turnTo(toEntry: boolean, apply: () => void) {
+    if (face) face.turn(toEntry, apply);
+    else apply();
+  }
+
+  /** To the contents, in the entry's own language so its row is there. */
+  function showList() {
+    if (entry) lang = langOf(entry.id);
+    showContents = true;
+  }
+
+  function goBack() {
+    turnTo(false, showList);
+  }
+
+  /** Escape comes here before the host closes — see IsbeContent.handleBack. */
+  export function handleBack(): boolean {
+    if (!canGoBack) return false;
+    goBack();
+    return true;
+  }
+
+  function flip() {
+    if (!showContents) {
+      turnTo(false, showList);
+      return;
+    }
+    // Nothing open this time — flip to whatever you last had open.
+    if (!entry && lastRead) {
+      const id = String(lastRead.id);
+      turnTo(true, () => openEntry(id));
+      return;
+    }
+    turnTo(true, () => (showContents = false));
+  }
+
+  function openFromContents(row: LibraryRow) {
+    const id = String(row.id);
+    turnTo(true, () => openEntry(id));
   }
 
   // --- The other four works ----------------------------------------------
@@ -127,7 +222,8 @@
    * stays put; otherwise the card keeps its frame with another work inside it.
    */
   function selectWork(work: WorkKey) {
-    if (!entry) {
+    // Over the contents the tabs move between contents; there's no subject.
+    if (showContents || !entry) {
       openWorkIndex(work, windowId);
       return;
     }
@@ -135,8 +231,11 @@
   }
 
   // --- Navigation --------------------------------------------------------
-  /** Another entry, from a related word. */
+  /** Another entry: a row from the contents, or a related word. */
   function openEntry(id: string) {
+    // Set here as well as by the reload, because opening the entry that is
+    // already loaded changes no id.
+    showContents = false;
     if (windowId) {
       windowStore.updateContentState(windowId, { strongsId: id });
       return;
@@ -180,22 +279,29 @@
 </script>
 
 <div class="strongs-content" class:docked>
-  <WorkTabs {works} current="strongs" inWindow={docked} onSelect={selectWork} />
-  <LibraryFace>
+  <WorkTabs {works} current="strongs" onIndex={showContents} inWindow={docked} onSelect={selectWork} />
+  <LibraryFace bind:this={face}>
     <div class="strongs-header">
+      <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
       <div class="head-text">
         <h2>
-          {#if entry}
+          {#if !showContents && entry}
             <span class="lemma" dir={rtl ? "rtl" : "ltr"}>{entry.lemma}</span>
-            <span class="strongs-id" style="color: {languageColor(entry.language)}">{entry.id}</span>
+            <span class="strongs-id" style="color: {languageColor(entry.language)}">{displayId(entry.id)}</span>
           {:else}
-            Strong’s
+            {source.label}
           {/if}
         </h2>
-        <div class="sub">{entry ? subtitle : "Strong’s Hebrew and Greek dictionary"}</div>
+        <div class="sub">
+          {#if showContents}
+            {source.subtitle} · {sortName(sort, lang)}
+          {:else}
+            {subtitle}
+          {/if}
+        </div>
       </div>
       <div class="head-actions">
-        {#if entry && onPopOut}
+        {#if !showContents && entry && onPopOut}
           <button class="pop-btn" on:click={popOut} title="Pin beside the reader" aria-label="Pin beside the reader">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8" />
@@ -214,6 +320,29 @@
       </div>
     </div>
 
+    {#if showContents}
+      <!-- A new language or order is a new list: its sections, rail and rows
+           all change, so it starts afresh rather than patching the old one. -->
+      {#key source}
+        <IndexList {source} onOpen={openFromContents} initialRowId={contentsRowId}>
+          <svelte:fragment slot="controls">
+            <div class="lang-switch" role="group" aria-label="Language">
+              <button class="ctl" class:on={lang === "greek"} on:click={() => (lang = "greek")}>Greek</button>
+              <button class="ctl" class:on={lang === "hebrew"} on:click={() => (lang = "hebrew")}>Hebrew</button>
+            </div>
+            <button
+              class="ctl sort"
+              on:click={cycleSort}
+              title="{sortName(sort, lang)} — tap for {sortName(nextSort(sort), lang).toLowerCase()}"
+              aria-label="Order: {sortName(sort, lang)}. Tap for {sortName(nextSort(sort), lang).toLowerCase()}."
+            >
+              <ArrowsDownUp size={11} weight="bold" />
+              {sortLabel(sort, lang)}
+            </button>
+          </svelte:fragment>
+        </IndexList>
+      {/key}
+    {:else}
     <div class="strongs-body" bind:this={bodyEl}>
       {#if loading}
         <div class="muted show-late">Loading…</div>
@@ -228,7 +357,7 @@
       {:else if strongsId}
         {#await packInstallFinished("lexical").catch(() => false) then installed}
           {#if installed}
-            <div class="muted">Strong’s {strongsId} isn’t in the dictionary.</div>
+            <div class="muted">Strong’s {displayId(strongsId)} isn’t in the dictionary.</div>
           {:else}
             <GetPacksCard
               packs={["lexical"]}
@@ -237,10 +366,9 @@
             />
           {/if}
         {/await}
-      {:else}
-        <div class="muted">Tap a Greek or Hebrew word, then its Strong’s number, to open an entry here.</div>
       {/if}
     </div>
+    {/if}
   </LibraryFace>
 </div>
 
@@ -330,6 +458,41 @@
   }
   .muted {
     color: var(--text-muted, #999);
+  }
+
+  /* The contents' own controls, drawn like the list's chips beside them. */
+  .lang-switch {
+    display: flex;
+  }
+  .ctl {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--surface-2, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-color, #333);
+    color: var(--text-muted, #999);
+    border-radius: 999px;
+    padding: 3px 9px;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+  }
+  .ctl.on {
+    color: var(--color-primary, #4a90e2);
+    border-color: var(--color-primary, #4a90e2);
+  }
+  /* The two languages read as one switch: joined, square where they meet. */
+  .lang-switch .ctl:first-child {
+    border-radius: 999px 0 0 999px;
+  }
+  .lang-switch .ctl:last-child {
+    border-radius: 0 999px 999px 0;
+    margin-left: -1px;
+  }
+  .lang-switch .ctl.on {
+    position: relative;
+    z-index: 1;
   }
 
   /* Bar size: the header scales with --bar-scale (Settings → Appearance). The

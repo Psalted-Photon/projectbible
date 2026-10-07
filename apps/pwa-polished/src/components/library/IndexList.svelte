@@ -87,6 +87,10 @@
   $: filteredRows = activeRows.filter(filterFn);
   $: shownRows = filteredRows.slice(0, visibleCount);
   $: browsing = !searchResults && !chapterRows;
+  /** How a section is named in its heading. A–Z lists use the letter itself. */
+  $: sectionName = (key: string) => source.sectionLabel?.(key) ?? key;
+  /** Which section a typed prefix falls in. */
+  $: letterOf = (prefix: string) => (source.letterOf ?? libraryLetterOf)(prefix);
 
   // The pill's label follows the reader live, so the list under it has to as
   // well — scrolling a docked window into the next chapter swaps its rows in
@@ -109,7 +113,13 @@
       return;
     }
     const first = Object.keys(letterCounts)[0] ?? "A";
-    await selectLetter(initialLetter || prefs.lastLetter || first, false);
+    // A letter only counts if this list has it: Strong's files by number in
+    // one order and by letter in another, under the same saved place.
+    const has = (l: string | null | undefined): l is string => !!l && !!letterCounts[l];
+    const located =
+      !has(initialLetter) && initialRowId != null && source.locate ? await source.locate(initialRowId) : null;
+    const start = [initialLetter, located, prefs.lastLetter].find(has) ?? first;
+    await selectLetter(start, false);
     if (initialRowId != null) {
       // filteredRows is derived, so it only settles on the next flush — same
       // reason jumpTo ticks after changing letter.
@@ -281,8 +291,8 @@
   }
 
   async function jumpTo(prefix: string) {
-    const target = libraryLetterOf(prefix);
-    if (browsing && target !== letter) {
+    const target = letterOf(prefix);
+    if (browsing && target !== letter && letterCounts[target]) {
       await selectLetter(target);
       // The new letter's rows have to exist before we can look inside them.
       await tick();
@@ -295,7 +305,7 @@
   // --- Rows --------------------------------------------------------------
   const markOf = (row: LibraryRow): LibraryMark => ({
     id: row.id,
-    name: row.name,
+    name: row.markName ?? row.name,
     sortKey: row.sortKey,
   });
 
@@ -367,16 +377,23 @@
 
 {#if packMissing}
   <div class="index-packs">
-    <GetPacksCard
-      packs={[source.pack, ...WORD_STUDY_PACKS.filter((id) => id !== source.pack)]}
-      title="Word study needs packs"
-      note="The encyclopedia, Nave's topics, every person in the Bible and the English dictionary. Download what you'd like here."
-    />
+    {#if source.missingPacks}
+      <GetPacksCard packs={[source.pack]} title={source.missingPacks.title} note={source.missingPacks.note} />
+    {:else}
+      <GetPacksCard
+        packs={[source.pack, ...WORD_STUDY_PACKS.filter((id) => id !== source.pack)]}
+        title="Word study needs packs"
+        note="The encyclopedia, Nave's topics, every person in the Bible and the English dictionary. Download what you'd like here."
+      />
+    {/if}
   </div>
 {:else}
 <div class="index">
   <div class="index-bar">
     <div class="chips">
+      <!-- A work's own controls, ahead of the chips: Strong's puts its language
+           switch and sort button here. -->
+      <slot name="controls" />
       <!-- A lone "All" chip filters nothing, so it isn't drawn. -->
       {#if source.filters.length > 1}
         {#each source.filters as f}
@@ -407,7 +424,13 @@
 
   <div class="index-main">
     {#if browsing}
-      <AlphabetRail counts={letterCounts} active={letter} onSelect={selectLetter} />
+      <AlphabetRail
+        counts={letterCounts}
+        active={letter}
+        onSelect={selectLetter}
+        letters={source.letters ?? null}
+        label={source.railLabel ?? null}
+      />
     {/if}
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -460,7 +483,7 @@
         {:else if chapterRows}
           {filteredRows.length} in {chapterHeld}
         {:else}
-          {letter}<span class="count">({filteredRows.length})</span>
+          {sectionName(letter)}<span class="count">({filteredRows.length})</span>
         {/if}
       </div>
 
@@ -475,9 +498,15 @@
           <div class="row-wrap" class:is-current={isCurrentRow(row)} data-row={i}>
             <button class="row" on:click={() => open(row)}>
               <span class="label">
-                <span class="name">{row.name}</span>
+                {#if row.tag}<span class="tag" style:color={row.tagColor}>{row.tag}</span>{/if}
+                <span
+                  class="name"
+                  class:orig={!!row.nameLang}
+                  dir={row.nameLang === "hebrew" ? "rtl" : undefined}
+                >{row.name}</span>
                 {#if row.detail}<span class="detail">{row.detail}</span>{/if}
               </span>
+              {#if row.meta}<span class="meta">{row.meta}</span>{/if}
             </button>
             <!-- A sibling of the row rather than inside it: these are buttons,
                  and a button inside a button is invalid and would fire both. -->
@@ -531,7 +560,7 @@
           </div>
         {:else if browsing && adjacentLetter(1)}
           <button class="next-letter" on:click={() => selectLetter(adjacentLetter(1)!)}>
-            Continue into {adjacentLetter(1)} ↓
+            Continue into {sectionName(adjacentLetter(1) ?? "")} ↓
           </button>
         {/if}
       {/if}
@@ -687,6 +716,28 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* A Strong's number in front of the word, in its language's color. Fixed
+     width, so the words line up down the list. */
+  .tag {
+    flex-shrink: 0;
+    min-width: 3.4em;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Greek and Hebrew in the lexicon's own typeface. */
+  .row .name.orig {
+    font-family: "Gentium Plus", "SBL Greek", "SBL Hebrew", serif;
+    font-size: 15px;
+    flex-shrink: 0;
+    max-width: 55%;
+  }
+  /* How often a word is used, at the row's end. */
+  .meta {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-muted, #999);
+    font-variant-numeric: tabular-nums;
   }
   /* Name meanings run long, so the detail gives up its width first and the
      name itself stays readable. */

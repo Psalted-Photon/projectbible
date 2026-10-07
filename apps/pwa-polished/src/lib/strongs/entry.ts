@@ -39,6 +39,26 @@ export async function loadStrongsEntry(id: string): Promise<StrongsEntryData | n
   };
 }
 
+/**
+ * A number as Strong's printed it: G26, not the pack's padded G0026. A split
+ * keeps its letter (G2424G).
+ */
+export function displayId(id: string): string {
+  return id.replace(/^([GH])0+(?=\d)/i, '$1');
+}
+
+/** The number the list files an id under: its classic number, splits folded in. */
+export function classicId(id: string): string {
+  const m = /^([GH])0*(\d{1,4})[A-Za-z]?$/i.exec(id ?? '');
+  return m ? `${m[1].toUpperCase()}${m[2].padStart(4, '0')}` : id;
+}
+
+/** How an entry is named on the Starred and Recently viewed shelves. */
+export function shelfName(id: string, lemma: string, gloss: string | undefined): string {
+  const head = `${displayId(id)} ${lemma}`;
+  return gloss ? `${head} · ${gloss}` : head;
+}
+
 /** Each original language's own color, used for its numbers and labels. */
 export function languageColor(lang: string): string {
   switch (lang) {

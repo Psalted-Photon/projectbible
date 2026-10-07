@@ -16,7 +16,7 @@
   import { navigationStore } from "../../stores/navigationStore";
   import { parseOsisRef } from "../../lib/parseRefString";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../../lib/morphologyExpander";
-  import { languageColor, isRtl, type StrongsEntryData, type EntryTab } from "../../lib/strongs/entry";
+  import { languageColor, isRtl, displayId, type StrongsEntryData, type EntryTab } from "../../lib/strongs/entry";
   import { reveal } from "../../lib/motion";
 
   /**
@@ -275,7 +275,7 @@
         <dl>
           <dt>Strong's ID:</dt>
           <dd style="color: {languageColor(entry.language)}">
-            {entry.id}
+            {displayId(entry.id)}
           </dd>
 
           <dt>Lemma:</dt>

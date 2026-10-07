@@ -286,6 +286,7 @@
         />
       {:else if work === "strongs"}
         <StrongsContent
+          bind:this={content}
           strongsId={strongs.strongsId}
           initialTab={saved.strongs?.tab ?? null}
           initialScrollTop={saved.strongs?.scrollTop ?? 0}

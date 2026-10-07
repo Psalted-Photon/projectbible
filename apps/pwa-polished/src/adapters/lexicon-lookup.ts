@@ -1504,6 +1504,17 @@ export interface LibraryRow {
   topicId?: number;
   /** The word the dictionary filed this under — the full name or its head. */
   dictTerm?: string;
+  /** A short label in front of the name, in its own color — Strong's number. */
+  tag?: string;
+  tagColor?: string;
+  /** Greek or Hebrew script in the name: set in the lexicon's typeface, and
+   *  Hebrew reads right to left. */
+  nameLang?: 'greek' | 'hebrew';
+  /** A quiet figure at the row's end — how often a Strong's word is used. */
+  meta?: string;
+  /** How the row is named on the Starred and Recently viewed shelves, when the
+   *  name alone wouldn't say enough there. */
+  markName?: string;
 }
 
 export const LIBRARY_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');

@@ -6,11 +6,17 @@
   export let counts: Record<string, number> = {};
   export let active: string | null = null;
   export let onSelect: (letter: string) => void;
+  /** The sections of a list that isn't filed A–Z — Strong's by number band or
+   *  by Greek letter. Left out, the rail is the A–Z it always was. */
+  export let letters: string[] | null = null;
+  /** A section as the rail shows it, where the key itself won't do. */
+  export let label: ((letter: string) => string) | null = null;
 
   let railEl: HTMLDivElement | null = null;
   let scrubbing = false;
 
-  $: letters = [...LIBRARY_LETTERS, ...(counts[LIBRARY_OTHER] ? [LIBRARY_OTHER] : [])];
+  $: shown = letters ?? [...LIBRARY_LETTERS, ...(counts[LIBRARY_OTHER] ? [LIBRARY_OTHER] : [])];
+  $: text = (letter: string) => label?.(letter) ?? letter;
 
   function select(letter: string) {
     if (!counts[letter] || letter === active) return;
@@ -22,8 +28,8 @@
   function letterAt(clientY: number): string | null {
     if (!railEl) return null;
     const box = railEl.getBoundingClientRect();
-    const i = Math.floor(((clientY - box.top) / box.height) * letters.length);
-    return letters[Math.min(Math.max(i, 0), letters.length - 1)] ?? null;
+    const i = Math.floor(((clientY - box.top) / box.height) * shown.length);
+    return shown[Math.min(Math.max(i, 0), shown.length - 1)] ?? null;
   }
 
   // Dragging down the rail runs through the letters, the way a thumb-index in a
@@ -52,10 +58,10 @@
     if (!step) return;
     e.preventDefault();
     // Skip past empty letters so the arrows always land somewhere with content.
-    let i = letters.indexOf(active ?? letters[0]);
-    for (let n = 0; n < letters.length; n++) {
-      i = (i + step + letters.length) % letters.length;
-      if (counts[letters[i]]) return select(letters[i]);
+    let i = shown.indexOf(active ?? shown[0]);
+    for (let n = 0; n < shown.length; n++) {
+      i = (i + step + shown.length) % shown.length;
+      if (counts[shown[i]]) return select(shown[i]);
     }
   }
 </script>
@@ -73,16 +79,17 @@
   on:pointercancel={onPointerUp}
   on:keydown={onKeydown}
 >
-  {#each letters as letter}
+  {#each shown as letter}
     <span
       class="letter"
       class:active={letter === active}
       class:empty={!counts[letter]}
+      class:long={text(letter).length > 2}
       role="tab"
       aria-selected={letter === active}
-      title={counts[letter] ? `${letter} — ${counts[letter]} entries` : letter}
+      title={counts[letter] ? `${text(letter)} — ${counts[letter]} entries` : text(letter)}
     >
-      {letter}
+      {text(letter)}
     </span>
   {/each}
 </div>
@@ -125,6 +132,11 @@
   }
   .letter.empty {
     opacity: 0.25;
+  }
+  /* "1.5k" and "1k+" have to fit the same strip as a single letter. */
+  .letter.long {
+    font-size: 8px;
+    letter-spacing: -0.02em;
   }
   /* While scrubbing the letters grow slightly, so the one under the thumb is
      readable past the finger covering it. */
