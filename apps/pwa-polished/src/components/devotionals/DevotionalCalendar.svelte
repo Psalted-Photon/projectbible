@@ -9,7 +9,7 @@
    * matches the Reading Plan window like the rest of the Devotionals tab.
    */
   import { createEventDispatcher, onMount } from 'svelte';
-  import { scale } from 'svelte/transition';
+  import { dropIn, fadeAway, scale } from '../../lib/motion';
   import { CaretLeft, CaretRight, CaretDown } from 'phosphor-svelte';
   import { monthName } from '../../lib/devotionals/devotionalsData';
   import { todayMonthDay } from '../../lib/devotionals/slot';
@@ -60,7 +60,7 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 <div class="dc-backdrop" on:click={() => dispatch('close')}></div>
-<div class="dc-panel" class:reader bind:this={panel} tabindex="-1" role="dialog" aria-label="Pick a date" transition:scale={{ start: 0.96, duration: 120 }}>
+<div class="dc-panel" class:reader bind:this={panel} tabindex="-1" role="dialog" aria-label="Pick a date" in:dropIn out:fadeAway>
   {#if view === 'days'}
     <div class="dc-head">
       <button class="dc-step" on:click={() => shiftMonth(-1)} aria-label="Previous month"><CaretLeft size={14} weight="bold" /></button>
@@ -86,7 +86,8 @@
     <div class="dc-head">
       <span class="dc-year">Every month</span>
     </div>
-    <div class="dc-months" in:scale={{ start: 0.9, duration: 160 }}>
+    <!-- 96%, not smaller: nothing in the app shrinks further than that. -->
+    <div class="dc-months" in:scale={{ start: 0.96, duration: 160 }}>
       {#each DAYS_IN_MONTH as _, i (i)}
         <button
           class="dc-cell dc-month-cell"

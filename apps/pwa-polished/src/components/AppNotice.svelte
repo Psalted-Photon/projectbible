@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fly } from 'svelte/transition';
+  import { fly } from '../lib/motion';
   import { CheckCircle, Info, WarningCircle, ArrowClockwise } from 'phosphor-svelte';
   import { notices, dismissNotice } from '../stores/noticeStore';
 </script>

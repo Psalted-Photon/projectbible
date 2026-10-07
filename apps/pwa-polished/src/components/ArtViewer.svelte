@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
-  import { fade } from 'svelte/transition';
+  import { fade } from '../lib/motion';
 
   /** Object URL of the full-resolution painting. */
   export let src: string;

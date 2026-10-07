@@ -21,6 +21,15 @@
  */
 
 import { writable, get } from 'svelte/store';
+import {
+  fade as svelteFade,
+  fly as svelteFly,
+  scale as svelteScale,
+  type FadeParams,
+  type FlyParams,
+  type ScaleParams,
+  type TransitionConfig,
+} from 'svelte/transition';
 import { getSettings } from '../adapters/settings';
 
 export type MotionSetting = 'system' | 'reduced' | 'off';
@@ -207,6 +216,48 @@ export function fadeIn(el: HTMLElement | null | undefined): void {
   const ms = arriveMs();
   if (!el || !ms || typeof el.animate !== 'function') return;
   el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: EASE_ENTER });
+}
+
+// --- Svelte's transitions, following the setting ---------------------------
+//
+// Drop-ins for svelte/transition's fade, fly and scale: import them from here
+// instead. Svelte's own play the same whatever the Motion setting says. These
+// are exactly Svelte's on full motion; on Reduced every one becomes the same
+// short fade, and on Off nothing plays.
+
+function byLevel(node: Element, full: () => TransitionConfig): TransitionConfig {
+  const level = motionLevel();
+  if (level === 'off') return { duration: 0 };
+  if (level === 'reduced') return svelteFade(node, { duration: MOTION.reducedFadeMs });
+  return full();
+}
+
+export function fade(node: Element, params?: FadeParams): TransitionConfig {
+  return byLevel(node, () => svelteFade(node, params));
+}
+
+export function fly(node: Element, params?: FlyParams): TransitionConfig {
+  return byLevel(node, () => svelteFly(node, params));
+}
+
+export function scale(node: Element, params?: ScaleParams): TransitionConfig {
+  return byLevel(node, () => svelteScale(node, params));
+}
+
+/**
+ * in:dropIn — growFrom as a Svelte transition, for a dropdown that is drawn
+ * where it belongs from the start. It grows from its own transform-origin.
+ * Pair it with out:fadeAway.
+ */
+export function dropIn(node: Element): TransitionConfig {
+  return byLevel(node, () =>
+    svelteScale(node, {
+      start: MOTION.dropdown.startScale,
+      duration: MOTION.dropdown.openMs,
+      // Slows into place, like EASE_ENTER.
+      easing: (t) => 1 - Math.pow(1 - t, 3),
+    }),
+  );
 }
 
 // --- Presses ----------------------------------------------------------------

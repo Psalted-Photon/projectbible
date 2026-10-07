@@ -631,10 +631,10 @@
     }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .dot,
-    .dot::after {
-      animation: none;
-    }
+  /* Reduced or Off in Settings → Appearance → Motion (which follows the
+     device's own switch by default). */
+  :global(:root:not([data-motion="full"])) .dot,
+  :global(:root:not([data-motion="full"])) .dot::after {
+    animation: none;
   }
 </style>

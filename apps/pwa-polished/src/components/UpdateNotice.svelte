@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fly } from 'svelte/transition';
+  import { fly } from '../lib/motion';
   import { CheckCircle } from 'phosphor-svelte';
 
   let show = false;

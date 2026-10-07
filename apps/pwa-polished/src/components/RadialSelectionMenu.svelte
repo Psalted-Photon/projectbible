@@ -22,6 +22,7 @@
     type RadialItem,
   } from '../lib/radialMenu';
   import { normalizeBookName, getBookColor } from '../lib/bibleData';
+  import { motionLevel } from '../lib/motion';
 
   /** Viewport center of the ring — the middle of the tapped word. */
   export let cx = 0;
@@ -101,9 +102,9 @@
   const STAGGER = 25;
   const POP_MS = 120;
 
-  const reduceMotion =
-    typeof window !== 'undefined' &&
-    (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+  // Settings → Appearance → Motion, which follows the device's own switch by
+  // default.
+  const reduceMotion = motionLevel() !== 'full';
 
   // --- What the ring is showing -------------------------------------------
   //

@@ -33,6 +33,7 @@
   } from '../lib/familyTree/motion';
   import FamilyTreeCard from './FamilyTreeCard.svelte';
   import FamilyTreeBioSheet from './FamilyTreeBioSheet.svelte';
+  import { motionLevel } from '../lib/motion';
 
   /**
    * The tree, full screen on black — opened from People, over everything the
@@ -45,7 +46,9 @@
    * no restore code needed anywhere.
    */
 
-  const REDUCED_MOTION = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Settings → Appearance → Motion, which follows the device's own switch by
+  // default.
+  const REDUCED_MOTION = motionLevel() !== 'full';
   const TOUCH = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
   /** Same portal ArtViewer uses: filters on the light/sepia themes make their
@@ -1114,7 +1117,7 @@
         class:on={entranceActive}
         aria-pressed={entranceActive}
         disabled={REDUCED_MOTION}
-        title={REDUCED_MOTION ? 'Off while your device asks for reduced motion' : undefined}
+        title={REDUCED_MOTION ? 'Off while motion is reduced (Settings → Appearance → Motion)' : undefined}
         on:click={toggleEntrance}
       >
         Cinematic

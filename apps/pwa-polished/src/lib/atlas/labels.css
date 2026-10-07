@@ -216,11 +216,11 @@
 
 /* Movement off, but the dot still has to be findable, so the halo stays and
    only stops breathing. */
-@media (prefers-reduced-motion: reduce) {
-  .dot-chosen {
-    animation: none;
-    filter: drop-shadow(0 0 5px rgba(255, 244, 214, .8));
-  }
+/* Reduced or Off in Settings → Appearance → Motion (which follows the
+   device's own switch by default). */
+:root:not([data-motion="full"]) .dot-chosen {
+  animation: none;
+  filter: drop-shadow(0 0 5px rgba(255, 244, 214, .8));
 }
 
 /* ---------------- a place several journeys visit ----------------
@@ -270,11 +270,11 @@
   100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(255, 244, 214, .85)); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .journey-shared.dot-chosen .js-dot {
-    animation: none;
-    filter: drop-shadow(0 0 5px rgba(255, 244, 214, .8));
-  }
+/* Reduced or Off in Settings → Appearance → Motion (which follows the
+   device's own switch by default). */
+:root:not([data-motion="full"]) .journey-shared.dot-chosen .js-dot {
+  animation: none;
+  filter: drop-shadow(0 0 5px rgba(255, 244, 214, .8));
 }
 
 /* One land singled out from the era card: its name glows and grows a little,

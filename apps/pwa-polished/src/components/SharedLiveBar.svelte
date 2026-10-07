@@ -123,10 +123,10 @@
     50% { opacity: 0.25; }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .live-dot {
-      animation: none;
-    }
+  /* Reduced or Off in Settings → Appearance → Motion (which follows the
+     device's own switch by default). */
+  :global(:root:not([data-motion="full"])) .live-dot {
+    animation: none;
   }
 
   .live-pills {

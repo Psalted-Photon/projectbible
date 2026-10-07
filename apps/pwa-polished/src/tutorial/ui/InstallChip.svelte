@@ -10,7 +10,7 @@
    * When nothing is left and nothing needs a restart, the tour moves on.
    */
   import { createEventDispatcher, onMount } from "svelte";
-  import { fly } from "svelte/transition";
+  import { fly } from "../../lib/motion";
   import {
     installAll,
     installAllState,

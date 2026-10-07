@@ -15,6 +15,7 @@
   import PersonContent from './PersonContent.svelte';
   import TribeContent from './TribeContent.svelte';
   import type { PersonRecord } from '../adapters/lexicon-lookup.js';
+  import { motionLevel } from '../lib/motion';
 
   /** The person to show, and a counter the viewer bumps to force a fresh
    *  PersonContent instance. Both must be set together, in the same tick —
@@ -35,7 +36,9 @@
   /** A tap on the stone inside the bio shown here. */
   export let onOpenTribe: (tribe: string, personId: string) => void;
 
-  const REDUCED_MOTION = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Settings → Appearance → Motion, which follows the device's own switch by
+  // default.
+  const REDUCED_MOTION = motionLevel() !== 'full';
 
   let shown: PersonRecord | null = null;
 

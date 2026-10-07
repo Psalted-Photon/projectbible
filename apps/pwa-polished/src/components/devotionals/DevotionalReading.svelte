@@ -20,7 +20,7 @@
    */
   import { createEventDispatcher, tick } from 'svelte';
   import { get } from 'svelte/store';
-  import { fade } from 'svelte/transition';
+  import { fade } from '../../lib/motion';
   import { SunHorizon, MoonStars, CalendarBlank, CalendarDots, CaretLeft, CaretRight, ShareNetwork, Info, X } from 'phosphor-svelte';
   import { navigationStore } from '../../stores/navigationStore';
   import { readingPlanModalStore } from '../../stores/readingPlanModalStore';

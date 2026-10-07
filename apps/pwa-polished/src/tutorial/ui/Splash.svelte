@@ -6,7 +6,7 @@
    * the gem floats, with the name written under it in chalk.
    */
   import { createEventDispatcher, onMount } from "svelte";
-  import { fade } from "svelte/transition";
+  import { fade } from "../../lib/motion";
   import { APP_NAME, TAGLINE, START_LABEL, SKIP_LABEL, TURN_OFF_HINT } from "../content/splash";
 
   const dispatch = createEventDispatcher<{ start: void; skip: void }>();
@@ -163,13 +163,13 @@
     }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .gem,
-    .name,
-    .tagline,
-    .actions,
-    .hint {
-      animation: none;
-    }
+  /* Reduced or Off in Settings → Appearance → Motion (which follows the
+     device's own switch by default). */
+  :global(:root:not([data-motion="full"])) .gem,
+  :global(:root:not([data-motion="full"])) .name,
+  :global(:root:not([data-motion="full"])) .tagline,
+  :global(:root:not([data-motion="full"])) .actions,
+  :global(:root:not([data-motion="full"])) .hint {
+    animation: none;
   }
 </style>

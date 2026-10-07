@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fly } from "svelte/transition";
+  import { fly } from "../lib/motion";
   import { get } from "svelte/store";
   import { paneStore, pendingCloseEdge, type PaneState } from "../stores/paneStore";
   import SettingsPane from "./panes/SettingsPane.svelte";

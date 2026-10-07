@@ -9,7 +9,7 @@
    * wide inside a docked window, which is a thing the lab page never had to do.
    */
   import { onMount, onDestroy, tick } from 'svelte';
-  import { fly } from 'svelte/transition';
+  import { fly } from '../lib/motion';
   import { get } from 'svelte/store';
   import 'leaflet/dist/leaflet.css';
   import ArtViewer from './ArtViewer.svelte';
@@ -2483,7 +2483,9 @@
     border-radius: 50%; background: var(--text); border: 4px solid #151515;
     box-shadow: 0 0 0 1px var(--line-2); pointer-events: none;
   }
-  @media (prefers-reduced-motion: no-preference) { .tl-knob { transition: left .2s ease; } }
+  /* Only on full motion in Settings → Appearance → Motion (which follows
+     the device's own switch by default). */
+  :global(:root[data-motion="full"]) .tl-knob { transition: left .2s ease; }
 
   /* ---------------- not installed ---------------- */
   .gate {

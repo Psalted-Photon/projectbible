@@ -136,9 +136,9 @@
     100% { transform: translateY(110px); opacity: 0; }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .dot {
-      animation: none !important;
-    }
+  /* Reduced or Off in Settings → Appearance → Motion (which follows the
+     device's own switch by default). */
+  :global(:root:not([data-motion="full"])) .dot {
+    animation: none !important;
   }
 </style>

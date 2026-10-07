@@ -690,11 +690,11 @@
 
   /* Anything this slow is worse than nothing for someone who asked for less
      motion — snap instead. */
-  @media (prefers-reduced-motion: reduce) {
-    .toolbar-wrap.animated,
-    .bumper-pill.animated .bumper-caret {
-      transition-duration: 0.01ms;
-    }
+  /* Reduced or Off in Settings → Appearance → Motion (which follows the
+     device's own switch by default). */
+  :global(:root:not([data-motion="full"])) .toolbar-wrap.animated,
+  :global(:root:not([data-motion="full"])) .bumper-pill.animated .bumper-caret {
+    transition-duration: 0.01ms;
   }
 
   .toolbar {

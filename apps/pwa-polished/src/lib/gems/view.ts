@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import type { Stone } from './stones';
 import { VERT, GEM_FRAG, CAB_FRAG } from './shaders';
 import { geometryFor } from './geometry';
+import { motionLevel } from '../motion';
 
 export interface GemViewOptions {
   /** Drag to turn. Off for a purely decorative stone. */
@@ -137,7 +138,9 @@ export function createGemView(canvas: HTMLCanvasElement, stone: Stone, opts: Gem
   // to an IntersectionObserver: a stone created inside a sheet that is still
   // sliding up got told "off screen" and was never told otherwise, so it
   // froze until the sheet was rebuilt.
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Settings → Appearance → Motion, which follows the device's own switch by
+  // default.
+  const reduce = motionLevel() !== 'full';
   const inv = new THREE.Matrix4();
   let raf = 0, last = 0;
   function onScreen() {

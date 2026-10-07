@@ -11,7 +11,7 @@
    * background so the press starts talking immediately.
    */
   import { onMount, onDestroy } from "svelte";
-  import { fade } from "svelte/transition";
+  import { fade } from "../lib/motion";
   import { navigationStore } from "../stores/navigationStore";
   import { wakeAlarmStartOpen } from "../stores/wakeAlarmStore";
   import { continuousPlay } from "../stores/audioStore";

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fade, fly } from 'svelte/transition';
+  import { fade, fly } from '../lib/motion';
   import { Question, WarningCircle } from 'phosphor-svelte';
   import { confirms, answerConfirm } from '../stores/confirmStore';
 

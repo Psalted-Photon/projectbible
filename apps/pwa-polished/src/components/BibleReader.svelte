@@ -82,6 +82,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { get } from "svelte/store";
+  import { motionLevel } from "../lib/motion";
   import { barScale } from "../lib/barSize";
   import NavigationBar from "./NavigationBar.svelte";
   import SelectionToast from "./SelectionToast.svelte";
@@ -1402,8 +1403,9 @@
   let glowCleanup: (() => void) | null = null;
   let glowTicket = 0;
 
+  /** Settings → Appearance → Motion, which follows the device's own switch by default. */
   function prefersReducedMotion(): boolean {
-    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    return motionLevel() !== "full";
   }
 
   /** Nudge the spoken verse back into view, but only once it drifts out of a
@@ -6893,13 +6895,13 @@
     transform-origin: center;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    /* Hold the enlarged state rather than pulsing — the icon still stands out,
-       nothing moves. */
-    .anno-breathing {
-      animation: none;
-      transform: scale(1.28);
-    }
+  /* Reduced or Off in Settings → Appearance → Motion (which follows the
+     device's own switch by default). */
+  /* Hold the enlarged state rather than pulsing — the icon still stands out,
+     nothing moves. */
+  :global(:root:not([data-motion="full"])) .anno-breathing {
+    animation: none;
+    transform: scale(1.28);
   }
 
   .art-icon {

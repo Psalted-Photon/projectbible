@@ -297,7 +297,16 @@
     flex-direction: column;
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
     overflow: hidden;
-    animation: slideUp 0.3s ease-out;
+    animation: slideUp 0.3s var(--ease-enter, ease-out);
+  }
+  /* Reduced motion: the card fades in without rising. Off: it is just there. */
+  :global(:root[data-motion="reduced"]) .modal-backdrop,
+  :global(:root[data-motion="reduced"]) .modal-container {
+    animation: fadeIn var(--motion-fade-ms, 120ms) ease-out;
+  }
+  :global(:root[data-motion="off"]) .modal-backdrop,
+  :global(:root[data-motion="off"]) .modal-container {
+    animation: none;
   }
   /* Only on the way in. Switching tabs changes what is inside the card, not the
      card, so the motion must not replay — that replay is exactly what made the

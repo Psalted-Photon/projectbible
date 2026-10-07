@@ -122,12 +122,12 @@
     transform-origin: center;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    /* Hold the enlarged state rather than pulsing — the pill still stands out,
-       nothing moves. */
-    .anno-breathing {
-      animation: none;
-      transform: scale(1.28);
-    }
+  /* Reduced or Off in Settings → Appearance → Motion (which follows the
+     device's own switch by default). */
+  /* Hold the enlarged state rather than pulsing — the pill still stands out,
+     nothing moves. */
+  :global(:root:not([data-motion="full"])) .anno-breathing {
+    animation: none;
+    transform: scale(1.28);
   }
 </style>
