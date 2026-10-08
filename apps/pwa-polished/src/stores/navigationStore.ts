@@ -2,6 +2,7 @@ import { writable, derived, get, type Readable, type Writable } from 'svelte/sto
 import { getBookChapters, normalizeBookName, DEFAULT_TRANSLATION } from '../lib/bibleData';
 import { translationForJump } from '../lib/testamentDefaults';
 import { getDeviceOwner } from '../lib/sync/deviceOwner';
+import { windowStore, type WindowState } from '../lib/stores/windowStore';
 
 export interface NavigationState {
   translation: string;
@@ -276,6 +277,14 @@ function isSavedCrumb(c: any): c is TrailCrumb {
   );
 }
 
+function parseSavedTrail(saved: any): Trail {
+  return {
+    back: Array.isArray(saved?.back) ? saved.back.filter(isSavedCrumb) : [],
+    ahead: Array.isArray(saved?.ahead) ? saved.ahead.filter(isSavedCrumb) : [],
+    current: isSavedCrumb(saved?.current) ? saved.current : null,
+  };
+}
+
 function loadTrail(): Trail {
   try {
     const raw = localStorage.getItem(TRAIL_STORAGE_KEY);
@@ -283,15 +292,28 @@ function loadTrail(): Trail {
     const saved = JSON.parse(raw);
     const owner = getDeviceOwner();
     if (!owner || saved?.owner !== owner) return emptyTrail();
-    return {
-      back: Array.isArray(saved.back) ? saved.back.filter(isSavedCrumb) : [],
-      ahead: Array.isArray(saved.ahead) ? saved.ahead.filter(isSavedCrumb) : [],
-      current: isSavedCrumb(saved.current) ? saved.current : null,
-    };
+    return parseSavedTrail(saved);
   } catch {
     return emptyTrail();
   }
 }
+
+function isEmptyTrail(t: Trail): boolean {
+  return t.back.length === 0 && t.ahead.length === 0;
+}
+
+/** A trail as it is written to storage: trimmed, with each crumb passed through `strip`. */
+function trailForSave(trail: Trail, strip: (c: TrailCrumb) => TrailCrumb) {
+  const kept = trimForSave(trail);
+  return {
+    back: kept.back.map(strip),
+    ahead: kept.ahead.map(strip),
+    current: kept.current ? strip(kept.current) : null,
+  };
+}
+
+const keepSaveableOrigin = (crumb: TrailCrumb): TrailCrumb => ({ ...crumb, origin: saveableOrigin(crumb.origin) });
+const dropOrigin = (crumb: TrailCrumb): TrailCrumb => ({ ...crumb, origin: undefined });
 
 /** Drop the oldest crumbs first, then the farthest ahead, down to the save limit. */
 function trimForSave(trail: Trail): Trail {
@@ -316,25 +338,78 @@ function persistTrail(trail: Trail): void {
   } catch {
     return;
   }
-  const kept = trimForSave(trail);
   const save = (strip: (c: TrailCrumb) => TrailCrumb) =>
-    localStorage.setItem(
-      TRAIL_STORAGE_KEY,
-      JSON.stringify({
-        owner,
-        back: kept.back.map(strip),
-        ahead: kept.ahead.map(strip),
-        current: kept.current ? strip(kept.current) : null,
-      }),
-    );
+    localStorage.setItem(TRAIL_STORAGE_KEY, JSON.stringify({ owner, ...trailForSave(trail, strip) }));
   try {
-    save((crumb) => ({ ...crumb, origin: saveableOrigin(crumb.origin) }));
+    save(keepSaveableOrigin);
   } catch {
     // Storage full: the panels are the bulk of it, so save just the places.
     try {
-      save((crumb) => ({ ...crumb, origin: undefined }));
+      save(dropOrigin);
     } catch {
       // Blocked storage. The trail still works until the app is closed.
+    }
+  }
+}
+
+/**
+ * Every Bible window's trail, saved under one key as window id → trail, with
+ * the same account stamp, trim and panel limit as the main reader's. A trail
+ * goes when its window closes or stops showing a Bible, and a saved one whose
+ * window is gone is dropped on load. Sign-out removes it (ACCOUNT_KEYS).
+ */
+const WINDOW_TRAILS_KEY = 'projectbible_window_trails';
+
+/** Saved window trails not yet picked up by a reader, by window id. */
+let savedWindowTrails: Record<string, Trail> = loadWindowTrails();
+
+function loadWindowTrails(): Record<string, Trail> {
+  try {
+    const raw = localStorage.getItem(WINDOW_TRAILS_KEY);
+    if (!raw) return {};
+    const saved = JSON.parse(raw);
+    const owner = getDeviceOwner();
+    if (!owner || saved?.owner !== owner || typeof saved.trails !== 'object' || !saved.trails) return {};
+    const out: Record<string, Trail> = {};
+    for (const [id, t] of Object.entries(saved.trails)) {
+      const trail = parseSavedTrail(t);
+      if (!isEmptyTrail(trail)) out[id] = trail;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function persistWindowTrails(): void {
+  const owner = getDeviceOwner();
+  const all: Record<string, Trail> = { ...savedWindowTrails };
+  for (const [id, r] of readers) {
+    if (id === MAIN_READER) continue;
+    const t = get(r.trail);
+    if (isEmptyTrail(t)) delete all[id];
+    else all[id] = t;
+  }
+  try {
+    if (!owner || Object.keys(all).length === 0) {
+      localStorage.removeItem(WINDOW_TRAILS_KEY);
+      return;
+    }
+  } catch {
+    return;
+  }
+  const save = (strip: (c: TrailCrumb) => TrailCrumb) => {
+    const trails: Record<string, unknown> = {};
+    for (const [id, t] of Object.entries(all)) trails[id] = trailForSave(t, strip);
+    localStorage.setItem(WINDOW_TRAILS_KEY, JSON.stringify({ owner, trails }));
+  };
+  try {
+    save(keepSaveableOrigin);
+  } catch {
+    try {
+      save(dropOrigin);
+    } catch {
+      // Blocked storage. The trails still work until the app is closed.
     }
   }
 }
@@ -632,10 +707,52 @@ function makeReader(trail: Writable<Trail>, pendingRestore: Writable<unknown | n
 function readerFor(id: string): Reader {
   let r = readers.get(id);
   if (!r) {
-    r = makeReader(writable<Trail>(emptyTrail()), writable<unknown | null>(null));
+    const trail = writable<Trail>(savedWindowTrails[id] ?? emptyTrail());
+    delete savedWindowTrails[id];
+    r = makeReader(trail, writable<unknown | null>(null));
     readers.set(id, r);
+    // A harmony pane never keeps a trail, so it never writes one either.
+    if (!id.startsWith('harmony-')) trail.subscribe(() => persistWindowTrails());
   }
   return r;
+}
+
+/**
+ * Drop the trails of windows that are gone, or no longer show a Bible. Run
+ * on every window change, so closing a window takes its trail with it, and
+ * once at start for saved trails whose windows did not come back.
+ */
+function pruneWindowTrails(windows: WindowState[]): void {
+  const live = new Set(windows.filter((w) => w.contentType === 'bible' && !w.transient).map((w) => w.id));
+  let changed = false;
+  for (const id of Object.keys(savedWindowTrails)) {
+    if (!live.has(id)) {
+      delete savedWindowTrails[id];
+      changed = true;
+    }
+  }
+  for (const [id, r] of readers) {
+    if (id === MAIN_READER || live.has(id)) continue;
+    // Emptied as well as forgotten, in case anything still holds it.
+    r.trail.set(emptyTrail());
+    r.pendingRestore.set(null);
+    readers.delete(id);
+    changed = true;
+  }
+  if (changed) persistWindowTrails();
+}
+
+/** Every window's trail goes, live and saved — for sign-out. */
+export function clearWindowTrails(): void {
+  savedWindowTrails = {};
+  for (const [id, r] of readers) {
+    if (id !== MAIN_READER) r.trail.set(emptyTrail());
+  }
+  try {
+    localStorage.removeItem(WINDOW_TRAILS_KEY);
+  } catch {
+    // Blocked storage: nothing was saved.
+  }
 }
 
 /** The trail of one reader: `main`, or a Bible window's id. */
@@ -688,6 +805,7 @@ export const pendingRestore = writable<unknown | null>(null);
 
 const mainReader = makeReader(mainTrail, pendingRestore);
 readers.set(MAIN_READER, mainReader);
+windowStore.subscribe(pruneWindowTrails);
 
 function createNavigationStore() {
   const { subscribe, set, update } = writable<NavigationState>(loadPersistedState());

@@ -124,6 +124,8 @@ const ACCOUNT_KEYS = [
   'projectbible_settings_synced_at',
   /** The breadcrumb trail, saved so it survives closing the app (navigationStore.ts). */
   'projectbible_trail',
+  /** Each Bible window's breadcrumb trail, saved the same way (navigationStore.ts). */
+  'projectbible_window_trails',
 ];
 
 /** What has not reached the server yet, and so would be lost by clearing. */
@@ -302,8 +304,9 @@ export async function clearPersonalData(reason: ClearReason = 'sign-out'): Promi
   // enough: the live trail would be saved again, under whoever signs in
   // next, the first time it changes. Imported late for the same cycle reason.
   try {
-    const { navigationStore } = await import('../../stores/navigationStore');
+    const { navigationStore, clearWindowTrails } = await import('../../stores/navigationStore');
     navigationStore.clearHistory();
+    clearWindowTrails();
   } catch (err) {
     console.warn('[ClearData] Could not clear the breadcrumb trail:', err);
   }
