@@ -11,6 +11,7 @@
     storedVoices,
     isTtsSupported,
     DEFAULT_TTS_VOICE,
+    firstVoiceDownload,
     type TtsVoiceInfo,
   } from "../../adapters/tts";
   import {
@@ -186,6 +187,16 @@
   let missingVoiceMB = 0;
   /** This pane started the voice download (installBusy alone may be a pack). */
   let gettingVoices = false;
+  // The first-launch voice landing while this pane is open: list it and show
+  // it as the voice, or the next save here would put the old voice back.
+  let firstVoiceWasDownloading = false;
+  $: if ($firstVoiceDownload) {
+    firstVoiceWasDownloading = true;
+  } else if (firstVoiceWasDownloading) {
+    firstVoiceWasDownloading = false;
+    ttsVoice = getTtsSettings().voiceId;
+    void refreshVoiceInventory();
+  }
   let alarmSummary = "";
 
   // ── Instant save ────────────────────────────────────────────────────────
@@ -1120,7 +1131,11 @@
         Reads any chapter out loud with an on-device AI voice. The voices download
         once and then work fully offline.
       </p>
-      {#if noVoicesYet}
+      {#if $firstVoiceDownload}
+        <p class="no-voices">
+          Getting {$firstVoiceDownload.label}… {$firstVoiceDownload.pct}%
+        </p>
+      {:else if noVoicesYet}
         <p class="no-voices">You have no voices yet.</p>
         <button
           class="packs-button voices-button"

@@ -21,7 +21,8 @@ import {
   type SpeechRoute,
   type TtsEngine,
 } from '../lib/tts/voices.js';
-import { getTtsSettings } from './settings.js';
+import { get, writable } from 'svelte/store';
+import { getTtsSettings, updateTtsSettings } from './settings.js';
 
 export { TTS_VOICES, KOKORO_VOICES, GREEK_VOICE_ID };
 export type { TtsVoiceInfo, TtsProgress, SpeechRoute };
@@ -258,13 +259,106 @@ export function isVoiceInstalled(voiceId: string): Promise<boolean> {
   return call<boolean>('installed', { voiceId, engine: engineOf(voiceId) });
 }
 
+/**
+ * Downloads under way, by voice. Asking for a voice that is already coming in
+ * joins that download instead of starting a second one — the first-launch
+ * Heart download, the talking head, Settings and Install everything can all
+ * ask for the same voice at once, and two writers to one 310 MB file would
+ * each leave the other's work half-done.
+ */
+const downloading = new Map<
+  string,
+  { promise: Promise<void>; listeners: Set<(p: TtsProgress) => void> }
+>();
+
 export function downloadVoice(
   voiceId: string,
   onProgress?: (p: TtsProgress) => void
 ): Promise<void> {
-  const info = getVoiceInfo(voiceId);
-  const source: TtsSource | undefined = info ? resolveVoiceSource(info) ?? undefined : undefined;
-  return call<void>('download', { voiceId, source, engine: engineOf(voiceId) }, { onProgress });
+  let entry = downloading.get(voiceId);
+  if (!entry) {
+    const listeners = new Set<(p: TtsProgress) => void>();
+    const info = getVoiceInfo(voiceId);
+    const source: TtsSource | undefined = info ? resolveVoiceSource(info) ?? undefined : undefined;
+    const promise = call<void>(
+      'download',
+      { voiceId, source, engine: engineOf(voiceId) },
+      { onProgress: (p) => listeners.forEach((l) => l(p)) }
+    ).finally(() => downloading.delete(voiceId));
+    entry = { promise, listeners };
+    downloading.set(voiceId, entry);
+  }
+  if (onProgress) entry.listeners.add(onProgress);
+  return entry.promise;
+}
+
+/** True while this voice is downloading, whoever asked for it. */
+export function isVoiceDownloading(voiceId: string): boolean {
+  return downloading.has(voiceId);
+}
+
+// ─── the first voice ────────────────────────────────────────────────────────
+// A new user gets Heart without asking: it starts downloading behind the app on
+// first launch. A device that cannot run the natural voices gets Standard. The
+// rest wait for the button in Settings → Read Aloud.
+
+/** Heart where the natural voices are offered, Standard where they aren't. */
+export async function firstVoiceId(): Promise<string> {
+  return (await canUseGraphicsChip()) ? 'af_heart' : DEFAULT_TTS_VOICE;
+}
+
+/** The first-launch download while it runs, with how far along it is. Null otherwise. */
+export const firstVoiceDownload = writable<{ voiceId: string; label: string; pct: number } | null>(
+  null
+);
+
+/** Make a voice the one Read Aloud uses, and tell everything showing it. */
+export function adoptVoice(voiceId: string): void {
+  if (getTtsSettings().voiceId === voiceId) return;
+  updateTtsSettings({ voiceId });
+  window.dispatchEvent(new CustomEvent('settingsUpdated'));
+}
+
+/**
+ * Fetch the first voice in the background. Does nothing on a device that
+ * already has a voice. Never throws: if it fails, the talking head offers the
+ * same voice when it is tapped.
+ */
+export async function getFirstVoice(): Promise<void> {
+  if (!isTtsSupported()) return;
+  try {
+    if ((await storedVoices()).length > 0) return;
+    const voiceId = await firstVoiceId();
+    const label = getVoiceInfo(voiceId)?.label ?? voiceId;
+    firstVoiceDownload.set({ voiceId, label, pct: 0 });
+    await downloadVoice(voiceId, ({ loaded, total }) => {
+      firstVoiceDownload.set({
+        voiceId,
+        label,
+        pct: total > 0 ? Math.round((100 * loaded) / total) : 0,
+      });
+    });
+    adoptVoice(voiceId);
+    console.log(`[TTS] First voice ready: ${label}`);
+  } catch (err) {
+    console.warn('[TTS] First voice download failed; the talking head will offer it:', err);
+  } finally {
+    firstVoiceDownload.set(null);
+  }
+}
+
+/**
+ * Which voice a Read Aloud button should use or offer. The saved voice when it
+ * is on the device. Otherwise the first-launch voice if it is still coming in,
+ * or the first voice when the device has none at all, so a new user is never
+ * offered Standard where Heart would run. Failing all that, the saved voice.
+ */
+export async function voiceToOffer(savedId: string): Promise<string> {
+  if (await isVoiceInstalled(savedId)) return savedId;
+  const pending = get(firstVoiceDownload);
+  if (pending) return pending.voiceId;
+  if ((await storedVoices()).length === 0) return firstVoiceId();
+  return savedId;
 }
 
 export async function removeVoice(voiceId: string): Promise<void> {

@@ -17,6 +17,9 @@
     downloadVoice,
     getVoiceInfo,
     unlockTtsAudio,
+    voiceToOffer,
+    isVoiceDownloading,
+    adoptVoice,
   } from '../adapters/tts.js';
   import { getTtsSettings } from '../adapters/settings.js';
   import { startReadingPlaylist, readingState, isPreparing } from '../lib/tts/readingEngine';
@@ -39,8 +42,10 @@
   let downloadPct = 0;
   let pressing = false;
 
-  $: voiceId = getTtsSettings().voiceId;
+  /** The voice this tap reads with or offers — Heart on a device with no voices yet. */
+  let voiceId = '';
   $: voiceSizeMB = getVoiceInfo(voiceId)?.approxSizeMB ?? 64;
+  $: voiceLabel = getVoiceInfo(voiceId)?.label.replace(/ \(.*\)$/, '') ?? 'voice';
   $: isLive = $readingState === 'playing' || $readingState === 'paused';
 
   /** True when the day runs straight through one book, as the plan links judge it. */
@@ -110,10 +115,17 @@
         errorMsg = 'Nothing to read here.';
         return;
       }
+      voiceId = await voiceToOffer(getTtsSettings().voiceId);
       if (!(await isVoiceInstalled(voiceId))) {
+        // Already coming in (the first-launch download): wait on it.
+        if (isVoiceDownloading(voiceId)) {
+          await handleDownloadVoice();
+          return;
+        }
         local = 'voice-needed';
         return;
       }
+      adoptVoice(voiceId);
       play(playlist);
     } catch (e: any) {
       local = 'error';
@@ -136,6 +148,7 @@
       return;
     }
     local = 'idle';
+    adoptVoice(voiceId);
     const playlist = await resolvePlaylist();
     if (playlist) play(playlist);
   }
@@ -144,10 +157,10 @@
 {#if isTtsSupported()}
   {#if local === 'voice-needed'}
     <button class="play-today-btn" on:click={handleDownloadVoice}>
-      Download voice (~{voiceSizeMB} MB)
+      Download {voiceLabel} (~{voiceSizeMB} MB)
     </button>
   {:else if local === 'downloading'}
-    <span class="play-today-note"><BrandSpinner size={14} /> Downloading voice… {downloadPct}%</span>
+    <span class="play-today-note"><BrandSpinner size={14} /> Downloading {voiceLabel}… {downloadPct}%</span>
   {:else if local === 'error'}
     <button class="play-today-btn is-error" on:click={() => (local = 'idle')} title={errorMsg}>
       {errorMsg} — dismiss

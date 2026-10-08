@@ -122,6 +122,21 @@ export async function hasStarterText(): Promise<boolean> {
 }
 
 /**
+ * Whether this device has any Bible text at all. False only on a genuine first
+ * launch (or a cleared device) — not when an existing install is re-fetching a
+ * corrected starter. Says yes when it cannot tell, so nothing first-launch-only
+ * runs on a device that already has its setup.
+ */
+export async function hasAnyText(): Promise<boolean> {
+  try {
+    const { IndexedDBTextStore } = await import('../adapters/TextStore');
+    return (await new IndexedDBTextStore().getTranslations()).length > 0;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Whether any section headings are on the device.
  *
  * A count rather than a read: this runs on every launch, ahead of the app

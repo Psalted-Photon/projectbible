@@ -47,6 +47,7 @@ import {
 import { getMorphologyForChapter } from '../../adapters/db';
 import { originalSpeechText, canSpeakOriginal } from './originalText';
 import { continuousPlay, ttsCurrentVerse } from '../../stores/audioStore';
+import { showNotice } from '../../stores/noticeStore';
 // One-way dependency on purpose: the timer knows nothing about the engine, so
 // the engine listens to it. The reverse would be a circular import.
 import { stopAtChapterEnd, sleepStopNonce, cancelSleepTimer } from './sleepTimer';
@@ -330,6 +331,13 @@ let swapping = false;
 /** Measured pace, for the chapter-length estimate. */
 let measuredChars = 0;
 let measuredSeconds = 0;
+/**
+ * Lines that failed one after another. A single bad verse is dropped and
+ * reading moves on; several in a row means the voice itself is not working,
+ * and carrying on would scroll through the chapter in silence.
+ */
+let failedInARow = 0;
+const MAX_FAILED_IN_A_ROW = 3;
 /** Set by the sleep timer's "end of chapter": stop once we leave this chapter. */
 let stopAfterChapter: { book: string; chapter: number } | null = null;
 
@@ -702,6 +710,7 @@ async function renderUtterance(u: Utterance, gen: number): Promise<boolean> {
 
     measuredChars += u.text.length;
     measuredSeconds += wav.seconds;
+    failedInARow = 0;
     return true;
   } catch (err: any) {
     if (gen !== generation) return false;
@@ -712,9 +721,19 @@ async function renderUtterance(u: Utterance, gen: number): Promise<boolean> {
       console.error('🔊 Read Aloud stopped: required voice is not installed', err);
       readingError.set('The voice for this text is not downloaded yet.');
       readingState.set('voice-needed');
+      // Nothing on screen shows readingError, and the stop that follows resets
+      // it, so say it where it will be seen.
+      showNotice("This voice isn't fully downloaded. Tap the talking head to get it again.", 'error');
       return false;
     }
     console.warn('🔊 Read Aloud could not render an utterance:', err);
+    if (++failedInARow >= MAX_FAILED_IN_A_ROW) {
+      console.error('🔊 Read Aloud stopped: the voice is not producing sound');
+      readingError.set('Read Aloud could not make sound with this voice.');
+      readingState.set('error');
+      showNotice('Read Aloud could not make sound with this voice.', 'error');
+      return false;
+    }
     // Drop it rather than wedging the queue on one bad verse.
     u.pcm = new Uint8Array(0);
     u.seconds = 0;
@@ -1452,6 +1471,7 @@ export function stopReading(): void {
   lastVerseKey = '';
   measuredChars = 0;
   measuredSeconds = 0;
+  failedInARow = 0;
   observedRate = 0;
   priming = false;
 

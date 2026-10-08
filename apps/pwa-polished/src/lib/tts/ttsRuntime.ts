@@ -27,21 +27,36 @@ export function opfsFolder(dirName: string) {
     return root.getDirectoryHandle(dirName, { create: true });
   }
 
+  // No voice file is ever empty, so an empty one is treated as missing. That
+  // is what a failed write used to leave behind (see write), and treating it
+  // as present made a half-installed voice look finished.
   return {
     async read(name: string): Promise<File | undefined> {
       try {
         const handle = await (await dir()).getFileHandle(name);
-        return await handle.getFile();
+        const file = await handle.getFile();
+        return file.size > 0 ? file : undefined;
       } catch {
         return undefined;
       }
     },
 
+    /**
+     * getFileHandle creates an empty file before anything is written. If the
+     * write then fails — most often running out of space at the end of a big
+     * download — that empty file is removed rather than left looking installed.
+     */
     async write(name: string, data: Blob | ArrayBuffer): Promise<void> {
-      const handle = await (await dir()).getFileHandle(name, { create: true });
-      const writable = await handle.createWritable();
-      await writable.write(data);
-      await writable.close();
+      const folder = await dir();
+      const handle = await folder.getFileHandle(name, { create: true });
+      try {
+        const writable = await handle.createWritable();
+        await writable.write(data);
+        await writable.close();
+      } catch (err) {
+        await folder.removeEntry(name).catch(() => {});
+        throw err;
+      }
     },
 
     async remove(name: string): Promise<void> {
@@ -52,13 +67,14 @@ export function opfsFolder(dirName: string) {
       }
     },
 
-    /** Every filename in the folder. Empty when storage is unavailable. */
+    /** Every non-empty filename in the folder. Empty when storage is unavailable. */
     async list(): Promise<string[]> {
       const found: string[] = [];
       try {
         const handle = await dir();
-        for await (const name of (handle as any).keys()) {
-          if (typeof name === 'string') found.push(name);
+        for await (const [name, entry] of (handle as any).entries()) {
+          if (typeof name !== 'string' || entry.kind !== 'file') continue;
+          if ((await entry.getFile()).size > 0) found.push(name);
         }
       } catch {
         // storage unavailable → nothing installed

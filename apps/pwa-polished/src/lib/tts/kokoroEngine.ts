@@ -219,7 +219,17 @@ async function getSession(): Promise<ort.InferenceSession> {
     // silent drop to an unusable speed went unexplained for a day.
     console.warn('[Kokoro] graphics chip unavailable, falling back to the processor:', err);
     sessionFailure = err instanceof Error ? err.message : String(err);
-    session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] });
+    try {
+      session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] });
+    } catch (cpuErr) {
+      // Neither chip can open it, so the file itself is bad — a download cut
+      // short, most likely. Remove it and say "not installed", so reading
+      // stops and the next tap offers the download again, rather than every
+      // verse failing in turn while the reader scrolls on in silence.
+      console.error('[Kokoro] model file will not load; removing it:', cpuErr);
+      await removeSharedModel();
+      throw new TtsError('VOICE_NOT_INSTALLED', 'The Kokoro model is damaged and was removed');
+    }
     sessionBackend = 'wasm';
   }
   return session;

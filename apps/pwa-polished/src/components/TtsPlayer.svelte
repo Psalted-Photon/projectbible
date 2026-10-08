@@ -18,6 +18,9 @@
     getVoiceInfo,
     unlockTtsAudio,
     greekSpeechRoute,
+    voiceToOffer,
+    isVoiceDownloading,
+    adoptVoice,
   } from '../adapters/tts.js';
   import { getTtsSettings } from '../adapters/settings.js';
   import { canSpeakOriginal } from '../lib/tts/originalText.js';
@@ -45,8 +48,14 @@
   // picks, which may not be the voice the user reads English with.
   $: isGreek =
     /^(byz|tr|sblgnt|lxx)$/i.test(translation) && canSpeakOriginal(translation);
-  $: voiceId = isGreek ? greekSpeechRoute().voiceId : getTtsSettings().voiceId;
+  /**
+   * The voice this tap reads with or offers. For English that can be Heart
+   * rather than the saved voice on a device with no voices yet — see
+   * voiceToOffer. Greek always needs its own voice, so it is never swapped.
+   */
+  let voiceId = '';
   $: voiceSizeMB = getVoiceInfo(voiceId)?.approxSizeMB ?? 64;
+  $: voiceLabel = getVoiceInfo(voiceId)?.label.replace(/ \(.*\)$/, '') ?? 'voice';
 
   // Is the engine reading *this* chapter right now? Only that chapter's button
   // lights up, so chapter 1 never looks active while chapter 5 is being read.
@@ -73,11 +82,23 @@
     pressing = true;
 
     try {
+      // Read fresh on each tap: the saved voice can change behind this button
+      // (Settings, or the first-launch download finishing).
+      voiceId = isGreek
+        ? greekSpeechRoute().voiceId
+        : await voiceToOffer(getTtsSettings().voiceId);
       // Check before handing off, so only this chapter shows the download prompt.
       if (!(await isVoiceInstalled(voiceId))) {
+        // Already coming in (the first-launch download): wait on it with its
+        // progress rather than asking for a download that is under way.
+        if (isVoiceDownloading(voiceId)) {
+          await handleDownloadVoice();
+          return;
+        }
         local = 'voice-needed';
         return;
       }
+      if (!isGreek) adoptVoice(voiceId);
       await startReading(translation, book, chapter);
     } finally {
       pressing = false;
@@ -97,6 +118,7 @@
       return;
     }
     local = 'idle';
+    if (!isGreek) adoptVoice(voiceId);
     await startReading(translation, book, chapter);
   }
 </script>
@@ -105,12 +127,12 @@
   <div class="tts-player" class:active={isLive}>
     {#if local === 'voice-needed'}
       <button class="tts-download-btn" on:click={handleDownloadVoice}>
-        Download voice (~{voiceSizeMB} MB)
+        Download {voiceLabel} (~{voiceSizeMB} MB)
       </button>
       <button class="tts-btn" on:click={() => (local = 'idle')} title="Cancel">✕</button>
     {:else if local === 'downloading'}
       <BrandSpinner size={18} title="Downloading voice…" />
-      <span class="tts-tip">Downloading voice… {downloadPct}%</span>
+      <span class="tts-tip">Downloading {voiceLabel}… {downloadPct}%</span>
     {:else if local === 'error'}
       <span class="tts-tip tts-error">{errorMsg}</span>
       <button class="tts-btn" on:click={() => (local = 'idle')} title="Dismiss">✕</button>

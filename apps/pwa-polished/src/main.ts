@@ -2,7 +2,7 @@ console.log('🔥 MAIN.TS LOADING...');
 
 import { mount } from 'svelte';
 import App from './App.svelte';
-import { hasStarterText, installStarterText, warmPackManifest } from './lib/progressive-init';
+import { hasAnyText, hasStarterText, installStarterText, warmPackManifest } from './lib/progressive-init';
 import { applyTheme, getSettings } from './adapters/settings';
 import { applyBarSize } from './lib/barSize';
 import { applyMotion, installPress } from './lib/motion';
@@ -125,7 +125,9 @@ async function initApp() {
   // launch after the first this is a single database check and nothing is
   // drawn, so the app goes straight up. Only a device with no text — a first
   // launch, or one whose starter install failed — sees the screen below.
+  let firstLaunch = false;
   if (!(await hasStarterText())) {
+    firstLaunch = !(await hasAnyText());
     appElement.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; font-family: 'Milonga', cursive;">
         <h1 style="margin-bottom: 20px;">Hexapla</h1>
@@ -162,6 +164,12 @@ async function initApp() {
   // Everything that does not have to happen first happens here, with the app
   // already on screen behind it.
   warmPackManifest();
+
+  // A new user's first voice comes with the starter: Heart (or Standard where
+  // Heart can't run) downloads behind the app, so the talking head just reads.
+  if (firstLaunch) {
+    void import('./adapters/tts').then((tts) => tts.getFirstVoice());
+  }
 
   return app;
 }
