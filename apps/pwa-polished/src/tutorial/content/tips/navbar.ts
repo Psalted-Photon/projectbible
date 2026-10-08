@@ -34,7 +34,7 @@ export const NAVBAR_TIPS: Tip[] = [
     area,
     target: '.crumb-btn',
     title: 'Your trail',
-    body: 'Every place you jumped from on the way here, each in its book’s color. Tap one to go back to it; the first is where you started. The places after it stay, faded, so you can go forward again, until you follow a new link. Hold a crumb (or right-click it) to go there and clear the ones after it, remove it, or clear the whole trail.',
+    body: 'Every place you jumped from on the way here, each in its book’s color. Tap one to go back to it; the first is where you started. The places after it stay, faded, so you can go forward again, until you follow a new link. Hold a crumb (or right-click it) and it lights up with a menu: Go Here walks there and clears the ones after it, Close takes just that crumb out, and Clear trail takes you home and leaves nothing behind.',
   },
   {
     id: 'nav-split',

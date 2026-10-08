@@ -2143,11 +2143,19 @@
     navigationStore.removeCrumb(m.side, m.index);
   }
 
-  /** Where you are becomes home. No confirm: only the trail is lost. */
+  /**
+   * Back to home, with nothing left behind: the trail leads out from home, so
+   * clearing it walks all the way back and drops every crumb, behind and
+   * ahead. That is "Go Here" on the home crumb, so it reuses it. Already home
+   * (only faded ahead crumbs showing) and there is nothing to walk back to, so
+   * emptying the trail where you stand drops those and leaves you put. Home
+   * itself never closes. No confirm: only the trail is lost.
+   */
   function crumbMenuClear(): void {
     closeCrumbMenu();
     isbeReturnStore.set(null);
-    navigationStore.clearHistory();
+    if (get(navTrail).length > 0) goToCrumb(1, true);
+    else navigationStore.clearHistory();
   }
 
   function teardownMembrane(): void {
@@ -2323,6 +2331,7 @@
           {@const crumbTrans = crumbTranslation(crumb)}
           <button
             class="pill-btn pill-btn-text crumb-btn"
+            class:crumb-held={crumbMenu?.side === "back" && crumbMenu.index === i}
             style="color: {getBookColor(crumb.book)};"
             on:click={(e) => onCrumbClick(e, "back", i)}
             on:pointerdown={(e) => onCrumbPointerDown(e, "back", i)}
@@ -2402,6 +2411,7 @@
             <span class="crumb-sep"><CaretRight size={9} weight="bold" /></span>
             <button
               class="pill-btn pill-btn-text crumb-btn crumb-ahead"
+              class:crumb-held={crumbMenu?.side === "ahead" && crumbMenu.index === i}
               style="color: {getBookColor(crumb.book)};"
               on:click={(e) => onCrumbClick(e, "ahead", i)}
               on:pointerdown={(e) => onCrumbPointerDown(e, "ahead", i)}
@@ -2924,10 +2934,10 @@
   {#if crumbMenu}
     <div class="dropdown-menu crumb-menu" class:positioned={crumbMenuPositioned} role="menu" out:fadeAway>
       <button class="crumb-menu-item" role="menuitem" on:click|stopPropagation={crumbMenuGo}>
-        Go here and clear after
+        Go Here
       </button>
       <button class="crumb-menu-item" role="menuitem" on:click|stopPropagation={crumbMenuRemove}>
-        Remove this one
+        Close
       </button>
       <button class="crumb-menu-item" role="menuitem" on:click|stopPropagation={crumbMenuClear}>
         Clear trail
@@ -3655,6 +3665,24 @@
 
   .crumb-ahead:hover {
     opacity: 0.75;
+  }
+
+  /* The held crumb, while its menu is open: a thin ring and a soft glow in the
+     crumb's own book color, so it is plain which crumb the menu grew out of.
+     currentColor, so it follows the label like the location pill's ring does.
+     A faded ahead crumb comes up to full strength while it is held. The
+     fade-in rides --motion-fade-ms, which is 0 with Motion off. */
+  .crumb-btn.crumb-held {
+    opacity: 1;
+    border-radius: 7px;
+    box-shadow:
+      inset 0 0 0 1px currentColor,
+      0 0 7px color-mix(in srgb, currentColor 55%, transparent);
+    animation: crumb-held-in var(--motion-fade-ms) var(--ease-enter);
+  }
+
+  @keyframes crumb-held-in {
+    from { box-shadow: inset 0 0 0 1px transparent, 0 0 0 transparent; }
   }
 
   /* Away: the same 6px rectangle as the home chip, but a hollow ring rather

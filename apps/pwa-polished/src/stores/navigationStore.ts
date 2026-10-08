@@ -329,8 +329,8 @@ function createNavigationStore() {
    * Walk back to a step in the trail — what tapping a crumb behind you does.
    * `depth` is 1-based, matching what pushHistory returns, so depth 1 is home.
    * The crumbs after it, and the spot you are leaving, move ahead of you —
-   * unless `clearAfter`, the crumb menu's "Go here and clear after", which
-   * drops them instead.
+   * unless `clearAfter`, the crumb menu's "Go Here" (and its "Clear trail",
+   * which is "Go Here" on the home crumb), which drops them instead.
    */
   function goToDepth(depth: number, clearAfter = false): TrailCrumb | null {
     const here = get({ subscribe });
@@ -612,7 +612,11 @@ function createNavigationStore() {
         return { ...t, [side]: t[side].filter((_, i) => i !== index) };
       });
     },
-    /** Empty the trail, behind and ahead. Where you are becomes home. */
+    /**
+     * Empty the trail, behind and ahead. Where you are becomes home. The crumb
+     * menu's "Clear trail" uses this only when you are already home and just
+     * the faded ahead crumbs are left; from anywhere else it walks home first.
+     */
     clearHistory: () => {
       trail.set(emptyTrail());
     },
