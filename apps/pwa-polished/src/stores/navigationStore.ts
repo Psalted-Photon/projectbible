@@ -1,4 +1,4 @@
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived, get, type Readable, type Writable } from 'svelte/store';
 import { getBookChapters, normalizeBookName, DEFAULT_TRANSLATION } from '../lib/bibleData';
 import { translationForJump } from '../lib/testamentDefaults';
 import { getDeviceOwner } from '../lib/sync/deviceOwner';
@@ -186,46 +186,6 @@ export interface ScreenSurface {
   close: () => void;
 }
 
-const screenSurfaces = new Set<ScreenSurface>();
-let readReaderPosition: (() => ReaderPosition | null) | null = null;
-
-/** Called by a surface as it mounts; returns the call to make as it unmounts. */
-export function registerScreenSurface(surface: ScreenSurface): () => void {
-  screenSurfaces.add(surface);
-  return () => screenSurfaces.delete(surface);
-}
-
-/** The main reader hands over how to measure where it is scrolled. */
-export function registerReaderPosition(read: () => ReaderPosition | null): () => void {
-  readReaderPosition = read;
-  return () => {
-    if (readReaderPosition === read) readReaderPosition = null;
-  };
-}
-
-function readerPosition(): ReaderPosition | null {
-  try {
-    return readReaderPosition?.() ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/** The panel on top right now, if any. Every surface is taken down. */
-function takeScreen(): ReturnType<ScreenSurface['capture']> {
-  let best: ReturnType<ScreenSurface['capture']> = null;
-  let bestPriority = -Infinity;
-  for (const surface of screenSurfaces) {
-    const shot = surface.capture();
-    if (shot && surface.priority > bestPriority) {
-      best = shot;
-      bestPriority = surface.priority;
-    }
-  }
-  for (const surface of screenSurfaces) surface.close();
-  return best;
-}
-
 /** The reader state to come back to, scrolled to `pos` when there is one. */
 function navAt(state: NavigationState, pos: ReaderPosition | null, fallbackVerse: number | null): NavigationState {
   if (!pos) return { ...state, highlightedVerse: null, scrollTargetVerse: fallbackVerse, restoreScroll: null };
@@ -239,45 +199,6 @@ function navAt(state: NavigationState, pos: ReaderPosition | null, fallbackVerse
     scrollTargetVerse: pos.verse,
     restoreScroll: { ...pos, at: Date.now() },
     linkHighlight: mark ? { ...mark, noScroll: true } : mark,
-  };
-}
-
-/**
- * The spot you are leaving by the trail, as a crumb: the screen as it is right
- * now. Where the reader is scrolled, and whichever panel is open — or none,
- * if you closed the one the crumb you came by brought back.
- *
- * The icon follows the panel. With no panel open it keeps the icon of the
- * crumb you came by, if you are still in its chapter and that crumb never
- * carried a panel (a map or a note, say); otherwise it is a plain crumb.
- */
-function crumbForHere(state: NavigationState, current: TrailCrumb | null): TrailCrumb {
-  const panel = takeScreen();
-  let pos = readerPosition();
-  let { book, chapter } = pos ?? state;
-  if (panel?.anchor) {
-    // A commentary panel is tied to its verse, and reopens only once that
-    // chapter is on screen, so the crumb stands there.
-    book = normalizeBookName(panel.anchor.book);
-    chapter = panel.anchor.chapter;
-    if (pos && (pos.book !== book || pos.chapter !== chapter)) pos = null;
-  }
-  const stillThere = !!current && current.book === book && current.chapter === chapter;
-  const mark = state.linkHighlight;
-  const verse = panel?.anchor
-    ? panel.anchor.verse
-    : stillThere
-      ? current!.verse
-      : mark && mark.book === book && mark.chapter === chapter
-        ? mark.verse
-        : null;
-  return {
-    nav: navAt({ ...state, book, chapter }, pos, verse),
-    kind: panel ? panel.kind : stillThere && current!.origin === undefined ? current!.kind : 'plain',
-    book,
-    chapter,
-    verse,
-    origin: panel?.origin,
   };
 }
 
@@ -418,28 +339,138 @@ function persistTrail(trail: Trail): void {
   }
 }
 
-const trail = writable<Trail>(loadTrail());
-trail.subscribe(persistTrail);
+/**
+ * Every reader has a trail of its own: the main reader, and each Bible window.
+ * A move in one never touches another's. The main reader's id is `main`; a
+ * window's is its window id, which no other open window shares.
+ */
+export const MAIN_READER = 'main';
 
 /**
- * The origin snapshot from the step just walked back to, waiting for whichever
- * surface recognizes it to put itself back.
- *
- * This is how a crumb reopens the panel you left from without the navigation
- * store needing to know what a commentary panel or a search tree is. Whoever
- * handles it clears it. It replaces a set of one-off return stores that each
- * knew about exactly one surface and could not be chained.
+ * How a reader's trail moves the reader. The main reader's is built in below;
+ * a window's reader hands its own over as it mounts (registerReaderDriver),
+ * since the store knows nothing about where a window keeps its place.
  */
-export const pendingRestore = writable<unknown | null>(null);
+export interface ReaderDriver {
+  /** The reader as it is now. */
+  state: () => NavigationState;
+  /** Stand where a crumb remembers, scrolled to its `restoreScroll` if it has one. */
+  arrive: (nav: NavigationState) => void;
+  /** Go to a book and chapter picked by hand, with no mark. */
+  move: (translation: string, book: string, chapter: number) => void;
+}
 
-function createNavigationStore() {
-  const { subscribe, set, update } = writable<NavigationState>(loadPersistedState());
+interface Reader {
+  trail: Writable<Trail>;
+  /** The panels on this reader's screen that a crumb can bring back. */
+  surfaces: Set<ScreenSurface>;
+  readPosition: (() => ReaderPosition | null) | null;
+  /**
+   * The origin snapshot from the step just walked back to, waiting for
+   * whichever surface recognizes it to put itself back. Whoever handles it
+   * clears it.
+   */
+  pendingRestore: Writable<unknown | null>;
+  driver: ReaderDriver | null;
+  api: ReaderTrail;
+}
+
+const readers = new Map<string, Reader>();
+
+function readerPosition(r: Reader): ReaderPosition | null {
+  try {
+    return r.readPosition?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The panel on top right now, if any. Every surface is taken down. */
+function takeScreen(r: Reader): ReturnType<ScreenSurface['capture']> {
+  let best: ReturnType<ScreenSurface['capture']> = null;
+  let bestPriority = -Infinity;
+  for (const surface of r.surfaces) {
+    const shot = surface.capture();
+    if (shot && surface.priority > bestPriority) {
+      best = shot;
+      bestPriority = surface.priority;
+    }
+  }
+  for (const surface of r.surfaces) surface.close();
+  return best;
+}
+
+/**
+ * The spot you are leaving by the trail, as a crumb: the screen as it is right
+ * now. Where the reader is scrolled, and whichever panel is open — or none,
+ * if you closed the one the crumb you came by brought back.
+ *
+ * The icon follows the panel. With no panel open it keeps the icon of the
+ * crumb you came by, if you are still in its chapter and that crumb never
+ * carried a panel (a map or a note, say); otherwise it is a plain crumb.
+ */
+function crumbForHere(r: Reader, state: NavigationState, current: TrailCrumb | null): TrailCrumb {
+  const panel = takeScreen(r);
+  let pos = readerPosition(r);
+  let { book, chapter } = pos ?? state;
+  if (panel?.anchor) {
+    // A commentary panel is tied to its verse, and reopens only once that
+    // chapter is on screen, so the crumb stands there.
+    book = normalizeBookName(panel.anchor.book);
+    chapter = panel.anchor.chapter;
+    if (pos && (pos.book !== book || pos.chapter !== chapter)) pos = null;
+  }
+  const stillThere = !!current && current.book === book && current.chapter === chapter;
+  const mark = state.linkHighlight;
+  const verse = panel?.anchor
+    ? panel.anchor.verse
+    : stillThere
+      ? current!.verse
+      : mark && mark.book === book && mark.chapter === chapter
+        ? mark.verse
+        : null;
+  return {
+    nav: navAt({ ...state, book, chapter }, pos, verse),
+    kind: panel ? panel.kind : stillThere && current!.origin === undefined ? current!.kind : 'plain',
+    book,
+    chapter,
+    verse,
+    origin: panel?.origin,
+  };
+}
+
+/** One reader's trail: what the nav bar draws, and everything it can do. */
+export interface ReaderTrail {
+  /** The trail of steps between home and here, oldest first. Empty means you are home. */
+  navTrail: Readable<TrailCrumb[]>;
+  /** The crumbs ahead of you, nearest first — the faded ones after the location pill. */
+  navAhead: Readable<TrailCrumb[]>;
+  canGoBack: Readable<boolean>;
+  /** How many steps are on the back stack — the token pushHistory hands back. */
+  historyDepth: Readable<number>;
+  pendingRestore: Writable<unknown | null>;
+  pushHistory: (
+    state: NavigationState,
+    kind?: CrumbKind,
+    origin?: unknown,
+    anchor?: { book: string; chapter: number; verse?: number | null },
+  ) => number;
+  attachOrigin: (depth: number, origin: unknown) => void;
+  goBack: () => TrailCrumb | null;
+  goToDepth: (depth: number, clearAfter?: boolean) => TrailCrumb | null;
+  goToAhead: (index: number, clearAfter?: boolean) => TrailCrumb | null;
+  removeCrumb: (side: 'back' | 'ahead', index: number) => void;
+  clearHistory: () => void;
+  moveByHand: (translation: string, book: string, chapter: number) => void;
+}
+
+function makeReaderTrail(r: Reader): ReaderTrail {
+  const { trail } = r;
 
   /** Stand where a crumb remembers, with its panel waiting to be put back. */
   function arrive(target: TrailCrumb) {
-    persistState(target.nav);
-    set(target.nav);
-    pendingRestore.set(target.origin ?? null);
+    r.driver?.arrive(target.nav);
+    r.pendingRestore.set(target.origin ?? null);
   }
 
   /**
@@ -451,11 +482,11 @@ function createNavigationStore() {
    */
   function goToDepth(depth: number, clearAfter = false): TrailCrumb | null {
     const t = get(trail);
-    if (depth < 1 || depth > t.back.length) return null;
+    if (!r.driver || depth < 1 || depth > t.back.length) return null;
     const target = t.back[depth - 1];
     // Taken before the trail changes, and always — even when Go Here drops it
     // — because taking it is also what clears this spot's panel off the screen.
-    const left = crumbForHere(get({ subscribe }), t.current);
+    const left = crumbForHere(r, r.driver.state(), t.current);
     trail.set({
       back: t.back.slice(0, depth - 1),
       ahead: clearAfter ? [] : [...t.back.slice(depth), left, ...t.ahead],
@@ -464,6 +495,202 @@ function createNavigationStore() {
     arrive(target);
     return target;
   }
+
+  return {
+    navTrail: derived(trail, (t) => t.back),
+    navAhead: derived(trail, (t) => t.ahead),
+    canGoBack: derived(trail, (t) => t.back.length > 0),
+    historyDepth: derived(trail, (t) => t.back.length),
+    pendingRestore: r.pendingRestore,
+    /**
+     * Record where a link is, before it takes you somewhere else.
+     *
+     * `anchor` is where the link physically sits -- the verse its icon or
+     * marker is printed on. Pass it. Without one the crumb falls back to
+     * wherever the reader is standing, and that is not a place: the reader
+     * rewrites it as you scroll, and again every time it loads another chapter
+     * to fill the screen. Open a commentary in Genesis 2, scroll fifty chapters
+     * and tap a link in it, and the crumb had you at chapter 52. The link never
+     * moved, so the crumb should not either.
+     *
+     * Returns the new stack depth. Callers that want to come back to something
+     * when this exact step is undone keep the depth as a token.
+     *
+     * A new step forks the trail, the way following a link empties a
+     * browser's Forward list: the crumbs ahead of you go.
+     */
+    pushHistory: (state, kind = 'link', origin, anchor) => {
+      let depth = 0;
+      // Without an anchor the crumb is the reader as it is on screen, so it
+      // comes back scrolled exactly where you were reading.
+      const pos = anchor ? null : readerPosition(r);
+      trail.update(({ back: history }) => {
+        const book = anchor ? normalizeBookName(anchor.book) : state.book;
+        const chapter = anchor ? anchor.chapter : state.chapter;
+        const verse = anchor
+          ? anchor.verse ?? null
+          : state.linkHighlight?.verse ?? state.scrollTargetVerse ?? null;
+        const crumb: TrailCrumb = {
+          // The state to restore is the reader as it was, but standing where
+          // the link was rather than wherever it had drifted to.
+          nav: anchor
+            ? { ...state, book, chapter, scrollTargetVerse: verse, linkHighlight: null, restoreScroll: null }
+            : pos
+              ? navAt(state, pos, verse)
+              : { ...state, restoreScroll: null },
+          kind,
+          book,
+          chapter,
+          verse,
+          origin,
+        };
+        const back = [...history, crumb];
+        depth = back.length;
+        return { back, ahead: [], current: null };
+      });
+      return depth;
+    },
+    /** Attach an origin snapshot to the step just pushed. */
+    attachOrigin: (depth, origin) => {
+      trail.update((t) => {
+        if (depth < 1 || depth > t.back.length) return t;
+        const back = [...t.back];
+        back[depth - 1] = { ...back[depth - 1], origin };
+        return { ...t, back };
+      });
+    },
+    /** One step back. */
+    goBack: () => goToDepth(get(trail).back.length),
+    goToDepth,
+    /**
+     * Walk forward to a crumb ahead of you. `index` is 0-based from the one
+     * nearest the location pill. The spot you are leaving, and the crumbs
+     * between it and the target, move behind you. With `clearAfter`, the
+     * crumbs beyond the target go.
+     */
+    goToAhead: (index, clearAfter = false) => {
+      const t = get(trail);
+      if (!r.driver || index < 0 || index >= t.ahead.length) return null;
+      const target = t.ahead[index];
+      const left = crumbForHere(r, r.driver.state(), t.current);
+      trail.set({
+        back: [...t.back, left, ...t.ahead.slice(0, index)],
+        ahead: clearAfter ? [] : t.ahead.slice(index + 1),
+        current: target,
+      });
+      arrive(target);
+      return target;
+    },
+    /**
+     * Take one crumb out of the trail without going anywhere. `index` is
+     * 0-based in its own list. Removing one behind you moves every crumb after
+     * it down a depth.
+     */
+    removeCrumb: (side, index) => {
+      trail.update((t) => {
+        if (index < 0 || index >= t[side].length) return t;
+        return { ...t, [side]: t[side].filter((_, i) => i !== index) };
+      });
+    },
+    /**
+     * Empty the trail, behind and ahead. Where you are becomes home. The crumb
+     * menu's "Clear trail" uses this only when you are already home and just
+     * the faded ahead crumbs are left; from anywhere else it walks home first.
+     */
+    clearHistory: () => {
+      trail.set(emptyTrail());
+    },
+    /**
+     * A book or chapter picked by hand, off the dropdown. It never clears the
+     * trail: home stays the start of the road.
+     *
+     * At the end of the trail, with nothing ahead, where you were is left
+     * behind as a crumb and the pick is a fresh spot — even from home with no
+     * trail at all. Walked back, with crumbs still ahead, the spot you are on
+     * just moves, like a tab, and the crumbs ahead stay where they are.
+     */
+    moveByHand: (translation, book, chapter) => {
+      if (!r.driver) return;
+      const t = get(trail);
+      if (t.ahead.length === 0) {
+        const left = crumbForHere(r, r.driver.state(), t.current);
+        trail.set({ back: [...t.back, left], ahead: [], current: null });
+      } else {
+        trail.set({ ...t, current: null });
+      }
+      r.driver.move(translation, book, chapter);
+    },
+  };
+}
+
+function makeReader(trail: Writable<Trail>, pendingRestore: Writable<unknown | null>): Reader {
+  const r = { trail, surfaces: new Set(), readPosition: null, pendingRestore, driver: null } as unknown as Reader;
+  r.api = makeReaderTrail(r);
+  return r;
+}
+
+function readerFor(id: string): Reader {
+  let r = readers.get(id);
+  if (!r) {
+    r = makeReader(writable<Trail>(emptyTrail()), writable<unknown | null>(null));
+    readers.set(id, r);
+  }
+  return r;
+}
+
+/** The trail of one reader: `main`, or a Bible window's id. */
+export function trailFor(readerId: string | null | undefined): ReaderTrail {
+  return readerFor(readerId || MAIN_READER).api;
+}
+
+/**
+ * Called by a surface as it mounts, under the reader it belongs to; returns
+ * the call to make as it unmounts.
+ */
+export function registerScreenSurface(surface: ScreenSurface, readerId: string = MAIN_READER): () => void {
+  const r = readerFor(readerId);
+  r.surfaces.add(surface);
+  return () => r.surfaces.delete(surface);
+}
+
+/** A reader hands over how to measure where it is scrolled. */
+export function registerReaderPosition(read: () => ReaderPosition | null, readerId: string = MAIN_READER): () => void {
+  const r = readerFor(readerId);
+  r.readPosition = read;
+  return () => {
+    if (r.readPosition === read) r.readPosition = null;
+  };
+}
+
+/** A window's reader hands over how its trail moves it. */
+export function registerReaderDriver(readerId: string, driver: ReaderDriver): () => void {
+  const r = readerFor(readerId);
+  r.driver = driver;
+  return () => {
+    if (r.driver === driver) r.driver = null;
+  };
+}
+
+/** Where a reader is scrolled right now, for split view to open a window on the same line. */
+export function currentReaderPosition(readerId: string = MAIN_READER): ReaderPosition | null {
+  return readerPosition(readerFor(readerId));
+}
+
+const mainTrail = writable<Trail>(loadTrail());
+mainTrail.subscribe(persistTrail);
+
+/**
+ * The main reader's pending restore. This is how a crumb reopens the panel you
+ * left from without the navigation store needing to know what a commentary
+ * panel or a search tree is.
+ */
+export const pendingRestore = writable<unknown | null>(null);
+
+const mainReader = makeReader(mainTrail, pendingRestore);
+readers.set(MAIN_READER, mainReader);
+
+function createNavigationStore() {
+  const { subscribe, set, update } = writable<NavigationState>(loadPersistedState());
 
   /**
    * Go somewhere, and by default mark the verse you land on.
@@ -510,6 +737,16 @@ function createNavigationStore() {
       return next;
     });
   }
+
+  const main = mainReader.api;
+  mainReader.driver = {
+    state: () => get({ subscribe }),
+    arrive: (nav) => {
+      persistState(nav);
+      set(nav);
+    },
+    move: (translation, book, chapter) => navigateTo(translation, book, chapter, null, false),
+  };
 
   return {
     subscribe,
@@ -571,25 +808,6 @@ function createNavigationStore() {
       });
     },
     navigateTo,
-    /**
-     * A book or chapter picked by hand, off the dropdown. It never clears the
-     * trail: home stays the start of the road.
-     *
-     * At the end of the trail, with nothing ahead, where you were is left
-     * behind as a crumb and the pick is a fresh spot — even from home with no
-     * trail at all. Walked back, with crumbs still ahead, the spot you are on
-     * just moves, like a tab, and the crumbs ahead stay where they are.
-     */
-    moveByHand: (translation: string, book: string, chapter: number) => {
-      const t = get(trail);
-      if (t.ahead.length === 0) {
-        const left = crumbForHere(get({ subscribe }), t.current);
-        trail.set({ back: [...t.back, left], ahead: [], current: null });
-      } else {
-        trail.set({ ...t, current: null });
-      }
-      navigateTo(translation, book, chapter, null, false);
-    },
     // Navigate to a specific verse and mark it in the target book's category color.
     navigateToVerse: (
       translation: string,
@@ -660,134 +878,27 @@ function createNavigationStore() {
         return next;
       });
     },
-    /**
-     * Record where a link is, before it takes you somewhere else.
-     *
-     * `anchor` is where the link physically sits -- the verse its icon or
-     * marker is printed on. Pass it. Without one the crumb falls back to
-     * wherever the reader is standing, and that is not a place: the reader
-     * rewrites it as you scroll, and again every time it loads another chapter
-     * to fill the screen. Open a commentary in Genesis 2, scroll fifty chapters
-     * and tap a link in it, and the crumb had you at chapter 52. The link never
-     * moved, so the crumb should not either.
-     *
-     * Returns the new stack depth. Callers that want to come back to something
-     * when this exact step is undone keep the depth as a token.
-     *
-     * A new step forks the trail, the way following a link empties a
-     * browser's Forward list: the crumbs ahead of you go.
-     */
-    pushHistory: (
-      state: NavigationState,
-      kind: CrumbKind = 'link',
-      origin?: unknown,
-      anchor?: { book: string; chapter: number; verse?: number | null },
-    ) => {
-      let depth = 0;
-      // Without an anchor the crumb is the reader as it is on screen, so it
-      // comes back scrolled exactly where you were reading.
-      const pos = anchor ? null : readerPosition();
-      trail.update(({ back: history }) => {
-        const book = anchor ? normalizeBookName(anchor.book) : state.book;
-        const chapter = anchor ? anchor.chapter : state.chapter;
-        const verse = anchor
-          ? anchor.verse ?? null
-          : state.linkHighlight?.verse ?? state.scrollTargetVerse ?? null;
-        const crumb: TrailCrumb = {
-          // The state to restore is the reader as it was, but standing where
-          // the link was rather than wherever it had drifted to.
-          nav: anchor
-            ? { ...state, book, chapter, scrollTargetVerse: verse, linkHighlight: null, restoreScroll: null }
-            : pos
-              ? navAt(state, pos, verse)
-              : { ...state, restoreScroll: null },
-          kind,
-          book,
-          chapter,
-          verse,
-          origin,
-        };
-        const back = [...history, crumb];
-        depth = back.length;
-        return { back, ahead: [], current: null };
-      });
-      return depth;
-    },
-    /** Attach an origin snapshot to the step just pushed. */
-    attachOrigin: (depth: number, origin: unknown) => {
-      trail.update((t) => {
-        if (depth < 1 || depth > t.back.length) return t;
-        const back = [...t.back];
-        back[depth - 1] = { ...back[depth - 1], origin };
-        return { ...t, back };
-      });
-    },
-    /** One step back. */
-    goBack: () => goToDepth(get(trail).back.length),
-    goToDepth,
-    /**
-     * Walk forward to a crumb ahead of you. `index` is 0-based from the one
-     * nearest the location pill. The spot you are leaving, and the crumbs
-     * between it and the target, move behind you. With `clearAfter`, the
-     * crumbs beyond the target go.
-     */
-    goToAhead: (index: number, clearAfter = false) => {
-      const t = get(trail);
-      if (index < 0 || index >= t.ahead.length) return null;
-      const target = t.ahead[index];
-      const left = crumbForHere(get({ subscribe }), t.current);
-      trail.set({
-        back: [...t.back, left, ...t.ahead.slice(0, index)],
-        ahead: clearAfter ? [] : t.ahead.slice(index + 1),
-        current: target,
-      });
-      arrive(target);
-      return target;
-    },
-    /**
-     * Take one crumb out of the trail without going anywhere. `index` is
-     * 0-based in its own list. Removing one behind you moves every crumb after
-     * it down a depth.
-     */
-    removeCrumb: (side: 'back' | 'ahead', index: number) => {
-      trail.update((t) => {
-        if (index < 0 || index >= t[side].length) return t;
-        return { ...t, [side]: t[side].filter((_, i) => i !== index) };
-      });
-    },
-    /**
-     * Empty the trail, behind and ahead. Where you are becomes home. The crumb
-     * menu's "Clear trail" uses this only when you are already home and just
-     * the faded ahead crumbs are left; from anywhere else it walks home first.
-     */
-    clearHistory: () => {
-      trail.set(emptyTrail());
-    },
     reset: () => {
       persistState(initialState);
       set(initialState);
-    }
+    },
+    // The main reader's trail. Everything that only ever moves the main reader
+    // goes through these; a window's reader uses trailFor(its id).
+    pushHistory: main.pushHistory,
+    attachOrigin: main.attachOrigin,
+    goBack: main.goBack,
+    goToDepth: main.goToDepth,
+    goToAhead: main.goToAhead,
+    removeCrumb: main.removeCrumb,
+    clearHistory: main.clearHistory,
+    moveByHand: main.moveByHand,
   };
 }
 
 export const navigationStore = createNavigationStore();
 
-export const canGoBack = derived(trail, (t) => t.back.length > 0);
-
-/**
- * The trail of steps between home and here, oldest first — what the navbar
- * breadcrumbs render. Empty means you are home.
- */
-export const navTrail = derived(trail, (t) => t.back);
-
-/**
- * The crumbs ahead of you, nearest first — the faded ones after the location
- * pill, left there when you tapped back along the trail.
- */
-export const navAhead = derived(trail, (t) => t.ahead);
-
-/** How many steps are on the back stack — the token pushHistory hands back. */
-export const historyDepth = derived(trail, (t) => t.back.length);
+/** The main reader's trail, for the many callers that only ever move it. */
+export const { canGoBack, navTrail, navAhead, historyDepth } = mainReader.api;
 
 // Derived store for getting current chapter count
 export const currentBookChapters = derived(
