@@ -15,7 +15,7 @@
   import { resolveWorks, EMPTY_WORKS, type WorksResolution, type LibraryRow } from "../../adapters/lexicon-lookup.js";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../../lib/openWork";
   import { windowStore } from "../../lib/stores/windowStore";
-  import { navigationStore } from "../../stores/navigationStore";
+  import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../../stores/navigationStore";
   import { strongsModalStore } from "../../stores/strongsModalStore";
   import { libraryPrefsStore } from "../../stores/libraryPrefsStore";
   import { testamentOf } from "../../lib/strongsUsage";
@@ -154,7 +154,7 @@
   $: contentsRowId = entry ? classicId(entry.id) : null;
 
   function readerLang(): StrongsLang {
-    return testamentOf(get(navigationStore).book) === "OT" ? "hebrew" : "greek";
+    return testamentOf(readerState(docked ? MAIN_READER : get(lookupReader)).book) === "OT" ? "hebrew" : "greek";
   }
 
   function cycleSort() {
@@ -311,13 +311,18 @@
    * Follow a verse into the reader, keeping the translation you are reading.
    * The entry rides along on the crumb, so walking back reopens it where you
    * left it. Docked there is nothing to reopen — the study stays up beside the
-   * passage, which is the whole point of pinning it.
+   * passage, which is the whole point of pinning it. The crumb goes in the
+   * trail of the reader that opened the card.
    */
   function goToVerse(target: { book: string; chapter: number; verse: number }) {
-    const current = get(navigationStore);
     const snap = docked ? null : viewSnapshot();
-    navigationStore.pushHistory(current, "library", snap ? { surface: "strongs", snapshot: snap } : undefined);
-    navigationStore.navigateToVerse(current.translation, target.book, target.chapter, target.verse);
+    cardJumpToVerse(
+      docked ? MAIN_READER : get(lookupReader),
+      target.book,
+      target.chapter,
+      target.verse,
+      snap ? { surface: "strongs", snapshot: snap } : undefined,
+    );
     if (!docked) onClose?.();
   }
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import { get } from "svelte/store";
   import IsbeContent from "./IsbeContent.svelte";
   import NavesContent from "./NavesContent.svelte";
@@ -13,7 +13,13 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { strongsModalStore } from "../stores/strongsModalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
-  import { pendingRestore, registerScreenSurface } from "../stores/navigationStore";
+  import {
+    crumbArrival,
+    lookupReader,
+    registerScreenSurface,
+    trailFor,
+    MAIN_READER,
+  } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { clearCarriedWorks } from "../lib/openWork";
   import PackUpdateNotice from "./PackUpdateNotice.svelte";
@@ -97,31 +103,46 @@
    * is the same shape `saved` holds for tab-switch memory — so it is seeded
    * straight into there and the existing `initial*` props do the rest. Without
    * this the back step landed you on the passage with the card simply gone.
+   *
+   * Heard from any reader's trail, since the card can belong to a window. It
+   * comes back answering to that reader.
    */
   $: {
-    const pending = $pendingRestore as { surface?: string; snapshot?: any } | null;
-    if (pending?.surface === 'naves' && pending.snapshot) {
-      pendingRestore.set(null);
+    const arrival = $crumbArrival;
+    const pending = (arrival?.origin ?? null) as { surface?: string; snapshot?: any } | null;
+    const readerPending = arrival ? trailFor(arrival.readerId).pendingRestore : null;
+    if (
+      arrival &&
+      readerPending &&
+      pending?.snapshot &&
+      ["naves", "person", "lexical", "isbe", "strongs"].includes(pending.surface ?? "") &&
+      get(readerPending) === arrival.origin
+    ) {
+      readerPending.set(null);
+      crumbArrival.set(null);
+      lookupReader.set(arrival.readerId);
+      restoreCard(pending);
+    }
+  }
+
+  function restoreCard(pending: { surface?: string; snapshot?: any }) {
+    if (pending.surface === 'naves') {
       const snap = pending.snapshot;
       saved = { ...saved, topical: snap };
       navesModalStore.open({ topicId: snap.topicId, primaryName: snap.primaryName, tab: snap.tab ?? null });
-    } else if (pending?.surface === 'person' && pending.snapshot) {
-      pendingRestore.set(null);
+    } else if (pending.surface === 'person') {
       const snap = pending.snapshot;
       saved = { ...saved, people: snap };
       personModalStore.open({ personId: snap.personId, primaryName: snap.primaryName });
-    } else if (pending?.surface === 'lexical' && pending.snapshot) {
-      pendingRestore.set(null);
+    } else if (pending.surface === 'lexical') {
       const snap = pending.snapshot;
       saved = { ...saved, dictionary: { scrollTop: snap.scrollTop } };
       lexicalModalStore.open(snap.payload);
-    } else if (pending?.surface === 'isbe' && pending.snapshot) {
-      pendingRestore.set(null);
+    } else if (pending.surface === 'isbe') {
       const snap = pending.snapshot;
       saved = { ...saved, encyclopedia: snap };
       isbeModalStore.open({ ...(pending as any).modal, tab: snap.tab ?? null });
-    } else if (pending?.surface === 'strongs' && pending.snapshot) {
-      pendingRestore.set(null);
+    } else if (pending.surface === 'strongs') {
       const snap = pending.snapshot;
       saved = { ...saved, strongs: { tab: snap.tab, scrollTop: snap.scrollTop, trail: snap.trail ?? [] } };
       strongsModalStore.open({ strongsId: snap.strongsId });
@@ -141,6 +162,7 @@
     lexicalModalStore.close();
     strongsModalStore.close();
     lookupStore.close();
+    lookupReader.set(MAIN_READER);
     // The teardown lands in the flush after this returns; take the guard off
     // once it has been and gone.
     tick().then(() => {
@@ -245,15 +267,23 @@
     return origin ? { kind: "library" as const, origin } : null;
   }
 
-  onMount(() =>
-    registerScreenSurface({
-      priority: 3,
-      capture: captureForCrumb,
-      close: () => {
-        if (work) close();
+  // On the screen of whichever reader the card answers to, so only that
+  // reader's crumbs save it and take it down.
+  let unregisterSurface: (() => void) | null = null;
+  $: {
+    unregisterSurface?.();
+    unregisterSurface = registerScreenSurface(
+      {
+        priority: 3,
+        capture: captureForCrumb,
+        close: () => {
+          if (work) close();
+        },
       },
-    }),
-  );
+      $lookupReader,
+    );
+  }
+  onDestroy(() => unregisterSurface?.());
 
   // Escape walks the work back out — a crumb, then its contents — and only
   // takes the card down once there is nowhere left to go. The dictionary has no

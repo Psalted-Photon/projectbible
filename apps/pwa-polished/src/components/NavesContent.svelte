@@ -7,7 +7,7 @@
   import { IndexedDBTextStore } from "../adapters/TextStore";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { parseOsisRef } from "../lib/parseRefString";
-  import { navigationStore } from "../stores/navigationStore";
+  import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { navesModalStore } from "../stores/navesModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
@@ -216,7 +216,7 @@
 
   /** Verse text for a point's citations, into the cache the Verses tab reads. */
   async function loadRefText(refs: NavesRef[]) {
-    const translation = get(navigationStore).translation;
+    const translation = readerState(docked ? MAIN_READER : get(lookupReader)).translation;
     const wanted = new Map<string, { book: string; chapter: number; verse: number }>();
     for (const r of refs) {
       const key = navesRefKey(r.osis);
@@ -289,7 +289,7 @@
   // verses at once.
   async function loadBookText(book: string) {
     const refs = versesByBook.find((g) => g.book === book)?.refs ?? [];
-    const translation = get(navigationStore).translation;
+    const translation = readerState(docked ? MAIN_READER : get(lookupReader)).translation;
     const loaded = await Promise.all(
       refs.map(async (r) => {
         const key = `${book} ${r.chapter}:${r.verse}`;
@@ -303,7 +303,6 @@
 
   // --- Navigation --------------------------------------------------------
   function navigateToVerse(book: string, chapter: number, verse: number) {
-    const current = get(navigationStore);
     // The topic rides along on the crumb, so walking back reopens it where you
     // left it rather than dropping you on the passage with the card gone.
     // Captured before navigating, because closing tears the state down.
@@ -311,13 +310,15 @@
     // Docked there is nothing to reopen — the window stays up across the jump,
     // so a snapshot would only put a second copy of the topic on top of it.
     // The crumb itself still goes on: it walks the reader back either way.
+    // It goes in the trail of the reader that opened the card.
     const snap = docked ? null : viewSnapshot();
-    navigationStore.pushHistory(
-      current,
-      'library',
+    cardJumpToVerse(
+      docked ? MAIN_READER : get(lookupReader),
+      book,
+      chapter,
+      verse,
       snap ? { surface: 'naves', snapshot: snap } : undefined,
     );
-    navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     // A pinned topic stays open across the jump — reading the passage beside
     // the outline is the whole point of pinning it.
     if (!docked) onClose?.();

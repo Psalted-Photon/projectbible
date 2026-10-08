@@ -9,7 +9,7 @@
   import { getBookColor } from "../lib/bibleData.js";
   import { parseOsisRef } from "../lib/parseRefString";
   import { IndexedDBTextStore } from "../adapters/TextStore";
-  import { navigationStore } from "../stores/navigationStore";
+  import { cardJumpToVerse, lookupReader, readerState } from "../stores/navigationStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { sanitizePackHtml } from "../lib/sanitizePackHtml";
   import { getIsbeEntry, getNavesTopic, type NavesPoint, type NavesRef } from "../adapters/lexicon-lookup.js";
@@ -98,11 +98,9 @@
 
   // --- Leaving for the reader -------------------------------------------
   function navigateToVerse(book: string, chapter: number, verse: number) {
-    const current = get(navigationStore);
-    // The back arrow walks the reader back to where it was. The tribe card
-    // itself isn't a saved surface, so it doesn't reopen with it.
-    navigationStore.pushHistory(current, "library");
-    navigationStore.navigateToVerse(current.translation, book, chapter, verse);
+    // The back arrow walks the reader that opened the card back to where it
+    // was. The tribe card itself isn't a saved surface, so it doesn't reopen.
+    cardJumpToVerse(get(lookupReader), book, chapter, verse);
     onClose();
   }
 
@@ -139,7 +137,7 @@
     const opening = !expanded[key];
     expanded = { ...expanded, [key]: opening };
     if (!opening) return;
-    const translation = get(navigationStore).translation;
+    const translation = readerState(get(lookupReader)).translation;
     const wanted = new Map<string, { book: string; chapter: number; verse: number }>();
     for (const r of refs) {
       const k = navesRefKey(r.osis);

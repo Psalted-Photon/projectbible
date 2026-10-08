@@ -433,9 +433,12 @@ export interface ReaderDriver {
   arrive: (nav: NavigationState) => void;
   /** Go to a book and chapter picked by hand, with no mark. */
   move: (translation: string, book: string, chapter: number) => void;
+  /** Follow a link to a verse, in `translation` (the one the reader is in). */
+  goToVerse: (translation: string, book: string, chapter: number, verse: number) => void;
 }
 
 interface Reader {
+  id: string;
   trail: Writable<Trail>;
   /** The panels on this reader's screen that a crumb can bring back. */
   surfaces: Set<ScreenSurface>;
@@ -451,6 +454,20 @@ interface Reader {
 }
 
 const readers = new Map<string, Reader>();
+
+/**
+ * The last crumb walked to in any reader, with the reader it was in. For a
+ * surface that is not tied to one reader — the lookup card — to see its own
+ * panel come back in whichever reader's trail it was saved.
+ */
+export const crumbArrival = writable<{ readerId: string; origin: unknown } | null>(null);
+
+/**
+ * Which reader the lookup card answers to: the one that opened it. Bible
+ * links in the card move that reader and leave their crumb in its trail. Set
+ * by whatever opens the card from a reader; back to `main` when it closes.
+ */
+export const lookupReader = writable<string>(MAIN_READER);
 
 function readerPosition(r: Reader): ReaderPosition | null {
   try {
@@ -546,6 +563,7 @@ function makeReaderTrail(r: Reader): ReaderTrail {
   function arrive(target: TrailCrumb) {
     r.driver?.arrive(target.nav);
     r.pendingRestore.set(target.origin ?? null);
+    crumbArrival.set(target.origin === undefined ? null : { readerId: r.id, origin: target.origin });
   }
 
   /**
@@ -698,8 +716,8 @@ function makeReaderTrail(r: Reader): ReaderTrail {
   };
 }
 
-function makeReader(trail: Writable<Trail>, pendingRestore: Writable<unknown | null>): Reader {
-  const r = { trail, surfaces: new Set(), readPosition: null, pendingRestore, driver: null } as unknown as Reader;
+function makeReader(id: string, trail: Writable<Trail>, pendingRestore: Writable<unknown | null>): Reader {
+  const r = { id, trail, surfaces: new Set(), readPosition: null, pendingRestore, driver: null } as unknown as Reader;
   r.api = makeReaderTrail(r);
   return r;
 }
@@ -709,7 +727,7 @@ function readerFor(id: string): Reader {
   if (!r) {
     const trail = writable<Trail>(savedWindowTrails[id] ?? emptyTrail());
     delete savedWindowTrails[id];
-    r = makeReader(trail, writable<unknown | null>(null));
+    r = makeReader(id, trail, writable<unknown | null>(null));
     readers.set(id, r);
     // A harmony pane never keeps a trail, so it never writes one either.
     if (!id.startsWith('harmony-')) trail.subscribe(() => persistWindowTrails());
@@ -788,6 +806,33 @@ export function registerReaderDriver(readerId: string, driver: ReaderDriver): ()
   };
 }
 
+/**
+ * Follow a Bible link out of a lookup card into `readerId`, leaving a crumb in
+ * that reader's trail first. `origin` is the card's snapshot, so walking the
+ * crumb back reopens it. A reader that has gone away hands the jump to the
+ * main reader. Returns the crumb's depth in the trail it went on.
+ */
+export function cardJumpToVerse(
+  readerId: string,
+  book: string,
+  chapter: number,
+  verse: number,
+  origin?: unknown,
+): number {
+  let r = readerFor(readerId);
+  if (!r.driver) r = mainReader;
+  const state = r.driver!.state();
+  const depth = r.api.pushHistory(state, 'library', origin);
+  r.driver!.goToVerse(state.translation, book, chapter, verse);
+  return depth;
+}
+
+/** A reader as it is now — its translation, book and chapter — or the main reader's if it has gone away. */
+export function readerState(readerId: string): NavigationState {
+  const r = readerFor(readerId);
+  return (r.driver ?? mainReader.driver!).state();
+}
+
 /** Where a reader is scrolled right now, for split view to open a window on the same line. */
 export function currentReaderPosition(readerId: string = MAIN_READER): ReaderPosition | null {
   return readerPosition(readerFor(readerId));
@@ -803,7 +848,7 @@ mainTrail.subscribe(persistTrail);
  */
 export const pendingRestore = writable<unknown | null>(null);
 
-const mainReader = makeReader(mainTrail, pendingRestore);
+const mainReader = makeReader(MAIN_READER, mainTrail, pendingRestore);
 readers.set(MAIN_READER, mainReader);
 windowStore.subscribe(pruneWindowTrails);
 
@@ -856,6 +901,35 @@ function createNavigationStore() {
     });
   }
 
+  // Navigate to a specific verse and mark it in the target book's category color.
+  function navigateToVerse(
+    translation: string,
+    book: string,
+    chapter: number,
+    verse: number,
+  ) {
+    update(state => {
+      const normalized = normalizeBookName(book);
+      // Same rule as navigateTo.
+      const landIn =
+        translation !== state.translation
+          ? translation
+          : translationForJump(translation, state.book, normalized, get(availableTranslations));
+      const next = {
+        ...state,
+        translation: landIn,
+        book: normalized,
+        chapter,
+        highlightedVerse: null,
+        scrollTargetVerse: verse,
+        restoreScroll: null,
+        linkHighlight: { book: normalized, chapter, verse, at: Date.now() },
+      };
+      persistState(next);
+      return next;
+    });
+  }
+
   const main = mainReader.api;
   mainReader.driver = {
     state: () => get({ subscribe }),
@@ -864,6 +938,7 @@ function createNavigationStore() {
       set(nav);
     },
     move: (translation, book, chapter) => navigateTo(translation, book, chapter, null, false),
+    goToVerse: (translation, book, chapter, verse) => navigateToVerse(translation, book, chapter, verse),
   };
 
   return {
@@ -926,34 +1001,7 @@ function createNavigationStore() {
       });
     },
     navigateTo,
-    // Navigate to a specific verse and mark it in the target book's category color.
-    navigateToVerse: (
-      translation: string,
-      book: string,
-      chapter: number,
-      verse: number,
-    ) => {
-      update(state => {
-        const normalized = normalizeBookName(book);
-        // Same rule as navigateTo.
-        const landIn =
-          translation !== state.translation
-            ? translation
-            : translationForJump(translation, state.book, normalized, get(availableTranslations));
-        const next = {
-          ...state,
-          translation: landIn,
-          book: normalized,
-          chapter,
-          highlightedVerse: null,
-          scrollTargetVerse: verse,
-          restoreScroll: null,
-          linkHighlight: { book: normalized, chapter, verse, at: Date.now() },
-        };
-        persistState(next);
-        return next;
-      });
-    },
+    navigateToVerse,
     clearScrollTarget: () => {
       update(state => ({ ...state, scrollTargetVerse: null }));
     },

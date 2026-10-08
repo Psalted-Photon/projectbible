@@ -7,7 +7,7 @@
   import { BIBLE_BOOKS, normalizeBookName, getBookColor } from "../lib/bibleData.js";
   import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
-  import { navigationStore } from "../stores/navigationStore";
+  import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { personModalStore } from "../stores/personModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
@@ -508,7 +508,7 @@
     }
     next.add(book);
     expandedBooks = next;
-    const translation = get(navigationStore).translation;
+    const translation = readerState(docked ? MAIN_READER : get(lookupReader)).translation;
     const loadedText = await Promise.all(
       refs.map(async (r) => {
         const key = `${book} ${r.chapter}:${r.verse}`;
@@ -537,19 +537,20 @@
   })();
 
   function navigateToVerse(book: string, chapter: number, verse: number) {
-    const current = get(navigationStore);
     // Same as the other works: the bio rides the crumb so walking back reopens
     // it, family-tree trail and scroll offset included.
     //
     // Docked there is nothing to reopen — the window stays up across the jump,
     // so a snapshot would only put a second copy of the bio on top of it. The
-    // crumb itself still goes on: it walks the reader back either way.
-    navigationStore.pushHistory(
-      current,
-      'library',
+    // crumb itself still goes on: it walks the reader back either way. It goes
+    // in the trail of the reader that opened the card.
+    cardJumpToVerse(
+      docked ? MAIN_READER : get(lookupReader),
+      book,
+      chapter,
+      verse,
       docked ? undefined : { surface: 'person', snapshot: viewSnapshot() },
     );
-    navigationStore.navigateToVerse(current.translation, book, chapter, verse);
     // A pinned bio stays open across the jump — reading the passage beside the
     // person is the whole point of pinning it.
     if (!docked) onClose?.();

@@ -160,6 +160,7 @@
     registerReaderPosition,
     registerReaderDriver,
     trailFor,
+    lookupReader,
     MAIN_READER,
     type CrumbKind,
     type NavigationState,
@@ -725,6 +726,8 @@
         _windowRestore = null;
         windowStore.updateContentState(windowId, { translation, book, chapter, highlightedVerse: null });
       },
+      goToVerse: (translation, book, chapter, verse) =>
+        windowArrive({ ...readerNavState(), translation, book, chapter, scrollTargetVerse: verse }),
     });
   });
   // Where the "start here" mark belongs now lives in the navigation store as
@@ -5436,6 +5439,8 @@
     const capturedMorphology = selectedMorphology;
     const capturedContext = selectedContext;
     console.log(`Action: ${action} on "${text}"`);
+    // Any card this opens answers to this reader: its Bible links move it.
+    lookupReader.set(trailId ?? MAIN_READER);
 
     // TODO: Wire up actual actions
     switch (action) {

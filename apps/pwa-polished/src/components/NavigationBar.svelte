@@ -4,6 +4,8 @@
     navigationStore,
     availableTranslations,
     trailFor,
+    lookupReader,
+    MAIN_READER,
     currentReaderPosition,
     registerScreenSurface,
     type CrumbKind,
@@ -96,7 +98,7 @@
     Play,
     Pause,
     Stop,
-    Playlist,
+    ArrowFatLinesRight,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
   import { repeatsStore } from "../stores/repeatsStore";
@@ -1164,6 +1166,8 @@
 
   async function handleResultClick(result: SearchResult) {
     if (!result.data) return;
+    // Any card this opens answers to this bar's reader: its Bible links move it.
+    lookupReader.set(keepsTrail && windowId ? windowId : MAIN_READER);
 
     if (result.type === "character") {
       // Reuse the reader's character view rather than building a second one.
@@ -2667,7 +2671,7 @@
           on:click={() => continuousPlay.update((v) => !v)}
           title={$continuousPlay ? 'Auto-advance: on (click to turn off)' : 'Auto-advance to next chapter'}
           aria-label="Toggle auto-advance"
-        ><Playlist size={17} weight="bold" /></button>
+        ><ArrowFatLinesRight size={17} weight="bold" /></button>
 
         <select
           class="tts-nav-picker tts-nav-sleep"

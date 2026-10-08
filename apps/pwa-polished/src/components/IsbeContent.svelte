@@ -4,7 +4,7 @@
   import type { Map as LeafletMap } from "leaflet";
   import { isbeModalStore, type IsbeTab } from "../stores/isbeModalStore";
   import { isbeReturnStore, type IsbeReturn } from "../stores/isbeReturnStore";
-  import { navigationStore } from "../stores/navigationStore";
+  import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { createResizeFit } from "../lib/atlas/fit";
   import { openMapWindow } from "../lib/openMapWindow";
@@ -470,7 +470,7 @@
   // collapsed, so a place like Jerusalem never pays for all 955 verses at once.
   async function loadBookText(book: string) {
     const refs = versesByBook.find((g) => g.book === book)?.refs ?? [];
-    const translation = get(navigationStore).translation;
+    const translation = readerState(docked ? MAIN_READER : get(lookupReader)).translation;
     const loaded = await Promise.all(
       refs.map(async (r) => {
         const key = `${book} ${r.chapter}:${r.verse}`;
@@ -666,15 +666,27 @@
     }
   }
 
-  /** Returns the back-stack depth this jump occupies, for the return crumb. */
-  function navigateToVerse(book: string, chapter: number, verse: number): number {
-    const current = get(navigationStore);
-    const depth = navigationStore.pushHistory(current, 'library');
-    navigationStore.navigateToVerse(current.translation, book, chapter, verse);
+  /**
+   * Returns the back-stack depth this jump occupies, for the main reader's
+   * return crumb (isbeReturnStore) — or null when the card belongs to a window.
+   * A window's crumb carries the article itself instead, the way the other
+   * works' crumbs do.
+   */
+  function navigateToVerse(book: string, chapter: number, verse: number): number | null {
+    const reader = docked ? MAIN_READER : get(lookupReader);
+    const inWindow = reader !== MAIN_READER;
+    const snap = inWindow ? viewSnapshot() : null;
+    const depth = cardJumpToVerse(
+      reader,
+      book,
+      chapter,
+      verse,
+      snap ? { surface: 'isbe', modal: { kind, entryId, placeId, primaryName }, snapshot: snap } : undefined,
+    );
     // A docked article stays open across the jump — reading the passage beside
     // the article is the whole point of pinning it.
     if (!docked) close();
-    return depth;
+    return inWindow ? null : depth;
   }
 
   // Everything the back arrow needs to put the modal back the way it was.
@@ -703,7 +715,7 @@
     }
     const here = crumb("verses");
     const depth = navigateToVerse(book, chapter, verse);
-    isbeReturnStore.set({ ...here, depth });
+    if (depth != null) isbeReturnStore.set({ ...here, depth });
   }
 
   // A cross-reference to another article replaces what's on screen. Docked that
@@ -759,7 +771,7 @@
       // Article scripture links get the same round trip as the verse list.
       const here = crumb("article");
       const depth = navigateToVerse(book, parseInt(ch, 10), parseInt(vs, 10) || 1);
-      isbeReturnStore.set({ ...here, depth });
+      if (depth != null) isbeReturnStore.set({ ...here, depth });
       return;
     }
     const target = a.getAttribute("data-entry");
