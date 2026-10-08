@@ -81,7 +81,7 @@
 
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { get } from "svelte/store";
+  import { get, writable } from "svelte/store";
   import { motionLevel } from "../lib/motion";
   import { barScale } from "../lib/barSize";
   import NavigationBar from "./NavigationBar.svelte";
@@ -156,9 +156,13 @@
   import {
     navigationStore,
     availableTranslations,
-    pendingRestore,
     registerScreenSurface,
     registerReaderPosition,
+    registerReaderDriver,
+    trailFor,
+    MAIN_READER,
+    type CrumbKind,
+    type NavigationState,
     type ReaderPosition,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
@@ -634,6 +638,83 @@
   let _reopenAnnotationAuthor = '';
   // Local scroll target for window panes (replaces global navigationStore.scrollTargetVerse)
   let _windowScrollTarget: number | null = null;
+  // A window's restoreScroll: the exact spot a crumb in its own trail saved.
+  let _windowRestore: (ReaderPosition & { at: number }) | null = null;
+
+  /**
+   * Whose trail this reader keeps: `main`, or its window id. Harmony panes
+   * keep none — the master pane drives the others, and a trail would fight it.
+   */
+  const trailId: string | null = !windowId
+    ? MAIN_READER
+    : windowId.startsWith('harmony-')
+      ? null
+      : windowId;
+  const readerPending = trailId ? trailFor(trailId).pendingRestore : writable<unknown | null>(null);
+
+  /** The reader as it is now, in the shape a crumb saves. */
+  function readerNavState(): NavigationState {
+    if (!windowId) return get(navigationStore);
+    return {
+      translation: currentTranslation,
+      book: currentBook,
+      chapter: currentChapter,
+      highlightedVerse: null,
+      scrollTargetVerse: null,
+      linkHighlight: null,
+      restoreScroll: null,
+    };
+  }
+
+  /** Leave a crumb in this reader's own trail, before a link moves it. */
+  function pushCrumb(
+    kind: CrumbKind,
+    origin?: unknown,
+    anchor?: { book: string; chapter: number; verse?: number | null },
+  ): void {
+    if (trailId) trailFor(trailId).pushHistory(readerNavState(), kind, origin, anchor);
+  }
+
+  /**
+   * Move a window where a crumb in its trail remembers. A window does not
+   * write its scroll back to its own state, so a chapter already on screen
+   * is scrolled to here rather than left to the chapter load, which only
+   * runs when the chapter is missing.
+   */
+  function windowArrive(nav: NavigationState): void {
+    if (!windowId) return;
+    const verse = nav.scrollTargetVerse ?? null;
+    const sameTranslation = nav.translation === currentTranslation;
+    const onScreen = sameTranslation && chapters.some((c) => c.book === nav.book && c.chapter === nav.chapter);
+    _windowRestore = nav.restoreScroll ?? null;
+    if (onScreen) {
+      if (!_windowRestore) void scrollToTarget(nav.book, nav.chapter, verse ?? 1);
+    } else if (sameTranslation && nav.book === currentBook && nav.chapter === currentChapter) {
+      // Its state already names this chapter, so a state write would not load it.
+      void loadChapter(currentTranslation, nav.book, nav.chapter, true, verse);
+    } else {
+      _windowScrollTarget = verse;
+    }
+    windowStore.updateContentState(windowId, {
+      translation: nav.translation,
+      book: nav.book,
+      chapter: nav.chapter,
+      highlightedVerse: null,
+    });
+  }
+
+  onMount(() => {
+    if (!windowId || !trailId) return;
+    return registerReaderDriver(trailId, {
+      state: readerNavState,
+      arrive: windowArrive,
+      move: (translation, book, chapter) => {
+        if (!windowId) return;
+        _windowRestore = null;
+        windowStore.updateContentState(windowId, { translation, book, chapter, highlightedVerse: null });
+      },
+    });
+  });
   // Where the "start here" mark belongs now lives in the navigation store as
   // linkHighlight (book + chapter + verse), not in component-local numbers.
   // A bare verse number could not say which chapter it meant, and the reader
@@ -699,19 +780,18 @@
       scrollTop: annotationPanelRef?.bodyScrollTop() ?? 0,
     };
     annotationPanelOpen = false;
+    // Anchored to the verse the panel was opened on. The panel stays open
+    // while the reader scrolls, so by the time a link inside it is tapped the
+    // reader can be a long way from the icon that opened it.
+    pushCrumb(
+      annotationPanelTab === 'commentary' ? 'commentary' : 'crossref',
+      origin,
+      { book: annotationPanelBook, chapter: annotationPanelChapter, verse: annotationPanelVerse },
+    );
     if (windowId) {
       _windowScrollTarget = verse;
       windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
     } else {
-      // Anchored to the verse the panel was opened on. The panel stays open
-      // while the reader scrolls, so by the time a link inside it is tapped the
-      // reader can be a long way from the icon that opened it.
-      navigationStore.pushHistory(
-        get(navigationStore),
-        annotationPanelTab === 'commentary' ? 'commentary' : 'crossref',
-        origin,
-        { book: annotationPanelBook, chapter: annotationPanelChapter, verse: annotationPanelVerse },
-      );
       navigationStore.navigateTo(currentTranslation, book, chapter, verse);
     }
   }
@@ -751,9 +831,9 @@
 
   // The commentary and intro panels, for a crumb to save as you leave by the
   // trail — so it brings back what is open now, not what was open when you
-  // first came. Main reader only: window panes keep their own panels.
+  // first came. Registered under this reader's own trail.
   onMount(() => {
-    if (windowId) return;
+    if (!trailId) return;
     return registerScreenSurface({
       priority: 1,
       capture: () => {
@@ -783,7 +863,7 @@
         annotationPanelOpen = false;
         bookIntroPanelOpen = false;
       },
-    });
+    }, trailId);
   });
 
   /**
@@ -811,8 +891,8 @@
   }
 
   onMount(() => {
-    if (windowId) return;
-    return registerReaderPosition(readPosition);
+    if (!trailId) return;
+    return registerReaderPosition(readPosition, trailId);
   });
 
   /**
@@ -848,7 +928,7 @@
   // scrolled near by loadChapter; this puts it on the exact line.
   let _lastRestoreAt = 0;
   $: {
-    const r = windowId ? null : $navigationStore.restoreScroll;
+    const r = windowId ? _windowRestore : $navigationStore.restoreScroll;
     if (
       r &&
       r.at !== _lastRestoreAt &&
@@ -861,9 +941,9 @@
   }
 
   $: {
-    const pending = $pendingRestore as ReaderOrigin | null;
-    if (!windowId && pending && (pending.surface === 'annotation' || pending.surface === 'bookIntro')) {
-      pendingRestore.set(null);
+    const pending = $readerPending as ReaderOrigin | null;
+    if (pending && (pending.surface === 'annotation' || pending.surface === 'bookIntro')) {
+      readerPending.set(null);
       restoreReaderOrigin(pending);
     }
   }
@@ -871,16 +951,12 @@
   function handleBookIntroNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
     bookIntroPanelOpen = false;
+    const origin: ReaderOrigin = { surface: 'bookIntro', book: bookIntroPanelBook };
+    pushCrumb('library', origin, { book: bookIntroPanelBook, chapter: 1, verse: null });
     if (windowId) {
       _windowScrollTarget = verse;
       windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
     } else {
-      const origin: ReaderOrigin = { surface: 'bookIntro', book: bookIntroPanelBook };
-      navigationStore.pushHistory(get(navigationStore), 'library', origin, {
-        book: bookIntroPanelBook,
-        chapter: 1,
-        verse: null,
-      });
       navigationStore.navigateTo(currentTranslation, book, chapter, verse);
     }
   }
@@ -1140,6 +1216,9 @@
     const target = parseRefString(ref, from?.book ?? currentBook, from?.chapter ?? currentChapter);
     if (!target) return;
 
+    // The crumb points at the marker we tapped, not at whatever chapter the
+    // reader had scrolled or auto-loaded its way to.
+    pushCrumb('crossref', undefined, from ? { book: from.book, chapter: from.chapter, verse: from.verse } : undefined);
     if (windowId) {
       _windowScrollTarget = target.verse;
       windowStore.updateContentState(windowId, {
@@ -1148,14 +1227,6 @@
         highlightedVerse: null,
       });
     } else {
-      // The crumb points at the marker we tapped, not at whatever chapter the
-      // reader had scrolled or auto-loaded its way to.
-      navigationStore.pushHistory(
-        get(navigationStore),
-        'crossref',
-        undefined,
-        from ? { book: from.book, chapter: from.chapter, verse: from.verse } : undefined,
-      );
       navigationStore.navigateToVerse(currentTranslation, target.book, target.chapter, target.verse);
     }
     closeFootnote();
@@ -1397,6 +1468,9 @@
     const translation = lxx ? 'lxx2012' : currentTranslation;
     const target = lxx ?? { book: ref.book, chapter: ref.chapter, verse: ref.verse };
 
+    // The crumb points at the mark we tapped, not at whatever chapter the
+    // reader had scrolled its way to.
+    pushCrumb('otquote', undefined, { book: hit.book, chapter: hit.chapter, verse: hit.verse });
     if (windowId) {
       _windowScrollTarget = target.verse;
       windowStore.updateContentState(windowId, {
@@ -1406,13 +1480,6 @@
         ...(lxx ? { translation: 'lxx2012' } : {}),
       });
     } else {
-      // The crumb points at the mark we tapped, not at whatever chapter the
-      // reader had scrolled its way to.
-      navigationStore.pushHistory(get(navigationStore), 'otquote', undefined, {
-        book: hit.book,
-        chapter: hit.chapter,
-        verse: hit.verse,
-      });
       navigationStore.navigateToVerse(translation, target.book, target.chapter, target.verse);
     }
     closeOtQuote();

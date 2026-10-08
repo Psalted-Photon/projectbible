@@ -3,11 +3,7 @@
   import {
     navigationStore,
     availableTranslations,
-    canGoBack,
-    historyDepth,
-    navTrail,
-    navAhead,
-    pendingRestore,
+    trailFor,
     registerScreenSurface,
     type CrumbKind,
   } from "../stores/navigationStore";
@@ -117,6 +113,19 @@
 
   export let windowId: string | undefined = undefined;
   export const visible: boolean = true;
+
+  /**
+   * The trail this bar draws and moves: its own reader's — the main reader's,
+   * or its window's — never another's. Harmony panes keep none: the master
+   * pane drives them, and a trail would fight it.
+   */
+  const myTrail = trailFor(windowId);
+  const keepsTrail = !windowId?.startsWith("harmony-");
+  const canGoBack = myTrail.canGoBack;
+  const historyDepth = myTrail.historyDepth;
+  const navTrail = myTrail.navTrail;
+  const navAhead = myTrail.navAhead;
+  const pendingRestore = myTrail.pendingRestore;
   export let style: string = "";
 
   /**
@@ -690,7 +699,7 @@
   }
 
   function selectChapter(bookName: string, chapter: number) {
-    if (windowId) {
+    if (windowId && !keepsTrail) {
       windowStore.updateContentState(windowId, {
         translation: currentTranslation,
         book: bookName,
@@ -700,7 +709,7 @@
     } else {
       // No mark. The trail stays: at its end the spot you leave becomes a
       // crumb; walked back, the crumb you are on moves (see moveByHand).
-      navigationStore.moveByHand(currentTranslation, bookName, chapter);
+      myTrail.moveByHand(currentTranslation, bookName, chapter);
     }
     referenceDropdownOpen = false;
     expandedBooks = new Set();
@@ -975,12 +984,13 @@
    * drops the crumbs after it rather than leaving them ahead of you.
    */
   function goToCrumb(depth: number, clearAfter = false) {
-    const ret = get(isbeReturnStore);
+    // The ISBE return belongs to the main reader's trail.
+    const ret = windowId ? null : get(isbeReturnStore);
     // Checked before the pop: a crumb at position N undoes the
     // step that was recorded at depth N. Reading the depth afterwards would
     // always be one short and never match.
     const undoingTheJump = !!ret && depth === ret.depth;
-    navigationStore.goToDepth(depth, clearAfter);
+    myTrail.goToDepth(depth, clearAfter);
     if (undoingTheJump) isbeModalStore.open(ret!.modal);
     else if (ret && get(historyDepth) < ret.depth) isbeReturnStore.set(null);
   }
@@ -1001,7 +1011,26 @@
   /** Jump the reader (or the owning window) to a book/chapter/verse. */
   function navigateToResult(book: string, chapter: number, verse: number | null, translation?: string) {
     const target = translation || currentTranslation;
+    // Leave a crumb before moving, carrying the search itself. Search used to
+    // navigate without one, so following a result stranded you with no way
+    // back — and the query, results and expansion were wiped on the way out,
+    // so there was nothing left to come back to even if there had been.
     if (windowId) {
+      if (keepsTrail) {
+        myTrail.pushHistory(
+          {
+            translation: currentTranslation,
+            book: currentBook,
+            chapter: currentChapter,
+            highlightedVerse: null,
+            scrollTargetVerse: null,
+            linkHighlight: null,
+            restoreScroll: null,
+          },
+          'search',
+          snapshotSearch(),
+        );
+      }
       windowStore.updateContentState(windowId, {
         translation: target,
         book,
@@ -1009,10 +1038,6 @@
         highlightedVerse: verse,
       });
     } else {
-      // Leave a crumb before moving, carrying the search itself. Search used to
-      // navigate without one, so following a result stranded you with no way
-      // back — and the query, results and expansion were wiped on the way out,
-      // so there was nothing left to come back to even if there had been.
       navigationStore.pushHistory(get(navigationStore), 'search', snapshotSearch());
       navigationStore.navigateTo(target, book, chapter, verse);
     }
@@ -1111,7 +1136,7 @@
   // Open search results, for a crumb to save when you leave by the trail, so
   // walking back brings them back only if they were still up.
   onMount(() => {
-    if (windowId) return;
+    if (!keepsTrail) return;
     return registerScreenSurface({
       priority: 2,
       capture: () =>
@@ -1119,12 +1144,12 @@
       close: () => {
         if (showResults) clearSearch();
       },
-    });
+    }, windowId);
   });
 
   $: {
     const pending = $pendingRestore as { surface?: string } | null;
-    if (!windowId && pending?.surface === 'search') {
+    if (keepsTrail && pending?.surface === 'search') {
       pendingRestore.set(null);
       void restoreSearch(pending as SearchOrigin);
     }
@@ -2087,7 +2112,7 @@
       return;
     }
     if (side === "back") goToCrumb(index + 1);
-    else navigationStore.goToAhead(index);
+    else myTrail.goToAhead(index);
   }
 
   async function openCrumbMenu(side: CrumbSide, index: number, anchor: HTMLElement) {
@@ -2138,14 +2163,14 @@
     closeCrumbMenu();
     if (!m) return;
     if (m.side === "back") goToCrumb(m.index + 1, true);
-    else navigationStore.goToAhead(m.index, true);
+    else myTrail.goToAhead(m.index, true);
   }
 
   function crumbMenuRemove(): void {
     const m = crumbMenu;
     closeCrumbMenu();
     if (!m) return;
-    if (m.side === "back") {
+    if (m.side === "back" && !windowId) {
       // The ISBE return remembers its crumb by depth. Removing that crumb ends
       // it; removing one before it moves it down a depth with everything else.
       const ret = get(isbeReturnStore);
@@ -2153,7 +2178,7 @@
       if (ret && depth === ret.depth) isbeReturnStore.set(null);
       else if (ret && depth < ret.depth) isbeReturnStore.set({ ...ret, depth: ret.depth - 1 });
     }
-    navigationStore.removeCrumb(m.side, m.index);
+    myTrail.removeCrumb(m.side, m.index);
   }
 
   /**
@@ -2166,9 +2191,9 @@
    */
   function crumbMenuClear(): void {
     closeCrumbMenu();
-    isbeReturnStore.set(null);
+    if (!windowId) isbeReturnStore.set(null);
     if (get(navTrail).length > 0) goToCrumb(1, true);
-    else navigationStore.clearHistory();
+    else myTrail.clearHistory();
   }
 
   function teardownMembrane(): void {
@@ -2398,7 +2423,7 @@
           bind:this={referenceButtonRef}
           class="pill-btn pill-btn-text pill-btn-reference"
           class:at-home={!$canGoBack}
-          style="--home-color: {getBookColor($navigationStore.book)};"
+          style="--home-color: {getBookColor(currentBook)};"
           on:click={toggleReferenceDropdown}
           title="Bible Navigation"
         >
