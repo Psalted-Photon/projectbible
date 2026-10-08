@@ -5,7 +5,21 @@
     getCustomThemeSettings, applyCustomThemeVars, MAX_COLOR_PRESETS,
   } from "../../adapters/settings";
   import { formatDays, formatTime12h } from "../../lib/alarm/alarmSchedule";
-  import { getAllVoices, getSelectableVoices, type TtsVoiceInfo } from "../../adapters/tts";
+  import {
+    getAllVoices,
+    getSelectableVoices,
+    storedVoices,
+    isTtsSupported,
+    DEFAULT_TTS_VOICE,
+    type TtsVoiceInfo,
+  } from "../../adapters/tts";
+  import {
+    installAllVoices,
+    voicesStillToInstall,
+    estimateVoicesMB,
+    installBusy,
+    installMessage,
+  } from "../../lib/packInstaller";
   import { paneStore } from "../../stores/paneStore";
   import { Gear, Palette, BookOpenText, SpeakerHigh, Globe, Package, LockSimple, Wrench } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
@@ -157,8 +171,21 @@
   // replaced once the graphics-chip check answers — that decides whether the
   // natural voices can be offered at all.
   let ttsVoices: TtsVoiceInfo[] = getAllVoices().filter((v) => v.engine !== "kokoro");
-  $: naturalVoices = ttsVoices.filter((v) => v.engine === "kokoro");
-  $: standardVoices = ttsVoices.filter((v) => v.engine !== "kokoro");
+  // The dropdown only offers voices already on the device. Null until the
+  // worker answers, so the no-voices card never flashes up on a device that
+  // has them.
+  let installedVoiceIds: string[] | null = null;
+  $: shownVoices = installedVoiceIds
+    ? ttsVoices.filter((v) => installedVoiceIds!.includes(v.id))
+    : ttsVoices;
+  $: naturalVoices = shownVoices.filter((v) => v.engine === "kokoro");
+  $: standardVoices = shownVoices.filter((v) => v.engine !== "kokoro");
+  $: noVoicesYet = installedVoiceIds !== null && shownVoices.length === 0;
+  /** Voices one tap would still fetch, and roughly how big that is. */
+  let missingVoiceCount = 0;
+  let missingVoiceMB = 0;
+  /** This pane started the voice download (installBusy alone may be a pack). */
+  let gettingVoices = false;
   let alarmSummary = "";
 
   // ── Instant save ────────────────────────────────────────────────────────
@@ -292,8 +319,61 @@
   $: readerSummary =
     `${LAYOUT_LABELS[verseLayout] ?? verseLayout}${showRedLetter ? " · Red letters" : ""}` +
     `${navBarPinned ? " · Nav bar pinned" : ""}`;
-  $: readAloudSummary =
-    `${ttsVoices.find((v) => v.id === ttsVoice)?.label ?? ttsVoice} · ${ttsRate.toFixed(2)}×`;
+  $: readAloudSummary = noVoicesYet
+    ? "No voices yet"
+    : `${ttsVoices.find((v) => v.id === ttsVoice)?.label ?? ttsVoice} · ${ttsRate.toFixed(2)}×`;
+
+  async function refreshVoiceInventory(): Promise<void> {
+    if (!isTtsSupported()) return;
+    try {
+      const [selectable, stored, missing] = await Promise.all([
+        getSelectableVoices(),
+        storedVoices(),
+        voicesStillToInstall(),
+      ]);
+      ttsVoices = selectable;
+      installedVoiceIds = stored;
+      missingVoiceCount = missing.length;
+      missingVoiceMB = Math.round(await estimateVoicesMB(missing));
+    } catch (err) {
+      console.warn("[Settings] Could not list voices:", err);
+    }
+  }
+
+  /**
+   * The one button: every voice this device can run, natural ones first. If
+   * the voice in use isn't on the device afterwards, Heart takes over -- or
+   * Standard where the natural voices aren't offered.
+   */
+  async function getAllVoicesNow(): Promise<void> {
+    if (gettingVoices || $installBusy) return;
+    gettingVoices = true;
+    try {
+      const result = await installAllVoices();
+      if (!result) {
+        showNotice("Something else is downloading. Try again when it's done.", "error");
+        return;
+      }
+      await refreshVoiceInventory();
+      const have = installedVoiceIds ?? [];
+      if (!have.includes(ttsVoice)) {
+        ttsVoice = have.includes("af_heart")
+          ? "af_heart"
+          : have.includes(DEFAULT_TTS_VOICE)
+            ? DEFAULT_TTS_VOICE
+            : have[0] ?? ttsVoice;
+      }
+      if (result.outOfSpace) {
+        showNotice("This device ran out of space before every voice finished.", "error");
+      } else if (result.failed.length > 0) {
+        showNotice(`Couldn't download: ${result.failed.join(", ")}. Tap the button to try again.`, "error");
+      } else {
+        showNotice("Voices downloaded. They work offline from now on.");
+      }
+    } finally {
+      gettingVoices = false;
+    }
+  }
   $: generalSummary =
     `${TIMEZONE_OPTIONS.find((o) => o.value === timezone)?.label.replace(/ \(.*\)$/, "") ?? timezone}` +
     `${navBarClock ? "" : " · No clock"}` +
@@ -381,6 +461,7 @@
     refreshExternalSummaries();
     window.addEventListener("settingsUpdated", refreshExternalSummaries);
     getSelectableVoices().then((v) => (ttsVoices = v));
+    refreshVoiceInventory();
     const settings = getSettings();
     theme = settings.theme || "dark";
     fontSize = settings.fontSize || 18;
@@ -1031,14 +1112,29 @@
     </SettingsSection>
   </SettingsSection>
 
-  <SettingsSection title="Read Aloud (AI voice)" summary={readAloudSummary} bind:open={openSections.readAloud}>
+  <SettingsSection title="Read Aloud (TTS Voice)" summary={readAloudSummary} bind:open={openSections.readAloud}>
     <span slot="icon"><SpeakerHigh size={16} weight="bold" /></span>
 
     <div class="setting-group">
       <p class="section-description il-hint">
-        Reads any chapter out loud with an on-device AI voice. The voice downloads
-        once (from the reader or Manage Packs) and then works fully offline.
+        Reads any chapter out loud with an on-device AI voice. The voices download
+        once and then work fully offline.
       </p>
+      {#if noVoicesYet}
+        <p class="no-voices">You have no voices yet.</p>
+        <button
+          class="packs-button voices-button"
+          on:click={getAllVoicesNow}
+          disabled={gettingVoices || $installBusy}
+        >
+          <span class="icon emoji">⬇️</span>
+          <span class="text">
+            {gettingVoices && $installMessage
+              ? $installMessage
+              : `Get high-quality voices (~${missingVoiceMB} MB)`}
+          </span>
+        </button>
+      {:else}
       <label>
         <span class="label-text">Voice</span>
         <select bind:value={ttsVoice}>
@@ -1048,18 +1144,35 @@
                 <option value={v.id}>{v.label}</option>
               {/each}
             </optgroup>
-            <optgroup label="Standard — lighter on the battery">
-              {#each standardVoices as v}
-                <option value={v.id}>{v.label}</option>
-              {/each}
-            </optgroup>
+            {#if standardVoices.length > 0}
+              <optgroup label="Standard — lighter on the battery">
+                {#each standardVoices as v}
+                  <option value={v.id}>{v.label}</option>
+                {/each}
+              </optgroup>
+            {/if}
           {:else}
-            {#each ttsVoices as v}
-              <option value={v.id}>{v.label} — ~{v.approxSizeMB} MB</option>
+            {#each shownVoices as v}
+              <option value={v.id}>{v.label}</option>
             {/each}
           {/if}
         </select>
       </label>
+      {#if installedVoiceIds && missingVoiceCount > 0}
+        <button
+          class="packs-button voices-button voices-button-small"
+          on:click={getAllVoicesNow}
+          disabled={gettingVoices || $installBusy}
+        >
+          <span class="icon emoji">⬇️</span>
+          <span class="text">
+            {gettingVoices && $installMessage
+              ? $installMessage
+              : `Get the rest of the voices (~${missingVoiceMB} MB)`}
+          </span>
+        </button>
+      {/if}
+      {/if}
       <label>
         <span class="label-text">Reading Speed: {ttsRate.toFixed(2)}×</span>
         <input
@@ -1664,6 +1777,25 @@
     font-size: 0.8rem;
     line-height: 1.45;
     color: #999;
+  }
+
+  .no-voices {
+    margin: 0.75rem 0 0.5rem;
+    font-weight: 600;
+  }
+  .voices-button {
+    margin-bottom: 0.5rem;
+  }
+  .voices-button:disabled {
+    opacity: 0.75;
+    cursor: default;
+  }
+  .voices-button-small {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+  }
+  .packs-button.voices-button-small .icon {
+    font-size: 1.1rem;
   }
 
   /* Same affordance as Manage Packs, but sitting inside the Read Aloud group. */

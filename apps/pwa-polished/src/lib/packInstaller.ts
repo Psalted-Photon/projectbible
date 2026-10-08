@@ -380,11 +380,11 @@ export async function packsStillToInstall(): Promise<CatalogPack[]> {
 }
 
 /**
- * Voices Install All still has to download: every downloadable built-in voice
- * this device can run (getSelectableVoices already hides the natural voices on
- * a device that cannot run them). Standard voices first -- they are small and
- * independent -- then the natural ones, the first of which pulls the shared
- * 310 MB engine.
+ * Voices still to download: every downloadable built-in voice this device can
+ * run (getSelectableVoices already hides the natural voices on a device that
+ * cannot run them). Natural voices first, Heart leading -- they are the ones a
+ * new user should hear, and the first pulls the shared 310 MB engine, after
+ * which the rest are half a megabyte each -- then the standard ones.
  */
 export async function voicesStillToInstall(): Promise<TtsVoiceInfo[]> {
   if (!isTtsSupported()) return [];
@@ -394,12 +394,65 @@ export async function voicesStillToInstall(): Promise<TtsVoiceInfo[]> {
       (v) => !v.custom && voiceIsDownloadable(v) && !stored.includes(v.id),
     );
     return [
-      ...missing.filter((v) => v.engine !== 'kokoro'),
       ...missing.filter((v) => v.engine === 'kokoro'),
+      ...missing.filter((v) => v.engine !== 'kokoro'),
     ];
   } catch (error) {
     console.warn('[InstallAll] Could not list voices:', error);
     return [];
+  }
+}
+
+/**
+ * Download voices one after another, counting on from `step` of `total` in
+ * installMessage. A voice that fails is noted and the run moves on, except
+ * running out of storage, which stops it.
+ */
+async function downloadVoicesInOrder(
+  voices: TtsVoiceInfo[],
+  step: number,
+  total: number,
+  onVoice: (label: string, step: number) => void,
+): Promise<{ failed: string[]; outOfSpace: boolean }> {
+  const failed: string[] = [];
+  for (const voice of voices) {
+    step++;
+    onVoice(voice.label, step);
+    installMessage.set(`${step} of ${total} · Preparing ${voice.label}...`);
+    try {
+      await downloadVoice(voice.id, ({ loaded, total: bytes }) => {
+        const loadedMB = (loaded / 1024 / 1024).toFixed(0);
+        const totalMB = bytes > 0 ? (bytes / 1024 / 1024).toFixed(0) : '?';
+        installMessage.set(
+          `${step} of ${total} · Downloading ${voice.label} (${loadedMB} MB / ${totalMB} MB)…`,
+        );
+      });
+    } catch (error) {
+      console.error(`[InstallVoices] ${voice.label} failed:`, error);
+      failed.push(voice.label);
+      if (isQuotaError(error)) return { failed, outOfSpace: true };
+    }
+  }
+  return { failed, outOfSpace: false };
+}
+
+/**
+ * Download every voice still missing, natural ones first -- the one button in
+ * Settings → Read Aloud. Shares the install lock, so it never runs alongside a
+ * pack install or Install All.
+ *
+ * Returns null without doing anything if another install is already running.
+ */
+export async function installAllVoices(): Promise<{ failed: string[]; outOfSpace: boolean } | null> {
+  if (get(installBusy)) return null;
+  installBusy.set(true);
+  installMessage.set('Checking which voices are here…');
+  try {
+    const voices = await voicesStillToInstall();
+    return await downloadVoicesInOrder(voices, 0, voices.length, () => {});
+  } finally {
+    installMessage.set('');
+    installBusy.set(false);
   }
 }
 
@@ -449,27 +502,11 @@ export async function installAll(): Promise<boolean> {
     }
 
     if (!outOfSpace) {
-      for (const voice of voices) {
-        step++;
-        installAllState.update((s) => ({ ...s, step, total, current: voice.label }));
-        installMessage.set(`${step} of ${total} · Preparing ${voice.label}...`);
-        try {
-          await downloadVoice(voice.id, ({ loaded, total: bytes }) => {
-            const loadedMB = (loaded / 1024 / 1024).toFixed(0);
-            const totalMB = bytes > 0 ? (bytes / 1024 / 1024).toFixed(0) : '?';
-            installMessage.set(
-              `${step} of ${total} · Downloading ${voice.label} (${loadedMB} MB / ${totalMB} MB)…`,
-            );
-          });
-        } catch (error) {
-          console.error(`[InstallAll] ${voice.label} failed:`, error);
-          failed.push(voice.label);
-          if (isQuotaError(error)) {
-            outOfSpace = true;
-            break;
-          }
-        }
-      }
+      const result = await downloadVoicesInOrder(voices, step, total, (current, at) =>
+        installAllState.update((s) => ({ ...s, step: at, total, current })),
+      );
+      failed.push(...result.failed);
+      outOfSpace = result.outOfSpace;
     }
   } finally {
     installAllState.update((s) => ({
@@ -714,15 +751,25 @@ export async function estimateRemaining(): Promise<{ count: number; bytes: numbe
     (sum, pack) => sum + (installBytesFor(pack.id, sizes.bytes) || parseFloat(pack.size) * MB || 0),
     0,
   );
+  bytes += (await estimateVoicesMB(voices)) * MB;
+  return { count: packs.length + voices.length, bytes };
+}
+
+/**
+ * Roughly how many megabytes these voices download. The natural voices share
+ * one 310 MB engine, and each of their own sizes includes it while it is
+ * missing, so it is counted once rather than once per voice.
+ */
+export async function estimateVoicesMB(voices: TtsVoiceInfo[]): Promise<number> {
   const voiceMB = await Promise.all(
     voices.map((v) => voiceDownloadSizeMB(v).catch(() => v.approxSizeMB)),
   );
-  const standard = voices.map((v, i) => ({ v, mb: voiceMB[i] })).filter(({ v }) => v.engine !== 'kokoro');
-  const natural = voices.map((v, i) => ({ v, mb: voiceMB[i] })).filter(({ v }) => v.engine === 'kokoro');
-  bytes += standard.reduce((sum, { mb }) => sum + mb * MB, 0);
+  const sized = voices.map((v, i) => ({ v, mb: voiceMB[i] }));
+  const standard = sized.filter(({ v }) => v.engine !== 'kokoro');
+  const natural = sized.filter(({ v }) => v.engine === 'kokoro');
+  let mb = standard.reduce((sum, s) => sum + s.mb, 0);
   if (natural.length > 0) {
-    const largest = Math.max(...natural.map(({ mb }) => mb));
-    bytes += (largest + (natural.length - 1)) * MB;
+    mb += Math.max(...natural.map((s) => s.mb)) + (natural.length - 1);
   }
-  return { count: packs.length + voices.length, bytes };
+  return mb;
 }
