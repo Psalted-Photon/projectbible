@@ -4,6 +4,7 @@
     navigationStore,
     availableTranslations,
     trailFor,
+    currentReaderPosition,
     registerScreenSurface,
     type CrumbKind,
   } from "../stores/navigationStore";
@@ -995,17 +996,23 @@
     else if (ret && get(historyDepth) < ret.depth) isbeReturnStore.set(null);
   }
 
-  /** Mirror of the reader's old split-view button, now that the bar is gone. */
+  /**
+   * A new Bible window at the spot this bar's reader is on, scrolled to the
+   * same line. That spot is its home: it starts with a trail of its own, empty,
+   * and neither reader's trail is copied or changed.
+   */
   function openSplitView() {
     const edge = window.innerWidth > window.innerHeight ? "right" : "bottom";
     const id = windowStore.createWindow(edge, 50);
-    if (id) {
-      windowStore.setWindowContent(id, "bible", {
-        translation: currentTranslation,
-        book: $navigationStore.book,
-        chapter: $navigationStore.chapter,
-      });
-    }
+    if (!id) return;
+    const pos = currentReaderPosition(windowId);
+    windowStore.setWindowContent(id, "bible", {
+      translation: currentTranslation,
+      book: pos?.book ?? currentBook,
+      chapter: pos?.chapter ?? currentChapter,
+      // Applied once by the new reader as it opens, then cleared.
+      openAt: pos,
+    });
   }
 
   /** Jump the reader (or the owning window) to a book/chapter/verse. */
@@ -2470,8 +2477,8 @@
 
       </div>
 
-      <!-- Only offered while away: it opens where you came from beside where
-           you landed, which is meaningless when those are the same place. -->
+      <!-- Only offered while away: it opens where you are now in a fresh
+           window of its own, as its home, beside this reader and its trail. -->
       {#if $canGoBack}
         <div class="pill-divider"></div>
         <button

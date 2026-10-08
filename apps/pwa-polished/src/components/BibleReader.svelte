@@ -641,6 +641,18 @@
   // A window's restoreScroll: the exact spot a crumb in its own trail saved.
   let _windowRestore: (ReaderPosition & { at: number }) | null = null;
 
+  // A window opened by split view starts on the line the other reader was
+  // reading. Taken once, here at start so the first load already aims for
+  // it, and cleared so a reload does not put the window back there.
+  if (windowId) {
+    const openAt = get(windowStore).find((w) => w.id === windowId)?.contentState?.openAt as ReaderPosition | null | undefined;
+    if (openAt) {
+      _windowScrollTarget = openAt.verse;
+      _windowRestore = { ...openAt, at: Date.now() };
+      windowStore.updateContentState(windowId, { openAt: null });
+    }
+  }
+
   /**
    * Whose trail this reader keeps: `main`, or its window id. Harmony panes
    * keep none — the master pane drives the others, and a trail would fight it.
