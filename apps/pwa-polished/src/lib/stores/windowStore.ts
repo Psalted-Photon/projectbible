@@ -135,6 +135,19 @@ const LIBRARY_SOURCE_OF: Partial<Record<WindowContentType, LibrarySource>> = {
   strongs: 'strongs',
 };
 
+/** The number in a `window-N-<time>` id, or null for any other id. */
+export function windowNumberOf(id: string): number | null {
+  const m = /^window-(\d+)-/.exec(id);
+  return m ? Number(m[1]) : null;
+}
+
+/** One past the highest window number in use, never below 2. */
+function nextWindowNumber(windows: WindowState[]): number {
+  let highest = 1;
+  for (const w of windows) highest = Math.max(highest, windowNumberOf(w.id) ?? 0);
+  return highest + 1;
+}
+
 function createWindowStore() {
   const { subscribe, set, update } = writable<WindowState[]>([]);
 
@@ -181,7 +194,10 @@ function createWindowStore() {
         return null; // At limit
       }
 
-      const windowNumber = docked.length + 1;
+      // Each window is a reader of its own, with its own crumb trail saved under
+      // its id, so no two may ever share a number. Counting the open ones gave
+      // a second "3" after closing 1 of 1, 2, 3. The main reader is 1.
+      const windowNumber = nextWindowNumber(windows);
       const id = `window-${windowNumber}-${Date.now()}`;
 
       // Use provided size or default to 50%
@@ -200,7 +216,7 @@ function createWindowStore() {
         id,
         edge: fromEdge,
         size: `${size.toFixed(1)}%`,
-        totalWindows: windowNumber
+        totalWindows: docked.length + 1
       });
 
       update(wins => {
