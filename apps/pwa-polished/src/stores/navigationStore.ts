@@ -20,7 +20,24 @@ export interface NavigationState {
    * to the chapter shows it again instead of losing it for good. That matches
    * how the reading plan target behaves; the two used to follow opposite rules.
    */
-  linkHighlight?: { book: string; chapter: number; verse: number; at: number } | null;
+  linkHighlight?: {
+    book: string;
+    chapter: number;
+    verse: number;
+    at: number;
+    /**
+     * Paint the mark but leave the scroll alone. Set on a crumb that saved
+     * where the reader was scrolled, so coming back lands there rather than
+     * jumping up to the mark.
+     */
+    noScroll?: boolean;
+  } | null;
+  /**
+   * The exact spot to scroll back to: the verse at the top of the screen and
+   * how far its first line sat above the top edge. Set by a crumb that saved
+   * where you were reading. `at` keys it, so the reader applies each one once.
+   */
+  restoreScroll?: ReaderPosition & { at: number } | null;
   showReferences?: boolean;
   showCommentaries?: boolean;
   selectedCommentaryAuthors?: string[];
@@ -138,29 +155,129 @@ function emptyTrail(): Trail {
   return { back: [], ahead: [], current: null };
 }
 
+/** Where the main reader is scrolled: the verse at the top of the screen, and
+ *  how many pixels of it sit above the top edge. */
+export interface ReaderPosition {
+  book: string;
+  chapter: number;
+  verse: number;
+  offset: number;
+}
+
 /**
- * The spot you are leaving by the trail, as a crumb, saved where you are
- * standing. If that is still the chapter the crumb you came by brought you
- * to, it keeps that crumb's icon, verse and panel. Anywhere else nothing
- * recorded a panel, so it is a plain crumb that brings back the chapter and
- * the verse the last link marked, if that mark is in this chapter.
+ * Something on screen that a crumb can bring back — the lookup card, the
+ * search results, the reader's commentary panel. When you leave a spot by the
+ * trail, each one is asked what it is showing right now, so the crumb holds
+ * the screen as you left it rather than as it was when you first arrived.
+ */
+export interface ScreenSurface {
+  /** Higher wins when more than one is open; a crumb carries one panel. */
+  priority: number;
+  /**
+   * What it is showing, as a crumb origin, or null when it is closed.
+   * `anchor` is for a panel tied to a verse: the crumb stands there.
+   */
+  capture: () => {
+    kind: CrumbKind;
+    origin: unknown;
+    anchor?: { book: string; chapter: number; verse: number | null };
+  } | null;
+  /** Take it down. What it showed now belongs to the crumb being left. */
+  close: () => void;
+}
+
+const screenSurfaces = new Set<ScreenSurface>();
+let readReaderPosition: (() => ReaderPosition | null) | null = null;
+
+/** Called by a surface as it mounts; returns the call to make as it unmounts. */
+export function registerScreenSurface(surface: ScreenSurface): () => void {
+  screenSurfaces.add(surface);
+  return () => screenSurfaces.delete(surface);
+}
+
+/** The main reader hands over how to measure where it is scrolled. */
+export function registerReaderPosition(read: () => ReaderPosition | null): () => void {
+  readReaderPosition = read;
+  return () => {
+    if (readReaderPosition === read) readReaderPosition = null;
+  };
+}
+
+function readerPosition(): ReaderPosition | null {
+  try {
+    return readReaderPosition?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The panel on top right now, if any. Every surface is taken down. */
+function takeScreen(): ReturnType<ScreenSurface['capture']> {
+  let best: ReturnType<ScreenSurface['capture']> = null;
+  let bestPriority = -Infinity;
+  for (const surface of screenSurfaces) {
+    const shot = surface.capture();
+    if (shot && surface.priority > bestPriority) {
+      best = shot;
+      bestPriority = surface.priority;
+    }
+  }
+  for (const surface of screenSurfaces) surface.close();
+  return best;
+}
+
+/** The reader state to come back to, scrolled to `pos` when there is one. */
+function navAt(state: NavigationState, pos: ReaderPosition | null, fallbackVerse: number | null): NavigationState {
+  if (!pos) return { ...state, highlightedVerse: null, scrollTargetVerse: fallbackVerse, restoreScroll: null };
+  const mark = state.linkHighlight;
+  return {
+    ...state,
+    book: pos.book,
+    chapter: pos.chapter,
+    highlightedVerse: null,
+    // The near enough fallback, if the exact spot cannot be found.
+    scrollTargetVerse: pos.verse,
+    restoreScroll: { ...pos, at: Date.now() },
+    linkHighlight: mark ? { ...mark, noScroll: true } : mark,
+  };
+}
+
+/**
+ * The spot you are leaving by the trail, as a crumb: the screen as it is right
+ * now. Where the reader is scrolled, and whichever panel is open — or none,
+ * if you closed the one the crumb you came by brought back.
+ *
+ * The icon follows the panel. With no panel open it keeps the icon of the
+ * crumb you came by, if you are still in its chapter and that crumb never
+ * carried a panel (a map or a note, say); otherwise it is a plain crumb.
  */
 function crumbForHere(state: NavigationState, current: TrailCrumb | null): TrailCrumb {
-  const { book, chapter } = state;
+  const panel = takeScreen();
+  let pos = readerPosition();
+  let { book, chapter } = pos ?? state;
+  if (panel?.anchor) {
+    // A commentary panel is tied to its verse, and reopens only once that
+    // chapter is on screen, so the crumb stands there.
+    book = normalizeBookName(panel.anchor.book);
+    chapter = panel.anchor.chapter;
+    if (pos && (pos.book !== book || pos.chapter !== chapter)) pos = null;
+  }
   const stillThere = !!current && current.book === book && current.chapter === chapter;
   const mark = state.linkHighlight;
-  const verse = stillThere
-    ? current!.verse
-    : mark && mark.book === book && mark.chapter === chapter
-      ? mark.verse
-      : null;
+  const verse = panel?.anchor
+    ? panel.anchor.verse
+    : stillThere
+      ? current!.verse
+      : mark && mark.book === book && mark.chapter === chapter
+        ? mark.verse
+        : null;
   return {
-    nav: { ...state, highlightedVerse: null, scrollTargetVerse: verse },
-    kind: stillThere ? current!.kind : 'plain',
+    nav: navAt({ ...state, book, chapter }, pos, verse),
+    kind: panel ? panel.kind : stillThere && current!.origin === undefined ? current!.kind : 'plain',
     book,
     chapter,
     verse,
-    origin: stillThere ? current!.origin : undefined,
+    origin: panel?.origin,
   };
 }
 
@@ -333,19 +450,65 @@ function createNavigationStore() {
    * which is "Go Here" on the home crumb), which drops them instead.
    */
   function goToDepth(depth: number, clearAfter = false): TrailCrumb | null {
-    const here = get({ subscribe });
-    let target: TrailCrumb | undefined;
-    trail.update((t) => {
-      if (depth < 1 || depth > t.back.length) return t;
-      target = t.back[depth - 1];
-      return {
-        back: t.back.slice(0, depth - 1),
-        ahead: clearAfter ? [] : [...t.back.slice(depth), crumbForHere(here, t.current), ...t.ahead],
-        current: target,
-      };
+    const t = get(trail);
+    if (depth < 1 || depth > t.back.length) return null;
+    const target = t.back[depth - 1];
+    // Taken before the trail changes, and always — even when Go Here drops it
+    // — because taking it is also what clears this spot's panel off the screen.
+    const left = crumbForHere(get({ subscribe }), t.current);
+    trail.set({
+      back: t.back.slice(0, depth - 1),
+      ahead: clearAfter ? [] : [...t.back.slice(depth), left, ...t.ahead],
+      current: target,
     });
-    if (target) arrive(target);
-    return target ?? null;
+    arrive(target);
+    return target;
+  }
+
+  /**
+   * Go somewhere, and by default mark the verse you land on.
+   *
+   * `highlight` defaults to true because that is the app-wide rule: any link
+   * that takes you to a place in the Bible marks where to start reading, in
+   * the target book's category color. Only callers that paint their own
+   * highlight — the reading plan, which keeps its green — pass false.
+   *
+   * A jump into the other testament lands in your default for it (see
+   * lib/testamentDefaults). Only when the caller is carrying the current
+   * translation along: one that names a different translation means it, and
+   * `keepTranslation` is for the two callers that are putting you back
+   * somewhere rather than sending you, where a switch would be wrong.
+   */
+  function navigateTo(
+    translation: string,
+    book: string,
+    chapter: number,
+    scrollTargetVerse: number | null = null,
+    highlight = true,
+    keepTranslation = false,
+  ) {
+    update(state => {
+      const normalized = normalizeBookName(book);
+      const landIn =
+        keepTranslation || translation !== state.translation
+          ? translation
+          : translationForJump(translation, state.book, normalized, get(availableTranslations));
+      const next = {
+        ...state,
+        translation: landIn,
+        book: normalized,
+        chapter,
+        highlightedVerse: null,
+        scrollTargetVerse,
+        restoreScroll: null,
+        linkHighlight:
+          highlight && scrollTargetVerse != null
+            ? { book: normalized, chapter, verse: scrollTargetVerse, at: Date.now() }
+            : null,
+      };
+      persistState(next);
+      return next;
+    });
   }
 
   return {
@@ -361,7 +524,7 @@ function createNavigationStore() {
     // the mark from the last link goes with it.
     setChapter: (chapter: number) => {
       update(state => {
-        const next = { ...state, chapter, highlightedVerse: null, linkHighlight: null };
+        const next = { ...state, chapter, highlightedVerse: null, linkHighlight: null, restoreScroll: null };
         persistState(next);
         return next;
       });
@@ -374,7 +537,7 @@ function createNavigationStore() {
     // loads raced and the page could end up staying on the old book.
     setBookAndChapter: (book: string, chapter: number) => {
       update(state => {
-        const next = { ...state, book: normalizeBookName(book), chapter, highlightedVerse: null, linkHighlight: null };
+        const next = { ...state, book: normalizeBookName(book), chapter, highlightedVerse: null, linkHighlight: null, restoreScroll: null };
         persistState(next);
         return next;
       });
@@ -407,49 +570,25 @@ function createNavigationStore() {
         return next;
       });
     },
+    navigateTo,
     /**
-     * Go somewhere, and by default mark the verse you land on.
+     * A book or chapter picked by hand, off the dropdown. It never clears the
+     * trail: home stays the start of the road.
      *
-     * `highlight` defaults to true because that is the app-wide rule: any link
-     * that takes you to a place in the Bible marks where to start reading, in
-     * the target book's category color. Only callers that paint their own
-     * highlight — the reading plan, which keeps its green — pass false.
-     *
-     * A jump into the other testament lands in your default for it (see
-     * lib/testamentDefaults). Only when the caller is carrying the current
-     * translation along: one that names a different translation means it, and
-     * `keepTranslation` is for the two callers that are putting you back
-     * somewhere rather than sending you, where a switch would be wrong.
+     * At the end of the trail, with nothing ahead, where you were is left
+     * behind as a crumb and the pick is a fresh spot — even from home with no
+     * trail at all. Walked back, with crumbs still ahead, the spot you are on
+     * just moves, like a tab, and the crumbs ahead stay where they are.
      */
-    navigateTo: (
-      translation: string,
-      book: string,
-      chapter: number,
-      scrollTargetVerse: number | null = null,
-      highlight = true,
-      keepTranslation = false,
-    ) => {
-      update(state => {
-        const normalized = normalizeBookName(book);
-        const landIn =
-          keepTranslation || translation !== state.translation
-            ? translation
-            : translationForJump(translation, state.book, normalized, get(availableTranslations));
-        const next = {
-          ...state,
-          translation: landIn,
-          book: normalized,
-          chapter,
-          highlightedVerse: null,
-          scrollTargetVerse,
-          linkHighlight:
-            highlight && scrollTargetVerse != null
-              ? { book: normalized, chapter, verse: scrollTargetVerse, at: Date.now() }
-              : null,
-        };
-        persistState(next);
-        return next;
-      });
+    moveByHand: (translation: string, book: string, chapter: number) => {
+      const t = get(trail);
+      if (t.ahead.length === 0) {
+        const left = crumbForHere(get({ subscribe }), t.current);
+        trail.set({ back: [...t.back, left], ahead: [], current: null });
+      } else {
+        trail.set({ ...t, current: null });
+      }
+      navigateTo(translation, book, chapter, null, false);
     },
     // Navigate to a specific verse and mark it in the target book's category color.
     navigateToVerse: (
@@ -472,6 +611,7 @@ function createNavigationStore() {
           chapter,
           highlightedVerse: null,
           scrollTargetVerse: verse,
+          restoreScroll: null,
           linkHighlight: { book: normalized, chapter, verse, at: Date.now() },
         };
         persistState(next);
@@ -544,6 +684,9 @@ function createNavigationStore() {
       anchor?: { book: string; chapter: number; verse?: number | null },
     ) => {
       let depth = 0;
+      // Without an anchor the crumb is the reader as it is on screen, so it
+      // comes back scrolled exactly where you were reading.
+      const pos = anchor ? null : readerPosition();
       trail.update(({ back: history }) => {
         const book = anchor ? normalizeBookName(anchor.book) : state.book;
         const chapter = anchor ? anchor.chapter : state.chapter;
@@ -554,8 +697,10 @@ function createNavigationStore() {
           // The state to restore is the reader as it was, but standing where
           // the link was rather than wherever it had drifted to.
           nav: anchor
-            ? { ...state, book, chapter, scrollTargetVerse: verse, linkHighlight: null }
-            : state,
+            ? { ...state, book, chapter, scrollTargetVerse: verse, linkHighlight: null, restoreScroll: null }
+            : pos
+              ? navAt(state, pos, verse)
+              : { ...state, restoreScroll: null },
           kind,
           book,
           chapter,
@@ -587,19 +732,17 @@ function createNavigationStore() {
      * crumbs beyond the target go.
      */
     goToAhead: (index: number, clearAfter = false) => {
-      const here = get({ subscribe });
-      let target: TrailCrumb | undefined;
-      trail.update((t) => {
-        if (index < 0 || index >= t.ahead.length) return t;
-        target = t.ahead[index];
-        return {
-          back: [...t.back, crumbForHere(here, t.current), ...t.ahead.slice(0, index)],
-          ahead: clearAfter ? [] : t.ahead.slice(index + 1),
-          current: target,
-        };
+      const t = get(trail);
+      if (index < 0 || index >= t.ahead.length) return null;
+      const target = t.ahead[index];
+      const left = crumbForHere(get({ subscribe }), t.current);
+      trail.set({
+        back: [...t.back, left, ...t.ahead.slice(0, index)],
+        ahead: clearAfter ? [] : t.ahead.slice(index + 1),
+        current: target,
       });
-      if (target) arrive(target);
-      return target ?? null;
+      arrive(target);
+      return target;
     },
     /**
      * Take one crumb out of the trail without going anywhere. `index` is

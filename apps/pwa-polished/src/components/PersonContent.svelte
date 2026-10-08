@@ -116,7 +116,7 @@
   // People reported only the offset, so walking a family tree and stepping over
   // to another tab lost both the relative and the way back.
   /** Everything needed to put this bio back exactly as it is now. */
-  function viewSnapshot() {
+  export function viewSnapshot() {
     return {
       personId: person?.id ?? null,
       primaryName: title,

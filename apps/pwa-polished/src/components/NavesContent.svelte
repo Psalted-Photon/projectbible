@@ -500,7 +500,7 @@
   }
 
   /** Everything needed to put this topic back exactly as it is now. */
-  function viewSnapshot(): PopOutSnapshot | null {
+  export function viewSnapshot(): PopOutSnapshot | null {
     if (!topic) return null;
     return {
       topicId: topic.topicId,

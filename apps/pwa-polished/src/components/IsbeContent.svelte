@@ -152,7 +152,7 @@
   });
 
   /** Everything needed to put this article back exactly as it is now. */
-  function viewSnapshot(): PopOutSnapshot {
+  export function viewSnapshot(): PopOutSnapshot {
     return {
       primaryName: title,
       tab: activeTab,

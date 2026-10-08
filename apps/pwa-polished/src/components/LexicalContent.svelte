@@ -64,7 +64,12 @@
   let error = "";
   let bodyEl: HTMLDivElement | null = null;
 
-  onDestroy(() => onSnapshot?.({ scrollTop: bodyEl?.scrollTop ?? 0 }));
+  /** How far down it is now — all a word study needs to come back as it was. */
+  export function viewSnapshot(): { scrollTop: number } {
+    return { scrollTop: bodyEl?.scrollTop ?? 0 };
+  }
+
+  onDestroy(() => onSnapshot?.(viewSnapshot()));
 
   // English lexical data
   let englishWordInfo: WordInfo | null = null;

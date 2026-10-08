@@ -8,6 +8,7 @@
     navTrail,
     navAhead,
     pendingRestore,
+    registerScreenSurface,
     type CrumbKind,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
@@ -697,11 +698,9 @@
         highlightedVerse: null,
       });
     } else {
-      // No mark, and no trail: picking a chapter off the dropdown is not a step
-      // away from anywhere, it is choosing a new home. Keeping the old crumbs
-      // would leave the bar claiming you were still mid-journey somewhere else.
-      navigationStore.clearHistory();
-      navigationStore.navigateTo(currentTranslation, bookName, chapter);
+      // No mark. The trail stays: at its end the spot you leave becomes a
+      // crumb; walked back, the crumb you are on moves (see moveByHand).
+      navigationStore.moveByHand(currentTranslation, bookName, chapter);
     }
     referenceDropdownOpen = false;
     expandedBooks = new Set();
@@ -1108,6 +1107,20 @@
       },
     };
   }
+
+  // Open search results, for a crumb to save when you leave by the trail, so
+  // walking back brings them back only if they were still up.
+  onMount(() => {
+    if (windowId) return;
+    return registerScreenSurface({
+      priority: 2,
+      capture: () =>
+        showResults && searchResults.length > 0 ? { kind: 'search', origin: snapshotSearch() } : null,
+      close: () => {
+        if (showResults) clearSearch();
+      },
+    });
+  });
 
   $: {
     const pending = $pendingRestore as { surface?: string } | null;

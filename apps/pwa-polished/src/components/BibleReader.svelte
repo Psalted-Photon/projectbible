@@ -157,6 +157,9 @@
     navigationStore,
     availableTranslations,
     pendingRestore,
+    registerScreenSurface,
+    registerReaderPosition,
+    type ReaderPosition,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { parallelStore } from "../stores/parallelStore";
@@ -631,8 +634,6 @@
   let _reopenAnnotationAuthor = '';
   // Local scroll target for window panes (replaces global navigationStore.scrollTargetVerse)
   let _windowScrollTarget: number | null = null;
-  // Set only when a crumb walks back to an intro panel; consumed by loadChapter
-  let _reopenBookIntroPanel = false;
   // Where the "start here" mark belongs now lives in the navigation store as
   // linkHighlight (book + chapter + verse), not in component-local numbers.
   // A bare verse number could not say which chapter it meant, and the reader
@@ -723,14 +724,140 @@
    */
   function restoreReaderOrigin(origin: ReaderOrigin): void {
     if (origin.surface === 'bookIntro') {
+      // The intro needs nothing from the chapter, so it comes straight back.
+      // Waiting on a chapter load left it waiting forever when the crumb was
+      // in a chapter already on screen, since no load happens then.
       bookIntroPanelBook = origin.book;
-      _reopenBookIntroPanel = true;
+      bookIntroPanelOpen = true;
       return;
     }
     _reopenAnnotationVerse = origin.verse;
     _reopenAnnotationTab = origin.tab;
     _reopenAnnotationAuthor = origin.author;
     _reopenAnnotationScrollTop = origin.scrollTop ?? 0;
+    // Same problem for the commentary panel: with its chapter already on
+    // screen and its annotations already loaded, open it now. Otherwise the
+    // chapter load opens it once the annotations are in.
+    tick().then(() => {
+      if (
+        _reopenAnnotationVerse !== null &&
+        !loading &&
+        chapters.some((c) => c.book === origin.book && c.chapter === origin.chapter)
+      ) {
+        void reopenAnnotationFromCrumb(origin.book, origin.chapter);
+      }
+    });
+  }
+
+  // The commentary and intro panels, for a crumb to save as you leave by the
+  // trail — so it brings back what is open now, not what was open when you
+  // first came. Main reader only: window panes keep their own panels.
+  onMount(() => {
+    if (windowId) return;
+    return registerScreenSurface({
+      priority: 1,
+      capture: () => {
+        if (annotationPanelOpen) {
+          const origin: ReaderOrigin = {
+            surface: 'annotation',
+            book: annotationPanelBook,
+            chapter: annotationPanelChapter,
+            verse: annotationPanelVerse,
+            tab: annotationPanelTab,
+            author: annotationPanelTargetAuthor,
+            scrollTop: annotationPanelRef?.bodyScrollTop() ?? 0,
+          };
+          return {
+            kind: annotationPanelTab === 'commentary' ? 'commentary' : 'crossref',
+            origin,
+            anchor: { book: annotationPanelBook, chapter: annotationPanelChapter, verse: annotationPanelVerse },
+          };
+        }
+        if (bookIntroPanelOpen) {
+          const origin: ReaderOrigin = { surface: 'bookIntro', book: bookIntroPanelBook };
+          return { kind: 'library', origin };
+        }
+        return null;
+      },
+      close: () => {
+        annotationPanelOpen = false;
+        bookIntroPanelOpen = false;
+      },
+    });
+  });
+
+  /**
+   * Where the reader is scrolled: the first verse still showing at the top,
+   * and how far its first line has gone up past the top edge. Measured the
+   * same way it is put back, so the same line lands in the same place.
+   */
+  function readPosition(): ReaderPosition | null {
+    if (!readerElement) return null;
+    const top = readerElement.getBoundingClientRect().top;
+    const sections = readerElement.querySelectorAll<HTMLElement>('[data-chapter-section]');
+    for (const section of sections) {
+      if (section.getBoundingClientRect().bottom <= top) continue;
+      for (const el of section.querySelectorAll<HTMLElement>('.verse[data-verse]')) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom <= top + 1) continue;
+        const verse = parseInt(el.dataset.verse ?? '', 10);
+        const chapter = parseInt(section.dataset.chapter ?? '', 10);
+        const book = section.dataset.book;
+        if (!book || !(verse > 0) || !(chapter > 0)) return null;
+        return { book, chapter, verse, offset: top - r.top };
+      }
+    }
+    return null;
+  }
+
+  onMount(() => {
+    if (windowId) return;
+    return registerReaderPosition(readPosition);
+  });
+
+  /**
+   * Put the reader back where a crumb saved it. Once the text has settled, and
+   * checked again after the panel transition the way scrollToTarget does,
+   * unless you have started scrolling yourself by then.
+   */
+  async function applyRestoreScroll(pos: ReaderPosition): Promise<void> {
+    if (!readerElement) return;
+    beginDeliberateNavigation();
+    await waitForTextToSettle();
+    if (!readerElement) return;
+    const el = findVerseEl(readerElement, pos.book, pos.chapter, pos.verse);
+    if (!el) return;
+    navBarOffset = 0;
+    const place = () => {
+      if (!readerElement) return;
+      const drift = el.getBoundingClientRect().top - readerElement.getBoundingClientRect().top + pos.offset;
+      readerElement.scrollTop = Math.max(0, readerElement.scrollTop + drift);
+      lastScrollTop = readerElement.scrollTop;
+    };
+    place();
+    const settledAt = readerElement.scrollTop;
+    window.setTimeout(() => {
+      if (!readerElement || !el.isConnected) return;
+      if (Math.abs(readerElement.scrollTop - settledAt) > 2) return;
+      place();
+    }, 360);
+  }
+
+  // A crumb's saved scroll spot, applied once its chapter is on screen and no
+  // load is running. A chapter that had to load first has already been
+  // scrolled near by loadChapter; this puts it on the exact line.
+  let _lastRestoreAt = 0;
+  $: {
+    const r = windowId ? null : $navigationStore.restoreScroll;
+    if (
+      r &&
+      r.at !== _lastRestoreAt &&
+      !loading &&
+      chapters.some((c) => c.book === r.book && c.chapter === r.chapter)
+    ) {
+      _lastRestoreAt = r.at;
+      tick().then(() => applyRestoreScroll(r));
+    }
   }
 
   $: {
@@ -1622,7 +1749,8 @@
       _lastLinkHlKey = key;
       const target = lh!;
       tick().then(async () => {
-        await scrollToTarget(target.book, target.chapter, target.verse);
+        // A crumb that saved where you were scrolled puts you back there instead.
+        if (!target.noScroll) await scrollToTarget(target.book, target.chapter, target.verse);
         // Overtaken while waiting on webfonts — the newer navigation wins.
         if (get(navigationStore).linkHighlight?.at !== target.at) return;
         await applyLinkNavHighlight();
@@ -1800,9 +1928,6 @@
         // one identified again — the old return payload dropped it, which left
         // the panel scrolled to the top with no idea which author you meant.
         void reopenAnnotationFromCrumb(currentBook, currentChapter);
-      } else if (_reopenBookIntroPanel) {
-        bookIntroPanelOpen = true;
-        _reopenBookIntroPanel = false;
       }
     }
   }
@@ -2559,9 +2684,6 @@
       // Re-open annotation panel if user navigated back via the floating Back button
       if (_reopenAnnotationVerse !== null) {
         void reopenAnnotationFromCrumb(book, chapter);
-      } else if (_reopenBookIntroPanel) {
-        bookIntroPanelOpen = true;
-        _reopenBookIntroPanel = false;
       }
 
       // Load and apply persisted highlights

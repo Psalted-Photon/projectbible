@@ -327,7 +327,7 @@
   }
 
   /** Everything needed to put this entry back exactly as it is now. */
-  function viewSnapshot(): Snapshot | null {
+  export function viewSnapshot(): Snapshot | null {
     if (!entry) return null;
     return { strongsId: entry.id, tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0, trail };
   }

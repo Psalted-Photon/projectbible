@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onMount, tick } from "svelte";
   import { get } from "svelte/store";
   import IsbeContent from "./IsbeContent.svelte";
   import NavesContent from "./NavesContent.svelte";
@@ -13,7 +13,7 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { strongsModalStore } from "../stores/strongsModalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
-  import { pendingRestore } from "../stores/navigationStore";
+  import { pendingRestore, registerScreenSurface } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { clearCarriedWorks } from "../lib/openWork";
   import PackUpdateNotice from "./PackUpdateNotice.svelte";
@@ -115,6 +115,11 @@
       const snap = pending.snapshot;
       saved = { ...saved, dictionary: { scrollTop: snap.scrollTop } };
       lexicalModalStore.open(snap.payload);
+    } else if (pending?.surface === 'isbe' && pending.snapshot) {
+      pendingRestore.set(null);
+      const snap = pending.snapshot;
+      saved = { ...saved, encyclopedia: snap };
+      isbeModalStore.open({ ...(pending as any).modal, tab: snap.tab ?? null });
     } else if (pending?.surface === 'strongs' && pending.snapshot) {
       pendingRestore.set(null);
       const snap = pending.snapshot;
@@ -212,10 +217,48 @@
     close();
   }
 
+  /**
+   * What the card is showing, for a crumb to save when you leave by the trail.
+   * Asked of the work in front at that moment, so walking back brings the card
+   * back only if it was still up — closed, the crumb comes back without it.
+   */
+  function captureForCrumb() {
+    if (!work) return null;
+    const snap = content?.viewSnapshot?.() ?? null;
+    let origin: unknown = null;
+    if (work === "encyclopedia" && snap) {
+      const { kind, entryId, placeId, primaryName } = isbe;
+      origin = { surface: "isbe", modal: { kind, entryId, placeId, primaryName }, snapshot: snap };
+    } else if (work === "topical" && snap) {
+      origin = { surface: "naves", snapshot: snap };
+    } else if (work === "people" && snap?.personId) {
+      origin = { surface: "person", snapshot: snap };
+    } else if (work === "dictionary") {
+      const { selectedText, strongsId, morphologyData, lexicalEntries } = lexical;
+      origin = {
+        surface: "lexical",
+        snapshot: { payload: { selectedText, strongsId, morphologyData, lexicalEntries }, scrollTop: snap?.scrollTop ?? 0 },
+      };
+    } else if (work === "strongs" && snap) {
+      origin = { surface: "strongs", snapshot: snap };
+    }
+    return origin ? { kind: "library" as const, origin } : null;
+  }
+
+  onMount(() =>
+    registerScreenSurface({
+      priority: 3,
+      capture: captureForCrumb,
+      close: () => {
+        if (work) close();
+      },
+    }),
+  );
+
   // Escape walks the work back out — a crumb, then its contents — and only
   // takes the card down once there is nowhere left to go. The dictionary has no
   // back trail, so it closes on the first press.
-  let content: { handleBack?: () => boolean } | null = null;
+  let content: { handleBack?: () => boolean; viewSnapshot?: () => any } | null = null;
 
   function onKeydown(e: KeyboardEvent) {
     if (e.key !== "Escape" || !work) return;
@@ -276,6 +319,7 @@
         />
       {:else if work === "dictionary"}
         <LexicalContent
+          bind:this={content}
           selectedText={lexical.selectedText}
           strongsId={lexical.strongsId}
           morphologyData={lexical.morphologyData}
