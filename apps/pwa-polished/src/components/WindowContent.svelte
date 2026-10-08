@@ -9,6 +9,8 @@
   import JournalWriter from "./JournalWriter.svelte";
   import JournalLockScreen from "./JournalLockScreen.svelte";
   import { journalLock } from "../lib/journalLock/lockState";
+  import { userProfileStore } from "../stores/userProfileStore";
+  import { profileModalStore } from "../stores/profileModalStore";
   import NotesPane from "./NotesPane.svelte";
   import ArtPane from "./ArtPane.svelte";
   import IsbeContent from "./IsbeContent.svelte";
@@ -51,8 +53,15 @@
   <CommentaryReader windowId={panel.id} />
 {:else if panel.contentType === 'journal'}
   <!-- Every way into the journal (J key, search, the calendar, a window
-       restored on launch) arrives here, so the lock only has to guard this. -->
-  {#if $journalLock.needsUnlock}
+       restored on launch) arrives here, so the sign-in wall and the lock
+       only have to guard this. -->
+  {#if !$userProfileStore.isSignedIn}
+    <div class="auth-wall">
+      <div class="auth-wall-icon">📔</div>
+      <p class="auth-wall-text">Sign in to write in your journal and keep it synced across all your devices.</p>
+      <button class="auth-wall-btn" on:click={() => profileModalStore.open()}>Sign In to Continue →</button>
+    </div>
+  {:else if $journalLock.needsUnlock}
     <JournalLockScreen />
   {:else if $journalLock.ready}
     <JournalWriter initialDate={panel.contentState?.date} />
@@ -123,5 +132,39 @@
     padding: 24px 16px;
     text-align: center;
     opacity: 0.7;
+  }
+
+  /* Signed out, the journal window shows this in place of the writer — the
+     same wall the Notes window uses. */
+  .auth-wall {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 32px 24px;
+    box-sizing: border-box;
+    text-align: center;
+  }
+  .auth-wall-icon {
+    font-size: 44px;
+  }
+  .auth-wall-text {
+    margin: 0;
+    color: #aaa;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    max-width: 320px;
+  }
+  .auth-wall-btn {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
   }
 </style>
