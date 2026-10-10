@@ -4,7 +4,7 @@
   import { BIBLE_BOOKS } from "../lib/bibleData";
   import { onMount, onDestroy } from "svelte";
   import { fadeAway, growFrom, reveal } from "../lib/motion";
-  import { Anchor, CaretDown, CaretRight, CaretUp } from "phosphor-svelte";
+  import { Anchor, CaretDown, CaretRight, CaretUp, Scroll } from "phosphor-svelte";
   import { IndexedDBCommentaryStore } from "../adapters/CommentaryStore";
   import { ENOCH_EDITIONS, isEnochAuthor, enochLabelFor, loadEnoch } from "../lib/enochBooks";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
@@ -388,7 +388,7 @@
       {/if}
       {#if windowId}
         <!-- Book of Enoch: the single entry point (per-window only) -->
-        <div class="dropdown-section-label">📜 Ancient Book</div>
+        <div class="dropdown-section-label"><Scroll size={13} weight="bold" class="ph-inline" /> Ancient Book</div>
         {#each ENOCH_EDITIONS as ed}
           <button
             class="dropdown-item enoch-item"

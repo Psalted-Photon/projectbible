@@ -10,7 +10,7 @@
    * at every panel width, so a 20%-wide sliver and a 50/50 split both work.
    */
   import { onMount, onDestroy, tick } from 'svelte';
-  import { ArrowLeft, UsersThree, CloudArrowUp } from 'phosphor-svelte';
+  import { ArrowLeft, UsersThree, CloudArrowUp, NotePencil } from 'phosphor-svelte';
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import SearchResultsTree from './SearchResultsTree.svelte';
   import { groupResultsByBook } from '../lib/searchTree';
@@ -1569,7 +1569,7 @@
   {#if !isSignedIn}
     <!-- ── Signed out ──────────────────────────────────────────────────────── -->
     <div class="auth-wall">
-      <div class="auth-wall-icon">📝</div>
+      <div class="auth-wall-icon"><NotePencil size={44} weight="bold" /></div>
       <p class="auth-wall-text">
         Sign in to write notes and keep them synced across all your devices.
       </p>
@@ -2069,7 +2069,8 @@
   }
 
   .auth-wall-icon {
-    font-size: 44px;
+    display: flex;
+    color: #fde047;
   }
 
   .auth-wall-text {

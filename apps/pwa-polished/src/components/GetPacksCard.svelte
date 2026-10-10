@@ -15,6 +15,7 @@
    */
   import { onMount } from 'svelte';
   import { CheckCircle, DownloadSimple, ArrowClockwise } from 'phosphor-svelte';
+  import PackIcon from './icons/PackIcon.svelte';
   import { packInstallFinished, listInstalledPacks } from '../adapters/db-manager';
   import {
     PACK_CATALOG,
@@ -86,7 +87,7 @@
   <ul class="gp-list">
     {#each list as pack (pack.id)}
       <li class="gp-row">
-        <span class="gp-icon" aria-hidden="true">{pack.icon}</span>
+        <span class="gp-icon"><PackIcon icons={pack.icons} size={20} /></span>
         <span class="gp-text">
           <span class="gp-name">{pack.name}</span>
           {#if $installingPackId === pack.id}
@@ -176,10 +177,10 @@
   }
 
   .gp-icon {
-    font-size: 1.25rem;
+    display: inline-flex;
     flex-shrink: 0;
-    width: 1.5rem;
-    text-align: center;
+    min-width: 1.5rem;
+    justify-content: center;
   }
 
   .gp-text {

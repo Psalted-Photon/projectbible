@@ -1,5 +1,6 @@
 <script lang="ts">
   import CloseX from "./CloseX.svelte";
+  import { Question } from "phosphor-svelte";
   export let show = false;
   export let helpTopic: string = "general";
 
@@ -86,7 +87,7 @@
   <div class="help-backdrop" on:click={handleBackdropClick}>
     <div class="help-modal">
       <div class="help-header">
-        <h3><span class="emoji">❓</span> {content.title}</h3>
+        <h3><Question size={19} weight="bold" class="ph-inline" /> {content.title}</h3>
         <CloseX edge on:click={closeModal} />
       </div>
       

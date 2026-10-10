@@ -18,7 +18,7 @@
   import YourDataPanel from './YourDataPanel.svelte';
   import BrandSpinner from './BrandSpinner.svelte';
   import PlayTodayButton from './PlayTodayButton.svelte';
-  import { User } from 'phosphor-svelte';
+  import { User, CloudArrowUp } from 'phosphor-svelte';
   import CloseX from './CloseX.svelte';
 
   let isOpen = false;
@@ -691,7 +691,7 @@
                 title="Sync now"
                 aria-label="Sync now"
               >
-                🔄
+                <CloudArrowUp size={16} weight="bold" class="ph-inline" />
               </button>
             </div>
             <button class="secondary-btn" on:click={handleSignOut} disabled={signingOut}>

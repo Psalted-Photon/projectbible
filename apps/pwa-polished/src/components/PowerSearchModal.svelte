@@ -22,7 +22,15 @@
   import { openDevotional } from "../stores/devotionalStore";
   import { windowStore } from "../lib/stores/windowStore";
   import HelpModal from "./HelpModal.svelte";
-  import { Microscope } from 'phosphor-svelte';
+  import {
+    Microscope,
+    TextT,
+    Faders,
+    PuzzlePiece,
+    Ruler,
+    MagnifyingGlass,
+    Warning,
+  } from 'phosphor-svelte';
   import { reveal } from '../lib/motion';
   import CloseX from './CloseX.svelte';
 
@@ -290,7 +298,7 @@
         <div class="controls-panel">
           <!-- Word/Phrase Section -->
           <section class="control-section">
-            <h3><span class="emoji">🔤</span> Word / Phrase</h3>
+            <h3><TextT size={17} weight="bold" class="ph-inline" /> Word / Phrase</h3>
             
             <div class="control-group">
               <label for="search-text">Search for:</label>
@@ -322,7 +330,7 @@
           <!-- Pattern Options Section -->
           <section class="control-section">
             <h3>
-              <span class="emoji">🎛️</span> Match Type
+              <Faders size={17} weight="bold" class="ph-inline" /> Match Type
               <button class="help-btn" on:click={() => openHelp('matchType')} title="Learn about match types">?</button>
             </h3>
             
@@ -341,7 +349,7 @@
           <!-- Must Contain/Not Contain Section -->
           <section class="control-section">
             <h3>
-              <span class="emoji">🧩</span> Advanced Logic
+              <PuzzlePiece size={17} weight="bold" class="ph-inline" /> Advanced Logic
               <button class="help-btn" on:click={() => openHelp('mustContain')} title="Learn about must contain">?</button>
             </h3>
             
@@ -399,7 +407,7 @@
           <!-- Proximity Search Section -->
           <section class="control-section">
             <h3>
-              <span class="emoji">📏</span> Proximity Search
+              <Ruler size={17} weight="bold" class="ph-inline" /> Proximity Search
               <button class="help-btn" on:click={() => openHelp('proximity')} title="Learn about proximity search">?</button>
             </h3>
             
@@ -466,7 +474,7 @@
               {#if isSearching}
                 Searching...
               {:else}
-                <span class="emoji">🔍</span> Search
+                <MagnifyingGlass size={16} weight="bold" class="ph-inline" /> Search
               {/if}
             </button>
             <button class="btn-secondary" on:click={resetConfig}>
@@ -494,7 +502,7 @@
                     <span>Complexity: {generatedQuery.estimatedComplexity}/100</span>
                     <button class="help-btn-inline" on:click={() => openHelp('complexity')}>?</button>
                     {#if generatedQuery.estimatedComplexity > 60}
-                      <span class="warning"><span class="emoji">⚠️</span> Complex pattern - may be slow</span>
+                      <span class="warning"><Warning size={14} weight="bold" class="ph-inline" /> Complex pattern - may be slow</span>
                     {/if}
                   </div>
                 </div>

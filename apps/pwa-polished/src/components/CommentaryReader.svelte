@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import CommentaryNavigationBar from "./CommentaryNavigationBar.svelte";
+  import { ChatText } from "phosphor-svelte";
   import { get } from "svelte/store";
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
@@ -281,7 +282,7 @@
             {#if entry.verseStart === 0}
               <!-- Chapter-level commentary with sticky badge -->
               <div class="chapter-badge">
-                <span class="badge-icon">📘</span>
+                <ChatText size={16} weight="bold" />
                 <span class="badge-text">Chapter Commentary</span>
               </div>
             {:else}
@@ -411,10 +412,6 @@
     color: #ce93d8;
     font-weight: 500;
     margin-bottom: 12px;
-  }
-
-  .badge-icon {
-    font-size: 1rem;
   }
 
   .verse-header {

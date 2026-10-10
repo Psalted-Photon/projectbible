@@ -9,6 +9,7 @@
   import { navigationStore } from "../stores/navigationStore";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import CloseX from "./CloseX.svelte";
+  import { Info } from "phosphor-svelte";
 
   export let open = false;
   export let book = "";
@@ -107,7 +108,7 @@
   <!-- Header -->
   <div class="intro-header">
     <div class="intro-title">
-      <span class="intro-icon">📖</span>
+      <Info size={19} weight="bold" class="intro-icon" />
       Introduction to {book}
     </div>
     <CloseX edge on:click={close} />
@@ -189,8 +190,6 @@
     display: flex; align-items: center; gap: 7px;
     flex: 1; min-width: 0;
   }
-
-  .intro-icon { font-size: 1.1rem; }
 
   .intro-source {
     padding: 4px 16px 6px; font-size: .72rem; color: #888;

@@ -73,7 +73,7 @@ export const LIBRARY_TIPS: Tip[] = [
   {
     id: 'index-jump-across',
     area,
-    target: '.index .badges .emoji',
+    target: '.index .badges .jump-btn',
     title: 'Jump across',
     body: 'Open this in another work: the map, a bio, the encyclopedia, the topical index or the dictionary.',
   },

@@ -26,7 +26,7 @@
   import BrandSpinner from './BrandSpinner.svelte';
   import { download } from '../lib/backup/saveFile';
   import harmonyData from '../data/robertson-harmony.json';
-  import { BookOpenText, Plus, ArrowLeft } from 'phosphor-svelte';
+  import { BookOpenText, Plus, ArrowLeft, ChartPieSlice, Trash, Trophy } from 'phosphor-svelte';
   import DevotionalsTab from './devotionals/DevotionalsTab.svelte';
   import { devotionalTarget } from '../stores/devotionalStore';
   import CloseX from './CloseX.svelte';
@@ -1683,8 +1683,8 @@
 
               <div class="plan-overview">
                 <div class="overview-header">
-                  <h3><span class="emoji">📊</span> Plan Overview</h3>
-                  <button class="delete-btn" on:click={deleteCurrentPlan}><span class="emoji">🗑️</span> Delete Plan</button>
+                  <h3><ChartPieSlice size={17} weight="bold" class="ph-inline" /> Plan Overview</h3>
+                  <button class="delete-btn" on:click={deleteCurrentPlan}><Trash size={15} weight="bold" class="ph-inline" /> Delete Plan</button>
                 </div>
                 <div class="stats-grid">
                   <div><strong>Total Days:</strong> {currentReadingPlan.totalDays}</div>
@@ -1964,7 +1964,7 @@
       </div>
       {:else}
         <div class="auth-wall">
-          <div class="auth-wall-icon">📖</div>
+          <div class="auth-wall-icon"><BookOpenText size={48} weight="bold" /></div>
           <p class="auth-wall-text">Sign in to create and sync reading plans across all your devices.</p>
           <button class="auth-wall-btn" on:click={() => { close(); profileModalStore.open(); }}>Sign In to Continue →</button>
         </div>
@@ -1977,7 +1977,7 @@
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div class="congrats-overlay" on:click={() => congratsPlanName = null}>
       <div class="congrats-card" on:click|stopPropagation>
-        <div class="congrats-emoji">🎉</div>
+        <div class="congrats-emoji"><Trophy size={56} weight="bold" /></div>
         <h2 class="congrats-title">Plan Complete!</h2>
         <p class="congrats-body">You finished <strong>{congratsPlanName}</strong>. It has been moved to your Completed Archive.</p>
         <button class="congrats-close-btn" on:click={() => congratsPlanName = null}>Awesome!</button>
@@ -3153,7 +3153,8 @@
     text-align: center;
   }
   .auth-wall-icon {
-    font-size: 48px;
+    display: flex;
+    color: #60a5fa;
   }
   .auth-wall-text {
     color: #ccc;
@@ -3318,8 +3319,9 @@
     box-shadow: 0 24px 64px rgba(0,0,0,0.7);
   }
   .congrats-emoji {
-    font-size: 56px;
-    line-height: 1;
+    display: flex;
+    justify-content: center;
+    color: #f59e0b;
     margin-bottom: 16px;
   }
   .congrats-title {

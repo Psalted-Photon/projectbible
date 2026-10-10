@@ -15,7 +15,7 @@
    * without a socket each.
    */
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
-  import { ArrowLeft } from 'phosphor-svelte';
+  import { ArrowLeft, PushPin } from 'phosphor-svelte';
   import SharedPageView from './SharedPageView.svelte';
   import AuthorPill from './AuthorPill.svelte';
   import { sharedNotebookStore } from '../adapters/SharedNotebookStore';
@@ -161,7 +161,7 @@
           {#each pages as page (page.id)}
             <button class="pn-page" on:click={() => (open = page)}>
               <span class="pn-page-label">
-                {#if page.pinned}<span class="pn-pin">📌</span>{/if}
+                {#if page.pinned}<span class="pn-pin"><PushPin size="1em" weight="bold" class="ph-inline" /></span>{/if}
                 {pageLabel(page)}
               </span>
               <span class="pn-page-sub">

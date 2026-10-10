@@ -11,6 +11,7 @@
    * background so the press starts talking immediately.
    */
   import { onMount, onDestroy } from "svelte";
+  import { SpeakerHigh } from "phosphor-svelte";
   import { fade } from "../lib/motion";
   import { navigationStore } from "../stores/navigationStore";
   import { wakeAlarmStartOpen } from "../stores/wakeAlarmStore";
@@ -125,7 +126,7 @@
         <p class="because">{passage.because}</p>
 
         <button class="start-btn" on:click={start}>
-          <span class="start-icon">🗣</span>
+          <span class="start-icon"><SpeakerHigh size="1em" weight="bold" /></span>
           Start reading
         </button>
 
@@ -228,7 +229,7 @@
   }
   .start-btn:active { transform: translateY(0); }
 
-  .start-icon { font-size: 1.4rem; line-height: 1; }
+  .start-icon { font-size: 1.4rem; line-height: 1; display: flex; }
 
   .warm-note {
     font-size: 0.78rem;

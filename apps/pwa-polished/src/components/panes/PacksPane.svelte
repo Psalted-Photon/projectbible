@@ -39,6 +39,24 @@
   import { showNotice, errorText } from "../../stores/noticeStore";
   import { askConfirm } from "../../stores/confirmStore";
   import CloseX from "../CloseX.svelte";
+  import PackIcon from "../icons/PackIcon.svelte";
+  import {
+    BookOpen,
+    Hash,
+    MapPin,
+    MapTrifold,
+    Graph,
+    TextAa,
+    Package,
+    DownloadSimple,
+    Trash,
+    Globe,
+    FolderOpen,
+    SpeakerHigh,
+    Microphone,
+    Warning,
+  } from "phosphor-svelte";
+  import type { PackGlyph } from "../../lib/packInstaller";
 
   console.log("DEV:", import.meta.env.DEV);
   console.log("PROD:", import.meta.env.PROD);
@@ -308,7 +326,7 @@
     return (
       `${quality}\n\nThe voice downloads once and then runs entirely on your device — ` +
       "no connection needed, and nothing you listen to leaves the phone. Start it from " +
-      "the 🗣 button in any chapter."
+      "the {speaker} button in any chapter."
     );
   }
 
@@ -539,25 +557,24 @@
     }
   }
 
-  function getPackTypeIcon(type: string): string {
+  function getPackTypeIcon(type: string): PackGlyph {
     switch (type) {
       case "text":
       case "original-language":
-        return "📖";
+        return BookOpen;
       case "lexicon":
-        return "📚";
+        return Hash;
       case "places":
-        return "📍";
+        return MapPin;
       case "map":
-        return "🗺️";
+        return MapTrifold;
       case "cross-references":
-        return "🔗";
       case "references":
-        return "◆";
+        return Graph;
       case "morphology":
-        return "🔤";
+        return TextAa;
       default:
-        return "📦";
+        return Package;
     }
   }
 </script>
@@ -565,7 +582,7 @@
 <svelte:window on:keydown={handleKeydown} />
 
 <div class="packs-pane">
-  <h2><span class="emoji">📦</span> Pack Management</h2>
+  <h2><Package size={20} weight="bold" class="ph-inline" /> Pack Management</h2>
   <p class="db-line">
     {packCount}
     {packCount === 1 ? "pack" : "packs"} · {dbStats.verseCount.toLocaleString()} verses
@@ -593,7 +610,7 @@
       </p>
     {:else if remainingCount > 0}
       <button class="install-all-btn" on:click={handleInstallAll} disabled={$installBusy}>
-        <span class="emoji">⬇️</span> Install all
+        <DownloadSimple size={16} weight="bold" class="ph-inline" /> Install all
       </button>
       <p class="ia-note">
         {remainingCount} left · about {formatBytes(remainingBytes)} · Wi-Fi recommended
@@ -628,7 +645,7 @@
         >
           <div class="pill-text">
             <div class="pill-head">
-              <span class="pill-icon emoji">{pack.icon}</span>
+              <span class="pill-icon"><PackIcon icons={pack.icons} size={18} /></span>
               <span class="pill-name">{pack.name}</span>
               {#if state?.incomplete}
                 <span class="pill-flag">install unfinished</span>
@@ -657,7 +674,7 @@
                 on:click={() => handleRemovePack(pack.id)}
                 disabled={$installBusy}
                 title="Remove {pack.name}"
-                aria-label="Remove {pack.name}"><span class="emoji">🗑️</span></button
+                aria-label="Remove {pack.name}"><Trash size={16} weight="bold" /></button
               >
             {/if}
           </div>
@@ -675,7 +692,7 @@
           <div class="pill stacked">
             <div class="pill-text">
               <div class="pill-head">
-                <span class="pill-icon emoji">{getPackTypeIcon(pack.type)}</span>
+                <span class="pill-icon"><PackIcon icons={[getPackTypeIcon(pack.type)]} size={18} /></span>
                 <span class="pill-name">{pack.id}</span>
               </div>
               <!-- No info button on these rows, so the version and size ride
@@ -690,7 +707,7 @@
                 on:click={() => handleRemovePack(pack.id)}
                 disabled={$installBusy}
                 title="Remove {pack.id}"
-                aria-label="Remove {pack.id}"><span class="emoji">🗑️</span></button
+                aria-label="Remove {pack.id}"><Trash size={16} weight="bold" /></button
               >
             </div>
           </div>
@@ -706,10 +723,10 @@
       on:click={() => (showInstallUrl = !showInstallUrl)}
       disabled={$installBusy}
     >
-      <span class="emoji">🌐</span> From URL
+      <Globe size={15} weight="bold" class="ph-inline" /> From URL
     </button>
     <button class="small-btn" on:click={handleInstallFromFileClick} disabled={$installBusy}>
-      <span class="emoji">📁</span> From File
+      <FolderOpen size={15} weight="bold" class="ph-inline" /> From File
     </button>
   </div>
 
@@ -741,7 +758,7 @@
   />
 
   {#if isTtsSupported()}
-    <h3 class="sub-head"><span class="emoji">🗣</span> Voices (Read Aloud)</h3>
+    <h3 class="sub-head"><SpeakerHigh size={14} weight="bold" class="ph-inline" /> Voices (Read Aloud)</h3>
 
     {#if naturalVoices.length > 0}
       <p class="voice-group-note">
@@ -763,7 +780,7 @@
         <div class="pill" class:installed={isVoiceInstalled}>
           <div class="pill-text">
             <div class="pill-head">
-              <span class="pill-icon emoji">{voice.custom ? "🎙" : "🗣"}</span>
+              <span class="pill-icon"><PackIcon icons={[voice.custom ? Microphone : SpeakerHigh]} size={18} /></span>
               <span class="pill-name">{voice.label}</span>
             </div>
             <div class="pill-desc">
@@ -791,7 +808,7 @@
                 on:click={() => removeTtsVoice(voice.id)}
                 disabled={$installBusy || (!isVoiceInstalled && !canDownload)}
                 title="Remove {voice.label}"
-                aria-label="Remove {voice.label}"><span class="emoji">🗑️</span></button
+                aria-label="Remove {voice.label}"><Trash size={16} weight="bold" /></button
               >
             {:else}
               <button
@@ -808,7 +825,7 @@
     </div>
 
     <button class="small-btn" on:click={triggerVoiceFilePicker} disabled={$installBusy}>
-      <span class="emoji">🎙</span> Install voice from file
+      <Microphone size={15} weight="bold" class="ph-inline" /> Install voice from file
     </button>
     <p class="hint">
       Pick a voice's model (.onnx) and settings (.onnx.json) together.
@@ -824,7 +841,7 @@
   {/if}
 
   <p class="footnote">
-    <span class="emoji">⚠️</span> Only install packs from sources you trust. Removing
+    <Warning size={13} weight="bold" class="ph-inline" /> Only install packs from sources you trust. Removing
     a pack deletes all of its data.
   </p>
 </div>
@@ -840,7 +857,8 @@
       <div class="info-sub">{infoCard.subtitle}</div>
     {/if}
     {#each infoCard.body.split("\n\n") as paragraph}
-      <p>{paragraph}</p>
+      <!-- {speaker} in the text stands for the Read Aloud icon. -->
+      <p>{#each paragraph.split("{speaker}") as part, i}{#if i}<SpeakerHigh size={15} weight="bold" class="ph-inline" />{/if}{part}{/each}</p>
     {/each}
     <div class="info-meta">{infoCard.meta}</div>
   </div>
@@ -876,6 +894,7 @@
     /* The title shares its row with the pane's close X (Pane.svelte). */
     display: flex;
     align-items: center;
+    gap: 0.45rem;
     min-height: calc(40px * var(--bar-scale, 1));
     padding-right: calc(40px * var(--bar-scale, 1));
   }

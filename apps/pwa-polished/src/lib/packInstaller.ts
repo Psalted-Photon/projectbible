@@ -18,6 +18,21 @@
 
 import { writable, get } from 'svelte/store';
 import {
+  BookOpen,
+  TextAa,
+  ChatText,
+  Graph,
+  Translate,
+  Scroll,
+  Compass,
+  Books,
+  MapTrifold,
+  Image as ImageIcon,
+  BookBookmark,
+  Hourglass,
+  UsersThree,
+} from 'phosphor-svelte';
+import {
   importPackFromBytes,
   importArtImageShard,
   importAtlasGeometryShard,
@@ -48,6 +63,9 @@ const RESTART = { label: 'Restart', run: () => window.location.reload() };
 /** Dev builds read packs straight out of public/; production goes through the proxy. */
 export const PACK_BASE_URL = USE_BUNDLED_PACKS ? '/packs/consolidated' : '/api/packs';
 
+/** A Phosphor icon component, drawn by PackIcon.svelte. */
+export type PackGlyph = typeof BookOpen;
+
 export interface CatalogPack {
   id: string;
   name: string;
@@ -57,7 +75,8 @@ export interface CatalogPack {
   info: string;
   /** Fallback size string for when the manifest cannot be fetched. */
   size: string;
-  icon: string;
+  /** Usually one; Lexical shows its two halves (Strong's, dictionary) side by side. */
+  icons: PackGlyph[];
   url: string;
 }
 
@@ -73,7 +92,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "KJV, WEB, BSB, LXX2012",
     info: "Four more English Bibles alongside the NET you already have: the King James Version (1611), World English Bible, Berean Standard Bible, and LXX2012 — an English rendering of the Greek Septuagint.\n\nSwitch between them from the translation picker in any reader window. All public domain or freely licensed.",
     size: "28.21 MB",
-    icon: "📖",
+    icons: [BookOpen],
     url: `${PACK_BASE_URL}/translations.sqlite`,
   },
   {
@@ -82,7 +101,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "Modern + Webster 1913 definitions",
     info: "Two English dictionaries in one: a modern definition set, and Webster’s 1913 unabridged — which is what the KJV’s older vocabulary actually meant to the people reading it.\n\nTap any English word in the reader and choose Define. Public domain.",
     size: "48.67 MB",
-    icon: "📖",
+    icons: [TextAa],
     url: `${PACK_BASE_URL}/dictionary-en.sqlite`,
   },
   {
@@ -91,7 +110,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "Henry, Clarke, Calvin, Spurgeon + 14 more",
     info: "Eighteen commentary sets working through the text a verse at a time: Matthew Henry, Adam Clarke, John Calvin, Charles Spurgeon, John Wesley, Albert Barnes, A.T. Robertson, Martin Luther, Thomas Aquinas (Catena Aurea), Jamieson-Fausset-Brown, E.W. Bullinger, John Lightfoot, Abbott, KingComments, Family Bible Notes, NET Bible Notes, Quotations & Allusions, and the Treasury of Scripture Knowledge.\n\nOpen the Commentary window, or tap a verse and choose Commentary, to read what each one said about where you are. Public domain or free for personal use, via the CrossWire Sword Project and Plano Bible Chapel.",
     size: "224.84 MB",
-    icon: "💭",
+    icons: [ChatText],
     url: `${PACK_BASE_URL}/commentaries.sqlite`,
   },
   {
@@ -100,7 +119,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "43,000+ cross-references by keyword",
     info: "The Treasury of Scripture Knowledge: over 43,000 entries linking each verse to the other passages that echo it, organized by the specific word in the verse that triggers the link.\n\nCross-references show beside the verse you are reading and in the Cross-References window. Public domain (1830s).",
     size: "6.21 MB",
-    icon: "🔗",
+    icons: [Graph],
     url: `${PACK_BASE_URL}/tsk-references.sqlite`,
   },
   {
@@ -109,7 +128,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "Hebrew + Greek with morphology",
     info: "The Hebrew Old Testament and Greek New Testament in their original words, with every word tagged for grammar — tense, case, person and number.\n\nPowers the interlinear view and Greek read-aloud. Turn it on with the interlinear controls in the reader. Public domain.",
     size: "105.31 MB",
-    icon: "📜",
+    icons: [Translate],
     url: `${PACK_BASE_URL}/ancient-languages.sqlite`,
   },
   {
@@ -118,7 +137,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "Strong’s + English dictionaries",
     info: "Strong’s Hebrew and Greek lexicons plus supporting English dictionaries — root meanings, definitions, and every place a given original word appears in scripture.\n\nTap a Greek or Hebrew word in the interlinear to see its Strong’s entry and full verse list. The largest reference pack at around 370 MB. Public domain.",
     size: "372.67 MB",
-    icon: "📚",
+    icons: [Scroll, TextAa],
     url: `${PACK_BASE_URL}/lexical.sqlite`,
   },
   {
@@ -127,7 +146,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "Biblical places, map layers, reading order",
     info: "Biblical and ancient place locations, historical map layers running from the Old Testament through the Roman era, and a chronological reading order that puts the books in the sequence the events happened.\n\nFeeds the Map window and the chronological plan under Reading Plans. Public domain; place data CC BY 4.0 (OpenBible.info).",
     size: "13.82 MB",
-    icon: "🗺️",
+    icons: [Compass],
     url: `${PACK_BASE_URL}/study-tools.sqlite`,
   },
   {
@@ -136,7 +155,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "Bible encyclopedia + Nave’s topical index",
     info: "Two classic references in one pack. The International Standard Bible Encyclopedia (ISBE, 1915) — 9,380 scholarly articles on people, places, customs, plants and doctrine. And Nave’s Topical Bible — 5,322 topics indexing over 100,000 verse references, so looking up “mercy” or “fasting” gives you every passage on it.\n\nBrowse either A–Z from the Encyclopedia and Topical windows, or tap a word in the reader and choose More Info. Public domain; place data CC BY 4.0 (OpenBible.info).",
     size: "77.52 MB",
-    icon: "📕",
+    icons: [Books],
     url: `${PACK_BASE_URL}/encyclotopical.sqlite`,
   },
   {
@@ -145,7 +164,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "Offline world map + 16 eras of the biblical world",
     info: "A drawn map of the world that works with no connection, and a timeline of sixteen eras over the top of it — from Abraham leaving Ur to the later Roman empire. Tap any place for the verses that name it, its encyclopedia article and a photograph.\n\nEvery place Scripture names is searchable, alongside 562,000 modern ones. Opens from the Map window, and from the Map tab on any place in the encyclopedia.\n\nNatural Earth (public domain); Barrington Atlas and OpenStreetMap (ODbL); Digital Atlas of the Roman Empire (CC BY-SA); OpenBible.info and GeoNames (CC BY 4.0).",
     size: "33.78 MB",
-    icon: "🗺️",
+    icons: [MapTrifold],
     url: `${PACK_BASE_URL}/atlas-map.sqlite`,
   },
   {
@@ -154,7 +173,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "Public-domain paintings of Bible scenes",
     info: "Famous paintings by the old masters, matched to the passages they depict. The images ship inside the pack, so they display with no connection.\n\nA small art icon appears in the text wherever a painting exists — tap it to view full screen. Public domain — Wikimedia Commons.",
     size: "83.45 MB",
-    icon: "🖼️",
+    icons: [ImageIcon],
     url: `${PACK_BASE_URL}/art.sqlite`,
   },
   {
@@ -163,7 +182,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "Morning and Evening, Faith's Checkbook, Daily Light",
     info: "Three classic daily devotionals, a reading for every morning and evening of the year. Charles Spurgeon's Morning and Evening, a short meditation on one verse twice a day. Spurgeon's Faith's Checkbook, a promise of God for each day. And Bagster's Daily Light on the Daily Path, morning and evening readings made entirely of Scripture.\n\nRead them from Reading Plan → Devotionals, or from the link under the Verse of the Day. Every reference opens the reader. Public domain.",
     size: "8.59 MB",
-    icon: "📖",
+    icons: [BookBookmark],
     url: `${PACK_BASE_URL}/devotionals.sqlite`,
   },
   {
@@ -172,7 +191,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "The whole story on one strip, with kings and prophets",
     info: "About four hundred events from Creation to Revelation, in the eras they belong to: every king of Judah and Israel with the Bible's verdict on him, the prophets, the empires and the rulers Scripture names, the four hundred years between the Testaments, the lives of the patriarchs, and when each book was written. Tap anything to read it.\n\nOpens from the Timeline window. Dates are modern conservative (Exodus 1446 BC, Thiele for the kings). CC BY-SA 4.0 (Theographic Bible Metadata).",
     size: "0.31 MB",
-    icon: "⏳",
+    icons: [Hourglass],
     url: `${PACK_BASE_URL}/timeline.sqlite`,
   },
   {
@@ -181,7 +200,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     description: "Every named person: family, dates, verses",
     info: "Every named person in scripture: what their name means, roughly when and where they lived, their family relationships, and every verse they appear in.\n\nTap a name in the reader and choose Bio. CC BY-SA 4.0 (Theographic); name meanings from Hitchcock’s (public domain).",
     size: "3.82 MB",
-    icon: "👤",
+    icons: [UsersThree],
     url: `${PACK_BASE_URL}/people.sqlite`,
   },
 ];

@@ -33,6 +33,7 @@
   } from '../lib/tts/readingEngine.js';
   import BrandSpinner from './BrandSpinner.svelte';
   import CloseX from './CloseX.svelte';
+  import { SpeakerHigh, Pause } from 'phosphor-svelte';
 
   export let translation: string;
   export let book: string;
@@ -150,7 +151,7 @@
           : 'Read this chapter aloud (TextToSpeech)'}
         aria-label={isLive ? 'Pause or resume reading' : 'Read aloud'}
       >
-        {isLive && $readingState === 'playing' ? '⏸' : '🗣'}
+        {#if isLive && $readingState === 'playing'}<Pause size="1em" weight="bold" />{:else}<SpeakerHigh size="1em" weight="bold" />{/if}
       </button>
       {#if isLive}
         <span class="tts-hint">Controls are in the bar at the top</span>

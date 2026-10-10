@@ -27,6 +27,7 @@
   import { beginPlanRun } from '../lib/tts/planTicker';
   import { navigationStore } from '../stores/navigationStore';
   import BrandSpinner from './BrandSpinner.svelte';
+  import { SpeakerHigh } from 'phosphor-svelte';
 
   /** Close the modal once playback is under way. */
   export let onStarted: (() => void) | null = null;
@@ -169,7 +170,7 @@
     <span class="play-today-note"><BrandSpinner size={14} /> Starting…</span>
   {:else}
     <button class="play-today-btn" on:click={handleClick} title="Read this whole reading aloud">
-      🗣 {label}
+      <SpeakerHigh size={15} weight="bold" class="ph-inline" /> {label}
     </button>
   {/if}
 {/if}

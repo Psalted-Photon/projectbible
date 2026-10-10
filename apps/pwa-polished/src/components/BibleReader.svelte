@@ -142,7 +142,7 @@
   import { countWordsInBook } from "../lib/repeatCounts";
   import TtsPlayer from "./TtsPlayer.svelte";
   import { FEATURES } from "../config";
-  import { Info } from "phosphor-svelte";
+  import { Info, Image as ImageIcon, BookOpenText, CheckCircle } from "phosphor-svelte";
   import {
     synthesizeWordSpeech,
     unlockTtsAudio,
@@ -6473,7 +6473,7 @@
                 class="book-intro-btn"
                 on:click={() => openBookIntroPanel(chapterData.book)}
                 title="Introduction to {chapterData.book}"
-              >📖 Introduction</button>
+              ><Info size={15} weight="bold" />Introduction</button>
               {#each (introPillsByBook.get(chapterData.book) ?? []) as rec (rec.word)}
                 <div class="intro-repeat-wrap">
                   <button
@@ -6629,7 +6629,7 @@
                     tabindex="0"
                     on:click|stopPropagation={() => openArtWindow(artScene)}
                     on:keypress|stopPropagation={(e) => e.key === 'Enter' && openArtWindow(artScene)}
-                  >🖼️</span>
+                  ><ImageIcon size={13} weight="bold" class="ph-inline" /></span>
                 {/if}
                 </span>
                 <span class="verse-body">
@@ -6680,7 +6680,7 @@
               {#each chStdCtxs as ctx}
                 {#if ctx.isLastChapter || !ctx.isSequentialNext}
                   <div class="plan-continue-row">
-                    <span class="plan-continue-name">📖 {ctx.planName}</span>
+                    <span class="plan-continue-name"><BookOpenText size={13} weight="bold" class="ph-inline" /> {ctx.planName}</span>
                     {#if ctx.isLastChapter}
                       <button
                         class="plan-day-complete-btn"
@@ -6735,7 +6735,7 @@
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="day-complete-overlay" on:click={() => dayCompleteMessage = null}>
     <div class="day-complete-card" on:click|stopPropagation>
-      <div class="day-complete-emoji">🎉</div>
+      <div class="day-complete-emoji"><CheckCircle size={52} weight="bold" /></div>
       <p class="day-complete-title">Day Complete!</p>
       <p class="day-complete-plan">{dayCompleteMessage}</p>
       <button class="day-complete-btn" on:click={() => dayCompleteMessage = null}>Great!</button>
@@ -7178,7 +7178,7 @@
   }
 
   .art-icon {
-    font-size: 11px;
+    color: #fb7185;
     line-height: 1;
     cursor: pointer;
     margin: 0 2px;
@@ -7283,7 +7283,9 @@
   }
 
   :global(.day-complete-emoji) {
-    font-size: 48px;
+    display: flex;
+    justify-content: center;
+    color: #4ade80;
     margin-bottom: 12px;
   }
 

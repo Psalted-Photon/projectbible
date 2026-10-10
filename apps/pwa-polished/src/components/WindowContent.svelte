@@ -2,6 +2,7 @@
   import type { ComponentProps } from "svelte";
   import type { DockEdge, WindowState } from "../lib/stores/windowStore";
   import WindowContentSelector from "./WindowContentSelector.svelte";
+  import PanelIcon from "./icons/PanelIcon.svelte";
   import BibleReader from "./BibleReader.svelte";
   // The timeline window's contents.
   import TimelinePane from "./TimelinePane.svelte";
@@ -57,7 +58,7 @@
        only have to guard this. -->
   {#if !$userProfileStore.isSignedIn}
     <div class="auth-wall">
-      <div class="auth-wall-icon">📔</div>
+      <div class="auth-wall-icon"><PanelIcon name="journal" size={44} plain /></div>
       <p class="auth-wall-text">Sign in to write in your journal and keep it synced across all your devices.</p>
       <button class="auth-wall-btn" on:click={() => profileModalStore.open()}>Sign In to Continue →</button>
     </div>
@@ -148,7 +149,8 @@
     text-align: center;
   }
   .auth-wall-icon {
-    font-size: 44px;
+    display: flex;
+    color: #f2893e;
   }
   .auth-wall-text {
     margin: 0;

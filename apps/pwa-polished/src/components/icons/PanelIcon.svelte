@@ -122,6 +122,9 @@
 <script lang="ts">
   export let name: PanelIconName;
   export let size = 20;
+  /** One line in the text color, as thick as Phosphor's bold, for sitting
+   *  among Phosphor icons (library badges, sign-in walls). */
+  export let plain = false;
 
   $: paths = PATHS[name];
 </script>
@@ -138,12 +141,18 @@
   aria-hidden="true"
   focusable="false"
 >
-  <g stroke="#000" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.55">
-    {#each paths as d}<path {d} />{/each}
-  </g>
-  <g stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    {#each paths as d}<path {d} />{/each}
-  </g>
+  {#if plain}
+    <g stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+      {#each paths as d}<path {d} />{/each}
+    </g>
+  {:else}
+    <g stroke="#000" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.55">
+      {#each paths as d}<path {d} />{/each}
+    </g>
+    <g stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      {#each paths as d}<path {d} />{/each}
+    </g>
+  {/if}
 </svg>
 
 <style>

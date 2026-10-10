@@ -493,8 +493,11 @@
     background: #f5f5f5;
   }
 
-  :global(.emoji) {
+  /* A Phosphor icon sitting in a line of text. */
+  :global(svg.ph-inline) {
     display: inline-block;
+    vertical-align: -0.15em;
+    flex-shrink: 0;
   }
 
   :global(body.sepia-theme) {

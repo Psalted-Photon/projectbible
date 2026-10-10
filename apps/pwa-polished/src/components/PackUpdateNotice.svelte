@@ -37,6 +37,7 @@
     ignoreUpdate,
   } from '../lib/packUpdates';
   import BrandSpinner from './BrandSpinner.svelte';
+  import PackIcon from './icons/PackIcon.svelte';
 
   /** Catalog ids of the packs this feature reads. */
   export let packs: string[];
@@ -76,7 +77,7 @@
   <div class="pu" role="status">
     {#each waiting as pack (pack.id)}
       <div class="pu-row">
-        <span class="pu-icon" aria-hidden="true">{pack.icon}</span>
+        <span class="pu-icon"><PackIcon icons={pack.icons} size={18} /></span>
         <span class="pu-text">
           <span class="pu-name">New version of {pack.name}</span>
           <span class="pu-desc">You can keep using the one you have while it downloads.</span>
@@ -150,10 +151,10 @@
   }
 
   .pu-icon {
-    font-size: 1.15rem;
+    display: inline-flex;
     flex-shrink: 0;
-    width: 1.5rem;
-    text-align: center;
+    min-width: 1.5rem;
+    justify-content: center;
   }
 
   .pu-text {

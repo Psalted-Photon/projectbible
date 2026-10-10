@@ -19,6 +19,7 @@
   import { openDB } from "../adapters/db";
   import GetPacksCard from "./GetPacksCard.svelte";
   import CloseX from "./CloseX.svelte";
+  import { Lightbulb, TextAa, Scroll } from "phosphor-svelte";
 
   /**
    * The dictionary: an English word's definitions, or a tapped Greek or Hebrew
@@ -461,7 +462,7 @@
         {#if morphologyData.strongsId}
           <div class="hint-section">
             <p class="hint">
-              <span class="emoji">💡</span> Tap the Strong's number for its full entry in Strong's
+              <Lightbulb size={15} weight="bold" class="ph-inline" /> Tap the Strong's number for its full entry in Strong's
             </p>
           </div>
         {/if}
@@ -502,7 +503,7 @@
                 {#if effectiveLexicalEntries.wordset && effectiveLexicalEntries.wordset.length > 0}
                 <div class="info-section">
                   <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
-                    <span class="emoji">📖</span> Modern Definitions
+                    <TextAa size={19} weight="bold" /> Modern Definitions
                   </h3>
                   {#each effectiveLexicalEntries.wordset as def}
                     <div class="modern-def" style="margin-bottom: 12px;">
@@ -527,7 +528,7 @@
                 <!-- Historic Definitions (GCIDE/Webster 1913) -->
                 <div class="info-section">
                 <h3 style="color: #8d6e63; display: flex; align-items: center; gap: 8px;">
-                  <span class="emoji">📜</span> Historic Definitions
+                  <Scroll size={19} weight="bold" /> Historic Definitions
                   <span style="font-size: 12px; color: #666; font-weight: normal;">Webster 1913</span>
                 </h3>
                 {#if effectiveLexicalEntries.historic && effectiveLexicalEntries.historic.length > 0}

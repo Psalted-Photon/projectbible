@@ -22,7 +22,21 @@
     installMessage,
   } from "../../lib/packInstaller";
   import { paneStore } from "../../stores/paneStore";
-  import { Gear, Palette, BookOpenText, SpeakerHigh, Globe, Package, LockSimple, Wrench } from 'phosphor-svelte';
+  import {
+    Gear,
+    Palette,
+    BookOpenText,
+    SpeakerHigh,
+    Globe,
+    Package,
+    LockSimple,
+    Wrench,
+    DownloadSimple,
+    Alarm,
+    CheckCircle,
+    CloudArrowDown,
+    Trash,
+  } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
   import SettingsSection from "../SettingsSection.svelte";
   import { getInterlinearSettings } from "../../adapters/settings";
@@ -1159,7 +1173,7 @@
           on:click={getAllVoicesNow}
           disabled={gettingVoices || $installBusy}
         >
-          <span class="icon emoji">⬇️</span>
+          <span class="icon"><DownloadSimple size={22} weight="bold" /></span>
           <span class="text">
             {gettingVoices && $installMessage
               ? $installMessage
@@ -1196,7 +1210,7 @@
           on:click={getAllVoicesNow}
           disabled={gettingVoices || $installBusy}
         >
-          <span class="icon emoji">⬇️</span>
+          <span class="icon"><DownloadSimple size={18} weight="bold" /></span>
           <span class="text">
             {gettingVoices && $installMessage
               ? $installMessage
@@ -1260,7 +1274,7 @@
         </label>
       </div>
       <button class="packs-button alarm-button" on:click={openWakeAlarmPane}>
-        <span class="icon emoji">⏰</span>
+        <span class="icon"><Alarm size={22} weight="bold" /></span>
         <span class="text">Auto-Read Alarm{alarmSummary ? ` — ${alarmSummary}` : ""}</span>
         <span class="arrow">→</span>
       </button>
@@ -1279,7 +1293,7 @@
         on:click={installApp}
         disabled={!installReady}
       >
-        <span class="icon emoji">{installedApp ? "✅" : "⬇️"}</span>
+        <span class="icon">{#if installedApp}<CheckCircle size={22} weight="bold" />{:else}<DownloadSimple size={22} weight="bold" />{/if}</span>
         <span class="text">{installedApp ? "App installed" : "Install app"}</span>
       </button>
       <p class="install-hint">{installHint}</p>
@@ -1393,7 +1407,7 @@
         on:click={checkForUpdates}
         disabled={checkingUpdate || clearing}
       >
-        <span class="icon emoji">🔄</span>
+        <span class="icon"><CloudArrowDown size={22} weight="bold" /></span>
         <span class="text">{checkingUpdate ? 'Checking...' : 'Check for Updates'}</span>
       </button>
       <label class="auto-check-toggle">
@@ -1417,7 +1431,7 @@
           Install, remove and repair every pack and Read Aloud voice in one place.
         </p>
         <button class="packs-button" on:click={openPacksPane}>
-          <span class="icon emoji">📦</span>
+          <span class="icon"><Package size={22} weight="bold" /></span>
           <span class="text">Manage Packs</span>
           <span class="arrow">→</span>
         </button>
@@ -1433,7 +1447,7 @@
           on:click={clearCacheAndReload}
           disabled={clearing || checkingPending || checkingUpdate}
         >
-          <span class="icon emoji">🗑️</span>
+          <span class="icon"><Trash size={22} weight="bold" /></span>
           <span class="text">{checkingPending ? 'Checking…' : clearing ? 'Clearing...' : 'Clear Cache & Reload'}</span>
         </button>
       </div>
@@ -1831,10 +1845,6 @@
     margin-top: 0.5rem;
     font-size: 0.85rem;
   }
-  .packs-button.voices-button-small .icon {
-    font-size: 1.1rem;
-  }
-
   /* Same affordance as Manage Packs, but sitting inside the Read Aloud group. */
   .alarm-button {
     margin-top: 1rem;
@@ -1850,7 +1860,7 @@
   }
 
   .packs-button .icon {
-    font-size: 1.5rem;
+    display: flex;
   }
 
   .packs-button .text {
@@ -1896,7 +1906,7 @@
   }
 
   .check-update-button .icon {
-    font-size: 1.5rem;
+    display: flex;
   }
 
   .check-update-button .text {
@@ -1991,7 +2001,7 @@
   }
 
   .clear-cache-button .icon {
-    font-size: 1.5rem;
+    display: flex;
   }
 
   .clear-cache-button .text {

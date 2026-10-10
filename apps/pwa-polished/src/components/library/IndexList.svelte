@@ -14,6 +14,8 @@
   import { lexicalModalStore } from "../../stores/lexicalModalStore";
   import { familyTreeIds } from "../../lib/familyTree/data";
   import { reveal } from "../../lib/motion";
+  import { MapPin, Books, Tag, TextAa, Tree } from "phosphor-svelte";
+  import PanelIcon from "../icons/PanelIcon.svelte";
 
   /**
    * The contents list — the table of contents for one reference work. Draws an
@@ -526,35 +528,36 @@
                  and a button inside a button is invalid and would fire both. -->
             <span class="badges">
               {#if shows("place") && row.isPlace}
-                <button class="emoji" title="Show on the map" aria-label="Show {row.name} on the map" on:click={(e) => openBadge(e, row, "place")}>📍</button>
+                <button class="jump-btn" title="Show on the map" aria-label="Show {row.name} on the map" on:click={(e) => openBadge(e, row, "place")}><MapPin size={14} weight="bold" /></button>
               {/if}
               {#if shows("bio") && row.hasBio}
-                <button class="emoji" title="Read the bio" aria-label="Bio of {row.name}" on:click={(e) => openBadge(e, row, "bio")}>👤</button>
+                <button class="jump-btn" title="Read the bio" aria-label="Bio of {row.name}" on:click={(e) => openBadge(e, row, "bio")}><PanelIcon name="people" size={14} plain /></button>
               {/if}
               {#if shows("entry") && row.hasEntry}
-                <button class="emoji" title="Read the encyclopedia article" aria-label="Encyclopedia article on {row.name}" on:click={(e) => openBadge(e, row, "entry")}>📕</button>
+                <button class="jump-btn" title="Read the encyclopedia article" aria-label="Encyclopedia article on {row.name}" on:click={(e) => openBadge(e, row, "entry")}><Books size={14} weight="bold" /></button>
               {/if}
               {#if shows("topic") && row.hasTopic}
-                <button class="emoji" title="Open the topic in Nave's" aria-label="Nave's topic {row.name}" on:click={(e) => openBadge(e, row, "topic")}>📚</button>
+                <button class="jump-btn" title="Open the topic in Nave's" aria-label="Nave's topic {row.name}" on:click={(e) => openBadge(e, row, "topic")}><Tag size={14} weight="bold" /></button>
               {/if}
               {#if shows("dict") && row.hasDict}
-                <button class="emoji" title="Look it up in the dictionary" aria-label="Dictionary entry for {row.name}" on:click={(e) => openBadge(e, row, "dict")}>📖</button>
+                <button class="jump-btn" title="Look it up in the dictionary" aria-label="Dictionary entry for {row.name}" on:click={(e) => openBadge(e, row, "dict")}><TextAa size={14} weight="bold" /></button>
               {/if}
-              <!-- Right after 📖, directly beside ★ — not before 📍. 📍 never
-                   appears on a People row, so "before 📍" would silently make
-                   🌳 the leftmost badge, and its screen position would shift
-                   row to row depending on which other badges that row has.
-                   After 📖 gives it a steady column. -->
+              <!-- Right after the dictionary badge, directly beside ★ — not
+                   before the map pin. The pin never appears on a People row,
+                   so "before the pin" would silently make the tree the
+                   leftmost badge, and its screen position would shift row to
+                   row depending on which other badges that row has. After
+                   the dictionary badge gives it a steady column. -->
               {#if onOpenTree && $familyTreeIds.has(String(row.id))}
                 <button
-                  class="emoji"
+                  class="jump-btn"
                   title="See on the family tree"
                   aria-label="{row.name} on the family tree"
                   on:click={(e) => {
                     e.stopPropagation();
                     onOpenTree?.(row);
                   }}
-                >🌳</button>
+                ><Tree size={14} weight="bold" /></button>
               {/if}
             </span>
             <button
@@ -782,11 +785,12 @@
   /* Each dot is its own button now, so tapping one goes to that work instead of
      opening the row. Padded out to something a thumb can hit without making the
      glyph itself any bigger. */
-  .emoji {
+  .jump-btn {
+    display: inline-flex;
     background: none;
     border: none;
     padding: 4px 3px;
-    font-size: 10px;
+    color: inherit;
     line-height: 1;
     opacity: 0.75;
     cursor: pointer;
@@ -794,7 +798,7 @@
       opacity 0.12s,
       transform 0.12s;
   }
-  .emoji:hover {
+  .jump-btn:hover {
     opacity: 1;
     transform: scale(1.3);
   }
