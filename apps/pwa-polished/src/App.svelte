@@ -14,6 +14,8 @@
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
   import TutorialLayer from "./tutorial/TutorialLayer.svelte";
   import SharedJoinLayer from "./components/SharedJoinLayer.svelte";
+  import MovingScreen from "./components/MovingScreen.svelte";
+  import { checkMove, movingScreenOpen } from "./lib/move/moveCheck";
   import { wakeAlarmStartOpen } from "./stores/wakeAlarmStore";
   import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
@@ -81,6 +83,10 @@
   // Initialize Eruda for mobile debugging
   onMount(() => {
     console.log("🚀 App mounted, initializing...");
+
+    // On hexapla.app: forward an empty device to irisbible.com, or open the
+    // moving screen. Does nothing on any other address.
+    void checkMove();
 
     /**
      * Links that arrive with something to open.
@@ -458,6 +464,12 @@
     <!-- A ?join= link, or a code typed into the Shared tab. Draws nothing
          until one arrives. -->
     <SharedJoinLayer />
+
+    <!-- On hexapla.app only: "irisBible has a new home". Opens from
+         lib/move/moveCheck.ts, never blocks the app for good. -->
+    {#if $movingScreenOpen}
+      <MovingScreen />
+    {/if}
 
     <!-- Parallel accounts. Not a docked window: it covers the reader whole, and
          mounting it behind the {#if} rather than hiding it is what guarantees
