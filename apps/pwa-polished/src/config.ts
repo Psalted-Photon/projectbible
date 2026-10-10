@@ -3,8 +3,10 @@
 /**
  * App Configuration
  * 
- * Central configuration for the Hexapla app.
+ * Central configuration for the irisBible app.
  */
+
+export const APP_NAME = 'irisBible';
 
 export const APP_VERSION = '1.0.0';
 

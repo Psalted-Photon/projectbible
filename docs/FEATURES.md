@@ -334,7 +334,7 @@ Turn it on in Settings → Privacy, and your fingerprint or face is needed befor
 - **Manage it** — see your fingerprint devices and remove one, add this device's fingerprint, or make a new recovery code, which retires the old one.
 - **Turning it off** asks twice, unscrambles everything, and deletes nothing until the readable copies are safely in the cloud.
 - **If the passkey and the recovery code are both lost, the journal is gone for good.** Setup says so and asks you to confirm twice.
-- **Where the fingerprint works:** iPhone on iOS 18.4 or later, Android Chrome and Samsung Internet, Mac, and Windows 11. Firefox on Android and older iPhones use the recovery code. Passkeys belong to hexapla.app, so install the home-screen app from there.
+- **Where the fingerprint works:** iPhone on iOS 18.4 or later, Android Chrome and Samsung Internet, Mac, and Windows 11. Firefox on Android and older iPhones use the recovery code. Passkeys belong to the address they were made on (irisbible.com, or hexapla.app until it closes), so install the home-screen app from the address you set the lock up on.
 - **Still visible to the cloud:** which days have an entry, roughly how long each is, and when it was edited.
 
 ## 13. Reading Plans & Progress
@@ -386,7 +386,7 @@ Three classic daily devotionals in one free pack (Devotionals, about 9 MB, publi
 - **Daily Light, fragment by fragment** — Bagster's King James fragments exactly as he arranged them, each with its own reference. Tap a fragment to read the full verse in your translation.
 - **Every reference opens the reader** at that verse with the usual fade, and a book-with-a-ribbon crumb brings you back to the reading where you left it.
 - **From the Verse of the Day** — a "Morning Devotional" link before noon and "Evening Devotional" after, by your time zone. You choose which devotional it opens.
-- **Share a reading** — the headline verse, the devotional and date, and a link that opens that reading in Hexapla. The Card tab adds a small line such as "Spurgeon · Morning and Evening · January 1".
+- **Share a reading** — the headline verse, the devotional and date, and a link that opens that reading in irisBible. The Card tab adds a small line such as "Spurgeon · Morning and Evening · January 1".
 - **Reminders** — a morning and an evening time, sent to your phone like the Wake Alarm. Tapping one opens the reading. Needs sign-in, and on iPhone the app on your home screen.
 
 ## 14. Maps & Places

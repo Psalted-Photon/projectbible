@@ -302,7 +302,7 @@ export const PART_TWO: TourStep[] = [
     skipIf: () => !inMainReader('.tts-player') || get(isReadingActive),
     doneWhen: () => get(isReadingActive),
     title: 'Read Aloud',
-    body: 'Tap the talking head and Hexapla reads the chapter to you.',
+    body: 'Tap the talking head and irisBible reads the chapter to you.',
   },
   {
     id: 'read-aloud-controls',

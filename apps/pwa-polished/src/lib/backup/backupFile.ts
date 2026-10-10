@@ -173,7 +173,7 @@ export async function prepareBackup(options: { includeJournal: boolean }): Promi
     },
   };
 
-  const name = `hexapla-backup-${localDateStr(new Date())}.json`;
+  const name = `irisbible-backup-${localDateStr(new Date())}.json`;
   const file = new File([JSON.stringify(backup, null, 2)], name, { type: 'application/json' });
 
   // A plan that was finished or archived sits in both lists; count it once.

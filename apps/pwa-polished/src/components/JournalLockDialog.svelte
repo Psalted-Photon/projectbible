@@ -223,7 +223,7 @@
           <p>You can still lock it with just the recovery code, but you’ll need to type the code each time the Journal opens. Or cancel, and turn the lock on from Safari or Chrome on your phone.</p>
         {:else}
           <p>Your device will ask for your fingerprint or face. It may ask twice.</p>
-          <p class="ld-quiet">A passkey called “Hexapla journal lock” gets saved in your password manager. Don’t delete it.</p>
+          <p class="ld-quiet">A passkey called “irisBible journal lock” gets saved in your password manager. Don’t delete it.</p>
         {/if}
       {:else if step === 'code'}
         {#if kind === 'new-code'}

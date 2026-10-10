@@ -91,7 +91,7 @@
    */
   $: inviteText = notebook
     ? [
-        `Join "${notebook.name || 'my notebook'}" in Hexapla:`,
+        `Join "${notebook.name || 'my notebook'}" in irisBible:`,
         '',
         inviteUrl,
         '',

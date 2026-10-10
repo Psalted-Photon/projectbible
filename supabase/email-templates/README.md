@@ -21,8 +21,8 @@ The `.txt` files are the plain-text alternates for the same three, for clients
 that refuse HTML.
 
 **Reply-To** is set per template in the dashboard's Reply-To field, pointing at
-a Namecheap alias (`hello@hexapla.app`), so replies reach a real inbox rather
-than the `send.hexapla.app` sending subdomain, which has no mailbox.
+a Namecheap alias (`hello@irisbible.com`), so replies reach a real inbox rather
+than the `send.irisbible.com` sending subdomain, which has no mailbox.
 
 ## Previewing a change
 
@@ -32,15 +32,15 @@ URL, and open it.
 
 ## Things that will break if changed carelessly
 
-- **The gem** is loaded from `https://hexapla.app/pb-gem.png`, and the
-  wordmark from `https://hexapla.app/email/hexapla-wordmark.png`. Both must
-  stay served from the live app; an email cannot carry a local file path. The
+- **The wordmark** is loaded from
+  `https://irisbible.com/email/irisbible-wordmark.png`. It must stay served
+  from the live app; an email cannot carry a local file path. The
   `email/` folder is excluded from the service-worker precache in
   `vite.config.ts` — only mail clients ever fetch it.
 - **The wordmark is an image, not a webfont.** Gmail's web and Android
-  clients strip `<link>` webfonts, so Fredericka the Great as live text would
+  clients strip `<link>` webfonts, so Milonga as live text would
   have fallen back to a plain serif for most people receiving these. The
-  rendered PNG cannot be substituted by any client. Its `alt` is "Hexapla", so
+  rendered PNG cannot be substituted by any client. Its `alt` is "irisBible", so
   a client with images turned off still reads the name.
 - **Inline styles and tables only.** A `<style>` block and flexbox are both
   widely stripped or ignored by mail clients. There is one `<style>` here, an
@@ -58,14 +58,17 @@ Supabase even handed the message over.
 
 ## Regenerating the wordmark
 
-`apps/pwa-polished/public/email/hexapla-wordmark.png` is Fredericka the Great
-set in the app's gold `#e6b84a`, rendered at 2x (380×121 px) and declared in
-the templates at 190×60. The source face is the same one Tutorial Mode ships,
-`apps/pwa-polished/public/fonts/tutorial/fredericka-the-great-400.woff2`;
-Pillow cannot read woff2, so regenerating it means taking the TTF from the
-Google Fonts CSS at
-`https://fonts.googleapis.com/css2?family=Fredericka+the+Great` and drawing the
-word onto a transparent canvas, cropped to the ink with a 6 px margin so the
-descender on the "p" is not clipped.
+`apps/pwa-polished/public/email/irisbible-wordmark.png` is the plain wordmark,
+black on cream: Milonga letters in `#0b0e14` on `#fffaed`, the iris as the dot
+of the "i" in Bible, the same picture as the plain artboard in the logo design.
+It is a PNG at 2x (520×160 px, with the cream ground baked in so a mail client's
+dark mode cannot turn the black letters invisible) and is declared in the
+templates at 260×80 inside a cream header band. The iris in the word is the
+only one in the email.
 
-It only needs redoing if the wordmark text or the brand gold changes.
+To redraw it, set the word in a page that loads
+`public/fonts/milonga-400.woff2` and `public/pb-gem.png` using the layout in
+`Wordmark.svelte` with no shadows, screenshot it at 200px type, trim to the
+ink, resize to 440 px wide and pad it to 520×160 with cream.
+`hexapla-wordmark.png` beside it is the same picture under its old name, kept
+so emails already sent from hexapla.app keep their header.

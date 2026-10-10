@@ -743,14 +743,14 @@
   let installedApp = isInstalledApp();
   $: installReady = $canInstall && !installedApp;
   $: installHint = installedApp
-    ? "Hexapla is installed on this device."
+    ? "irisBible is installed on this device."
     : installReady
       ? "Opens full screen, with no browser bar, and still works with no signal."
       : isIOS()
         ? "Tap the Share button at the bottom of Safari, then Add to Home Screen."
         : isPhoneOrTablet()
           ? "Open your browser’s menu, then tap Install app or Add to Home screen."
-          : "Your browser has not offered to install Hexapla. Look for an install icon in its address bar.";
+          : "Your browser has not offered to install irisBible. Look for an install icon in its address bar.";
 
   async function installApp() {
     if (!installReady) return;
@@ -759,7 +759,7 @@
       // The installed window is a separate launch; this tab stays a tab. Recheck
       // rather than assume, so the row tells the truth either way.
       installedApp = isInstalledApp();
-      showNotice("Hexapla is on your home screen.");
+      showNotice("irisBible is on your home screen.");
     }
   }
 

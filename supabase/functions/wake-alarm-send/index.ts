@@ -183,7 +183,7 @@ function buildPayload(alarm: Pick<WakeAlarmRow, 'source' | 'book' | 'chapter'>):
   }
 
   return {
-    title: 'Hexapla',
+    title: 'irisBible',
     body,
     url: '/?alarm=1',
     tag: 'projectbible-wake-alarm',

@@ -52,7 +52,7 @@ export function pushSupport():
       return {
         supported: false,
         reason: 'ios-needs-install',
-        message: 'On iPhone, add Hexapla to your home screen first — Safari tabs cannot receive alarms.',
+        message: 'On iPhone, add irisBible to your home screen first — Safari tabs cannot receive alarms.',
       };
     }
     return {
@@ -66,7 +66,7 @@ export function pushSupport():
     return {
       supported: false,
       reason: 'ios-needs-install',
-      message: 'On iPhone, add Hexapla to your home screen first — Safari tabs cannot receive alarms.',
+      message: 'On iPhone, add irisBible to your home screen first — Safari tabs cannot receive alarms.',
     };
   }
 
@@ -258,7 +258,7 @@ export async function showTestNotification(): Promise<PushSetupResult> {
     };
   }
 
-  await registration.showNotification('Hexapla', {
+  await registration.showNotification('irisBible', {
     body: 'Test notification — this is how your Auto-Read Alarm will look.',
     icon: '/pwa-192x192.png',
     badge: '/notification-badge-96.png',

@@ -251,7 +251,7 @@ export function getBookNames(): string[] {
 /**
  * What the reader opens to, and the fallback wherever no translation is known.
  *
- * NET, because it is the one translation every copy of Hexapla has — it ships
+ * NET, because it is the one translation every copy of irisBible has — it ships
  * in the starter pack rather than being downloaded (scripts/build-starter-pack.mjs),
  * so this can never name something the device does not have.
  */

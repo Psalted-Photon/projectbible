@@ -1,17 +1,16 @@
 #!/usr/bin/env node
-// Builds the Hexapla app icons from the master art.
+// Builds the irisBible app icons from the master art.
 //
 //   node scripts/build-app-icons.mjs
 //
-// Source is public/Logo.png (1024x1024). The gold gem is located by its own
-// color rather than hardcoded coordinates, scaled, and composited true-centered
-// on a full-bleed black square — so changing Logo.png and re-running is all a
-// future logo change needs.
+// Source is public/Logo.png (1024x1024): the iris, a full circle on a
+// transparent ground. It is scaled and composited true-centered on a full-bleed
+// cream square (#FFFAED, always — the home-screen icon never changes color), so
+// changing Logo.png and re-running is all a future logo change needs.
 //
-// Every target is a downscale from the master's 547px gem, so nothing is
-// upscaled. Written because the icons had drifted to roughly half black margin:
-// the gem filled 50.6% of the app icon and 37% of the maskable and Apple ones,
-// the latter two also carrying a stray white frame.
+// Also written from the same master: favicon.ico (the iris alone, no tile),
+// pb-gem.png (the spinner and the email header), and the one-color
+// notification badge.
 
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -30,82 +29,50 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = join(REPO, 'apps', 'pwa-polished', 'public');
 const SOURCE = join(PUBLIC, 'Logo.png');
 
-// Gem height as a share of the canvas.
+const CREAM = { r: 0xff, g: 0xfa, b: 0xed };
+
+// Iris diameter as a share of the canvas.
 //
-// 84% on the "any" icons keeps the hexagon's top and bottom points clear of a
-// circular crop — pwa-192 doubles as the push notification icon, and Android
-// circle-crops that one.
+// 93% on the "any" icons is the design's own tile. The iris is a circle, so it
+// also survives the circular crop Android gives pwa-192, which doubles as the
+// push notification icon.
 //
-// 60% on the maskable icon is set by Android, not by the maskable spec. The
+// 62% on the maskable icon is set by Android, not by the maskable spec. The
 // spec promises a safe zone of 80% diameter, but Android hands the image to an
-// adaptive icon where only the inner 72dp of 108dp survives — about 67%. A
-// first attempt at 78% trusted the spec and lost its points on a real home
-// screen.
-//
-// What has to fit is the gem's furthest pixel from center, and that is NOT half
-// its height. The gem is a pointy-top hexagon whose side vertices sit at
-// roughly (W/2, H/4); with W=505 and H=547 that diagonal is longer than H/2, so
-// the sides bind before the points do. assertMaskableFits() below measures it
-// rather than trusting the arithmetic — 63% looked right on paper and still
-// overran the safe zone by a pixel.
+// adaptive icon where only the inner 72dp of 108dp survives — about 67%. The
+// iris is a circle, so its furthest pixel from center is simply half its
+// diameter; assertMaskableFits() below measures it rather than trusting the
+// arithmetic.
 const TARGETS = [
-  { file: 'pwa-64x64.png',                size: 64,  fill: 0.84 },
-  { file: 'pwa-192x192.png',              size: 192, fill: 0.84 },
-  { file: 'pwa-512x512.png',              size: 512, fill: 0.84 },
-  { file: 'maskable-icon-512x512.png',    size: 512, fill: 0.60 },
-  { file: 'apple-touch-icon-180x180.png', size: 180, fill: 0.86 }
+  { file: 'pwa-64x64.png',                size: 64,  fill: 0.93 },
+  { file: 'pwa-192x192.png',              size: 192, fill: 0.93 },
+  { file: 'pwa-512x512.png',              size: 512, fill: 0.93 },
+  { file: 'maskable-icon-512x512.png',    size: 512, fill: 0.62 },
+  { file: 'apple-touch-icon-180x180.png', size: 180, fill: 0.88 }
 ];
 
 // Android's adaptive-icon safe zone, as a share of the icon's width.
 const ANDROID_SAFE_ZONE = 72 / 108;
 
-// At favicon sizes legibility beats margin.
+// At favicon sizes legibility beats margin, and the tab supplies its own
+// background, so these are the bare iris with a transparent surround.
 const FAVICON_SIZES = [16, 32, 48];
-const FAVICON_FILL = 0.92;
 
-/** Bounding box of the gold gem, found by color so the art can move. */
-async function findGem(file) {
-  const { data, info } = await sharp(file).ensureAlpha().raw()
-    .toBuffer({ resolveWithObject: true });
-  const { width: w, height: h, channels: c } = info;
-  let minX = w, minY = h, maxX = -1, maxY = -1;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * c;
-      const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
-      if (a < 128) continue;
-      // warm, red >= green > blue, and clearly not gray
-      if (r > 90 && g > 60 && r - b > 50 && g - b > 30) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-  if (maxX < 0) throw new Error('no gold found in ' + file);
-  return { left: minX, top: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+/** The iris scaled to `diameter` px, transparent surround kept. */
+function irisAt(diameter) {
+  return sharp(SOURCE).resize(diameter, diameter, { fit: 'fill' });
 }
 
-/**
- * One icon: the gem scaled so its height is `fill` of `size`, centered on opaque
- * black. The crop carries the master's own black backing, which meets the black
- * canvas seamlessly, so the gem's anti-aliased edge stays clean.
- */
-async function renderIcon(gem, size, fill) {
-  const scale = (size * fill) / gem.height;
-  const w = Math.max(1, Math.round(gem.width * scale));
-  const h = Math.max(1, Math.round(gem.height * scale));
-  const layer = await sharp(SOURCE).extract(gem).resize(w, h, { fit: 'fill' }).toBuffer();
+/** One icon: the iris centered on an opaque cream square. */
+async function renderIcon(size, fill) {
+  const d = Math.max(1, Math.round(size * fill));
+  const layer = await irisAt(d).png().toBuffer();
   return sharp({
-    create: { width: size, height: size, channels: 3, background: { r: 0, g: 0, b: 0 } }
+    create: { width: size, height: size, channels: 3, background: CREAM }
   })
-    .composite([{ input: layer, left: Math.round((size - w) / 2), top: Math.round((size - h) / 2) }])
-    // A gem this size is mostly gradient, and 24-bit RGB costs 220KB for the
-    // 512 alone. A 256-color palette is 4x smaller at a mean error of 0.56/255
-    // — indistinguishable here. Do not lower it: sharp snaps anything under 256
-    // down to a 16-color palette, which bands the gold visibly.
-    .png({ palette: true, colours: 256, effort: 10 })
+    .composite([{ input: layer, left: Math.round((size - d) / 2), top: Math.round((size - d) / 2) }])
+    // 24-bit RGB is kept: the iris is a smooth gradient and a palette bands it.
+    .png({ compressionLevel: 9, effort: 10 })
     .toBuffer();
 }
 
@@ -136,28 +103,51 @@ function buildIco(images) {
   return Buffer.concat([header, entries, ...images.map(i => i.data)]);
 }
 
-const gem = await findGem(SOURCE);
-console.log('gem located in Logo.png: ' + gem.width + 'x' + gem.height +
-  ' at (' + gem.left + ',' + gem.top + ')\n');
+/**
+ * The notification badge: Android uses only its alpha, so it is the iris as a
+ * white disc with the dark cross cut out of it.
+ */
+async function renderBadge(size) {
+  const { data, info } = await irisAt(size).ensureAlpha().raw()
+    .toBuffer({ resolveWithObject: true });
+  const out = Buffer.alloc(size * size * 4);
+  for (let p = 0; p < size * size; p++) {
+    const i = p * 4;
+    const lum = 0.3 * data[i] + 0.59 * data[i + 1] + 0.11 * data[i + 2];
+    // fully cut at lum 40 and below, fully white from 100 up
+    const keep = Math.min(1, Math.max(0, (lum - 40) / 60));
+    out[i] = out[i + 1] = out[i + 2] = 255;
+    out[i + 3] = Math.round(data[i + 3] * keep);
+  }
+  return sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
 
 for (const { file, size, fill } of TARGETS) {
-  writeFileSync(join(PUBLIC, file), await renderIcon(gem, size, fill));
+  writeFileSync(join(PUBLIC, file), await renderIcon(size, fill));
   console.log('  ' + file.padEnd(30) + (size + 'x' + size).padEnd(9) +
-    'gem ' + (fill * 100).toFixed(0) + '%');
+    'iris ' + (fill * 100).toFixed(0) + '%');
 }
 
 const images = [];
 for (const size of FAVICON_SIZES) {
-  images.push({ size, data: await renderIcon(gem, size, FAVICON_FILL) });
+  images.push({ size, data: await irisAt(size).png({ compressionLevel: 9 }).toBuffer() });
 }
 writeFileSync(join(PUBLIC, 'favicon.ico'), buildIco(images));
-console.log('  ' + 'favicon.ico'.padEnd(30) + FAVICON_SIZES.join('/').padEnd(9) +
-  'gem ' + (FAVICON_FILL * 100).toFixed(0) + '%');
+console.log('  ' + 'favicon.ico'.padEnd(30) + FAVICON_SIZES.join('/').padEnd(9) + 'iris alone');
+
+// The spinner turns this, and the email header sits it above the wordmark.
+writeFileSync(join(PUBLIC, 'pb-gem.png'), await irisAt(192).png({ compressionLevel: 9 }).toBuffer());
+console.log('  ' + 'pb-gem.png'.padEnd(30) + '192x192'.padEnd(9) + 'iris alone');
+
+writeFileSync(join(PUBLIC, 'notification-badge-96.png'), await renderBadge(96));
+console.log('  ' + 'notification-badge-96.png'.padEnd(30) + '96x96'.padEnd(9) + 'one-color');
 
 /**
  * The maskable icon is the one Android crops, and getting it wrong stays
- * invisible until it reaches a home screen. Measure the furthest gold pixel
- * from the center and fail loudly if it falls outside the safe zone.
+ * invisible until it reaches a home screen. Measure the furthest non-cream
+ * pixel from the center and fail loudly if it falls outside the safe zone.
  */
 async function assertMaskableFits(file) {
   const { data, info } = await sharp(join(PUBLIC, file)).ensureAlpha().raw()
@@ -168,19 +158,17 @@ async function assertMaskableFits(file) {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * c;
-      const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
-      if (a < 128) continue;
-      if (r > 90 && g > 60 && r - b > 50 && g - b > 30) {
-        const d = Math.hypot(x - cx, y - cy);
-        if (d > maxR) maxR = d;
-      }
+      const off = Math.abs(data[i] - CREAM.r) + Math.abs(data[i + 1] - CREAM.g) + Math.abs(data[i + 2] - CREAM.b);
+      if (off < 90) continue;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d > maxR) maxR = d;
     }
   }
   const safeR = (w * ANDROID_SAFE_ZONE) / 2;
-  console.log('\n  maskable: furthest gold ' + maxR.toFixed(1) + 'px vs Android safe radius ' +
+  console.log('\n  maskable: furthest iris pixel ' + maxR.toFixed(1) + 'px vs Android safe radius ' +
     safeR.toFixed(1) + 'px -> ' + ((1 - maxR / safeR) * 100).toFixed(1) + '% margin');
   if (maxR > safeR) {
-    console.error('  FAIL: the gem overruns Android\'s safe zone and will be clipped on a home screen.');
+    console.error('  FAIL: the iris overruns Android\'s safe zone and will be clipped on a home screen.');
     process.exit(1);
   }
 }

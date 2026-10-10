@@ -5,7 +5,7 @@
  * no tagline at all.
  */
 
-export const APP_NAME = 'Hexapla';
+export { APP_NAME } from '../../config';
 
 export const TAGLINE = '';
 

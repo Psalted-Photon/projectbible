@@ -23,8 +23,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico'],
       manifest: {
-        name: 'Hexapla',
-        short_name: 'Hexapla',
+        name: 'irisBible',
+        short_name: 'irisBible',
         description: 'Offline Interactive Bible Study App',
         theme_color: '#ffffff',
         background_color: '#ffffff',

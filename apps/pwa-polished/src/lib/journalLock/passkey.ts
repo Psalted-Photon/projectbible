@@ -44,12 +44,14 @@ const PROMPT_TIMEOUT_MS = 120_000;
 
 /**
  * The site a passkey is tied to. Both hexapla.app and www.hexapla.app share
- * one, so a passkey made on either works on both. Any other address (the old
+ * one, and irisbible.com and www.irisbible.com share another, so a passkey made
+ * on one works on its twin only. Any other address (the old
  * vercel.app one, a local dev server) gets passkeys of its own.
  */
 export function currentRpId(): string {
   const host = location.hostname;
   if (host === 'hexapla.app' || host.endsWith('.hexapla.app')) return 'hexapla.app';
+  if (host === 'irisbible.com' || host.endsWith('.irisbible.com')) return 'irisbible.com';
   return host;
 }
 
@@ -201,10 +203,10 @@ export async function createPasskeySlot(
     created = (await withPrompt((signal) => navigator.credentials.create({
       signal,
       publicKey: {
-        rp: { id: rpId, name: 'Hexapla' },
+        rp: { id: rpId, name: 'irisBible' },
         // A fresh random handle per passkey, so adding a second device never
         // replaces the first one's passkey in a synced password manager.
-        user: { id: randomBytes(16), name: accountName || 'Journal lock', displayName: 'Hexapla journal lock' },
+        user: { id: randomBytes(16), name: accountName || 'Journal lock', displayName: 'irisBible journal lock' },
         challenge: randomBytes(32),
         pubKeyCredParams: [
           { type: 'public-key', alg: -7 },   // ES256

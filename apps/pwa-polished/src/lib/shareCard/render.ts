@@ -11,11 +11,12 @@
  * Layers, back to front: background (color, gradient, photo or painting),
  * texture, the verse (auto-fitted, tapped words bold or accented), the
  * reference with its translation, a painting's credit, the QR code, and at
- * the foot a faint "Hexapla" mark with the app icon. The mark is always drawn;
+ * the foot a faint irisBible wordmark, iris dot and all. The mark is always drawn;
  * there is deliberately no switch for it.
  */
 
 import { getReaderFont } from '../readerFonts';
+import { WORDMARK_LETTERS } from '../wordmark';
 import { luminance } from '../themeColors';
 import { drawGradient, getGradient } from './gradients';
 import { drawImageBackground } from './image';
@@ -37,8 +38,9 @@ const DEFAULT_STACK = "'EB Garamond', Georgia, serif";
 const GREEK_STACK = "'EB Garamond', Georgia, serif";
 const HEBREW_STACK = "'SBL Hebrew', 'Ezra SIL', 'Times New Roman', serif";
 const MARK_FAMILY = 'HexaplaMark';
-const MARK_FONT_URL = '/fonts/tutorial/fredericka-the-great-400.woff2';
-const ICON_URL = '/pwa-192x192.png';
+const MARK_FONT_URL = '/fonts/milonga-400.woff2';
+/** The bare iris, not the cream-tiled app icon, so it sits on any card color. */
+const ICON_URL = '/pb-gem.png';
 
 const HAS_GREEK = /[\u0370-\u03FF\u1F00-\u1FFF]/;
 const HAS_HEBREW = /[\u0590-\u05FF]/;
@@ -311,7 +313,13 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, max: number): st
   return `${t.trimEnd()}\u2026`;
 }
 
-/** "Hexapla" in Fredericka the Great, the app icon to its right, centered on cx. */
+/**
+ * The plain irisBible wordmark, centered on cx: Milonga letters in the card's
+ * text color with the iris standing in as the dot of the "i" in Bible, laid
+ * out on the same numbers as the wordmark artboards (lib/wordmark.ts). The
+ * name is never drawn as bare text, so the iris is part of the mark; only if
+ * it failed to load is the plain dotless letter left.
+ */
 function drawMark(
   ctx: CanvasRenderingContext2D,
   icon: HTMLImageElement | null,
@@ -328,18 +336,24 @@ function drawMark(
   ctx.font = `${size}px '${MARK_FAMILY}', Georgia, serif`;
   ctx.fillStyle = colour;
 
-  const word = 'Hexapla';
-  const textW = ctx.measureText(word).width;
-  const iconSize = icon ? size * 1.25 : 0;
-  const gap = icon ? size * 0.35 : 0;
-  const left = cx - (textW + gap + iconSize) / 2;
+  // Letter by letter, so the spacing matches the artboards (0.04em) without
+  // depending on canvas letterSpacing, which older Safari does not have.
+  const spacing = size * 0.04;
+  const widths = WORDMARK_LETTERS.map((l) => ctx.measureText(l).width);
+  const total = widths.reduce((a, w) => a + w, 0) + spacing * (widths.length - 1);
+  let x = cx - total / 2;
 
-  ctx.fillText(word, left, baseline);
-  if (icon) {
-    // Sit the icon on the text's optical middle: cap height is about 0.7em.
-    const iconTop = baseline - size * 0.35 - iconSize / 2;
-    ctx.drawImage(icon, left + textW + gap, iconTop, iconSize, iconSize);
-  }
+  WORDMARK_LETTERS.forEach((letter, n) => {
+    ctx.fillText(letter, x, baseline);
+    if (letter === 'ı' && icon) {
+      // Artboard numbers at 200px type: a 40px iris, centered 29.5px into the
+      // letter, its top 0.11em below the top of a 1em line box. Milonga puts
+      // that box's baseline 0.865em down, so the top is 0.755em above it.
+      const d = size * 0.2;
+      ctx.drawImage(icon, x + size * 0.1475 - d / 2, baseline - size * 0.755, d, d);
+    }
+    x += widths[n] + spacing;
+  });
   ctx.restore();
 }
 

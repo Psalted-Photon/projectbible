@@ -124,7 +124,7 @@ function dueSlots(row: ReminderRow, now: Date): { slots: Slot[]; localDate: stri
 
 function buildPayload(slot: Slot): NotificationPayload {
   return {
-    title: 'Hexapla',
+    title: 'irisBible',
     body: 'Your ' + slot + ' devotional is ready.',
     url: '/?devo=today&s=' + slot,
     tag: 'projectbible-devotional',

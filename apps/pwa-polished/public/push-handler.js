@@ -36,7 +36,7 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  const title = payload.title || 'Hexapla';
+  const title = payload.title || 'irisBible';
   const options = {
     body: payload.body || 'Time to read.',
     icon: payload.icon || '/pwa-192x192.png',
@@ -59,7 +59,7 @@ self.addEventListener('push', (event) => {
 
 /*
  * Which open windows are the installed app. On Android the installed app runs
- * on Chrome and shares its storage, so to this worker a hexapla.app tab left
+ * on Chrome and shares its storage, so to this worker an irisBible tab left
  * open in Chrome looks exactly like the app, and a tap used to bring forward
  * whichever it found first. Each window says what it is when it starts
  * (App.svelte). That is kept in a cache of its own, not in memory: the worker

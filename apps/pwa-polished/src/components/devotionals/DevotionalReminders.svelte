@@ -106,7 +106,7 @@
     {/if}
 
     {#if permission === 'denied'}
-      <span class="dr-status warn">Notifications are blocked for Hexapla. Turn them back on in your phone or browser settings.</span>
+      <span class="dr-status warn">Notifications are blocked for irisBible. Turn them back on in your phone or browser settings.</span>
     {:else if status}
       <span class="dr-status {statusKind}">{status}</span>
     {/if}

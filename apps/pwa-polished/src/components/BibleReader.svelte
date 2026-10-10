@@ -6442,7 +6442,7 @@
            in-app browser inside Snapchat, Instagram or Facebook, where opening
            the same link in the real browser works. -->
       <div class="no-text">
-        <p class="no-text-title">Hexapla could not load its Bible text.</p>
+        <p class="no-text-title">irisBible could not load its Bible text.</p>
         <p class="no-text-body">
           This usually means the browser blocked storage or ran out of room.
           If you opened this link inside another app, try opening it in your

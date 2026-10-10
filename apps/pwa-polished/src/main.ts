@@ -11,6 +11,7 @@ import './adapters/tts'; // Read Aloud engine client (registers __tts dev hook; 
 import { initMediaSession } from './lib/tts/mediaSession';
 import { dumpPreviousInstallLog } from './lib/install-log';
 import { watchForInstallPrompt } from './lib/installPrompt';
+import { showLaunchSplash } from './lib/launchSplash';
 
 // Before anything that awaits: the browser fires beforeinstallprompt early and
 // only once, and initApp() below can sit waiting on the starter text download
@@ -80,6 +81,11 @@ applyInitialSettings();
 
 // Initialize app with progressive loading
 async function initApp() {
+  // Drawn first, so the wordmark is what a launch shows. It comes down once
+  // the app (or the first-launch download screen) is up and a full second has
+  // passed — see lib/launchSplash.ts.
+  const splash = showLaunchSplash();
+
   console.log('🚀 Starting app initialization...');
   console.log('Environment:', import.meta.env.DEV ? 'DEV' : 'PROD');
   console.log('Features:', FEATURES);
@@ -118,6 +124,7 @@ async function initApp() {
     const app = mount(App, {
       target: appElement
     });
+    splash.dismiss();
     return app;
   }
 
@@ -130,7 +137,7 @@ async function initApp() {
     firstLaunch = !(await hasAnyText());
     appElement.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; font-family: 'Milonga', cursive;">
-        <h1 style="margin-bottom: 20px;">Hexapla</h1>
+        <h1 style="margin-bottom: 20px;">irisBible</h1>
         <div style="width: 300px; background: #333; border-radius: 8px; padding: 20px;">
           <div id="init-message" style="margin-bottom: 10px; text-align: center;">Getting the text...</div>
           <div style="width: 100%; height: 6px; background: #555; border-radius: 3px; overflow: hidden;">
@@ -140,6 +147,10 @@ async function initApp() {
         </div>
       </div>
     `;
+
+    // The download screen is drawn; the splash can come down once its second
+    // is up, since this download can take a while.
+    splash.dismiss();
 
     // Never throws: a device that could not get the text still reaches the
     // reader, which says so itself rather than leaving a dead loading bar.
@@ -160,6 +171,8 @@ async function initApp() {
   const app = mount(App, {
     target: appElement
   });
+
+  splash.dismiss();
 
   // Everything that does not have to happen first happens here, with the app
   // already on screen behind it.

@@ -151,7 +151,7 @@
             {busy ? 'Waiting for your fingerprint…' : 'Unlock with fingerprint'}
           </button>
         {:else if hasPasskeys && usable.length === 0}
-          <p class="jl-note">Fingerprint unlock works at hexapla.app. Here, use your recovery code.</p>
+          <p class="jl-note">Fingerprint unlock only works on the address it was set up on. Here, use your recovery code.</p>
         {:else if hasPasskeys && support === 'no'}
           <p class="jl-note">This browser can’t use a fingerprint for the journal. Use your recovery code.</p>
         {/if}

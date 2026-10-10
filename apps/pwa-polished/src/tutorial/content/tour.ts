@@ -48,7 +48,7 @@ function referenceDropdown(): HTMLElement | null {
 }
 
 /**
- * How this device can put Hexapla on its home screen.
+ * How this device can put irisBible on its home screen.
  * - 'prompt'  Chrome handed us its install event; one tap does it.
  * - 'ios'     Safari never offers one; it is Share -> Add to Home Screen.
  * - 'menu'    An Android browser with no event: it is in the browser menu.
@@ -93,10 +93,10 @@ export const PART_ONE: TourStep[] = [
     // arrive or disappear while the step is up, and ctx.tour does not survive
     // a reload anyway.
     skipIf: () => installRoute() === 'none',
-    title: 'Keep Hexapla on your screen',
+    title: 'Keep irisBible on your screen',
     body: () => {
       const opening =
-        'Hexapla can live on your home screen like any other app: it opens full screen, with no browser bar, and still works with no signal.';
+        'irisBible can live on your home screen like any other app: it opens full screen, with no browser bar, and still works with no signal.';
       switch (installRoute()) {
         case 'ios':
           return `${opening} Tap the Share button at the bottom of Safari, then Add to Home Screen.`;
@@ -145,7 +145,7 @@ export const PART_ONE: TourStep[] = [
         ? ` All of it is about ${formatBytes(ctx.tour.remainingBytes)}, so Wi-Fi is best.`
         : ' It’s a big download, so Wi-Fi is best.';
       return (
-        'Most of Hexapla comes in packs: more translations, dictionaries, commentaries, the encyclopedia, maps, art and the reading voices.' +
+        'Most of irisBible comes in packs: more translations, dictionaries, commentaries, the encyclopedia, maps, art and the reading voices.' +
         size +
         ' Or take them as you go: the translation list and each feature offer their own downloads.'
       );
@@ -194,7 +194,7 @@ export const PART_ONE: TourStep[] = [
     extra: 'colors',
     title: 'Every book has a color',
     body:
-      'The books come in ten families, and each family keeps its color everywhere in Hexapla: chapter titles, verse numbers, verse lists, the map, reading plans and search.',
+      'The books come in ten families, and each family keeps its color everywhere in irisBible: chapter titles, verse numbers, verse lists, the map, reading plans and search.',
   },
   {
     id: 'pick-chapter',

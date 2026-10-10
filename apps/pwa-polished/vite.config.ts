@@ -244,6 +244,8 @@ export default defineConfig({
       includeAssets: [
         'notification-badge-96.png',
         'pb-gem.png',
+        // The wordmark's face: drawn by the launch splash on first paint.
+        'fonts/milonga-400.woff2',
         'fonts/berry-rotunda.woff2',
         'fonts/teutonic4.woff2'
       ],
@@ -340,14 +342,15 @@ export default defineConfig({
         ]
       },
       manifest: {
-        name: 'Hexapla',
+        name: 'irisBible',
         // Android labels notifications with short_name, so this is the name that
         // appears above a wake alarm. Changing it only takes effect after the
         // app is removed from the home screen and re-added.
-        short_name: 'Hexapla',
+        short_name: 'irisBible',
         description: 'Immersive Bible reading experience',
         theme_color: '#1a1a1a',
-        background_color: '#1a1a1a',
+        // The cream of the app icon's tile, so the launch screen is the icon.
+        background_color: '#fffaed',
         display: 'fullscreen',
         orientation: 'any',
         start_url: '/',

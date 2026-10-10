@@ -1,17 +1,24 @@
 <script lang="ts">
   /**
-   * Welcome to Hexapla: the first screen of the tour.
+   * Welcome to irisBible: the first screen of the tour.
    *
-   * A chalkboard: pure black, so the logo's own black tile vanishes and only
-   * the gem floats, with the name written under it in chalk.
+   * The iris floats over the wordmark, on the ground the wordmark's current
+   * look was drawn on: cream or night, by the time of day and the day's
+   * parity (lib/wordmark.ts).
    */
   import { createEventDispatcher, onMount } from "svelte";
   import { fade } from "../../lib/motion";
+  import Wordmark from "../../components/Wordmark.svelte";
+  import { WORDMARKS, wordmarkAt } from "../../lib/wordmark";
   import { APP_NAME, TAGLINE, START_LABEL, SKIP_LABEL, TURN_OFF_HINT } from "../content/splash";
 
   const dispatch = createEventDispatcher<{ start: void; skip: void }>();
 
   let startButton: HTMLButtonElement;
+
+  const code = wordmarkAt();
+  const look = WORDMARKS[code];
+  const onCream = look.ground.toLowerCase() === "#fffaed";
 
   onMount(() => {
     startButton?.focus({ preventScroll: true });
@@ -29,6 +36,8 @@
 
 <div
   class="splash no-edge-gesture"
+  class:on-cream={onCream}
+  style="background: {look.ground};"
   role="dialog"
   aria-modal="true"
   aria-label="Welcome to {APP_NAME}"
@@ -36,7 +45,7 @@
 >
   <div class="board">
     <img class="gem" src="/Logo.png" alt="" draggable="false" />
-    <h1 class="name" data-text={APP_NAME}>{APP_NAME}</h1>
+    <h1 class="name"><Wordmark {code} /></h1>
     {#if TAGLINE}
       <p class="tagline">{TAGLINE}</p>
     {/if}
@@ -61,15 +70,13 @@
     align-items: center;
     justify-content: center;
     padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
-    background: var(--tut-board);
     overflow-y: auto;
   }
 
   .board {
-    /* Logo.png is 1024 square with the gem in its middle half, so the image is
-       drawn large and its empty black margins are pulled in with negative
-       space. Every size below hangs off this one number. */
-    --gem: min(78vw, 44vh, 420px);
+    /* Logo.png is the iris, a full circle filling its 1024 square. Every size
+       below hangs off this one number. */
+    --gem: min(62vw, 34vh, 340px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -80,50 +87,18 @@
   .gem {
     width: var(--gem);
     height: var(--gem);
-    margin: calc(var(--gem) * -0.16) 0 calc(var(--gem) * -0.2);
+    margin: 0 0 1.4rem;
     user-select: none;
     animation: rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
 
   .name {
-    position: relative;
-    /* Keeps the gold layer's negative z-index above the black board. */
-    isolation: isolate;
     margin: 0;
-    font-family: var(--tut-display);
-    font-weight: 400;
-    font-size: clamp(3rem, 15vw, 5.75rem);
-    line-height: 1.05;
-    letter-spacing: 0.02em;
-    color: var(--tut-chalk);
-    /* Chalk dust: a soft bloom around each stroke, never a hard shadow. */
-    text-shadow:
-      0 0 1px rgba(241, 238, 228, 0.55),
-      0 0 14px rgba(241, 238, 228, 0.1);
+    /* The wordmark's shadows reach about a third of an em past the letters. */
+    padding: 0.1em 0.2em 0.18em;
+    font-size: clamp(3.2rem, 17vw, 6rem);
+    line-height: 1;
     animation: rise 0.9s 0.15s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  }
-
-  /* The same word again in the gem's gold, set underneath the chalk and nudged
-     down and to the left so it shows along those edges. Shaded top to bottom
-     like the gem's facets. */
-  .name::before {
-    content: attr(data-text);
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    transform: translate(-0.0225em, 0.03em);
-    background: linear-gradient(
-      180deg,
-      var(--tut-gold-hi) 0%,
-      var(--tut-gold-light) 30%,
-      var(--tut-gold) 62%,
-      var(--tut-gold-deep) 100%
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    text-shadow: none;
-    pointer-events: none;
   }
 
   .tagline {
@@ -150,6 +125,22 @@
     font-size: 0.8rem;
     letter-spacing: 0.02em;
     animation: rise 0.9s 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  /* On the cream ground the tour's night-time colors turn dark. */
+  .on-cream .tagline,
+  .on-cream .hint {
+    color: #5c5546;
+  }
+  .on-cream :global(.tut-btn-ghost) {
+    color: #2a2618;
+    border-color: rgba(42, 38, 24, 0.35);
+  }
+  .on-cream :global(.tut-btn-ghost:hover) {
+    background: rgba(42, 38, 24, 0.08);
+  }
+  .on-cream :global(.tut-btn) {
+    box-shadow: 0 0 0 1px rgba(11, 15, 0, 0.18);
   }
 
   @keyframes rise {

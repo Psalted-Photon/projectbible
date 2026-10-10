@@ -331,7 +331,7 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', handleSwMessage);
       // Say whether this window is the installed app or a browser tab, so a
-      // notification tap brings forward the app rather than a hexapla.app tab
+      // notification tap brings forward the app rather than a browser tab
       // left open in Chrome. See push-handler.js.
       navigator.serviceWorker.ready
         .then((registration) => registration.active?.postMessage({ type: 'window-kind', app: isInstalledApp() }))

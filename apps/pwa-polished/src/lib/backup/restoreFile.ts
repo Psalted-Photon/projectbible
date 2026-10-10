@@ -57,10 +57,10 @@ export async function readBackupFile(file: File): Promise<BackupFile> {
   try {
     parsed = JSON.parse(await file.text());
   } catch {
-    throw new Error("This isn't a Hexapla backup file.");
+    throw new Error("This isn't a irisBible backup file.");
   }
   if (!parsed || parsed.app !== BACKUP_APP || parsed.kind !== BACKUP_KIND || typeof parsed.data !== 'object' || !parsed.data) {
-    throw new Error("This isn't a Hexapla backup file.");
+    throw new Error("This isn't a irisBible backup file.");
   }
   if (typeof parsed.format !== 'number' || parsed.format > BACKUP_FORMAT) {
     throw new Error('This backup was made by a newer version of the app. Update the app, then try again.');

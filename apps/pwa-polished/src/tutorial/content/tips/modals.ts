@@ -69,7 +69,7 @@ export const MODAL_TIPS: Tip[] = [
     area,
     target: '.create-plan-tab .book-row',
     title: 'Pick the books',
-    body: 'Tick the books to include. Each wears its family color, the same as everywhere else in Hexapla.',
+    body: 'Tick the books to include. Each wears its family color, the same as everywhere else in irisBible.',
     extra: 'colors',
   },
   {

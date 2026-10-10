@@ -59,7 +59,7 @@ export const POPUP_TIPS: Tip[] = [
     area,
     target: '.sh-modal .sh-toggles',
     title: 'What goes with it',
-    body: 'Add the translation’s name, and a link that opens the verse in Hexapla.',
+    body: 'Add the translation’s name, and a link that opens the verse in irisBible.',
   },
   {
     id: 'share-copy',

@@ -41,7 +41,7 @@ export const PANE_TIPS: Tip[] = [
   section('Read Aloud (AI voice)', 'The voice, its speed, and what gets read and lit up as it reads. The Auto-Read Alarm is here too.'),
   section('General', 'Tutorial Mode, your time zone, the clock in the top bar, and screen rotation.'),
   section('Privacy', 'The journal lock: your fingerprint or face before the Journal opens, with your journal scrambled on this device and in the cloud.'),
-  section('Storage & Updates', 'How much space Hexapla takes on this device, when it last updated, and checking for a new version.'),
+  section('Storage & Updates', 'How much space irisBible takes on this device, when it last updated, and checking for a new version.'),
   section('Dev Options', 'Every pack in one list, clearing the cache, and the eruda console button. Hide Dev Options puts them away again.'),
 
   setting('settings-theme', 'Theme', 'Theme', 'Auto follows your device. Sepia and Light are easier in daylight; Custom is yours to set.', true),
@@ -71,7 +71,7 @@ export const PANE_TIPS: Tip[] = [
     area,
     target: '.pane-settings .check-update-button',
     title: 'Check for updates',
-    body: 'Looks for a newer version of Hexapla.',
+    body: 'Looks for a newer version of irisBible.',
   },
   {
     id: 'settings-clear-cache',

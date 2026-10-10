@@ -43,7 +43,7 @@ function setProgressHandler(handler?: (progress: DownloadProgress) => void): voi
 }
 
 /**
- * The text Hexapla ships with, rather than asks for.
+ * The text irisBible ships with, rather than asks for.
  *
  * Served from the app's own origin (staged into public/ by
  * scripts/ensure-starter-pack.mjs), so this is a plain fetch — no manifest, no

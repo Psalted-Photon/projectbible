@@ -1,13 +1,11 @@
 <script lang="ts">
   /**
-   * The Hexapla gem, spinning, shown while Read Aloud is generating audio.
+   * The irisBible icon, spinning, shown while Read Aloud is generating audio.
    *
-   * `pb-gem.png` is the app icon's own artwork with the black tile behind it
-   * removed and cropped to the gem — in the original, the tile fills 182 of 192
-   * pixels and the gem only 90, so the icon as shipped spins mostly as a black
-   * square. Its internal seams are kept, not cleared, or the cross falls apart
-   * on the light and sepia themes. The image is padded to a square wide enough
-   * for the gem's diagonal, so nothing is clipped as it turns.
+   * `pb-gem.png` is the bare iris, a full circle on a transparent ground (no
+   * cream tile), written by scripts/build-app-icons.mjs. A circle fills its
+   * square exactly, so nothing is clipped as it turns, and its cross shows the
+   * turning on every theme.
    *
    * Deliberately spins even when the phone's reduce-motion setting is on. That
    * setting is aimed at animation that travels across the screen; a small
