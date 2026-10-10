@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { portal } from '../lib/portal';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { buildShareText, buildShareUrl, formatShareRef, type ShareRef } from '../lib/shareText';
   import { canShare, copyText, shareText as shareViaSheet } from '../lib/clipboard';
   import { translationLabel } from '../lib/bibleData';
   import ShareCardPanel from './ShareCardPanel.svelte';
+  import CloseX from './CloseX.svelte';
 
   export let reference: ShareRef;
   /** The verse, or the phrase that was selected out of it. */
@@ -90,13 +92,13 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="sh-modal-backdrop" on:click={handleBackdropClick}>
+<div class="sh-modal-backdrop" use:portal on:click={handleBackdropClick}>
   <div class="sh-modal" role="dialog" aria-modal="true" aria-label="Share options">
 
     <div class="sh-modal-header">
       <span class="sh-modal-title">Share</span>
       <span class="sh-modal-subtitle">{formatShareRef(reference)}</span>
-      <button class="sh-close-btn" on:click={handleClose} aria-label="Close">✕</button>
+      <CloseX edge on:click={handleClose} />
     </div>
 
     <div class="sh-tabs" role="tablist" aria-label="Share as">
@@ -196,19 +198,6 @@
     color: #888;
     flex: 1;
   }
-
-  .sh-close-btn {
-    background: none;
-    border: none;
-    color: #666;
-    font-size: 0.875rem;
-    cursor: pointer;
-    padding: 2px 4px;
-    line-height: 1;
-    border-radius: 4px;
-    transition: color 0.15s;
-  }
-  .sh-close-btn:hover { color: #ccc; }
 
   /* ── Text | Card ── */
   .sh-tabs {

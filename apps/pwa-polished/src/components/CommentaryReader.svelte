@@ -387,7 +387,8 @@
     background: #2a2a3a;
     border-left-color: #9c27b0;
     position: sticky;
-    top: 68px;
+    /* Sits right under the commentary bar, which is 68px at Bar size Medium. */
+    top: calc(68px * var(--bar-scale, 1));
     z-index: 100;
     margin-bottom: 0;
   }

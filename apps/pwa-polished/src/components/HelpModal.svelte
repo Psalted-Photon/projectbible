@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CloseX from "./CloseX.svelte";
   export let show = false;
   export let helpTopic: string = "general";
 
@@ -75,17 +76,18 @@
     }
   }
 
-  $: content = helpContent[helpTopic] || helpContent.general;
+  // A topic with no entry shows nothing rather than crashing.
+  $: content = helpContent[helpTopic];
 </script>
 
-{#if show}
+{#if show && content}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="help-backdrop" on:click={handleBackdropClick}>
     <div class="help-modal">
       <div class="help-header">
         <h3><span class="emoji">❓</span> {content.title}</h3>
-        <button class="close-btn" on:click={closeModal}>✕</button>
+        <CloseX edge on:click={closeModal} />
       </div>
       
       <div class="help-body">
@@ -148,26 +150,6 @@
     color: #667eea;
     font-size: 20px;
     font-weight: 700;
-  }
-
-  .close-btn {
-    background: none;
-    border: none;
-    color: #e0e0e0;
-    font-size: 24px;
-    cursor: pointer;
-    padding: 0;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    transition: background 0.2s;
-  }
-
-  .close-btn:hover {
-    background: #3a3a3a;
   }
 
   .help-body {

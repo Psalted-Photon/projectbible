@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { portal } from '../lib/portal';
   /**
    * The modal behind the Harmonies tile: choose what to lay side by side.
    *
@@ -30,6 +31,7 @@
     translationLabel,
     translationSortIndex,
   } from '../lib/bibleData';
+  import CloseX from './CloseX.svelte';
 
   /** The ceiling everywhere, phone included — the view's grid tops out at four. */
   const MAX_PANES = 4;
@@ -201,12 +203,12 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="hp-backdrop" on:click={handleBackdropClick}>
+<div class="hp-backdrop" use:portal on:click={handleBackdropClick}>
   <div class="hp-modal" role="dialog" aria-modal="true" aria-label="Open a harmony">
 
     <div class="hp-header">
       <span class="hp-title">Harmonies</span>
-      <button class="hp-close" on:click={() => dispatch('close')} aria-label="Close">✕</button>
+      <CloseX edge on:click={() => dispatch('close')} />
     </div>
 
     <div class="hp-tabs">
@@ -348,20 +350,6 @@
     font-weight: 600;
     color: #e0e0e0;
     flex: 1;
-  }
-
-  .hp-close {
-    background: none;
-    border: none;
-    color: #888;
-    font-size: 16px;
-    cursor: pointer;
-    padding: 4px 8px;
-    line-height: 1;
-  }
-
-  .hp-close:hover {
-    color: #e0e0e0;
   }
 
   .hp-tabs {

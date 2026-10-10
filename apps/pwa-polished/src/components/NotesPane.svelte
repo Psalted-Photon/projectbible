@@ -199,6 +199,8 @@
   let editorText = '';
   let isDirty = false;
   let isSaving = false;
+  /** Autosave retries; a failure is announced once, not on every try. */
+  let saveFailureShown = false;
   // Asked to save while a save was already running. Honored when that one
   // finishes, so words typed during a slow save (or just before the panel
   // closed) are not left behind.
@@ -1443,6 +1445,7 @@
         });
       }
       persistState();
+      saveFailureShown = false;
     } catch (err) {
       console.error('[NotesPane] save error:', err);
       isDirty = wasDirty;
@@ -1451,6 +1454,9 @@
       // already a plain sentence, so it is shown rather than replaced.
       if (target?.kind === 'shared') {
         sharedBlocked = (err as Error)?.message || 'That could not be saved.';
+      } else if (!saveFailureShown) {
+        saveFailureShown = true;
+        showNotice("This couldn't be saved. Keep it open; it tries again as you type.", 'error');
       }
     } finally {
       isSaving = false;

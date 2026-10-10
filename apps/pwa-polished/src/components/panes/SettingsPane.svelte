@@ -564,8 +564,25 @@
       if (registration) {
         await registration.update();
       }
-      // Give the new SW time to download and activate (skipWaiting is true)
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // update() settles once the server has been asked. A new version shows
+      // up as an installing (or waiting) worker; none means nothing changed.
+      const incoming = registration?.installing ?? registration?.waiting;
+      if (!incoming) {
+        showNotice("You're up to date.");
+        checkingUpdate = false;
+        return;
+      }
+      // skipWaiting is on, so it takes over by itself; wait for that, then
+      // reload so the new version is the one on screen.
+      await new Promise<void>((resolve) => {
+        const settle = () => {
+          if (incoming.state === 'activated' || incoming.state === 'redundant') resolve();
+        };
+        incoming.addEventListener('statechange', settle);
+        settle();
+        setTimeout(resolve, 15000);
+      });
+      sessionStorage.setItem('pb-updated', '1');
       window.location.reload();
     } catch (err) {
       console.error('Update check failed:', err);
@@ -1449,13 +1466,18 @@
 
 <style>
   .settings-pane {
-    padding: 20px;
+    padding: 0 20px 20px;
     color: #e0e0e0;
   }
 
   h2 {
     font-size: 1.5rem;
-    margin-bottom: 1.25rem;
+    margin: 0 0 1.25rem;
+    /* The title shares its row with the pane's close X (Pane.svelte). */
+    display: flex;
+    align-items: center;
+    min-height: calc(40px * var(--bar-scale, 1));
+    padding-right: calc(40px * var(--bar-scale, 1));
     color: #f0f0f0;
     font-weight: 600;
   }
@@ -1980,7 +2002,7 @@
   /* ── Phone portrait (≤480px) ── */
   @media (max-width: 480px) {
     .settings-pane {
-      padding: 12px;
+      padding: 0 12px 12px;
     }
 
     h2 {

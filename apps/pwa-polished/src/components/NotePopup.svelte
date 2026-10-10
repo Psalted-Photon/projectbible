@@ -6,6 +6,8 @@
   import { editorThemeVars } from '../lib/editorTheme';
   import { fixedOrigin } from '../lib/fixedOrigin';
   import { grow } from '../lib/motion';
+  import { showNotice } from '../stores/noticeStore';
+  import CloseX from './CloseX.svelte';
 
   export let book: string;
   export let chapter: number;
@@ -39,6 +41,8 @@
   let currentContent = initialContent;
   let isDirty = false;
   let isSaving = false;
+  /** Autosave retries; say so once, not on every try. */
+  let saveFailureShown = false;
   let saveTimeout: number | null = null;
   // Interaction state.
   //
@@ -144,9 +148,14 @@
         }
         dispatch('noteSaved', { book, chapter, verse, noteId: currentNoteId });
       }
+      saveFailureShown = false;
     } catch (err) {
       console.error('[NotePopup] Save error:', err);
       isDirty = wasDirty; // restore dirty on failure
+      if (!saveFailureShown) {
+        saveFailureShown = true;
+        showNotice("Your note couldn't be saved. Keep it open; it tries again as you type.", 'error');
+      }
     } finally {
       isSaving = false;
     }
@@ -328,9 +337,7 @@
   {/each}
 
   <!-- Top-right: close button only -->
-  <button class="close-btn" on:click={handleClose} aria-label="Close note" title="Close">
-    ✕
-  </button>
+  <CloseX class="note-close" label="Close note" on:click={handleClose} />
 
   <!-- Header bar doubles as the drag handle — the obvious place to grab a
        window is its title bar, and it is the one target big enough for a
@@ -442,31 +449,13 @@
   }
 
   /* ── Close button (top-right corner exclusively) ────────── */
-  .close-btn {
+  /* Centered on the 34px header bar. */
+  .note-popup :global(.note-close) {
     position: absolute;
-    top: 0;
+    top: calc(17px - 20px * var(--bar-scale, 1));
     right: 0;
-    width: 34px;
-    height: 34px;
     z-index: 12;
-    background: transparent;
-    border: none;
-    color: #c0392b;
-    font-size: 13px;
-    cursor: pointer;
     touch-action: manipulation;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0 4px 0 0;
-    transition: background 0.15s, color 0.15s;
-    line-height: 1;
-    padding: 0;
-  }
-
-  .close-btn:hover {
-    background: rgba(192, 57, 43, 0.18);
-    color: #e74c3c;
   }
 
   /* ── Header bar ─────────────────────────────────────────────
@@ -480,7 +469,7 @@
     gap: 6px;
     /* Nothing to dodge on the left any more — no resize handle shares this bar.
        Right clears the close button. */
-    padding: 4px 38px 4px 10px;
+    padding: 4px calc(40px * var(--bar-scale, 1)) 4px 10px;
     background: var(--toolbar-bg, #d1e3f5);
     border-bottom: 1px solid var(--border-color, #bed5eb);
     flex-shrink: 0;

@@ -24,6 +24,7 @@
   import HelpModal from "./HelpModal.svelte";
   import { Microscope } from 'phosphor-svelte';
   import { reveal } from '../lib/motion';
+  import CloseX from './CloseX.svelte';
 
   export let show = false;
   /** Text typed in the bar's search box before this was opened. It goes into
@@ -280,7 +281,7 @@
       <!-- Header -->
       <div class="modal-header">
         <h2><span class="header-icon"><Microscope size={20} weight="bold" /><span class="icon-overlay"><Microscope size={20} weight="thin" /></span></span> Advanced Search</h2>
-        <button class="close-button" on:click={closeModal} title="Close">✕</button>
+        <CloseX on:click={closeModal} />
       </div>
 
       <!-- Main Content -->
@@ -314,12 +315,7 @@
                 Include plurals
                 <button class="help-btn-inline" on:click={() => openHelp('plurals')}>?</button>
               </label>
-              
-              <label title="Show IPA pronunciation for search results (requires lexical packs)">
-                <input type="checkbox" bind:checked={config.showPronunciation} />
-                Show pronunciation
-                <button class="help-btn-inline" on:click={() => openHelp('pronunciation')}>?</button>
-              </label>
+
             </div>
           </section>
 
@@ -630,27 +626,6 @@
   }
   :global(.modal-header .header-icon > svg) {
     filter: drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407);
-  }
-
-  .close-button {
-    background: none;
-    border: none;
-    color: #e0e0e0;
-    font-size: 28px;
-    cursor: pointer;
-    padding: 0;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    transition: all 0.2s;
-  }
-
-  .close-button:hover {
-    background: #3a3a3a;
-    color: #fff;
   }
 
   .modal-body {
@@ -965,7 +940,7 @@
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: #7e8ff0;
+    background: #fb8a3c;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
   }
@@ -1210,12 +1185,6 @@
 
     .modal-header h2 {
       font-size: 18px;
-    }
-
-    .close-button {
-      font-size: 22px;
-      width: 32px;
-      height: 32px;
     }
 
     .modal-body {

@@ -6,6 +6,7 @@
   import { localDateStr } from '../stores/clockStore';
   import { onBeforeLock } from '../lib/journalLock/lockState';
   import type { JournalEntry } from '@projectbible/core';
+  import { showNotice } from '../stores/noticeStore';
   
   export let initialDate: string | undefined = undefined;
   
@@ -16,6 +17,8 @@
   let text = '';
   let isDirty = false;
   let isSaving = false;
+  /** Autosave retries every couple of seconds; say so once, not on every try. */
+  let saveFailureShown = false;
   let saveTimeout: number | null = null;
   /**
    * Set when the day's entry is scrambled and can't be shown: 'locked' while
@@ -126,8 +129,13 @@
       }
       
       isDirty = false;
+      saveFailureShown = false;
     } catch (error) {
       console.error('Failed to save journal entry:', error);
+      if (!saveFailureShown) {
+        saveFailureShown = true;
+        showNotice("Your journal entry couldn't be saved. Keep it open; it tries again as you type.", 'error');
+      }
     } finally {
       isSaving = false;
     }

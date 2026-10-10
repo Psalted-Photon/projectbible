@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { portal } from '../lib/portal';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { BCV, HighlightStyle, UserHighlight, UserWordHighlight } from '@projectbible/core';
   import { userProfileStore } from '../stores/userProfileStore';
   import { HIGHLIGHT_PALETTE, categoryMeaning, lineStyleMeaning } from '../lib/highlightCategories';
   import { getHighlightNames, getSettings, updateSettings } from '../adapters/settings';
+  import CloseX from './CloseX.svelte';
 
   export let reference: BCV;
   export let existingHighlight: UserHighlight | UserWordHighlight | null = null;
@@ -114,7 +116,7 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="hl-modal-backdrop" on:click={handleBackdropClick}>
+<div class="hl-modal-backdrop" use:portal on:click={handleBackdropClick}>
   <div class="hl-modal" role="dialog" aria-modal="true" aria-label="Highlight options">
 
     <div class="hl-modal-header">
@@ -128,7 +130,7 @@
         on:click={toggleMeanings}
         aria-pressed={showMeanings}
       >Meanings</button>
-      <button class="hl-close-btn" on:click={handleClose} aria-label="Close">✕</button>
+      <CloseX edge on:click={handleClose} />
     </div>
 
     {#if isRepeatWord && !bulkDescription}
@@ -319,19 +321,6 @@
     color: #888;
     flex: 1;
   }
-
-  .hl-close-btn {
-    background: none;
-    border: none;
-    color: #666;
-    font-size: 0.875rem;
-    cursor: pointer;
-    padding: 2px 4px;
-    line-height: 1;
-    border-radius: 4px;
-    transition: color 0.15s;
-  }
-  .hl-close-btn:hover { color: #ccc; }
 
   .hl-meanings-btn {
     align-self: center;
