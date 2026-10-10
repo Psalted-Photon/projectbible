@@ -34,6 +34,7 @@
   import * as parallelSync from '../lib/parallelSync';
   import { groupById, stepSection } from '../lib/parallelIndex';
   import { BIBLE_BOOKS, translationLabel } from '../lib/bibleData';
+  import CloseX from './CloseX.svelte';
 
   /**
    * Below this width the panes are stacked whatever the user chose.
@@ -372,10 +373,7 @@
            ignores a choice reads as broken. -->
       <span class="pv-note">Stacked — screen too narrow for columns</span>
     {/if}
-    <button
-      class="pv-close"
-      on:click={close}
-      aria-label={comparing ? 'Close comparison' : 'Close harmony'}>✕</button>
+    <CloseX edge label={comparing ? 'Close comparison' : 'Close harmony'} on:click={close} />
   </div>
 
   <div class="pv-grid" style={gridStyle} bind:this={container}>
@@ -490,21 +488,6 @@
     font-size: calc(10px * var(--bar-scale, 1));
     color: #888;
     white-space: nowrap;
-  }
-
-  .pv-close {
-    background: none;
-    border: none;
-    color: #999;
-    font-size: calc(15px * var(--bar-scale, 1));
-    line-height: 1;
-    padding: calc(4px * var(--bar-scale, 1)) calc(6px * var(--bar-scale, 1));
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .pv-close:hover {
-    color: #e0e0e0;
   }
 
   .pv-grid {

@@ -27,6 +27,7 @@
   } from '../lib/shared/joinCode';
   import { canShare, copyText, shareText } from '../lib/clipboard';
   import { errorText } from '../stores/noticeStore';
+  import CloseX from './CloseX.svelte';
 
   /** Which end of the code this is. */
   export let mode: 'join' | 'invite' = 'join';
@@ -155,7 +156,7 @@
       {#if mode === 'invite' && notebook}
         <span class="sj-sub">{notebook.name || 'Untitled notebook'}</span>
       {/if}
-      <button class="sj-close" on:click={close} aria-label="Close">✕</button>
+      <CloseX edge on:click={close} />
     </div>
 
     {#if mode === 'invite'}
@@ -262,20 +263,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .sj-close {
-    background: none;
-    border: none;
-    color: #666;
-    font-size: 0.875rem;
-    cursor: pointer;
-    padding: 2px 4px;
-    line-height: 1;
-    margin-left: auto;
-  }
-  .sj-close:hover {
-    color: #ccc;
   }
 
   .sj-note {

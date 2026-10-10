@@ -25,6 +25,7 @@
   import type { SharedNotebook, SharedNotebookMember } from '../adapters/SharedNotebookStore';
   import { MEMBER_COLORS, defaultInitials } from '../lib/shared/memberIdentity';
   import { errorText } from '../stores/noticeStore';
+  import CloseX from './CloseX.svelte';
 
   export let notebook: SharedNotebook;
   /** Your own member row in it. */
@@ -105,7 +106,7 @@
   <div class="mp-sheet" role="dialog" aria-modal="true" aria-label="Your badge">
     <div class="mp-head">
       <span class="mp-title">Your badge</span>
-      <button class="mp-close" on:click={close} aria-label="Close">✕</button>
+      <CloseX edge on:click={close} />
     </div>
 
     <p class="mp-note">
@@ -205,20 +206,6 @@
     font-weight: 600;
     color: #f0f0f0;
     flex: 1;
-  }
-
-  .mp-close {
-    background: none;
-    border: none;
-    color: #666;
-    font-size: 0.875rem;
-    cursor: pointer;
-    padding: 2px 4px;
-    line-height: 1;
-    border-radius: 4px;
-  }
-  .mp-close:hover {
-    color: #ccc;
   }
 
   .mp-note {

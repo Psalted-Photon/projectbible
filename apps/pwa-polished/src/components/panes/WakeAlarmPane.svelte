@@ -340,13 +340,18 @@
 
 <style>
   .alarm-pane {
-    padding: 20px;
+    padding: 0 20px 20px;
     color: #e0e0e0;
   }
 
   h2 {
     font-size: 1.5rem;
-    margin-bottom: 1rem;
+    margin: 0 0 1rem;
+    /* The title shares its row with the pane's close X (Pane.svelte). */
+    display: flex;
+    align-items: center;
+    min-height: calc(40px * var(--bar-scale, 1));
+    padding-right: calc(40px * var(--bar-scale, 1));
     color: #f0f0f0;
     font-weight: 600;
   }

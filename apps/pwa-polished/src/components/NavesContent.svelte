@@ -34,6 +34,7 @@
     type VerseRef,
     type LibraryRow,
   } from "../adapters/lexicon-lookup.js";
+  import CloseX from "./CloseX.svelte";
 
   /**
    * A Nave's topic — the outline of where Scripture speaks about something,
@@ -549,11 +550,7 @@
         {/if}
       {/if}
       {#if onClose}
-        <button class="close-btn" on:click={() => onClose?.()} aria-label="Close">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M18 6L6 18M6 6l12 12" stroke-width="2" stroke-linecap="round" />
-          </svg>
-        </button>
+        <CloseX edge on:click={() => onClose?.()} />
       {/if}
     </div>
   </div>
@@ -778,23 +775,9 @@
     flex-shrink: 0;
   }
   .pop-btn,
-  .close-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted, #999);
-    cursor: pointer;
-    padding: calc(2px * var(--bar-scale, 1));
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-  }
   .pop-btn:hover {
     color: var(--color-primary, #4a90e2);
   }
-  .close-btn:hover {
-    color: var(--text-color, #fff);
-  }
-
   .trail {
     display: flex;
     align-items: center;
@@ -1047,9 +1030,5 @@
   .naves-header .pop-btn svg {
     width: calc(18px * var(--bar-scale, 1));
     height: calc(18px * var(--bar-scale, 1));
-  }
-  .naves-header .close-btn svg {
-    width: calc(24px * var(--bar-scale, 1));
-    height: calc(24px * var(--bar-scale, 1));
   }
 </style>

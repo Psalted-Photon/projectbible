@@ -34,6 +34,7 @@
   import FamilyTreeCard from './FamilyTreeCard.svelte';
   import FamilyTreeBioSheet from './FamilyTreeBioSheet.svelte';
   import { motionLevel } from '../lib/motion';
+  import CloseX from './CloseX.svelte';
 
   /**
    * The tree, full screen on black — opened from People, over everything the
@@ -646,7 +647,7 @@
   // × and Escape only. The phone's Back is deliberately not caught: inside
   // the app it does nothing, so it goes straight to Android.
 
-  /** The sheet's own ✕/Escape: close the sheet, leave the tree. */
+  /** The sheet's own back arrow/Escape: close the sheet, leave the tree. */
   function closeSheetOnly() {
     sheetOpen = false;
   }
@@ -1123,9 +1124,7 @@
         Cinematic
       </button>
     </div>
-    <button class="close-btn" bind:this={closeBtnEl} on:click={doClose} aria-label="Close family tree">
-      ✕ Close
-    </button>
+    <CloseX class="tree-close" label="Close family tree" bind:el={closeBtnEl} on:click={doClose} />
 
     <!-- The tree card hides while the sheet is open — with a person already
          pinned in the sheet's own header, a second card naming them is
@@ -1217,9 +1216,9 @@
     position: absolute;
     top: calc(env(safe-area-inset-top, 0px) + 12px);
     left: calc(env(safe-area-inset-left, 0px) + 12px);
-    /* Clear of ✕ Close. On a narrow phone the third pill wraps under the
+    /* Clear of the close X. On a narrow phone the third pill wraps under the
        first two rather than running into it. */
-    right: calc(env(safe-area-inset-right, 0px) + 100px);
+    right: calc(env(safe-area-inset-right, 0px) + 60px);
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -1256,27 +1255,15 @@
 
   .tribe-chip {
     position: absolute;
-    /* Where the person card sits, below ✕ Close. */
+    /* Where the person card sits, below the close X. */
     top: calc(env(safe-area-inset-top, 0px) + 58px);
     right: calc(env(safe-area-inset-right, 0px) + 12px);
   }
 
-  .close-btn {
+  .family-tree :global(.tree-close) {
     position: absolute;
-    top: calc(env(safe-area-inset-top, 0px) + 12px);
-    right: calc(env(safe-area-inset-right, 0px) + 12px);
-    background: rgba(0, 0, 0, 0.55);
-    border: none;
-    border-radius: 20px;
-    color: #f2f2f2;
-    font-size: 13px;
-    font-family: inherit;
-    padding: 8px 14px;
-    cursor: pointer;
-    backdrop-filter: blur(6px);
-  }
-  .close-btn:hover {
-    background: rgba(0, 0, 0, 0.8);
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    right: calc(env(safe-area-inset-right, 0px) + 8px);
   }
 
   /* Stacked above the attribution rather than side by side: on a phone the

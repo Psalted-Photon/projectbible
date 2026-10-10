@@ -32,6 +32,7 @@
   import { canLeaveNotebook, canManageNotebook, isReadOnlyCopy } from '../lib/shared/sharedPermissions';
   import { formatJoinCode } from '../lib/shared/joinCode';
   import { errorText } from '../stores/noticeStore';
+  import CloseX from './CloseX.svelte';
 
   export let notebook: SharedNotebook;
   /** The roster, in the order people joined. */
@@ -197,7 +198,7 @@
     <div class="sa-head">
       <span class="sa-title">{iRunIt ? 'Manage notebook' : 'Who is in it'}</span>
       <span class="sa-sub">{notebook.name || 'Untitled notebook'}</span>
-      <button class="sa-close" on:click={close} aria-label="Close">✕</button>
+      <CloseX edge on:click={close} />
     </div>
 
     {#if readOnly}
@@ -526,20 +527,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .sa-close {
-    background: none;
-    border: none;
-    color: #666;
-    font-size: 0.875rem;
-    cursor: pointer;
-    padding: 2px 4px;
-    line-height: 1;
-    margin-left: auto;
-  }
-  .sa-close:hover {
-    color: #ccc;
   }
 
   .sa-field {

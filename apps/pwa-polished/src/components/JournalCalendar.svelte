@@ -6,6 +6,7 @@
   import { journalLock } from '../lib/journalLock/lockState';
   import JournalLockScreen from './JournalLockScreen.svelte';
   import type { JournalEntry } from '@projectbible/core';
+  import CloseX from './CloseX.svelte';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -246,7 +247,7 @@
     role="dialog"
     on:keydown={handleWindowKeydown}
   >
-    <button class="pop-x" on:click={dismissPopover} aria-label="Close">×</button>
+    <CloseX class="pop-x" on:click={dismissPopover} />
     <div class="pop-date">{formatDateFull(selectedCell.dateStr)}</div>
 
     {#if selectedCell.entry}
@@ -368,22 +369,13 @@
     outline: none;
   }
 
-  .pop-x {
+  .jc-popover :global(.pop-x) {
     position: absolute;
-    top: 8px;
-    right: 10px;
-    background: none;
-    border: none;
-    color: #555;
-    cursor: pointer;
-    font-size: 18px;
-    line-height: 1;
-    padding: 0;
-    transition: color 0.15s;
+    top: 0;
+    right: 0;
   }
-  .pop-x:hover { color: #bbb; }
 
-  .pop-date { font-size: 11px; color: #777; font-weight: 500; padding-right: 20px; }
+  .pop-date { font-size: 11px; color: #777; font-weight: 500; padding-right: 30px; }
 
   .pop-title { font-size: 14px; font-weight: 600; color: #e0e0e0; }
 

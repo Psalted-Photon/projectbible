@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { fade } from '../lib/motion';
+  import CloseX from './CloseX.svelte';
 
   /** Object URL of the full-resolution painting. */
   export let src: string;
@@ -376,7 +377,7 @@
     <div class="viewer-state">Couldn’t open this image.</div>
   {/if}
 
-  <button class="viewer-close" on:click={close} aria-label="Close image viewer">✕</button>
+  <CloseX class="viewer-close" label="Close image viewer" on:click={close} />
 
   {#if title || meta || sourceUrl}
     <div class="viewer-caption">
@@ -443,22 +444,11 @@
   }
 
   /* The portal escaped #app's safe-area padding, so the chrome carries its own. */
-  .viewer-close {
+  .art-viewer :global(.viewer-close) {
     position: absolute;
     top: calc(env(safe-area-inset-top, 0px) + 12px);
     right: calc(env(safe-area-inset-right, 0px) + 12px);
-    width: 40px;
-    height: 40px;
-    border: none;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.55);
-    color: #f2f2f2;
-    font-size: 17px;
-    line-height: 1;
-    cursor: pointer;
-    backdrop-filter: blur(6px);
   }
-  .viewer-close:hover { background: rgba(0, 0, 0, 0.8); }
 
   .viewer-caption {
     position: absolute;

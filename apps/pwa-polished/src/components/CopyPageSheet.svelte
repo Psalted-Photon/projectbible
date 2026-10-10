@@ -28,6 +28,7 @@
   import { syncedNotebookStore } from '../adapters/SyncedNotebookStore';
   import { stripStamps } from '../lib/shared/paragraphStamp';
   import { errorText } from '../stores/noticeStore';
+  import CloseX from './CloseX.svelte';
 
   export let mode: 'to-shared' | 'to-local';
   /** The page's stored title, which may be empty — copied across as it is. */
@@ -106,7 +107,7 @@
   <div class="cp-sheet" role="dialog" aria-modal="true" aria-label={heading}>
     <div class="cp-head">
       <span class="cp-title">{heading}</span>
-      <button class="cp-close" on:click={close} aria-label="Close">✕</button>
+      <CloseX edge on:click={close} />
     </div>
 
     <p class="cp-what">
@@ -192,20 +193,6 @@
     font-weight: 600;
     color: #f0f0f0;
     flex: 1;
-  }
-
-  .cp-close {
-    background: none;
-    border: none;
-    color: #666;
-    font-size: 0.875rem;
-    cursor: pointer;
-    padding: 2px 4px;
-    line-height: 1;
-    border-radius: 4px;
-  }
-  .cp-close:hover {
-    color: #ccc;
   }
 
   .cp-what {

@@ -14,6 +14,7 @@
   import { sharedNotebookStore } from '../adapters/SharedNotebookStore';
   import type { SharedNotebook } from '../adapters/SharedNotebookStore';
   import { errorText } from '../stores/noticeStore';
+  import CloseX from './CloseX.svelte';
 
   const dispatch = createEventDispatcher<{ close: void; created: SharedNotebook }>();
 
@@ -92,7 +93,7 @@
   <div class="sn-sheet" role="dialog" aria-modal="true" aria-label={heading}>
     <div class="sn-head">
       <span class="sn-title">{heading}</span>
-      <button class="sn-close" on:click={close} aria-label="Close">✕</button>
+      <CloseX edge on:click={close} />
     </div>
 
     {#if note}
@@ -210,20 +211,6 @@
     font-weight: 600;
     color: #f0f0f0;
     flex: 1;
-  }
-
-  .sn-close {
-    background: none;
-    border: none;
-    color: #666;
-    font-size: 0.875rem;
-    cursor: pointer;
-    padding: 2px 4px;
-    line-height: 1;
-    border-radius: 4px;
-  }
-  .sn-close:hover {
-    color: #ccc;
   }
 
   .sn-note {

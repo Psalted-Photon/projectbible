@@ -21,7 +21,7 @@
   import { createEventDispatcher, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { fade } from '../../lib/motion';
-  import { SunHorizon, MoonStars, CalendarBlank, CalendarDots, CaretLeft, CaretRight, ShareNetwork, Info, X } from 'phosphor-svelte';
+  import { SunHorizon, MoonStars, CalendarBlank, CalendarDots, CaretLeft, CaretRight, ShareNetwork, Info } from 'phosphor-svelte';
   import { navigationStore } from '../../stores/navigationStore';
   import { readingPlanModalStore } from '../../stores/readingPlanModalStore';
   import { devotionalSettings, type DevotionalTarget } from '../../stores/devotionalStore';
@@ -41,6 +41,7 @@
   import ShareModal from '../ShareModal.svelte';
   import DevotionalCalendar from './DevotionalCalendar.svelte';
   import { buildDevotionalUrl } from '../../lib/shareText';
+  import CloseX from '../CloseX.svelte';
 
   export let work: DevotionalWork;
   export let target: DevotionalTarget;
@@ -310,9 +311,7 @@
           <Info size={17} weight="bold" />
         </button>
       {/if}
-      <button class="dr-close" on:click={() => dispatch('close')} title="Close" aria-label="Close reading">
-        <X size={20} weight="bold" />
-      </button>
+      <CloseX label="Close reading" on:click={() => dispatch('close')} />
     </div>
     {#if calendarOpen}
       <div class="dr-calendar">
@@ -470,21 +469,6 @@
   }
   .dr-calendar :global(.dc-panel) {
     transform-origin: top left;
-  }
-  .dr-close {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: calc(40px * var(--bar-scale, 1));
-    height: calc(40px * var(--bar-scale, 1));
-    border: none;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--reader-text, #f2f2f2);
-    cursor: pointer;
-  }
-  .dr-close:hover {
-    background: rgba(255, 255, 255, 0.16);
   }
   .dr-top-right {
     display: flex;
@@ -708,8 +692,7 @@
 
   /* Bar size: the top bar scales with --bar-scale. Its buttons are fixed
      boxes, so the icons inside are scaled in place to match. */
-  .dr-icon-btn :global(svg),
-  .dr-close :global(svg) {
+  .dr-icon-btn :global(svg) {
     transform: scale(var(--bar-scale, 1));
   }
 </style>

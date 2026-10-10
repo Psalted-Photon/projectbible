@@ -13,6 +13,7 @@
   import { navigationStore } from "../stores/navigationStore";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import AuthorPill from "./AuthorPill.svelte";
+  import CloseX from "./CloseX.svelte";
 
   export let open = false;
   export let book = "";
@@ -256,7 +257,7 @@
       </button>
     </div>
     <div class="panel-title">{verseLabel()}</div>
-    <button class="close-btn" on:click={close} aria-label="Close">✕</button>
+    <CloseX edge on:click={close} />
   </div>
 
   <!-- Content -->
@@ -441,23 +442,6 @@
     font-size: 12px;
     color: #777;
     white-space: nowrap;
-  }
-
-  .close-btn {
-    background: none;
-    border: none;
-    color: #888;
-    font-size: 16px;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    line-height: 1;
-    flex-shrink: 0;
-  }
-
-  .close-btn:hover {
-    color: #e0e0e0;
-    background: #333;
   }
 
   /* ——— Body ——— */

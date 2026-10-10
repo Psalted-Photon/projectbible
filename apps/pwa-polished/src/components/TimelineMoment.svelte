@@ -10,6 +10,7 @@
   import { laneColor } from '../lib/timeline/lanes';
   import { itemColor } from '../lib/timeline/layout';
   import type { Moment } from '../lib/timeline/query';
+  import CloseX from './CloseX.svelte';
 
   export let moment: Moment;
   export let eraTitle: string | undefined = undefined;
@@ -33,7 +34,7 @@
 <div class="moment">
   <div class="moment-top">
     <div class="moment-kind">At this moment{#if eraTitle}<span class="moment-era"> · {eraTitle}</span>{/if}</div>
-    <button class="moment-close" aria-label="Close" on:click={onClose}>×</button>
+    <CloseX edge on:click={onClose} />
   </div>
   <div class="moment-year">c. {formatYear(moment.year)}</div>
   {#if rows.length}
@@ -59,12 +60,6 @@
     font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #fbbf24;
   }
   .moment-era { color: var(--dim, #8a8a8a); }
-  .moment-close {
-    width: 28px; height: 28px; border-radius: 6px;
-    background: transparent; border: 0; color: var(--dim, #8a8a8a); cursor: pointer;
-    font-size: 19px; line-height: 1;
-  }
-  .moment-close:hover { background: var(--chrome-2, #212121); color: var(--text, #e0e0e0); }
   .moment-year { font-family: var(--display); font-size: 17px; line-height: 1.25; margin-top: 2px; }
   .moment-rows {
     display: grid; grid-template-columns: max-content 1fr; gap: 4px 10px;

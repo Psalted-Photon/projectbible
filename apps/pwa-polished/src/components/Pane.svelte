@@ -5,6 +5,7 @@
   import SettingsPane from "./panes/SettingsPane.svelte";
   import PacksPane from "./panes/PacksPane.svelte";
   import WakeAlarmPane from "./panes/WakeAlarmPane.svelte";
+  import CloseX from "./CloseX.svelte";
 
 
   export let pane: PaneState;
@@ -127,8 +128,8 @@
     on:touchstart={startResize}
   ></div>
 
-  <!-- Close button -->
-  <button class="close-btn" on:click={handleClose}>×</button>
+  <!-- Close button, on the same row as each pane's title (their h2s leave room) -->
+  <CloseX class="pane-close" on:click={handleClose} />
 
   <!-- Pane content -->
   <div class="pane-content">
@@ -218,33 +219,17 @@
     transition: background 0.1s;
   }
 
-  .close-btn {
+  .pane :global(.pane-close) {
     position: absolute;
-    top: calc(12px * var(--bar-scale, 1));
-    right: calc(12px * var(--bar-scale, 1));
-    width: calc(32px * var(--bar-scale, 1));
-    height: calc(32px * var(--bar-scale, 1));
-    border: none;
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
-    font-size: calc(24px * var(--bar-scale, 1));
-    border-radius: 50%;
-    cursor: pointer;
+    top: 8px;
+    right: 8px;
     z-index: 20;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s;
-  }
-
-  .close-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
   }
 
   .pane-content {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 60px 20px 20px;
+    padding: 8px 20px 20px;
   }
 </style>

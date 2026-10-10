@@ -43,6 +43,7 @@
     type StrongsEntryData,
     type EntryTab,
   } from "../../lib/strongs/entry";
+  import CloseX from "../CloseX.svelte";
 
   /**
    * Strong's, as a work of its own beside the encyclopedia, Nave's, the people
@@ -393,11 +394,7 @@
           </button>
         {/if}
         {#if onClose}
-          <button class="close-btn" on:click={() => onClose?.()} aria-label="Close">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M18 6L6 18M6 6l12 12" stroke-width="2" stroke-linecap="round" />
-            </svg>
-          </button>
+          <CloseX edge on:click={() => onClose?.()} />
         {/if}
       </div>
     </div>
@@ -524,23 +521,9 @@
     flex-shrink: 0;
   }
   .pop-btn,
-  .close-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted, #999);
-    cursor: pointer;
-    padding: calc(2px * var(--bar-scale, 1));
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-  }
   .pop-btn:hover {
     color: var(--color-primary, #4a90e2);
   }
-  .close-btn:hover {
-    color: var(--text-color, #fff);
-  }
-
   .strongs-body {
     flex: 1;
     min-height: 0;
@@ -645,9 +628,5 @@
   .strongs-header .pop-btn svg {
     width: calc(18px * var(--bar-scale, 1));
     height: calc(18px * var(--bar-scale, 1));
-  }
-  .strongs-header .close-btn svg {
-    width: calc(24px * var(--bar-scale, 1));
-    height: calc(24px * var(--bar-scale, 1));
   }
 </style>

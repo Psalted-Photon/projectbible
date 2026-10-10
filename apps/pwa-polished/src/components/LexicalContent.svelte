@@ -18,6 +18,7 @@
   import { languageColor, glossTerm } from "../lib/strongs/entry";
   import { openDB } from "../adapters/db";
   import GetPacksCard from "./GetPacksCard.svelte";
+  import CloseX from "./CloseX.svelte";
 
   /**
    * The dictionary: an English word's definitions, or a tapped Greek or Hebrew
@@ -345,21 +346,7 @@
         </button>
       {/if}
       {#if !docked}
-        <button class="close-btn" on:click={close} aria-label="Close">
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-          >
-            <path
-              d="M18 6L6 18M6 6l12 12"
-              stroke-width="2"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
+        <CloseX edge on:click={close} />
       {/if}
     </div>
   </div>
@@ -704,19 +691,6 @@
   .pop-btn:hover {
     color: var(--color-primary, #4a90e2);
   }
-  .close-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted, #999);
-    cursor: pointer;
-    padding: calc(2px * var(--bar-scale, 1));
-    flex-shrink: 0;
-  }
-
-  .close-btn:hover {
-    color: var(--text-color, #fff);
-  }
-
   .modal-body {
     flex: 1;
     min-height: 0;
@@ -1004,9 +978,5 @@
   .modal-header .pop-btn svg {
     width: calc(18px * var(--bar-scale, 1));
     height: calc(18px * var(--bar-scale, 1));
-  }
-  .modal-header .close-btn svg {
-    width: calc(24px * var(--bar-scale, 1));
-    height: calc(24px * var(--bar-scale, 1));
   }
 </style>

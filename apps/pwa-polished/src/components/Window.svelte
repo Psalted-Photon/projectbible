@@ -8,6 +8,7 @@
   import PackUpdateNotice from "./PackUpdateNotice.svelte";
   import { WINDOW_PACKS } from "../lib/packUpdates";
   import { arrive, fadeIn } from "../lib/motion";
+  import CloseX from "./CloseX.svelte";
 
   export let window: WindowState;
 
@@ -332,7 +333,7 @@
           <path fill="#fde047" d="M200,136H156a20,20,0,0,0-20,20v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V156A20,20,0,0,0,200,136Zm-4,60H160V160h36Z" />
         </svg></button>
     {/if}
-    <button class="close-button" on:click={handleCloseClick} aria-label="Close panel">×</button>
+    <CloseX tall class="window-close" label="Close panel" on:click={handleCloseClick} />
   </div>
 
   {#if swapOpen && swapButton}
@@ -478,9 +479,9 @@
     backdrop-filter: blur(3px) saturate(1.1);
     -webkit-backdrop-filter: blur(3px) saturate(1.1);
     padding: 0 calc(2px * var(--bar-scale, 1));
-    /* Arrows left, swap dead center, × right. The two outer columns share the
+    /* Arrows left, swap dead center, X right. The two outer columns share the
        spare width equally so the swap stays centered; when the panel gets
-       narrow the arrows' column gives way first, so swap and × stay whole. */
+       narrow the arrows' column gives way first, so swap and X stay whole. */
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(auto, 1fr);
     align-items: center;
@@ -587,27 +588,9 @@
 
   /* Pinned to the third column so it stays at the right end even on the
      selector, which has no swap button in the middle. */
-  .close-button {
+  .panel-header :global(.window-close) {
     grid-column: 3;
     justify-self: end;
-    background: rgba(255, 255, 255, 0.2);
-    border: none;
-    color: white;
-    font-size: calc(16px * var(--bar-scale, 1));
-    width: calc(20px * var(--bar-scale, 1));
-    height: calc(20px * var(--bar-scale, 1));
-    border-radius: 2px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-    flex-shrink: 0;
-    transition: background 0.2s;
-  }
-
-  .close-button:hover {
-    background: rgba(255, 255, 255, 0.3);
   }
 
   .panel-content {
@@ -631,7 +614,7 @@
     padding-right: 26px;
   }
 
-  /* Bar size: the header, its arrows, swap and × above all scale with
+  /* Bar size: the header, its arrows, swap and X above all scale with
      --bar-scale (Settings → Appearance). */
   .swap-button :global(svg) {
     width: calc(11px * var(--bar-scale, 1));

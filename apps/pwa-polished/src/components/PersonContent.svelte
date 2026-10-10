@@ -36,6 +36,7 @@
     type WorksResolution,
     type LibraryRow,
   } from "../adapters/lexicon-lookup.js";
+  import CloseX from "./CloseX.svelte";
 
   /**
    * A person's bio, independent of what is holding it. Three hosts: the word-study
@@ -599,11 +600,7 @@
           </button>
         {/if}
         {#if onClose}
-          <button class="close-btn" on:click={() => onClose?.()} aria-label="Close">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M18 6L6 18M6 6l12 12" stroke-width="2" stroke-linecap="round" />
-            </svg>
-          </button>
+          <CloseX edge on:click={() => onClose?.()} />
         {/if}
       </div>
     </div>
@@ -928,21 +925,8 @@
     font-size: 11px;
   }
   .pop-btn,
-  .close-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted, #999);
-    cursor: pointer;
-    padding: calc(2px * var(--bar-scale, 1));
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-  }
   .pop-btn:hover {
     color: var(--color-primary, #4a90e2);
-  }
-  .close-btn:hover {
-    color: var(--text-color, #fff);
   }
   /* The way into the family tree: a soft green chip so it reads as a door. */
   .pop-btn.tree-btn {
@@ -1229,10 +1213,6 @@
   .person-header .pop-btn svg {
     width: calc(18px * var(--bar-scale, 1));
     height: calc(18px * var(--bar-scale, 1));
-  }
-  .person-header .close-btn svg {
-    width: calc(24px * var(--bar-scale, 1));
-    height: calc(24px * var(--bar-scale, 1));
   }
   .person-header .tree-btn :global(svg) {
     width: calc(21px * var(--bar-scale, 1));

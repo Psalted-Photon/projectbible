@@ -101,7 +101,7 @@
 <style>
   .readout-box {
     position: absolute;
-    /* Top right, below the ✕ Close button (which sits in the same corner). */
+    /* Top right, below the close X (which sits in the same corner). */
     top: calc(env(safe-area-inset-top, 0px) + 58px);
     right: calc(env(safe-area-inset-right, 0px) + 12px);
     background: rgba(13, 12, 11, 0.82);

@@ -16,6 +16,7 @@
   import TribeContent from './TribeContent.svelte';
   import type { PersonRecord } from '../adapters/lexicon-lookup.js';
   import { motionLevel } from '../lib/motion';
+  import { ArrowLeft } from 'phosphor-svelte';
 
   /** The person to show, and a counter the viewer bumps to force a fresh
    *  PersonContent instance. Both must be set together, in the same tick —
@@ -65,8 +66,10 @@
   <div class="sheet-head">
     <div class="handle" aria-hidden="true"></div>
     <div class="sheet-head-row">
+      <button class="back-btn" on:click={onBackToTree} aria-label="Back to tree" title="Back to tree">
+        <ArrowLeft size={20} weight="bold" />
+      </button>
       <span class="sheet-name">{tribe ? `Tribe of ${tribe}` : personLabel}</span>
-      <button class="back-btn" on:click={onBackToTree}>✕ Back to tree</button>
     </div>
   </div>
   <div class="sheet-body">
@@ -136,8 +139,7 @@
   .sheet-head-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    gap: 6px;
   }
   .sheet-name {
     font-family: Milonga, serif;
@@ -148,20 +150,22 @@
     white-space: nowrap;
     min-width: 0;
   }
+  /* 40px to tap, hanging into the head's padding so the row stays its height. */
   .back-btn {
     flex-shrink: 0;
+    display: inline-grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin: -10px 0 -10px -10px;
+    padding: 0;
     background: none;
-    border: 1px solid var(--border-color, #444);
-    border-radius: 14px;
+    border: none;
     color: var(--text-muted, #999);
-    font-family: inherit;
-    font-size: 12px;
-    padding: 5px 11px;
     cursor: pointer;
   }
   .back-btn:hover {
     color: var(--text-color, #fff);
-    border-color: var(--color-primary, #4a90e2);
   }
 
   .sheet-body {

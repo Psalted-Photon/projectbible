@@ -28,6 +28,7 @@
   import { getBookColor } from '../lib/bibleData';
   import { getSettings } from '../adapters/settings';
   import { loadTimeline, timelineInstalled, formatItemSpan, type TimelineItem } from '../lib/timeline/data';
+  import CloseX from './CloseX.svelte';
 
   export let windowId: string | undefined = undefined;
 
@@ -1269,7 +1270,7 @@
         bind:clientHeight={cardH}
         transition:fly={{ y: compact ? 260 : 60, duration: 220 }}
       >
-        <button class="info-close" aria-label="Close" on:click={() => (eraCardOpen = false)}>✕</button>
+        <CloseX class="info-close" on:click={() => (eraCardOpen = false)} />
         <div class="era-body">
           <div class="info-name">{era.title}</div>
           {#if era.subtitle}<div class="info-sub">{era.subtitle}</div>{/if}
@@ -1398,17 +1399,13 @@
             From <b>{measureFromName}</b> &middot; tap where to go
           {/if}
         </span>
-        <button class="measure-cancel" aria-label="Stop measuring" on:click={endMeasure}>✕</button>
+        <CloseX edge label="Stop measuring" on:click={endMeasure} />
       </div>
     {/if}
 
     {#if info}
       <aside class="info" aria-live="polite" bind:clientWidth={infoW}>
-        <button
-          class="info-close"
-          aria-label="Close"
-          on:click={closeInfo}
-        >✕</button>
+        <CloseX class="info-close" on:click={closeInfo} />
         <div class="info-body">
           {#if info.kind === 'measure'}
             {@const roadKm = info.km * ROAD_FACTOR}
@@ -2116,17 +2113,15 @@
     display: flex; flex-direction: column; overflow: hidden;
     font-family: var(--display);
   }
-  .info-close {
-    position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; z-index: 2;
-    border-radius: 7px; border: 1px solid var(--line); background: var(--chrome-2);
-    color: var(--dim); cursor: pointer; font-size: 12px;
+  .info :global(.info-close),
+  .era-card :global(.info-close) {
+    position: absolute; top: 2px; right: 2px; z-index: 2;
   }
-  .info-close:hover { color: var(--text); }
   .info-body { overflow-y: auto; padding: 14px 15px; }
 
   /* Milonga ships one weight, so anything here asking for bold gets a
      synthesized smear instead. Emphasis comes from size and color. */
-  .info-name { font-size: 18px; font-weight: 400; padding-right: 26px; }
+  .info-name { font-size: 18px; font-weight: 400; padding-right: 30px; }
   .info-sub {
     font-size: 11.5px; color: var(--dim); margin-top: 3px;
     font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -2251,13 +2246,6 @@
   }
   .measure-prompt > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .measure-prompt b { font-weight: 400; color: var(--focus); }
-  .measure-cancel {
-    flex: none; width: 24px; height: 24px; border-radius: 50%;
-    border: 1px solid var(--line); background: var(--chrome-2);
-    color: var(--dim); cursor: pointer; font-size: 11px;
-  }
-  .measure-cancel:hover { color: var(--text); }
-
   .mx-arrow { color: var(--dim); }
   .mx {
     margin-top: 10px; border-left: 2px solid #9a3412; padding-left: 9px;

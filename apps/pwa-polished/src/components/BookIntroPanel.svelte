@@ -8,6 +8,7 @@
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
   import { navigationStore } from "../stores/navigationStore";
   import { fixedOrigin } from "../lib/fixedOrigin";
+  import CloseX from "./CloseX.svelte";
 
   export let open = false;
   export let book = "";
@@ -109,7 +110,7 @@
       <span class="intro-icon">📖</span>
       Introduction to {book}
     </div>
-    <button class="close-btn" on:click={close} aria-label="Close">✕</button>
+    <CloseX edge on:click={close} />
   </div>
 
   <!-- Source attribution -->
@@ -196,14 +197,6 @@
     letter-spacing: .03em; text-transform: uppercase;
     flex-shrink: 0; border-bottom: 1px solid #2a2a2a;
   }
-
-  .close-btn {
-    background: none; border: none; color: #aaa;
-    font-size: 1.1rem; cursor: pointer;
-    padding: 4px 6px; border-radius: 6px; line-height: 1;
-    transition: background .15s, color .15s; flex-shrink: 0;
-  }
-  .close-btn:hover { background: #333; color: #fff; }
 
   .intro-body {
     flex: 1; overflow-y: auto; overscroll-behavior: contain;

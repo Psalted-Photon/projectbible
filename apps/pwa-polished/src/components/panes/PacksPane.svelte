@@ -38,6 +38,7 @@
   } from "../../adapters/tts";
   import { showNotice, errorText } from "../../stores/noticeStore";
   import { askConfirm } from "../../stores/confirmStore";
+  import CloseX from "../CloseX.svelte";
 
   console.log("DEV:", import.meta.env.DEV);
   console.log("PROD:", import.meta.env.PROD);
@@ -833,7 +834,7 @@
 {#if infoCard}
   <button class="info-backdrop" on:click={closeInfo} aria-label="Close"></button>
   <div class="info-card" role="dialog" aria-modal="true" aria-label={infoCard.title}>
-    <button class="info-close" on:click={closeInfo} aria-label="Close">✕</button>
+    <CloseX class="info-close" on:click={closeInfo} />
     <h4>{infoCard.title}</h4>
     {#if infoCard.subtitle}
       <div class="info-sub">{infoCard.subtitle}</div>
@@ -872,6 +873,11 @@
     font-weight: 600;
     color: #f0f0f0;
     margin: 0 0 0.2rem;
+    /* The title shares its row with the pane's close X (Pane.svelte). */
+    display: flex;
+    align-items: center;
+    min-height: calc(40px * var(--bar-scale, 1));
+    padding-right: calc(40px * var(--bar-scale, 1));
   }
 
   .db-line {
@@ -1245,23 +1251,10 @@
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
   }
 
-  .info-close {
+  .info-card :global(.info-close) {
     position: absolute;
-    top: 0.45rem;
-    right: 0.45rem;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    color: #888;
-    font-size: 0.95rem;
-    line-height: 1;
-    cursor: pointer;
-  }
-
-  .info-close:hover {
-    color: #fff;
+    top: 0;
+    right: 0;
   }
 
   .info-card h4 {

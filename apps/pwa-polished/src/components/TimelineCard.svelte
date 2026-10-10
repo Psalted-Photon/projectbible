@@ -17,6 +17,7 @@
   import { itemColor } from '../lib/timeline/layout';
   import { laneColor, VERDICT_COLOR } from '../lib/timeline/lanes';
   import { neighbours } from '../lib/timeline/query';
+  import CloseX from './CloseX.svelte';
 
   export let item: TimelineItem;
   export let data: TimelineData;
@@ -111,7 +112,7 @@
       <button class="card-btn" aria-label="Next" title={near.next ? near.next.title : ''} disabled={!near.next} on:click={() => near.next && onSelect(near.next)}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
       </button>
-      <button class="card-btn card-close" aria-label="Close" on:click={onClose}>×</button>
+      <CloseX edge on:click={onClose} />
     </div>
   </div>
 
@@ -212,7 +213,6 @@
   .card-btn {
     width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center;
     background: transparent; border: 0; color: var(--dim, #8a8a8a); cursor: pointer;
-    font-size: 19px; line-height: 1;
   }
   .card-btn svg { width: 16px; height: 16px; }
   .card-btn:hover:not(:disabled) { background: var(--chrome-2, #212121); color: var(--text, #e0e0e0); }

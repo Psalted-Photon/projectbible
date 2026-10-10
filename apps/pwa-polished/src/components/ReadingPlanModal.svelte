@@ -29,6 +29,7 @@
   import { BookOpenText, Plus, ArrowLeft } from 'phosphor-svelte';
   import DevotionalsTab from './devotionals/DevotionalsTab.svelte';
   import { devotionalTarget } from '../stores/devotionalStore';
+  import CloseX from './CloseX.svelte';
   
   export let isOpen = false;
   
@@ -1368,7 +1369,7 @@
     <div class="modal-content" on:click|stopPropagation>
       <div class="modal-header">
         <h2><span class="header-icon"><BookOpenText size={20} weight="bold" /><span class="icon-overlay"><BookOpenText size={20} weight="thin" /></span></span> {userName ? `${userName}'s Reading Plan` : 'Reading Plan'}</h2>
-        <button class="close-btn" on:click={close}>&times;</button>
+        <CloseX on:click={close} />
       </div>
       
       <div class="tabs">
@@ -2049,27 +2050,6 @@
   }
   :global(.modal-header .header-icon > svg) {
     filter: drop-shadow(0 0 2px #431407) drop-shadow(0 0 2px #431407);
-  }
-  
-  .close-btn {
-    background: none;
-    border: none;
-    font-size: 28px;
-    cursor: pointer;
-    color: #888;
-    padding: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-  }
-  
-  .close-btn:hover {
-    background: #2a2a2a;
-    color: #e0e0e0;
   }
   
   .tabs {

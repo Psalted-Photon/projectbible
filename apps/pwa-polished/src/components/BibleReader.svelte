@@ -218,6 +218,7 @@
   import { readingSessionStore } from "../stores/readingSessionStore";
   import { readingProgressStore } from "../stores/ReadingProgressStore";
   import type { HarmonyPassage, HarmonySection } from "@projectbible/core";
+  import CloseX from "./CloseX.svelte";
 
   const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans';
 
@@ -6745,14 +6746,14 @@
 {#if speakFailedWord}
   <div class="speak-voice-notice">
     <span>Couldn’t pronounce “{speakFailedWord}” cleanly — nothing played.</span>
-    <button on:click={() => (speakFailedWord = null)} aria-label="Dismiss">✕</button>
+    <CloseX edge label="Dismiss" on:click={() => (speakFailedWord = null)} />
   </div>
 {/if}
 
 {#if showTtsVoiceNeeded}
   <div class="speak-voice-notice">
     <span>The Greek voice isn't downloaded yet — use the Read Aloud button above the chapter.</span>
-    <button on:click={() => (showTtsVoiceNeeded = null)} aria-label="Dismiss">✕</button>
+    <CloseX edge label="Dismiss" on:click={() => (showTtsVoiceNeeded = null)} />
   </div>
 {/if}
 
@@ -6776,16 +6777,6 @@
     font-size: 13px;
     line-height: 1.35;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
-  }
-
-  .speak-voice-notice button {
-    flex: none;
-    background: none;
-    border: none;
-    color: #9ca3af;
-    font-size: 14px;
-    cursor: pointer;
-    padding: 2px 4px;
   }
 
   .bible-reader {

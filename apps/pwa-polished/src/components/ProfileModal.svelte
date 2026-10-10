@@ -19,6 +19,7 @@
   import BrandSpinner from './BrandSpinner.svelte';
   import PlayTodayButton from './PlayTodayButton.svelte';
   import { User } from 'phosphor-svelte';
+  import CloseX from './CloseX.svelte';
 
   let isOpen = false;
   $: isOpen = $profileModalStore;
@@ -676,7 +677,7 @@
           </div>
         </div>
         <div class="profile-actions">
-          <!-- Signed out there is nothing to sync, so only × shows. -->
+          <!-- Signed out there is nothing to sync, so only the X shows. -->
           {#if isSignedIn}
             <div class="sync-status" title={SYNC_SCOPE_TOOLTIP}>
               {#if syncing}
@@ -697,7 +698,7 @@
               {signingOut ? 'Signing out…' : 'Sign Out'}
             </button>
           {/if}
-          <button class="close-btn" on:click={close}>&times;</button>
+          <CloseX on:click={close} />
         </div>
       </div>
 

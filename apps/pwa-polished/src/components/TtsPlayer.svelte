@@ -32,6 +32,7 @@
     togglePlayPause,
   } from '../lib/tts/readingEngine.js';
   import BrandSpinner from './BrandSpinner.svelte';
+  import CloseX from './CloseX.svelte';
 
   export let translation: string;
   export let book: string;
@@ -129,13 +130,13 @@
       <button class="tts-download-btn" on:click={handleDownloadVoice}>
         Download {voiceLabel} (~{voiceSizeMB} MB)
       </button>
-      <button class="tts-btn" on:click={() => (local = 'idle')} title="Cancel">✕</button>
+      <CloseX class="tts-close" label="Cancel" on:click={() => (local = 'idle')} />
     {:else if local === 'downloading'}
       <BrandSpinner size={18} title="Downloading voice…" />
       <span class="tts-tip">Downloading {voiceLabel}… {downloadPct}%</span>
     {:else if local === 'error'}
       <span class="tts-tip tts-error">{errorMsg}</span>
-      <button class="tts-btn" on:click={() => (local = 'idle')} title="Dismiss">✕</button>
+      <CloseX class="tts-close" label="Dismiss" on:click={() => (local = 'idle')} />
     {:else if pressing || (isThisChapter && $isPreparing)}
       <!-- Only this chapter spins; the rest keep their plain talking head. -->
       <BrandSpinner size={22} />
@@ -184,6 +185,11 @@
 
   .tts-play-btn {
     font-size: 1.25rem;
+  }
+
+  /* Its 40px tap area hangs above and below so the row stays its height. */
+  .tts-player :global(.tts-close) {
+    margin: -10px 0;
   }
 
   /* The chapter currently being read — the only lit one. */

@@ -71,6 +71,7 @@
     type LaneLayout,
   } from '../lib/timeline/lanes';
   import { buildHereIndex, findHere, momentAt, searchItems, type HereIndex } from '../lib/timeline/query';
+  import CloseX from './CloseX.svelte';
 
   export let windowId: string | undefined = undefined;
 
@@ -1210,7 +1211,7 @@
             if (e.key === 'Enter' && results[0]) pickResult(results[0]);
           }}
         />
-        <button class="search-close" aria-label="Close search" on:click={closeSearch}>×</button>
+        <CloseX edge label="Close search" on:click={closeSearch} />
         {#if query.trim()}
           <div class="results">
             {#each results as r (r.id)}
@@ -1660,10 +1661,6 @@
     font: inherit; font-size: 14px;
   }
   .search-input:focus { outline: none; border-color: var(--focus); }
-  .search-close {
-    width: 30px; height: 30px; border-radius: 6px; background: transparent; border: 0;
-    color: var(--dim); font-size: 19px; line-height: 1; cursor: pointer;
-  }
   .results {
     position: absolute; left: calc(8px + var(--grip-l)); right: calc(8px + var(--grip-r)); top: 100%;
     max-height: 60vh; overflow-y: auto;
