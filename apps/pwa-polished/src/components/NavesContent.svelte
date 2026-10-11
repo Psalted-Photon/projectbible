@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretRight, ArrowLeft, ArrowRight } from "phosphor-svelte";
   import { onDestroy } from "svelte";
   import { packInstallFinished } from "../adapters/db-manager";
   import GetPacksCard from "./GetPacksCard.svelte";
@@ -567,7 +568,7 @@
       <nav class="trail" aria-label="Back trail">
         {#each trail as stop, i}
           <button class="crumb" on:click={() => popTrailTo(i)}>{stop.name}</button>
-          <span class="crumb-sep">›</span>
+          <span class="crumb-sep"><CaretRight size="1em" weight="bold" class="ph-inline" /></span>
         {/each}
         <span class="crumb here">{title}</span>
       </nav>
@@ -669,7 +670,7 @@
             {#each versesByBook as group}
               <div class="vb-group">
                 <button class="vb-header" on:click={() => toggleBook(group.book)}>
-                  <span class="vb-caret motion-caret" class:open={expandedBooks.has(group.book)} style="color:{group.color}">▶</span>
+                  <span class="vb-caret motion-caret" class:open={expandedBooks.has(group.book)} style="color:{group.color}"><CaretRight size="1em" weight="bold" /></span>
                   <span class="vb-name" style="color:{group.color}">{group.book}</span>
                   <span class="vb-count">({group.refs.length})</span>
                 </button>
@@ -705,7 +706,7 @@
           {#if neighbors.prev}
             {@const prev = neighbors.prev}
             <button class="turn-btn" on:click={() => jumpToTopic(Number(prev.id), prev.name)} title="Previous topic">
-              ← <span class="turn-name">{prev.name}</span>
+              <ArrowLeft size="1em" weight="bold" class="ph-inline" /> <span class="turn-name">{prev.name}</span>
             </button>
           {:else}
             <span></span>
@@ -713,7 +714,7 @@
           {#if neighbors.next}
             {@const next = neighbors.next}
             <button class="turn-btn next" on:click={() => jumpToTopic(Number(next.id), next.name)} title="Next topic">
-              <span class="turn-name">{next.name}</span> →
+              <span class="turn-name">{next.name}</span> <ArrowRight size="1em" weight="bold" class="ph-inline" />
             </button>
           {/if}
         </div>

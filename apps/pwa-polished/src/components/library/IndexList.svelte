@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretRight, ArrowDown } from "phosphor-svelte";
   import { onMount, tick } from "svelte";
   import AlphabetRail from "./AlphabetRail.svelte";
   import RefSearchBar from "./RefSearchBar.svelte";
@@ -461,7 +462,7 @@
     >
       {#if browsing && prefs.starred.length}
         <button class="shelf-head" on:click={() => (showStarred = !showStarred)}>
-          <span class="caret motion-caret" class:open={showStarred}>▶</span>
+          <span class="caret motion-caret" class:open={showStarred}><CaretRight size="1em" weight="bold" /></span>
           <span class="star-on">★</span> Starred
           <span class="count">({prefs.starred.length})</span>
         </button>
@@ -478,7 +479,7 @@
 
       {#if browsing && prefs.recent.length}
         <button class="shelf-head" on:click={() => (showRecent = !showRecent)}>
-          <span class="caret motion-caret" class:open={showRecent}>▶</span>
+          <span class="caret motion-caret" class:open={showRecent}><CaretRight size="1em" weight="bold" /></span>
           Recently viewed
           <span class="count">({prefs.recent.length})</span>
         </button>
@@ -577,7 +578,7 @@
           </div>
         {:else if browsing && adjacentLetter(1)}
           <button class="next-letter" on:click={() => selectLetter(adjacentLetter(1)!)}>
-            Continue into {sectionName(adjacentLetter(1) ?? "")} ↓
+            Continue into {sectionName(adjacentLetter(1) ?? "")} <ArrowDown size="1em" weight="bold" class="ph-inline" />
           </button>
         {/if}
       {/if}

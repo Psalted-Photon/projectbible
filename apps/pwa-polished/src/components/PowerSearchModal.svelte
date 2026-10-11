@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { X, CaretRight } from "phosphor-svelte";
   import type { 
     SearchConfig, 
     GeneratedQuery 
@@ -371,7 +372,7 @@
                   {#each config.mustContain as word, i}
                     <span class="chip chip-positive">
                       {word}
-                      <button on:click={() => removeMustContain(i)}>×</button>
+                      <button on:click={() => removeMustContain(i)} aria-label="Remove"><X size="1em" weight="bold" class="ph-inline" /></button>
                     </span>
                   {/each}
                 </div>
@@ -396,7 +397,7 @@
                   {#each config.mustNotContain as word, i}
                     <span class="chip chip-negative">
                       {word}
-                      <button on:click={() => removeMustNotContain(i)}>×</button>
+                      <button on:click={() => removeMustNotContain(i)} aria-label="Remove"><X size="1em" weight="bold" class="ph-inline" /></button>
                     </span>
                   {/each}
                 </div>
@@ -460,7 +461,7 @@
                   {#each config.proximityRules as rule, i}
                     <span class="chip chip-proximity">
                       "{rule.word1}" ↔ {rule.maxDistance} ↔ "{rule.word2}"
-                      <button on:click={() => removeProximityRule(i)}>×</button>
+                      <button on:click={() => removeProximityRule(i)} aria-label="Remove"><X size="1em" weight="bold" class="ph-inline" /></button>
                     </span>
                   {/each}
                 </div>
@@ -492,7 +493,7 @@
                 class="toggle-pattern"
                 on:click={() => showGeneratedPattern = !showGeneratedPattern}
               >
-                <span class="motion-caret" class:open={showGeneratedPattern}>▶</span> Generated Pattern
+                <span class="motion-caret" class:open={showGeneratedPattern}><CaretRight size="1em" weight="bold" /></span> Generated Pattern
               </button>
 
               {#if showGeneratedPattern}

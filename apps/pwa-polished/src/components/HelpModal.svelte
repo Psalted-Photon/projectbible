@@ -186,12 +186,17 @@
     position: relative;
   }
 
+  /* Phosphor's bold ArrowRight, drawn as a mask so it takes the bullet color. */
   .help-examples li::before {
-    content: "→";
+    content: "";
     position: absolute;
     left: 0;
-    color: #667eea;
-    font-weight: bold;
+    top: calc(8px + 0.3em);
+    width: 14px;
+    height: 14px;
+    background: #667eea;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M224.49,136.49l-72,72a12,12,0,0,1-17-17L187,140H40a12,12,0,0,1,0-24H187L135.51,64.48a12,12,0,0,1,17-17l72,72A12,12,0,0,1,224.49,136.49Z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M224.49,136.49l-72,72a12,12,0,0,1-17-17L187,140H40a12,12,0,0,1,0-24H187L135.51,64.48a12,12,0,0,1,17-17l72,72A12,12,0,0,1,224.49,136.49Z'/%3E%3C/svg%3E") center / contain no-repeat;
   }
 
   .help-footer {

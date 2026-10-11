@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretLeft, CaretRight } from "phosphor-svelte";
   import { planDayDateStr } from '@projectbible/core';
   import type { ReadingPlan } from '@projectbible/core';
   import type { ReadingProgressEntry } from '../stores/ReadingProgressStore';
@@ -113,9 +114,9 @@
 <div class="cal-wrap">
   <!-- Month navigation header -->
   <div class="cal-header">
-    <button class="nav-btn" on:click={prevMonth} aria-label="Previous month">‹</button>
+    <button class="nav-btn" on:click={prevMonth} aria-label="Previous month"><CaretLeft size="1em" weight="bold" class="ph-inline" /></button>
     <span class="month-label">{monthLabel}</span>
-    <button class="nav-btn" on:click={nextMonth} aria-label="Next month">›</button>
+    <button class="nav-btn" on:click={nextMonth} aria-label="Next month"><CaretRight size="1em" weight="bold" class="ph-inline" /></button>
   </div>
 
   <!-- Weekday headers -->

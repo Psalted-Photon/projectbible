@@ -319,7 +319,7 @@
       >
         <span class="nav-label">Commentary:</span>
         <span class="nav-value">{displayAuthor}</span>
-        <span class="nav-arrow">{authorDropdownOpen ? "▲" : "▼"}</span>
+        <span class="nav-arrow">{#if authorDropdownOpen}<CaretUp size="1em" weight="bold" />{:else}<CaretDown size="1em" weight="bold" />{/if}</span>
       </button>
     </div>
 

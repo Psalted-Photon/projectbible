@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowRight, ArrowLeft, CaretRight, Play, Pause } from "phosphor-svelte";
   /**
    * The map's furniture: its navbar, its panels, its timeline and the panel for
    * whatever you tapped. The drawing itself lives in lib/atlas/map.js, which
@@ -1409,7 +1410,7 @@
         <div class="info-body">
           {#if info.kind === 'measure'}
             {@const roadKm = info.km * ROAD_FACTOR}
-            <div class="info-name">{info.from.n} <span class="mx-arrow">→</span> {info.to.n}</div>
+            <div class="info-name">{info.from.n} <span class="mx-arrow"><ArrowRight size="1em" weight="bold" class="ph-inline" /></span> {info.to.n}</div>
             <div class="info-sub">How far, and how long it took</div>
 
             <div class="mx">
@@ -1501,7 +1502,7 @@
                         {/if}
                       </em>
                     </span>
-                    <span class="jx-arrow">→</span>
+                    <span class="jx-arrow"><ArrowRight size="1em" weight="bold" class="ph-inline" /></span>
                   </button>
 
                   <!-- The later calls, each its own way in. The row above opens
@@ -1552,7 +1553,7 @@
                       title="Previous stop: {info.journey.prev.n}"
                       on:click={() => atlas?.openJourneyStop(info.journey.id, info.journey.prev.i)}
                     >
-                      <span class="jx-arrow">←</span>
+                      <span class="jx-arrow"><ArrowLeft size="1em" weight="bold" class="ph-inline" /></span>
                       <span class="jx-step-t"><em>Before</em>{info.journey.prev.n}</span>
                     </button>
                   {:else}
@@ -1565,7 +1566,7 @@
                       on:click={() => atlas?.openJourneyStop(info.journey.id, info.journey.next.i)}
                     >
                       <span class="jx-step-t"><em>Next</em>{info.journey.next.n}</span>
-                      <span class="jx-arrow">→</span>
+                      <span class="jx-arrow"><ArrowRight size="1em" weight="bold" class="ph-inline" /></span>
                     </button>
                   {:else}
                     <span class="jx-step jx-step-r jx-step-off"><span class="jx-step-t"><em>Next</em>—</span></span>
@@ -1645,7 +1646,7 @@
               {@const open = openBooks[group.book] ?? i === 0}
               <div class="vb-group" class:open>
                 <button class="vb-header" on:click={() => toggleBook(group, i === 0)}>
-                  <span class="vb-caret motion-caret" class:open style="color:{colour}">►</span>
+                  <span class="vb-caret motion-caret" class:open style="color:{colour}"><CaretRight size="1em" weight="bold" /></span>
                   <span class="vb-name" style="color:{colour}">{bookName(group.book)}</span>
                   <span class="vb-count">({group.refs.length})</span>
                 </button>
@@ -1692,7 +1693,7 @@
 
       <div class="tl-controls">
         <button class="tl-play" aria-label="Play through the eras" on:click={togglePlay}>
-          {#if playTimer}❙❙{:else}▶{/if}
+          {#if playTimer}<Pause size={13} weight="bold" />{:else}<Play size={13} weight="bold" />{/if}
         </button>
         <div
           class="tl-track"

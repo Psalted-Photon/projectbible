@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowRight, ArrowUpRight, Trash, PencilSimple, DotsThree, ArrowClockwise } from "phosphor-svelte";
   /**
    * NotesPane — the desk.
    *
@@ -1574,7 +1575,7 @@
         Sign in to write notes and keep them synced across all your devices.
       </p>
       <button class="auth-wall-btn" on:click={() => profileModalStore.open()}>
-        Sign In to Continue →
+        Sign In to Continue <ArrowRight size="1em" weight="bold" class="ph-inline" />
       </button>
     </div>
   {:else if view === 'editor'}
@@ -1607,7 +1608,7 @@
       {/if}
 
       {#if target?.kind === 'verse'}
-        <button class="icon-btn" title="Go to this verse" on:click={jumpToVerse}>↗</button>
+        <button class="icon-btn" title="Go to this verse" on:click={jumpToVerse}><ArrowUpRight size={17} weight="bold" /></button>
       {/if}
 
       <!-- A page of your own can be sent to a notebook you share with other
@@ -1624,13 +1625,13 @@
       {/if}
 
       <!-- A shared page you may write in but not remove — somebody else's page,
-           left open to the notebook — gets no ⋯ at all, rather than one that
+           left open to the notebook — gets no Delete button at all, rather than one that
            offers nothing. -->
       {#if target?.kind !== 'shared' || canRemoveOpenPage}
         <button
           class="icon-btn"
           title={target?.kind === 'shared' ? 'Remove from the notebook' : 'Delete'}
-          on:click={() => (confirmDeleteOpen = !confirmDeleteOpen)}>⋯</button
+          on:click={() => (confirmDeleteOpen = !confirmDeleteOpen)}><Trash size={17} weight="bold" /></button
         >
       {/if}
     </div>
@@ -1708,13 +1709,13 @@
       <!-- No pencil while somebody else is in the page. The strip below says
            who, and offers to take it from them once they have gone quiet. -->
       {#if canEditOpenPage && !lockedByOther}
-        <button class="icon-btn" title="Edit this page" on:click={editSharedPage}>✎</button>
+        <button class="icon-btn" title="Edit this page" on:click={editSharedPage}><PencilSimple size={17} weight="bold" /></button>
       {/if}
       {#if hasSharedMenu}
         <button
           class="icon-btn"
           title="Page options"
-          on:click={() => (sharedMenuOpen = !sharedMenuOpen)}>⋯</button
+          on:click={() => (sharedMenuOpen = !sharedMenuOpen)}><DotsThree size={17} weight="bold" /></button
         >
       {/if}
     </div>
@@ -1962,7 +1963,7 @@
           </button>
 
           <button class="ghost-btn shared" on:click={() => loadShared({ force: true })}>
-            ↻ Check for changes
+            <ArrowClockwise size="1em" weight="bold" class="ph-inline" /> Check for changes
           </button>
         </section>
       {/if}

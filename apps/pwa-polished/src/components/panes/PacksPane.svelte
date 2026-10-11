@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowClockwise } from "phosphor-svelte";
   import { onMount } from "svelte";
   import {
     listInstalledPacks,
@@ -666,7 +667,7 @@
               disabled={$installBusy}
               title={state ? `Re-download ${pack.name}` : `Install ${pack.name}`}
               aria-label={state ? `Re-download ${pack.name}` : `Install ${pack.name}`}
-              >{state ? "↻" : "↓"}</button
+              >{#if state}<ArrowClockwise size={16} weight="bold" />{:else}<DownloadSimple size={16} weight="bold" />{/if}</button
             >
             {#if state}
               <button
@@ -816,7 +817,7 @@
                 on:click={() => installTtsVoice(voice.id)}
                 disabled={$installBusy}
                 title="Install {voice.label}"
-                aria-label="Install {voice.label}">↓</button
+                aria-label="Install {voice.label}"><DownloadSimple size={16} weight="bold" /></button
               >
             {/if}
           </div>

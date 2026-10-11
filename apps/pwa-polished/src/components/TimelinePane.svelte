@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from "phosphor-svelte";
   /**
    * The Timeline window: the whole story down one vertical strip, and where
    * you are in it.
@@ -1353,7 +1354,7 @@
           </button>
         {:else if here && hereWhere !== 'none'}
           <button class="here-tag here-off x-here-off" class:after={hereWhere === 'below'} data-here on:click={() => fromClick(tapHere)}>
-            {hereWhere === 'above' ? '←' : '→'} {hereLabel}
+            {#if hereWhere === 'above'}<ArrowLeft size="1em" weight="bold" class="ph-inline" />{:else}<ArrowRight size="1em" weight="bold" class="ph-inline" />{/if} {hereLabel}
           </button>
         {/if}
         {#if momentOn}
@@ -1448,7 +1449,7 @@
           </button>
         {:else if here && hereWhere !== 'none'}
           <button class="here-tag here-off" class:below={hereWhere === 'below'} data-here on:click={() => fromClick(tapHere)}>
-            {hereWhere === 'above' ? '↑' : '↓'} {hereLabel}
+            {#if hereWhere === 'above'}<ArrowUp size="1em" weight="bold" class="ph-inline" />{:else}<ArrowDown size="1em" weight="bold" class="ph-inline" />{/if} {hereLabel}
           </button>
         {/if}
 

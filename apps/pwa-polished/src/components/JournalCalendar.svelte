@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretLeft, CaretRight, ArrowRight } from "phosphor-svelte";
   import { onMount, createEventDispatcher, tick } from 'svelte';
   import { localDateStr } from '../stores/clockStore';
   import { syncedJournalStore } from '../adapters/SyncedJournalStore';
@@ -196,9 +197,9 @@
   <div class="jc-top">
     <button class="today-btn" on:click={goToToday}>Today</button>
     <div class="month-nav">
-      <button class="nav-btn" on:click={prevMonth} aria-label="Previous month">‹</button>
+      <button class="nav-btn" on:click={prevMonth} aria-label="Previous month"><CaretLeft size="1em" weight="bold" class="ph-inline" /></button>
       <span class="month-label">{monthLabel}</span>
-      <button class="nav-btn" on:click={nextMonth} aria-label="Next month">›</button>
+      <button class="nav-btn" on:click={nextMonth} aria-label="Next month"><CaretRight size="1em" weight="bold" class="ph-inline" /></button>
     </div>
   </div>
 
@@ -256,12 +257,12 @@
       {/if}
       <div class="pop-preview">{stripHtml(selectedCell.entry.text)}</div>
       <button class="pop-action" on:click={() => openJournal(selectedCell?.dateStr ?? '')}>
-        Open in Journal →
+        Open in Journal <ArrowRight size="1em" weight="bold" class="ph-inline" />
       </button>
     {:else}
       <div class="pop-empty">No entry for this day.</div>
       <button class="pop-action" on:click={() => openJournal(selectedCell?.dateStr ?? '')}>
-        Add journal entry for this day →
+        Add journal entry for this day <ArrowRight size="1em" weight="bold" class="ph-inline" />
       </button>
     {/if}
   </div>

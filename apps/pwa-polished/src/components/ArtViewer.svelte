@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowSquareOut } from "phosphor-svelte";
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { fade } from '../lib/motion';
   import CloseX from './CloseX.svelte';
@@ -388,7 +389,7 @@
       </div>
       {#if sourceUrl}
         <a class="caption-source" href={sourceUrl} target="_blank" rel="noopener noreferrer">
-          Wikimedia Commons ↗
+          Wikimedia Commons <ArrowSquareOut size="1em" weight="bold" class="ph-inline" />
         </a>
       {/if}
     </div>

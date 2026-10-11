@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretRight } from "phosphor-svelte";
   import { onDestroy, tick } from "svelte";
   import { get } from "svelte/store";
   import WorkTabs from "../WorkTabs.svelte";
@@ -426,7 +427,7 @@
       <nav class="trail" aria-label="Back trail">
         {#each trail as stop, i}
           <button class="crumb" on:click={() => popTrailTo(i)}>{stop.name}</button>
-          <span class="crumb-sep">›</span>
+          <span class="crumb-sep"><CaretRight size="1em" weight="bold" class="ph-inline" /></span>
         {/each}
         {#if entry}<span class="crumb here">{displayId(entry.id)} {firstForm(entry.lemma)}</span>{/if}
       </nav>

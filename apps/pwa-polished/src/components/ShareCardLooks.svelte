@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { X } from "phosphor-svelte";
   /**
    * Looks: a card's style saved by name and reused with one tap.
    *
@@ -79,7 +80,7 @@
     >
       <span class="scl-swatch" style={chipStyle(look.style)}>Aa</span>
       {look.name}
-      {#if editing}<span class="scl-x" aria-label="Remove">×</span>{/if}
+      {#if editing}<span class="scl-x" aria-label="Remove"><X size="1em" weight="bold" /></span>{/if}
     </button>
   {/each}
 </div>

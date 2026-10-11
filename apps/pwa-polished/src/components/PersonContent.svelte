@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretRight, ArrowLeft, ArrowRight } from "phosphor-svelte";
   import { onMount, onDestroy, tick } from "svelte";
   import { packInstallFinished } from "../adapters/db-manager";
   import GetPacksCard from "./GetPacksCard.svelte";
@@ -635,7 +636,7 @@
       <nav class="trail" aria-label="Back trail">
         {#each trail as stop, i}
           <button class="crumb" on:click={() => popTrailTo(i)}>{stop.name}</button>
-          <span class="crumb-sep">›</span>
+          <span class="crumb-sep"><CaretRight size="1em" weight="bold" class="ph-inline" /></span>
         {/each}
         <span class="crumb here">{title}</span>
       </nav>
@@ -732,7 +733,7 @@
         {#if person.verseCount}
           <div class="char-verses">
             <button class="char-verses-toggle" on:click={toggleVerseList}>
-              <span class="char-verses-caret motion-caret" class:open={showVerseList}>▶</span>
+              <span class="char-verses-caret motion-caret" class:open={showVerseList}><CaretRight size="1em" weight="bold" /></span>
               Appears in {person.verseCount} verse{person.verseCount === 1 ? "" : "s"}
             </button>
             {#if showVerseList}
@@ -744,7 +745,7 @@
                   {#each versesByBook as { book, refs, color }}
                     <div class="cv-book-group">
                       <button class="cv-book-header" on:click={() => toggleBook(book, refs)}>
-                        <span class="cv-book-caret motion-caret" class:open={expandedBooks.has(book)} style="color:{color}">▶</span>
+                        <span class="cv-book-caret motion-caret" class:open={expandedBooks.has(book)} style="color:{color}"><CaretRight size="1em" weight="bold" /></span>
                         <span class="cv-book-name" style="color:{color}">{book}</span>
                         <span class="cv-book-count">({refs.length})</span>
                       </button>
@@ -814,7 +815,7 @@
           {#if neighbors.prev}
             {@const prev = neighbors.prev}
             <button class="turn-btn" on:click={() => openPerson(String(prev.id), prev.name)} title="Previous person">
-              ← <span class="turn-name">{prev.name}</span>
+              <ArrowLeft size="1em" weight="bold" class="ph-inline" /> <span class="turn-name">{prev.name}</span>
             </button>
           {:else}
             <span></span>
@@ -822,7 +823,7 @@
           {#if neighbors.next}
             {@const next = neighbors.next}
             <button class="turn-btn next" on:click={() => openPerson(String(next.id), next.name)} title="Next person">
-              <span class="turn-name">{next.name}</span> →
+              <span class="turn-name">{next.name}</span> <ArrowRight size="1em" weight="bold" class="ph-inline" />
             </button>
           {/if}
         </div>

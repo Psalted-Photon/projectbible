@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowLineLeft, ArrowLineUp, ArrowLineDown, ArrowLineRight } from "phosphor-svelte";
   import { windowStore, type WindowState, type WindowEdge } from "../lib/stores/windowStore";
   import { pendingCloseEdge } from "../stores/paneStore";
   import { swapWindowContent, openHarmonyView, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
@@ -17,11 +18,12 @@
 
   // Send this window to another edge. The reader re-insets itself from the
   // store, so nothing here has to know about the layout.
-  const EDGES: { edge: WindowEdge; label: string; glyph: string }[] = [
-    { edge: 'left', label: 'Dock left', glyph: '◀' },
-    { edge: 'top', label: 'Dock top', glyph: '▲' },
-    { edge: 'bottom', label: 'Dock bottom', glyph: '▼' },
-    { edge: 'right', label: 'Dock right', glyph: '▶' },
+  // An arrow running into a line: send the window to that edge.
+  const EDGES: { edge: WindowEdge; label: string; glyph: typeof ArrowLineLeft }[] = [
+    { edge: 'left', label: 'Dock left', glyph: ArrowLineLeft },
+    { edge: 'top', label: 'Dock top', glyph: ArrowLineUp },
+    { edge: 'bottom', label: 'Dock bottom', glyph: ArrowLineDown },
+    { edge: 'right', label: 'Dock right', glyph: ArrowLineRight },
   ];
 
   function moveTo(edge: WindowEdge) {
@@ -311,7 +313,7 @@
           aria-disabled={window.edge === e.edge}
           title={e.label}
           aria-label={e.label}
-        >{e.glyph}</button>
+        ><svelte:component this={e.glyph} size="1.15em" weight="bold" /></button>
       {/each}
     </div>
     {#if window.contentType !== 'selector'}

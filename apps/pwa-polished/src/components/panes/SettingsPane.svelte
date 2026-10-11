@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowRight, X } from "phosphor-svelte";
   import { onMount, onDestroy } from "svelte";
   import {
     applyTheme, getSettings, updateSettings, getTtsSettings, getWakeAlarmSettings,
@@ -923,7 +924,7 @@
                     style="background: {color}"
                     title={color}
                     on:click={() => (editingTextPresets ? removePreset("text", i) : usePreset("text", color))}
-                  >{#if editingTextPresets}<span class="cp-x">×</span>{/if}</button>
+                  >{#if editingTextPresets}<span class="cp-x"><X size="1em" weight="bold" /></span>{/if}</button>
                 {/each}
                 {#each textSlotsFree as _}
                   <span class="cp-swatch empty"></span>
@@ -957,7 +958,7 @@
                     style="background: {color}"
                     title={color}
                     on:click={() => (editingBgPresets ? removePreset("bg", i) : usePreset("bg", color))}
-                  >{#if editingBgPresets}<span class="cp-x">×</span>{/if}</button>
+                  >{#if editingBgPresets}<span class="cp-x"><X size="1em" weight="bold" /></span>{/if}</button>
                 {/each}
                 {#each bgSlotsFree as _}
                   <span class="cp-swatch empty"></span>
@@ -1276,7 +1277,7 @@
       <button class="packs-button alarm-button" on:click={openWakeAlarmPane}>
         <span class="icon"><Alarm size={22} weight="bold" /></span>
         <span class="text">Auto-Read Alarm{alarmSummary ? ` — ${alarmSummary}` : ""}</span>
-        <span class="arrow">→</span>
+        <span class="arrow"><ArrowRight size="1em" weight="bold" /></span>
       </button>
     </div>
 
@@ -1433,7 +1434,7 @@
         <button class="packs-button" on:click={openPacksPane}>
           <span class="icon"><Package size={22} weight="bold" /></span>
           <span class="text">Manage Packs</span>
-          <span class="arrow">→</span>
+          <span class="arrow"><ArrowRight size="1em" weight="bold" /></span>
         </button>
       </div>
 

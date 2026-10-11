@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretRight } from "phosphor-svelte";
   import { get } from "svelte/store";
   import { getBookColor } from "../../lib/bibleData.js";
   import StrongsVerseList from "../StrongsVerseList.svelte";
@@ -430,7 +431,7 @@
           {#each formGroups as f (f.key)}
             <div class="form-group">
               <button class="form-row" on:click={() => toggleForm(f.key)}>
-                <span class="form-caret motion-caret" class:open={openForm === f.key}>▶</span>
+                <span class="form-caret motion-caret" class:open={openForm === f.key}><CaretRight size="1em" weight="bold" /></span>
                 <span class="form-text" dir={rtl ? "rtl" : "ltr"}>{f.form}</span>
                 <span class="form-parse">{parseOf(f.morphCode)}</span>
                 <span class="form-count">{f.count}</span>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowRight, ArrowDown } from "phosphor-svelte";
   import { onMount, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { askConfirm } from '../stores/confirmStore';
@@ -1571,7 +1572,7 @@
                     </div>
                     <div class="plan-manager-actions">
                       {#if nextCh}
-                        <button class="pm-chapter-link" on:click={() => { selectPlanTab(entry.id); navigateToChapter(nextCh.book, nextCh.chapter); }}>{normalizeBookName(nextCh.book)} {nextCh.chapter} →</button>
+                        <button class="pm-chapter-link" on:click={() => { selectPlanTab(entry.id); navigateToChapter(nextCh.book, nextCh.chapter); }}>{normalizeBookName(nextCh.book)} {nextCh.chapter} <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
                       {/if}
                       {#if planRenamingId !== entry.id}
                         <button class="pm-rename-btn" on:click={() => { planRenamingId = entry.id; planRenameValue = getPlanDisplayName(entry.plan.config); planDeleteConfirmId = null; }}>Rename</button>
@@ -1603,7 +1604,7 @@
                   <div class="today-reading" class:day-done={todayDone}>
                     <div class="today-reading-header">
                       <span class="today-day-label">Day {todayReading.dayNumber} &mdash; {new Date(todayReading.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                      <button class="jump-to-day-btn" on:click={() => scrollToDayInList(todayReading.dayNumber)}>Jump to day ↓</button>
+                      <button class="jump-to-day-btn" on:click={() => scrollToDayInList(todayReading.dayNumber)}>Jump to day <ArrowDown size="1em" weight="bold" class="ph-inline" /></button>
                     </div>
                     <div class="chapters-list">
                       {#if todayReading.harmonySections?.length}
@@ -1650,7 +1651,7 @@
                             }
                           }}
                         >
-                          Read Again →
+                          Read Again <ArrowRight size="1em" weight="bold" class="ph-inline" />
                         </button>
                         <PlayTodayButton onStarted={close} planId={currentPlanId} day={todayReading} />
                       {:else}
@@ -1664,7 +1665,7 @@
                             }
                           }}
                         >
-                          Start Reading →
+                          Start Reading <ArrowRight size="1em" weight="bold" class="ph-inline" />
                         </button>
                         <PlayTodayButton onStarted={close} planId={currentPlanId} day={todayReading} />
                         <button class="mark-day-btn" on:click={() => markDayComplete(todayReading)}>Mark Day Complete</button>
@@ -1966,7 +1967,7 @@
         <div class="auth-wall">
           <div class="auth-wall-icon"><BookOpenText size={48} weight="bold" /></div>
           <p class="auth-wall-text">Sign in to create and sync reading plans across all your devices.</p>
-          <button class="auth-wall-btn" on:click={() => { close(); profileModalStore.open(); }}>Sign In to Continue →</button>
+          <button class="auth-wall-btn" on:click={() => { close(); profileModalStore.open(); }}>Sign In to Continue <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
         </div>
       {/if}
     </div>

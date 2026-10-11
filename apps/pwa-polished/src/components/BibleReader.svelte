@@ -80,6 +80,7 @@
 </script>
 
 <script lang="ts">
+  import { CaretUp, CaretDown, CaretRight, CaretLeft, NotePencil, ArrowRight } from "phosphor-svelte";
   import { onMount, tick } from "svelte";
   import { get, writable } from "svelte/store";
   import { motionLevel } from "../lib/motion";
@@ -6487,15 +6488,15 @@
                     {#if $repeatCountsStore.get(rec.word) !== undefined}
                       <span class="repeat-pill-count">({$repeatCountsStore.get(rec.word)})</span>
                     {/if}
-                    <span class="intro-repeat-caret">{introMenuKey === `${rec.book}:${rec.word}` ? '▴' : '▾'}</span>
+                    <span class="intro-repeat-caret">{#if introMenuKey === `${rec.book}:${rec.word}`}<CaretUp size="1em" weight="bold" />{:else}<CaretDown size="1em" weight="bold" />{/if}</span>
                   </button>
                   {#if introMenuKey === `${rec.book}:${rec.word}`}
                     <div class="intro-repeat-menu" on:click|stopPropagation on:keydown|stopPropagation role="menu" tabindex="-1">
                       {#if introMenuView === 'main'}
-                        <button class="intro-repeat-item" on:click|stopPropagation={() => (introMenuView = 'scope')}>Highlight All ▸</button>
+                        <button class="intro-repeat-item" on:click|stopPropagation={() => (introMenuView = 'scope')}>Highlight All <CaretRight size="1em" weight="bold" class="ph-inline" /></button>
                         <button class="intro-repeat-item" on:click|stopPropagation={() => introDeselect(rec)}>Deselect All</button>
                       {:else}
-                        <button class="intro-repeat-item intro-repeat-back" on:click|stopPropagation={() => (introMenuView = 'main')}>‹ Highlight all in…</button>
+                        <button class="intro-repeat-item intro-repeat-back" on:click|stopPropagation={() => (introMenuView = 'main')}><CaretLeft size="1em" weight="bold" class="ph-inline" /> Highlight all in…</button>
                         <button class="intro-repeat-item" on:click|stopPropagation={() => introHighlightAll(rec, 'chapter')}>Current Chapter</button>
                         <button class="intro-repeat-item" on:click|stopPropagation={() => introHighlightAll(rec, 'book')}>Current Book</button>
                       {/if}
@@ -6645,7 +6646,7 @@
                     title="View note"
                     on:click|stopPropagation={() => openNotePopup(verse, chapterData.book, chapterData.chapter)}
                     on:keypress|stopPropagation={(e) => e.key === 'Enter' && openNotePopup(verse, chapterData.book, chapterData.chapter)}
-                  >✎</span>
+                  ><NotePencil size="1em" weight="bold" class="ph-inline" /></span>
                 {/if}
                 </span>
                 {#if hCtxsForVerse.length > 0}
@@ -6690,11 +6691,11 @@
                       <button
                         class="plan-mark-continue-btn"
                         on:click={() => handleMarkAndContinue(ctx, chapterData.book, chapterData.chapter)}
-                      >✓ Done — {ctx.nextChapter?.book} {ctx.nextChapter?.chapter} →</button>
+                      >✓ Done — {ctx.nextChapter?.book} {ctx.nextChapter?.chapter} <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
                       <button
                         class="plan-continue-only-btn"
                         on:click={() => handleContinueOnly(ctx)}
-                      >{ctx.nextChapter?.book} {ctx.nextChapter?.chapter} →</button>
+                      >{ctx.nextChapter?.book} {ctx.nextChapter?.chapter} <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
                     {/if}
                   </div>
                 {/if}

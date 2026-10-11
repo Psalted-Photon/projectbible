@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretLeft, CaretRight } from "phosphor-svelte";
   import { onMount, onDestroy } from "svelte";
   import CommentaryNavigationBar from "./CommentaryNavigationBar.svelte";
   import { ChatText } from "phosphor-svelte";
@@ -239,9 +240,9 @@
           <h3 class="enoch-chapter-title">{enochChapter.label}</h3>
           <p class="enoch-verses">{#each enochChapter.verses as v}<span class="enoch-verse"><sup class="enoch-vn">{v.n}</sup>{v.text} </span>{/each}</p>
           <nav class="enoch-nav">
-            <button class="enoch-nav-btn" disabled={!hasPrevEnoch} on:click={() => goEnoch(-1)}>‹ Prev</button>
+            <button class="enoch-nav-btn" disabled={!hasPrevEnoch} on:click={() => goEnoch(-1)}><CaretLeft size="1em" weight="bold" class="ph-inline" /> Prev</button>
             <span class="enoch-nav-label">{enochChapter.label}</span>
-            <button class="enoch-nav-btn" disabled={!hasNextEnoch} on:click={() => goEnoch(1)}>Next ›</button>
+            <button class="enoch-nav-btn" disabled={!hasNextEnoch} on:click={() => goEnoch(1)}>Next <CaretRight size="1em" weight="bold" class="ph-inline" /></button>
           </nav>
         </article>
       {:else}

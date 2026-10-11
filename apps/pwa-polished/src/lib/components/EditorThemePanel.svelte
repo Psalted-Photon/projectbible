@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { X } from "phosphor-svelte";
   /**
    * Theme picker for a writing surface (Notes or Journal).
    *
@@ -195,7 +196,7 @@
                   style="background: {color}"
                   title={color}
                   on:click={() => (editingText ? removePreset("text", i) : usePreset("text", color))}
-                >{#if editingText}<span class="etp-x">×</span>{/if}</button>
+                >{#if editingText}<span class="etp-x"><X size="1em" weight="bold" /></span>{/if}</button>
               {/each}
               {#each textSlotsFree as _}
                 <span class="etp-swatch empty"></span>
@@ -232,7 +233,7 @@
                   style="background: {color}"
                   title={color}
                   on:click={() => (editingBg ? removePreset("bg", i) : usePreset("bg", color))}
-                >{#if editingBg}<span class="etp-x">×</span>{/if}</button>
+                >{#if editingBg}<span class="etp-x"><X size="1em" weight="bold" /></span>{/if}</button>
               {/each}
               {#each bgSlotsFree as _}
                 <span class="etp-swatch empty"></span>

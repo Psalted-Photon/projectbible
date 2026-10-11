@@ -80,6 +80,7 @@
 </script>
 
 <script lang="ts">
+  import { DotsThree } from "phosphor-svelte";
   /**
    * The notebook → pages list, with its rows.
    *
@@ -285,7 +286,7 @@
               title="Notebook options"
               aria-label="Notebook options"
               on:click={() => (openMenuId = openMenuId === notebook.id ? null : notebook.id)}
-              >⋯</button
+              ><DotsThree size={17} weight="bold" /></button
             >
           {/if}
         {/if}

@@ -16,6 +16,7 @@
 </script>
 
 <script lang="ts">
+  import { CaretRight } from "phosphor-svelte";
   import { getBookColor } from "../../lib/bibleData.js";
   import { renderVersePreviewHtml } from "../../lib/verseRendering";
   import { reveal } from "../../lib/motion";
@@ -68,7 +69,7 @@
 {#if refs.length}
   <div class="refs" class:indent>
     <button class="refs-toggle" on:click={onToggle} aria-expanded={open}>
-      <span class="refs-caret motion-caret" class:open>▶</span>
+      <span class="refs-caret motion-caret" class:open><CaretRight size="1em" weight="bold" /></span>
       <span>{refs.length} reference{refs.length === 1 ? "" : "s"}</span>
     </button>
     {#if open}

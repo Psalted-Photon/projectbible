@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretLeft, CaretRight } from "phosphor-svelte";
   /**
    * The parallel view: up to four readers side by side.
    *
@@ -344,13 +345,13 @@
       on:click={() => step(-1)}
       disabled={!canStepBack}
       aria-label={comparing ? 'Previous chapter' : 'Previous section'}
-      title={comparing ? 'Previous chapter' : 'Previous section'}>‹</button>
+      title={comparing ? 'Previous chapter' : 'Previous section'}><CaretLeft size="1em" weight="bold" class="ph-inline" /></button>
     <button
       class="pv-step"
       on:click={() => step(1)}
       disabled={!canStepFwd}
       aria-label={comparing ? 'Next chapter' : 'Next section'}
-      title={comparing ? 'Next chapter' : 'Next section'}>›</button>
+      title={comparing ? 'Next chapter' : 'Next section'}><CaretRight size="1em" weight="bold" class="ph-inline" /></button>
 
     {#if comparing}
       <span class="pv-set">

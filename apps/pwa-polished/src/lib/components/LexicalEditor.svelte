@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowUUpLeft, ArrowUUpRight } from "phosphor-svelte";
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   // Aliased on import: Svelte reserves the $ prefix for store subscriptions,
   // so the Lexical naming convention can't be used as a local binding here.
@@ -448,8 +449,8 @@
   >
     <div class="toolbar" bind:this={toolbarEl}>
       <!-- Undo / Redo -->
-      <button on:mousedown|preventDefault on:click={undo} title="Undo (Ctrl+Z)" aria-label="Undo" type="button">↩</button>
-      <button on:mousedown|preventDefault on:click={redo} title="Redo (Ctrl+Y)" aria-label="Redo" type="button">↪</button>
+      <button on:mousedown|preventDefault on:click={undo} title="Undo (Ctrl+Z)" aria-label="Undo" type="button"><ArrowUUpLeft size={14} weight="bold" /></button>
+      <button on:mousedown|preventDefault on:click={redo} title="Redo (Ctrl+Y)" aria-label="Redo" type="button"><ArrowUUpRight size={14} weight="bold" /></button>
 
       <span class="sep"></span>
 

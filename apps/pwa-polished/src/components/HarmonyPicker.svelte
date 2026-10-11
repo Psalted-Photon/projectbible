@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretRight } from "phosphor-svelte";
   import { portal } from '../lib/portal';
   /**
    * The modal behind the Harmonies tile: choose what to lay side by side.
@@ -287,7 +288,7 @@
             on:click={() => (openParts = { ...openParts, [part.title]: !openParts[part.title] })}
             aria-expanded={!!openParts[part.title]}
           >
-            <span class="hp-caret" class:open={openParts[part.title]}>›</span>
+            <span class="hp-caret" class:open={openParts[part.title]}><CaretRight size="1em" weight="bold" /></span>
             <span class="hp-part-title">{part.title}</span>
             <span class="hp-part-count">{part.entries.length}</span>
           </button>

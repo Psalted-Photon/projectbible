@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretLeft, CaretRight } from "phosphor-svelte";
   import { createEventDispatcher } from 'svelte';
   
   export let currentDate: string;
@@ -31,7 +32,7 @@
     aria-label="Previous day"
     type="button"
   >
-    ←
+    <CaretLeft size="1em" weight="bold" />
   </button>
   
   <input
@@ -69,7 +70,7 @@
     aria-label="Next day"
     type="button"
   >
-    →
+    <CaretRight size="1em" weight="bold" />
   </button>
   
   {#if isSaving}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretDown, PencilSimple } from "phosphor-svelte";
   import { onMount, createEventDispatcher } from 'svelte';
   import { get } from 'svelte/store';
   import { navigationStore } from '../stores/navigationStore';
@@ -261,7 +262,7 @@
               on:click={() => toggleFold(cat.key)}
               aria-expanded={!folded.has(cat.key)}
             >
-              <span class="svp-fold" class:svp-fold--closed={folded.has(cat.key)}>▾</span>
+              <span class="svp-fold" class:svp-fold--closed={folded.has(cat.key)}><CaretDown size="1em" weight="bold" /></span>
               {#if cat.kind === 'marker'}
                 <span class="svp-sample svp-sample--marker" style="background: {cat.color}">Aa</span>
               {:else if cat.kind === 'text'}
@@ -291,7 +292,7 @@
                 on:blur={commitEdit}
               />
             {:else if cat.nameable}
-              <button class="svp-rename" on:click={() => startEdit(cat.key)} aria-label="Name this group" title="Name this group">✎</button>
+              <button class="svp-rename" on:click={() => startEdit(cat.key)} aria-label="Name this group" title="Name this group"><PencilSimple size="1em" weight="bold" /></button>
             {/if}
             </div>
             {#if !folded.has(cat.key)}

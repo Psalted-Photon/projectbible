@@ -15,7 +15,7 @@
    * without a socket each.
    */
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
-  import { ArrowLeft, PushPin } from 'phosphor-svelte';
+  import { ArrowLeft, PushPin, ArrowClockwise } from 'phosphor-svelte';
   import SharedPageView from './SharedPageView.svelte';
   import AuthorPill from './AuthorPill.svelte';
   import { sharedNotebookStore } from '../adapters/SharedNotebookStore';
@@ -181,7 +181,7 @@
       {/if}
 
       <button class="pn-refresh" on:click={() => refresh()} disabled={refreshing}>
-        {refreshing ? 'Checking…' : '↻ Check for changes'}
+        {#if refreshing}Checking…{:else}<ArrowClockwise size="1em" weight="bold" class="ph-inline" /> Check for changes{/if}
       </button>
     </div>
   {/if}

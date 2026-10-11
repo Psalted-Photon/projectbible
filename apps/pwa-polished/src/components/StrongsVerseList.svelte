@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretRight } from "phosphor-svelte";
   /**
    * The verse list shared by the word study's Forms and Occurrences tabs.
    *
@@ -176,7 +177,7 @@
   {#each corpora as corpus (corpus.testament)}
     {#if splitCorpora}
       <button class="sv-corpus" on:click={() => toggleCorpus(corpus.testament)}>
-        <span class="sv-caret motion-caret" class:open={expandedCorpora.has(corpus.testament)}>▶</span>
+        <span class="sv-caret motion-caret" class:open={expandedCorpora.has(corpus.testament)}><CaretRight size="1em" weight="bold" /></span>
         <span class="sv-corpus-name">{corpus.label}</span>
         <span class="sv-count">{corpus.count} verse{corpus.count === 1 ? "" : "s"}</span>
       </button>
@@ -186,7 +187,7 @@
         {#each corpus.books as group (group.book)}
           <div class="vb-group">
             <button class="vb-header" on:click={() => toggleBook(corpus.testament, group)}>
-              <span class="vb-caret motion-caret" class:open={expandedBooks.has(bookKey(corpus.testament, group.book))} style="color:{group.color}">▶</span>
+              <span class="vb-caret motion-caret" class:open={expandedBooks.has(bookKey(corpus.testament, group.book))} style="color:{group.color}"><CaretRight size="1em" weight="bold" /></span>
               <span class="vb-name" style="color:{group.color}">{group.book}</span>
               <span class="vb-count">({group.uses.length})</span>
             </button>

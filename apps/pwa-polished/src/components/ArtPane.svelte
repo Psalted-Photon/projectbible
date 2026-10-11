@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CaretLeft, ArrowSquareOut } from "phosphor-svelte";
   import { onDestroy, onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { navigationStore } from '../stores/navigationStore';
@@ -195,7 +196,7 @@
   {:else if selected}
     <div class="scene">
       {#if browse}
-        <button class="back" on:click={backToList}>‹ All scenes</button>
+        <button class="back" on:click={backToList}><CaretLeft size="1em" weight="bold" class="ph-inline" /> All scenes</button>
       {/if}
       <header class="scene-head">
         <h2>{selected.title}</h2>
@@ -241,7 +242,7 @@
                       class="work-source"
                       href={work.sourceUrl}
                       target="_blank"
-                      rel="noopener noreferrer">Wikimedia Commons ↗</a
+                      rel="noopener noreferrer">Wikimedia Commons <ArrowSquareOut size="1em" weight="bold" class="ph-inline" /></a
                     >
                   {/if}
                 </span>
