@@ -5,6 +5,7 @@
   import LookupModal from "./components/LookupModal.svelte";
   import FamilyTreeViewer from "./components/FamilyTreeViewer.svelte";
   import { familyTreeStore } from "./stores/familyTreeStore";
+  import { saveSession, restoreSession } from "./lib/sessionRestore";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
   import WelcomeModal from "./components/WelcomeModal.svelte";
@@ -162,8 +163,12 @@
     };
 
     const init = async () => {
+      // A launch from a link, a reminder or the alarm is going somewhere of
+      // its own, so it does not bring back what was open before.
+      const launchedWithPurpose = window.location.search.length > 1;
       await openSharedLink();
       appReady = true;
+      if (!launchedWithPurpose) restoreSession();
       if (sharedDevotional) {
         const target = sharedDevotional;
         sharedDevotional = null;
@@ -214,7 +219,12 @@
       // The journal lock's relock clock starts when the app is left and is
       // checked on the way back, before anything else runs.
       journalLockVisibilityChanged(document.hidden);
-      if (document.hidden) return;
+      if (document.hidden) {
+        // Opening a folding phone relaunches the app on the other screen, so
+        // what is open is written down every time the app is left.
+        saveSession();
+        return;
+      }
       // Re-sync when the user switches back to this tab so progress written
       // on another device is pulled into IndexedDB. Throttled to at most
       // once every 30 s and guarded by the forceSync mutex so it can never
@@ -223,6 +233,8 @@
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
+    // A page torn down without being hidden first (a reload) saves here.
+    window.addEventListener("pagehide", saveSession);
 
     // Re-enforce orientation lock on visibility resume (handles tablet app-switching)
     document.addEventListener("visibilitychange", handleVisibilityResume);
@@ -358,6 +370,7 @@
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", saveSession);
       document.removeEventListener('visibilitychange', handleVisibilityUpdateCheck);
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
