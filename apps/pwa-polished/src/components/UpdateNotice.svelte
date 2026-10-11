@@ -33,7 +33,7 @@
       on:click={dismiss}
     >
       <span class="un-icon"><CheckCircle size={20} weight="bold" /></span>
-      <span class="un-text">Running Latest Version</span>
+      <span class="un-text">Running latest version</span>
     </div>
   </div>
 {/if}

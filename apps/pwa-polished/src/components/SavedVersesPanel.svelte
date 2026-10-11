@@ -228,7 +228,7 @@
 
   $: sortLabel = sortOrder === 'recent' ? 'Recent'
     : sortOrder === 'categories' && activeTab === 'verses' ? 'Categories'
-    : 'Bible Order';
+    : 'Bible order';
 </script>
 
 <div class="svp-root">

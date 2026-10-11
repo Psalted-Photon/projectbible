@@ -61,7 +61,7 @@
     <div class="auth-wall">
       <div class="auth-wall-icon"><PanelIcon name="journal" size={44} plain /></div>
       <p class="auth-wall-text">Sign in to write in your journal and keep it synced across all your devices.</p>
-      <button class="auth-wall-btn" on:click={() => profileModalStore.open()}>Sign In to Continue <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
+      <button class="auth-wall-btn" on:click={() => profileModalStore.open()}>Sign in to continue <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
     </div>
   {:else if $journalLock.needsUnlock}
     <JournalLockScreen />

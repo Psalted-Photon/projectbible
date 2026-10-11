@@ -70,10 +70,10 @@
       {#if fromGod && fromGod > 0}
         {#if pinned && chain.length}
           <button class="gens-toggle" class:open={gensOpen} on:click={() => (gensOpen = !gensOpen)}>
-            {fromGod} Generations from God
+            {fromGod} generations from God
           </button>
         {:else}
-          <span>{fromGod} Generations from God</span>
+          <span>{fromGod} generations from God</span>
         {/if}
       {/if}
       {#if toJesus && toJesus > 0}

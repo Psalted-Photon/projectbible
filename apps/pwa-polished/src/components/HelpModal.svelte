@@ -6,7 +6,7 @@
 
   const helpContent: Record<string, {title: string, description: string, examples: string[]}> = {
     matchType: {
-      title: "Match Type",
+      title: "Match type",
       description: "Controls how your search text is matched against Bible verses.",
       examples: [
         "Contains: 'light' finds 'light', 'delight', 'lighthouse'",
@@ -18,7 +18,7 @@
       ]
     },
     mustContain: {
-      title: "Must Contain / Must NOT Contain",
+      title: "Must contain / must not contain",
       description: "Add additional requirements for verses. Verse must match your main search AND contain (or NOT contain) these words.",
       examples: [
         "Search: 'faith' + Must contain: 'works' → finds verses with both faith AND works",
@@ -27,7 +27,7 @@
       ]
     },
     proximity: {
-      title: "Proximity Search",
+      title: "Proximity search",
       description: "Find verses where two words appear near each other. Use the slider to adjust the maximum distance.",
       examples: [
         "'faith' within 5 words of 'works' → finds 'faith without works is dead'",
@@ -37,7 +37,7 @@
       ]
     },
     plurals: {
-      title: "Include Plurals",
+      title: "Include plurals",
       description: "Automatically includes plural forms of your search word by adding an optional 's' at the end.",
       examples: [
         "'word' with plurals → matches 'word' or 'words'",
@@ -46,23 +46,23 @@
       ]
     },
     caseInsensitive: {
-      title: "Case-Insensitive Search",
+      title: "Case-insensitive search",
       description: "When enabled, search ignores uppercase/lowercase differences.",
       examples: [
         "With case-insensitive: 'god', 'God', 'GOD' all match",
         "Without case-insensitive: only exact case matches",
-        "Recommended: Keep this ON for most searches"
+        "Recommended: keep this on for most searches"
       ]
     },
     complexity: {
-      title: "Pattern Complexity",
+      title: "Pattern complexity",
       description: "Shows how computationally expensive your search pattern is. Higher scores may take longer to execute.",
       examples: [
         "0-30: Fast and simple",
         "31-60: Moderate complexity",
         "61-80: Complex - may be slow",
         "81-100: Very complex - could take a while",
-        "Tip: Simpler patterns search faster"
+        "Tip: simpler patterns search faster"
       ]
     }
   };

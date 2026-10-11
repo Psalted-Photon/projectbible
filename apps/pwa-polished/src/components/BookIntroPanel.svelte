@@ -115,7 +115,7 @@
   </div>
 
   <!-- Source attribution -->
-  <div class="intro-source">KingComments Commentary</div>
+  <div class="intro-source">KingComments commentary</div>
 
   <!-- Body -->
   <div class="intro-body">

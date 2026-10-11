@@ -152,7 +152,7 @@
     : $devotionalSettings.slotMode === 'both'
       ? $currentSlotStore
       : $devotionalSettings.slotMode;
-  $: devoLabel = devoSlot === 'day' ? "Today's Devotional" : devoSlot === 'morning' ? 'Morning Devotional' : 'Evening Devotional';
+  $: devoLabel = devoSlot === 'day' ? "Today's devotional" : devoSlot === 'morning' ? 'Morning devotional' : 'Evening devotional';
 
   function openDevo() {
     const { month, day } = todayMonthDay();

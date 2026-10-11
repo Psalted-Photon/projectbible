@@ -48,7 +48,7 @@ export const PANE_TIPS: Tip[] = [
   setting('settings-bar-size', 'Bar size', 'Bar size', 'Small, Normal or Large: the top bar, window headers and tabs, buttons and all. Set on each device.', true),
   setting('settings-default-translations', 'Default Old Testament translation', 'Default translations', 'Going to a book in the other testament switches the reader to your pick for it. Not set keeps whatever you’re reading.'),
   setting('settings-layout', 'Verse Layout', 'Verse layout', 'One verse per line, or flowing paragraphs, with or without verse numbers.'),
-  setting('settings-pin-bar', 'Keep the navigation bar visible', 'Keep the top bar', 'The top bar slides away while you read and comes back when you scroll up. Tick this to keep it.'),
+  setting('settings-pin-bar', 'Keep the top bar visible', 'Keep the top bar', 'The top bar slides away while you read and comes back when you scroll up. Tick this to keep it.'),
   setting('settings-word-menu', 'Menu when you tap a word', 'The word menu', 'The ring around the word, or the classic popup bar.'),
   setting('settings-voice', 'Voice', 'Voice', 'Natural voices sound most like a real reader. Standard ones are lighter on the battery.', true),
   setting('settings-tutorial', 'Tutorial Mode', 'Tutorial Mode', 'Untick to turn the tutorial off. Tick it again anytime to replay the tour.', true),

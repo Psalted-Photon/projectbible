@@ -416,7 +416,7 @@
     <div
       style="display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-size: 20px;"
     >
-      Loading App...
+      Loading app...
     </div>
   {:else}
     <div class="main-content themed" style={mainContentStyle}>

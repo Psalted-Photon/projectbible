@@ -188,7 +188,7 @@
 
     <!-- Text color -->
     <div class="hl-section">
-      <div class="hl-section-label">Text Color</div>
+      <div class="hl-section-label">Text color</div>
       {#if showMeanings}
         <div class="hl-meaning-list">
           {#each PALETTE as { value, label }, i}

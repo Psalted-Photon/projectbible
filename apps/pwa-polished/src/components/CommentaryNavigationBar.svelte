@@ -41,7 +41,8 @@
   $: currentAuthor =
     windowState?.contentState?.author ?? "All Authors";
   $: isEnoch = isEnochAuthor(currentAuthor);
-  $: displayAuthor = enochLabelFor(currentAuthor) ?? currentAuthor;
+  // "All Authors" is the stored value; on screen it reads in sentence case.
+  $: displayAuthor = enochLabelFor(currentAuthor) ?? (currentAuthor === "All Authors" ? "All authors" : currentAuthor);
   $: currentBook = windowState?.contentState?.book ?? $navigationStore.book;
   $: currentChapter =
     windowState?.contentState?.chapter ?? $navigationStore.chapter;
@@ -367,7 +368,7 @@
         class:selected={currentAuthor === "All Authors"}
         on:click={() => selectAuthor(undefined)}
       >
-        All Authors
+        All authors
       </button>
       {#each authors as author}
         <button
@@ -388,7 +389,7 @@
       {/if}
       {#if windowId}
         <!-- Book of Enoch: the single entry point (per-window only) -->
-        <div class="dropdown-section-label"><Scroll size={13} weight="bold" class="ph-inline" /> Ancient Book</div>
+        <div class="dropdown-section-label"><Scroll size={13} weight="bold" class="ph-inline" /> Ancient book</div>
         {#each ENOCH_EDITIONS as ed}
           <button
             class="dropdown-item enoch-item"

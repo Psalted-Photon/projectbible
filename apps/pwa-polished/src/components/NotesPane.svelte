@@ -1575,7 +1575,7 @@
         Sign in to write notes and keep them synced across all your devices.
       </p>
       <button class="auth-wall-btn" on:click={() => profileModalStore.open()}>
-        Sign In to Continue <ArrowRight size="1em" weight="bold" class="ph-inline" />
+        Sign in to continue <ArrowRight size="1em" weight="bold" class="ph-inline" />
       </button>
     </div>
   {:else if view === 'editor'}
@@ -1852,7 +1852,7 @@
           <section class="section">
             {#if verseNotes.length === 0}
               <div class="section-head">
-                <span class="section-label">Verse Notes</span>
+                <span class="section-label">Verse notes</span>
                 <span class="section-count">(0)</span>
               </div>
               <p class="muted small">
@@ -1926,7 +1926,7 @@
         <!-- ── Shared ────────────────────────────────────────────────────── -->
         <section class="section">
           <div class="section-head">
-            <span class="section-label shared">Shared Notebooks</span>
+            <span class="section-label shared">Shared notebooks</span>
             <span class="section-count">({sharedNotebooks.length})</span>
           </div>
 

@@ -327,7 +327,7 @@
                term lowercase, so it would otherwise read "noah". -->
           {titleCase(selectedText)}
         {:else}
-          Word Study
+          Word study
         {/if}
       </h2>
       {#if headerSubtitle}
@@ -402,7 +402,7 @@
 
             {#if morphologyData.transliteration}
               <dt>Transliteration:</dt>
-              <dd>{morphologyData.transliteration}</dd>
+              <dd class="xlit">{morphologyData.transliteration}</dd>
             {:else}
               <dt>Transliteration:</dt>
               <dd class="missing-data">Not available in legacy pack</dd>
@@ -424,7 +424,7 @@
 
             {#if (morphologyData as any).gloss_en || (morphologyData as any).gloss}
               {@const gloss = (morphologyData as any).gloss_en ?? (morphologyData as any).gloss}
-              <dt>English Gloss:</dt>
+              <dt>English gloss:</dt>
               <dd>
                 <button
                   class="gloss"
@@ -468,18 +468,18 @@
         {/if}
       </div>
     {:else if isEnglishWord && englishWordInfo}
-      <!-- English Word Information. No tab strip: definitions are the only
+      <!-- English Word information. No tab strip: definitions are the only
            thing this view shows now that synonyms are gone. -->
       <div class="tab-content">
           <div class="definition-view">
             <div class="info-section">
-              <h3>Word Information</h3>
+              <h3>Word information</h3>
               <dl>
                 <dt>Word:</dt>
                 <dd class="lemma-text">{englishWordInfo.word}</dd>
 
                 {#if englishPOS.length > 0}
-                  <dt>Part of Speech:</dt>
+                  <dt>Part of speech:</dt>
                   <dd style="text-transform: capitalize;">
                     {englishPOS.join(", ")}
                   </dd>
@@ -499,11 +499,11 @@
                    pack dropped it, and the api.dictionaryapi.dev call that
                    served it live has been removed. -->
               <div class="definitions-grid">
-                <!-- Modern Definitions (Concise / Wordset) -->
+                <!-- Modern definitions (Concise / Wordset) -->
                 {#if effectiveLexicalEntries.wordset && effectiveLexicalEntries.wordset.length > 0}
                 <div class="info-section">
                   <h3 style="color: #4a90e2; display: flex; align-items: center; gap: 8px;">
-                    <TextAa size={19} weight="bold" /> Modern Definitions
+                    <TextAa size={19} weight="bold" /> Modern definitions
                   </h3>
                   {#each effectiveLexicalEntries.wordset as def}
                     <div class="modern-def" style="margin-bottom: 12px;">
@@ -525,10 +525,10 @@
                 </div>
                 {/if}
 
-                <!-- Historic Definitions (GCIDE/Webster 1913) -->
+                <!-- Historic definitions (GCIDE/Webster 1913) -->
                 <div class="info-section">
                 <h3 style="color: #8d6e63; display: flex; align-items: center; gap: 8px;">
-                  <Scroll size={19} weight="bold" /> Historic Definitions
+                  <Scroll size={19} weight="bold" /> Historic definitions
                   <span style="font-size: 12px; color: #666; font-weight: normal;">Webster 1913</span>
                 </h3>
                 {#if effectiveLexicalEntries.historic && effectiveLexicalEntries.historic.length > 0}
@@ -564,7 +564,7 @@
             {#if !hasOfflineDefinitions}
               <!-- No offline definitions available -->
               <div class="info-section">
-                <h3>About This Word</h3>
+                <h3>About this word</h3>
                 <p class="full-def">
                   This is an English word from the Bible translation.
                   For deeper study, look up the original Greek or Hebrew word from an interlinear Bible.
@@ -795,14 +795,19 @@
   .morph-text {
     font-size: 24px;
     font-weight: 600;
-    font-family: "Times New Roman", serif;
+    font-family: "Gentium Plus", "SBL Greek", "SBL Hebrew", serif;
   }
 
   .morph-lemma {
     font-size: 20px;
     font-weight: 500;
-    font-family: "Times New Roman", serif;
+    font-family: "Gentium Plus", "SBL Greek", "SBL Hebrew", serif;
     color: #4caf50;
+  }
+
+  /* Same face as the Greek it spells out, and as Strong's pronunciation. */
+  .xlit {
+    font-family: "Gentium Plus", serif;
   }
 
   .hint-text {

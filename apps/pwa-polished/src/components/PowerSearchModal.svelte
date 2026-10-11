@@ -299,7 +299,7 @@
         <div class="controls-panel">
           <!-- Word/Phrase Section -->
           <section class="control-section">
-            <h3><TextT size={17} weight="bold" class="ph-inline" /> Word / Phrase</h3>
+            <h3><TextT size={17} weight="bold" class="ph-inline" /> Word / phrase</h3>
             
             <div class="control-group">
               <label for="search-text">Search for:</label>
@@ -331,7 +331,7 @@
           <!-- Pattern Options Section -->
           <section class="control-section">
             <h3>
-              <Faders size={17} weight="bold" class="ph-inline" /> Match Type
+              <Faders size={17} weight="bold" class="ph-inline" /> Match type
               <button class="help-btn" on:click={() => openHelp('matchType')} title="Learn about match types">?</button>
             </h3>
             
@@ -350,7 +350,7 @@
           <!-- Must Contain/Not Contain Section -->
           <section class="control-section">
             <h3>
-              <PuzzlePiece size={17} weight="bold" class="ph-inline" /> Advanced Logic
+              <PuzzlePiece size={17} weight="bold" class="ph-inline" /> Advanced logic
               <button class="help-btn" on:click={() => openHelp('mustContain')} title="Learn about must contain">?</button>
             </h3>
             
@@ -405,10 +405,10 @@
             </div>
           </section>
 
-          <!-- Proximity Search Section -->
+          <!-- Proximity search Section -->
           <section class="control-section">
             <h3>
-              <Ruler size={17} weight="bold" class="ph-inline" /> Proximity Search
+              <Ruler size={17} weight="bold" class="ph-inline" /> Proximity search
               <button class="help-btn" on:click={() => openHelp('proximity')} title="Learn about proximity search">?</button>
             </h3>
             
@@ -486,14 +486,14 @@
 
         <!-- Right Panel: Preview & Results -->
         <div class="preview-panel">
-          <!-- Generated Pattern Display -->
+          <!-- Generated pattern Display -->
           {#if generatedQuery}
             <div class="pattern-display">
               <button 
                 class="toggle-pattern"
                 on:click={() => showGeneratedPattern = !showGeneratedPattern}
               >
-                <span class="motion-caret" class:open={showGeneratedPattern}><CaretRight size="1em" weight="bold" /></span> Generated Pattern
+                <span class="motion-caret" class:open={showGeneratedPattern}><CaretRight size="1em" weight="bold" /></span> Generated pattern
               </button>
 
               {#if showGeneratedPattern}

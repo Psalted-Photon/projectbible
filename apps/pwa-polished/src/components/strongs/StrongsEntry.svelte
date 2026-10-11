@@ -317,7 +317,7 @@
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <div class="definition-view" on:click={handleDefinitionClick}>
       <div class="info-section">
-        <h3>Entry Information</h3>
+        <h3>Entry information</h3>
         <dl>
           <dt>Strong's ID:</dt>
           <dd style="color: {languageColor(entry.language)}">
@@ -329,7 +329,7 @@
 
           {#if entry.transliteration}
             <dt>Transliteration:</dt>
-            <dd>{entry.transliteration}</dd>
+            <dd class="xlit">{entry.transliteration}</dd>
           {/if}
 
           {#if entry.pronunciation?.phonetic}
@@ -343,7 +343,7 @@
           </dd>
 
           {#if entry.partOfSpeech}
-            <dt>Part of Speech:</dt>
+            <dt>Part of speech:</dt>
             <dd>
               {expandStepBiblePOS(entry.partOfSpeech)}
               <span class="code-raw">({entry.partOfSpeech})</span>
@@ -358,7 +358,7 @@
 
       {#if entry.shortDefinition}
         <div class="info-section">
-          <h3>Short Definition</h3>
+          <h3>Short definition</h3>
           <p class="short-def">{entry.shortDefinition}</p>
         </div>
       {/if}
@@ -384,13 +384,13 @@
       {/if}
 
       <div class="info-section">
-        <h3>Full Definition</h3>
+        <h3>Full definition</h3>
         <p class="full-def">{@html renderStrongsMarkup(entry.definition)}</p>
       </div>
 
       {#if kjvRenderings.length}
         <div class="info-section">
-          <h3>KJV Renderings</h3>
+          <h3>KJV renderings</h3>
           <div class="renderings">
             {#each kjvRenderings as r (r.text + (r.marker ?? ""))}
               <span class="rendering" class:marked={r.marker}>
@@ -731,6 +731,7 @@
   .lemma-text {
     font-size: 20px;
     font-weight: 600;
+    font-family: "Gentium Plus", "SBL Greek", "SBL Hebrew", serif;
   }
 
   .lemma-text[dir="rtl"] {
@@ -896,11 +897,14 @@
     color: var(--color-primary, #4a90e2);
   }
 
+  /* Transliteration and pronunciation share Gentium with the Greek above. */
+  .xlit {
+    font-family: "Gentium Plus", serif;
+  }
+
   .phonetic {
-    font-family: monospace;
-    font-size: 0.95em;
+    font-family: "Gentium Plus", serif;
     color: var(--text-muted, #aaa);
-    letter-spacing: 0.03em;
   }
 
   /* --- Forms tab ----------------------------------------------------------
@@ -1004,7 +1008,7 @@
   }
 
   .rel-lemma {
-    font-family: "Gentium Plus", "SBL Greek", serif;
+    font-family: "Gentium Plus", "SBL Greek", "SBL Hebrew", serif;
     font-size: 14.5px;
     color: var(--text-color, #dfe2e8);
   }

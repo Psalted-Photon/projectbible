@@ -583,7 +583,7 @@
 <svelte:window on:keydown={handleKeydown} />
 
 <div class="packs-pane">
-  <h2><Package size={20} weight="bold" class="ph-inline" /> Pack Management</h2>
+  <h2><Package size={20} weight="bold" class="ph-inline" /> Pack management</h2>
   <p class="db-line">
     {packCount}
     {packCount === 1 ? "pack" : "packs"} · {dbStats.verseCount.toLocaleString()} verses
@@ -717,7 +717,7 @@
     {/if}
   {/if}
 
-  <h3 class="sub-head">Advanced Install</h3>
+  <h3 class="sub-head">Advanced install</h3>
   <div class="adv-actions">
     <button
       class="small-btn"
@@ -727,7 +727,7 @@
       <Globe size={15} weight="bold" class="ph-inline" /> From URL
     </button>
     <button class="small-btn" on:click={handleInstallFromFileClick} disabled={$installBusy}>
-      <FolderOpen size={15} weight="bold" class="ph-inline" /> From File
+      <FolderOpen size={15} weight="bold" class="ph-inline" /> From file
     </button>
   </div>
 

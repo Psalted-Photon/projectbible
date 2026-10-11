@@ -20,6 +20,7 @@
   import PlayTodayButton from './PlayTodayButton.svelte';
   import { User, CloudArrowUp } from 'phosphor-svelte';
   import CloseX from './CloseX.svelte';
+  import { countOf, scheduleText } from '../lib/countText';
 
   let isOpen = false;
   $: isOpen = $profileModalStore;
@@ -695,7 +696,7 @@
               </button>
             </div>
             <button class="secondary-btn" on:click={handleSignOut} disabled={signingOut}>
-              {signingOut ? 'Signing out…' : 'Sign Out'}
+              {signingOut ? 'Signing out…' : 'Sign out'}
             </button>
           {/if}
           <CloseX on:click={close} />
@@ -928,14 +929,14 @@
                 <div class="stat-row"><strong>Verses read today:</strong> {verseStats.todayRead}</div>
                 <div class="stat-row"><strong>Total verses read:</strong> {verseStats.read}</div>
                 <div class="stat-row"><strong>Verses remaining:</strong> {verseStats.remaining}</div>
-                <div class="stat-row"><strong>Days ahead/behind:</strong> {daysAheadBehind}</div>
-                <div class="stat-row"><strong>Streak:</strong> {streak} days</div>
+                <div class="stat-row"><strong>Schedule:</strong> {scheduleText(daysAheadBehind)}</div>
+                <div class="stat-row"><strong>Streak:</strong> {countOf(streak, 'day')}</div>
                 {#if profileName && verseStats.todayRead > 0}
-                  <div class="stat-message">Congrats {profileName}, today you read {verseStats.todayRead} verses!</div>
+                  <div class="stat-message">Congrats {profileName}, today you read {countOf(verseStats.todayRead, 'verse')}!</div>
                 {/if}
               </div>
 
-              <button class="primary-btn" on:click={openReadingPlan}>Open Full Reading Plan</button>
+              <button class="primary-btn" on:click={openReadingPlan}>Open full Reading Plan</button>
             </div>
           {:else if currentTab === 'notes'}
             <SavedVersesPanel on:close={close} />
@@ -947,10 +948,10 @@
                    the Settings pane. Profile keeps only what belongs to the
                    account. -->
               <div class="setting-group">
-                <p class="setting-label">Change Name</p>
+                <p class="setting-label">Change name</p>
                 <input class="auth-input" type="text" placeholder="Your name" bind:value={nameUpdate} />
                 <button class="primary-btn" on:click={handleChangeName}>
-                  Update Name
+                  Update name
                 </button>
                 {#if nameMessage}
                   <div class="auth-message">{nameMessage}</div>
@@ -960,7 +961,7 @@
                 {/if}
               </div>
               <div class="setting-group">
-                <p class="setting-label">Change Password</p>
+                <p class="setting-label">Change password</p>
                 <input
                   class="auth-input"
                   type="password"
@@ -985,7 +986,7 @@
                   {/if}
                 </div>
                 <button class="primary-btn" on:click={handleChangePassword} disabled={!passwordsMatch || !currentPassword}>
-                  Change Password
+                  Change password
                 </button>
                 {#if passwordMessage}
                   <div class="auth-message">{passwordMessage}</div>
@@ -996,15 +997,15 @@
               </div>
               <YourDataPanel />
               <div class="setting-group danger">
-                <p class="setting-label">Delete Account</p>
+                <p class="setting-label">Delete account</p>
                 <button class="danger-btn" on:click={() => (showDeleteConfirm = !showDeleteConfirm)}>
-                  Delete Account
+                  Delete account
                 </button>
                 {#if showDeleteConfirm && !showFinalDeleteConfirm}
                   <div class="delete-confirm">
                     <p>Type DELETE to confirm account deletion.</p>
                     <input class="auth-input" type="text" bind:value={deleteConfirmText} />
-                    <button class="danger-btn" on:click={handleDeleteAccount}>Confirm Delete</button>
+                    <button class="danger-btn" on:click={handleDeleteAccount}>Confirm delete</button>
                     <button class="secondary-btn" on:click={cancelDeleteAccount}>Cancel</button>
                   </div>
                 {/if}

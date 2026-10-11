@@ -562,7 +562,7 @@
       if (dropdown && translationButtonRef) {
         const navRect = navElement?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth };
         const rect = translationButtonRef.getBoundingClientRect();
-        // Wide enough for More Translations to fit a Download button beside
+        // Wide enough for More translations to fit a Download button beside
         // each row. Set before the clamp below measures it.
         dropdown.style.width = `${Math.max(rect.width, 250)}px`;
         const naturalLeft = rect.left - navRect.left;
@@ -2054,7 +2054,7 @@
     window.dispatchEvent(new CustomEvent("settingsUpdated"));
 
     navigator.vibrate?.(15);
-    pinNoticeText = pinned ? "Nav bar pinned" : "Nav bar unpinned";
+    pinNoticeText = pinned ? "Top bar pinned" : "Top bar unpinned";
     if (pinNoticeTimer) clearTimeout(pinNoticeTimer);
     pinNoticeTimer = setTimeout(() => (pinNoticeText = ""), 1400);
   }
@@ -2195,7 +2195,7 @@
   /**
    * Back to home, with nothing left behind: the trail leads out from home, so
    * clearing it walks all the way back and drops every crumb, behind and
-   * ahead. That is "Go Here" on the home crumb, so it reuses it. Already home
+   * ahead. That is "Go here" on the home crumb, so it reuses it. Already home
    * (only faded ahead crumbs showing) and there is nothing to walk back to, so
    * emptying the trail where you stand drops those and leaves you put. Home
    * itself never closes. No confirm: only the trail is lost.
@@ -2436,7 +2436,7 @@
           class:at-home={!$canGoBack}
           style="--home-color: {getBookColor(currentBook)};"
           on:click={toggleReferenceDropdown}
-          title="Bible Navigation"
+          title="Bible navigation"
         >
           <span class="pill-label">{currentReference}</span>
           {#if referenceDropdownOpen}
@@ -2911,13 +2911,13 @@
       <!-- Packs not yet downloaded, each with its own Download button, and
            any installed one with a new version. -->
       <PackDropdownSection
-        heading="More Translations"
+        heading="More translations"
         restartFor="read them"
         rows={[
           { packId: 'translations', label: 'English', contents: 'KJV, WEB, BSB, LXX2012' },
           { packId: 'ancient-languages', label: 'Ancient Languages', contents: 'Hebrew, Greek NT, LXX' },
           // Only ever as an update: once TSK is in, its own dropdown never opens.
-          { packId: 'tsk-references', label: 'TSK References', contents: 'Cross-references', updateOnly: true },
+          { packId: 'tsk-references', label: 'TSK references', contents: 'Cross-references', updateOnly: true },
         ]}
       />
     </div>
@@ -2983,7 +2983,7 @@
   {#if crumbMenu}
     <div class="dropdown-menu crumb-menu" class:positioned={crumbMenuPositioned} role="menu" out:fadeAway>
       <button class="crumb-menu-item" role="menuitem" on:click|stopPropagation={crumbMenuGo}>
-        Go Here
+        Go here
       </button>
       <button class="crumb-menu-item" role="menuitem" on:click|stopPropagation={crumbMenuRemove}>
         Close
@@ -2999,7 +2999,7 @@
       <PackDropdownSection
         heading="Cross-references need a pack"
         restartFor="see them"
-        rows={[{ packId: 'tsk-references', label: 'TSK References', contents: '43,000+ cross-references by keyword' }]}
+        rows={[{ packId: 'tsk-references', label: 'TSK references', contents: '43,000+ cross-references by keyword' }]}
       />
     </div>
   {/if}
@@ -3037,19 +3037,19 @@
       >
         {#if repeatDropdownView === 'main'}
           <button class="repeat-menu-item" on:click|stopPropagation={() => { repeatDropdownView = 'scope'; positionRepeatDropdown(); }}>
-            <span>Highlight All</span>
+            <span>Highlight all</span>
             <CaretRight size={11} weight="bold" />
           </button>
           <button class="repeat-menu-item" on:click|stopPropagation={() => deselectRepeat(grp.word)}>
-            Deselect All
+            Deselect all
           </button>
         {:else}
           <button class="repeat-menu-item repeat-menu-back" on:click|stopPropagation={() => { repeatDropdownView = 'main'; positionRepeatDropdown(); }}>
             <CaretRight size={11} weight="bold" style="transform: rotate(180deg);" />
             <span>Highlight all in…</span>
           </button>
-          <button class="repeat-menu-item" on:click|stopPropagation={() => selectRepeatScope('chapter')}>Current Chapter</button>
-          <button class="repeat-menu-item" on:click|stopPropagation={() => selectRepeatScope('book')}>Current Book</button>
+          <button class="repeat-menu-item" on:click|stopPropagation={() => selectRepeatScope('chapter')}>Current chapter</button>
+          <button class="repeat-menu-item" on:click|stopPropagation={() => selectRepeatScope('book')}>Current book</button>
         {/if}
       </div>
     {/if}

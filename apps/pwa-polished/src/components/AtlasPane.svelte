@@ -1927,7 +1927,7 @@
 
   .row {
     display: flex; align-items: center; gap: 9px; padding: 6px 8px; font-size: 12.5px;
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--display);
   }
   .row label { color: var(--dim); flex: none; width: 62px; }
   .row input[type='range'] { flex: 1; accent-color: var(--focus); }
@@ -2310,7 +2310,7 @@
     border: 1px solid rgba(255, 255, 255, .08);
     border-left: 3px solid;
     border-radius: 5px; padding: 6px 9px; cursor: pointer;
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--display);
   }
   .vb-ref:hover { background: rgba(255, 255, 255, .08); }
   .vb-ref-label { font-size: 12px; font-weight: 600; }
@@ -2361,7 +2361,7 @@
     padding: 4px 9px; border-radius: 5px; cursor: pointer;
     background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08);
     border-left: 3px solid rgba(255, 255, 255, .08);
-    color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text); font-family: var(--display);
     font-size: 12px;
   }
   .era-chip:hover { background: rgba(255, 255, 255, .09); }
@@ -2371,7 +2371,7 @@
     display: flex; align-items: baseline; gap: 8px; width: 100%;
     padding: 6px 4px; background: none; border: 0; border-top: 1px solid rgba(255, 255, 255, .06);
     color: var(--text); cursor: pointer; text-align: left;
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 12.5px;
+    font-family: var(--display); font-size: 12.5px;
   }
   .era-row:hover:not(:disabled) { background: rgba(255, 255, 255, .04); }
   .era-row:disabled { cursor: default; color: var(--dim); }

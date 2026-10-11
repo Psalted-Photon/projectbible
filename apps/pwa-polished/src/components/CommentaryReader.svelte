@@ -284,7 +284,7 @@
               <!-- Chapter-level commentary with sticky badge -->
               <div class="chapter-badge">
                 <ChatText size={16} weight="bold" />
-                <span class="badge-text">Chapter Commentary</span>
+                <span class="badge-text">Chapter commentary</span>
               </div>
             {:else}
               <!-- Verse-level commentary with verse number -->
@@ -312,7 +312,7 @@
           {#if entry.verseStart === 0}
             <!-- Section divider after chapter commentary -->
             <div class="section-divider">
-              <span class="divider-text">Verse Commentary</span>
+              <span class="divider-text">Verse commentary</span>
             </div>
           {/if}
         {/each}

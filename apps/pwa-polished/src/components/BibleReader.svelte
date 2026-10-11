@@ -6261,7 +6261,7 @@
     existingHighlight={highlightModalExisting}
     selectionType={highlightSelectionType}
     bulkDescription={bulkRepeatRequest
-      ? `All “${bulkRepeatRequest.label}” · ${bulkRepeatRequest.scope === 'chapter' ? 'Current Chapter' : 'Entire Book'}`
+      ? `All “${bulkRepeatRequest.label}” · ${bulkRepeatRequest.scope === 'chapter' ? 'Current chapter' : 'Entire book'}`
       : null}
     isRepeatWord={highlightModalRepeatGroup !== null}
     on:save={async (e) => {
@@ -6493,12 +6493,12 @@
                   {#if introMenuKey === `${rec.book}:${rec.word}`}
                     <div class="intro-repeat-menu" on:click|stopPropagation on:keydown|stopPropagation role="menu" tabindex="-1">
                       {#if introMenuView === 'main'}
-                        <button class="intro-repeat-item" on:click|stopPropagation={() => (introMenuView = 'scope')}>Highlight All <CaretRight size="1em" weight="bold" class="ph-inline" /></button>
-                        <button class="intro-repeat-item" on:click|stopPropagation={() => introDeselect(rec)}>Deselect All</button>
+                        <button class="intro-repeat-item" on:click|stopPropagation={() => (introMenuView = 'scope')}>Highlight all <CaretRight size="1em" weight="bold" class="ph-inline" /></button>
+                        <button class="intro-repeat-item" on:click|stopPropagation={() => introDeselect(rec)}>Deselect all</button>
                       {:else}
                         <button class="intro-repeat-item intro-repeat-back" on:click|stopPropagation={() => (introMenuView = 'main')}><CaretLeft size="1em" weight="bold" class="ph-inline" /> Highlight all in…</button>
-                        <button class="intro-repeat-item" on:click|stopPropagation={() => introHighlightAll(rec, 'chapter')}>Current Chapter</button>
-                        <button class="intro-repeat-item" on:click|stopPropagation={() => introHighlightAll(rec, 'book')}>Current Book</button>
+                        <button class="intro-repeat-item" on:click|stopPropagation={() => introHighlightAll(rec, 'chapter')}>Current chapter</button>
+                        <button class="intro-repeat-item" on:click|stopPropagation={() => introHighlightAll(rec, 'book')}>Current book</button>
                       {/if}
                     </div>
                   {/if}
@@ -6614,7 +6614,7 @@
                     class="anno-ref"
                     class:anno-breathing={isOpenAnnotation(chapterData.book, chapterData.chapter, verse, 'references')}
                     style="color:{TSK_COLOR}"
-                    title="TSK Cross-References"
+                    title="TSK cross-references"
                     role="button"
                     tabindex="0"
                     on:click|stopPropagation={() => openAnnotationPanel(verse, 'references', chapterData.book, chapterData.chapter)}
@@ -6668,7 +6668,7 @@
                           class="harmony-check-continue-btn"
                           on:click={() => handleHarmonyCheckAndContinue(hCtx)}
                           title="Check off this passage and continue"
-                        >✓ Check off &amp; Continue</button>
+                        >✓ Check off &amp; continue</button>
                       {/if}
                     </div>
                   {/each}
@@ -6686,7 +6686,7 @@
                       <button
                         class="plan-day-complete-btn"
                         on:click={() => handleStandardDayComplete(ctx)}
-                      >✓ Day Complete</button>
+                      >✓ Day complete</button>
                     {:else}
                       <button
                         class="plan-mark-continue-btn"
@@ -6737,7 +6737,7 @@
   <div class="day-complete-overlay" on:click={() => dayCompleteMessage = null}>
     <div class="day-complete-card" on:click|stopPropagation>
       <div class="day-complete-emoji"><CheckCircle size={52} weight="bold" /></div>
-      <p class="day-complete-title">Day Complete!</p>
+      <p class="day-complete-title">Day complete!</p>
       <p class="day-complete-plan">{dayCompleteMessage}</p>
       <button class="day-complete-btn" on:click={() => dayCompleteMessage = null}>Great!</button>
     </div>

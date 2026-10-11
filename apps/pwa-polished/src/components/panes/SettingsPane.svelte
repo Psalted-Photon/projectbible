@@ -344,7 +344,7 @@
     `${motionSetting === "reduced" ? " · Reduced motion" : motionSetting === "off" ? " · Motion off" : ""}`;
   $: readerSummary =
     `${LAYOUT_LABELS[verseLayout] ?? verseLayout}${showRedLetter ? " · Red letters" : ""}` +
-    `${navBarPinned ? " · Nav bar pinned" : ""}`;
+    `${navBarPinned ? " · Top bar pinned" : ""}`;
   $: readAloudSummary = noVoicesYet
     ? "No voices yet"
     : `${ttsVoices.find((v) => v.id === ttsVoice)?.label ?? ttsVoice} · ${ttsRate.toFixed(2)}×`;
@@ -640,7 +640,7 @@
     if (!(await askConfirm(
       "Are you sure? Packs and cached data can't be brought back. " +
         "If you're signed in, your synced settings and reading plans come back when you sign in again.",
-      { confirmLabel: "Clear Cache & Reload", danger: true },
+      { confirmLabel: "Clear cache & reload", danger: true },
     ))) {
       return;
     }
@@ -972,14 +972,14 @@
 
     <div class="setting-group">
       <label>
-        <span class="label-text">Font Size: {fontSize}px</span>
+        <span class="label-text">Font size: {fontSize}px</span>
         <input type="range" min="12" max="32" bind:value={fontSize} />
       </label>
     </div>
 
     <div class="setting-group">
       <label>
-        <span class="label-text">Line Spacing: {lineSpacing.toFixed(1)}</span>
+        <span class="label-text">Line spacing: {lineSpacing.toFixed(1)}</span>
         <input
           type="range"
           min="0.1"
@@ -1055,7 +1055,7 @@
 
     <div class="setting-group">
       <label>
-        <span class="label-text">Verse Layout</span>
+        <span class="label-text">Verse layout</span>
         <select bind:value={verseLayout}>
           <option value="one-per-line">Each verse on new line</option>
           <option value="paragraph">Paragraph (flow like book)</option>
@@ -1067,14 +1067,14 @@
     <div class="setting-group">
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={wordWrap} />
-        <span class="label-text">Word Wrap (wrap long lines)</span>
+        <span class="label-text">Word wrap (wrap long lines)</span>
       </label>
     </div>
 
     <div class="setting-group">
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={navBarPinned} />
-        <span class="label-text">Keep the navigation bar visible (never hide on scroll)</span>
+        <span class="label-text">Keep the top bar visible (never hide on scroll)</span>
       </label>
     </div>
 
@@ -1221,7 +1221,7 @@
       {/if}
       {/if}
       <label>
-        <span class="label-text">Reading Speed: {ttsRate.toFixed(2)}×</span>
+        <span class="label-text">Reading speed: {ttsRate.toFixed(2)}×</span>
         <input
           type="range"
           min="0.5"
@@ -1315,7 +1315,7 @@
 
     <div class="setting-group">
       <label>
-        <span class="label-text">Time Zone</span>
+        <span class="label-text">Time zone</span>
         <select bind:value={timezone}>
           {#each TIMEZONE_OPTIONS as opt}
             <option value={opt.value}>{opt.label}</option>
@@ -1327,14 +1327,14 @@
     <div class="setting-group">
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={navBarClock} />
-        <span class="label-text">Show the time and date in the navigation bar</span>
+        <span class="label-text">Show the time and date in the top bar</span>
       </label>
     </div>
 
     <div class="setting-group">
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={allowRotation} />
-        <span class="label-text">Allow Screen Rotation</span>
+        <span class="label-text">Allow screen rotation</span>
       </label>
     </div>
   </SettingsSection>
@@ -1384,7 +1384,7 @@
   {/if}
 
   <SettingsSection
-    title="Storage &amp; Updates"
+    title="Storage &amp; updates"
     summary={storageSummary}
     bind:open={openSections.storage}
     on:toggle={storageHeaderTapped}
@@ -1409,7 +1409,7 @@
         disabled={checkingUpdate || clearing}
       >
         <span class="icon"><CloudArrowDown size={22} weight="bold" /></span>
-        <span class="text">{checkingUpdate ? 'Checking...' : 'Check for Updates'}</span>
+        <span class="text">{checkingUpdate ? 'Checking...' : 'Check for updates'}</span>
       </button>
       <label class="auto-check-toggle">
         <input type="checkbox" bind:checked={autoCheckUpdates} />
@@ -1427,7 +1427,7 @@
       <!-- Every pack in one list. Day to day, packs are downloaded where
            they're needed: the translation list and each feature offer their own. -->
       <div class="sub-block">
-        <h3>Pack Management</h3>
+        <h3>Pack management</h3>
         <p class="section-description">
           Install, remove and repair every pack and Read Aloud voice in one place.
         </p>
@@ -1449,7 +1449,7 @@
           disabled={clearing || checkingPending || checkingUpdate}
         >
           <span class="icon"><Trash size={22} weight="bold" /></span>
-          <span class="text">{checkingPending ? 'Checking…' : clearing ? 'Clearing...' : 'Clear Cache & Reload'}</span>
+          <span class="text">{checkingPending ? 'Checking…' : clearing ? 'Clearing...' : 'Clear cache & reload'}</span>
         </button>
       </div>
 
@@ -1472,7 +1472,7 @@
       <div class="sub-block divided">
         <button class="hide-dev-button" on:click={putDevOptionsAway}>Hide Dev Options</button>
         <p class="section-description dev-note">
-          Also hides the eruda button. Tap Storage &amp; Updates ten times to bring them back.
+          Also hides the eruda button. Tap Storage &amp; updates ten times to bring them back.
         </p>
       </div>
     </SettingsSection>

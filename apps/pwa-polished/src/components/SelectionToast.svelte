@@ -70,7 +70,7 @@
       <!-- Same action either way; the label tells you what you'll get.
            Precedence: a biblical character (Bio) outranks an ISBE entry (More Info). -->
       <button class="action-btn" on:click={() => handleAction('dissect')}>
-        {isPerson ? 'Bio' : moreInfo ? 'More Info' : 'Define'}
+        {isPerson ? 'Bio' : moreInfo ? 'More info' : 'Define'}
       </button>
     {/if}
 

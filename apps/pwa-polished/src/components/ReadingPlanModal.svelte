@@ -31,11 +31,12 @@
   import DevotionalsTab from './devotionals/DevotionalsTab.svelte';
   import { devotionalTarget } from '../stores/devotionalStore';
   import CloseX from './CloseX.svelte';
+  import { countOf, scheduleText, planDateText } from '../lib/countText';
   
   export let isOpen = false;
   
   // 'create' is not a tab of its own: it's the form the Active Plan tab's
-  // Create New Plan button opens, so Active Plan stays lit while it shows.
+  // Create new plan button opens, so Active Plan stays lit while it shows.
   let currentTab: 'create' | 'active' | 'history' | 'devotionals' = 'active';
   let currentReadingPlan: ReadingPlan | null = null;
   let currentPlanId: string | null = null;
@@ -110,7 +111,7 @@
     todayRead: 0,
   };
   // The sync service is the ONLY writer of the sync label. This component used
-  // to also set it by hand on Sync Now, which printed a fresh timestamp for a
+  // to also set it by hand on Sync now, which printed a fresh timestamp for a
   // sync that had been skipped by the service's in-flight mutex.
   let syncState: SyncState = syncService.getState();
   $: syncLabel = formatSyncLabel(syncState, isSignedIn);
@@ -813,8 +814,8 @@
     lines.push(`Plan ID: ${currentPlanId}`);
     lines.push(`Generated: ${new Date().toLocaleString()}`);
     lines.push('');
-    lines.push(`- Total Days: ${currentReadingPlan.totalDays}`);
-    lines.push(`- Total Chapters: ${currentReadingPlan.totalChapters}`);
+    lines.push(`- Total days: ${currentReadingPlan.totalDays}`);
+    lines.push(`- Total chapters: ${currentReadingPlan.totalChapters}`);
     lines.push(`- Verses Read: ${verseStats.read}`);
     lines.push(`- Verses Remaining: ${verseStats.remaining}`);
     lines.push(`- Percent Complete: ${verseStats.total > 0 ? Math.round((verseStats.read / verseStats.total) * 100) : 0}%`);
@@ -1130,9 +1131,9 @@
           await readingProgressStore.ensureDayProgress(currentPlanId, 1, day1Chapters);
         }
 
-        planGenerationStatus = `✓ Plan created! ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
+        planGenerationStatus = `✓ Plan created! ${countOf(currentReadingPlan.totalDays, 'day')}, ${countOf(currentReadingPlan.totalChapters, 'chapter')}`;
       } else {
-        planGenerationStatus = `✓ Plan created (local only — sign in to save permanently). ${currentReadingPlan.totalDays} days, ${currentReadingPlan.totalChapters} chapters`;
+        planGenerationStatus = `✓ Plan created (local only — sign in to save permanently). ${countOf(currentReadingPlan.totalDays, 'day')}, ${countOf(currentReadingPlan.totalChapters, 'chapter')}`;
       }
       
       setTimeout(() => {
@@ -1379,7 +1380,7 @@
           class:active={currentTab === 'active' || currentTab === 'create'}
           on:click={() => currentTab = 'active'}
         >
-          Active Plan
+          Active plan
         </button>
         <button
           class="tab"
@@ -1393,7 +1394,7 @@
           class:active={currentTab === 'history'}
           on:click={() => { currentTab = 'history'; loadPlanHistory(); }}
         >
-          Completed Archive
+          Completed archive
         </button>
       </div>
 
@@ -1409,7 +1410,7 @@
               <ArrowLeft size={14} weight="bold" /> Back to plans
             </button>
             <div class="form-group">
-              <label for="preset">Preset Plan:</label>
+              <label for="preset">Preset plan:</label>
               <select id="preset" bind:value={planPreset}>
                 <option value="">Custom...</option>
                 <option value="bible-1-year">Bible in 1 Year</option>
@@ -1427,23 +1428,23 @@
             </div>
 
             <div class="form-group">
-              <label for="planName">Plan Name <span class="optional">(optional)</span>:</label>
+              <label for="planName">Plan name <span class="optional">(optional)</span>:</label>
               <input id="planName" type="text" bind:value={planName} placeholder="e.g. Morning Devotions" maxlength="80" />
             </div>
             
             {#if planPreset === ''}
               <div class="custom-options">
-                <h3>Date Range</h3>
+                <h3>Date range</h3>
                 <div class="form-group">
-                  <label for="startDate">Start Date:</label>
+                  <label for="startDate">Start date:</label>
                   <input type="date" id="startDate" bind:value={planStartDate} />
                 </div>
                 <div class="form-group">
-                  <label for="endDate">End Date:</label>
+                  <label for="endDate">End date:</label>
                   <input type="date" id="endDate" bind:value={planEndDate} />
                 </div>
                 
-                <h3>Reading Days</h3>
+                <h3>Reading days</h3>
                 <div class="days-grid">
                   <label><input type="checkbox" bind:checked={dayChecks[0]} /> Sunday</label>
                   <label><input type="checkbox" bind:checked={dayChecks[1]} /> Monday</label>
@@ -1454,12 +1455,12 @@
                   <label><input type="checkbox" bind:checked={dayChecks[6]} /> Saturday</label>
                 </div>
                 
-                <h3>Book Selection</h3>
+                <h3>Book selection</h3>
                 <div class="book-buttons">
-                  <button on:click={selectAllBooks}>Select All</button>
-                  <button on:click={selectNone}>Select None</button>
-                  <button on:click={selectOT}>OT Only</button>
-                  <button on:click={selectNT}>NT Only</button>
+                  <button on:click={selectAllBooks}>Select all</button>
+                  <button on:click={selectNone}>Select none</button>
+                  <button on:click={selectOT}>OT only</button>
+                  <button on:click={selectNT}>NT only</button>
                 </div>
                 <!-- Two straight top-to-bottom lists. The old auto-fill grid
                      flowed left-to-right, so column order meant nothing and
@@ -1483,7 +1484,7 @@
                   {/each}
                 </div>
                 
-                <h3>Reading Order</h3>
+                <h3>Reading order</h3>
                 <div class="radio-group">
                   <label><input type="radio" bind:group={ordering} value="canonical" /> Canonical (Traditional)</label>
                   <label><input type="radio" bind:group={ordering} value="chronological" /> Chronological (Historical Order)</label>
@@ -1508,14 +1509,14 @@
                       <label class="sub-option"><input type="checkbox" bind:checked={optRandomizeProverbs} /> Randomize Proverbs?</label>
                     {/if}
                   </div>
-                  <label><input type="checkbox" bind:checked={optReverseOrder} /> Reverse Order</label>
-                  <label><input type="checkbox" bind:checked={optShowOverallStats} /> Show Overall Statistics</label>
-                  <label><input type="checkbox" bind:checked={optShowDailyStats} /> Show Daily Statistics</label>
+                  <label><input type="checkbox" bind:checked={optReverseOrder} /> Reverse order</label>
+                  <label><input type="checkbox" bind:checked={optShowOverallStats} /> Show overall statistics</label>
+                  <label><input type="checkbox" bind:checked={optShowDailyStats} /> Show daily statistics</label>
                 </div>
               </div>
             {/if}
             
-            <button class="generate-btn" on:click={generatePlan}>Generate Plan</button>
+            <button class="generate-btn" on:click={generatePlan}>Generate plan</button>
             {#if planGenerationStatus}
               <div class="status">{planGenerationStatus}</div>
             {/if}
@@ -1523,7 +1524,7 @@
         {:else if currentTab === 'active'}
           <div class="active-plan-tab">
             <button class="create-new-plan-btn" on:click={() => currentTab = 'create'}>
-              <Plus size={14} weight="bold" /> Create New Plan
+              <Plus size={14} weight="bold" /> Create new plan
             </button>
             {#if activePlans.length >= 2}
               <div class="plan-tab-strip">
@@ -1532,7 +1533,7 @@
                   class:active={activePlanViewTab === 'all'}
                   on:click={() => selectPlanTab('all')}
                 >
-                  All Plans
+                  All plans
                 </button>
                 {#each activePlans as entry}
                   <button
@@ -1549,7 +1550,7 @@
             {#if activePlanViewTab === 'all'}
               <!-- Plan Manager -->
               <div class="plan-manager">
-                <h3 class="plan-manager-title">Active Reading Plans</h3>
+                <h3 class="plan-manager-title">Active reading plans</h3>
                 {#each activePlans as entry (entry.id)}
                   {@const nextCh = getNextChapterForPlan(entry.plan)}
                   <div class="plan-manager-row" class:delete-confirm={planDeleteConfirmId === entry.id}>
@@ -1568,7 +1569,7 @@
                       {/if}
                     </div>
                     <div class="plan-manager-meta">
-                      Started {new Date(entry.plan.config.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} &bull; {entry.plan.totalDays} days
+                      Started {planDateText(entry.plan.config.startDate)} &bull; {countOf(entry.plan.totalDays, 'day')}
                     </div>
                     <div class="plan-manager-actions">
                       {#if nextCh}
@@ -1603,7 +1604,7 @@
                   </div>
                   <div class="today-reading" class:day-done={todayDone}>
                     <div class="today-reading-header">
-                      <span class="today-day-label">Day {todayReading.dayNumber} &mdash; {new Date(todayReading.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      <span class="today-day-label">Day {todayReading.dayNumber} &mdash; {planDateText(todayReading.date)}</span>
                       <button class="jump-to-day-btn" on:click={() => scrollToDayInList(todayReading.dayNumber)}>Jump to day <ArrowDown size="1em" weight="bold" class="ph-inline" /></button>
                     </div>
                     <div class="chapters-list">
@@ -1640,7 +1641,7 @@
                     </div>
                     <div class="today-reading-actions">
                       {#if todayDone}
-                        <span class="day-complete-badge">✓ Day Complete</span>
+                        <span class="day-complete-badge">✓ Day complete</span>
                         <button
                           class="start-reading-btn"
                           on:click={() => {
@@ -1651,7 +1652,7 @@
                             }
                           }}
                         >
-                          Read Again <ArrowRight size="1em" weight="bold" class="ph-inline" />
+                          Read again <ArrowRight size="1em" weight="bold" class="ph-inline" />
                         </button>
                         <PlayTodayButton onStarted={close} planId={currentPlanId} day={todayReading} />
                       {:else}
@@ -1665,10 +1666,10 @@
                             }
                           }}
                         >
-                          Start Reading <ArrowRight size="1em" weight="bold" class="ph-inline" />
+                          Start reading <ArrowRight size="1em" weight="bold" class="ph-inline" />
                         </button>
                         <PlayTodayButton onStarted={close} planId={currentPlanId} day={todayReading} />
-                        <button class="mark-day-btn" on:click={() => markDayComplete(todayReading)}>Mark Day Complete</button>
+                        <button class="mark-day-btn" on:click={() => markDayComplete(todayReading)}>Mark day complete</button>
                       {/if}
                     </div>
                   </div>
@@ -1684,15 +1685,15 @@
 
               <div class="plan-overview">
                 <div class="overview-header">
-                  <h3><ChartPieSlice size={17} weight="bold" class="ph-inline" /> Plan Overview</h3>
-                  <button class="delete-btn" on:click={deleteCurrentPlan}><Trash size={15} weight="bold" class="ph-inline" /> Delete Plan</button>
+                  <h3><ChartPieSlice size={17} weight="bold" class="ph-inline" /> Plan overview</h3>
+                  <button class="delete-btn" on:click={deleteCurrentPlan}><Trash size={15} weight="bold" class="ph-inline" /> Delete plan</button>
                 </div>
                 <div class="stats-grid">
-                  <div><strong>Total Days:</strong> {currentReadingPlan.totalDays}</div>
-                  <div><strong>Total Chapters:</strong> {currentReadingPlan.totalChapters}</div>
+                  <div><strong>Total days:</strong> {currentReadingPlan.totalDays}</div>
+                  <div><strong>Total chapters:</strong> {currentReadingPlan.totalChapters}</div>
                   <div><strong>Avg/Day:</strong> {currentReadingPlan.avgChaptersPerDay.toFixed(1)} chapters</div>
-                  <div><strong>Start:</strong> {new Date(currentReadingPlan.config.startDate).toLocaleDateString()}</div>
-                  <div><strong>End:</strong> {new Date(currentReadingPlan.config.endDate).toLocaleDateString()}</div>
+                  <div><strong>Start:</strong> {planDateText(currentReadingPlan.config.startDate)}</div>
+                  <div><strong>End:</strong> {planDateText(currentReadingPlan.config.endDate)}</div>
                 </div>
               </div>
 
@@ -1713,16 +1714,16 @@
                   <div><strong>Verses read today:</strong> {verseStats.todayRead}</div>
                   <div><strong>Total verses read:</strong> {verseStats.read}</div>
                   <div><strong>Verses remaining:</strong> {verseStats.remaining}</div>
-                  <div><strong>Days ahead/behind:</strong> {currentReadingPlan ? getDaysAheadBehind(currentReadingPlan, getProgressEntries(), $todayStore) : 0}</div>
-                  <div><strong>Streak:</strong> {currentReadingPlan ? calculateStreak(currentReadingPlan, getProgressEntries(), $todayStore, localDateStr) : 0} days</div>
+                  <div><strong>Schedule:</strong> {scheduleText(currentReadingPlan ? getDaysAheadBehind(currentReadingPlan, getProgressEntries(), $todayStore) : 0)}</div>
+                  <div><strong>Streak:</strong> {countOf(currentReadingPlan ? calculateStreak(currentReadingPlan, getProgressEntries(), $todayStore, localDateStr) : 0, 'day')}</div>
                 </div>
                 {#if userName && verseStats.todayRead > 0}
-                  <div class="progress-message">Congrats {userName}, today you read {verseStats.todayRead} verses!</div>
+                  <div class="progress-message">Congrats {userName}, today you read {countOf(verseStats.todayRead, 'verse')}!</div>
                 {/if}
                 <div class="progress-actions">
                   <button class="export-btn" on:click={exportProgressJson}>Export JSON</button>
                   <button class="export-btn" on:click={exportProgressMarkdown}>Export Markdown</button>
-                  <button class="export-btn" on:click={syncNow} disabled={syncing}>Sync Now</button>
+                  <button class="export-btn" on:click={syncNow} disabled={syncing}>Sync now</button>
                   <span class="sync-status" class:sync-status-error={syncState.status === 'error'} title={SYNC_SCOPE_TOOLTIP}>
                     {#if syncing}
                       <BrandSpinner size={13} title="Syncing…" />
@@ -1737,13 +1738,13 @@
                   class:active={viewMode === 'calendar'}
                   on:click={() => viewMode = 'calendar'}
                 >
-                  Calendar View
+                  Calendar view
                 </button>
                 <button 
                   class:active={viewMode === 'list'}
                   on:click={() => viewMode = 'list'}
                 >
-                  List View
+                  List view
                 </button>
                 <button
                   class:active={viewMode === 'catchup'}
@@ -1927,7 +1928,7 @@
                 </div>
               {/if}
             {:else}
-              <p>No active plan yet. Tap Create New Plan to start one.</p>
+              <p>No active plan yet. Tap Create new plan to start one.</p>
             {/if}
           </div>
         {:else}
@@ -1942,7 +1943,7 @@
                         {getPlanDisplayName(item.plan.config)}
                       </div>
                       <div class="history-date">
-                        Completed {new Date(item.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        Completed {planDateText(item.completedAt)}
                       </div>
                     </div>
                     <div class="history-actions">
@@ -1953,7 +1954,7 @@
                     <strong>{item.plan.totalDays}</strong> days &bull; <strong>{item.plan.totalChapters}</strong> chapters
                   </div>
                   <div class="history-dates">
-                    {new Date(item.plan.config.startDate).toLocaleDateString()} → {new Date(item.plan.config.endDate).toLocaleDateString()}
+                    {planDateText(item.plan.config.startDate)} – {planDateText(item.plan.config.endDate)}
                   </div>
                 </div>
               {/each}
@@ -1967,7 +1968,7 @@
         <div class="auth-wall">
           <div class="auth-wall-icon"><BookOpenText size={48} weight="bold" /></div>
           <p class="auth-wall-text">Sign in to create and sync reading plans across all your devices.</p>
-          <button class="auth-wall-btn" on:click={() => { close(); profileModalStore.open(); }}>Sign In to Continue <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
+          <button class="auth-wall-btn" on:click={() => { close(); profileModalStore.open(); }}>Sign in to continue <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
         </div>
       {/if}
     </div>
@@ -1979,8 +1980,8 @@
     <div class="congrats-overlay" on:click={() => congratsPlanName = null}>
       <div class="congrats-card" on:click|stopPropagation>
         <div class="congrats-emoji"><Trophy size={56} weight="bold" /></div>
-        <h2 class="congrats-title">Plan Complete!</h2>
-        <p class="congrats-body">You finished <strong>{congratsPlanName}</strong>. It has been moved to your Completed Archive.</p>
+        <h2 class="congrats-title">Plan complete!</h2>
+        <p class="congrats-body">You finished <strong>{congratsPlanName}</strong>. It has been moved to your Completed archive.</p>
         <button class="congrats-close-btn" on:click={() => congratsPlanName = null}>Awesome!</button>
       </div>
     </div>
@@ -3179,7 +3180,7 @@
     opacity: 0.85;
   }
 
-  /* Plan Manager (All Plans view) */
+  /* Plan Manager (All plans view) */
   .plan-manager {
     padding: 4px 0;
   }
@@ -3290,7 +3291,7 @@
     font-weight: 600;
   }
 
-  /* Completed Archive empty state */
+  /* Completed archive empty state */
   .empty-archive {
     color: #888;
     font-style: italic;

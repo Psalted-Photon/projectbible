@@ -247,7 +247,17 @@ export default defineConfig({
         // The wordmark's face: drawn by the launch splash on first paint.
         'fonts/milonga-400.woff2',
         'fonts/berry-rotunda.woff2',
-        'fonts/teutonic4.woff2'
+        'fonts/teutonic4.woff2',
+        // Gentium Plus: the word studies' Greek and pronunciation, which
+        // people read offline. About 245 KB for all eight.
+        'fonts/gentium-plus-400-greek.woff2',
+        'fonts/gentium-plus-400-greek-ext.woff2',
+        'fonts/gentium-plus-400-latin.woff2',
+        'fonts/gentium-plus-400-latin-ext.woff2',
+        'fonts/gentium-plus-700-greek.woff2',
+        'fonts/gentium-plus-700-greek-ext.woff2',
+        'fonts/gentium-plus-700-latin.woff2',
+        'fonts/gentium-plus-700-latin-ext.woff2'
       ],
       workbox: {
         skipWaiting: true,
