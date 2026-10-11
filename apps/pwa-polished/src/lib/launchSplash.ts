@@ -15,6 +15,7 @@
 import { mount, unmount } from 'svelte';
 import Wordmark from '../components/Wordmark.svelte';
 import { WORDMARKS, wordmarkAt } from './wordmark';
+import { isQuickReturn } from './resume';
 
 /** The least time the splash stays, from the moment it is drawn. */
 export const LAUNCH_SPLASH_MIN_MS = 1000;
@@ -61,8 +62,13 @@ export function showLaunchSplash(): LaunchSplash {
     }, FADE_MS);
   }
 
+  // No held second when the app was left moments ago. That is a fold handing
+  // the app to the other screen, and the logo was seen a minute ago; holding
+  // it again is just a wait between closing the phone and reading on.
+  const minMs = isQuickReturn() ? 0 : LAUNCH_SPLASH_MIN_MS;
+
   function dismiss(): void {
-    const left = LAUNCH_SPLASH_MIN_MS - (Date.now() - shownAt);
+    const left = minMs - (Date.now() - shownAt);
     if (left <= 0) remove();
     else setTimeout(remove, left);
   }

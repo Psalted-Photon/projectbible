@@ -19,11 +19,7 @@ import { windowStore } from './stores/windowStore';
 import { openHarmonyView } from './windowTypes';
 import { readingState, readingPosition, startReading } from './tts/readingEngine';
 import { showNotice } from '../stores/noticeStore';
-
-const KEY = 'projectbible_session';
-
-/** How soon a relaunch has to follow for what was open to come back. */
-const QUICK_RETURN_MS = 2 * 60 * 1000;
+import { SESSION_KEY as KEY, QUICK_RETURN_MS } from './resume';
 
 interface HarmonySnapshot {
   mode: 'accounts' | 'translations';

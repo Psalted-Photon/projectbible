@@ -13,6 +13,27 @@ import type { ReaderPosition } from '../stores/navigationStore';
 
 const KEY = 'projectbible_resume';
 
+/** Where lib/sessionRestore writes down what was open as the app is left. */
+export const SESSION_KEY = 'projectbible_session';
+
+/**
+ * How soon a relaunch has to follow the app being left to count as picking up
+ * where you were. A fold hands over in a second or two; this leaves room for a
+ * slow phone without bringing back yesterday's panels.
+ */
+export const QUICK_RETURN_MS = 2 * 60 * 1000;
+
+/** This launch follows the app being left moments ago — a fold, most likely. */
+export function isQuickReturn(): boolean {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    const savedAt = raw ? JSON.parse(raw)?.savedAt : null;
+    return typeof savedAt === 'number' && Date.now() - savedAt < QUICK_RETURN_MS;
+  } catch {
+    return false;
+  }
+}
+
 export interface ResumeEntry {
   /**
    * What the reader's own saved state named when this was taken. A resume

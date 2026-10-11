@@ -1334,7 +1334,7 @@
     <div class="setting-group">
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={allowRotation} />
-        <span class="label-text">Allow screen rotation</span>
+        <span class="label-text">Allow screen rotation (tablets and unfolded phones always rotate)</span>
       </label>
     </div>
   </SettingsSection>

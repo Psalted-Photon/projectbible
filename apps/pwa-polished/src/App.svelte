@@ -46,11 +46,21 @@
   let showReadingPlanModal = false;
 
   // ── Orientation lock ──────────────────────────────────────────────────────
+  /**
+   * A screen tablet-sized on its short side (600 px, Android's own line for a
+   * tablet) — the inside of a folding phone, or a tablet. Portrait has no
+   * meaning on a screen that is nearly square, and Android letterboxes or
+   * restarts an app that insists on it there, so the lock is for phones only.
+   */
+  function isLargeScreen(): boolean {
+    return Math.min(screen.width, screen.height) >= 600;
+  }
+
   async function applyOrientationLock() {
     if (typeof screen === 'undefined' || !screen.orientation) return;
     const { allowRotation } = getSettings();
     try {
-      if (allowRotation) {
+      if (allowRotation || isLargeScreen()) {
         screen.orientation.unlock();
       } else {
         try {
@@ -245,6 +255,17 @@
     // Re-apply orientation lock whenever settings are saved
     window.addEventListener('settingsUpdated', applyOrientationLock);
 
+    // And when the app moves between a phone-sized and a tablet-sized screen
+    // without being relaunched, which some folding phones do.
+    let wasLargeScreen = isLargeScreen();
+    const handleScreenResize = () => {
+      const large = isLargeScreen();
+      if (large === wasLargeScreen) return;
+      wasLargeScreen = large;
+      void applyOrientationLock();
+    };
+    window.addEventListener('resize', handleScreenResize);
+
     // Fade-in transition when orientation changes
     screen.orientation?.addEventListener('change', handleOrientationChange);
 
@@ -378,6 +399,7 @@
       }
       document.removeEventListener('keydown', handleGlobalKeydown);
       window.removeEventListener('settingsUpdated', applyOrientationLock);
+      window.removeEventListener('resize', handleScreenResize);
       screen.orientation?.removeEventListener('change', handleOrientationChange);
       unsubscribeReadingPlan();
       unsubscribeToday();
