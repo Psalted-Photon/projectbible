@@ -168,6 +168,7 @@
     type ReaderPosition,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
+  import { readResume, saveResume } from "../lib/resume";
   import { parallelStore } from "../stores/parallelStore";
   import * as parallelSync from "../lib/parallelSync";
   import { soloRunsIn } from "../lib/parallelIndex";
@@ -643,16 +644,46 @@
   let _windowScrollTarget: number | null = null;
   // A window's restoreScroll: the exact spot a crumb in its own trail saved.
   let _windowRestore: (ReaderPosition & { at: number }) | null = null;
+  /** The search result last scrolled to, so a repaint of the same one stays put. */
+  let _searchScrolledKey: string | null = null;
 
   // A window opened by split view starts on the line the other reader was
   // reading. Taken once, here at start so the first load already aims for
   // it, and cleared so a reload does not put the window back there.
   if (windowId) {
-    const openAt = get(windowStore).find((w) => w.id === windowId)?.contentState?.openAt as ReaderPosition | null | undefined;
+    const cs = get(windowStore).find((w) => w.id === windowId)?.contentState;
+    const openAt = cs?.openAt as ReaderPosition | null | undefined;
     if (openAt) {
       _windowScrollTarget = openAt.verse;
       _windowRestore = { ...openAt, at: Date.now() };
       windowStore.updateContentState(windowId, { openAt: null });
+    } else if (!windowId.startsWith('harmony-')) {
+      // Otherwise, after a relaunch, the line it was showing when the app went
+      // away — while it is still on the place its state names.
+      const r = readResume(windowId);
+      const book = cs?.book ?? 'Genesis';
+      const chapter = cs?.chapter ?? 1;
+      if (
+        r &&
+        r.translation === (cs?.translation ?? DEFAULT_TRANSLATION) &&
+        r.book === book &&
+        r.chapter === chapter
+      ) {
+        _windowScrollTarget = r.pos.verse;
+        _windowRestore = { ...r.pos, at: Date.now() };
+        if (r.pos.book !== book || r.pos.chapter !== chapter) {
+          // Read on past the chapter it was sent to. Its search mark is a bare
+          // verse number in that chapter, so it cannot come along.
+          windowStore.updateContentState(windowId, {
+            book: r.pos.book,
+            chapter: r.pos.chapter,
+            highlightedVerse: null,
+          });
+        } else if (cs?.highlightedVerse) {
+          // The mark comes back, but painting it must not pull the window up to it.
+          _searchScrolledKey = `${book}|${chapter}|${cs.highlightedVerse}`;
+        }
+      }
     }
   }
 
@@ -3375,9 +3406,34 @@
     return bestBook ? { book: bestBook, chapter: bestChapter } : null;
   }
 
+  /** A reader still on screen, so a closed window's saved line can be dropped. */
+  const isLiveReader = (id: string) =>
+    id === MAIN_READER || get(windowStore).some((w) => w.id === id);
+
   function saveScrollPosition() {
-    // Only save for the main reader (not windowed panes — they have their own contentState)
+    // The exact line, for a relaunch to come back to (lib/resume). Every
+    // reader with a trail keeps one; harmony panes are not brought back.
+    const pos = trailId ? readPosition() : null;
+    if (pos && windowId) {
+      saveResume(windowId, {
+        translation: currentTranslation,
+        book: currentBook,
+        chapter: currentChapter,
+        pos,
+      }, isLiveReader);
+    }
+    // Windows keep the rest in their own contentState.
     if (windowId) return;
+    if (pos) {
+      const lh = get(navigationStore).linkHighlight;
+      saveResume(MAIN_READER, {
+        translation: currentTranslation,
+        book: pos.book,
+        chapter: pos.chapter,
+        pos,
+        mark: lh ? { book: lh.book, chapter: lh.chapter, verse: lh.verse } : null,
+      }, isLiveReader);
+    }
     const visible = detectVisibleChapter();
     if (!visible) return;
     try {
@@ -4639,8 +4695,6 @@
   // A search result is a link like any other, so it gets the same mark in the
   // same book category color. It used to be an orange bordered box that matched
   // nothing else in the app, and in the main reader it never appeared at all.
-  /** The result last scrolled to, so a repaint of the same one stays put. */
-  let _searchScrolledKey: string | null = null;
   function clearSearchHighlight() {
     // Only clears a mark this function actually put there. It is called from a
     // reactive statement that runs whenever `highlightVerse` is falsy — which in
@@ -6116,6 +6170,9 @@
       if (document.hidden) saveScrollPosition();
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    // pagehide as well: a page being torn down (a fold handing the app to the
+    // other screen, a swipe away) does not always report hidden first.
+    window.addEventListener('pagehide', saveScrollPosition);
 
     // Reload highlights when a remote change arrives (cross-device sync)
     const unsubscribeHighlightChanges = subscribeToHighlightRemoteChanges(() => {
@@ -6157,6 +6214,7 @@
       document.removeEventListener("click", handleClickOutside);
       cancelWordDrag();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', saveScrollPosition);
       unsubscribeHighlightChanges();
       unsubscribeNoteChanges();
       stopScrollDetection();

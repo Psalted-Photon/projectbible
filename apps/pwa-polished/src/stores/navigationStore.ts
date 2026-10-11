@@ -3,6 +3,7 @@ import { getBookChapters, normalizeBookName, DEFAULT_TRANSLATION } from '../lib/
 import { translationForJump } from '../lib/testamentDefaults';
 import { getDeviceOwner } from '../lib/sync/deviceOwner';
 import { windowStore, type WindowState } from '../lib/stores/windowStore';
+import { readResume } from '../lib/resume';
 
 export interface NavigationState {
   translation: string;
@@ -69,12 +70,37 @@ function loadPersistedState(): NavigationState {
     const raw = localStorage.getItem(NAV_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...initialState, ...parsed, highlightedVerse: null };
+      return withResume({ ...initialState, ...parsed, highlightedVerse: null });
     }
   } catch {
     // ignore parse errors; fall through to default
   }
   return initialState;
+}
+
+/**
+ * Open on the exact line the reader was showing when the app went away, with
+ * the "start here" mark if one was up — not just the top of its chapter.
+ *
+ * Only while the saved chapter is still the one the store names, give or take
+ * the one either side: at a chapter break the two can be measured a chapter
+ * apart. Anything further means the reader was sent somewhere else since.
+ */
+function withResume(state: NavigationState): NavigationState {
+  const r = readResume(MAIN_READER);
+  if (!r) return state;
+  const { pos } = r;
+  if (r.translation !== state.translation || pos.book !== state.book) return state;
+  if (Math.abs(pos.chapter - state.chapter) > 1) return state;
+  const at = Date.now();
+  return {
+    ...state,
+    book: pos.book,
+    chapter: pos.chapter,
+    scrollTargetVerse: pos.verse,
+    restoreScroll: { ...pos, at },
+    linkHighlight: r.mark ? { ...r.mark, at, noScroll: true } : null,
+  };
 }
 
 function persistState(state: NavigationState): void {
