@@ -359,8 +359,9 @@ export default defineConfig({
         short_name: 'irisBible',
         description: 'Immersive Bible reading experience',
         theme_color: '#1a1a1a',
-        // The cream of the app icon's tile, so the launch screen is the icon.
-        background_color: '#fffaed',
+        // Stays dark: Android also paints this behind the system buttons when
+        // they're swiped up over the fullscreen app, and the buttons are white.
+        background_color: '#1a1a1a',
         display: 'fullscreen',
         orientation: 'any',
         start_url: '/',
