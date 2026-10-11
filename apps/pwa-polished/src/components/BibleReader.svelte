@@ -730,6 +730,21 @@
       },
       goToVerse: (translation, book, chapter, verse) =>
         windowArrive({ ...readerNavState(), translation, book, chapter, scrollTargetVerse: verse }),
+      switchTranslation: (translation, pos) => {
+        if (!windowId || translation === currentTranslation) return;
+        if (pos) {
+          _windowScrollTarget = pos.verse;
+          _windowRestore = { ...pos, at: Date.now() };
+        }
+        // A window's search mark is a bare verse number in the chapter its
+        // state names, so it can only come along while that chapter stays put.
+        const staying = !pos || (pos.book === currentBook && pos.chapter === currentChapter);
+        windowStore.updateContentState(windowId, {
+          translation,
+          ...(pos ? { book: pos.book, chapter: pos.chapter } : {}),
+          ...(staying ? {} : { highlightedVerse: null }),
+        });
+      },
     });
   });
   // Where the "start here" mark belongs now lives in the navigation store as
@@ -1961,7 +1976,10 @@
 
   // Load verses when navigation changes externally (not from our scroll loading)
   $: {
-    const navKey = `${currentTranslation}-${currentBook}-${currentChapter}-${isChronologicalMode}`;
+    // "|" between the parts, not "-": translation ids can carry a hyphen
+    // (hebrew-oshb), and splitting on it below read every chapter turn in one
+    // of those as a translation change.
+    const navKey = `${currentTranslation}|${currentBook}|${currentChapter}|${isChronologicalMode}`;
     console.log(
       "🔑 Navigation key changed:",
       navKey,
@@ -1979,7 +1997,7 @@
       );
 
       // Capture previous translation BEFORE updating lastNavigationKey
-      const prevTranslation = lastNavigationKey.split("-")[0];
+      const prevTranslation = lastNavigationKey.split("|")[0];
       const translationChanged = !!(prevTranslation && prevTranslation !== currentTranslation);
       // Claimed up front so this block can't re-enter and start the same load
       // on every reactive tick. loadChapter then re-commits it to describe the
@@ -2733,7 +2751,7 @@
       // claiming this destination was handled, and nothing would retry it
       // until you navigated somewhere else and back — the "works on the
       // second tap" behavior.
-      lastNavigationKey = `${translation}-${book}-${chapter}-${isChronologicalMode}`;
+      lastNavigationKey = `${translation}|${book}|${chapter}|${isChronologicalMode}`;
 
       console.log(
         "   Chapters array AFTER assignment:",
@@ -3611,6 +3629,8 @@
         ];
         await loadAnnotations(nextBook, nextChapter, false);
         await applyReadingPlanEndHighlight();
+        // Same as a prepend: a mark waiting on this chapter goes back up.
+        reapplyVerseHighlights(readerElement, windowId);
         didAddChapter = true;
       }
     } catch (err) {
@@ -3748,6 +3768,9 @@
           // with it, the scroll handler reads it as the reader scrolling down and
           // hides the bar in the middle of a scroll up.
           lastScrollTop = readerElement.scrollTop;
+          // A mark whose chapter was dropped by a translation switch is waiting
+          // for that chapter to come back, which scrolling up is how it does.
+          reapplyVerseHighlights(readerElement, windowId);
         }
       }
     } catch (err) {
@@ -4616,11 +4639,14 @@
   // A search result is a link like any other, so it gets the same mark in the
   // same book category color. It used to be an orange bordered box that matched
   // nothing else in the app, and in the main reader it never appeared at all.
+  /** The result last scrolled to, so a repaint of the same one stays put. */
+  let _searchScrolledKey: string | null = null;
   function clearSearchHighlight() {
     // Only clears a mark this function actually put there. It is called from a
     // reactive statement that runs whenever `highlightVerse` is falsy — which in
     // the main reader is always — so without this guard it would wipe the mark
     // every link navigation had just painted into the same slot.
+    _searchScrolledKey = null;
     if (!searchHighlightedElement) return;
     searchHighlightedElement = null;
     clearVerseHighlight(slotFor('nav', windowId));
@@ -4637,6 +4663,13 @@
     );
     if (!verseEl) return;
     searchHighlightedElement = verseEl;
+    // Scrolled to once per result. This repaints whenever the chapter list
+    // changes — a translation switch, a chapter added by scrolling — and
+    // scrolling each time would drag you back up to the result from wherever
+    // you had read on to.
+    const key = `${currentBook}|${currentChapter}|${verseNumber}`;
+    if (key === _searchScrolledKey) return;
+    _searchScrolledKey = key;
     // One landing behavior for the whole app. This used to center the verse
     // with scrollIntoView while every other jump put it near the top, so the
     // same verse arrived in a different place depending on how you got there.

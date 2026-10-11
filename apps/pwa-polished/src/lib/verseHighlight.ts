@@ -439,7 +439,21 @@ export function reapplyVerseHighlights(
   for (const a of [...active.values()]) {
     if (!a.slot.endsWith(suffix)) continue;
     const el = findVerseEl(reader, a.target.book, a.target.chapter, a.target.verse, a.target.last);
-    if (!el) continue;
+    if (!el) {
+      // Its chapter is no longer on screen (a translation switch reloads only
+      // the chapter you are in). The drawing is pinned in pixels, so left up it
+      // would sit over whatever text now fills that spot. The slot itself stays,
+      // so the next reapply after its chapter is back paints it again.
+      if (a.verseEl) {
+        a.observer?.disconnect();
+        a.observer = null;
+        for (const t of a.timers) clearTimeout(t);
+        a.timers.length = 0;
+        removeOverlays(a);
+        a.verseEl = null;
+      }
+      continue;
+    }
     if (el !== a.verseEl) {
       removeOverlays(a);
       a.verseEl = el;

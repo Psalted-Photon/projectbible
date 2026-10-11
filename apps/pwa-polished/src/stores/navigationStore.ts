@@ -435,6 +435,8 @@ export interface ReaderDriver {
   move: (translation: string, book: string, chapter: number) => void;
   /** Follow a link to a verse, in `translation` (the one the reader is in). */
   goToVerse: (translation: string, book: string, chapter: number, verse: number) => void;
+  /** Change translation and stay on `pos`, the line on screen before the switch. */
+  switchTranslation?: (translation: string, pos: ReaderPosition | null) => void;
 }
 
 interface Reader {
@@ -807,6 +809,25 @@ export function registerReaderDriver(readerId: string, driver: ReaderDriver): ()
 }
 
 /**
+ * Switch a reader to another translation, keeping it on the line it was
+ * showing. The position is measured here, before the store changes, because
+ * the reader rebuilds every chapter as soon as the translation does. Returns
+ * false for a reader that cannot do it (a harmony pane), so the caller can
+ * fall back to a plain switch.
+ */
+export function switchTranslation(translation: string, readerId: string = MAIN_READER): boolean {
+  const r = readers.get(readerId);
+  const pos = r ? readerPosition(r) : null;
+  if (readerId === MAIN_READER) {
+    navigationStore.setTranslation(translation, pos);
+    return true;
+  }
+  if (!r?.driver?.switchTranslation) return false;
+  r.driver.switchTranslation(translation, pos);
+  return true;
+}
+
+/**
  * Follow a Bible link out of a lookup card into `readerId`, leaving a crumb in
  * that reader's trail first. `origin` is the card's snapshot, so walking the
  * crumb back reopens it. A reader that has gone away hands the jump to the
@@ -943,9 +964,27 @@ function createNavigationStore() {
 
   return {
     subscribe,
-    setTranslation: (translation: string) => {
+    /**
+     * With `pos`, the line on screen before the switch, the new translation
+     * opens on that same line rather than the top of the chapter, and the
+     * "start here" mark comes along. The mark gets a fresh stamp so the reader
+     * paints it again on the new text, in the new text's reading direction, and
+     * `noScroll` so painting it does not pull you up to it.
+     */
+    setTranslation: (translation: string, pos: ReaderPosition | null = null) => {
       update(state => {
-        const next = { ...state, translation, highlightedVerse: null };
+        if (!pos) {
+          const next = { ...state, translation, highlightedVerse: null };
+          persistState(next);
+          return next;
+        }
+        if (translation === state.translation) return state;
+        const at = navAt(state, pos, null);
+        const next = {
+          ...at,
+          translation,
+          linkHighlight: at.linkHighlight ? { ...at.linkHighlight, at: Date.now() } : null,
+        };
         persistState(next);
         return next;
       });

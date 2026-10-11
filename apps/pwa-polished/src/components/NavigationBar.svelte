@@ -8,6 +8,7 @@
     MAIN_READER,
     currentReaderPosition,
     registerScreenSurface,
+    switchTranslation,
     type CrumbKind,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
@@ -629,13 +630,12 @@
   }
 
   function selectTranslation(translation: string) {
-    if (windowId) {
+    // Both stay on the line you were reading, mark and all.
+    if (!switchTranslation(translation, windowId) && windowId) {
       windowStore.updateContentState(windowId, {
         translation,
         highlightedVerse: null,
       });
-    } else {
-      navigationStore.setTranslation(translation);
     }
     translationDropdownOpen = false;
   }
