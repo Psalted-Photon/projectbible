@@ -4,9 +4,14 @@
 //   node scripts/build-app-icons.mjs
 //
 // Source is public/Logo.png (1024x1024): the iris, a full circle on a
-// transparent ground. It is scaled and composited true-centered on a full-bleed
-// cream square (#FFFAED, always — the home-screen icon never changes color), so
-// changing Logo.png and re-running is all a future logo change needs.
+// transparent ground. It is scaled and composited true-centered on a cream tile
+// (#FFFAED, always — the home-screen icon never changes color), so changing
+// Logo.png and re-running is all a future logo change needs.
+//
+// The "any" icons carry their own rounded corners, because Windows and desktop
+// installs show the image exactly as drawn. The maskable and Apple icons stay
+// full-bleed squares: Android and iOS cut their own shape, and iOS fills any
+// transparent corner with black.
 //
 // Also written from the same master: favicon.ico (the iris alone, no tile),
 // pb-gem.png (the spinner and the email header), and the one-color
@@ -44,12 +49,15 @@ const CREAM = { r: 0xff, g: 0xfa, b: 0xed };
 // diameter; assertMaskableFits() below measures it rather than trusting the
 // arithmetic.
 const TARGETS = [
-  { file: 'pwa-64x64.png',                size: 64,  fill: 0.93 },
-  { file: 'pwa-192x192.png',              size: 192, fill: 0.93 },
-  { file: 'pwa-512x512.png',              size: 512, fill: 0.93 },
+  { file: 'pwa-64x64.png',                size: 64,  fill: 0.93, rounded: true },
+  { file: 'pwa-192x192.png',              size: 192, fill: 0.93, rounded: true },
+  { file: 'pwa-512x512.png',              size: 512, fill: 0.93, rounded: true },
   { file: 'maskable-icon-512x512.png',    size: 512, fill: 0.62 },
   { file: 'apple-touch-icon-180x180.png', size: 180, fill: 0.88 }
 ];
+
+// Corner radius of the rounded tile, as a share of its width.
+const CORNER_RADIUS = 0.22;
 
 // Android's adaptive-icon safe zone, as a share of the icon's width.
 const ANDROID_SAFE_ZONE = 72 / 108;
@@ -63,15 +71,28 @@ function irisAt(diameter) {
   return sharp(SOURCE).resize(diameter, diameter, { fit: 'fill' });
 }
 
-/** One icon: the iris centered on an opaque cream square. */
-async function renderIcon(size, fill) {
+/** One icon: the iris centered on a cream tile, square or rounded. */
+async function renderIcon(size, fill, rounded) {
   const d = Math.max(1, Math.round(size * fill));
   const layer = await irisAt(d).png().toBuffer();
-  return sharp({
+  const tile = await sharp({
     create: { width: size, height: size, channels: 3, background: CREAM }
   })
     .composite([{ input: layer, left: Math.round((size - d) / 2), top: Math.round((size - d) / 2) }])
+    .png()
+    .toBuffer();
+  if (!rounded) {
     // 24-bit RGB is kept: the iris is a smooth gradient and a palette bands it.
+    return sharp(tile).png({ compressionLevel: 9, effort: 10 }).toBuffer();
+  }
+  const r = size * CORNER_RADIUS;
+  const mask = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">` +
+    `<rect width="${size}" height="${size}" rx="${r}" ry="${r}" fill="#fff"/></svg>`
+  );
+  return sharp(tile)
+    .ensureAlpha()
+    .composite([{ input: mask, blend: 'dest-in' }])
     .png({ compressionLevel: 9, effort: 10 })
     .toBuffer();
 }
@@ -124,10 +145,10 @@ async function renderBadge(size) {
     .toBuffer();
 }
 
-for (const { file, size, fill } of TARGETS) {
-  writeFileSync(join(PUBLIC, file), await renderIcon(size, fill));
+for (const { file, size, fill, rounded } of TARGETS) {
+  writeFileSync(join(PUBLIC, file), await renderIcon(size, fill, rounded));
   console.log('  ' + file.padEnd(30) + (size + 'x' + size).padEnd(9) +
-    'iris ' + (fill * 100).toFixed(0) + '%');
+    'iris ' + (fill * 100).toFixed(0) + '%' + (rounded ? ', rounded' : ''));
 }
 
 const images = [];
