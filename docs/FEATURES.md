@@ -593,7 +593,7 @@ The formatting toolbar slides out of the way when you want the space.
 - Place-name underlines
 - Which menu opens when you tap a word — the ring or the older popup
 - Measurements in US or Metric, for the weights-and-measures pill
-- Allow screen rotation on phones (tablets and unfolded phones always rotate)
+- Allow screen rotation
 
 ### 21.6 Read Aloud settings
 

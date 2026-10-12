@@ -42,15 +42,9 @@
       color: #e0e0e0;
     }
     
-    /* Increase base font size for tablet devices */
+    /* Phone-sized screens, the inside of a folding phone included: one size,
+       so unfolding the phone does not make every button bigger. */
     @media (max-width: 768px) {
-      html {
-        font-size: 18px;
-      }
-    }
-
-    /* Reduce font size for small phone portrait — override the tablet bump above */
-    @media (max-width: 480px) {
       html {
         font-size: 14px;
       }

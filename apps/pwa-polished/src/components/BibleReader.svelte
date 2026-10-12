@@ -516,6 +516,7 @@
       anchorSyncDebounce = null;
     }
     suppressScrollSyncUntil = Date.now() + 600;
+    dropAnchor();
   }
   // Key: "book::chapter::verse" — prevents verse-number collisions across chapters in multi-chapter view
   const visibleVersePositions = new Map<string, { book: string; chapter: number; verse: number; top: number }>();
@@ -956,6 +957,69 @@
   onMount(() => {
     if (!trailId) return;
     return registerReaderPosition(readPosition, trailId);
+  });
+
+  // ── Keeping your line when the screen changes width ──────────────────────
+  // Opening or closing a folding phone changes the width, the text rewraps,
+  // and the scroll offset stays where it was — so a different verse lands at
+  // the top: wider screen, shorter verses, you jump ahead; narrower, you fall
+  // back. And whatever was saved as the app went away was that wrong spot.
+  // So the line you were reading is noted while the width is steady, put back
+  // whenever the width changes, and saved in place of what a mid-rewrap
+  // measurement would say.
+
+  /** The line last seen at the top, and the window width it was measured at. */
+  let anchorPos: ReaderPosition | null = null;
+  let anchorWidth = 0;
+  let anchorTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function noteAnchor(): void {
+    if (window.innerWidth !== anchorWidth && anchorPos) return; // a rewrap is still to be undone
+    const pos = readPosition();
+    if (!pos) return;
+    anchorPos = pos;
+    anchorWidth = window.innerWidth;
+  }
+
+  /** A deliberate jump makes the noted line stale until the next scroll settles. */
+  function dropAnchor(): void {
+    anchorPos = null;
+    if (anchorTimer) clearTimeout(anchorTimer);
+    anchorTimer = null;
+  }
+
+  /** Where you are reading: as measured, or the noted line if the text has since rewrapped. */
+  function stablePosition(): ReaderPosition | null {
+    if (anchorPos && window.innerWidth !== anchorWidth) return anchorPos;
+    noteAnchor();
+    return anchorPos ?? readPosition();
+  }
+
+  function holdLineThroughResize(): void {
+    if (!readerElement || !anchorPos || window.innerWidth === anchorWidth) return;
+    const pos = anchorPos;
+    anchorWidth = window.innerWidth;
+    const el = findVerseEl(readerElement, pos.book, pos.chapter, pos.verse);
+    if (!el) return;
+    const put = () => {
+      if (!readerElement || !el.isConnected) return;
+      const drift = el.getBoundingClientRect().top - readerElement.getBoundingClientRect().top + pos.offset;
+      if (Math.abs(drift) < 1) return;
+      readerElement.scrollTop = Math.max(0, readerElement.scrollTop + drift);
+      lastScrollTop = readerElement.scrollTop;
+    };
+    put();
+    // Once more after the browser has finished laying the new width out.
+    requestAnimationFrame(put);
+  }
+
+  onMount(() => {
+    if (!trailId) return;
+    window.addEventListener('resize', holdLineThroughResize);
+    return () => {
+      window.removeEventListener('resize', holdLineThroughResize);
+      if (anchorTimer) clearTimeout(anchorTimer);
+    };
   });
 
   /**
@@ -2826,6 +2890,7 @@
       if (resetScroll && readerElement) {
         // Set flag BEFORE tick so any clamp-induced scroll event is consumed
         scrollResetPending = true;
+        dropAnchor(); // the line noted belongs to the page being replaced
         await tick(); // flush DOM so scrollHeight reflects the new single-chapter content
         lastScrollTop = 0;
         navBarOffset = 0;
@@ -3413,7 +3478,7 @@
   function saveScrollPosition() {
     // The exact line, for a relaunch to come back to (lib/resume). Every
     // reader with a trail keeps one; harmony panes are not brought back.
-    const pos = trailId ? readPosition() : null;
+    const pos = trailId ? stablePosition() : null;
     if (pos && windowId) {
       saveResume(windowId, {
         translation: currentTranslation,
@@ -3525,6 +3590,12 @@
       // Save scroll position after user stops scrolling (debounced)
       if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
       scrollSaveTimer = setTimeout(saveScrollPosition, 500);
+      // And note the line sooner than that, so a fold right after a scroll
+      // still knows where you were.
+      if (trailId) {
+        if (anchorTimer) clearTimeout(anchorTimer);
+        anchorTimer = setTimeout(noteAnchor, 150);
+      }
     };
 
     // Attach scroll event listener
