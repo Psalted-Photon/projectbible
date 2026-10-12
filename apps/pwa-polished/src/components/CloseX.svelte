@@ -48,7 +48,7 @@
   .close-x {
     /* Tune here. Sepia gets its own red below: its filter can't be undone
        exactly, so it starts from a brighter red that lands near this one. */
-    --cx-red: #b3141e;
+    --cx-red: #5c0c11;
     --cx-red-hover: #d41c27;
     --cx-black: #000;
 
