@@ -565,6 +565,13 @@ const BOOK_NOTCH = 4;
 const BAR_CURVE = 0.5;
 /** The shortest bar, so a one-verse chapter is still a mark and not a gap. */
 const BAR_MIN = 2;
+/**
+ * How strongly a chapter bar wears its book's color.
+ *
+ * Below the names' 0.95 on purpose. The ruler is furniture: it should be
+ * readable at a glance and never compete with the arcs, which are the picture.
+ */
+const BAR_ALPHA = 0.55;
 /** The gap between the bars and the book names. */
 const NAME_GAP = 6;
 /** Room a sideways book name is given, in pixels across the axis. */
@@ -597,32 +604,45 @@ function drawAxis(
 
   // ── Chapter bars ───────────────────────────────────────────────────────
   //
-  // Away from the arcs, so they never fight the picture. One path for all
-  // 1,189 of them; the longest chapter in the Bible sets the scale, so the
-  // bars mean the same thing whichever spacing the axis is in.
+  // Away from the arcs, so they never fight the picture. Each bar wears its own
+  // book's color, which makes the ruler the legend twice over: the name under a
+  // book and the bars above it say the same thing, so a color arriving in the
+  // arcs can be traced to a place on the line without reading a word.
+  //
+  // Batched by book rather than drawn per chapter — one path and one color per
+  // book is 66 strokes for 1,189 bars, since a stroke is the dear part.
   let longest = 1;
   for (let i = 0; i < axis.chapterVerses.length; i++) {
     if (axis.chapterVerses[i] > longest) longest = axis.chapterVerses[i];
   }
 
-  ctx.strokeStyle = palette.muted;
   ctx.lineWidth = 1;
   ctx.lineCap = 'butt';
-  ctx.beginPath();
-  for (let c = 0; c < axis.chapterStarts.length; c++) {
-    const a0 = axis.offsets[c];
-    const a1 = axis.offsets[c + 1];
-    // The middle of the chapter's own slot, so a bar sits under its chapter
-    // rather than on the boundary between two.
-    const along = ((a0 + a1) / 2) * frame.along;
-    const share = Math.pow(axis.chapterVerses[c] / longest, BAR_CURVE);
-    const length = BAR_MIN + (BAR_MAX - BAR_MIN) * share;
-    const a = pointAt(frame, along, 0);
-    const b = pointAt(frame, along, -length);
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-  }
-  ctx.stroke();
+  data.books.forEach((_book, b) => {
+    const first = axis.bookFirstChapter[b];
+    const last = axis.bookFirstChapter[b + 1];
+    if (last <= first) return;
+
+    const [r, g, bl] = BOOK_RGB[b] ?? [138, 143, 152];
+    // Held back from the names' full strength so the ruler reads as the quiet
+    // furniture it is, and the arcs stay the brightest thing on the canvas.
+    ctx.strokeStyle = `rgba(${r}, ${g}, ${bl}, ${BAR_ALPHA})`;
+    ctx.beginPath();
+    for (let c = first; c < last; c++) {
+      const a0 = axis.offsets[c];
+      const a1 = axis.offsets[c + 1];
+      // The middle of the chapter's own slot, so a bar sits under its chapter
+      // rather than on the boundary between two.
+      const along = ((a0 + a1) / 2) * frame.along;
+      const share = Math.pow(axis.chapterVerses[c] / longest, BAR_CURVE);
+      const length = BAR_MIN + (BAR_MAX - BAR_MIN) * share;
+      const a = pointAt(frame, along, 0);
+      const bPt = pointAt(frame, along, -length);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(bPt.x, bPt.y);
+    }
+    ctx.stroke();
+  });
 
   // ── The rule ───────────────────────────────────────────────────────────
   const start = pointAt(frame, 0, 0);
