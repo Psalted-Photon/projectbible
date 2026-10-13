@@ -128,6 +128,18 @@ const PACK_CONFIGS = {
       'The whole biblical story on one strip: about 400 events, the eras, every king of Judah and Israel, the prophets, the world powers, the years between the Testaments, lifespans from Adam to Joseph, and when each book was written. Modern conservative dating (Exodus 1446 BC). CC BY-SA 4.0 (Theographic Bible Metadata, Robert Rouse)',
     dependencies: []
   },
+  // Type 'study' for the same reason again; the pack's metadata says
+  // 'connections', and that is what routes the import. Its own pack rather than
+  // part of Study Tools because it is OpenBible's votes, CC BY, and because the
+  // Connections window is the only thing that reads it.
+  'connections.sqlite': {
+    id: 'connections',
+    type: 'study',
+    name: 'Connections',
+    description:
+      'Every cross-reference in Scripture — 344,799 links between verses, each with the votes readers gave it — drawn as one picture of how the whole Bible ties to itself. Cross references: OpenBible.info (CC BY)',
+    dependencies: []
+  },
   'atlas-places.sqlite': {
     id: 'atlas-map-places',
     type: 'study',

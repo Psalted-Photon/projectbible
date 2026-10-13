@@ -192,7 +192,7 @@ export function atlasPackSupported(): boolean {
   return typeof DecompressionStream !== 'undefined';
 }
 
-/** Gzipped bytes from an atlas pack, as a Blob IndexedDB can file-back. */
+/** Gzipped bytes out of a pack, as a Blob IndexedDB can file-back. */
 function gzipBlob(data: Uint8Array): Blob {
   // slice(): sql.js hands back a view that the next step() invalidates.
   return new Blob([data.slice() as unknown as BlobPart], { type: 'application/gzip' });
@@ -475,7 +475,7 @@ export async function importPackFromBytes(
       // stored ID always matches the canonical manifest IDs used by the UI.
       id: rawId?.replace(/\.v\d+$/, '') ?? rawId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art' | 'atlas-map' | 'devotionals' | 'timeline',
+      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art' | 'atlas-map' | 'devotionals' | 'timeline' | 'connections',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -1981,6 +1981,36 @@ export async function importPackFromBytes(
       );
 
       console.log(`✅ Timeline pack ${packInfo.id} imported`);
+    } else if (packInfo.type === 'connections') {
+      // The Connections pack: every cross-reference in Scripture, as four
+      // gzipped number columns rather than 344,799 rows. Four writes, so the
+      // install is over before the progress bar means anything, and the window
+      // later loads the whole set in one read.
+      //
+      // The blobs are kept compressed in the store and inflated on load, which
+      // is what the map's place index does -- the columns are numbers, so they
+      // pack to about a third, and that is the difference between a few
+      // megabytes of quota and a dozen.
+      console.log('Importing connections pack...');
+      await clearStores(['connection_columns']);
+
+      let columns = 0;
+      const stmt = db.prepare('SELECT name, kind, encoding, raw_bytes, data FROM connection_columns');
+      try {
+        while (stmt.step()) {
+          const [name, kind, encoding, rawBytes, data] = stmt.get() as
+            [string, string, string, number, Uint8Array];
+          await batchWriteTransaction('connection_columns', (store) => {
+            store.put({ name, kind, encoding, rawBytes, data: gzipBlob(data) });
+          });
+          columns++;
+        }
+      } finally {
+        stmt.free();
+      }
+
+      await logInstallFlush('connections-done', { columns });
+      console.log(`✅ Connections pack ${packInfo.id} imported (${columns} columns)`);
     } else if (packInfo.type === 'map') {
       // Import map/places data
       console.log('Importing map pack...');

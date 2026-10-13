@@ -31,6 +31,7 @@ import {
   BookBookmark,
   Hourglass,
   UsersThree,
+  Rainbow,
 } from 'phosphor-svelte';
 import {
   importPackFromBytes,
@@ -195,6 +196,15 @@ export const PACK_CATALOG: CatalogPack[] = [
     url: `${PACK_BASE_URL}/timeline.sqlite`,
   },
   {
+    id: "connections",
+    name: "Connections",
+    description: "Every cross-reference, drawn as one picture",
+    info: "All 344,799 cross-references in Scripture on one screen: every verse that echoes another, arching from where it is written to where it is answered. Each link carries the votes readers gave it, so the strongest connections are the brightest ones.\n\nTap a book or a chapter to light only what it reaches. Tap an arc for both verses. Opens from the Connections window.\n\nCross references: OpenBible.info (CC BY).",
+    size: "1.68 MB",
+    icons: [Rainbow],
+    url: `${PACK_BASE_URL}/connections.sqlite`,
+  },
+  {
     id: "people-biblical-v1",
     name: "Biblical Characters",
     description: "Every named person: family, dates, verses",
@@ -213,6 +223,7 @@ export const PACK_CATALOG: CatalogPack[] = [
  */
 export const INSTALL_ALL_ORDER: string[] = [
   'timeline',
+  'connections',
   'people-biblical-v1',
   'devotionals',
   'tsk-references',

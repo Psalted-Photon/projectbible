@@ -15,7 +15,7 @@ import { getDeviceOwner } from '../lib/sync/deviceOwner';
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 42; // Migration 42: timeline_items (the Timeline pack)
+const DB_VERSION = 43; // Migration 43: connection_columns (the Connections pack)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -183,7 +183,7 @@ export interface DBAtlasPlaceColumn {
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art' | 'atlas-map' | 'study' | 'devotionals' | 'timeline';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art' | 'atlas-map' | 'study' | 'devotionals' | 'timeline' | 'connections';
   translationId?: string;
   translationName?: string;
   language?: string;
@@ -1054,6 +1054,15 @@ export function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('timeline_items')) {
         const timelineItems = db.createObjectStore('timeline_items', { keyPath: 'id' });
         timelineItems.createIndex('lane', 'lane', { unique: false });
+      }
+
+      // The Connections pack: every cross-reference in Scripture as four
+      // gzipped number columns, four rows in all. Deliberately not a row per
+      // link — there are 344,799 of them, and a store that size takes a minute
+      // to walk and most of the device's budget to hold. Keyed by column name,
+      // the same shape as atlas_place_index below.
+      if (!db.objectStoreNames.contains('connection_columns')) {
+        db.createObjectStore('connection_columns', { keyPath: 'name' });
       }
       
       // Word occurrences store

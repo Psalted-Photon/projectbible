@@ -143,6 +143,7 @@ export function markInstalled(packId: string): void {
 export const WINDOW_PACKS: Record<string, { packs: string[]; reloads?: boolean }> = {
   map: { packs: ['atlas-map'] },
   timeline: { packs: ['timeline'], reloads: true },
+  connections: { packs: ['connections'], reloads: true },
   commentaries: { packs: ['commentaries'] },
   art: { packs: ['biblical-art'] },
   isbe: { packs: ['encyclotopical'] },
