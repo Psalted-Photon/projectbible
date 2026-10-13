@@ -69,9 +69,10 @@ export interface ConnectionsConfig {
   /**
    * Room kept past the rule for the chapter bars and the book names, in pixels.
    *
-   * The bars are a bar graph of verse counts and the names are written sideways
-   * under them, so this is the longest bar plus a name's length — about 140
-   * with names and 76 without. render.ts's `axisDepth` gives the right number.
+   * The bars are a bar graph of verse counts with the chapter number inside
+   * each, and under them the book names stack one upright letter at a time. So
+   * this is the longest bar plus the longest name's 14 letters — about 177 with
+   * names and 62 without. render.ts's `axisDepth` gives the right number.
    */
   axisDepth: number;
 }
@@ -96,7 +97,7 @@ export const CONFIG: ConnectionsConfig = {
   dimFloor: 0.06,
   padding: 18,
   axisAt: 1,
-  axisDepth: 140,
+  axisDepth: 177,
 };
 
 /** The box the picture is drawn into, in CSS pixels. */

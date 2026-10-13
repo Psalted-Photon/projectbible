@@ -489,7 +489,7 @@ export function draw(
   }
 
   // ── The axis and its labels ────────────────────────────────────────────
-  drawAxis(ctx, data, axis, frame, palette, options.labels !== false);
+  drawAxis(ctx, data, axis, frame, palette, options.labels !== false, options.view?.k ?? 1);
 
   ctx.restore();
   return { drawn, skipped, batches: sorted.length, ms: performance.now() - t0 };
@@ -549,7 +549,7 @@ function gradientFor(
 }
 
 /** How long the longest chapter bar gets, in pixels off the axis. */
-const BAR_MAX = 72;
+const BAR_MAX = 58;
 /** How far a book divider reaches either side of the rule. */
 const BOOK_NOTCH = 4;
 /**
@@ -573,9 +573,31 @@ const BAR_MIN = 2;
  */
 const BAR_ALPHA = 0.55;
 /** The gap between the bars and the book names. */
-const NAME_GAP = 6;
-/** Room a sideways book name is given, in pixels across the axis. */
-const NAME_BAND = 62;
+const NAME_GAP = 10;
+/**
+ * Book-name letters: their size, and how far apart they stack.
+ *
+ * The step is tighter than the font size, which is what a stacked word wants —
+ * letters are shorter than a line box, so full leading leaves them adrift from
+ * each other and the name stops reading as one word.
+ */
+const NAME_FONT = 9;
+const NAME_STEP = 7.5;
+/**
+ * Room the stacked book names are given, in pixels across the axis.
+ *
+ * The longest name is "1 Thessalonians" — 14 letters once the space is
+ * dropped — so this is that many steps plus a little air.
+ */
+const NAME_BAND = 14 * NAME_STEP + 4;
+/**
+ * Chapter numbers inside the bars: tiny by design.
+ *
+ * Whether one is drawn depends on the room its own digits need — see the slot
+ * test in `drawAxis`, which counts digits rather than assuming three, so "7"
+ * appears at a zoom where "119" still cannot fit.
+ */
+const CHAPTER_FONT = 7;
 
 /**
  * The axis: a bar per chapter, a tick at each book, and all 66 book names.
@@ -599,6 +621,7 @@ function drawAxis(
   frame: Frame,
   palette: ConnectionsPalette,
   labels: boolean,
+  zoom: number,
 ): void {
   const horizontal = frame.orientation === 'horizontal';
 
@@ -673,33 +696,96 @@ function drawAxis(
 
   if (!labels) return;
 
+  // ── Chapter numbers, inside the bars ───────────────────────────────────
+  //
+  // Tiny on purpose: 1,189 numbers on one line can be nothing else, and at this
+  // size they are a texture you can navigate by rather than something to read
+  // across. They sit inside the bar, near its far end, in the book's color over
+  // the bar's own line.
+  //
+  // Only drawn where the chapter's slot is wide enough to hold the digits, so
+  // the numbers thin out as you zoom out instead of smearing into a gray band —
+  // which is the one thing that would make the ruler worse, not better.
+  // All 1,189 chapters across a phone's width is under a pixel each, so at rest
+  // there is no room for a single digit and the numbers stay hidden. They
+  // appear as the reader zooms in, which is also the only time they could be
+  // read. Everything below is therefore measured in *screen* pixels: a slot is
+  // `zoom` times wider on screen than in canvas units, and the font is divided
+  // by `zoom` so a number stays the same size on screen however far in you go.
+  const screenFont = CHAPTER_FONT / zoom;
+  ctx.font = `${screenFont}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  data.books.forEach((_book, b) => {
+    const first = axis.bookFirstChapter[b];
+    const last = axis.bookFirstChapter[b + 1];
+    if (last <= first) return;
+    const [r, g, bl] = BOOK_RGB[b] ?? [138, 143, 152];
+    ctx.fillStyle = `rgba(${r}, ${g}, ${bl}, 0.9)`;
+
+    for (let c = first; c < last; c++) {
+      const a0 = axis.offsets[c];
+      const a1 = axis.offsets[c + 1];
+      // How wide this chapter's slot is on screen, after the zoom.
+      const slot = (a1 - a0) * frame.along * zoom;
+      // A number needs room for its own digits, or it collides with its
+      // neighbours and the whole row turns to mud.
+      const digits = c - first + 1 >= 100 ? 3 : c - first + 1 >= 10 ? 2 : 1;
+      if (slot < CHAPTER_FONT * 0.72 * digits + 1.5) continue;
+
+      const along = ((a0 + a1) / 2) * frame.along;
+      const share = Math.pow(axis.chapterVerses[c] / longest, BAR_CURVE);
+      const length = BAR_MIN + (BAR_MAX - BAR_MIN) * share;
+      // Inside the bar where it fits, just past the tip where it does not, so
+      // a one-verse chapter is still numbered.
+      const across =
+        length >= screenFont + 4 ? length - screenFont * 0.8 : length + screenFont * 0.7;
+      const at = pointAt(frame, along, -across);
+      ctx.fillText(String(c - first + 1), at.x, at.y);
+    }
+  });
+
   // ── Book names ─────────────────────────────────────────────────────────
   //
-  // Sideways on a horizontal axis and upright on a vertical one — either way
-  // each name needs only its line height across the axis, so all 66 fit and
-  // none has to be dropped or abbreviated.
-  ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  // The letters stay upright and the word runs down the page, one letter under
+  // the next. A rotated word is the usual trick and it is the wrong one here:
+  // it makes the reader tilt their head, and on a horizontal axis every name
+  // would lie on its side while the chapter numbers beside it stood up. Stacked
+  // letters read straight on, and a name still only needs one letter's width of
+  // room along the axis, which is what lets all 66 be drawn.
+  // Divided by the zoom for the same reason as the chapter numbers: the ruler
+  // is furniture and should stay the size it was drawn at, whatever the zoom.
+  // The stacking step follows, so a name keeps its shape as it is scaled.
+  ctx.font = `${NAME_FONT / zoom}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   const base = BAR_MAX + NAME_GAP;
+  const step = NAME_STEP / zoom;
 
   data.books.forEach((book, i) => {
     const mid = fractionOf(axis, (book.start + book.end) / 2) * frame.along;
-    const at = pointAt(frame, mid, -base);
     ctx.fillStyle = `rgba(${BOOK_RGB[i][0]}, ${BOOK_RGB[i][1]}, ${BOOK_RGB[i][2]}, 0.95)`;
 
-    ctx.save();
-    ctx.translate(at.x, at.y);
+    // Spaces are dropped from the stack and the digit of a numbered book is
+    // kept, so "1 Thessalonians" stacks as 1-T-h-e-s-… with no gap.
+    const letters = [...book.name].filter((ch) => ch !== ' ');
+
     if (horizontal) {
-      // Reading bottom-to-top, which is the convention for a sideways axis
-      // label and keeps the name's start at the axis end.
-      ctx.rotate(-Math.PI / 2);
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
+      // Down the page from the ruler: letter 0 nearest the axis.
+      for (let n = 0; n < letters.length; n++) {
+        const at = pointAt(frame, mid, -(base + n * step));
+        ctx.fillText(letters[n], at.x, at.y);
+      }
     } else {
+      // A vertical axis runs down the screen already, so the name reads
+      // across it as ordinary left-to-right text.
+      const at = pointAt(frame, mid, -base);
+      ctx.save();
       ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
+      ctx.fillText(book.name, at.x, at.y);
+      ctx.restore();
     }
-    ctx.fillText(book.name, 0, 0);
-    ctx.restore();
   });
 }
 
